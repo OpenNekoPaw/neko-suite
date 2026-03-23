@@ -3,5 +3,5 @@
   "neko.engine.stop.title": "停止引擎",
   "neko.engine.status.title": "引擎状态",
   "neko.engine.probe.title": "探测媒体文件",
-  "neko.engine.export.title": "导出 JVI 项目"
+  "neko.engine.export.title": "导出 NKV 项目"
 }

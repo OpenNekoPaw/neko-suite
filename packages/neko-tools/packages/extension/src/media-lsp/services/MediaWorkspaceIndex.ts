@@ -1,7 +1,7 @@
 /**
- * Media Workspace Index — Cross-file index for .jvi documents.
+ * Media Workspace Index — Cross-file index for .nkv documents.
  *
- * Scans all *.jvi files in workspace, caches parsed projects, and maintains
+ * Scans all *.nkv files in workspace, caches parsed projects, and maintains
  * derived indices for cross-file navigation (media references, element IDs, symbols).
  *
  * Follows the WorkspaceIndexService pattern from neko-story.
@@ -19,7 +19,7 @@ import type {
 } from '../types';
 import type { IMediaWorkspaceIndex } from './types';
 
-const JVI_GLOB = '**/*.jvi';
+const JVI_GLOB = '**/*.nkv';
 
 export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
@@ -158,7 +158,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
   }
 
   private isRelevantDocument(doc: vscode.TextDocument): boolean {
-    return doc.languageId === 'nekotools-jvi' || doc.uri.fsPath.endsWith('.jvi');
+    return doc.languageId === 'nekotools-jvi' || doc.uri.fsPath.endsWith('.nkv');
   }
 
   private async buildFullIndex(): Promise<void> {

@@ -16,7 +16,7 @@ import { TimelineToolExecutor } from './TimelineToolExecutor';
 
 class MockVideoEditorModel {
   readonly type = 'video';
-  readonly uri = vscode.Uri.file('/test/project.jvi');
+  readonly uri = vscode.Uri.file('/test/project.nkv');
   private project: ProjectData;
   readonly updates: ProjectData[] = [];
 

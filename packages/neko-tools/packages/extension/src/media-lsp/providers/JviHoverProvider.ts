@@ -1,7 +1,7 @@
 /**
  * JVI Hover Provider — Show media metadata on hover over `src` values.
  *
- * When the cursor hovers over a "src" string in a .jvi file, probes the
+ * When the cursor hovers over a "src" string in a .nkv file, probes the
  * referenced media file via EngineMediaService and displays a Markdown tooltip
  * with resolution, duration, codec, FPS, bitrate, and audio info.
  */

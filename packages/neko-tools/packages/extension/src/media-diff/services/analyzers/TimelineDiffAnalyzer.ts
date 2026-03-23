@@ -19,7 +19,7 @@ export class TimelineDiffAnalyzer extends BaseMediaDiffAnalyzer {
   private activeTempFiles = new Set<string>();
 
   constructor(engineMediaService?: EngineMediaService) {
-    super(['.jvi']);
+    super(['.nkv']);
     this.engineMediaService = engineMediaService ?? new EngineMediaService();
   }
 
@@ -28,7 +28,7 @@ export class TimelineDiffAnalyzer extends BaseMediaDiffAnalyzer {
     const localTempFiles: string[] = [];
 
     try {
-      const ext = options?.fileExtension ?? '.jvi';
+      const ext = options?.fileExtension ?? '.nkv';
       const [currentPath, previousPath] = await this.writeTempFiles(
         current,
         previous,

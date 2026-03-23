@@ -35,9 +35,7 @@ describe('ScriptRenderer', () => {
   it('renders empty state when document is null', () => {
     render(<ScriptRenderer document={null} />);
     expect(screen.getByText('No Script Loaded')).toBeInTheDocument();
-    expect(
-      screen.getByText('Open a .fountain, .nks, or .story file to preview'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Open a .fountain file to preview')).toBeInTheDocument();
   });
 
   it('renders empty screenplay when document has no elements', () => {

@@ -29,7 +29,7 @@ Extension Host
   └── CI/CD 触发        → 提交后自动渲染
         │
         └── GitHub Actions / GitLab CI
-              └── neko-cli render project.jvi -o output.mp4
+              └── neko-cli render project.nkv -o output.mp4
 ```
 
 ### AI 分类器
@@ -56,14 +56,14 @@ Extension Host
 ```yaml
 on:
   push:
-    paths: ['**.jvi']
+    paths: ['**.nkv']
 jobs:
   render:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { lfs: true }
-      - run: neko-cli render project.jvi -o output.mp4
+      - run: neko-cli render project.nkv -o output.mp4
 ```
 
 ### 配置

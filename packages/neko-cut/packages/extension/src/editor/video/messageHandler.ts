@@ -169,11 +169,11 @@ export class MessageHandler {
   }
 
   /**
-   * Convert absolute paths to relative paths for portable .jvi files
-   * Paths are relative to the .jvi file location, not workspace root
+   * Convert absolute paths to relative paths for portable .nkv files
+   * Paths are relative to the .nkv file location, not workspace root
    */
   private normalizePathsForSave(content: ProjectData): ProjectData {
-    // Get the directory containing the .jvi file
+    // Get the directory containing the .nkv file
     const jviDir = path.dirname(this.model.uri.fsPath);
     const normalized = JSON.parse(JSON.stringify(content)) as ProjectData;
 
@@ -208,14 +208,14 @@ export class MessageHandler {
 
   /**
    * Resolve a media path to absolute path
-   * Paths in .jvi files are relative to the .jvi file location
+   * Paths in .nkv files are relative to the .nkv file location
    */
   private resolveMediaPath(filePath: string): string {
     if (path.isAbsolute(filePath)) {
       return filePath;
     }
 
-    // Resolve relative to .jvi file directory
+    // Resolve relative to .nkv file directory
     const jviDir = path.dirname(this.model.uri.fsPath);
     const resolved = path.resolve(jviDir, filePath);
     return resolved;
@@ -228,7 +228,7 @@ export class MessageHandler {
    */
   private async handleRequestFile(filePath: string): Promise<void> {
     try {
-      // Resolve path relative to .jvi file
+      // Resolve path relative to .nkv file
       const absolutePath = this.resolveMediaPath(filePath);
       const fileUri = vscode.Uri.file(absolutePath);
 
@@ -709,7 +709,7 @@ export class MessageHandler {
     end: number,
   ): Promise<void> {
     try {
-      // Resolve path relative to .jvi file
+      // Resolve path relative to .nkv file
       const absolutePath = this.resolveMediaPath(filePath);
 
       // Get file stats

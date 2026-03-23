@@ -6,7 +6,7 @@
  * - 当没有活动 VideoEditorModel 时，提供 ProjectData 的读写能力
  *
  * 说明：
- * - 若通过 load(path) 加载，则会将变更写回该 .jvi 文件（以 JSON 形式全量覆盖）
+ * - 若通过 load(path) 加载，则会将变更写回该 .nkv 文件（以 JSON 形式全量覆盖）
  * - 若通过 create() 创建，则仅维护内存态 ProjectData（不落盘）
  */
 

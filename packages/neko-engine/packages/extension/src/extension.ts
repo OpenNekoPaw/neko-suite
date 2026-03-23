@@ -454,7 +454,7 @@ async function cmdProbeMedia(): Promise<void> {
 }
 
 /**
- * Export a JVI project — select .jvi file, export to video
+ * Export a JVI project — select .nkv file, export to video
  */
 async function cmdExportProject(): Promise<void> {
   if (!exportService) {

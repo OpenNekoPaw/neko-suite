@@ -1,7 +1,7 @@
 /**
  * JVI Diagnostics Provider — VSCode wrapper for diagnostic analysis.
  *
- * Watches .jvi documents for open/change/close events, debounces analysis,
+ * Watches .nkv documents for open/change/close events, debounces analysis,
  * and publishes DiagnosticEntry[] → vscode.Diagnostic[].
  *
  * Follows the FountainDiagnosticsProvider pattern from neko-story.

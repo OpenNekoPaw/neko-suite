@@ -136,7 +136,7 @@ impl Runner {
         hw_encoder: String,
         zero_copy: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Load .jvi file
+        // Load .nkv file
         let loader = JviLoader::new();
         let (timeline, mut settings) = loader.load(&jvi_file)?;
 

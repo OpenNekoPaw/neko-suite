@@ -9,7 +9,7 @@ import type { ProjectData } from '../../types';
 export interface ProjectSlice {
   // State
   project: ProjectData | null;
-  /** Project root directory (.jvi file location) for resolving relative media paths */
+  /** Project root directory (.nkv file location) for resolving relative media paths */
   projectRoot: string | null;
 
   // Actions

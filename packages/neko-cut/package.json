@@ -40,7 +40,7 @@
         "displayName": "Video Editor",
         "selector": [
           {
-            "filenamePattern": "*.jvi"
+            "filenamePattern": "*.nkv"
           }
         ],
         "priority": "default"
@@ -309,7 +309,7 @@
         {
           "command": "neko.openInEditor",
           "group": "neko@3",
-          "when": "resourceExtname == .jvi"
+          "when": "resourceExtname == .nkv"
         }
       ]
     }

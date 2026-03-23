@@ -40,7 +40,7 @@
         "displayName": "Canvas Editor",
         "selector": [
           {
-            "filenamePattern": "*.jvc"
+            "filenamePattern": "*.nkc"
           }
         ],
         "priority": "default"

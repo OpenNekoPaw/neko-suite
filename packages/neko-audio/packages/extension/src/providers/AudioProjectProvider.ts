@@ -31,6 +31,7 @@ import { getLogger } from '../utils/logger';
 import {
   applyAudioOperation,
   applyOperation,
+  loadNka,
   type AudioProjectData,
   type EditOperation,
   type AudioOperation,
@@ -694,7 +695,15 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
       if (!projectData) {
         // First open: read from disk
         const raw = await vscode.workspace.fs.readFile(nkaUri);
-        projectData = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProjectData;
+        const content = Buffer.from(raw).toString('utf-8');
+        const nkaResult = loadNka(content);
+        if (!nkaResult.validation.valid) {
+          logger.warn(
+            'NKA validation errors:',
+            nkaResult.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+          );
+        }
+        projectData = nkaResult.data;
         this._projectDataCache.set(docKey, projectData);
       }
 
@@ -756,7 +765,8 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     // Fallback: read from disk
     try {
       const raw = await vscode.workspace.fs.readFile(nkaUri);
-      const parsed = JSON.parse(Buffer.from(raw).toString('utf-8')) as AudioProjectData;
+      const nkaResult = loadNka(Buffer.from(raw).toString('utf-8'));
+      const parsed = nkaResult.data;
 
       for (const track of parsed.tracks) {
         for (const element of track.elements) {

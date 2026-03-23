@@ -2,7 +2,7 @@
 
 工具执行模块，处理来自 Extension 的 AI 工具调用。
 
-> 说明：从 “Timeline 工具下沉到 Extension（VSCode Undo 模式）” 起，AI/HTTP 调用的 timeline **数据类工具**默认在 Extension 侧执行并写回 `.jvi`（形成 VSCode Undo/Redo 步骤）。本目录保留为 **兼容层**：UI 交互仍可直接操作 store，且部分 UI-only/渲染类工具仍可能通过 Webview 执行。
+> 说明：从 “Timeline 工具下沉到 Extension（VSCode Undo 模式）” 起，AI/HTTP 调用的 timeline **数据类工具**默认在 Extension 侧执行并写回 `.nkv`（形成 VSCode Undo/Redo 步骤）。本目录保留为 **兼容层**：UI 交互仍可直接操作 store，且部分 UI-only/渲染类工具仍可能通过 Webview 执行。
 
 ## 职责
 
@@ -22,13 +22,13 @@ tools/
 
 ## 接口
 
-| 导出 | 类型 | 用途 |
-|------|------|------|
+| 导出                 | 类型 | 用途         |
+| -------------------- | ---- | ------------ |
 | `initToolExecutor()` | 函数 | 初始化执行器 |
-| `getEditorStore()` | 函数 | 获取 Store |
-| `ToolHandler` | 类型 | 工具处理器 |
-| `ToolExecuteRequest` | 类型 | 执行请求 |
-| `ToolExecuteResult` | 类型 | 执行结果 |
+| `getEditorStore()`   | 函数 | 获取 Store   |
+| `ToolHandler`        | 类型 | 工具处理器   |
+| `ToolExecuteRequest` | 类型 | 执行请求     |
+| `ToolExecuteResult`  | 类型 | 执行结果     |
 
 ## 依赖
 

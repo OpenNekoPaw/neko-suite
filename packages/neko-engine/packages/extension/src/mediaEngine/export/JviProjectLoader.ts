@@ -1,7 +1,7 @@
 /**
  * JVI Project Loader
  *
- * Loads and parses .jvi project files for export.
+ * Loads and parses .nkv project files for export.
  */
 
 import * as fs from 'fs';

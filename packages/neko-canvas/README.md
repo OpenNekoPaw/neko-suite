@@ -12,7 +12,7 @@
 
 - **职责**：无限画布编辑、节点图编排、媒体资产预览、故事板管理
 - **入口**：`packages/extension/src/extension.ts`
-- **项目格式**：`.jvc`（JSON Visual Canvas）
+- **项目格式**：`.nkc`（JSON Visual Canvas）
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
@@ -23,7 +23,7 @@
 
 ```
 Extension Host
-  ├── CanvasEditorProvider  → CustomEditorProvider（.jvc 文件）
+  ├── CanvasEditorProvider  → CustomEditorProvider（.nkc 文件）
   └── AssetLibrary 视图
 
 Webview (React + Vite)

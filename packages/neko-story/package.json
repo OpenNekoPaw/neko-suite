@@ -43,8 +43,6 @@
           "nekostory"
         ],
         "extensions": [
-          ".nks",
-          ".story",
           ".fountain"
         ],
         "configuration": "./language-configuration.json"

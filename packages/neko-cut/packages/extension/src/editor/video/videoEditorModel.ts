@@ -1,11 +1,11 @@
 /**
  * 视频编辑器模型
- * 实现 IEditorModel 接口，包装 .jvi 文档
+ * 实现 IEditorModel 接口，包装 .nkv 文档
  */
 
 import * as vscode from 'vscode';
 import { BaseEditorModel, EditorCapabilities, IModelChangeEvent } from '../common/editorModel';
-import { ProjectData, createDefaultProject } from '@neko/shared';
+import { ProjectData, createDefaultProject, loadNkv } from '@neko/shared';
 import { getLogger } from '../../base';
 
 const logger = getLogger('VideoEditorModel');
@@ -171,53 +171,22 @@ export class VideoEditorModel extends BaseEditorModel {
       return createDefaultProject();
     }
 
-    try {
-      const parsed = JSON.parse(text) as ProjectData;
-      return this.validateAndMigrate(parsed);
-    } catch (error) {
-      logger.error('Failed to parse .jvi file:', error);
-      return createDefaultProject();
-    }
-  }
+    const result = loadNkv(text);
 
-  private validateAndMigrate(data: ProjectData): ProjectData {
-    // 确保版本号存在
-    if (!data.version) {
-      data.version = '2.0';
+    if (!result.validation.valid) {
+      logger.warn(
+        'NKV validation errors:',
+        result.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+      );
     }
 
-    // 标准字段验证
-    if (!data.name) {
-      data.name = 'Untitled Project';
-    }
-    if (!data.resolution) {
-      data.resolution = { width: 1920, height: 1080 };
-    }
-    if (!data.fps) {
-      data.fps = 30;
-    }
-    if (!data.tracks) {
-      data.tracks = [];
+    if (result.migration) {
+      logger.info(
+        `Migrated NKV from ${result.migration.fromVersion} to ${result.migration.toVersion}`,
+      );
     }
 
-    // 确保主轨道存在
-    const hasMainTrack = data.tracks.some((track) => track.isMain);
-    if (!hasMainTrack) {
-      data.tracks.unshift({
-        id: this.generateId(),
-        name: 'Main Track',
-        type: 'media',
-        elements: [],
-        muted: false,
-        isMain: true,
-      });
-    }
-
-    return data;
-  }
-
-  private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    return result.project;
   }
 }
 

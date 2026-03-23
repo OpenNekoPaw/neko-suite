@@ -17,7 +17,7 @@ use std::path::PathBuf;
 /// Examples:
 ///   neko-engine nodes health
 ///   neko-engine videos probe --options '{"source":"/path/to/video.mp4"}'
-///   neko-engine timelines export -i project.jvi -o output.mp4
+///   neko-engine timelines export -i project.nkv -o output.mp4
 ///   neko-engine serve -p 8765
 #[derive(Parser, Debug)]
 #[command(name = "neko-engine")]
@@ -373,7 +373,7 @@ define_actions!(SceneAction {
 
 #[derive(Subcommand, Debug)]
 pub enum TimelineAction {
-    /// Probe timeline (.jvi) file metadata
+    /// Probe timeline (.nkv) file metadata
     Probe {
         #[command(flatten)]
         opts: ActionOpts,
@@ -439,9 +439,9 @@ pub enum TimelineAction {
         opts: ActionOpts,
     },
 
-    /// Export a .jvi project file with progress display
+    /// Export a .nkv project file with progress display
     Export {
-        /// Path to .jvi project file
+        /// Path to .nkv project file
         #[arg(short = 'i', long)]
         jvi_file: PathBuf,
 

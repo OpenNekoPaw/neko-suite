@@ -14,14 +14,7 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PuppetEditorProvider');
 
-/** Parsed .nkp project data */
-interface NkpProjectData {
-  version: string;
-  name: string;
-  puppet: { src: string | null };
-  parameters: Record<string, number>;
-  viewport: { zoom: number };
-}
+import type { NkpProjectData } from '@neko/shared';
 
 /** Custom document for .nkp files */
 class PuppetDocument implements vscode.CustomDocument {

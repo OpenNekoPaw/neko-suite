@@ -1,10 +1,10 @@
 //! JVI file format types - mirrors TypeScript ProjectData
 //!
-//! These types represent the .jvi project file format used by Neko Suite.
+//! These types represent the .nkv project file format used by Neko Suite.
 
 use serde::{Deserialize, Serialize};
 
-/// Project data structure (.jvi file format)
+/// Project data structure (.nkv file format)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectData {

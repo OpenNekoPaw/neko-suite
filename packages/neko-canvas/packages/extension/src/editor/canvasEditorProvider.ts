@@ -1,11 +1,12 @@
 /**
- * Canvas Editor Provider - Custom editor for .jvc files
+ * Canvas Editor Provider - Custom editor for .nkc files
  *
  * Supports inline media playback by sharing neko-preview's
  * NativeEngine and frame server via NekoPreviewAPI.
  */
 import * as vscode from 'vscode';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import { loadNkc } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -273,7 +274,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         try {
           const fileData = await vscode.workspace.fs.readFile(document.uri);
           const content = Buffer.from(fileData).toString('utf-8');
-          const data = content.trim() ? JSON.parse(content) : null;
+          const result = content.trim() ? loadNkc(content) : null;
+          const data = result?.data ?? null;
+          if (result && !result.validation.valid) {
+            logger.warn(
+              'NKC validation errors:',
+              result.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+            );
+          }
           webviewPanel.webview.postMessage({ type: 'update', data });
           // Sync outline & status bar on initial load
           if (data) {

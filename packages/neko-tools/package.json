@@ -55,11 +55,11 @@
       {
         "id": "nekotools-jvi",
         "aliases": [
-          "JVI Timeline",
-          "jvi"
+          "NKV Timeline",
+          "nkv"
         ],
         "extensions": [
-          ".jvi"
+          ".nkv"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -70,7 +70,7 @@
         "displayName": "Media Diff",
         "selector": [
           {
-            "filenamePattern": "*.{png,jpg,jpeg,gif,webp,bmp,svg,mp4,mov,avi,mkv,webm,m4v,mp3,wav,ogg,flac,aac,m4a,jvi}"
+            "filenamePattern": "*.{png,jpg,jpeg,gif,webp,bmp,svg,mp4,mov,avi,mkv,webm,m4v,mp3,wav,ogg,flac,aac,m4a,nkv}"
           }
         ],
         "priority": "option"

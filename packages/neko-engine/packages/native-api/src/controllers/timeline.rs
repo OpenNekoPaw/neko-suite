@@ -45,7 +45,7 @@ impl TimelineController {
 /// Options for timelines:probe
 #[derive(Debug, Deserialize, Default)]
 struct ProbeRequestOptions {
-    /// Source .jvi file path
+    /// Source .nkv file path
     source: Option<String>,
 }
 
@@ -578,7 +578,7 @@ mod tests {
     async fn test_timeline_controller_probe_nonexistent_file() {
         let controller = create_test_controller();
 
-        let opts = serde_json::json!({ "source": "/nonexistent/file.jvi" });
+        let opts = serde_json::json!({ "source": "/nonexistent/file.nkv" });
         let result = controller.handle("probe", None, opts, None).await;
 
         assert!(result.is_err());

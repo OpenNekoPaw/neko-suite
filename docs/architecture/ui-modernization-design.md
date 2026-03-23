@@ -678,8 +678,8 @@ neko-suite 的 13 个自定义扩展名在 VSCode 文件树中现在有专属图
 packages/neko-tools/themes/
 ├── neko-file-icon-theme.json     — File Icon Theme 定义
 └── icons/
-    ├── file-timeline.svg  (.jvi) — 紫色 #6366F1，胶片条 + 刻度点
-    ├── file-canvas.svg    (.jvc) — 橙色 #F97316，画板 + 中心圆
+    ├── file-timeline.svg  (.nkv) — 紫色 #6366F1，胶片条 + 刻度点
+    ├── file-canvas.svg    (.nkc) — 橙色 #F97316，画板 + 中心圆
     ├── file-audio.svg     (.nka) — 绿色 #22C55E，7 根波形竖线
     ├── file-sketch.svg    (.nks) — 粉色 #EC4899，铅笔
     ├── file-puppet.svg  (.nkp/.inp) — 黄色 #EAB308，关节人偶

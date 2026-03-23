@@ -117,7 +117,7 @@ L3 - LSP Indexer
 
 ### Phase 1：基础诊断 ✅ 已完成
 
-- [x] JviParser — jsonc-parser AST 解析 .jvi 文件，带位置信息
+- [x] JviParser — jsonc-parser AST 解析 .nkv 文件，带位置信息
 - [x] JviDiagnosticAnalyzer — 9 个诊断规则（结构检查 + 引用检查）
   - `invalid-fps` / `invalid-resolution` / `duplicate-track-name` / `duplicate-element-id`
   - `broken-element-link` / `empty-track` / `missing-media-ref` / `duration-mismatch` / `resolution-mismatch`
@@ -130,12 +130,12 @@ L3 - LSP Indexer
 
 ### Phase 2：符号与导航 ✅ 已完成
 
-- [x] MediaWorkspaceIndex — 跨文件索引（`**/*.jvi` watcher + 媒体引用 + 元素 ID 派生索引）
+- [x] MediaWorkspaceIndex — 跨文件索引（`**/*.nkv` watcher + 媒体引用 + 元素 ID 派生索引）
 - [x] JviDocumentSymbolProvider — Outline 视图（Project → Track → Element 三级层次）
 - [x] JviDefinitionProvider — `src` → 打开媒体文件，`linkedId` → 跳转元素
-- [x] JviReferenceProvider — Find All References（查找引用相同媒体的所有 .jvi 位置）
+- [x] JviReferenceProvider — Find All References（查找引用相同媒体的所有 .nkv 位置）
 - [x] 集成入 extension.ts（共享 EngineMediaService + initializeMediaLsp）
-- [x] package.json 注册 `.jvi` 语言（`nekotools-jvi`）+ language-configuration.json
+- [x] package.json 注册 `.nkv` 语言（`nekotools-jvi`）+ language-configuration.json
 
 ### Phase 3：AI 增强
 

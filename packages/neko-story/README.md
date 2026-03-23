@@ -27,7 +27,7 @@ VSCode 原生编辑器（.nks / .fountain 文件）
         ├── @neko-story/parser → 剧本解析 → AST
         └── 命令
               ├── Preview Story   → 开启 Webview 预览面板
-              ├── Convert to Timeline → 生成 .jvi 项目文件 → neko-cut
+              ├── Convert to Timeline → 生成 .nkv 项目文件 → neko-cut
               └── Generate Storyboard → 调用 neko-agent AI 生成分镜
 ```
 

@@ -1,6 +1,6 @@
 //! JVI file loader with path resolution
 //!
-//! Loads .jvi project files and resolves relative media paths.
+//! Loads .nkv project files and resolves relative media paths.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,10 +24,10 @@ impl JviLoader {
         Self { _base_dir: None }
     }
 
-    /// Load a .jvi file and convert to Timeline + ExportSettings
+    /// Load a .nkv file and convert to Timeline + ExportSettings
     ///
     /// # Arguments
-    /// * `path` - Path to the .jvi file
+    /// * `path` - Path to the .nkv file
     ///
     /// # Returns
     /// A tuple of (Timeline, ExportSettings) ready for export

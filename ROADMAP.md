@@ -151,7 +151,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 ### Phase 5.6: SVG 图标统一 + File Icon Theme [2d]
 - 在 @neko/shared/icons 建立统一图标模块（~25 个去重图标）
 - 统一为 stroke 描边 + 24×24 viewBox + currentColor（macOS SF Symbols 风格）
-- 提供 File Icon Theme 支持 13 个自定义文件扩展名（.jvi / .jvc / .nka / .nks 等）
+- 提供 File Icon Theme 支持 13 个自定义文件扩展名（.nkv / .nkc / .nka / .nks 等）
 
 ### Phase 6: 跨包共享组件 [1.5d, 按需触发]
 - ContextMenu / CollapsibleSection / Ruler 等高频组件提取到 @neko/shared

@@ -1,5 +1,5 @@
 // =============================================================================
-// Project Data (.jvi file format)
+// Project Data (.nkv file format)
 // =============================================================================
 
 import { TimelineTrack } from './timelineTrack';

@@ -188,7 +188,7 @@ export interface CanvasViewport {
 // =============================================================================
 
 /**
- * Canvas data structure - persisted to .jvc file
+ * Canvas data structure - persisted to .nkc file
  */
 export interface CanvasData {
   /** File format version */

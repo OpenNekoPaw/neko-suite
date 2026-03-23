@@ -10,6 +10,9 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./nkv": "./src/nkv/index.ts",
+    "./nkc": "./src/nkc/index.ts",
+    "./nka": "./src/nka/index.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
     "./*": "./src/*"
   },

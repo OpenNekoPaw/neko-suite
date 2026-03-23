@@ -1,7 +1,7 @@
 /**
  * Export Integration Test
  *
- * Tests the complete export pipeline by exporting test.jvi to a video file.
+ * Tests the complete export pipeline by exporting test.nkv to a video file.
  *
  * Run with: npx ts-node --esm packages/extension/src/mediaEngine/export/ExportIntegrationTest.ts
  */
@@ -13,7 +13,7 @@ import { VideoFrameProvider } from './VideoFrameProvider';
 import { createExportService, type ExportConfig, type ExportProgress } from './ExportService';
 
 // Test configuration
-const TEST_PROJECT_PATH = path.resolve(__dirname, '../../../../../test/test.jvi');
+const TEST_PROJECT_PATH = path.resolve(__dirname, '../../../../../test/test.nkv');
 const OUTPUT_PATH = path.resolve(__dirname, '../../../../../test/output_test.mp4');
 
 /**

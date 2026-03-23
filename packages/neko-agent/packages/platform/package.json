@@ -4,11 +4,12 @@
   "version": "0.0.1",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.2",
-    "@ai-sdk/google": "^3.0.2",
-    "@ai-sdk/openai": "^3.0.2",
+    "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/google": "^3.0.52",
+    "@ai-sdk/openai": "^3.0.47",
+    "@neko/ai-sdk": "workspace:*",
     "@neko/shared": "workspace:*",
-    "ai": "^6.0.6"
+    "ai": "^6.0.134"
   },
   "exports": {
     ".": "./src/index.ts",

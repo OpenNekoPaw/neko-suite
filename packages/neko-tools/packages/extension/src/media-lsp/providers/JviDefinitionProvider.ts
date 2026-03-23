@@ -1,5 +1,5 @@
 /**
- * JVI Definition Provider — Go to Definition for .jvi files.
+ * JVI Definition Provider — Go to Definition for .nkv files.
  *
  * Two navigation paths:
  * 1. Cursor on `src` value → opens the referenced media file
@@ -53,7 +53,7 @@ export class JviDefinitionProvider implements vscode.DefinitionProvider {
       const found = this.workspaceIndex.findElementById(linkedId.value);
       if (found) {
         return new vscode.Location(
-          vscode.Uri.parse(found.jviUri),
+          vscode.Uri.parse(found.nkvUri),
           new vscode.Range(
             new vscode.Position(found.range.startLine, found.range.startChar),
             new vscode.Position(found.range.endLine, found.range.endChar),

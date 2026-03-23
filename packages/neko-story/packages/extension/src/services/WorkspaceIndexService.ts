@@ -3,12 +3,12 @@ import { parse } from '@neko-story/parser';
 import type { FountainDocument, Character, SceneHeading, Section } from '@neko-story/types';
 import type { IWorkspaceIndex, SymbolLocation } from './types';
 
-const FOUNTAIN_GLOB = '**/*.{fountain,nks,story}';
+const FOUNTAIN_GLOB = '**/*.fountain';
 
 /**
  * Workspace-wide index service for Fountain documents.
  *
- * Scans all .fountain/.nks/.story files, caches parse results,
+ * Scans all .fountain files, caches parse results,
  * maintains derived symbol indices, and watches for file changes.
  */
 export class WorkspaceIndexService implements IWorkspaceIndex {
@@ -163,12 +163,7 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
   }
 
   private isRelevantDocument(doc: vscode.TextDocument): boolean {
-    return (
-      doc.languageId === 'nekostory' ||
-      doc.uri.fsPath.endsWith('.fountain') ||
-      doc.uri.fsPath.endsWith('.nks') ||
-      doc.uri.fsPath.endsWith('.story')
-    );
+    return doc.languageId === 'nekostory' || doc.uri.fsPath.endsWith('.fountain');
   }
 
   private async buildFullIndex(): Promise<void> {

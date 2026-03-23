@@ -129,7 +129,7 @@ describe('VideoEditorModel', () => {
   describe('构造和初始化', () => {
     it('应该能够从有效 JSON 创建模型', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -141,7 +141,7 @@ describe('VideoEditorModel', () => {
     });
 
     it('从无效 JSON 创建应该返回默认项目', () => {
-      const doc = new MockTextDocument(vscode.Uri.parse('file:///test.jvi'), invalidJson);
+      const doc = new MockTextDocument(vscode.Uri.parse('file:///test.nkv'), invalidJson);
 
       const model = new VideoEditorModel(doc);
       const content = model.getProjectData();
@@ -152,7 +152,7 @@ describe('VideoEditorModel', () => {
     });
 
     it('从空文档创建应该返回默认项目', () => {
-      const doc = new MockTextDocument(vscode.Uri.parse('file:///test.jvi'), emptyProject);
+      const doc = new MockTextDocument(vscode.Uri.parse('file:///test.nkv'), emptyProject);
 
       const model = new VideoEditorModel(doc);
       const content = model.getProjectData();
@@ -168,7 +168,7 @@ describe('VideoEditorModel', () => {
       };
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutMainTrack),
       );
 
@@ -187,7 +187,7 @@ describe('VideoEditorModel', () => {
   describe('能力定义', () => {
     it('应该返回正确的编辑器能力', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -211,7 +211,7 @@ describe('VideoEditorModel', () => {
   describe('内容操作', () => {
     it('getContent 应该返回项目数据', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -224,7 +224,7 @@ describe('VideoEditorModel', () => {
 
     it('getProjectData 应该返回类型安全的项目数据', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -238,7 +238,7 @@ describe('VideoEditorModel', () => {
 
     it('setContent 应该更新项目数据并触发 onDidChange 事件', async () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -269,7 +269,7 @@ describe('VideoEditorModel', () => {
 
     it('updateProjectData 应该更新内容', async () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -299,7 +299,7 @@ describe('VideoEditorModel', () => {
       delete (projectWithoutVersion as any).version;
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutVersion),
       );
 
@@ -314,7 +314,7 @@ describe('VideoEditorModel', () => {
       delete (projectWithoutName as any).name;
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutName),
       );
 
@@ -329,7 +329,7 @@ describe('VideoEditorModel', () => {
       delete (projectWithoutResolution as any).resolution;
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutResolution),
       );
 
@@ -344,7 +344,7 @@ describe('VideoEditorModel', () => {
       delete (projectWithoutFps as any).fps;
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutFps),
       );
 
@@ -359,7 +359,7 @@ describe('VideoEditorModel', () => {
       delete (projectWithoutTracks as any).tracks;
 
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(projectWithoutTracks),
       );
 
@@ -378,7 +378,7 @@ describe('VideoEditorModel', () => {
   describe('重新加载', () => {
     it('reload 应该重新解析文档内容', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -400,7 +400,7 @@ describe('VideoEditorModel', () => {
 
     it('reload 应该触发 onDidChange 事件', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -424,7 +424,7 @@ describe('VideoEditorModel', () => {
   describe('生命周期', () => {
     it('dispose 应该释放资源', () => {
       const doc = new MockTextDocument(
-        vscode.Uri.parse('file:///test.jvi'),
+        vscode.Uri.parse('file:///test.nkv'),
         JSON.stringify(validProjectData),
       );
 
@@ -453,7 +453,7 @@ describe('VideoEditorModelProvider', () => {
   it('应该能够创建 VideoEditorModel', () => {
     const provider = new VideoEditorModelProvider();
     const doc = new MockTextDocument(
-      vscode.Uri.parse('file:///test.jvi'),
+      vscode.Uri.parse('file:///test.nkv'),
       JSON.stringify(validProjectData),
     );
 
@@ -467,7 +467,7 @@ describe('VideoEditorModelProvider', () => {
   it('创建的模型应该正确解析内容', () => {
     const provider = new VideoEditorModelProvider();
     const doc = new MockTextDocument(
-      vscode.Uri.parse('file:///test.jvi'),
+      vscode.Uri.parse('file:///test.nkv'),
       JSON.stringify(validProjectData),
     );
 

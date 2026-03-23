@@ -106,7 +106,7 @@ export function registerCommands(
 }
 
 /**
- * Create a new .jvi project file
+ * Create a new .nkv project file
  */
 async function createNewProject(folderUri: vscode.Uri): Promise<void> {
   // Ask for project name
@@ -130,7 +130,7 @@ async function createNewProject(folderUri: vscode.Uri): Promise<void> {
   }
 
   // Create the project file
-  const fileName = `${projectName.replace(/\s+/g, '-').toLowerCase()}.jvi`;
+  const fileName = `${projectName.replace(/\s+/g, '-').toLowerCase()}.nkv`;
   const fileUri = vscode.Uri.joinPath(folderUri, fileName);
 
   // Check if file already exists
@@ -209,7 +209,7 @@ async function addToTimeline(
 }
 
 /**
- * Open a .jvi file in the video editor
+ * Open a .nkv file in the video editor
  */
 async function openInEditor(fileUri: vscode.Uri): Promise<void> {
   await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');

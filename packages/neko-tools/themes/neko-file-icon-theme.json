@@ -1,8 +1,8 @@
 {
   "hidesExplorerArrows": false,
   "fileExtensions": {
-    "jvi": "_neko_timeline",
-    "jvc": "_neko_canvas",
+    "nkv": "_neko_timeline",
+    "nkc": "_neko_canvas",
     "nka": "_neko_audio",
     "nks": "_neko_sketch",
     "nkp": "_neko_puppet",
@@ -12,7 +12,6 @@
     "glb": "_neko_3d",
     "vrm": "_neko_avatar",
     "asset-diff": "_neko_diff",
-    "story": "_neko_story",
     "fountain": "_neko_story"
   },
   "iconDefinitions": {

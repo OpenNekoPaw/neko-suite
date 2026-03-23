@@ -27,6 +27,11 @@ export * from './i18n/index';
 // Theme (design tokens + ThemeKind)
 export * from './theme/index';
 
+// Format SDKs (load/validate/migrate/save project files)
+export * from './nkv/index';
+export * from './nkc/index';
+export * from './nka/index';
+
 // VSCode Webview API is NOT exported from main entry to avoid
 // requiring DOM types in Node.js consumers.
 // Use subpath import instead: import { ... } from '@neko/shared/vscode';

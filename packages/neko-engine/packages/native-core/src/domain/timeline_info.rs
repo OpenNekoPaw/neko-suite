@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Timeline project info returned by timelines:probe
 ///
-/// Contains metadata about a .jvi project file without rendering anything.
+/// Contains metadata about a .nkv project file without rendering anything.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimelineProjectInfo {

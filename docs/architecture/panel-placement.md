@@ -51,7 +51,7 @@ Neko Suite 包含多种面板类型：属性编辑、滤镜参数、AI 助手、
 | 冲突 | 严重性 | 说明 |
 |------|--------|------|
 | 幽灵数据 | P0 | 切换 tab 后侧栏显示旧编辑器的数据，用户误编辑 |
-| 多同类文件闪烁 | P1 | 同时打开 A.jvi + B.jvi，面板状态依赖最后一次事件 |
+| 多同类文件闪烁 | P1 | 同时打开 A.nkv + B.nkv，面板状态依赖最后一次事件 |
 | Activity Bar 膨胀 | P1 | 多个扩展各注册一个属性容器，图标堆积 |
 | IPC 消息丢失 | P2 | Webview 未 ready 时 postMessage 静默丢失 |
 | 状态双写 | P2 | Extension Host + React 各维护一份状态 |
@@ -132,8 +132,8 @@ FilterPanel 参数变更
 
 | ViewType | 扩展 | 文件类型 | Priority |
 |---|---|---|---|
-| `neko.videoEditor` | neko-cut | `*.jvi` | default |
-| `neko.canvasEditor` | neko-canvas | `*.jvc` | default |
+| `neko.videoEditor` | neko-cut | `*.nkv` | default |
+| `neko.canvasEditor` | neko-canvas | `*.nkc` | default |
 | `neko.sketchEditor` | neko-sketch | `*.nks` | default |
 | `neko.modelEditor` | neko-model | `*.gltf/*.glb/*.vrm` | default |
 | `neko.videoPreview` | neko-preview | 视频文件 | default |

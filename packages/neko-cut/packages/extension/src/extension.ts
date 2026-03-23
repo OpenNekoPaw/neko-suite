@@ -43,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Create providers
   const videoEditorProvider = new VideoEditorProvider(context);
 
-  // Register custom editor (CustomTextEditorProvider for .jvi files)
+  // Register custom editor (CustomTextEditorProvider for .nkv files)
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider('neko.videoEditor', videoEditorProvider, {
       webviewOptions: {

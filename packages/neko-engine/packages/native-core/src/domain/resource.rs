@@ -117,7 +117,7 @@ mod tests {
             ResourceType::Image
         );
         assert_eq!(
-            infer_resource_type(Path::new("project.jvi")),
+            infer_resource_type(Path::new("project.nkv")),
             ResourceType::Timeline
         );
     }

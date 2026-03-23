@@ -148,6 +148,15 @@ export * from './mediaEngine';
 // Canvas types (infinite canvas editor)
 export * from './canvas';
 
+// Sketch types (.nks document format)
+export * from './sketch';
+
+// Puppet types (.nkp project format)
+export * from './puppet';
+
+// Audio project types (.nka file format)
+export * from './audioProject';
+
 // Proxy protocol types (video proxy generation and management)
 export * from './proxyProtocol';
 

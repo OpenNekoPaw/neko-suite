@@ -6,7 +6,7 @@
 
 ## 系统定位
 
-neko-cut 是 Neko Suite 的核心创作工具。以 VSCode CustomEditor 方式打开 `.jvi` 项目文件，Extension Host 负责文件 I/O 和引擎通信，Webview 承载完整的时间线编辑 UI。通过 EditOperation 管道实现可撤销的操作历史，所有媒体处理委托给 neko-engine。
+neko-cut 是 Neko Suite 的核心创作工具。以 VSCode CustomEditor 方式打开 `.nkv` 项目文件，Extension Host 负责文件 I/O 和引擎通信，Webview 承载完整的时间线编辑 UI。通过 EditOperation 管道实现可撤销的操作历史，所有媒体处理委托给 neko-engine。
 
 ---
 
@@ -32,7 +32,7 @@ packages/neko-cut/
 │  extension.ts → ServiceCollection (DI)                    │
 │    │                                                     │
 │    ├─ VideoEditorProvider (CustomTextEditorProvider)       │
-│    │    └─ VideoEditorModel (.jvi ↔ ProjectData)          │
+│    │    └─ VideoEditorModel (.nkv ↔ ProjectData)          │
 │    │    └─ MessageHandler (Webview IPC)                   │
 │    │                                                     │
 │    ├─ Services                                           │
@@ -97,7 +97,7 @@ packages/neko-cut/
 ### 打开项目
 
 ```
-用户打开 .jvi 文件
+用户打开 .nkv 文件
   → VideoEditorProvider.resolveCustomTextEditor()
     → 创建 VideoEditorModel（解析 ProjectData）
     → 创建 Webview + MessageHandler
@@ -191,7 +191,7 @@ Phase 3（组合依赖）:   trackOps, elementOps, elementSplit, clipboard, shap
 
 | 模式 | 应用 |
 |------|------|
-| **CustomTextEditorProvider** | .jvi 文件的 VSCode 编辑器集成 |
+| **CustomTextEditorProvider** | .nkv 文件的 VSCode 编辑器集成 |
 | **Service Locator** | ServiceCollection DI 容器 |
 | **Registry** | EditorRegistry 管理编辑器 Provider |
 | **Command** | TimelineToolExecutor — 时间线操作命令化 |
@@ -204,7 +204,7 @@ Phase 3（组合依赖）:   trackOps, elementOps, elementSplit, clipboard, shap
 
 ## 项目文件格式
 
-- **扩展名**: `.jvi`（JSON Video Instructions）
+- **扩展名**: `.nkv`（JSON Video Instructions）
 - **格式**: 序列化的 `ProjectData`（来自 `@neko/shared`）
 - **编辑器 viewType**: `neko.videoEditor`
 

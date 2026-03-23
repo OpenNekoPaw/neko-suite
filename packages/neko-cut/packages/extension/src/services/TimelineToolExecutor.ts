@@ -88,7 +88,7 @@ export class TimelineToolExecutor {
         return {
           success: false,
           error:
-            'No project loaded. Open a .jvi file or call POST /api/v1/project/load|create first.',
+            'No project loaded. Open a .nkv file or call POST /api/v1/project/load|create first.',
           duration: Date.now() - start,
         };
       }

@@ -1,0 +1,20 @@
+{
+  "name": "@neko/ai-sdk",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "ai": "^6.0.134",
+    "@ai-sdk/openai": "^3.0.2",
+    "@ai-sdk/google": "^3.0.2",
+    "@ai-sdk/provider": "^3.0.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}

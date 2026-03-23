@@ -2,25 +2,13 @@
 // applyAudioOperation — 音频项目操作应用
 // =============================================================================
 
-import type { TimelineTrack } from '../types/timelineTrack';
-import type { AudioOperation, AudioEffectSnapshot, AudioMarkerSnapshot } from './types';
+import type { AudioOperation } from './types';
 import { arrayMove } from './helpers';
 import { OperationError } from './errors';
 
-// =============================================================================
-// AudioProjectData — multi-track audio project
-// =============================================================================
-
-/** Audio project data — multi-track, reuses TimelineTrack from neko-types */
-export interface AudioProjectData {
-  version: string; // '2.0'
-  name: string;
-  sampleRate: number; // project sample rate (default 48000)
-  channels: number; // project channels (default 2)
-  tracks: TimelineTrack[]; // reuse from neko-types
-  masterEffectsChain: AudioEffectSnapshot[]; // master bus effects
-  markers: AudioMarkerSnapshot[]; // project-level markers
-}
+// Re-export AudioProjectData from its canonical location
+export type { AudioProjectData } from '../types/audioProject';
+import type { AudioProjectData } from '../types/audioProject';
 
 // =============================================================================
 // applyAudioOperation — operates on masterEffectsChain and markers

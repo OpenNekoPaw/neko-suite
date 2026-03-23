@@ -72,7 +72,7 @@ export const MEDIA_EXTENSIONS: Record<string, MediaType> = {
   '.aac': 'audio',
   '.m4a': 'audio',
   // Timeline projects
-  '.jvi': 'timeline',
+  '.nkv': 'timeline',
 };
 
 /**

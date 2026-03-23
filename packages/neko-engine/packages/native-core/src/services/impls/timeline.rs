@@ -288,7 +288,7 @@ impl ITimelineService for TimelineService {
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo> {
         let path = jvi_path.to_path_buf();
 
-        // Load and parse .jvi file in blocking task (file I/O)
+        // Load and parse .nkv file in blocking task (file I/O)
         let info = tokio::task::spawn_blocking(move || -> Result<TimelineProjectInfo> {
             let loader = JviLoader::new();
             let (timeline_data, settings) = loader.load(&path)?;
@@ -1395,7 +1395,7 @@ mod tests {
     #[tokio::test]
     async fn test_timeline_service_probe_file_not_found() {
         let service = create_test_service();
-        let result = service.probe(Path::new("/nonexistent/file.jvi")).await;
+        let result = service.probe(Path::new("/nonexistent/file.nkv")).await;
         assert!(result.is_err());
     }
 

@@ -688,7 +688,7 @@ export class ExportService implements vscode.Disposable {
   }
 
   /**
-   * Resolve a media path to absolute (relative to .jvi document dir)
+   * Resolve a media path to absolute (relative to .nkv document dir)
    */
   private resolveMediaPath(mediaPath: string): string {
     if (path.isAbsolute(mediaPath)) return mediaPath;

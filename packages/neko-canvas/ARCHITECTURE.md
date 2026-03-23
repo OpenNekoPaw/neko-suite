@@ -6,7 +6,7 @@
 
 ## 系统定位
 
-neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.jvc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放等能力。它也是 neko-sketch（绘画工具）的基础平台。
+neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放等能力。它也是 neko-sketch（绘画工具）的基础平台。
 
 ---
 
@@ -30,7 +30,7 @@ packages/neko-canvas/
 │                                                           │
 │  extension.ts                                             │
 │    ├─ CanvasEditorProvider (CustomEditorProvider)          │
-│    │    └─ 处理 .jvc 文件读写                              │
+│    │    └─ 处理 .nkc 文件读写                              │
 │    │    └─ 消息分发（save/pickMedia/dropFiles/media:*）    │
 │    │                                                     │
 │    ├─ Views                                              │
@@ -130,7 +130,7 @@ packages/neko-canvas/
 ### 打开画布
 
 ```
-用户打开 .jvc 文件
+用户打开 .nkc 文件
   → CanvasEditorProvider.resolveCustomEditor()
     → 读取 JSON → postMessage('update', canvasData)
       → canvasStore 初始化节点/连接/视口
@@ -218,7 +218,7 @@ dropMedia(mediaInfoList)   — 拖放文件解析结果
 
 | 模式 | 应用 |
 |------|------|
-| **CustomEditorProvider** | .jvc 文件的 VSCode 编辑器集成 |
+| **CustomEditorProvider** | .nkc 文件的 VSCode 编辑器集成 |
 | **Zustand Store** | 集中式不可变状态（canvasStore + historyStore + clipboardStore） |
 | **Hook 组合** | 交互逻辑封装为可组合的自定义 Hook |
 | **Viewport Culling** | 性能优化 — 仅渲染视口内节点 |
@@ -229,7 +229,7 @@ dropMedia(mediaInfoList)   — 拖放文件解析结果
 
 ## 项目文件格式
 
-- **扩展名**: `.jvc`（JSON Visual Canvas）
+- **扩展名**: `.nkc`（JSON Visual Canvas）
 - **格式**: 序列化的画布数据（节点列表 + 连接列表 + 视口状态）
 - **编辑器 viewType**: `neko.canvasEditor`
 

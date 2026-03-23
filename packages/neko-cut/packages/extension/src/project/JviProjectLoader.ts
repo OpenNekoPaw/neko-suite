@@ -1,7 +1,7 @@
 /**
  * JVI Project Loader
  *
- * Loads and parses .jvi project files for export.
+ * Loads and parses .nkv project files for export.
  * This is a core neko-cut functionality, independent of neko-engine.
  */
 

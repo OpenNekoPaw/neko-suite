@@ -24,7 +24,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
     return (
       <div className="empty-state">
         <h2>No Script Loaded</h2>
-        <p>Open a .fountain, .nks, or .story file to preview</p>
+        <p>Open a .fountain file to preview</p>
       </div>
     );
   }

@@ -70,7 +70,7 @@ impl std::fmt::Debug for TimelineStreamResult {
 /// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
 #[allow(async_fn_in_trait)]
 pub trait ITimelineService: IStreamPlayback {
-    /// Probe a .jvi project file and return metadata without rendering
+    /// Probe a .nkv project file and return metadata without rendering
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo>;
 
     /// Composite a single frame at specified time

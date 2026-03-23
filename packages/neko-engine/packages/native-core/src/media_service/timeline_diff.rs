@@ -1,4 +1,4 @@
-//! Timeline Diff - Structural and optional content comparison of two .jvi project files
+//! Timeline Diff - Structural and optional content comparison of two .nkv project files
 //!
 //! Parses two JVI project files and produces a structural diff covering:
 //! - Project metadata (name, resolution, fps)
@@ -167,7 +167,7 @@ pub struct TimelineContentDiff {
 // Public API
 // =============================================================================
 
-/// Compare two .jvi project files and produce a structural diff (no content diff).
+/// Compare two .nkv project files and produce a structural diff (no content diff).
 pub fn diff_timeline_content<P: AsRef<Path>>(
     source_a: P,
     source_b: P,
@@ -175,7 +175,7 @@ pub fn diff_timeline_content<P: AsRef<Path>>(
     diff_timeline_content_with_options(source_a, source_b, &TimelineDiffOptions::default())
 }
 
-/// Compare two .jvi project files with configurable options.
+/// Compare two .nkv project files with configurable options.
 ///
 /// When `options.include_content_diff` is true, elements whose media source
 /// changed will be compared at the content level (SSIM/PSNR/waveform).

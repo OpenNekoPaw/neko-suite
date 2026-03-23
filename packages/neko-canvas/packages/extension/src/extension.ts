@@ -150,9 +150,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
         return;
       }
 
-      // Generate a unique default file name (Untitled.jvc, Untitled-1.jvc, ...)
+      // Generate a unique default file name (Untitled.nkc, Untitled-1.nkc, ...)
       const baseName = 'Untitled';
-      const ext = '.jvc';
+      const ext = '.nkc';
       let fileName = `${baseName}${ext}`;
       let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
       let counter = 1;
@@ -171,7 +171,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
       try {
         // Create file with template content
-        const title = fileName.replace(/\.jvc$/, '');
+        const title = fileName.replace(/\.nkc$/, '');
         const content = getCanvasTemplate(title);
         await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
 
@@ -313,7 +313,7 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
     throw new Error('No workspace folder open');
   }
 
-  const canvasFile = path.join(folders[0].uri.fsPath, `${config.name}.jvc`);
+  const canvasFile = path.join(folders[0].uri.fsPath, `${config.name}.nkc`);
   const content = getCanvasTemplate(config.name);
   await vscode.workspace.fs.writeFile(vscode.Uri.file(canvasFile), Buffer.from(content, 'utf-8'));
   return canvasFile;

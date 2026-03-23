@@ -12,7 +12,7 @@
 
 - **职责**：专业视频剪辑——时间线编辑、关键帧动画、特效、字幕、导出
 - **入口**：`packages/extension/src/extension.ts`
-- **项目格式**：`.jvi`（JSON Video Instructions）
+- **项目格式**：`.nkv`（JSON Video Instructions）
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/platform`、`@neko/shared`、`@neko/neko-client`、`sharp`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
@@ -23,7 +23,7 @@
 Extension Host (Node.js)
   ├── ServiceCollection     → DI 容器
   ├── EditorRegistry        → 编辑器注册表（Registry Pattern）
-  ├── VideoEditorProvider   → CustomEditorProvider（.jvi 文件）
+  ├── VideoEditorProvider   → CustomEditorProvider（.nkv 文件）
   ├── VideoEditorModel      → 项目数据模型
   ├── TimelineToolExecutor  → 时间线操作执行器（Command Pattern）
   ├── MediaProcessorService → 媒体处理路由（Facade + Cache）
@@ -53,7 +53,7 @@ packages/
 │   ├── commands/     # VSCode 命令注册
 │   ├── editor/       # EditorRegistry + VideoEditorProvider/Model
 │   ├── handlers/     # Webview 消息处理器
-│   ├── project/      # .jvi 文件加载/保存
+│   ├── project/      # .nkv 文件加载/保存
 │   ├── services/     # TimelineToolExecutor / MediaProcessor...
 │   └── views/        # 大纲面板、状态栏
 └── webview/src/

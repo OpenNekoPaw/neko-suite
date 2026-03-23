@@ -112,6 +112,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
 | 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
+| 格式策略 | [docs/architecture/format-strategy.md](./docs/architecture/format-strategy.md) | nk* 统一命名，JSON Schema 为文件格式 SSOT，Proto 仅引擎通信；Format SDK（@neko/shared/nkv）提供 load/validate/migrate/save；增量操作 20 种 + 全量 fallback |
 
 ### Rust 引擎开发约束
 

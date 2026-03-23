@@ -138,7 +138,7 @@ describe('EditorRegistry', () => {
 
   describe('模型注册', () => {
     it('应该能够注册模型', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       const disposable = registry.registerModel(model);
@@ -150,7 +150,7 @@ describe('EditorRegistry', () => {
     });
 
     it('注册模型应该触发 onDidRegisterEditor 事件', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       let fired = false;
@@ -168,7 +168,7 @@ describe('EditorRegistry', () => {
     });
 
     it('注销模型应该触发 onDidUnregisterEditor 事件', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       let fired = false;
@@ -188,7 +188,7 @@ describe('EditorRegistry', () => {
     });
 
     it('应该能够通过 URI 获取模型', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModel(model);
@@ -197,7 +197,7 @@ describe('EditorRegistry', () => {
     });
 
     it('获取未注册的模型应该返回 undefined', () => {
-      const uri = vscode.Uri.parse('file:///nonexistent.jvi');
+      const uri = vscode.Uri.parse('file:///nonexistent.nkv');
       expect(registry.getEditorByUri(uri)).toBeUndefined();
     });
   });
@@ -208,7 +208,7 @@ describe('EditorRegistry', () => {
 
   describe('活动编辑器管理', () => {
     it('应该能够设置活动编辑器', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModel(model);
@@ -218,7 +218,7 @@ describe('EditorRegistry', () => {
     });
 
     it('设置活动编辑器应该触发 onDidChangeActiveEditor 事件', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       let fired = false;
@@ -237,7 +237,7 @@ describe('EditorRegistry', () => {
     });
 
     it('设置相同的活动编辑器不应该触发事件', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModel(model);
@@ -254,7 +254,7 @@ describe('EditorRegistry', () => {
     });
 
     it('注销活动编辑器应该清除活动状态', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       const disposable = registry.registerModel(model);
@@ -266,7 +266,7 @@ describe('EditorRegistry', () => {
     });
 
     it('应该能够清除活动编辑器', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModel(model);
@@ -283,8 +283,8 @@ describe('EditorRegistry', () => {
 
   describe('按类型查询', () => {
     it('应该能够获取所有编辑器', () => {
-      const doc1 = createMockDocument('file:///test1.jvi');
-      const doc2 = createMockDocument('file:///test2.jvi');
+      const doc1 = createMockDocument('file:///test1.nkv');
+      const doc2 = createMockDocument('file:///test2.nkv');
       const model1 = new MockEditorModel(doc1);
       const model2 = new MockEditorModel(doc2);
 
@@ -298,7 +298,7 @@ describe('EditorRegistry', () => {
     });
 
     it('应该能够按类型获取编辑器', () => {
-      const doc1 = createMockDocument('file:///test1.jvi');
+      const doc1 = createMockDocument('file:///test1.nkv');
       const doc2 = createMockDocument('file:///test2.mp3');
       const model1 = new MockEditorModel(doc1, 'video');
       const model2 = new MockEditorModel(doc2, 'audio');
@@ -328,7 +328,7 @@ describe('EditorRegistry', () => {
   describe('生命周期', () => {
     it('dispose 应该清空所有模型和 Provider', () => {
       const provider = new MockModelProvider();
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModelProvider('video', provider);
@@ -355,7 +355,7 @@ describe('EditorRegistry', () => {
       registry.dispose();
 
       // 在 dispose 后触发事件不应该有响应
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       // 这些操作应该不会触发任何事件
@@ -379,7 +379,7 @@ describe('EditorRegistry', () => {
 
   describe('边界情况', () => {
     it('重复注册同一个模型应该警告但不崩溃', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       registry.registerModel(model);
@@ -390,7 +390,7 @@ describe('EditorRegistry', () => {
     });
 
     it('注销未注册的模型应该不报错', () => {
-      const doc = createMockDocument('file:///test.jvi');
+      const doc = createMockDocument('file:///test.nkv');
       const model = new MockEditorModel(doc);
 
       const disposable = registry.registerModel(model);

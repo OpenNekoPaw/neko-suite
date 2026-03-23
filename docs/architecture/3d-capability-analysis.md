@@ -619,7 +619,7 @@ neko-model 加载 + 预览
 |------|----------|-------------|-------------------|
 | 编辑空间 | 1D（时间线） | 2D（画布） | 3D（空间） |
 | 核心操作 | 剪辑、拼接、调速 | 平移、缩放、图层 | 旋转、建模、光照 |
-| 文件格式 | `.jvi` | `.jvc` | `.scene` / `.glb` |
+| 文件格式 | `.nkv` | `.nkc` | `.scene` / `.glb` |
 | 数据模型 | Timeline → Track → Element | Canvas → Layer → Node | Scene → Object → Mesh |
 
 ### 4.2 包结构

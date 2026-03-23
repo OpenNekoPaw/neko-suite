@@ -241,7 +241,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
     }
 
-    // Add the .jvi file's directory and its parent directories
+    // Add the .nkv file's directory and its parent directories
     // This allows access to media files relative to the project file
     const jviDir = vscode.Uri.file(path.dirname(document.uri.fsPath));
     if (!localResourceRoots.some((root) => root.fsPath === jviDir.fsPath)) {
@@ -249,7 +249,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     // Also add common parent directories that might contain media files
-    // (e.g., if .jvi is in /project/videos/ and media is in /project/assets/)
+    // (e.g., if .nkv is in /project/videos/ and media is in /project/assets/)
     const jviParent = vscode.Uri.file(path.dirname(path.dirname(document.uri.fsPath)));
     if (
       jviParent.fsPath !== '/' &&
@@ -606,7 +606,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           try {
             const fs = await import('fs');
 
-            // Resolve relative paths based on .jvi file location
+            // Resolve relative paths based on .nkv file location
             if (!path.isAbsolute(filePath)) {
               const jviDir = path.dirname(document.uri.fsPath);
               absolutePath = path.join(jviDir, filePath);

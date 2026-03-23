@@ -1,5 +1,5 @@
 /**
- * JVI Document Symbol Provider — Outline view for .jvi files.
+ * JVI Document Symbol Provider — Outline view for .nkv files.
  *
  * Provides a hierarchical symbol tree:
  *   Project (Module icon) — name, resolution @ fps

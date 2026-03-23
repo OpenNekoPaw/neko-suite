@@ -929,9 +929,9 @@ Hello!`;
   it('should detect multiple links in one document', () => {
     const text = `[[see: a.fountain]]
 Some text
-[[see: sub/b.nks]]
+[[see: sub/b.fountain]]
 More text
-[[see: c.story]]`;
+[[see: c.fountain]]`;
 
     const provider = new FountainDocumentLinkProvider();
     const doc = createMockDocument(text, '/project/main.fountain');

@@ -3,7 +3,7 @@
 //! Standalone WebSocket server for compat mode video export.
 //! Supports two modes:
 //! 1. Server mode: Listen for WebSocket export requests
-//! 2. CLI mode: Direct .jvi file export
+//! 2. CLI mode: Direct .nkv file export
 
 mod args;
 mod runner;

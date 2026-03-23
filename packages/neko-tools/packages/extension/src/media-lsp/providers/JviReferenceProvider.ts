@@ -1,7 +1,7 @@
 /**
- * JVI Reference Provider — Find All References for .jvi files.
+ * JVI Reference Provider — Find All References for .nkv files.
  *
- * When the cursor is on a `src` value, finds all .jvi elements across the
+ * When the cursor is on a `src` value, finds all .nkv elements across the
  * workspace that reference the same absolute media path.
  */
 
@@ -34,7 +34,7 @@ export class JviReferenceProvider implements vscode.ReferenceProvider {
     return references.map(
       (ref) =>
         new vscode.Location(
-          vscode.Uri.parse(ref.jviUri),
+          vscode.Uri.parse(ref.nkvUri),
           new vscode.Range(
             new vscode.Position(ref.srcRange.startLine, ref.srcRange.startChar),
             new vscode.Position(ref.srcRange.endLine, ref.srcRange.endChar),
