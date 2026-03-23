@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useMemo } from 'react';
-import type { ChatModelOption, ModelCategory } from '@neko/shared';
+import type { ChatModelOption, MediaModelType } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -18,13 +18,13 @@ interface MediaModelSelectorProps {
   onSelect: (modelId: string) => void;
 }
 
-const MEDIA_CATEGORIES: ModelCategory[] = ['image', 'video', 'audio'];
+const MEDIA_CATEGORIES: MediaModelType[] = ['image', 'video', 'audio', 'music'];
 
-const CATEGORY_LABELS: Record<string, string> = {
+const CATEGORY_LABELS: Record<MediaModelType, string> = {
   image: 'Image',
   video: 'Video',
   audio: 'Audio',
-  other: 'Other',
+  music: 'Music',
 };
 
 export function MediaModelSelector({ selectedModel, models, onSelect }: MediaModelSelectorProps) {
@@ -40,8 +40,8 @@ export function MediaModelSelector({ selectedModel, models, onSelect }: MediaMod
 
     for (const model of models) {
       if (model.id === 'none') continue;
-      const category = model.category || 'other';
-      if (!MEDIA_CATEGORIES.includes(category as ModelCategory) && category !== 'other') continue;
+      const category = model.category || 'image';
+      if (!MEDIA_CATEGORIES.includes(category as MediaModelType)) continue;
       if (!groups[category]) {
         groups[category] = [];
       }
@@ -49,7 +49,7 @@ export function MediaModelSelector({ selectedModel, models, onSelect }: MediaMod
     }
 
     const sortedCategories = Object.keys(groups).sort((a, b) => {
-      const order: Record<string, number> = { image: 1, video: 2, audio: 3, other: 4 };
+      const order: Record<string, number> = { image: 1, video: 2, audio: 3, music: 4 };
       return (order[a] ?? 99) - (order[b] ?? 99);
     });
 
@@ -109,7 +109,7 @@ export function MediaModelSelector({ selectedModel, models, onSelect }: MediaMod
           {groupedModels.sortedCategories.map((category) => (
             <div key={category}>
               <div className="px-3 py-1 mt-1 text-[10px] text-[var(--vscode-descriptionForeground)] font-medium border-t border-[var(--vscode-dropdown-border)]">
-                {CATEGORY_LABELS[category] ?? category}
+                {CATEGORY_LABELS[category as MediaModelType] ?? category}
               </div>
               {groupedModels.groups[category]?.map((model) => (
                 <button

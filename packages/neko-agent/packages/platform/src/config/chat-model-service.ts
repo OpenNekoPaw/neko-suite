@@ -5,7 +5,7 @@
  */
 
 import type { Model, Provider } from '../types/provider';
-import type { ChatModelOption, ModelCapability, ModelCategory } from '@neko/shared';
+import type { ChatModelOption, ModelCapability, ModelType } from '@neko/shared';
 
 /**
  * Chat model service interface
@@ -17,9 +17,9 @@ export interface IChatModelService {
   getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[];
 
   /**
-   * Infer model category from capabilities
+   * Get model type. Uses model.type if set, otherwise infers from capabilities.
    */
-  inferModelCategory(capabilities: string[]): ModelCategory;
+  getModelType(model: Model): ModelType;
 }
 
 /**
@@ -33,7 +33,7 @@ export class ChatModelService implements IChatModelService {
    */
   getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[] {
     const options: ChatModelOption[] = [
-      { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'chat' },
+      { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'llm' },
     ];
 
     // Only include providers with API key configured
@@ -47,7 +47,7 @@ export class ChatModelService implements IChatModelService {
       if (!provider) continue;
 
       const capabilities = model.capabilities ?? [];
-      const category = this.inferModelCategory(capabilities);
+      const category = this.getModelType(model);
 
       const providerName = provider.displayName || provider.name || provider.type;
       const modelName = model.displayName || model.name || model.id;
@@ -66,14 +66,22 @@ export class ChatModelService implements IChatModelService {
   }
 
   /**
-   * Infer model category from capabilities
+   * Get model type. Uses model.type if set, otherwise infers from capabilities.
    */
-  inferModelCategory(capabilities: string[]): ModelCategory {
+  getModelType(model: Model): ModelType {
+    if (model.type) return model.type;
+    return this.inferFromCapabilities(model.capabilities ?? []);
+  }
+
+  /**
+   * Infer model type from capabilities (backward compatibility fallback)
+   */
+  private inferFromCapabilities(capabilities: string[]): ModelType {
     if (capabilities.length === 0) {
-      return 'chat'; // Default to chat if no capabilities specified
+      return 'llm';
     }
     if (capabilities.includes('chat') || capabilities.includes('completion')) {
-      return 'chat';
+      return 'llm';
     }
     if (
       capabilities.includes('text_to_image') ||
@@ -90,14 +98,13 @@ export class ChatModelService implements IChatModelService {
     ) {
       return 'video';
     }
-    if (
-      capabilities.includes('text_to_audio') ||
-      capabilities.includes('text_to_music') ||
-      capabilities.includes('audio')
-    ) {
+    if (capabilities.includes('text_to_music')) {
+      return 'music';
+    }
+    if (capabilities.includes('text_to_audio') || capabilities.includes('audio')) {
       return 'audio';
     }
-    return 'other';
+    return 'llm';
   }
 }
 

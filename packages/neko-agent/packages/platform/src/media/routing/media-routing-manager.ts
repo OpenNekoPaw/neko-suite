@@ -5,16 +5,14 @@
  * Simplified: capability filtering and preference exclusion are inlined.
  */
 
+import type { MediaModelType } from '@neko/shared';
 import type { MediaGenerationType, MediaRoutingResult, RoutingPreference } from '../types';
 import type { ConfigManager } from '../../config/config-manager';
 
 /**
- * Map generation type to media type category
+ * Map generation type to media model type
  */
-const GENERATION_TYPE_TO_MEDIA_TYPE: Record<
-  MediaGenerationType,
-  'image' | 'video' | 'audio' | 'music'
-> = {
+const GENERATION_TYPE_TO_MEDIA_TYPE: Record<MediaGenerationType, MediaModelType> = {
   'text-to-image': 'image',
   'image-to-image': 'image',
   'text-to-video': 'video',
@@ -126,9 +124,7 @@ export class MediaRoutingManager {
   /**
    * Get configured default media model for a specific type
    */
-  private getDefaultMediaModel(
-    mediaType: 'image' | 'video' | 'audio' | 'music',
-  ): string | undefined {
+  private getDefaultMediaModel(mediaType: MediaModelType): string | undefined {
     const defaultMediaModels = this.configManager.getDefaultMediaModels();
     return defaultMediaModels[mediaType];
   }

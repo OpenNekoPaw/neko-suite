@@ -2,7 +2,7 @@
  * ModelIcon — provider / category color dot for model selectors
  */
 
-import type { ModelCategory } from '@neko/shared';
+import type { ModelType } from '@neko/shared';
 
 // Brand-inspired colors, adjusted for VS Code dark/light themes
 const PROVIDER_COLORS: Record<string, string> = {
@@ -17,12 +17,12 @@ const PROVIDER_COLORS: Record<string, string> = {
   cohere: '#39594D',
 };
 
-const CATEGORY_COLORS: Record<ModelCategory, string> = {
-  chat: '#10A37F',
+const CATEGORY_COLORS: Record<ModelType, string> = {
+  llm: '#10A37F',
   image: '#A855F7',
   video: '#EF4444',
   audio: '#06B6D4',
-  other: '#6B7280',
+  music: '#F59E0B',
 };
 
 export function getProviderColor(providerId: string): string {
@@ -33,8 +33,8 @@ export function getProviderColor(providerId: string): string {
   return '#6B7280';
 }
 
-export function getCategoryColor(category: ModelCategory | undefined): string {
-  return category ? (CATEGORY_COLORS[category] ?? '#6B7280') : '#6B7280';
+export function getCategoryColor(category: ModelType | string | undefined): string {
+  return category ? (CATEGORY_COLORS[category as ModelType] ?? '#6B7280') : '#6B7280';
 }
 
 interface ModelDotProps {

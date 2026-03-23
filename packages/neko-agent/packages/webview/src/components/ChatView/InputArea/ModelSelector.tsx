@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useMemo } from 'react';
-import type { ChatModelOption, ModelCategory } from '@neko/shared';
+import type { ChatModelOption, ModelType } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -16,12 +16,12 @@ interface ModelSelectorProps {
 }
 
 // Category labels and order
-const CATEGORY_CONFIG: Record<ModelCategory, { labelKey: string; order: number }> = {
-  chat: { labelKey: 'chat.categoryChat', order: 1 },
+const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = {
+  llm: { labelKey: 'chat.categoryChat', order: 1 },
   image: { labelKey: 'chat.categoryImage', order: 2 },
   video: { labelKey: 'chat.categoryVideo', order: 3 },
   audio: { labelKey: 'chat.categoryAudio', order: 4 },
-  other: { labelKey: 'chat.categoryOther', order: 5 },
+  music: { labelKey: 'chat.categoryMusic', order: 5 },
 };
 
 export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {
@@ -38,7 +38,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
     for (const model of models) {
       if (model.id === 'auto') continue;
-      const category = (model as ChatModelOption).category || 'chat';
+      const category = (model as ChatModelOption).category || 'llm';
       if (!groups[category]) {
         groups[category] = [];
       }
@@ -47,8 +47,8 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
     // Sort categories by order
     const sortedCategories = Object.keys(groups).sort((a, b) => {
-      const orderA = CATEGORY_CONFIG[a as ModelCategory]?.order ?? 99;
-      const orderB = CATEGORY_CONFIG[b as ModelCategory]?.order ?? 99;
+      const orderA = CATEGORY_CONFIG[a as ModelType]?.order ?? 99;
+      const orderB = CATEGORY_CONFIG[b as ModelType]?.order ?? 99;
       return orderA - orderB;
     });
 
@@ -65,7 +65,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
   };
 
   const getCategoryLabel = (category: string): string => {
-    const config = CATEGORY_CONFIG[category as ModelCategory];
+    const config = CATEGORY_CONFIG[category as ModelType];
     if (config) {
       const label = t(config.labelKey);
       // Fallback if translation not found
@@ -78,7 +78,8 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
   const hasModels = models.length > 1;
 
-  const selectedModelObj = selectedModel === 'auto' ? null : models.find((m) => m.id === selectedModel);
+  const selectedModelObj =
+    selectedModel === 'auto' ? null : models.find((m) => m.id === selectedModel);
   const dotColor = selectedModelObj ? getProviderColor(selectedModelObj.providerId) : '#6B7280';
 
   return (

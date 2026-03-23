@@ -102,6 +102,7 @@ export type ProviderType =
   | 'ollama'
   | 'generic'
   | 'newapi'
+  | 'oneapi'
   // Media generation providers
   | 'xai'
   | 'kling'
@@ -214,6 +215,11 @@ export interface ModelConfig {
    * Set to false for proxy services that don't support beta headers.
    */
   supportsBeta?: boolean;
+  /**
+   * Model type for classification and routing.
+   * Optional — when omitted, inferred from capabilities for backward compatibility.
+   */
+  type?: ModelType;
   /** Model capabilities */
   capabilities: ModelCapability[] | string[];
   /** Context window size in tokens */
@@ -346,9 +352,17 @@ export interface ConfiguredPrompt extends PromptPresetConfig {
 // =============================================================================
 
 /**
- * Model category for UI grouping
+ * Model type for classification and routing
  */
-export type ModelCategory = 'chat' | 'image' | 'video' | 'audio' | 'other';
+export type ModelType = 'llm' | 'image' | 'video' | 'audio' | 'music';
+
+/**
+ * Media model type (excludes LLM)
+ */
+export type MediaModelType = Exclude<ModelType, 'llm'>;
+
+/** @deprecated Use ModelType instead */
+export type ModelCategory = ModelType | 'chat' | 'other';
 
 /**
  * Chat model option for UI model selector dropdown
@@ -365,6 +379,6 @@ export interface ChatModelOption {
   modelId: string;
   /** Model capabilities (optional, for filtering) */
   capabilities?: ModelCapability[];
-  /** Model category for UI grouping */
-  category?: ModelCategory;
+  /** Model type for UI grouping */
+  category?: ModelType;
 }

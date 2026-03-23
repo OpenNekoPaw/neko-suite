@@ -7,7 +7,7 @@
  * - Workspace config: .neko/config.json
  */
 
-import type { ProviderConfig, ModelConfig, MCPServerConfig } from '../types/config';
+import type { ProviderConfig, ModelConfig, MCPServerConfig, MediaModelType } from '../types/config';
 
 // =============================================================================
 // Unified Configuration Format
@@ -53,12 +53,7 @@ export interface UnifiedConfig {
   defaultModel?: string;
 
   /** Default media models by type */
-  defaultMediaModels?: {
-    image?: string;
-    video?: string;
-    audio?: string;
-    music?: string;
-  };
+  defaultMediaModels?: Partial<Record<MediaModelType, string>>;
 
   /** Global default maxTokens */
   maxTokens?: number;

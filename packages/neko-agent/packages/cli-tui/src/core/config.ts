@@ -160,10 +160,11 @@ export function loadConfig(
       enabled: s.enabled ?? true,
     }));
 
-    // Media models
+    // Media models: prefer type field, fallback to capabilities check
     const mediaModels = cm
       .getEnabledModels()
       .filter((m) => {
+        if (m.type && m.type !== 'llm') return true;
         const caps = m.capabilities ?? [];
         return caps.some((c) => MEDIA_CAPABILITIES.has(c as string));
       })

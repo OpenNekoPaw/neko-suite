@@ -28,10 +28,13 @@ interface OpenAIImageResponse {
 }
 
 interface OpenAIVideoResponse {
-  id: string;
+  /** Sora-style task ID */
+  id?: string;
+  /** NewAPI-style task ID */
+  task_id?: string;
   status: 'queued' | 'in_progress' | 'completed' | 'failed';
-  created_at: number;
-  model: string;
+  created_at?: number;
+  model?: string;
   output?: {
     video_url: string;
     duration: number;
@@ -167,9 +170,27 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     };
 
     if (request.duration) body.duration = request.duration;
-    if (request.resolution) body.resolution = request.resolution;
-    if (request.aspectRatio) body.aspect_ratio = request.aspectRatio;
-    if (request.referenceImageUrl) body.image_url = request.referenceImageUrl;
+    if (request.fps) body.fps = request.fps;
+
+    // Convert resolution string (e.g., "720p") to width/height
+    if (request.resolution) {
+      const dims = this.parseResolution(request.resolution);
+      if (dims) {
+        body.width = dims.width;
+        body.height = dims.height;
+      }
+    }
+
+    // Convert aspect ratio to width/height when no explicit resolution
+    if (request.aspectRatio && !body.width) {
+      body.aspect_ratio = request.aspectRatio;
+    }
+
+    // NewAPI uses "image", Sora uses "image_url"
+    if (request.referenceImageUrl) {
+      body.image = request.referenceImageUrl;
+      body.image_url = request.referenceImageUrl;
+    }
 
     const { data, error } = await this.request<OpenAIVideoResponse>(
       url,
@@ -181,9 +202,12 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
       return { status: 'failed', error };
     }
 
+    // Accept both Sora-style "id" and NewAPI-style "task_id"
+    const taskId = data?.id ?? data?.task_id;
+
     // Video generation is async, return task ID for polling
     return {
-      externalTaskId: data?.id,
+      externalTaskId: taskId,
       status: this.mapStatusFrom(data?.status, OpenAICompatMediaAdapter.STATUS_MAP),
       progress: this.estimateProgressFrom(data?.status, OpenAICompatMediaAdapter.PROGRESS_MAP),
     };
@@ -257,5 +281,17 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     if (aspectRatio === '16:9') return '1792x1024';
     if (aspectRatio === '9:16') return '1024x1792';
     return '1024x1024';
+  }
+
+  /**
+   * Parse resolution string (e.g., "720p", "1080p") to width/height
+   */
+  private parseResolution(resolution: string): { width: number; height: number } | null {
+    const presets: Record<string, { width: number; height: number }> = {
+      '480p': { width: 854, height: 480 },
+      '720p': { width: 1280, height: 720 },
+      '1080p': { width: 1920, height: 1080 },
+    };
+    return presets[resolution] ?? null;
   }
 }

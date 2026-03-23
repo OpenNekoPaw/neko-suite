@@ -8,7 +8,7 @@
 import type { Provider, Model } from '../types/provider';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset } from '../types/config';
-import type { ChatModelOption, UnifiedConfig } from '@neko/shared';
+import type { ChatModelOption, MediaModelType, UnifiedConfig } from '@neko/shared';
 import { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG } from '@neko/shared';
 import { type UserConfig, type IUserConfigManager } from './user-config';
 import {
@@ -57,7 +57,7 @@ export class ConfigManager {
   private configMerged = false;
   private cachedConfig: MergedConfig | null = null;
   /** Runtime-only media model overrides (not persisted to disk) */
-  private runtimeMediaDefaults: { image?: string; video?: string; audio?: string; music?: string } = {};
+  private runtimeMediaDefaults: Partial<Record<MediaModelType, string>> = {};
 
   // Merged data
   private providers: Map<string, Provider> = new Map();
@@ -298,7 +298,7 @@ export class ConfigManager {
     return this.getScalar('defaultModel') ?? DEFAULT_CONFIG.defaultModel;
   }
 
-  getDefaultMediaModels(): { image?: string; video?: string; audio?: string; music?: string } {
+  getDefaultMediaModels(): Partial<Record<MediaModelType, string>> {
     const fromConfig = this.getScalar('defaultMediaModels') ?? {};
     // Runtime overrides take priority over config-file defaults (not persisted)
     return { ...fromConfig, ...this.runtimeMediaDefaults };
@@ -309,9 +309,7 @@ export class ConfigManager {
    * These override config-file defaults but are never written to disk.
    * Pass empty overrides to clear all per-category session overrides.
    */
-  setRuntimeMediaDefaults(
-    overrides: { image?: string; video?: string; audio?: string; music?: string },
-  ): void {
+  setRuntimeMediaDefaults(overrides: Partial<Record<MediaModelType, string>>): void {
     this.runtimeMediaDefaults = { ...overrides };
   }
 

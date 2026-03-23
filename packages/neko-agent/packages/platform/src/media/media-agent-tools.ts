@@ -23,7 +23,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateImage',
       description:
-        'Submit an async image generation task. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
+        'Submit an async IMAGE generation task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -75,7 +75,7 @@ export function registerMediaAgentTools(
               taskId: task.id,
               type: 'image',
               status: 'queued',
-              message: `Image generation task submitted and processing in background. Task ID: ${task.id}. The image is NOT ready yet — do not tell the user it is finished.`,
+              message: prompt,
               routedTo: { provider: task.providerId },
             },
           };
@@ -94,7 +94,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateVideo',
       description:
-        'Submit an async video generation task. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
+        'Submit an async VIDEO generation task (clips, animations, motion content). Use this when the user asks for a video, animation, or moving content — for still images use GenerateImage instead. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -137,7 +137,7 @@ export function registerMediaAgentTools(
               taskId: task.id,
               type: 'video',
               status: 'queued',
-              message: `Video generation task submitted and processing in background. Task ID: ${task.id}. The video is NOT ready yet — do not tell the user it is finished.`,
+              message: prompt,
               routedTo: { provider: task.providerId },
             },
           };
@@ -199,7 +199,7 @@ export function registerMediaAgentTools(
               taskId: task.id,
               type: 'audio',
               status: 'queued',
-              message: `Music generation task submitted and processing in background. Task ID: ${task.id}. The music is NOT ready yet — do not tell the user it is finished.`,
+              message: prompt,
               routedTo: { provider: task.providerId },
             },
           };
@@ -262,7 +262,7 @@ export function registerMediaAgentTools(
               taskId: task.id,
               type: 'audio',
               status: 'queued',
-              message: `TTS task submitted and processing in background. Task ID: ${task.id}. The audio is NOT ready yet — do not tell the user it is finished.`,
+              message: text,
               routedTo: { provider: task.providerId },
             },
           };
