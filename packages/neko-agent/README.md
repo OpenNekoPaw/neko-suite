@@ -156,6 +156,27 @@ const result = await vscode.commands.executeCommand<string | null>(
 
 **合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000）。返回模型第一条文本回复，非文本内容或任何错误均返回 `null`。
 
+## 文档格式支持
+
+NekoAgent 支持读取多种文档格式用于 AI 内容分析和视频生成工作流：
+
+### 支持的格式
+
+| 类型 | 格式 | 说明 |
+|------|------|------|
+| **文本文档** | PDF, DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取纯文本内容 |
+| **电子书** | EPUB | 提取所有章节文本 + 元数据 |
+| **漫画档案** | CBZ, CBR | 提取图片页面供 AI 视觉分析 |
+
+### 法律声明
+
+- **仅支持 DRM-free 内容**（DRM 保护的文件会被拒绝）
+- 用户必须拥有文件的合法使用权
+- 不支持盗版内容或未授权分发
+- 本工具仅用于本地内容处理，不分发内容
+
+详细文档：[DOCUMENT_FORMATS.md](./DOCUMENT_FORMATS.md)
+
 ## 开发
 
 ```bash

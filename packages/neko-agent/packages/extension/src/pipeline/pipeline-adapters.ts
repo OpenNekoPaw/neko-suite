@@ -27,7 +27,7 @@ export interface IFileReader {
 }
 
 export interface IDocumentReader {
-  read(filePath: string): Promise<{ text: string; metadata?: Record<string, string> }>;
+  read(filePath: string): Promise<{ text: string; metadata?: Record<string, unknown> }>;
   supports(filePath: string): boolean;
 }
 
@@ -90,9 +90,16 @@ export class VSCodeFileReader implements IFileReader {
 export class DocumentReaderAdapter implements IDocumentReader {
   constructor(private readonly service: IDocumentReaderService) {}
 
-  async read(filePath: string): Promise<{ text: string; metadata?: Record<string, string> }> {
+  async read(filePath: string): Promise<{ text: string; metadata?: Record<string, unknown> }> {
     const result = await this.service.read(filePath);
-    return { text: result.text, metadata: result.metadata };
+    return {
+      text: result.text,
+      metadata: {
+        ...result.metadata,
+        pageCount: result.pageCount,
+        imagePaths: result.imagePaths,
+      },
+    };
   }
 
   supports(filePath: string): boolean {

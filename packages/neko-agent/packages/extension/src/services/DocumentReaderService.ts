@@ -1,12 +1,18 @@
 /**
- * Document Reader Service — Extracts text from PDF, DOCX, and other document formats
+ * Document Reader Service — Extracts text from PDF, DOCX, EPUB, CBZ, CBR and other document formats
  *
  * Runs in Extension Host (Node.js) where file system and native modules are available.
  * Used by the readDocument pipeline stage and ReadDocument agent tool.
+ *
+ * Legal Notice:
+ * - Supports DRM-free content only
+ * - Users must have legal rights to process files
+ * - Do not use for pirated content
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { getLogger } from '../base';
 
 const logger = getLogger('DocumentReaderService');
@@ -18,7 +24,9 @@ export interface DocumentContent {
   /** Number of pages (for PDFs) */
   pageCount?: number;
   /** Document metadata (title, author, etc.) */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  /** Image paths (for comic archives) */
+  imagePaths?: string[];
 }
 
 /** Document reader interface */
@@ -27,6 +35,8 @@ export interface IDocumentReaderService {
   read(filePath: string): Promise<DocumentContent>;
   /** Check if a file format is supported */
   supports(filePath: string): boolean;
+  /** Check if a file has DRM protection */
+  hasDRM(filePath: string): Promise<boolean>;
 }
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -41,6 +51,9 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.json',
   '.yaml',
   '.yml',
+  '.epub',
+  '.cbz',
+  '.cbr',
 ]);
 
 export class DocumentReaderService implements IDocumentReaderService {
@@ -52,12 +65,26 @@ export class DocumentReaderService implements IDocumentReaderService {
   async read(filePath: string): Promise<DocumentContent> {
     const ext = path.extname(filePath).toLowerCase();
 
+    // Check DRM protection
+    if (await this.hasDRM(filePath)) {
+      throw new Error(
+        'DRM-protected files are not supported due to legal restrictions. ' +
+          'Please use DRM-free versions of your content.',
+      );
+    }
+
     switch (ext) {
       case '.pdf':
         return this.readPdf(filePath);
       case '.docx':
       case '.doc':
         return this.readDocx(filePath);
+      case '.epub':
+        return this.readEpub(filePath);
+      case '.cbz':
+        return this.readCbz(filePath);
+      case '.cbr':
+        return this.readCbr(filePath);
       case '.md':
       case '.txt':
       case '.fountain':
@@ -152,6 +179,203 @@ export class DocumentReaderService implements IDocumentReaderService {
       throw new Error(
         `Failed to read DOCX: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  private async readEpub(filePath: string): Promise<DocumentContent> {
+    try {
+      const EPub = await this.tryImport<typeof import('epub2')>('epub2');
+
+      if (!EPub) {
+        throw new Error(
+          'epub2 package not installed. Run: pnpm add epub2 -F @neko-agent/extension',
+        );
+      }
+
+      return new Promise((resolve, reject) => {
+        const epub = new EPub(filePath);
+
+        epub.on('end', async () => {
+          try {
+            const chapters = epub.flow.map((c: { id: string }) => c.id);
+            const texts: string[] = [];
+
+            for (const id of chapters) {
+              const text = await new Promise<string>((res) => {
+                epub.getChapter(id, (err: Error | null, content: string) => {
+                  if (err) return res('');
+                  // Strip HTML tags
+                  const clean = content
+                    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                  res(clean);
+                });
+              });
+              texts.push(text);
+            }
+
+            resolve({
+              text: texts.join('\n\n'),
+              metadata: {
+                title: epub.metadata.title,
+                author: epub.metadata.creator,
+                publisher: epub.metadata.publisher,
+                language: epub.metadata.language,
+              },
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        epub.on('error', reject);
+        epub.parse();
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('epub2')) {
+        throw error;
+      }
+      logger.error('Failed to read EPUB', { path: filePath, error });
+      throw new Error(
+        `Failed to read EPUB: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async readCbz(filePath: string): Promise<DocumentContent> {
+    try {
+      const AdmZip = await this.tryImport<typeof import('adm-zip')>('adm-zip');
+
+      if (!AdmZip) {
+        throw new Error(
+          'adm-zip package not installed. Run: pnpm add adm-zip -F @neko-agent/extension',
+        );
+      }
+
+      const zip = new AdmZip(filePath);
+      const entries = zip
+        .getEntries()
+        .filter((e) => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(e.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+      // Extract images to temporary directory
+      const tmpDir = path.join(os.tmpdir(), `neko_cbz_${Date.now()}`);
+      await fs.mkdir(tmpDir, { recursive: true });
+
+      const imagePaths: string[] = [];
+      for (const entry of entries) {
+        const imgPath = path.join(tmpDir, path.basename(entry.name));
+        await fs.writeFile(imgPath, entry.getData());
+        imagePaths.push(imgPath);
+      }
+
+      logger.info('Extracted CBZ archive', { pages: entries.length, tmpDir });
+
+      return {
+        text: `Comic archive with ${entries.length} pages`,
+        pageCount: entries.length,
+        imagePaths,
+        metadata: {
+          format: 'cbz',
+          fileName: path.basename(filePath),
+          tmpDir,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('adm-zip')) {
+        throw error;
+      }
+      logger.error('Failed to read CBZ', { path: filePath, error });
+      throw new Error(
+        `Failed to read CBZ: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async readCbr(filePath: string): Promise<DocumentContent> {
+    try {
+      const unrar = await this.tryImport<typeof import('node-unrar-js')>('node-unrar-js');
+
+      if (!unrar) {
+        throw new Error(
+          'node-unrar-js package not installed. Run: pnpm add node-unrar-js -F @neko-agent/extension',
+        );
+      }
+
+      const buffer = await fs.readFile(filePath);
+      const extractor = unrar.createExtractorFromData({ data: buffer });
+      const list = extractor.getFileList();
+
+      const imageFiles = list.fileHeaders
+        .filter((f) => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(f.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+      const tmpDir = path.join(os.tmpdir(), `neko_cbr_${Date.now()}`);
+      await fs.mkdir(tmpDir, { recursive: true });
+
+      const imagePaths: string[] = [];
+      const extracted = extractor.extract();
+
+      for (const file of extracted.files) {
+        if (/\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.fileHeader.name)) {
+          const imgPath = path.join(tmpDir, path.basename(file.fileHeader.name));
+          await fs.writeFile(imgPath, file.extract[1]);
+          imagePaths.push(imgPath);
+        }
+      }
+
+      logger.info('Extracted CBR archive', { pages: imageFiles.length, tmpDir });
+
+      return {
+        text: `Comic archive with ${imageFiles.length} pages`,
+        pageCount: imageFiles.length,
+        imagePaths,
+        metadata: {
+          format: 'cbr',
+          fileName: path.basename(filePath),
+          tmpDir,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('node-unrar-js')) {
+        throw error;
+      }
+      logger.error('Failed to read CBR', { path: filePath, error });
+      throw new Error(
+        `Failed to read CBR: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  async hasDRM(filePath: string): Promise<boolean> {
+    const ext = path.extname(filePath).toLowerCase();
+
+    try {
+      if (ext === '.epub') {
+        // Check for META-INF/encryption.xml
+        const AdmZip = await this.tryImport<typeof import('adm-zip')>('adm-zip');
+        if (!AdmZip) return false;
+
+        const zip = new AdmZip(filePath);
+        const encryptionEntry = zip.getEntry('META-INF/encryption.xml');
+        return encryptionEntry !== null;
+      }
+
+      if (ext === '.pdf') {
+        // Check for encryption flag in PDF header
+        const buffer = await fs.readFile(filePath);
+        const header = buffer.toString('utf-8', 0, 1024);
+        return header.includes('/Encrypt');
+      }
+
+      // CBZ/CBR/DOCX don't typically have DRM
+      return false;
+    } catch (error) {
+      logger.warn('Failed to check DRM', { path: filePath, error });
+      return false;
     }
   }
 
