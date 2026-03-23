@@ -128,9 +128,9 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
           <span className="text-[11px] text-[var(--activity-inactive)] whitespace-nowrap">
             {audioInfo.codec.toUpperCase()} · {(audioInfo.sampleRate / 1000).toFixed(1)}kHz ·{' '}
             {audioInfo.channels === 1
-              ? 'Mono'
+              ? t('audio.common.mono')
               : audioInfo.channels === 2
-                ? 'Stereo'
+                ? t('audio.common.stereo')
                 : `${audioInfo.channels}ch`}
             {audioInfo.bitrate ? ` · ${Math.round(audioInfo.bitrate / 1000)}kbps` : ''}
           </span>
@@ -234,7 +234,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
       </MacIconButton>
       <input
         type="range"
-        className="neko-slider w-16 bg-[var(--btn-bg)]"
+        className="neko-slider w-16"
         min="0"
         max="1"
         step="0.05"

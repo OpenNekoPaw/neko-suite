@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { getNonce } from './nonce';
 
 export interface WebviewHtmlOptions {
@@ -25,22 +26,23 @@ export interface WebviewHtmlOptions {
 export function getWebviewHtml(options: WebviewHtmlOptions): string {
   const { webview, extensionUri, devMode = false, devPort = 5175 } = options;
   const nonce = getNonce();
+  const localeAttr = injectLocaleAttribute();
 
   if (devMode) {
-    return getDevHtml(nonce, devPort);
+    return getDevHtml(nonce, devPort, localeAttr);
   }
 
-  return getProdHtml(webview, extensionUri, nonce);
+  return getProdHtml(webview, extensionUri, nonce, localeAttr);
 }
 
 /**
  * Dev mode: connect to Vite dev server for HMR
  */
-function getDevHtml(nonce: string, devPort: number): string {
+function getDevHtml(nonce: string, devPort: number, localeAttr: string): string {
   const devUrl = `http://localhost:${devPort}`;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html ${localeAttr}>
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -66,13 +68,18 @@ function getDevHtml(nonce: string, devPort: number): string {
 /**
  * Production mode: load bundled assets from dist
  */
-function getProdHtml(webview: vscode.Webview, extensionUri: vscode.Uri, nonce: string): string {
+function getProdHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+  nonce: string,
+  localeAttr: string,
+): string {
   const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'editor.js'));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'style.css'));
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html ${localeAttr}>
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />

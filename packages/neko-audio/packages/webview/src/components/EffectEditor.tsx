@@ -62,7 +62,7 @@ export function EffectEditor({
           size="sm"
           onClick={() => onRemove(effect.id)}
           title={t('audio.effects.remove')}
-          className="w-5 h-5 text-[10px] text-[#f44]"
+          className="w-5 h-5 text-[10px] text-[var(--status-error)]"
         >
           ✕
         </MacIconButton>
@@ -123,17 +123,19 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
     case 'slider':
       return (
         <div className="flex items-center gap-1.5">
-          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
+          <label className="text-[10px] min-w-[60px] max-w-[80px] shrink-0 opacity-70 truncate">
+            {label}
+          </label>
           <input
             type="range"
-            className="neko-slider flex-1 bg-[var(--neko-surface)]"
+            className="neko-slider flex-1 min-w-0"
             min={paramDef.min}
             max={paramDef.max}
             step={paramDef.step}
             value={typeof value === 'number' ? value : (paramDef.min ?? 0)}
             onChange={handleSliderChange}
           />
-          <span className="text-[10px] w-[50px] text-right shrink-0">
+          <span className="text-[10px] min-w-[52px] text-right shrink-0 tabular-nums">
             {typeof value === 'number' ? formatValue(value, paramDef) : '—'}
           </span>
         </div>
@@ -142,7 +144,9 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
     case 'select':
       return (
         <div className="flex items-center gap-1.5">
-          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
+          <label className="text-[10px] min-w-[60px] max-w-[80px] shrink-0 opacity-70 truncate">
+            {label}
+          </label>
           <select
             value={typeof value === 'string' ? value : ''}
             onChange={handleSelectChange}
@@ -160,7 +164,9 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
     case 'boolean':
       return (
         <div className="flex items-center gap-1.5">
-          <label className="text-[10px] w-[60px] shrink-0 opacity-70">{label}</label>
+          <label className="text-[10px] min-w-[60px] max-w-[80px] shrink-0 opacity-70 truncate">
+            {label}
+          </label>
           <input
             type="checkbox"
             checked={typeof value === 'boolean' ? value : false}

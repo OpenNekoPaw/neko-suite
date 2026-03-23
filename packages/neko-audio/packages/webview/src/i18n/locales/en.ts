@@ -47,6 +47,101 @@ const audio: MessageBundle = {
   'audio.effects.noEffects': 'No effects added',
   'audio.effects.clear': 'Clear All',
 
+  // Effect categories
+  'audioEffects.category.dynamics': 'Dynamics',
+  'audioEffects.category.filter': 'Filter',
+  'audioEffects.category.spatial': 'Spatial',
+  'audioEffects.category.modulation': 'Modulation',
+  'audioEffects.category.utility': 'Utility',
+
+  // Effect names
+  'audioEffects.noiseReduction': 'Noise Reduction',
+  'audioEffects.compressor': 'Compressor',
+  'audioEffects.limiter': 'Limiter',
+  'audioEffects.reverb': 'Reverb',
+  'audioEffects.delay': 'Delay',
+  'audioEffects.chorus': 'Chorus',
+  'audioEffects.distortion': 'Distortion',
+  'audioEffects.pitchShift': 'Pitch Shift',
+  'audioEffects.timeStretch': 'Time Stretch',
+  'audioEffects.highPass': 'High-Pass Filter',
+  'audioEffects.lowPass': 'Low-Pass Filter',
+  'audioEffects.bandPass': 'Band-Pass Filter',
+
+  // Effect descriptions
+  'audioEffects.noiseReduction.description': 'Reduce background noise',
+  'audioEffects.compressor.description': 'Dynamic range compression',
+  'audioEffects.limiter.description': 'Peak limiting',
+  'audioEffects.reverb.description': 'Add reverberation',
+  'audioEffects.delay.description': 'Echo and delay effect',
+  'audioEffects.chorus.description': 'Chorus modulation',
+  'audioEffects.distortion.description': 'Distortion effect',
+  'audioEffects.pitchShift.description': 'Shift pitch up or down',
+  'audioEffects.timeStretch.description': 'Stretch or compress time',
+  'audioEffects.highPass.description': 'High-pass frequency filter',
+  'audioEffects.lowPass.description': 'Low-pass frequency filter',
+  'audioEffects.bandPass.description': 'Band-pass frequency filter',
+
+  // Effect parameters
+  'audioEffects.params.amount': 'Amount',
+  'audioEffects.params.threshold': 'Threshold',
+  'audioEffects.params.smoothing': 'Smoothing',
+  'audioEffects.params.ratio': 'Ratio',
+  'audioEffects.params.attack': 'Attack',
+  'audioEffects.params.release': 'Release',
+  'audioEffects.params.knee': 'Knee',
+  'audioEffects.params.makeupGain': 'Makeup Gain',
+  'audioEffects.params.ceiling': 'Ceiling',
+  'audioEffects.params.type': 'Type',
+  'audioEffects.params.roomSize': 'Room Size',
+  'audioEffects.params.damping': 'Damping',
+  'audioEffects.params.wetDry': 'Wet/Dry',
+  'audioEffects.params.width': 'Width',
+  'audioEffects.params.preDelay': 'Pre-Delay',
+  'audioEffects.params.delayTime': 'Delay Time',
+  'audioEffects.params.feedback': 'Feedback',
+  'audioEffects.params.stereo': 'Stereo',
+  'audioEffects.params.pingPong': 'Ping-Pong',
+  'audioEffects.params.rate': 'Rate',
+  'audioEffects.params.depth': 'Depth',
+  'audioEffects.params.delay': 'Delay',
+  'audioEffects.params.drive': 'Drive',
+  'audioEffects.params.outputGain': 'Output Gain',
+  'audioEffects.params.semitones': 'Semitones',
+  'audioEffects.params.preserveFormants': 'Preserve Formants',
+  'audioEffects.params.preservePitch': 'Preserve Pitch',
+  'audioEffects.params.frequency': 'Frequency',
+  'audioEffects.params.resonance': 'Resonance',
+  'audioEffects.params.bandwidth': 'Bandwidth',
+  'audioEffects.params.gain': 'Gain',
+
+  // Reverb types
+  'audioEffects.reverbType.room': 'Room',
+  'audioEffects.reverbType.hall': 'Hall',
+  'audioEffects.reverbType.plate': 'Plate',
+  'audioEffects.reverbType.spring': 'Spring',
+  'audioEffects.reverbType.chamber': 'Chamber',
+
+  // Distortion types
+  'audioEffects.distortionType.soft': 'Soft',
+  'audioEffects.distortionType.hard': 'Hard',
+  'audioEffects.distortionType.tube': 'Tube',
+  'audioEffects.distortionType.fuzz': 'Fuzz',
+
+  // Common UI
+  'audio.common.close': 'Close',
+  'audio.common.mono': 'Mono',
+  'audio.common.stereo': 'Stereo',
+
+  // Spectrum
+  'audio.spectrum.noData': 'No spectrum data',
+
+  // Timeline
+  'audio.timeline.empty': 'No tracks — import audio files to get started',
+
+  // Recording
+  'audio.recording.micFallback': 'Microphone {id}',
+
   // Empty project
   'audio.import.empty': 'No audio source. Import a file to start editing.',
   'audio.import.drop': 'Drop audio file here',

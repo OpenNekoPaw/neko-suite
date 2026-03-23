@@ -12,6 +12,7 @@ import { TimelineRuler } from './TimelineRuler';
 import { TrackLane } from './TrackLane';
 import { PIXELS_PER_SECOND, TRACK_HEIGHT, RULER_HEIGHT, TRACK_LABEL_WIDTH } from '../../constants';
 import { getTotalDuration } from '@neko/shared';
+import { t } from '../../i18n';
 
 export function AudioTimeline() {
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
@@ -79,7 +80,7 @@ export function AudioTimeline() {
               className="neko-timeline-guides flex items-center justify-center text-[13px] text-[var(--activity-inactive)]"
               style={{ height: TRACK_HEIGHT * 6, width: '100%' }}
             >
-              No tracks — import audio files to get started
+              {t('audio.timeline.empty')}
             </div>
           )}
         </div>

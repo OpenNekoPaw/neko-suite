@@ -8,12 +8,12 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { AudioStreamClient } from '@neko/neko-client';
 import { useSpectrum } from '../hooks/useSpectrum';
+import { t } from '../i18n';
 
-// Colors
-const BAR_COLOR_LOW = '#4a9eff'; // Bass (0-200Hz)
-const BAR_COLOR_MID = '#00cc88'; // Mids (200-2kHz)
-const BAR_COLOR_HIGH = '#ff6b6b'; // Highs (2kHz+)
-const BG_COLOR = 'rgba(0, 0, 0, 0.3)';
+/** Read CSS custom properties at draw-time so canvas follows theme */
+function getCssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 interface SpectrumAnalyzerProps {
   audioClientRef: React.RefObject<AudioStreamClient | null>;
@@ -44,15 +44,15 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
     ctx.clearRect(0, 0, width, height);
 
     // Background
-    ctx.fillStyle = BG_COLOR;
+    ctx.fillStyle = getCssVar('--spectrum-bg');
     ctx.fillRect(0, 0, width, height);
 
     if (!frequencyData || frequencyData.length === 0) {
       // No data — draw empty state
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fillStyle = getCssVar('--spectrum-empty');
       ctx.font = '11px var(--vscode-font-family, sans-serif)';
       ctx.textAlign = 'center';
-      ctx.fillText('No spectrum data', width / 2, height / 2);
+      ctx.fillText(t('audio.spectrum.noData'), width / 2, height / 2);
       return;
     }
 
@@ -72,11 +72,11 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
 
       // Color by frequency range
       if (i < lowEnd) {
-        ctx.fillStyle = BAR_COLOR_LOW;
+        ctx.fillStyle = getCssVar('--spectrum-low');
       } else if (i < midEnd) {
-        ctx.fillStyle = BAR_COLOR_MID;
+        ctx.fillStyle = getCssVar('--spectrum-mid');
       } else {
-        ctx.fillStyle = BAR_COLOR_HIGH;
+        ctx.fillStyle = getCssVar('--spectrum-high');
       }
 
       const x = i * barWidth;

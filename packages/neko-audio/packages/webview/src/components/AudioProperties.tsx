@@ -33,7 +33,7 @@ export function AudioProperties({
         <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.volume')}</label>
         <input
           type="range"
-          className="neko-slider flex-1 bg-[var(--neko-surface)]"
+          className="neko-slider flex-1"
           min="0"
           max="2"
           step="0.01"
@@ -48,7 +48,7 @@ export function AudioProperties({
         <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.pan')}</label>
         <input
           type="range"
-          className="neko-slider flex-1 bg-[var(--neko-surface)]"
+          className="neko-slider flex-1"
           min="-1"
           max="1"
           step="0.01"
@@ -69,7 +69,7 @@ export function AudioProperties({
         <label className="text-[11px] w-[50px] shrink-0">{t('audio.properties.gain')}</label>
         <input
           type="range"
-          className="neko-slider flex-1 bg-[var(--neko-surface)]"
+          className="neko-slider flex-1"
           min="-20"
           max="20"
           step="0.5"

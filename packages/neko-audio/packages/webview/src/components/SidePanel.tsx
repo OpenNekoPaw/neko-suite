@@ -69,10 +69,8 @@ export function SidePanel() {
       >
         {/* Header */}
         <div className="neko-panel-header flex items-center">
-          <span className="flex-1">
-            {t(PANEL_TITLES[activeSidePanel])}
-          </span>
-          <MacIconButton size="sm" onClick={closeSidePanel} title="Close">
+          <span className="flex-1">{t(PANEL_TITLES[activeSidePanel])}</span>
+          <MacIconButton size="sm" onClick={closeSidePanel} title={t('audio.common.close')}>
             ✕
           </MacIconButton>
         </div>

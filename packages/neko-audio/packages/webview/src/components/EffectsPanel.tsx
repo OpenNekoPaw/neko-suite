@@ -18,13 +18,13 @@ interface EffectsPanelProps {
   chain: EffectsChain;
 }
 
-// Group effects by category for the Add dropdown
-const CATEGORY_LABELS: Record<AudioEffectCategory, string> = {
-  dynamics: 'Dynamics',
-  filter: 'Filter',
-  spatial: 'Spatial',
-  modulation: 'Modulation',
-  utility: 'Utility',
+// i18n keys for category labels
+const CATEGORY_LABEL_KEYS: Record<AudioEffectCategory, string> = {
+  dynamics: 'audioEffects.category.dynamics',
+  filter: 'audioEffects.category.filter',
+  spatial: 'audioEffects.category.spatial',
+  modulation: 'audioEffects.category.modulation',
+  utility: 'audioEffects.category.utility',
 };
 
 const CATEGORY_ORDER: AudioEffectCategory[] = [
@@ -180,7 +180,7 @@ function AddEffectMenu({ onSelect, onClose }: AddEffectMenuProps) {
           return (
             <div key={category}>
               <div className="text-[10px] opacity-50 px-2 pt-1 pb-0.5 uppercase tracking-wider">
-                {CATEGORY_LABELS[category]}
+                {t(CATEGORY_LABEL_KEYS[category]) || category}
               </div>
               {effects.map((effect) => (
                 <button

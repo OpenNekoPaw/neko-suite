@@ -15,14 +15,10 @@ import type { MenuItem } from '@neko/shared/components';
 import { postMessage } from '../shared/useVscodeMessage';
 import { t } from '../i18n';
 
-// Colors
-const WAVE_COLOR = '#264f78';
-const WAVE_PLAYED_COLOR = '#4a9eff';
-const WAVE_BG_COLOR = 'rgba(255, 255, 255, 0.03)';
-const CURSOR_COLOR = '#ffffff';
-const SELECTION_BG = 'rgba(74, 158, 255, 0.15)';
-const SELECTION_BORDER = 'rgba(74, 158, 255, 0.5)';
-const SILENCE_COLOR = 'rgba(255, 255, 255, 0.05)';
+/** Read CSS custom properties at draw-time so canvas follows theme */
+function getCssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 interface EditableWaveformProps {
   onSeek: (time: number) => void;
@@ -39,7 +35,11 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
   const duration = waveform?.duration ?? 0;
   const peaks = waveform?.peaks ?? null;
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    items: MenuItem[];
+  } | null>(null);
 
   // =========================================================================
   // Drawing
@@ -59,12 +59,12 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
     ctx.clearRect(0, 0, width, height);
 
     // Background
-    ctx.fillStyle = WAVE_BG_COLOR;
+    ctx.fillStyle = getCssVar('--waveform-bg');
     ctx.fillRect(0, 0, width, height);
 
     // Draw silence regions
     if (silenceRegions.length > 0 && duration > 0) {
-      ctx.fillStyle = SILENCE_COLOR;
+      ctx.fillStyle = getCssVar('--waveform-silence');
       for (const region of silenceRegions) {
         const x1 = (region.start / duration) * width;
         const x2 = (region.end / duration) * width;
@@ -77,17 +77,17 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
       const selX1 = (selection.start / duration) * width;
       const selX2 = (selection.end / duration) * width;
 
-      ctx.fillStyle = SELECTION_BG;
+      ctx.fillStyle = getCssVar('--selection-bg');
       ctx.fillRect(selX1, 0, selX2 - selX1, height);
 
-      ctx.strokeStyle = SELECTION_BORDER;
+      ctx.strokeStyle = getCssVar('--selection-border');
       ctx.lineWidth = 1;
       ctx.strokeRect(selX1, 0, selX2 - selX1, height);
     }
 
     if (!peaks || peaks.length === 0) {
       // No data — draw center line
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeStyle = getCssVar('--waveform-centerline');
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, centerY);
@@ -108,13 +108,14 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
       const peakValue = Math.abs(peaks[i] ?? 0);
       const barHeight = Math.max(1, peakValue * halfHeight);
 
-      ctx.fillStyle = x < progressX ? WAVE_PLAYED_COLOR : WAVE_COLOR;
+      ctx.fillStyle =
+        x < progressX ? getCssVar('--waveform-played') : getCssVar('--waveform-unplayed');
       ctx.fillRect(x, centerY - barHeight, barWidth - 0.5, barHeight * 2);
     }
 
     // Draw playback cursor
     if (duration > 0) {
-      ctx.fillStyle = CURSOR_COLOR;
+      ctx.fillStyle = getCssVar('--waveform-cursor');
       ctx.fillRect(progressX - 1, 0, 2, height);
     }
   }, [peaks, duration, currentTime, selection, silenceRegions]);
@@ -187,7 +188,11 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
           disabled: !selection,
           onClick: () => {
             if (selection) {
-              postMessage({ type: 'editor:trim', startTime: selection.start, endTime: selection.end });
+              postMessage({
+                type: 'editor:trim',
+                startTime: selection.start,
+                endTime: selection.end,
+              });
             }
           },
         },

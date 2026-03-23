@@ -58,7 +58,8 @@ export function RecordingPanel() {
           >
             {devices.map((device) => (
               <option key={device.deviceId} value={device.deviceId}>
-                {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                {device.label ||
+                  t('audio.recording.micFallback', { id: device.deviceId.slice(0, 8) })}
               </option>
             ))}
           </select>
@@ -73,7 +74,12 @@ export function RecordingPanel() {
             className="h-full rounded transition-[width] duration-50 ease-out"
             style={{
               width: `${level * 100}%`,
-              background: level > 0.8 ? '#f44' : level > 0.5 ? '#ff0' : '#0c8',
+              background:
+                level > 0.8
+                  ? 'var(--level-red)'
+                  : level > 0.5
+                    ? 'var(--level-yellow)'
+                    : 'var(--level-green)',
             }}
           />
         </div>
@@ -105,7 +111,7 @@ export function RecordingPanel() {
               variant="ghost"
               size="sm"
               onClick={handleStopAndSave}
-              className="text-[#f44]"
+              className="text-[var(--status-error)]"
             >
               {t('audio.recording.stop')}
             </MacButton>
@@ -114,7 +120,7 @@ export function RecordingPanel() {
       </div>
 
       {/* Error */}
-      {error && <div className="text-[11px] text-[#f44] text-center">{error}</div>}
+      {error && <div className="text-[11px] text-[var(--status-error)] text-center">{error}</div>}
     </div>
   );
 }

@@ -72,7 +72,15 @@ function WaveformThumbnail({
   );
 }
 
-export function AudioClip({ element, trackId, left, width, height, waveform, locked }: AudioClipProps) {
+export function AudioClip({
+  element,
+  trackId,
+  left,
+  width,
+  height,
+  waveform,
+  locked,
+}: AudioClipProps) {
   const clipName = element.name || 'Untitled';
   const isMuted = element.muted;
 
@@ -80,7 +88,11 @@ export function AudioClip({ element, trackId, left, width, height, waveform, loc
   const removeElement = useAudioProjectStore((s) => s.removeElement);
   const addElement = useAudioProjectStore((s) => s.addElement);
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    items: MenuItem[];
+  } | null>(null);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -122,12 +134,10 @@ export function AudioClip({ element, trackId, left, width, height, waveform, loc
         height: height - 5,
         borderRadius: 5,
         background: isMuted
-          ? 'rgba(120, 120, 128, 0.25)'
+          ? 'var(--clip-muted-bg)'
           : `color-mix(in srgb, var(--accent, #0A84FF) 80%, #000 20%)`,
-        border: `1px solid ${isMuted ? 'rgba(120,120,128,0.30)' : 'color-mix(in srgb, var(--accent, #0A84FF) 60%, #000 40%)'}`,
-        boxShadow: isMuted
-          ? 'none'
-          : '0 1px 4px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.12)',
+        border: `1px solid ${isMuted ? 'var(--clip-muted-border)' : 'color-mix(in srgb, var(--accent, #0A84FF) 60%, #000 40%)'}`,
+        boxShadow: isMuted ? 'none' : 'var(--clip-shadow)',
         cursor: locked ? 'not-allowed' : 'grab',
         opacity: isMuted ? 0.4 : 1,
       }}
@@ -137,7 +147,7 @@ export function AudioClip({ element, trackId, left, width, height, waveform, loc
       {/* Clip label — white on colored bg; theme-aware on muted (semi-transparent) bg */}
       <div
         className="text-[10px] px-1.5 py-0.5 truncate leading-[14px] font-medium"
-        style={{ color: isMuted ? 'var(--activity-fg)' : 'rgba(255,255,255,0.92)' }}
+        style={{ color: isMuted ? 'var(--activity-fg)' : 'var(--clip-text)' }}
       >
         {clipName}
       </div>
@@ -149,7 +159,7 @@ export function AudioClip({ element, trackId, left, width, height, waveform, loc
             peaks={waveform.peaks}
             width={Math.max(width - 2, 1)}
             height={Math.max(height - 16, 1)}
-            color={isMuted ? 'var(--activity-inactive)' : 'rgba(255,255,255,0.75)'}
+            color={isMuted ? 'var(--activity-inactive)' : 'var(--clip-waveform)'}
           />
         </div>
       )}

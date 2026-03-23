@@ -38,8 +38,33 @@
     --waveform-played:    #4a9eff;
     --waveform-unplayed:  #2d5f8a;
     --waveform-cursor:    #ffffff;
+    --waveform-bg:        rgba(255, 255, 255, 0.03);
+    --waveform-centerline: rgba(255, 255, 255, 0.1);
+    --waveform-silence:   rgba(255, 255, 255, 0.05);
     --selection-bg:       rgba(74, 158, 255, 0.15);
     --selection-border:   rgba(74, 158, 255, 0.50);
+
+    /* Spectrum analyzer */
+    --spectrum-bg:     rgba(0, 0, 0, 0.3);
+    --spectrum-low:    #4a9eff;
+    --spectrum-mid:    #00cc88;
+    --spectrum-high:   #ff6b6b;
+    --spectrum-empty:  rgba(255, 255, 255, 0.1);
+
+    /* Clip colors */
+    --clip-muted-bg:      rgba(120, 120, 128, 0.25);
+    --clip-muted-border:  rgba(120, 120, 128, 0.30);
+    --clip-text:          rgba(255, 255, 255, 0.92);
+    --clip-waveform:      rgba(255, 255, 255, 0.75);
+    --clip-shadow:        0 1px 4px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+    /* Status colors */
+    --status-error:    var(--vscode-errorForeground, #ff453a);
+    --status-warning:  var(--vscode-editorWarning-foreground, #ff9f0a);
+    --status-success:  var(--vscode-testing-iconPassed, #30d158);
+    --level-red:       #ff453a;
+    --level-yellow:    #ffd60a;
+    --level-green:     #30d158;
 
     /* Button states */
     --btn-bg:          rgba(255, 255, 255, 0.07);
@@ -84,11 +109,36 @@
     --transport-border:  var(--accent);
 
     /* Waveform */
-    --waveform-played:   #007AFF;
-    --waveform-unplayed: #A4C0DC;
-    --waveform-cursor:   #1C1C1E;
-    --selection-bg:      rgba(0, 122, 255, 0.10);
-    --selection-border:  rgba(0, 122, 255, 0.40);
+    --waveform-played:     #007AFF;
+    --waveform-unplayed:   #A4C0DC;
+    --waveform-cursor:     #1C1C1E;
+    --waveform-bg:         rgba(0, 0, 0, 0.03);
+    --waveform-centerline: rgba(0, 0, 0, 0.08);
+    --waveform-silence:    rgba(0, 0, 0, 0.04);
+    --selection-bg:        rgba(0, 122, 255, 0.10);
+    --selection-border:    rgba(0, 122, 255, 0.40);
+
+    /* Spectrum analyzer */
+    --spectrum-bg:     rgba(0, 0, 0, 0.06);
+    --spectrum-low:    #0066cc;
+    --spectrum-mid:    #00994d;
+    --spectrum-high:   #cc3333;
+    --spectrum-empty:  rgba(0, 0, 0, 0.12);
+
+    /* Clip colors */
+    --clip-muted-bg:      rgba(120, 120, 128, 0.15);
+    --clip-muted-border:  rgba(120, 120, 128, 0.25);
+    --clip-text:          rgba(255, 255, 255, 0.95);
+    --clip-waveform:      rgba(255, 255, 255, 0.80);
+    --clip-shadow:        0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+
+    /* Status colors */
+    --status-error:    var(--vscode-errorForeground, #d32f2f);
+    --status-warning:  var(--vscode-editorWarning-foreground, #e67700);
+    --status-success:  var(--vscode-testing-iconPassed, #2e7d32);
+    --level-red:       #d32f2f;
+    --level-yellow:    #e6a700;
+    --level-green:     #2e7d32;
 
     /* Button states — on light surfaces */
     --btn-bg:            rgba(0, 0, 0, 0.060);
@@ -134,6 +184,33 @@
     --neko-preview-primary:        #3794FF;
     --neko-preview-text-primary:   #ffffff;
     --neko-preview-text-secondary: rgba(255, 255, 255, 0.80);
+
+    /* Spectrum — high contrast */
+    --spectrum-bg:     rgba(0, 0, 0, 0.5);
+    --spectrum-low:    #4a9eff;
+    --spectrum-mid:    #00cc88;
+    --spectrum-high:   #ff6b6b;
+    --spectrum-empty:  rgba(255, 255, 255, 0.2);
+
+    /* Waveform — high contrast */
+    --waveform-bg:        rgba(255, 255, 255, 0.05);
+    --waveform-centerline: rgba(255, 255, 255, 0.2);
+    --waveform-silence:   rgba(255, 255, 255, 0.08);
+
+    /* Clip — high contrast */
+    --clip-muted-bg:      rgba(120, 120, 128, 0.35);
+    --clip-muted-border:  rgba(120, 120, 128, 0.50);
+    --clip-text:          #ffffff;
+    --clip-waveform:      rgba(255, 255, 255, 0.85);
+    --clip-shadow:        0 1px 4px rgba(0, 0, 0, 0.5);
+
+    /* Status — high contrast */
+    --status-error:    #ff6b6b;
+    --status-warning:  #ffb340;
+    --status-success:  #73c991;
+    --level-red:       #ff6b6b;
+    --level-yellow:    #ffd60a;
+    --level-green:     #73c991;
   }
 
   /* Global reset */
@@ -213,26 +290,30 @@
     font-size: 10px;
     font-weight: 500;
     border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(255, 255, 255, 0.60);
+    border: 1px solid var(--btn-border, rgba(255, 255, 255, 0.12));
+    background: var(--btn-bg, rgba(255, 255, 255, 0.07));
+    color: var(--activity-fg, rgba(255, 255, 255, 0.60));
+    opacity: 0.65;
     cursor: pointer;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.1s, color 0.1s, opacity 0.1s;
     line-height: 1;
   }
   .neko-track-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: rgba(255, 255, 255, 0.88);
+    background: var(--btn-bg-hover, rgba(255, 255, 255, 0.14));
+    color: var(--activity-fg, rgba(255, 255, 255, 0.88));
+    opacity: 1;
   }
   .neko-track-btn.active-mute {
     background: rgba(255, 59, 48, 0.30);
     border-color: rgba(255, 59, 48, 0.45);
     color: #ff6b6b;
+    opacity: 1;
   }
   .neko-track-btn.active-lock {
     background: rgba(255, 159, 10, 0.25);
     border-color: rgba(255, 159, 10, 0.40);
     color: #ffb340;
+    opacity: 1;
   }
   .neko-track-btn.remove {
     margin-left: auto;
@@ -251,7 +332,7 @@
     appearance: none;
     height: 3px;
     border-radius: 2px;
-    background: var(--btn-bg);
+    background: var(--slider-track, var(--btn-bg-active));
     outline: none;
     cursor: pointer;
   }
@@ -262,7 +343,7 @@
     height: 11px;
     border-radius: 50%;
     background: var(--neko-preview-text-primary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
     cursor: pointer;
     transition: transform 0.10s;
   }
@@ -272,7 +353,7 @@
     height: 11px;
     border-radius: 50%;
     background: var(--neko-preview-text-primary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
     border: none;
     cursor: pointer;
   }

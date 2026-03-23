@@ -38,7 +38,9 @@ export function TrackLane({
   const pps = pixelsPerSecond * zoomLevel;
   const trackIndex = tracks.findIndex((tr) => tr.id === track.id);
 
-  const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
+    null,
+  );
 
   const handleToggleMute = useCallback(() => {
     toggleTrackField(track.id, 'muted');
@@ -105,19 +107,23 @@ export function TrackLane({
         <div className="flex gap-1 items-center">
           <button
             onClick={handleToggleMute}
-            title={track.muted ? 'Unmute' : 'Mute'}
+            title={track.muted ? t('audio.track.unmute') : t('audio.track.mute')}
             className={`neko-track-btn ${track.muted ? 'active-mute' : ''}`}
           >
             M
           </button>
           <button
             onClick={handleToggleLock}
-            title={track.locked ? 'Unlock' : 'Lock'}
+            title={track.locked ? t('audio.track.unlock') : t('audio.track.lock')}
             className={`neko-track-btn ${track.locked ? 'active-lock' : ''}`}
           >
             L
           </button>
-          <button onClick={handleRemove} title="Remove track" className="neko-track-btn remove">
+          <button
+            onClick={handleRemove}
+            title={t('audio.track.delete')}
+            className="neko-track-btn remove"
+          >
             ×
           </button>
         </div>
