@@ -148,6 +148,15 @@ export interface Synopsis extends FountainElement {
 }
 
 /**
+ * Asset reference extracted from note
+ * e.g., "[[IMAGE: diagram.png]]" or "[[ASSET: video://clip.mp4]]"
+ */
+export interface AssetReference {
+  type: 'image' | 'video' | 'audio';
+  path: string;
+}
+
+/**
  * Note (inline or block)
  * e.g., "[[note text]]" or block comments
  */
@@ -155,6 +164,7 @@ export interface Note extends FountainElement {
   type: 'note';
   text: string;
   noteType: 'inline' | 'block' | 'line';
+  assetRef?: AssetReference;
 }
 
 /**

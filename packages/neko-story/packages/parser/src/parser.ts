@@ -15,6 +15,7 @@ import type {
   Section,
   Synopsis,
   Note,
+  AssetReference,
   PageBreak,
   Lyrics,
 } from '@neko-story/types';
@@ -240,6 +241,13 @@ function parseElement(state: ParserState): AnyFountainElement | null {
     return createCentered(lineNum, line, centeredMatch);
   }
 
+  // Inline note [[...]]
+  const inlineNoteMatch = /^\[\[([^\]]+)\]\]$/.exec(line);
+  if (inlineNoteMatch) {
+    state.currentLine++;
+    return createNote(lineNum, line, inlineNoteMatch[1] ?? '', 'inline');
+  }
+
   // Line note
   const lineNoteMatch = PATTERNS.lineNote.exec(line);
   if (lineNoteMatch) {
@@ -449,11 +457,43 @@ function createSynopsis(lineNum: number, raw: string, match: RegExpExecArray): S
   };
 }
 
+/**
+ * Parse asset reference from note text
+ * Supported formats:
+ *   [[IMAGE: path/to/file.png]]
+ *   [[VIDEO: clip.mp4]]
+ *   [[AUDIO: bgm.wav]]
+ *   [[ASSET: image://diagram.png]]
+ */
+function parseAssetReference(text: string): AssetReference | undefined {
+  // Try ASSET: prefix with protocol
+  const assetMatch = /^ASSET:\s*(image|video|audio):\/\/(.+)$/i.exec(text.trim());
+  if (assetMatch) {
+    return {
+      type: assetMatch[1]?.toLowerCase() as 'image' | 'video' | 'audio',
+      path: assetMatch[2]?.trim() ?? '',
+    };
+  }
+
+  // Try direct type prefix
+  const directMatch = /^(IMAGE|VIDEO|AUDIO):\s*(.+)$/i.exec(text.trim());
+  if (directMatch) {
+    return {
+      type: directMatch[1]?.toLowerCase() as 'image' | 'video' | 'audio',
+      path: directMatch[2]?.trim() ?? '',
+    };
+  }
+
+  return undefined;
+}
+
 function createNote(lineNum: number, raw: string, text: string, noteType: Note['noteType']): Note {
+  const assetRef = parseAssetReference(text);
   return {
     type: 'note',
     text,
     noteType,
+    assetRef,
     range: range(lineNum, 0, lineNum, raw.length),
     raw,
   };

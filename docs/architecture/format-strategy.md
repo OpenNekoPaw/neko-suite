@@ -27,9 +27,11 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 | `.nks` | Neko Sketch | neko-sketch | 2D 绘画项目 |
 | `.nkp` | Neko Puppet | neko-sketch | 骨骼动画/Live2D 项目 |
 | `.nka` | Neko Audio | neko-audio | 音频编辑项目 |
-| `.fountain` | Fountain | neko-story | 行业标准剧本格式（不自定义） |
+| `.fountain` | Fountain | neko-story | 行业标准剧本格式（不自定义，支持资产引用扩展） |
 
 **命名规则**：`nk` + 英文名首字母小写。`.fountain` 是行业标准，保持原样不改名。
+
+**Fountain 资产引用扩展**：neko-story 通过 Fountain 标准的 Notes 语法 `[[...]]` 支持素材引用，保持与其他 Fountain 工具的兼容性。语法：`[[IMAGE: path]]`、`[[VIDEO: path]]`、`[[AUDIO: path]]`、`[[ASSET: type://path]]`。转换为 neko-cut 时自动生成 MediaElement。
 
 ---
 

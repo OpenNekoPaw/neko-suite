@@ -11,9 +11,15 @@
 //   - Minimum scene:  3.0 s
 // =============================================================================
 
-import type { ProjectData, TimelineTrack, TextElement, SubtitleElement } from '@neko/shared';
+import type {
+  ProjectData,
+  TimelineTrack,
+  TextElement,
+  SubtitleElement,
+  MediaElement,
+} from '@neko/shared';
 import { generateId, ENGINE_DEFAULT_TRANSFORM, CENTERED_TRANSFORM } from '@neko/shared';
-import type { FountainDocument, AnyFountainElement } from '@neko-story/types';
+import type { FountainDocument, AnyFountainElement, AssetReference } from '@neko-story/types';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -175,6 +181,32 @@ function makeSubtitleElement(
   };
 }
 
+function makeMediaElement(
+  assetRef: AssetReference,
+  startTime: number,
+  duration: number,
+  name: string,
+): MediaElement {
+  return {
+    id: generateId(),
+    type: 'media',
+    name,
+    src: assetRef.path,
+    mediaType: assetRef.type === 'video' ? 'video' : 'image',
+    duration,
+    startTime,
+    trimStart: 0,
+    trimEnd: 0,
+    transform: { ...ENGINE_DEFAULT_TRANSFORM },
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: assetRef.type === 'video' ? false : true,
+    hidden: false,
+    locked: false,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // TimelineConverter
 // ---------------------------------------------------------------------------
@@ -192,10 +224,11 @@ export class TimelineConverter {
     const characterNames = collectCharacterNames(doc.elements);
     const scenes = groupByScene(doc.elements);
 
-    // Build scene track (TextElements) and subtitle track (SubtitleElements)
-    // while advancing a shared cursor for absolute start times.
+    // Build scene track (TextElements), subtitle track (SubtitleElements),
+    // and media track (MediaElements from asset references)
     const sceneElements: TextElement[] = [];
     const subtitleElements: SubtitleElement[] = [];
+    const mediaElements: MediaElement[] = [];
 
     let cursor = 0; // absolute timeline position (seconds)
     let subtitleCursor = 0; // subtitle cursor advances with dialogue
@@ -213,7 +246,7 @@ export class TimelineConverter {
       // Scene marker on text track
       sceneElements.push(makeTextElement(sceneLabel, cursor, sceneDuration, `Scene ${i + 1}`));
 
-      // Subtitle elements — placed within scene boundaries
+      // Subtitle elements and media elements — placed within scene boundaries
       subtitleCursor = cursor;
 
       for (const el of scene) {
@@ -227,6 +260,17 @@ export class TimelineConverter {
             ),
           );
           subtitleCursor += DIALOGUE_LINE_SEC;
+        } else if (el.type === 'note' && el.assetRef) {
+          // Asset reference from note — create media element
+          const assetDuration = el.assetRef.type === 'video' ? MIN_SCENE_SEC : sceneDuration;
+          mediaElements.push(
+            makeMediaElement(
+              el.assetRef,
+              cursor,
+              assetDuration,
+              `Asset ${mediaElements.length + 1}`,
+            ),
+          );
         }
       }
 
@@ -257,12 +301,28 @@ export class TimelineConverter {
       isMain: false,
     };
 
+    const mediaTrack: TimelineTrack = {
+      id: generateId(),
+      name: 'Assets',
+      type: 'media',
+      elements: mediaElements,
+      muted: false,
+      locked: false,
+      hidden: false,
+      isMain: true,
+    };
+
+    const tracks: TimelineTrack[] = [sceneTrack, subtitleTrack];
+    if (mediaElements.length > 0) {
+      tracks.unshift(mediaTrack); // Media track as first track
+    }
+
     const project: ProjectData = {
       version: '2.0',
       name: projectName,
       resolution: { width: 1920, height: 1080 },
       fps: 24,
-      tracks: [sceneTrack, subtitleTrack],
+      tracks,
     };
 
     return {

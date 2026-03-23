@@ -53,16 +53,41 @@ packages/
   └── 转换为时间线（neko-cut）→ 自动摆放素材
 ```
 
-### 剧本语法示例
+### Fountain 语法示例
 
+```fountain
+INT. COFFEE SHOP - DAY
+
+ALICE
+Hello there.
+
+BOB
+How are you?
 ```
-# 场景一：咖啡馆
 
-[内景 - 日]
+### 资产引用（Asset References）
 
-**角色A** 走进咖啡馆。
+通过 Fountain 标准的 Notes 语法 `[[...]]` 引用图片、视频、音频素材：
 
-角色A：今天人真少啊。
+```fountain
+INT. LAB - NIGHT
 
-> 镜头：特写
+[[IMAGE: diagram.png]]
+[[VIDEO: establishing-shot.mp4]]
+[[AUDIO: background-music.wav]]
+[[ASSET: image://path/to/file.png]]
+
+The scientist points at the screen.
 ```
+
+**支持的格式**：
+- `[[IMAGE: path]]` - 图片素材
+- `[[VIDEO: path]]` - 视频素材
+- `[[AUDIO: path]]` - 音频素材
+- `[[ASSET: type://path]]` - 统一协议格式
+
+**转换行为**：
+- 转换为 neko-cut 时间线时，资产引用自动生成 MediaElement
+- 创建独立的 Assets 轨道（Track 0）
+- 图片默认静音，视频保留音频
+- 时长根据场景自动估算

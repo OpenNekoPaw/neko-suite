@@ -389,4 +389,114 @@ They walk together.
       expect(types).toContain('centered');
     });
   });
+
+  describe('Asset References', () => {
+    it('should parse IMAGE asset reference from note', () => {
+      const text = `INT. LAB - NIGHT
+
+[[IMAGE: diagram.png]]
+
+The scientist points at the screen.`;
+
+      const doc = parse(text);
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toBeDefined();
+        expect(note.assetRef?.type).toBe('image');
+        expect(note.assetRef?.path).toBe('diagram.png');
+      }
+    });
+
+    it('should parse VIDEO asset reference from note', () => {
+      const text = `INT. OFFICE - DAY
+
+[[VIDEO: establishing-shot.mp4]]
+
+John enters the room.`;
+
+      const doc = parse(text);
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toBeDefined();
+        expect(note.assetRef?.type).toBe('video');
+        expect(note.assetRef?.path).toBe('establishing-shot.mp4');
+      }
+    });
+
+    it('should parse AUDIO asset reference from note', () => {
+      const text = `INT. STUDIO - DAY
+
+[[AUDIO: background-music.wav]]
+
+Recording in progress.`;
+
+      const doc = parse(text);
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toBeDefined();
+        expect(note.assetRef?.type).toBe('audio');
+        expect(note.assetRef?.path).toBe('background-music.wav');
+      }
+    });
+
+    it('should parse ASSET with protocol prefix', () => {
+      const text = `INT. LAB - NIGHT
+
+[[ASSET: image://path/to/diagram.png]]
+
+Complex diagram appears.`;
+
+      const doc = parse(text);
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toBeDefined();
+        expect(note.assetRef?.type).toBe('image');
+        expect(note.assetRef?.path).toBe('path/to/diagram.png');
+      }
+    });
+
+    it('should handle note without asset reference', () => {
+      const text = `INT. OFFICE - DAY
+
+[[This is just a regular note]]
+
+John walks in.`;
+
+      const doc = parse(text);
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toBeUndefined();
+        expect(note.text).toBe('This is just a regular note');
+      }
+    });
+
+    it('should parse multiple asset references in a scene', () => {
+      const text = `INT. LAB - NIGHT
+
+[[IMAGE: slide_01.png]]
+
+The first slide appears.
+
+[[IMAGE: slide_02.png]]
+
+The second slide appears.`;
+
+      const doc = parse(text);
+      const notes = doc.elements.filter((e) => e.type === 'note');
+
+      expect(notes).toHaveLength(2);
+      expect(notes[0]?.type === 'note' && notes[0].assetRef?.path).toBe('slide_01.png');
+      expect(notes[1]?.type === 'note' && notes[1].assetRef?.path).toBe('slide_02.png');
+    });
+  });
 });
