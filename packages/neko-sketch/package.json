@@ -197,7 +197,15 @@
         },
         "neko.sketch.defaultBrush": {
           "type": "string",
-          "enum": ["pencil", "pen", "watercolor", "airbrush", "eraser", "marker", "pixel"],
+          "enum": [
+            "pencil",
+            "pen",
+            "watercolor",
+            "airbrush",
+            "eraser",
+            "marker",
+            "pixel"
+          ],
           "default": "pen",
           "description": "%neko.sketch.config.defaultBrush%"
         }

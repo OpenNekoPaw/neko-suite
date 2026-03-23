@@ -39,10 +39,18 @@
         "viewType": "neko.modelEditor",
         "displayName": "3D Model Editor",
         "selector": [
-          { "filenamePattern": "*.gltf" },
-          { "filenamePattern": "*.glb" },
-          { "filenamePattern": "*.vrm" },
-          { "filenamePattern": "*.nkm" }
+          {
+            "filenamePattern": "*.gltf"
+          },
+          {
+            "filenamePattern": "*.glb"
+          },
+          {
+            "filenamePattern": "*.vrm"
+          },
+          {
+            "filenamePattern": "*.nkm"
+          }
         ],
         "priority": "default"
       }

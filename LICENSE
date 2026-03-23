@@ -1,21 +1,23 @@
-MIT License
+Neko Suite - Mixed License
 
-Copyright (c) 2025
+Copyright (c) 2025 Neko Suite Contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This project uses a mixed licensing strategy. Different components are
+licensed under different open-source licenses:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Media Engine (packages/neko-engine/)
+   Licensed under the GNU Lesser General Public License v3.0 or later.
+   See LICENSE-LGPL for the full license text.
+   See LICENSE-GPL for the GNU General Public License v3.0 text
+   (incorporated by reference in the LGPL).
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Shared Libraries (packages/neko-types/, packages/neko-client/, packages/neko-proto/)
+   Licensed under the Apache License, Version 2.0.
+   See LICENSE-APACHE for the full license text.
+
+3. VSCode Extensions and All Other Packages
+   Licensed under the MIT License.
+   See LICENSE-MIT for the full license text.
+
+Each package's license is also specified in its package.json or Cargo.toml file.
+When in doubt, refer to the license field of the specific package you are using.

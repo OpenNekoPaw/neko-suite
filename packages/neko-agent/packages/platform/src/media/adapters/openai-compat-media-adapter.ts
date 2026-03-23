@@ -69,6 +69,16 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   }
 
   /**
+   * Default endpoint paths (OpenAI Sora-compatible)
+   */
+  private static readonly DEFAULT_ENDPOINTS = {
+    imageGenerations: '/v1/images/generations',
+    videoGenerations: '/v1/videos/generations',
+    videoStatus: '/v1/videos/{taskId}',
+    videoCancel: '/v1/videos/{taskId}/cancel',
+  };
+
+  /**
    * Get normalized base URL (removes trailing /v1 if present)
    */
   private getBaseUrl(provider: Provider): string {
@@ -81,6 +91,24 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   }
 
   /**
+   * Get media endpoint URL, respecting provider's protocolVariant.mediaEndpoints override.
+   */
+  private getMediaEndpoint(
+    provider: Provider,
+    key: keyof typeof OpenAICompatMediaAdapter.DEFAULT_ENDPOINTS,
+    params?: Record<string, string>,
+  ): string {
+    const custom = provider.protocolVariant?.mediaEndpoints?.[key];
+    let path = custom ?? OpenAICompatMediaAdapter.DEFAULT_ENDPOINTS[key];
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        path = path.replace(`{${k}}`, v);
+      }
+    }
+    return `${this.getBaseUrl(provider)}${path}`;
+  }
+
+  /**
    * Generate image using OpenAI DALL-E compatible API
    */
   async generateImage(
@@ -88,7 +116,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     model: Model,
     provider: Provider,
   ): Promise<MediaAdapterResult> {
-    const url = `${this.getBaseUrl(provider)}/v1/images/generations`;
+    const url = this.getMediaEndpoint(provider, 'imageGenerations');
 
     const body = {
       model: model.name,
@@ -131,7 +159,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     model: Model,
     provider: Provider,
   ): Promise<MediaAdapterResult> {
-    const url = `${this.getBaseUrl(provider)}/v1/videos/generations`;
+    const url = this.getMediaEndpoint(provider, 'videoGenerations');
 
     const body: Record<string, unknown> = {
       model: model.name,
@@ -165,7 +193,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
    * Get task status for async video generation
    */
   async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
-    const url = `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}`;
+    const url = this.getMediaEndpoint(provider, 'videoStatus', { taskId: externalTaskId });
 
     const { data, error } = await this.request<OpenAIVideoResponse>(
       url,
@@ -214,7 +242,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
    */
   async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     await this.cancelViaEndpoint(
-      `${this.getBaseUrl(provider)}/v1/videos/${externalTaskId}/cancel`,
+      this.getMediaEndpoint(provider, 'videoCancel', { taskId: externalTaskId }),
       provider,
     );
   }

@@ -101,7 +101,11 @@
         },
         "neko.live.trackingMode": {
           "type": "string",
-          "enum": ["mediapipe", "vmc", "hybrid"],
+          "enum": [
+            "mediapipe",
+            "vmc",
+            "hybrid"
+          ],
           "default": "mediapipe",
           "description": "Motion tracking mode"
         }

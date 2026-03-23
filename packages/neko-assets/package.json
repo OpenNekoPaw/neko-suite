@@ -294,7 +294,12 @@
       "properties": {
         "neko.assets.cloudProvider": {
           "type": "string",
-          "enum": ["github", "gitlab", "s3", "rclone"],
+          "enum": [
+            "github",
+            "gitlab",
+            "s3",
+            "rclone"
+          ],
           "default": "github",
           "description": "Cloud storage provider"
         },

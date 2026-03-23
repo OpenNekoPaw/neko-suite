@@ -849,7 +849,10 @@ interface AudioDetailsProps {
     sampleRate: { current: number; previous: number };
     channels: { current: number; previous: number };
     bitrate?: { current: number; previous: number };
-    silentRegions?: Array<{ start: number; end: number }>;
+    silenceRegions?: {
+      current: Array<{ start: number; end: number }>;
+      previous: Array<{ start: number; end: number }>;
+    };
   };
 }
 
@@ -926,23 +929,39 @@ const AudioDetails = memo(function AudioDetails({ details }: AudioDetailsProps) 
           </div>
         )}
       </div>
-      {details.silentRegions && details.silentRegions.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1 text-xs">
-            {t('mediaDiff.audio.silentRegions')}
+      {details.silenceRegions &&
+        (details.silenceRegions.previous.length > 0 ||
+          details.silenceRegions.current.length > 0) && (
+          <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
+            <div className="text-[var(--vscode-descriptionForeground)] mb-1 text-xs">
+              {t('mediaDiff.audio.silentRegions')}
+            </div>
+            {details.silenceRegions.previous.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1">
+                {details.silenceRegions.previous.map((region, i) => (
+                  <span
+                    key={`prev-${i}`}
+                    className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded"
+                  >
+                    {formatDuration(region.start)} - {formatDuration(region.end)}
+                  </span>
+                ))}
+              </div>
+            )}
+            {details.silenceRegions.current.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {details.silenceRegions.current.map((region, i) => (
+                  <span
+                    key={`cur-${i}`}
+                    className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded"
+                  >
+                    {formatDuration(region.start)} - {formatDuration(region.end)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="flex flex-wrap gap-1">
-            {details.silentRegions.map((region, i) => (
-              <span
-                key={i}
-                className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded"
-              >
-                {formatDuration(region.start)} - {formatDuration(region.end)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+        )}
     </div>
   );
 });

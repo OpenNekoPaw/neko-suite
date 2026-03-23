@@ -11,5 +11,6 @@
   "dependencies": {
     "@neko/shared": "workspace:*",
     "@neko-engine/native-napi": "workspace:*"
-  }
+  },
+  "license": "LGPL-3.0-or-later"
 }

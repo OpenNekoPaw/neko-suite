@@ -7,5 +7,6 @@
   "exports": {
     ".": "./src/extension.ts",
     "./*": "./src/*"
-  }
+  },
+  "license": "MIT"
 }

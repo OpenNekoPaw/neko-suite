@@ -38,8 +38,15 @@
     "languages": [
       {
         "id": "nekostory",
-        "aliases": ["Neko Story", "nekostory"],
-        "extensions": [".nks", ".story", ".fountain"],
+        "aliases": [
+          "Neko Story",
+          "nekostory"
+        ],
+        "extensions": [
+          ".nks",
+          ".story",
+          ".fountain"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],

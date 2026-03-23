@@ -27,5 +27,6 @@
     "vite": "^5.0.8",
     "vite-plugin-static-copy": "^3.2.0",
     "vitest": "^4.0.18"
-  }
+  },
+  "license": "MIT"
 }

@@ -22,7 +22,8 @@ export function registerMediaAgentTools(
   toolRegistry.register(
     createTool({
       name: 'GenerateImage',
-      description: 'Generate an image from a text prompt using AI',
+      description:
+        'Submit an async image generation task. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -73,7 +74,8 @@ export function registerMediaAgentTools(
               backgroundMode: true,
               taskId: task.id,
               type: 'image',
-              message: prompt,
+              status: 'queued',
+              message: `Image generation task submitted and processing in background. Task ID: ${task.id}. The image is NOT ready yet — do not tell the user it is finished.`,
               routedTo: { provider: task.providerId },
             },
           };
@@ -91,7 +93,8 @@ export function registerMediaAgentTools(
   toolRegistry.register(
     createTool({
       name: 'GenerateVideo',
-      description: 'Generate a video from a text prompt using AI',
+      description:
+        'Submit an async video generation task. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -133,7 +136,8 @@ export function registerMediaAgentTools(
               backgroundMode: true,
               taskId: task.id,
               type: 'video',
-              message: prompt,
+              status: 'queued',
+              message: `Video generation task submitted and processing in background. Task ID: ${task.id}. The video is NOT ready yet — do not tell the user it is finished.`,
               routedTo: { provider: task.providerId },
             },
           };
@@ -151,7 +155,8 @@ export function registerMediaAgentTools(
   toolRegistry.register(
     createTool({
       name: 'GenerateMusic',
-      description: 'Generate background music from a text prompt using AI',
+      description:
+        'Submit an async music generation task. This tool only SUBMITS the task and returns immediately with a taskId — the music is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the music is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -193,7 +198,8 @@ export function registerMediaAgentTools(
               backgroundMode: true,
               taskId: task.id,
               type: 'audio',
-              message: prompt,
+              status: 'queued',
+              message: `Music generation task submitted and processing in background. Task ID: ${task.id}. The music is NOT ready yet — do not tell the user it is finished.`,
               routedTo: { provider: task.providerId },
             },
           };
@@ -211,7 +217,8 @@ export function registerMediaAgentTools(
   toolRegistry.register(
     createTool({
       name: 'GenerateTTS',
-      description: 'Generate speech audio from text using text-to-speech AI',
+      description:
+        'Submit an async text-to-speech task. This tool only SUBMITS the task and returns immediately with a taskId — the audio is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the audio is ready or finished.',
       category: 'generation',
       parameters: {
         type: 'object',
@@ -254,7 +261,8 @@ export function registerMediaAgentTools(
               backgroundMode: true,
               taskId: task.id,
               type: 'audio',
-              message: text,
+              status: 'queued',
+              message: `TTS task submitted and processing in background. Task ID: ${task.id}. The audio is NOT ready yet — do not tell the user it is finished.`,
               routedTo: { provider: task.providerId },
             },
           };

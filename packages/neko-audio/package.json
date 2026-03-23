@@ -128,7 +128,11 @@
       "properties": {
         "neko.audio.sampleRate": {
           "type": "number",
-          "enum": [44100, 48000, 96000],
+          "enum": [
+            44100,
+            48000,
+            96000
+          ],
           "default": 48000,
           "description": "Default sample rate for recording"
         },
@@ -142,7 +146,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-  "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview && npm run copy:l10n",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview && npm run copy:l10n",
     "compile:extension": "cd packages/extension && npm run build",
     "compile:webview": "cd packages/webview && npm run build",
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",

@@ -16,6 +16,7 @@
 import * as vscode from 'vscode';
 import type { EngineDiffResult } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
+import type { SilenceAnalysis } from '@neko/neko-client'; // Used by detectSilence()
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('EngineMediaService');
@@ -121,6 +122,25 @@ export class EngineMediaService {
    * @param source - Absolute path to media file
    * @returns ProbeResult or null if engine unavailable
    */
+  /**
+   * Detect silence regions in an audio file via engine's native detect_silence action.
+   */
+  async detectSilence(
+    source: string,
+    thresholdDbfs?: number,
+    minDuration?: number,
+  ): Promise<SilenceAnalysis | null> {
+    const client = await this.ensureClient();
+    if (!client) return null;
+
+    try {
+      return await client.detectSilence(source, thresholdDbfs, minDuration);
+    } catch (error) {
+      logger.error('detectSilence failed:', error);
+      return null;
+    }
+  }
+
   async probe(group: 'videos' | 'audios', source: string): Promise<any | null> {
     const client = await this.ensureClient();
     if (!client) return null;

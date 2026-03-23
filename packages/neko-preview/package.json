@@ -72,7 +72,11 @@
       "properties": {
         "neko.preview.videoQuality": {
           "type": "string",
-          "enum": ["low", "medium", "high"],
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
           "default": "medium",
           "description": "Preview video quality (affects bandwidth and CPU usage)"
         },

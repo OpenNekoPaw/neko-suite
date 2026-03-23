@@ -15,6 +15,7 @@ import type {
   AudioDiffDetails,
   EngineAudioDiffRegion,
 } from '@neko/shared';
+import type { SilenceAnalysis } from '@neko/neko-client';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 import { getLogger } from '../../../utils/logger';
@@ -72,7 +73,7 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
       const maxDur = Math.max(probeDurA, probeDurB);
       const durRatio = maxDur > 0 ? minDur / maxDur : 1;
 
-      let diffOptions: { startTime?: number; endTime?: number } = {};
+      const diffOptions: { startTime?: number; endTime?: number } = {};
 
       // User-specified time range takes priority over auto-detection
       if (options?.startTime !== undefined || options?.endTime !== undefined) {
@@ -102,6 +103,14 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
         throw new Error('Engine audio diff unavailable');
       }
 
+      // Step 3: Parallel silence detection (non-blocking, graceful fallback)
+      const [silenceA, silenceB]: Array<SilenceAnalysis | null> = await Promise.all([
+        this.engineMediaService.detectSilence(currentPath).catch((): null => null),
+        this.engineMediaService.detectSilence(previousPath).catch((): null => null),
+      ]);
+
+      this.throwIfAborted();
+
       // Convert Engine types → Protocol types
       const audioDiff = engineResult.audioDiff;
       const details: AudioDiffDetails = {
@@ -121,6 +130,13 @@ export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
           end: r.end,
           snr: r.snr,
         })),
+        silenceRegions:
+          silenceA || silenceB
+            ? {
+                current: silenceA?.regions?.map((r) => ({ start: r.start, end: r.end })) ?? [],
+                previous: silenceB?.regions?.map((r) => ({ start: r.start, end: r.end })) ?? [],
+              }
+            : undefined,
       };
 
       // Compute overall similarity from SNR

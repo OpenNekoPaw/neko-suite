@@ -10,5 +10,6 @@
     "./media-diff": "./src/media-diff/index.ts",
     "./media-lsp": "./src/media-lsp/index.ts",
     "./*": "./src/*"
-  }
+  },
+  "license": "MIT"
 }

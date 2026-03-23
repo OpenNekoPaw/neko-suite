@@ -54,8 +54,13 @@
     "languages": [
       {
         "id": "nekotools-jvi",
-        "aliases": ["JVI Timeline", "jvi"],
-        "extensions": [".jvi"],
+        "aliases": [
+          "JVI Timeline",
+          "jvi"
+        ],
+        "extensions": [
+          ".jvi"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -132,7 +137,11 @@
       "properties": {
         "neko.tools.diffMode": {
           "type": "string",
-          "enum": ["side-by-side", "overlay", "slider"],
+          "enum": [
+            "side-by-side",
+            "overlay",
+            "slider"
+          ],
           "default": "side-by-side",
           "description": "Default diff view mode"
         },

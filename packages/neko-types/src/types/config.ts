@@ -67,6 +67,23 @@ export interface ProtocolVariant {
    * Useful for APIs requiring custom headers.
    */
   extraHeaders?: Record<string, string>;
+
+  /**
+   * Custom media generation endpoint paths.
+   * Override default OpenAI-compatible paths for proxy services.
+   *
+   * Defaults:
+   * - imageGenerations: '/v1/images/generations'
+   * - videoGenerations: '/v1/videos/generations'
+   * - videoStatus: '/v1/videos/{taskId}'
+   * - videoCancel: '/v1/videos/{taskId}/cancel'
+   */
+  mediaEndpoints?: {
+    imageGenerations?: string;
+    videoGenerations?: string;
+    videoStatus?: string;
+    videoCancel?: string;
+  };
 }
 
 // =============================================================================
