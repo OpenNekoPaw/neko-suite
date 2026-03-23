@@ -25,3 +25,4 @@ export { BashTool, type BashToolOptions } from './bash-tool';
 export { ListDirectoryTool } from './list-directory-tool';
 export { GrepTool, type GrepToolOptions } from './grep-tool';
 export { createCoreTools, type CoreToolsOptions } from './core-tools';
+export { MemoryWriteTool } from './memory-write-tool';

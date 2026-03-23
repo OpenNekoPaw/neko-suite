@@ -21,7 +21,11 @@ import {
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
+  createFileProjectMemoryManager,
   type InputProcessor,
+  type ConversationRecord,
+  createFileConversationStorage,
+  type FileConversationStorage,
 } from '@neko/agent';
 import * as os from 'node:os';
 import {
@@ -105,8 +109,13 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     const mcpTools = await createAllMCPTools(mcpManager);
     toolRegistry.registerMany(mcpTools);
 
+    // Initialize project memory (cross-session fact persistence)
+    const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
+    const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
+    await projectMemoryManager.load();
+
     // Register core file/system tools
-    const coreTools = createCoreTools({ defaultCwd: config.workDir });
+    const coreTools = createCoreTools({ defaultCwd: config.workDir, projectMemoryManager });
     toolRegistry.registerMany(coreTools);
 
     // Initialize Skill Service
@@ -157,6 +166,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxTokens: config.maxTokens,
       modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
+      projectMemoryManager,
       onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
         if (!runOptions.interactive) {
@@ -255,6 +265,11 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
           },
           collector,
         );
+        if (event.type === 'tool_result') {
+          subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
+            onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/generated/\n`);
+          });
+        }
       }
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
@@ -302,6 +317,40 @@ interface EventCollector {
 
 function createEventCollector(): EventCollector {
   return { steps: [], iterations: 0, totalTokens: 0 };
+}
+
+/**
+ * Subscribe to a background media task and save outputs to local disk when complete.
+ * Called on every tool_result event that carries { backgroundMode: true, taskId }.
+ * No-op if platform or platform.media is unavailable.
+ */
+function subscribeToMediaSave(
+  platform: Platform | undefined,
+  event: AgentEvent,
+  workDir: string,
+  onSaved?: (taskId: string, localPaths: string[]) => void,
+): void {
+  if (!platform?.media) return;
+
+  const resultData = event.toolResult?.data as Record<string, unknown> | undefined;
+  if (resultData?.backgroundMode !== true || typeof resultData?.taskId !== 'string') return;
+
+  const taskId = resultData.taskId;
+  const outputDir = path.join(workDir, '.neko', 'generated');
+
+  const unsubscribe = platform.media.onProgress(taskId, async (task) => {
+    if (task.status === 'completed' && task.outputs && task.outputs.length > 0) {
+      // No transcodeFile needed for TUI (terminal renders paths, not Electron webview)
+      const localPaths = await platform.media!.saveOutputs(taskId, outputDir);
+      if (localPaths.length > 0) {
+        onSaved?.(taskId, localPaths);
+      }
+    }
+
+    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+      unsubscribe();
+    }
+  });
 }
 
 /**
@@ -406,6 +455,8 @@ export interface AgentRunnerWithContextOptions extends AgentRunnerOptions {
   session?: AgentSession;
   /** Pre-initialized input processor */
   inputProcessor?: InputProcessor;
+  /** Platform instance for media file saving */
+  platform?: Platform;
 }
 
 /**
@@ -415,7 +466,7 @@ export interface AgentRunnerWithContextOptions extends AgentRunnerOptions {
 export async function runAgentWithContext(
   options: AgentRunnerWithContextOptions,
 ): Promise<CLIResult> {
-  const { config, runOptions, session, inputProcessor, onOutput, onToolCall, onThinking } = options;
+  const { config, runOptions, session, inputProcessor, onOutput, onToolCall, onThinking, platform } = options;
   const startTime = Date.now();
 
   if (!session) {
@@ -459,6 +510,11 @@ export async function runAgentWithContext(
         },
         collector,
       );
+      if (event.type === 'tool_result') {
+        subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
+          onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/generated/\n`);
+        });
+      }
     }
 
     const result: AgentResult = {
@@ -501,17 +557,33 @@ interface InteractiveSessionState {
   config: CLIConfig;
   /** Rebuild LLM service and update session after config change */
   rebuildService: (newConfig: CLIConfig, service?: IService) => void;
+  /** Platform instance (available when not using injected service) */
+  platform?: Platform;
+  /** Conversation persistence */
+  conversationStorage: FileConversationStorage;
+  conversationId: string;
+  conversationTitle: string;
+  conversationCreatedAt: number;
+  /** Media model overrides set via /media command */
+  mediaModelOverrides: {
+    image?: string;
+    video?: string;
+    audio?: string;
+    music?: string;
+  };
 }
 
 /**
  * Initialize interactive session
  *
  * @param rl - Shared readline interface (avoids stdin contention)
+ * @param resumeId - Optional conversation ID to resume
  */
 async function initializeInteractiveSession(
   config: CLIConfig,
   rl: import('node:readline').Interface,
   service?: IService,
+  resumeId?: string,
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
   const alwaysAllowedTools = new Set<string>();
@@ -667,6 +739,25 @@ async function initializeInteractiveSession(
     });
   };
 
+  // Initialize conversation storage for the shared resume layer
+  const conversationStorage = createFileConversationStorage(config.workDir);
+  const conversationCreatedAt = Date.now();
+  let conversationId: string = crypto.randomUUID();
+  let conversationTitle = '';
+
+  // Resume a previous conversation if requested
+  if (resumeId) {
+    const record = await conversationStorage.load(resumeId).catch(() => undefined);
+    if (record) {
+      session.loadHistory(record.messages);
+      conversationId = record.id;
+      conversationTitle = record.title;
+      console.log(theme.info(`Resumed: "${record.title}" (${record.messages.length - 1} messages)`));
+    } else {
+      console.log(theme.warning(`Conversation "${resumeId}" not found — starting fresh`));
+    }
+  }
+
   return {
     mcpManager,
     toolRegistry,
@@ -676,6 +767,12 @@ async function initializeInteractiveSession(
     inputProcessor,
     config,
     rebuildService,
+    platform,
+    conversationStorage,
+    conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    mediaModelOverrides: {},
   };
 }
 
@@ -686,6 +783,7 @@ export async function runInteractive(
   config: CLIConfig,
   service?: IService,
   _hooks?: Partial<ExecutorHooks>,
+  options?: { resumeId?: string },
 ): Promise<void> {
   const readline = await import('node:readline');
 
@@ -700,7 +798,7 @@ export async function runInteractive(
 
   try {
     // Initialize session (pass shared rl to avoid stdin contention)
-    state = await initializeInteractiveSession(sessionConfig, rl, service);
+    state = await initializeInteractiveSession(sessionConfig, rl, service, options?.resumeId);
 
     // Create slash command context
     const slashContext: SlashCommandContext = {
@@ -713,6 +811,26 @@ export async function runInteractive(
         // Sync config changes to session
         state!.rebuildService(sessionConfig, service);
       },
+      conversationStorage: state.conversationStorage,
+      currentConversationId: state.conversationId,
+      onLoadHistory: (messages) => {
+        state!.session.loadHistory(messages);
+      },
+      getHistory: () => state!.session.getHistory(),
+      onUpdateMediaOverrides: (overrides) => {
+        state!.mediaModelOverrides = { ...state!.mediaModelOverrides, ...overrides };
+        slashContext.currentMediaOverrides = state!.mediaModelOverrides;
+        // Apply to platform config if available
+        state!.platform?.config.setRuntimeMediaDefaults(state!.mediaModelOverrides);
+      },
+      onResetMediaOverrides: () => {
+        state!.mediaModelOverrides = {};
+        slashContext.currentMediaOverrides = {};
+        state!.platform?.config.setRuntimeMediaDefaults({});
+      },
+      currentMediaOverrides: state.mediaModelOverrides,
+      availableMediaModels: sessionConfig.mediaModels,
+      defaultMediaModels: sessionConfig.defaultMediaModels,
     };
 
     console.log(theme.bold('NekoAgent CLI - Interactive Mode'));
@@ -863,8 +981,35 @@ export async function runInteractive(
               },
               onThinking: (thought) => console.log(theme.muted(`\n[Thinking] ${thought}`)),
             });
+            if (event.type === 'tool_result') {
+              subscribeToMediaSave(state!.platform, event, sessionConfig.workDir, (_id, paths) => {
+                console.log(theme.success(`\n[media] Saved ${paths.length} file(s):`));
+                for (const p of paths) console.log(theme.muted(`  ${p}`));
+              });
+            }
           }
           console.log('\n');
+
+          // Persist conversation after each turn
+          if (!state!.conversationTitle) {
+            state!.conversationTitle =
+              agentPrompt.slice(0, 50) + (agentPrompt.length > 50 ? '…' : '');
+          }
+          const record: ConversationRecord = {
+            id: state!.conversationId,
+            version: 1,
+            title: state!.conversationTitle,
+            workDir: sessionConfig.workDir,
+            messages: state!.session.getHistory(),
+            createdAt: state!.conversationCreatedAt,
+            updatedAt: Date.now(),
+            source: 'tui',
+            mediaModelSelection:
+              Object.keys(state!.mediaModelOverrides).length > 0
+                ? state!.mediaModelOverrides
+                : undefined,
+          };
+          state!.conversationStorage.save(record).catch(() => {/* silent — storage is best-effort */});
         } catch (error) {
           console.error(
             theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`),

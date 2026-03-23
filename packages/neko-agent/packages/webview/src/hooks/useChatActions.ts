@@ -16,10 +16,22 @@ import { Message, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
 
+/** Per-category resolved media model for agent mode */
+export interface AgentMediaModels {
+  image?: { providerId?: string; modelId: string };
+  video?: { providerId?: string; modelId: string };
+  audio?: { providerId?: string; modelId: string };
+}
+
 export interface UseChatActionsProps {
   inputValue: string;
   isThinking: boolean;
   selectedModel: string;
+  sessionMode?: string;
+  mediaProviderId?: string;
+  mediaModelId?: string;
+  /** Per-category media models for agent mode (overrides mediaModelId when set) */
+  agentMediaModels?: AgentMediaModels;
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   streamingMessageIdRef: MutableRefObject<string | null>;
@@ -55,6 +67,10 @@ export function useChatActions({
   inputValue,
   isThinking,
   selectedModel,
+  sessionMode,
+  mediaProviderId,
+  mediaModelId,
+  agentMediaModels,
   activeConversationId,
   activeConversationIdRef,
   streamingMessageIdRef,
@@ -112,11 +128,20 @@ export function useChatActions({
         attachments,
         undefined,
         activeConversationId || undefined,
+        undefined,
+        sessionMode,
+        mediaProviderId,
+        mediaModelId,
+        agentMediaModels,
       );
     },
     [
       inputValue,
       selectedModel,
+      sessionMode,
+      mediaProviderId,
+      mediaModelId,
+      agentMediaModels,
       activeConversationId,
       isDuplicate,
       setMessages,

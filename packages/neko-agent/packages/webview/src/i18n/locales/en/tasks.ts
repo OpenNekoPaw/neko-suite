@@ -20,6 +20,8 @@ export const tasks = {
   'tasks.batchProgress': '{completed}/{total} completed',
   'tasks.videoGeneration': 'Video Generation',
   'tasks.imageGeneration': 'Image Generation',
+  'tasks.audioGeneration': 'Audio Generation',
+  'tasks.revealInExplorer': 'Show in Folder',
   'tasks.provider': 'Provider',
   'tasks.progress': 'Progress',
   'tasks.generating': 'Generating...',

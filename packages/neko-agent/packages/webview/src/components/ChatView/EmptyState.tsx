@@ -1,26 +1,92 @@
 import { useTranslation } from '@/i18n/I18nContext';
 
-export function EmptyState() {
+interface EmptyStateProps {
+  onSuggestionClick?: (text: string) => void;
+}
+
+export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
   const { t } = useTranslation();
+
+  const suggestions = [
+    t('chat.emptyState.suggestion1'),
+    t('chat.emptyState.suggestion2'),
+    t('chat.emptyState.suggestion3'),
+  ];
+
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4">
-      {/* Logo/Icon */}
-      <div className="mb-4 w-16 h-16 rounded-full bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] flex items-center justify-center">
-        <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-        </svg>
+    <div className="flex flex-col items-center justify-center h-full px-4 select-none">
+      {/* Icon */}
+      <div className="mb-5 relative">
+        {/* Outer glow */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] opacity-20 blur-xl scale-110" />
+        {/* Icon container */}
+        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] flex items-center justify-center shadow-lg">
+          <NekoIcon className="w-9 h-9" />
+        </div>
       </div>
 
       {/* Title */}
-      <h2 className="text-lg font-medium mb-1">{t('chat.emptyState.title')}</h2>
-      <p className="text-[12px] text-[var(--vscode-descriptionForeground)] text-center mb-6 max-w-[280px]">
+      <h2 className="text-[15px] font-semibold mb-1.5 tracking-tight">
+        {t('chat.emptyState.title')}
+      </h2>
+      <p className="text-[12px] text-[var(--vscode-descriptionForeground)] text-center mb-5 max-w-[260px] leading-relaxed">
         {t('chat.emptyState.description')}
       </p>
 
+      {/* Suggestion chips */}
+      <div className="flex flex-col items-stretch gap-1.5 w-full max-w-[260px] mb-6">
+        {suggestions.map((s) => (
+          <button
+            key={s}
+            onClick={() => onSuggestionClick?.(s)}
+            className="px-3 py-1.5 text-[11px] text-left text-[var(--vscode-descriptionForeground)] border border-[var(--vscode-panel-border)] rounded-lg hover:border-[var(--vscode-focusBorder)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
       {/* Disclaimer */}
-      <p className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-60 text-center">
+      <p className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-50 text-center">
         {t('chat.emptyState.disclaimer')}
       </p>
     </div>
+  );
+}
+
+/** Neko (cat) icon — white silhouette with mask-cut eyes and nose */
+function NekoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <defs>
+        <mask id="neko-mask">
+          <rect width="24" height="24" fill="white" />
+          {/* Left eye */}
+          <ellipse cx="9" cy="14" rx="1.6" ry="1.9" fill="black" />
+          {/* Right eye */}
+          <ellipse cx="15" cy="14" rx="1.6" ry="1.9" fill="black" />
+          {/* Nose */}
+          <path d="M11.3 17 L12 17.9 L12.7 17 Z" fill="black" />
+        </mask>
+      </defs>
+
+      {/* Cat silhouette: head + ears, masked */}
+      <g fill="white" mask="url(#neko-mask)">
+        {/* Left ear */}
+        <path d="M8 11.5 L4.5 4 L11 9.5 Z" />
+        {/* Right ear */}
+        <path d="M16 11.5 L19.5 4 L13 9.5 Z" />
+        {/* Head */}
+        <circle cx="12" cy="14.5" r="8.5" />
+      </g>
+
+      {/* Inner ear highlights (softer white fill) */}
+      <path d="M8 10.5 L5.8 5.5 L10.2 9.5 Z" fill="white" opacity="0.35" />
+      <path d="M16 10.5 L18.2 5.5 L13.8 9.5 Z" fill="white" opacity="0.35" />
+
+      {/* Eye shine dots */}
+      <circle cx="9.7" cy="13.2" r="0.55" fill="white" opacity="0.7" />
+      <circle cx="15.7" cy="13.2" r="0.55" fill="white" opacity="0.7" />
+    </svg>
   );
 }

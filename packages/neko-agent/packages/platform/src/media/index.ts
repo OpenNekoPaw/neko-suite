@@ -32,6 +32,7 @@ export type {
 // =============================================================================
 
 export { MediaGenerationService } from './media-generation-service';
+export { downloadMediaOutputs, detectMediaExtension, type DownloadMediaOptions } from './media-file-downloader';
 
 // Factory
 import { ConfigManager } from '../config/config-manager';
@@ -92,6 +93,7 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
   const openaiCompatAdapter = new OpenAICompatMediaAdapter();
   adapterRegistry.registerBuiltin('openai', openaiCompatAdapter);
   adapterRegistry.registerBuiltin('generic', openaiCompatAdapter); // For NekoAPI and other compatible APIs
+  adapterRegistry.registerBuiltin('newapi', openaiCompatAdapter); // NewAPI is OpenAI-compatible
   adapterRegistry.registerBuiltin('xai', openaiCompatAdapter);
   adapterRegistry.registerBuiltin('kling', openaiCompatAdapter);
 

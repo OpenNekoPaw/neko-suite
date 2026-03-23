@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { ShellExecutionMode, PromptMode, AgentState } from '@/components/types';
+import { ShellExecutionMode, PromptMode, SessionMode, AgentState } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
 import { ChatView } from '@/components/ChatView';
@@ -43,8 +43,8 @@ export function AIAssistant() {
     setInputValue,
     selectedModel,
     setSelectedModel,
-    selectedMediaModel,
-    setSelectedMediaModel,
+    mediaModelSelection,
+    setMediaModelSelection,
     clearInput,
   } = ui;
 
@@ -73,6 +73,9 @@ export function AIAssistant() {
   const { settings, setSettings, projectFiles, setProjectFiles, updateSettings } = config;
 
   const { backgroundTasks, setBackgroundTasks } = resource;
+
+  // Session mode state (top-level workflow routing)
+  const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
 
   // Skills state
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -214,12 +217,58 @@ export function AIAssistant() {
     }
   }, [activeConversationId]);
 
+  // --- Model lists (needed by useChatActions and InputAreaProvider) ---
+
+  const allModels =
+    settings.chatModelOptions.length > 0
+      ? settings.chatModelOptions
+      : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
+
+  const MEDIA_CATEGORIES = new Set(['image', 'video', 'audio']);
+  const availableModels = allModels.filter(
+    (m) => m.id === 'auto' || !m.category || !MEDIA_CATEGORIES.has(m.category),
+  );
+  const availableMediaModels = allModels.filter(
+    (m) => m.category && MEDIA_CATEGORIES.has(m.category),
+  );
+
+  // For non-agent modes, resolve providerId + modelId from the selected ChatModelOption
+  const activeMediaModel =
+    sessionMode !== 'agent'
+      ? availableMediaModels.find(
+          (m) => m.id === mediaModelSelection[sessionMode as 'image' | 'video' | 'audio'],
+        )
+      : undefined;
+
+  // For agent mode, resolve per-category media models (image/video/audio independently)
+  const agentMediaModels =
+    sessionMode === 'agent'
+      ? (() => {
+          const resolve = (cat: 'image' | 'video' | 'audio') => {
+            const id = mediaModelSelection[cat];
+            if (!id || id === 'none') return undefined;
+            const m = availableMediaModels.find((m) => m.id === id);
+            if (!m?.modelId) return undefined;
+            return { providerId: m.providerId || undefined, modelId: m.modelId };
+          };
+          const result: import('@/hooks/useChatActions').AgentMediaModels = {};
+          const img = resolve('image'); if (img) result.image = img;
+          const vid = resolve('video'); if (vid) result.video = vid;
+          const aud = resolve('audio'); if (aud) result.audio = aud;
+          return Object.keys(result).length > 0 ? result : undefined;
+        })()
+      : undefined;
+
   // --- Extracted behavior hooks ---
 
   const { handleSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue,
     isThinking,
     selectedModel,
+    sessionMode,
+    mediaProviderId: activeMediaModel?.providerId,
+    mediaModelId: activeMediaModel?.modelId,
+    agentMediaModels,
     activeConversationId,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -342,19 +391,26 @@ export function AIAssistant() {
     VSCodeMessages.setPromptMode(mode);
   };
 
-  // Get available models from Platform ConfigManager (via settings.chatModelOptions)
-  const allModels =
-    settings.chatModelOptions.length > 0
-      ? settings.chatModelOptions
-      : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
-
-  // Split into chat and media models
-  const MEDIA_CATEGORIES = new Set(['image', 'video', 'audio']);
-  const availableModels = allModels.filter(
-    (m) => m.id === 'auto' || !m.category || !MEDIA_CATEGORIES.has(m.category),
+  // Handle per-category media model selection
+  const handleMediaModelSelect = useCallback(
+    (category: 'image' | 'video' | 'audio', modelId: string) => {
+      setMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
+    },
+    [setMediaModelSelection],
   );
-  const availableMediaModels = allModels.filter(
-    (m) => m.category && MEDIA_CATEGORIES.has(m.category),
+
+  // Handle session mode change — auto-select first available model for that category
+  const handleSessionModeChange = useCallback(
+    (mode: SessionMode) => {
+      setSessionMode(mode);
+      if (mode !== 'agent') {
+        const first = allModels.find((m) => m.category === mode);
+        if (first) {
+          setMediaModelSelection((prev) => ({ ...prev, [mode]: first.id }));
+        }
+      }
+    },
+    [allModels, setMediaModelSelection],
   );
 
   return (
@@ -381,12 +437,14 @@ export function AIAssistant() {
       {/* Content Area */}
       {activeTab === 'chat' ? (
         <InputAreaProvider
+          sessionMode={sessionMode}
+          onSessionModeChange={handleSessionModeChange}
           selectedModel={selectedModel}
           availableModels={availableModels}
           onModelSelect={setSelectedModel}
-          selectedMediaModel={selectedMediaModel}
+          mediaModelSelection={mediaModelSelection}
           availableMediaModels={availableMediaModels}
-          onMediaModelSelect={setSelectedMediaModel}
+          onMediaModelSelect={handleMediaModelSelect}
           executionMode={settings.executionMode}
           onExecutionModeChange={handleExecutionModeChange}
           promptMode={settings.promptMode}

@@ -22,6 +22,9 @@ export const chat = {
   'chat.emptyState.title': 'Neko Suite AI 助手',
   'chat.emptyState.description': '问我任何关于视频编辑、时间轴管理或项目组织的问题。',
   'chat.emptyState.disclaimer': 'AI 回复可能不准确。',
+  'chat.emptyState.suggestion1': '分析当前项目结构',
+  'chat.emptyState.suggestion2': '帮我优化时间轴剪辑',
+  'chat.emptyState.suggestion3': '生成一段旁白脚本',
 
   'chat.input.placeholder': '输入任何问题... (/ 命令, @ 文件, Shift+Enter 换行)',
   'chat.input.thinkingPlaceholder': '输入下一条消息... (将加入队列)',
@@ -65,6 +68,15 @@ export const chat = {
   'chat.plan.partial': '部分批准',
   'chat.plan.approveAll': '全部批准',
   'chat.plan.rejectAll': '全部拒绝',
+
+  'chat.sessionMode.agent': 'Agent',
+  'chat.sessionMode.agentDesc': 'LLM 推理 + 工具调用',
+  'chat.sessionMode.image': '生图',
+  'chat.sessionMode.imageDesc': '生成图片',
+  'chat.sessionMode.video': '生视频',
+  'chat.sessionMode.videoDesc': '生成视频',
+  'chat.sessionMode.audio': '生音频',
+  'chat.sessionMode.audioDesc': '生成音频',
 
   'chat.executionMode.label': '执行模式',
   'chat.executionMode.title': '执行模式：计划（模拟运行）、询问（确认）、自动（仅白名单）',

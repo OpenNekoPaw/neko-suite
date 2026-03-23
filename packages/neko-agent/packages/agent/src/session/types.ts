@@ -97,6 +97,14 @@ export interface AgentSessionConfig {
    * - UserPromptSubmit hooks: executed before each user message in execute()
    */
   settingsHookLoader?: import('../hook-loader/settings-hook-loader').SettingsHookLoader;
+
+  /**
+   * Project memory manager for cross-session fact persistence.
+   * When provided, memory content is injected into the `environment` layer of
+   * the system prompt and refreshed in-session whenever entries change.
+   * Backed by `.neko/memory.md` in the project workspace root.
+   */
+  projectMemoryManager?: import('@neko/shared').IProjectMemoryManager;
 }
 
 // =============================================================================

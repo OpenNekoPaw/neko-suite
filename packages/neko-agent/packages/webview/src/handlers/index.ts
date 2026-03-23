@@ -18,6 +18,7 @@ import { tabHandlers } from './tab-handlers';
 import { commandHandlers } from './command-handlers';
 import { skillHandlers } from './skill-handlers';
 import { contextHandlers } from './context-handlers';
+import { mediaHandlers } from './media-handlers';
 
 /**
  * Create a fully configured message handler registry
@@ -35,6 +36,7 @@ export function createConfiguredRegistry(): MessageHandlerRegistry {
   registry.registerAll(commandHandlers);
   registry.registerAll(skillHandlers);
   registry.registerAll(contextHandlers);
+  registry.registerAll(mediaHandlers);
 
   return registry;
 }

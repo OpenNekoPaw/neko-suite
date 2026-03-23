@@ -48,6 +48,15 @@ export const VSCodeMessages = {
     promptId?: string,
     conversationId?: string,
     messageTrackingId?: string,
+    sessionMode?: string,
+    mediaProviderId?: string,
+    mediaModelId?: string,
+    /** Per-category media model selection for agent mode */
+    agentMediaModels?: {
+      image?: { providerId?: string; modelId: string };
+      video?: { providerId?: string; modelId: string };
+      audio?: { providerId?: string; modelId: string };
+    },
   ) => {
     postMessage({
       type: 'sendMessage',
@@ -58,6 +67,10 @@ export const VSCodeMessages = {
       promptId,
       conversationId,
       messageTrackingId,
+      sessionMode,
+      mediaProviderId,
+      mediaModelId,
+      agentMediaModels,
     });
   },
 

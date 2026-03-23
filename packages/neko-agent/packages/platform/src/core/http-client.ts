@@ -104,11 +104,20 @@ export class HttpClient {
         };
       }
 
+      // Build a message that includes Node.js error cause (e.g. ENOTFOUND, ECONNREFUSED)
+      let message = err instanceof Error ? err.message : 'Network error';
+      const cause = err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined;
+      if (cause instanceof Error && cause.message) {
+        message = `${message}: ${cause.message}`;
+      }
+
+      logger.error(`Network error for ${config.method} ${config.url}`, { err, cause });
+
       return {
         success: false,
         error: {
           code: 'NETWORK_ERROR',
-          message: err instanceof Error ? err.message : 'Network error',
+          message,
           statusCode: 0,
           retryable: true,
           retryAfterMs: 5000,

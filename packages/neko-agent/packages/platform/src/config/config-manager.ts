@@ -56,6 +56,8 @@ export class ConfigManager {
   private stopWatching: (() => void) | null = null;
   private configMerged = false;
   private cachedConfig: MergedConfig | null = null;
+  /** Runtime-only media model overrides (not persisted to disk) */
+  private runtimeMediaDefaults: { image?: string; video?: string; audio?: string; music?: string } = {};
 
   // Merged data
   private providers: Map<string, Provider> = new Map();
@@ -297,7 +299,20 @@ export class ConfigManager {
   }
 
   getDefaultMediaModels(): { image?: string; video?: string; audio?: string; music?: string } {
-    return this.getScalar('defaultMediaModels') ?? {};
+    const fromConfig = this.getScalar('defaultMediaModels') ?? {};
+    // Runtime overrides take priority over config-file defaults (not persisted)
+    return { ...fromConfig, ...this.runtimeMediaDefaults };
+  }
+
+  /**
+   * Apply runtime-only media model defaults for the current session.
+   * These override config-file defaults but are never written to disk.
+   * Pass empty overrides to clear all per-category session overrides.
+   */
+  setRuntimeMediaDefaults(
+    overrides: { image?: string; video?: string; audio?: string; music?: string },
+  ): void {
+    this.runtimeMediaDefaults = { ...overrides };
   }
 
   getTemperature(): number {

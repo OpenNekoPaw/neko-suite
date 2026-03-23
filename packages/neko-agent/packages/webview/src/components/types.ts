@@ -131,6 +131,15 @@ export type ShellExecutionMode = 'plan' | 'ask' | 'auto';
 export type PromptMode = 'default' | 'plan';
 
 /**
+ * Session mode — controls the primary workflow / capability routing.
+ * - agent:  LLM reasoning + tool calls (default)
+ * - image:  image generation (routes to image media model)
+ * - video:  video generation (routes to video media model)
+ * - audio:  audio generation (routes to audio media model)
+ */
+export type SessionMode = 'agent' | 'image' | 'video' | 'audio';
+
+/**
  * Agent execution phase for status indicator
  * - idle: Agent is not running
  * - thinking: Agent is processing/thinking (Claude extended thinking)

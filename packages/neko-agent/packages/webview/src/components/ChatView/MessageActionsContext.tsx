@@ -6,8 +6,11 @@
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { BackgroundTask } from '@/components/TaskListView';
 
 export interface MessageActionsContextValue {
+  // Background tasks (for inline TaskCard rendering in ToolCallDisplay)
+  backgroundTasks?: BackgroundTask[];
   // Task actions
   onCancelTask?: (taskId: string) => void;
   onViewTaskResult?: (taskId: string) => void;
@@ -30,6 +33,7 @@ export function MessageActionsProvider({
 }: MessageActionsContextValue & { children: ReactNode }) {
   const value = useMemo<MessageActionsContextValue>(
     () => ({
+      backgroundTasks: actions.backgroundTasks,
       onCancelTask: actions.onCancelTask,
       onViewTaskResult: actions.onViewTaskResult,
       onAcceptDiff: actions.onAcceptDiff,
@@ -41,6 +45,7 @@ export function MessageActionsProvider({
       onRejectAllPlanSteps: actions.onRejectAllPlanSteps,
     }),
     [
+      actions.backgroundTasks,
       actions.onCancelTask,
       actions.onViewTaskResult,
       actions.onAcceptDiff,

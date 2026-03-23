@@ -15,7 +15,7 @@ import { render } from 'ink';
 import { Command } from 'commander';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
 import type { CLIConfig } from './core/types';
-import { runAgent } from './core/runner';
+import { runAgent, runInteractive } from './core/runner';
 import { formatResult } from './core/formatter';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
@@ -34,6 +34,7 @@ program
   .option('-m, --model <model>', 'Model ID')
   .option('-k, --api-key <key>', 'API key')
   .option('-v, --verbose', 'Enable verbose output')
+  .option('-r, --resume [id]', 'Resume a previous conversation (omit id to pick from list)')
   .action(async (opts: Record<string, unknown>) => {
     await handleInteractive(opts);
   });
@@ -146,6 +147,14 @@ async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
   const capabilities = detectCapabilities();
   if (!capabilities.supportsColor) {
     chalk.level = 0;
+  }
+
+  // --resume flag: use readline-based interactive mode (supports resume prompt)
+  const resumeFlag = opts['resume'];
+  if (resumeFlag !== undefined) {
+    const resumeId = typeof resumeFlag === 'string' ? resumeFlag : undefined;
+    await runInteractive(config, undefined, undefined, { resumeId });
+    return;
   }
 
   console.log(chalk.cyan.bold('\n  Neko Agent'));

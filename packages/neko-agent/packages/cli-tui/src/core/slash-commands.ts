@@ -10,13 +10,23 @@ import {
   type ToolRegistry,
   type CommandContext,
   type CommandResult,
+  type ChatMessage,
   executeSlashCommand,
   isSlashCommand as checkIsSlashCommand,
   parseSlashCommand as parseCommand,
   getCliCommands,
+  type FileConversationStorage,
 } from '@neko/agent';
 import type { CLIConfig } from './types';
 import { listProviders, getProviderModels } from './config';
+
+/** Per-category media model overrides for the current session */
+export interface MediaModelOverrides {
+  image?: string;
+  video?: string;
+  audio?: string;
+  music?: string;
+}
 
 /**
  * Slash command result (CLI-specific)
@@ -41,6 +51,24 @@ export interface SlashCommandContext {
   toolRegistry?: ToolRegistry;
   /** Callback to update config */
   onConfigUpdate?: (updates: Partial<CLIConfig>) => void;
+  /** Conversation storage for /resume */
+  conversationStorage?: FileConversationStorage;
+  /** Current conversation ID */
+  currentConversationId?: string;
+  /** Load history into current session */
+  onLoadHistory?: (messages: ChatMessage[]) => void;
+  /** Get current session history */
+  getHistory?: () => ChatMessage[];
+  /** Update media model overrides and propagate to platform */
+  onUpdateMediaOverrides?: (overrides: MediaModelOverrides) => void;
+  /** Reset all media overrides to config defaults */
+  onResetMediaOverrides?: () => void;
+  /** Current media model overrides */
+  currentMediaOverrides?: MediaModelOverrides;
+  /** Available media model IDs from config */
+  availableMediaModels?: string[];
+  /** Default media models from config */
+  defaultMediaModels?: { image?: string; video?: string; audio?: string; music?: string };
 }
 
 /**
@@ -134,6 +162,21 @@ export async function handleSlashCommand(
   // Handle CLI-specific config command with provider info
   if (command === 'config' || command === 'cfg') {
     return handleConfig(args, context);
+  }
+
+  // Conversation resume
+  if (command === 'resume') {
+    return handleResume(args, context);
+  }
+
+  // Conversation history
+  if (command === 'history') {
+    return handleHistory(context);
+  }
+
+  // Media model selection
+  if (command === 'media') {
+    return handleMedia(args, context);
   }
 
   // Use shared command executor for other commands
@@ -308,4 +351,190 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
  */
 export function getAvailableCommands(): string[] {
   return getCliCommands().map((cmd) => cmd.name);
+}
+
+// ============================================================================
+// /resume — List and restore historical conversations
+// ============================================================================
+
+async function handleResume(
+  args: string[],
+  context: SlashCommandContext,
+): Promise<SlashCommandResult> {
+  const { conversationStorage, onLoadHistory } = context;
+  if (!conversationStorage) {
+    return { handled: true, continueExecution: true, error: 'Conversation storage not available' };
+  }
+
+  const targetId = args[0];
+
+  if (targetId) {
+    // Direct resume by ID
+    const record = await conversationStorage.load(targetId).catch(() => undefined);
+    if (!record) {
+      return { handled: true, continueExecution: true, error: `Conversation "${targetId}" not found` };
+    }
+    onLoadHistory?.(record.messages);
+    return {
+      handled: true,
+      output: `Resumed: "${record.title}" (${record.messages.length - 1} messages, ${new Date(record.updatedAt).toLocaleString()})`,
+      continueExecution: true,
+    };
+  }
+
+  // List available conversations
+  const records = await conversationStorage.list().catch(() => []);
+  if (records.length === 0) {
+    return {
+      handled: true,
+      output: 'No saved conversations found for this workspace.',
+      continueExecution: true,
+    };
+  }
+
+  const lines = ['', 'Saved Conversations:', ''];
+  records.slice(0, 20).forEach((r, i) => {
+    const date = new Date(r.updatedAt).toLocaleDateString();
+    const msgCount = Math.max(0, r.messages.length - 1); // exclude system message
+    const isCurrent = r.id === context.currentConversationId ? ' (current)' : '';
+    lines.push(`  [${i + 1}] ${r.title}${isCurrent}`);
+    lines.push(`      id: ${r.id} · ${date} · ${msgCount} messages`);
+    lines.push('');
+  });
+  lines.push('Use "/resume <id>" to restore a conversation.');
+
+  return { handled: true, output: lines.join('\n'), continueExecution: true };
+}
+
+// ============================================================================
+// /history — Show turns in current session
+// ============================================================================
+
+function handleHistory(context: SlashCommandContext): SlashCommandResult {
+  const { getHistory } = context;
+  if (!getHistory) {
+    return { handled: true, continueExecution: true, error: 'History not available' };
+  }
+
+  const messages = getHistory();
+  const turns = messages.filter((m) => m.role !== 'system');
+
+  if (turns.length === 0) {
+    return {
+      handled: true,
+      output: 'No messages in current session.',
+      continueExecution: true,
+    };
+  }
+
+  const lines = ['', `Conversation History (${turns.length} messages):`, ''];
+  turns.forEach((m, i) => {
+    const role = m.role === 'user' ? 'You' : 'Assistant';
+    const preview =
+      typeof m.content === 'string'
+        ? m.content.slice(0, 60) + (m.content.length > 60 ? '…' : '')
+        : '[tool/structured]';
+    lines.push(`  [${i + 1}] ${role}: ${preview}`);
+  });
+  lines.push('');
+
+  return { handled: true, output: lines.join('\n'), continueExecution: true };
+}
+
+// ============================================================================
+// /media — Per-category media model selection
+// ============================================================================
+
+type MediaCategory = 'image' | 'video' | 'audio' | 'music';
+const MEDIA_CATEGORIES: MediaCategory[] = ['image', 'video', 'audio', 'music'];
+
+function handleMedia(
+  args: string[],
+  context: SlashCommandContext,
+): SlashCommandResult {
+  const {
+    availableMediaModels = [],
+    currentMediaOverrides = {},
+    defaultMediaModels = {},
+    onUpdateMediaOverrides,
+    onResetMediaOverrides,
+  } = context;
+
+  if (args.length === 0) {
+    // Show current status
+    const lines = ['', 'Media Model Selection:', ''];
+    for (const cat of MEDIA_CATEGORIES) {
+      const override = currentMediaOverrides[cat];
+      const def = defaultMediaModels[cat];
+      const effective = override ?? def ?? '(none)';
+      const source = override ? 'session override' : def ? 'config default' : 'not set';
+      lines.push(`  ${cat}: ${effective} [${source}]`);
+    }
+    if (availableMediaModels.length > 0) {
+      lines.push('', 'Available models:', '');
+      for (const modelId of availableMediaModels) {
+        lines.push(`  ${modelId}`);
+      }
+    }
+    lines.push('', 'Usage: /media <category> [model-id|none]  |  /media reset');
+    return { handled: true, output: lines.join('\n'), continueExecution: true };
+  }
+
+  const subcommand = args[0]?.toLowerCase() as MediaCategory | 'reset';
+
+  if (subcommand === 'reset') {
+    onResetMediaOverrides?.();
+    return {
+      handled: true,
+      output: 'Media model overrides reset to config defaults.',
+      continueExecution: true,
+    };
+  }
+
+  if (!MEDIA_CATEGORIES.includes(subcommand as MediaCategory)) {
+    return {
+      handled: true,
+      continueExecution: true,
+      error: `Unknown category: "${subcommand}". Valid: ${MEDIA_CATEGORIES.join(', ')}, reset`,
+    };
+  }
+
+  const category = subcommand as MediaCategory;
+
+  if (args.length === 1) {
+    // List models for this category
+    const modelsForCat = availableMediaModels.filter((id) => {
+      // Heuristic: filter by category name substring; real implementation may use ChatModelOption
+      return id.toLowerCase().includes(category) || availableMediaModels.length <= 5;
+    });
+    const current = currentMediaOverrides[category] ?? defaultMediaModels[category] ?? '(none)';
+    const lines = ['', `${category} models (current: ${current}):`, ''];
+    if (modelsForCat.length === 0) {
+      lines.push('  (no models available for this category)');
+    } else {
+      for (const m of modelsForCat) {
+        const marker = m === current ? '* ' : '  ';
+        lines.push(`  ${marker}${m}`);
+      }
+    }
+    lines.push('', 'Use "/media none" to disable this category.');
+    return { handled: true, output: lines.join('\n'), continueExecution: true };
+  }
+
+  const modelId = args[1];
+  if (modelId === 'none') {
+    onUpdateMediaOverrides?.({ [category]: 'none' });
+    return {
+      handled: true,
+      output: `${category} media generation disabled for this session.`,
+      continueExecution: true,
+    };
+  }
+
+  onUpdateMediaOverrides?.({ [category]: modelId });
+  return {
+    handled: true,
+    output: `${category} model set to: ${modelId}`,
+    continueExecution: true,
+  };
 }

@@ -148,6 +148,26 @@ export function initializeSession(
   // Step 7: System prompt composer + initial history
   const promptComposer = new SystemPromptComposer();
   promptComposer.setBase(config.systemPrompt);
+
+  // Inject project memory into environment layer (if available)
+  if (config.projectMemoryManager) {
+    const injectMemory = (content: string | null): void => {
+      if (content) {
+        promptComposer.setSection({
+          id: 'memory:project',
+          layer: 'environment',
+          content: `## Project Memory\n\n${content}`,
+          priority: 60,
+        });
+      } else {
+        promptComposer.removeSection('memory:project');
+      }
+    };
+
+    injectMemory(config.projectMemoryManager.getContent());
+    config.projectMemoryManager.on('change', injectMemory);
+  }
+
   const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
 
   return {

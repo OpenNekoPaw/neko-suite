@@ -120,10 +120,11 @@ export function ChatView({
         {/* Messages Container */}
         {isEmpty ? (
           <div className="flex-1 overflow-y-auto">
-            <EmptyState />
+            <EmptyState onSuggestionClick={onInputChange} />
           </div>
         ) : (
           <MessageActionsProvider
+            backgroundTasks={backgroundTasks}
             onCancelTask={onCancelTask}
             onViewTaskResult={onViewTaskResult}
             onAcceptDiff={onAcceptDiff}

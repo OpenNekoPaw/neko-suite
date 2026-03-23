@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { Platform } from '@neko/platform';
+import type { Platform, MediaTask } from '@neko/platform';
 import type { ConversationMessage } from './conversationManager';
 import type { IAgentManager } from '../ai/agentManager';
 import { createDefaultAgentContext } from '../ai/agentContext';
@@ -20,11 +20,66 @@ import { FileReference, MessageAttachment } from './types';
 import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
 import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
+import { EngineClient } from '@neko/neko-client';
 import { getLogger } from '../base';
 
 const logger = getLogger('MessageHandler');
 
 type AgentPhase = 'idle' | 'thinking' | 'acting' | 'streaming';
+
+// =============================================================================
+// neko-engine transcoder (lazy, optional)
+// =============================================================================
+
+let _engineClient: EngineClient | null = null;
+
+/**
+ * Lazily acquire EngineClient via neko-engine Frame Server command.
+ * Returns null if neko-engine is not installed or fails to start.
+ */
+async function getEngineClient(): Promise<EngineClient | null> {
+  if (_engineClient) return _engineClient;
+  try {
+    const ext = vscode.extensions.getExtension('neko.neko-engine');
+    if (!ext) return null;
+    if (!ext.isActive) await ext.activate();
+    const result = await vscode.commands.executeCommand<{ port: number } | null>(
+      'neko.engine.ensureFrameServer',
+    );
+    if (!result) return null;
+    _engineClient = new EngineClient(result.port, { timeout: 300_000 });
+    return _engineClient;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Transcode a media file to a webview-compatible format using neko-engine FFmpeg.
+ * Audio → MP3, Video → H.264 MP4.
+ */
+async function transcodeFile(
+  inputPath: string,
+  outputPath: string,
+  mediaType: 'audio' | 'video',
+): Promise<boolean> {
+  const client = await getEngineClient();
+  if (!client) return false;
+
+  try {
+    const group = mediaType === 'audio' ? 'audios' : 'videos';
+    const codec = mediaType === 'audio' ? 'mp3' : 'h264';
+    const resp = await client.dispatch({
+      group,
+      action: 'transcode',
+      options: { source: inputPath, output: outputPath, codec },
+    });
+    return resp.status === 'ok';
+  } catch (err) {
+    logger.warn('neko-engine transcode failed:', err);
+    return false;
+  }
+}
 
 interface AgentStateSnapshot {
   conversationId: string;
@@ -55,6 +110,7 @@ export class MessageHandler {
     this._streamProcessor = new AgentStreamProcessor({
       platform: this._platform,
       conversations: this._conversations,
+      transcodeFile,
     });
   }
 
@@ -165,6 +221,8 @@ export class MessageHandler {
   /**
    * Handle incoming user message
    * @param requestConversationId - Optional conversation ID from Webview (for session binding)
+   * @param sessionMode - Session mode ('agent' | 'image' | 'video' | 'audio')
+   * @param mediaModelId - Selected media model ID for non-agent modes
    */
   async handleUserMessage(
     webview: vscode.Webview,
@@ -174,6 +232,14 @@ export class MessageHandler {
     attachments?: MessageAttachment[],
     promptId?: string,
     requestConversationId?: string,
+    sessionMode?: string,
+    mediaProviderId?: string,
+    mediaModelId?: string,
+    agentMediaModels?: {
+      image?: { providerId?: string; modelId: string };
+      video?: { providerId?: string; modelId: string };
+      audio?: { providerId?: string; modelId: string };
+    },
   ): Promise<void> {
     const conversationId = requestConversationId || this._conversations.ensureActive();
 
@@ -208,8 +274,20 @@ export class MessageHandler {
     // Send thinking indicator
     webview.postMessage({ type: 'thinking', conversationId });
 
-    // Execute with agent
-    if (this._agentManager && this._platform) {
+    // Route: non-agent mode → media generation service
+    const isMediaMode =
+      sessionMode && sessionMode !== 'agent' && mediaModelId && mediaModelId !== 'none';
+
+    if (isMediaMode && this._platform?.media) {
+      await this._executeMediaGeneration(
+        webview,
+        conversationId,
+        enhancedMessage,
+        sessionMode,
+        mediaProviderId,
+        mediaModelId,
+      );
+    } else if (this._agentManager && this._platform) {
       await this._executeWithAgent(
         webview,
         conversationId,
@@ -218,9 +296,78 @@ export class MessageHandler {
         modelId,
         imageAttachments,
         promptId,
+        mediaProviderId,
+        mediaModelId,
+        agentMediaModels,
       );
     } else {
       this._sendFallbackResponse(webview);
+    }
+  }
+
+  /**
+   * Execute media generation for non-agent session modes (image / video / audio).
+   * Delegates routing and provider selection to platform.media.
+   */
+  private async _executeMediaGeneration(
+    webview: vscode.Webview,
+    conversationId: string,
+    prompt: string,
+    category: string,
+    providerId: string | undefined,
+    modelId: string,
+  ): Promise<void> {
+    try {
+      const media = this._platform!.media!;
+      let task: MediaTask;
+
+      if (category === 'image') {
+        task = await media.generateImage({ prompt, providerId, modelId });
+      } else if (category === 'video') {
+        task = await media.generateVideo({ prompt, providerId, modelId });
+      } else if (category === 'audio') {
+        task = await media.generateAudio({ prompt, providerId, modelId });
+      } else {
+        this._sendFallbackResponse(webview);
+        return;
+      }
+
+      // Notify webview: task submitted
+      webview.postMessage({ type: 'mediaTaskCreated', conversationId, task });
+
+      // Subscribe to progress — webview receives live updates until done
+      const unsubscribe = media.onProgress(task.id, (updated) => {
+        webview.postMessage({ type: 'mediaTaskProgress', conversationId, task: updated });
+        if (
+          updated.status === 'completed' ||
+          updated.status === 'failed' ||
+          updated.status === 'cancelled'
+        ) {
+          unsubscribe();
+        }
+      });
+
+      // Race condition fix: task may have already completed/failed before onProgress registered
+      const currentTask = await media.getTask(task.id);
+      if (
+        currentTask &&
+        (currentTask.status === 'completed' ||
+          currentTask.status === 'failed' ||
+          currentTask.status === 'cancelled')
+      ) {
+        logger.info(`Media task ${task.id} already in terminal state: ${currentTask.status}`, {
+          error: currentTask.error,
+        });
+        webview.postMessage({ type: 'mediaTaskProgress', conversationId, task: currentTask });
+        unsubscribe();
+      }
+    } catch (error) {
+      logger.error('Media generation error:', error);
+      webview.postMessage({
+        type: 'error',
+        conversationId,
+        message: error instanceof Error ? error.message : 'Media generation failed',
+      });
     }
   }
 
@@ -236,6 +383,13 @@ export class MessageHandler {
     modelId?: string,
     imageAttachments?: Array<{ type: 'base64'; media_type: string; data: string }>,
     promptId?: string,
+    mediaProviderId?: string,
+    mediaModelId?: string,
+    agentMediaModels?: {
+      image?: { providerId?: string; modelId: string };
+      video?: { providerId?: string; modelId: string };
+      audio?: { providerId?: string; modelId: string };
+    },
   ): Promise<void> {
     let confirmationDisposable: { dispose(): void } | undefined;
 
@@ -259,6 +413,25 @@ export class MessageHandler {
       if (!this._platform) {
         this._sendFallbackResponse(webview);
         return;
+      }
+
+      // Apply session-level media routing defaults so agent tool calls can omit providerId/modelId.
+      // Agent mode: apply per-category selections from AgentMediaBar.
+      // Non-agent mode: apply single mediaModelId across all categories.
+      if (agentMediaModels && Object.keys(agentMediaModels).length > 0) {
+        this._platform.config.setRuntimeMediaDefaults({
+          image: agentMediaModels.image?.modelId,
+          video: agentMediaModels.video?.modelId,
+          audio: agentMediaModels.audio?.modelId,
+          music: agentMediaModels.audio?.modelId,
+        });
+      } else if (mediaModelId) {
+        this._platform.config.setRuntimeMediaDefaults({
+          image: mediaModelId,
+          video: mediaModelId,
+          audio: mediaModelId,
+          music: mediaModelId,
+        });
       }
 
       // Get or create agent for this conversation

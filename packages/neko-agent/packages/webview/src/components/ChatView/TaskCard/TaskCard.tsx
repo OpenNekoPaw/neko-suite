@@ -3,9 +3,11 @@
  */
 
 import { useState, useCallback } from 'react';
+
+const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
-import { ImagePreview, VideoPlayer } from '@/components/ChatView/MediaPreview';
+import { ImagePreview, VideoPlayer, AudioPlayer } from '@/components/ChatView/MediaPreview';
 import {
   SuccessIcon,
   ErrorIcon,
@@ -65,11 +67,15 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
         {/* Task type icon + name */}
         <span className="shrink-0">{getTypeIcon(task.type)}</span>
         <span className="font-medium text-[var(--vscode-foreground)] truncate">
-          {task.type === 'video' ? t('tasks.videoGeneration') : t('tasks.imageGeneration')}
+          {task.type === 'video'
+            ? t('tasks.videoGeneration')
+            : task.type === 'audio'
+              ? t('tasks.audioGeneration')
+              : t('tasks.imageGeneration')}
         </span>
 
         {/* Progress or status */}
-        {isActive && (
+        {isActive && task.progress > 0 && (
           <span className="text-[var(--vscode-descriptionForeground)] shrink-0">
             {task.progress}%
           </span>
@@ -132,25 +138,35 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
           {/* Progress Bar (for active tasks) */}
           {isActive && (
             <div className="mb-2">
-              <div className="flex items-center justify-between text-[var(--vscode-descriptionForeground)] mb-1">
-                <span>{t('tasks.progress')}</span>
-                <div className="flex items-center gap-2">
-                  <span>{task.progress}%</span>
-                  {task.eta && task.eta > 0 && (
-                    <span className="text-[var(--vscode-charts-blue)]">
-                      ETA: {formatETA(task.eta)}
-                    </span>
-                  )}
+              {task.progress > 0 && (
+                <div className="flex items-center justify-between text-[var(--vscode-descriptionForeground)] mb-1">
+                  <span>{t('tasks.progress')}</span>
+                  <div className="flex items-center gap-2">
+                    <span>{task.progress}%</span>
+                    {task.eta && task.eta > 0 && (
+                      <span className="text-[var(--vscode-charts-blue)]">
+                        ETA: {formatETA(task.eta)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="h-1.5 bg-[var(--vscode-progressBar-background)] rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out"
-                  style={{
-                    width: `${task.progress}%`,
-                    backgroundColor: getStatusColor(task.status),
-                  }}
-                />
+                {task.progress > 0 ? (
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${task.progress}%`,
+                      backgroundColor: getStatusColor(task.status),
+                    }}
+                  />
+                ) : (
+                  // Indeterminate animation for models without progress reporting
+                  <div
+                    className="h-full w-1/3 rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]"
+                    style={{ backgroundColor: getStatusColor(task.status) }}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -170,26 +186,34 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
           {/* Result preview (for completed tasks) */}
           {isCompleted && task.result && (
             <div className="mb-2">
-              {task.type === 'video' && task.result.thumbnailUrl && (
+              {task.type === 'video' && task.result.urls?.[0] && (
                 <VideoPlayer
-                  src={task.result.urls?.[0] || task.result.thumbnailUrl}
+                  src={task.result.urls[0]}
                   poster={task.result.thumbnailUrl}
                   title={task.name}
                   localPath={task.result.localPaths?.[0]}
                   inline
                 />
               )}
-              {task.type === 'image' && task.result.thumbnailUrl && (
+              {task.type === 'image' && (task.result.thumbnailUrl || task.result.urls?.[0]) && (
                 <ImagePreview
-                  src={task.result.thumbnailUrl}
+                  src={task.result.thumbnailUrl || task.result.urls[0]}
                   name={task.name}
                   localPath={task.result.localPaths?.[0]}
                   inline
                 />
               )}
+              {task.type === 'audio' && task.result.urls?.[0] && (
+                <AudioPlayer
+                  src={task.result.urls[0]}
+                  title={task.name}
+                  localPath={task.result.localPaths?.[0]}
+                  inline
+                />
+              )}
 
-              {/* Result info badges */}
-              <div className="flex flex-wrap gap-1 mt-2">
+              {/* Result info badges + download */}
+              <div className="flex flex-wrap items-center gap-1 mt-2">
                 {task.result.width && task.result.height && (
                   <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
                     {task.result.width}×{task.result.height}
@@ -199,6 +223,27 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
                   <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
                     {formatDuration(task.result.duration)}
                   </span>
+                )}
+                <span className="flex-1" />
+                {task.result.localPaths?.[0] && (
+                  <span
+                    className="text-[var(--vscode-descriptionForeground)] text-xs truncate max-w-[140px]"
+                    title={task.result.localPaths[0]}
+                  >
+                    {task.result.localPaths[0].split(/[\\/]/).pop()}
+                  </span>
+                )}
+                {task.result.localPaths?.[0] && (
+                  <button
+                    onClick={() => {
+                      vscode?.postMessage({ type: 'revealFile', filePath: task.result!.localPaths![0] });
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1"
+                    title={t('tasks.revealInExplorer')}
+                  >
+                    <DownloadIcon className="w-3 h-3" />
+                    <span>{t('tasks.revealInExplorer')}</span>
+                  </button>
                 )}
               </div>
             </div>
@@ -211,5 +256,18 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+      />
+    </svg>
   );
 }

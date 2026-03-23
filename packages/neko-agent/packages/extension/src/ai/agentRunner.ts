@@ -22,15 +22,19 @@ import type { ToolConfirmationRequest } from '@neko/agent';
 import {
   AgentSession,
   createAgentSession,
+  createFileProjectMemoryManager,
   SystemPromptBuilder,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   ToolGroupRegistry,
   ToolCategoryRegistry,
+  MemoryWriteTool,
   type ExecutionMode,
   type AgentEvent,
   type AgentEventType,
 } from '@neko/agent';
+import type { IProjectMemoryManager } from '@neko/shared';
+import * as nodePath from 'node:path';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
 
@@ -329,6 +333,7 @@ export class AgentRunner implements IAgentRunner {
   private _toolGroupRegistry?: ToolGroupRegistry;
   private _isRunning = false;
   private _skillProvider?: import('@neko/agent').ISkillProvider;
+  private _projectMemoryManager?: IProjectMemoryManager;
 
   // Pending messages queue (for messages sent while agent is running)
   private _pendingMessages: string[] = [];
@@ -405,6 +410,24 @@ export class AgentRunner implements IAgentRunner {
       }
     }
 
+    // Initialize project memory manager (cross-session fact persistence)
+    if (config.workspaceRoot) {
+      try {
+        const memoryFilePath = nodePath.join(config.workspaceRoot, '.neko', 'memory.md');
+        const memoryManager = createFileProjectMemoryManager(memoryFilePath);
+        await memoryManager.load();
+        this._projectMemoryManager = memoryManager;
+
+        // Register MemoryWrite tool into the platform's tool registry
+        config.platform.tools.register(new MemoryWriteTool(memoryManager));
+      } catch (err) {
+        logger.warn('Failed to initialize project memory:', err);
+        this._projectMemoryManager = undefined;
+      }
+    } else {
+      this._projectMemoryManager = undefined;
+    }
+
     // Resolve system prompt
     const effectiveSystemPrompt = this._resolveSystemPrompt(config);
 
@@ -430,6 +453,7 @@ export class AgentRunner implements IAgentRunner {
       modelId: config.modelId,
       hooks: customHooks.length > 0 ? customHooks : undefined,
       toolCategoryRegistry: config.toolCategoryRegistry,
+      projectMemoryManager: this._projectMemoryManager,
       onConfirmTool: async (request) => {
         return this._handleToolConfirmation(request);
       },

@@ -57,6 +57,7 @@ export { PromptManager } from './service/prompt-manager';
 // =============================================================================
 
 export { MediaGenerationService } from './media/media-generation-service';
+export { downloadMediaOutputs, detectMediaExtension, type DownloadMediaOptions } from './media/media-file-downloader';
 export type {
   MediaGenerationType,
   MediaTaskStatus,
@@ -89,6 +90,7 @@ import { PromptManager } from './service/prompt-manager';
 // Media Generation imports
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
+import { registerMediaAgentTools } from './media/media-agent-tools';
 import { getLogger } from './utils/logger';
 
 const logger = getLogger('Platform');
@@ -185,6 +187,9 @@ export function createPlatform(options: PlatformOptions): Platform {
     });
 
     mediaGenerationService = mediaPlatform.service;
+
+    // Register media generation tools so agents can call GenerateImage, GenerateVideo, etc.
+    registerMediaAgentTools(toolRegistry, mediaGenerationService);
   } else {
     logger.info('taskManager not provided — media generation disabled');
     mediaGenerationService = undefined;

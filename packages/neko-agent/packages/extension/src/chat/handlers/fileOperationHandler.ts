@@ -288,6 +288,19 @@ export class FileOperationHandler {
     }
   }
 
+  async handleRevealFile(filePath: string): Promise<void> {
+    if (!filePath) return;
+
+    try {
+      const cleanPath = filePath.replace(/^file:\/\//, '');
+      const uri = vscode.Uri.file(cleanPath);
+      await vscode.commands.executeCommand('revealFileInOS', uri);
+    } catch (error) {
+      logger.error('Failed to reveal file:', error);
+      handleError(error, { showToUser: true, severity: 'error' });
+    }
+  }
+
   async handleDownloadSvg(svg: string, filename: string): Promise<void> {
     if (!svg) return;
 

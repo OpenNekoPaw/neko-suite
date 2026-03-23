@@ -419,7 +419,10 @@ export class TaskManager implements ITaskManager {
   }
 
   /**
-   * Subscribe to task progress
+   * Subscribe to task progress.
+   * If the task is already in a terminal state (completed/failed/cancelled),
+   * the callback is invoked immediately with the current task state so that
+   * late subscribers (e.g. fast synchronous image generation) never miss it.
    */
   onProgress(id: string, callback: TaskProgressCallback): () => void {
     let callbacks = this.progressCallbacks.get(id);
@@ -428,6 +431,21 @@ export class TaskManager implements ITaskManager {
       this.progressCallbacks.set(id, callbacks);
     }
     callbacks.add(callback);
+
+    // Replay terminal state for late subscribers
+    const existing = this.tasks.get(id);
+    if (
+      existing &&
+      (existing.status === 'completed' ||
+        existing.status === 'failed' ||
+        existing.status === 'cancelled')
+    ) {
+      try {
+        callback(existing);
+      } catch {
+        // Ignore callback errors
+      }
+    }
 
     return () => {
       callbacks?.delete(callback);

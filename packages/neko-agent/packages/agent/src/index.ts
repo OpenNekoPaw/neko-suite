@@ -99,7 +99,7 @@ export {
 } from './hooks';
 
 // Export memory
-export { InMemorySessionMemory } from './memory';
+export { InMemorySessionMemory, FileProjectMemoryManager, createFileProjectMemoryManager } from './memory';
 
 // Export MCP
 export {
@@ -278,6 +278,7 @@ export {
   ListDirectoryTool,
   GrepTool,
   type GrepToolOptions,
+  MemoryWriteTool,
   createCoreTools,
   type CoreToolsOptions,
   // Injection constants
@@ -506,3 +507,10 @@ export {
   type IFileReader,
   type IInputProcessor,
 } from './input';
+
+// Export conversation persistence (shared resume layer)
+export type { ConversationRecord, ConversationIndex } from './session/conversation-record';
+export {
+  FileConversationStorage,
+  createFileConversationStorage,
+} from './session/file-conversation-storage';

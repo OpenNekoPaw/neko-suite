@@ -10,6 +10,8 @@ import { ToolCall } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ImagePreview, AudioPlayer, VideoPlayer } from '@/components/ChatView/MediaPreview';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
+import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
 import { getLogger } from '../../../utils/logger';
 import {
   extractFilePath,
@@ -43,6 +45,7 @@ interface ToolCallDisplayProps {
 
 function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   const { t } = useTranslation();
+  const { backgroundTasks, onCancelTask, onViewTaskResult } = useMessageActions();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpand = useCallback(() => {
@@ -79,6 +82,12 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   const backgroundTaskStatus = resultData?.status as string | undefined;
   const isBackgroundTaskCompleted = isBackgroundMode && backgroundTaskStatus === 'completed';
   const shouldShowMediaPreview = !isBackgroundMode || isBackgroundTaskCompleted;
+
+  // Look up live task for inline TaskCard progress
+  const backgroundTaskId = isBackgroundMode ? (resultData?.taskId as string | undefined) : undefined;
+  const liveTask = backgroundTaskId
+    ? backgroundTasks?.find((t) => t.id === backgroundTaskId)
+    : undefined;
 
   // Media extraction
   const isImageTool = IMAGE_GENERATION_TOOLS.includes(toolCall.name);
@@ -280,6 +289,11 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Inline task progress card for background media tasks */}
+      {isBackgroundMode && liveTask && (
+        <TaskCard task={liveTask} onCancel={onCancelTask} onViewResult={onViewTaskResult} />
       )}
 
       {/* Media previews */}

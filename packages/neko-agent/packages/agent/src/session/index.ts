@@ -11,3 +11,8 @@ export {
   DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
+export type { ConversationRecord, ConversationIndex } from './conversation-record';
+export {
+  FileConversationStorage,
+  createFileConversationStorage,
+} from './file-conversation-storage';

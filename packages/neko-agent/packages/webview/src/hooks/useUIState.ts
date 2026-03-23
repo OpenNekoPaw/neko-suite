@@ -7,6 +7,13 @@
 import { useState, useCallback } from 'react';
 import type { TabType } from '@/components/types';
 
+/** Per-category media model selection */
+export interface MediaModelSelection {
+  image: string;
+  video: string;
+  audio: string;
+}
+
 /**
  * UI state shape
  */
@@ -14,7 +21,7 @@ export interface UIState {
   activeTab: TabType;
   inputValue: string;
   selectedModel: string;
-  selectedMediaModel: string;
+  mediaModelSelection: MediaModelSelection;
 }
 
 /**
@@ -24,7 +31,7 @@ export interface UIStateActions {
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
   setInputValue: React.Dispatch<React.SetStateAction<string>>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
-  setSelectedMediaModel: React.Dispatch<React.SetStateAction<string>>;
+  setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
   clearInput: () => void;
 }
 
@@ -40,7 +47,7 @@ const DEFAULT_UI_STATE: UIState = {
   activeTab: 'chat',
   inputValue: '',
   selectedModel: 'auto',
-  selectedMediaModel: 'none',
+  mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
 };
 
 /**
@@ -56,8 +63,8 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
   const [selectedModel, setSelectedModel] = useState(
     initialState?.selectedModel ?? DEFAULT_UI_STATE.selectedModel,
   );
-  const [selectedMediaModel, setSelectedMediaModel] = useState(
-    initialState?.selectedMediaModel ?? DEFAULT_UI_STATE.selectedMediaModel,
+  const [mediaModelSelection, setMediaModelSelection] = useState<MediaModelSelection>(
+    initialState?.mediaModelSelection ?? DEFAULT_UI_STATE.mediaModelSelection,
   );
 
   const clearInput = useCallback(() => {
@@ -69,12 +76,12 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
     activeTab,
     inputValue,
     selectedModel,
-    selectedMediaModel,
+    mediaModelSelection,
     // Actions
     setActiveTab,
     setInputValue,
     setSelectedModel,
-    setSelectedMediaModel,
+    setMediaModelSelection,
     clearInput,
   };
 }

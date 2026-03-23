@@ -20,6 +20,8 @@ export const tasks = {
   'tasks.batchProgress': '已完成 {completed}/{total}',
   'tasks.videoGeneration': '视频生成',
   'tasks.imageGeneration': '图片生成',
+  'tasks.audioGeneration': '音频生成',
+  'tasks.revealInExplorer': '在文件夹中显示',
   'tasks.provider': '服务商',
   'tasks.progress': '进度',
   'tasks.generating': '生成中...',

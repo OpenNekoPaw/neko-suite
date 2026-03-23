@@ -11,6 +11,7 @@ import {
   type ConversationStorage,
   type ContentBlock,
 } from './conversationManager';
+import { createFileConversationStorage, type FileConversationStorage, type ConversationRecord } from '@neko/agent';
 
 const logger = getLogger('ConversationHandler');
 
@@ -213,8 +214,10 @@ class VscodeConversationStorage implements ConversationStorage {
 
 export class ConversationHandler {
   private _conversationManager: ConversationManager;
+  private _fileStorage: FileConversationStorage | null = null;
+  private _workspaceRoot: string | null = null;
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(context: vscode.ExtensionContext, workspaceRoot?: string) {
     const storage = new VscodeConversationStorage(context.workspaceState);
     this._conversationManager = new ConversationManager(storage);
 
@@ -222,6 +225,12 @@ export class ConversationHandler {
     const cleaned = this._conversationManager.cleanupEmpty();
     if (cleaned > 0) {
       logger.info(`Cleaned up ${cleaned} empty conversation(s)`);
+    }
+
+    // Initialize shared resume-layer file storage if workspace root is known
+    if (workspaceRoot) {
+      this._workspaceRoot = workspaceRoot;
+      this._fileStorage = createFileConversationStorage(workspaceRoot);
     }
   }
 
@@ -306,6 +315,35 @@ export class ConversationHandler {
   addMessageToConversation(conversationId: string, message: ConversationMessage): void {
     // Use incremental addMessage instead of full array copy via updateMessages
     this._conversationManager.addMessage(conversationId, message);
+    // Sync to shared resume-layer file (best-effort, non-blocking)
+    this._syncConversationToFile(conversationId);
+  }
+
+  /**
+   * Write a conversation to the shared resume-layer file (~/.neko/conversations/<hash>.json).
+   * Best-effort: errors are logged but not rethrown.
+   */
+  private _syncConversationToFile(conversationId: string): void {
+    if (!this._fileStorage || !this._workspaceRoot) return;
+    const conv = this._conversationManager.get(conversationId);
+    if (!conv || conv.messages.length === 0) return;
+
+    // toAgentHistory returns a compatible subset of ChatMessage[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentHistory = this._conversationManager.toAgentHistory(conversationId) as any[];
+    const record: ConversationRecord = {
+      id: conv.id,
+      version: 1,
+      title: conv.title,
+      workDir: this._workspaceRoot,
+      messages: agentHistory,
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+      source: 'extension',
+    };
+    this._fileStorage.save(record).catch((err) => {
+      logger.warn('Failed to sync conversation to file', { conversationId, err });
+    });
   }
 
   /**

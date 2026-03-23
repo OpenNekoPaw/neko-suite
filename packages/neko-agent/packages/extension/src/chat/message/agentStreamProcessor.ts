@@ -11,7 +11,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as path from 'path';
 import type { Platform } from '@neko/platform';
 import { parsePlanMarkdown, type AgentEvent, type Plan } from '@neko/agent';
@@ -76,6 +75,17 @@ export interface StreamCallbacks {
 export interface AgentStreamProcessorDeps {
   platform?: Platform;
   conversations?: ConversationHandler;
+  /**
+   * Optional transcoder for converting incompatible media formats.
+   * Called when a downloaded file uses a codec not supported by Electron webview
+   * (e.g. raw Opus audio, HEVC video).
+   * Returns true on success; on failure the original file is kept.
+   */
+  transcodeFile?: (
+    inputPath: string,
+    outputPath: string,
+    mediaType: 'audio' | 'video',
+  ) => Promise<boolean>;
 }
 
 /**
@@ -369,11 +379,12 @@ export class AgentStreamProcessor {
 
     const taskId = resultData.taskId as string;
     const taskMessage = (resultData.message as string) || '';
-    const mediaId = (resultData.mediaId as string) || '';
     const routedTo = resultData.routedTo as Record<string, unknown> | undefined;
 
-    // Determine task type from tool result data
-    const taskType = mediaId.includes('video') || taskMessage.includes('video') ? 'video' : 'image';
+    // Determine task type: prefer explicit type field, fall back to heuristic
+    const explicitType = resultData.type as string | undefined;
+    const taskType: 'image' | 'video' | 'audio' =
+      explicitType === 'video' ? 'video' : explicitType === 'audio' ? 'audio' : 'image';
 
     // Send taskCreated so webview can display the task immediately
     webview.postMessage({
@@ -410,32 +421,60 @@ export class AgentStreamProcessor {
       let thumbnailUrl = task.outputs?.[0]?.url;
 
       if (task.status === 'completed' && task.outputs && task.outputs.length > 0) {
-        const localPaths = await this.saveOutputsToLocal(task.id, task.type, task.outputs);
-        if (localPaths.length > 0) {
-          resultUrls = localPaths;
-          thumbnailUrl = localPaths[0];
-
-          const updatedOutputs = task.outputs.map((output, index) => ({
-            ...output,
-            url: localPaths[index] || output.url,
-          }));
-          await this.deps.platform?.media?.updateTaskOutputs(task.id, updatedOutputs);
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+          const mediaConfig = vscode.workspace.getConfiguration('neko.agent.media');
+          const customDir = mediaConfig.get<string>('outputDir', '');
+          const outputDir = customDir
+            ? customDir
+            : path.join(workspaceFolders[0].uri.fsPath, '.neko', 'generated');
+          const localPaths = await this.deps.platform.media!.saveOutputs(task.id, outputDir, {
+            transcodeFile: this.deps.transcodeFile,
+          });
+          if (localPaths.length > 0) {
+            resultUrls = localPaths;
+            thumbnailUrl = localPaths[0];
+            const showNotification = mediaConfig.get<boolean>('showSaveNotification', true);
+            if (showNotification) {
+              const displayPath = localPaths[0];
+              const shortPath = path.relative(workspaceFolders[0].uri.fsPath, displayPath);
+              const label =
+                taskType === 'video' ? 'Video' : taskType === 'audio' ? 'Audio' : 'Image';
+              vscode.window
+                .showInformationMessage(`${label} saved to ${shortPath}`, 'Show in Folder')
+                .then((action) => {
+                  if (action === 'Show in Folder') {
+                    vscode.commands.executeCommand(
+                      'revealFileInOS',
+                      vscode.Uri.file(displayPath),
+                    );
+                  }
+                });
+            }
+          }
         }
       }
 
       const webviewUrls = resultUrls.map((url) => toWebviewUri(url)).filter(Boolean) as string[];
       const webviewThumbnailUrl = toWebviewUri(thumbnailUrl);
 
+      // Keep original local file paths (not vscode-resource:// URIs) for OS reveal/download
+      const localPaths = resultUrls.filter(
+        (url) => url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url),
+      );
+
       webview.postMessage({
         type: 'taskUpdated',
         task: {
           id: task.id,
           type:
-            task.type === 'text-to-image'
+            task.type === 'text-to-image' || task.type === 'image-to-image'
               ? 'image'
-              : task.type === 'text-to-video'
+              : task.type === 'text-to-video' || task.type === 'image-to-video'
                 ? 'video'
-                : 'image',
+                : task.type === 'text-to-audio' || task.type === 'text-to-music'
+                  ? 'audio'
+                  : 'image',
           status: task.status === 'pending' ? 'queued' : task.status,
           progress: task.progress,
           result:
@@ -443,6 +482,7 @@ export class AgentStreamProcessor {
               ? {
                   urls: webviewUrls,
                   thumbnailUrl: webviewThumbnailUrl,
+                  localPaths: localPaths.length > 0 ? localPaths : undefined,
                 }
               : undefined,
           error: task.error?.message,
@@ -457,72 +497,6 @@ export class AgentStreamProcessor {
         unsubscribe();
       }
     });
-  }
-
-  /**
-   * Save task outputs to local filesystem
-   */
-  async saveOutputsToLocal(
-    taskId: string,
-    taskType: string,
-    outputs: Array<{ url?: string; type?: string }>,
-  ): Promise<string[]> {
-    const savedPaths: string[] = [];
-
-    try {
-      const workspaceFolders = vscode.workspace.workspaceFolders;
-      if (!workspaceFolders || workspaceFolders.length === 0) {
-        logger.warn('No workspace folder, cannot save outputs locally');
-        return savedPaths;
-      }
-
-      const workspaceRoot = workspaceFolders[0].uri.fsPath;
-      const outputDir = path.join(workspaceRoot, '.neko', 'generated');
-
-      await fs.promises.mkdir(outputDir, { recursive: true });
-
-      const getExtension = (type: string, outputType?: string): string => {
-        if (outputType?.includes('video') || type.includes('video')) return '.mp4';
-        if (outputType?.includes('audio') || type.includes('audio')) return '.mp3';
-        return '.png';
-      };
-
-      for (let i = 0; i < outputs.length; i++) {
-        const output = outputs[i];
-        if (!output.url) continue;
-
-        if (output.url.startsWith('/') || output.url.startsWith('file://')) {
-          savedPaths.push(output.url.replace('file://', ''));
-          continue;
-        }
-
-        const ext = getExtension(taskType, output.type);
-        const filename = `${taskId}_${i}${ext}`;
-        const localPath = path.join(outputDir, filename);
-
-        try {
-          const response = await fetch(output.url);
-          if (!response.ok) {
-            logger.error('Download failed:', {
-              status: response.status,
-              statusText: response.statusText,
-            });
-            continue;
-          }
-
-          const buffer = Buffer.from(await response.arrayBuffer());
-          await fs.promises.writeFile(localPath, buffer);
-          savedPaths.push(localPath);
-        } catch (downloadError) {
-          logger.error('Failed to download/save output:', downloadError);
-          savedPaths.push(output.url);
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to save outputs locally:', error);
-    }
-
-    return savedPaths;
   }
 
   /**

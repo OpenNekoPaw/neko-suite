@@ -17,6 +17,8 @@ interface AudioPlayerProps {
   className?: string;
   /** Local file path for opening in neko-preview */
   localPath?: string;
+  /** Inline mode: native audio controls embedded (for use inside TaskCard) */
+  inline?: boolean;
 }
 
 /**
@@ -42,7 +44,68 @@ function formatTime(time: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerProps) {
+/**
+ * Compact inline audio player shown inside TaskCard.
+ * Uses native <audio controls> which works for MP3/WAV/AAC/OGG-Vorbis in Electron.
+ * Falls back to "Open in Preview" if the browser cannot decode the format (e.g. raw Opus).
+ */
+function InlineAudioPlayer({
+  src,
+  title,
+  localPath,
+  className,
+}: {
+  src: string;
+  title?: string;
+  localPath?: string;
+  className?: string;
+}) {
+  const [cannotPlay, setCannotPlay] = useState(false);
+  const fileName = getFileName(src, title);
+
+  const handleOpenPreview = useCallback(() => {
+    const pathToOpen = localPath || src;
+    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
+      vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
+    } else {
+      vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
+    }
+  }, [localPath, src]);
+
+  if (cannotPlay) {
+    return (
+      <div
+        className={`flex items-center gap-2 px-2 py-1.5 rounded bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#a855f7)] ${className || ''}`}
+      >
+        <AudioIcon className="w-3 h-3 text-[var(--vscode-charts-purple)] shrink-0" />
+        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] truncate flex-1">
+          {fileName}
+        </span>
+        <button
+          onClick={handleOpenPreview}
+          className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] text-[10px] transition-colors shrink-0"
+        >
+          Open in Preview
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded overflow-hidden ${className || ''}`}>
+      <audio
+        src={src}
+        controls
+        preload="metadata"
+        className="w-full h-8"
+        style={{ colorScheme: 'dark' }}
+        onError={() => setCannotPlay(true)}
+      />
+    </div>
+  );
+}
+
+function AudioPlayerComponent({ src, title, className, localPath, inline = false }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -76,6 +139,13 @@ function AudioPlayerComponent({ src, title, className, localPath }: AudioPlayerP
       vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
     }
   }, [localPath, src]);
+
+  // Inline mode: compact native audio player for use inside TaskCard
+  if (inline) {
+    return (
+      <InlineAudioPlayer src={src} title={title} localPath={localPath} className={className} />
+    );
+  }
 
   return (
     <div className={`my-1 ${className || ''}`}>

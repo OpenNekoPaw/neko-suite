@@ -23,6 +23,9 @@ export const chat = {
   'chat.emptyState.description':
     'Ask me anything about video editing, timeline management, or project organization.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
+  'chat.emptyState.suggestion1': 'Analyze current project structure',
+  'chat.emptyState.suggestion2': 'Help me optimize the timeline',
+  'chat.emptyState.suggestion3': 'Write a narration script',
 
   'chat.input.placeholder':
     'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
@@ -67,6 +70,15 @@ export const chat = {
   'chat.plan.partial': 'Partial',
   'chat.plan.approveAll': 'Approve All',
   'chat.plan.rejectAll': 'Reject All',
+
+  'chat.sessionMode.agent': 'Agent',
+  'chat.sessionMode.agentDesc': 'LLM reasoning + tool calls',
+  'chat.sessionMode.image': 'Image',
+  'chat.sessionMode.imageDesc': 'Generate images',
+  'chat.sessionMode.video': 'Video',
+  'chat.sessionMode.videoDesc': 'Generate videos',
+  'chat.sessionMode.audio': 'Audio',
+  'chat.sessionMode.audioDesc': 'Generate audio',
 
   'chat.executionMode.label': 'Execution Mode',
   'chat.executionMode.title':

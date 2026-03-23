@@ -7,3 +7,6 @@
 
 // Session memory
 export { InMemorySessionMemory } from './session-memory';
+
+// Project memory (cross-session file-backed memory)
+export { FileProjectMemoryManager, createFileProjectMemoryManager } from './project-memory-manager';

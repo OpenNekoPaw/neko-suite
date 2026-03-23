@@ -22,7 +22,9 @@ export function getStatusColor(status: TaskStatus): string {
 }
 
 export function getTypeIcon(type: string): string {
-  return type === 'video' ? '\uD83C\uDFAC' : '\uD83D\uDDBC\uFE0F';
+  if (type === 'video') return '\uD83C\uDFAC';
+  if (type === 'audio') return '\uD83C\uDFB5';
+  return '\uD83D\uDDBC\uFE0F';
 }
 
 export function formatDuration(seconds?: number): string {

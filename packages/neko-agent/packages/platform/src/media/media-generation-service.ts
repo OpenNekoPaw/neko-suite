@@ -18,6 +18,7 @@ import type {
   MediaOutput,
   MediaAdapterError,
 } from './types';
+import { downloadMediaOutputs, type DownloadMediaOptions } from './media-file-downloader';
 import { ProviderRegistry } from '../provider/provider-registry';
 import { MediaRoutingManager } from './routing/media-routing-manager';
 import { createMediaTaskInput } from './media-task-executor';
@@ -135,6 +136,44 @@ export class MediaGenerationService {
       return this.taskManager.updateOutputData(taskId, { outputs });
     }
     return false;
+  }
+
+  /**
+   * Download completed task outputs to a local directory.
+   *
+   * Retrieves outputs from the task, calls the shared downloader, then updates
+   * the task's stored output URLs to point to the local paths.
+   *
+   * @param taskId    - Task whose outputs should be saved
+   * @param outputDir - Absolute path to target directory (created if absent)
+   * @param options   - Optional transcoding callback (needed for Electron webview compat)
+   * @returns Local file paths (same length/order as task outputs)
+   */
+  async saveOutputs(
+    taskId: string,
+    outputDir: string,
+    options?: DownloadMediaOptions,
+  ): Promise<string[]> {
+    const task = await this.getTask(taskId);
+    if (!task?.outputs || task.outputs.length === 0) return [];
+
+    const localPaths = await downloadMediaOutputs(
+      taskId,
+      task.type,
+      task.outputs,
+      outputDir,
+      options,
+    );
+
+    if (localPaths.length > 0) {
+      const updatedOutputs = task.outputs.map((output, i) => ({
+        ...output,
+        url: localPaths[i] ?? output.url,
+      }));
+      await this.updateTaskOutputs(taskId, updatedOutputs);
+    }
+
+    return localPaths;
   }
 
   /**

@@ -7,7 +7,7 @@
  */
 
 export type TaskStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-export type TaskType = 'image' | 'video';
+export type TaskType = 'image' | 'video' | 'audio';
 
 /** Task step status for detailed progress tracking */
 export type TaskStepStatus = 'pending' | 'running' | 'completed' | 'failed';

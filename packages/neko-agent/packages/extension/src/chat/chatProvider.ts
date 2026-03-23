@@ -438,6 +438,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             message.attachments as MessageAttachment[] | undefined,
             message.promptId as string | undefined,
             message.conversationId as string | undefined,
+            message.sessionMode as string | undefined,
+            message.mediaProviderId as string | undefined,
+            message.mediaModelId as string | undefined,
+            message.agentMediaModels as
+              | {
+                  image?: { providerId?: string; modelId: string };
+                  video?: { providerId?: string; modelId: string };
+                  audio?: { providerId?: string; modelId: string };
+                }
+              | undefined,
           );
           break;
         case 'searchProjectFiles':
@@ -612,6 +622,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           break;
         case 'openFile':
           this._fileOperationHandler.handleOpenFile(message.filePath as string);
+          break;
+        case 'revealFile':
+          this._fileOperationHandler.handleRevealFile(message.filePath as string);
           break;
         case 'openConfigFile':
           this._fileOperationHandler.handleOpenConfigFile();

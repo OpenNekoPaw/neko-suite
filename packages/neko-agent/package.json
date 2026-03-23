@@ -215,6 +215,16 @@
           "default": "",
           "description": "OpenAI API key"
         },
+        "neko.agent.media.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory to save generated media. Defaults to <workspace>/.neko/generated"
+        },
+        "neko.agent.media.showSaveNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when generated media is saved to disk"
+        },
         "neko.agent.mcp.servers": {
           "type": "array",
           "default": [],

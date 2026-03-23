@@ -3,25 +3,29 @@
  *
  * Eliminates prop drilling of 13 configuration props through
  * AIAssistant → ChatView → InputArea (and its sub-components).
- *
- * Props moved here are "global" settings that don't change per-keystroke:
- * model selection, execution/prompt modes, context compression, skills.
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { ShellExecutionMode, PromptMode } from '@/components/types';
+import type { ShellExecutionMode, PromptMode, SessionMode } from '@/components/types';
 import type { ChatModelOption } from '@neko/shared';
 import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
+import type { MediaModelSelection } from '@/hooks/useUIState';
+
+export type { MediaModelSelection };
+export type MediaCategory = 'image' | 'video' | 'audio';
 
 export interface InputAreaContextValue {
   // Chat Model
   selectedModel: string;
   availableModels: ChatModelOption[];
   onModelSelect: (modelId: string) => void;
-  // Media Model
-  selectedMediaModel: string;
+  // Media Models (per-category selection)
+  mediaModelSelection: MediaModelSelection;
   availableMediaModels: ChatModelOption[];
-  onMediaModelSelect: (modelId: string) => void;
+  onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
+  // Session mode (top-level workflow routing)
+  sessionMode: SessionMode;
+  onSessionModeChange: (mode: SessionMode) => void;
   // Execution mode
   executionMode: ShellExecutionMode;
   onExecutionModeChange: (mode: ShellExecutionMode) => void;
@@ -51,9 +55,11 @@ export function InputAreaProvider({
       selectedModel: value.selectedModel,
       availableModels: value.availableModels,
       onModelSelect: value.onModelSelect,
-      selectedMediaModel: value.selectedMediaModel,
+      mediaModelSelection: value.mediaModelSelection,
       availableMediaModels: value.availableMediaModels,
       onMediaModelSelect: value.onMediaModelSelect,
+      sessionMode: value.sessionMode,
+      onSessionModeChange: value.onSessionModeChange,
       executionMode: value.executionMode,
       onExecutionModeChange: value.onExecutionModeChange,
       promptMode: value.promptMode,
@@ -70,9 +76,11 @@ export function InputAreaProvider({
       value.selectedModel,
       value.availableModels,
       value.onModelSelect,
-      value.selectedMediaModel,
+      value.mediaModelSelection,
       value.availableMediaModels,
       value.onMediaModelSelect,
+      value.sessionMode,
+      value.onSessionModeChange,
       value.executionMode,
       value.onExecutionModeChange,
       value.promptMode,
