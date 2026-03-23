@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./pipeline": "./src/pipeline/index.ts",
     "./*": "./src/*"
   },
   "scripts": {

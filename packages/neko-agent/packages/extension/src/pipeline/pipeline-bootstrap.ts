@@ -1,0 +1,146 @@
+/**
+ * Pipeline Bootstrap — Initializes the Pipeline orchestration layer
+ *
+ * Creates all stage instances with injected dependencies and registers them
+ * into the PipelineRegistry. Called during extension activation.
+ */
+
+import type { Platform } from '@neko/platform';
+import {
+  createPipelineExecutor,
+  createPipelineRegistry,
+  createPipelineResolver,
+  createReadDocumentStage,
+  createParseStoryboardStage,
+  createGeneratePromptsStage,
+  createBatchGenerateStage,
+  createArrangeOnTimelineStage,
+  type IPipelineRegistry,
+  type PipelineContext,
+  type FlowId,
+  type PipelineHandle,
+  type MediaGenerateOptions,
+} from '@neko/agent/src/pipeline';
+import { createPipelineTools } from '../tools/pipelineTools';
+import {
+  VSCodeFileReader,
+  DocumentReaderAdapter,
+  StoryParserAdapter,
+  LLMAnalyzerAdapter,
+  PromptOptimizerAdapter,
+  MediaGeneratorAdapter,
+  TimelineArrangerAdapter,
+} from './pipeline-adapters';
+import { createDocumentReaderService } from '../services/DocumentReaderService';
+import { getLogger } from '../base';
+
+const logger = getLogger('PipelineBootstrap');
+
+export interface PipelineBootstrapResult {
+  registry: IPipelineRegistry;
+  startPipeline: (
+    flowId: FlowId,
+    ctx: PipelineContext,
+    overrides?: { skipStages?: string[]; globalStyle?: string },
+  ) => PipelineHandle;
+}
+
+/**
+ * Initialize the Pipeline orchestration layer
+ *
+ * @param platform - Platform instance for media generation
+ * @param toolRegistry - Tool registry to register pipeline tools
+ */
+export function bootstrapPipeline(
+  platform: Platform,
+  toolRegistry: { register: (tool: unknown) => void },
+): PipelineBootstrapResult {
+  // Create core infrastructure
+  const registry = createPipelineRegistry();
+  const executor = createPipelineExecutor();
+  const resolver = createPipelineResolver(registry, executor);
+
+  // Create dependency adapters
+  const fileReader = new VSCodeFileReader();
+  const documentReaderService = createDocumentReaderService();
+  const documentReader = new DocumentReaderAdapter(documentReaderService);
+  const storyParser = new StoryParserAdapter();
+  const llmAnalyzer = new LLMAnalyzerAdapter();
+  const promptOptimizer = new PromptOptimizerAdapter();
+
+  // MediaGenerator adapter — wraps platform media generation service
+  const mediaGenerator = new MediaGeneratorAdapter(
+    async (prompt: string, options: MediaGenerateOptions) => {
+      // Determine generation type
+      const genType = options.type === 'image' ? 'text-to-image' : 'text-to-video';
+
+      // Use platform media generation
+      const mediaService = platform.media;
+      if (!mediaService) {
+        throw new Error('Media generation service not available');
+      }
+
+      if (genType === 'text-to-image') {
+        const task = await mediaService.generateImage({
+          prompt,
+          width: 1024,
+          height: 1024,
+        });
+        // Wait for completion and get output path
+        const completed = await mediaService.waitForTask(task.id, 120_000);
+        const output = completed.outputs?.[0];
+        if (!output?.url) {
+          throw new Error('Image generation produced no output');
+        }
+        return { path: output.url };
+      } else {
+        const task = await mediaService.generateVideo({
+          prompt,
+          duration: options.duration,
+          resolution: options.resolution,
+        });
+        const completed = await mediaService.waitForTask(task.id, 300_000);
+        const output = completed.outputs?.[0];
+        if (!output?.url) {
+          throw new Error('Video generation produced no output');
+        }
+        return { path: output.url, duration: output.duration };
+      }
+    },
+  );
+
+  const timelineArranger = new TimelineArrangerAdapter();
+
+  // Register all 5 stages
+  registry.registerStage(createReadDocumentStage({ fileReader, documentReader }));
+  registry.registerStage(createParseStoryboardStage({ storyParser, llmAnalyzer }));
+  registry.registerStage(createGeneratePromptsStage({ promptOptimizer }));
+  registry.registerStage(createBatchGenerateStage({ mediaGenerator }));
+  registry.registerStage(createArrangeOnTimelineStage({ timelineArranger }));
+
+  // Create the startPipeline function for pipeline tools
+  const startPipeline = (
+    flowId: FlowId,
+    ctx: PipelineContext,
+    overrides?: { skipStages?: string[]; globalStyle?: string },
+  ): PipelineHandle => {
+    return resolver.startFlow(flowId, ctx, {
+      skipStages: overrides?.skipStages,
+      globalStyle: overrides?.globalStyle,
+    });
+  };
+
+  // Register pipeline tools into tool registry
+  const pipelineTools = createPipelineTools({ startPipeline });
+  for (const tool of pipelineTools) {
+    toolRegistry.register(tool);
+  }
+
+  logger.info('Pipeline orchestration layer initialized', {
+    stages: registry.listStages(),
+    flows: registry.listFlows().map((flow: { id: string }) => flow.id),
+    tools: pipelineTools.map((t: { name: string }) => t.name),
+  });
+
+  return { registry, startPipeline };
+}

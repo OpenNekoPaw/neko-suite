@@ -190,6 +190,36 @@ export interface Skill {
   enabled: boolean;
 
   // ===========================================================================
+  // Pipeline Configuration (Neko Suite extension)
+  // ===========================================================================
+
+  /**
+   * Pipeline flow ID to execute when this skill is activated
+   * @example "flowF", "flowA"
+   */
+  pipelineFlowId?: string;
+
+  /**
+   * Stages to skip in the pipeline
+   */
+  pipelineSkipStages?: string[];
+
+  /**
+   * Per-stage parameter overrides
+   */
+  pipelineParams?: Record<string, Record<string, unknown>>;
+
+  /**
+   * Pipeline hook configurations
+   */
+  pipelineHooks?: Array<{
+    stageName: string;
+    timing: 'before' | 'after';
+    action: string;
+    params?: Record<string, unknown>;
+  }>;
+
+  // ===========================================================================
   // Optional Slash Command Integration
   // ===========================================================================
 
@@ -507,6 +537,34 @@ export interface SkillFrontmatter {
 
   /** Enabled state */
   enabled?: boolean;
+
+  // ===========================================================================
+  // Pipeline Configuration (Neko Suite extension)
+  // ===========================================================================
+
+  /**
+   * Pipeline flow to execute when this skill is activated
+   * @example "flowF", "flowA"
+   */
+  pipeline?: string;
+
+  /**
+   * Stages to skip in the pipeline
+   * Comma-separated or YAML list
+   * @example "generateMusic,addSubtitles"
+   */
+  'pipeline-skip'?: string;
+
+  /**
+   * Per-stage parameter overrides (JSON string in simple YAML)
+   * @example "batchGenerate.style=anime,batchGenerate.resolution=1080p"
+   */
+  'pipeline-params'?: string;
+
+  /**
+   * Hook configurations (JSON string in simple YAML)
+   */
+  'pipeline-hooks'?: string;
 }
 
 /**
@@ -844,6 +902,10 @@ export function createSkill(
     source,
     directoryPath,
     enabled: frontmatter.enabled ?? true,
+    // Pipeline fields
+    pipelineFlowId: frontmatter.pipeline,
+    pipelineSkipStages: parsePipelineSkip(frontmatter['pipeline-skip']),
+    pipelineParams: parsePipelineParams(frontmatter['pipeline-params']),
   };
 }
 
@@ -868,6 +930,62 @@ export function createCommand(
     filePath,
     enabled: frontmatter.enabled ?? true,
   };
+}
+
+/**
+ * Parse pipeline-skip string into array
+ * Accepts comma-separated values: "generateMusic,addSubtitles"
+ */
+export function parsePipelineSkip(skipStr: string | undefined): string[] | undefined {
+  if (!skipStr) return undefined;
+  const items = skipStr
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return items.length > 0 ? items : undefined;
+}
+
+/**
+ * Parse pipeline-params string into nested Record
+ * Accepts dot-notation: "batchGenerate.style=anime,batchGenerate.resolution=1080p"
+ */
+export function parsePipelineParams(
+  paramsStr: string | undefined,
+): Record<string, Record<string, unknown>> | undefined {
+  if (!paramsStr) return undefined;
+
+  const result: Record<string, Record<string, unknown>> = {};
+  const pairs = paramsStr.split(',').map((s) => s.trim());
+
+  for (const pair of pairs) {
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx === -1) continue;
+
+    const key = pair.slice(0, eqIdx).trim();
+    const value = pair.slice(eqIdx + 1).trim();
+    const dotIdx = key.indexOf('.');
+
+    if (dotIdx === -1) continue;
+
+    const stageName = key.slice(0, dotIdx);
+    const paramName = key.slice(dotIdx + 1);
+
+    if (!result[stageName]) {
+      result[stageName] = {};
+    }
+    // Try to parse as number/boolean
+    if (value === 'true') {
+      result[stageName][paramName] = true;
+    } else if (value === 'false') {
+      result[stageName][paramName] = false;
+    } else if (!isNaN(Number(value)) && value !== '') {
+      result[stageName][paramName] = Number(value);
+    } else {
+      result[stageName][paramName] = value;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 /**

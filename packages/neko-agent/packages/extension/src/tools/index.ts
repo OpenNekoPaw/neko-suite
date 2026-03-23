@@ -10,3 +10,10 @@ export {
   createNekoEngineEffectsTools,
   type Tool,
 } from './extensionTools';
+
+export {
+  createPipelineTools,
+  getActivePipeline,
+  removePipeline,
+  type PipelineToolsDeps,
+} from './pipelineTools';

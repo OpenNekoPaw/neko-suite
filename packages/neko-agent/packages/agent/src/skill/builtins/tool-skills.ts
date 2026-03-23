@@ -250,6 +250,20 @@ export const aiGenerationToolSet: ToolGroup = {
   icon: '🤖',
 };
 
+/**
+ * Pipeline control tools
+ */
+export const pipelineControlToolSet: ToolGroup = {
+  name: 'pipeline-control',
+  description: 'Pipeline orchestration tools for starting and controlling creative workflows',
+  tools: ['StartPipeline', 'ConfirmPipelineGate', 'RetryPipelineScenes'],
+  alwaysActive: true,
+  priority: 80,
+  source: 'builtin',
+  enabled: true,
+  icon: '🔄',
+};
+
 // =============================================================================
 // Exports
 // =============================================================================
@@ -275,6 +289,7 @@ export const builtinToolGroups: ToolGroup[] = [
   shapeMaskToolSet,
   exportRenderToolSet,
   aiGenerationToolSet,
+  pipelineControlToolSet,
 ];
 
 /**

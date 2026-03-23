@@ -24,6 +24,7 @@ import {
   createNekoCanvasTools,
   createNekoEngineEffectsTools,
 } from './tools/extensionTools';
+import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 
 /**
  * Activate the extension
@@ -50,6 +51,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Register tools from other Neko extensions
   registerExtensionTools(bootstrapResult.toolRegistry);
+
+  // Initialize Pipeline orchestration layer (L2)
+  bootstrapPipeline(bootstrapResult.platform, bootstrapResult.toolRegistry);
 
   // Create chat view provider
   const chatViewProvider = new ChatViewProvider(context.extensionUri, context);

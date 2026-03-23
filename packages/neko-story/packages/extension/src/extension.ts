@@ -188,6 +188,27 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.commands.executeCommand('renameFile');
     }),
   );
+
+  // Expose API for cross-extension communication (e.g., neko-agent pipeline)
+  const api = {
+    /**
+     * Parse Fountain screenplay text into structured document
+     */
+    parseScript(content: string) {
+      return parse(content);
+    },
+
+    /**
+     * Convert parsed Fountain document to neko-cut timeline ProjectData
+     */
+    convertToTimeline(fountainContent: string, projectName = 'Untitled') {
+      const doc = parse(fountainContent);
+      const converter = new TimelineConverter();
+      return converter.convert(doc, projectName);
+    },
+  };
+
+  return api;
 }
 
 export function deactivate() {}

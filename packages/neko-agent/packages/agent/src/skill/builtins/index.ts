@@ -411,6 +411,81 @@ Fountain is a plain-text screenplay format:
 // =============================================================================
 
 /**
+ * Storyboard to Timeline Pipeline - Auto-convert scripts to video via AI generation
+ *
+ * Triggered when user mentions: storyboard to video, batch generate, script to video
+ *
+ * This skill activates the Pipeline orchestration layer (L2):
+ *   parseStoryboard → generatePrompts (confirm gate) → batchGenerate → arrangeOnTimeline
+ */
+export const storyboardToTimelineSkill: Skill = {
+  name: 'storyboard-to-timeline',
+  description:
+    'Convert scripts or storyboard descriptions into videos and arrange on timeline. ' +
+    'Use when user mentions: storyboard to video, batch generate video, script to video, ' +
+    'make video from script, 分镜, 批量生成视频, 剧本转视频, 做成视频.',
+  content: `# Storyboard → Video Timeline Pipeline
+
+You are a storyboard director assistant. When the user provides a script or scene descriptions,
+use the Pipeline system to automate the full workflow.
+
+## Workflow
+
+1. **Call StartPipeline** with the appropriate flow:
+   - \`flowF\`: Script → Storyboard → Video (most common)
+   - \`flowA\`: Document → Script → Storyboard → Video (for PDF/DOCX/MD)
+   - \`flowB\`: Quick generate → Video (simple prompts)
+   - \`flowD\`: Script → Video (skip storyboard, just add to timeline)
+
+2. **Review at confirmation gates**: The pipeline pauses after generating video prompts.
+   Review the prompts with the user, then call ConfirmPipelineGate to proceed.
+
+3. **Monitor progress**: Batch generation runs in background with progress tracking.
+
+4. **Post-pipeline suggestions**: After completion, suggest:
+   - Adding transitions between scenes
+   - Generating background music (GenerateMusic)
+   - Adding voiceover (GenerateTTS)
+   - Color grading adjustments
+
+## Source Format Detection
+
+- \`.fountain\` files → sourceFormat: "fountain"
+- \`.pdf\`, \`.docx\` files → sourceFormat: "document" (use flowA)
+- Free text / scene list → sourceFormat: "freeform"
+
+## Tips for Better Results
+
+- Emphasize visual consistency across scenes (same characters, style, color palette)
+- Use specific camera angles in prompts (wide shot, close-up, tracking)
+- Match lighting to scene mood (warm for comfort, cool for tension)
+`,
+  allowedTools: [
+    // Pipeline control
+    'StartPipeline',
+    'ConfirmPipelineGate',
+    // Timeline (for post-pipeline adjustments)
+    'GetTimelineInfo',
+    'ListElements',
+    'AddElement',
+    'UpdateElement',
+    // Media generation (for individual additions)
+    'GenerateImage',
+    'GenerateVideo',
+    'GenerateMusic',
+    'GenerateTTS',
+    // File operations
+    'Read',
+    'ListDirectory',
+    'Glob',
+  ],
+  pipelineFlowId: 'flowF',
+  icon: '🎬',
+  source: 'builtin',
+  enabled: true,
+};
+
+/**
  * All builtin skills (semantic discovery)
  *
  * Creative media skills only. System operation skills (file-operations, git, shell)
@@ -426,6 +501,8 @@ export const builtinSkills: Skill[] = [
   subtitleSkill,
   // Script Conversion
   scriptToTimelineSkill,
+  // Pipeline Orchestration
+  storyboardToTimelineSkill,
 ];
 
 /**

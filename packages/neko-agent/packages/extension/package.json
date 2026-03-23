@@ -16,7 +16,9 @@
     "@neko/agent": "workspace:*",
     "@neko/neko-client": "workspace:*",
     "@neko/platform": "workspace:*",
-    "@neko/shared": "workspace:*"
+    "@neko/shared": "workspace:*",
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
