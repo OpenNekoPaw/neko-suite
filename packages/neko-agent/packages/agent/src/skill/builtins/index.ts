@@ -483,6 +483,49 @@ use the Pipeline system to automate the full workflow.
   icon: '🎬',
   source: 'builtin',
   enabled: true,
+  // Also register as /pipeline slash command
+  command: 'pipeline',
+  argumentHint: '[flowId] [source file or text]',
+  supportsArguments: true,
+};
+
+/**
+ * Pipeline Retry — Retry failed scenes from a completed pipeline
+ *
+ * Triggered by /pipeline-retry or when user mentions retry/failed scenes
+ */
+export const pipelineRetrySkill: Skill = {
+  name: 'pipeline-retry',
+  description:
+    'Retry failed scenes from a completed pipeline. ' +
+    'Use when user mentions: retry failed, retry pipeline, redo failed scenes, 重试失败.',
+  content: `# Pipeline Retry Assistant
+
+When the user wants to retry failed scenes from a previous pipeline:
+
+1. Call RetryPipelineScenes with the pipeline ID
+   - If no specific pipeline ID, use the most recent one
+   - If no specific scene indices, retry all failed scenes
+2. Monitor the retry progress
+3. Report which scenes succeeded on retry
+
+If the user wants to restart the entire pipeline instead of just failed scenes,
+suggest using StartPipeline with the original parameters.
+`,
+  allowedTools: [
+    'RetryPipelineScenes',
+    'StartPipeline',
+    'ConfirmPipelineGate',
+    'GetTimelineInfo',
+    'ListElements',
+  ],
+  icon: '🔄',
+  source: 'builtin',
+  enabled: true,
+  // Register as /pipeline-retry slash command
+  command: 'pipeline-retry',
+  argumentHint: '[pipeline-id] [scene indices]',
+  supportsArguments: true,
 };
 
 /**
@@ -503,6 +546,7 @@ export const builtinSkills: Skill[] = [
   scriptToTimelineSkill,
   // Pipeline Orchestration
   storyboardToTimelineSkill,
+  pipelineRetrySkill,
 ];
 
 /**

@@ -66,6 +66,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register commands
   registerCommands(context, chatViewProvider, services);
 
+  // Register pipeline commands
+  registerPipelineCommands(context, chatViewProvider);
+
   // Listen for extension changes to update tools (register disposable + avoid duplicates)
   let extensionToolsRegistered = true; // Already registered above
   context.subscriptions.push(
@@ -237,6 +240,130 @@ function registerCommands(
         }
       },
     ),
+  );
+}
+
+/**
+ * Register pipeline commands — LLM-routed via Agent chat
+ *
+ * Commands collect context (file path, user intent) and send to Agent.
+ * Agent's Skill matching + LLM understanding selects the right Pipeline.
+ * This way new Skill Pipelines are auto-supported without code changes.
+ */
+function registerPipelineCommands(
+  context: vscode.ExtensionContext,
+  chatViewProvider: ChatViewProvider,
+): void {
+  // Start Creative Pipeline — QuickPick for intent, then send to Agent
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.pipeline.start', async () => {
+      const intent = await vscode.window.showQuickPick(
+        [
+          {
+            label: '$(file-text) Script → Video',
+            description: 'Convert a screenplay to video',
+            value: 'Convert my script to video',
+          },
+          {
+            label: '$(file-pdf) Document → Video',
+            description: 'Turn a document into video',
+            value: 'Create a video from my document',
+          },
+          {
+            label: '$(image) Images → Video',
+            description: 'Generate video from visual concepts',
+            value: 'Create a video from these visual concepts',
+          },
+          {
+            label: '$(zap) Quick Generate',
+            description: 'Describe scenes to generate',
+            value: 'Generate videos for these scenes',
+          },
+        ],
+        { placeHolder: 'Choose a creative pipeline...' },
+      );
+
+      if (!intent) return;
+
+      // Ask for source file
+      const fileUris = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: {
+          Scripts: ['fountain', 'nks'],
+          Documents: ['md', 'txt', 'pdf', 'docx'],
+          'All Files': ['*'],
+        },
+        openLabel: 'Select Source File',
+      });
+
+      if (fileUris && fileUris.length > 0) {
+        const filePath = fileUris[0].fsPath;
+        await chatViewProvider.sendMessageToAssistant(
+          `${intent.value}. Source file: ${filePath}`,
+          true,
+        );
+      } else {
+        // No file selected — let user describe in chat
+        await chatViewProvider.sendMessageToAssistant(intent.value, true);
+      }
+    }),
+  );
+
+  // Start from File — Right-click context menu, auto-detect file type
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.pipeline.startFromFile', async (uri?: vscode.Uri) => {
+      // Resolve file path from context menu URI or active editor
+      let filePath: string | undefined;
+
+      if (uri) {
+        filePath = uri.fsPath;
+      } else {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+          filePath = editor.document.uri.fsPath;
+        }
+      }
+
+      if (!filePath) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+
+      // Build intent message based on file extension
+      const ext = filePath.split('.').pop()?.toLowerCase();
+      let intent: string;
+
+      switch (ext) {
+        case 'fountain':
+        case 'nks':
+          intent = 'Convert this screenplay to video';
+          break;
+        case 'pdf':
+        case 'docx':
+        case 'doc':
+          intent = 'Create a video from this document';
+          break;
+        case 'md':
+        case 'txt':
+          intent = 'Create a video from this text';
+          break;
+        default:
+          intent = 'Create a video from this file';
+          break;
+      }
+
+      await chatViewProvider.sendMessageToAssistant(`${intent}. Source file: ${filePath}`, true);
+    }),
+  );
+
+  // Retry Failed — send retry intent to Agent
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.pipeline.retryFailed', async () => {
+      await chatViewProvider.sendMessageToAssistant(
+        'Retry the failed scenes from my last pipeline',
+        true,
+      );
+    }),
   );
 }
 

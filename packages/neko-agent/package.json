@@ -159,6 +159,21 @@
         "command": "neko.script.generateVideo",
         "title": "%neko.script.generateVideo.title%",
         "category": "NekoAgent: Script"
+      },
+      {
+        "command": "neko.pipeline.start",
+        "title": "Start Creative Pipeline...",
+        "category": "NekoAgent: Pipeline"
+      },
+      {
+        "command": "neko.pipeline.startFromFile",
+        "title": "Create Video from This File",
+        "category": "NekoAgent: Pipeline"
+      },
+      {
+        "command": "neko.pipeline.retryFailed",
+        "title": "Retry Failed Pipeline Scenes",
+        "category": "NekoAgent: Pipeline"
       }
     ],
     "menus": {
@@ -182,6 +197,18 @@
           "command": "neko.script.generateVideo",
           "group": "neko@4",
           "when": "editorLangId =~ /markdown|plaintext|txt/"
+        },
+        {
+          "command": "neko.pipeline.startFromFile",
+          "group": "neko@5",
+          "when": "editorLangId =~ /markdown|plaintext|txt|nekostory/"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "neko.pipeline.startFromFile",
+          "group": "neko@1",
+          "when": "resourceExtname =~ /\\.fountain|\\.md|\\.txt|\\.pdf|\\.docx/"
         }
       ]
     },
