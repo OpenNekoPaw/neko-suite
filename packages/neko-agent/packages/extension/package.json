@@ -18,10 +18,14 @@
     "@neko/platform": "workspace:*",
     "@neko/shared": "workspace:*",
     "adm-zip": "^0.5.16",
+    "cheerio": "^1.0.0",
     "epub2": "^3.0.2",
+    "fast-xml-parser": "^4.5.0",
     "mammoth": "^1.12.0",
+    "node-fetch": "^2.7.0",
     "node-unrar-js": "^2.0.2",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",

@@ -54,6 +54,9 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.epub',
   '.cbz',
   '.cbr',
+  '.xlsx',
+  '.xls',
+  '.fdx',
 ]);
 
 export class DocumentReaderService implements IDocumentReaderService {
@@ -63,6 +66,11 @@ export class DocumentReaderService implements IDocumentReaderService {
   }
 
   async read(filePath: string): Promise<DocumentContent> {
+    // Handle URL
+    if (this.isUrl(filePath)) {
+      return this.readUrl(filePath);
+    }
+
     const ext = path.extname(filePath).toLowerCase();
 
     // Check DRM protection
@@ -85,6 +93,11 @@ export class DocumentReaderService implements IDocumentReaderService {
         return this.readCbz(filePath);
       case '.cbr':
         return this.readCbr(filePath);
+      case '.xlsx':
+      case '.xls':
+        return this.readExcel(filePath);
+      case '.fdx':
+        return this.readFinalDraft(filePath);
       case '.md':
       case '.txt':
       case '.fountain':
@@ -98,6 +111,10 @@ export class DocumentReaderService implements IDocumentReaderService {
       default:
         throw new Error(`Unsupported document format: ${ext}`);
     }
+  }
+
+  private isUrl(input: string): boolean {
+    return /^https?:\/\//i.test(input);
   }
 
   private async readTextFile(filePath: string): Promise<DocumentContent> {
@@ -348,6 +365,162 @@ export class DocumentReaderService implements IDocumentReaderService {
         `Failed to read CBR: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private async readUrl(url: string): Promise<DocumentContent> {
+    try {
+      const fetch = await this.tryImport<typeof import('node-fetch')>('node-fetch');
+      const cheerio = await this.tryImport<typeof import('cheerio')>('cheerio');
+
+      if (!fetch || !cheerio) {
+        throw new Error(
+          'URL support requires node-fetch and cheerio. Run: pnpm add node-fetch cheerio -F @neko-agent/extension',
+        );
+      }
+
+      const response = await fetch.default(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+      }
+
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      // Remove non-content elements
+      $('script, style, nav, aside, footer, header, .ad, .advertisement').remove();
+
+      // Extract main content
+      const mainContent =
+        $('article').text() || $('main').text() || $('.content').text() || $('body').text();
+
+      const text = mainContent.replace(/\s+/g, ' ').trim();
+
+      return {
+        text,
+        metadata: {
+          url,
+          title: $('title').text().trim(),
+          fetchedAt: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read URL', { url, error });
+      throw new Error(
+        `Failed to read URL: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async readExcel(filePath: string): Promise<DocumentContent> {
+    try {
+      const xlsx = await this.tryImport<typeof import('xlsx')>('xlsx');
+
+      if (!xlsx) {
+        throw new Error('Excel support requires xlsx. Run: pnpm add xlsx -F @neko-agent/extension');
+      }
+
+      const workbook = xlsx.readFile(filePath);
+      const sheets: string[] = [];
+      const allData: unknown[][] = [];
+
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const data = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+        allData.push(...(data as unknown[][]));
+
+        // Convert to readable text
+        const sheetText = (data as unknown[][]).map((row) => row.join('\t')).join('\n');
+        sheets.push(`Sheet: ${sheetName}\n${sheetText}`);
+      }
+
+      return {
+        text: sheets.join('\n\n'),
+        metadata: {
+          format: 'xlsx',
+          sheetCount: workbook.SheetNames.length,
+          sheets: workbook.SheetNames,
+          rowCount: allData.length,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read Excel', { path: filePath, error });
+      throw new Error(
+        `Failed to read Excel: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async readFinalDraft(filePath: string): Promise<DocumentContent> {
+    try {
+      const { XMLParser } = await this.tryImport<typeof import('fast-xml-parser')>(
+        'fast-xml-parser',
+      ).then((mod) => mod || { XMLParser: null });
+
+      if (!XMLParser) {
+        throw new Error(
+          'Final Draft support requires fast-xml-parser. Run: pnpm add fast-xml-parser -F @neko-agent/extension',
+        );
+      }
+
+      const xml = await fs.readFile(filePath, 'utf-8');
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+      });
+      const doc = parser.parse(xml);
+
+      // Extract scenes from FDX structure
+      const scenes = this.extractFDXScenes(doc);
+      const text = scenes.map((s) => s.text).join('\n\n');
+
+      return {
+        text,
+        pageCount: scenes.length,
+        metadata: {
+          format: 'fdx',
+          sceneCount: scenes.length,
+          title: doc.FinalDraft?.Content?.TitlePage?.Content || 'Untitled',
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read Final Draft', { path: filePath, error });
+      throw new Error(
+        `Failed to read Final Draft: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private extractFDXScenes(doc: Record<string, unknown>): Array<{ text: string }> {
+    const scenes: Array<{ text: string }> = [];
+    try {
+      const content = (doc as { FinalDraft?: { Content?: { Paragraph?: unknown[] } } }).FinalDraft
+        ?.Content?.Paragraph;
+      if (!Array.isArray(content)) return scenes;
+
+      let currentScene = '';
+      for (const para of content) {
+        const p = para as { '@_Type'?: string; Text?: string | string[] };
+        const type = p['@_Type'];
+        const text = Array.isArray(p.Text) ? p.Text.join(' ') : p.Text || '';
+
+        if (type === 'Scene Heading') {
+          if (currentScene) {
+            scenes.push({ text: currentScene.trim() });
+          }
+          currentScene = `${text}\n`;
+        } else if (type === 'Action' || type === 'Character' || type === 'Dialogue') {
+          currentScene += `${text}\n`;
+        }
+      }
+
+      if (currentScene) {
+        scenes.push({ text: currentScene.trim() });
+      }
+    } catch (error) {
+      logger.warn('Failed to parse FDX structure', { error });
+    }
+
+    return scenes.length > 0 ? scenes : [{ text: 'Failed to parse FDX content' }];
   }
 
   async hasDRM(filePath: string): Promise<boolean> {

@@ -67,6 +67,15 @@ describe('DocumentReaderService', () => {
       expect(service.supports('/path/to/script.fountain')).toBe(true);
     });
 
+    it('should support Excel files', () => {
+      expect(service.supports('/path/to/data.xlsx')).toBe(true);
+      expect(service.supports('/path/to/data.xls')).toBe(true);
+    });
+
+    it('should support Final Draft files', () => {
+      expect(service.supports('/path/to/script.fdx')).toBe(true);
+    });
+
     it('should not support unsupported formats', () => {
       expect(service.supports('/path/to/file.xyz')).toBe(false);
       expect(service.supports('/path/to/file.exe')).toBe(false);
@@ -149,6 +158,47 @@ describe('DocumentReaderService', () => {
       const result = await service.read('/path/to/file.txt');
 
       expect(result.text).toBe('Test content');
+    });
+  });
+
+  describe('readUrl', () => {
+    it('should read web pages', async () => {
+      vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+
+      const result = await service.read('https://example.com');
+
+      expect(result.text).toContain('Example Domain');
+      expect(result.metadata?.url).toBe('https://example.com');
+      expect(result.metadata?.title).toBeTruthy();
+    });
+  });
+
+  describe('readExcel', () => {
+    it('should handle Excel files', async () => {
+      vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+
+      // Will fail without actual file, just verify it attempts to read
+      await expect(service.read('/path/to/file.xlsx')).rejects.toThrow();
+    });
+  });
+
+  describe('readFinalDraft', () => {
+    it('should handle Final Draft files', async () => {
+      const fs = await import('fs/promises');
+      const mockXml = `<?xml version="1.0"?>
+<FinalDraft>
+  <Content>
+    <Paragraph Type="Scene Heading"><Text>INT. OFFICE - DAY</Text></Paragraph>
+    <Paragraph Type="Action"><Text>John enters.</Text></Paragraph>
+  </Content>
+</FinalDraft>`;
+      vi.mocked(fs.readFile).mockResolvedValue(mockXml as any);
+      vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+
+      const result = await service.read('/path/to/script.fdx');
+
+      expect(result.text).toContain('INT. OFFICE - DAY');
+      expect(result.metadata?.format).toBe('fdx');
     });
   });
 

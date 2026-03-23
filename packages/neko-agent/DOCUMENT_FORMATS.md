@@ -29,6 +29,24 @@ NekoAgent supports reading and extracting content from various document formats 
   - Same capabilities as CBZ
   - Requires `node-unrar-js` package
 
+### Web Content
+- **URL** (HTTP/HTTPS links) - Web pages
+  - Fetches and extracts main content
+  - Removes navigation, ads, and non-content elements
+  - Preserves page title and metadata
+
+### Spreadsheets
+- **Excel** (`.xlsx`, `.xls`) - Microsoft Excel
+  - Extracts data from all sheets
+  - Converts to tab-separated text format
+  - Preserves sheet names and structure
+
+### Professional Screenwriting
+- **Final Draft** (`.fdx`) - Industry-standard screenplay format
+  - Parses scene headings, action, dialogue
+  - More precise than Fountain for professional workflows
+  - Preserves screenplay structure
+
 ## Usage
 
 ### Basic Reading
@@ -114,11 +132,15 @@ The following packages are required for format support:
 
 ```json
 {
-  "pdf-parse": "^2.4.5",      // MIT License
-  "mammoth": "^1.12.0",       // BSD-2-Clause License
-  "epub2": "^3.0.2",          // MIT License
-  "adm-zip": "^0.5.16",       // MIT License
-  "node-unrar-js": "^2.0.2"   // MIT License
+  "pdf-parse": "^2.4.5",           // MIT License
+  "mammoth": "^1.12.0",            // BSD-2-Clause License
+  "epub2": "^3.0.2",               // MIT License
+  "adm-zip": "^0.5.16",            // MIT License
+  "node-unrar-js": "^2.0.2",       // MIT License
+  "node-fetch": "^2.7.0",          // MIT License
+  "cheerio": "^1.0.0",             // MIT License
+  "xlsx": "^0.18.5",               // Apache-2.0 License
+  "fast-xml-parser": "^4.5.0"      // MIT License
 }
 ```
 
