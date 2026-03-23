@@ -66,49 +66,10 @@ export class ChatModelService implements IChatModelService {
   }
 
   /**
-   * Get model type. Uses model.type if set, otherwise infers from capabilities.
+   * Get model type from explicit `type` field. Defaults to 'llm' if not set.
    */
   getModelType(model: Model): ModelType {
-    if (model.type) return model.type;
-    return this.inferFromCapabilities(model.capabilities ?? []);
-  }
-
-  /**
-   * Infer model type from capabilities (backward compatibility fallback).
-   *
-   * Media capabilities are checked BEFORE chat/completion, because multimodal
-   * LLMs (e.g., gemini-3-pro-image-preview) may have both 'chat' and
-   * 'image_generation' — they should be classified as 'image' so they appear
-   * in the media model selector. Pure chat models won't have media capabilities.
-   */
-  private inferFromCapabilities(capabilities: string[]): ModelType {
-    if (capabilities.length === 0) {
-      return 'llm';
-    }
-    // Check media capabilities first (higher priority)
-    if (
-      capabilities.includes('text_to_image') ||
-      capabilities.includes('image_to_image') ||
-      capabilities.includes('image_generation')
-    ) {
-      return 'image';
-    }
-    if (
-      capabilities.includes('text_to_video') ||
-      capabilities.includes('image_to_video') ||
-      capabilities.includes('video_to_video') ||
-      capabilities.includes('video_generation')
-    ) {
-      return 'video';
-    }
-    if (capabilities.includes('text_to_music')) {
-      return 'music';
-    }
-    if (capabilities.includes('text_to_audio') || capabilities.includes('audio')) {
-      return 'audio';
-    }
-    // Default to LLM (includes chat, completion, and unknown capabilities)
-    return 'llm';
+    return model.type ?? 'llm';
   }
 }
 
