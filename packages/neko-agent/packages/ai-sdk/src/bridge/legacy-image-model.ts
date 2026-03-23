@@ -13,9 +13,7 @@ import type {
   SharedV3Warning,
 } from '@ai-sdk/provider';
 import type { LegacyMediaAdapter, LegacyAdapterResult, ProviderConfig } from '../types';
-
-const POLLING_INTERVAL_MS = 5000;
-const MAX_POLLING_ATTEMPTS = 360;
+import { pollUntilDone, POLLING_PRESETS } from '../polling';
 
 export class LegacyImageModel implements ImageModelV3 {
   readonly specificationVersion = 'v3' as const;
@@ -88,19 +86,20 @@ export class LegacyImageModel implements ImageModelV3 {
     provider: unknown,
     abortSignal?: AbortSignal,
   ): Promise<LegacyAdapterResult> {
-    for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
-      if (abortSignal?.aborted) throw new Error('Image generation cancelled');
-      await new Promise((r) => setTimeout(r, POLLING_INTERVAL_MS));
-
-      const result = await this.adapter.getTaskStatus(taskId, provider);
-      if (
-        result.status === 'completed' ||
-        result.status === 'failed' ||
-        result.status === 'cancelled'
-      ) {
-        return result;
-      }
-    }
-    throw new Error('Image generation timed out');
+    return pollUntilDone<LegacyAdapterResult>(
+      async () => {
+        const result = await this.adapter.getTaskStatus(taskId, provider);
+        if (
+          result.status === 'completed' ||
+          result.status === 'failed' ||
+          result.status === 'cancelled'
+        ) {
+          return result;
+        }
+        return undefined;
+      },
+      POLLING_PRESETS.image,
+      abortSignal,
+    );
   }
 }

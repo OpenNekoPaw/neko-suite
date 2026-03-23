@@ -55,18 +55,14 @@ export class MediaTaskExecutor {
   private providerRegistry: ProviderRegistry;
   private configManager: ConfigManager;
   private taskManager?: MediaTaskManagerDeps;
-  private pollingIntervalMs: number;
-  private maxPollingAttempts: number;
 
   constructor(
     providerRegistry: ProviderRegistry,
     configManager: ConfigManager,
-    options: MediaTaskExecutorOptions = {},
+    _options: MediaTaskExecutorOptions = {},
   ) {
     this.providerRegistry = providerRegistry;
     this.configManager = configManager;
-    this.pollingIntervalMs = options.pollingIntervalMs ?? 5000;
-    this.maxPollingAttempts = options.maxPollingAttempts ?? 360;
   }
 
   /**
@@ -384,7 +380,8 @@ export class MediaTaskExecutor {
   }
 
   /**
-   * Poll for task completion
+   * Poll for task completion (used for recovery polling).
+   * Uses video preset since recovery tasks are typically long-running.
    */
   private async pollForCompletion(
     adapter: MediaAdapter,
@@ -392,23 +389,25 @@ export class MediaTaskExecutor {
     provider: Provider,
     onProgress: (progress: number) => void,
   ): Promise<TaskOutput> {
-    let attempts = 0;
+    const config = {
+      initialIntervalMs: 5000,
+      maxIntervalMs: 15000,
+      backoffStepMs: 1000,
+      timeoutMs: 30 * 60 * 1000,
+    };
+    const startTime = Date.now();
+    let currentInterval = config.initialIntervalMs;
 
-    while (attempts < this.maxPollingAttempts) {
-      attempts++;
-
-      // Wait before polling
-      await new Promise((resolve) => setTimeout(resolve, this.pollingIntervalMs));
+    while (Date.now() - startTime < config.timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, currentInterval));
 
       try {
         const result = await adapter.getTaskStatus(externalTaskId, provider);
 
-        // Update progress
         if (result.progress !== undefined) {
           onProgress(result.progress);
         }
 
-        // Check status
         switch (result.status) {
           case 'completed':
             onProgress(100);
@@ -431,17 +430,18 @@ export class MediaTaskExecutor {
 
           case 'pending':
           case 'processing':
-            // Continue polling
             break;
         }
-      } catch (error) {
-        // If polling fails, continue with reduced frequency
-        await new Promise((resolve) => setTimeout(resolve, this.pollingIntervalMs * 2));
+      } catch (_error) {
+        // Transient error, continue with next interval
       }
+
+      currentInterval = Math.min(currentInterval + config.backoffStepMs, config.maxIntervalMs);
     }
 
+    const elapsedSec = Math.round((Date.now() - startTime) / 1000);
     return {
-      error: `Generation timed out after ${this.maxPollingAttempts} polling attempts`,
+      error: `Generation timed out after ${elapsedSec}s`,
     };
   }
 

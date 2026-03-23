@@ -23,6 +23,7 @@ import type {
   SharedV3ProviderMetadata,
 } from '@ai-sdk/provider';
 import type { ProviderConfig } from '../../types';
+import { pollUntilDone, POLLING_PRESETS } from '../../polling';
 
 /** POST /v1/videos response */
 interface SoraCreateResponse {
@@ -57,8 +58,6 @@ export class NewAPIVideoModel implements VideoModelV3 {
   readonly maxVideosPerCall = 1;
 
   private config: ProviderConfig;
-  private pollingIntervalMs = 5000;
-  private maxPollingAttempts = 360; // 30 min at 5s
 
   constructor(modelId: string, config: ProviderConfig) {
     this.modelId = modelId;
@@ -145,7 +144,7 @@ export class NewAPIVideoModel implements VideoModelV3 {
 
   /**
    * Poll GET /v1/videos/{videoId} until completion, then return video data.
-   * On success, uses /v1/videos/{videoId}/content download URL.
+   * On success, downloads via /v1/videos/{videoId}/content.
    */
   private async pollForCompletion(
     videoId: string,
@@ -154,66 +153,54 @@ export class NewAPIVideoModel implements VideoModelV3 {
   ): Promise<VideoModelV3VideoData> {
     const statusUrl = `${baseUrl}/v1/videos/${videoId}`;
     const downloadUrl = `${baseUrl}/v1/videos/${videoId}/content`;
+    const apiKey = this.config.apiKey;
 
-    for (let attempt = 0; attempt < this.maxPollingAttempts; attempt++) {
-      if (abortSignal?.aborted) {
-        throw new Error('Video generation was cancelled');
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, this.pollingIntervalMs));
-
-      const response = await fetch(statusUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-        signal: abortSignal,
-      });
-
-      if (!response.ok) {
-        // Continue polling on transient errors
-        continue;
-      }
-
-      const data = (await response.json()) as SoraStatusResponse;
-
-      // Check error
-      if (data.error) {
-        throw new Error(`Video generation failed: ${data.error.message}`);
-      }
-
-      // Normalize status to lowercase for comparison
-      const status = data.status?.toLowerCase();
-
-      // Check completed — download the video and return as binary
-      if (status === 'succeeded' || status === 'completed') {
-        const videoResponse = await fetch(downloadUrl, {
-          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+    return pollUntilDone<VideoModelV3VideoData>(
+      async () => {
+        const response = await fetch(statusUrl, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
           signal: abortSignal,
         });
 
-        if (!videoResponse.ok) {
-          // Fallback: return download URL if direct download fails
-          return { type: 'url', url: downloadUrl, mediaType: 'video/mp4' };
+        if (!response.ok) return undefined; // Transient error, continue
+
+        const data = (await response.json()) as SoraStatusResponse;
+
+        if (data.error) {
+          throw new Error(`Video generation failed: ${data.error.message}`);
         }
 
-        const videoBuffer = await videoResponse.arrayBuffer();
-        return {
-          type: 'file',
-          data: new Uint8Array(videoBuffer),
-          mediaType: 'video/mp4',
-        };
-      }
+        const status = data.status?.toLowerCase();
 
-      // Check failed
-      if (status === 'failed') {
-        throw new Error('Video generation failed');
-      }
+        if (status === 'succeeded' || status === 'completed') {
+          // Download the video file
+          const videoResponse = await fetch(downloadUrl, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: abortSignal,
+          });
 
-      // Continue polling for queued/in_progress/processing
-    }
+          if (!videoResponse.ok) {
+            return { type: 'url' as const, url: downloadUrl, mediaType: 'video/mp4' };
+          }
 
-    throw new Error(`Video generation timed out after ${this.maxPollingAttempts} polling attempts`);
+          const videoBuffer = await videoResponse.arrayBuffer();
+          return {
+            type: 'file' as const,
+            data: new Uint8Array(videoBuffer),
+            mediaType: 'video/mp4',
+          };
+        }
+
+        if (status === 'failed') {
+          throw new Error('Video generation failed');
+        }
+
+        return undefined; // Continue polling
+      },
+      POLLING_PRESETS.video,
+      abortSignal,
+    );
   }
 
   private getBaseUrl(): string {
