@@ -74,15 +74,18 @@ export class ChatModelService implements IChatModelService {
   }
 
   /**
-   * Infer model type from capabilities (backward compatibility fallback)
+   * Infer model type from capabilities (backward compatibility fallback).
+   *
+   * Media capabilities are checked BEFORE chat/completion, because multimodal
+   * LLMs (e.g., gemini-3-pro-image-preview) may have both 'chat' and
+   * 'image_generation' — they should be classified as 'image' so they appear
+   * in the media model selector. Pure chat models won't have media capabilities.
    */
   private inferFromCapabilities(capabilities: string[]): ModelType {
     if (capabilities.length === 0) {
       return 'llm';
     }
-    if (capabilities.includes('chat') || capabilities.includes('completion')) {
-      return 'llm';
-    }
+    // Check media capabilities first (higher priority)
     if (
       capabilities.includes('text_to_image') ||
       capabilities.includes('image_to_image') ||
@@ -104,6 +107,7 @@ export class ChatModelService implements IChatModelService {
     if (capabilities.includes('text_to_audio') || capabilities.includes('audio')) {
       return 'audio';
     }
+    // Default to LLM (includes chat, completion, and unknown capabilities)
     return 'llm';
   }
 }
