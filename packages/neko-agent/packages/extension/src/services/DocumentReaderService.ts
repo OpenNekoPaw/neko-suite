@@ -1,5 +1,5 @@
 /**
- * Document Reader Service — Extracts text from PDF, DOCX, EPUB, CBZ, CBR and other document formats
+ * Document Reader Service — Extracts text from PDF, DOCX, PPTX, EPUB, CBZ, CBR and other document formats
  *
  * Runs in Extension Host (Node.js) where file system and native modules are available.
  * Used by the readDocument pipeline stage and ReadDocument agent tool.
@@ -43,6 +43,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.pdf',
   '.docx',
   '.doc',
+  '.pptx',
+  '.ppt',
   '.md',
   '.txt',
   '.fountain',
@@ -87,6 +89,9 @@ export class DocumentReaderService implements IDocumentReaderService {
       case '.docx':
       case '.doc':
         return this.readDocx(filePath);
+      case '.pptx':
+      case '.ppt':
+        return this.readPptx(filePath);
       case '.epub':
         return this.readEpub(filePath);
       case '.cbz':
@@ -195,6 +200,43 @@ export class DocumentReaderService implements IDocumentReaderService {
       logger.error('Failed to read DOCX', { path: filePath, error });
       throw new Error(
         `Failed to read DOCX: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async readPptx(filePath: string): Promise<DocumentContent> {
+    try {
+      // Dynamic import to avoid hard dependency
+      const officeParser = await this.tryImport<{
+        parseOfficeAsync: (filePath: string) => Promise<string>;
+      }>('officeparser');
+
+      if (!officeParser) {
+        throw new Error(
+          'officeparser package not installed. Run: pnpm add officeparser -F @neko-agent/extension',
+        );
+      }
+
+      const text = await officeParser.parseOfficeAsync(filePath);
+
+      // Estimate slide count by splitting on double newlines (rough heuristic)
+      const slideCount = text.split('\n\n').filter((s) => s.trim().length > 0).length;
+
+      return {
+        text,
+        pageCount: slideCount,
+        metadata: {
+          format: 'pptx',
+          slideCount,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('officeparser')) {
+        throw error;
+      }
+      logger.error('Failed to read PPTX', { path: filePath, error });
+      throw new Error(
+        `Failed to read PPTX: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

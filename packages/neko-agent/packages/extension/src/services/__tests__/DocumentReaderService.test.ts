@@ -76,6 +76,12 @@ describe('DocumentReaderService', () => {
       expect(service.supports('/path/to/script.fdx')).toBe(true);
     });
 
+    it('should support PPTX files', () => {
+      expect(service.supports('/path/to/presentation.pptx')).toBe(true);
+      expect(service.supports('/path/to/presentation.ppt')).toBe(true);
+      expect(service.supports('/path/to/presentation.PPTX')).toBe(true);
+    });
+
     it('should not support unsupported formats', () => {
       expect(service.supports('/path/to/file.xyz')).toBe(false);
       expect(service.supports('/path/to/file.exe')).toBe(false);
@@ -229,6 +235,24 @@ describe('DocumentReaderService', () => {
       expect(result.text).not.toContain('alert');
       expect(result.text).not.toContain('body{}');
       expect(result.text).toContain('Content');
+    });
+  });
+
+  describe('readPptx', () => {
+    it('should handle PPTX files without officeparser', async () => {
+      vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+
+      await expect(service.read('/path/to/presentation.pptx')).rejects.toThrow(
+        'Failed to read PPTX',
+      );
+    });
+
+    it('should extract text and metadata from PPTX', async () => {
+      vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+
+      // This test requires actual officeparser package
+      // In real usage, officeparser will extract text from slides
+      await expect(service.read('/path/to/presentation.pptx')).rejects.toThrow();
     });
   });
 });

@@ -351,10 +351,10 @@ type VideoGenerationType =
 | `.fountain` 剧本 | ✅ | Read + neko-story 解析 | AST 级别理解 |
 | `.json/.yaml` 结构化 | ✅ | Read 工具直接读取 | 可解析结构 |
 | `.html` 网页 | ✅ | Read 工具直接读取 | 含标签 |
-| `.pdf` PDF | ❌ | 不支持 | 需 pdfjs/pdf-parse 库 |
-| `.docx` Word | ❌ | 不支持 | 需 mammoth.js 库 |
-| `.pptx` PowerPoint | ❌ | 不支持 | 需 pptx-parser 库 |
-| `.epub` 电子书 | ❌ | 不支持 | 需 epub-parser 库 |
+| `.pdf` PDF | ✅ | pdf-parse | 全格式支持 |
+| `.docx` Word | ✅ | mammoth.js | 全格式支持 |
+| `.pptx` PowerPoint | ✅ | officeparser | 文本 + 元数据 |
+| `.epub` 电子书 | ✅ | epub2 | 全格式支持 |
 
 #### 文本文件→剧本的当前工作流
 
@@ -2378,11 +2378,14 @@ Flow F (②→③→④) 标准流程 — 打通此路径即解锁所有流程
 | **P1** | storyboardToTimelineSkill + pipeline-control ToolSet | ✅ | ~80 |
 | **P1** | neko-story parseScript API 暴露 | ✅ | ~15 |
 | **P2** | Pipeline 进度→WebView 桥接 | ✅ | ~150 |
+| **P2** | 漫画分析 Skill（comic-to-storyboard） | ✅ | ~170 |
+| **P2** | 专用剧本生成 Skill（script-generation） | ✅ | ~235 |
 | **P3** | 单元测试（executor + registry + resolver + stages + parse） | ✅ | 69 tests |
+| **P3** | Builtin Skills 单元测试 | ✅ | 33 tests |
 | **P3** | @neko/agent pipeline 子路径导出 | ✅ | ~5 |
 | **P3** | 错误恢复（RetryPipelineScenes + completedPipelines 缓存） | ✅ | ~60 |
 
-**合计**: ~1990 LOC + 69 tests | 构建 23/23 ✅
+**合计**: ~2395 LOC + 102 tests | 构建 23/23 ✅
 
 ### 当前流程可行性
 
@@ -2392,15 +2395,15 @@ Flow F (②→③→④) 标准流程 — 打通此路径即解锁所有流程
 | **Flow B** | 素材→视频 | ✅ 完全可用 |
 | **Flow C** | 素材→分镜→视频 | ✅ 完全打通 |
 | **Flow D** | 剧本→视频 | ✅ 完全打通 |
-| **Flow E** | 漫画→分镜→视频 | ⚠️ 缺漫画分析 Skill |
+| **Flow E** | 漫画→分镜→视频 | ✅ 完全打通 |
 | **Flow F** | 剧本→分镜→视频 | ✅ 完全打通 |
+
+**6 种创作流程全部打通 ✅**
 
 ### 待开发（后续迭代）
 
 | 优先级 | 能力 | 估算 | 说明 |
 |--------|------|------|------|
-| P2 | 漫画分析 Skill | ~150 LOC | 打通 Flow E |
-| P2 | 专用剧本生成 Skill | ~200 LOC | 体裁模板 + 结构化改写 |
 | P2 | ReactiveStage 执行器 | ~200 LOC | 导出质检 / CLIP 筛选 |
 | P3 | Pipeline VSCode 命令 | ~100 LOC | 右键菜单 startFromFile + Command Palette |
 | P3 | Pipeline Slash 命令 | ~50 LOC | `/pipeline flowF script.fountain` |
@@ -2411,4 +2414,4 @@ Flow F (②→③→④) 标准流程 — 打通此路径即解锁所有流程
 
 ---
 
-*最后更新: 2026-03-23（Pipeline P1-P3 全部完成，6 种创作流程中 5 种打通）*
+*最后更新: 2026-03-24（Phase 2 完成，6 种创作流程全部打通）*
