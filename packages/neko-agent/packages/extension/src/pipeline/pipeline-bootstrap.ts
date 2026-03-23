@@ -20,7 +20,7 @@ import {
   type FlowId,
   type PipelineHandle,
   type MediaGenerateOptions,
-} from '@neko/agent/src/pipeline';
+} from '@neko/agent/pipeline';
 import { createPipelineTools } from '../tools/pipelineTools';
 import {
   VSCodeFileReader,
