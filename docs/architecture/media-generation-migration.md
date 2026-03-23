@@ -325,7 +325,33 @@ All 7 legacy adapters (runway, luma, minimax, liblib, suno, vidu, midjourney) ar
 | `LegacyVideoModel` | `VideoModelV3` | `adapter.generateVideo()` + internal polling |
 | `LegacySpeechModel` | `SpeechModelV3` | `adapter.generateAudio()` + internal polling |
 
-Bridge models handle async polling internally (5s interval, 360 max attempts), converting the adapter's submit-poll pattern to AI SDK's blocking `doGenerate()` pattern.
+Bridge models use shared `pollUntilDone()` with per-media-type presets, converting the adapter's submit-poll pattern to AI SDK's blocking `doGenerate()` pattern.
+
+### Polling Strategy (`@neko/ai-sdk/src/polling.ts`)
+
+All async polling uses a shared `pollUntilDone()` utility with configurable presets per media type:
+
+| Media Type | Initial Interval | Backoff | Max Interval | Timeout |
+|-----------|-----------------|---------|-------------|---------|
+| Image | 2s | None (fixed) | 2s | 2 min |
+| Video | 5s | +1s/attempt | 15s | 30 min |
+| Audio/TTS | 2s | None (fixed) | 2s | 5 min |
+| Music | 5s | +1s/attempt | 15s | 30 min |
+
+Rationale:
+- **Image/Audio**: Fast tasks (5-30s typical), frequent polling catches completion quickly
+- **Video/Music**: Slow tasks (1-30min), linear backoff reduces API load without missing completion
+
+### Model Type Classification
+
+Model type is determined by the explicit `type` field in `ModelConfig`. No inference from capabilities — all models must set `type` explicitly. Defaults to `'llm'` when omitted.
+
+```typescript
+// chat-model-service.ts
+getModelType(model: Model): ModelType {
+  return model.type ?? 'llm';
+}
+```
 
 ### Error Handling: No Silent Fallback
 
