@@ -6,9 +6,15 @@
 
 import type { Skill, ISkillRegistry } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
+import { comicToStoryboardSkill } from './comic-to-storyboard';
+import { scriptGenerationSkill } from './script-generation';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
+
+// Re-export new skills
+export { comicToStoryboardSkill } from './comic-to-storyboard';
+export { scriptGenerationSkill } from './script-generation';
 
 // Re-export ToolGroups
 export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
@@ -542,10 +548,12 @@ export const builtinSkills: Skill[] = [
   colorGradingSkill,
   audioMixingSkill,
   subtitleSkill,
-  // Script Conversion
+  // Script Creation
+  scriptGenerationSkill,
   scriptToTimelineSkill,
   // Pipeline Orchestration
   storyboardToTimelineSkill,
+  comicToStoryboardSkill,
   pipelineRetrySkill,
 ];
 

@@ -52,6 +52,17 @@ export {
 export {
   registerBuiltins,
   builtinSkills,
+  // Individual skills
+  aiGenerateSkill,
+  videoEditingSkill,
+  colorGradingSkill,
+  audioMixingSkill,
+  subtitleSkill,
+  scriptGenerationSkill,
+  scriptToTimelineSkill,
+  storyboardToTimelineSkill,
+  comicToStoryboardSkill,
+  pipelineRetrySkill,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
