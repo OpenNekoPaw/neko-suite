@@ -59,16 +59,16 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 + 3D 场景/2D 骨骼 ECS | Alpha 85% | 170+ Rust + 12 TS |
-| **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 + 29 EditOperation | Alpha 82% | 200 TS/TSX |
-| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI + 视频生成 | Alpha 75% | 418 TS/TSX, 47 tests |
+| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 + 3D 场景/2D 骨骼 ECS | Alpha 85% | 70.7K Rust + 3.4K TS, 471 tests |
+| **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 + 29 EditOperation | Alpha 82% | 62.6K TS/TSX (274 files), 20 tests |
+| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI + 视频生成 | Alpha 75% | 97.3K TS/TSX (524 files), 79 tests |
 
 ### 基础设施
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-types** | 共享类型 + 横切关注点（Logger/i18n/Theme/Errors） | Alpha 90% | 102 TS, 10 tests |
-| **neko-client** | 流媒体客户端 - H264/fMP4/PCM + EngineClient HTTP dispatch | Alpha 80% | 8 TS |
+| **neko-types** | 共享类型 + 横切关注点（Logger/i18n/Theme/Errors） | Alpha 90% | 33.9K TS (185 files), 20 tests |
+| **neko-client** | 流媒体客户端 - H264/fMP4/PCM + EngineClient HTTP dispatch | Alpha 80% | 4.8K TS (17 files), 3 tests |
 | **neko-proto** | 协议定义（timeline.proto + diff.proto 完整 IDL） | Stable 100% | 2 proto |
 | **neko-suite** | Extension Pack 门户 | Stable 90% | 配置包 |
 
@@ -76,25 +76,25 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + 波形 | Alpha 70% | 19 TS/TSX |
-| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成 + PDF 导出 | WIP 75% | 32 TS/TSX, 3 tests |
-| **neko-assets** | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + 多云支持 | Alpha 85% | 22 TS, 5 tests |
-| **neko-tools** | 媒体工具 - Diff 比较 + 并行优化 + 协议增强 | WIP 62% | 17 TS, 3 tests |
-| **neko-canvas** | 无限画布 - 5 种节点 + 多选 + 属性面板 + 拖放 + 快捷键 | Alpha 65% | 58 TS/TSX |
+| **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + 波形 | Alpha 70% | 7.1K TS/TSX (41 files), 5 tests |
+| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成 + PDF 导出 | WIP 75% | 5.8K TS/TSX (37 files), 4 tests |
+| **neko-assets** | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + 多云支持 | Alpha 85% | 8.7K TS (45 files), 7 tests |
+| **neko-tools** | 媒体工具 - Diff 比较 + 并行优化 + 协议增强 | WIP 62% | 14.9K TS (61 files), 6 tests |
+| **neko-canvas** | 无限画布 - 5 种节点 + 多选 + 属性面板 + 拖放 + 快捷键 | Alpha 65% | 14.0K TS/TSX (79 files), 4 tests |
 
 ### 新兴模块
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-model** | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成（[架构](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 25+ TS/TSX + 12 Rust |
-| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + i18n（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 85% | 90+ TS/TSX + Rust, 42 tests |
+| **neko-model** | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成（[架构](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 3.3K TS/TSX (35 files) |
+| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + i18n（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 85% | 13.9K TS/TSX (126 files), 7 tests |
 
 ### 规划中
 
-| 模块 | 职能 | 状态 |
-|------|------|------|
-| **neko-audio** | 音频工作站 - 波形编辑 + 均衡器/压缩/降噪 + 录音 | Planned |
-| **neko-live** | 虚拟制片 - MediaPipe/VMC 动捕 + VRM 虚拟形象 + RTMP 推流 + OBS 集成 | Planned |
+| 模块 | 职能 | 状态 | 规模 |
+|------|------|------|------|
+| **neko-audio** | 音频工作站 - 波形编辑 + 均衡器/压缩/降噪 + 录音 | Alpha 50% | 9.1K TS/TSX (53 files), 3 tests |
+| **neko-live** | 虚拟制片 - MediaPipe/VMC 动捕 + VRM 虚拟形象 + RTMP 推流 + OBS 集成 | Planned | 35 TS (1 file) |
 
 ---
 
