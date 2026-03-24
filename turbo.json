@@ -56,6 +56,26 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
+    "neko-market#compile": {
+      "dependsOn": ["@neko/market-core#build", "@neko/market-webview#build"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
+    "neko-auth#compile": {
+      "dependsOn": ["@neko/auth-core#build"],
+      "outputs": ["dist/**"],
+      "cache": true
+    },
+    "@neko/auth-core#build": {
+      "dependsOn": ["@neko/shared#build"],
+      "outputs": ["dist/**"],
+      "cache": true
+    },
+    "@neko/market-webview#build": {
+      "dependsOn": ["@neko/shared#build"],
+      "outputs": ["dist/**"],
+      "cache": true
+    },
     "neko-live#compile": {
       "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
       "outputs": ["dist/**", "out/**"],

@@ -1,0 +1,67 @@
+{
+  "name": "neko-auth",
+  "displayName": "Neko Auth",
+  "description": "Unified authentication for Neko Suite — OAuth 2.0 + PKCE SSO",
+  "version": "0.1.0",
+  "publisher": "neko",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["auth", "sso", "oauth", "neko"],
+  "extensionKind": ["workspace"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Neko Auth",
+      "properties": {
+        "neko.auth.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "OAuth 2.0 client ID for the Neko cloud service."
+        },
+        "neko.auth.authUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Authorization endpoint URL. Leave empty to disable cloud auth."
+        },
+        "neko.auth.tokenUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Token endpoint URL."
+        },
+        "neko.auth.scopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["openid", "profile", "email"],
+          "description": "OAuth 2.0 scopes to request."
+        },
+        "neko.auth.redirectPort": {
+          "type": "number",
+          "default": 6419,
+          "description": "Localhost port for the OAuth redirect callback server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.cjs",
+    "watch": "node esbuild.cjs --watch"
+  },
+  "dependencies": {
+    "@neko/auth-core": "workspace:*",
+    "@neko/auth-extension": "workspace:*",
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.2"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@neko/auth-extension",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Neko Auth extension host source",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@neko/auth-core": "workspace:*",
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.2"
+  },
+  "license": "Apache-2.0"
+}

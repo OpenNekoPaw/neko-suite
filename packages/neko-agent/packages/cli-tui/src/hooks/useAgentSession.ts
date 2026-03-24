@@ -62,6 +62,10 @@ export interface AgentSessionHandle {
   updateModel: (model: string) => void;
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
+  /** Activate a skill by name; returns false if skill not found */
+  activateSkill: (name: string) => boolean;
+  /** Deactivate the currently active skill */
+  deactivateSkill: () => void;
   /** Skill service (for slash commands) */
   readonly getSkillService: () => SkillService | undefined;
   /** Tool registry (for slash commands) */
@@ -341,6 +345,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       })) {
         adapter.handleEvent(event);
       }
+
+      // Trigger plan review after plan-mode execution completes
+      if (useAgentStore.getState().executionMode === 'plan') {
+        useUIStore.getState().showPlanReview();
+      }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       useAgentStore.getState().setError(err);
@@ -376,6 +385,27 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
   }, []);
 
+  const activateSkill = useCallback((name: string): boolean => {
+    const skillService = skillServiceRef.current;
+    const session = sessionRef.current;
+    if (!skillService || !session) return false;
+
+    const skill = skillService.registry.getSkill(name);
+    if (!skill) return false;
+
+    const injection = skillService.apply(skill);
+    session.applySkillInjection(injection, skill);
+    useAgentStore.getState().setActiveSkill(name);
+    return true;
+  }, []);
+
+  const deactivateSkill = useCallback(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    session.clearActiveSkill();
+    useAgentStore.getState().setActiveSkill(null);
+  }, []);
+
   const updateMode = useCallback((mode: ExecutionMode) => {
     const session = sessionRef.current;
     if (!session) return;
@@ -404,6 +434,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     confirmTool,
     updateModel,
     updateMode,
+    activateSkill,
+    deactivateSkill,
     getSkillService: () => skillServiceRef.current ?? undefined,
     getToolRegistry: () => toolRegistryRef.current ?? undefined,
     isReady: isReadyRef.current,

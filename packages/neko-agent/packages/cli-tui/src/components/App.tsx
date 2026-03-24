@@ -38,6 +38,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
+  const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
 
   // Track terminal size changes
   useTerminalSize();
@@ -55,6 +56,8 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     confirmTool,
     updateModel,
     updateMode,
+    activateSkill,
+    deactivateSkill,
     getSkillService,
     getToolRegistry,
   } = useAgentSession({
@@ -66,6 +69,8 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   const { handleCommand, onClear } = useSlashCommands({
     clearHistory,
     updateModel,
+    activateSkill,
+    deactivateSkill,
     getSkillService,
     getToolRegistry,
   });
@@ -106,8 +111,42 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     }
   }, [pendingApproval, confirmTool]);
 
+  // Plan review: execute → switch to auto and re-submit the plan
+  const handlePlanReviewExecute = useCallback(async () => {
+    useUIStore.getState().dismissPlanReview();
+    updateMode('auto');
+    await submit('Execute the plan above.');
+  }, [updateMode, submit]);
+
+  const handlePlanReviewDismiss = useCallback(() => {
+    useUIStore.getState().dismissPlanReview();
+  }, []);
+
+  // Build plan review selection menu items (shown when pendingPlanReview is true)
+  const planReviewSelection = pendingPlanReview
+    ? {
+        title: 'Plan ready — what next?',
+        items: [
+          {
+            id: 'execute',
+            label: '✅ Execute',
+            description: 'Switch to auto mode and run the plan',
+          },
+          { id: 'modify', label: '✏️  Modify', description: 'Edit your message and re-plan' },
+          { id: 'cancel', label: '❌ Cancel', description: 'Stay in plan mode' },
+        ],
+        resolve: (selectedId: string | null) => {
+          if (selectedId === 'execute') {
+            void handlePlanReviewExecute();
+          } else {
+            handlePlanReviewDismiss();
+          }
+        },
+      }
+    : null;
+
   const isRunning = status === 'running' || status === 'waiting_confirmation';
-  const inputDisabled = isRunning || !!pendingSelection;
+  const inputDisabled = isRunning || !!pendingSelection || pendingPlanReview;
 
   return (
     <ErrorBoundary label="Neko TUI">
@@ -126,8 +165,11 @@ export function App({ config, service }: AppProps): React.JSX.Element {
           />
         ) : null}
 
-        {/* Selection menu — shows for /model etc. */}
+        {/* Selection menu — shows for /model, /skill etc. */}
         {pendingSelection ? <SelectionMenu selection={pendingSelection} /> : null}
+
+        {/* Plan review menu — shows after plan-mode execution completes */}
+        {planReviewSelection ? <SelectionMenu selection={planReviewSelection} /> : null}
 
         {/* Input — fixed at bottom, with slash command support */}
         <InputEditor

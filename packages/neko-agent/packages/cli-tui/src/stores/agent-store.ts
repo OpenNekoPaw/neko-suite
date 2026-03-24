@@ -16,6 +16,8 @@ export interface AgentSlice {
   readonly usage: TokenUsage;
   readonly startTime: number | null;
   readonly error: Error | null;
+  /** Currently active skill name (null if none) */
+  readonly activeSkill: string | null;
 
   // Actions
   setRunning: () => void;
@@ -25,6 +27,7 @@ export interface AgentSlice {
   setIteration: (current: number, max: number) => void;
   updateUsage: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
+  setActiveSkill: (name: string | null) => void;
   reset: () => void;
 }
 
@@ -35,6 +38,7 @@ const initialState = {
   usage: { input: 0, output: 0, total: 0 },
   startTime: null as number | null,
   error: null as Error | null,
+  activeSkill: null as string | null,
 };
 
 export const useAgentStore = create<AgentSlice>((set) => ({
@@ -72,6 +76,10 @@ export const useAgentStore = create<AgentSlice>((set) => ({
 
   setExecutionMode: (mode) => {
     set({ executionMode: mode });
+  },
+
+  setActiveSkill: (name) => {
+    set({ activeSkill: name });
   },
 
   reset: () => {

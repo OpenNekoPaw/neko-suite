@@ -26,6 +26,8 @@ interface SlashCommandHandlers {
 export function useSlashCommands(sessionActions: {
   clearHistory: () => void;
   updateModel?: (model: string) => void;
+  activateSkill?: (name: string) => boolean;
+  deactivateSkill?: () => void;
   getSkillService?: () => SkillService | undefined;
   getToolRegistry?: () => ToolRegistry | undefined;
 }): SlashCommandHandlers {
@@ -104,6 +106,67 @@ export function useSlashCommands(sessionActions: {
 
           // No models at all
           addSystemMessage('No models configured.');
+          return;
+        }
+
+        case '/skill': {
+          const skillArg = input.slice(6).trim();
+          const skillService = sessionActions.getSkillService?.();
+
+          if (!skillService) {
+            addSystemMessage('No skills loaded. Configure skillsDir in your config.');
+            return;
+          }
+
+          const skills = skillService.registry.listSkills().filter((s) => s.enabled !== false);
+
+          if (skills.length === 0) {
+            addSystemMessage('No skills available in skillsDir.');
+            return;
+          }
+
+          // Direct activate: /skill <name>
+          if (skillArg && skillArg !== 'off') {
+            const ok = sessionActions.activateSkill?.(skillArg) ?? false;
+            if (ok) {
+              addSystemMessage(`Skill activated: ${skillArg}`);
+            } else {
+              addSystemMessage(`Skill not found: "${skillArg}". Use /skill to browse.`);
+            }
+            return;
+          }
+
+          // Deactivate: /skill off
+          if (skillArg === 'off') {
+            sessionActions.deactivateSkill?.();
+            addSystemMessage('Skill deactivated.');
+            return;
+          }
+
+          // Interactive picker
+          const activeSkillName = useAgentStore.getState().activeSkill;
+          const items: SelectionMenuItem[] = [
+            ...skills.map((s) => ({
+              id: s.name,
+              label: s.name,
+              description: s.description ?? undefined,
+              active: s.name === activeSkillName,
+            })),
+            { id: '__off__', label: '✕ Deactivate', description: 'Clear active skill' },
+          ];
+
+          const selectedId = await showSelection('Select Skill', items);
+          if (!selectedId) return;
+
+          if (selectedId === '__off__') {
+            sessionActions.deactivateSkill?.();
+            addSystemMessage('Skill deactivated.');
+          } else {
+            const ok = sessionActions.activateSkill?.(selectedId) ?? false;
+            if (ok) {
+              addSystemMessage(`Skill activated: ${selectedId}`);
+            }
+          }
           return;
         }
 

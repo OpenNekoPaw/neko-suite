@@ -1,0 +1,21 @@
+{
+  "name": "@neko/auth-core",
+  "version": "0.1.0",
+  "description": "Neko auth core — OAuth 2.0 + PKCE, token management (Layer 0, zero VSCode dependency)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

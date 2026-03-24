@@ -22,6 +22,7 @@ module.exports = {
           '^packages/neko-client/',
           '^packages/neko-proto/',
           '^packages/neko-market/packages/core/',
+          '^packages/neko-auth/packages/core/',
         ],
       },
       to: {
@@ -32,6 +33,7 @@ module.exports = {
           '^packages/neko-client/',
           '^packages/neko-proto/',
           '^packages/neko-market/packages/core/',
+          '^packages/neko-auth/packages/core/',
         ],
       },
     },
@@ -118,6 +120,20 @@ module.exports = {
       to: {
         path: '^packages/(?!neko-market/)[^/]+/packages/extension/',
       },
+    },
+    {
+      name: 'marketplace-webview-no-vscode',
+      comment: 'neko-market webview must not import vscode',
+      severity: 'error',
+      from: { path: '^packages/neko-market/packages/webview/' },
+      to: { path: '^vscode$' },
+    },
+    {
+      name: 'marketplace-extension-no-react',
+      comment: 'neko-market extension must not import React',
+      severity: 'error',
+      from: { path: '^packages/neko-market/packages/extension/' },
+      to: { path: '^react(-dom)?$' },
     },
   ],
 

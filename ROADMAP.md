@@ -18,7 +18,8 @@
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3.5 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 跨扩展集成，Phase 4-5 待开发 |
-| **neko-market** | Alpha | 40% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅（market-core 9 模块 + 58 测试 + Skill 安装/卸载/搜索 UI） |
+| **neko-market** | Alpha | 45% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅ + Bearer token 注入（neko-auth 集成）✅ |
+| **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO 基础设施 ✅：auth-core Layer 0（43 tests）+ VSCode 扩展（SecretStorage）+ CLI FileTokenStorage；OAuth 后端待接入 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
@@ -50,6 +51,9 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - AI SDK 迁移 ✅：@ai-sdk/openai,google,anthropic v3 已集成
 - 对话持久化（大部分 ✅）：ConversationRecord + FileConversationStorage 完成
 - Pipeline Hook Registry ✅：hook-registry.ts + generate-pilot.ts
+- AccountBar + OnboardingFlow UI ✅：SSO / 自定义 API key 两种流程
+- TUI P1 功能 ✅：`/skill` 选择菜单 + StatusBar skill 展示 + Plan Review SelectionMenu
+- SSO 接入 ✅：configBridge ssoLogin/ssoLogout + onDidChangeSession 广播（依赖 neko.neko-auth 扩展）
 
 ### neko-agent — 待完成
 - 分镜→批量视频生成 → 自动排列到时间线

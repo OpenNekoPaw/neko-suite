@@ -17,6 +17,7 @@ import {
   getCliCommands,
   type FileConversationStorage,
 } from '@neko/agent';
+import { handleMarketCommand } from '../commands/market';
 import type { CLIConfig } from './types';
 import { listProviders, getProviderModels } from './config';
 
@@ -177,6 +178,11 @@ export async function handleSlashCommand(
   // Media model selection
   if (command === 'media') {
     return handleMedia(args, context);
+  }
+
+  // Marketplace management
+  if (command === 'market') {
+    return handleMarketCommand(args);
   }
 
   // Use shared command executor for other commands
@@ -372,7 +378,11 @@ async function handleResume(
     // Direct resume by ID
     const record = await conversationStorage.load(targetId).catch(() => undefined);
     if (!record) {
-      return { handled: true, continueExecution: true, error: `Conversation "${targetId}" not found` };
+      return {
+        handled: true,
+        continueExecution: true,
+        error: `Conversation "${targetId}" not found`,
+      };
     }
     onLoadHistory?.(record.messages);
     return {
@@ -448,10 +458,7 @@ function handleHistory(context: SlashCommandContext): SlashCommandResult {
 type MediaCategory = 'image' | 'video' | 'audio' | 'music';
 const MEDIA_CATEGORIES: MediaCategory[] = ['image', 'video', 'audio', 'music'];
 
-function handleMedia(
-  args: string[],
-  context: SlashCommandContext,
-): SlashCommandResult {
+function handleMedia(args: string[], context: SlashCommandContext): SlashCommandResult {
   const {
     availableMediaModels = [],
     currentMediaOverrides = {},

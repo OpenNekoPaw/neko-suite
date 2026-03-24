@@ -18,7 +18,15 @@ import type {
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolGroup,
+  IAuthSession,
 } from '@neko/shared';
+/** Minimal interface matching neko.neko-auth extension exports (defined locally to avoid cross-extension import). */
+interface NekoAuthAPI {
+  getSession(): Promise<IAuthSession | null>;
+  login(options?: { force?: boolean }): Promise<IAuthSession>;
+  logout(): Promise<void>;
+  onDidChangeSession: (listener: (session: IAuthSession | null) => void) => { dispose(): void };
+}
 import { getSkillFileService } from '../SkillFileService';
 import { getHookFileService } from '../HookFileService';
 import type { ConnectionStateManager, ConnectionStateChangeEvent } from '../connectionStateManager';
@@ -34,6 +42,18 @@ export type { PostMessageFn } from './types';
 export type { ConfigStateWithStatus } from './types';
 
 const logger = getLogger('ConfigBridge');
+
+// ---------------------------------------------------------------------------
+// neko-auth inter-extension helper
+// ---------------------------------------------------------------------------
+
+function getNekoAuthAPI(): NekoAuthAPI | undefined {
+  return vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth')?.exports;
+}
+
+function toSsoSession(s: IAuthSession): { user: string; plan?: string; usage?: number } {
+  return { user: s.user, plan: s.plan, usage: s.usage };
+}
 
 /**
  * ConfigBridge - message routing orchestrator
@@ -74,6 +94,18 @@ export class ConfigBridge implements vscode.Disposable {
     this.skillSync.init();
     this.hookSync.init();
     void this.configFile.init();
+
+    // Subscribe to neko-auth session changes and broadcast to all webviews
+    const auth = getNekoAuthAPI();
+    if (auth) {
+      const sub = auth.onDidChangeSession((session) => {
+        broadcastToWebviews(this.activeWebviews, {
+          type: 'ssoSessionChanged',
+          session: session ? toSsoSession(session) : null,
+        });
+      });
+      this.disposables.push(sub);
+    }
   }
 
   /**
@@ -153,6 +185,33 @@ export class ConfigBridge implements vscode.Disposable {
         case 'openUserConfigFile':
           await this.configFile.handleOpenUserConfigFile();
           return true;
+
+        case 'ssoLogin': {
+          const auth = getNekoAuthAPI();
+          if (!auth) {
+            postMessage({
+              type: 'ssoError',
+              error: 'neko-auth extension is not installed or active',
+            });
+            return true;
+          }
+          try {
+            const session = await auth.login({ force: message.force as boolean | undefined });
+            postMessage({ type: 'ssoSessionChanged', session: toSsoSession(session) });
+          } catch (err) {
+            postMessage({
+              type: 'ssoError',
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          return true;
+        }
+
+        case 'ssoLogout': {
+          await getNekoAuthAPI()?.logout();
+          postMessage({ type: 'ssoSessionChanged', session: null });
+          return true;
+        }
 
         default:
           return false;

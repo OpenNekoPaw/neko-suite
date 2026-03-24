@@ -48,6 +48,15 @@ export class MarketClient implements IMarketClient {
     };
   }
 
+  /** Inject or remove Bearer token for authenticated requests. */
+  setAuthToken(token: string | null): void {
+    if (token) {
+      this.headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete this.headers['Authorization'];
+    }
+  }
+
   async search(query: MarketSearchQuery): Promise<MarketSearchResult> {
     const params = new URLSearchParams();
     if (query.text) params.set('q', query.text);

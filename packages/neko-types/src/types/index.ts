@@ -162,3 +162,6 @@ export * from './proxyProtocol';
 
 // Extension API types (inter-extension communication)
 export * from './extension-api';
+
+// Auth types (shared interfaces for neko-auth ecosystem)
+export * from './auth';

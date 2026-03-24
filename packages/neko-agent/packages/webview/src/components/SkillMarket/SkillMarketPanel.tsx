@@ -47,6 +47,14 @@ export const SkillMarketPanel: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Deep-link banner to full Marketplace panel */}
+      <button
+        onClick={() => VSCodeMessages.openMarketplace()}
+        className="flex items-center justify-between px-3 py-1.5 text-xs bg-[var(--vscode-inputValidation-infoBorder,#007acc)] text-white hover:opacity-90 transition-opacity"
+      >
+        <span>Full marketplace available (shaders, models, presets…)</span>
+        <span className="codicon codicon-arrow-right ml-1" />
+      </button>
       {/* Tab bar */}
       <div className="flex border-b border-[var(--vscode-panel-border)] px-3">
         {TABS.map((tab) => (

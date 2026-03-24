@@ -70,6 +70,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 | **neko-types** | 共享类型 + 横切关注点（Logger/i18n/Theme/Errors） | Alpha 90% | 33.9K TS (185 files), 20 tests |
 | **neko-client** | 流媒体客户端 - H264/fMP4/PCM + EngineClient HTTP dispatch | Alpha 80% | 4.8K TS (17 files), 3 tests |
 | **neko-proto** | 协议定义（timeline.proto + diff.proto 完整 IDL） | Stable 100% | 2 proto |
+| **neko-auth** | 统一认证 - OAuth 2.0 + PKCE SSO + token 刷新 + VSCode SecretStorage / 文件存储 | Alpha 80% | 1.2K TS (10 files), 43 tests |
 | **neko-suite** | Extension Pack 门户 | Stable 90% | 配置包 |
 
 ### 功能模块
@@ -78,6 +79,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 16 �
 |------|------|------|------|
 | **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + 波形 | Alpha 70% | 7.1K TS/TSX (41 files), 5 tests |
 | **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成 + PDF 导出 | WIP 75% | 5.8K TS/TSX (37 files), 4 tests |
+| **neko-market** | 资产市场 - Skills/着色器/模型/预设搜索 + 安装 + 版本管理 + 授权 | Alpha 70% | 12.4K TS/TSX (68 files), 8 tests |
 | **neko-assets** | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + 多云支持 | Alpha 85% | 8.7K TS (45 files), 7 tests |
 | **neko-tools** | 媒体工具 - Diff 比较 + 并行优化 + 协议增强 | WIP 62% | 14.9K TS (61 files), 6 tests |
 | **neko-canvas** | 无限画布 - 5 种节点 + 多选 + 属性面板 + 拖放 + 快捷键 | Alpha 65% | 14.0K TS/TSX (79 files), 4 tests |
@@ -216,6 +218,15 @@ neko-suite/
 │   │       └── webview/       # React 18 + WebGL2 UI
 │   ├── neko-audio/            # 音频工作站（Planned）
 │   ├── neko-live/             # 虚拟直播（Planned）
+│   ├── neko-market/           # 资产市场（Skills/着色器/模型）
+│   │   └── packages/
+│   │       ├── core/          # 市场客户端 + 安装管理（Layer 0）
+│   │       ├── extension/     # VSCode 扩展侧
+│   │       └── webview/       # React UI
+│   ├── neko-auth/             # 统一认证（OAuth 2.0 + PKCE SSO）
+│   │   └── packages/
+│   │       ├── core/          # @neko/auth-core（Layer 0）
+│   │       └── extension/     # neko.neko-auth VSCode 扩展
 │   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
 │   └── neko-proto/            # 协议定义（Protobuf IDL）
 ├── docs/                      # 架构文档

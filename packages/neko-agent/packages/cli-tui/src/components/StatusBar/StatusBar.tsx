@@ -16,6 +16,7 @@ import { TokenUsage } from './TokenUsage';
 
 export function StatusBar(): React.JSX.Element {
   const mode = useAgentStore((s) => s.executionMode);
+  const activeSkill = useAgentStore((s) => s.activeSkill);
   const usage = useAgentStore((s) => s.usage);
   const config = useConfigStore((s) => s.config);
 
@@ -27,6 +28,15 @@ export function StatusBar(): React.JSX.Element {
       {/* Mode badge — leftmost */}
       <Text color={modeColor(mode)}>{mode}</Text>
       <Text dimColor> | </Text>
+
+      {/* Active skill badge */}
+      {activeSkill ? (
+        <>
+          <Text color={tokens.info}>skill:</Text>
+          <Text color={tokens.info}>{activeSkill}</Text>
+          <Text dimColor> | </Text>
+        </>
+      ) : null}
 
       {/* Chat model */}
       <Text dimColor>chat:</Text>

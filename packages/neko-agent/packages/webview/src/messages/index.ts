@@ -387,4 +387,9 @@ export const VSCodeMessages = {
   marketGetFeatured: () => {
     postMessage({ type: 'market:getFeatured' });
   },
+
+  /** Open the full Neko Marketplace panel (neko-market extension) */
+  openMarketplace: () => {
+    postMessage({ type: 'openMarketplace' });
+  },
 };
