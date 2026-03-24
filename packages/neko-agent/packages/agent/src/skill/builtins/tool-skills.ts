@@ -264,6 +264,20 @@ export const pipelineControlToolSet: ToolGroup = {
   icon: '🔄',
 };
 
+/**
+ * Media quality assessment tools
+ */
+export const mediaQAToolSet: ToolGroup = {
+  name: 'media-qa',
+  description: 'Quality evaluation tools for AI-generated media using multimodal LLM analysis',
+  tools: ['QualityCheck'],
+  alwaysActive: true,
+  priority: 70,
+  dependencies: ['ai-generation', 'pipeline-control'],
+  source: 'builtin',
+  enabled: true,
+};
+
 // =============================================================================
 // Exports
 // =============================================================================
@@ -290,6 +304,7 @@ export const builtinToolGroups: ToolGroup[] = [
   exportRenderToolSet,
   aiGenerationToolSet,
   pipelineControlToolSet,
+  mediaQAToolSet,
 ];
 
 /**

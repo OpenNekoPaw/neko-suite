@@ -22,6 +22,7 @@ import {
   type MediaGenerateOptions,
 } from '@neko/agent/pipeline';
 import { createPipelineTools } from '../tools/pipelineTools';
+import { createQualityCheckTools } from '../tools/qualityCheckTools';
 import {
   VSCodeFileReader,
   DocumentReaderAdapter,
@@ -129,6 +130,16 @@ export function bootstrapPipeline(
       globalStyle: overrides?.globalStyle,
     });
   };
+
+  // Register quality check tools (multimodal LLM evaluation)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
+  const qaTools = createQualityCheckTools({
+    createService: () => platform.createService() as any,
+    mediaGenerator,
+  });
+  for (const tool of qaTools) {
+    toolRegistry.register(tool);
+  }
 
   // Register pipeline tools into tool registry
   const pipelineTools = createPipelineTools({ startPipeline });
