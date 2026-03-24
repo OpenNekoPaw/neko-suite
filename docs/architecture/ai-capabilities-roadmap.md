@@ -145,6 +145,10 @@ Pipeline 架构的差距不在编排模式，而在领域知识。
 | 高级循环 Stage | 4-5 天 | QualityCheck 工具能力不够用 |
 | 角色一致性研究 | 研究 | 提供商支持 Embedding/LoRA |
 | Workflow 引擎 | 3-4 周 | 用户需要自定义 DAG 编排 |
+| neko-diff CLI（Git diff driver） | 0.5 天 | 用户使用 Git LFS 管理素材 |
+| pHash 感知哈希 | 1 天 | 素材去重 / diff 摘要需求 |
+
+> 项目数据管理（变更记录/二进制素材/协作）策略详见 [project-data-management.md](./project-data-management.md)
 
 ---
 

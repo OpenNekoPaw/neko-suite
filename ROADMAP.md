@@ -13,11 +13,12 @@
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全（audio/canvas/sketch 全覆盖）+ 文档完善 |
 | **neko-engine** | Alpha | 88% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
-| **neko-agent** | Alpha | 75% | Agent 引擎 + LLM 平台 + CLI + UI + Handler 拆分 + 流式化 + 剧本→时间线 |
+| **neko-agent** | Alpha | 82% | Agent 引擎 + LLM 平台 + CLI + UI + Phase 3 重构 ✅ + 媒体工具贯通 ✅ + AI SDK v3 ✅ + Pipeline Hook ✅ + 对话持久化（存储层 ✅） |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 82% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅（Tailwind + macOS 风格，全部 BEM CSS 清除） |
+| **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
-| **neko-assets** | Alpha | 85% | Phase 1-3 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 多云支持 + 跨扩展集成，Phase 4-5 待开发 |
+| **neko-assets** | Alpha | 85% | Phase 1-3.5 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 跨扩展集成，Phase 4-5 待开发 |
+| **neko-market** | Planned | 0% | 统一市场平台（Skills/模型/Shader/素材分发） |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
@@ -41,15 +42,26 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 2: AI 驱动创作 (Current)
 
-> 目标：AI Agent 驱动的智能剪辑 — **进度 ~70%**
+> 目标：AI Agent 驱动的智能剪辑 — **进度 ~85%**
+
+### neko-agent — 已完成
+- Phase 3 架构重构 ✅：AgentExecutor 统一循环 + AgentSessionInitializer + IPermissionManager + SkillInjection rollback
+- 媒体工具贯通 ✅：GenerateImage/Video/Music/TTS 4 个工具均有 execute 实现
+- AI SDK 迁移 ✅：@ai-sdk/openai,google,anthropic v3 已集成
+- 对话持久化（大部分 ✅）：ConversationRecord + FileConversationStorage 完成
+- Pipeline Hook Registry ✅：hook-registry.ts + generate-pilot.ts
 
 ### neko-agent — 待完成
 - 分镜→批量视频生成 → 自动排列到时间线
+- 对话持久化遗留：CLI `--resume` / `/resume` 未实现
+- MCP 客户端重连退避（当前连接失败即终止）
+- ContextManager 异步竞态保护（无锁，并发写入有风险）
 
 ### neko-agent — 延后到后续 Phase
 - 批量时间线操作 Skill（→ Phase 6 资产管理与协作阶段，配合跨扩展集成）
 - AI 字幕生成 / 自动配乐 / 画面描述（→ Phase 4 音频工作站阶段，依赖 neko-audio）
 - MCP 桥接专业软件 Blender / ComfyUI / Photoshop（→ Phase 3.4 AI 辅助 3D + neko-model）
+- SubAgent Skills：Seed_Manager + Audio_Mixer + 镜头语言通用 Skill
 
 ---
 
@@ -77,7 +89,10 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 > 架构设计见 [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)
 
 - Phase S.1-S.3 ✅（绘画基础 + 2D 骨骼动画 + 逐帧动画 + 高级 2D 功能）
-- Phase S.4：AI 辅助 + 跨模块集成（sketch.generate / style_transfer / → neko-cut/canvas）
+- Phase S.4：AI 辅助 + 跨模块集成
+  - `sketch.generate`（AI 绘画生成）
+  - `style_transfer`（风格迁移）
+  - 跨模块集成（→ neko-cut / canvas）
 
 ---
 
@@ -106,7 +121,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 4.5: UI 现代化与主题统一
 
-> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~40%** | **Phase 0-3 已完成**
+> 目标：统一 macOS 视觉风格 + VSCode 主题配色 + 图标系统 — **进度 ~95%** | **Phase 0-5.6 已完成**
 
 **价值定位**：提升 neko-suite 整体视觉一致性和现代感，与 macOS 设计语言对齐，改善用户体验。
 
@@ -136,25 +151,23 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - 输入控件规范（输入框 / 滑块）
 - 动效规范（hover / active / transition）
 
-### Phase 4: neko-audio Tailwind 接入 + macOS 化 [1d]
-- 接入 Tailwind 基础设施
-- 工具栏按钮、面板容器使用 macOS 组件模式
+### Phase 4: neko-audio Tailwind 接入 + macOS 化 ✅
+- tailwind.config.js + nekoTailwindPreset 接入完成
+- MacButton/MacSlider 等从 @neko/shared/components 导入使用
 
-### Phase 5: neko-story VSCode 主题接入 [0.5d]
-- 硬编码颜色替换为 var(--vscode-*) 变量
+### Phase 5: neko-story VSCode 主题接入 ✅
+- 硬编码颜色替换为 var(--vscode-*) 变量（仅 print.css 保留 #000/#fff）
 
-### Phase 5.5: macOS VSCode 主题配色（Dark + Light）[1d]
-- 在 neko-tools 中声明 contributes.themes
-- 提供 Neko macOS Dark / Light 两套完整配色（130+ token）
-- 基于 Apple 系统色（#0A84FF / #FF453A / #30D158 等）
+### Phase 5.5: macOS VSCode 主题配色（Dark + Light）✅
+- neko-tools contributes.themes 声明 Neko macOS Dark / Light
 
-### Phase 5.6: SVG 图标统一 + File Icon Theme [2d]
-- 在 @neko/shared/icons 建立统一图标模块（~25 个去重图标）
-- 统一为 stroke 描边 + 24×24 viewBox + currentColor（macOS SF Symbols 风格）
-- 提供 File Icon Theme 支持 13 个自定义文件扩展名（.nkv / .nkc / .nka / .nks 等）
+### Phase 5.6: SVG 图标统一 + File Icon Theme ✅
+- @neko/shared/icons 30+ 图标组件
+- File Icon Theme 支持自定义文件扩展名
 
-### Phase 6: 跨包共享组件 [1.5d, 按需触发]
-- ContextMenu / CollapsibleSection / Ruler 等高频组件提取到 @neko/shared
+### Phase 6: 跨包共享组件 ✅
+- macOS primitives（MacButton/MacIconButton/MacSlider/MacTabs/ProgressBar）已迁移到 @neko/shared/components ✅
+- Toolbar / Panel / CollapsibleSection / ContextMenu / TimelineRuler 等已在 @neko/shared ✅
 
 ### neko-engine 设备代理 — ✅ P1-P3 框架完成
 - P1 麦克风（`cpal`）：✅ 完整实现（3 个 action + monitor 端点 + TS 双模式录制）
@@ -196,11 +209,93 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 6: 资产管理与协作
 
-> 目标：统一资产管理 + AI 模型资产化 + 社区分发 — **进度 ~55%**
+> 目标：统一资产管理 + 市场平台 + 远程存储 + 社区分发 — **进度 ~55%**
 
-- Phase 1-3.5 ✅（统一核心 + 深度集成 + 注册表 + 缩略图 + 外部媒体库）
-- Phase 4（待开发）：Handler 实现（Shader/Preset/Model）+ AI 模型资产化 + IAIAnalysisService
-- Phase 5（待开发）：社区分发（`.neko` 包格式 + 远程注册表 + CLI）
+**架构文档**：
+- [marketplace.md](./docs/architecture/marketplace.md) — 市场平台架构
+- [remote-storage.md](./docs/architecture/remote-storage.md) — 远程存储与代理文件策略
+
+### Phase 6.1-6.3.5 ✅ 本地资产管理
+- 统一核心（Entity→Variant→File 三层层级 + AssetManifest + IAssetRegistry）
+- 深度集成（neko-cut/story/canvas 跨扩展拖拽 + IPC 协议 20+ 请求类型）
+- 注册表 + AI 分类 + 缩略图 + 外部媒体库
+
+### Phase 6.4（待开发）：Handler 补全 + 文档素材
+- ShaderAssetHandler（编译验证 + 预览 + 热重载）
+- PresetAssetHandler（LUT / 转场预设 / 导出预设）
+- ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
+- IAIAnalysisService（接入 neko-agent AI 分类）
+- AssetType `'document'` + DocumentMetadata（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
+- AssetOwnership（scope: personal/project/team/purchased/public）
+
+### Phase 6.5（待开发）：统一市场平台（neko-market）
+
+> 架构设计见 [marketplace.md](./docs/architecture/marketplace.md)
+
+**品类**：Skills / 本地模型 / Shader / 插件 / 创作素材 / 预设模板 LUT
+
+**分发模式**：官方 / 私有 / 共享 / 售卖
+
+**关键包**：
+
+```
+neko-market/packages/core/    @neko/market-core（零 vscode 依赖）
+├── MarketClient              HTTP API 客户端（搜索/详情/下载 URL）
+├── InstallManager            下载/校验/解压/版本管理
+├── LicenseManager            授权验证 + 付费资产
+├── CacheManager              .neko/market-cache/ 管理
+└── VersionResolver           semver 解析 + 兼容性检查
+```
+
+**里程碑**：
+- Phase 6.5.1：基础设施（@neko/market-core + IFileTransport + AssetDistribution 扩展）
+- Phase 6.5.2：Skill 市场 MVP（neko-agent 侧边栏 + 官方/免费 + 安装/卸载）
+- Phase 6.5.3：全品类市场（Shader/LUT/预设 + 本地模型 + 创作素材）
+- Phase 6.5.4：商业化（付费资产 + 支付集成 + 发布者后台 + 评分评论）
+
+### Phase 6.6（待开发）：远程存储与代理文件
+
+> 架构设计见 [remote-storage.md](./docs/architecture/remote-storage.md)
+
+**存储后端**：MinIO（S3 协议兼容），可切换 AWS S3 / Aliyun OSS / Cloudflare R2
+
+**服务架构**：
+
+```
+Neko Storage Service（薄服务层）
+├── Auth Service              Neko 账号 → JWT
+├── Team/Project Isolation    Bucket 隔离（per team/project/user）
+├── Presigned URL             给 Webview/Engine 使用
+└── Transcode Worker          代理文件 + 缩略图生成
+```
+
+**Transcode Worker 全品类管线**：
+
+| 管线 | 工具 | 输入 → 输出 |
+|------|------|------------|
+| 视频 | FFmpeg | → H.264 720p faststart proxy + poster + strip |
+| 音频 | FFmpeg | → AAC 128k proxy + waveform |
+| 图片 | libvips | → WebP 2K proxy + 256px thumbnail（> 5MB 或 PSD/TIFF/RAW/EXR） |
+| 序列帧 | FFmpeg | → H.264 720p faststart proxy（合成为视频） |
+| 3D 模型 | gltf-transform | → LOD Draco 压缩 + 512px 贴图 + 渲染预览图 |
+| PDF | poppler/mupdf | → 逐页 WebP + 结构 JSON |
+| PPT | LibreOffice + poppler | → 逐页 WebP + 备注 JSON |
+| Word | pandoc | → HTML + 嵌入资源提取 |
+| Excel | sheetjs | → JSON 数据 + Sheet 结构 |
+| EPUB | 解压提取 | → 封面 + 目录 JSON + HTML 章节 |
+| CBZ | unzip + libvips | → 缩小逐页 WebP |
+
+**核心流程**：上传 → 服务端生成代理 → 客户端下载代理到本地 → Engine 读本地代理编辑 → 导出时增量拉取原始文件
+
+**里程碑**：
+- Phase 6.6.1：基础设施（IFileTransport + S3Transport + ICacheManager + ProxyService 扩展）
+- Phase 6.6.2：上传 + 媒体代理生成（分片上传 + FFmpeg/libvips Worker）
+- Phase 6.6.3：文档 + 3D 代理生成（poppler/LibreOffice/gltf-transform Worker）
+- Phase 6.6.4：导出优化（预览导出用代理 + 最终导出增量拉取原始文件）
+
+### Phase 6.7（待开发）：项目协作基础设施
+- Git LFS 集成（.gitignore/.gitattributes 模板自动生成 + neko-diff CLI + pHash 相似度 + AssetManifest OID 自动填充）— [ADR](./docs/architecture/project-data-management.md)
+- Project Memory 增强（全局 ~/.neko/memory.md + 自动压缩 + MemoryRead 工具 + 文件监听）— [ADR](./docs/architecture/project-memory.md)
 
 ---
 
@@ -319,4 +414,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-21（UI 现代化 Phase 0-3 完成 + neko-preview 全部 Tailwind 化）*
+*最后更新: 2026-03-24（代码验证：Phase 2 agent 架构 85% + Phase 4.5 UI 95% + Phase 6 市场/远程存储/协作基础设施）*

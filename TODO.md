@@ -42,19 +42,19 @@
 - [x] Phase 3：视频播放器 macOS 化（VideoPlayer/VideoControls Tailwind 化 + 共享 MacIconButton/MacSlider + 删除全部 BEM CSS，player.css 1009行→183行）
 
 ### neko-audio（UI 现代化 — Phase 4）
-- [ ] Tailwind 接入（同 Phase 0 模式）
-- [ ] macOS 化（工具栏按钮、面板容器使用 Phase 3 组件模式）
+- [x] Tailwind 接入（tailwind.config.js + nekoTailwindPreset ✅）
+- [x] macOS 化（MacButton/MacSlider 等从 @neko/shared/components 导入使用 ✅）
 
 ### neko-story（UI 现代化 — Phase 5）
-- [ ] VSCode 主题接入（硬编码颜色替换为 var(--vscode-*) 变量）
+- [x] VSCode 主题接入（硬编码颜色已替换为 var(--vscode-*) 变量 ✅，仅 print.css 保留 #000/#fff）
 
 ### neko-tools（UI 现代化 — Phase 5.5-5.6）
-- [ ] macOS VSCode 主题配色（contributes.themes + Neko macOS Dark/Light 两套完整配色）
-- [ ] File Icon Theme（contributes.iconThemes + 13 个自定义文件扩展名图标）
+- [x] macOS VSCode 主题配色（contributes.themes + Neko macOS Dark/Light ✅）
+- [x] File Icon Theme（contributes.iconThemes + 自定义文件扩展名图标 ✅）
 
 ### @neko/shared（UI 现代化 — Phase 1 + 5.6）
 - [x] macOS Design Token 扩展（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
-- [ ] 统一 SVG 图标模块（@neko/shared/icons + ~25 个去重图标 + stroke 描边 macOS SF Symbols 风格）
+- [x] 统一 SVG 图标模块（@neko/shared/icons 30+ 图标组件 ✅）
 
 ### neko-preview（风格主题优化）— 已移至 UI 现代化 Phase 0-3
 - ~~[ ] 统一 `--neko-audio-*` 变量为 `--neko-preview-*`，覆盖 audio + video 两个 webview~~
@@ -96,6 +96,20 @@
 - [ ] 场景描写辅助
 - [ ] AI API 诊断（配置页内置：连通性/延迟/兼容性/配额检查，从 neko-tools 迁移）
 
+### neko-agent 架构补全（ADR 文档对齐）
+- [x] Phase 3 重构（[agent-refactoring.md](./docs/architecture/agent-refactoring.md)）：AgentExecutor 统一循环 ✅ + AgentSessionInitializer ✅ + IPermissionManager 拆分 ✅ + SkillInjectionCoordinator rollback ✅
+- [x] 媒体工具贯通（[media-tool-bridging.md](./docs/architecture/media-tool-bridging.md)）：GenerateImage/Video/Music/TTS 4 个工具均已实现 execute，非 schema-only
+- [x] AI SDK 迁移（[media-generation-migration.md](./docs/architecture/media-generation-migration.md)）：@ai-sdk/openai,google,anthropic v3 已集成，OpenAICompatMediaAdapter 仍作为兼容层保留
+- [x] Pipeline Hook Registry（[ai-capabilities-roadmap.md](./docs/architecture/ai-capabilities-roadmap.md)）：hook-registry.ts ✅ + generate-pilot.ts ✅
+- [ ] 对话持久化遗留：ConversationRecord + FileConversationStorage ✅，**CLI `--resume` / `/resume` 未实现**
+- [ ] SubAgent Skills：Seed_Manager（角色 Seed/LoRA 跨 scene 复用）+ Audio_Mixer（情绪→BGM 匹配）+ 镜头语言通用 Skill
+- [ ] Agent P2 级改进：MCP 客户端重连退避（当前连接失败即终止）+ ContextManager 异步竞态（无锁保护）
+
+### neko-sketch AI MCP Tools（Phase S.4，[2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)）
+- [ ] `sketch.generate`（AI 绘画生成）
+- [ ] `style_transfer`（风格迁移）
+- [ ] 跨模块集成（→ neko-cut / canvas）
+
 ### neko-model AI MCP Tools
 - [ ] `face.generate_params`（文本 → 参数向量）
 - [ ] `face.from_image`（图片 → 参数向量）
@@ -108,6 +122,25 @@
 - [ ] External Media Library P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
 - [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
 - [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类）
+- [ ] AssetOwnership 扩展（scope: personal/project/team/purchased/public + access 控制）
+- [ ] AssetManifestSource 增加 `'remote'` kind（s3:// / oss:// URI）
+- [ ] DocumentMetadata 类型 + `'document'` AssetType（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
+
+### neko-market（新包，[ADR](./docs/architecture/marketplace.md)）
+- [ ] @neko/market-core 基础包（MarketClient + InstallManager + LicenseManager + CacheManager）
+- [ ] IFileTransport 接口 + S3Transport 实现（预签名 URL + 分片上传 + 断点续传）
+- [ ] ICacheManager 本地缓存（.neko/cache/remote/ + LRU 淘汰）
+- [ ] Skill 市场 MVP（neko-agent 侧边栏 + 官方/免费共享 + SkillHandler.onInstall）
+- [ ] AssetDistribution 扩展（visibility/publisherId/pricing/rating/compatibility）
+- [ ] SkillMetadata 类型（domain/toolSets/mcpServers/llmRequirements）
+
+### 远程存储（[ADR](./docs/architecture/remote-storage.md)）
+- [ ] Neko Storage Service 基础版（Auth + Team/Project 隔离 + 预签名 URL）
+- [ ] Transcode Worker — 媒体管线（视频 H.264 proxy + 音频 AAC proxy + 图片 WebP + 序列帧 + 波形）
+- [ ] Transcode Worker — 3D 管线（gltf-transform LOD 简化 + Draco 压缩 + 渲染预览图）
+- [ ] Transcode Worker — 文档管线（PDF/PPT 逐页 WebP + Word→HTML + Excel→JSON + CBZ 解压缩小）
+- [ ] ProxyService 扩展（远程代理下载 + 本地缓存 + 下载优先级队列）
+- [ ] 导出增量拉取（时间线分析 → 按 time range 计算 byte range → 部分下载）
 
 ### neko-live 虚拟制片（Phase 5，前置 neko-audio）
 - [ ] Phase 5.1：核心追踪
@@ -131,6 +164,11 @@
 - [ ] Phase 7.2：Electron/Tauri WebXR 外部 App（沉浸式预览 + 手部追踪 → 骨骼映射）
 - [ ] Phase 7.3：AR 能力（ARKit/ARCore 原生集成 + 平面检测 + 光照估计）
 - [ ] Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 MCP Tools + 手势识别 + 语音指令）
+
+### 项目基础设施（ADR 文档对齐）
+- [x] 共享组件迁移（[shared-component-shell.md](./docs/architecture/shared-component-shell.md)）：MacButton/MacIconButton/MacSlider/MacTabs/ProgressBar 已在 @neko/shared/components，neko-audio 已通过 import 复用
+- [ ] Project Memory 增强（[project-memory.md](./docs/architecture/project-memory.md)）：workspace 级 .neko/memory.md ✅ + MemoryWriteTool ✅；**MemoryRead 工具未实现**（Memory 直接注入 system prompt，可能不需要独立工具）；自动压缩未实现
+- [ ] Git LFS 集成（[project-data-management.md](./docs/architecture/project-data-management.md)）：.gitignore/.gitattributes 模板自动生成 + neko-diff CLI（Git diff driver）+ pHash 相似度检测 + Git LFS AssetManifest 自动填充 OID
 
 ### 跨语言架构对齐
 - [ ] Step 2：Engine ComputeService — 降级为 P3。实际可消除 ~600-700 行（非 1285 行，约一半是 UI 交互必需：timeToPixels/框选碰撞/scrubber 实时预览）。HTTP 往返 ~5-10ms 对属性面板拖拽有延迟风险。当前双端计算不一致的实际 bug 为零，新增缓动/蒙版类型频率低。若实施，优先做渲染路径（缓动+蒙版+合成层），保留 UI 交互路径的 TS 计算
@@ -212,7 +250,7 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 | 优先级 | 问题 | 影响 |
 |--------|------|------|
 | 低 | neko-engine 性能监控面板（采集层 ✅ + HTTP 端点 ✅ + TS 类型 ✅，仅缺独立 Dashboard UI；Alpha 阶段可通过端点直接查询） | 体验优化 |
-| 中 | AI SDK 依赖倒置（`AISdkAdapter` 直接依赖 Vercel AI SDK） | 可替换性差 |
+| ~~中~~ | ~~AI SDK 依赖倒置~~ ✅ 已迁移到 @ai-sdk/openai,google,anthropic v3 | — |
 | 中 | neko-types JSDoc 覆盖率低 | 开发体验差 |
 | 低 | 国际化扩展（neko-cut/neko-agent/neko-sketch 已完成，其他包待补） | 国际化缺口 |
 
@@ -228,6 +266,8 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 | neko-audio 遗留 | neko-preview 高级预览 | Phase 4 |
 | neko-live | 动捕 + 虚拟形象 + 直播（前置 neko-audio；5.1 MediaPipe/VMC 追踪 + VRM 预览；5.2 录制 + 音视频同步；5.3 RTMP→OBS 推流；虚拟摄像头不做，改 RTMP） | Phase 5 |
 | neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
+| neko-market | 统一市场平台（Skills/模型/Shader/素材 + 官方/私有/共享/售卖） | [ADR](./docs/architecture/marketplace.md) |
+| Neko Storage Service | 远程存储服务（MinIO S3 + Auth + Transcode Worker） | [ADR](./docs/architecture/remote-storage.md) |
 | neko-vr | VR/AR 沉浸式创作（立体渲染 + Electron WebXR App + 手部追踪；前置 Phase 3 + 5） | Phase 7 |
 
 ### neko-engine 设备代理（[ADR](./docs/architecture/device-access.md)）— ✅ P1-P3 框架完成
@@ -245,4 +285,4 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 ---
 
-*最后更新：2026-03-21（neko-preview UI 现代化 Phase 0-3 完成：音频+视频全部 Tailwind 化，CSS 1009→183 行）*
+*最后更新：2026-03-24（ADR 全量对齐 + 代码验证：agent Phase 3/媒体工具/AI SDK/Pipeline Hook/共享组件/UI Phase 4-5.6 标记完成；修正 Project Memory/对话持久化状态）*
