@@ -18,14 +18,27 @@ const FLOW_DEFINITIONS: Record<FlowId, string[]> = {
     'readDocument',
     'parseStoryboard',
     'generatePrompts',
+    'generatePilot',
     'batchGenerate',
     'arrangeOnTimeline',
   ],
-  flowB: ['generatePrompts', 'batchGenerate', 'arrangeOnTimeline'],
-  flowC: ['readDocument', 'generatePrompts', 'batchGenerate', 'arrangeOnTimeline'],
+  flowB: ['generatePrompts', 'generatePilot', 'batchGenerate', 'arrangeOnTimeline'],
+  flowC: ['readDocument', 'generatePrompts', 'generatePilot', 'batchGenerate', 'arrangeOnTimeline'],
   flowD: ['parseStoryboard', 'arrangeOnTimeline'],
-  flowE: ['parseStoryboard', 'generatePrompts', 'batchGenerate', 'arrangeOnTimeline'],
-  flowF: ['parseStoryboard', 'generatePrompts', 'batchGenerate', 'arrangeOnTimeline'],
+  flowE: [
+    'parseStoryboard',
+    'generatePrompts',
+    'generatePilot',
+    'batchGenerate',
+    'arrangeOnTimeline',
+  ],
+  flowF: [
+    'parseStoryboard',
+    'generatePrompts',
+    'generatePilot',
+    'batchGenerate',
+    'arrangeOnTimeline',
+  ],
 };
 
 export class PipelineRegistry implements IPipelineRegistry {

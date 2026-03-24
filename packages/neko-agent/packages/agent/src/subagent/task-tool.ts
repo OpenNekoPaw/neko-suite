@@ -41,27 +41,35 @@ export function createTaskTool(subAgentManager: ISubAgentManager): Tool {
     name: 'task',
     description: `Launch a SubAgent to handle complex, multi-step tasks autonomously.
 
-Available agent types:
-- code-search: Search and analyze code in the codebase
-- file-explorer: Explore and navigate file system
-- test-runner: Run and analyze tests
-- document-writer: Write and update documentation
-- general: General purpose agent (all tools available)
+Each SubAgent runs its own ReAct loop with an isolated context — intermediate work does NOT pollute the main conversation.
 
-Use this tool when:
-- Task requires multiple search/read operations
-- Task can run independently
-- Task benefits from parallel execution
+## When to Use SubAgent
+- Task requires extensive searching/reading across many files (context isolation)
+- Multiple independent subtasks can run in parallel (use run_in_background: true, then task_output to collect)
+- Task needs multi-step reasoning (explore → analyze → synthesize)
+- Main conversation context is already long and needs "offloading"
 
-Skill & ToolSkill injection:
-- skills: Inject skill content into SubAgent's system prompt
-- tool_skills: Activate ToolSkills to add related tools
+## When NOT to Use SubAgent
+- Single-step operations (directly call tools — faster and cheaper)
+- Tasks tightly coupled to current conversation context (shared state needed)
+- Cost-sensitive simple lookups (SubAgent adds ~40% token overhead from full ReAct loop)
 
-Examples:
-- Search for all API endpoints
-- Find files matching a pattern
-- Run tests and analyze results
-- Write documentation for a module`,
+## Type Selection Guide
+- code-search: Find implementations, trace dependencies, analyze patterns (fast model, Grep/Glob/Read tools)
+- file-explorer: Navigate directory structure, discover file organization (fast model, Glob/Read tools)
+- test-runner: Execute tests and analyze results (balanced model, Bash/Read/Glob tools)
+- document-writer: Create or update documentation (balanced model, Read/Write/Edit tools)
+- general: Complex tasks needing all tools (balanced model, all tools)
+
+## Parallel Execution
+Launch multiple SubAgents in a single turn for independent tasks:
+- Use run_in_background: true for each
+- Then call task_output for each to collect results
+- Max 5 concurrent SubAgents
+
+## Skill & ToolSkill Injection
+- skills: Inject domain knowledge into SubAgent's system prompt
+- tool_skills: Activate ToolSkills to give SubAgent additional tools`,
 
     parameters: {
       type: 'object',
@@ -241,10 +249,9 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
     name: 'task_output',
     description: `Get output from a background SubAgent task.
 
-Use this tool to:
-- Check if a background task is complete
-- Get the final result of a completed task
-- Wait for a task to complete (blocking mode)`,
+- block=true (default): Wait for the SubAgent to complete, then return its full result
+- block=false: Non-blocking check — returns current status without waiting
+- Use after launching SubAgents with run_in_background: true`,
 
     parameters: {
       type: 'object',

@@ -94,6 +94,7 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
       arguments: tc.arguments,
     })),
     timestamp: Date.now(),
+    usage: response.usage,
   };
 
   // Hook: afterThink
@@ -118,6 +119,7 @@ export async function* thinkStream(
   let accumulatedThinking = ''; // Track extracted thinking content
   const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
   let finishReason: string | undefined;
+  let streamUsage: AgentStep['usage'] | undefined;
 
   for await (const chunk of deps.service.chatStream(modifiedContext.messages, options)) {
     if (deps.abortController?.signal.aborted) break;
@@ -167,6 +169,7 @@ export async function* thinkStream(
 
       case 'done':
         finishReason = chunk.finishReason;
+        streamUsage = chunk.usage;
         break;
     }
   }
@@ -208,6 +211,7 @@ export async function* thinkStream(
     thinking: accumulatedThinking || extractedThinking || undefined,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     timestamp: Date.now(),
+    usage: streamUsage,
   };
 
   // Hook: afterThink

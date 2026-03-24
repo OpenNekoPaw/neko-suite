@@ -225,6 +225,9 @@ export class AgentSession implements IAgentSession {
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
       let iteration = 0;
 
+      // Accumulate real token usage from LLM API responses
+      const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
       this._history.push({ role: 'user', content: processedInput });
@@ -242,19 +245,26 @@ export class AgentSession implements IAgentSession {
         },
       })) {
         ++iteration;
+
+        // Accumulate token usage from think steps
+        if (step.usage) {
+          totalUsage.promptTokens += step.usage.promptTokens;
+          totalUsage.completionTokens += step.usage.completionTokens;
+          totalUsage.totalTokens += step.usage.totalTokens;
+        }
+
         // Record history first (side effects), then emit events (pure)
         recordStepInHistory(step, iteration, this._history);
         yield* stepToEvents(step, iteration, maxIterations, this._streamState);
       }
 
-      // Emit done event
-      const totalTokens = this.getTokenCount();
+      // Emit done event with real accumulated usage
       yield {
         type: 'done',
         usage: {
-          inputTokens: totalTokens,
-          outputTokens: 0,
-          totalTokens,
+          inputTokens: totalUsage.promptTokens,
+          outputTokens: totalUsage.completionTokens,
+          totalTokens: totalUsage.totalTokens,
         },
       };
     } catch (error) {

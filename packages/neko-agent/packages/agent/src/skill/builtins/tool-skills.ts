@@ -269,9 +269,11 @@ export const pipelineControlToolSet: ToolGroup = {
  */
 export const mediaQAToolSet: ToolGroup = {
   name: 'media-qa',
-  description: 'Quality evaluation tools for AI-generated media using multimodal LLM analysis',
+  description:
+    'Quality evaluation tools for AI-generated media using multimodal LLM vision analysis. ' +
+    'Activate when user explicitly requests quality checking of generated images/videos.',
   tools: ['QualityCheck'],
-  alwaysActive: true,
+  alwaysActive: false,
   priority: 70,
   dependencies: ['ai-generation', 'pipeline-control'],
   source: 'builtin',

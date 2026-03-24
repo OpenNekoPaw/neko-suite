@@ -67,6 +67,7 @@ describe('PipelineRegistry', () => {
     expect(flowF?.stages).toEqual([
       'parseStoryboard',
       'generatePrompts',
+      'generatePilot',
       'batchGenerate',
       'arrangeOnTimeline',
     ]);
@@ -81,6 +82,7 @@ describe('PipelineRegistry', () => {
       'readDocument',
       'parseStoryboard',
       'generatePrompts',
+      'generatePilot',
       'batchGenerate',
       'arrangeOnTimeline',
     ]);

@@ -10,10 +10,12 @@ import {
   createPipelineExecutor,
   createPipelineRegistry,
   createPipelineResolver,
+  createPipelineHookRegistry,
   createReadDocumentStage,
   createParseStoryboardStage,
   createGeneratePromptsStage,
   createBatchGenerateStage,
+  createGeneratePilotStage,
   createArrangeOnTimelineStage,
   type IPipelineRegistry,
   type PipelineContext,
@@ -57,8 +59,9 @@ export function bootstrapPipeline(
   toolRegistry: { register: (tool: unknown) => void },
 ): PipelineBootstrapResult {
   // Create core infrastructure
+  const hookRegistry = createPipelineHookRegistry();
   const registry = createPipelineRegistry();
-  const executor = createPipelineExecutor();
+  const executor = createPipelineExecutor(hookRegistry);
   const resolver = createPipelineResolver(registry, executor);
 
   // Create dependency adapters
@@ -112,10 +115,11 @@ export function bootstrapPipeline(
 
   const timelineArranger = new TimelineArrangerAdapter();
 
-  // Register all 5 stages
+  // Register all 6 stages
   registry.registerStage(createReadDocumentStage({ fileReader, documentReader }));
   registry.registerStage(createParseStoryboardStage({ storyParser, llmAnalyzer }));
   registry.registerStage(createGeneratePromptsStage({ promptOptimizer }));
+  registry.registerStage(createGeneratePilotStage({ mediaGenerator }));
   registry.registerStage(createBatchGenerateStage({ mediaGenerator }));
   registry.registerStage(createArrangeOnTimelineStage({ timelineArranger }));
 

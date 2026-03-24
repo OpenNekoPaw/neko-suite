@@ -85,6 +85,12 @@ export interface AgentStep {
   toolResults?: ToolResult[];
   /** Timestamp */
   timestamp: number;
+  /** Token usage for this step (from LLM API response) */
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
 /**
@@ -106,6 +112,12 @@ export interface AgentResult {
     startTime: number;
     endTime: number;
     duration: number;
+  };
+  /** Accumulated token usage across all steps */
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
   };
 }
 

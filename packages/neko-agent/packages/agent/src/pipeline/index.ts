@@ -55,3 +55,10 @@ export type {
 
 export { createArrangeOnTimelineStage } from './stages/arrange-on-timeline';
 export type { ITimelineArranger, ArrangeOnTimelineStageDeps } from './stages/arrange-on-timeline';
+
+export { createGeneratePilotStage } from './stages/generate-pilot';
+export type { GeneratePilotStageDeps } from './stages/generate-pilot';
+
+// Hook Registry
+export { PipelineHookRegistry, createPipelineHookRegistry } from './hook-registry';
+export type { HookHandler } from './hook-registry';

@@ -153,6 +153,12 @@ export interface PipelineContext {
   /** Scene indices that failed generation */
   failedScenes?: number[];
 
+  // — Pilot —
+  /** Generated pilot scene path (from generatePilot stage) */
+  pilotPath?: string;
+  /** Index of the pilot scene */
+  pilotSceneIndex?: number;
+
   // — Timeline —
   /** Element IDs added to timeline */
   elementIds?: string[];

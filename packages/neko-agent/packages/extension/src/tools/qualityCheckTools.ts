@@ -263,7 +263,8 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
         'Evaluate AI-generated media quality using multimodal LLM vision analysis. ' +
         'Automatically retries low-scoring scenes with optimized prompts. ' +
         'Returns a structured summary of pass/fail results per scene. ' +
-        'Use after batch media generation to ensure quality before timeline arrangement.',
+        'IMPORTANT: Only use when the user explicitly requests quality checking — ' +
+        'each evaluation costs a vision LLM call. Do NOT call automatically after generation.',
       parameters: {
         type: 'object',
         properties: {

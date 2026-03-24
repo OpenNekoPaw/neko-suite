@@ -21,6 +21,7 @@ import type {
   IPipelineExecutor,
   StageHookConfig,
 } from './types';
+import type { PipelineHookRegistry } from './hook-registry';
 
 const logger = getLogger('PipelineExecutor');
 
@@ -30,6 +31,8 @@ let nextPipelineId = 1;
  * Pipeline executor implementation
  */
 export class PipelineExecutor implements IPipelineExecutor {
+  constructor(private readonly hookRegistry?: PipelineHookRegistry) {}
+
   execute(
     stages: IPipelineStage[],
     config: PipelineConfig,
@@ -151,7 +154,7 @@ export class PipelineExecutor implements IPipelineExecutor {
         }
 
         // Run before hooks
-        ctx = await runHooks(hooks, stage.name, 'before', ctx);
+        ctx = await runHooks(hooks, stage.name, 'before', ctx, this.hookRegistry);
 
         // Execute stage
         emit({ type: 'stage_start', stage: stage.name, index: stageIndex, total: totalStages });
@@ -176,7 +179,7 @@ export class PipelineExecutor implements IPipelineExecutor {
         emit({ type: 'stage_complete', stage: stage.name });
 
         // Run after hooks
-        ctx = await runHooks(hooks, stage.name, 'after', ctx);
+        ctx = await runHooks(hooks, stage.name, 'after', ctx, this.hookRegistry);
 
         stageIndex++;
       }
@@ -273,16 +276,23 @@ async function runHooks(
   stageName: string,
   timing: 'before' | 'after',
   ctx: PipelineContext,
+  registry?: PipelineHookRegistry,
 ): Promise<PipelineContext> {
   const matching = hooks.filter(
     (h) => (h.stageName === stageName || h.stageName === '*') && h.timing === timing,
   );
 
   for (const hook of matching) {
-    logger.debug('Running hook', { action: hook.action, stage: stageName, timing });
-    // Hook execution is currently a placeholder — concrete hook actions
-    // will be implemented as a registry pattern in Phase 3.
-    // For now, hooks are logged but not executed.
+    if (registry?.has(hook.action)) {
+      logger.debug('Executing hook', { action: hook.action, stage: stageName, timing });
+      ctx = await registry.execute(hook.action, ctx, stageName, hook.params);
+    } else {
+      logger.debug('Hook action not registered, skipping', {
+        action: hook.action,
+        stage: stageName,
+        timing,
+      });
+    }
   }
 
   return ctx;
@@ -291,6 +301,6 @@ async function runHooks(
 /**
  * Create a pipeline executor instance
  */
-export function createPipelineExecutor(): IPipelineExecutor {
-  return new PipelineExecutor();
+export function createPipelineExecutor(hookRegistry?: PipelineHookRegistry): IPipelineExecutor {
+  return new PipelineExecutor(hookRegistry);
 }
