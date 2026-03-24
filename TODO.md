@@ -4,6 +4,61 @@
 
 ---
 
+## ✅ 已完成（本轮）
+
+<details>
+<summary>neko-canvas — resize/rotate/框选/分组/Port/画板导出</summary>
+
+- 节点 resize/rotate + 框选 + 分组节点
+- Port 系统 + UI 面板
+- 画板导出为图片（PNG/SVG）
+</details>
+
+<details>
+<summary>neko-proto — diff.proto 补齐</summary>
+
+- CanvasContentDiff + AudioSilenceDetection 类型定义
+</details>
+
+<details>
+<summary>neko-preview — 音频播放器现代化 Phase 1-5</summary>
+
+- Apple Music 风格四视图 + 封面/歌词/波形/频谱
+- Engine 元数据扩展（ID3/Vorbis/封面提取）
+- LRC 歌词 + 嵌入歌词提取
+</details>
+
+<details>
+<summary>UI 现代化 — Phase 0-5.6 全部完成</summary>
+
+- neko-preview Phase 0-3（Tailwind + macOS Token + 组件重构 + 视频播放器）
+- neko-audio Phase 4（Tailwind + macOS 组件）
+- neko-story Phase 5（VSCode 主题变量）
+- neko-tools Phase 5.5-5.6（macOS 主题配色 + File Icon Theme）
+- @neko/shared（Design Token + 30+ SVG 图标）
+- 共享组件迁移（MacButton/MacSlider/MacTabs/ProgressBar → @neko/shared/components）
+</details>
+
+<details>
+<summary>EditOperation — 全包接入</summary>
+
+- neko-types test + undo/redo 验证
+- neko-audio / neko-canvas / neko-sketch 接入
+- operations 类型扩展（audio 8 + canvas 8 + sketch 8）
+</details>
+
+<details>
+<summary>neko-agent 架构补全</summary>
+
+- Phase 3 重构（统一循环 + SessionInitializer + IPermissionManager + SkillInjection rollback）
+- 媒体工具贯通（GenerateImage/Video/Music/TTS 4 个工具均有 execute）
+- AI SDK 迁移（@ai-sdk/openai,google,anthropic v3）
+- Pipeline Hook Registry + generatePilot stage
+- 工具系统简化（1M context 全工具常驻 + meta-tools）
+</details>
+
+---
+
 ## 🟢 P2 — 增强功能（可延后）
 
 ### neko-engine
@@ -11,248 +66,103 @@
 - [ ] 高精度波形 Zoom（按需加载超过 800 点的精细波形）
 - [ ] 渲染能力补齐：shapes / keyframes（effects ✅ subtitles ✅ letter_spacing ⚠️ cosmic-text 限制）
 
-### neko-canvas
-- [x] 节点 resize/rotate + 框选 + 分组节点（resize ✅ 分组 ✅ rotate ✅ 框选 ✅）
-- [x] Port 系统 + UI 面板（Port 类型/渲染 ✅ PortEditor UI 面板 ✅）
-
 ### neko-tools（媒体 Diff）
-- [ ] 音频静音检测 UI（数据层已就绪：engine 后端 ✅ + Proto 类型 ✅ + Analyzer 接收 ✅，仅缺 AudioDiffViewer 沉默区域可视化）
-- [ ] CompareView N 文件网格对比（现有仅支持 2 文件，AI 生成场景需对比 3-8 个变体）
-- [ ] 视频场景切割检测（需 engine 新增 FFmpeg scene filter，优先级低）
+- [ ] 音频静音检测 UI（数据层已就绪，仅缺 AudioDiffViewer 沉默区域可视化）
+- [ ] CompareView N 文件网格对比（现有仅支持 2 文件）
+- [ ] 视频场景切割检测（需 engine 新增 FFmpeg scene filter）
 
-### neko-canvas（高级功能）
-- [x] 画板导出为图片（PNG/SVG，html-to-image 截图 + Extension 保存）
-- [ ] 大量节点性能优化（Canvas 2D 渲染 或 OffscreenCanvas + Worker，当前 DOM/SVG 方案 <1000 节点足够）
+### neko-canvas
+- [ ] 大量节点性能优化（Canvas 2D / OffscreenCanvas + Worker，当前 <1000 节点足够）
 
 ### neko-proto
-- [ ] ~~接入 protoc/buf 自动生成~~ → 降级为 P3。Proto→TS 已有成熟自定义生成器（proto-gen-ts.mjs），项目用 JSON 非 protobuf 二进制，buf/protoc 核心价值用不上。真正痛点是 Rust 域模型手动同步，考虑增强 `__engine-check.ts` 漂移检测覆盖面即可
-- [x] 补齐 diff.proto 剩余类型定义（CanvasContentDiff + AudioSilenceDetection 已添加）
-
-### neko-preview（音频播放器现代化）
-- [x] Phase 1：视觉重设计 + 视图切换框架（Apple Music 风格布局 + 封面/歌词/波形三视图 + `--neko-audio-*` 主题变量 + speed 控制 + 拖拽 seek storm 修复）
-- [x] Phase 2：Engine 元数据扩展（FFmpeg metadata dict → ID3/Vorbis 标签提取 + ATTACHED_PIC 封面流提取 + CoverArtInfo base64 DTO + MediaInfo 扩展 + 真实封面展示 + 模糊背景 + metadata title/artist 显示）
-- [x] Phase 3：歌词支持（LRC 时间标签解析 + 多标签/元数据/二分查找 + 同目录 .lrc 查找 + 滚动高亮歌词视图 + smooth scroll 居中 + 渐隐遮罩）
-- [x] Phase 4：频谱可视化（AnalyserNode FFT 实时频率柱状图 + 第四视图 + 主题感知颜色 + DPR 缩放）
-- [x] Phase 5：嵌入歌词提取（ID3v2 USLT / Vorbis LYRICS → metadata.lyrics 回退 + 纯文本歌词静态展示）
-
-### neko-preview（UI 现代化 — Phase 0-3）
-- [x] Phase 0：Tailwind 基础设施接入（tailwind.config.js + postcss.config.js + @tailwind 指令）
-- [x] Phase 1：macOS Design Token 体系（扩展 @neko/shared token + CSS 变量统一 `--neko-preview-*` + 深色/浅色/高对比度主题覆盖）
-- [x] Phase 2：macOS 风格组件重构（AudioPlayer/AudioControls/ProgressBar/CoverView/LyricsView Tailwind 化 + MacButton/MacIconButton/MacTabs/MacSlider 共享组件）
-- [x] Phase 3：视频播放器 macOS 化（VideoPlayer/VideoControls Tailwind 化 + 共享 MacIconButton/MacSlider + 删除全部 BEM CSS，player.css 1009行→183行）
-
-### neko-audio（UI 现代化 — Phase 4）
-- [x] Tailwind 接入（tailwind.config.js + nekoTailwindPreset ✅）
-- [x] macOS 化（MacButton/MacSlider 等从 @neko/shared/components 导入使用 ✅）
-
-### neko-story（UI 现代化 — Phase 5）
-- [x] VSCode 主题接入（硬编码颜色已替换为 var(--vscode-*) 变量 ✅，仅 print.css 保留 #000/#fff）
-
-### neko-tools（UI 现代化 — Phase 5.5-5.6）
-- [x] macOS VSCode 主题配色（contributes.themes + Neko macOS Dark/Light ✅）
-- [x] File Icon Theme（contributes.iconThemes + 自定义文件扩展名图标 ✅）
-
-### @neko/shared（UI 现代化 — Phase 1 + 5.6）
-- [x] macOS Design Token 扩展（neko-glass / neko-surface / borderRadius / boxShadow / backdropBlur）
-- [x] 统一 SVG 图标模块（@neko/shared/icons 30+ 图标组件 ✅）
-
-### neko-preview（风格主题优化）— 已移至 UI 现代化 Phase 0-3
-- ~~[ ] 统一 `--neko-audio-*` 变量为 `--neko-preview-*`，覆盖 audio + video 两个 webview~~
-- ~~[ ] 深色/浅色主题适配验证（VSCode 主题切换时 canvas 组件颜色跟随）~~
-- ~~[ ] 视频播放器控件样式对齐音频播放器（进度条/音量/速度控件复用 shared 组件）~~
-- ~~[ ] 高对比度主题支持（`vscode-high-contrast` / `vscode-high-contrast-light`）~~
-
-### EditOperation 遗留项
-- [x] neko-types `package.json` 缺少 test script（已添加，11 文件 242 测试通过）
-- [x] 操作 undo/redo 正确性验证（invert 30+ / roundtrip 40+ / historySlice 15+ 测试已覆盖）
-- [x] neko-audio EditOperation 接入（audioProjectStore：dispatch + undo/redo + Extension 同步）
-- [x] neko-canvas EditOperation 接入（canvasOperationStore 桥接层，14 个操作方法记录 EditOperation）
-- [x] neko-sketch EditOperation 接入（sketchOperationStore 桥接层，layerSlice 5 个操作方法记录）
-- [x] neko-types operations 扩展（audio 8 类型 + canvas 8 类型 + sketch 8 类型 + apply/invert 全覆盖）
+- [ ] Rust 域模型漂移检测增强（`__engine-check.ts` 覆盖面扩展）
 
 ---
 
 ## 🔵 P3 — 长期功能
 
 ### Diff AI 增强（Phase 4-6）
-- [ ] CLIP 语义打分（Prompt↔视频/图片对齐度）
-- [ ] Whisper ASR 文本 Diff（对白变更检测）
-- [ ] Demucs 音源分离（人声/背景独立比较）
+- [ ] CLIP 语义打分 + Whisper ASR 文本 Diff + Demucs 音源分离
 - [ ] Grounding DINO 目标锚点验证
 - [ ] AI 质量评估（黑帧/静音/冻结检测 + No-Reference VQA）
 - [ ] AI 素材筛选（批量 CLIP 打分 + 语义一致性过滤 + 视觉聚类去重）
 
-### Media LSP（Phase 3-5）— [docs/architecture/lsp.md](./docs/architecture/lsp.md)
-- [ ] Phase 3：AI 增强（CLIP / Whisper / Demucs / Grounding DINO）
-- [ ] Phase 4：AI 素材审查
-- [ ] Phase 5：质量评估（黑帧检测 / VQA / SAM 智能蒙版）
+### Media LSP AI 增强（Phase 3-5）— [ADR](./docs/architecture/lsp.md)
+- [ ] Phase 3：CLIP / Whisper / Demucs / Grounding DINO 集成
+- [ ] Phase 4-5：AI 素材审查 + 质量评估（VQA / SAM 智能蒙版）
 
-### neko-agent 创意助手
-- [x] 工具系统简化（1M context 全工具常驻 + meta-tools 重构为 GetContext/ActivateSkill/DeactivateSkill + ISkillProvider 桥接）
-- [ ] 批量时间线操作 Skill（当前仅支持单元素操作）
-- [ ] AI 字幕生成 Skill（调用 Whisper / 云端 ASR）
-- [ ] 智能素材推荐（根据剧本自动检索资产库）
-- [ ] 场景描述 → 自动配乐
-- [ ] 场景描写辅助
-- [ ] AI API 诊断（配置页内置：连通性/延迟/兼容性/配额检查，从 neko-tools 迁移）
+### neko-agent
+- [ ] 对话持久化遗留：CLI `--resume` / `/resume` 未实现（存储层已完成）
+- [ ] SubAgent Skills：Seed_Manager + Audio_Mixer + 镜头语言通用 Skill
+- [ ] MCP 客户端重连退避（当前连接失败即终止）+ ContextManager 异步竞态保护
+- [ ] 批量时间线操作 Skill + AI 字幕生成 + 智能素材推荐
+- [ ] 场景描述 → 自动配乐 + 场景描写辅助
+- [ ] AI API 诊断（从 neko-tools 迁移）
 
-### neko-agent 架构补全（ADR 文档对齐）
-- [x] Phase 3 重构（[agent-refactoring.md](./docs/architecture/agent-refactoring.md)）：AgentExecutor 统一循环 ✅ + AgentSessionInitializer ✅ + IPermissionManager 拆分 ✅ + SkillInjectionCoordinator rollback ✅
-- [x] 媒体工具贯通（[media-tool-bridging.md](./docs/architecture/media-tool-bridging.md)）：GenerateImage/Video/Music/TTS 4 个工具均已实现 execute，非 schema-only
-- [x] AI SDK 迁移（[media-generation-migration.md](./docs/architecture/media-generation-migration.md)）：@ai-sdk/openai,google,anthropic v3 已集成，OpenAICompatMediaAdapter 仍作为兼容层保留
-- [x] Pipeline Hook Registry（[ai-capabilities-roadmap.md](./docs/architecture/ai-capabilities-roadmap.md)）：hook-registry.ts ✅ + generate-pilot.ts ✅
-- [ ] 对话持久化遗留：ConversationRecord + FileConversationStorage ✅，**CLI `--resume` / `/resume` 未实现**
-- [ ] SubAgent Skills：Seed_Manager（角色 Seed/LoRA 跨 scene 复用）+ Audio_Mixer（情绪→BGM 匹配）+ 镜头语言通用 Skill
-- [ ] Agent P2 级改进：MCP 客户端重连退避（当前连接失败即终止）+ ContextManager 异步竞态（无锁保护）
+### AI MCP Tools
+- [ ] neko-model：`face.generate_params` / `face.from_image` / `face.adjust`
+- [ ] neko-sketch S.4：`sketch.generate` / `style_transfer` / 跨模块集成（→ neko-cut/canvas）
 
-### neko-sketch AI MCP Tools（Phase S.4，[2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md)）
-- [ ] `sketch.generate`（AI 绘画生成）
-- [ ] `style_transfer`（风格迁移）
-- [ ] 跨模块集成（→ neko-cut / canvas）
+### neko-assets — [ADR](./docs/architecture/marketplace.md) · [ADR](./docs/architecture/remote-storage.md)
+- [ ] Handler 补全：ShaderAssetHandler + PresetAssetHandler + ModelAssetHandler
+- [ ] AI 生成结果自动入库 + IAIAnalysisService
+- [ ] External Media Library P2（元数据缓存 + 增量索引 + 搜索 + 批量导入）
+- [ ] AssetOwnership + `'remote'` source + `'document'` AssetType（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
 
-### neko-model AI MCP Tools
-- [ ] `face.generate_params`（文本 → 参数向量）
-- [ ] `face.from_image`（图片 → 参数向量）
-- [ ] `face.adjust`（自然语言微调）
+### neko-market（新包）
+- [ ] @neko/market-core（MarketClient + InstallManager + LicenseManager + CacheManager）
+- [ ] IFileTransport + S3Transport + ICacheManager
+- [ ] Skill 市场 MVP + AssetDistribution / SkillMetadata 扩展
 
-### neko-assets（未来开发）
-- [ ] ShaderAssetHandler（编译验证 + 预览 + 热重载）
-- [ ] PresetAssetHandler（LUT / 转场预设 / 导出预设）
-- [ ] AI 生成结果自动入库（Agent 生成 → AssetRegistry.register）
-- [ ] External Media Library P2: 性能优化（元数据缓存 + 增量索引 + 搜索 + 代理文件 + 批量导入）
-- [ ] ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
-- [ ] IAIAnalysisService 实现（接入 neko-agent AI 分类）
-- [ ] AssetOwnership 扩展（scope: personal/project/team/purchased/public + access 控制）
-- [ ] AssetManifestSource 增加 `'remote'` kind（s3:// / oss:// URI）
-- [ ] DocumentMetadata 类型 + `'document'` AssetType（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
+### 远程存储
+- [ ] Neko Storage Service（Auth + 隔离 + 预签名 URL）
+- [ ] Transcode Worker（媒体 + 3D + 文档三条管线）
+- [ ] ProxyService 扩展 + 导出增量拉取
 
-### neko-market（新包，[ADR](./docs/architecture/marketplace.md)）
-- [ ] @neko/market-core 基础包（MarketClient + InstallManager + LicenseManager + CacheManager）
-- [ ] IFileTransport 接口 + S3Transport 实现（预签名 URL + 分片上传 + 断点续传）
-- [ ] ICacheManager 本地缓存（.neko/cache/remote/ + LRU 淘汰）
-- [ ] Skill 市场 MVP（neko-agent 侧边栏 + 官方/免费共享 + SkillHandler.onInstall）
-- [ ] AssetDistribution 扩展（visibility/publisherId/pricing/rating/compatibility）
-- [ ] SkillMetadata 类型（domain/toolSets/mcpServers/llmRequirements）
+### neko-live 虚拟制片（Phase 5）
+- [ ] 5.1：MediaPipe Face/Pose + VMC + VRM 预览 + 骨骼驱动
+- [ ] 5.2：录制管道 + 音视频同步 + MP4 导出
+- [ ] 5.3：RTMP/SRT 推流 + OBS + 2D puppet 联动
 
-### 远程存储（[ADR](./docs/architecture/remote-storage.md)）
-- [ ] Neko Storage Service 基础版（Auth + Team/Project 隔离 + 预签名 URL）
-- [ ] Transcode Worker — 媒体管线（视频 H.264 proxy + 音频 AAC proxy + 图片 WebP + 序列帧 + 波形）
-- [ ] Transcode Worker — 3D 管线（gltf-transform LOD 简化 + Draco 压缩 + 渲染预览图）
-- [ ] Transcode Worker — 文档管线（PDF/PPT 逐页 WebP + Word→HTML + Excel→JSON + CBZ 解压缩小）
-- [ ] ProxyService 扩展（远程代理下载 + 本地缓存 + 下载优先级队列）
-- [ ] 导出增量拉取（时间线分析 → 按 time range 计算 byte range → 部分下载）
+### VR/AR（远期 Phase 7）
+- [ ] 7.1-7.4：立体渲染 + WebXR App + AR 能力 + AI 辅助 XR
 
-### neko-live 虚拟制片（Phase 5，前置 neko-audio）
-- [ ] Phase 5.1：核心追踪
-  - [ ] Webview 脚手架（React + Zustand + Three.js + @pixiv/three-vrm）
-  - [ ] Extension Host VmcReceiver（Node.js dgram UDP → postMessage 中转）
-  - [ ] MediaPipe Face/Pose 集成（468 面部 + 33 姿态点 → VRM BlendShape 映射）
-  - [ ] 骨骼/表情驱动（复用 neko-model BoneExpression + 口型同步 6 音素）
-  - [ ] 60fps 实时预览流（复用 neko-sketch puppet_stream WebSocket）
-- [ ] Phase 5.2：录制与输出
-  - [ ] 追踪标定系统（坐标系校准 + 参数微调）
-  - [ ] 录制管道（复用 neko-engine ExportService + GPU 导出管线）
-  - [ ] 音视频同步（依赖 neko-audio AudioMixer）
-  - [ ] MP4 导出 → neko-cut 时间线集成
-- [ ] Phase 5.3：直播推流
-  - [ ] RTMP/SRT 推流（native-core FFmpeg 输出，绕过虚拟摄像头驱动）
-  - [ ] OBS WebSocket 集成
-  - [ ] neko-sketch 2D puppet 联动（INP → 实时驱动）
-
-### VR/AR 沉浸式创作（远期 Phase 7）
-- [ ] Phase 7.1：neko-engine 立体渲染（双 Pass wgpu + 镜头畸变校正 + XR pose 同步）
-- [ ] Phase 7.2：Electron/Tauri WebXR 外部 App（沉浸式预览 + 手部追踪 → 骨骼映射）
-- [ ] Phase 7.3：AR 能力（ARKit/ARCore 原生集成 + 平面检测 + 光照估计）
-- [ ] Phase 7.4：AI 辅助 XR（neko-agent VR 场景生成 MCP Tools + 手势识别 + 语音指令）
-
-### 项目基础设施（ADR 文档对齐）
-- [x] 共享组件迁移（[shared-component-shell.md](./docs/architecture/shared-component-shell.md)）：MacButton/MacIconButton/MacSlider/MacTabs/ProgressBar 已在 @neko/shared/components，neko-audio 已通过 import 复用
-- [ ] Project Memory 增强（[project-memory.md](./docs/architecture/project-memory.md)）：workspace 级 .neko/memory.md ✅ + MemoryWriteTool ✅；**MemoryRead 工具未实现**（Memory 直接注入 system prompt，可能不需要独立工具）；自动压缩未实现
-- [ ] Git LFS 集成（[project-data-management.md](./docs/architecture/project-data-management.md)）：.gitignore/.gitattributes 模板自动生成 + neko-diff CLI（Git diff driver）+ pHash 相似度检测 + Git LFS AssetManifest 自动填充 OID
-
-### 跨语言架构对齐
-- [ ] Step 2：Engine ComputeService — 降级为 P3。实际可消除 ~600-700 行（非 1285 行，约一半是 UI 交互必需：timeToPixels/框选碰撞/scrubber 实时预览）。HTTP 往返 ~5-10ms 对属性面板拖拽有延迟风险。当前双端计算不一致的实际 bug 为零，新增缓动/蒙版类型频率低。若实施，优先做渲染路径（缓动+蒙版+合成层），保留 UI 交互路径的 TS 计算
-- [ ] Step 3：UI 状态分离（Track/Element UI 字段移入前端 Store）
+### 项目基础设施
+- [ ] Project Memory：自动压缩（workspace 级 ✅ + MemoryWrite ✅）
+- [ ] Git LFS 集成：neko-diff CLI + pHash + .gitignore/.gitattributes 模板 + OID 自动填充
+- [ ] 跨语言架构对齐 Step 2-3（Engine ComputeService + UI 状态分离）
 
 ---
 
 ## 📋 技术债务
 
-### CI/CD（待完成项）
-- [x] 覆盖率阈值启用（`vitest.shared.ts` thresholds 已生效：lines 30% / branches 20% / functions 25% / statements 30%；CI `pnpm test --coverage` 不达标即 fail）
-  - ⚠️ 遗留：neko-agent 根包自定义 coverage 配置未接入 `sharedCoverage()`，无阈值
-  - 📈 后续：阈值从 30% 渐进提升到 50%+（随测试补充自然提升）
-  - 💡 可选：接入 Codecov/Coveralls 做 PR 覆盖率评论 + 趋势追踪
-- [ ] CI code-quality 移除 `continue-on-error`（本地稳定后使其成为阻塞门禁）
-- [ ] Release workflow（`.github/workflows/release.yml`，tag 触发 vsix 打包）
+### CI/CD
+- [ ] CI code-quality 移除 `continue-on-error`
+- [ ] Release workflow（tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
+- ⚠️ 覆盖率遗留：neko-agent 根包未接入 `sharedCoverage()`
 
 ### 代码质量
 
-**扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | `pnpm check` ❌（Knip 未使用导出）
-
-**源码 TODO 扫描**：10 处（P0: 0 | P1: 0 | P2: 0 | 一般: 3 | 误报: 7）— 无阻塞项
-
-**扫描基线**：Knip 5 未使用文件 | 435 未使用导出 | 16 未使用依赖 | **0 循环依赖** ✅
-
-**`as any`：452 处（生产 0 ✅ + 测试 452）**
-
-生产代码 `as any` 已全部清除（18 → 0），修复方式：
-- i18n 动态键：移除不必要的 `as any`（`t()` 签名已接受 `string`）
-- 类型联合：利用判别联合自动窄化 + 精确类型断言（`BezierShape`）
-- 全局 API：Window 接口扩展（`vite-env.d.ts` / `global.d.ts`）+ `'X' in globalThis`
-- 泛型不兼容：BaseNode 引入 `BaseNodeInput` 放宽 prop 约束
-- 接口对齐：`VSCodeTaskStorage` 实现 `ITaskStorage` + `createAllMCPTools()` 包装 MCP 工具
-- 动态对象：`Record<string, unknown>` 中间变量 + `typeof` 守卫
-
-**`as unknown as`（模式 1：TimelineElement 联合类型字段访问）：42 → 5 ✅**
-
-neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减少 88%），修复方式：
-- 引入 `ToolElement`（`TimelineElement & Partial<ToolElementExtensions>`）+ `ToolTrack` 类型，集中声明运行时 UI 扩展字段
-- `findElement()` 返回 `ToolElement`，将类型断言集中在 1 处
-- `mergeElement()` / `createElement()` 工具函数消除 handler 中 spread+cast 模式
-- 判别联合自动窄化访问 `src`/`content`/`shapes` 等子类型字段
-- 剩余 5 处：`helpers.ts` 1 处（`createElement` 集中断言）+ `shapeHandler.ts` 4 处（Shape↔Record 固有转换）
-
-**未使用导出分析** 📊：
-- 总计：962 处（435 导出 + 527 类型）
-- Barrel exports (index.ts): 146 处（34%）
-- Phase 2 类型定义: ~200 处（21%）- 规划功能，暂不清理
-- Hook 类型定义: ~100 处（10%）
-- 工具函数/常量: ~100 处（10%）
-- 其他: ~416 处（43%）
-
-**按包分布**：
-- neko-cut webview: ~350 处（types.ts 164 + services/index.ts 36）
-- neko-agent webview: ~200 处（hooks/index.ts 29 + handlers）
-- neko-canvas webview: ~120 处（components/index.ts 34 + hooks/index.ts 46）
-
-**待清理**：
-
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P3 | 清理 ~200 处 Hook 类型定义 | 代码整洁 |
-| P3 | ESLint warn → error 升级 | 质量守门 |
-| P3 | Release workflow（vsix 打包发布） | 自动化发布 |
+**扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | Knip 435 未使用导出 | **0 循环依赖** ✅ | 生产 `as any` 0 ✅
 
 **大文件（>1000 LOC）：5 个待拆分**
 
-| 文件 | LOC | 拆分方案 |
-|------|-----|----------|
+| 文件 | LOC | 方案 |
+|------|-----|------|
 | ShapePanel.tsx | 1133 | 提取子组件和 hooks |
 | PreviewPanel.tsx | 1116 | 提取子组件和 hooks |
 | ExportPanel.tsx | 1112 | 提取子组件和 hooks |
 | AudioDiffViewer.tsx | 1081 | 分离波形渲染和交互逻辑 |
 | AssetVariantDiffEditorProvider.ts | 1071 | 重构 |
 
-**其他技术债务**
+**其他**
 
-| 优先级 | 问题 | 影响 |
-|--------|------|------|
-| 低 | neko-engine 性能监控面板（采集层 ✅ + HTTP 端点 ✅ + TS 类型 ✅，仅缺独立 Dashboard UI；Alpha 阶段可通过端点直接查询） | 体验优化 |
-| ~~中~~ | ~~AI SDK 依赖倒置~~ ✅ 已迁移到 @ai-sdk/openai,google,anthropic v3 | — |
-| 中 | neko-types JSDoc 覆盖率低 | 开发体验差 |
-| 低 | 国际化扩展（neko-cut/neko-agent/neko-sketch 已完成，其他包待补） | 国际化缺口 |
+| 优先级 | 问题 |
+|--------|------|
+| 中 | neko-types JSDoc 覆盖率低 |
+| 低 | neko-engine 性能监控 Dashboard UI（采集+端点已就绪） |
+| 低 | 国际化扩展（neko-cut/agent/sketch 已完成，其他待补） |
 
 ---
 
@@ -260,29 +170,23 @@ neko-cut tool handler 8 文件中 ~42 处 `as unknown as` 收敛为 5 处（减�
 
 | 模块 | 目标 | 参考 |
 |------|------|------|
-| neko-protocol | 共享协议仓库（Proto IDL → TS/Go/Rust 生成） | — |
+| neko-market | 统一市场平台（Skills/模型/Shader/素材） | [ADR](./docs/architecture/marketplace.md) |
+| Neko Storage Service | 远程存储（MinIO S3 + Transcode Worker） | [ADR](./docs/architecture/remote-storage.md) |
+| neko-live | 动捕 + 虚拟形象 + 直播 | Phase 5 |
+| neko-vr | VR/AR 沉浸式创作 | Phase 7 |
+| neko-protocol | 共享协议仓库（Proto IDL → 多语言生成） | — |
 | @neko/types 重组 | domain/ 分层 + exports 子路径隔离 | — |
-| @neko/media-analysis | 从 neko-tools 提取纯 Diff 算法包 | — |
-| neko-audio 遗留 | neko-preview 高级预览 | Phase 4 |
-| neko-live | 动捕 + 虚拟形象 + 直播（前置 neko-audio；5.1 MediaPipe/VMC 追踪 + VRM 预览；5.2 录制 + 音视频同步；5.3 RTMP→OBS 推流；虚拟摄像头不做，改 RTMP） | Phase 5 |
-| neko-assets Phase 5 | 社区分发（.neko 包格式 + 远程注册表） | — |
-| neko-market | 统一市场平台（Skills/模型/Shader/素材 + 官方/私有/共享/售卖） | [ADR](./docs/architecture/marketplace.md) |
-| Neko Storage Service | 远程存储服务（MinIO S3 + Auth + Transcode Worker） | [ADR](./docs/architecture/remote-storage.md) |
-| neko-vr | VR/AR 沉浸式创作（立体渲染 + Electron WebXR App + 手部追踪；前置 Phase 3 + 5） | Phase 7 |
 
-### neko-engine 设备代理（[ADR](./docs/architecture/device-access.md)）— ✅ P1-P3 框架完成
+### neko-engine 设备代理 — [ADR](./docs/architecture/device-access.md)
 
-| 优先级 | 设备 | 状态 | 说明 |
-|--------|------|------|------|
-| P1 | 麦克风 | ✅ 完整 | `cpal` 采集 + WAV 写入 + `/v1/monitor` 电平 + neko-audio 双模式录制 |
-| P2 | 摄像头 | ⚠️ 框架 | trait + controller + TS 方法就绪，capture 实现需 FFmpeg avdevice 集成 |
-| P3 | MIDI | ✅ 完整 | `midir` 端口枚举 + 连接 + 事件 broadcast + `/v1/midi/{id}` WS 端点 |
-| P3 | Gamepad | ✅ 完整 | `gilrs` 枚举 + 120Hz 轮询 + broadcast + `/v1/gamepad/{id}` WS 端点 |
-| — | 手写板压感 | ✅ 无需代理 | `PointerEvent.pressure` webview 内直接可用 |
-
-**待完成**：
-- [ ] 摄像头 capture 实现（FFmpeg avdevice → H.264 编码 → WebSocket 流，属 neko-live Phase 5 前置）
+| 设备 | 状态 |
+|------|------|
+| 麦克风 | ✅ 完整（cpal + WAV + monitor + 双模式录制） |
+| 摄像头 | ⚠️ 框架就绪，capture 实现 TODO（FFmpeg avdevice，neko-live 前置） |
+| MIDI | ✅ 完整（midir + broadcast + WS） |
+| Gamepad | ✅ 完整（gilrs + 120Hz + broadcast + WS） |
+| 手写板压感 | ✅ PointerEvent.pressure 直接可用 |
 
 ---
 
-*最后更新：2026-03-24（ADR 全量对齐 + 代码验证：agent Phase 3/媒体工具/AI SDK/Pipeline Hook/共享组件/UI Phase 4-5.6 标记完成；修正 Project Memory/对话持久化状态）*
+*最后更新：2026-03-24*
