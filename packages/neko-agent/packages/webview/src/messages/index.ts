@@ -353,4 +353,38 @@ export const VSCodeMessages = {
   invokeSlashCommand: (command: string, args?: string) => {
     postMessage({ type: 'invokeSlashCommand', command, args });
   },
+
+  // ===========================================================================
+  // Skill Marketplace
+  // ===========================================================================
+
+  /** Search marketplace skills */
+  marketSearch: (query: { text?: string; tags?: string[]; page?: number }) => {
+    postMessage({ type: 'market:search', query: { ...query, types: ['skill'] } });
+  },
+
+  /** Install a skill from marketplace */
+  marketInstall: (packageId: string, version: string) => {
+    postMessage({ type: 'market:install', packageId, version });
+  },
+
+  /** Uninstall a marketplace skill */
+  marketUninstall: (packageId: string) => {
+    postMessage({ type: 'market:uninstall', packageId });
+  },
+
+  /** Get list of installed marketplace skills */
+  marketListInstalled: () => {
+    postMessage({ type: 'market:listInstalled' });
+  },
+
+  /** Check for updates */
+  marketCheckUpdates: () => {
+    postMessage({ type: 'market:checkUpdates' });
+  },
+
+  /** Get featured skills */
+  marketGetFeatured: () => {
+    postMessage({ type: 'market:getFeatured' });
+  },
 };

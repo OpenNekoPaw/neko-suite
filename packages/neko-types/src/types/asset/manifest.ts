@@ -39,7 +39,7 @@ export type AssetType =
 export type AssetManifestSource =
   | { kind: 'local'; path: string }
   | { kind: 'git-lfs'; oid: string; path: string }
-  | { kind: 'registry'; registry: string; package: string; version: string }
+  | { kind: 'registry'; registry: string; package: string; version: string; integrity?: string }
   | { kind: 'ai-generated'; taskId: string; model: string };
 
 // =============================================================================
@@ -88,12 +88,28 @@ export interface PresetMetadata {
   parameters?: Record<string, unknown>;
 }
 
+/** Skill-specific marketplace metadata */
+export interface SkillMarketMetadata {
+  /** Skill domain tags */
+  domain: string[];
+  /** Associated ToolSet names */
+  toolSets?: string[];
+  /** Required MCP server names */
+  mcpServers?: string[];
+  /** LLM requirements */
+  llmRequirements?: {
+    capabilities: ('vision' | 'function-calling' | 'streaming')[];
+    minContextWindow?: number;
+  };
+}
+
 /** 类型特化元数据联合 */
 export type AssetTypeMetadata =
   | { type: 'shader'; data: ShaderMetadata }
   | { type: 'model'; data: ModelMetadata }
   | { type: 'plugin'; data: PluginMetadata }
-  | { type: 'preset'; data: PresetMetadata };
+  | { type: 'preset'; data: PresetMetadata }
+  | { type: 'skill'; data: SkillMarketMetadata };
 
 // =============================================================================
 // Distribution Info
@@ -108,6 +124,42 @@ export interface AssetDistribution {
   homepage?: string;
   downloads?: number;
   checksum: string;
+
+  // === Marketplace extensions ===
+
+  /** Visibility level */
+  visibility?: 'public' | 'private' | 'shared' | 'paid';
+  /** Publisher unique identifier */
+  publisherId?: string;
+  /** Publisher display name */
+  publisherName?: string;
+  /** Whether the publisher is verified */
+  verified?: boolean;
+  /** Pricing info */
+  pricing?: AssetPricing;
+  /** Rating stats */
+  rating?: { average: number; count: number };
+  /** Screenshot URLs */
+  screenshots?: string[];
+  /** Compatibility requirements */
+  compatibility?: AssetCompatibility;
+}
+
+/** Pricing model for marketplace assets */
+export interface AssetPricing {
+  model: 'free' | 'paid' | 'freemium';
+  price?: number;
+  currency?: string;
+}
+
+/** Version compatibility requirements */
+export interface AssetCompatibility {
+  /** Neko Suite version range (semver) */
+  nekoSuiteVersion?: string;
+  /** VSCode version range */
+  vscodeVersion?: string;
+  /** Engine version range */
+  engineVersion?: string;
 }
 
 // =============================================================================

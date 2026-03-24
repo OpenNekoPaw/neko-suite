@@ -17,15 +17,21 @@ module.exports = {
         'Foundation packages (@neko/shared, @neko/neko-client, @neko/proto) must not depend on other workspace packages',
       severity: 'error',
       from: {
-        path: ['^packages/neko-types/', '^packages/neko-client/', '^packages/neko-proto/'],
+        path: [
+          '^packages/neko-types/',
+          '^packages/neko-client/',
+          '^packages/neko-proto/',
+          '^packages/neko-market/packages/core/',
+        ],
       },
       to: {
         path: '^packages/',
         pathNot: [
-          // Allow self-references
+          // Allow self-references and Layer 0 peers
           '^packages/neko-types/',
           '^packages/neko-client/',
           '^packages/neko-proto/',
+          '^packages/neko-market/packages/core/',
         ],
       },
     },
@@ -102,6 +108,15 @@ module.exports = {
       from: { path: '^packages/neko-preview/' },
       to: {
         path: '^packages/(?!neko-preview/)[^/]+/packages/extension/',
+      },
+    },
+    {
+      name: 'no-cross-extension-deps-market',
+      comment: 'neko-market must not depend on other extension packages',
+      severity: 'warn',
+      from: { path: '^packages/neko-market/' },
+      to: {
+        path: '^packages/(?!neko-market/)[^/]+/packages/extension/',
       },
     },
   ],

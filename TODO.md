@@ -57,6 +57,19 @@
 - 工具系统简化（1M context 全工具常驻 + meta-tools）
 </details>
 
+<details>
+<summary>neko-market — Phase 6.5.1-6.5.2（市场核心 + Skill MVP）</summary>
+
+- @neko/market-core Layer 0 包：MarketClient + InstallManager + CacheManager + VersionResolver + IntegrityChecker + InstalledRegistry + LicenseManager（stub）
+- 市场类型定义：25+ 类型 + 6 个核心接口（IMarketClient/IInstallManager/IInstallTarget/ICacheManager/IVersionResolver/ILicenseManager）
+- AssetDistribution 市场扩展字段 + SkillMarketMetadata + AssetCompatibility
+- SkillSource 添加 'market' + SkillFrontmatter 添加 'market-id'
+- Skill 市场 Extension 层：SkillInstallTarget + SkillAssetHandler + SkillMarketService + SkillMarketHandler
+- Skill 市场 Webview：SkillMarketPanel（Browse/Installed/Updates）+ SkillCard + SkillSearchBar + useSkillMarket store
+- 7 测试文件 / 58 用例全部通过
+- dependency-cruiser 规则：market-core Layer 0 隔离 + 跨扩展依赖规则
+</details>
+
 ---
 
 ## 🟢 P2 — 增强功能（可延后）
@@ -109,10 +122,11 @@
 - [ ] External Media Library P2（元数据缓存 + 增量索引 + 搜索 + 批量导入）
 - [ ] AssetOwnership + `'remote'` source + `'document'` AssetType（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
 
-### neko-market（新包）
-- [ ] @neko/market-core（MarketClient + InstallManager + LicenseManager + CacheManager）
-- [ ] IFileTransport + S3Transport + ICacheManager
-- [ ] Skill 市场 MVP + AssetDistribution / SkillMetadata 扩展
+### neko-market（Phase 6.5.3-6.5.4 待开发）
+- [ ] 全品类市场：ShaderInstallTarget + ModelInstallTarget + PresetInstallTarget
+- [ ] neko-assets MarketBridge 集成 + neko-cut Shader/LUT 市场 UI
+- [ ] 私有 registry 支持（MarketClient 可配 registryUrl）
+- [ ] 商业化：LicenseManager 完整实现（JWT + 在线校验）+ 支付集成 + 发布者 Portal + 评分评论
 
 ### 远程存储
 - [ ] Neko Storage Service（Auth + 隔离 + 预签名 URL）
@@ -170,7 +184,7 @@
 
 | 模块 | 目标 | 参考 |
 |------|------|------|
-| neko-market | 统一市场平台（Skills/模型/Shader/素材） | [ADR](./docs/architecture/marketplace.md) |
+| neko-market | ~~统一市场平台~~ Phase 6.5.1-6.5.2 ✅，6.5.3-6.5.4 待开发 | [ADR](./docs/architecture/marketplace.md) |
 | Neko Storage Service | 远程存储（MinIO S3 + Transcode Worker） | [ADR](./docs/architecture/remote-storage.md) |
 | neko-live | 动捕 + 虚拟形象 + 直播 | Phase 5 |
 | neko-vr | VR/AR 沉浸式创作 | Phase 7 |
@@ -189,4 +203,4 @@
 
 ---
 
-*最后更新：2026-03-24*
+*最后更新：2026-03-25*

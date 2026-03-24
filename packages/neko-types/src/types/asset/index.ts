@@ -26,5 +26,8 @@ export * from './manifest';
 // Registry protocol types
 export * from './registry';
 
+// Market types (marketplace platform)
+export * from './market';
+
 // Settings types (media library config)
 export * from './settings';

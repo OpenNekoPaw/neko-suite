@@ -1,0 +1,8 @@
+{
+  "name": "neko-market",
+  "description": "Unified marketplace platform for Neko Suite",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "license": "Apache-2.0"
+}

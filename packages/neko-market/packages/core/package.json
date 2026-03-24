@@ -1,0 +1,22 @@
+{
+  "name": "@neko/market-core",
+  "description": "Marketplace core library for Neko Suite (zero vscode dependency)",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  },
+  "license": "Apache-2.0"
+}

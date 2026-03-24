@@ -11,6 +11,7 @@ packages:
   - packages/neko-sketch/packages/*
   - packages/neko-story/packages/*
   - packages/neko-tools/packages/*
+  - packages/neko-market/packages/*
 
 ignoredBuiltDependencies:
   - esbuild

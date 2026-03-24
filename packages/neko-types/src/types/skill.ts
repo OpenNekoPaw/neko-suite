@@ -62,7 +62,7 @@ export interface ToolsFileFrontmatter {
 /**
  * Where the skill/command comes from
  */
-export type SkillSource = 'builtin' | 'personal' | 'project';
+export type SkillSource = 'builtin' | 'personal' | 'project' | 'market';
 
 /**
  * Skill directory locations
@@ -565,6 +565,16 @@ export interface SkillFrontmatter {
    * Hook configurations (JSON string in simple YAML)
    */
   'pipeline-hooks'?: string;
+
+  // ===========================================================================
+  // Marketplace (injected by market install)
+  // ===========================================================================
+
+  /**
+   * Market package identifier (injected during marketplace install)
+   * @example "@publisher/skill-name"
+   */
+  'market-id'?: string;
 }
 
 /**

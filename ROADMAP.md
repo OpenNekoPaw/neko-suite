@@ -18,7 +18,7 @@
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3.5 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 跨扩展集成，Phase 4-5 待开发 |
-| **neko-market** | Planned | 0% | 统一市场平台（Skills/模型/Shader/素材分发） |
+| **neko-market** | Alpha | 40% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅（market-core 9 模块 + 58 测试 + Skill 安装/卸载/搜索 UI） |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL，Rust/TS 双端类型源 |
@@ -209,7 +209,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 6: 资产管理与协作
 
-> 目标：统一资产管理 + 市场平台 + 远程存储 + 社区分发 — **进度 ~55%**
+> 目标：统一资产管理 + 市场平台 + 远程存储 + 社区分发 — **进度 ~65%**
 
 **架构文档**：
 - [marketplace.md](./docs/architecture/marketplace.md) — 市场平台架构
@@ -228,30 +228,32 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - AssetType `'document'` + DocumentMetadata（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
 - AssetOwnership（scope: personal/project/team/purchased/public）
 
-### Phase 6.5（待开发）：统一市场平台（neko-market）
+### Phase 6.5.1 ✅ 市场核心基础设施（neko-market）
 
 > 架构设计见 [marketplace.md](./docs/architecture/marketplace.md)
 
-**品类**：Skills / 本地模型 / Shader / 插件 / 创作素材 / 预设模板 LUT
+- @neko/market-core（Layer 0，零 vscode）：MarketClient + InstallManager + CacheManager + VersionResolver + IntegrityChecker + InstalledRegistry + LicenseManager（stub）+ DownloadService + InstallTargetRegistry
+- 市场类型（@neko/shared）：25+ 类型 + 6 核心接口（IMarketClient / IInstallManager / IInstallTarget / ICacheManager / IVersionResolver / ILicenseManager）
+- AssetDistribution 市场扩展 + SkillMarketMetadata + AssetCompatibility + AssetPricing
+- dependency-cruiser：market-core Layer 0 隔离 + no-cross-extension-deps-market
+- 7 测试文件 / 58 用例通过
 
-**分发模式**：官方 / 私有 / 共享 / 售卖
+### Phase 6.5.2 ✅ Skill 市场 MVP
 
-**关键包**：
+- SkillInstallTarget：安装到 `~/.neko/skills/{publisher}/{name}/`，frontmatter 注入 `source: market` + SkillFileService 热加载
+- SkillAssetHandler：SKILL.md 校验 + 元数据提取
+- SkillMarketService：组合 market-core + SkillFileService，vscode.Event 进度通知
+- SkillMarketHandler：路由 `market:*` postMessage
+- Webview：SkillMarketPanel（Browse/Installed/Updates）+ SkillCard + SkillSearchBar + useSkillMarket zustand store
+- SkillSource 扩展 `'market'` + SkillFrontmatter `'market-id'`
 
-```
-neko-market/packages/core/    @neko/market-core（零 vscode 依赖）
-├── MarketClient              HTTP API 客户端（搜索/详情/下载 URL）
-├── InstallManager            下载/校验/解压/版本管理
-├── LicenseManager            授权验证 + 付费资产
-├── CacheManager              .neko/market-cache/ 管理
-└── VersionResolver           semver 解析 + 兼容性检查
-```
+### Phase 6.5.3（待开发）：全品类市场
+- ShaderInstallTarget / ModelInstallTarget / PresetInstallTarget
+- neko-assets MarketBridge + neko-cut Shader/LUT 市场 UI
+- 私有 registry 支持
 
-**里程碑**：
-- Phase 6.5.1：基础设施（@neko/market-core + IFileTransport + AssetDistribution 扩展）
-- Phase 6.5.2：Skill 市场 MVP（neko-agent 侧边栏 + 官方/免费 + 安装/卸载）
-- Phase 6.5.3：全品类市场（Shader/LUT/预设 + 本地模型 + 创作素材）
-- Phase 6.5.4：商业化（付费资产 + 支付集成 + 发布者后台 + 评分评论）
+### Phase 6.5.4（待开发）：商业化
+- LicenseManager 完整实现（JWT + 在线校验）+ 支付集成 + 发布者 Portal + 评分评论
 
 ### Phase 6.6（待开发）：远程存储与代理文件
 
@@ -414,4 +416,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-24（代码验证：Phase 2 agent 架构 85% + Phase 4.5 UI 95% + Phase 6 市场/远程存储/协作基础设施）*
+*最后更新: 2026-03-25（代码验证：Phase 6.5.1-6.5.2 市场核心 + Skill MVP ✅ + 58 测试通过）*
