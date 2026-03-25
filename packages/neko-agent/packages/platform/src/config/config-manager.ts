@@ -68,8 +68,20 @@ export class ConfigManager {
   private readonly chatModelService = new ChatModelService();
   private readonly configExportService = new ConfigExportService();
 
+  // Config change listeners (external consumers, e.g. ConfigBridge)
+  private readonly _configChangeListeners: Array<() => void> = [];
+
   constructor(options: ConfigManagerOptions = {}) {
     this.userConfigManager = options.userConfigManager ?? null;
+
+    // Subscribe to user config file changes so the merged cache stays fresh
+    // and external listeners are notified (e.g. ConfigBridge → webview broadcast).
+    if (this.userConfigManager && 'onChange' in this.userConfigManager) {
+      (this.userConfigManager as { onChange: (cb: () => void) => void }).onChange(() => {
+        this.invalidateCache();
+        for (const listener of this._configChangeListeners) listener();
+      });
+    }
 
     if (options.workspacePath) {
       this.workspacePath = options.workspacePath;
@@ -79,6 +91,18 @@ export class ConfigManager {
         this.invalidateCache();
       });
     }
+  }
+
+  /**
+   * Subscribe to user config changes (file write or external edit).
+   * Returns an unsubscribe function.
+   */
+  onUserConfigChange(listener: () => void): () => void {
+    this._configChangeListeners.push(listener);
+    return () => {
+      const idx = this._configChangeListeners.indexOf(listener);
+      if (idx >= 0) this._configChangeListeners.splice(idx, 1);
+    };
   }
 
   /**

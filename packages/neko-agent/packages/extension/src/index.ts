@@ -25,6 +25,8 @@ import {
   createNekoEngineEffectsTools,
 } from './tools/extensionTools';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
+import { getSkillFileService } from './services/SkillFileService';
+import type { Platform } from '@neko/platform';
 
 /**
  * Activate the extension
@@ -106,6 +108,48 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
 
 /** Default max tokens for the internal chat command. */
 const INTERNAL_CHAT_DEFAULT_MAX_TOKENS = 1000;
+
+/**
+ * Discover new Ollama models and add them to ~/.neko/config.json.
+ *
+ * Called by the neko.agent.refreshModels command after a GGUF model
+ * is registered with Ollama via neko-market ModelInstallTarget.
+ */
+async function refreshOllamaModels(platform: Platform): Promise<void> {
+  const providers = platform.config.getProviders().filter((p) => p.type === 'ollama');
+  if (providers.length === 0) return;
+
+  let added = 0;
+  for (const provider of providers) {
+    try {
+      const apiUrl = (provider.apiUrl ?? 'http://localhost:11434/api').replace(/\/$/, '');
+      const response = await fetch(`${apiUrl}/tags`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) continue;
+
+      const data = (await response.json()) as { models?: Array<{ name: string }> };
+      const existing = new Set(platform.config.getModelsByProvider(provider.id).map((m) => m.name));
+
+      for (const { name } of data.models ?? []) {
+        if (!existing.has(name)) {
+          await platform.config.setModel({
+            id: `${provider.id}-${name}`,
+            name,
+            providerId: provider.id,
+            capabilities: ['chat'],
+            enabled: true,
+          });
+          added++;
+        }
+      }
+    } catch {
+      // Ollama not running or not reachable — ignore
+    }
+  }
+
+  getRootLogger().info(`Ollama model refresh: +${added} new model(s)`);
+}
 
 /**
  * Register extension commands
@@ -215,6 +259,29 @@ function registerCommands(
         `Generate a video from this script: ${text}`,
         true,
       );
+    }),
+  );
+
+  // Called by neko-market after a Skill package is installed/uninstalled.
+  // The file watcher in SkillFileService usually catches it automatically;
+  // this command provides an explicit trigger as a fallback.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.agent.rescanSkills', () => {
+      getSkillFileService()
+        .triggerRescan()
+        .catch((err) => {
+          getRootLogger().warn('neko.agent.rescanSkills failed', { error: err });
+        });
+    }),
+  );
+
+  // Called by neko-market ModelInstallTarget after a GGUF model is registered with Ollama.
+  // Discovers new Ollama models and adds them to ~/.neko/config.json.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.agent.refreshModels', async () => {
+      const platform = services.get(IPlatform);
+      if (!platform) return;
+      await refreshOllamaModels(platform);
     }),
   );
 

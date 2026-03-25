@@ -107,14 +107,7 @@ export const elementEditingToolSet: ToolGroup = {
   name: 'element-editing',
   description:
     'Timeline element editing tools for adding, updating, deleting, trimming, and splitting',
-  tools: [
-    'AddElement',
-    'UpdateElement',
-    'DeleteElement',
-    'TrimElement',
-    'SplitElement',
-    'BatchTimelineOps',
-  ],
+  tools: ['AddElement', 'UpdateElement', 'DeleteElement', 'TrimElement', 'SplitElement'],
   alwaysActive: true,
   priority: 80,
   dependencies: ['timeline-query'],

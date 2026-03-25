@@ -535,6 +535,75 @@ suggest using StartPipeline with the original parameters.
 };
 
 /**
+ * Scene-to-Music Skill
+ *
+ * Analyzes timeline content and generates matching background music.
+ * Triggered by: 配乐, background music, auto score, 自动配乐, 场景配乐, add music to timeline
+ */
+export const sceneToMusicSkill: Skill = {
+  name: 'scene-to-music',
+  description:
+    'Analyze timeline scenes and generate matching background music with GenerateMusic, then insert it as an audio track. ' +
+    'Use when user mentions: 配乐, background music, auto score, 自动配乐, 场景配乐, add music, music for scene.',
+  content: `# Scene-to-Music Assistant
+
+Analyze the timeline and generate background music that matches the scene content and mood.
+
+## Workflow
+
+### Step 1: Analyze the timeline
+Call GetTimelineInfo to get the total duration and timeline structure.
+Call ListElements to understand what's in the scene (video clips, subtitles, effects).
+From the elements, infer:
+- Overall mood (action, peaceful, dramatic, uplifting, mysterious, etc.)
+- Genre hint (if any visual style clues are present)
+- Duration to match
+
+### Step 2: Build a music prompt
+Compose a concise prompt that describes the desired music based on scene analysis.
+Examples:
+- "Cinematic orchestral score, uplifting and adventurous, building tension"
+- "Ambient electronic background, calm and focused, minimal percussion"
+- "Upbeat acoustic guitar, warm and cheerful, light rhythm"
+
+If the user provided explicit preferences (genre, mood, style), prioritize those.
+
+### Step 3: Generate the music
+Call GenerateMusic with:
+- prompt: the composed prompt
+- duration: total timeline duration in seconds (capped at 300)
+- genre and mood if clearly inferable
+
+GenerateMusic is asynchronous and returns a taskId. Poll task_output until status is 'complete'.
+On completion, task_output returns { url: string } in the result field.
+
+### Step 4: Insert the music track
+First check if a music/audio track exists. If not, call AddTrack with type 'audio'.
+Then call AddElement with:
+- type: 'audio'
+- src: the URL returned by task_output
+- trackId: the music track id
+- startTime: 0
+- duration: match the generated clip duration (or timeline duration)
+
+### Step 5: Confirm
+Report to the user what music was generated (prompt used, duration) and where it was placed.
+
+## Notes
+- Always match music duration to timeline length unless user specifies otherwise
+- If timeline has no elements yet, ask the user to describe the scene mood instead of reading an empty timeline
+- If generation fails, report the error and suggest the user check their music provider configuration
+`,
+  allowedTools: ['GetTimelineInfo', 'ListElements', 'GenerateMusic', 'AddTrack', 'AddElement'],
+  icon: '🎵',
+  source: 'builtin',
+  enabled: true,
+  command: 'scene-to-music',
+  argumentHint: '[mood or style hint]',
+  supportsArguments: true,
+};
+
+/**
  * All builtin skills (semantic discovery)
  *
  * Creative media skills only. System operation skills (file-operations, git, shell)
@@ -543,6 +612,7 @@ suggest using StartPipeline with the original parameters.
 export const builtinSkills: Skill[] = [
   // AI Generation
   aiGenerateSkill,
+  sceneToMusicSkill,
   // Video Editing
   videoEditingSkill,
   colorGradingSkill,

@@ -47,8 +47,11 @@ const logger = getLogger('ConfigBridge');
 // neko-auth inter-extension helper
 // ---------------------------------------------------------------------------
 
-function getNekoAuthAPI(): NekoAuthAPI | undefined {
-  return vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth')?.exports;
+async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
+  const ext = vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth');
+  if (!ext) return undefined;
+  await ext.activate();
+  return ext.exports;
 }
 
 function toSsoSession(s: IAuthSession): { user: string; plan?: string; usage?: number } {
@@ -95,22 +98,36 @@ export class ConfigBridge implements vscode.Disposable {
     this.hookSync.init();
     void this.configFile.init();
 
-    // Subscribe to neko-auth session changes and broadcast to all webviews
-    const auth = getNekoAuthAPI();
-    if (auth) {
-      const sub = auth.onDidChangeSession((session) => {
-        broadcastToWebviews(this.activeWebviews, {
-          type: 'ssoSessionChanged',
-          session: session ? toSsoSession(session) : null,
-        });
+    // Broadcast updated configState to webviews whenever ~/.neko/config.json changes
+    // (e.g. after neko-market installs an Ollama model and refreshModels writes new entries)
+    const unsubscribeConfig = platform.config.onUserConfigChange(() => {
+      broadcastToWebviews(this.activeWebviews, {
+        type: 'configState',
+        config: this.buildConfigState(),
       });
-      this.disposables.push(sub);
-    }
+    });
+    this.disposables.push({ dispose: unsubscribeConfig });
+
+    // Subscribe to neko-auth session changes and broadcast to all webviews.
+    // Deferred async: neko-auth may not be activated yet when ConfigBridge constructs.
+    void this.initAuthSubscription();
   }
 
   /**
    * Register a webview to receive broadcasts
    */
+  private async initAuthSubscription(): Promise<void> {
+    const auth = await getNekoAuthAPI();
+    if (!auth) return;
+    const sub = auth.onDidChangeSession((session) => {
+      broadcastToWebviews(this.activeWebviews, {
+        type: 'ssoSessionChanged',
+        session: session ? toSsoSession(session) : null,
+      });
+    });
+    this.disposables.push(sub);
+  }
+
   registerWebview(postMessage: PostMessageFn): vscode.Disposable {
     this.activeWebviews.add(postMessage);
 
@@ -187,7 +204,7 @@ export class ConfigBridge implements vscode.Disposable {
           return true;
 
         case 'ssoLogin': {
-          const auth = getNekoAuthAPI();
+          const auth = await getNekoAuthAPI();
           if (!auth) {
             postMessage({
               type: 'ssoError',
@@ -208,7 +225,7 @@ export class ConfigBridge implements vscode.Disposable {
         }
 
         case 'ssoLogout': {
-          await getNekoAuthAPI()?.logout();
+          await (await getNekoAuthAPI())?.logout();
           postMessage({ type: 'ssoSessionChanged', session: null });
           return true;
         }

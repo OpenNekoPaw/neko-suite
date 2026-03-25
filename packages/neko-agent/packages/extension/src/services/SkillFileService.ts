@@ -249,6 +249,15 @@ export class SkillFileService implements vscode.Disposable {
     return this.scanSkills();
   }
 
+  /**
+   * Force a rescan and emit onSkillsChanged.
+   * Used by the neko.agent.rescanSkills command (called by neko-market after install).
+   */
+  async triggerRescan(): Promise<void> {
+    const result = await this.scanSkills();
+    this._onSkillsChanged.fire(result);
+  }
+
   // ==========================================================================
   // File Creation
   // ==========================================================================
