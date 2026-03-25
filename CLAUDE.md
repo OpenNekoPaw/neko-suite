@@ -42,12 +42,12 @@
 **Monorepo 结构**: 详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 和 [README.md](./README.md)。
 
 **核心包**：
-- `neko-engine` - Rust 媒体引擎（GPU/FFmpeg/HTTP）
+- `neko-engine` - Rust 媒体引擎（GPU/FFmpeg/HTTP + ONNX ML 原生推理）
 - `neko-types` - @neko/shared 共享基础设施（Logger/i18n/Theme/Errors）
 - `neko-client` - @neko/neko-client 流媒体客户端 + EngineClient
 - `neko-proto` - Protobuf IDL（类型契约源）
 
-**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-model（3D 编辑）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）
+**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-model（3D 编辑）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）、neko-market（市场）
 
 **构建命令**:
 ```bash
@@ -113,6 +113,9 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
 | 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
 | 格式策略 | [docs/architecture/format-strategy.md](./docs/architecture/format-strategy.md) | nk* 统一命名，JSON Schema 为文件格式 SSOT，Proto 仅引擎通信；Format SDK（@neko/shared/nkv）提供 load/validate/migrate/save；增量操作 20 种 + 全量 fallback |
+| 市场平台 | [docs/architecture/marketplace.md](./docs/architecture/marketplace.md) | @neko/market-core Layer 0 + 多品类 InstallTarget + 统一分发协议 |
+| 本地模型部署 | [docs/architecture/model-runtime.md](./docs/architecture/model-runtime.md) | 不建 neko-runtime 包；onPostInstall GGUF→Ollama / ONNX→Engine；Engine ort/candle 原生 ML；外部运行时 Provider/MCP 接入 |
+| Registry Server | [docs/architecture/registry-server.md](./docs/architecture/registry-server.md) | 薄 API + 对象存储直传 + 上游代理（HF/Civitai）+ 多 Registry + 私有部署 Docker |
 
 ### Rust 引擎开发约束
 

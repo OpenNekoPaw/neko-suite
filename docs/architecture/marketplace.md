@@ -1,6 +1,6 @@
 # 市场平台架构
 
-> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [remote-storage.md](./remote-storage.md)
+> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [remote-storage.md](./remote-storage.md) · [registry-server.md](./registry-server.md) · [model-runtime.md](./model-runtime.md)
 
 ---
 
@@ -481,7 +481,13 @@ Phase 6.5.5 — 消费端集成 + 热加载（待开发）
 ├── neko-agent ModelManager 扫描 ~/.neko/models/（generation 工具自动发现可用模型）
 └── 私有 registry 支持（MarketClient 可配 registryUrl，团队/企业自建）
 
-Phase 6.5.6 — 商业化（待开发）
+Phase 6.5.7 — Registry Server + 商业化（待开发）
+├── Registry Server 实现（详见 registry-server.md）
+│   ├── S1: 最小 Server（Package API + SQLite + Docker）
+│   ├── S2: 对象存储 + 预签名直传 + 发布能力
+│   ├── S3: 上游代理（HF/Civitai 适配器 + 缓存，对客户端透明）
+│   └── S4: 商业化（付费授权 + 支付 + 发布者 Portal）
+├── 客户端 registryUrl 固定为官方地址，第三方源聚合为服务端职责
 ├── LicenseManager 完整实现（JWT + 在线校验）
 ├── 付费资产 + 支付集成
 ├── 发布者后台（上传/审核/数据分析）
@@ -513,5 +519,27 @@ neko-agent（ModelManager）
 | neko-assets / AssetLibrary | **平行** | 工具型资产不入 AssetLibrary；内容素材不经 market |
 | SkillService | **集成** | 市场安装后触发 Skill 热加载（neko-agent 文件监听）|
 | EffectDispatcher | **集成（Phase 6.5.5）** | 订阅 NekoMarketAPI.onDidInstall 热重载 Shader |
-| EngineClient | **集成（Phase 6.5.5）** | ModelManager 扫描 ~/.neko/models/ 自动发现模型 |
+| @neko/model-runtime | **集成（Phase 6.5.5）** | onPostInstall 自动注册模型到对应运行时（Ollama/ComfyUI/ONNX） |
 | neko-auth | **可选集成** | Bearer token 注入，无 neko-auth 时降级为匿名 |
+
+### AI 模型部署流程
+
+> 详细架构见 [model-runtime.md](./model-runtime.md)
+
+市场安装的 AI 模型（`ai-model` / `lora` / `embedding`）通过 `@neko/model-runtime` 自动部署到对应运行时：
+
+```
+neko-market 安装模型文件 → ~/.neko/models/{framework}/{name}/
+    ↓ ModelInstallTarget.onPostInstall()
+    ↓ pickRuntime(framework, task)
+    ├── GGUF → OllamaRuntime.registerModel() → ollama create
+    ├── safetensors (image/video) → ComfyUIRuntime.registerModel() → symlink
+    ├── ONNX → EngineOnnxRuntime.registerModel() → EngineClient
+    └── safetensors (tts/audio) → PythonRuntime.registerModel()
+    ↓
+    ↓ GpuResourceManager 记录 VRAM 需求
+    ↓
+消费扩展使用：
+    ├── neko-agent: ComfyUIMediaAdapter / OllamaAdapter（本地优先，VRAM 不足回退云端）
+    └── neko-engine: ONNX 模型直接加载到 GPU 管线
+```

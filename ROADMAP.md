@@ -17,8 +17,8 @@
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
-| **neko-assets** | Alpha | 85% | Phase 1-3.5 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 跨扩展集成，Phase 4-5 待开发 |
-| **neko-market** | Alpha | 70% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅ + Phase 6.5.3 独立 Webview 面板 ✅ + Phase 6.5.4 多品类 InstallTarget ✅（Shader/Model/Preset）|
+| **neko-assets** | Alpha | 92% | Phase 1-3.5 ✅ + 外部媒体库 P1-P2 ✅ + AI 分类 + 缩略图 + 跨扩展集成 + Phase 6.4 ✅（Document + Ownership + 搜索 + 缓存 + PathVariable 全格式） |
+| **neko-market** | Alpha | 95% | **客户端完成** ✅：Phase 6.5.1-6.5.5 全部完成（核心 + Skill MVP + 独立面板 + 多品类 + 消费端集成/启停/热加载）；剩余为 Registry Server 后端 + neko-runtime 集成 |
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO 基础设施 ✅：auth-core Layer 0（43 tests）+ VSCode 扩展（SecretStorage）+ CLI FileTokenStorage；OAuth 后端待接入 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
@@ -224,15 +224,24 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - 深度集成（neko-cut/story/canvas 跨扩展拖拽 + IPC 协议 20+ 请求类型）
 - 注册表 + AI 分类 + 缩略图 + 外部媒体库
 
-### Phase 6.4（待开发）：内容素材扩展
+### Phase 6.4：内容素材扩展（部分完成 ✅）
 
 **职责边界**：neko-assets 管理**项目级内容素材**（媒体文件 + 参考文档 + AI 生成内容）。
 工具型资产（Shader / AI 模型 / Preset）由 neko-market 负责安装，由消费扩展（neko-cut / neko-agent）直接读取，不经过 neko-assets。
+AI 生成素材默认保留在工作区，用户通过 Explorer 右键菜单按需手动导入 Asset Library。
 
-- `AssetType 'document'` + `DocumentMetadata`（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）+ `DocumentAssetHandler`
-- `AssetOwnership`（scope: personal/project/team/purchased/public，远程存储前置依赖）
-- AI 生成结果自动入库：`GenerateImage` / `GenerateVideo` 完成后调用 `neko.assets.importGenerated`（source: `'ai-generated'`）
-- External Media Library P2：增量索引（mtime/inode 变更检测）+ 元数据缓存 + 全文搜索 + 批量导入
+- ✅ `AssetType 'document'` + `DocumentMetadata`（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）+ `AssetTypeMetadata` document 分支
+- ✅ `'document'` EntityCategory + `DocumentEntityMetadata` + `AssetMediaType 'document'`
+- ✅ 媒体检测扩展：文档格式映射 + `isDocumentFile()`
+- ✅ 分类器支持：RuleClassifier document 模式 + LLMClassifier category 扩展
+- ✅ `AssetOwnership`（scope: personal/project/team/purchased/public，access: private/readonly/editable）
+- ✅ `AssetQuery.ownershipScopes` 过滤 + EntityService 创建/更新 ownership + UI tooltip
+- ✅ `AssetManifestSource 'remote'` 类型（远程存储前置）
+- ✅ External Media Library P2：全文搜索（QuickPick 跨目录 + 文件索引缓存）+ 元数据持久化缓存（mtime + PathVariable 可移植 key）
+- ✅ PathVariable 全格式集成：neko-cut/canvas/audio 保存/加载 `${VAR}/path` + 跨扩展 PathResolver API（Git 团队协作可移植路径）
+- External Media Library P2（可选）：增量索引、批量导入
+
+> **素材同步边界**：PathVariable 解决路径映射（同一文件不同机器路径不同）。素材内容同步依赖：项目内小文件 Git 直接跟踪 → 项目内大文件 Git LFS → 外部媒体库依赖远程存储（Phase 6.6）或团队 NAS 自行同步。
 
 ### Phase 6.5.1 ✅ 市场核心基础设施（neko-market）
 
@@ -274,21 +283,68 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - `PresetInstallTarget`：`preset` / `template` / `lut` → `~/.neko/presets/{presetType}/{name}/`（presetType 来自 typeMetadata）
 - `MarketplaceService` 注册全 9 种类型；修复 `getFeatured` 参数类型（`string` → `AssetType`）
 
-### Phase 6.5.5（待开发）：消费端集成 + 热加载
+### Phase 6.5.5 ✅ 消费端集成 + 启停 + 热加载
 
-**工具型资产接入模式**：neko-market 导出公共 API（`onDidInstall` / `onDidUninstall` / `getInstalled`），消费扩展订阅后各自刷新。
+**工具型资产接入模式**：neko-market 导出公共 API，消费扩展订阅事件后各自刷新。
 
-- **neko-market**：`activate()` 导出公共 API（`NekoMarketAPI` interface），供消费扩展跨扩展调用
-- **neko-cut**：EffectDispatcher 启动时扫描 `~/.neko/shaders/` + 订阅 `onDidInstall` 热重载；LUT 面板扫描 `~/.neko/presets/lut/`；转场选择器扫描 `~/.neko/presets/transition/`
-- **neko-agent**：ModelManager 扫描 `~/.neko/models/`（generation 工具自动发现可用模型）
-- 私有 registry 支持（团队/企业自建，MarketClient 可配 registryUrl）
+- **NekoMarketAPI 公共接口**（`market-api.ts`）：`onDidInstall` / `onDidUninstall` / `onDidEnable` / `onDidDisable` + `getInstalled(options?)` + `isInstalled(packageId)`
+- **InstalledPackage 启停**：`enabled: boolean` 字段 + `InstalledRegistry.setEnabled()` + 旧数据 backward compat
+- **MarketplaceService**：4 个 `vscode.EventEmitter` + `enable()` / `disable()` 方法
+- **MarketplaceHandler**：`market:enable` / `market:disable` 路由
+- **Webview**：InstalledView 启停 toggle（eye/eye-closed 图标）+ i18n（EN/ZH-CN）
+- **neko-cut MarketShaderService**：扫描 `~/.neko/shaders/` + 订阅市场事件热重载 + graceful degradation（无 market 时仅扫描）
+- market-core 64 测试 + neko-cut 468 测试全部通过
 
-### Phase 6.5.6（待开发）：商业化
-- LicenseManager 完整实现（JWT + 在线校验）+ 支付集成 + 发布者 Portal + 评分评论
+### Phase 6.5.6（待开发）：本地模型部署 + Engine ML 原生
+
+> 架构见 [model-runtime.md](./docs/architecture/model-runtime.md)。不创建 neko-runtime 包，改动归入现有包。
+
+**核心设计**：外部运行时（Ollama/ComfyUI）用户自行管理，通过 Provider/MCP 接入 neko-agent。neko-engine 嵌入 ONNX Runtime 原生处理轻量 ML 任务。媒体生成继续使用云端 API。
+
+- Phase M1 ✅：neko-market `ModelInstallTarget.onPostInstall/onPreUninstall` — GGUF → Ollama；ONNX → Engine（12 tests）
+- Phase M2 ✅：neko-engine `ort` crate ONNX — ml/ 模块 + IMlService + ModelsController +7 action + EngineClient 模型方法（10 Rust tests）。推理管线 placeholder，等 ort 2.0 stable
+- Phase M3（待评估）：neko-engine `candle` SD/SDXL 图片生成（前置：candle 推理 < PyTorch 2x 且支持 Flux）
+- 外部运行时接入（零 neko 代码）：Ollama → Provider 配置；ComfyUI → MCP Server 或 Provider
+
+### Phase 6.5.7（待开发）：Registry Server + 商业化
+
+> Registry Server 架构见 [registry-server.md](./docs/architecture/registry-server.md)
+
+**核心设计**：薄 API + 对象存储预签名直传（存储选型自带加速）+ 服务端上游代理（HF/Civitai，对客户端透明）。客户端 `registryUrl` 固定为官方地址，不做多 Registry。
+
+- **Registry Server**（`neko-market-server`）
+  - S1：最小 Server（Package API + SQLite + 本地文件 + Docker 镜像，复用 `IMarketClient` API 契约）
+  - S2：对象存储（S3/R2/OSS）+ 预签名 URL 直传 + 大文件分片上传 + Publisher 注册
+  - S3：服务端上游代理（HF/Civitai 适配器 + 透明缓存 + 搜索结果来源标记）
+  - S4：可见性控制（public/private/paid）+ LicenseManager 服务端 + 支付集成
+  - S4：发布者 Portal Web UI + 评分评论系统
 
 ### Phase 6.6（待开发）：远程存储与代理文件
 
 > 架构设计见 [remote-storage.md](./docs/architecture/remote-storage.md)
+
+**素材引用协议**：
+
+```
+.nkv / .nkc element.src 路径层级：
+├─ assets/clip.mp4              项目内素材（相对路径）         ✅ 已完成
+├─ ${FOOTAGE}/scene.mov         外部本地素材（PathVariable）   ✅ 已完成
+└─ neko://entity/variant/file   Asset Library 间接引用         Phase 6.6
+```
+
+`neko://` 引用通过 AssetManifest 解析，MediaResolver 自动决策用原始文件还是代理：
+
+```
+MediaResolver 决策逻辑：
+  neko://id → AssetManifest 查找
+    ├─ 原始文件在本地 → 返回原始路径（最优）
+    ├─ 原始不在 + 代理在本地 → 返回代理路径（预览/编辑够用）
+    ├─ 代理也没有 → 触发远程代理下载 → 返回下载后路径
+    └─ intent='export' + 原始不在 → 阻塞拉取原始文件
+  Engine 始终读本地文件 — 无改动
+```
+
+**代理/原始切换**：`AssetFile` 新增 `proxy?` 字段 + `'proxy'` 状态。预览用代理（720p），导出按需拉原始。
 
 **存储后端**：MinIO（S3 协议兼容），可切换 AWS S3 / Aliyun OSS / Cloudflare R2
 
@@ -321,10 +377,10 @@ Neko Storage Service（薄服务层）
 **核心流程**：上传 → 服务端生成代理 → 客户端下载代理到本地 → Engine 读本地代理编辑 → 导出时增量拉取原始文件
 
 **里程碑**：
-- Phase 6.6.1：基础设施（IFileTransport + S3Transport + ICacheManager + ProxyService 扩展）
+- Phase 6.6.1：基础设施（IFileTransport + S3Transport + ICacheManager + `neko://` 协议 + MediaResolver + AssetFile.proxy 字段）
 - Phase 6.6.2：上传 + 媒体代理生成（分片上传 + FFmpeg/libvips Worker）
 - Phase 6.6.3：文档 + 3D 代理生成（poppler/LibreOffice/gltf-transform Worker）
-- Phase 6.6.4：导出优化（预览导出用代理 + 最终导出增量拉取原始文件）
+- Phase 6.6.4：导出优化（预览导出用代理 + 最终导出增量拉取原始文件 + 代理/原始自动切换）
 
 ### Phase 6.7（待开发）：项目协作基础设施
 - Git LFS 集成（.gitignore/.gitattributes 模板自动生成 + neko-diff CLI + pHash 相似度 + AssetManifest OID 自动填充）— [ADR](./docs/architecture/project-data-management.md)
@@ -447,4 +503,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-25（架构调整：Phase 6.4 职责边界厘清，工具型资产不经 neko-assets；Phase 6.5.5 消费端热加载模式重新定义；代码验证：Phase 6.5.1-6.5.4 ✅）*
+*最后更新: 2026-03-25（neko-market 客户端标记完成 95%，registryUrl 固定，剩余任务归类为后端 + neko-runtime）*
