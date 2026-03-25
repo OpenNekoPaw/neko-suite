@@ -19,6 +19,9 @@ mod task;
 mod timeline;
 mod video;
 
+#[cfg(feature = "onnx")]
+pub mod ml;
+
 pub mod impls;
 
 pub use audio::IAudioService;
@@ -42,3 +45,8 @@ pub use impls::{
     MidiService, NodeService, PuppetService, SceneService, ServiceContainer, TaskService,
     TimelineService, VideoService,
 };
+
+#[cfg(feature = "onnx")]
+pub use impls::MlService;
+#[cfg(feature = "onnx")]
+pub use ml::IMlService;

@@ -13,6 +13,9 @@ use neko_native_core::services::{
     MidiService, NodeService, PuppetService, SceneService, TaskService, TimelineService,
     VideoService,
 };
+
+#[cfg(feature = "onnx")]
+use neko_native_core::services::IMlService;
 use neko_types::registry::{self, groups};
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
@@ -54,6 +57,7 @@ impl ActionRouter {
         gamepad_service: Arc<GamepadService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
+        #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
         Self {
             node_controller: NodeController::new(node_service),
@@ -76,6 +80,9 @@ impl ActionRouter {
             ),
             stream_controller: StreamController::new(stream_registry, timeline_service),
             effects_controller: EffectsController::new(effects_service),
+            #[cfg(feature = "onnx")]
+            models_controller: ModelsController::new(ml_service),
+            #[cfg(not(feature = "onnx"))]
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::new(scene_service),

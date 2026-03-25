@@ -20,6 +20,9 @@ mod task;
 mod timeline;
 mod video;
 
+#[cfg(feature = "onnx")]
+mod ml;
+
 pub use audio::AudioService;
 pub use camera::CameraService;
 pub use container::ServiceContainer;
@@ -34,3 +37,6 @@ pub use scene::SceneService;
 pub use task::TaskService;
 pub use timeline::TimelineService;
 pub use video::VideoService;
+
+#[cfg(feature = "onnx")]
+pub use ml::MlService;

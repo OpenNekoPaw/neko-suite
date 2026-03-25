@@ -13,7 +13,7 @@ crate-type = ["lib"]
 neko-types = { path = "../types" }
 
 # Core services
-neko-native-core = { path = "../native-core" }
+neko-native-core = { path = "../native-core", features = [] }
 
 # Async runtime
 tokio.workspace = true
@@ -38,6 +38,10 @@ glam.workspace = true
 
 # Base64 encoding (for INP puppet data transfer)
 base64.workspace = true
+
+[features]
+default = []
+onnx = ["neko-native-core/onnx"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }

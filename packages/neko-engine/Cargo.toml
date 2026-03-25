@@ -77,6 +77,10 @@ base64 = "0.22"
 # Image encoding - pure Rust JPEG encoder
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
+# ML inference - ONNX Runtime (dynamic linking)
+ort = { version = "2.0.0-rc.12", features = ["load-dynamic"] }
+ndarray = "0.16"
+
 # Text rendering - font shaping, layout, rasterization
 cosmic-text = "0.12"
 

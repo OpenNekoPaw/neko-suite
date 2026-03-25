@@ -32,6 +32,9 @@ pub mod preview;
 pub mod services;
 pub mod telemetry;
 
+#[cfg(feature = "onnx")]
+pub mod ml;
+
 // Re-export puppet world types so higher-level crates (native-api, native-http)
 // can access them without depending directly on neko-native-puppet
 pub use neko_native_puppet::world::PuppetDelta;

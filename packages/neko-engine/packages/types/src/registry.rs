@@ -110,7 +110,11 @@ pub mod actions {
         "applyOperation",
     ];
 
-    pub const MODELS: &[&str] = &["probe", "capture", "stream", "diff"];
+    pub const MODELS: &[&str] = &[
+        "probe", "capture", "stream", "diff",
+        "register", "unregister", "list",
+        "upscale", "denoise", "clip", "transcribe",
+    ];
 
     pub const CANVAS: &[&str] = &["composite", "capture", "export", "diff"];
 

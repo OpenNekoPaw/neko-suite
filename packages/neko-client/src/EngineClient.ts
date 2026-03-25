@@ -942,6 +942,109 @@ export class EngineClient {
   }
 
   // =========================================================================
+  // Models (ONNX inference) API
+  // =========================================================================
+
+  /**
+   * Register an ONNX model with the engine for inference.
+   * Model files must already exist on disk (e.g., installed via neko-market).
+   */
+  async registerModel(
+    name: string,
+    modelPath: string,
+    framework: string,
+    task: string,
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'register',
+      options: { name, path: modelPath, framework, task },
+    });
+    this.assertOk(resp, 'models:register');
+  }
+
+  /** Unregister a model (also unloads from memory if loaded). */
+  async unregisterModel(name: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'unregister',
+      options: { name },
+    });
+    this.assertOk(resp, 'models:unregister');
+  }
+
+  /** List all registered models. */
+  async listModels(): Promise<Record<string, unknown>[]> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'list',
+      options: {},
+    });
+    this.assertOk(resp, 'models:list');
+    return (resp.data ?? []) as Record<string, unknown>[];
+  }
+
+  /**
+   * Upscale an image using a registered ONNX model (e.g., Real-ESRGAN).
+   * @param model - registered model name
+   * @param input - input image file path
+   * @param output - output image file path
+   * @param scale - upscale factor (default: 4)
+   */
+  async upscale(model: string, input: string, output: string, scale = 4): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'upscale',
+      options: { model, input, output, scale },
+    });
+    this.assertOk(resp, 'models:upscale');
+  }
+
+  /**
+   * Denoise an image using a registered ONNX model.
+   * @param model - registered model name
+   * @param input - input image file path
+   * @param output - output image file path
+   * @param strength - denoise strength 0-1 (default: 0.5)
+   */
+  async denoiseImage(model: string, input: string, output: string, strength = 0.5): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'denoise',
+      options: { model, input, output, strength },
+    });
+    this.assertOk(resp, 'models:denoise');
+  }
+
+  /**
+   * Compute CLIP similarity score between an image and text.
+   * @returns similarity score in [-1, 1] range
+   */
+  async clipScore(model: string, image: string, text: string): Promise<number> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'clip',
+      options: { model, image, text },
+    });
+    this.assertOk(resp, 'models:clip');
+    return (resp.data as { score: number }).score;
+  }
+
+  /**
+   * Transcribe audio to text using a registered Whisper ONNX model.
+   * @returns transcribed text
+   */
+  async transcribe(model: string, audio: string): Promise<string> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'transcribe',
+      options: { model, audio },
+    });
+    this.assertOk(resp, 'models:transcribe');
+    return (resp.data as { text: string }).text;
+  }
+
+  // =========================================================================
   // Internals
   // =========================================================================
 

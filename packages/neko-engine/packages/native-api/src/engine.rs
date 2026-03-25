@@ -135,6 +135,8 @@ impl EngineApi {
             gamepad_service,
             resource_registry.clone(),
             stream_registry.clone(),
+            #[cfg(feature = "onnx")]
+            None, // MlService — created when first model is registered
         );
 
         Ok(Self {
