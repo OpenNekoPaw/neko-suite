@@ -19,6 +19,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type { ProjectData } from '@neko/shared';
+import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import { getLogger } from '../base';
 
 const logger = getLogger('ExportService');
@@ -171,7 +172,7 @@ export class ExportService implements vscode.Disposable {
     const jobId = `export-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
     const duration = this.computeProjectDuration(project);
-    const exportJobConfig = this.buildExportJobConfig(jobId, project, config, duration);
+    const exportJobConfig = await this.buildExportJobConfig(jobId, project, config, duration);
 
     // Dispatch timelines:export_enqueue
     const response = await this.dispatch({
@@ -401,12 +402,12 @@ export class ExportService implements vscode.Disposable {
   /**
    * Build ExportJobConfig for Rust timelines:export_enqueue action
    */
-  private buildExportJobConfig(
+  private async buildExportJobConfig(
     jobId: string,
     project: ProjectData,
     config: ExportConfig,
     duration: number,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const qualityPreset = QUALITY_PRESETS[config.quality] ?? {
       preset: 'medium',
       baseBitrate: 6_000_000,
@@ -417,7 +418,7 @@ export class ExportService implements vscode.Disposable {
     const videoBitrate = Math.round(qualityPreset.baseBitrate * pixelRatio);
 
     // Build timeline from project data, resolving relative paths
-    const timeline = this.buildTimeline(project, duration);
+    const timeline = await this.buildTimeline(project, duration);
 
     return {
       jobId,
@@ -448,19 +449,24 @@ export class ExportService implements vscode.Disposable {
    * - Transition type maps to "transitionType" (not "type")
    * - EffectParams schema differs from EffectInstance
    */
-  private buildTimeline(project: ProjectData, duration: number): Record<string, unknown> {
-    const tracks = project.tracks.map((track) => ({
-      id: track.id,
-      name: track.name ?? '',
-      type: track.type,
-      elements: track.elements.map((el) =>
-        this.convertElement(el as unknown as Record<string, unknown>),
-      ),
-      muted: track.muted ?? false,
-      locked: track.locked ?? false,
-      hidden: track.hidden ?? false,
-      isMain: track.isMain ?? false,
-    }));
+  private async buildTimeline(
+    project: ProjectData,
+    duration: number,
+  ): Promise<Record<string, unknown>> {
+    const tracks = await Promise.all(
+      project.tracks.map(async (track) => ({
+        id: track.id,
+        name: track.name ?? '',
+        type: track.type,
+        elements: await Promise.all(
+          track.elements.map((el) => this.convertElement(el as unknown as Record<string, unknown>)),
+        ),
+        muted: track.muted ?? false,
+        locked: track.locked ?? false,
+        hidden: track.hidden ?? false,
+        isMain: track.isMain ?? false,
+      })),
+    );
 
     return {
       duration,
@@ -475,7 +481,7 @@ export class ExportService implements vscode.Disposable {
    * Convert a project element to domain-compatible format.
    * Handles field name mapping and value sanitization.
    */
-  private convertElement(element: Record<string, unknown>): Record<string, unknown> {
+  private async convertElement(element: Record<string, unknown>): Promise<Record<string, unknown>> {
     const el = element as Record<string, unknown>;
 
     // Base element fields (shared by all element types)
@@ -513,7 +519,7 @@ export class ExportService implements vscode.Disposable {
     switch (el.type) {
       case 'media': {
         const src = el.src as string | undefined;
-        result.src = src ? this.resolveMediaPath(src) : '';
+        result.src = src ? await this.resolveMediaPath(src) : '';
         if (el.resourceId) result.resourceId = el.resourceId;
         if (el.mediaType) result.mediaType = el.mediaType;
         if (el.linkedAudioId) result.linkedAudioId = el.linkedAudioId;
@@ -522,7 +528,7 @@ export class ExportService implements vscode.Disposable {
       }
       case 'audio': {
         const src = el.src as string | undefined;
-        result.src = src ? this.resolveMediaPath(src) : '';
+        result.src = src ? await this.resolveMediaPath(src) : '';
         if (el.resourceId) result.resourceId = el.resourceId;
         if (el.linkedVideoId) result.linkedVideoId = el.linkedVideoId;
         if (el.audio) result.audio = this.sanitizeAudioProps(el.audio as Record<string, unknown>);
@@ -690,9 +696,8 @@ export class ExportService implements vscode.Disposable {
   /**
    * Resolve a media path to absolute (relative to .nkv document dir)
    */
-  private resolveMediaPath(mediaPath: string): string {
-    if (path.isAbsolute(mediaPath)) return mediaPath;
-    return path.resolve(this.documentDir, mediaPath);
+  private async resolveMediaPath(mediaPath: string): Promise<string> {
+    return resolveMediaPathHelper(mediaPath, this.documentDir);
   }
 
   /**

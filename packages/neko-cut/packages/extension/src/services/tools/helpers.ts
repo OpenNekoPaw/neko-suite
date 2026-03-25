@@ -3,6 +3,7 @@
  */
 
 import * as path from 'path';
+import * as vscode from 'vscode';
 import type { ProjectData, TimelineElement, TimelineTrack } from '@neko/shared';
 
 // =============================================================================
@@ -65,38 +66,93 @@ export function createElement(fields: Record<string, unknown>): TimelineElement 
   return fields as unknown as TimelineElement;
 }
 
-export function toRelativeIfAbsolute(filePath: string, baseDir: string): string {
-  if (!path.isAbsolute(filePath)) {
-    return filePath;
+// =============================================================================
+// Portable Path Utilities (PathVariable integration)
+// =============================================================================
+
+/**
+ * Contract an absolute path to a portable path for storage.
+ *
+ * Priority:
+ * 1. PathVariable: /Volumes/NAS/footage/clip.mp4 → ${FOOTAGE}/clip.mp4
+ * 2. Relative to project dir: /project/assets/clip.mp4 → assets/clip.mp4
+ */
+async function contractPath(absolutePath: string, baseDir: string): Promise<string> {
+  try {
+    const contracted = await vscode.commands.executeCommand<string>(
+      'neko.assets.contractPath',
+      absolutePath,
+    );
+    if (contracted && contracted.startsWith('${')) return contracted;
+  } catch {
+    // neko-assets not active, fallback to relative
   }
 
-  let relativePath = path.relative(baseDir, filePath);
+  let relativePath = path.relative(baseDir, absolutePath);
   relativePath = relativePath.split(path.sep).join('/');
   return relativePath;
 }
 
-export function normalizePathsForSave(project: ProjectData, projectFilePath?: string): ProjectData {
-  if (!projectFilePath) {
-    return project;
+/**
+ * Resolve a stored path (PathVariable or relative) to an absolute path.
+ */
+export async function resolveMediaPath(storedPath: string, baseDir: string): Promise<string> {
+  // PathVariable: ${VAR}/rest → absolute
+  if (storedPath.startsWith('${')) {
+    try {
+      const resolved = await vscode.commands.executeCommand<string>(
+        'neko.assets.resolvePath',
+        storedPath,
+      );
+      if (resolved) return resolved;
+    } catch {
+      // neko-assets not active
+    }
+    return storedPath;
   }
+
+  // Absolute path: return as-is
+  if (path.isAbsolute(storedPath)) return storedPath;
+
+  // Relative path: resolve against base dir
+  return path.resolve(baseDir, storedPath);
+}
+
+/**
+ * Normalize all element paths in a project for saving.
+ *
+ * Converts absolute paths to portable paths:
+ * - External paths → ${VAR}/rest (via PathResolver)
+ * - Project-internal paths → relative to project dir
+ */
+export async function normalizePathsForSave(
+  project: ProjectData,
+  projectFilePath?: string,
+): Promise<ProjectData> {
+  if (!projectFilePath) return project;
 
   const baseDir = path.dirname(projectFilePath);
 
-  return {
-    ...project,
-    tracks: project.tracks.map((track) => ({
+  const tracks = await Promise.all(
+    project.tracks.map(async (track) => ({
       ...track,
-      elements: track.elements.map((element) => {
-        if (
-          (element.type === 'media' || element.type === 'audio' || element.type === 'scene3d') &&
-          typeof element.src === 'string'
-        ) {
-          return { ...element, src: toRelativeIfAbsolute(element.src, baseDir) } as TimelineElement;
-        }
-        return element;
-      }),
+      elements: await Promise.all(
+        track.elements.map(async (element) => {
+          if (
+            (element.type === 'media' || element.type === 'audio' || element.type === 'scene3d') &&
+            typeof element.src === 'string' &&
+            path.isAbsolute(element.src)
+          ) {
+            const portable = await contractPath(element.src, baseDir);
+            return { ...element, src: portable } as TimelineElement;
+          }
+          return element;
+        }),
+      ),
     })),
-  };
+  );
+
+  return { ...project, tracks };
 }
 
 export function findElement(

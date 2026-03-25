@@ -35,6 +35,8 @@ export const marketplace = {
   'marketplace.action.install': 'Install',
   'marketplace.action.uninstall': 'Uninstall',
   'marketplace.action.update': 'Update',
+  'marketplace.action.enable': 'Enable',
+  'marketplace.action.disable': 'Disable',
   'marketplace.action.installing': 'Installing...',
   'marketplace.action.uninstalling': 'Uninstalling...',
 

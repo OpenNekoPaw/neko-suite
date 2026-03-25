@@ -68,6 +68,17 @@ const EXTENSION_TO_MEDIA_TYPE: Record<string, AssetMediaType> = {
   ass: 'text',
   ssa: 'text',
   sub: 'text',
+  // Document
+  pdf: 'document',
+  doc: 'document',
+  docx: 'document',
+  ppt: 'document',
+  pptx: 'document',
+  xls: 'document',
+  xlsx: 'document',
+  epub: 'document',
+  cbz: 'document',
+  fdx: 'document',
 };
 
 // =============================================================================
@@ -121,6 +132,17 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   ass: 'text/x-ssa',
   ssa: 'text/x-ssa',
   sub: 'text/x-sub',
+  // Document
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  epub: 'application/epub+zip',
+  cbz: 'application/x-cbz',
+  fdx: 'application/xml+fdx',
 };
 
 // =============================================================================
@@ -152,6 +174,7 @@ export function getFileExtension(filePath: string): string {
  * - `'audio'` — mp3, wav, ogg, aac, m4a, flac, wma, opus
  * - `'image'` — jpg, jpeg, png, gif, webp, bmp, svg, tiff
  * - `'text'`  — txt, md, json, yaml, csv, xml, srt, vtt, ass, ssa, sub
+ * - `'document'` — pdf, doc, docx, ppt, pptx, xls, xlsx, epub, cbz, fdx
  * - `'sequence'` — image files with 3+ consecutive digits (e.g., frame_001.png)
  * - `'image'` as fallback for unknown extensions
  *
@@ -212,6 +235,14 @@ export function isImageSequence(filePath: string): boolean {
   // Remove extension before checking
   const nameWithoutExt = fileName.replace(/\.[^.]+$/, '');
   return /\d{3,}/.test(nameWithoutExt);
+}
+
+/**
+ * Check if a file path corresponds to a document file (PDF, Word, PPT, etc.).
+ */
+export function isDocumentFile(filePath: string): boolean {
+  const ext = getFileExtension(filePath);
+  return EXTENSION_TO_MEDIA_TYPE[ext] === 'document';
 }
 
 /**

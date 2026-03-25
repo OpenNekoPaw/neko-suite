@@ -38,10 +38,14 @@ class EntityItem extends vscode.TreeItem {
     this.description =
       entity.variants.length > 1 ? `${entity.variants.length} variants` : undefined;
     this.contextValue = 'entity';
+    const ownershipLabel = entity.ownership
+      ? `Scope: ${entity.ownership.scope} (${entity.ownership.access})`
+      : undefined;
     this.tooltip = [
       entity.name,
       entity.description,
       entity.tags.length > 0 ? `Tags: ${entity.tags.join(', ')}` : undefined,
+      ownershipLabel,
     ]
       .filter(Boolean)
       .join('\n');
@@ -191,6 +195,7 @@ function getCategoryLabel(category: EntityCategory): string {
     effect: 'Effects',
     ui: 'UI',
     audio: 'Audio',
+    document: 'Documents',
   };
   return labels[category] ?? category;
 }
@@ -205,6 +210,7 @@ function getCategoryIcon(category: EntityCategory): string {
     effect: 'sparkle',
     ui: 'layout',
     audio: 'unmute',
+    document: 'file-text',
   };
   return icons[category] ?? 'file';
 }

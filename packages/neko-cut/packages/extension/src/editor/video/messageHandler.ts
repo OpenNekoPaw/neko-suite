@@ -17,6 +17,7 @@ import {
   type EditOperation,
 } from '@neko/shared';
 import { getLogger } from '../../base';
+import { normalizePathsForSave, resolveMediaPath } from '../../services/tools/helpers';
 
 const logger = getLogger('MessageHandler');
 
@@ -155,7 +156,7 @@ export class MessageHandler {
    */
   private async handleSave(content: ProjectData): Promise<void> {
     try {
-      const normalizedContent = this.normalizePathsForSave(content);
+      const normalizedContent = await normalizePathsForSave(content, this.model.uri.fsPath);
       const success = await this.model.updateProjectData(normalizedContent);
       if (success) {
         this.webview.postMessage({ type: 'saved' });
@@ -169,56 +170,11 @@ export class MessageHandler {
   }
 
   /**
-   * Convert absolute paths to relative paths for portable .nkv files
-   * Paths are relative to the .nkv file location, not workspace root
+   * Resolve a stored path (PathVariable, relative, or absolute) to absolute.
    */
-  private normalizePathsForSave(content: ProjectData): ProjectData {
-    // Get the directory containing the .nkv file
+  private async resolveStoredMediaPath(filePath: string): Promise<string> {
     const jviDir = path.dirname(this.model.uri.fsPath);
-    const normalized = JSON.parse(JSON.stringify(content)) as ProjectData;
-
-    for (const track of normalized.tracks) {
-      for (const element of track.elements) {
-        if ('src' in element && typeof element.src === 'string') {
-          element.src = this.toRelativePath(element.src, jviDir);
-        }
-      }
-    }
-
-    return normalized;
-  }
-
-  /**
-   * Convert an absolute path to a relative path from the given base directory
-   */
-  private toRelativePath(filePath: string, baseDir: string): string {
-    if (!path.isAbsolute(filePath)) {
-      return filePath;
-    }
-
-    const normalizedPath = path.normalize(filePath);
-    const normalizedBase = path.normalize(baseDir);
-
-    // Check if file is within or accessible from base directory
-    let relativePath = path.relative(baseDir, filePath);
-    relativePath = relativePath.split(path.sep).join('/');
-
-    return relativePath;
-  }
-
-  /**
-   * Resolve a media path to absolute path
-   * Paths in .nkv files are relative to the .nkv file location
-   */
-  private resolveMediaPath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-      return filePath;
-    }
-
-    // Resolve relative to .nkv file directory
-    const jviDir = path.dirname(this.model.uri.fsPath);
-    const resolved = path.resolve(jviDir, filePath);
-    return resolved;
+    return resolveMediaPath(filePath, jviDir);
   }
 
   /**
@@ -229,7 +185,7 @@ export class MessageHandler {
   private async handleRequestFile(filePath: string): Promise<void> {
     try {
       // Resolve path relative to .nkv file
-      const absolutePath = this.resolveMediaPath(filePath);
+      const absolutePath = await this.resolveStoredMediaPath(filePath);
       const fileUri = vscode.Uri.file(absolutePath);
 
       try {
@@ -710,7 +666,7 @@ export class MessageHandler {
   ): Promise<void> {
     try {
       // Resolve path relative to .nkv file
-      const absolutePath = this.resolveMediaPath(filePath);
+      const absolutePath = await this.resolveStoredMediaPath(filePath);
 
       // Get file stats
       const stats = fs.statSync(absolutePath);

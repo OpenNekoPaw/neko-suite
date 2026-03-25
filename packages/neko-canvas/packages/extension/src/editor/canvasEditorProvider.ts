@@ -5,6 +5,7 @@
  * NativeEngine and frame server via NekoPreviewAPI.
  */
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { loadNkc } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
@@ -295,9 +296,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
       case 'save': {
-        // Save canvas data back to file
+        // Save canvas data back to file, normalizing asset paths for portability
         try {
           const data = message.data as Record<string, unknown>;
+          await this.normalizeCanvasPathsForSave(data, document.uri);
           const content = JSON.stringify(data, null, 2);
           await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
           // Sync outline & status bar on every save
@@ -322,7 +324,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         try {
           // Resolve to filesystem path (handles webview URIs, absolute, and relative paths)
-          const fsPath = this.resolveAssetPath(assetPath, document.uri);
+          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
           const fileUri = vscode.Uri.file(fsPath);
 
           const ext = assetPath.split('.').pop()?.toLowerCase() ?? '';
@@ -401,7 +403,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         logger.debug(`media:probe received, assetPath: ${assetPath}, nodeId: ${message.nodeId}`);
         if (!assetPath) break;
         try {
-          const filePath = this.resolveAssetPath(assetPath, document.uri);
+          const filePath = await this.resolveAssetPath(assetPath, document.uri);
           logger.debug(`Resolved filePath: ${filePath}`);
           const api = await this.getPreviewApi();
           logger.debug(`Preview API available: ${!!api}, isAvailable: ${api?.isAvailable}`);
@@ -439,7 +441,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const speed = (message.speed as number) ?? 1.0;
         if (!assetPath || !mediaInfo) break;
         try {
-          const filePath = this.resolveAssetPath(assetPath, document.uri);
+          const filePath = await this.resolveAssetPath(assetPath, document.uri);
           const api = await this.getPreviewApi();
           if (!api) {
             webviewPanel.webview.postMessage({
@@ -521,7 +523,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const time = (message.time as number) ?? 0;
         if (!assetPath) break;
         try {
-          const filePath = this.resolveAssetPath(assetPath, document.uri);
+          const filePath = await this.resolveAssetPath(assetPath, document.uri);
           const api = await this.getPreviewApi();
           if (!api) {
             webviewPanel.webview.postMessage({
@@ -661,8 +663,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return CanvasEditorProvider.MEDIA_EXTENSIONS[ext] ?? null;
   }
 
-  /** Resolve asset path to absolute filesystem path */
-  private resolveAssetPath(assetPath: string, documentUri: vscode.Uri): string {
+  /** Resolve asset path (PathVariable, webview URI, relative, or absolute) to absolute filesystem path */
+  private async resolveAssetPath(assetPath: string, documentUri: vscode.Uri): Promise<string> {
+    // PathVariable: ${VAR}/rest → absolute
+    if (assetPath.startsWith('${')) {
+      try {
+        const resolved = await vscode.commands.executeCommand<string>(
+          'neko.assets.resolvePath',
+          assetPath,
+        );
+        if (resolved) return resolved;
+      } catch {
+        // neko-assets not active
+      }
+      return assetPath;
+    }
     // Handle webview URIs (https:/file+.vscode-resource.vscode-cdn.net/path/to/file)
     const vscodeResourceMatch = assetPath.match(/vscode-resource\.vscode-cdn\.net(\/.*)/);
     if (vscodeResourceMatch) {
@@ -675,6 +690,45 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     // Relative path — resolve against document's directory
     const docDir = vscode.Uri.joinPath(documentUri, '..');
     return vscode.Uri.joinPath(docDir, assetPath).fsPath;
+  }
+
+  /** Normalize all media node asset paths in canvas data for portable storage */
+  private async normalizeCanvasPathsForSave(
+    data: Record<string, unknown>,
+    documentUri: vscode.Uri,
+  ): Promise<void> {
+    const nodes = data['nodes'] as Array<Record<string, unknown>> | undefined;
+    if (!nodes) return;
+
+    for (const node of nodes) {
+      if (node['type'] !== 'media') continue;
+      const nodeData = node['data'] as Record<string, unknown> | undefined;
+      if (!nodeData || typeof nodeData['assetPath'] !== 'string') continue;
+
+      const assetPath = nodeData['assetPath'] as string;
+      // Resolve to absolute first (handle webview URIs, relative, etc.)
+      const absolutePath = await this.resolveAssetPath(assetPath, documentUri);
+      // Contract to portable path
+      nodeData['assetPath'] = await this.contractAssetPath(absolutePath, documentUri);
+    }
+  }
+
+  /** Contract absolute path to portable path for storage */
+  private async contractAssetPath(absolutePath: string, documentUri: vscode.Uri): Promise<string> {
+    // Try PathVariable first (for external paths)
+    try {
+      const contracted = await vscode.commands.executeCommand<string>(
+        'neko.assets.contractPath',
+        absolutePath,
+      );
+      if (contracted && contracted.startsWith('${')) return contracted;
+    } catch {
+      // neko-assets not active
+    }
+
+    // Fallback: relative to document directory
+    const docDir = path.dirname(documentUri.fsPath);
+    return path.relative(docDir, absolutePath).split(path.sep).join('/');
   }
 
   // ===========================================================================

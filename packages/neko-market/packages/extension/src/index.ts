@@ -7,14 +7,19 @@ import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { LogLevel } from '@neko/shared';
 import { MarketplaceService } from './MarketplaceService';
 import { MarketplaceProvider } from './MarketplaceProvider';
+import { NekoMarketAPIImpl } from './market-api';
+import type { NekoMarketAPI, MarketAssetEvent } from './market-api';
 
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export type { NekoMarketAPI, MarketAssetEvent };
+
+export async function activate(context: vscode.ExtensionContext): Promise<NekoMarketAPI> {
   const logger = createVSCodeLogger('Neko Marketplace', 'NekoMarket', context, LogLevel.Info);
 
   logger.info('Neko Marketplace activating');
 
   const service = new MarketplaceService(logger);
   const provider = new MarketplaceProvider(context.extensionUri, service, logger);
+  const api = new NekoMarketAPIImpl(service);
 
   context.subscriptions.push(
     // Register webview view in Activity Bar
@@ -32,10 +37,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     service,
+    api,
     { dispose: () => provider.dispose() },
   );
 
   logger.info('Neko Marketplace activated');
+  return api;
 }
 
 export function deactivate(): void {

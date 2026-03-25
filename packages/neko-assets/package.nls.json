@@ -30,5 +30,6 @@
   "neko.assets.previewMediaLibraryFile": "Preview Media",
   "neko.assets.addToTimelineFromLibrary": "Add to Timeline",
   "neko.assets.addToCanvasFromLibrary": "Add to Canvas",
-  "neko.assets.refreshMediaLibraries": "Refresh Media Libraries"
+  "neko.assets.refreshMediaLibraries": "Refresh Media Libraries",
+  "neko.assets.searchMediaLibrary": "Search Media Library"
 }

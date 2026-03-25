@@ -31,6 +31,7 @@ export interface InstalledItem {
   type: string;
   installedAt: string;
   installedPath: string;
+  enabled: boolean;
 }
 
 export interface UpdateItem {

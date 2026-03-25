@@ -124,6 +124,8 @@ export interface InstalledPackage {
   installedAt: number;
   installedPath: string;
   manifest: AssetManifest;
+  /** Whether this package is enabled (default: true). Disabled packages remain on disk but are not loaded by consumers. */
+  enabled: boolean;
 }
 
 /** Update availability info */

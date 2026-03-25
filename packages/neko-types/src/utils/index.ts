@@ -13,6 +13,7 @@ export {
   detectMediaType,
   getMimeType,
   isMediaFile,
+  isDocumentFile,
   isImageSequence,
   isSubtitleFile,
   getExtensionsForType,

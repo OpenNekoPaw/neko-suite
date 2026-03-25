@@ -42,6 +42,7 @@ export class EntityService {
       lastUsedAt: undefined,
       createdAt: now,
       updatedAt: now,
+      ownership: input.ownership ?? { scope: 'project', access: 'editable' },
     };
 
     await this.storage.saveEntity(entity);
@@ -90,6 +91,9 @@ export class EntityService {
     }
     if (updates.aliases !== undefined) {
       entity.aliases = updates.aliases;
+    }
+    if (updates.ownership !== undefined) {
+      entity.ownership = updates.ownership;
     }
     if (updates.defaultVariantId !== undefined) {
       // Validate that the variant exists

@@ -273,6 +273,14 @@ export class JsonFileStorage implements IAssetStorageWithEvents {
       results = results.filter((e) => e.usageCount >= query.minUsageCount!);
     }
 
+    // Filter by ownership scopes
+    if (query.ownershipScopes && query.ownershipScopes.length > 0) {
+      results = results.filter((e) => {
+        const scope = e.ownership?.scope ?? 'project';
+        return query.ownershipScopes!.includes(scope);
+      });
+    }
+
     // Filter by variant attributes
     if (query.variantAttributes) {
       const attrs = query.variantAttributes;

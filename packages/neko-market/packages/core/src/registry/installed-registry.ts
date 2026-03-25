@@ -29,6 +29,13 @@ export class InstalledRegistry {
     try {
       const content = await readFile(this.filePath, 'utf-8');
       this.data = JSON.parse(content) as InstalledRegistryData;
+      // Backward compatibility: ensure all records have `enabled` (default true)
+      Object.keys(this.data.packages).forEach((key) => {
+        const pkg = this.data!.packages[key];
+        if (pkg && pkg.enabled === undefined) {
+          pkg.enabled = true;
+        }
+      });
     } catch {
       this.data = { version: REGISTRY_VERSION, packages: {} };
     }
@@ -44,7 +51,17 @@ export class InstalledRegistry {
   /** Add or update an installed package record */
   async add(pkg: InstalledPackage): Promise<void> {
     this.ensureLoaded();
-    this.data!.packages[pkg.packageId] = pkg;
+    // Ensure enabled defaults to true for new records
+    this.data!.packages[pkg.packageId] = { ...pkg, enabled: pkg.enabled ?? true };
+    await this.save();
+  }
+
+  /** Set the enabled state of an installed package */
+  async setEnabled(packageId: string, enabled: boolean): Promise<void> {
+    this.ensureLoaded();
+    const pkg = this.data!.packages[packageId];
+    if (!pkg) return;
+    pkg.enabled = enabled;
     await this.save();
   }
 

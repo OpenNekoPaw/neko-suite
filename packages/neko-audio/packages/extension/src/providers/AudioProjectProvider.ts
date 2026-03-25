@@ -95,8 +95,9 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     const cached = this._projectDataCache.get(docKey);
     if (!cached) return;
 
-    // Serialize cache directly to .nka (v2 format)
-    const content = JSON.stringify(cached, null, 2);
+    // Normalize paths for portable .nka files
+    const normalized = await this.normalizePathsForSave(cached, document.uri.fsPath);
+    const content = JSON.stringify(normalized, null, 2);
     await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
   }
 
@@ -108,7 +109,8 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     const cached = this._projectDataCache.get(docKey);
     if (!cached) return;
 
-    const content = JSON.stringify(cached, null, 2);
+    const normalized = await this.normalizePathsForSave(cached, destination.fsPath);
+    const content = JSON.stringify(normalized, null, 2);
     await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
   }
 
@@ -785,6 +787,50 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     const lastDot = inputPath.lastIndexOf('.');
     if (lastDot === -1) return `${inputPath}_${suffix}`;
     return `${inputPath.substring(0, lastDot)}_${suffix}${inputPath.substring(lastDot)}`;
+  }
+
+  // =========================================================================
+  // Path Normalization
+  // =========================================================================
+
+  /**
+   * Normalize element paths for portable .nka files.
+   * External paths → ${VAR}/rest via PathResolver; internal → relative.
+   */
+  private async normalizePathsForSave(
+    project: AudioProjectData,
+    projectFilePath: string,
+  ): Promise<AudioProjectData> {
+    const baseDir = path.dirname(projectFilePath);
+    const normalized = JSON.parse(JSON.stringify(project)) as AudioProjectData;
+
+    for (const track of normalized.tracks) {
+      for (const element of track.elements) {
+        if ('src' in element && typeof element.src === 'string' && path.isAbsolute(element.src)) {
+          // Try PathVariable for external paths
+          let portable: string | undefined;
+          try {
+            const contracted = await vscode.commands.executeCommand<string>(
+              'neko.assets.contractPath',
+              element.src,
+            );
+            if (contracted && contracted.startsWith('${')) {
+              portable = contracted;
+            }
+          } catch {
+            // neko-assets not active
+          }
+
+          if (!portable) {
+            portable = path.relative(baseDir, element.src).split(path.sep).join('/');
+          }
+
+          (element as unknown as Record<string, unknown>).src = portable;
+        }
+      }
+    }
+
+    return normalized;
   }
 
   // =========================================================================

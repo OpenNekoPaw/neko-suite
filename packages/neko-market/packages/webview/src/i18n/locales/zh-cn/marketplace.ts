@@ -35,6 +35,8 @@ export const marketplace = {
   'marketplace.action.install': '安装',
   'marketplace.action.uninstall': '卸载',
   'marketplace.action.update': '更新',
+  'marketplace.action.enable': '启用',
+  'marketplace.action.disable': '停用',
   'marketplace.action.installing': '安装中...',
   'marketplace.action.uninstalling': '卸载中...',
 

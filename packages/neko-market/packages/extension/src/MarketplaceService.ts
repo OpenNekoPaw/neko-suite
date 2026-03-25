@@ -30,6 +30,7 @@ import type { AssetType } from '@neko/shared/types/asset/manifest';
 import type { IAuthSession, ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 
+import type { MarketAssetEvent } from './market-api';
 import { SkillInstallTarget } from './SkillInstallTarget';
 import { ShaderInstallTarget } from './ShaderInstallTarget';
 import { ModelInstallTarget } from './ModelInstallTarget';
@@ -56,8 +57,22 @@ export class MarketplaceService implements vscode.Disposable {
   private readonly _installedRegistry: InstalledRegistry;
   private readonly _disposables: vscode.Disposable[] = [];
 
+  // Progress events (webview consumption)
   private readonly _onInstallProgress = new vscode.EventEmitter<InstallProgress>();
   readonly onInstallProgress = this._onInstallProgress.event;
+
+  // Public API events (cross-extension consumption)
+  private readonly _onDidInstall = new vscode.EventEmitter<MarketAssetEvent>();
+  readonly onDidInstall = this._onDidInstall.event;
+
+  private readonly _onDidUninstall = new vscode.EventEmitter<MarketAssetEvent>();
+  readonly onDidUninstall = this._onDidUninstall.event;
+
+  private readonly _onDidEnable = new vscode.EventEmitter<MarketAssetEvent>();
+  readonly onDidEnable = this._onDidEnable.event;
+
+  private readonly _onDidDisable = new vscode.EventEmitter<MarketAssetEvent>();
+  readonly onDidDisable = this._onDidDisable.event;
 
   constructor(private readonly _logger: ILogger) {
     this._client = new MarketClient();
@@ -92,7 +107,13 @@ export class MarketplaceService implements vscode.Disposable {
       this._logger.error('Failed to load installed registry', toBaseError(err));
     });
 
-    this._disposables.push(this._onInstallProgress);
+    this._disposables.push(
+      this._onInstallProgress,
+      this._onDidInstall,
+      this._onDidUninstall,
+      this._onDidEnable,
+      this._onDidDisable,
+    );
     this.initAuth();
   }
 
@@ -146,13 +167,21 @@ export class MarketplaceService implements vscode.Disposable {
       this._onInstallProgress.fire(progress),
     );
 
-    if (result.success) {
-      this._logger.info(`Installed ${packageId} → ${result.installedPath ?? 'done'}`);
+    if (result.success && result.manifest && result.installedPath) {
+      this._logger.info(`Installed ${packageId} → ${result.installedPath}`);
+
+      this._onDidInstall.fire({
+        packageId,
+        type: result.manifest.type,
+        installedPath: result.installedPath,
+        manifest: result.manifest,
+      });
+
       // Notify neko-agent to rescan skills if command is available (optional, graceful degradation)
       vscode.commands.executeCommand('neko.agent.rescanSkills').then(undefined, () => {
         /* command not available, ignore */
       });
-    } else {
+    } else if (!result.success) {
       this._logger.warn(`Install failed: ${packageId}`, result.error);
     }
 
@@ -161,10 +190,64 @@ export class MarketplaceService implements vscode.Disposable {
 
   async uninstall(packageId: string): Promise<void> {
     this._logger.info(`Uninstalling ${packageId}`);
+
+    // Capture package info before removal for the event
+    const record = this._installedRegistry.get(packageId);
+
     await this._installManager.uninstall(packageId);
     this._logger.info(`Uninstalled ${packageId}`);
+
+    if (record) {
+      this._onDidUninstall.fire({
+        packageId,
+        type: record.type,
+        installedPath: record.installedPath,
+        manifest: record.manifest,
+      });
+    }
+
     vscode.commands.executeCommand('neko.agent.rescanSkills').then(undefined, () => {
       /* ignore */
+    });
+  }
+
+  // ===========================================================================
+  // Enable / Disable
+  // ===========================================================================
+
+  async enable(packageId: string): Promise<void> {
+    const record = this._installedRegistry.get(packageId);
+    if (!record) {
+      this._logger.warn(`Cannot enable: package not installed: ${packageId}`);
+      return;
+    }
+
+    await this._installedRegistry.setEnabled(packageId, true);
+    this._logger.info(`Enabled ${packageId}`);
+
+    this._onDidEnable.fire({
+      packageId,
+      type: record.type,
+      installedPath: record.installedPath,
+      manifest: record.manifest,
+    });
+  }
+
+  async disable(packageId: string): Promise<void> {
+    const record = this._installedRegistry.get(packageId);
+    if (!record) {
+      this._logger.warn(`Cannot disable: package not installed: ${packageId}`);
+      return;
+    }
+
+    await this._installedRegistry.setEnabled(packageId, false);
+    this._logger.info(`Disabled ${packageId}`);
+
+    this._onDidDisable.fire({
+      packageId,
+      type: record.type,
+      installedPath: record.installedPath,
+      manifest: record.manifest,
     });
   }
 
@@ -174,6 +257,11 @@ export class MarketplaceService implements vscode.Disposable {
 
   async listInstalled(): Promise<InstalledPackage[]> {
     return this._installManager.listInstalled();
+  }
+
+  /** Check if a package is installed (regardless of enabled state) */
+  isInstalled(packageId: string): boolean {
+    return this._installedRegistry.has(packageId);
   }
 
   async checkUpdates(): Promise<UpdateInfo[]> {

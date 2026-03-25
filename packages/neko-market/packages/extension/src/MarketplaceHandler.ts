@@ -50,6 +50,12 @@ export class MarketplaceHandler {
       case 'market:checkUpdates':
         return this._handleCheckUpdates(postMessage);
 
+      case 'market:enable':
+        return this._handleEnable(message['packageId'] as string, postMessage);
+
+      case 'market:disable':
+        return this._handleDisable(message['packageId'] as string, postMessage);
+
       default:
         return false;
     }
@@ -160,6 +166,38 @@ export class MarketplaceHandler {
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error('checkUpdates failed', e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleEnable(packageId: string, postMessage: PostMessageFn): Promise<boolean> {
+    try {
+      await this._service.enable(packageId);
+      postMessage({ type: 'market:enableResult', data: { packageId, success: true } });
+
+      // Refresh installed list
+      const installed = await this._service.listInstalled();
+      postMessage({ type: 'market:installedResult', data: installed });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error(`Enable failed: ${packageId}`, e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleDisable(packageId: string, postMessage: PostMessageFn): Promise<boolean> {
+    try {
+      await this._service.disable(packageId);
+      postMessage({ type: 'market:disableResult', data: { packageId, success: true } });
+
+      // Refresh installed list
+      const installed = await this._service.listInstalled();
+      postMessage({ type: 'market:installedResult', data: installed });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error(`Disable failed: ${packageId}`, e);
       postMessage({ type: 'market:error', error: e.message });
     }
     return true;

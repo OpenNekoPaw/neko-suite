@@ -67,7 +67,7 @@ const SYSTEM_PROMPT_CLASSIFY = `\
 You are a creative asset classifier for a video/game production pipeline.
 Analyze the provided file and return ONLY valid JSON with this exact schema:
 {
-  "category": "character"|"creature"|"object"|"vehicle"|"environment"|"effect"|"ui"|"audio",
+  "category": "character"|"creature"|"object"|"vehicle"|"environment"|"effect"|"ui"|"audio"|"document",
   "name": "human-readable name without extension",
   "description": "one sentence description",
   "tags": ["tag1", "tag2"],

@@ -21,6 +21,7 @@ import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import { createServiceId } from '../base';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
+import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import type { ProxyManifest, ProxyEntry, ProxyStatus } from '@neko/shared';
 
 // =============================================================================
@@ -97,7 +98,7 @@ export class ProxyService implements vscode.Disposable {
   async generateProxy(sourcePath: string): Promise<ProxyGenerateResult> {
     this.ensureInitialized();
 
-    const absoluteSource = this.resolveMediaPath(sourcePath);
+    const absoluteSource = await this.resolveMediaPath(sourcePath);
     const resourceId = this.computeResourceId(absoluteSource);
 
     // Check existing proxy
@@ -107,7 +108,7 @@ export class ProxyService implements vscode.Disposable {
       if (!isStale) {
         return {
           resourceId,
-          proxyPath: this.resolveMediaPath(existing.proxy),
+          proxyPath: await this.resolveMediaPath(existing.proxy),
           status: 'ready',
         };
       }
@@ -124,7 +125,7 @@ export class ProxyService implements vscode.Disposable {
   async needsProxy(sourcePath: string): Promise<boolean> {
     this.ensureInitialized();
 
-    const absoluteSource = this.resolveMediaPath(sourcePath);
+    const absoluteSource = await this.resolveMediaPath(sourcePath);
 
     // Check file size first (no engine call needed)
     try {
@@ -166,15 +167,15 @@ export class ProxyService implements vscode.Disposable {
   /**
    * Get proxy path for a source file, or null if not available.
    */
-  getProxyPath(sourcePath: string): string | null {
+  async getProxyPath(sourcePath: string): Promise<string | null> {
     if (!this.projectDir) return null;
 
-    const absoluteSource = this.resolveMediaPath(sourcePath);
+    const absoluteSource = await this.resolveMediaPath(sourcePath);
     const resourceId = this.computeResourceId(absoluteSource);
     const entry = this.manifest.proxies[resourceId];
 
     if (entry?.status === 'ready') {
-      return this.resolveMediaPath(entry.proxy);
+      return await this.resolveMediaPath(entry.proxy);
     }
     return null;
   }
@@ -182,10 +183,10 @@ export class ProxyService implements vscode.Disposable {
   /**
    * Get proxy status for a source file.
    */
-  getProxyStatus(sourcePath: string): ProxyStatus | null {
+  async getProxyStatus(sourcePath: string): Promise<ProxyStatus | null> {
     if (!this.projectDir) return null;
 
-    const absoluteSource = this.resolveMediaPath(sourcePath);
+    const absoluteSource = await this.resolveMediaPath(sourcePath);
     const resourceId = this.computeResourceId(absoluteSource);
     return this.manifest.proxies[resourceId]?.status ?? null;
   }
@@ -196,14 +197,14 @@ export class ProxyService implements vscode.Disposable {
   async removeProxy(sourcePath: string): Promise<void> {
     this.ensureInitialized();
 
-    const absoluteSource = this.resolveMediaPath(sourcePath);
+    const absoluteSource = await this.resolveMediaPath(sourcePath);
     const resourceId = this.computeResourceId(absoluteSource);
     const entry = this.manifest.proxies[resourceId];
 
     if (entry) {
       // Delete proxy file
       try {
-        const proxyAbsolute = this.resolveMediaPath(entry.proxy);
+        const proxyAbsolute = await this.resolveMediaPath(entry.proxy);
         await fs.unlink(proxyAbsolute);
       } catch {
         // File may not exist
@@ -432,7 +433,7 @@ export class ProxyService implements vscode.Disposable {
 
     // Check proxy file exists
     try {
-      const proxyAbsolute = this.resolveMediaPath(entry.proxy);
+      const proxyAbsolute = await this.resolveMediaPath(entry.proxy);
       await fs.access(proxyAbsolute);
     } catch {
       return true;
@@ -449,10 +450,8 @@ export class ProxyService implements vscode.Disposable {
     return crypto.createHash('sha256').update(absolutePath).digest('hex').slice(0, 16);
   }
 
-  private resolveMediaPath(mediaPath: string): string {
-    if (path.isAbsolute(mediaPath)) return mediaPath;
-    if (this.projectDir) return path.resolve(this.projectDir, mediaPath);
-    return mediaPath;
+  private async resolveMediaPath(mediaPath: string): Promise<string> {
+    return resolveMediaPathHelper(mediaPath, this.projectDir ?? '');
   }
 
   private async dispatch(req: ActionRequest): Promise<ActionResponse> {

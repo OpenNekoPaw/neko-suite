@@ -199,10 +199,21 @@
         "title": "%neko.assets.refreshMediaLibraries%",
         "category": "Neko Assets",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "neko.assets.searchMediaLibrary",
+        "title": "%neko.assets.searchMediaLibrary%",
+        "category": "Neko Assets",
+        "icon": "$(search)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "neko.assets.searchMediaLibrary",
+          "when": "view == neko.mediaLibraries",
+          "group": "navigation"
+        },
         {
           "command": "neko.assets.addMediaLibrary",
           "when": "view == neko.mediaLibraries",

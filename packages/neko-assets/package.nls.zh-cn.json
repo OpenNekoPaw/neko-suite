@@ -30,5 +30,6 @@
   "neko.assets.previewMediaLibraryFile": "预览媒体",
   "neko.assets.addToTimelineFromLibrary": "添加到时间线",
   "neko.assets.addToCanvasFromLibrary": "添加到画布",
-  "neko.assets.refreshMediaLibraries": "刷新媒体库"
+  "neko.assets.refreshMediaLibraries": "刷新媒体库",
+  "neko.assets.searchMediaLibrary": "搜索媒体库"
 }

@@ -18,7 +18,8 @@ export type EntityCategory =
   | 'environment' // Scenes, backgrounds, environments
   | 'effect' // Visual effects, particles
   | 'ui' // UI elements, icons
-  | 'audio'; // Audio asset collections
+  | 'audio' // Audio asset collections
+  | 'document'; // Documents, references, scripts
 
 // =============================================================================
 // Variant Attributes
@@ -138,6 +139,34 @@ export interface EffectMetadata {
   category?: string;
 }
 
+/** Document-specific metadata */
+export interface DocumentEntityMetadata {
+  /** Document role in the project */
+  subtype?: 'reference' | 'script' | 'storyboard' | 'brief' | 'research' | 'other';
+  /** File format hint (pdf, docx, etc.) */
+  format?: string;
+}
+
+// =============================================================================
+// Ownership Types
+// =============================================================================
+
+/** Asset ownership scope */
+export type OwnershipScope = 'personal' | 'project' | 'team' | 'purchased' | 'public';
+
+/** Asset access level */
+export type AccessLevel = 'private' | 'readonly' | 'editable';
+
+/** Asset ownership information */
+export interface AssetOwnership {
+  /** Scope of ownership */
+  scope: OwnershipScope;
+  /** Owner identifier (userId, teamId, etc.) */
+  ownerId?: string;
+  /** Access level */
+  access: AccessLevel;
+}
+
 /** Asset source information */
 export interface AssetSource {
   /** Source type */
@@ -162,6 +191,8 @@ export interface EntityMetadata {
   environment?: EnvironmentMetadata;
   /** Effect metadata */
   effect?: EffectMetadata;
+  /** Document metadata */
+  document?: DocumentEntityMetadata;
   /** Source information */
   source?: AssetSource;
 }
@@ -205,7 +236,7 @@ export type FilePurpose =
   | 'source'; // Source file (PSD, AI, etc.)
 
 /** Media file type */
-export type AssetMediaType = 'video' | 'audio' | 'image' | 'sequence' | 'text';
+export type AssetMediaType = 'video' | 'audio' | 'image' | 'sequence' | 'text' | 'document';
 
 /** Media file metadata */
 export interface MediaFileMetadata {
@@ -323,6 +354,8 @@ export interface AssetEntity {
   createdAt: number;
   /** Last update timestamp */
   updatedAt: number;
+  /** Ownership information (default: project scope, editable) */
+  ownership?: AssetOwnership;
 }
 
 // =============================================================================
@@ -337,6 +370,7 @@ export interface CreateEntityInput {
   metadata?: EntityMetadata;
   tags?: string[];
   aliases?: string[];
+  ownership?: AssetOwnership;
 }
 
 /** Input for updating an entity */
@@ -348,6 +382,7 @@ export interface UpdateEntityInput {
   tags?: string[];
   aliases?: string[];
   defaultVariantId?: string;
+  ownership?: AssetOwnership;
 }
 
 /** Input for creating a variant */

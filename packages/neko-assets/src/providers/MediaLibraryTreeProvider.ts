@@ -24,6 +24,7 @@ import {
 import type { ResolvedMediaLibrary } from '@neko/shared';
 import type { MediaLibrarySettingsService } from '../services/MediaLibrarySettingsService';
 import type { ThumbnailService } from '../services/ThumbnailService';
+import type { MediaMetadataCache } from '../services/MediaMetadataCache';
 import { formatDuration, formatResolution, buildMetadataTooltipLines } from '../utils/formatters';
 import { t } from '../i18n';
 
@@ -35,6 +36,7 @@ export interface MediaLibraryDeps {
   settingsService: MediaLibrarySettingsService;
   thumbnailService: ThumbnailService;
   metadataExtractor: (filePath: string) => Promise<MediaFileMetadata>;
+  metadataCache?: MediaMetadataCache;
 }
 
 // =============================================================================
@@ -185,11 +187,13 @@ export class MediaLibraryTreeProvider
   private readonly settingsService: MediaLibrarySettingsService;
   private readonly thumbnailService: ThumbnailService;
   private readonly metadataExtractor: (filePath: string) => Promise<MediaFileMetadata>;
+  private readonly persistentCache?: MediaMetadataCache;
 
   constructor(deps: MediaLibraryDeps) {
     this.settingsService = deps.settingsService;
     this.thumbnailService = deps.thumbnailService;
     this.metadataExtractor = deps.metadataExtractor;
+    this.persistentCache = deps.metadataCache;
 
     this.disposables.push(deps.settingsService.onDidChange(() => this.refresh()));
   }
@@ -204,7 +208,7 @@ export class MediaLibraryTreeProvider
     this.watcherDisposables = [];
     this.directoryWatchers.clear();
     this.thumbnailCache.clear();
-    this.metadataCache.clear();
+    // Keep metadataCache — it's backed by persistent storage and mtime-validated
     this.pendingThumbnails.clear();
     this._onDidChangeTreeData.fire(undefined);
   }
@@ -286,7 +290,7 @@ export class MediaLibraryTreeProvider
         const filePath = path.join(dirPath, file.name);
         const mediaType = detectMediaType(filePath);
 
-        let metadata = this.metadataCache.get(filePath);
+        const metadata = this.metadataCache.get(filePath);
         if (!metadata) {
           this.extractMetadata(filePath);
         }
@@ -312,8 +316,25 @@ export class MediaLibraryTreeProvider
 
   private async extractMetadata(filePath: string): Promise<void> {
     try {
+      // Check persistent cache first (survives VSCode restarts)
+      if (this.persistentCache) {
+        const cached = await this.persistentCache.get(filePath);
+        if (cached) {
+          this.metadataCache.set(filePath, cached);
+          this.debouncedRefresh(filePath);
+          return;
+        }
+      }
+
+      // Cache miss — extract via engine probe
       const metadata = await this.metadataExtractor(filePath);
       this.metadataCache.set(filePath, metadata);
+
+      // Persist for next restart
+      if (this.persistentCache) {
+        void this.persistentCache.set(filePath, metadata);
+      }
+
       this.debouncedRefresh(filePath);
     } catch {
       // Silently ignore metadata extraction failures

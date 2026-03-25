@@ -16,6 +16,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
+import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import type {
   MediaRequest,
   MediaResponse,
@@ -175,7 +176,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async handleVideoCapture(request: GetVideoFrameRequest): Promise<MediaResponse> {
     const { videoPath, timeInSeconds, quality, scale } = request.payload;
-    const absolutePath = this.resolveMediaPath(videoPath);
+    const absolutePath = await this.resolveMediaPath(videoPath);
 
     // Build capture options, converting scale (0-1) to pixel dimensions if provided
     const captureOptions: Record<string, unknown> = {
@@ -230,7 +231,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async handleVideoFrameRange(request: GetVideoFrameRangeRequest): Promise<MediaResponse> {
     const { videoPath, startTime, duration, fps, maxFrames } = request.payload;
-    const absolutePath = this.resolveMediaPath(videoPath);
+    const absolutePath = await this.resolveMediaPath(videoPath);
 
     const actualDuration = maxFrames ? Math.min(duration, maxFrames / fps) : duration;
     const frameCount = Math.ceil(actualDuration * fps);
@@ -270,7 +271,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async handleProbeMedia(request: ProbeMediaInfoRequest): Promise<MediaResponse> {
     const { videoPath } = request.payload;
-    const absolutePath = this.resolveMediaPath(videoPath);
+    const absolutePath = await this.resolveMediaPath(videoPath);
 
     const result = await this.dispatch({
       group: 'videos',
@@ -321,7 +322,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async handleExtractSubtitles(request: ExtractSubtitlesRequest): Promise<MediaResponse> {
     const { videoPath } = request.payload;
-    const absolutePath = this.resolveMediaPath(videoPath);
+    const absolutePath = await this.resolveMediaPath(videoPath);
 
     const result = await this.dispatch({
       group: 'videos',
@@ -342,7 +343,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async handleGetWaveform(request: GetWaveformRequest): Promise<MediaResponse> {
     const { filePath } = request.payload;
-    const absolutePath = this.resolveMediaPath(filePath);
+    const absolutePath = await this.resolveMediaPath(filePath);
 
     const result = await this.dispatch({
       group: 'audios',
@@ -412,7 +413,7 @@ export class MediaService implements vscode.Disposable {
     request: CompatibleGetVideoFrameRequest,
   ): Promise<CompatibleGetVideoFrameResponse> {
     const { videoPath, timeInSeconds, width, height } = request.payload;
-    const absolutePath = this.resolveMediaPath(videoPath);
+    const absolutePath = await this.resolveMediaPath(videoPath);
 
     const result = await this.dispatch({
       group: 'videos',
@@ -453,7 +454,7 @@ export class MediaService implements vscode.Disposable {
 
     // Build a minimal Timeline for the composite request
     // The Rust side expects a Timeline object in the body
-    const timeline = this.buildTimelineForComposite(layers, width, height, backgroundColor);
+    const timeline = await this.buildTimelineForComposite(layers, width, height, backgroundColor);
 
     const result = await this.dispatch({
       group: 'timelines',
@@ -706,7 +707,7 @@ export class MediaService implements vscode.Disposable {
 
       for (const source of payload.sources) {
         try {
-          const absolutePath = this.resolveMediaPath(source);
+          const absolutePath = await this.resolveMediaPath(source);
           const result = await this.dispatch({
             group: 'audios',
             action: 'analyze_loudness',
@@ -778,7 +779,7 @@ export class MediaService implements vscode.Disposable {
     const payload = msg.payload as { mediaPath: string };
 
     try {
-      const absolutePath = this.resolveMediaPath(payload.mediaPath);
+      const absolutePath = await this.resolveMediaPath(payload.mediaPath);
 
       const result = await this.dispatch({
         group: 'videos',
@@ -921,25 +922,15 @@ export class MediaService implements vscode.Disposable {
   /**
    * Resolve media path to absolute path
    */
-  private resolveMediaPath(mediaPath: string): string {
-    if (path.isAbsolute(mediaPath)) return mediaPath;
-
-    if (this.documentDir) {
-      return path.resolve(this.documentDir, mediaPath);
-    }
-
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (workspaceRoot) {
-      return path.join(workspaceRoot, mediaPath);
-    }
-
-    return mediaPath;
+  private async resolveMediaPath(mediaPath: string): Promise<string> {
+    const baseDir = this.documentDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+    return resolveMediaPathHelper(mediaPath, baseDir);
   }
 
   /**
    * Build a minimal Timeline object for timelines:composite
    */
-  private buildTimelineForComposite(
+  private async buildTimelineForComposite(
     layers: Array<{
       source: string;
       sourceTime: number;
@@ -978,7 +969,12 @@ export class MediaService implements vscode.Disposable {
     width: number,
     height: number,
     backgroundColor?: [number, number, number, number],
-  ): object {
+  ): Promise<object> {
+    // Resolve all layer sources in parallel before building the project
+    const resolvedSources = await Promise.all(
+      layers.map((layer) => this.resolveMediaPath(layer.source)),
+    );
+
     return {
       id: 'composite-frame',
       duration: 1,
@@ -992,7 +988,7 @@ export class MediaService implements vscode.Disposable {
           elements: layers.map((layer, index) => ({
             id: `layer-${index}`,
             type: 'media',
-            src: this.resolveMediaPath(layer.source),
+            src: resolvedSources[index],
             startTime: 0,
             duration: 1,
             trimStart: layer.sourceTime,

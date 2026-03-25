@@ -401,7 +401,15 @@ interface AssetOwnership {
 
 ---
 
-## 十、AssetManifestSource 扩展
+## 九-b、AssetOwnership — 已实现 ✅
+
+`AssetOwnership` 已在 `packages/neko-types/src/types/asset/entity.ts` 中实现，包含 `OwnershipScope`、`AccessLevel`、`AssetOwnership` 接口，`AssetEntity.ownership?` 可选字段，`AssetQuery.ownershipScopes` 过滤。
+
+---
+
+## 十、AssetManifestSource 扩展 — 已实现 ✅
+
+`'remote'` kind 已添加到 `AssetManifestSource` 类型中。
 
 ```typescript
 export type AssetManifestSource =
@@ -410,10 +418,141 @@ export type AssetManifestSource =
   | { kind: 'registry'; registry: string; package: string; version: string; integrity?: string }
   | { kind: 'ai-generated'; taskId: string; model: string }
   | { kind: 'remote'; uri: string; checksum?: string };
-  //   uri examples:
-  //   s3://team-bucket/assets/character.png
-  //   oss://team-assets/footage/scene01.mp4
 ```
+
+---
+
+## 十-b、neko:// 引用协议与 MediaResolver（Phase 6.6 设计）
+
+### 素材路径层级
+
+`.nkv` / `.nkc` / `.nka` 的 `element.src` 字段支持三种路径格式：
+
+```
+1. assets/clip.mp4                      项目内素材（相对路径）          ✅ 已实现
+2. ${FOOTAGE}/scene.mov                 外部本地素材（PathVariable）    ✅ 已实现
+3. neko://entity-id/variant-id/file-id  Asset Library 间接引用         Phase 6.6
+```
+
+PathVariable 解决"同一文件在不同机器上路径不同"（`settings.local.json` 覆盖）。
+`neko://` 解决"文件可能在远程存储，需要代理/原始自动切换"。
+
+### neko:// 协议
+
+```
+neko://abc123/v1/f1
+       │      │  └─ AssetFile.id
+       │      └─── AssetVariant.id
+       └────────── AssetEntity.id
+```
+
+解析流程：
+1. 从 AssetManifest（`library.json`）查找 entity → variant → file
+2. 获得 `AssetFile.path`（本地路径，可能是 `${VAR}/...`）和 `AssetFile.source`（来源信息）
+3. 交给 MediaResolver 决策
+
+### MediaResolver
+
+```typescript
+interface MediaResolution {
+  /** Local file path for Engine to read */
+  localPath: string;
+  /** Whether this is a proxy (lower quality) */
+  isProxy: boolean;
+  /** Original quality info */
+  original?: { width: number; height: number; codec: string; size: number };
+  /** Proxy quality info */
+  proxy?: { width: number; height: number; codec: string; size: number };
+}
+
+class MediaResolver {
+  /**
+   * Resolve a stored path to a local file path.
+   *
+   * @param intent - 'preview' allows proxy; 'export' requires original
+   */
+  async resolve(
+    storedPath: string,
+    baseDir: string,
+    intent: 'preview' | 'export' = 'preview',
+  ): Promise<MediaResolution>;
+}
+```
+
+决策逻辑：
+
+```
+resolve("neko://abc/v1/f1", baseDir, intent)
+  │
+  ├─ AssetManifest 查找 → AssetFile
+  │   ├─ file.path = "${FOOTAGE}/scene01.mov"
+  │   └─ file.source = { kind: 'remote', uri: 's3://bucket/scene01.mov' }
+  │
+  ├─ PathResolver.resolve(file.path) → /Volumes/NAS/footage/scene01.mov
+  │   ├─ fs.access OK → { localPath: 原始路径, isProxy: false }  ✅ 最优
+  │   └─ fs.access FAIL → 原始不在本地
+  │       │
+  │       ├─ intent = 'preview'
+  │       │   ├─ file.proxy?.localPath 存在 → { localPath: 代理路径, isProxy: true }
+  │       │   └─ 代理也没有 → 触发 ProxyService 下载 → 等待 → 返回代理路径
+  │       │
+  │       └─ intent = 'export'
+  │           └─ 通过 IFileTransport.pull() 下载原始文件 → 阻塞等待 → 返回原始路径
+  │
+resolve("${FOOTAGE}/scene.mov", baseDir, intent)
+  → PathResolver.resolve() → 绝对路径 → { localPath, isProxy: false }
+
+resolve("assets/clip.mp4", baseDir, intent)
+  → path.resolve(baseDir, src) → { localPath, isProxy: false }
+```
+
+### AssetFile.proxy 字段扩展
+
+```typescript
+interface AssetFileProxy {
+  /** Local path to the proxy file */
+  localPath: string;
+  /** Proxy resolution */
+  resolution: number;
+  /** Proxy codec */
+  codec: string;
+  /** When the proxy was generated */
+  generatedAt: number;
+}
+
+// AssetFile 扩展
+interface AssetFile {
+  // ... existing fields
+  /** Proxy file info (for remote assets with local proxy cache) */
+  proxy?: AssetFileProxy;
+  /** File status: 'proxy' = original not local, proxy available */
+  status?: 'online' | 'offline' | 'missing' | 'remapped' | 'proxy';
+}
+```
+
+### 自动切换场景
+
+| 操作 | intent | 用什么 | 原因 |
+|------|--------|-------|------|
+| 时间线预览 | preview | 代理 | 720p 够用，多轨实时合成 |
+| 单文件预览 | preview | 代理 | 浏览够用 |
+| 拖拽 Seek | preview | 代理 | 低延迟 < 100ms |
+| 导出 720p | preview | 代理 | 质量匹配 |
+| 导出 4K 最终版 | export | 原始 | 质量要求 |
+| 色彩精确调整 | export | 原始 | 代理有损 |
+
+### 与 PathVariable 的关系
+
+```
+PathVariable（✅ 已完成）       neko://（Phase 6.6）
+├─ 解决路径映射                 ├─ 解决远程素材引用
+├─ 同一文件不同机器不同路径     ├─ 文件可能不在本地
+├─ 无代理概念                   ├─ 代理/原始自动切换
+├─ Engine 直接读本地文件        ├─ Engine 仍然读本地文件
+└─ 适用：NAS + Git 团队协作     └─ 适用：云存储 + 分布式团队
+```
+
+两者共存：`neko://` 解析后可能得到 `${VAR}/...` 路径，再由 PathResolver 展开为绝对路径。
 
 ---
 

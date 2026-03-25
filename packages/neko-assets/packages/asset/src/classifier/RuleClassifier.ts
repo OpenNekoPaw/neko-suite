@@ -125,6 +125,14 @@ export class RuleClassifier implements IAssetClassifier {
       return 'audio';
     }
 
+    // Document patterns (based on extension and keywords)
+    if (
+      /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|epub|cbz|fdx)$/i.test(fileName) ||
+      /storyboard|brief|reference|script|screenplay|outline|research/i.test(fileName)
+    ) {
+      return 'document';
+    }
+
     // Text patterns (based on extension and keywords)
     if (
       /\.(txt|md|json|yaml|yml|csv)$/i.test(fileName) ||
@@ -309,6 +317,7 @@ export class RuleClassifier implements IAssetClassifier {
       effect: 'Visual effect',
       ui: 'UI element',
       audio: 'Audio asset',
+      document: 'Document',
     };
     parts.push(categoryNames[category] || 'Asset');
 

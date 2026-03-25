@@ -7,6 +7,7 @@
 import type {
   AssetEntity,
   EntityCategory,
+  OwnershipScope,
   ViewAngle,
   ExpressionState,
   ActionState,
@@ -64,6 +65,8 @@ export interface AssetQuery {
   limit?: number;
   /** Pagination: number of results to skip */
   offset?: number;
+  /** Filter by ownership scopes */
+  ownershipScopes?: OwnershipScope[];
 }
 
 /** Search result */

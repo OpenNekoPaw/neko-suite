@@ -124,6 +124,7 @@ export class InstallManager implements IInstallManager {
         installedAt: Date.now(),
         installedPath: installPath,
         manifest,
+        enabled: true,
       };
       await this.installed.add(record);
 

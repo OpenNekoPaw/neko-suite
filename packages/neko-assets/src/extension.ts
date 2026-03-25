@@ -14,12 +14,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { AssetLibrary, JsonFileStorage, RuleClassifier, AssetDiffService } from '@neko/asset';
+import {
+  AssetLibrary,
+  JsonFileStorage,
+  RuleClassifier,
+  AssetDiffService,
+  PathResolver,
+} from '@neko/asset';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
 import { detectMediaType } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
+import { MediaMetadataCache } from './services/MediaMetadataCache';
+import { MediaLibrarySearchService } from './services/MediaLibrarySearchService';
 import { AssetHealthMonitor, createFileAccessChecker } from './services/AssetHealthMonitor';
 import { MediaLibrarySettingsService } from './services/MediaLibrarySettingsService';
 import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProvider';
@@ -181,11 +189,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       library!.updatePathVariables(await settingsService.getPathVariableMap());
     });
 
+    // Initialize PathResolver for portable cache keys
+    const cachePathResolver = new PathResolver();
+    cachePathResolver.setVariables(await settingsService.getPathVariableMap());
+    settingsService.onDidChange(async () => {
+      cachePathResolver.setVariables(await settingsService.getPathVariableMap());
+    });
+
+    // Initialize persistent metadata cache
+    const metadataCachePath = path.join(workspaceRoot, '.neko', 'cache', 'media-metadata.json');
+    const metadataCache = new MediaMetadataCache(metadataCachePath, cachePathResolver);
+    await metadataCache.load();
+    context.subscriptions.push(metadataCache);
+
+    // Initialize search service
+    const searchService = new MediaLibrarySearchService(settingsService, metadataCache);
+
     // Register Media Library TreeView
     const mediaLibraryProvider = new MediaLibraryTreeProvider({
       settingsService,
       thumbnailService: thumbnailService!,
       metadataExtractor,
+      metadataCache,
     });
     const mediaLibraryTree = vscode.window.createTreeView('neko.mediaLibraries', {
       treeDataProvider: mediaLibraryProvider,
@@ -197,6 +222,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // Register media library commands
     registerMediaLibraryCommands(context, settingsService);
+
+    // Register search command
+    registerSearchCommand(context, searchService);
   }
 
   // 5. Register asset action commands
@@ -528,6 +556,120 @@ function getMediaFileItems(item: unknown, selectedItems?: unknown[]): Array<{ fi
 }
 
 // =============================================================================
+// Search Command
+// =============================================================================
+
+interface MediaSearchQuickPickItem extends vscode.QuickPickItem {
+  filePath: string;
+  mediaType: string;
+}
+
+function registerSearchCommand(
+  context: vscode.ExtensionContext,
+  searchService: MediaLibrarySearchService,
+): void {
+  const { t } = require('./i18n');
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.searchMediaLibrary', () => {
+      const quickPick = vscode.window.createQuickPick<MediaSearchQuickPickItem>();
+      quickPick.placeholder = t('mediaLibrary.search.placeholder');
+      quickPick.matchOnDescription = true;
+      quickPick.matchOnDetail = true;
+
+      let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+      quickPick.onDidChangeValue((value) => {
+        if (searchTimer) clearTimeout(searchTimer);
+        if (value.length < 2) {
+          quickPick.items = [];
+          return;
+        }
+        // Debounce search
+        searchTimer = setTimeout(async () => {
+          quickPick.busy = true;
+          try {
+            const results = await searchService.search(value);
+            quickPick.items = results.map((r) => {
+              const iconMap: Record<string, string> = {
+                video: 'file-media',
+                audio: 'unmute',
+                image: 'file',
+                document: 'file-text',
+              };
+              const icon = iconMap[r.mediaType] ?? 'file';
+
+              let detail: string | undefined;
+              if (r.metadata) {
+                const parts: string[] = [];
+                if (r.metadata.width && r.metadata.height) {
+                  parts.push(`${r.metadata.width}×${r.metadata.height}`);
+                }
+                if (r.metadata.duration) {
+                  const d = r.metadata.duration;
+                  const m = Math.floor(d / 60);
+                  const s = Math.round(d % 60);
+                  parts.push(`${m}:${s.toString().padStart(2, '0')}`);
+                }
+                if (r.metadata.fileSize > 0) {
+                  const mb = r.metadata.fileSize / (1024 * 1024);
+                  parts.push(
+                    mb >= 1
+                      ? `${mb.toFixed(1)} MB`
+                      : `${(r.metadata.fileSize / 1024).toFixed(0)} KB`,
+                  );
+                }
+                if (parts.length > 0) detail = parts.join('  ·  ');
+              }
+
+              return {
+                label: `$(${icon}) ${r.fileName}`,
+                description: r.libraryName,
+                detail,
+                filePath: r.filePath,
+                mediaType: r.mediaType,
+              };
+            });
+            if (results.length === 0) {
+              quickPick.items = [
+                {
+                  label: t('mediaLibrary.search.noResults'),
+                  filePath: '',
+                  mediaType: '',
+                },
+              ];
+            }
+          } catch {
+            // Search failed silently
+          } finally {
+            quickPick.busy = false;
+          }
+        }, 200);
+      });
+
+      quickPick.onDidAccept(() => {
+        const selected = quickPick.selectedItems[0];
+        if (!selected || !selected.filePath) return;
+
+        const uri = vscode.Uri.file(selected.filePath);
+        if (selected.mediaType === 'video') {
+          vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
+        } else if (selected.mediaType === 'audio') {
+          vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
+        } else {
+          vscode.commands.executeCommand('vscode.open', uri);
+        }
+
+        quickPick.dispose();
+      });
+
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+    }),
+  );
+}
+
+// =============================================================================
 // Legacy Commands (preserved from original extension.ts)
 // =============================================================================
 
@@ -713,6 +855,22 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
         logger.error('getThumbnailPath failed:', error);
         return null;
       }
+    }),
+  );
+
+  // Contract absolute path → portable path (${VAR}/rest or relative)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.contractPath', (absolutePath: string) => {
+      if (!library) return absolutePath;
+      return library.contractPath(absolutePath);
+    }),
+  );
+
+  // Resolve portable path → absolute path
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.resolvePath', (storedPath: string) => {
+      if (!library) return storedPath;
+      return library.resolvePath(storedPath);
     }),
   );
 }

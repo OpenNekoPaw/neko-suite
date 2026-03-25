@@ -170,7 +170,15 @@
 
 ### 本地模型运行时 — [ADR](./docs/architecture/model-runtime.md)
 > 不创建 neko-runtime 包。外部运行时（Ollama/ComfyUI）用户自行管理，通过 Provider/MCP 接入。Engine ONNX/candle 原生处理。
-- [x] Phase M2 ✅：neko-engine ONNX 原生 — `ort` crate + ml/ 模块（6 文件）+ IMlService trait + ModelsController 扩展（+7 action）+ EngineClient 模型方法（10 Rust tests）。推理管线为 placeholder，等 ort 2.0 stable 补齐
+- [x] Phase M2 ✅：neko-engine ONNX 基础设施 — `ort` crate + ml/ 模块（6 文件）+ IMlService trait + ModelsController 扩展（+7 action）+ EngineClient 模型方法（10 Rust tests）
+- [ ] Phase M2 剩余：推理管线实现（依赖 ort 2.0 stable，当前 2.0.0-rc.12 API 不稳定）
+  - [ ] `ml/upscale.rs`：Real-ESRGAN ONNX 推理（load image → normalize NCHW → session.run → denormalize → save）
+  - [ ] `ml/denoise.rs`：去噪模型推理（同 upscale 管线）
+  - [ ] `ml/clip.rs`：CLIP 双模型推理（visual encoder + textual encoder → cosine similarity）— 需实现双 Session 管理
+  - [ ] `ml/whisper.rs`：Whisper STT 完整管线（FFmpeg 加载音频 → 16kHz resample → mel spectrogram → encoder → autoregressive decoder → token decode）
+  - [ ] `ml/onnx_runtime.rs`：设备选择完善（CUDA EP / CoreML EP / DirectML EP 实际验证）
+  - [ ] `MlService`：推理方法从 placeholder 替换为实际调用
+  - [ ] 端到端测试：下载 Real-ESRGAN ONNX 模型 → registerModel → upscale() 验证输出
 - [ ] Phase M3（待评估）：neko-engine candle SD/SDXL 图片生成 — 前置条件：candle 推理速度 < PyTorch 2x 且支持 Flux
 - 外部运行时接入：Ollama → Provider 配置（adapter 已有）；ComfyUI → MCP Server 或 Provider 配置
 

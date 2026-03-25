@@ -34,6 +34,11 @@ export const en = {
   'mediaLibrary.fileCount': '{count} file',
   'mediaLibrary.fileCount.plural': '{count} files',
 
+  // Search
+  'mediaLibrary.search.placeholder': 'Search media files across all libraries...',
+  'mediaLibrary.search.noResults': 'No matching files found',
+  'mediaLibrary.search.scanning': 'Scanning media libraries...',
+
   // Commands
   'command.previewVideo': 'Preview Video',
   'command.previewAudio': 'Preview Audio',

@@ -45,6 +45,12 @@ export const MarketMessages = {
   /** Uninstall a package */
   uninstall: (packageId: string) => postMessage({ type: 'market:uninstall', packageId }),
 
+  /** Enable a package */
+  enable: (packageId: string) => postMessage({ type: 'market:enable', packageId }),
+
+  /** Disable a package */
+  disable: (packageId: string) => postMessage({ type: 'market:disable', packageId }),
+
   // =============================================================================
   // Installed / Updates
   // =============================================================================

@@ -555,6 +555,7 @@ export class AssetLibrary {
       effect: ['effect', 'vfx'],
       ui: ['ui', 'icon'],
       audio: ['audio', 'sound'],
+      document: ['document', 'reference'],
     };
     return categoryTagMap[category] ?? [];
   }

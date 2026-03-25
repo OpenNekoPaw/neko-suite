@@ -36,6 +36,11 @@ export const zhCn: AssetTranslations = {
   'mediaLibrary.fileCount': '{count} 个文件',
   'mediaLibrary.fileCount.plural': '{count} 个文件',
 
+  // Search
+  'mediaLibrary.search.placeholder': '在所有媒体库中搜索文件...',
+  'mediaLibrary.search.noResults': '未找到匹配的文件',
+  'mediaLibrary.search.scanning': '正在扫描媒体库...',
+
   // Commands
   'command.previewVideo': '预览视频',
   'command.previewAudio': '预览音频',
