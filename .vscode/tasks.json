@@ -103,6 +103,21 @@
       "problemMatcher": ["$tsc"]
     },
     {
+      "label": "build:neko-model",
+      "type": "shell",
+      "command": "pnpm build:neko-model",
+      "group": "build",
+      "dependsOn": ["build:core"],
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build:neko-auth",
+      "type": "shell",
+      "command": "pnpm build:neko-auth",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
       "label": "build:all",
       "type": "shell",
       "command": "pnpm build:extensions",

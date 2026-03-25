@@ -55,6 +55,8 @@
 - AI SDK 迁移（@ai-sdk/openai,google,anthropic v3）
 - Pipeline Hook Registry + generatePilot stage
 - 工具系统简化（1M context 全工具常驻 + meta-tools）
+- 分镜 → 批量视频生成 → 自动排列时间线（Pipeline 4 阶段：parseStoryboard → generatePrompts → batchGenerate → arrangeOnTimeline；6 种预定义 Flow；storyboard-to-timeline / comic-to-storyboard / pipeline-retry 内置 Skill）
+- 对话持久化 CLI `--resume` / `/resume` ✅（`cli.tsx` flag + `runner.ts` 历史加载 + `slash-commands.ts /resume` 命令 + FileConversationStorage）
 </details>
 
 <details>
@@ -81,6 +83,17 @@
 - neko-cut MarketShaderService：扫描 `~/.neko/shaders/` + 订阅市场事件热重载 + graceful degradation
 - InstalledRegistry `setEnabled()` + 旧数据 backward compat（无 enabled 字段默认 true）
 - market-core 64 测试 + neko-cut 468 测试全部通过
+</details>
+
+<details>
+<summary>neko-market → neko-agent 消费端打通（Phase 6.5.6）</summary>
+
+- `neko.agent.rescanSkills` 命令注册：`SkillFileService.triggerRescan()` 强制重扫 + 推送事件到 Webview，作为文件 Watcher 的显式 fallback
+- `neko.agent.refreshModels` 命令注册：`refreshOllamaModels()` 调用 Ollama `/api/tags`，发现新模型后写入 `~/.neko/config.json`
+- `ConfigManager.onUserConfigChange()` 多监听器订阅接口（原来仅支持单回调，现支持多消费者）
+- `ConfigManager` 构造函数接入 `userConfigManager.onChange` 钩子：外部编辑 config.json 时自动失效合并缓存并通知监听者
+- `ConfigBridge` 订阅 `platform.config.onUserConfigChange` → 实时广播 `configState` 到所有 Webview（无需重启或重新打开面板）
+- 完整链路：neko-market 安装 Skill/Ollama 模型 → 触发 agent 命令 → neko-agent 自动感知 → Webview 实时刷新
 </details>
 
 ---
@@ -118,12 +131,14 @@
 - [ ] Phase 4-5：AI 素材审查 + 质量评估（VQA / SAM 智能蒙版）
 
 ### neko-agent
-- [ ] 对话持久化遗留：CLI `--resume` / `/resume` 未实现（存储层已完成）
+- [x] 对话持久化 CLI `--resume` / `/resume` ✅（已核实完整实现：`cli.tsx` flag + `runner.ts` 历史加载 + `slash-commands.ts /resume` 命令）
+- [x] ContextManager 竞态保护 ✅（无需实现：所有调用在单线程顺序路径，`act-phase.ts` 的并发工具执行不访问 ContextManager）
+- [ ] MCP 客户端重连退避：`callTool()` 检测断开后无自动重连，进程崩溃需重启会话（低复杂度，低优先级）
 - [ ] SubAgent Skills：Seed_Manager + Audio_Mixer + 镜头语言通用 Skill
-- [ ] MCP 客户端重连退避（当前连接失败即终止）+ ContextManager 异步竞态保护
-- [ ] 批量时间线操作 Skill + AI 字幕生成 + 智能素材推荐
-- [ ] 场景描述 → 自动配乐 + 场景描写辅助
-- [ ] AI API 诊断（从 neko-tools 迁移）
+- [ ] AI 字幕生成 + 智能素材推荐
+- [x] 场景描述 → 自动配乐 ✅（`sceneToMusicSkill` 已实现：GetTimelineInfo → ListElements → GenerateMusic → AddElement）
+- [ ] 场景描写辅助
+- [ ] AI 字幕生成：前置条件缺失（平台层无 ASR service，`speech-to-text` routing 未实现）；建议等 Engine Whisper ONNX 推理管线（Phase M2）完成后一起做，走本地 transcribe → SRT → AddElement 路径
 
 ### AI MCP Tools
 - [ ] neko-model：`face.generate_params` / `face.from_image` / `face.adjust`
@@ -141,6 +156,8 @@
 - [x] PathVariable 全格式集成：neko-cut/canvas/audio 保存/加载时自动转换 `${VAR}/path`，支持 Git 团队协作
 - [x] PathResolver 跨扩展 API：`neko.assets.contractPath` / `neko.assets.resolvePath` commands
 - [ ] External Media Library P2（可选）：增量索引、批量导入（neko-engine 直接用文件路径，导入非必要）
+- [x] AssetDiffService git source 路径解析（`case 'git':` 返回空路径，`compareWithGit` 走 `type:'path'` 绕过，影响范围小）
+- [x] `neko.assets.viewHistory` 命令接入 AssetHistoryTreeProvider（当前为空壳提示）
 
 > **素材路径层级**：
 > | 路径格式 | 含义 | 解析方式 | 已完成？ |
@@ -160,8 +177,9 @@
 > - 外部媒体库：远程存储（Phase 6.6）或团队 NAS 自行同步
 
 ### neko-market — [ADR](./docs/architecture/marketplace.md) · [ADR](./docs/architecture/registry-server.md)
-> **客户端已完成** ✅（Phase 6.5.1-6.5.5）。剩余为 onPostInstall 模型注册 + Registry Server 后端。
+> **客户端完全完成** ✅（Phase 6.5.1-6.5.6）。剩余仅为 Registry Server 后端。
 - [x] Phase M1 ✅：ModelInstallTarget.onPostInstall/onPreUninstall — GGUF → `ensureOllamaRunning()` + `ollama create`；ONNX → `EngineClient.registerModel()`；`ModelMetadata` +gguf（12 tests）
+- [x] Phase M1 消费端打通 ✅：`neko.agent.rescanSkills` + `neko.agent.refreshModels` 命令注册；`ConfigManager.onUserConfigChange()` 多监听器；`ConfigBridge` 实时广播 configState
 - [ ] **Registry Server**（后端，非客户端任务）
   - [ ] S1：最小 Server（Package API + SQLite + 本地文件 + Docker 镜像）
   - [ ] S2：对象存储（S3/R2/OSS）+ 预签名 URL 直传 + 分片上传 + 发布能力
@@ -171,14 +189,19 @@
 ### 本地模型运行时 — [ADR](./docs/architecture/model-runtime.md)
 > 不创建 neko-runtime 包。外部运行时（Ollama/ComfyUI）用户自行管理，通过 Provider/MCP 接入。Engine ONNX/candle 原生处理。
 - [x] Phase M2 ✅：neko-engine ONNX 基础设施 — `ort` crate + ml/ 模块（6 文件）+ IMlService trait + ModelsController 扩展（+7 action）+ EngineClient 模型方法（10 Rust tests）
-- [ ] Phase M2 剩余：推理管线实现（依赖 ort 2.0 stable，当前 2.0.0-rc.12 API 不稳定）
-  - [ ] `ml/upscale.rs`：Real-ESRGAN ONNX 推理（load image → normalize NCHW → session.run → denormalize → save）
-  - [ ] `ml/denoise.rs`：去噪模型推理（同 upscale 管线）
-  - [ ] `ml/clip.rs`：CLIP 双模型推理（visual encoder + textual encoder → cosine similarity）— 需实现双 Session 管理
-  - [ ] `ml/whisper.rs`：Whisper STT 完整管线（FFmpeg 加载音频 → 16kHz resample → mel spectrogram → encoder → autoregressive decoder → token decode）
-  - [ ] `ml/onnx_runtime.rs`：设备选择完善（CUDA EP / CoreML EP / DirectML EP 实际验证）
-  - [ ] `MlService`：推理方法从 placeholder 替换为实际调用
-  - [ ] 端到端测试：下载 Real-ESRGAN ONNX 模型 → registerModel → upscale() 验证输出
+- [ ] Phase M2 剩余：推理管线实现
+  > **阻塞原因修正**：之前标注"ort 2.0 API 不稳定"有误，rc.12 已是 production-ready，官方建议新项目直接使用。
+  > 真正阻塞：`ndarray = "0.16"`（workspace Cargo.toml L82）与 ort 2.0 要求的 0.17 不兼容；但 ndarray 目前在任何 .rs 文件中均无实际使用，升级零影响，可立即执行。
+  - [ ] **Step 0（解锁）**：workspace Cargo.toml `ndarray` 升级 0.16 → 0.17
+  - [ ] **Step 1（初始化）**：`native-api/src/engine.rs` 中 MlService 从 `None` 改为实际创建 `MlServiceImpl`，确定 `max_loaded` 初始值
+  - [ ] `ml/upscale.rs`：Real-ESRGAN 推理（load image → f32 NCHW → `inputs!` macro → session.run → denormalize → save）；4K 图片必须 tile 分块（512×512），否则显存 OOM
+  - [ ] `ml/denoise.rs`：同 upscale 管线
+  - [ ] `ml/clip.rs`：CLIP 双模型推理（visual + textual encoder，需引入 `tokenizers` crate）
+  - [ ] `ml/whisper.rs`：最高复杂度（mel spectrogram 需 `rustfft`/FFmpeg → encoder 一次 → autoregressive decoder 循环 → BPE token decode）
+  - [ ] `ml/onnx_runtime.rs`：DeviceSelection::Auto 实现（macOS→CoreML EP，Windows→DirectML EP，Linux NVIDIA→CUDA EP）；DirectML 需补充到 DeviceSelection 枚举
+  - [ ] `ModelRegistry`：增加基于空闲时间的淘汰（≥5 分钟无调用则卸载 Session 释放显存）；当前仅有容量触发的 LRU，Session 常驻直到进程退出
+  - [ ] 跨平台打包：`load-dynamic` 模式需随扩展分发 onnxruntime 动态库（macOS/Windows/Linux 各不同），CI 按平台下载
+  - [ ] 端到端测试：下载 Real-ESRGAN ONNX → registerModel → upscale() 验证输出
 - [ ] Phase M3（待评估）：neko-engine candle SD/SDXL 图片生成 — 前置条件：candle 推理速度 < PyTorch 2x 且支持 Flux
 - 外部运行时接入：Ollama → Provider 配置（adapter 已有）；ComfyUI → MCP Server 或 Provider 配置
 
@@ -196,7 +219,7 @@
 - [ ] 7.1-7.4：立体渲染 + WebXR App + AR 能力 + AI 辅助 XR
 
 ### 项目基础设施
-- [ ] Project Memory：自动压缩（workspace 级 ✅ + MemoryWrite ✅）
+- [x] Project Memory ✅：workspace 级 memory.md + MemoryWrite 工具（自动压缩无需实现：memory 天然简洁，agent 通过 `remove` 主动清理即可）
 - [ ] Git LFS 集成：neko-diff CLI + pHash + .gitignore/.gitattributes 模板 + OID 自动填充
 - [ ] 跨语言架构对齐 Step 2-3（Engine ComputeService + UI 状态分离）
 
@@ -205,7 +228,7 @@
 ## 📋 技术债务
 
 ### CI/CD
-- [ ] CI code-quality 移除 `continue-on-error`
+- [x] CI code-quality 移除 `continue-on-error`
 - [ ] Release workflow（tag 触发 vsix 打包）
 - [ ] ESLint warn → error 升级（`no-console` + `no-explicit-any`）
 - ⚠️ 覆盖率遗留：neko-agent 根包未接入 `sharedCoverage()`
@@ -214,7 +237,7 @@
 
 **扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | Knip 435 未使用导出 | **0 循环依赖** ✅ | 生产 `as any` 0 ✅
 
-**大文件（>1000 LOC）：5 个待拆分**
+**大文件（>1000 LOC）：4 个待拆分**
 
 | 文件 | LOC | 方案 |
 |------|-----|------|
@@ -222,7 +245,6 @@
 | PreviewPanel.tsx | 1116 | 提取子组件和 hooks |
 | ExportPanel.tsx | 1112 | 提取子组件和 hooks |
 | AudioDiffViewer.tsx | 1081 | 分离波形渲染和交互逻辑 |
-| AssetVariantDiffEditorProvider.ts | 1071 | 重构 |
 
 **其他**
 
@@ -238,7 +260,7 @@
 
 | 模块 | 目标 | 参考 |
 |------|------|------|
-| neko-market | **客户端完成** ✅（Phase 6.5.1-6.5.5），剩余为 onPostInstall 模型注册 + Registry Server 后端 | [ADR](./docs/architecture/marketplace.md) · [ADR](./docs/architecture/registry-server.md) · [ADR](./docs/architecture/model-runtime.md) |
+| neko-market | **客户端完全完成** ✅（Phase 6.5.1-6.5.6），剩余仅为 Registry Server 后端 | [ADR](./docs/architecture/marketplace.md) · [ADR](./docs/architecture/registry-server.md) · [ADR](./docs/architecture/model-runtime.md) |
 | Neko Storage Service | 远程存储（MinIO S3 + Transcode Worker） | [ADR](./docs/architecture/remote-storage.md) |
 | neko-live | 动捕 + 虚拟形象 + 直播 | Phase 5 |
 | neko-vr | VR/AR 沉浸式创作 | Phase 7 |
@@ -257,4 +279,4 @@
 
 ---
 
-*最后更新：2026-03-25（Phase 6.4 完成：Document + Ownership + 搜索 + 缓存 + PathVariable 全格式集成 + 素材同步说明）*
+*最后更新：2026-03-26（scene-to-music Skill 实现完成；AI 字幕生成前置条件分析（需 Engine Whisper 推理）；Phase M2 推理管线阻塞原因修正（ndarray 版本而非 ort API），补充 ModelRegistry 显存常驻问题、跨平台打包、DeviceSelection 缺 DirectML、时间窗口淘汰等实现缺口）*

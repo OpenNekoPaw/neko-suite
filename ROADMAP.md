@@ -13,12 +13,12 @@
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全（audio/canvas/sketch 全覆盖）+ 文档完善 |
 | **neko-engine** | Alpha | 88% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad） |
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
-| **neko-agent** | Alpha | 82% | Agent 引擎 + LLM 平台 + CLI + UI + Phase 3 重构 ✅ + 媒体工具贯通 ✅ + AI SDK v3 ✅ + Pipeline Hook ✅ + 对话持久化（存储层 ✅） |
+| **neko-agent** | Alpha | 92% | Agent 引擎 + LLM 平台 + CLI + UI + Phase 3 重构 ✅ + 媒体工具贯通 ✅ + AI SDK v3 ✅ + Pipeline Hook ✅ + 对话持久化完整 ✅（含 CLI --resume + /resume）+ 分镜→视频 Pipeline ✅；剩余：MCP 重连退避 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 92% | Phase 1-3.5 ✅ + 外部媒体库 P1-P2 ✅ + AI 分类 + 缩略图 + 跨扩展集成 + Phase 6.4 ✅（Document + Ownership + 搜索 + 缓存 + PathVariable 全格式） |
-| **neko-market** | Alpha | 95% | **客户端完成** ✅：Phase 6.5.1-6.5.5 全部完成（核心 + Skill MVP + 独立面板 + 多品类 + 消费端集成/启停/热加载）；剩余为 Registry Server 后端 + neko-runtime 集成 |
+| **neko-market** | Alpha | 97% | **客户端完全完成** ✅：Phase 6.5.1-6.5.6 全部完成（核心 + Skill MVP + 独立面板 + 多品类 + 消费端集成/启停/热加载 + neko-agent 消费端打通）；剩余仅 Registry Server 后端 |
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO 基础设施 ✅：auth-core Layer 0（43 tests）+ VSCode 扩展（SecretStorage）+ CLI FileTokenStorage；OAuth 后端待接入 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
@@ -43,7 +43,7 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 
 ## Phase 2: AI 驱动创作 (Current)
 
-> 目标：AI Agent 驱动的智能剪辑 — **进度 ~85%**
+> 目标：AI Agent 驱动的智能剪辑 — **进度 ~90%**
 
 ### neko-agent — 已完成
 - Phase 3 架构重构 ✅：AgentExecutor 统一循环 + AgentSessionInitializer + IPermissionManager + SkillInjection rollback
@@ -54,15 +54,13 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - AccountBar + OnboardingFlow UI ✅：SSO / 自定义 API key 两种流程
 - TUI P1 功能 ✅：`/skill` 选择菜单 + StatusBar skill 展示 + Plan Review SelectionMenu
 - SSO 接入 ✅：configBridge ssoLogin/ssoLogout + onDidChangeSession 广播（依赖 neko.neko-auth 扩展）
+- 分镜 → 批量视频生成 → 自动排列时间线 ✅：Pipeline 4 阶段（parseStoryboard → generatePrompts → batchGenerate → arrangeOnTimeline）+ 6 种预定义 Flow + storyboard-to-timeline / comic-to-storyboard / pipeline-retry 内置 Skill
+- 对话持久化 CLI `--resume` / `/resume` ✅：`cli.tsx` flag + `runner.ts` 历史加载 + `slash-commands.ts /resume` 命令 + FileConversationStorage（含 list/load/save）
 
-### neko-agent — 待完成
-- 分镜→批量视频生成 → 自动排列到时间线
-- 对话持久化遗留：CLI `--resume` / `/resume` 未实现
-- MCP 客户端重连退避（当前连接失败即终止）
-- ContextManager 异步竞态保护（无锁，并发写入有风险）
+### neko-agent — 延后到后续 Phase（补充）
+- MCP 客户端重连退避：`callTool()` 检测到 `isConnected()==false` 时无自动重连，进程崩溃后需重启会话（低复杂度：仅需在 `callTool()` 加一次重连尝试，但触发频率低，延后处理）
 
 ### neko-agent — 延后到后续 Phase
-- 批量时间线操作 Skill（→ Phase 6 资产管理与协作阶段，配合跨扩展集成）
 - AI 字幕生成 / 自动配乐 / 画面描述（→ Phase 4 音频工作站阶段，依赖 neko-audio）
 - MCP 桥接专业软件 Blender / ComfyUI / Photoshop（→ Phase 3.4 AI 辅助 3D + neko-model）
 - SubAgent Skills：Seed_Manager + Audio_Mixer + 镜头语言通用 Skill
@@ -295,7 +293,19 @@ AI 生成素材默认保留在工作区，用户通过 Explorer 右键菜单按�
 - **neko-cut MarketShaderService**：扫描 `~/.neko/shaders/` + 订阅市场事件热重载 + graceful degradation（无 market 时仅扫描）
 - market-core 64 测试 + neko-cut 468 测试全部通过
 
-### Phase 6.5.6（待开发）：本地模型部署 + Engine ML 原生
+### Phase 6.5.6 ✅ neko-agent 消费端打通（已完成）+ 本地模型部署（进行中）
+
+**neko-agent 消费端打通 ✅**：
+
+- `SkillFileService.triggerRescan()` 公开方法：强制重扫 Skills + 推送事件到 Webview（文件 Watcher 自动感知的显式 fallback）
+- `neko.agent.rescanSkills` 命令注册：neko-market 安装/卸载 Skill 后调用，无需重启
+- `neko.agent.refreshModels` 命令注册 + `refreshOllamaModels()` 实现：Ollama `GET /api/tags` → 发现新模型 → 写入 `~/.neko/config.json`
+- `ConfigManager.onUserConfigChange()` 多监听器接口：原单回调扩展为监听者列表，支持多消费者（ConfigBridge + 未来扩展）
+- `ConfigManager` 构造函数接入 `userConfigManager.onChange` 钩子：外部编辑 `~/.neko/config.json` 时自动失效合并缓存
+- `ConfigBridge` 订阅 `platform.config.onUserConfigChange` → 广播 `configState` 到所有 Webview（实时，无需重启）
+- 完整链路：neko-market 安装 Skill/Ollama 模型 → 触发 agent 命令 → neko-agent 自动感知 → Webview 实时刷新
+
+**本地模型部署（进行中）**：
 
 > 架构见 [model-runtime.md](./docs/architecture/model-runtime.md)。不创建 neko-runtime 包，改动归入现有包。
 
@@ -384,7 +394,7 @@ Neko Storage Service（薄服务层）
 
 ### Phase 6.7（待开发）：项目协作基础设施
 - Git LFS 集成（.gitignore/.gitattributes 模板自动生成 + neko-diff CLI + pHash 相似度 + AssetManifest OID 自动填充）— [ADR](./docs/architecture/project-data-management.md)
-- Project Memory 增强（全局 ~/.neko/memory.md + 自动压缩 + MemoryRead 工具 + 文件监听）— [ADR](./docs/architecture/project-memory.md)
+- Project Memory ✅（workspace 级 memory.md + MemoryWrite + 文件监听已完成；自动压缩无需实现）— [ADR](./docs/architecture/project-memory.md)
 
 ---
 
@@ -503,4 +513,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-25（neko-market 客户端标记完成 95%，registryUrl 固定，剩余任务归类为后端 + neko-runtime）*
+*最后更新: 2026-03-25（核实 neko-agent：--resume/\/resume 已完整实现，ContextManager 竞态架构天然不存在，两项从待完成移入已完成；唯一剩余项为 MCP 重连退避；进度提升至 92%）*

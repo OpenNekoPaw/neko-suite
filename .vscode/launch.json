@@ -18,6 +18,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-market",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth"
       ],
       "outFiles": [
@@ -185,6 +186,20 @@
       "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"],
       "outFiles": ["${workspaceFolder}/packages/neko-live/dist/**/*.js"],
       "preLaunchTask": "build:neko-live"
+    },
+    {
+      "name": "Debug neko-model",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-model/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js"
+      ],
+      "preLaunchTask": "build:neko-model"
     },
     {
       "name": "Debug neko-auth",

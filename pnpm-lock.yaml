@@ -467,6 +467,57 @@ importers:
         specifier: ^5.0.10
         version: 5.4.21(@types/node@20.19.27)
 
+  packages/neko-auth:
+    dependencies:
+      '@neko/auth-core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@neko/auth-extension':
+        specifier: workspace:*
+        version: link:packages/extension
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../neko-types
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.107.0
+      esbuild:
+        specifier: ^0.20.0
+        version: 0.20.2
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
+
+  packages/neko-auth/packages/core:
+    dependencies:
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@27.4.0)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/neko-auth/packages/extension:
+    dependencies:
+      '@neko/auth-core':
+        specifier: workspace:*
+        version: link:../core
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.107.0
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
+
   packages/neko-canvas:
     devDependencies:
       '@types/node':
@@ -706,7 +757,17 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@27.4.0)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/neko-market: {}
+  packages/neko-market:
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.107.0
+      esbuild:
+        specifier: ^0.19.8
+        version: 0.19.12
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
 
   packages/neko-market/packages/core:
     dependencies:
@@ -717,6 +778,65 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@27.4.0)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/neko-market/packages/extension:
+    dependencies:
+      '@neko/market-core':
+        specifier: workspace:*
+        version: link:../core
+      '@neko/neko-client':
+        specifier: workspace:*
+        version: link:../../../neko-client
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.107.0
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
+
+  packages/neko-market/packages/webview:
+    dependencies:
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      zustand:
+        specifier: ^4.4.7
+        version: 4.5.7(@types/react@18.3.27)(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.2.43
+        version: 18.3.27
+      '@types/react-dom':
+        specifier: ^18.2.17
+        version: 18.3.7(@types/react@18.3.27)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.1
+        version: 4.7.0(vite@5.4.21(@types/node@20.19.27))
+      autoprefixer:
+        specifier: ^10.4.16
+        version: 10.4.23(postcss@8.5.6)
+      postcss:
+        specifier: ^8.4.32
+        version: 8.5.6
+      tailwindcss:
+        specifier: ^3.3.6
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.8
+        version: 5.4.21(@types/node@20.19.27)
 
   packages/neko-model:
     devDependencies:

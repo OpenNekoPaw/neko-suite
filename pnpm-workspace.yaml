@@ -12,6 +12,7 @@ packages:
   - packages/neko-story/packages/*
   - packages/neko-tools/packages/*
   - packages/neko-market/packages/*
+  - packages/neko-auth/packages/*
 
 ignoredBuiltDependencies:
   - esbuild
