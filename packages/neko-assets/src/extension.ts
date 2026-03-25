@@ -704,7 +704,7 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
       vscode.window.showInformationMessage('CI/CD render triggered');
     }),
     vscode.commands.registerCommand('neko.assets.viewHistory', () => {
-      vscode.window.showInformationMessage('Asset history - Coming soon');
+      vscode.commands.executeCommand('neko.assetHistory.focus');
     }),
     // Preview media files with neko-preview
     vscode.commands.registerCommand('neko.assets.previewMedia', async (uri?: vscode.Uri) => {

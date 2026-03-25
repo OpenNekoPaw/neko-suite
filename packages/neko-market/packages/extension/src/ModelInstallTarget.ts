@@ -80,11 +80,15 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
     const { framework } = metadata.data;
 
     switch (framework) {
-      case 'gguf':
-        await execFileAsync('ollama', ['rm', manifest.name], { timeout: 30_000 }).catch(() => {
-          // Ollama may not be running or model already removed — ignore
-        });
+      case 'gguf': {
+        const ollamaBin = await this.findOllamaBinary();
+        if (ollamaBin) {
+          await execFileAsync(ollamaBin, ['rm', manifest.name], { timeout: 30_000 }).catch(() => {
+            // Ollama may not be running or model already removed — ignore
+          });
+        }
         break;
+      }
       case 'onnx':
         await this.unregisterFromEngine(manifest.name).catch(() => {
           // Engine may not be running — ignore
@@ -101,7 +105,7 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
    * Register GGUF model with Ollama: ensure running → generate Modelfile → ollama create.
    */
   private async registerWithOllama(modelName: string, installedPath: string): Promise<void> {
-    await this.ensureOllamaRunning();
+    const ollamaPath = await this.ensureOllamaRunning();
 
     // Find the GGUF file in the installed directory
     const ggufFile = this.findFileByExtension(installedPath, '.gguf');
@@ -113,8 +117,8 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
     const modelfilePath = path.join(installedPath, 'Modelfile');
     fs.writeFileSync(modelfilePath, `FROM ${ggufFile}\n`, 'utf-8');
 
-    // Register with Ollama
-    await execFileAsync('ollama', ['create', modelName, '-f', modelfilePath], {
+    // Register with Ollama using the resolved binary path
+    await execFileAsync(ollamaPath, ['create', modelName, '-f', modelfilePath], {
       timeout: OLLAMA_CREATE_TIMEOUT_MS,
     });
 
@@ -124,13 +128,11 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
 
   /**
    * Ensure Ollama is running. If not, attempt to start it.
+   * Returns the resolved ollama binary path.
    * Throws if Ollama is not installed or fails to start within timeout.
    */
-  private async ensureOllamaRunning(): Promise<void> {
+  private async ensureOllamaRunning(): Promise<string> {
     // 1. Already running?
-    if (await this.isOllamaRunning()) return;
-
-    // 2. Installed?
     const ollamaPath = await this.findOllamaBinary();
     if (!ollamaPath) {
       throw new Error(
@@ -138,17 +140,19 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
       );
     }
 
-    // 3. Start in background
+    if (await this.isOllamaRunning()) return ollamaPath;
+
+    // 2. Start in background
     const proc = spawn(ollamaPath, ['serve'], {
       detached: true,
       stdio: 'ignore',
     });
     proc.unref();
 
-    // 4. Wait for ready
+    // 3. Wait for ready
     for (let i = 0; i < OLLAMA_STARTUP_MAX_ATTEMPTS; i++) {
       await this.sleep(OLLAMA_STARTUP_POLL_INTERVAL_MS);
-      if (await this.isOllamaRunning()) return;
+      if (await this.isOllamaRunning()) return ollamaPath;
     }
 
     throw new Error(
@@ -167,13 +171,29 @@ export class ModelInstallTarget implements IInstallTarget<'ai-model' | 'lora' | 
     }
   }
 
+  /**
+   * Locate the ollama binary cross-platform.
+   * - Unix/macOS: `which ollama`, fallback to common paths
+   * - Windows: `where ollama`, fallback to common %LOCALAPPDATA% / %ProgramFiles% paths
+   */
   private async findOllamaBinary(): Promise<string | null> {
+    const isWindows = process.platform === 'win32';
+    const locateCmd = isWindows ? 'where' : 'which';
+
     try {
-      const { stdout } = await execFileAsync('which', ['ollama'], { timeout: 5000 });
-      return stdout.trim() || null;
+      const { stdout } = await execFileAsync(locateCmd, ['ollama'], { timeout: 5000 });
+      // `where` may return multiple lines — take the first non-empty one
+      const first = stdout.trim().split(/\r?\n/)[0];
+      return first ?? null;
     } catch {
-      // 'which' failed — check common paths
-      const commonPaths = ['/usr/local/bin/ollama', '/opt/homebrew/bin/ollama'];
+      // Fallback to well-known install paths per platform
+      const commonPaths: string[] = isWindows
+        ? [
+            path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Ollama', 'ollama.exe'),
+            path.join(process.env['ProgramFiles'] ?? 'C:\\Program Files', 'Ollama', 'ollama.exe'),
+          ]
+        : ['/usr/local/bin/ollama', '/opt/homebrew/bin/ollama', '/usr/bin/ollama'];
+
       for (const p of commonPaths) {
         if (fs.existsSync(p)) return p;
       }

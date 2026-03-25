@@ -237,12 +237,16 @@ export class AssetDiffService implements IAssetDiffService {
         };
       }
 
-      case 'git':
-        // TODO: Resolve git ref to actual file
+      case 'git': {
+        if (!this.gitService) {
+          throw new Error('Git service not available for git source resolution');
+        }
+        const resolvedPath = await this.gitService.getFileAtRef(source.filePath, source.ref);
         return {
-          name: `Version @ ${source.ref}`,
-          path: '',
+          name: `${source.filePath.split('/').pop() ?? source.filePath} @ ${source.ref}`,
+          path: resolvedPath,
         };
+      }
 
       default:
         throw new Error(`Unknown source type`);

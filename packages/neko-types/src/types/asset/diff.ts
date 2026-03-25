@@ -25,7 +25,7 @@ export type AssetDiffViewMode =
 
 /** Source for diff comparison */
 export type AssetDiffSource =
-  | { type: 'git'; ref: string } // Git reference (commit, branch, HEAD)
+  | { type: 'git'; filePath: string; ref: string } // Git reference (commit, branch, HEAD)
   | { type: 'file'; file: AssetFile } // Specific asset file
   | { type: 'variant'; entityId: string; variant: AssetVariant } // Asset variant
   | { type: 'path'; path: string }; // File path

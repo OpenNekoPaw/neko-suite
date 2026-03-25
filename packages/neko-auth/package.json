@@ -51,8 +51,8 @@
     }
   },
   "scripts": {
-    "compile": "node esbuild.cjs",
-    "watch": "node esbuild.cjs --watch"
+    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch"
   },
   "dependencies": {
     "@neko/auth-core": "workspace:*",
