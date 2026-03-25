@@ -29,7 +29,11 @@ export type AssetType =
   // 预设 / 模板 / LUT
   | 'preset'
   | 'template'
-  | 'lut';
+  | 'lut'
+  // 3D 模型
+  | '3d-model'
+  // 文档
+  | 'document';
 
 // =============================================================================
 // Asset Source
@@ -40,7 +44,8 @@ export type AssetManifestSource =
   | { kind: 'local'; path: string }
   | { kind: 'git-lfs'; oid: string; path: string }
   | { kind: 'registry'; registry: string; package: string; version: string; integrity?: string }
-  | { kind: 'ai-generated'; taskId: string; model: string };
+  | { kind: 'ai-generated'; taskId: string; model: string }
+  | { kind: 'remote'; uri: string; checksum?: string };
 
 // =============================================================================
 // Type-Specific Metadata
@@ -64,13 +69,34 @@ export interface ShaderInput {
   label?: string;
 }
 
-/** AI 模型元数据 */
+/** AI model metadata for marketplace distribution and runtime deployment */
 export interface ModelMetadata {
-  framework: 'onnx' | 'pytorch' | 'safetensors';
-  task: 'image-gen' | 'tts' | 'style-transfer' | 'upscale' | 'transcribe' | string;
+  /** Model weight format */
+  framework: 'onnx' | 'pytorch' | 'safetensors' | 'gguf';
+  /** Primary task this model performs */
+  task:
+    | 'image-gen'
+    | 'tts'
+    | 'stt'
+    | 'style-transfer'
+    | 'upscale'
+    | 'denoise'
+    | 'transcribe'
+    | 'clip'
+    | 'chat'
+    | 'embedding'
+    | 'vision'
+    | string;
+  /** Model file size in bytes */
   size: number;
+  /** Quantization level (e.g., 'q4_k_m', 'fp16', 'int8') */
   quantization?: string;
+  /** Minimum VRAM required in MB */
   minVram?: number;
+  /** Architecture name (e.g., 'realesrgan', 'whisper', 'llama', 'sdxl') */
+  architecture?: string;
+  /** Base model ID for LoRA / embedding / adapter */
+  baseModel?: string;
 }
 
 /** 插件元数据 */
@@ -103,13 +129,24 @@ export interface SkillMarketMetadata {
   };
 }
 
+/** Document metadata */
+export interface DocumentMetadata {
+  subtype: 'markdown' | 'pdf' | 'word' | 'pptx' | 'xlsx' | 'epub' | 'cbz' | 'fdx';
+  pageCount?: number;
+  wordCount?: number;
+  language?: string;
+  /** Whether text content can be extracted for AI analysis */
+  textExtractable: boolean;
+}
+
 /** 类型特化元数据联合 */
 export type AssetTypeMetadata =
   | { type: 'shader'; data: ShaderMetadata }
   | { type: 'model'; data: ModelMetadata }
   | { type: 'plugin'; data: PluginMetadata }
   | { type: 'preset'; data: PresetMetadata }
-  | { type: 'skill'; data: SkillMarketMetadata };
+  | { type: 'skill'; data: SkillMarketMetadata }
+  | { type: 'document'; data: DocumentMetadata };
 
 // =============================================================================
 // Distribution Info

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@neko/market-core": "workspace:*",
+    "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {
