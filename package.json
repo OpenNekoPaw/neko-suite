@@ -22,6 +22,7 @@
     "build:neko-assets": "turbo run compile --filter=neko-assets",
     "build:neko-tools": "turbo run compile --filter=neko-tools",
     "build:neko-preview": "turbo run compile --filter=neko-preview",
+    "build:neko-market": "turbo run compile --filter=neko-market",
     "dev": "turbo run dev --filter=neko-cut",
     "dev:neko": "turbo run watch --filter=neko-cut",
     "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",

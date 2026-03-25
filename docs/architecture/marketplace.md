@@ -78,45 +78,64 @@ Neko Suite 需要一个统一的市场平台，管理官方、私有、共享、
 
 ```
 packages/
-├── neko-types/src/types/asset/     ← 所有类型定义（含市场类型）
-│   ├── manifest.ts                   AssetManifest / AssetDistribution（扩展）
-│   ├── registry.ts                   IAssetRegistry / IAssetHandler
-│   └── market.ts                     ← 新增：MarketQuery / MarketPackage / 市场专有类型
+├── neko-types/src/types/asset/          ← 所有类型定义（含市场类型）
+│   ├── manifest.ts                        AssetManifest / AssetDistribution（扩展）
+│   ├── registry.ts                        IAssetRegistry / IAssetHandler
+│   └── market.ts                          MarketQuery / MarketPackage / 市场专有类型 ✅
 │
-├── neko-market/                    ← 新建：市场基础设施
+├── neko-market/                         ← 市场基础设施 ✅
 │   └── packages/
-│       └── core/                     @neko/market-core（零 vscode 依赖）
-│           ├── MarketClient.ts       HTTP API 客户端（搜索/详情/下载 URL）
-│           ├── InstallManager.ts     下载/校验/解压
-│           ├── LicenseManager.ts     授权验证
-│           ├── CacheManager.ts       .neko/market-cache/ 管理
-│           └── VersionResolver.ts    semver 解析/兼容性检查
+│       ├── core/                          @neko/market-core（零 vscode 依赖）✅
+│       │   ├── MarketClient.ts            HTTP API 客户端（搜索/详情/下载 URL）
+│       │   ├── InstallManager.ts          下载/校验/解压 + InstallTargetRegistry
+│       │   ├── LicenseManager.ts          授权验证（stub，Phase 6.5.5 完整实现）
+│       │   ├── CacheManager.ts            .neko/market-cache/ 管理
+│       │   ├── VersionResolver.ts         semver 解析/兼容性检查
+│       │   └── InstalledRegistry.ts       ~/.neko/market-installed.json 持久化
+│       │
+│       ├── extension/                     neko.neko-market VSCode 扩展 ✅
+│       │   └── src/
+│       │       ├── index.ts               activate/deactivate + 命令注册
+│       │       ├── MarketplaceProvider.ts WebviewViewProvider（Activity Bar 侧边栏）
+│       │       ├── MarketplaceService.ts  包装 market-core，注入 Bearer token
+│       │       ├── MarketplaceHandler.ts  market:* postMessage 路由
+│       │       └── SkillInstallTarget.ts  IInstallTarget for Skill 类型
+│       │
+│       └── webview/                       @neko/market-webview React UI ✅
+│           └── src/
+│               ├── components/
+│               │   ├── MarketplaceApp.tsx  根组件（Tab 路由 + 消息处理）
+│               │   ├── BrowseView.tsx      Featured + 搜索结果
+│               │   ├── InstalledView.tsx   已安装列表
+│               │   ├── UpdatesView.tsx     可用更新
+│               │   ├── AssetCard.tsx       统一资产卡片
+│               │   └── SearchBar.tsx       搜索 + 类型过滤
+│               ├── stores/marketplaceStore.ts  Zustand（slices + error state）
+│               ├── messages/index.ts       类型安全 postMessage builder
+│               └── i18n/                   EN + ZH-CN 国际化
 │
-├── neko-assets/                    ← 现有：本地素材管理 + 素材市场入口
-│   ├── packages/asset/               本地管理（不变）
-│   └── src/
-│       ├── providers/
-│       │   └── MarketplaceTreeProvider.ts  ← 新增：素材市场面板
-│       └── services/
-│           └── AssetMarketService.ts       ← 新增：组合 market-core + AssetLibrary
+├── neko-assets/                         ← 现有：本地素材管理（Phase 6.5.4 扩展）
+│   └── …
 │
-└── neko-agent/                     ← 现有：Skill 市场入口
-    └── src/
-        └── services/
-            └── SkillMarketService.ts       ← 新增：组合 market-core + SkillService
+└── neko-agent/                          ← 现有：Skill 市场深链接入口 ✅
+    └── …SkillMarketPanel               "Open in Marketplace" banner
 ```
 
 ### 依赖关系
 
 ```
-                    @neko/shared (types)
+                    @neko/shared (types + i18n + logger + theme)
                          ▲
                          │
-                  @neko/market-core          ← 纯协议 + HTTP + 下载
+                  @neko/market-core          ← 纯协议 + HTTP + 下载（Layer 0）
                     ▲         ▲
                     │         │
-            neko-assets    neko-agent         ← 各自的市场 UI + 安装逻辑
-            (素材市场)     (Skill 市场)
+          neko-market/      neko-agent        ← 各自的 UI + 安装逻辑
+          extension/        SkillMarket
+          webview/          (深链接入口)
+             ▲
+             │
+         cli-tui             ← /market 命令（直接依赖 market-core，无 vscode）
 ```
 
 ---
@@ -428,44 +447,71 @@ export interface LicenseVerifyResult {
 ## 七、实施路径
 
 ```
-Phase 1 — 基础设施
-├── 扩展 @neko/shared 类型（AssetDistribution / SkillMetadata）
-├── 新建 neko-market/packages/core/
-│   ├── MarketClient（HTTP API 客户端）
-│   ├── InstallManager（下载/校验/解压）
-│   └── CacheManager（.neko/market-cache/）
-├── 补全 IAssetHandler（Skill / Shader / Model）
-└── 设计 Market Backend API 契约（OpenAPI spec）
+Phase 6.5.1 ✅ — 基础设施（@neko/market-core）
+├── 扩展 @neko/shared 类型（25+ 类型 + 6 核心接口）
+├── MarketClient / InstallManager / CacheManager / VersionResolver
+├── IntegrityChecker / InstalledRegistry / LicenseManager（stub）
+├── DownloadService + InstallTargetRegistry（注册表模式，支持多品类）
+└── dependency-cruiser Layer 0 隔离规则 + 7 测试文件 / 58 用例
 
-Phase 2 — 最小可用（Skill 市场优先）
-├── Skill 市场面板（neko-agent 侧边栏）
-├── 官方 + 免费共享两种模式
-├── SkillHandler.onInstall → 复制到 .neko/skills/ + SkillService 热加载
-└── 基础搜索/浏览/安装/卸载
+Phase 6.5.2 ✅ — Skill 市场 MVP（neko-agent 侧边栏）
+├── SkillInstallTarget → ~/.neko/skills/{publisher}/{name}/ + SkillService 热加载
+├── SkillAssetHandler：SKILL.md 校验 + 元数据提取
+├── SkillMarketService + SkillMarketHandler
+└── 基础 Browse / Installed / Updates UI（嵌入 neko-agent webview）
 
-Phase 3 — 全品类扩展
-├── Shader/LUT/预设 市场（neko-cut / neko-canvas 入口）
-├── 本地模型市场（大文件下载 + 断点续传 + 进度管理）
-├── 创作素材市场（neko-assets 入口）
-└── 私有 registry 支持（团队/企业自建）
+Phase 6.5.3 ✅ — 独立 Marketplace Webview 面板
+├── neko.neko-market 独立 VSCode 扩展（Activity Bar 侧边栏）
+├── MarketplaceProvider + MarketplaceService + MarketplaceHandler
+├── React Webview：Browse / Installed / Updates 三 Tab
+├── 统一基础设施：nekoTailwindPreset + I18nService + ConsoleLogger + toBaseError
+├── CLI TUI /market 命令（Layer 0，直接依赖 market-core）
+└── neko-agent SkillMarketPanel 深链接入口
 
-Phase 4 — 商业化
-├── 付费资产 + 支付集成（LicenseManager 完整实现）
+Phase 6.5.4 ✅ — 多品类 InstallTarget
+├── ShaderInstallTarget：shader / shader-preset → ~/.neko/shaders/{publisherId}/{name}/
+├── ModelInstallTarget：ai-model / lora / embedding → ~/.neko/models/{framework}/{name}/
+├── PresetInstallTarget：preset / template / lut → ~/.neko/presets/{presetType}/{name}/
+└── MarketplaceService 注册全 9 种类型（skill + 2 shader + 3 model + 3 preset）
+
+Phase 6.5.5 — 消费端集成 + 热加载（待开发）
+├── neko-market activate() 导出 NekoMarketAPI（onDidInstall / onDidUninstall / getInstalled）
+├── neko-cut EffectDispatcher 扫描 ~/.neko/shaders/ + 订阅 onDidInstall 热重载
+├── neko-cut LUT 面板扫描 ~/.neko/presets/lut/ + 转场选择器扫描 ~/.neko/presets/transition/
+├── neko-agent ModelManager 扫描 ~/.neko/models/（generation 工具自动发现可用模型）
+└── 私有 registry 支持（MarketClient 可配 registryUrl，团队/企业自建）
+
+Phase 6.5.6 — 商业化（待开发）
+├── LicenseManager 完整实现（JWT + 在线校验）
+├── 付费资产 + 支付集成
 ├── 发布者后台（上传/审核/数据分析）
-├── 评分/评论系统
-└── 推荐算法
+└── 评分/评论系统 + 推荐算法
 ```
 
 ---
 
 ## 八、与现有系统的关系
 
+### 职责边界
+
+**工具型资产**（Shader / AI 模型 / Preset）由 neko-market 负责安装，由消费扩展直接读取，**不经过 neko-assets**：
+
+```
+neko-market 安装到 ~/.neko/{shaders|models|presets}/
+    ↓ 消费扩展各自扫描目录
+neko-cut（EffectDispatcher / LUT 面板）
+neko-agent（ModelManager）
+```
+
+**内容素材**（媒体文件 / 文档 / AI 生成内容）由 neko-assets 管理，neko-market 不参与索引。
+
+### 系统关系表
+
 | 现有系统 | 关系 | 说明 |
 |----------|------|------|
 | AssetManifest | **扩展** | 补充 Distribution / SkillMetadata 字段 |
-| IAssetRegistry | **复用** | 安装完成后调用 `register(manifest)` |
-| IAssetHandler | **补全** | 各类型实现 `onInstall` / `onUninstall` |
-| IAssetResolver | **扩展** | `resolveVersion()` 处理 registry source |
-| AssetLibrary | **不变** | 本地素材管理逻辑不受影响 |
-| SkillService | **集成** | 市场安装后触发 Skill 热加载 |
-| EngineClient | **集成** | 模型/Shader 安装后注册到引擎 |
+| neko-assets / AssetLibrary | **平行** | 工具型资产不入 AssetLibrary；内容素材不经 market |
+| SkillService | **集成** | 市场安装后触发 Skill 热加载（neko-agent 文件监听）|
+| EffectDispatcher | **集成（Phase 6.5.5）** | 订阅 NekoMarketAPI.onDidInstall 热重载 Shader |
+| EngineClient | **集成（Phase 6.5.5）** | ModelManager 扫描 ~/.neko/models/ 自动发现模型 |
+| neko-auth | **可选集成** | Bearer token 注入，无 neko-auth 时降级为匿名 |

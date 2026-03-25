@@ -8,6 +8,7 @@ import type { ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 import type { MarketplaceService } from './MarketplaceService';
 import type { MarketSearchQuery } from '@neko/shared/types/asset/market';
+import type { AssetType } from '@neko/shared/types/asset/manifest';
 
 interface WebviewMessage {
   type: string;
@@ -28,7 +29,7 @@ export class MarketplaceHandler {
         return this._handleSearch(message['query'] as MarketSearchQuery, postMessage);
 
       case 'market:getFeatured':
-        return this._handleGetFeatured(message['assetType'] as string | undefined, postMessage);
+        return this._handleGetFeatured(message['assetType'] as AssetType | undefined, postMessage);
 
       case 'market:getPackage':
         return this._handleGetPackage(message['packageId'] as string, postMessage);
@@ -70,7 +71,7 @@ export class MarketplaceHandler {
   }
 
   private async _handleGetFeatured(
-    assetType: string | undefined,
+    assetType: AssetType | undefined,
     postMessage: PostMessageFn,
   ): Promise<boolean> {
     try {

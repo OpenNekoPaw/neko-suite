@@ -26,10 +26,14 @@ import type {
   InstalledPackage,
   UpdateInfo,
 } from '@neko/shared/types/asset/market';
+import type { AssetType } from '@neko/shared/types/asset/manifest';
 import type { IAuthSession, ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 
 import { SkillInstallTarget } from './SkillInstallTarget';
+import { ShaderInstallTarget } from './ShaderInstallTarget';
+import { ModelInstallTarget } from './ModelInstallTarget';
+import { PresetInstallTarget } from './PresetInstallTarget';
 
 /** Minimal NekoAuthAPI interface (defined locally to avoid cross-extension imports). */
 interface NekoAuthAPI {
@@ -62,9 +66,17 @@ export class MarketplaceService implements vscode.Disposable {
     const license = new LicenseManager();
     this._installedRegistry = new InstalledRegistry(INSTALLED_FILE);
 
-    // Register install targets (add more types here in Phase 6.5.3+)
+    // Register install targets for all supported asset types
     const targets = new InstallTargetRegistry();
     targets.register(new SkillInstallTarget());
+    targets.register(new ShaderInstallTarget('shader'));
+    targets.register(new ShaderInstallTarget('shader-preset'));
+    targets.register(new ModelInstallTarget('ai-model'));
+    targets.register(new ModelInstallTarget('lora'));
+    targets.register(new ModelInstallTarget('embedding'));
+    targets.register(new PresetInstallTarget('preset'));
+    targets.register(new PresetInstallTarget('template'));
+    targets.register(new PresetInstallTarget('lut'));
 
     this._installManager = new InstallManager(
       this._client,
@@ -116,7 +128,7 @@ export class MarketplaceService implements vscode.Disposable {
     return this._client.search(query);
   }
 
-  async getFeatured(type?: string): Promise<MarketPackage[]> {
+  async getFeatured(type?: AssetType): Promise<MarketPackage[]> {
     return this._client.getFeatured(type);
   }
 

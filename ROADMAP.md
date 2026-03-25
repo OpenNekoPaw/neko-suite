@@ -18,7 +18,7 @@
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs 播放器 + 波形可视化 + 音频播放器现代化（Apple Music 风格四视图） + i18n + 流生命周期重构 + UI 现代化 Phase 0-3 ✅ |
 | **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 错误诊断 + 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 85% | Phase 1-3.5 ✅ + 外部媒体库 ✅ + AI 分类 + 缩略图 + 跨扩展集成，Phase 4-5 待开发 |
-| **neko-market** | Alpha | 45% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅ + Bearer token 注入（neko-auth 集成）✅ |
+| **neko-market** | Alpha | 70% | 统一市场平台：Phase 6.5.1 核心基础设施 ✅ + Phase 6.5.2 Skill 市场 MVP ✅ + Phase 6.5.3 独立 Webview 面板 ✅ + Phase 6.5.4 多品类 InstallTarget ✅（Shader/Model/Preset）|
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO 基础设施 ✅：auth-core Layer 0（43 tests）+ VSCode 扩展（SecretStorage）+ CLI FileTokenStorage；OAuth 后端待接入 |
 | **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 + 资产变体对比 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 连接标签 + 图层面板 + 富文本 + 分组 + 画板导出 + 原地粘贴 + 旋转 + 框选 + Port UI 面板 + EditOperation 集成 + i18n |
@@ -224,13 +224,15 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - 深度集成（neko-cut/story/canvas 跨扩展拖拽 + IPC 协议 20+ 请求类型）
 - 注册表 + AI 分类 + 缩略图 + 外部媒体库
 
-### Phase 6.4（待开发）：Handler 补全 + 文档素材
-- ShaderAssetHandler（编译验证 + 预览 + 热重载）
-- PresetAssetHandler（LUT / 转场预设 / 导出预设）
-- ModelAssetHandler（AI 模型下载 + 校验 + 量化选择）
-- IAIAnalysisService（接入 neko-agent AI 分类）
-- AssetType `'document'` + DocumentMetadata（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
-- AssetOwnership（scope: personal/project/team/purchased/public）
+### Phase 6.4（待开发）：内容素材扩展
+
+**职责边界**：neko-assets 管理**项目级内容素材**（媒体文件 + 参考文档 + AI 生成内容）。
+工具型资产（Shader / AI 模型 / Preset）由 neko-market 负责安装，由消费扩展（neko-cut / neko-agent）直接读取，不经过 neko-assets。
+
+- `AssetType 'document'` + `DocumentMetadata`（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）+ `DocumentAssetHandler`
+- `AssetOwnership`（scope: personal/project/team/purchased/public，远程存储前置依赖）
+- AI 生成结果自动入库：`GenerateImage` / `GenerateVideo` 完成后调用 `neko.assets.importGenerated`（source: `'ai-generated'`）
+- External Media Library P2：增量索引（mtime/inode 变更检测）+ 元数据缓存 + 全文搜索 + 批量导入
 
 ### Phase 6.5.1 ✅ 市场核心基础设施（neko-market）
 
@@ -251,12 +253,37 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - Webview：SkillMarketPanel（Browse/Installed/Updates）+ SkillCard + SkillSearchBar + useSkillMarket zustand store
 - SkillSource 扩展 `'market'` + SkillFrontmatter `'market-id'`
 
-### Phase 6.5.3（待开发）：全品类市场
-- ShaderInstallTarget / ModelInstallTarget / PresetInstallTarget
-- neko-assets MarketBridge + neko-cut Shader/LUT 市场 UI
-- 私有 registry 支持
+### Phase 6.5.3 ✅ 独立 Marketplace Webview 面板
 
-### Phase 6.5.4（待开发）：商业化
+- **VSCode 扩展**：`neko.neko-market` 独立扩展，Activity Bar 侧边栏，`WebviewViewProvider` 模式
+  - `MarketplaceService`：包装 `@neko/market-core`，`InstallTargetRegistry` 注册 targets，Bearer token 注入
+  - `MarketplaceHandler`：路由 `market:*` postMessage（search/install/uninstall/listInstalled/checkUpdates/getFeatured）
+  - `MarketplaceProvider`：服务 React webview，nonce + CSP，进度推送
+- **React Webview**（`@neko/market-webview`）：Browse / Installed / Updates 三 Tab
+  - Zustand store（slices 模式），类型安全 `MarketMessages` builder
+  - 统一基础设施：`nekoTailwindPreset`（`--neko-*` 设计 Token）+ `I18nService`（EN/ZH-CN）+ `ConsoleLogger` + `toBaseError` 错误处理
+  - 错误 banner（i18n key + 可关闭）
+- **CLI TUI**：`/market search|install|list|update` 命令，直接依赖 `@neko/market-core`（Layer 0，无 vscode）
+- **neko-agent 集成**：`SkillMarketPanel` 深链接入口（点击跳转新面板）；`openMarketplace` postMessage 路由
+- `.vscode/launch.json`：添加 `neko-market` 调试配置
+
+### Phase 6.5.4 ✅ 多品类 InstallTarget
+
+- `ShaderInstallTarget`：`shader` / `shader-preset` → `~/.neko/shaders/{publisherId}/{name}/`
+- `ModelInstallTarget`：`ai-model` / `lora` / `embedding` → `~/.neko/models/{framework}/{name}/`（framework 来自 typeMetadata）
+- `PresetInstallTarget`：`preset` / `template` / `lut` → `~/.neko/presets/{presetType}/{name}/`（presetType 来自 typeMetadata）
+- `MarketplaceService` 注册全 9 种类型；修复 `getFeatured` 参数类型（`string` → `AssetType`）
+
+### Phase 6.5.5（待开发）：消费端集成 + 热加载
+
+**工具型资产接入模式**：neko-market 导出公共 API（`onDidInstall` / `onDidUninstall` / `getInstalled`），消费扩展订阅后各自刷新。
+
+- **neko-market**：`activate()` 导出公共 API（`NekoMarketAPI` interface），供消费扩展跨扩展调用
+- **neko-cut**：EffectDispatcher 启动时扫描 `~/.neko/shaders/` + 订阅 `onDidInstall` 热重载；LUT 面板扫描 `~/.neko/presets/lut/`；转场选择器扫描 `~/.neko/presets/transition/`
+- **neko-agent**：ModelManager 扫描 `~/.neko/models/`（generation 工具自动发现可用模型）
+- 私有 registry 支持（团队/企业自建，MarketClient 可配 registryUrl）
+
+### Phase 6.5.6（待开发）：商业化
 - LicenseManager 完整实现（JWT + 在线校验）+ 支付集成 + 发布者 Portal + 评分评论
 
 ### Phase 6.6（待开发）：远程存储与代理文件
@@ -420,4 +447,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-25（代码验证：Phase 6.5.1-6.5.2 市场核心 + Skill MVP ✅ + 58 测试通过）*
+*最后更新: 2026-03-25（架构调整：Phase 6.4 职责边界厘清，工具型资产不经 neko-assets；Phase 6.5.5 消费端热加载模式重新定义；代码验证：Phase 6.5.1-6.5.4 ✅）*

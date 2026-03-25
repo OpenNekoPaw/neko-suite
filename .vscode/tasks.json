@@ -96,6 +96,13 @@
       "problemMatcher": ["$tsc"]
     },
     {
+      "label": "build:neko-market",
+      "type": "shell",
+      "command": "pnpm build:neko-market",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
       "label": "build:all",
       "type": "shell",
       "command": "pnpm build:extensions",

@@ -16,7 +16,9 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-market",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/*/dist/**/*.js"
@@ -72,6 +74,18 @@
         "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-canvas"
+    },
+    {
+      "name": "Debug neko-market",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-market"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-market/dist/**/*.js"
+      ],
+      "preLaunchTask": "build:neko-market"
     },
     {
       "name": "Debug neko-agent",
@@ -171,6 +185,14 @@
       "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"],
       "outFiles": ["${workspaceFolder}/packages/neko-live/dist/**/*.js"],
       "preLaunchTask": "build:neko-live"
+    },
+    {
+      "name": "Debug neko-auth",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth"],
+      "outFiles": ["${workspaceFolder}/packages/neko-auth/dist/**/*.js"],
+      "preLaunchTask": "build:neko-auth"
     }
   ]
 }

@@ -729,6 +729,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             message.conversationId as string | undefined,
           );
           break;
+
+        // Open full Neko Marketplace panel (neko-market extension)
+        case 'openMarketplace':
+          vscode.commands.executeCommand('neko.market.openSkills').then(undefined, () => {
+            // neko-market extension not installed — silently ignore
+          });
+          break;
       }
     });
   }

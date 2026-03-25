@@ -117,14 +117,16 @@
 - [ ] neko-sketch S.4：`sketch.generate` / `style_transfer` / 跨模块集成（→ neko-cut/canvas）
 
 ### neko-assets — [ADR](./docs/architecture/marketplace.md) · [ADR](./docs/architecture/remote-storage.md)
-- [ ] Handler 补全：ShaderAssetHandler + PresetAssetHandler + ModelAssetHandler
-- [ ] AI 生成结果自动入库 + IAIAnalysisService
-- [ ] External Media Library P2（元数据缓存 + 增量索引 + 搜索 + 批量导入）
-- [ ] AssetOwnership + `'remote'` source + `'document'` AssetType（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
+> 职责边界：项目级内容素材（媒体文件 + 参考文档 + AI 生成内容）。工具型资产（Shader/Model/Preset）由 neko-market 安装，由消费扩展直接读取。
+- [ ] `'document'` AssetType + DocumentMetadata + DocumentAssetHandler（PDF/Word/PPT/Excel/EPUB/CBZ/FDX）
+- [ ] AssetOwnership（scope: personal/project/team/purchased/public）
+- [ ] AI 生成结果自动入库：GenerateImage/Video 完成 → `neko.assets.importGenerated`（source: `'ai-generated'`）
+- [ ] External Media Library P2（mtime/inode 增量索引 + 元数据缓存 + 全文搜索 + 批量导入）
 
-### neko-market（Phase 6.5.3-6.5.4 待开发）
-- [ ] 全品类市场：ShaderInstallTarget + ModelInstallTarget + PresetInstallTarget
-- [ ] neko-assets MarketBridge 集成 + neko-cut Shader/LUT 市场 UI
+### neko-market（Phase 6.5.5-6.5.6 待开发）
+- [ ] `activate()` 导出公共 API（`NekoMarketAPI`：`onDidInstall` / `onDidUninstall` / `getInstalled`）
+- [ ] neko-cut：EffectDispatcher 扫描 `~/.neko/shaders/` + 订阅 `onDidInstall` 热重载；LUT/转场面板同步
+- [ ] neko-agent：ModelManager 扫描 `~/.neko/models/`，generation 工具自动发现可用模型
 - [ ] 私有 registry 支持（MarketClient 可配 registryUrl）
 - [ ] 商业化：LicenseManager 完整实现（JWT + 在线校验）+ 支付集成 + 发布者 Portal + 评分评论
 
@@ -203,4 +205,4 @@
 
 ---
 
-*最后更新：2026-03-25*
+*最后更新：2026-03-25（架构调整：neko-assets 职责边界厘清，工具型资产接入模式重新定义）*
