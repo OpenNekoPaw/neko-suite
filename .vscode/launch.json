@@ -19,7 +19,8 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-market",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/*/dist/**/*.js"
@@ -94,10 +95,14 @@
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-agent/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js",
         "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-agent"
@@ -123,7 +128,6 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "--remote-debugging-port=9222",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
       ],
@@ -134,15 +138,31 @@
       "preLaunchTask": "build:neko-preview"
     },
     {
+      "name": "Debug neko-preview (CDP:9222)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+      "runtimeArgs": [
+        "--remote-debugging-port=9222",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
+      ],
+      "preLaunchTask": "build:neko-preview"
+    },
+    {
       "name": "Debug neko-assets",
       "type": "extensionHost",
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-assets",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-assets/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js",
         "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-assets"
@@ -175,16 +195,32 @@
       "name": "Debug neko-audio",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio"],
-      "outFiles": ["${workspaceFolder}/packages/neko-audio/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-audio/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-audio"
     },
     {
       "name": "Debug neko-live",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live"],
-      "outFiles": ["${workspaceFolder}/packages/neko-live/dist/**/*.js"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/neko-live/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
+      ],
       "preLaunchTask": "build:neko-live"
     },
     {
@@ -193,11 +229,13 @@
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-model/dist/**/*.js",
-        "${workspaceFolder}/packages/neko-engine/dist/**/*.js"
+        "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-tools/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-model"
     },

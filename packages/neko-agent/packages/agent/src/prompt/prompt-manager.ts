@@ -465,7 +465,7 @@ export class ChainPromptExecutor {
     const startTime = Date.now();
     const stepResults = new Map<string, unknown>();
     const maxSteps = options.maxSteps || 100;
-    let currentVariables = { ...options.variables };
+    const currentVariables = { ...options.variables };
 
     for (let i = 0; i < chain.steps.length && i < maxSteps; i++) {
       const step = chain.steps[i];

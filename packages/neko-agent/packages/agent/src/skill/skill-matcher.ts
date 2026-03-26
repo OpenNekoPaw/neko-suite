@@ -132,7 +132,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
    */
   private tokenize(text: string): string[] {
     return text
-      .split(/[\s.,!?;:'"()\[\]{}]+/)
+      .split(/[\s.,!?;:'"()[\]{}]+/)
       .map((w) => w.trim())
       .filter((w) => w.length > 0);
   }

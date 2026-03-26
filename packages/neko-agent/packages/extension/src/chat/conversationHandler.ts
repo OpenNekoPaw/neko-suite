@@ -11,7 +11,11 @@ import {
   type ConversationStorage,
   type ContentBlock,
 } from './conversationManager';
-import { createFileConversationStorage, type FileConversationStorage, type ConversationRecord } from '@neko/agent';
+import {
+  createFileConversationStorage,
+  type FileConversationStorage,
+  type ConversationRecord,
+} from '@neko/agent';
 
 const logger = getLogger('ConversationHandler');
 
@@ -154,7 +158,7 @@ function convertMessagesForWebview(
   messages: ConversationMessage[],
 ): ConversationMessage[] {
   return messages.map((message) => {
-    let convertedMessage = { ...message };
+    const convertedMessage = { ...message };
 
     // Convert URLs in legacy toolCalls array
     if (message.toolCalls && message.toolCalls.length > 0) {
@@ -350,7 +354,7 @@ export class ConversationHandler {
    * Ensure there's an active conversation (create if needed)
    */
   ensureActive(): string {
-    let conversation = this._conversationManager.getActive();
+    const conversation = this._conversationManager.getActive();
     if (!conversation) {
       return this._conversationManager.create();
     }

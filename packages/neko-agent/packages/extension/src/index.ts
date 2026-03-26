@@ -23,6 +23,7 @@ import {
   createNekoCutTools,
   createNekoCanvasTools,
   createNekoEngineEffectsTools,
+  createTranscribeTools,
 } from './tools/extensionTools';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -101,8 +102,12 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
   const effectsTools = createNekoEngineEffectsTools();
   effectsTools.forEach((tool) => toolRegistry.register(tool));
 
+  // Register Transcribe tools (Whisper STT)
+  const transcribeTools = createTranscribeTools();
+  transcribeTools.forEach((tool) => toolRegistry.register(tool));
+
   getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length} extension tools`,
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length} extension tools`,
   );
 }
 

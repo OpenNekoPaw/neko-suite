@@ -1,0 +1,79 @@
+# Release workflow — triggered by version tags (e.g. v0.1.0)
+#
+# Steps:
+#   1. Build all packages
+#   2. Run tests
+#   3. Package each VSCode extension into .vsix
+#   4. Create GitHub Release with all .vsix artifacts
+#
+# Usage:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  release:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/neko-engine
+
+      - name: Install FFmpeg dev libraries
+        run: sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev libva-dev pkg-config
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build everything
+      - run: pnpm build
+
+      # Run tests
+      - run: pnpm test
+
+      # Package all extensions into .vsix files
+      # neko-auth excluded: early stage, compile not yet stable
+      - name: Package all extensions
+        run: pnpm package:all
+
+      # Collect .vsix files from each extension directory
+      - name: Collect .vsix artifacts
+        run: |
+          mkdir -p release-artifacts
+          find packages -maxdepth 2 -name '*.vsix' -exec cp {} release-artifacts/ \;
+          echo "## Packaged extensions:" >> $GITHUB_STEP_SUMMARY
+          ls -lh release-artifacts/*.vsix | awk '{print "- " $NF " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+
+      # Create GitHub Release with all .vsix files
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*.vsix
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

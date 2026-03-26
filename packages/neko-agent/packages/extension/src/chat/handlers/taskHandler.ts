@@ -3,14 +3,17 @@
  *
  * Responsible for:
  * - Sending task lists to webview
- * - Task cancellation
- * - Task removal
+ * - Task cancellation, retry, and removal
  * - Viewing task results
+ * - Re-generating webview URIs from local paths for session reload
  */
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
 import type { ITaskManager as TaskManager, Task, TaskView } from '@neko/shared';
+import { getLogger } from '../../base';
+
+const logger = getLogger('TaskHandler');
 
 /**
  * Dependencies for TaskHandler
@@ -43,7 +46,7 @@ export class TaskHandler {
     }
 
     const tasks = await this.deps.taskManager.list();
-    const taskViews = tasks.map((t) => this.toTaskView(t));
+    const taskViews = tasks.map((t) => this.toTaskView(t, webview));
     webview.postMessage({
       type: 'tasksUpdated',
       tasks: taskViews,
@@ -57,6 +60,35 @@ export class TaskHandler {
     if (!this.deps.taskManager) return;
     await this.deps.taskManager.cancel(taskId);
     await this.sendTasks(webview);
+  }
+
+  /**
+   * Handle task retry — re-submit the failed task with the same payload
+   */
+  async handleRetryTask(webview: vscode.Webview, taskId: string): Promise<void> {
+    if (!this.deps.taskManager) return;
+
+    const task = await this.deps.taskManager.get(taskId);
+    if (!task || (task.status !== 'failed' && task.status !== 'cancelled')) {
+      logger.warn('Cannot retry task: not found or not in failed/cancelled state', { taskId });
+      return;
+    }
+
+    // Re-submit using the original task input
+    try {
+      const newTaskId = await this.deps.taskManager.submit(task.input);
+      logger.info('Task retried', { originalTaskId: taskId, newTaskId });
+    } catch (error) {
+      logger.error('Failed to retry task', { taskId, error });
+      webview.postMessage({
+        type: 'taskUpdated',
+        task: {
+          id: taskId,
+          error: `Retry failed: ${error instanceof Error ? error.message : String(error)}`,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
   }
 
   /**
@@ -138,9 +170,10 @@ export class TaskHandler {
   }
 
   /**
-   * Convert Task to TaskView for webview display
+   * Convert Task to TaskView for webview display.
+   * Re-generates webview URIs from localPaths so previews survive session reload.
    */
-  private toTaskView(task: Task): TaskView {
+  private toTaskView(task: Task, webview: vscode.Webview): TaskView {
     const payload = task.input.payload as Record<string, unknown>;
     const prompt = payload?.prompt as string | undefined;
 
@@ -159,6 +192,43 @@ export class TaskHandler {
         .join(' ');
     }
 
+    // Extract result data and re-generate webview URIs from local paths
+    const resultData = task.output?.data as Record<string, unknown> | undefined;
+    let result = resultData;
+    if (resultData) {
+      const localPaths = (resultData.localPaths as string[]) ?? [];
+      if (localPaths.length > 0) {
+        // Re-generate webview URIs from persisted local paths
+        const urls = localPaths
+          .map((p) => {
+            try {
+              return webview.asWebviewUri(vscode.Uri.file(p)).toString();
+            } catch {
+              return undefined;
+            }
+          })
+          .filter(Boolean) as string[];
+
+        const thumbnailPath = localPaths[0];
+        const thumbnailUrl = thumbnailPath
+          ? (() => {
+              try {
+                return webview.asWebviewUri(vscode.Uri.file(thumbnailPath)).toString();
+              } catch {
+                return undefined;
+              }
+            })()
+          : undefined;
+
+        result = {
+          ...resultData,
+          urls: urls.length > 0 ? urls : resultData.urls,
+          thumbnailUrl: thumbnailUrl ?? resultData.thumbnailUrl,
+          localPaths,
+        };
+      }
+    }
+
     return {
       id: task.id,
       type: task.type,
@@ -170,7 +240,7 @@ export class TaskHandler {
       progress: task.progress,
       createdAt: new Date(task.createdAt).toISOString(),
       updatedAt: new Date(task.updatedAt).toISOString(),
-      result: task.output?.data,
+      result,
       error: task.error,
     };
   }

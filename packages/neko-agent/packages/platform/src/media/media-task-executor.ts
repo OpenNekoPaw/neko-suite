@@ -355,11 +355,62 @@ export class MediaTaskExecutor {
 
       return null;
     } catch (error) {
-      // Do not silently fallback — user specified this provider, report the error
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('AI SDK generation failed', { error });
-      return { error: message };
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const context = `[${provider.type}/${model.name}] ${rawMessage}`;
+      logger.error('AI SDK generation failed', {
+        error,
+        provider: provider.type,
+        model: model.name,
+      });
+
+      // Determine if the error is retryable (network, rate limit, server errors)
+      if (this.isRetryableError(error)) {
+        // Throw to let TaskManager's retry loop handle it
+        throw new Error(context);
+      }
+
+      // Non-retryable errors (auth, invalid request, content filter) — fail immediately
+      return { error: context };
     }
+  }
+
+  /**
+   * Check if an error is retryable (network, rate limit, server errors)
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+    const name = error.name;
+
+    // Rate limit errors
+    if (name === 'AI_APICallError' || message.includes('rate limit') || message.includes('429')) {
+      return true;
+    }
+    // Server errors (5xx)
+    if (
+      message.includes('500') ||
+      message.includes('502') ||
+      message.includes('503') ||
+      message.includes('504')
+    ) {
+      return true;
+    }
+    // Network errors
+    if (
+      message.includes('network') ||
+      message.includes('econnrefused') ||
+      message.includes('enotfound') ||
+      message.includes('timeout') ||
+      message.includes('etimedout') ||
+      message.includes('fetch failed')
+    ) {
+      return true;
+    }
+    // "No video/image generated" — may be transient model issue, worth retrying
+    if (message.includes('no video generated') || message.includes('no image generated')) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -505,5 +556,11 @@ export function createMediaTaskInput(
       modelId,
       request,
     } as unknown as Record<string, unknown>,
+    options: {
+      retry: {
+        maxRetries: 5,
+        backoffMs: 3000,
+      },
+    },
   };
 }

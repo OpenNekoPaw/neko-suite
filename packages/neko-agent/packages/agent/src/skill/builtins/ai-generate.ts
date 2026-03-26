@@ -183,6 +183,24 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'TranscribeAudio',
+    description:
+      'Transcribe audio/video to text with timestamps using Whisper. Returns segments with start/end times. ' +
+      'Use results with AddTimelineElement(type:"subtitle") to add subtitles.',
+    parameters: {
+      audioSource: {
+        type: 'string',
+        required: true,
+        description: 'Absolute path to the audio or video file',
+      },
+      model: {
+        type: 'string',
+        default: 'whisper-base',
+        description: 'Whisper model name registered in the engine',
+      },
+    },
+  },
 ];
 
 /**
@@ -207,6 +225,7 @@ You now have access to AI-powered media generation tools.
 | Voiceover/TTS | \`generate_tts\` | text, voice, language |
 | Background music | \`generate_music\` | prompt, duration, genre |
 | Character consistency | \`generate_character\` | prompt, referenceImageUrl |
+| Transcribe audio/video | \`transcribe_audio\` | audioSource, model |
 | Style transfer | \`transfer_style\` | sourceImageUrl, stylePrompt |
 | Video upscale/enhance | \`enhance_video\` | videoUrl, targetResolution |
 | Audio cleanup | \`optimize_audio\` | audioUrl, denoise |
@@ -288,6 +307,7 @@ export const aiGenerateSkill: Skill = {
     'TransferStyle',
     'EnhanceVideo',
     'OptimizeAudio',
+    'TranscribeAudio',
     'Read',
     'ListDirectory',
   ],

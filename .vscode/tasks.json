@@ -4,7 +4,7 @@
     {
       "label": "build:core",
       "type": "shell",
-      "command": "pnpm build:neko-engine && pnpm build:neko-tools",
+      "command": "pnpm build:core",
       "group": "build",
       "problemMatcher": ["$tsc"],
       "detail": "Build core packages (neko-engine, neko-tools)"
@@ -28,7 +28,6 @@
       "type": "shell",
       "command": "pnpm build:neko-cut",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -36,7 +35,6 @@
       "type": "shell",
       "command": "pnpm build:neko-canvas",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -44,7 +42,6 @@
       "type": "shell",
       "command": "pnpm build:neko-agent",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -52,7 +49,6 @@
       "type": "shell",
       "command": "pnpm build:neko-audio",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -60,7 +56,6 @@
       "type": "shell",
       "command": "pnpm build:neko-assets",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -68,7 +63,6 @@
       "type": "shell",
       "command": "pnpm build:neko-live",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -76,7 +70,6 @@
       "type": "shell",
       "command": "pnpm build:neko-story",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -84,7 +77,6 @@
       "type": "shell",
       "command": "pnpm build:neko-sketch",
       "group": "build",
-      "dependsOn": ["build:neko-canvas"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -92,7 +84,6 @@
       "type": "shell",
       "command": "pnpm build:neko-preview",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {
@@ -107,7 +98,6 @@
       "type": "shell",
       "command": "pnpm build:neko-model",
       "group": "build",
-      "dependsOn": ["build:core"],
       "problemMatcher": ["$tsc"]
     },
     {

@@ -23,6 +23,7 @@ import {
   AgentSession,
   createAgentSession,
   createFileProjectMemoryManager,
+  createCoreTools,
   SystemPromptBuilder,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
@@ -407,6 +408,14 @@ export class AgentRunner implements IAgentRunner {
         await this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath());
       } catch (err) {
         logger.warn('Failed to load AGENTS.md:', err);
+      }
+    }
+
+    // Register core file/system tools (Read, Write, Bash, Grep, ListDirectory)
+    const coreTools = createCoreTools({ defaultCwd: config.workspaceRoot });
+    for (const tool of coreTools) {
+      if (!config.platform.tools.has?.(tool.name)) {
+        config.platform.tools.register(tool);
       }
     }
 

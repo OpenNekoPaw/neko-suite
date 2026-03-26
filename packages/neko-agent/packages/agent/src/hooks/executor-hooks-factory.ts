@@ -16,7 +16,7 @@ import type { ToolConfirmationRequest } from '../permission/types';
 import type { ValidationWarning, ValidationError } from '../validation/types';
 import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
 
-import { MemoryHooks } from './hooks';
+import { MemoryHooks, RetryHooks } from './hooks';
 import { createValidationHooks } from '../validation';
 import { createPermissionHooks } from '../permission';
 
@@ -87,7 +87,8 @@ export interface ExecutorHooksFactoryResult {
  * 1. MemoryHooks — context compression, session memory
  * 2. ValidationHooks — input/output validation
  * 3. PermissionHooks — permission checking, tool confirmation
- * 4. Custom hooks — user-provided extensions
+ * 4. RetryHooks — tool call retry with exponential backoff
+ * 5. Custom hooks — user-provided extensions
  */
 export function createExecutorHooks(
   config: ExecutorHooksFactoryConfig,
@@ -121,11 +122,26 @@ export function createExecutorHooks(
     settingsHookLoader: config.settingsHookLoader,
   });
 
-  // 4. Compose: built-in hooks + custom hooks
+  // 4. Retry hooks — auto-retry failed tool calls for transient errors
+  const retryHooks = new RetryHooks({
+    toolRetryPolicy: {
+      maxRetries: 5,
+      backoffStrategy: {
+        type: 'exponential',
+        initialDelayMs: 1000,
+        multiplier: 2,
+        maxDelayMs: 30000,
+      },
+      retryableCategories: ['timeout', 'rate_limit', 'server', 'network'],
+    },
+  });
+
+  // 5. Compose: built-in hooks + custom hooks
   const hooks: ExecutorHooks[] = [
     memoryHooks,
     validationHooks,
     permissionHooks,
+    retryHooks,
     ...(config.customHooks ?? []),
   ];
 

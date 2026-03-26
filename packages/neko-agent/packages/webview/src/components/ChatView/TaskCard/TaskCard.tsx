@@ -102,6 +102,19 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
           </button>
         )}
 
+        {isFailed && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              vscode?.postMessage({ type: 'retryTask', taskId: task.id });
+            }}
+            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors shrink-0"
+            title={t('tasks.retry')}
+          >
+            ↻
+          </button>
+        )}
+
         {isCompleted && onViewResult && (
           <button
             onClick={(e) => {
@@ -236,7 +249,10 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
                 {task.result.localPaths?.[0] && (
                   <button
                     onClick={() => {
-                      vscode?.postMessage({ type: 'revealFile', filePath: task.result!.localPaths![0] });
+                      vscode?.postMessage({
+                        type: 'revealFile',
+                        filePath: task.result!.localPaths![0],
+                      });
                     }}
                     className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1"
                     title={t('tasks.revealInExplorer')}

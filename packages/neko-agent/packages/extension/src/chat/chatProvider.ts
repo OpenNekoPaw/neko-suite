@@ -611,6 +611,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'cancelTask':
           this._taskHandler.handleCancelTask(webview, message.taskId as string);
           break;
+        case 'retryTask':
+          this._taskHandler.handleRetryTask(webview, message.taskId as string);
+          break;
         case 'removeTask':
           this._taskHandler.handleRemoveTask(webview, message.taskId as string);
           break;
