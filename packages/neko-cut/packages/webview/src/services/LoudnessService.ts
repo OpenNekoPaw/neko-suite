@@ -116,20 +116,3 @@ export async function analyzeLoudness(
     logger.debug(`Sent loudness analysis request: ${sources.length} file(s)`);
   });
 }
-
-/**
- * Cleanup: remove global listener and reject pending requests.
- * Call when the webview is being disposed.
- */
-export function disposeLoudnessService(): void {
-  if (listenerRegistered) {
-    window.removeEventListener('message', handleMessage);
-    listenerRegistered = false;
-  }
-
-  pendingRequests.forEach((pending) => {
-    clearTimeout(pending.timeoutId);
-    pending.reject(new Error('LoudnessService disposed'));
-  });
-  pendingRequests.clear();
-}

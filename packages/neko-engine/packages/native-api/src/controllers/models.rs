@@ -251,14 +251,14 @@ impl Controller for ModelsController {
                 let audio = opts.audio.ok_or_else(|| ApiError::InvalidRequest("audio required".to_string()))?;
 
                 let ml: Arc<dyn IMlService> = self.ml_service.as_ref().unwrap().clone();
-                let text = tokio::task::spawn_blocking(move || {
+                let result = tokio::task::spawn_blocking(move || {
                     ml.transcribe(&model, &audio)
                         .map_err(|e| ApiError::ServiceError(format!("Transcribe failed: {}", e)))
                 })
                 .await
                 .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "text": text })))
+                Ok(ActionResponse::ok("", serde_json::json!(result)))
             }
 
             // ------------------------------------------------------------------

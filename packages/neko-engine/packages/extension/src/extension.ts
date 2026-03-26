@@ -440,9 +440,6 @@ async function cmdProbeMedia(): Promise<void> {
       outputChannel.appendLine('  Subtitles: Yes');
     }
 
-    // Mode recommendation
-    const recommendation = manager!.analyzeMedia(mediaInfo);
-    outputChannel.appendLine(`  Recommended Mode: ${recommendation.recommendedMode}`);
     outputChannel.appendLine('');
 
     vscode.window.showInformationMessage(

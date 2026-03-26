@@ -4,6 +4,15 @@
  *
  * Canonical source for UI color correction types.
  * No engine type dependencies — all definitions are local.
+ *
+ * Engine integration status:
+ * - BasicColorAdjustment: ✅ Wired to engine via composite-helpers → element.effects → GPU shader
+ *   (except clarity/dehaze — not yet in engine ColorCorrectionParams)
+ * - CurvesAdjustment:     ❌ UI-only, not sent to engine (needs 1D LUT texture upload)
+ * - ColorWheelsParams:    ❌ UI-only, not sent to engine (shader ready: apply_color_wheel)
+ * - HSLAdjustment:        ❌ UI-only, not sent to engine (shader ready: apply_hsl_adjustment)
+ * - LUTAdjustment:        ❌ UI-only, not sent to engine (needs 3D LUT texture + .cube parser in Rust)
+ * - VignetteParams:       ✅ Separate effect in engine (GpuStyleProcessor::apply_vignette)
  */
 
 // =============================================================================

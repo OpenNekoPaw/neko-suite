@@ -1,13 +1,26 @@
 /**
  * Media Processing Protocol - Media Engine Types
  *
- * Progressive media engine architecture types.
+ * Download-related types for the compatible mode engine (Native FFmpeg + wgpu).
  */
 
-import type { MediaInfo } from './base';
+// =============================================================================
+// Download State
+// =============================================================================
+
+/**
+ * Download state for compatible mode
+ */
+export type DownloadStateType =
+  | 'idle'
+  | 'downloading'
+  | 'extracting'
+  | 'verifying'
+  | 'completed'
+  | 'error';
 
 // =============================================================================
-// Media Engine Protocol (Progressive Architecture)
+// Download Protocol Messages
 // =============================================================================
 
 /**
@@ -30,68 +43,6 @@ interface BaseMediaResponse {
   type: string;
   /** 错误信息（如果失败） */
   error?: string;
-}
-
-/**
- * Media engine mode
- */
-export type MediaEngineModeType = 'basic' | 'compatible' | 'auto';
-
-/**
- * Download state for compatible mode
- */
-export type DownloadStateType =
-  | 'idle'
-  | 'downloading'
-  | 'extracting'
-  | 'verifying'
-  | 'completed'
-  | 'error';
-
-/**
- * Get current media engine mode request
- */
-export interface GetMediaEngineModeRequest extends BaseMediaRequest {
-  type: 'mediaEngine:getMode';
-}
-
-/**
- * Get current media engine mode response
- */
-export interface GetMediaEngineModeResponse extends BaseMediaResponse {
-  type: 'mediaEngine:response:getMode';
-  payload?: {
-    /** Current active mode */
-    currentMode: MediaEngineModeType | null;
-    /** Whether compatible mode is installed */
-    compatibleModeInstalled: boolean;
-    /** Recommended mode for current context */
-    recommendedMode?: MediaEngineModeType;
-  };
-}
-
-/**
- * Set media engine mode request
- */
-export interface SetMediaEngineModeRequest extends BaseMediaRequest {
-  type: 'mediaEngine:setMode';
-  payload: {
-    /** Mode to set */
-    mode: MediaEngineModeType;
-  };
-}
-
-/**
- * Set media engine mode response
- */
-export interface SetMediaEngineModeResponse extends BaseMediaResponse {
-  type: 'mediaEngine:response:setMode';
-  payload?: {
-    /** Whether mode was set successfully */
-    success: boolean;
-    /** New active mode */
-    activeMode: MediaEngineModeType;
-  };
 }
 
 /**
@@ -171,58 +122,6 @@ export interface DownloadCompleteNotification {
     version?: string;
   };
 }
-
-/**
- * Analyze media for mode recommendation request
- */
-export interface AnalyzeMediaRequest extends BaseMediaRequest {
-  type: 'mediaEngine:analyzeMedia';
-  payload: {
-    /** Media file path */
-    videoPath: string;
-  };
-}
-
-/**
- * Analyze media response
- */
-export interface AnalyzeMediaResponse extends BaseMediaResponse {
-  type: 'mediaEngine:response:analyzeMedia';
-  payload?: {
-    /** Media information */
-    mediaInfo: MediaInfo;
-    /** Recommended mode */
-    recommendedMode: MediaEngineModeType;
-    /** Reason for recommendation */
-    reason: string;
-    /** Whether download is required */
-    requiresDownload: boolean;
-    /** Download size if required */
-    downloadSize?: number;
-    /** Unsupported features in basic mode */
-    unsupportedFeatures?: string[];
-  };
-}
-
-/**
- * All media engine request types
- */
-export type MediaEngineRequest =
-  | GetMediaEngineModeRequest
-  | SetMediaEngineModeRequest
-  | GetDownloadStatusRequest
-  | StartDownloadRequest
-  | AnalyzeMediaRequest;
-
-/**
- * All media engine response types
- */
-export type MediaEngineResponse =
-  | GetMediaEngineModeResponse
-  | SetMediaEngineModeResponse
-  | GetDownloadStatusResponse
-  | StartDownloadResponse
-  | AnalyzeMediaResponse;
 
 /**
  * All media engine notification types (push from Extension)

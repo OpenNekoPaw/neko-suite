@@ -1,0 +1,6 @@
+/**
+ * React i18n bindings for neko-model
+ *
+ * Re-exports shared Provider/hooks from @neko/shared.
+ */
+export { I18nProvider, useI18n, useTranslation } from '@neko/shared/i18n/react';

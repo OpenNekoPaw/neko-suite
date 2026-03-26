@@ -99,7 +99,7 @@
     "dev:webview": "cd packages/webview && npx vite",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test": "vitest",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

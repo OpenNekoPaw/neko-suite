@@ -3,6 +3,8 @@
 use crate::error::Result;
 
 #[cfg(feature = "onnx")]
+use crate::ml;
+#[cfg(feature = "onnx")]
 use crate::ml::ModelInfo;
 
 /// ML service interface for model management and inference.
@@ -41,6 +43,6 @@ pub trait IMlService: Send + Sync {
     /// Compute CLIP similarity score between an image and text.
     fn clip_score(&self, model: &str, image: &str, text: &str) -> Result<f32>;
 
-    /// Transcribe audio to text using Whisper model.
-    fn transcribe(&self, model: &str, audio: &str) -> Result<String>;
+    /// Transcribe audio to text with timestamps using Whisper model.
+    fn transcribe(&self, model: &str, audio: &str) -> Result<ml::whisper::TranscribeResult>;
 }

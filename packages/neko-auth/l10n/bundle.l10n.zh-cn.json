@@ -1,0 +1,8 @@
+{
+  "neko.auth.config.title": "Neko 认证",
+  "neko.auth.clientId.description": "Neko 云服务的 OAuth 2.0 客户端 ID。",
+  "neko.auth.authUrl.description": "授权端点 URL。留空则禁用云端认证。",
+  "neko.auth.tokenUrl.description": "令牌端点 URL。",
+  "neko.auth.scopes.description": "请求的 OAuth 2.0 权限范围。",
+  "neko.auth.redirectPort.description": "OAuth 回调服务器的本地端口。"
+}

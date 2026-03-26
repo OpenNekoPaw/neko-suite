@@ -16,7 +16,11 @@
     "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@neko/shared": ["../../../neko-types/src/index.ts"],
+      "@neko/shared/*": ["../../../neko-types/src/*"]
+    }
   },
   "include": ["src"],
   "exclude": ["src/__tests__"],

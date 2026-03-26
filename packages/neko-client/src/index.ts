@@ -57,7 +57,12 @@ export {
 export { formatTime, formatTimePrecise } from './formatTime';
 
 // Engine HTTP/WS dispatch client
-export { EngineClient, type EngineClientConfig } from './EngineClient';
+export {
+  EngineClient,
+  type EngineClientConfig,
+  type TranscribeSegment,
+  type TranscribeResponse,
+} from './EngineClient';
 
 export type {
   // Request / Response

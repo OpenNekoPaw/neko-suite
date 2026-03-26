@@ -1,0 +1,8 @@
+{
+  "neko.auth.config.title": "Neko Auth",
+  "neko.auth.clientId.description": "OAuth 2.0 client ID for the Neko cloud service.",
+  "neko.auth.authUrl.description": "Authorization endpoint URL. Leave empty to disable cloud auth.",
+  "neko.auth.tokenUrl.description": "Token endpoint URL.",
+  "neko.auth.scopes.description": "OAuth 2.0 scopes to request.",
+  "neko.auth.redirectPort.description": "Localhost port for the OAuth redirect callback server."
+}

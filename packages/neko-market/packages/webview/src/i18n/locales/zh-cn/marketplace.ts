@@ -5,8 +5,8 @@ export const marketplace = {
   'marketplace.search.placeholder': '搜索市场...',
   'marketplace.search.clear': '清除',
   'marketplace.filter.all': '全部',
-  'marketplace.filter.skill': 'Skills',
-  'marketplace.filter.shader': 'Shaders',
+  'marketplace.filter.skill': '技能',
+  'marketplace.filter.shader': '着色器',
   'marketplace.filter.model': '模型',
   'marketplace.filter.preset': '预设',
 
@@ -24,6 +24,8 @@ export const marketplace = {
 
   // Installed view
   'marketplace.installed.empty': '尚未安装任何市场包。',
+  'marketplace.installed.hint': '浏览市场以查找技能和资产。',
+  'marketplace.installed.disabled': '已停用',
 
   // Updates view
   'marketplace.updates.empty': '所有包均为最新版本。',

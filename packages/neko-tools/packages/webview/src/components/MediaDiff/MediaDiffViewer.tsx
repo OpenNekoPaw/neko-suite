@@ -16,7 +16,7 @@ import type { MediaDiffViewerProps } from './types';
 import { DiffControls } from './DiffControls';
 import { ImageDiffViewer } from './ImageDiffViewer';
 import { VideoDiffViewer } from './VideoDiffViewer';
-import { AudioDiffViewer } from './AudioDiffViewer';
+import { AudioDiffViewer } from './audio';
 import { TimelineDiffViewer } from './TimelineDiffViewer';
 
 // =============================================================================

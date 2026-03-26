@@ -5,18 +5,20 @@
 import React, { useCallback, useRef } from 'react';
 import { useMarketplaceStore, type AssetTypeFilter } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
+import { useTranslation } from '../i18n/I18nContext';
 
-const TYPE_FILTERS: { key: AssetTypeFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'skill', label: 'Skills' },
-  { key: 'shader', label: 'Shaders' },
-  { key: 'model', label: 'Models' },
-  { key: 'preset', label: 'Presets' },
+const TYPE_FILTER_KEYS: { key: AssetTypeFilter; i18nKey: string }[] = [
+  { key: 'all', i18nKey: 'marketplace.filter.all' },
+  { key: 'skill', i18nKey: 'marketplace.filter.skill' },
+  { key: 'shader', i18nKey: 'marketplace.filter.shader' },
+  { key: 'model', i18nKey: 'marketplace.filter.model' },
+  { key: 'preset', i18nKey: 'marketplace.filter.preset' },
 ];
 
 export const SearchBar: React.FC = () => {
   const { searchText, assetTypeFilter, setSearchText, setSearching, setAssetTypeFilter } =
     useMarketplaceStore();
+  const { t } = useTranslation();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,7 +58,7 @@ export const SearchBar: React.FC = () => {
         <input
           className="search-input"
           type="text"
-          placeholder="Search marketplace…"
+          placeholder={t('marketplace.search.placeholder')}
           value={searchText}
           onChange={handleInput}
         />
@@ -74,13 +76,13 @@ export const SearchBar: React.FC = () => {
       </div>
 
       <div className="type-filters">
-        {TYPE_FILTERS.map(({ key, label }) => (
+        {TYPE_FILTER_KEYS.map(({ key, i18nKey }) => (
           <button
             key={key}
             className={`type-chip ${assetTypeFilter === key ? 'type-chip--active' : ''}`}
             onClick={() => handleTypeChange(key)}
           >
-            {label}
+            {t(i18nKey)}
           </button>
         ))}
       </div>

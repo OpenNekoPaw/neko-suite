@@ -23,9 +23,9 @@ import type {
 // Regex patterns for Fountain elements
 const PATTERNS = {
   // Scene heading: INT./EXT./etc. or forced with leading period
-  sceneHeading: /^(\.(?!\.)|(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s])/i,
+  sceneHeading: /^(\.(?!\.)|(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s])/i,
   sceneHeadingFull:
-    /^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s]+(.+?)(?:\s*-\s*(.+?))?(?:\s*#([^#]+)#)?$/i,
+    /^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s]+(.+?)(?:\s*-\s*(.+?))?(?:\s*#([^#]+)#)?$/i,
   forcedSceneHeading: /^\.(.+?)(?:\s*#([^#]+)#)?$/,
 
   // Character: all caps, may have extension in parens

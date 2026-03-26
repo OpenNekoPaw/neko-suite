@@ -663,13 +663,3 @@ export function getThumbnailService(): ThumbnailService {
   }
   return instance;
 }
-
-/**
- * Create a new ThumbnailService with custom URL resolver
- */
-export function createThumbnailService(
-  urlResolver?: UrlResolver,
-  maxCacheSize?: number,
-): ThumbnailService {
-  return new ThumbnailService(urlResolver, maxCacheSize);
-}

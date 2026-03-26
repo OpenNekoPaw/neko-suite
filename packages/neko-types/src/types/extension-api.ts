@@ -18,7 +18,7 @@
  * Timeline element configuration for adding new elements
  */
 export interface TimelineElementConfig {
-  type: 'video' | 'audio' | 'image' | 'text' | 'shape';
+  type: 'video' | 'audio' | 'image' | 'text' | 'shape' | 'subtitle';
   trackId: string;
   startTime: number;
   duration: number;

@@ -2,7 +2,7 @@
  * Media Engine - Extension Host
  *
  * Provides the compatible mode (Native FFmpeg + wgpu) implementation
- * and the MediaEngineManager for mode selection.
+ * and the MediaEngineManager for engine lifecycle management.
  *
  * Usage:
  * ```typescript
@@ -15,19 +15,9 @@
  * const manager = createMediaEngineManager(context.globalStorageUri);
  * services.set(IMediaEngineManager, manager);
  *
- * // When processing media
- * const mediaInfo = await probeMedia(filePath);
- * const recommendation = manager.analyzeMedia(mediaInfo);
- *
- * if (recommendation.recommendedMode === 'basic') {
- *   // Tell Webview to use WebMediaEngine
- *   webview.postMessage({ type: 'useBasicMode', mediaInfo });
- * } else {
- *   // Use compatible mode in Extension Host
- *   const engine = await manager.getCompatibleEngine();
- *   const decoder = await engine.createVideoDecoder({ source: filePath });
- *   // ...
- * }
+ * // Use compatible mode engine
+ * const engine = await manager.getCompatibleEngine();
+ * const decoder = await engine.createVideoDecoder({ source: filePath });
  * ```
  */
 
@@ -38,7 +28,6 @@ export { IMediaEngineManager } from './serviceIds';
 export {
   MediaEngineManager,
   createMediaEngineManager,
-  BasicModeRequiredError,
   type MediaEngineManagerConfig,
 } from './MediaEngineManager';
 

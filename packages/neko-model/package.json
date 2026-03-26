@@ -133,7 +133,7 @@
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",
     "test": "vitest run --passWithNoTests",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

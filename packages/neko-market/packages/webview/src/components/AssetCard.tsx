@@ -7,6 +7,7 @@
 import React, { useCallback } from 'react';
 import { useMarketplaceStore, type MarketItem } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface AssetCardProps {
   item: MarketItem;
@@ -21,6 +22,7 @@ const TYPE_ICONS: Record<string, string> = {
 
 export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
   const { installProgress } = useMarketplaceStore();
+  const { t } = useTranslation();
   const progress = installProgress.get(item.id);
   const isInstalling = progress !== undefined;
 
@@ -39,10 +41,10 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
   const actionLabel = isInstalling
     ? `${progress.percent}%`
     : item.installState === 'not-installed'
-      ? 'Install'
+      ? t('marketplace.action.install')
       : item.installState === 'update-available'
-        ? 'Update'
-        : 'Uninstall';
+        ? t('marketplace.action.update')
+        : t('marketplace.action.uninstall');
 
   const actionVariant = item.installState === 'installed' ? 'secondary' : 'primary';
 

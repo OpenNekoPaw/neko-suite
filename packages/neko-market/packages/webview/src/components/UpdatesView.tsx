@@ -5,15 +5,17 @@
 import React from 'react';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
+import { useTranslation } from '../i18n/I18nContext';
 
 export const UpdatesView: React.FC = () => {
   const { updates, installProgress } = useMarketplaceStore();
+  const { t } = useTranslation();
 
   if (updates.length === 0) {
     return (
       <div className="empty-state">
         <span className="codicon codicon-check empty-state__icon" />
-        <p className="empty-state__text">Everything is up to date.</p>
+        <p className="empty-state__text">{t('marketplace.updates.empty')}</p>
       </div>
     );
   }
@@ -22,7 +24,10 @@ export const UpdatesView: React.FC = () => {
     <div className="updates-view">
       <div className="updates-header">
         <span>
-          {updates.length} update{updates.length !== 1 ? 's' : ''} available
+          {t(
+            updates.length !== 1 ? 'marketplace.updates.countPlural' : 'marketplace.updates.count',
+            { count: String(updates.length) },
+          )}
         </span>
         <button
           className="asset-action-btn asset-action-btn--primary"
@@ -30,7 +35,7 @@ export const UpdatesView: React.FC = () => {
             updates.forEach((u) => MarketMessages.install(u.packageId, u.latestVersion));
           }}
         >
-          Update All
+          {t('marketplace.updates.updateAll')}
         </button>
       </div>
 
@@ -62,7 +67,7 @@ export const UpdatesView: React.FC = () => {
                   className="asset-action-btn asset-action-btn--primary"
                   onClick={() => MarketMessages.install(update.packageId, update.latestVersion)}
                 >
-                  Update
+                  {t('marketplace.action.update')}
                 </button>
               )}
             </div>

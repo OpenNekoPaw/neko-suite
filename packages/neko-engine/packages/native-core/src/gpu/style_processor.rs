@@ -216,10 +216,19 @@ impl ChromaticAberrationParams {
     }
 }
 
-/// Color correction parameters (maps to BasicColorAdjustment from TS)
+/// Color correction parameters
+///
+/// Includes basic adjustments (13 params) and color wheels (3-way correction).
+///
+/// TODO(P1): Add curves support — per-channel (R/G/B/Luma) spline curve points,
+///           requires 1D LUT texture upload to GPU
+/// TODO(P1): Add 3D LUT support — .cube file parsing + 3D texture trilinear interpolation
+/// TODO(P2): Add HSL per-color adjustments — per-hue H/S/L shifts,
+///           shader already implemented in color_correction.wgsl (apply_hsl_adjustment)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ColorCorrectionParams {
+    // --- Basic adjustments (13 params) ---
     /// Brightness (-1.0 to 1.0)
     pub brightness: f32,
     /// Contrast multiplier (0.0 to 3.0, 1.0 = no change)
@@ -246,6 +255,35 @@ pub struct ColorCorrectionParams {
     pub whites: f32,
     /// Blacks (-1.0 to 1.0, 0.0 = no change)
     pub blacks: f32,
+
+    // --- Color Wheels (3-way: shadows/midtones/highlights) ---
+    /// Whether color wheels are enabled (0.0 = off, 1.0 = on)
+    pub cw_enabled: f32,
+    /// Shadows wheel RGB color (0.5 = neutral)
+    pub cw_shadows_r: f32,
+    pub cw_shadows_g: f32,
+    pub cw_shadows_b: f32,
+    /// Shadows wheel brightness offset (-1.0 to 1.0)
+    pub cw_shadows_brightness: f32,
+    /// Midtones wheel RGB color (0.5 = neutral)
+    pub cw_midtones_r: f32,
+    pub cw_midtones_g: f32,
+    pub cw_midtones_b: f32,
+    /// Midtones wheel brightness offset (-1.0 to 1.0)
+    pub cw_midtones_brightness: f32,
+    /// Highlights wheel RGB color (0.5 = neutral)
+    pub cw_highlights_r: f32,
+    pub cw_highlights_g: f32,
+    pub cw_highlights_b: f32,
+    /// Highlights wheel brightness offset (-1.0 to 1.0)
+    pub cw_highlights_brightness: f32,
+
+    // --- HSL per-color adjustments (up to 8 active ranges) ---
+    /// Number of active HSL ranges (0-8)
+    pub hsl_count: f32,
+    /// HSL range data: [target_hue, hue_shift, sat_adjust, lum_adjust] × 8
+    pub hsl_data: [f32; 32],
+
     /// Padding for 16-byte alignment
     pub _padding: [f32; 3],
 }
@@ -266,6 +304,22 @@ impl Default for ColorCorrectionParams {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            // Color wheels disabled by default, neutral colors (0.5)
+            cw_enabled: 0.0,
+            cw_shadows_r: 0.5,
+            cw_shadows_g: 0.5,
+            cw_shadows_b: 0.5,
+            cw_shadows_brightness: 0.0,
+            cw_midtones_r: 0.5,
+            cw_midtones_g: 0.5,
+            cw_midtones_b: 0.5,
+            cw_midtones_brightness: 0.0,
+            cw_highlights_r: 0.5,
+            cw_highlights_g: 0.5,
+            cw_highlights_b: 0.5,
+            cw_highlights_brightness: 0.0,
+            hsl_count: 0.0,
+            hsl_data: [0.0; 32],
             _padding: [0.0; 3],
         }
     }
@@ -287,6 +341,8 @@ impl ColorCorrectionParams {
             && self.shadows.abs() < 0.001
             && self.whites.abs() < 0.001
             && self.blacks.abs() < 0.001
+            && self.cw_enabled.abs() < 0.001
+            && self.hsl_count.abs() < 0.001
     }
 }
 
@@ -296,6 +352,7 @@ impl ColorCorrectionParams {
 struct ColorCorrectionUniforms {
     width: u32,
     height: u32,
+    // Basic adjustments
     brightness: f32,
     contrast: f32,
     saturation: f32,
@@ -309,7 +366,24 @@ struct ColorCorrectionUniforms {
     shadows: f32,
     whites: f32,
     blacks: f32,
-    _padding: f32,
+    // Color wheels
+    cw_enabled: f32,
+    cw_shadows_r: f32,
+    cw_shadows_g: f32,
+    cw_shadows_b: f32,
+    cw_shadows_brightness: f32,
+    cw_midtones_r: f32,
+    cw_midtones_g: f32,
+    cw_midtones_b: f32,
+    cw_midtones_brightness: f32,
+    cw_highlights_r: f32,
+    cw_highlights_g: f32,
+    cw_highlights_b: f32,
+    cw_highlights_brightness: f32,
+    // HSL per-color adjustments
+    hsl_count: f32,
+    hsl_data: [f32; 32],
+    _padding: [f32; 3],
 }
 
 /// Uniform buffer for vignette shader
@@ -643,7 +717,22 @@ impl GpuStyleProcessor {
             shadows: params.shadows,
             whites: params.whites,
             blacks: params.blacks,
-            _padding: 0.0,
+            cw_enabled: params.cw_enabled,
+            cw_shadows_r: params.cw_shadows_r,
+            cw_shadows_g: params.cw_shadows_g,
+            cw_shadows_b: params.cw_shadows_b,
+            cw_shadows_brightness: params.cw_shadows_brightness,
+            cw_midtones_r: params.cw_midtones_r,
+            cw_midtones_g: params.cw_midtones_g,
+            cw_midtones_b: params.cw_midtones_b,
+            cw_midtones_brightness: params.cw_midtones_brightness,
+            cw_highlights_r: params.cw_highlights_r,
+            cw_highlights_g: params.cw_highlights_g,
+            cw_highlights_b: params.cw_highlights_b,
+            cw_highlights_brightness: params.cw_highlights_brightness,
+            hsl_count: params.hsl_count,
+            hsl_data: params.hsl_data,
+            _padding: [0.0; 3],
         };
 
         self.run_effect(

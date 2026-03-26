@@ -38,7 +38,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     }
 
     // Check if hovering over a scene heading
-    const sceneMatch = /^(\.|\s*(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[\.\s])/i.exec(line);
+    const sceneMatch = /^(\.|\s*(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s])/i.exec(line);
     if (sceneMatch) {
       const sceneStats = this.getSceneStats(fountainDoc, position.line);
       if (sceneStats) {

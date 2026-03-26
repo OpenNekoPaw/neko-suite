@@ -103,7 +103,7 @@
     "watch": "pnpm --filter @neko-story/extension run watch",
     "lint": "pnpm --filter @neko-story/extension run lint",
     "test": "pnpm --filter @neko-story/extension run test && pnpm --filter @neko-story/webview run test",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

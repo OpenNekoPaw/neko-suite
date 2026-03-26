@@ -1,8 +1,17 @@
 import { useState } from 'react';
 import { useEditorStore } from '../stores/editor-store';
-import { ExportPanel } from './Timeline/ExportPanel';
+import { ExportPanel } from './Timeline/export';
 import { formatTimeFull } from '../utils';
-import { PlayIcon, PauseIcon, SkipBackIcon, SkipForwardIcon, UndoIcon, RedoIcon, ZoomInIcon, ZoomOutIcon } from '@neko/shared/icons';
+import {
+  PlayIcon,
+  PauseIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  UndoIcon,
+  RedoIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from '@neko/shared/icons';
 
 export function Toolbar() {
   const {

@@ -208,6 +208,44 @@ impl EffectDispatcher {
                 let shadows = Self::get_f32(params, "shadows", 0.0);
                 let whites = Self::get_f32(params, "whites", 0.0);
                 let blacks = Self::get_f32(params, "blacks", 0.0);
+
+                // Color wheels (3-way correction)
+                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) {
+                    1.0
+                } else {
+                    0.0
+                };
+                let cw_shadows_r = Self::get_f32(params, "cw_shadows_r", 0.5);
+                let cw_shadows_g = Self::get_f32(params, "cw_shadows_g", 0.5);
+                let cw_shadows_b = Self::get_f32(params, "cw_shadows_b", 0.5);
+                let cw_shadows_brightness =
+                    Self::get_f32(params, "cw_shadows_brightness", 0.0);
+                let cw_midtones_r = Self::get_f32(params, "cw_midtones_r", 0.5);
+                let cw_midtones_g = Self::get_f32(params, "cw_midtones_g", 0.5);
+                let cw_midtones_b = Self::get_f32(params, "cw_midtones_b", 0.5);
+                let cw_midtones_brightness =
+                    Self::get_f32(params, "cw_midtones_brightness", 0.0);
+                let cw_highlights_r = Self::get_f32(params, "cw_highlights_r", 0.5);
+                let cw_highlights_g = Self::get_f32(params, "cw_highlights_g", 0.5);
+                let cw_highlights_b = Self::get_f32(params, "cw_highlights_b", 0.5);
+                let cw_highlights_brightness =
+                    Self::get_f32(params, "cw_highlights_brightness", 0.0);
+
+                // HSL per-color adjustments (variable count, max 8)
+                let hsl_count = Self::get_f32(params, "hsl_count", 0.0);
+                let mut hsl_data = [0.0f32; 32];
+                let count = (hsl_count as usize).min(8);
+                for i in 0..count {
+                    hsl_data[i * 4] =
+                        Self::get_f32(params, &format!("hsl_{}_target", i), 0.0);
+                    hsl_data[i * 4 + 1] =
+                        Self::get_f32(params, &format!("hsl_{}_hue", i), 0.0);
+                    hsl_data[i * 4 + 2] =
+                        Self::get_f32(params, &format!("hsl_{}_sat", i), 0.0);
+                    hsl_data[i * 4 + 3] =
+                        Self::get_f32(params, &format!("hsl_{}_lum", i), 0.0);
+                }
+
                 self.style_processor.apply_color_correction(
                     pixels,
                     width,
@@ -226,9 +264,47 @@ impl EffectDispatcher {
                         shadows,
                         whites,
                         blacks,
+                        cw_enabled,
+                        cw_shadows_r,
+                        cw_shadows_g,
+                        cw_shadows_b,
+                        cw_shadows_brightness,
+                        cw_midtones_r,
+                        cw_midtones_g,
+                        cw_midtones_b,
+                        cw_midtones_brightness,
+                        cw_highlights_r,
+                        cw_highlights_g,
+                        cw_highlights_b,
+                        cw_highlights_brightness,
+                        hsl_count,
+                        hsl_data,
                         _padding: [0.0; 3],
                     },
-                )
+                )?;
+
+                // Apply curves LUT (CPU-side, after GPU color correction)
+                let has_curves = Self::get_bool(params, "curves_enabled", false);
+                if has_curves {
+                    Self::apply_curves_lut(&mut result, params);
+                }
+
+                // TODO(P1): 3D LUT application
+                // When lut_id is present, look up pre-loaded LUT data from engine cache
+                // and apply trilinear interpolation. Requires:
+                // 1. Extension Host → Engine LUT upload pipeline (via EngineClient)
+                // 2. LUT cache in EffectDispatcher (HashMap<String, Lut3DData>)
+                // 3. CPU-side trilinear interpolation (or GPU 3D texture in future)
+                //
+                // let lut_id = Self::get_str(params, "lut_id");
+                // let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
+                // if let Some(id) = lut_id {
+                //     if let Some(lut) = self.lut_cache.get(&id) {
+                //         Self::apply_3d_lut(&mut result, lut, lut_intensity);
+                //     }
+                // }
+
+                Ok(result)
             }
 
             // Preset shaders → CustomShaderProcessor (noise, pixelate, etc.)
@@ -250,6 +326,86 @@ impl EffectDispatcher {
         }
     }
 
+    /// Parse a JSON string containing a 256-entry LUT array
+    fn parse_lut(
+        params: &serde_json::Map<String, serde_json::Value>,
+        key: &str,
+    ) -> Option<Vec<u8>> {
+        let json_str = params.get(key)?.as_str()?;
+        let values: Vec<f64> = serde_json::from_str(json_str).ok()?;
+        if values.len() != 256 {
+            return None;
+        }
+        Some(
+            values
+                .iter()
+                .map(|&v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+                .collect(),
+        )
+    }
+
+    /// Apply curves LUT to RGBA pixel buffer (CPU-side).
+    /// Supports RGB master curve, per-channel R/G/B, and luminance curve.
+    fn apply_curves_lut(
+        pixels: &mut [u8],
+        params: &serde_json::Map<String, serde_json::Value>,
+    ) {
+        let lut_rgb = Self::parse_lut(params, "curve_rgb");
+        let lut_r = Self::parse_lut(params, "curve_r");
+        let lut_g = Self::parse_lut(params, "curve_g");
+        let lut_b = Self::parse_lut(params, "curve_b");
+        let lut_luma = Self::parse_lut(params, "curve_luma");
+
+        // Apply per-pixel (RGBA layout, 4 bytes per pixel)
+        for chunk in pixels.chunks_exact_mut(4) {
+            let mut r = chunk[0];
+            let mut g = chunk[1];
+            let mut b = chunk[2];
+
+            // Master RGB curve (applied to all channels)
+            if let Some(ref lut) = lut_rgb {
+                r = lut[r as usize];
+                g = lut[g as usize];
+                b = lut[b as usize];
+            }
+
+            // Per-channel curves
+            if let Some(ref lut) = lut_r {
+                r = lut[r as usize];
+            }
+            if let Some(ref lut) = lut_g {
+                g = lut[g as usize];
+            }
+            if let Some(ref lut) = lut_b {
+                b = lut[b as usize];
+            }
+
+            // Luminance curve (apply luminance shift while preserving color)
+            if let Some(ref lut) = lut_luma {
+                let luma = (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) as u8;
+                let new_luma = lut[luma as usize] as f32;
+                let old_luma = luma as f32;
+                if old_luma > 0.5 {
+                    let ratio = new_luma / old_luma;
+                    r = (r as f32 * ratio).min(255.0) as u8;
+                    g = (g as f32 * ratio).min(255.0) as u8;
+                    b = (b as f32 * ratio).min(255.0) as u8;
+                } else {
+                    // Near-black: add the difference
+                    let diff = new_luma - old_luma;
+                    r = (r as f32 + diff).clamp(0.0, 255.0) as u8;
+                    g = (g as f32 + diff).clamp(0.0, 255.0) as u8;
+                    b = (b as f32 + diff).clamp(0.0, 255.0) as u8;
+                }
+            }
+
+            chunk[0] = r;
+            chunk[1] = g;
+            chunk[2] = b;
+            // Alpha (chunk[3]) unchanged
+        }
+    }
+
     /// Extract an f32 parameter from the JSON map, with a default value.
     fn get_f32(
         params: &serde_json::Map<String, serde_json::Value>,
@@ -260,6 +416,18 @@ impl EffectDispatcher {
             .get(key)
             .and_then(|v| v.as_f64())
             .map(|v| v as f32)
+            .unwrap_or(default)
+    }
+
+    /// Extract a bool parameter from the JSON map, with a default value.
+    fn get_bool(
+        params: &serde_json::Map<String, serde_json::Value>,
+        key: &str,
+        default: bool,
+    ) -> bool {
+        params
+            .get(key)
+            .and_then(|v| v.as_bool())
             .unwrap_or(default)
     }
 }

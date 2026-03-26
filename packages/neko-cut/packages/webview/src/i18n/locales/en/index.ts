@@ -15,7 +15,6 @@ import { exportBundle } from './export';
 import { header } from './header';
 import { history } from './history';
 import { mask } from './mask';
-import { mediaEngine } from './mediaEngine';
 import { preview } from './preview';
 import { promptTemplates } from './promptTemplates';
 import { propertyPanel } from './propertyPanel';
@@ -45,7 +44,6 @@ export const bundles: Record<string, MessageBundle> = {
   header,
   history,
   mask,
-  mediaEngine,
   preview,
   promptTemplates,
   propertyPanel,

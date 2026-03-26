@@ -38,12 +38,24 @@ const MAX_TOKENS: usize = 448;
 const SOT: i64 = 50258;           // <|startoftranscript|>
 const EOT: i64 = 50257;           // <|endoftext|>
 const TRANSCRIBE: i64 = 50359;    // <|transcribe|>
-const NO_TIMESTAMPS: i64 = 50363; // <|notimestamps|>
+const TIMESTAMP_BEGIN: i64 = 50364; // <|0.00|> — first timestamp token
+
+/// A timestamped segment produced by the decoder.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TranscribeSegment {
+    /// Start time in seconds.
+    pub start: f64,
+    /// End time in seconds.
+    pub end: f64,
+    /// Transcribed text for this segment.
+    pub text: String,
+}
 
 /// Transcription result.
 #[derive(Debug, serde::Serialize)]
 pub struct TranscribeResult {
     pub text: String,
+    pub segments: Vec<TranscribeSegment>,
     pub language: Option<String>,
     pub duration_secs: Option<f64>,
 }
@@ -90,12 +102,13 @@ pub fn transcribe(
     let lang_id = language.map(lang_to_token_id);
     let token_ids = decode(&mut decoder_session, &encoder_out, lang_id)?;
 
-    // 7. Detokenise.
+    // 7. Detokenise with timestamps.
     let vocab = load_vocab_near(encoder_session)?;
-    let text = detokenise(&token_ids, &vocab);
+    let (text, segments) = detokenise_with_timestamps(&token_ids, &vocab);
 
     Ok(TranscribeResult {
         text,
+        segments,
         language: language.map(str::to_string),
         duration_secs: Some(duration_secs),
     })
@@ -337,13 +350,13 @@ fn decode(
     encoder_hidden: &ndarray::ArrayD<f32>,
     lang_id: Option<i64>,
 ) -> Result<Vec<i64>> {
-    // Initial prompt: SOT, [language token], TRANSCRIBE, NO_TIMESTAMPS.
+    // Initial prompt: SOT, [language token], TRANSCRIBE.
+    // No NO_TIMESTAMPS token — decoder will produce timestamp tokens naturally.
     let mut tokens: Vec<i64> = vec![SOT];
     if let Some(lid) = lang_id {
         tokens.push(lid);
     }
     tokens.push(TRANSCRIBE);
-    tokens.push(NO_TIMESTAMPS);
 
     let hidden_dyn = encoder_hidden.view().into_dyn().into_owned();
 
@@ -396,8 +409,8 @@ fn decode(
         tokens.push(next_token);
     }
 
-    // Strip prompt prefix; keep only generated tokens.
-    let prompt_len = if lang_id.is_some() { 4 } else { 3 };
+    // Strip prompt prefix; keep only generated tokens (including timestamp tokens).
+    let prompt_len = if lang_id.is_some() { 3 } else { 2 };
     Ok(tokens.into_iter().skip(prompt_len).collect())
 }
 
@@ -507,31 +520,88 @@ fn load_vocab_near(encoder_session: &ort::session::Session) -> Result<HashMap<i6
     Ok(vocab)
 }
 
-/// Decode a list of token IDs to a UTF-8 string using the Whisper GPT-2 byte encoding.
+/// Decode token IDs to text and timestamped segments.
 ///
-/// Whisper uses the GPT-2 bytes_to_unicode mapping: byte values 0–255 are
-/// mapped to specific unicode code points so that BPE operates on text.
-/// Tokens like `"Ġhello"` decode to `b" hello"`.
-fn detokenise(token_ids: &[i64], vocab: &HashMap<i64, String>) -> String {
+/// Whisper timestamp tokens have IDs >= TIMESTAMP_BEGIN (50364).
+/// Each timestamp encodes `(id - 50364) * 0.02` seconds.
+/// The decoder emits `<|start_ts|> text tokens <|end_ts|>` groups.
+fn detokenise_with_timestamps(
+    token_ids: &[i64],
+    vocab: &HashMap<i64, String>,
+) -> (String, Vec<TranscribeSegment>) {
     let b2u = bytes_to_unicode();
 
-    let mut byte_buf: Vec<u8> = Vec::new();
+    let mut full_text = String::new();
+    let mut segments: Vec<TranscribeSegment> = Vec::new();
+
+    // Current segment accumulation state.
+    let mut seg_start: Option<f64> = None;
+    let mut seg_bytes: Vec<u8> = Vec::new();
+
+    let decode_bytes = |byte_buf: &[u8]| -> String {
+        String::from_utf8_lossy(byte_buf).trim().to_string()
+    };
+
     for &id in token_ids {
-        // Skip special tokens (>= 50257).
-        if id >= 50257 {
+        if id >= TIMESTAMP_BEGIN {
+            // Timestamp token: value = (id - TIMESTAMP_BEGIN) * 0.02 seconds
+            let ts = (id - TIMESTAMP_BEGIN) as f64 * 0.02;
+
+            match seg_start {
+                None => {
+                    // Opening timestamp — start a new segment.
+                    seg_start = Some(ts);
+                }
+                Some(start) => {
+                    // Closing timestamp — finish the segment.
+                    let text = decode_bytes(&seg_bytes);
+                    if !text.is_empty() {
+                        if !full_text.is_empty() {
+                            full_text.push(' ');
+                        }
+                        full_text.push_str(&text);
+                        segments.push(TranscribeSegment {
+                            start,
+                            end: ts,
+                            text,
+                        });
+                    }
+                    seg_bytes.clear();
+                    seg_start = None;
+                }
+            }
+        } else if id >= EOT {
+            // Skip other special tokens (SOT, EOT, TRANSCRIBE, language, etc.)
             continue;
-        }
-        if let Some(tok) = vocab.get(&id) {
-            // Each character in the token string is a mapped unicode code point.
+        } else if let Some(tok) = vocab.get(&id) {
+            // Regular text token — accumulate bytes.
             for ch in tok.chars() {
                 if let Some(&byte) = b2u.get(&ch) {
-                    byte_buf.push(byte);
+                    seg_bytes.push(byte);
                 }
             }
         }
     }
 
-    String::from_utf8_lossy(&byte_buf).into_owned()
+    // Flush any remaining tokens without a closing timestamp.
+    if !seg_bytes.is_empty() {
+        let text = decode_bytes(&seg_bytes);
+        if !text.is_empty() {
+            if !full_text.is_empty() {
+                full_text.push(' ');
+            }
+            full_text.push_str(&text);
+            // No closing timestamp — use start or 0.
+            let start = seg_start.unwrap_or(0.0);
+            segments.push(TranscribeSegment {
+                start,
+                end: start, // unknown end
+                text,
+            });
+        }
+    }
+
+    (full_text, segments)
 }
 
 /// GPT-2 / Whisper bytes-to-unicode reverse map (unicode char → original byte).

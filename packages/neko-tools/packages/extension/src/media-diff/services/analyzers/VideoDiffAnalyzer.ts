@@ -107,7 +107,7 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
       const maxDur = Math.max(probeDurA, probeDurB);
       const durRatio = maxDur > 0 ? minDur / maxDur : 1;
 
-      let diffOptions: { sampleFps: number; startTime?: number; endTime?: number } = {
+      const diffOptions: { sampleFps: number; startTime?: number; endTime?: number } = {
         sampleFps: 1.0,
       };
 

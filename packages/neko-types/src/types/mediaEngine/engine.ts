@@ -1,8 +1,7 @@
 /**
  * Media Engine Interface
  *
- * Defines the unified media engine interface that abstracts
- * both basic mode (WebCodecs + FFmpeg.wasm + WebGPU) and
+ * Defines the unified media engine interface for
  * compatible mode (Native FFmpeg + wgpu).
  */
 
@@ -69,8 +68,7 @@ export interface MediaEngineInitOptions {
  * media processing backends. Upper-layer code should only depend on
  * this interface, not on specific implementations.
  *
- * Implementations:
- * - WebMediaEngine: Basic mode (Webview, WebCodecs + FFmpeg.wasm + WebGPU)
+ * Implementation:
  * - NativeMediaEngine: Compatible mode (Extension Host, Native FFmpeg + wgpu)
  */
 export interface IMediaEngine {

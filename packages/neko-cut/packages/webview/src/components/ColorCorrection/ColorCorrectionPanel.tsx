@@ -8,6 +8,8 @@ import { useTranslation } from '../../i18n/I18nContext';
 import type {
   ColorCorrection,
   BasicColorAdjustment,
+  HSLAdjustment,
+  LUTAdjustment,
   ColorWheelValue,
 } from '../../types/colorCorrection';
 import {
@@ -17,6 +19,8 @@ import {
 import { BasicAdjustments } from './BasicAdjustments';
 import { CurvesPanel } from './CurvesPanel';
 import { ColorWheelsPanel } from './ColorWheelsPanel';
+import { HSLPanel } from './HSLPanel';
+import { LUTPanel } from './LUTPanel';
 
 // =============================================================================
 // Types
@@ -120,6 +124,28 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
     [cc, onChange],
   );
 
+  // Handle LUT change
+  const handleLUTChange = useCallback(
+    (lut: LUTAdjustment) => {
+      onChange({
+        ...cc,
+        lut,
+      });
+    },
+    [cc, onChange],
+  );
+
+  // Handle HSL change
+  const handleHSLChange = useCallback(
+    (hsl: HSLAdjustment) => {
+      onChange({
+        ...cc,
+        hsl,
+      });
+    },
+    [cc, onChange],
+  );
+
   // Handle color wheels change
   const handleColorWheelsChange = useCallback(
     (wheel: 'shadows' | 'midtones' | 'highlights' | 'global', settings: ColorWheelValue) => {
@@ -188,6 +214,12 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
         <TabButton active={activeTab === 'colorWheels'} onClick={() => setActiveTab('colorWheels')}>
           {t('colorCorrection.tabs.colorWheels')}
         </TabButton>
+        <TabButton active={activeTab === 'hsl'} onClick={() => setActiveTab('hsl')}>
+          {t('colorCorrection.tabs.hsl')}
+        </TabButton>
+        <TabButton active={activeTab === 'lut'} onClick={() => setActiveTab('lut')}>
+          {t('colorCorrection.tabs.lut')}
+        </TabButton>
       </div>
 
       {/* Tab Content */}
@@ -199,6 +231,8 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
         {activeTab === 'colorWheels' && (
           <ColorWheelsPanel colorWheels={cc.colorWheels} onChange={handleColorWheelsChange} />
         )}
+        {activeTab === 'hsl' && <HSLPanel hsl={cc.hsl} onChange={handleHSLChange} />}
+        {activeTab === 'lut' && <LUTPanel lut={cc.lut} onChange={handleLUTChange} />}
       </div>
     </div>
   );

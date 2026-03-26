@@ -28,21 +28,3 @@ export function getMediaProxy(): IMediaRequestProxy {
   }
   return instance;
 }
-
-/**
- * @deprecated Use getMediaProxy instead. Will be removed in v2.0.
- * @alias getMediaProxy
- */
-export const getRemoteMediaProxy = getMediaProxy;
-
-/**
- * Reset the singleton instance
- *
- * Used for testing or when reinitializing the media proxy.
- */
-export function resetMediaProxy(): void {
-  if (instance) {
-    instance.dispose();
-    instance = null;
-  }
-}

@@ -5,9 +5,11 @@
 import React, { useCallback } from 'react';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
+import { useTranslation } from '../i18n/I18nContext';
 
 export const InstalledView: React.FC = () => {
   const { installed } = useMarketplaceStore();
+  const { t } = useTranslation();
 
   const handleToggleEnabled = useCallback((packageId: string, currentEnabled: boolean) => {
     if (currentEnabled) {
@@ -21,8 +23,8 @@ export const InstalledView: React.FC = () => {
     return (
       <div className="empty-state">
         <span className="codicon codicon-inbox empty-state__icon" />
-        <p className="empty-state__text">No packages installed.</p>
-        <p className="empty-state__hint">Browse the marketplace to find skills and assets.</p>
+        <p className="empty-state__text">{t('marketplace.installed.empty')}</p>
+        <p className="empty-state__hint">{t('marketplace.installed.hint')}</p>
       </div>
     );
   }
@@ -41,7 +43,7 @@ export const InstalledView: React.FC = () => {
               <span className="installed-item__type">{item.type}</span>
               {!item.enabled && (
                 <span className="installed-item__badge installed-item__badge--disabled">
-                  Disabled
+                  {t('marketplace.installed.disabled')}
                 </span>
               )}
             </div>
@@ -49,7 +51,9 @@ export const InstalledView: React.FC = () => {
               <button
                 className="asset-action-btn asset-action-btn--ghost"
                 onClick={() => handleToggleEnabled(item.packageId, item.enabled)}
-                title={item.enabled ? 'Disable' : 'Enable'}
+                title={
+                  item.enabled ? t('marketplace.action.disable') : t('marketplace.action.enable')
+                }
               >
                 <span
                   className={`codicon ${item.enabled ? 'codicon-eye' : 'codicon-eye-closed'}`}
@@ -59,7 +63,7 @@ export const InstalledView: React.FC = () => {
                 className="asset-action-btn asset-action-btn--secondary"
                 onClick={() => MarketMessages.uninstall(item.packageId)}
               >
-                Uninstall
+                {t('marketplace.action.uninstall')}
               </button>
             </div>
           </div>

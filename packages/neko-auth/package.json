@@ -4,6 +4,7 @@
   "description": "Unified authentication for Neko Suite — OAuth 2.0 + PKCE SSO",
   "version": "0.1.0",
   "publisher": "neko",
+  "l10n": "./l10n",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -19,40 +20,42 @@
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "Neko Auth",
+      "title": "%neko.auth.config.title%",
       "properties": {
         "neko.auth.clientId": {
           "type": "string",
           "default": "",
-          "description": "OAuth 2.0 client ID for the Neko cloud service."
+          "description": "%neko.auth.clientId.description%"
         },
         "neko.auth.authUrl": {
           "type": "string",
           "default": "",
-          "description": "Authorization endpoint URL. Leave empty to disable cloud auth."
+          "description": "%neko.auth.authUrl.description%"
         },
         "neko.auth.tokenUrl": {
           "type": "string",
           "default": "",
-          "description": "Token endpoint URL."
+          "description": "%neko.auth.tokenUrl.description%"
         },
         "neko.auth.scopes": {
           "type": "array",
           "items": { "type": "string" },
           "default": ["openid", "profile", "email"],
-          "description": "OAuth 2.0 scopes to request."
+          "description": "%neko.auth.scopes.description%"
         },
         "neko.auth.redirectPort": {
           "type": "number",
           "default": 6419,
-          "description": "Localhost port for the OAuth redirect callback server."
+          "description": "%neko.auth.redirectPort.description%"
         }
       }
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch"
+    "watch": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
     "@neko/auth-core": "workspace:*",

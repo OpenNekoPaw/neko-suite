@@ -135,6 +135,7 @@ pub const COLOR_CORRECTION_SHADER: &str = r#"
 struct Uniforms {
     width: u32,
     height: u32,
+    // Basic adjustments
     brightness: f32,
     contrast: f32,
     saturation: f32,
@@ -148,7 +149,24 @@ struct Uniforms {
     shadows: f32,
     whites: f32,
     blacks: f32,
-    _padding: f32,
+    // Color wheels
+    cw_enabled: f32,
+    cw_shadows_r: f32,
+    cw_shadows_g: f32,
+    cw_shadows_b: f32,
+    cw_shadows_brightness: f32,
+    cw_midtones_r: f32,
+    cw_midtones_g: f32,
+    cw_midtones_b: f32,
+    cw_midtones_brightness: f32,
+    cw_highlights_r: f32,
+    cw_highlights_g: f32,
+    cw_highlights_b: f32,
+    cw_highlights_brightness: f32,
+    // HSL per-color adjustments
+    hsl_count: f32,
+    hsl_data: array<vec4<f32>, 8>,  // [target_hue, hue_shift, sat_adjust, lum_adjust] × 8
+    _padding: vec3<f32>,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<u32>;
@@ -336,6 +354,26 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     rgb = apply_vibrance(rgb, uniforms.vibrance);
     rgb = apply_saturation(rgb, uniforms.saturation);
     rgb = apply_hue_shift(rgb, uniforms.hue_shift);
+
+    // HSL per-color adjustments
+    let hsl_n = u32(uniforms.hsl_count);
+    for (var i = 0u; i < hsl_n; i++) {
+        let d = uniforms.hsl_data[i];
+        rgb = apply_hsl_adjustment(rgb, d.x, d.y, d.z, d.w);
+    }
+
+    // Color wheels (3-way correction)
+    if (uniforms.cw_enabled > 0.5) {
+        rgb = apply_color_wheel(
+            rgb,
+            vec3<f32>(uniforms.cw_shadows_r, uniforms.cw_shadows_g, uniforms.cw_shadows_b),
+            uniforms.cw_shadows_brightness,
+            vec3<f32>(uniforms.cw_midtones_r, uniforms.cw_midtones_g, uniforms.cw_midtones_b),
+            uniforms.cw_midtones_brightness,
+            vec3<f32>(uniforms.cw_highlights_r, uniforms.cw_highlights_g, uniforms.cw_highlights_b),
+            uniforms.cw_highlights_brightness,
+        );
+    }
 
     rgb = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
 

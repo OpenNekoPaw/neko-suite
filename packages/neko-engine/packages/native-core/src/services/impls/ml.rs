@@ -98,11 +98,10 @@ impl IMlService for MlService {
         Ok(score)
     }
 
-    fn transcribe(&self, model: &str, audio: &str) -> Result<String> {
+    fn transcribe(&self, model: &str, audio: &str) -> Result<ml::whisper::TranscribeResult> {
         self.registry.get_or_load(model, &self.device)?;
         let result = self.registry.with_session(model, |session| {
-            let result = ml::whisper::transcribe(session, audio, None)?;
-            Ok(result.text)
+            ml::whisper::transcribe(session, audio, None)
         });
         self.registry.evict_idle(IDLE_EVICT_SECS).ok();
         result

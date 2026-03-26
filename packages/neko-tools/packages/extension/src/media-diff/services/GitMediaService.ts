@@ -436,7 +436,7 @@ export class GitMediaService implements IGitMediaService {
       });
 
       const fileStream = createWriteStream(outputPath);
-      let stderrChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
 
       gitProcess.stdout.pipe(fileStream);
       gitProcess.stderr.on('data', (chunk: Buffer) => {

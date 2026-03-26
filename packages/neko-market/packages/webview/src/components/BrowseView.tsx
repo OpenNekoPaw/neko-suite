@@ -4,10 +4,12 @@
 
 import React from 'react';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
+import { useTranslation } from '../i18n/I18nContext';
 import { AssetCard } from './AssetCard';
 
 export const BrowseView: React.FC = () => {
   const { searchText, featured, searchResults, searchTotal, isSearching } = useMarketplaceStore();
+  const { t } = useTranslation();
 
   const showFeatured = !searchText;
   const showResults = !!searchText;
@@ -26,7 +28,7 @@ export const BrowseView: React.FC = () => {
         <section className="featured-section">
           {featured.length > 0 ? (
             <>
-              <h3 className="section-title">Featured</h3>
+              <h3 className="section-title">{t('marketplace.browse.featured')}</h3>
               <div className="asset-grid">
                 {featured.map((item) => (
                   <AssetCard key={item.id} item={item} />
@@ -36,7 +38,7 @@ export const BrowseView: React.FC = () => {
           ) : (
             <div className="empty-state">
               <span className="codicon codicon-package empty-state__icon" />
-              <p className="empty-state__text">No packages available yet.</p>
+              <p className="empty-state__text">{t('marketplace.browse.empty')}</p>
             </div>
           )}
         </section>
@@ -47,7 +49,7 @@ export const BrowseView: React.FC = () => {
         <section className="results-section">
           <div className="results-header">
             <span className="results-count">
-              {searchTotal} result{searchTotal !== 1 ? 's' : ''} for &ldquo;{searchText}&rdquo;
+              {t('marketplace.browse.results', { count: String(searchTotal) })}
             </span>
           </div>
 
@@ -60,7 +62,9 @@ export const BrowseView: React.FC = () => {
           ) : (
             <div className="empty-state">
               <span className="codicon codicon-search empty-state__icon" />
-              <p className="empty-state__text">No results for &ldquo;{searchText}&rdquo;</p>
+              <p className="empty-state__text">
+                {t('marketplace.browse.noResults', { query: searchText })}
+              </p>
             </div>
           )}
         </section>

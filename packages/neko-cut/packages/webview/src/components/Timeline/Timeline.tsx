@@ -5,7 +5,7 @@
 
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { useEditorStore } from '../../stores/editor-store';
-import { ExportPanel } from './ExportPanel';
+import { ExportPanel } from './export';
 import { ContextMenu } from '../ContextMenu';
 import { TimelineControls } from './TimelineControls';
 import { TimelineRuler } from './TimelineRuler';

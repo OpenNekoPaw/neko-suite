@@ -24,6 +24,8 @@ export const marketplace = {
 
   // Installed view
   'marketplace.installed.empty': 'No marketplace packages installed yet.',
+  'marketplace.installed.hint': 'Browse the marketplace to find skills and assets.',
+  'marketplace.installed.disabled': 'Disabled',
 
   // Updates view
   'marketplace.updates.empty': 'All packages are up to date.',

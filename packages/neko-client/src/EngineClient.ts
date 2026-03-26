@@ -48,6 +48,21 @@ export interface EngineClientConfig {
   timeout?: number;
 }
 
+/** A timestamped segment from Whisper transcription. */
+export interface TranscribeSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** Response from the `models:transcribe` action. */
+export interface TranscribeResponse {
+  text: string;
+  segments: TranscribeSegment[];
+  language: string | null;
+  durationSecs: number | null;
+}
+
 const logger = getLogger('EngineClient');
 
 export class EngineClient {
@@ -1031,17 +1046,22 @@ export class EngineClient {
   }
 
   /**
-   * Transcribe audio to text using a registered Whisper ONNX model.
-   * @returns transcribed text
+   * Transcribe audio to text with timestamps using a registered Whisper ONNX model.
    */
-  async transcribe(model: string, audio: string): Promise<string> {
+  async transcribe(model: string, audio: string): Promise<TranscribeResponse> {
     const resp = await this.dispatch({
       group: 'models',
       action: 'transcribe',
       options: { model, audio },
     });
     this.assertOk(resp, 'models:transcribe');
-    return (resp.data as { text: string }).text;
+    const data = resp.data as TranscribeResponse;
+    return {
+      text: data.text,
+      segments: data.segments ?? [],
+      language: data.language ?? null,
+      durationSecs: data.durationSecs ?? null,
+    };
   }
 
   // =========================================================================

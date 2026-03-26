@@ -137,6 +137,22 @@ export class ElementHandler implements IToolHandler {
         });
         break;
       }
+      case 'subtitle': {
+        newElement = createElement({
+          ...baseFields,
+          type: 'subtitle',
+          name: content || 'Subtitle',
+          text: content || '',
+          fontSize: 48,
+          fontFamily: 'Arial',
+          color: '#ffffff',
+          backgroundColor: 'transparent',
+          textAlign: 'center',
+          strokeColor: 'transparent',
+          strokeWidth: 0,
+        });
+        break;
+      }
       default:
         return { success: false, error: `Invalid element type: ${type}` };
     }

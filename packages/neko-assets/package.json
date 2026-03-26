@@ -338,7 +338,7 @@
     "watch": "npm run compile -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
     "@neko/asset": "workspace:*",

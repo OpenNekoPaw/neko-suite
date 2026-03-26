@@ -108,9 +108,14 @@ export class AssetHealthService {
     const active = new Set<Promise<void>>();
     for (const entry of fileEntries) {
       // NOTE: task! uses definite assignment assertion because the .finally() closure
-      // captures `task` by reference — by the time .finally() runs, task is assigned.
-      let task!: Promise<void>;
-      task = processEntrySafe(entry).finally(() => active.delete(task));
+      const task: Promise<void> = processEntrySafe(entry).then(
+        () => {
+          active.delete(task);
+        },
+        () => {
+          active.delete(task);
+        },
+      );
       active.add(task);
       if (active.size >= this.concurrency) {
         await Promise.race(active);
