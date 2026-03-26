@@ -9,68 +9,18 @@
  */
 
 import { getLogger } from '../base';
+import type { Message } from '@neko-agent/types';
 
 const logger = getLogger('ConversationManager');
 
-/**
- * Tool call information
- */
-export interface ToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  result?: {
-    success: boolean;
-    data: unknown;
-    error?: string;
-  };
-}
+// Re-export shared types for backward compatibility
+export type { ToolCall, ContentBlock, ContentBlockType } from '@neko-agent/types';
 
 /**
- * Content block types for sequential rendering
+ * Conversation message — alias for Message from @neko-agent/types.
+ * Kept for backward compatibility with extension-internal code.
  */
-export type ContentBlockType = 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan';
-
-/**
- * Content block for chronological message rendering
- * Preserves the order of thinking, text, and tool calls as they occurred
- */
-export interface ContentBlock {
-  id: string;
-  type: ContentBlockType;
-  timestamp: number;
-  // For thinking blocks
-  thinking?: string;
-  isThinkingComplete?: boolean;
-  // For text blocks
-  content?: string;
-  isStreaming?: boolean;
-  // For tool_call blocks
-  toolCall?: ToolCall;
-  // For code_diff blocks (future use)
-  codeDiff?: unknown;
-  // For plan blocks (future use)
-  plan?: unknown;
-}
-
-/**
- * Conversation message with tool calls and content blocks
- */
-export interface ConversationMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-  /** AI thinking process (extended thinking) */
-  thinking?: string;
-  /** Legacy tool calls array (for backward compatibility) */
-  toolCalls?: ToolCall[];
-  /**
-   * Sequential content blocks for chronological rendering (assistant messages only)
-   * When present, these preserve the exact order of thinking, text, and tool calls
-   */
-  contentBlocks?: ContentBlock[];
-}
+export type ConversationMessage = Message;
 
 /**
  * Conversation session

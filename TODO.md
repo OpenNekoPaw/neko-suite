@@ -30,6 +30,8 @@
 
 - [x] ESLint 升级 ✅（`prefer-const`/`no-useless-escape` error；security 误报规则关闭；1837→0 error / 895 warn）
 - [x] 国际化扩展 ✅（neko-model/neko-story webview i18n + neko-market/neko-auth L10N 补齐）
+- [x] neko-agent 类型去重 ✅（新建 `@neko-agent/types` 共享包，消除 9 处重复类型定义；`ToolParameters` 类型约束防止工具 schema 错误）
+- [x] neko-agent Logger 去重 ✅（`createLoggerRegistry()` 工厂函数，4 份 ~20 LOC 样板 → 各 1 行）
 
 **扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | `pnpm lint` 0 error ✅ | **0 循环依赖** ✅
 

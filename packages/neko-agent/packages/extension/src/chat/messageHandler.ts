@@ -21,11 +21,10 @@ import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
 import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
 import { EngineClient } from '@neko/neko-client';
+import type { AgentPhase } from '@neko-agent/types';
 import { getLogger } from '../base';
 
 const logger = getLogger('MessageHandler');
-
-type AgentPhase = 'idle' | 'thinking' | 'acting' | 'streaming';
 
 // =============================================================================
 // neko-engine transcoder (lazy, optional)

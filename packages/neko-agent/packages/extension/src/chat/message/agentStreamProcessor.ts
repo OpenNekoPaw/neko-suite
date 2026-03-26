@@ -13,33 +13,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { Platform } from '@neko/platform';
-import { parsePlanMarkdown, type AgentEvent, type Plan } from '@neko/agent';
+import { parsePlanMarkdown, type AgentEvent } from '@neko/agent';
+import type { AgentPhase, ContentBlock, Plan } from '@neko-agent/types';
 import type { ConversationHandler } from '../conversationHandler';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
-
-type AgentPhase = 'idle' | 'thinking' | 'acting' | 'streaming';
-
-/**
- * Content block for sequential rendering persistence
- */
-export interface ContentBlock {
-  id: string;
-  type: 'thinking' | 'text' | 'tool_call' | 'plan';
-  timestamp: number;
-  thinking?: string;
-  isThinkingComplete?: boolean;
-  content?: string;
-  isStreaming?: boolean;
-  toolCall?: {
-    id: string;
-    name: string;
-    arguments: Record<string, unknown>;
-    result?: { success: boolean; data: unknown; error?: string };
-  };
-  plan?: Plan;
-}
 
 /**
  * Collected tool call for persistence
@@ -444,10 +423,7 @@ export class AgentStreamProcessor {
                 .showInformationMessage(`${label} saved to ${shortPath}`, 'Show in Folder')
                 .then((action) => {
                   if (action === 'Show in Folder') {
-                    vscode.commands.executeCommand(
-                      'revealFileInOS',
-                      vscode.Uri.file(displayPath),
-                    );
+                    vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(displayPath));
                   }
                 });
             }

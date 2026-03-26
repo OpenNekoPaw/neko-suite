@@ -37,16 +37,24 @@ export interface ImagePart {
 }
 
 /**
- * Tool call from model
+ * LLM tool call — OpenAI-compatible wire format.
+ * Distinguished from the internal ToolCall in @neko-agent/types which uses
+ * parsed arguments (Record<string, unknown>) and has result/confirmation fields.
  */
-export interface ToolCall {
+export interface LLMToolCall {
   id: string;
   type: 'function';
   function: {
     name: string;
+    /** JSON-encoded arguments string */
     arguments: string;
   };
 }
+
+/**
+ * @deprecated Use LLMToolCall instead. Kept for backward compatibility.
+ */
+export type ToolCall = LLMToolCall;
 
 /**
  * Chat request options

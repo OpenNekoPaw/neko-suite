@@ -155,10 +155,7 @@ export class ToolRegistry implements IToolRegistry {
    * @param filter Optional filter to limit which tools are included
    * @returns Array of tool definitions
    */
-  toToolDefinitions(filter?: ToolFilterOptions): Array<{
-    type: 'function';
-    function: { name: string; description: string; parameters: Record<string, unknown> };
-  }> {
+  toToolDefinitions(filter?: ToolFilterOptions): ReturnType<IToolRegistry['toToolDefinitions']> {
     let tools = this.list();
 
     if (filter) {

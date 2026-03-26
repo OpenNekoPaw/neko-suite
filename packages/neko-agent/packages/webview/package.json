@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@neko-agent/types": "workspace:*",
     "@tanstack/react-virtual": "^3.13.14",
     "@neko/shared": "workspace:*",
     "clsx": "^2.1.1",

@@ -1,0 +1,105 @@
+/**
+ * Message Types — Core message protocol shared across extension, webview, and agent
+ *
+ * SSOT for: Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff
+ */
+
+import type { MessageAttachment } from '@neko/shared';
+import type { Plan } from './plan';
+
+// ---------------------------------------------------------------------------
+// ToolCall (internal format — NOT the LLM wire format in platform/adapter)
+// ---------------------------------------------------------------------------
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: {
+    success: boolean;
+    data: unknown;
+    error?: string;
+    /** Execution time in milliseconds */
+    duration?: number;
+  };
+  /** For tool confirmation (ask mode) */
+  pendingConfirmation?: boolean;
+  confirmation?: {
+    action: string;
+    description: string;
+    details: Record<string, unknown>;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ContentBlock
+// ---------------------------------------------------------------------------
+
+/**
+ * Content block types for sequential rendering of AI responses.
+ * Allows thinking, tool calls, text, and code diffs to be rendered in chronological order.
+ */
+export type ContentBlockType = 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan';
+
+/**
+ * Code diff information for file edits
+ */
+export interface CodeDiff {
+  filePath: string;
+  oldContent: string;
+  newContent: string;
+  language?: string;
+  /** Diff status */
+  status: 'pending' | 'accepted' | 'rejected';
+}
+
+export interface ContentBlock {
+  id: string;
+  type: ContentBlockType;
+  timestamp: number;
+  /** For thinking blocks */
+  thinking?: string;
+  isThinkingComplete?: boolean;
+  /** For text blocks */
+  content?: string;
+  isStreaming?: boolean;
+  /** For tool_call blocks */
+  toolCall?: ToolCall;
+  /** For code_diff blocks */
+  codeDiff?: CodeDiff;
+  /** For plan blocks */
+  plan?: Plan;
+}
+
+// ---------------------------------------------------------------------------
+// Message
+// ---------------------------------------------------------------------------
+
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  /** @deprecated Derived from contentBlocks[].toolCall — do not update directly */
+  toolCalls?: ToolCall[];
+  isStreaming?: boolean;
+  attachments?: MessageAttachment[];
+  /** Associated background task IDs (for inline task cards) */
+  backgroundTaskIds?: string[];
+  /** AI thinking process (legacy, for backward compatibility) */
+  thinking?: string;
+  isThinkingComplete?: boolean;
+  /** Message feedback */
+  feedback?: 'positive' | 'negative';
+  editedAt?: number;
+  originalContent?: string;
+  /** Message cancelled by user (ESC key) */
+  isCancelled?: boolean;
+  /** Message was queued while agent is running */
+  isQueued?: boolean;
+  /**
+   * Sequential content blocks for chronological rendering (assistant messages only).
+   * When present, render these instead of the legacy fields.
+   */
+  contentBlocks?: ContentBlock[];
+}

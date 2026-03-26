@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   streamResponses: true,
   showToolCalls: true,
   temperature: 0.7,
-  maxTokens: 4096,
+  maxTokens: 8192,
   executionMode: 'ask' as ShellExecutionMode,
   promptMode: 'default' as PromptMode,
   chatModelOptions: [],

@@ -18,6 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@neko-agent/types": ["../agent-types/src/index.ts"],
+      "@neko-agent/types/*": ["../agent-types/src/*"],
       "@neko/shared": ["../../../neko-types/src/index.ts"],
       "@neko/shared/*": ["../../../neko-types/src/*"]
     }

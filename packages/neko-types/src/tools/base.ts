@@ -7,7 +7,7 @@
  * - Standard interface implementation
  */
 
-import type { Tool, ToolCategory, ToolResult } from '../types/tool';
+import type { Tool, ToolCategory, ToolParameters, ToolResult } from '../types/tool';
 
 /**
  * Base class for builtin tools
@@ -22,7 +22,7 @@ import type { Tool, ToolCategory, ToolResult } from '../types/tool';
 export abstract class BuiltinTool implements Tool {
   abstract readonly name: string;
   abstract readonly description: string;
-  abstract readonly parameters: Record<string, unknown>;
+  abstract readonly parameters: ToolParameters;
   abstract readonly category: ToolCategory;
   readonly requiresConfirmation: boolean = false;
 
@@ -35,18 +35,7 @@ export abstract class BuiltinTool implements Tool {
    * - Checks required fields are present
    */
   protected validateArgs(args: Record<string, unknown>): { valid: boolean; error?: string } {
-    const params = this.parameters as {
-      type: string;
-      properties?: Record<string, { type: string }>;
-      required?: string[];
-    };
-
-    if (params.type !== 'object') {
-      return { valid: true };
-    }
-
-    // Check required fields
-    const required = params.required || [];
+    const required = this.parameters.required ?? [];
     for (const field of required) {
       if (args[field] === undefined) {
         return { valid: false, error: `Missing required field: ${field}` };
@@ -77,7 +66,7 @@ export abstract class BuiltinTool implements Tool {
 export function createTool(config: {
   name: string;
   description: string;
-  parameters: Record<string, unknown>;
+  parameters: ToolParameters;
   category: ToolCategory;
   requiresConfirmation?: boolean;
   execute: (args: Record<string, unknown>) => Promise<ToolResult>;

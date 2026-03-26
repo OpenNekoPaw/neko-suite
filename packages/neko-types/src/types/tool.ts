@@ -46,6 +46,29 @@ export interface ToolResult {
 }
 
 /**
+ * JSON Schema property definition for tool parameters
+ */
+export interface ToolParameterProperty {
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  items?: Record<string, unknown>;
+  properties?: Record<string, ToolParameterProperty>;
+  required?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Tool parameter schema — must be a valid JSON Schema object type.
+ * This ensures the schema is accepted by OpenAI/Claude function-calling APIs.
+ */
+export interface ToolParameters {
+  type: 'object';
+  properties: Record<string, ToolParameterProperty>;
+  required?: string[];
+}
+
+/**
  * Tool definition
  */
 export interface Tool {
@@ -53,8 +76,8 @@ export interface Tool {
   name: string;
   /** Tool description for LLM */
   description: string;
-  /** Parameter schema (JSON Schema) */
-  parameters: Record<string, unknown>;
+  /** Parameter schema (JSON Schema object) */
+  parameters: ToolParameters;
   /** Tool category */
   category: ToolCategory;
   /** Whether tool requires confirmation */
@@ -119,7 +142,7 @@ export interface IToolRegistry {
    */
   toToolDefinitions(filter?: ToolFilterOptions): Array<{
     type: 'function';
-    function: { name: string; description: string; parameters: Record<string, unknown> };
+    function: { name: string; description: string; parameters: ToolParameters };
   }>;
 
   /** Get tool count (optional) */

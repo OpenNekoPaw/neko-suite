@@ -13,6 +13,7 @@
     "test:run": "vitest --run"
   },
   "dependencies": {
+    "@neko-agent/types": "workspace:*",
     "@neko/agent": "workspace:*",
     "@neko/market-core": "workspace:*",
     "@neko/neko-client": "workspace:*",

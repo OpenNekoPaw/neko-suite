@@ -1,14 +1,19 @@
 /**
  * AI Assistant Types
  *
- * UI 层类型定义（WebView 通信、设置、附件等）
+ * UI layer type definitions (WebView communication, settings, attachments, etc.)
+ * Shared types are re-exported from @neko-agent/types.
  */
 
-// Re-export MessageAttachment from shared (Single Source of Truth)
+// Re-export from shared
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
+// Re-export from @neko-agent/types (Single Source of Truth)
+export type { AIAssistantSettings, ConfiguredProvider } from '@neko-agent/types';
+export { DEFAULT_SETTINGS } from '@neko-agent/types';
+
 // =============================================================================
-// UI 层类型（WebView 通信）
+// Extension-only types (NOT shared with webview)
 // =============================================================================
 
 /**
@@ -20,21 +25,6 @@ export interface WebviewMessage {
 }
 
 /**
- * Settings state interface
- */
-export interface AIAssistantSettings {
-  selectedProviderId: string | null;
-  selectedModelId: string | null;
-  customSystemPrompt: string;
-  autoExecuteTools: boolean;
-  streamResponses: boolean;
-  showToolCalls: boolean;
-  temperature: number;
-  maxTokens: number;
-  executionMode: 'plan' | 'ask' | 'auto';
-}
-
-/**
  * File reference parsed from @ mentions
  */
 export interface FileReference {
@@ -42,23 +32,8 @@ export interface FileReference {
   content: string;
 }
 
-/**
- * Default settings
- */
-export const DEFAULT_SETTINGS: AIAssistantSettings = {
-  selectedProviderId: null,
-  selectedModelId: null,
-  customSystemPrompt: '',
-  autoExecuteTools: true,
-  streamResponses: true,
-  showToolCalls: true,
-  temperature: 0.7,
-  maxTokens: 8192, // Increased for better tool result handling
-  executionMode: 'ask',
-};
-
 // =============================================================================
-// Provider Types (for UI)
+// Provider Types (extension-only, for UI display)
 // =============================================================================
 
 /**
@@ -74,23 +49,6 @@ export interface ProviderInfo {
     enabled: boolean;
   }>;
   enabled: boolean;
-}
-
-/**
- * Configured provider info
- */
-export interface ConfiguredProvider {
-  id: string;
-  type: string;
-  name: string;
-  enabled: boolean;
-  apiKey?: string;
-  baseUrl?: string;
-  models: Array<{
-    id: string;
-    name: string;
-    enabled: boolean;
-  }>;
 }
 
 /**

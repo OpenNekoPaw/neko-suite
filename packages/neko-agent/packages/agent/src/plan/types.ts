@@ -1,18 +1,4 @@
 /**
- * Plan types — shared between agent, extension, and webview
+ * Plan types — re-exported from @neko-agent/types (Single Source of Truth)
  */
-
-export interface PlanStep {
-  id: string;
-  description: string;
-  status: 'pending' | 'approved' | 'rejected' | 'modified';
-  originalDescription?: string;
-}
-
-export interface Plan {
-  id: string;
-  title: string;
-  steps: PlanStep[];
-  status: 'pending' | 'approved' | 'rejected' | 'partial';
-  filePath?: string;
-}
+export type { Plan, PlanStep } from '@neko-agent/types';

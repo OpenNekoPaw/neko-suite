@@ -13,6 +13,7 @@
     "test:run": "vitest --run --passWithNoTests"
   },
   "dependencies": {
+    "@neko-agent/types": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "peerDependencies": {

@@ -6,20 +6,21 @@
  */
 
 import * as vscode from 'vscode';
-import type { NekoCutAPI, NekoCanvasAPI } from '@neko/shared';
+import type { NekoCutAPI, NekoCanvasAPI, ToolParameters } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
-import type { EffectPresetInfo, ShaderParamDef } from '@neko/neko-client';
+import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
 import { getLogger } from '../base';
 
 const logger = getLogger('ExtensionTools');
 
 /**
- * Tool definition interface
+ * Tool definition interface for extension-layer tools.
+ * Uses ToolParameters from @neko/shared to enforce valid JSON Schema at compile time.
  */
 export interface Tool {
   name: string;
   description: string;
-  parameters: Record<string, unknown>;
+  parameters: ToolParameters;
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
@@ -50,7 +51,7 @@ export function createNekoCutTools(): Tool[] {
     {
       name: 'GetTimelineInfo',
       description: 'Get information about the current video timeline',
-      parameters: {},
+      parameters: { type: 'object', properties: {} },
       execute: async () => {
         const api = await getAPI();
         return api.timeline.getInfo();
@@ -59,7 +60,7 @@ export function createNekoCutTools(): Tool[] {
     {
       name: 'ListTimelineElements',
       description: 'List all elements in the current timeline',
-      parameters: {},
+      parameters: { type: 'object', properties: {} },
       execute: async () => {
         const api = await getAPI();
         return api.timeline.listElements();
@@ -73,7 +74,7 @@ export function createNekoCutTools(): Tool[] {
         properties: {
           type: {
             type: 'string',
-            enum: ['video', 'audio', 'image', 'text', 'shape'],
+            enum: ['video', 'audio', 'image', 'text', 'shape', 'subtitle'],
             description: 'Type of element to add',
           },
           trackId: {
@@ -92,17 +93,22 @@ export function createNekoCutTools(): Tool[] {
             type: 'string',
             description: 'Source file path (for video/audio/image)',
           },
+          content: {
+            type: 'string',
+            description: 'Text content (for text/subtitle elements)',
+          },
         },
         required: ['type', 'trackId', 'startTime', 'duration'],
       },
       execute: async (args) => {
         const api = await getAPI();
         return api.timeline.addElement({
-          type: args.type as 'video' | 'audio' | 'image' | 'text' | 'shape',
+          type: args.type as 'video' | 'audio' | 'image' | 'text' | 'shape' | 'subtitle',
           trackId: args.trackId as string,
           startTime: args.startTime as number,
           duration: args.duration as number,
           source: args.source as string | undefined,
+          content: args.content as string | undefined,
         });
       },
     },
@@ -379,7 +385,7 @@ export function createNekoEngineEffectsTools(): Tool[] {
       name: 'ListVideoEffects',
       description:
         'List all available GPU video effects/shaders. Returns preset IDs, descriptions, and tunable parameters.',
-      parameters: {},
+      parameters: { type: 'object', properties: {} },
       execute: async (): Promise<EffectPresetInfo[]> => {
         const client = await getEngineClient();
         return client.listEffects();
@@ -447,6 +453,49 @@ export function createNekoEngineEffectsTools(): Tool[] {
           args.params as ShaderParamDef[] | undefined,
         );
         return { success: true, shaderId: args.id as string };
+      },
+    },
+  ];
+}
+
+/**
+ * Create tools for audio transcription via neko-engine Whisper ONNX.
+ * Returns timestamped segments that can be added as subtitle elements.
+ */
+export function createTranscribeTools(): Tool[] {
+  return [
+    {
+      name: 'TranscribeAudio',
+      description:
+        'Transcribe an audio or video file to text with word-level timestamps using Whisper. ' +
+        'Returns an array of timestamped segments. Use the segments with AddTimelineElement(type:"subtitle") ' +
+        'to add subtitles to the timeline.',
+      parameters: {
+        type: 'object',
+        properties: {
+          audioSource: {
+            type: 'string',
+            description: 'Absolute path to the audio or video file to transcribe',
+          },
+          model: {
+            type: 'string',
+            description: 'Whisper model name registered in the engine (default: "whisper-base")',
+          },
+        },
+        required: ['audioSource'],
+      },
+      execute: async (args): Promise<TranscribeResponse> => {
+        const client = await getEngineClient();
+        const model = (args.model as string) || 'whisper-base';
+        const audioSource = args.audioSource as string;
+
+        logger.info(`TranscribeAudio: model=${model}, source=${audioSource}`);
+        const result = await client.transcribe(model, audioSource);
+        logger.info(
+          `TranscribeAudio: ${result.segments.length} segments, total text length=${result.text.length}`,
+        );
+
+        return result;
       },
     },
   ];
