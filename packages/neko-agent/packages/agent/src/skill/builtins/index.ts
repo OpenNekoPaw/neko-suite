@@ -604,6 +604,81 @@ Report to the user what music was generated (prompt used, duration) and where it
 };
 
 /**
+ * Pipeline Diagnostics — Analyze pipeline execution results on user request
+ *
+ * Triggered when user asks: "what went wrong", "why did it fail", "pipeline status",
+ * "流水线怎么了", "哪个场景失败了", "分析执行结果"
+ */
+export const pipelineDiagnosticsSkill: Skill = {
+  name: 'pipeline-diagnostics',
+  description:
+    'Diagnose pipeline execution results. ' +
+    'Use when user mentions: what went wrong, pipeline failed, why did it fail, ' +
+    'which scene failed, analyze results, diagnose pipeline, check pipeline, ' +
+    '流水线怎么了, 哪个失败了, 分析结果, 执行报告, 诊断.',
+  content: `# Pipeline Diagnostics Assistant
+
+You help users understand what happened during a pipeline execution and guide them to fix issues.
+
+## Workflow
+
+### Step 1: Get the Report
+Call **ListPipelineReports** to see recent executions.
+If the user mentions a specific pipeline, call **GetPipelineReport** with its ID.
+
+### Step 2: Analyze
+From the report, identify:
+1. **Overall status**: completed / failed / cancelled
+2. **Failed stage**: which stage broke and why (error message)
+3. **Scene summary**: how many scenes generated vs failed, which indices failed
+4. **Duration**: how long each stage took (abnormally long stages may indicate provider issues)
+
+### Step 3: Diagnose Common Issues
+
+| Symptom | Likely Cause | Suggested Fix |
+|---------|-------------|---------------|
+| readDocument failed | File not found or unsupported format | Check file path and format |
+| parseStoryboard failed | LLM couldn't parse script structure | Simplify script or use Fountain format |
+| batchGenerate partial failure | Some media providers timed out | Retry failed scenes with RetryPipelineScenes |
+| batchGenerate all failed | Provider not configured or quota exceeded | Check media provider settings |
+| arrangeOnTimeline failed | NekoCut extension not active | Open a .neko project first |
+| Cancelled at gate | User cancelled during review | Not an error — user chose to stop |
+
+### Step 4: Recommend Next Steps
+Based on diagnosis:
+- **Partial failure**: Suggest retrying specific scenes with RetryPipelineScenes
+- **Full failure**: Suggest fixing the root cause then re-running with StartPipeline
+- **Scene quality issues**: Suggest reviewing generated media and adjusting prompts/style
+- **Successful but user unhappy**: Guide user to Gate review for manual adjustment
+
+### Step 5: If User Wants Scene-Level Analysis
+When the user says "this scene doesn't look right" or "场景不对":
+- Ask which scene index they're referring to
+- Read the storyboard scene description from the report context
+- Compare with what was generated (the media path)
+- Suggest a revised prompt and offer to retry that specific scene
+
+## Important
+- Always show concrete data (stage names, error messages, scene indices) — don't be vague
+- If no reports exist, tell the user to run a pipeline first
+- Reports are kept in memory for 1 hour after completion
+`,
+  allowedTools: [
+    'GetPipelineReport',
+    'ListPipelineReports',
+    'RetryPipelineScenes',
+    'StartPipeline',
+    'ConfirmPipelineGate',
+  ],
+  icon: '🔍',
+  source: 'builtin',
+  enabled: true,
+  command: 'pipeline-diagnostics',
+  argumentHint: '[pipeline-id]',
+  supportsArguments: true,
+};
+
+/**
  * All builtin skills (semantic discovery)
  *
  * Creative media skills only. System operation skills (file-operations, git, shell)
@@ -625,6 +700,8 @@ export const builtinSkills: Skill[] = [
   storyboardToTimelineSkill,
   comicToStoryboardSkill,
   pipelineRetrySkill,
+  // Diagnostics
+  pipelineDiagnosticsSkill,
 ];
 
 /**

@@ -8,6 +8,7 @@ export {
   createNekoCutTools,
   createNekoCanvasTools,
   createNekoEngineEffectsTools,
+  createTranscribeTools,
   type Tool,
 } from './extensionTools';
 
@@ -15,5 +16,11 @@ export {
   createPipelineTools,
   getActivePipeline,
   removePipeline,
+  recordCompletedPipeline,
+  getPipelineReport,
+  listPipelineReports,
   type PipelineToolsDeps,
+  type CompletedPipelineRecord,
 } from './pipelineTools';
+
+export { createRunReportTools } from './runReportTools';

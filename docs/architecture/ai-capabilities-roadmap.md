@@ -14,6 +14,13 @@
 - QualityCheck 智能工具（多模态 LLM 评估，按需激活）
 - VSCode 命令 + Slash 命令（`/pipeline` + `/pipeline-retry`）
 
+### Phase 2.5: 流水线质量保障 ✅
+
+- **执行报告**（P0）：`PipelineRunReport` 自动收集各阶段状态/耗时/错误，`GetPipelineReport` / `ListPipelineReports` 工具供 Agent 查询
+- **Gate 预览增强**（P1）：confirm gate 暂停时向 WebView 推送丰富预览数据（场景摘要 + 媒体路径 + 失败标记），帮助用户快速审核
+- **诊断 Skill**（P1）：`pipeline-diagnostics` 语义触发 + `/pipeline-diagnostics` 命令，Agent 引导分析失败原因并建议修复
+- **设计原则**：质量判断由用户在 Gate 完成，不采用 LLM 评 LLM 自动评测；Agent 仅在用户主动询问时分析报告
+
 ### Agent 能力现状
 
 ```
@@ -139,7 +146,7 @@ Pipeline 架构的差距不在编排模式，而在领域知识。
 
 | 任务 | 工作量 | 触发条件 |
 |------|--------|---------|
-| QualityCheck P1 视频帧 | 1 天 | neko-engine RenderFrame 端点就绪 |
+| ~~QualityCheck P1 视频帧~~ | ~~1 天~~ | 重新评估：质量判断由用户在 Gate 完成，不再做 LLM 自动评测 |
 | Canvas 分镜可视化 | 3-4 天 | 用户需要可视化分镜编排 |
 | 执行 trace | 2-3 天 | 调试复杂多轮交互困难 |
 | 高级循环 Stage | 4-5 天 | QualityCheck 工具能力不够用 |

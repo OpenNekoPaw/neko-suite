@@ -21,6 +21,9 @@ export type {
   PipelineHandle,
   IPipelineExecutor,
   IPipelineRegistry,
+  StageRecord,
+  SceneSummary,
+  PipelineRunReport,
 } from './types';
 
 // Executor
@@ -62,3 +65,22 @@ export type { GeneratePilotStageDeps } from './stages/generate-pilot';
 // Hook Registry
 export { PipelineHookRegistry, createPipelineHookRegistry } from './hook-registry';
 export type { HookHandler } from './hook-registry';
+
+// Run Report
+export {
+  collectRunReport,
+  createReportCollector,
+  type ReportCollector,
+} from './run-report-collector';
+
+// QA Types
+export type {
+  SceneVerdict,
+  SceneReviewCard,
+  GatePreviewData,
+  SceneDiagnostic,
+  DiagnosticsReport,
+  StyleDriftPair,
+  CharacterAppearance,
+  ConsistencyReport,
+} from './qa-types';

@@ -284,3 +284,55 @@ export interface IPipelineRegistry {
   /** List all available flows */
   listFlows(): { id: FlowId; stages: string[] }[];
 }
+
+// =============================================================================
+// Pipeline Run Report (P0: execution diagnostics)
+// =============================================================================
+
+/** Per-stage execution record within a pipeline run */
+export interface StageRecord {
+  /** Stage name */
+  name: string;
+  /** Execution outcome */
+  status: 'success' | 'failed' | 'skipped';
+  /** Wall-clock duration in milliseconds */
+  durationMs: number;
+  /** Error message if status is 'failed' */
+  error?: string;
+  /** Reason if status is 'skipped' */
+  skipReason?: string;
+}
+
+/** Scene-level summary within a pipeline run report */
+export interface SceneSummary {
+  /** Total scene count from storyboard */
+  total: number;
+  /** Successfully generated scenes */
+  generated: number;
+  /** Failed scene count */
+  failed: number;
+  /** Indices of failed scenes (for retry) */
+  failedIndices: number[];
+}
+
+/** Complete pipeline execution report */
+export interface PipelineRunReport {
+  /** Pipeline execution ID (matches PipelineHandle.id) */
+  id: string;
+  /** Flow that was executed */
+  flowId: FlowId;
+  /** ISO 8601 timestamp when pipeline started */
+  startedAt: string;
+  /** ISO 8601 timestamp when pipeline completed/failed */
+  completedAt: string;
+  /** Overall execution outcome */
+  status: 'completed' | 'failed' | 'cancelled';
+  /** Per-stage execution records */
+  stages: StageRecord[];
+  /** Final (or partial) pipeline context */
+  finalContext: PipelineContext;
+  /** Index of the stage that caused failure (undefined if completed) */
+  failedStageIndex?: number;
+  /** Scene generation summary (populated when batchGenerate stage ran) */
+  sceneSummary?: SceneSummary;
+}

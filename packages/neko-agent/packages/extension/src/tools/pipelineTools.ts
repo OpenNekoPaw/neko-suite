@@ -7,6 +7,7 @@
  */
 
 import type { Tool } from './extensionTools';
+import type { PipelineRunReport } from '@neko/agent/pipeline';
 // Pipeline types are defined in the agent package
 // Using inline types to avoid cross-package import issues at build time
 type FlowId = 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
@@ -54,30 +55,32 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         'flowD (script→video), flowE (comic→storyboard→video), ' +
         'flowF (script→storyboard→video, most common)',
       parameters: {
-        flowId: {
-          type: 'string',
-          required: true,
-          enum: ['flowA', 'flowB', 'flowC', 'flowD', 'flowE', 'flowF'],
-          description: 'Which flow to execute',
+        type: 'object',
+        properties: {
+          flowId: {
+            type: 'string',
+            enum: ['flowA', 'flowB', 'flowC', 'flowD', 'flowE', 'flowF'],
+            description: 'Which flow to execute',
+          },
+          source: {
+            type: 'string',
+            description: 'Input source: file path (.fountain, .md, .pdf, .docx) or inline text',
+          },
+          sourceFormat: {
+            type: 'string',
+            enum: ['fountain', 'freeform', 'document'],
+            description: 'Source format hint (auto-detected from extension if omitted)',
+          },
+          style: {
+            type: 'string',
+            description: 'Global visual style (e.g., "anime", "cinematic", "corporate")',
+          },
+          skipStages: {
+            type: 'string',
+            description: 'Comma-separated stage names to skip (e.g., "generateMusic,addSubtitles")',
+          },
         },
-        source: {
-          type: 'string',
-          required: true,
-          description: 'Input source: file path (.fountain, .md, .pdf, .docx) or inline text',
-        },
-        sourceFormat: {
-          type: 'string',
-          enum: ['fountain', 'freeform', 'document'],
-          description: 'Source format hint (auto-detected from extension if omitted)',
-        },
-        style: {
-          type: 'string',
-          description: 'Global visual style (e.g., "anime", "cinematic", "corporate")',
-        },
-        skipStages: {
-          type: 'string',
-          description: 'Comma-separated stage names to skip (e.g., "generateMusic,addSubtitles")',
-        },
+        required: ['flowId', 'source'],
       },
       async execute(args: Record<string, unknown>): Promise<unknown> {
         const flowId = args['flowId'] as FlowId;
@@ -118,17 +121,19 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         'Confirm or cancel a pipeline gate. Pipelines pause at confirmation gates ' +
         '(e.g., after generating prompts) to let you review before proceeding.',
       parameters: {
-        pipelineId: {
-          type: 'string',
-          required: true,
-          description: 'Pipeline ID (returned by StartPipeline)',
+        type: 'object',
+        properties: {
+          pipelineId: {
+            type: 'string',
+            description: 'Pipeline ID (returned by StartPipeline)',
+          },
+          action: {
+            type: 'string',
+            enum: ['confirm', 'cancel'],
+            description: 'Whether to confirm and proceed or cancel the pipeline',
+          },
         },
-        action: {
-          type: 'string',
-          required: true,
-          enum: ['confirm', 'cancel'],
-          description: 'Whether to confirm and proceed or cancel the pipeline',
-        },
+        required: ['pipelineId', 'action'],
       },
       async execute(args: Record<string, unknown>): Promise<unknown> {
         const pipelineId = args['pipelineId'] as string;
@@ -155,16 +160,19 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         'Retry failed scenes from a completed pipeline. Use when some scenes failed ' +
         'generation and the user wants to regenerate them without restarting the entire pipeline.',
       parameters: {
-        pipelineId: {
-          type: 'string',
-          required: true,
-          description: 'Pipeline ID of the completed pipeline with failed scenes',
+        type: 'object',
+        properties: {
+          pipelineId: {
+            type: 'string',
+            description: 'Pipeline ID of the completed pipeline with failed scenes',
+          },
+          sceneIndices: {
+            type: 'string',
+            description:
+              'Comma-separated scene indices to retry (e.g., "2,5,7"). If omitted, retries all failed scenes.',
+          },
         },
-        sceneIndices: {
-          type: 'string',
-          description:
-            'Comma-separated scene indices to retry (e.g., "2,5,7"). If omitted, retries all failed scenes.',
-        },
+        required: ['pipelineId'],
       },
       async execute(args: Record<string, unknown>): Promise<unknown> {
         const pipelineId = args['pipelineId'] as string;
@@ -180,7 +188,8 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
           };
         }
 
-        const failedScenes = (handle.failedScenes as number[]) ?? [];
+        const { result } = handle;
+        const failedScenes = (result['failedScenes'] as number[] | undefined) ?? [];
         if (failedScenes.length === 0) {
           return { status: 'no_failures', message: 'No failed scenes to retry.' };
         }
@@ -194,12 +203,12 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
 
         // Start a new pipeline with only the failed scenes
         const ctx = {
-          ...(handle.context as Record<string, unknown>),
+          ...(result['context'] as Record<string, unknown>),
           retrySceneIndices: toRetry,
         };
 
         const newHandle = deps.startPipeline(
-          (handle.flowId as FlowId) ?? 'flowF',
+          (result['flowId'] as FlowId) ?? 'flowF',
           ctx as PipelineContext,
           { skipStages: ['readDocument', 'parseStoryboard'] },
         );
@@ -216,16 +225,54 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
   ];
 }
 
-/** Store completed pipeline results for retry support */
-const completedPipelines = new Map<string, Record<string, unknown>>();
+/** Store completed pipeline results + run reports for retry/diagnostics */
+const completedPipelines = new Map<string, CompletedPipelineRecord>();
+
+/** Internal record combining retry data and run report */
+export interface CompletedPipelineRecord {
+  /** Original pipeline result for retry support */
+  result: Record<string, unknown>;
+  /** Structured run report (populated by progress bridge) */
+  report?: PipelineRunReport;
+}
 
 /**
  * Record a completed pipeline result (called from progress bridge)
  */
-export function recordCompletedPipeline(pipelineId: string, result: Record<string, unknown>): void {
-  completedPipelines.set(pipelineId, result);
+export function recordCompletedPipeline(
+  pipelineId: string,
+  result: Record<string, unknown>,
+  report?: PipelineRunReport,
+): void {
+  completedPipelines.set(pipelineId, { result, report });
   // Auto-cleanup after 1 hour
   setTimeout(() => completedPipelines.delete(pipelineId), 60 * 60 * 1000);
+}
+
+/**
+ * Get a run report by pipeline ID (for report query tools)
+ */
+export function getPipelineReport(pipelineId: string): PipelineRunReport | undefined {
+  return completedPipelines.get(pipelineId)?.report;
+}
+
+/**
+ * List all available run reports (newest first, limited)
+ */
+export function listPipelineReports(limit: number = 10): PipelineRunReport[] {
+  const reports: PipelineRunReport[] = [];
+  completedPipelines.forEach((record) => {
+    if (record.report) {
+      reports.push(record.report);
+    }
+  });
+  // Sort by completedAt descending
+  reports.sort((a, b) => {
+    const timeA = new Date(a.completedAt).getTime();
+    const timeB = new Date(b.completedAt).getTime();
+    return timeB - timeA;
+  });
+  return reports.slice(0, limit);
 }
 
 /**

@@ -4,11 +4,19 @@
  * Subscribes to a PipelineHandle's event stream and converts each PipelineEvent
  * into a WebView-consumable message, following the same pattern as
  * AgentStreamProcessor._subscribeToTaskProgress().
+ *
+ * Also collects a PipelineRunReport via ReportCollector, passing it to
+ * recordCompletedPipeline for in-memory diagnostics.
  */
 
 import * as vscode from 'vscode';
 import { getLogger } from '../base';
 import { removePipeline, recordCompletedPipeline } from '../tools/pipelineTools';
+import {
+  createReportCollector,
+  type FlowId,
+  type PipelineEvent as AgentPipelineEvent,
+} from '@neko/agent/pipeline';
 
 // Pipeline event types from @neko/agent pipeline (inline to avoid cross-package import)
 interface PipelineEvent {
@@ -44,13 +52,7 @@ interface PipelineWebViewMessage {
  *
  * Call this after StartPipeline tool returns successfully.
  * Automatically cleans up when pipeline completes or errors.
- */
-/**
- * Subscribe to pipeline progress and forward events to WebView.
- *
- * @param webview - Target webview for postMessage
- * @param pipelineId - Pipeline execution ID
- * @param handle - Pipeline handle with events stream
+ * Collects a PipelineRunReport and passes it to recordCompletedPipeline.
  */
 export function subscribePipelineProgress(
   webview: vscode.Webview,
@@ -64,10 +66,16 @@ export function subscribePipelineProgress(
     data: { flowId: handle.flowId, status: 'running' },
   });
 
+  // Create report collector to track per-stage execution
+  const collector = createReportCollector(pipelineId, handle.flowId as FlowId);
+
   // Consume events in background (fire-and-forget)
   void (async () => {
     try {
       for await (const event of handle.events) {
+        // Feed event to report collector
+        collector.processEvent(event as AgentPipelineEvent);
+
         switch (event.type) {
           case 'pipeline_start':
             postToWebview(webview, {
@@ -110,14 +118,11 @@ export function subscribePipelineProgress(
             break;
 
           case 'gate_waiting': {
-            const preview = event['preview'] as Record<string, unknown> | undefined;
+            const ctx = event['preview'] as Record<string, unknown> | undefined;
             postToWebview(webview, {
               type: 'pipelineGateWaiting',
               pipelineId,
-              data: {
-                stage: event['stage'],
-                scenes: preview?.['scenes'],
-              },
+              data: buildGatePreview(event['stage'] as string, ctx),
             });
             break;
           }
@@ -146,26 +151,31 @@ export function subscribePipelineProgress(
                 failedScenes: result?.['failedScenes'],
               },
             });
-            // Record for retry support
+            // Record for retry + diagnostics (with run report)
             if (result) {
-              recordCompletedPipeline(pipelineId, {
-                ...result,
-                flowId: handle.flowId,
-                context: result,
-              });
+              const report = collector.finalize();
+              recordCompletedPipeline(
+                pipelineId,
+                { ...result, flowId: handle.flowId, context: result },
+                report,
+              );
             }
             removePipeline(pipelineId);
             break;
           }
 
-          case 'pipeline_error':
+          case 'pipeline_error': {
             postToWebview(webview, {
               type: 'pipelineError',
               pipelineId,
               data: { error: event['error'], stage: event['stage'] },
             });
+            // Record failed report for diagnostics
+            const report = collector.finalize();
+            recordCompletedPipeline(pipelineId, { flowId: handle.flowId }, report);
             removePipeline(pipelineId);
             break;
+          }
         }
       }
     } catch (error) {
@@ -178,9 +188,47 @@ export function subscribePipelineProgress(
           stage: 'unknown',
         },
       });
+      // Record report even on stream error
+      const report = collector.finalize();
+      recordCompletedPipeline(pipelineId, { flowId: handle.flowId }, report);
       removePipeline(pipelineId);
     }
   })();
+}
+
+/**
+ * Build enriched gate preview data from pipeline context.
+ * Pairs each scene with its generated media path and flags failures.
+ */
+function buildGatePreview(
+  stageName: string,
+  ctx: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!ctx) return { stage: stageName, scenes: [] };
+
+  const scenes = ctx['scenes'] as Array<Record<string, unknown>> | undefined;
+  const generatedPaths = ctx['generatedPaths'] as string[] | undefined;
+  const failedScenes = ctx['failedScenes'] as number[] | undefined;
+  const failedSet = new Set(failedScenes ?? []);
+
+  // Build review cards: pair each scene with its media
+  const reviewCards = (scenes ?? []).map((scene, i) => ({
+    sceneIndex: i,
+    heading: scene['heading'] ?? '',
+    description: scene['description'] ?? '',
+    mediaPath: generatedPaths?.[i] ?? '',
+    mediaType: 'image' as const, // TODO: detect from extension
+    failed: failedSet.has(i),
+  }));
+
+  return {
+    stage: stageName,
+    scenes: reviewCards,
+    globalStyle: ctx['globalStyle'] ?? '',
+    failedIndices: failedScenes ?? [],
+    totalScenes: scenes?.length ?? 0,
+    generatedCount: generatedPaths?.length ?? 0,
+  };
 }
 
 function postToWebview(webview: vscode.Webview, message: PipelineWebViewMessage): void {

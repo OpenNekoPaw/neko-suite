@@ -25,6 +25,7 @@ import {
 } from '@neko/agent/pipeline';
 import { createPipelineTools } from '../tools/pipelineTools';
 import { createQualityCheckTools } from '../tools/qualityCheckTools';
+import { createRunReportTools } from '../tools/runReportTools';
 import {
   VSCodeFileReader,
   DocumentReaderAdapter,
@@ -151,10 +152,16 @@ export function bootstrapPipeline(
     toolRegistry.register(tool);
   }
 
+  // Register run report query tools (reads from in-memory completedPipelines)
+  const reportTools = createRunReportTools();
+  for (const tool of reportTools) {
+    toolRegistry.register(tool);
+  }
+
   logger.info('Pipeline orchestration layer initialized', {
     stages: registry.listStages(),
     flows: registry.listFlows().map((flow: { id: string }) => flow.id),
-    tools: pipelineTools.map((t: { name: string }) => t.name),
+    tools: [...pipelineTools, ...reportTools].map((t: { name: string }) => t.name),
   });
 
   return { registry, startPipeline };
