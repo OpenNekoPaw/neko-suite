@@ -107,6 +107,11 @@
       "outputs": ["coverage/**"],
       "cache": false
     },
+    "package": {
+      "dependsOn": ["compile"],
+      "outputs": ["*.vsix"],
+      "cache": false
+    },
     "clean": {
       "cache": false
     }

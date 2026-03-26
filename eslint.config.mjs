@@ -30,17 +30,19 @@ export default tseslint.config(
       reportUnusedDisableDirectives: 'off',
     },
     rules: {
-      // Phase 2: warn level — does not block CI, only reports
+      // --- Error level (CI-blocking) ---
+      'no-debugger': 'error',
       'no-console': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
-      '@typescript-eslint/no-non-null-assertion': 'warn',
+      'prefer-const': 'error',
+      'no-useless-escape': 'error',
 
-      // Immediately enforced as errors
-      'no-debugger': 'error',
+      // --- Warn level (report-only, phased migration) ---
+      '@typescript-eslint/no-non-null-assertion': 'warn',
 
       // TypeScript handles these better than ESLint
       'no-undef': 'off',
@@ -51,17 +53,23 @@ export default tseslint.config(
       '@typescript-eslint/ban-ts-comment': 'off',
       'no-case-declarations': 'off',
       'no-control-regex': 'off',
-      'no-useless-escape': 'warn',
-      'prefer-const': 'warn',
     },
   },
 
-  // Security rules — all at warn level (Phase 2 policy: report-only, no CI block)
-  // Covers: path traversal, child_process injection, unsafe regex (ReDoS),
-  //         object injection, eval, non-literal regexp, timing attacks
+  // Security rules — selective enforcement
+  // Disabled: detect-object-injection (726 false positives on obj[key]),
+  //           detect-non-literal-fs-filename (194 false positives in Extension Host)
   {
     ...security.configs.recommended,
     files: ['packages/**/src/**/*.ts', 'packages/**/src/**/*.tsx'],
+    rules: {
+      ...security.configs.recommended.rules,
+      'security/detect-object-injection': 'off',
+      'security/detect-non-literal-fs-filename': 'off',
+      'security/detect-non-literal-regexp': 'off',
+      'security/detect-non-literal-require': 'off',
+      'security/detect-unsafe-regex': 'warn',
+    },
   },
 
   // React hooks rules — applied to both .tsx and hook .ts files

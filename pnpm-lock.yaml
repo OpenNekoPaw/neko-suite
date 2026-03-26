@@ -1189,6 +1189,9 @@ importers:
 
   packages/neko-story/packages/webview:
     dependencies:
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
       react:
         specifier: ^18.2.0
         version: 18.3.1

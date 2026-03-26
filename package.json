@@ -31,6 +31,7 @@
     "lint:fix": "eslint \"packages/**/src/**/*.{ts,tsx}\" --fix",
     "lint:turbo": "turbo run lint",
     "test": "turbo run test",
+    "package:all": "turbo run package --filter='neko-*' --filter='!neko-auth'",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
     "nekoagent": "pnpm dlx tsx packages/neko-agent/packages/cli/src/cli.ts",
