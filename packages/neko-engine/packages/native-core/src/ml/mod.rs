@@ -179,11 +179,92 @@ impl ModelRegistry {
         }
         Ok(())
     }
+
+    /// Unload sessions that have not been used for `idle_secs` seconds.
+    ///
+    /// Called after each inference to reclaim GPU/CPU memory from idle models.
+    /// Sessions are dropped here (RAII), which releases ONNX Runtime resources.
+    pub fn evict_idle(&self, idle_secs: u64) -> Result<()> {
+        let threshold = std::time::Duration::from_secs(idle_secs);
+        let mut loaded = self
+            .loaded
+            .lock()
+            .map_err(|e| Error::Other(format!("Lock error: {}", e)))?;
+
+        let now = std::time::Instant::now();
+        let stale: Vec<String> = loaded
+            .iter()
+            .filter(|(_, m)| now.duration_since(m.last_used) >= threshold)
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        for name in stale {
+            tracing::info!(model = %name, idle_secs, "Evicting idle model");
+            loaded.remove(&name);
+        }
+        Ok(())
+    }
 }
+
+// =============================================================================
+// Test helpers (test builds only)
+// =============================================================================
+
+#[cfg(test)]
+impl ModelRegistry {
+    /// Number of currently-loaded sessions.
+    pub fn loaded_count(&self) -> usize {
+        self.loaded.lock().unwrap().len()
+    }
+
+    /// Load an ONNX model from raw bytes without going through the file-based
+    /// registry. Requires the ort dynamic library to be present at runtime.
+    pub fn load_from_memory_for_test(&self, name: &str, bytes: &[u8]) -> Result<()> {
+        let session = ort::session::Session::builder()
+            .map_err(|e| Error::Other(e.to_string()))?
+            .commit_from_memory(bytes)
+            .map_err(|e| Error::Other(e.to_string()))?;
+        let mut loaded = self
+            .loaded
+            .lock()
+            .map_err(|e| Error::Other(format!("Lock error: {}", e)))?;
+        loaded.insert(
+            name.to_string(),
+            LoadedModel {
+                info: ModelInfo {
+                    name: name.to_string(),
+                    path: "<memory>".to_string(),
+                    framework: "onnx".to_string(),
+                    task: "test".to_string(),
+                },
+                session,
+                last_used: Instant::now(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Backdate `last_used` for a loaded model (eviction timing tests).
+    pub fn set_last_used_for_test(&self, name: &str, time: Instant) {
+        if let Ok(mut loaded) = self.loaded.lock() {
+            if let Some(m) = loaded.get_mut(name) {
+                m.last_used = time;
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------------------
+    // Registry: register / list / unregister
+    // ------------------------------------------------------------------
 
     #[test]
     fn test_register_and_list() {
@@ -222,5 +303,83 @@ mod tests {
         registry.register(info).unwrap();
         registry.unregister("m1").unwrap();
         assert_eq!(registry.list().len(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // evict_idle — timing logic
+    // ------------------------------------------------------------------
+
+    /// Minimal ONNX Identity model (52 bytes):
+    ///   ir_version=7, opset=17, graph: float x → Identity → float y
+    const MINIMAL_ONNX: &[u8] = &[
+        0x08, 0x07, 0x42, 0x04, 0x0a, 0x00, 0x10, 0x11, 0x3a, 0x2a, 0x0a,
+        0x12, 0x0a, 0x01, 0x78, 0x12, 0x01, 0x79, 0x22, 0x08, 0x49, 0x64,
+        0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x2a, 0x00, 0x5a, 0x09, 0x0a,
+        0x01, 0x78, 0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, 0x62, 0x09, 0x0a,
+        0x01, 0x79, 0x12, 0x04, 0x0a, 0x02, 0x08, 0x01,
+    ];
+
+    /// evict_idle on an empty registry is always a no-op.
+    #[test]
+    fn test_evict_idle_empty_registry() {
+        let registry = ModelRegistry::new(3);
+        assert!(registry.evict_idle(300).is_ok());
+        assert_eq!(registry.loaded_count(), 0);
+    }
+
+    /// A session backdated beyond the threshold must be evicted.
+    ///
+    /// Requires `ORT_DYLIB_PATH` (or the ort dynamic library on the system
+    /// library path) to load the embedded minimal ONNX model.
+    #[test]
+    #[ignore = "requires ORT_DYLIB_PATH or libonnxruntime installed"]
+    fn test_evict_idle_removes_stale_sessions() {
+        let registry = ModelRegistry::new(3);
+        registry
+            .load_from_memory_for_test("stale", MINIMAL_ONNX)
+            .expect("load minimal ONNX");
+        assert_eq!(registry.loaded_count(), 1);
+
+        // Backdate last_used to 400 s ago — beyond the 300 s threshold.
+        let past = Instant::now() - std::time::Duration::from_secs(400);
+        registry.set_last_used_for_test("stale", past);
+
+        registry.evict_idle(300).unwrap();
+        assert_eq!(registry.loaded_count(), 0, "stale session must be evicted");
+    }
+
+    /// A session used recently must survive eviction.
+    #[test]
+    #[ignore = "requires ORT_DYLIB_PATH or libonnxruntime installed"]
+    fn test_evict_idle_keeps_fresh_sessions() {
+        let registry = ModelRegistry::new(3);
+        registry
+            .load_from_memory_for_test("fresh", MINIMAL_ONNX)
+            .expect("load minimal ONNX");
+        assert_eq!(registry.loaded_count(), 1);
+
+        // last_used defaults to now — well within the 300 s threshold.
+        registry.evict_idle(300).unwrap();
+        assert_eq!(registry.loaded_count(), 1, "fresh session must be kept");
+    }
+
+    /// Mixed: stale session is evicted, fresh session is kept.
+    #[test]
+    #[ignore = "requires ORT_DYLIB_PATH or libonnxruntime installed"]
+    fn test_evict_idle_mixed() {
+        let registry = ModelRegistry::new(4);
+        registry
+            .load_from_memory_for_test("stale", MINIMAL_ONNX)
+            .expect("load minimal ONNX for stale");
+        registry
+            .load_from_memory_for_test("fresh", MINIMAL_ONNX)
+            .expect("load minimal ONNX for fresh");
+        assert_eq!(registry.loaded_count(), 2);
+
+        let past = Instant::now() - std::time::Duration::from_secs(400);
+        registry.set_last_used_for_test("stale", past);
+
+        registry.evict_idle(300).unwrap();
+        assert_eq!(registry.loaded_count(), 1, "only fresh session must remain");
     }
 }

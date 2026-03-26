@@ -11,7 +11,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全（audio/canvas/sketch 全覆盖）+ 文档完善 |
-| **neko-engine** | Alpha | 88% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad） |
+| **neko-engine** | Alpha | 90% | GPU PBR 渲染 + 编解码 + FIFO 导出 + 统一 HTTP/WS + 响度标准化 + 预加载优化 + 粒子/后处理/IBL + 设备代理（mic/midi/gamepad）+ ONNX ML 推理（upscale/denoise/clip/whisper，macOS CoreML EP）|
 | **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 拖拽修复 |
 | **neko-agent** | Alpha | 92% | Agent 引擎 + LLM 平台 + CLI + UI + Phase 3 重构 ✅ + 媒体工具贯通 ✅ + AI SDK v3 ✅ + Pipeline Hook ✅ + 对话持久化完整 ✅（含 CLI --resume + /resume）+ 分镜→视频 Pipeline ✅；剩余：MCP 重连退避 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
@@ -61,7 +61,8 @@ neko-engine GPU 渲染管线 + 全格式编解码 + FIFO 导出 + 统一 HTTP/WS
 - MCP 客户端重连退避：`callTool()` 检测到 `isConnected()==false` 时无自动重连，进程崩溃后需重启会话（低复杂度：仅需在 `callTool()` 加一次重连尝试，但触发频率低，延后处理）
 
 ### neko-agent — 延后到后续 Phase
-- AI 字幕生成 / 自动配乐 / 画面描述（→ Phase 4 音频工作站阶段，依赖 neko-audio）
+- AI 字幕生成：前置条件已满足（Phase M2 Whisper + `EngineClient.transcribe()` + `SubtitleElement` 类型），缺失：Whisper 时间戳切分 + `TranscribeAudio` 工具 + `NekoCutAPI` subtitle 类型扩展（见 TODO.md 详细拆分）
+- 自动配乐（→ neko-audio）；画面描述（→ neko-sketch S.4）
 - MCP 桥接专业软件 Blender / ComfyUI / Photoshop（→ Phase 3.4 AI 辅助 3D + neko-model）
 - SubAgent Skills：Seed_Manager + Audio_Mixer + 镜头语言通用 Skill
 
@@ -312,7 +313,7 @@ AI 生成素材默认保留在工作区，用户通过 Explorer 右键菜单按�
 **核心设计**：外部运行时（Ollama/ComfyUI）用户自行管理，通过 Provider/MCP 接入 neko-agent。neko-engine 嵌入 ONNX Runtime 原生处理轻量 ML 任务。媒体生成继续使用云端 API。
 
 - Phase M1 ✅：neko-market `ModelInstallTarget.onPostInstall/onPreUninstall` — GGUF → Ollama；ONNX → Engine（12 tests）
-- Phase M2 ✅：neko-engine `ort` crate ONNX — ml/ 模块 + IMlService + ModelsController +7 action + EngineClient 模型方法（10 Rust tests）。推理管线 placeholder，等 ort 2.0 stable
+- Phase M2 ✅（macOS）：neko-engine `ort` crate ONNX 推理管线全实现 — ml/ 模块（upscale/denoise/clip/whisper）+ CoreML EP + MlService 初始化（max_loaded=3, DeviceSelection::Auto）+ 编译 0 错误 + 6 ML 单元测试通过；剩余：ModelRegistry 时间窗口淘汰、端到端集成测试、Windows/Linux 跨平台打包（延后规划）
 - Phase M3（待评估）：neko-engine `candle` SD/SDXL 图片生成（前置：candle 推理 < PyTorch 2x 且支持 Flux）
 - 外部运行时接入（零 neko 代码）：Ollama → Provider 配置；ComfyUI → MCP Server 或 Provider
 
@@ -513,4 +514,4 @@ neko-engine (分段渲染 + 转场 + 特效)
 
 ---
 
-*最后更新: 2026-03-25（核实 neko-agent：--resume/\/resume 已完整实现，ContextManager 竞态架构天然不存在，两项从待完成移入已完成；唯一剩余项为 MCP 重连退避；进度提升至 92%）*
+*最后更新: 2026-03-26（Phase M2 macOS 完成；CI 新增 onnx 编译检查 + ORT dylib timing tests；AI 字幕生成前置条件分析：Whisper 时间戳 + TranscribeAudio 工具 + NekoCutAPI subtitle 类型为剩余缺口）*

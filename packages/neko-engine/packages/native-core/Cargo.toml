@@ -90,7 +90,8 @@ gilrs = "0.11"
 
 # ML inference - ONNX Runtime
 ort = { workspace = true, optional = true }
-ndarray = { version = "0.16", optional = true }
+ndarray = { workspace = true, optional = true }
+rustfft = { workspace = true, optional = true }
 
 # Base64 encoding
 base64.workspace = true
@@ -129,4 +130,4 @@ videotoolbox = []  # macOS VideoToolbox
 vaapi = []         # Linux VAAPI
 cuda = []          # NVIDIA CUDA
 tracy = ["tracing-tracy", "tracy-client"]  # Tracy profiler integration
-onnx = ["ort", "ndarray"]  # ONNX Runtime ML inference
+onnx = ["ort", "ndarray", "rustfft"]  # ONNX Runtime ML inference

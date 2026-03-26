@@ -142,6 +142,63 @@ L3 - LSP Indexer
 - 集成 ort (ONNX Runtime) 加载 CLIP/Whisper
 - 实现语义搜索和 Prompt 对齐评分
 - 实现 Completion Provider (基于风格推荐 Prompt)
+- Fountain 剧本解析：ScriptIndex（场次/角色/行号结构化索引）+ 诊断规则
+
+## 剧本 Agent 索引策略
+
+> 核心结论：**LSP 结构索引与向量索引互补，不可互替。** 二者分别对应不同的查询类型，Agent 工作流依赖两者协同。
+
+### 问题分类与工具对应
+
+| 查询类型 | 正确工具 | 原因 |
+|----------|----------|------|
+| "第 12 场在哪里？" | L1 LSP 结构索引 | 语法问题，pest 解析即可，< 100ms |
+| "张三在哪几场出现？" | L1 符号引用（Find References） | 精确词匹配，结构索引直接命中 |
+| "台词字数超限？" | L1 LSP 诊断规则 | 规则校验，无需 AI |
+| "所有情绪压抑的场景？" | L3 向量语义搜索 | 关键词无法覆盖，必须用嵌入向量 |
+| "这个伏笔是否在后文呼应？" | L3 向量语义搜索 | 语义相似度匹配，非字面匹配 |
+
+### Agent 工作流
+
+```
+剧本文件 (.fountain)
+    │
+    ├─ pest/nom 解析（L1 LSP Core）
+    │       ▼
+    │   ScriptIndex
+    │   ├── scenes[]: { id, title, int/ext, line_start, line_end }
+    │   ├── characters[]: { name, appearances[] }
+    │   └── props[] / locations[]
+    │       │
+    │       ├── Agent: Read(offset=line_start, limit=N)  → 精准读取场次
+    │       ├── VSCode Outline 面板导航
+    │       └── Agent: Grep(pattern="角色名")            → 精确匹配
+    │
+    └─ 嵌入模型（L3 向量索引 Qdrant）
+            ▼
+        VectorIndex
+        ├── 分块单位：场次（保留 scene_id + line_start 元数据）
+        └── 查询返回 scene_id → 再用 Read 取完整原文
+
+        Agent 工作流示例：
+        script_search("愤怒爆发") → [{ scene_id: "S45", score: 0.91, line_start: 380 }]
+            → Read(offset=380, limit=38)  → 读取完整场次原文
+```
+
+**关键设计约束**：向量搜索返回值**必须携带 `line_start`**，才能衔接 Read 工具做精准读取。Qdrant payload 字段存储结构元数据（`scene_id` / `line_start` / `line_end`），不能只存文本向量。
+
+### 与 neko-agent 工具层的对接
+
+L1 ScriptIndex 通过 `script-index-tool`（新增内置工具）暴露给 Agent；L3 向量搜索通过 `neko-script-search` MCP 服务暴露，与现有 MCP 体系（`mcp-manager.ts`）对接，无需改动 Agent 核心。
+
+```
+neko-story 技能（ToolGroupRegistry）
+├── 内置：Read / Grep / Write / MemoryWrite
+├── 内置：script-index-tool（L1 场次结构查询）
+└── MCP: neko-script-search（L3 向量语义搜索）
+```
+
+持久化的人物志、世界观通过 `MemoryWrite` 存入 `.neko/memory.md`，跨会话复用。
 
 ## 技术选型
 
@@ -151,4 +208,4 @@ L3 - LSP Indexer
 | 语法解析 | pest / nom (Rust) | Fountain 剧本解析 |
 | 信号处理 | FFmpeg (已集成) | 音视频基础诊断 |
 | 语义模型 | ort (ONNX Runtime) | CLIP / Whisper / YOLO |
-| 向量索引 | Qdrant (本地嵌入式) | 素材语义检索 |
+| 向量索引 | Qdrant (本地嵌入式) | 素材语义检索；剧本场景需在 payload 中存储 line_start 元数据 |

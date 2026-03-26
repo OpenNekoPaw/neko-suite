@@ -10,6 +10,11 @@ use neko_native_core::services::{
     IPuppetService, MidiService, NodeService, PuppetService, SceneService, TaskService,
     TimelineService, VideoService,
 };
+#[cfg(feature = "onnx")]
+use neko_native_core::{
+    ml::onnx_runtime::DeviceSelection,
+    services::{IMlService, MlService},
+};
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
 
@@ -136,7 +141,10 @@ impl EngineApi {
             resource_registry.clone(),
             stream_registry.clone(),
             #[cfg(feature = "onnx")]
-            None, // MlService — created when first model is registered
+            Some(std::sync::Arc::new(MlService::new(
+                3,                    // max_loaded: keep at most 3 sessions resident
+                DeviceSelection::Auto, // macOS → CoreML EP; others → CPU
+            )) as std::sync::Arc<dyn IMlService>),
         );
 
         Ok(Self {

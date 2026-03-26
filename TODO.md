@@ -138,7 +138,10 @@
 - [ ] AI 字幕生成 + 智能素材推荐
 - [x] 场景描述 → 自动配乐 ✅（`sceneToMusicSkill` 已实现：GetTimelineInfo → ListElements → GenerateMusic → AddElement）
 - [ ] 场景描写辅助
-- [ ] AI 字幕生成：前置条件缺失（平台层无 ASR service，`speech-to-text` routing 未实现）；建议等 Engine Whisper ONNX 推理管线（Phase M2）完成后一起做，走本地 transcribe → SRT → AddElement 路径
+- [ ] AI 字幕生成：前置条件已满足（Phase M2 Whisper 推理 ✅ + `models:transcribe` action ✅ + `EngineClient.transcribe()` ✅ + `SubtitleElement`/`SubtitleCue` 类型 ✅）。**缺失三件事**：
+  - [ ] **Whisper 时间戳**：当前 `transcribe()` 只返回合并文本，无逐句时间戳。选项 A：改 decoder 输出时间戳 token（精确）；选项 B：平均分段（快速 MVP）
+  - [ ] **`TranscribeAudio` Agent 工具**（~60 行 TS）：调 `EngineClient.transcribe()` → 生成 `SubtitleCue[]` → 调 `AddElement(type:'subtitle')`
+  - [ ] **`NekoCutAPI` 扩展**（~5 行）：`TimelineElementConfig.type` 加上 `'subtitle'`，`AddTimelineElement` 工具同步支持
 
 ### AI MCP Tools
 - [ ] neko-model：`face.generate_params` / `face.from_image` / `face.adjust`
@@ -188,20 +191,18 @@
 
 ### 本地模型运行时 — [ADR](./docs/architecture/model-runtime.md)
 > 不创建 neko-runtime 包。外部运行时（Ollama/ComfyUI）用户自行管理，通过 Provider/MCP 接入。Engine ONNX/candle 原生处理。
-- [x] Phase M2 ✅：neko-engine ONNX 基础设施 — `ort` crate + ml/ 模块（6 文件）+ IMlService trait + ModelsController 扩展（+7 action）+ EngineClient 模型方法（10 Rust tests）
-- [ ] Phase M2 剩余：推理管线实现
-  > **阻塞原因修正**：之前标注"ort 2.0 API 不稳定"有误，rc.12 已是 production-ready，官方建议新项目直接使用。
-  > 真正阻塞：`ndarray = "0.16"`（workspace Cargo.toml L82）与 ort 2.0 要求的 0.17 不兼容；但 ndarray 目前在任何 .rs 文件中均无实际使用，升级零影响，可立即执行。
-  - [ ] **Step 0（解锁）**：workspace Cargo.toml `ndarray` 升级 0.16 → 0.17
-  - [ ] **Step 1（初始化）**：`native-api/src/engine.rs` 中 MlService 从 `None` 改为实际创建 `MlServiceImpl`，确定 `max_loaded` 初始值
-  - [ ] `ml/upscale.rs`：Real-ESRGAN 推理（load image → f32 NCHW → `inputs!` macro → session.run → denormalize → save）；4K 图片必须 tile 分块（512×512），否则显存 OOM
-  - [ ] `ml/denoise.rs`：同 upscale 管线
-  - [ ] `ml/clip.rs`：CLIP 双模型推理（visual + textual encoder，需引入 `tokenizers` crate）
-  - [ ] `ml/whisper.rs`：最高复杂度（mel spectrogram 需 `rustfft`/FFmpeg → encoder 一次 → autoregressive decoder 循环 → BPE token decode）
-  - [ ] `ml/onnx_runtime.rs`：DeviceSelection::Auto 实现（macOS→CoreML EP，Windows→DirectML EP，Linux NVIDIA→CUDA EP）；DirectML 需补充到 DeviceSelection 枚举
-  - [ ] `ModelRegistry`：增加基于空闲时间的淘汰（≥5 分钟无调用则卸载 Session 释放显存）；当前仅有容量触发的 LRU，Session 常驻直到进程退出
-  - [ ] 跨平台打包：`load-dynamic` 模式需随扩展分发 onnxruntime 动态库（macOS/Windows/Linux 各不同），CI 按平台下载
-  - [ ] 端到端测试：下载 Real-ESRGAN ONNX → registerModel → upscale() 验证输出
+- [x] Phase M2 ✅：neko-engine ONNX 推理管线（macOS）— 基础设施 + 推理管线全部实现
+  - [x] `ort` crate + ml/ 模块（6 文件）+ IMlService trait + ModelsController +7 action + EngineClient 模型方法（10 Rust tests）
+  - [x] ndarray 0.17 升级（ort ndarray feature 启用 `try_extract_array` + `Tensor::from_array`）
+  - [x] `MlService::new(3, DeviceSelection::Auto)` 在 `native-api/src/engine.rs` 中初始化
+  - [x] `ml/onnx_runtime.rs`：CoreML EP（macOS GPU/ANE）+ CPU fallback；`DeviceSelection::Auto/CoreMl/Cpu/Cuda/DirectMl` 枚举
+  - [x] `ml/upscale.rs`：Real-ESRGAN 推理，tile 分块（512×512 + 32px overlap），NCHW 张量管线
+  - [x] `ml/denoise.rs`：同 upscale tile 管线，strength 作诊断 hint
+  - [x] `ml/clip.rs`：双模型推理（image + text encoder），ImageNet 归一化，余弦相似度
+  - [x] `ml/whisper.rs`：完整 STT 管线（FFmpeg 16kHz → mel → encoder → autoregressive decoder → GPT-2 BPE detokenise）
+  - [x] `ModelRegistry` 时间窗口淘汰 ✅：`evict_idle(300)` 在每次推理后调用，≥5min 空闲自动卸载 Session；测试：`test_evict_idle_empty_registry`(always) + 3 个 timing 测试(#[ignore])
+  - [x] 端到端测试 ✅：`services/impls/ml.rs` — 5 个 `#[ignore]` 集成测试（upscale/denoise/clip/whisper/idle eviction），通过 `ORT_DYLIB_PATH` + `ML_TEST_*` 环境变量激活；3 个无条件服务层测试（register/list/unregister）全部通过
+  - [ ] 跨平台打包：`load-dynamic` 需随扩展分发 onnxruntime 动态库（Windows/Linux 延后规划）
 - [ ] Phase M3（待评估）：neko-engine candle SD/SDXL 图片生成 — 前置条件：candle 推理速度 < PyTorch 2x 且支持 Flux
 - 外部运行时接入：Ollama → Provider 配置（adapter 已有）；ComfyUI → MCP Server 或 Provider 配置
 
@@ -279,4 +280,4 @@
 
 ---
 
-*最后更新：2026-03-26（scene-to-music Skill 实现完成；AI 字幕生成前置条件分析（需 Engine Whisper 推理）；Phase M2 推理管线阻塞原因修正（ndarray 版本而非 ort API），补充 ModelRegistry 显存常驻问题、跨平台打包、DeviceSelection 缺 DirectML、时间窗口淘汰等实现缺口）*
+*最后更新：2026-03-26（Phase M2 macOS 全部完成；CI 新增 onnx feature lint/test + ORT dylib 下载 + timing tests；AI 字幕生成前置条件分析完成，缺失：Whisper 时间戳 + TranscribeAudio 工具 + NekoCutAPI subtitle 类型）*
