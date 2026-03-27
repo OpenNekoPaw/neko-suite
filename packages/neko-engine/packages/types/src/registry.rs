@@ -23,10 +23,11 @@ pub mod groups {
     pub const CAMERAS: &str = "cameras";
     pub const MIDI: &str = "midi";
     pub const GAMEPAD: &str = "gamepad";
+    pub const COLOR_CORRECTION: &str = "color-correction";
 
     pub const ALL: &[&str] = &[
         NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS, CANVAS, SCENES, PUPPETS,
-        EFFECTS, CAMERAS, MIDI, GAMEPAD,
+        EFFECTS, CAMERAS, MIDI, GAMEPAD, COLOR_CORRECTION,
     ];
 }
 
@@ -157,4 +158,6 @@ pub mod actions {
     pub const MIDI: &[&str] = &["list_ports", "connect", "disconnect"];
 
     pub const GAMEPAD: &[&str] = &["list", "connect", "disconnect"];
+
+    pub const COLOR_CORRECTION: &[&str] = &["upload_lut", "remove_lut", "list_luts"];
 }

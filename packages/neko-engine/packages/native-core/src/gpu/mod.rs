@@ -17,6 +17,7 @@
 mod blur_processor;
 mod buffer_pool;
 mod compositor;
+pub mod lut3d;
 mod context;
 pub mod custom_shader_processor;
 mod encoder_bridge;
@@ -53,6 +54,7 @@ mod windows_export;
 mod windows_import;
 
 pub use blur_processor::{BlurParams, BlurType, GpuBlurProcessor, SharpenParams};
+pub use lut3d::{Lut3DData, LutRegistry};
 pub use compositor::{
     BlendMode, CompositeLayer, CompositeResult, GpuCompositor, LayerPixelFormat, Transform2D,
 };

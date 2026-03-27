@@ -3,7 +3,7 @@
  * 颜色校正面板组件 - 调整视频/图像的颜色
  */
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/I18nContext';
 import type {
   ColorCorrection,
@@ -134,6 +134,22 @@ export const ColorCorrectionPanel = memo(function ColorCorrectionPanel({
     },
     [cc, onChange],
   );
+
+  // Listen for colorCorrection:lutLoaded from Extension Host
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data as { type?: string; lutId?: string; name?: string };
+      if (msg.type === 'colorCorrection:lutLoaded' && msg.lutId) {
+        handleLUTChange({
+          enabled: true,
+          lutId: msg.lutId,
+          intensity: 100,
+        });
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [handleLUTChange]);
 
   // Handle HSL change
   const handleHSLChange = useCallback(

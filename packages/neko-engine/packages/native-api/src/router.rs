@@ -1,10 +1,10 @@
 //! ActionRouter - Routes ActionRequest to appropriate controllers
 
 use crate::controllers::{
-    AudioController, CameraController, CanvasController, Controller, EffectsController,
-    GamepadController, ImageController, MidiController, ModelsController, NodeController,
-    PuppetsController, ScenesController, StreamController, TaskController, TimelineController,
-    VideoController,
+    AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
+    EffectsController, GamepadController, ImageController, MidiController, ModelsController,
+    NodeController, PuppetsController, ScenesController, StreamController, TaskController,
+    TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
@@ -37,6 +37,7 @@ pub struct ActionRouter {
     camera_controller: CameraController,
     midi_controller: MidiController,
     gamepad_controller: GamepadController,
+    color_correction_controller: ColorCorrectionController,
 }
 
 impl ActionRouter {
@@ -90,6 +91,7 @@ impl ActionRouter {
             camera_controller: CameraController::new(camera_service),
             midi_controller: MidiController::new(midi_service),
             gamepad_controller: GamepadController::new(gamepad_service),
+            color_correction_controller: ColorCorrectionController::new(),
         }
     }
 
@@ -179,6 +181,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::COLOR_CORRECTION => {
+                self.color_correction_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -209,6 +216,7 @@ impl ActionRouter {
             groups::CAMERAS => Some(self.camera_controller.actions()),
             groups::MIDI => Some(self.midi_controller.actions()),
             groups::GAMEPAD => Some(self.gamepad_controller.actions()),
+            groups::COLOR_CORRECTION => Some(self.color_correction_controller.actions()),
             _ => None,
         }
     }

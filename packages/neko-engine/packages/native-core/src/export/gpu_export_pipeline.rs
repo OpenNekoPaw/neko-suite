@@ -20,10 +20,10 @@ use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
     BlurParams, BlurType, ChromaticAberrationParams, CustomShaderProcessor, GlowParams,
-    GpuBlurProcessor, GpuContext, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, Nv12OutputBuffers,
-    Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, SharpenParams, TextRenderer,
-    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
-    TransitionType, VignetteParams,
+    GpuBlurProcessor, GpuContext, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, LutRegistry,
+    Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, SharpenParams,
+    TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
+    TransitionParams, TransitionType, VignetteParams,
 };
 use crate::telemetry::spans::span;
 use crate::services::{ISceneService, SceneService};
@@ -246,7 +246,7 @@ impl EffectDispatcher {
                         Self::get_f32(params, &format!("hsl_{}_lum", i), 0.0);
                 }
 
-                self.style_processor.apply_color_correction(
+                let mut result = self.style_processor.apply_color_correction(
                     pixels,
                     width,
                     height,
@@ -289,20 +289,12 @@ impl EffectDispatcher {
                     Self::apply_curves_lut(&mut result, params);
                 }
 
-                // TODO(P1): 3D LUT application
-                // When lut_id is present, look up pre-loaded LUT data from engine cache
-                // and apply trilinear interpolation. Requires:
-                // 1. Extension Host → Engine LUT upload pipeline (via EngineClient)
-                // 2. LUT cache in EffectDispatcher (HashMap<String, Lut3DData>)
-                // 3. CPU-side trilinear interpolation (or GPU 3D texture in future)
-                //
-                // let lut_id = Self::get_str(params, "lut_id");
-                // let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
-                // if let Some(id) = lut_id {
-                //     if let Some(lut) = self.lut_cache.get(&id) {
-                //         Self::apply_3d_lut(&mut result, lut, lut_intensity);
-                //     }
-                // }
+                // Apply 3D LUT (CPU trilinear interpolation via global LutRegistry)
+                let lut_id = Self::get_str(params, "lut_id");
+                let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
+                if let Some(id) = lut_id {
+                    LutRegistry::global().apply_to_pixels(&id, &mut result, lut_intensity);
+                }
 
                 Ok(result)
             }
@@ -429,6 +421,14 @@ impl EffectDispatcher {
             .get(key)
             .and_then(|v| v.as_bool())
             .unwrap_or(default)
+    }
+
+    /// Extract an optional string parameter from the JSON map.
+    fn get_str<'a>(
+        params: &'a serde_json::Map<String, serde_json::Value>,
+        key: &str,
+    ) -> Option<&'a str> {
+        params.get(key).and_then(|v| v.as_str())
     }
 }
 

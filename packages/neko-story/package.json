@@ -94,8 +94,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run build",
-    "build": "pnpm run build:types && pnpm run build:parser && pnpm run build:webview && pnpm run build:extension",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run build:types && pnpm run build:parser && pnpm run build:webview && pnpm run build:extension",
+    "build": "pnpm run compile",
     "build:types": "pnpm --filter @neko-story/types run build",
     "build:parser": "pnpm --filter @neko-story/parser run build",
     "build:extension": "pnpm --filter @neko-story/extension run build",

@@ -323,7 +323,10 @@ export type MessageToWebview =
     }
   | { type: 'export:error'; error: string }
   | { type: 'export:cancelled' }
-  | { type: 'export:globalStatus'; hasActiveExport: boolean };
+  | { type: 'export:globalStatus'; hasActiveExport: boolean }
+  // LUT load response (Extension -> WebView)
+  | { type: 'colorCorrection:lutLoaded'; lutId: string; name: string }
+  | { type: 'colorCorrection:lutError'; error: string };
 
 /** Model info returned from provider API */
 export interface ProviderModelInfo {
@@ -462,4 +465,6 @@ export type MessageFromWebview =
   // File range read request (WebView -> Extension) - for testing on-demand loading
   | { type: 'readFileRange'; requestId: string; path: string; start: number; end: number }
   // Incremental sync: send EditOperation to Extension (WebView -> Extension)
-  | { type: 'operationApplied'; operation: EditOperation };
+  | { type: 'operationApplied'; operation: EditOperation }
+  // LUT load request (WebView -> Extension)
+  | { type: 'colorCorrection:loadLut' };

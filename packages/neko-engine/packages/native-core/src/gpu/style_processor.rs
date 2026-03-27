@@ -1,56 +1,43 @@
-//! GPU Style Effects Processor
+//! GPU Style Effects Processor (Phase 3 — texture-to-texture, zero CPU round-trip)
 //!
-//! Provides GPU-accelerated style effects including:
-//! - Vignette
-//! - Film grain
-//! - Glow/Bloom
-//! - Chromatic aberration
+//! All methods operate on `wgpu::Texture` directly.
+//! No `read_buffer_sync` / `read_texture_sync` occurs inside this module.
 
 #![allow(dead_code)]
 
-use super::buffer_pool::BufferPool;
 use super::context::GpuContext;
+use super::lut3d::LutRegistry;
 use super::shaders;
 use crate::error::{Error, Result};
-
 use bytemuck::{Pod, Zeroable};
+use std::collections::HashMap;
 use std::sync::Arc;
+
+// =============================================================================
+// Public param structs (unchanged interface)
+// =============================================================================
 
 /// Vignette effect parameters
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VignetteParams {
-    /// Vignette amount/intensity (0.0 to 1.0)
     pub amount: f32,
-    /// Radius from center where vignette starts (0.0 to 2.0)
     pub radius: f32,
-    /// Softness/feather of the vignette edge (0.0 to 1.0)
     pub softness: f32,
-    /// Roundness of the vignette (0.0 = oval, 1.0 = circular)
     pub roundness: f32,
 }
 
 impl Default for VignetteParams {
     fn default() -> Self {
-        Self {
-            amount: 0.5,
-            radius: 0.5,
-            softness: 0.5,
-            roundness: 1.0,
-        }
+        Self { amount: 0.5, radius: 0.5, softness: 0.5, roundness: 1.0 }
     }
 }
 
 impl VignetteParams {
-    /// Create vignette params with amount
     pub fn new(amount: f32) -> Self {
-        Self {
-            amount: amount.clamp(0.0, 1.0),
-            ..Default::default()
-        }
+        Self { amount: amount.clamp(0.0, 1.0), ..Default::default() }
     }
 
-    /// Create vignette params with all options
     pub fn with_options(amount: f32, radius: f32, softness: f32, roundness: f32) -> Self {
         Self {
             amount: amount.clamp(0.0, 1.0),
@@ -60,47 +47,30 @@ impl VignetteParams {
         }
     }
 
-    /// Check if vignette is effectively disabled
-    pub fn is_identity(&self) -> bool {
-        self.amount < 0.001
-    }
+    pub fn is_identity(&self) -> bool { self.amount < 0.001 }
 }
 
 /// Film grain effect parameters
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct FilmGrainParams {
-    /// Grain amount/intensity (0.0 to 1.0)
     pub amount: f32,
-    /// Grain size multiplier (0.5 to 3.0)
     pub size: f32,
-    /// Time value for animation (used as random seed)
     pub time: f32,
-    /// Color vs monochrome grain (0.0 = mono, 1.0 = color)
     pub color_amount: f32,
 }
 
 impl Default for FilmGrainParams {
     fn default() -> Self {
-        Self {
-            amount: 0.3,
-            size: 1.0,
-            time: 0.0,
-            color_amount: 0.0,
-        }
+        Self { amount: 0.3, size: 1.0, time: 0.0, color_amount: 0.0 }
     }
 }
 
 impl FilmGrainParams {
-    /// Create film grain params with amount
     pub fn new(amount: f32) -> Self {
-        Self {
-            amount: amount.clamp(0.0, 1.0),
-            ..Default::default()
-        }
+        Self { amount: amount.clamp(0.0, 1.0), ..Default::default() }
     }
 
-    /// Create film grain params with all options
     pub fn with_options(amount: f32, size: f32, time: f32, color_amount: f32) -> Self {
         Self {
             amount: amount.clamp(0.0, 1.0),
@@ -110,47 +80,30 @@ impl FilmGrainParams {
         }
     }
 
-    /// Check if film grain is effectively disabled
-    pub fn is_identity(&self) -> bool {
-        self.amount < 0.001
-    }
+    pub fn is_identity(&self) -> bool { self.amount < 0.001 }
 }
 
 /// Glow/Bloom effect parameters
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GlowParams {
-    /// Glow intensity (0.0 to 2.0)
     pub intensity: f32,
-    /// Brightness threshold for glow (0.0 to 1.0)
     pub threshold: f32,
-    /// Blur radius for glow (1.0 to 50.0)
     pub radius: f32,
-    /// Padding for alignment
     pub _padding: f32,
 }
 
 impl Default for GlowParams {
     fn default() -> Self {
-        Self {
-            intensity: 1.0,
-            threshold: 0.7,
-            radius: 10.0,
-            _padding: 0.0,
-        }
+        Self { intensity: 1.0, threshold: 0.7, radius: 10.0, _padding: 0.0 }
     }
 }
 
 impl GlowParams {
-    /// Create glow params with intensity
     pub fn new(intensity: f32) -> Self {
-        Self {
-            intensity: intensity.clamp(0.0, 2.0),
-            ..Default::default()
-        }
+        Self { intensity: intensity.clamp(0.0, 2.0), ..Default::default() }
     }
 
-    /// Create glow params with all options
     pub fn with_options(intensity: f32, threshold: f32, radius: f32) -> Self {
         Self {
             intensity: intensity.clamp(0.0, 2.0),
@@ -160,47 +113,30 @@ impl GlowParams {
         }
     }
 
-    /// Check if glow is effectively disabled
-    pub fn is_identity(&self) -> bool {
-        self.intensity < 0.001
-    }
+    pub fn is_identity(&self) -> bool { self.intensity < 0.001 }
 }
 
 /// Chromatic aberration effect parameters
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ChromaticAberrationParams {
-    /// Aberration amount/offset (0.0 to 0.1)
     pub amount: f32,
-    /// Angle of aberration in radians
     pub angle: f32,
-    /// Center X (0.0 to 1.0)
     pub center_x: f32,
-    /// Center Y (0.0 to 1.0)
     pub center_y: f32,
 }
 
 impl Default for ChromaticAberrationParams {
     fn default() -> Self {
-        Self {
-            amount: 0.01,
-            angle: 0.0,
-            center_x: 0.5,
-            center_y: 0.5,
-        }
+        Self { amount: 0.01, angle: 0.0, center_x: 0.5, center_y: 0.5 }
     }
 }
 
 impl ChromaticAberrationParams {
-    /// Create chromatic aberration params with amount
     pub fn new(amount: f32) -> Self {
-        Self {
-            amount: amount.clamp(0.0, 0.1),
-            ..Default::default()
-        }
+        Self { amount: amount.clamp(0.0, 0.1), ..Default::default() }
     }
 
-    /// Create chromatic aberration params with all options
     pub fn with_options(amount: f32, angle: f32, center_x: f32, center_y: f32) -> Self {
         Self {
             amount: amount.clamp(0.0, 0.1),
@@ -210,309 +146,259 @@ impl ChromaticAberrationParams {
         }
     }
 
-    /// Check if chromatic aberration is effectively disabled
-    pub fn is_identity(&self) -> bool {
-        self.amount < 0.0001
-    }
+    pub fn is_identity(&self) -> bool { self.amount < 0.0001 }
 }
 
-/// Color correction parameters
+// =============================================================================
+// Full color correction uniform params — 256 bytes
+// Layout must match WGSL `ColorCorrectionTexParams` in COLOR_CORRECTION_COMPUTE_SHADER
+// =============================================================================
+
+/// Color correction uniform parameters for the GPU compute shader.
 ///
-/// Includes basic adjustments (13 params) and color wheels (3-way correction).
-///
-/// TODO(P1): Add curves support — per-channel (R/G/B/Luma) spline curve points,
-///           requires 1D LUT texture upload to GPU
-/// TODO(P1): Add 3D LUT support — .cube file parsing + 3D texture trilinear interpolation
-/// TODO(P2): Add HSL per-color adjustments — per-hue H/S/L shifts,
-///           shader already implemented in color_correction.wgsl (apply_hsl_adjustment)
+/// 256 bytes, `repr(C)` — matches WGSL `ColorCorrectionTexParams`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct ColorCorrectionParams {
-    // --- Basic adjustments (13 params) ---
-    /// Brightness (-1.0 to 1.0)
-    pub brightness: f32,
-    /// Contrast multiplier (0.0 to 3.0, 1.0 = no change)
-    pub contrast: f32,
-    /// Saturation multiplier (0.0 to 3.0, 1.0 = no change)
-    pub saturation: f32,
-    /// Exposure in stops (-5.0 to 5.0, 0.0 = no change)
-    pub exposure: f32,
-    /// Gamma (0.1 to 3.0, 1.0 = no change)
-    pub gamma: f32,
-    /// Hue shift in degrees (-180 to 180, 0.0 = no change)
-    pub hue_shift: f32,
-    /// Vibrance (-1.0 to 1.0, 0.0 = no change)
-    pub vibrance: f32,
-    /// Temperature shift (-1.0 to 1.0, 0.0 = no change)
-    pub temperature: f32,
-    /// Tint shift (-1.0 to 1.0, 0.0 = no change)
-    pub tint: f32,
-    /// Highlights (-1.0 to 1.0, 0.0 = no change)
-    pub highlights: f32,
-    /// Shadows (-1.0 to 1.0, 0.0 = no change)
-    pub shadows: f32,
-    /// Whites (-1.0 to 1.0, 0.0 = no change)
-    pub whites: f32,
-    /// Blacks (-1.0 to 1.0, 0.0 = no change)
-    pub blacks: f32,
-
-    // --- Color Wheels (3-way: shadows/midtones/highlights) ---
-    /// Whether color wheels are enabled (0.0 = off, 1.0 = on)
-    pub cw_enabled: f32,
-    /// Shadows wheel RGB color (0.5 = neutral)
-    pub cw_shadows_r: f32,
-    pub cw_shadows_g: f32,
-    pub cw_shadows_b: f32,
-    /// Shadows wheel brightness offset (-1.0 to 1.0)
-    pub cw_shadows_brightness: f32,
-    /// Midtones wheel RGB color (0.5 = neutral)
-    pub cw_midtones_r: f32,
-    pub cw_midtones_g: f32,
-    pub cw_midtones_b: f32,
-    /// Midtones wheel brightness offset (-1.0 to 1.0)
-    pub cw_midtones_brightness: f32,
-    /// Highlights wheel RGB color (0.5 = neutral)
-    pub cw_highlights_r: f32,
-    pub cw_highlights_g: f32,
-    pub cw_highlights_b: f32,
-    /// Highlights wheel brightness offset (-1.0 to 1.0)
-    pub cw_highlights_brightness: f32,
-
-    // --- HSL per-color adjustments (up to 8 active ranges) ---
-    /// Number of active HSL ranges (0-8)
-    pub hsl_count: f32,
-    /// HSL range data: [target_hue, hue_shift, sat_adjust, lum_adjust] × 8
-    pub hsl_data: [f32; 32],
-
-    /// Padding for 16-byte alignment
-    pub _padding: [f32; 3],
+pub struct ColorCorrectionTexParams {
+    // Basic (offsets 0..76, 20 × f32)
+    pub brightness:     f32,   // +0
+    pub exposure:       f32,   // +4
+    pub contrast:       f32,   // +8
+    pub highlights:     f32,   // +12
+    pub shadows:        f32,   // +16
+    pub whites:         f32,   // +20
+    pub blacks:         f32,   // +24
+    pub temperature:    f32,   // +28
+    pub tint:           f32,   // +32
+    pub saturation:     f32,   // +36
+    pub vibrance:       f32,   // +40
+    pub gamma:          f32,   // +44
+    pub hue_shift:      f32,   // +48
+    pub cw_enabled:     f32,   // +52  (0 or 1)
+    pub curves_enabled: f32,   // +56  (0 or 1)
+    pub lut_enabled:    f32,   // +60  (0 or 1)
+    pub lut_intensity:  f32,   // +64
+    pub hsl_count:      f32,   // +68  (0..8)
+    pub _pad0:          f32,   // +72
+    pub _pad1:          f32,   // +76
+    // Color wheels — [r,g,b,brightness], starts at offset 80 (16-aligned)
+    pub cw_shadows:     [f32; 4],       // +80
+    pub cw_midtones:    [f32; 4],       // +96
+    pub cw_highlights:  [f32; 4],       // +112
+    // HSL data — 8 × [target_hue, hue_shift, sat_adjust, lum_adjust], starts at +128
+    pub hsl_data:       [[f32; 4]; 8],  // +128..+255
 }
 
-impl Default for ColorCorrectionParams {
+const _: () = assert!(
+    std::mem::size_of::<ColorCorrectionTexParams>() == 256,
+    "ColorCorrectionTexParams must be 256 bytes"
+);
+
+impl Default for ColorCorrectionTexParams {
     fn default() -> Self {
         Self {
-            brightness: 0.0,
-            contrast: 1.0,
-            saturation: 1.0,
-            exposure: 0.0,
-            gamma: 1.0,
-            hue_shift: 0.0,
-            vibrance: 0.0,
-            temperature: 0.0,
-            tint: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            // Color wheels disabled by default, neutral colors (0.5)
-            cw_enabled: 0.0,
-            cw_shadows_r: 0.5,
-            cw_shadows_g: 0.5,
-            cw_shadows_b: 0.5,
-            cw_shadows_brightness: 0.0,
-            cw_midtones_r: 0.5,
-            cw_midtones_g: 0.5,
-            cw_midtones_b: 0.5,
-            cw_midtones_brightness: 0.0,
-            cw_highlights_r: 0.5,
-            cw_highlights_g: 0.5,
-            cw_highlights_b: 0.5,
-            cw_highlights_brightness: 0.0,
-            hsl_count: 0.0,
-            hsl_data: [0.0; 32],
-            _padding: [0.0; 3],
+            brightness: 0.0, exposure: 0.0, contrast: 1.0, highlights: 0.0,
+            shadows: 0.0, whites: 0.0, blacks: 0.0, temperature: 0.0,
+            tint: 0.0, saturation: 1.0, vibrance: 0.0, gamma: 1.0,
+            hue_shift: 0.0, cw_enabled: 0.0, curves_enabled: 0.0, lut_enabled: 0.0,
+            lut_intensity: 1.0, hsl_count: 0.0, _pad0: 0.0, _pad1: 0.0,
+            cw_shadows:    [0.5, 0.5, 0.5, 0.0],
+            cw_midtones:   [0.5, 0.5, 0.5, 0.0],
+            cw_highlights: [0.5, 0.5, 0.5, 0.0],
+            hsl_data: [[0.0; 4]; 8],
         }
     }
 }
 
-impl ColorCorrectionParams {
-    /// Check if all parameters are at identity (no visible change)
+impl ColorCorrectionTexParams {
+    /// Return true if all values are at identity (no visible change).
     pub fn is_identity(&self) -> bool {
-        self.brightness.abs() < 0.001
-            && (self.contrast - 1.0).abs() < 0.001
-            && (self.saturation - 1.0).abs() < 0.001
+        self.brightness.abs()      < 0.001
             && self.exposure.abs() < 0.001
-            && (self.gamma - 1.0).abs() < 0.001
-            && self.hue_shift.abs() < 0.01
-            && self.vibrance.abs() < 0.001
-            && self.temperature.abs() < 0.001
-            && self.tint.abs() < 0.001
+            && (self.contrast - 1.0).abs() < 0.001
             && self.highlights.abs() < 0.001
-            && self.shadows.abs() < 0.001
-            && self.whites.abs() < 0.001
-            && self.blacks.abs() < 0.001
-            && self.cw_enabled.abs() < 0.001
-            && self.hsl_count.abs() < 0.001
+            && self.shadows.abs()    < 0.001
+            && self.whites.abs()     < 0.001
+            && self.blacks.abs()     < 0.001
+            && self.temperature.abs() < 0.001
+            && self.tint.abs()       < 0.001
+            && (self.saturation - 1.0).abs() < 0.001
+            && self.vibrance.abs()   < 0.001
+            && (self.gamma - 1.0).abs() < 0.001
+            && self.hue_shift.abs()  < 0.01
+            && self.cw_enabled       < 0.001
+            && self.curves_enabled   < 0.001
+            && self.lut_enabled      < 0.001
+            && self.hsl_count        < 0.001
     }
 }
 
-/// Uniform buffer for color correction shader
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct ColorCorrectionUniforms {
-    width: u32,
-    height: u32,
-    // Basic adjustments
-    brightness: f32,
-    contrast: f32,
-    saturation: f32,
-    exposure: f32,
-    gamma: f32,
-    hue_shift: f32,
-    vibrance: f32,
-    temperature: f32,
-    tint: f32,
-    highlights: f32,
-    shadows: f32,
-    whites: f32,
-    blacks: f32,
-    // Color wheels
-    cw_enabled: f32,
-    cw_shadows_r: f32,
-    cw_shadows_g: f32,
-    cw_shadows_b: f32,
-    cw_shadows_brightness: f32,
-    cw_midtones_r: f32,
-    cw_midtones_g: f32,
-    cw_midtones_b: f32,
-    cw_midtones_brightness: f32,
-    cw_highlights_r: f32,
-    cw_highlights_g: f32,
-    cw_highlights_b: f32,
-    cw_highlights_brightness: f32,
-    // HSL per-color adjustments
-    hsl_count: f32,
-    hsl_data: [f32; 32],
-    _padding: [f32; 3],
+// =============================================================================
+// GpuLutCache — lazy GPU upload of 3D LUTs from LutRegistry
+// =============================================================================
+
+struct GpuLutCache {
+    textures: HashMap<String, wgpu::Texture>,
+    sampler: wgpu::Sampler,
+    identity_tex: wgpu::Texture,
 }
 
-/// Uniform buffer for vignette shader
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct VignetteUniforms {
-    width: u32,
-    height: u32,
-    amount: f32,
-    radius: f32,
-    softness: f32,
-    roundness: f32,
-    _padding: [f32; 2],
+impl GpuLutCache {
+    fn new(ctx: &GpuContext) -> Self {
+        let device = ctx.device();
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("LUT 3D Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let identity_tex = Self::create_identity_texture(ctx);
+        Self { textures: HashMap::new(), sampler, identity_tex }
+    }
+
+    /// 2×2×2 identity LUT: each texel (x=r, y=g, z=b) maps (r,g,b)→(r,g,b).
+    fn create_identity_texture(ctx: &GpuContext) -> wgpu::Texture {
+        let n = 2u32;
+        let mut bytes = Vec::with_capacity((n * n * n * 4) as usize);
+        for b in 0..n { for g in 0..n { for r in 0..n {
+            let s = (n - 1) as f32;
+            bytes.push((r as f32 / s * 255.0).round() as u8);
+            bytes.push((g as f32 / s * 255.0).round() as u8);
+            bytes.push((b as f32 / s * 255.0).round() as u8);
+            bytes.push(255u8);
+        }}}
+
+        let tex = ctx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("Identity LUT 3D"),
+            size: wgpu::Extent3d { width: n, height: n, depth_or_array_layers: n },
+            mip_level_count: 1, sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        ctx.queue().write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &tex, mip_level: 0,
+                origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(n * 4), rows_per_image: Some(n) },
+            wgpu::Extent3d { width: n, height: n, depth_or_array_layers: n },
+        );
+        tex
+    }
+
+    /// Upload a LUT from `LutRegistry` to GPU if not yet cached.
+    fn ensure_uploaded(&mut self, ctx: &GpuContext, lut_id: &str) {
+        if self.textures.contains_key(lut_id) { return; }
+        let Some(lut_data) = LutRegistry::global().get_data(lut_id) else { return };
+
+        let n = lut_data.size as u32;
+        let bytes = lut_data.to_texture_bytes();
+
+        let tex = ctx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("LUT 3D"),
+            size: wgpu::Extent3d { width: n, height: n, depth_or_array_layers: n },
+            mip_level_count: 1, sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        ctx.queue().write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &tex, mip_level: 0,
+                origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(n * 4), rows_per_image: Some(n) },
+            wgpu::Extent3d { width: n, height: n, depth_or_array_layers: n },
+        );
+        self.textures.insert(lut_id.to_string(), tex);
+    }
+
+    /// Get the cached texture for `lut_id`, or the identity texture if missing.
+    fn get(&self, lut_id: Option<&str>) -> &wgpu::Texture {
+        lut_id
+            .and_then(|id| self.textures.get(id))
+            .unwrap_or(&self.identity_tex)
+    }
 }
 
-/// Uniform buffer for film grain shader
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct FilmGrainUniforms {
-    width: u32,
-    height: u32,
-    amount: f32,
-    size: f32,
-    time: f32,
-    color_amount: f32,
-    _padding: [f32; 2],
+// =============================================================================
+// Identity curves buffer (5×256 f32 = 1280 floats, linear identity)
+// =============================================================================
+
+fn identity_curves_data() -> Vec<f32> {
+    let mut data = vec![0.0f32; 5 * 256];
+    for ch in 0..5usize {
+        for i in 0..256usize {
+            data[ch * 256 + i] = i as f32 / 255.0;
+        }
+    }
+    data
 }
 
-/// Uniform buffer for glow shader
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct GlowUniforms {
-    width: u32,
-    height: u32,
-    intensity: f32,
-    threshold: f32,
-    radius: f32,
-    _padding: [f32; 3],
-}
+// =============================================================================
+// GpuStyleProcessor
+// =============================================================================
 
-/// Uniform buffer for chromatic aberration shader
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct ChromaticAberrationUniforms {
-    width: u32,
-    height: u32,
-    amount: f32,
-    angle: f32,
-    center_x: f32,
-    center_y: f32,
-    _padding: [f32; 2],
-}
-
-/// GPU style effects processor using compute shaders
+/// GPU style effects processor — texture-to-texture, zero CPU round-trips.
 pub struct GpuStyleProcessor {
     ctx: Arc<GpuContext>,
-    vignette_pipeline: wgpu::ComputePipeline,
-    film_grain_pipeline: wgpu::ComputePipeline,
-    glow_pipeline: wgpu::ComputePipeline,
-    chromatic_aberration_pipeline: wgpu::ComputePipeline,
-    color_correction_pipeline: wgpu::ComputePipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
-    buffer_pool: BufferPool,
+
+    // Bind group layouts
+    bgl_3: wgpu::BindGroupLayout,   // bindings 0-2: input_tex, output_tex, uniforms
+    bgl_cc: wgpu::BindGroupLayout,  // bindings 0-5: + curves, lut_3d, lut_sampler
+
+    // Compute pipelines
+    vignette_pipeline:              wgpu::ComputePipeline,
+    film_grain_pipeline:            wgpu::ComputePipeline,
+    glow_pipeline:                  wgpu::ComputePipeline,
+    chromatic_aberration_pipeline:  wgpu::ComputePipeline,
+    color_correction_pipeline:      wgpu::ComputePipeline,
+
+    // Per-instance LUT cache and identity resources
+    lut_cache: GpuLutCache,
+    identity_curves_buf: wgpu::Buffer,
 }
 
 impl GpuStyleProcessor {
-    /// Create a new GPU style processor
+    /// Create a new GPU style processor with texture-to-texture pipelines.
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
         let device = ctx.device();
 
-        // Create shader modules
-        let vignette_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Vignette Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::VIGNETTE_COMPUTE_SHADER.into()),
-        });
-
-        let film_grain_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Film Grain Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::FILM_GRAIN_COMPUTE_SHADER.into()),
-        });
-
-        let glow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Glow Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::GLOW_COMPUTE_SHADER.into()),
-        });
-
-        let chromatic_aberration_shader =
-            device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Chromatic Aberration Shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    shaders::CHROMATIC_ABERRATION_COMPUTE_SHADER.into(),
-                ),
-            });
-
-        let color_correction_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Color Correction Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::COLOR_CORRECTION_SHADER.into()),
-        });
-
-        // Create bind group layout (same for all)
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Style Effect Bind Group Layout"),
+        // --- Bind group layout for simple effects (3 bindings) ---
+        let bgl_3 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Style Effect BGL (3)"),
             entries: &[
-                // Input buffer (read-only storage)
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
                     count: None,
                 },
-                // Output buffer (read-write storage)
                 wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
                 },
-                // Uniforms
                 wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
+                    binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -523,312 +409,363 @@ impl GpuStyleProcessor {
             ],
         });
 
-        // Create pipeline layout
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Style Effect Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        // Create pipelines
-        let vignette_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Vignette Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: &vignette_shader,
-            entry_point: "main",
-        });
-
-        let film_grain_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Film Grain Pipeline"),
-                layout: Some(&pipeline_layout),
-                module: &film_grain_shader,
-                entry_point: "main",
-            });
-
-        let glow_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Glow Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: &glow_shader,
-            entry_point: "main",
-        });
-
-        let chromatic_aberration_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Chromatic Aberration Pipeline"),
-                layout: Some(&pipeline_layout),
-                module: &chromatic_aberration_shader,
-                entry_point: "main",
-            });
-
-        let color_correction_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Color Correction Pipeline"),
-                layout: Some(&pipeline_layout),
-                module: &color_correction_shader,
-                entry_point: "main",
-            });
-
-        // Create buffer pool
-        let buffer_pool = BufferPool::new(ctx.device().clone(), wgpu::BufferUsages::STORAGE, 8);
-
-        Ok(Self {
-            ctx,
-            vignette_pipeline,
-            film_grain_pipeline,
-            glow_pipeline,
-            chromatic_aberration_pipeline,
-            color_correction_pipeline,
-            bind_group_layout,
-            buffer_pool,
-        })
-    }
-
-    /// Apply vignette effect to a frame
-    pub fn apply_vignette(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        params: &VignetteParams,
-    ) -> Result<Vec<u8>> {
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let uniforms = VignetteUniforms {
-            width,
-            height,
-            amount: params.amount,
-            radius: params.radius,
-            softness: params.softness,
-            roundness: params.roundness,
-            _padding: [0.0; 2],
-        };
-
-        self.run_effect(input, width, height, &self.vignette_pipeline, &uniforms)
-    }
-
-    /// Apply film grain effect to a frame
-    pub fn apply_film_grain(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        params: &FilmGrainParams,
-    ) -> Result<Vec<u8>> {
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let uniforms = FilmGrainUniforms {
-            width,
-            height,
-            amount: params.amount,
-            size: params.size,
-            time: params.time,
-            color_amount: params.color_amount,
-            _padding: [0.0; 2],
-        };
-
-        self.run_effect(input, width, height, &self.film_grain_pipeline, &uniforms)
-    }
-
-    /// Apply glow/bloom effect to a frame
-    pub fn apply_glow(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        params: &GlowParams,
-    ) -> Result<Vec<u8>> {
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let uniforms = GlowUniforms {
-            width,
-            height,
-            intensity: params.intensity,
-            threshold: params.threshold,
-            radius: params.radius,
-            _padding: [0.0; 3],
-        };
-
-        self.run_effect(input, width, height, &self.glow_pipeline, &uniforms)
-    }
-
-    /// Apply chromatic aberration effect to a frame
-    pub fn apply_chromatic_aberration(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        params: &ChromaticAberrationParams,
-    ) -> Result<Vec<u8>> {
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let uniforms = ChromaticAberrationUniforms {
-            width,
-            height,
-            amount: params.amount,
-            angle: params.angle,
-            center_x: params.center_x,
-            center_y: params.center_y,
-            _padding: [0.0; 2],
-        };
-
-        self.run_effect(
-            input,
-            width,
-            height,
-            &self.chromatic_aberration_pipeline,
-            &uniforms,
-        )
-    }
-
-    /// Apply color correction to a frame
-    pub fn apply_color_correction(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        params: &ColorCorrectionParams,
-    ) -> Result<Vec<u8>> {
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let uniforms = ColorCorrectionUniforms {
-            width,
-            height,
-            brightness: params.brightness,
-            contrast: params.contrast,
-            saturation: params.saturation,
-            exposure: params.exposure,
-            gamma: params.gamma,
-            hue_shift: params.hue_shift,
-            vibrance: params.vibrance,
-            temperature: params.temperature,
-            tint: params.tint,
-            highlights: params.highlights,
-            shadows: params.shadows,
-            whites: params.whites,
-            blacks: params.blacks,
-            cw_enabled: params.cw_enabled,
-            cw_shadows_r: params.cw_shadows_r,
-            cw_shadows_g: params.cw_shadows_g,
-            cw_shadows_b: params.cw_shadows_b,
-            cw_shadows_brightness: params.cw_shadows_brightness,
-            cw_midtones_r: params.cw_midtones_r,
-            cw_midtones_g: params.cw_midtones_g,
-            cw_midtones_b: params.cw_midtones_b,
-            cw_midtones_brightness: params.cw_midtones_brightness,
-            cw_highlights_r: params.cw_highlights_r,
-            cw_highlights_g: params.cw_highlights_g,
-            cw_highlights_b: params.cw_highlights_b,
-            cw_highlights_brightness: params.cw_highlights_brightness,
-            hsl_count: params.hsl_count,
-            hsl_data: params.hsl_data,
-            _padding: [0.0; 3],
-        };
-
-        self.run_effect(
-            input,
-            width,
-            height,
-            &self.color_correction_pipeline,
-            &uniforms,
-        )
-    }
-
-    /// Run a style effect with the given pipeline and uniforms
-    fn run_effect<U: Pod>(
-        &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
-        pipeline: &wgpu::ComputePipeline,
-        uniforms: &U,
-    ) -> Result<Vec<u8>> {
-        let expected_size = (width * height * 4) as usize;
-        if input.len() != expected_size {
-            return Err(Error::InvalidParameter(format!(
-                "Input size mismatch: expected {}, got {}",
-                expected_size,
-                input.len()
-            )));
-        }
-
-        let device = self.ctx.device();
-        let queue = self.ctx.queue();
-
-        // Create input buffer
-        let input_buffer = self
-            .ctx
-            .create_buffer_with_data(input, wgpu::BufferUsages::STORAGE);
-
-        // Acquire output buffer from pool
-        let output_pooled = self.buffer_pool.acquire(input.len() as u64);
-        let output_buffer = output_pooled.buffer();
-
-        // Create uniform buffer
-        let uniform_buffer = self
-            .ctx
-            .create_buffer_with_data(bytemuck::bytes_of(uniforms), wgpu::BufferUsages::UNIFORM);
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Style Effect Bind Group"),
-            layout: &self.bind_group_layout,
+        // --- Bind group layout for color correction (6 bindings) ---
+        let bgl_cc = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Color Correction BGL (6)"),
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: input_buffer.as_entire_binding(),
+                // 0: input texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: output_buffer.as_entire_binding(),
+                // 1: output storage texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: uniform_buffer.as_entire_binding(),
+                // 2: CC params uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // 3: curves storage buffer (5×256 f32, read-only)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // 4: 3D LUT texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D3,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // 5: LUT sampler (linear/trilinear)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5, visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
                 },
             ],
         });
 
-        // Create command encoder and dispatch
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Style Effect Encoder"),
+        // --- Pipelines ---
+        let pipeline_layout_3 = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Style Effect Pipeline Layout (3)"),
+            bind_group_layouts: &[&bgl_3],
+            push_constant_ranges: &[],
+        });
+        let pipeline_layout_cc = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Color Correction Pipeline Layout (6)"),
+            bind_group_layouts: &[&bgl_cc],
+            push_constant_ranges: &[],
         });
 
+        macro_rules! make_shader {
+            ($src:expr, $label:expr) => {
+                device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some($label),
+                    source: wgpu::ShaderSource::Wgsl($src.into()),
+                })
+            };
+        }
+        macro_rules! make_pipeline {
+            ($module:expr, $layout:expr, $label:expr) => {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some($label),
+                    layout: Some($layout),
+                    module: &$module,
+                    entry_point: "main",
+                })
+            };
+        }
+
+        let vignette_pipeline = make_pipeline!(
+            make_shader!(shaders::VIGNETTE_TEX_SHADER, "Vignette Shader"),
+            &pipeline_layout_3, "Vignette Pipeline"
+        );
+        let film_grain_pipeline = make_pipeline!(
+            make_shader!(shaders::FILM_GRAIN_TEX_SHADER, "Film Grain Shader"),
+            &pipeline_layout_3, "Film Grain Pipeline"
+        );
+        let glow_pipeline = make_pipeline!(
+            make_shader!(shaders::GLOW_TEX_SHADER, "Glow Shader"),
+            &pipeline_layout_3, "Glow Pipeline"
+        );
+        let chromatic_aberration_pipeline = make_pipeline!(
+            make_shader!(shaders::CHROMATIC_ABERRATION_TEX_SHADER, "Chromatic Aberration Shader"),
+            &pipeline_layout_3, "Chromatic Aberration Pipeline"
+        );
+        let color_correction_pipeline = make_pipeline!(
+            make_shader!(shaders::get_color_correction_shader().as_str(), "Color Correction Shader"),
+            &pipeline_layout_cc, "Color Correction Pipeline"
+        );
+
+        // --- Identity curves buffer (1280 floats, GPU storage) ---
+        let identity_data = identity_curves_data();
+        let identity_curves_buf = ctx.create_buffer_with_data(
+            bytemuck::cast_slice(&identity_data),
+            wgpu::BufferUsages::STORAGE,
+        );
+
+        // --- LUT cache ---
+        let lut_cache = GpuLutCache::new(&ctx);
+
+        Ok(Self {
+            ctx,
+            bgl_3, bgl_cc,
+            vignette_pipeline, film_grain_pipeline, glow_pipeline,
+            chromatic_aberration_pipeline, color_correction_pipeline,
+            lut_cache, identity_curves_buf,
+        })
+    }
+
+    // =========================================================================
+    // Public texture-to-texture API
+    // =========================================================================
+
+    /// Apply vignette effect: input → output (both `Rgba8Unorm`).
+    pub fn apply_vignette_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &VignetteParams,
+    ) -> Result<()> {
+        if params.is_identity() { return self.copy_texture(input, output); }
+        self.run_effect_tex(input, output, &self.vignette_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply film grain effect: input → output.
+    pub fn apply_film_grain_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &FilmGrainParams,
+    ) -> Result<()> {
+        if params.is_identity() { return self.copy_texture(input, output); }
+        self.run_effect_tex(input, output, &self.film_grain_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply glow/bloom effect: input → output.
+    pub fn apply_glow_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &GlowParams,
+    ) -> Result<()> {
+        if params.is_identity() { return self.copy_texture(input, output); }
+        self.run_effect_tex(input, output, &self.glow_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply chromatic aberration: input → output.
+    pub fn apply_chromatic_aberration_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &ChromaticAberrationParams,
+    ) -> Result<()> {
+        if params.is_identity() { return self.copy_texture(input, output); }
+        self.run_effect_tex(input, output, &self.chromatic_aberration_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply full color correction (basic + color wheels + HSL + curves + 3D LUT).
+    ///
+    /// - `curves_data`: 5×256 f32 `[rgb, r, g, b, luma]`. `None` → identity curves.
+    /// - `lut_id`: key into `LutRegistry`. LUT is uploaded lazily on first use.
+    pub fn apply_color_correction_tex(
+        &mut self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &ColorCorrectionTexParams,
+        curves_data: Option<&[f32]>,
+        lut_id: Option<&str>,
+    ) -> Result<()> {
+        let w = input.width();
+        let h = input.height();
+
+        // Step 1: Ensure LUT is on GPU (mutably borrows lut_cache only)
+        if params.lut_enabled > 0.5 {
+            if let Some(id) = lut_id {
+                let ctx = Arc::clone(&self.ctx);
+                self.lut_cache.ensure_uploaded(&ctx, id);
+            }
+        }
+
+        // Step 2: Create texture views
+        let input_view  = input.create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Step 3: Create or borrow curves buffer
+        let temp_curves_buf: Option<wgpu::Buffer>;
+        let curves_buf: &wgpu::Buffer = if let Some(data) = curves_data {
+            let buf = self.ctx.create_buffer_with_data(
+                bytemuck::cast_slice(data),
+                wgpu::BufferUsages::STORAGE,
+            );
+            temp_curves_buf = Some(buf);
+            temp_curves_buf.as_ref().unwrap()
+        } else {
+            temp_curves_buf = None;
+            &self.identity_curves_buf
+        };
+
+        // Step 4: Get LUT texture and sampler views
+        let lut_id_active = if params.lut_enabled > 0.5 { lut_id } else { None };
+        let lut_tex  = self.lut_cache.get(lut_id_active);
+        let lut_view = lut_tex.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D3),
+            ..Default::default()
+        });
+        let lut_sampler = &self.lut_cache.sampler;
+
+        // Step 5: Uniform buffer
+        let uniform_buf = self.ctx.create_buffer_with_data(
+            bytemuck::bytes_of(params),
+            wgpu::BufferUsages::UNIFORM,
+        );
+
+        // Step 6: Build bind group and dispatch
+        let entries = [
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&input_view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&output_view) },
+            wgpu::BindGroupEntry { binding: 2, resource: uniform_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: curves_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&lut_view) },
+            wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(lut_sampler) },
+        ];
+
+        let device = self.ctx.device();
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("CC Tex Bind Group"),
+            layout: &self.bgl_cc,
+            entries: &entries,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("CC Tex Encoder"),
+        });
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Style Effect Pass"),
+                label: Some("CC Tex Pass"),
                 timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.color_correction_pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups((w + 15) / 16, (h + 15) / 16, 1);
+        }
+        self.ctx.queue().submit(Some(encoder.finish()));
+
+        Ok(())
+    }
+
+    /// Accessor for the wgpu context.
+    pub fn context(&self) -> &Arc<GpuContext> { &self.ctx }
+
+    // =========================================================================
+    // Internal helpers
+    // =========================================================================
+
+    /// Run a 3-binding texture effect (input_tex → output_tex via uniforms).
+    fn run_effect_tex<U: Pod>(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        pipeline: &wgpu::ComputePipeline,
+        bgl: &wgpu::BindGroupLayout,
+        uniforms: &U,
+    ) -> Result<()> {
+        let w = input.width();
+        let h = input.height();
+
+        let input_view  = input.create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let uniform_buf = self.ctx.create_buffer_with_data(
+            bytemuck::bytes_of(uniforms),
+            wgpu::BufferUsages::UNIFORM,
+        );
+
+        let bind_group = self.ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Effect Tex Bind Group"),
+            layout: bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&input_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&output_view) },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let mut encoder = self.ctx.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Effect Tex Encoder"),
+        });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Effect Tex Pass"), timestamp_writes: None,
             });
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups((w + 15) / 16, (h + 15) / 16, 1);
+        }
+        self.ctx.queue().submit(Some(encoder.finish()));
+        Ok(())
+    }
 
-            // Workgroup size is 16x16
-            let workgroups_x = (width + 15) / 16;
-            let workgroups_y = (height + 15) / 16;
-            pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+    /// GPU-side texture copy via command encoder (used when effect is identity).
+    fn copy_texture(&self, src: &wgpu::Texture, dst: &wgpu::Texture) -> Result<()> {
+        let w = src.width();
+        let h = src.height();
+
+        if w != dst.width() || h != dst.height() {
+            return Err(Error::InvalidParameter(
+                "copy_texture: dimension mismatch".into()
+            ));
         }
 
-        queue.submit(Some(encoder.finish()));
-
-        // Read back results
-        self.ctx.read_buffer_sync(output_buffer)
-    }
-
-    /// Get GPU context
-    pub fn context(&self) -> &Arc<GpuContext> {
-        &self.ctx
+        let mut encoder = self.ctx.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Texture Copy"),
+        });
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: src, mip_level: 0,
+                origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: dst, mip_level: 0,
+                origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        self.ctx.queue().submit(Some(encoder.finish()));
+        Ok(())
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -920,5 +857,26 @@ mod tests {
         assert_eq!(params.amount, 0.1);
         assert_eq!(params.center_x, 1.0);
         assert_eq!(params.center_y, 0.0);
+    }
+
+    #[test]
+    fn test_cc_tex_params_size() {
+        assert_eq!(std::mem::size_of::<ColorCorrectionTexParams>(), 256);
+    }
+
+    #[test]
+    fn test_cc_tex_params_default_is_identity() {
+        let p = ColorCorrectionTexParams::default();
+        assert!(p.is_identity());
+    }
+
+    #[test]
+    fn test_identity_curves_data() {
+        let data = identity_curves_data();
+        assert_eq!(data.len(), 5 * 256);
+        // First channel: identity curve
+        assert!((data[0] - 0.0).abs() < 0.001);
+        assert!((data[128] - 128.0 / 255.0).abs() < 0.001);
+        assert!((data[255] - 1.0).abs() < 0.001);
     }
 }

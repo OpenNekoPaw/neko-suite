@@ -23,51 +23,259 @@ pub const EFFECTS_WGSL: &str = include_str!("../../../shaders/effects.wgsl");
 /// Easing functions for GPU animation (30+ easing types)
 pub const EASING_WGSL: &str = include_str!("../../../shaders/easing.wgsl");
 
-/// Color correction compute shader using texture format
+/// Full color correction compute shader (texture format, 6 bindings).
+///
+/// Bindings:
+///   0: input_tex  — texture_2d<f32>
+///   1: output_tex — texture_storage_2d<rgba8unorm, write>
+///   2: params     — uniform ColorCorrectionTexParams (256 bytes)
+///   3: curves     — storage<read> array<f32>  (5×256 entries: rgb/r/g/b/luma)
+///   4: lut_3d     — texture_3d<f32>  (n×n×n, x=R y=G z=B)
+///   5: lut_sampler— sampler (linear/trilinear)
 pub const COLOR_CORRECTION_COMPUTE_SHADER: &str = r#"
-// Color Correction Compute Shader
-// Uses texture format for WebGPU/wgpu compatibility
+// Full Color Correction Compute Shader — Texture-to-Texture, 6 bindings
+// Self-contained (no external includes required)
 
-struct Params {
-    brightness: f32,
-    contrast: f32,
-    saturation: f32,
-    exposure: f32,
-    gamma: f32,
-    hue_shift: f32,
-    temperature: f32,
-    tint: f32,
+// =============================================================================
+// Uniforms — must match Rust ColorCorrectionTexParams (repr(C), 256 bytes)
+// =============================================================================
+
+struct ColorCorrectionTexParams {
+    // Basic (13 params × f32 = 52 bytes)
+    brightness:     f32, // +0
+    exposure:       f32, // +4
+    contrast:       f32, // +8
+    highlights:     f32, // +12
+    shadows:        f32, // +16
+    whites:         f32, // +20
+    blacks:         f32, // +24
+    temperature:    f32, // +28
+    tint:           f32, // +32
+    saturation:     f32, // +36
+    vibrance:       f32, // +40
+    gamma:          f32, // +44
+    hue_shift:      f32, // +48
+    // Flags
+    cw_enabled:     f32, // +52  (0 or 1)
+    curves_enabled: f32, // +56  (0 or 1)
+    lut_enabled:    f32, // +60  (0 or 1)
+    lut_intensity:  f32, // +64
+    hsl_count:      f32, // +68  (0..8)
+    _pad0:          f32, // +72
+    _pad1:          f32, // +76
+    // Color wheels: (r,g,b,brightness) × 3 = 48 bytes  (starts at +80, 16-aligned)
+    cw_shadows:     vec4<f32>, // +80
+    cw_midtones:    vec4<f32>, // +96
+    cw_highlights:  vec4<f32>, // +112
+    // HSL data: 8 × vec4<f32> = 128 bytes (starts at +128)
+    hsl_data:       array<vec4<f32>, 8>, // +128..+255
 }
 
-@group(0) @binding(0) var input_texture: texture_2d<f32>;
-@group(0) @binding(1) var output_texture: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(2) var<uniform> params: Params;
+// =============================================================================
+// Bindings
+// =============================================================================
+
+@group(0) @binding(0) var input_tex:   texture_2d<f32>;
+@group(0) @binding(1) var output_tex:  texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> p:  ColorCorrectionTexParams;
+@group(0) @binding(3) var<storage, read> curves: array<f32>;
+@group(0) @binding(4) var lut_3d:      texture_3d<f32>;
+@group(0) @binding(5) var lut_sampler: sampler;
+
+// =============================================================================
+// Color math
+// =============================================================================
+
+fn luminance(c: vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)); }
+
+fn rgb_to_hsl(rgb: vec3<f32>) -> vec3<f32> {
+    let mx = max(max(rgb.r, rgb.g), rgb.b);
+    let mn = min(min(rgb.r, rgb.g), rgb.b);
+    let d  = mx - mn;
+    let l  = (mx + mn) * 0.5;
+    var h = 0.0; var s = 0.0;
+    if (d > 0.0001) {
+        s = select(d / (2.0 - mx - mn), d / (mx + mn), l < 0.5);
+        if      (mx == rgb.r) { h = (rgb.g - rgb.b) / d + select(0.0, 6.0, rgb.g < rgb.b); }
+        else if (mx == rgb.g) { h = (rgb.b - rgb.r) / d + 2.0; }
+        else                  { h = (rgb.r - rgb.g) / d + 4.0; }
+        h /= 6.0;
+    }
+    return vec3<f32>(h, s, l);
+}
+
+fn hue2rgb(p: f32, q: f32, t: f32) -> f32 {
+    var t1 = t;
+    if (t1 < 0.0) { t1 += 1.0; } if (t1 > 1.0) { t1 -= 1.0; }
+    if (t1 < 1.0/6.0) { return p + (q-p)*6.0*t1; }
+    if (t1 < 1.0/2.0) { return q; }
+    if (t1 < 2.0/3.0) { return p + (q-p)*(2.0/3.0-t1)*6.0; }
+    return p;
+}
+
+fn hsl_to_rgb(hsl: vec3<f32>) -> vec3<f32> {
+    if (hsl.y < 0.0001) { return vec3<f32>(hsl.z); }
+    let q = select(hsl.z + hsl.y - hsl.z*hsl.y, hsl.z*(1.0+hsl.y), hsl.z < 0.5);
+    let p = 2.0*hsl.z - q;
+    return vec3<f32>(hue2rgb(p,q,hsl.x+1.0/3.0), hue2rgb(p,q,hsl.x), hue2rgb(p,q,hsl.x-1.0/3.0));
+}
+
+// =============================================================================
+// CC pipeline functions
+// =============================================================================
+
+fn cc_exposure(c: vec3<f32>, stops: f32) -> vec3<f32>  { return c * pow(2.0, stops); }
+fn cc_brightness(c: vec3<f32>, a: f32)   -> vec3<f32>  { return c + a; }
+fn cc_contrast(c: vec3<f32>, a: f32)     -> vec3<f32>  { return (c - 0.5) * a + 0.5; }
+fn cc_gamma(c: vec3<f32>, g: f32)        -> vec3<f32>  { return pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0/g)); }
+
+fn cc_saturation(c: vec3<f32>, a: f32) -> vec3<f32> {
+    return mix(vec3<f32>(luminance(c)), c, a);
+}
+fn cc_vibrance(c: vec3<f32>, a: f32) -> vec3<f32> {
+    let sat = max(max(c.r,c.g),c.b) - min(min(c.r,c.g),c.b);
+    return mix(vec3<f32>(luminance(c)), c, 1.0 + a*(1.0-sat));
+}
+fn cc_hue_shift(c: vec3<f32>, deg: f32) -> vec3<f32> {
+    var hsl = rgb_to_hsl(c); hsl.x = fract(hsl.x + deg/360.0); return hsl_to_rgb(hsl);
+}
+fn cc_temperature(c: vec3<f32>, t: f32) -> vec3<f32> {
+    let s = t; return vec3<f32>(c.r + s*0.1, c.g, c.b - s*0.1);
+}
+fn cc_tint(c: vec3<f32>, t: f32) -> vec3<f32> { return vec3<f32>(c.r, c.g + t*0.1, c.b); }
+
+fn cc_highlights(c: vec3<f32>, a: f32) -> vec3<f32> {
+    return c + a * smoothstep(0.5, 1.0, luminance(c));
+}
+fn cc_shadows(c: vec3<f32>, a: f32) -> vec3<f32> {
+    return c + a * (1.0 - smoothstep(0.0, 0.5, luminance(c)));
+}
+fn cc_whites(c: vec3<f32>, a: f32) -> vec3<f32> {
+    return c + a * smoothstep(0.75, 1.0, luminance(c));
+}
+fn cc_blacks(c: vec3<f32>, a: f32) -> vec3<f32> {
+    return c + a * (1.0 - smoothstep(0.0, 0.25, luminance(c)));
+}
+
+// HSL per-color adjustment: target_hue in 0-1, hue_shift/sat_adj/lum_adj in -0.5..0.5
+fn cc_hsl_range(c: vec3<f32>, target_hue: f32, hue_shift: f32, sat_adj: f32, lum_adj: f32) -> vec3<f32> {
+    var hsl = rgb_to_hsl(c);
+    // Weight: angular distance on hue wheel (wrap-around, width ~1/6)
+    var diff = abs(hsl.x - target_hue);
+    if (diff > 0.5) { diff = 1.0 - diff; }
+    let weight = smoothstep(1.0/6.0, 0.0, diff);
+    if (weight < 0.001) { return c; }
+    hsl.x  = fract(hsl.x + hue_shift * weight);
+    hsl.y  = clamp(hsl.y + sat_adj * weight, 0.0, 1.0);
+    hsl.z  = clamp(hsl.z + lum_adj * weight, 0.0, 1.0);
+    return mix(c, hsl_to_rgb(hsl), weight);
+}
+
+// 3-way color wheel correction
+fn cc_color_wheel(
+    c:    vec3<f32>,
+    sh:   vec4<f32>,   // shadows    (r,g,b,brightness)
+    mid:  vec4<f32>,   // midtones   (r,g,b,brightness)
+    hi:   vec4<f32>,   // highlights (r,g,b,brightness)
+) -> vec3<f32> {
+    let lum = luminance(c);
+    let shadow_w    = 1.0 - smoothstep(0.0, 0.5, lum);
+    let highlight_w = smoothstep(0.5, 1.0, lum);
+    let midtone_w   = 1.0 - shadow_w - highlight_w;
+
+    var result = c;
+    // Color tint: shift each channel proportionally (0.5=neutral)
+    result += (sh.rgb  - 0.5) * 2.0 * shadow_w;
+    result += (mid.rgb - 0.5) * 2.0 * midtone_w;
+    result += (hi.rgb  - 0.5) * 2.0 * highlight_w;
+    // Brightness offset
+    result += sh.w  * shadow_w;
+    result += mid.w * midtone_w;
+    result += hi.w  * highlight_w;
+    return result;
+}
+
+// =============================================================================
+// Curves (5×256 f32 buffer: indices rgb=0, r=1, g=2, b=3, luma=4)
+// =============================================================================
+
+fn sample_curve(channel: u32, value: f32) -> f32 {
+    let idx = channel * 256u + u32(clamp(round(value * 255.0), 0.0, 255.0));
+    return curves[idx];
+}
+
+fn apply_curves(c: vec3<f32>) -> vec3<f32> {
+    // Per-channel
+    var r = sample_curve(1u, c.r);
+    var g = sample_curve(2u, c.g);
+    var b = sample_curve(3u, c.b);
+    // Luma curve — scale channels to preserve colour balance
+    let lum_in  = luminance(vec3<f32>(r, g, b));
+    let lum_out = sample_curve(4u, lum_in);
+    let scale   = select(lum_out / lum_in, 1.0, lum_in < 0.001);
+    r *= scale; g *= scale; b *= scale;
+    // RGB master
+    r = sample_curve(0u, r);
+    g = sample_curve(0u, g);
+    b = sample_curve(0u, b);
+    return vec3<f32>(r, g, b);
+}
+
+// =============================================================================
+// Main
+// =============================================================================
 
 @compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let dims = textureDimensions(input_texture);
-    if (global_id.x >= dims.x || global_id.y >= dims.y) {
-        return;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims  = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let coord = vec2<i32>(gid.xy);
+
+    var c4 = textureLoad(input_tex, coord, 0);
+    var c  = c4.rgb;
+
+    // Basic CC pipeline
+    c = cc_exposure(c,    p.exposure);
+    c = cc_brightness(c,  p.brightness);
+    c = cc_temperature(c, p.temperature);
+    c = cc_tint(c,        p.tint);
+    c = cc_highlights(c,  p.highlights);
+    c = cc_shadows(c,     p.shadows);
+    c = cc_whites(c,      p.whites);
+    c = cc_blacks(c,      p.blacks);
+    c = cc_contrast(c,    p.contrast);
+    c = cc_gamma(c,       p.gamma);
+    c = cc_vibrance(c,    p.vibrance);
+    c = cc_saturation(c,  p.saturation);
+    c = cc_hue_shift(c,   p.hue_shift);
+
+    // HSL per-color adjustments
+    let hsl_n = u32(p.hsl_count);
+    for (var i = 0u; i < hsl_n; i++) {
+        let d = p.hsl_data[i];
+        c = cc_hsl_range(c, d.x, d.y, d.z, d.w);
     }
 
-    let coord = vec2<i32>(global_id.xy);
-    var color = textureLoad(input_texture, coord, 0);
+    // Color wheels
+    if (p.cw_enabled > 0.5) {
+        c = cc_color_wheel(c, p.cw_shadows, p.cw_midtones, p.cw_highlights);
+    }
 
-    // Apply effects using shared functions
-    var rgb = color.rgb;
-    rgb = apply_exposure(rgb, params.exposure);
-    rgb = apply_brightness(rgb, params.brightness);
-    rgb = apply_contrast(rgb, params.contrast);
-    rgb = apply_gamma(rgb, params.gamma);
-    rgb = apply_saturation(rgb, params.saturation);
-    rgb = apply_hue_shift(rgb, params.hue_shift);
-    rgb = apply_temperature(rgb, params.temperature);
-    rgb = apply_tint(rgb, params.tint);
+    // Curves
+    if (p.curves_enabled > 0.5) {
+        c = apply_curves(c);
+    }
 
-    // Clamp to valid range
-    rgb = saturate3(rgb);
+    c = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
 
-    textureStore(output_texture, coord, vec4<f32>(rgb, color.a));
+    // 3D LUT
+    if (p.lut_enabled > 0.5) {
+        let lut_c = textureSample(lut_3d, lut_sampler, c).rgb;
+        c = mix(c, lut_c, p.lut_intensity);
+        c = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+
+    textureStore(output_tex, coord, vec4<f32>(c, c4.a));
 }
 "#;
 
@@ -382,8 +590,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
-/// Get full color correction shader with common utilities included (texture format)
+/// Get full color correction shader (texture format, 6 bindings, full params + curves + LUT).
+/// Self-contained — no external WGSL includes needed.
 pub fn get_color_correction_shader() -> String {
+    COLOR_CORRECTION_COMPUTE_SHADER.to_string()
+}
+
+/// Legacy alias kept for callers that still concatenate shared includes.
+pub fn get_color_correction_shader_legacy() -> String {
     format!(
         "{}\n{}\n{}",
         COMMON_WGSL, COLOR_CORRECTION_WGSL, COLOR_CORRECTION_COMPUTE_SHADER
@@ -1037,6 +1251,261 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let idx = global_id.x + global_id.y * uniforms.width;
     output[idx] = pack_rgba(result);
+}
+"#;
+
+// =============================================================================
+// Texture-to-Texture Effect Shaders (Phase 3 zero-copy pipeline)
+// Bindings: 0=input_tex texture_2d<f32>, 1=output_tex texture_storage_2d<rgba8unorm,write>,
+//           2=uniforms (uniform buffer)
+// =============================================================================
+
+/// Blur texture-to-texture shader.
+/// Uniforms: blur_type(u32), samples(u32), radius(f32), direction_x(f32),
+///           direction_y(f32), center_x(f32), center_y(f32), strength(f32)
+pub const BLUR_TEX_SHADER: &str = r#"
+struct Uniforms {
+    blur_type:   u32,
+    samples:     u32,
+    radius:      f32,
+    direction_x: f32,
+    direction_y: f32,
+    center_x:    f32,
+    center_y:    f32,
+    strength:    f32,
+}
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn tex_sample(x: i32, y: i32, dims: vec2<u32>) -> vec4<f32> {
+    let cx = clamp(x, 0, i32(dims.x)-1);
+    let cy = clamp(y, 0, i32(dims.y)-1);
+    return textureLoad(input_tex, vec2<i32>(cx, cy), 0);
+}
+fn gauss_w(x: f32, sigma: f32) -> f32 { return exp(-(x*x)/(2.0*sigma*sigma)); }
+
+fn box_blur(px: i32, py: i32, dims: vec2<u32>) -> vec4<f32> {
+    let r = i32(u.radius); var c = vec4<f32>(0.0); var n = 0.0;
+    for (var dy = -r; dy <= r; dy++) { for (var dx = -r; dx <= r; dx++) {
+        c += tex_sample(px+dx, py+dy, dims); n += 1.0;
+    }}
+    return c / n;
+}
+fn gaussian_blur(px: i32, py: i32, dims: vec2<u32>) -> vec4<f32> {
+    let r = i32(u.radius); let sigma = u.radius/3.0;
+    var c = vec4<f32>(0.0); var ws = 0.0;
+    for (var dy = -r; dy <= r; dy++) { for (var dx = -r; dx <= r; dx++) {
+        let w = gauss_w(sqrt(f32(dx*dx+dy*dy)), sigma);
+        c += tex_sample(px+dx, py+dy, dims)*w; ws += w;
+    }}
+    return c / ws;
+}
+fn directional_blur(px: i32, py: i32, dims: vec2<u32>) -> vec4<f32> {
+    let s = i32(u.samples); var c = vec4<f32>(0.0);
+    for (var i = 0; i < s; i++) {
+        let t = (f32(i) - f32(s-1)*0.5) / f32(s);
+        c += tex_sample(px+i32(u.direction_x*u.radius*t), py+i32(u.direction_y*u.radius*t), dims);
+    }
+    return c / f32(s);
+}
+fn radial_blur(px: i32, py: i32, dims: vec2<u32>) -> vec4<f32> {
+    let uv = vec2<f32>(f32(px)/f32(dims.x), f32(py)/f32(dims.y));
+    let dir = uv - vec2<f32>(u.center_x, u.center_y);
+    let s = i32(u.samples); var c = vec4<f32>(0.0);
+    for (var i = 0; i < s; i++) {
+        let t = f32(i)/f32(s-1);
+        let a = u.strength*length(dir)*(t-0.5)*0.1;
+        let rv = vec2<f32>(dir.x*cos(a)-dir.y*sin(a), dir.x*sin(a)+dir.y*cos(a));
+        let suv = vec2<f32>(u.center_x, u.center_y) + rv;
+        c += tex_sample(i32(suv.x*f32(dims.x)), i32(suv.y*f32(dims.y)), dims);
+    }
+    return c / f32(s);
+}
+fn zoom_blur(px: i32, py: i32, dims: vec2<u32>) -> vec4<f32> {
+    let uv = vec2<f32>(f32(px)/f32(dims.x), f32(py)/f32(dims.y));
+    let dir = uv - vec2<f32>(u.center_x, u.center_y);
+    let s = i32(u.samples); var c = vec4<f32>(0.0);
+    for (var i = 0; i < s; i++) {
+        let sc = 1.0 + u.strength*(f32(i)/f32(s-1)-0.5)*0.1;
+        let suv = vec2<f32>(u.center_x, u.center_y) + dir*sc;
+        c += tex_sample(i32(suv.x*f32(dims.x)), i32(suv.y*f32(dims.y)), dims);
+    }
+    return c / f32(s);
+}
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let px = i32(gid.x); let py = i32(gid.y);
+    var result: vec4<f32>;
+    switch (u.blur_type) {
+        case 0u: { result = box_blur(px, py, dims); }
+        case 1u: { result = gaussian_blur(px, py, dims); }
+        case 2u: { result = directional_blur(px, py, dims); }
+        case 3u: { result = radial_blur(px, py, dims); }
+        case 4u: { result = zoom_blur(px, py, dims); }
+        default: { result = textureLoad(input_tex, vec2<i32>(px, py), 0); }
+    }
+    textureStore(output_tex, vec2<i32>(px, py), result);
+}
+"#;
+
+/// Sharpen (unsharp mask) texture-to-texture shader.
+/// Uniforms: amount(f32), radius(f32), threshold(f32), _pad(f32)
+pub const SHARPEN_TEX_SHADER: &str = r#"
+struct Uniforms { amount: f32, radius: f32, threshold: f32, _pad: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn tex_sample(x: i32, y: i32, dims: vec2<u32>) -> vec4<f32> {
+    return textureLoad(input_tex, vec2<i32>(clamp(x,0,i32(dims.x)-1), clamp(y,0,i32(dims.y)-1)), 0);
+}
+fn gauss_w(x: f32, sigma: f32) -> f32 { return exp(-(x*x)/(2.0*sigma*sigma)); }
+fn luminance(c: vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126,0.7152,0.0722)); }
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let px = i32(gid.x); let py = i32(gid.y);
+    let orig = tex_sample(px, py, dims);
+    let r = i32(ceil(u.radius)); let sigma = u.radius/3.0;
+    var blur = vec4<f32>(0.0); var ws = 0.0;
+    for (var dy = -r; dy <= r; dy++) { for (var dx = -r; dx <= r; dx++) {
+        let d = sqrt(f32(dx*dx+dy*dy));
+        if (d <= u.radius) {
+            let w = gauss_w(d, sigma);
+            blur += tex_sample(px+dx, py+dy, dims)*w; ws += w;
+        }
+    }}
+    blur /= ws;
+    let diff = orig.rgb - blur.rgb;
+    var sharp = orig.rgb;
+    if (abs(luminance(diff)) > u.threshold) { sharp = orig.rgb + u.amount*diff; }
+    textureStore(output_tex, vec2<i32>(px,py), vec4<f32>(clamp(sharp,vec3<f32>(0.0),vec3<f32>(1.0)), orig.a));
+}
+"#;
+
+/// Vignette texture-to-texture shader.
+/// Uniforms: amount(f32), radius(f32), softness(f32), roundness(f32)
+pub const VIGNETTE_TEX_SHADER: &str = r#"
+struct Uniforms { amount: f32, radius: f32, softness: f32, roundness: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let coord = vec2<i32>(gid.xy);
+    let c = textureLoad(input_tex, coord, 0);
+    let uv = vec2<f32>(f32(gid.x)/f32(dims.x), f32(gid.y)/f32(dims.y));
+    var delta = uv - 0.5;
+    delta.x *= mix(1.0, f32(dims.x)/f32(dims.y), u.roundness);
+    let vignette = 1.0 - smoothstep(u.radius, u.radius+u.softness, length(delta)) * u.amount;
+    textureStore(output_tex, coord, vec4<f32>(c.rgb*vignette, c.a));
+}
+"#;
+
+/// Film grain texture-to-texture shader.
+/// Uniforms: amount(f32), size(f32), time(f32), color_amount(f32)
+pub const FILM_GRAIN_TEX_SHADER: &str = r#"
+struct Uniforms { amount: f32, size: f32, time: f32, color_amount: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn hash2(p: vec2<f32>) -> f32 {
+    var p3 = fract(vec3<f32>(p.x,p.y,p.x)*0.13);
+    p3 += dot(p3, p3.yzx+3.333);
+    return fract((p3.x+p3.y)*p3.z);
+}
+fn grain(uv: vec2<f32>, t: f32) -> f32 { return hash2(uv*u.size+t)*2.0-1.0; }
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let coord = vec2<i32>(gid.xy);
+    let c = textureLoad(input_tex, coord, 0);
+    let uv = vec2<f32>(gid.xy);
+    let mg = grain(uv, u.time)*u.amount;
+    let fg = vec3<f32>(
+        mix(mg, grain(uv+vec2<f32>(1.0,0.0), u.time)*u.amount, u.color_amount),
+        mix(mg, grain(uv+vec2<f32>(0.0,1.0), u.time)*u.amount, u.color_amount),
+        mix(mg, grain(uv+vec2<f32>(1.0,1.0), u.time)*u.amount, u.color_amount),
+    );
+    textureStore(output_tex, coord, vec4<f32>(clamp(c.rgb+fg, vec3<f32>(0.0), vec3<f32>(1.0)), c.a));
+}
+"#;
+
+/// Glow/bloom texture-to-texture shader.
+/// Uniforms: intensity(f32), threshold(f32), radius(f32), _pad(f32)
+pub const GLOW_TEX_SHADER: &str = r#"
+struct Uniforms { intensity: f32, threshold: f32, radius: f32, _pad: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn tex_sample(x: i32, y: i32, dims: vec2<u32>) -> vec4<f32> {
+    return textureLoad(input_tex, vec2<i32>(clamp(x,0,i32(dims.x)-1), clamp(y,0,i32(dims.y)-1)), 0);
+}
+fn gauss_w(x: f32, sigma: f32) -> f32 { return exp(-(x*x)/(2.0*sigma*sigma)); }
+fn luminance(c: vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126,0.7152,0.0722)); }
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let px = i32(gid.x); let py = i32(gid.y);
+    let orig = tex_sample(px, py, dims);
+    let r = i32(u.radius); let sigma = u.radius/3.0;
+    var glow = vec3<f32>(0.0); var ws = 0.0;
+    for (var dy = -r; dy <= r; dy+=2) { for (var dx = -r; dx <= r; dx+=2) {
+        let s = tex_sample(px+dx, py+dy, dims);
+        let lum = luminance(s.rgb);
+        if (lum > u.threshold) {
+            let w = gauss_w(sqrt(f32(dx*dx+dy*dy)), sigma);
+            glow += s.rgb*(lum-u.threshold)/(1.0-u.threshold)*w; ws += w;
+        }
+    }}
+    if (ws > 0.0) { glow /= ws; }
+    textureStore(output_tex, vec2<i32>(px,py),
+        vec4<f32>(clamp(orig.rgb+glow*u.intensity, vec3<f32>(0.0), vec3<f32>(1.0)), orig.a));
+}
+"#;
+
+/// Chromatic aberration texture-to-texture shader.
+/// Uniforms: amount(f32), angle(f32), center_x(f32), center_y(f32)
+pub const CHROMATIC_ABERRATION_TEX_SHADER: &str = r#"
+struct Uniforms { amount: f32, angle: f32, center_x: f32, center_y: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn sample_uv(uv: vec2<f32>, dims: vec2<u32>) -> vec4<f32> {
+    let x = clamp(i32(uv.x*f32(dims.x)), 0, i32(dims.x)-1);
+    let y = clamp(i32(uv.y*f32(dims.y)), 0, i32(dims.y)-1);
+    return textureLoad(input_tex, vec2<i32>(x,y), 0);
+}
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let uv = vec2<f32>(f32(gid.x)/f32(dims.x), f32(gid.y)/f32(dims.y));
+    let center = vec2<f32>(u.center_x, u.center_y);
+    let dist = length(uv - center);
+    let off = vec2<f32>(cos(u.angle), sin(u.angle)) * u.amount * dist;
+    let r = sample_uv(uv+off, dims).r;
+    let g = sample_uv(uv,    dims).g;
+    let b = sample_uv(uv-off, dims).b;
+    let a = sample_uv(uv,    dims).a;
+    textureStore(output_tex, vec2<i32>(gid.xy), vec4<f32>(r,g,b,a));
 }
 "#;
 
@@ -2169,9 +2638,21 @@ mod tests {
     #[test]
     fn test_full_shader_generation() {
         let shader = get_color_correction_shader();
-        assert!(shader.contains("rgb_to_hsl"));
-        assert!(shader.contains("apply_exposure"));
-        assert!(shader.contains("@compute"));
+        assert!(shader.contains("rgb_to_hsl"), "missing rgb_to_hsl");
+        assert!(shader.contains("cc_exposure"), "missing cc_exposure");
+        assert!(shader.contains("@compute"), "missing @compute");
+        assert!(shader.contains("lut_3d"), "missing lut_3d binding");
+        assert!(shader.contains("curves"), "missing curves binding");
+    }
+
+    #[test]
+    fn test_tex_variant_shaders_present() {
+        assert!(BLUR_TEX_SHADER.contains("texture_storage_2d"), "BLUR_TEX_SHADER not texture-based");
+        assert!(SHARPEN_TEX_SHADER.contains("texture_storage_2d"));
+        assert!(VIGNETTE_TEX_SHADER.contains("texture_storage_2d"));
+        assert!(FILM_GRAIN_TEX_SHADER.contains("texture_storage_2d"));
+        assert!(GLOW_TEX_SHADER.contains("texture_storage_2d"));
+        assert!(CHROMATIC_ABERRATION_TEX_SHADER.contains("texture_storage_2d"));
     }
 
     #[test]

@@ -10,7 +10,19 @@ import * as path from 'node:path';
 import type { ToolResult, ToolCategory } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
+export interface WriteToolOptions {
+  /** Default working directory; relative paths are resolved against this */
+  defaultCwd?: string;
+}
+
 export class WriteTool extends BuiltinTool {
+  private readonly defaultCwd?: string;
+
+  constructor(options?: WriteToolOptions) {
+    super();
+    this.defaultCwd = options?.defaultCwd;
+  }
+
   readonly name = 'Write';
   readonly description =
     'Write content to a file. Creates parent directories if needed. Use append mode to add to existing files.';
@@ -19,7 +31,8 @@ export class WriteTool extends BuiltinTool {
     properties: {
       file_path: {
         type: 'string',
-        description: 'Absolute path to the file to write',
+        description:
+          'Path to the file to write. Relative paths are resolved against the workspace root.',
       },
       content: {
         type: 'string',
@@ -46,7 +59,17 @@ export class WriteTool extends BuiltinTool {
     const append = (args.append as boolean | undefined) ?? false;
 
     try {
-      const resolved = path.resolve(filePath);
+      const resolved = path.resolve(this.defaultCwd ?? '.', filePath);
+
+      // Prevent writing outside the workspace root
+      if (this.defaultCwd) {
+        const workspace = path.resolve(this.defaultCwd);
+        if (!resolved.startsWith(workspace + path.sep) && resolved !== workspace) {
+          return this.error(
+            `Path is outside the workspace root: ${resolved}\nWorkspace: ${workspace}`,
+          );
+        }
+      }
 
       // Ensure parent directory exists
       await fs.mkdir(path.dirname(resolved), { recursive: true });

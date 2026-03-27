@@ -350,8 +350,6 @@ function isHSLIdentity(hsl: ColorCorrection['hsl']): boolean {
  * - Color wheels (shadows/midtones/highlights) → engine apply_color_wheel shader
  * - HSL per-color (8 ranges × 3 params) → engine apply_hsl_adjustment shader
  *
- * TODO(P1): LUT data upload — currently forwards lutId + intensity,
- *           but .cube file loading requires Extension Host → Engine upload pipeline
  */
 export function colorCorrectionToCompositeEffect(cc: ColorCorrection): CompositeEffect | null {
   if (!cc.enabled) return null;

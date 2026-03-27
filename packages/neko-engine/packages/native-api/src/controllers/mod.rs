@@ -13,10 +13,12 @@
 //! - CanvasController: canvas:* actions (placeholder)
 //! - ScenesController: scenes:* actions (3D scene management)
 //! - PuppetsController: puppets:* actions (2D puppet management)
+//! - ColorCorrectionController: color-correction:* actions (LUT management)
 
 mod audio;
 mod camera;
 mod canvas;
+mod color_correction;
 mod effects;
 mod gamepad;
 mod image;
@@ -34,6 +36,7 @@ mod video;
 pub use audio::AudioController;
 pub use camera::CameraController;
 pub use canvas::CanvasController;
+pub use color_correction::ColorCorrectionController;
 pub use effects::EffectsController;
 pub use gamepad::GamepadController;
 pub use image::ImageController;

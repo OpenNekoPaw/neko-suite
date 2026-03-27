@@ -35,7 +35,7 @@ export function createCoreTools(options?: CoreToolsOptions): Tool[] {
 
   const tools: Tool[] = [
     new ReadTool(),
-    new WriteTool(),
+    new WriteTool({ defaultCwd: options?.defaultCwd }),
     new BashTool(bashOpts),
     new ListDirectoryTool(),
     new GrepTool({ defaultCwd: options?.defaultCwd }),

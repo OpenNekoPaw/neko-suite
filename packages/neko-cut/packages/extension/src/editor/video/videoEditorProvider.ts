@@ -562,6 +562,12 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
 
+        // Handle LUT load request (Webview → Extension → NativeEngine)
+        if (message.type === 'colorCorrection:loadLut') {
+          await this.handleLoadLut(webviewPanel.webview, docUri);
+          return;
+        }
+
         // Handle preset list request
         if (message.type === 'preset:list') {
           const presets = this.presetService?.listPresets() ?? [];
@@ -976,6 +982,85 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
+  }
+
+  /**
+   * Handle colorCorrection:loadLut — open file dialog, read .cube, upload to engine.
+   * Responds with colorCorrection:lutLoaded or colorCorrection:lutError.
+   */
+  private async handleLoadLut(webview: vscode.Webview, _docUri: string): Promise<void> {
+    try {
+      // 1. Open file picker for .cube files
+      const uris = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: { 'LUT Files': ['cube'] },
+        title: 'Load LUT (.cube)',
+      });
+
+      if (!uris || uris.length === 0) {
+        // User cancelled — no response needed
+        return;
+      }
+
+      const fileUri = uris[0]!;
+      const fileName = path.basename(fileUri.fsPath, '.cube');
+
+      // 2. Read .cube file
+      const fileData = await vscode.workspace.fs.readFile(fileUri);
+
+      // 3. Base64-encode the UTF-8 content
+      const base64Data = Buffer.from(fileData).toString('base64');
+
+      // 4. Upload to engine via EngineClient
+      const client = await this.engineConnection.ensureClient();
+      if (!client) {
+        webview.postMessage({
+          type: 'colorCorrection:lutError',
+          error: 'Engine not available',
+        });
+        return;
+      }
+
+      const response = await client.dispatch({
+        group: 'color-correction',
+        action: 'upload_lut',
+        options: { name: fileName },
+        body: { data: base64Data },
+      });
+
+      if (response.status !== 'ok') {
+        webview.postMessage({
+          type: 'colorCorrection:lutError',
+          error: (response.error as { message?: string } | null)?.message ?? 'LUT upload failed',
+        });
+        return;
+      }
+
+      const data = response.data as Record<string, unknown> | undefined;
+      const lutId = data?.['lutId'] as string | undefined;
+      const name = (data?.['name'] as string | undefined) ?? fileName;
+
+      if (!lutId) {
+        webview.postMessage({
+          type: 'colorCorrection:lutError',
+          error: 'Engine did not return a lutId',
+        });
+        return;
+      }
+
+      // 5. Notify webview
+      webview.postMessage({
+        type: 'colorCorrection:lutLoaded',
+        lutId,
+        name,
+      });
+    } catch (error) {
+      logger.error('handleLoadLut error', error);
+      webview.postMessage({
+        type: 'colorCorrection:lutError',
+        error: error instanceof Error ? error.message : 'Failed to load LUT',
+      });
+    }
   }
 }
 
