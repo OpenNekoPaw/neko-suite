@@ -104,7 +104,8 @@
         "${workspaceFolder}/packages/neko-agent/dist/**/*.js",
         "${workspaceFolder}/packages/neko-engine/dist/**/*.js",
         "${workspaceFolder}/packages/neko-tools/dist/**/*.js",
-        "${workspaceFolder}/packages/neko-preview/dist/**/*.js"
+        "${workspaceFolder}/packages/neko-preview/dist/**/*.js",
+        "${workspaceFolder}/packages/neko-auth/dist/**/*.js"
       ],
       "preLaunchTask": "build:neko-agent"
     },
