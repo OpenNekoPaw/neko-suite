@@ -73,7 +73,7 @@ pub use rgba_to_nv12::{
     Nv12OutputBuffers, RgbaToNv12Converter, RgbaToNv12Uniforms, RGBA_TO_NV12_SHADER,
 };
 pub use style_processor::{
-    ChromaticAberrationParams, ColorCorrectionParams, FilmGrainParams, GlowParams,
+    ChromaticAberrationParams, ColorCorrectionTexParams, FilmGrainParams, GlowParams,
     GpuStyleProcessor, VignetteParams,
 };
 pub use texture::{TextureFormat, TextureHandle, TexturePool};

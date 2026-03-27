@@ -434,23 +434,22 @@ impl ITimelineService for TimelineService {
 
             let (mut rgba_data, src_width, src_height) = decoded_rgba;
 
-            // Apply effects to decoded RGBA frame (Phase 2 GPU pipeline)
-            // Note: apply_effects takes ownership of the pixel buffer, so we must
-            // always reassign the result or clone before calling.
-            if !element.effects.is_empty() {
+            // Apply effects to decoded RGBA frame (GPU texture-to-texture via EffectDispatcher)
+            if element.effects.iter().any(|e| e.enabled) {
+                let original = rgba_data.clone();
                 rgba_data = match EffectDispatcher::new(gpu_ctx.clone()) {
-                    Ok(dispatcher) => {
-                        match dispatcher.apply_effects(rgba_data.clone(), src_width, src_height, &element.effects) {
+                    Ok(mut dispatcher) => {
+                        match dispatcher.apply_effects_from_pixels(rgba_data, src_width, src_height, &element.effects) {
                             Ok(processed) => processed,
                             Err(e) => {
                                 tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
-                                rgba_data
+                                original
                             }
                         }
                     }
                     Err(e) => {
                         tracing::warn!("Failed to create EffectDispatcher for composite: {}", e);
-                        rgba_data
+                        original
                     }
                 };
             }

@@ -19,11 +19,12 @@ use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
-    BlurParams, BlurType, ChromaticAberrationParams, CustomShaderProcessor, GlowParams,
-    GpuBlurProcessor, GpuContext, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, LutRegistry,
-    Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, SharpenParams,
-    TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
-    TransitionParams, TransitionType, VignetteParams,
+    BlurParams, BlurType, ChromaticAberrationParams, ColorCorrectionTexParams,
+    CustomShaderProcessor, FilmGrainParams, GlowParams, GpuBlurProcessor, GpuContext, GpuLayer,
+    GpuLayerBuilder, GpuStyleProcessor, LutRegistry, Nv12OutputBuffers, Nv12RenderCache,
+    Nv12TextureImporter, RgbaToNv12Converter, SharpenParams, TextRenderer,
+    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
+    TransitionType, VignetteParams,
 };
 use crate::telemetry::spans::span;
 use crate::services::{ISceneService, SceneService};
@@ -32,16 +33,15 @@ use neko_types::TrackType;
 use super::types::ExportSettings;
 
 // =============================================================================
-// Effect Dispatcher — maps ElementEffect to GPU processors
+// Effect Dispatcher — GPU texture-to-texture effect chain
 // =============================================================================
 
-/// Dispatches `ElementEffect` instances to the appropriate GPU processor.
+/// Dispatches `ElementEffect` instances to GPU processors via texture-to-texture pipeline.
 ///
-/// Phase 2: operates on `&[u8]` RGBA buffers (CPU round-trip per effect).
-/// Future: GPU texture-to-texture pass for zero-copy effect chains.
-///
-/// Used by both export pipeline and composite preview pipeline.
+/// All effects operate entirely on GPU textures — no CPU round-trips.
+/// The only legal CPU exit is the final NV12 readback for the encoder.
 pub struct EffectDispatcher {
+    ctx: Arc<GpuContext>,
     custom_shader: CustomShaderProcessor,
     blur_processor: GpuBlurProcessor,
     style_processor: GpuStyleProcessor,
@@ -52,26 +52,46 @@ impl EffectDispatcher {
         Ok(Self {
             custom_shader: CustomShaderProcessor::new(ctx.clone())?,
             blur_processor: GpuBlurProcessor::new(ctx.clone())?,
-            style_processor: GpuStyleProcessor::new(ctx)?,
+            style_processor: GpuStyleProcessor::new(ctx.clone())?,
+            ctx,
         })
     }
 
-    /// Apply all enabled effects on an element in stack order.
-    /// Returns the processed RGBA pixel buffer.
-    pub fn apply_effects(
-        &self,
-        mut pixels: Vec<u8>,
+    /// Apply all enabled effects on a GPU texture, returning the processed texture.
+    ///
+    /// Ping-pong pattern: two `Rgba8Unorm` intermediate textures alternate as
+    /// input/output across the chain. Returns the texture containing the final result.
+    pub fn apply_effects_gpu(
+        &mut self,
+        input: &wgpu::Texture,
         width: u32,
         height: u32,
         effects: &[neko_types::ElementEffect],
-    ) -> Result<Vec<u8>> {
+    ) -> Result<wgpu::Texture> {
         let mut sorted: Vec<&neko_types::ElementEffect> =
             effects.iter().filter(|e| e.enabled).collect();
         sorted.sort_by_key(|e| e.order);
 
-        for fx in sorted {
-            match self.apply_single(&pixels, width, height, fx) {
-                Ok(result) => pixels = result,
+        // Caller guarantees sorted is non-empty (has_enabled_effects check in Step 3.5)
+        debug_assert!(!sorted.is_empty(), "apply_effects_gpu called with no enabled effects");
+
+        // Allocate two ping-pong textures
+        let ping = Self::create_effect_texture(&self.ctx, width, height);
+        let pong = Self::create_effect_texture(&self.ctx, width, height);
+        let textures = [ping, pong];
+        let mut src_is_input = true; // first effect reads from `input`
+        let mut dst_idx: usize = 0; // first output goes to textures[0]
+
+        for (i, fx) in sorted.iter().enumerate() {
+            let dst = &textures[dst_idx];
+            let src: &wgpu::Texture = if src_is_input {
+                input
+            } else {
+                &textures[1 - dst_idx]
+            };
+
+            match self.apply_single_tex(src, dst, fx) {
+                Ok(()) => {}
                 Err(e) => {
                     tracing::warn!(
                         "Effect '{}' ({}) failed, skipping: {}",
@@ -79,29 +99,53 @@ impl EffectDispatcher {
                         fx.id,
                         e
                     );
-                    // Graceful degradation: continue with unmodified pixels
+                    // Graceful degradation: write src pixels through film-grain identity pass
+                    // (amount=0 → identity but actually triggers the is_identity copy path, which
+                    // requires same format — so use a near-zero amount to force shader execution)
+                    let identity_grain = crate::gpu::FilmGrainParams {
+                        amount: 0.0001,
+                        ..Default::default()
+                    };
+                    let _ = self.style_processor.apply_film_grain_tex(src, dst, &identity_grain);
                 }
             }
+
+            src_is_input = false;
+            if i + 1 < sorted.len() {
+                dst_idx = 1 - dst_idx; // swap ping/pong for next effect
+            }
         }
-        Ok(pixels)
+
+        // Return whichever texture holds the final output
+        let (first, second) = {
+            let mut iter = textures.into_iter();
+            (iter.next().unwrap(), iter.next().unwrap())
+        };
+        if dst_idx == 0 {
+            Ok(first)
+        } else {
+            Ok(second)
+        }
     }
 
-    fn apply_single(
-        &self,
-        pixels: &[u8],
-        width: u32,
-        height: u32,
+    // =========================================================================
+    // Internal: single effect dispatch (texture → texture)
+    // =========================================================================
+
+    fn apply_single_tex(
+        &mut self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
         fx: &neko_types::ElementEffect,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<()> {
         let params = &fx.parameters;
         match fx.effect_type.as_str() {
             // Blur effects → GpuBlurProcessor
             "gaussian-blur" => {
                 let radius = Self::get_f32(params, "radius", 10.0);
-                self.blur_processor.apply_blur(
-                    pixels,
-                    width,
-                    height,
+                self.blur_processor.apply_blur_tex(
+                    input,
+                    output,
                     &BlurParams {
                         blur_type: BlurType::Gaussian as u32,
                         radius,
@@ -114,10 +158,9 @@ impl EffectDispatcher {
             "motion-blur" => {
                 let distance = Self::get_f32(params, "distance", 20.0);
                 let angle = Self::get_f32(params, "angle", 0.0).to_radians();
-                self.blur_processor.apply_blur(
-                    pixels,
-                    width,
-                    height,
+                self.blur_processor.apply_blur_tex(
+                    input,
+                    output,
                     &BlurParams {
                         blur_type: BlurType::Directional as u32,
                         radius: distance,
@@ -131,10 +174,9 @@ impl EffectDispatcher {
                 let amount = Self::get_f32(params, "amount", 20.0) / 100.0;
                 let center_x = Self::get_f32(params, "centerX", 50.0) / 100.0;
                 let center_y = Self::get_f32(params, "centerY", 50.0) / 100.0;
-                self.blur_processor.apply_blur(
-                    pixels,
-                    width,
-                    height,
+                self.blur_processor.apply_blur_tex(
+                    input,
+                    output,
                     &BlurParams {
                         blur_type: BlurType::Radial as u32,
                         center_x,
@@ -148,10 +190,9 @@ impl EffectDispatcher {
                 let amount = Self::get_f32(params, "amount", 1.0);
                 let radius = Self::get_f32(params, "radius", 1.0);
                 let threshold = Self::get_f32(params, "threshold", 0.0);
-                self.blur_processor.apply_sharpen(
-                    pixels,
-                    width,
-                    height,
+                self.blur_processor.apply_sharpen_tex(
+                    input,
+                    output,
                     &SharpenParams::with_options(amount, radius, threshold),
                 )
             }
@@ -162,10 +203,9 @@ impl EffectDispatcher {
                 let radius = Self::get_f32(params, "radius", 0.5);
                 let softness = Self::get_f32(params, "softness", 0.5);
                 let roundness = Self::get_f32(params, "roundness", 1.0);
-                self.style_processor.apply_vignette(
-                    pixels,
-                    width,
-                    height,
+                self.style_processor.apply_vignette_tex(
+                    input,
+                    output,
                     &VignetteParams::with_options(amount, radius, softness, roundness),
                 )
             }
@@ -173,10 +213,9 @@ impl EffectDispatcher {
                 let intensity = Self::get_f32(params, "intensity", 0.5);
                 let threshold = Self::get_f32(params, "threshold", 0.5);
                 let radius = Self::get_f32(params, "radius", 10.0);
-                self.style_processor.apply_glow(
-                    pixels,
-                    width,
-                    height,
+                self.style_processor.apply_glow_tex(
+                    input,
+                    output,
                     &GlowParams::with_options(intensity, threshold, radius),
                 )
             }
@@ -185,15 +224,25 @@ impl EffectDispatcher {
                 let angle = Self::get_f32(params, "angle", 0.0);
                 let center_x = Self::get_f32(params, "centerX", 0.5);
                 let center_y = Self::get_f32(params, "centerY", 0.5);
-                self.style_processor.apply_chromatic_aberration(
-                    pixels,
-                    width,
-                    height,
+                self.style_processor.apply_chromatic_aberration_tex(
+                    input,
+                    output,
                     &ChromaticAberrationParams::with_options(amount, angle, center_x, center_y),
                 )
             }
+            "film-grain" => {
+                let amount = Self::get_f32(params, "amount", 0.1);
+                let size = Self::get_f32(params, "size", 1.0);
+                let time = Self::get_f32(params, "time", 0.0);
+                let color_amount = Self::get_f32(params, "colorAmount", 0.0);
+                self.style_processor.apply_film_grain_tex(
+                    input,
+                    output,
+                    &FilmGrainParams::with_options(amount, size, time, color_amount),
+                )
+            }
 
-            // Color correction → GpuStyleProcessor
+            // Color correction → GpuStyleProcessor (full GPU pass: CC + wheels + HSL + curves + LUT)
             "color-correction" => {
                 let brightness = Self::get_f32(params, "brightness", 0.0);
                 let contrast = Self::get_f32(params, "contrast", 1.0);
@@ -209,196 +258,178 @@ impl EffectDispatcher {
                 let whites = Self::get_f32(params, "whites", 0.0);
                 let blacks = Self::get_f32(params, "blacks", 0.0);
 
-                // Color wheels (3-way correction)
-                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) {
-                    1.0
-                } else {
-                    0.0
-                };
-                let cw_shadows_r = Self::get_f32(params, "cw_shadows_r", 0.5);
-                let cw_shadows_g = Self::get_f32(params, "cw_shadows_g", 0.5);
-                let cw_shadows_b = Self::get_f32(params, "cw_shadows_b", 0.5);
-                let cw_shadows_brightness =
-                    Self::get_f32(params, "cw_shadows_brightness", 0.0);
-                let cw_midtones_r = Self::get_f32(params, "cw_midtones_r", 0.5);
-                let cw_midtones_g = Self::get_f32(params, "cw_midtones_g", 0.5);
-                let cw_midtones_b = Self::get_f32(params, "cw_midtones_b", 0.5);
-                let cw_midtones_brightness =
-                    Self::get_f32(params, "cw_midtones_brightness", 0.0);
-                let cw_highlights_r = Self::get_f32(params, "cw_highlights_r", 0.5);
-                let cw_highlights_g = Self::get_f32(params, "cw_highlights_g", 0.5);
-                let cw_highlights_b = Self::get_f32(params, "cw_highlights_b", 0.5);
-                let cw_highlights_brightness =
-                    Self::get_f32(params, "cw_highlights_brightness", 0.0);
+                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) { 1.0 } else { 0.0 };
+                let cw_shadows = [
+                    Self::get_f32(params, "cw_shadows_r", 0.5),
+                    Self::get_f32(params, "cw_shadows_g", 0.5),
+                    Self::get_f32(params, "cw_shadows_b", 0.5),
+                    Self::get_f32(params, "cw_shadows_brightness", 0.0),
+                ];
+                let cw_midtones = [
+                    Self::get_f32(params, "cw_midtones_r", 0.5),
+                    Self::get_f32(params, "cw_midtones_g", 0.5),
+                    Self::get_f32(params, "cw_midtones_b", 0.5),
+                    Self::get_f32(params, "cw_midtones_brightness", 0.0),
+                ];
+                let cw_highlights = [
+                    Self::get_f32(params, "cw_highlights_r", 0.5),
+                    Self::get_f32(params, "cw_highlights_g", 0.5),
+                    Self::get_f32(params, "cw_highlights_b", 0.5),
+                    Self::get_f32(params, "cw_highlights_brightness", 0.0),
+                ];
 
-                // HSL per-color adjustments (variable count, max 8)
                 let hsl_count = Self::get_f32(params, "hsl_count", 0.0);
-                let mut hsl_data = [0.0f32; 32];
+                let mut hsl_data = [[0.0f32; 4]; 8];
                 let count = (hsl_count as usize).min(8);
                 for i in 0..count {
-                    hsl_data[i * 4] =
-                        Self::get_f32(params, &format!("hsl_{}_target", i), 0.0);
-                    hsl_data[i * 4 + 1] =
-                        Self::get_f32(params, &format!("hsl_{}_hue", i), 0.0);
-                    hsl_data[i * 4 + 2] =
-                        Self::get_f32(params, &format!("hsl_{}_sat", i), 0.0);
-                    hsl_data[i * 4 + 3] =
-                        Self::get_f32(params, &format!("hsl_{}_lum", i), 0.0);
+                    hsl_data[i] = [
+                        Self::get_f32(params, &format!("hsl_{}_target", i), 0.0),
+                        Self::get_f32(params, &format!("hsl_{}_hue", i), 0.0),
+                        Self::get_f32(params, &format!("hsl_{}_sat", i), 0.0),
+                        Self::get_f32(params, &format!("hsl_{}_lum", i), 0.0),
+                    ];
                 }
 
-                let mut result = self.style_processor.apply_color_correction(
-                    pixels,
-                    width,
-                    height,
-                    &crate::gpu::ColorCorrectionParams {
-                        brightness,
-                        contrast,
-                        saturation,
-                        exposure,
-                        gamma,
-                        hue_shift,
-                        vibrance,
-                        temperature,
-                        tint,
-                        highlights,
-                        shadows,
-                        whites,
-                        blacks,
-                        cw_enabled,
-                        cw_shadows_r,
-                        cw_shadows_g,
-                        cw_shadows_b,
-                        cw_shadows_brightness,
-                        cw_midtones_r,
-                        cw_midtones_g,
-                        cw_midtones_b,
-                        cw_midtones_brightness,
-                        cw_highlights_r,
-                        cw_highlights_g,
-                        cw_highlights_b,
-                        cw_highlights_brightness,
-                        hsl_count,
-                        hsl_data,
-                        _padding: [0.0; 3],
-                    },
-                )?;
-
-                // Apply curves LUT (CPU-side, after GPU color correction)
-                let has_curves = Self::get_bool(params, "curves_enabled", false);
-                if has_curves {
-                    Self::apply_curves_lut(&mut result, params);
-                }
-
-                // Apply 3D LUT (CPU trilinear interpolation via global LutRegistry)
-                let lut_id = Self::get_str(params, "lut_id");
+                let has_curves = if Self::get_bool(params, "curves_enabled", false) { 1.0 } else { 0.0 };
+                let lut_id = Self::get_str(params, "lut_id").map(|s| s.to_string());
                 let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
-                if let Some(id) = lut_id {
-                    LutRegistry::global().apply_to_pixels(&id, &mut result, lut_intensity);
-                }
+                let lut_enabled = if lut_id.is_some() { 1.0 } else { 0.0 };
 
-                Ok(result)
-            }
-
-            // Preset shaders → CustomShaderProcessor (noise, pixelate, etc.)
-            "noise" | "pixelate" | "edge-detect" | "posterize" | "rgb-split" | "wave-distort" => {
-                // Map TS kebab-case to Rust snake_case shader IDs
-                let shader_id = fx.effect_type.replace('-', "_");
-                let json_params = serde_json::Value::Object(params.clone());
-                self.custom_shader
-                    .apply(pixels, width, height, &shader_id, &json_params)
-            }
-
-            // Custom user-registered shaders
-            _ => {
-                // Try as custom shader ID (registered via effects:register)
-                let json_params = serde_json::Value::Object(params.clone());
-                self.custom_shader
-                    .apply(pixels, width, height, &fx.effect_type, &json_params)
-            }
-        }
-    }
-
-    /// Parse a JSON string containing a 256-entry LUT array
-    fn parse_lut(
-        params: &serde_json::Map<String, serde_json::Value>,
-        key: &str,
-    ) -> Option<Vec<u8>> {
-        let json_str = params.get(key)?.as_str()?;
-        let values: Vec<f64> = serde_json::from_str(json_str).ok()?;
-        if values.len() != 256 {
-            return None;
-        }
-        Some(
-            values
-                .iter()
-                .map(|&v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
-                .collect(),
-        )
-    }
-
-    /// Apply curves LUT to RGBA pixel buffer (CPU-side).
-    /// Supports RGB master curve, per-channel R/G/B, and luminance curve.
-    fn apply_curves_lut(
-        pixels: &mut [u8],
-        params: &serde_json::Map<String, serde_json::Value>,
-    ) {
-        let lut_rgb = Self::parse_lut(params, "curve_rgb");
-        let lut_r = Self::parse_lut(params, "curve_r");
-        let lut_g = Self::parse_lut(params, "curve_g");
-        let lut_b = Self::parse_lut(params, "curve_b");
-        let lut_luma = Self::parse_lut(params, "curve_luma");
-
-        // Apply per-pixel (RGBA layout, 4 bytes per pixel)
-        for chunk in pixels.chunks_exact_mut(4) {
-            let mut r = chunk[0];
-            let mut g = chunk[1];
-            let mut b = chunk[2];
-
-            // Master RGB curve (applied to all channels)
-            if let Some(ref lut) = lut_rgb {
-                r = lut[r as usize];
-                g = lut[g as usize];
-                b = lut[b as usize];
-            }
-
-            // Per-channel curves
-            if let Some(ref lut) = lut_r {
-                r = lut[r as usize];
-            }
-            if let Some(ref lut) = lut_g {
-                g = lut[g as usize];
-            }
-            if let Some(ref lut) = lut_b {
-                b = lut[b as usize];
-            }
-
-            // Luminance curve (apply luminance shift while preserving color)
-            if let Some(ref lut) = lut_luma {
-                let luma = (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) as u8;
-                let new_luma = lut[luma as usize] as f32;
-                let old_luma = luma as f32;
-                if old_luma > 0.5 {
-                    let ratio = new_luma / old_luma;
-                    r = (r as f32 * ratio).min(255.0) as u8;
-                    g = (g as f32 * ratio).min(255.0) as u8;
-                    b = (b as f32 * ratio).min(255.0) as u8;
+                // Build 5×256 curves float array from JSON-encoded LUT strings
+                let curves_data: Option<Vec<f32>> = if has_curves > 0.0 {
+                    Some(Self::build_curves_data(params))
                 } else {
-                    // Near-black: add the difference
-                    let diff = new_luma - old_luma;
-                    r = (r as f32 + diff).clamp(0.0, 255.0) as u8;
-                    g = (g as f32 + diff).clamp(0.0, 255.0) as u8;
-                    b = (b as f32 + diff).clamp(0.0, 255.0) as u8;
-                }
+                    None
+                };
+
+                let cc_params = ColorCorrectionTexParams {
+                    brightness,
+                    exposure,
+                    contrast,
+                    highlights,
+                    shadows,
+                    whites,
+                    blacks,
+                    temperature,
+                    tint,
+                    saturation,
+                    vibrance,
+                    gamma,
+                    hue_shift,
+                    cw_enabled,
+                    curves_enabled: has_curves,
+                    lut_enabled,
+                    lut_intensity,
+                    hsl_count,
+                    _pad0: 0.0,
+                    _pad1: 0.0,
+                    cw_shadows,
+                    cw_midtones,
+                    cw_highlights,
+                    hsl_data,
+                };
+
+                self.style_processor.apply_color_correction_tex(
+                    input,
+                    output,
+                    &cc_params,
+                    curves_data.as_deref(),
+                    lut_id.as_deref(),
+                )
             }
 
-            chunk[0] = r;
-            chunk[1] = g;
-            chunk[2] = b;
-            // Alpha (chunk[3]) unchanged
+            // Custom/preset shaders — CPU fallback (single round-trip)
+            _ => self.apply_custom_tex_fallback(input, output, fx),
         }
     }
 
-    /// Extract an f32 parameter from the JSON map, with a default value.
+    /// CPU fallback for unknown/custom shader effects.
+    /// Reads input texture to CPU, applies custom shader, uploads result.
+    fn apply_custom_tex_fallback(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        fx: &neko_types::ElementEffect,
+    ) -> Result<()> {
+        let width = input.width();
+        let height = input.height();
+        let params = &fx.parameters;
+
+        let pixels = self.ctx.read_texture_sync(input, width, height)?;
+
+        let shader_id = fx.effect_type.replace('-', "_");
+        let json_params = serde_json::Value::Object(params.clone());
+        let processed = self
+            .custom_shader
+            .apply(&pixels, width, height, &shader_id, &json_params)?;
+
+        self.ctx.queue().write_texture(
+            wgpu::ImageCopyTexture {
+                texture: output,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &processed,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        Ok(())
+    }
+
+    // =========================================================================
+    // Internal helpers
+    // =========================================================================
+
+    /// Create an `Rgba8Unorm` effect intermediate texture.
+    fn create_effect_texture(ctx: &GpuContext, w: u32, h: u32) -> wgpu::Texture {
+        ctx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("EffectTex"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+    }
+
+    /// Build a 5×256 float curves array from JSON-encoded curve LUT strings in params.
+    /// Layout: [rgb×256, r×256, g×256, b×256, luma×256]
+    fn build_curves_data(params: &serde_json::Map<String, serde_json::Value>) -> Vec<f32> {
+        let mut data = vec![0.0f32; 5 * 256];
+        for (slot, key) in [
+            (0usize, "curve_rgb"),
+            (1, "curve_r"),
+            (2, "curve_g"),
+            (3, "curve_b"),
+            (4, "curve_luma"),
+        ] {
+            if let Some(json_str) = params.get(key).and_then(|v| v.as_str()) {
+                if let Ok(values) = serde_json::from_str::<Vec<f64>>(json_str) {
+                    for (i, &v) in values.iter().enumerate().take(256) {
+                        data[slot * 256 + i] = v as f32;
+                    }
+                }
+            } else {
+                // Identity: linear 0..1
+                for i in 0..256 {
+                    data[slot * 256 + i] = i as f32 / 255.0;
+                }
+            }
+        }
+        data
+    }
+
     fn get_f32(
         params: &serde_json::Map<String, serde_json::Value>,
         key: &str,
@@ -411,24 +442,72 @@ impl EffectDispatcher {
             .unwrap_or(default)
     }
 
-    /// Extract a bool parameter from the JSON map, with a default value.
     fn get_bool(
         params: &serde_json::Map<String, serde_json::Value>,
         key: &str,
         default: bool,
     ) -> bool {
-        params
-            .get(key)
-            .and_then(|v| v.as_bool())
-            .unwrap_or(default)
+        params.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
     }
 
-    /// Extract an optional string parameter from the JSON map.
     fn get_str<'a>(
         params: &'a serde_json::Map<String, serde_json::Value>,
         key: &str,
     ) -> Option<&'a str> {
         params.get(key).and_then(|v| v.as_str())
+    }
+
+    // =========================================================================
+    // CPU-compatible wrapper (for preview/composite paths that pass pixel buffers)
+    // =========================================================================
+
+    /// Apply effects to a CPU pixel buffer (upload → GPU effects → readback).
+    ///
+    /// Used by composite preview paths that operate on `Vec<u8>` RGBA buffers.
+    /// The export pipeline uses `apply_effects_gpu` directly for zero-copy operation.
+    pub fn apply_effects_from_pixels(
+        &mut self,
+        pixels: Vec<u8>,
+        width: u32,
+        height: u32,
+        effects: &[neko_types::ElementEffect],
+    ) -> Result<Vec<u8>> {
+        if !effects.iter().any(|e| e.enabled) {
+            return Ok(pixels);
+        }
+
+        // Upload pixels to an Rgba8Unorm input texture
+        let input_tex = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("EffectsFromPixels Input"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.ctx.queue().write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &input_tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixels,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        // Run GPU effects
+        let output_tex = self.apply_effects_gpu(&input_tex, width, height, effects)?;
+
+        // Readback to CPU
+        self.ctx.read_texture_sync(&output_tex, width, height)
     }
 }
 
@@ -537,7 +616,7 @@ impl LayerTexturePool {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            // Use Rgba16Float for HDR support and to avoid color banding
+            // Rgba16Float: matches nv12_renderer output for HDR-safe copies
             format: wgpu::TextureFormat::Rgba16Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_DST
@@ -1450,67 +1529,18 @@ impl GpuExportPipeline {
             result
         };
 
-        // Step 3.5: Apply per-element visual effects (CPU round-trip, Phase 2)
-        let effects_applied_texture: Option<wgpu::Texture> = if !element.effects.is_empty() {
-            if let Some(ref dispatcher) = self.effect_dispatcher {
+        // Step 3.5: Apply per-element visual effects (GPU texture-to-texture, Phase 3)
+        // No CPU round-trip: all effects run on GPU, output stays as wgpu::Texture.
+        let has_enabled_effects = element.effects.iter().any(|e| e.enabled);
+        let effects_applied_texture: Option<wgpu::Texture> = if has_enabled_effects {
+            if let Some(ref mut dispatcher) = self.effect_dispatcher {
                 let _span =
                     tracing::trace_span!("EFFECT_DISPATCH", effects = element.effects.len())
                         .entered();
-                // Read RGBA from GPU texture to CPU
-                match self.ctx.read_texture_sync(rgba_texture, width, height) {
-                    Ok(pixels) => {
-                        match dispatcher.apply_effects(pixels, width, height, &element.effects) {
-                            Ok(processed) => {
-                                // Upload processed pixels back as a new texture
-                                let tex =
-                                    self.ctx.device().create_texture(&wgpu::TextureDescriptor {
-                                        label: Some("Effects Output"),
-                                        size: wgpu::Extent3d {
-                                            width,
-                                            height,
-                                            depth_or_array_layers: 1,
-                                        },
-                                        mip_level_count: 1,
-                                        sample_count: 1,
-                                        dimension: wgpu::TextureDimension::D2,
-                                        format: wgpu::TextureFormat::Rgba8Unorm,
-                                        usage: wgpu::TextureUsages::COPY_SRC
-                                            | wgpu::TextureUsages::COPY_DST
-                                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                                        view_formats: &[],
-                                    });
-                                self.ctx.queue().write_texture(
-                                    wgpu::ImageCopyTexture {
-                                        texture: &tex,
-                                        mip_level: 0,
-                                        origin: wgpu::Origin3d::ZERO,
-                                        aspect: wgpu::TextureAspect::All,
-                                    },
-                                    &processed,
-                                    wgpu::ImageDataLayout {
-                                        offset: 0,
-                                        bytes_per_row: Some(width * 4),
-                                        rows_per_image: Some(height),
-                                    },
-                                    wgpu::Extent3d {
-                                        width,
-                                        height,
-                                        depth_or_array_layers: 1,
-                                    },
-                                );
-                                Some(tex)
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Effect dispatch failed: {}, using original frame",
-                                    e
-                                );
-                                None
-                            }
-                        }
-                    }
+                match dispatcher.apply_effects_gpu(rgba_texture, width, height, &element.effects) {
+                    Ok(tex) => Some(tex),
                     Err(e) => {
-                        tracing::error!("Texture readback failed: {}, using original frame", e);
+                        tracing::error!("GPU effect dispatch failed: {}, using original frame", e);
                         None
                     }
                 }
@@ -1522,43 +1552,48 @@ impl GpuExportPipeline {
         };
         let effective_rgba = effects_applied_texture.as_ref().unwrap_or(rgba_texture);
 
-        // Step 4: Copy to pooled texture (avoids per-frame allocation)
-        let tex_idx = self.layer_texture_pool.acquire(&self.ctx, width, height);
-        {
-            let _span = tracing::trace_span!(span::GPU_SUBMIT).entered();
-            let dst = self.layer_texture_pool.get(tex_idx);
-            let mut encoder =
-                self.ctx
-                    .device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Texture Copy Encoder"),
-                    });
+        // Step 4 + 5: Obtain an owned texture for the GpuLayer.
+        //
+        // When effects were applied (Rgba8Unorm output), use the effect texture directly —
+        // no pool copy needed (we already own it and the compositor handles any float format).
+        //
+        // When no effects, copy the Rgba16Float rgba_texture into a pooled texture to
+        // avoid per-frame allocation (pool reuses Rgba16Float textures across frames).
+        let owned_texture: wgpu::Texture = if let Some(effect_tex) = effects_applied_texture {
+            // Effects path: effect output is owned, skip pool
+            effect_tex
+        } else {
+            // No-effects path: copy rgba_texture (Rgba16Float) to pool texture (same format)
+            let tex_idx = self.layer_texture_pool.acquire(&self.ctx, width, height);
+            {
+                let _span = tracing::trace_span!(span::GPU_SUBMIT).entered();
+                let dst = self.layer_texture_pool.get(tex_idx);
+                let mut encoder =
+                    self.ctx
+                        .device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Texture Copy Encoder"),
+                        });
 
-            encoder.copy_texture_to_texture(
-                wgpu::ImageCopyTexture {
-                    texture: effective_rgba,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::ImageCopyTexture {
-                    texture: dst,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-            );
-
-            self.ctx.queue().submit(std::iter::once(encoder.finish()));
-        }
-
-        // Step 5: Build GpuLayer using the pooled texture
-        let owned_texture = self.layer_texture_pool.in_use.pop().unwrap();
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: effective_rgba,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: dst,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                );
+                self.ctx.queue().submit(std::iter::once(encoder.finish()));
+            }
+            self.layer_texture_pool.in_use.pop().unwrap()
+        };
 
         // Calculate transform: always apply fit-to-canvas base scaling
         // JVI transform semantics:

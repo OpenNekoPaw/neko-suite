@@ -7,14 +7,21 @@
 //! - Radial blur
 //! - Zoom blur
 //! - Sharpen
+//!
+//! All processing is texture-to-texture (zero CPU round-trip).
+//! Input: `wgpu::Texture` (any float format)
+//! Output: `wgpu::Texture` (Rgba8Unorm)
 
-use super::buffer_pool::BufferPool;
 use super::context::GpuContext;
 use super::shaders;
 use crate::error::{Error, Result};
 
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
+
+// =============================================================================
+// Public parameter types
+// =============================================================================
 
 /// Blur type enumeration
 #[repr(u32)]
@@ -196,12 +203,14 @@ impl SharpenParams {
     }
 }
 
-/// Uniform buffer for blur shader
+// =============================================================================
+// Internal uniform structs (match WGSL layout in BLUR_TEX_SHADER / SHARPEN_TEX_SHADER)
+// =============================================================================
+
+/// Uniforms for BLUR_TEX_SHADER — must match WGSL `BlurTexUniforms` exactly
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct BlurUniforms {
-    width: u32,
-    height: u32,
+struct BlurTexUniforms {
     blur_type: u32,
     samples: u32,
     radius: f32,
@@ -210,28 +219,32 @@ struct BlurUniforms {
     center_x: f32,
     center_y: f32,
     strength: f32,
-    _padding: [f32; 2],
 }
 
-/// Uniform buffer for sharpen shader
+/// Uniforms for SHARPEN_TEX_SHADER — must match WGSL `SharpenTexUniforms` exactly
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct SharpenUniforms {
-    width: u32,
-    height: u32,
+struct SharpenTexUniforms {
     amount: f32,
     radius: f32,
     threshold: f32,
-    _padding: [f32; 3],
+    _pad: f32,
 }
 
-/// GPU blur processor using compute shaders
+// =============================================================================
+// GpuBlurProcessor
+// =============================================================================
+
+/// GPU blur processor — texture-to-texture compute pipeline.
+///
+/// Operates entirely on GPU textures (`wgpu::Texture → wgpu::Texture`).
+/// Input may be any float-compatible format; output is always `Rgba8Unorm`.
 pub struct GpuBlurProcessor {
     ctx: Arc<GpuContext>,
+    /// Texture-based BGL: input_tex(0) + output_tex(1) + uniforms(2)
+    bgl: wgpu::BindGroupLayout,
     blur_pipeline: wgpu::ComputePipeline,
     sharpen_pipeline: wgpu::ComputePipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
-    buffer_pool: BufferPool,
 }
 
 impl GpuBlurProcessor {
@@ -239,45 +252,33 @@ impl GpuBlurProcessor {
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
         let device = ctx.device();
 
-        // Create blur shader module
-        let blur_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Blur Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::BLUR_COMPUTE_SHADER.into()),
-        });
-
-        // Create sharpen shader module
-        let sharpen_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Sharpen Shader"),
-            source: wgpu::ShaderSource::Wgsl(shaders::SHARPEN_COMPUTE_SHADER.into()),
-        });
-
-        // Create bind group layout (same for both)
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Blur/Sharpen Bind Group Layout"),
+        // Texture-based bind group layout (3 bindings)
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("BlurTex BGL"),
             entries: &[
-                // Input buffer (read-only storage)
+                // binding 0: input texture (read, any float format)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
                     count: None,
                 },
-                // Output buffer (read-write storage)
+                // binding 1: output texture (write, Rgba8Unorm storage)
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
                 },
-                // Uniforms
+                // binding 2: uniforms
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -291,88 +292,57 @@ impl GpuBlurProcessor {
             ],
         });
 
-        // Create blur pipeline
-        let blur_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Blur Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("BlurTex Pipeline Layout"),
+            bind_group_layouts: &[&bgl],
             push_constant_ranges: &[],
         });
 
+        let blur_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("BlurTex Shader"),
+            source: wgpu::ShaderSource::Wgsl(shaders::BLUR_TEX_SHADER.into()),
+        });
         let blur_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Blur Pipeline"),
-            layout: Some(&blur_pipeline_layout),
+            label: Some("BlurTex Pipeline"),
+            layout: Some(&pipeline_layout),
             module: &blur_shader,
             entry_point: "main",
         });
 
-        // Create sharpen pipeline
-        let sharpen_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Sharpen Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
+        let sharpen_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("SharpenTex Shader"),
+            source: wgpu::ShaderSource::Wgsl(shaders::SHARPEN_TEX_SHADER.into()),
+        });
         let sharpen_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Sharpen Pipeline"),
-            layout: Some(&sharpen_pipeline_layout),
+            label: Some("SharpenTex Pipeline"),
+            layout: Some(&pipeline_layout),
             module: &sharpen_shader,
             entry_point: "main",
         });
 
-        // Create buffer pool
-        let buffer_pool = BufferPool::new(ctx.device().clone(), wgpu::BufferUsages::STORAGE, 8);
-
         Ok(Self {
             ctx,
+            bgl,
             blur_pipeline,
             sharpen_pipeline,
-            bind_group_layout,
-            buffer_pool,
         })
     }
 
-    /// Apply blur effect to a frame
+    // =========================================================================
+    // Public texture API
+    // =========================================================================
+
+    /// Apply blur to an input texture, writing results to output texture.
     ///
-    /// Input: RGBA pixel data
-    /// Output: Blurred RGBA pixel data
-    pub fn apply_blur(
+    /// `input` may be any float-compatible format (Rgba16Float, Rgba8Unorm, etc.)
+    /// `output` must be `Rgba8Unorm` with `STORAGE_BINDING` usage.
+    pub fn apply_blur_tex(
         &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
         params: &BlurParams,
-    ) -> Result<Vec<u8>> {
-        let expected_size = (width * height * 4) as usize;
-        if input.len() != expected_size {
-            return Err(Error::InvalidParameter(format!(
-                "Input size mismatch: expected {}, got {}",
-                expected_size,
-                input.len()
-            )));
-        }
-
-        // If params are identity, return input unchanged
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let device = self.ctx.device();
-        let queue = self.ctx.queue();
-
-        // Create input buffer
-        let input_buffer = self
-            .ctx
-            .create_buffer_with_data(input, wgpu::BufferUsages::STORAGE);
-
-        // Acquire output buffer from pool
-        let output_pooled = self.buffer_pool.acquire(input.len() as u64);
-        let output_buffer = output_pooled.buffer();
-
-        // Create uniforms
-        let uniforms = BlurUniforms {
-            width,
-            height,
+    ) -> Result<()> {
+        let uniforms = BlurTexUniforms {
             blur_type: params.blur_type,
             samples: params.samples.clamp(8, 64),
             radius: params.radius,
@@ -381,150 +351,101 @@ impl GpuBlurProcessor {
             center_x: params.center_x,
             center_y: params.center_y,
             strength: params.strength,
-            _padding: [0.0; 2],
         };
-        let uniform_buffer = self
-            .ctx
-            .create_buffer_with_data(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Blur Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: input_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-        // Create command encoder and dispatch
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Blur Encoder"),
-        });
-
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Blur Pass"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self.blur_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-
-            // Workgroup size is 16x16
-            let workgroups_x = (width + 15) / 16;
-            let workgroups_y = (height + 15) / 16;
-            pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
-        }
-
-        queue.submit(Some(encoder.finish()));
-
-        // Read back results
-        self.ctx.read_buffer_sync(output_buffer)
+        self.run_effect_tex(input, output, &self.blur_pipeline, &uniforms)
     }
 
-    /// Apply sharpen effect to a frame
+    /// Apply sharpen to an input texture, writing results to output texture.
     ///
-    /// Input: RGBA pixel data
-    /// Output: Sharpened RGBA pixel data
-    pub fn apply_sharpen(
+    /// `input` may be any float-compatible format.
+    /// `output` must be `Rgba8Unorm` with `STORAGE_BINDING` usage.
+    pub fn apply_sharpen_tex(
         &self,
-        input: &[u8],
-        width: u32,
-        height: u32,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
         params: &SharpenParams,
-    ) -> Result<Vec<u8>> {
-        let expected_size = (width * height * 4) as usize;
-        if input.len() != expected_size {
-            return Err(Error::InvalidParameter(format!(
-                "Input size mismatch: expected {}, got {}",
-                expected_size,
-                input.len()
-            )));
-        }
-
-        // If params are identity, return input unchanged
-        if params.is_identity() {
-            return Ok(input.to_vec());
-        }
-
-        let device = self.ctx.device();
-        let queue = self.ctx.queue();
-
-        // Create input buffer
-        let input_buffer = self
-            .ctx
-            .create_buffer_with_data(input, wgpu::BufferUsages::STORAGE);
-
-        // Acquire output buffer from pool
-        let output_pooled = self.buffer_pool.acquire(input.len() as u64);
-        let output_buffer = output_pooled.buffer();
-
-        // Create uniforms
-        let uniforms = SharpenUniforms {
-            width,
-            height,
+    ) -> Result<()> {
+        let uniforms = SharpenTexUniforms {
             amount: params.amount,
             radius: params.radius,
             threshold: params.threshold,
-            _padding: [0.0; 3],
+            _pad: 0.0,
         };
-        let uniform_buffer = self
-            .ctx
-            .create_buffer_with_data(bytemuck::bytes_of(&uniforms), wgpu::BufferUsages::UNIFORM);
+        self.run_effect_tex(input, output, &self.sharpen_pipeline, &uniforms)
+    }
 
-        // Create bind group
+    // =========================================================================
+    // Internal helpers
+    // =========================================================================
+
+    /// Run a single texture-to-texture compute pass with uniform data.
+    fn run_effect_tex<U: Pod>(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        pipeline: &wgpu::ComputePipeline,
+        uniforms: &U,
+    ) -> Result<()> {
+        let device = self.ctx.device();
+        let queue = self.ctx.queue();
+
+        let width = output.width();
+        let height = output.height();
+
+        let input_view = input.create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let uniform_buf = self
+            .ctx
+            .create_buffer_with_data(bytemuck::bytes_of(uniforms), wgpu::BufferUsages::UNIFORM);
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Sharpen Bind Group"),
-            layout: &self.bind_group_layout,
+            label: Some("BlurTex BindGroup"),
+            layout: &self.bgl,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: input_buffer.as_entire_binding(),
+                    resource: wgpu::BindingResource::TextureView(&input_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: output_buffer.as_entire_binding(),
+                    resource: wgpu::BindingResource::TextureView(&output_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: uniform_buf.as_entire_binding(),
                 },
             ],
         });
 
-        // Create command encoder and dispatch
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Sharpen Encoder"),
+            label: Some("BlurTex Encoder"),
         });
-
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Sharpen Pass"),
+                label: Some("BlurTex Pass"),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&self.sharpen_pipeline);
+            pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-
-            // Workgroup size is 16x16
-            let workgroups_x = (width + 15) / 16;
-            let workgroups_y = (height + 15) / 16;
-            pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+            let wx = (width + 15) / 16;
+            let wy = (height + 15) / 16;
+            pass.dispatch_workgroups(wx, wy, 1);
         }
-
         queue.submit(Some(encoder.finish()));
 
-        // Read back results
-        self.ctx.read_buffer_sync(output_buffer)
+        // Validate output dimensions match input
+        if input.width() != width || input.height() != height {
+            return Err(Error::InvalidParameter(format!(
+                "Input ({}x{}) and output ({}x{}) texture dimensions must match",
+                input.width(),
+                input.height(),
+                width,
+                height,
+            )));
+        }
+
+        Ok(())
     }
 
     /// Get GPU context
@@ -533,6 +454,10 @@ impl GpuBlurProcessor {
         &self.ctx
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -650,5 +575,17 @@ mod tests {
         assert_eq!(BlurType::from(3), BlurType::Radial);
         assert_eq!(BlurType::from(4), BlurType::Zoom);
         assert_eq!(BlurType::from(99), BlurType::Box); // Default fallback
+    }
+
+    #[test]
+    fn test_blur_tex_uniforms_size() {
+        // BlurTexUniforms must be 32 bytes (8 × f32/u32)
+        assert_eq!(std::mem::size_of::<BlurTexUniforms>(), 32);
+    }
+
+    #[test]
+    fn test_sharpen_tex_uniforms_size() {
+        // SharpenTexUniforms must be 16 bytes (4 × f32)
+        assert_eq!(std::mem::size_of::<SharpenTexUniforms>(), 16);
     }
 }
