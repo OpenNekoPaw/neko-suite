@@ -97,7 +97,8 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-agent",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-auth"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/neko-agent/dist/**/*.js",
