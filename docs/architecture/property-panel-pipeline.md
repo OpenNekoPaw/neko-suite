@@ -256,4 +256,105 @@ WebView buildCompositeLayers(project, time)
 
 ---
 
-*最后更新: 2026-03-17*
+## 6. GPU 管线分析：零拷贝状态
+
+### 6.1 导出管线数据流（实际路径）
+
+```
+HW Decoder (VideoToolbox/VAAPI/NVENC)
+  │ IOSurface / DMA-BUF / DXGI SharedHandle
+  ▼ [零拷贝导入] Nv12TextureImporter
+NV12 Texture (GPU)
+  │ nv12_renderer.rs: render pipeline (BT.601/709/2020)
+  ▼
+RGBA16Float Texture (GPU)
+  │ texture_compositor.rs: 多层合成 + blend mode + transform
+  ▼
+Composited Frame (GPU)
+  │ EffectDispatcher (gpu_export_pipeline.rs): texture-to-texture ping-pong chain
+  │   ├─ color-correction → GpuStyleProcessor::apply_color_correction_tex() ← 零拷贝
+  │   ├─ blur → GpuBlurProcessor::apply_blur_tex()
+  │   ├─ style → GpuStyleProcessor (vignette/glow/grain/aberration)
+  │   └─ unknown → apply_custom_tex_fallback() ← 唯一 CPU round-trip
+  ▼
+Effects Output (GPU)
+  │
+  ├─ [macOS] rgba_to_nv12_texture.rs → IOSurface → VideoToolbox ← 零拷贝
+  └─ [Linux/Windows] rgba_to_nv12.rs → map_async readback → CPU NV12 → Encoder
+```
+
+### 6.2 当前 CPU-GPU 拷贝点
+
+| # | 位置 | 方向 | 平台 | 阻塞 | 说明 |
+|---|------|------|------|------|------|
+| ① | `rgba_to_nv12.rs:500,523` | GPU→CPU | Linux/Windows | **YES** | NV12 Y+UV readback（macOS 已零拷贝） |
+| ② | `apply_custom_tex_fallback()` :358 | GPU→CPU→GPU | 全平台 | YES | 未知 effect CPU fallback（仅 custom shader 触发） |
+| ③ | `process_frame_to_cpu()` :953 | GPU→CPU | 全平台 | YES | 暂停预览 RGBA 帧（非实时路径） |
+
+**关键结论**：
+- **macOS 导出/预览已完全零拷贝**（IOSurface → VideoToolbox）
+- **Linux/Windows** 的最终 NV12 readback 是真实瓶颈
+- 色彩校正在导出管线已使用 `GpuStyleProcessor` texture-to-texture 路径，**不存在 readback**
+
+### 6.3 平台零拷贝基础设施
+
+| 平台 | 导入 | 导出 | 状态 |
+|------|------|------|------|
+| macOS | IOSurface → Metal → wgpu | wgpu → IOSurface → VideoToolbox | ✅ 已打通 |
+| Linux | DMA-BUF → VkImage → wgpu | DMA-BUF export 代码已写 | ⚠️ 导入零拷贝，导出仍 readback |
+| Windows | DXGI SharedHandle → wgpu | DXGI export 代码已写 | ⚠️ 导入零拷贝，导出仍 readback |
+
+### 6.4 Property 能力 GPU 覆盖矩阵
+
+| Property Panel 能力 | Engine Shader | GPU 处理 | CPU-GPU Copy |
+|---------------------|-------------|----------|-------------|
+| **Transform** (position/scale/rotation) | `texture_compositor.rs` render pipeline | ✅ | 无 |
+| **Opacity** | `texture_compositor.rs` alpha blend | ✅ | 无 |
+| **Blend Mode** (27种) | `texture_compositor.rs` Photoshop-compatible | ✅ | 无 |
+| **Basic Color Correction** (15参数) | `style_processor.rs` texture-to-texture | ✅ | 无 |
+| **LUT** | `lut3d.rs` 3D LUT lookup | ✅ | 无（LUT 上传一次） |
+| **Gaussian/Motion/Radial Blur** | `blur_processor.rs` 5种模式 | ✅ | 无 |
+| **Noise/Film Grain** | `style_processor.rs` | ✅ | 无 |
+| **Glow** | `style_processor.rs` | ✅ | 无 |
+| **Vignette** | `style_processor.rs` | ✅ | 无 |
+| **Chromatic Aberration** | `style_processor.rs` | ✅ | 无 |
+| **Custom Shaders** (pixelate/edge/posterize/wave 等) | `custom_shader_processor.rs` preset + runtime | ✅ | 无 |
+| **Transitions** (18种) | `transition_processor.rs` | ✅ | 无 |
+| **Masks** (rect/ellipse/polygon/bezier) | `mask_rasterizer.rs` SDF | ✅ | 无 |
+| **Text** | `text_renderer.rs` | ✅ | ⚠️ 字体光栅化 CPU→GPU（必要开销） |
+| **Audio** (volume/pan/fade/gain) | AudioMixer CPU 处理 | N/A | N/A（音频流独立） |
+| **Speed/Reverse** | 时间重映射逻辑 | N/A | N/A（解码层处理） |
+| **Curves 曲线调色** | ❌ 无 shader | — | — |
+| **Color Wheels 三向色轮** | ❌ 无 shader | — | — |
+| **HSL 选择性调色** (8色域) | ❌ 无 shader | — | — |
+| **Chroma Key** | ❌ 无 shader | — | — |
+| **Luma Key** | ❌ 无 shader | — | — |
+| **Sharpen** | ❌ 无 shader | — | — |
+
+### 6.5 总结
+
+| 维度 | 数值 |
+|------|------|
+| UI → Engine 覆盖率 | **~80%**（6 项 UI-only 无 shader） |
+| 已实现功能 GPU 处理率 | **~98%**（text rasterize 必要开销 + unknown effect fallback） |
+| macOS 端到端零拷贝 | ✅ **已打通**（IOSurface 全链路） |
+| Linux/Windows 零拷贝 | ⚠️ 导入已打通，导出 NV12 仍有 readback |
+
+### 6.6 剩余优化路径
+
+| 优先级 | 任务 | 收益 |
+|--------|------|------|
+| **P1** | 补齐 6 个缺失 shader: Curves / ColorWheels / HSL / ChromaKey / LumaKey / Sharpen | UI→Engine 覆盖率 → 100% |
+| **P2** | Linux/Windows NV12 导出零拷贝（激活 DMA-BUF/DXGI export 路径） | 全平台零拷贝 |
+| **P2** | 将 `apply_custom_tex_fallback()` CPU round-trip 迁移到 GPU compute | 消除 unknown effect readback |
+
+### 6.7 已清理的死代码（2026-03-27）
+
+| 文件 | 内容 | 原因 |
+|------|------|------|
+| `gpu/processor.rs` | `GpuProcessor` — buffer-based CC compute + `read_buffer_sync()` | 无调用者，导出管线使用 `GpuStyleProcessor` texture-to-texture 路径 |
+| `gpu/gpu_pipeline.rs` | `GpuPipeline` / `ZeroCopyPipelineBuilder` — Phase 2 接口 | 纯接口定义无实际处理逻辑，`GpuExportPipeline` 才是真正管线 |
+
+---
+
+*最后更新: 2026-03-27*

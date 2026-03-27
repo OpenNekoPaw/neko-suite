@@ -102,7 +102,7 @@ impl CustomShaderProcessor {
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
         let device = ctx.device();
 
-        // Shared bind group layout (same as GpuProcessor / GpuStyleProcessor)
+        // Shared bind group layout (same as GpuStyleProcessor)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Custom Shader Bind Group Layout"),
             entries: &[

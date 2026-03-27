@@ -2,9 +2,7 @@
 //!
 //! Provides:
 //! - GPU context and device management
-//! - Compute shader-based effects processing
-//! - Blur and sharpen effects processing
-//! - Style effects (vignette, film grain, glow, chromatic aberration)
+//! - Texture-to-texture effects processing (color correction, blur, style)
 //! - Transition effects between video clips
 //! - Multi-layer compositor for video compositing
 //! - Texture management for zero-copy frame transfer
@@ -12,7 +10,6 @@
 //! - NV12 texture import for zero-copy hardware decoding
 //! - RGBA to NV12 conversion for hardware encoding
 //! - GPU encoder bridge for zero-copy encoding pipeline
-//! - Unified zero-copy pipeline interface
 
 mod blur_processor;
 mod buffer_pool;
@@ -22,12 +19,10 @@ mod context;
 pub mod custom_shader_processor;
 mod encoder_bridge;
 mod gpu_layer;
-mod gpu_pipeline;
 mod mask_rasterizer;
 mod hal_import;
 mod nv12_import;
 mod nv12_renderer;
-mod processor;
 mod rgba_to_nv12;
 mod rgba_to_nv12_texture;
 pub mod shaders;
@@ -68,7 +63,6 @@ pub use nv12_import::{
     NV12_TO_RGB_SHADER,
 };
 pub use nv12_renderer::{Nv12RenderCache, Nv12Renderer};
-pub use processor::{EffectParams, GpuProcessor};
 pub use rgba_to_nv12::{
     Nv12OutputBuffers, RgbaToNv12Converter, RgbaToNv12Uniforms, RGBA_TO_NV12_SHADER,
 };

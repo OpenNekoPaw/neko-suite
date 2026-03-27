@@ -5,10 +5,33 @@
 
 ---
 
+## ✅ P0 — GPU 管线零拷贝（已完成）
+
+- [x] ~~消除 `processor.rs` readback~~ → 分析发现 `GpuProcessor` 是死代码（无调用者），导出管线已使用 `GpuStyleProcessor` texture-to-texture 路径。已删除。
+- [x] ~~激活 `gpu_pipeline.rs` Phase 2~~ → 分析发现 `GpuPipeline` 是纯接口定义（无处理逻辑），macOS 已通过 `RgbaToNv12TextureConverter` + IOSurface 实现全链路零拷贝。已删除死代码。
+
+**结论**：macOS 已完全零拷贝；Linux/Windows NV12 导出 readback 降级为 P2。
+详见 [Property Panel GPU 管线分析](./docs/architecture/property-panel-pipeline.md#6-gpu-管线分析零拷贝状态)
+
+---
+
+## 🟡 P1 — 缺失 Shader 补齐
+
+- [ ] Curves 曲线调色 GPU shader（UI 已完成，引擎无实现）
+- [ ] Color Wheels 三向色轮 GPU shader（UI 已完成）
+- [ ] HSL 选择性调色 GPU shader（8 色域独立调整，UI 已完成）
+- [ ] Chroma Key 色度抠像 GPU shader（UI 已完成）
+- [ ] Luma Key 亮度抠像 GPU shader（UI 已完成）
+- [ ] Sharpen 锐化 GPU shader（UI 已完成）
+
+---
+
 ## 🟢 P2 — 增强功能
 
 - [ ] neko-engine 渲染补齐：shapes / keyframes（effects ✅ subtitles ✅）
 - [ ] neko-tools 音频静音检测 UI（数据层已就绪，仅缺 AudioDiffViewer 沉默区域可视化）
+- [ ] Linux/Windows NV12 导出零拷贝（激活 DMA-BUF/DXGI export 路径，消除 `rgba_to_nv12.rs` readback）
+- [ ] `apply_custom_tex_fallback()` CPU round-trip 迁移到 GPU compute
 
 ---
 
@@ -37,4 +60,4 @@
 
 ---
 
-*最后更新：2026-03-26*
+*最后更新：2026-03-27*
