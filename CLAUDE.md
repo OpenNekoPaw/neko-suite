@@ -116,6 +116,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 市场平台 | [docs/architecture/marketplace.md](./docs/architecture/marketplace.md) | @neko/market-core Layer 0 + 多品类 InstallTarget + 统一分发协议 |
 | 本地模型部署 | [docs/architecture/model-runtime.md](./docs/architecture/model-runtime.md) | 不建 neko-runtime 包；onPostInstall GGUF→Ollama / ONNX→Engine；Engine ort/candle 原生 ML；外部运行时 Provider/MCP 接入 |
 | Registry Server | [docs/architecture/registry-server.md](./docs/architecture/registry-server.md) | 薄 API + 对象存储直传 + 上游代理（HF/Civitai）+ 多 Registry + 私有部署 Docker |
+| 文档预览 | [docs/architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ 委托 Book Reader 或自建（pdfjs-dist/epub.js）；DOCX→docx-preview；XLSX→x-data-spreadsheet；PPTX→LibreOffice headless；priority: option |
 
 ### Rust 引擎开发约束
 

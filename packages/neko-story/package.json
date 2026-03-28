@@ -59,17 +59,12 @@
       {
         "command": "neko.story.preview",
         "title": "Preview Story",
+        "icon": "$(open-preview)",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.toTimeline",
         "title": "Convert to Timeline",
-        "category": "Neko Story"
-      },
-      {
-        "command": "neko.story.exportPdf",
-        "title": "%neko.story.exportPdf.title%",
-        "icon": "$(file-pdf)",
         "category": "Neko Story"
       },
       {
@@ -84,6 +79,13 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "neko.story.preview",
+          "when": "editorLangId == nekostory",
+          "group": "navigation"
+        }
+      ],
       "explorer/context": [
         {
           "command": "neko.story.newFile",

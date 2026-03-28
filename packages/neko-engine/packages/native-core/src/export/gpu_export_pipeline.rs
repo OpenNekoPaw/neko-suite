@@ -19,12 +19,12 @@ use crate::domain::{Element, ElementType, Timeline};
 use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
-    BlurParams, BlurType, ChromaticAberrationParams, ColorCorrectionTexParams,
+    BlurParams, BlurType, ChromaKeyParams, ChromaticAberrationParams, ColorCorrectionTexParams,
     CustomShaderProcessor, FilmGrainParams, GlowParams, GpuBlurProcessor, GpuContext, GpuLayer,
-    GpuLayerBuilder, GpuStyleProcessor, LutRegistry, Nv12OutputBuffers, Nv12RenderCache,
-    Nv12TextureImporter, RgbaToNv12Converter, SharpenParams, TextRenderer,
-    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
-    TransitionType, VignetteParams,
+    GpuLayerBuilder, GpuStyleProcessor, LumaKeyParams, LutRegistry, Nv12OutputBuffers,
+    Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer, SharpenParams,
+    TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
+    TransitionParams, TransitionType, VignetteParams,
 };
 use crate::telemetry::spans::span;
 use crate::services::{ISceneService, SceneService};
@@ -338,6 +338,30 @@ impl EffectDispatcher {
                 )
             }
 
+            // Keying effects → GpuStyleProcessor
+            "luma-key" => {
+                let threshold = Self::get_f32(params, "threshold", 50.0) / 100.0;
+                let softness = Self::get_f32(params, "softness", 10.0) / 100.0;
+                let invert = Self::get_bool(params, "invert", false);
+                self.style_processor.apply_luma_key_tex(
+                    input,
+                    output,
+                    &LumaKeyParams::with_options(threshold, softness, invert),
+                )
+            }
+            "chroma-key" => {
+                let key_color = Self::get_str(params, "keyColor").unwrap_or("#00ff00");
+                let (key_r, key_g, key_b) = Self::parse_hex_color(key_color);
+                let similarity = Self::get_f32(params, "similarity", 30.0) / 200.0;
+                let smoothness = Self::get_f32(params, "smoothness", 10.0) / 500.0;
+                let spill = Self::get_f32(params, "spillSuppression", 50.0) / 100.0;
+                self.style_processor.apply_chroma_key_tex(
+                    input,
+                    output,
+                    &ChromaKeyParams::with_options(key_r, key_g, key_b, similarity, smoothness, spill),
+                )
+            }
+
             // Custom/preset shaders — CPU fallback (single round-trip)
             _ => self.apply_custom_tex_fallback(input, output, fx),
         }
@@ -455,6 +479,25 @@ impl EffectDispatcher {
         key: &str,
     ) -> Option<&'a str> {
         params.get(key).and_then(|v| v.as_str())
+    }
+
+    /// Parse a CSS hex color string (`#rrggbb` or `#rgb`) into linear f32 components.
+    fn parse_hex_color(hex: &str) -> (f32, f32, f32) {
+        let s = hex.trim_start_matches('#');
+        let (r, g, b) = if s.len() == 6 {
+            let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0);
+            let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0);
+            let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0);
+            (r, g, b)
+        } else if s.len() == 3 {
+            let r = u8::from_str_radix(&s[0..1], 16).unwrap_or(0);
+            let g = u8::from_str_radix(&s[1..2], 16).unwrap_or(0);
+            let b = u8::from_str_radix(&s[2..3], 16).unwrap_or(0);
+            (r * 17, g * 17, b * 17)
+        } else {
+            (0, 255, 0) // fallback: green screen
+        };
+        (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
     }
 
     // =========================================================================
@@ -685,6 +728,8 @@ pub struct GpuExportPipeline {
     layer_texture_pool: LayerTexturePool,
     /// Text renderer for text elements (lazy-initialized)
     text_renderer: Option<TextRenderer>,
+    /// Shape rasterizer for shape elements (lazy-initialized)
+    shape_rasterizer: Option<ShapeRasterizer>,
     /// Effect dispatcher for per-element GPU effects (None when GPU unavailable)
     effect_dispatcher: Option<EffectDispatcher>,
     /// Texture-based transition processor for GPU zero-copy transitions
@@ -730,6 +775,7 @@ impl GpuExportPipeline {
             nv12_output_cache: None,
             layer_texture_pool: LayerTexturePool::new(),
             text_renderer: None,
+            shape_rasterizer: None,
             effect_dispatcher,
             transition_processor,
             scene_service,
@@ -904,6 +950,23 @@ impl GpuExportPipeline {
             );
             for (scene3d, z_idx) in &scene3d_elements {
                 if let Some(layer) = self.render_scene3d_to_gpu_layer(scene3d, time, *z_idx) {
+                    gpu_layers.push(layer);
+                }
+            }
+        }
+
+        // Render shape elements (vector graphics)
+        let shape_z_start =
+            (media_elements.len() + text_elements.len() + scene3d_elements.len()) as i32;
+        let shape_elements = self.collect_visible_shapes(time, shape_z_start);
+        if !shape_elements.is_empty() {
+            tracing::debug!(
+                "Rendering {} shape elements at time {:.2}s",
+                shape_elements.len(),
+                time
+            );
+            for (shape, z_idx) in &shape_elements {
+                if let Some(layer) = self.render_shape_to_gpu_layer(shape, *z_idx) {
                     gpu_layers.push(layer);
                 }
             }
@@ -1281,6 +1344,82 @@ impl GpuExportPipeline {
         }
 
         result
+    }
+
+    /// Collect visible shape elements at a given time
+    fn collect_visible_shapes(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
+        let mut result = Vec::new();
+        let mut z_index = z_index_start;
+
+        for track in &self.timeline.tracks {
+            if track.muted {
+                continue;
+            }
+            for element in &track.elements {
+                if !element.is_visible_at(time) {
+                    continue;
+                }
+                if element.is_shape() {
+                    result.push((element.clone(), z_index));
+                    z_index += 1;
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Render a shape element to a GpuLayer via CPU rasterization
+    fn render_shape_to_gpu_layer(&mut self, element: &Element, z_index: i32) -> Option<GpuLayer> {
+        let shape_data = match &element.element_type {
+            ElementType::Shape(s) => s,
+            _ => return None,
+        };
+
+        // Lazy-initialize shape rasterizer
+        if self.shape_rasterizer.is_none() {
+            self.shape_rasterizer = Some(ShapeRasterizer::new(self.ctx.clone()));
+        }
+        let rasterizer = self.shape_rasterizer.as_ref().unwrap();
+
+        let rasterized =
+            rasterizer.rasterize(shape_data, self.output_width, self.output_height)?;
+
+        let width = rasterized.width;
+        let height = rasterized.height;
+        let texture = rasterizer.upload_to_texture(&rasterized);
+
+        let transform = if !element.transform.is_identity() {
+            element.to_transform_2d()
+        } else {
+            crate::gpu::Transform2D {
+                x: self.output_width as f32 / 2.0,
+                y: self.output_height as f32 / 2.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+                anchor_x: 0.5,
+                anchor_y: 0.5,
+                _padding: 0.0,
+            }
+        };
+
+        let layer = GpuLayerBuilder::new()
+            .transform(transform)
+            .opacity(element.opacity as f32)
+            .z_index(z_index)
+            .build_from_rgba(texture, width, height);
+
+        tracing::debug!(
+            "Rendered shape '{}' ({}) to {}x{} texture (z_index={})",
+            element.name,
+            shape_data.shape_type,
+            width,
+            height,
+            z_index
+        );
+
+        Some(layer)
     }
 
     /// Render a text element to a GpuLayer

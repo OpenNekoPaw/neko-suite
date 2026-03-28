@@ -15,28 +15,34 @@
 
 ---
 
-## 🟡 P1 — 缺失 Shader 补齐
+## ✅ P1 — 缺失 Shader 补齐（已完成）
 
-- [ ] Curves 曲线调色 GPU shader（UI 已完成，引擎无实现）
-- [ ] Color Wheels 三向色轮 GPU shader（UI 已完成）
-- [ ] HSL 选择性调色 GPU shader（8 色域独立调整，UI 已完成）
-- [ ] Chroma Key 色度抠像 GPU shader（UI 已完成）
-- [ ] Luma Key 亮度抠像 GPU shader（UI 已完成）
-- [ ] Sharpen 锐化 GPU shader（UI 已完成）
+> 经代码核查（2026-03-28）：Curves / Color Wheels / HSL / Sharpen 已在 Phase 3 GPU 零拷贝重构中完整实现（WGSL + Rust EffectDispatcher + TS composite-helpers 三端贯通）。真正缺失的仅剩抠像类 shader。
+
+- [x] ~~Curves 曲线调色 GPU shader~~ ✅ Phase 3 已实现（`build_curves_data` + WGSL `apply_curves`）
+- [x] ~~Color Wheels 三向色轮 GPU shader~~ ✅ Phase 3 已实现（WGSL `cc_color_wheel` + Rust `cw_*` 参数读取）
+- [x] ~~HSL 选择性调色 GPU shader~~ ✅ Phase 3 已实现（WGSL `cc_hsl_range` + Rust `hsl_N_*` 参数读取）
+- [x] ~~Sharpen 锐化 GPU shader~~ ✅ 已实现（`SHARPEN_TEX_SHADER` + `apply_sharpen_tex`）
+- [x] Chroma Key 色度抠像 GPU shader ✅（WGSL BT.601 CbCr 距离 + spill suppression + TS BUILT_IN_EFFECTS 已就绪）
+- [x] Luma Key 亮度抠像 GPU shader ✅（WGSL Rec.709 亮度 + smoothstep + 可反转 + TS BUILT_IN_EFFECTS 已就绪）
 
 ---
 
-## 🟢 P2 — 增强功能
+## ✅ P2 — 增强功能（已完成）
 
-- [ ] neko-engine 渲染补齐：shapes / keyframes（effects ✅ subtitles ✅）
-- [ ] neko-tools 音频静音检测 UI（数据层已就绪，仅缺 AudioDiffViewer 沉默区域可视化）
-- [ ] Linux/Windows NV12 导出零拷贝（激活 DMA-BUF/DXGI export 路径，消除 `rgba_to_nv12.rs` readback）
-- [ ] `apply_custom_tex_fallback()` CPU round-trip 迁移到 GPU compute
+- [x] neko-engine 渲染补齐：shapes ✅（tiny-skia CPU 光栅化 → GPU upload；6 种形状 + 填充/描边/阴影/渐变）；keyframes 已由 neko-sketch puppet 动画处理
+- [x] neko-tools 音频静音检测 UI ✅（DiffRegionOverlay 加颜色 props；ThreeTrackWaveform 接收 silenceRegions，Previous/Current 轨显示琥珀色叠加层；AudioDiffViewer 传递 silenceRegions）
+- [ ] Linux/Windows NV12 导出零拷贝（激活 DMA-BUF/DXGI export 路径，消除 `rgba_to_nv12.rs` readback）—— 降为 P3，依赖跨平台 GPU 栈，暂无 Linux/Windows 测试环境
+- [ ] `apply_custom_tex_fallback()` CPU round-trip 迁移到 GPU compute —— 降为 P3，自定义 shader 使用率低，收益有限
 
 ---
 
 ## 🔵 P3 — 长期功能
 
+- [ ] neko-preview 文档预览（PDF.js + mammoth.js + epub.js + SheetJS，策略见 [ADR](./docs/architecture/document-preview.md)）
+  - P1：PdfPreviewProvider / DocxPreviewProvider / EpubPreviewProvider + 注册表
+  - P2：XlsxPreviewProvider / CbzPreviewProvider + 缩略图 → neko-assets 集成
+  - P3：PptxPreviewProvider（LibreOffice headless via Rust 引擎）
 - [ ] Diff/LSP AI 增强（CLIP 语义打分 + Whisper ASR Diff + Demucs 音源分离 + VQA，按需推进）— [ADR](./docs/architecture/lsp.md)
 - [ ] neko-agent MCP 客户端重连退避（低复杂度，低优先级）
 - [ ] neko-model AI MCP Tools：`face.generate_params` / `face.from_image` / `face.adjust`
@@ -60,4 +66,4 @@
 
 ---
 
-*最后更新：2026-03-27*
+*最后更新：2026-03-28（P2 全部完成：Shape 渲染 + 音频静音检测 UI）*

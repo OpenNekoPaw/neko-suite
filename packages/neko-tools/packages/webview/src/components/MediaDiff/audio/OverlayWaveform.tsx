@@ -18,6 +18,10 @@ export interface DiffRegionOverlayProps {
   height: number;
   zoom?: number;
   scrollOffset?: number;
+  /** SVG fill color for region rects (default: red diff style) */
+  fillColor?: string;
+  /** SVG stroke color for region rects (default: red diff style) */
+  strokeColor?: string;
 }
 
 export const DiffRegionOverlay = memo(function DiffRegionOverlay({
@@ -27,6 +31,8 @@ export const DiffRegionOverlay = memo(function DiffRegionOverlay({
   height,
   zoom = 1,
   scrollOffset = 0,
+  fillColor = 'rgba(239, 68, 68, 0.15)',
+  strokeColor = 'rgba(239, 68, 68, 0.3)',
 }: DiffRegionOverlayProps) {
   if (!regions.length || duration <= 0) return null;
 
@@ -56,8 +62,8 @@ export const DiffRegionOverlay = memo(function DiffRegionOverlay({
             y={0}
             width={Math.max(1, w)}
             height={height}
-            fill="rgba(239, 68, 68, 0.15)"
-            stroke="rgba(239, 68, 68, 0.3)"
+            fill={fillColor}
+            stroke={strokeColor}
             strokeWidth={0.5}
           />
         );

@@ -149,6 +149,76 @@ impl ChromaticAberrationParams {
     pub fn is_identity(&self) -> bool { self.amount < 0.0001 }
 }
 
+/// Luma Key effect parameters
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct LumaKeyParams {
+    pub threshold: f32,  // 0..1 — luminance cutoff
+    pub softness: f32,   // 0..1 — transition width
+    pub invert: f32,     // 0 or 1 — invert the mask
+    pub _pad: f32,
+}
+
+impl Default for LumaKeyParams {
+    fn default() -> Self {
+        Self { threshold: 0.5, softness: 0.1, invert: 0.0, _pad: 0.0 }
+    }
+}
+
+impl LumaKeyParams {
+    pub fn with_options(threshold: f32, softness: f32, invert: bool) -> Self {
+        Self {
+            threshold: threshold.clamp(0.0, 1.0),
+            softness: softness.clamp(0.0, 1.0),
+            invert: if invert { 1.0 } else { 0.0 },
+            _pad: 0.0,
+        }
+    }
+    pub fn is_identity(&self) -> bool { false }
+}
+
+/// Chroma Key (green/blue screen) effect parameters
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct ChromaKeyParams {
+    pub key_r: f32,       // 0..1 — key color red
+    pub key_g: f32,       // 0..1 — key color green
+    pub key_b: f32,       // 0..1 — key color blue
+    pub similarity: f32,  // 0..0.5 — CbCr distance threshold
+    pub smoothness: f32,  // 0..0.5 — transition edge width
+    pub spill: f32,       // 0..1 — spill suppression strength
+    pub _pad0: f32,
+    pub _pad1: f32,
+}
+
+impl Default for ChromaKeyParams {
+    fn default() -> Self {
+        Self {
+            key_r: 0.0, key_g: 1.0, key_b: 0.0,
+            similarity: 0.2, smoothness: 0.05, spill: 0.5,
+            _pad0: 0.0, _pad1: 0.0,
+        }
+    }
+}
+
+impl ChromaKeyParams {
+    pub fn with_options(
+        key_r: f32, key_g: f32, key_b: f32,
+        similarity: f32, smoothness: f32, spill: f32,
+    ) -> Self {
+        Self {
+            key_r: key_r.clamp(0.0, 1.0),
+            key_g: key_g.clamp(0.0, 1.0),
+            key_b: key_b.clamp(0.0, 1.0),
+            similarity: similarity.clamp(0.0, 0.5),
+            smoothness: smoothness.clamp(0.0, 0.5),
+            spill: spill.clamp(0.0, 1.0),
+            _pad0: 0.0, _pad1: 0.0,
+        }
+    }
+    pub fn is_identity(&self) -> bool { false }
+}
+
 // =============================================================================
 // Full color correction uniform params — 256 bytes
 // Layout must match WGSL `ColorCorrectionTexParams` in COLOR_CORRECTION_COMPUTE_SHADER
@@ -364,6 +434,8 @@ pub struct GpuStyleProcessor {
     glow_pipeline:                  wgpu::ComputePipeline,
     chromatic_aberration_pipeline:  wgpu::ComputePipeline,
     color_correction_pipeline:      wgpu::ComputePipeline,
+    luma_key_pipeline:              wgpu::ComputePipeline,
+    chroma_key_pipeline:            wgpu::ComputePipeline,
 
     // Per-instance LUT cache and identity resources
     lut_cache: GpuLutCache,
@@ -523,6 +595,14 @@ impl GpuStyleProcessor {
             make_shader!(shaders::get_color_correction_shader().as_str(), "Color Correction Shader"),
             &pipeline_layout_cc, "Color Correction Pipeline"
         );
+        let luma_key_pipeline = make_pipeline!(
+            make_shader!(shaders::LUMA_KEY_TEX_SHADER, "Luma Key Shader"),
+            &pipeline_layout_3, "Luma Key Pipeline"
+        );
+        let chroma_key_pipeline = make_pipeline!(
+            make_shader!(shaders::CHROMA_KEY_TEX_SHADER, "Chroma Key Shader"),
+            &pipeline_layout_3, "Chroma Key Pipeline"
+        );
 
         // --- Identity curves buffer (1280 floats, GPU storage) ---
         let identity_data = identity_curves_data();
@@ -539,6 +619,7 @@ impl GpuStyleProcessor {
             bgl_3, bgl_cc,
             vignette_pipeline, film_grain_pipeline, glow_pipeline,
             chromatic_aberration_pipeline, color_correction_pipeline,
+            luma_key_pipeline, chroma_key_pipeline,
             lut_cache, identity_curves_buf,
         })
     }
@@ -589,6 +670,26 @@ impl GpuStyleProcessor {
     ) -> Result<()> {
         if params.is_identity() { return self.copy_texture(input, output); }
         self.run_effect_tex(input, output, &self.chromatic_aberration_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply luma key: pixels below threshold become transparent.
+    pub fn apply_luma_key_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &LumaKeyParams,
+    ) -> Result<()> {
+        self.run_effect_tex(input, output, &self.luma_key_pipeline, &self.bgl_3, params)
+    }
+
+    /// Apply chroma key (green/blue screen removal) with spill suppression.
+    pub fn apply_chroma_key_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        params: &ChromaKeyParams,
+    ) -> Result<()> {
+        self.run_effect_tex(input, output, &self.chroma_key_pipeline, &self.bgl_3, params)
     }
 
     /// Apply full color correction (basic + color wheels + HSL + curves + 3D LUT).

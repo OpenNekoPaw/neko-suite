@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { parse } from '@neko-story/parser';
-import type { FountainDocument } from '@neko-story/types';
+import type { FountainDocument, Note } from '@neko-story/types';
 
 type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number }
-  | { type: 'print' };
+  | { type: 'scrollTo'; line: number };
 
 type MessageFromWebview =
   | { type: 'ready' }
@@ -79,10 +79,14 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     // Create new panel
+    const workspaceFolderUris = vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? [];
     const panel = vscode.window.createWebviewPanel(PreviewPanel.viewType, 'Story Preview', column, {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
+      localResourceRoots: [
+        vscode.Uri.joinPath(extensionUri, 'dist', 'webview'),
+        ...workspaceFolderUris,
+      ],
     });
 
     PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
@@ -142,15 +146,33 @@ export class PreviewPanel implements vscode.Disposable {
     const text = this.activeEditor.document.getText();
     const document = parse(text);
 
-    this.postMessage({ type: 'update', document });
+    this.postMessage({ type: 'update', document: this.resolveAssets(document) });
+  }
+
+  /** Walk elements and inject resolvedUri for notes with assetRef */
+  private resolveAssets(doc: FountainDocument): FountainDocument {
+    if (!this.activeEditor) return doc;
+    const docDir = path.dirname(this.activeEditor.document.uri.fsPath);
+
+    const elements = doc.elements.map((el) => {
+      if (el.type !== 'note') return el;
+      const note = el as Note;
+      if (!note.assetRef) return el;
+
+      const assetPath = path.isAbsolute(note.assetRef.path)
+        ? note.assetRef.path
+        : path.join(docDir, note.assetRef.path);
+
+      const resolvedUri = this.panel.webview.asWebviewUri(vscode.Uri.file(assetPath)).toString();
+
+      return { ...note, resolvedUri };
+    });
+
+    return { ...doc, elements };
   }
 
   private scrollPreviewToLine(line: number) {
     this.postMessage({ type: 'scrollTo', line });
-  }
-
-  public print(): void {
-    this.postMessage({ type: 'print' });
   }
 
   private postMessage(message: MessageToWebview) {

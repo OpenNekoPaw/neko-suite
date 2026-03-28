@@ -26,6 +26,7 @@ mod nv12_renderer;
 mod rgba_to_nv12;
 mod rgba_to_nv12_texture;
 pub mod shaders;
+mod shape_rasterizer;
 mod style_processor;
 mod text_renderer;
 mod texture;
@@ -67,8 +68,8 @@ pub use rgba_to_nv12::{
     Nv12OutputBuffers, RgbaToNv12Converter, RgbaToNv12Uniforms, RGBA_TO_NV12_SHADER,
 };
 pub use style_processor::{
-    ChromaticAberrationParams, ColorCorrectionTexParams, FilmGrainParams, GlowParams,
-    GpuStyleProcessor, VignetteParams,
+    ChromaKeyParams, ChromaticAberrationParams, ColorCorrectionTexParams, FilmGrainParams,
+    GlowParams, GpuStyleProcessor, LumaKeyParams, VignetteParams,
 };
 pub use texture::{TextureFormat, TextureHandle, TexturePool};
 pub use texture_transition_processor::TextureTransitionProcessor;
@@ -94,6 +95,7 @@ pub use windows_import::WindowsTextureImporter;
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use mask_rasterizer::MaskRasterizer;
+pub use shape_rasterizer::{RasterizedShape, ShapeRasterizer};
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
 pub use scene_renderer::{AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput};

@@ -17,9 +17,6 @@ export function App() {
         // Find element at line and scroll to it
         scrollToLine(message.line);
         break;
-      case 'print':
-        window.print();
-        break;
     }
   }, []);
 

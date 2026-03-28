@@ -1056,6 +1056,11 @@ impl Element {
         matches!(self.element_type, ElementType::Scene3D(_))
     }
 
+    /// Check if this is a shape element
+    pub fn is_shape(&self) -> bool {
+        matches!(self.element_type, ElementType::Shape(_))
+    }
+
     /// Convert element transform to GPU Transform2D
     pub fn to_transform_2d(&self) -> Transform2D {
         Transform2D {
@@ -1351,18 +1356,126 @@ fn default_transparent() -> String {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShapeElementData {
-    /// Shape type
+    /// Shape type discriminant: "rectangle" | "ellipse" | "polygon" | "star" | "line" | "bezier"
     #[serde(default)]
     pub shape_type: String,
-    /// Fill color
+    /// Shape-specific geometry parameters (type-discriminated JSON object)
     #[serde(default)]
-    pub fill: String,
-    /// Stroke color
+    pub shape_params: serde_json::Value,
+    /// Fill properties
     #[serde(default)]
-    pub stroke: String,
-    /// Stroke width
+    pub fill: ShapeFillData,
+    /// Stroke properties
     #[serde(default)]
-    pub stroke_width: f32,
+    pub stroke: ShapeStrokeData,
+    /// Shadow properties
+    #[serde(default)]
+    pub shadow: ShapeShadowData,
+}
+
+/// Gradient stop for shape fill
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeGradientStop {
+    /// Position along the gradient (0.0–1.0)
+    pub offset: f32,
+    /// CSS color string
+    pub color: String,
+}
+
+/// Gradient definition for shape fill
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeGradientData {
+    /// "linear" | "radial"
+    #[serde(rename = "type", default)]
+    pub gradient_type: String,
+    #[serde(default)]
+    pub stops: Vec<ShapeGradientStop>,
+    /// Angle in degrees (linear gradient)
+    pub angle: Option<f32>,
+    /// Center X as ratio 0–1 (radial gradient)
+    pub center_x: Option<f32>,
+    /// Center Y as ratio 0–1 (radial gradient)
+    pub center_y: Option<f32>,
+    /// Radius as ratio of min(width, height) (radial gradient)
+    pub radius: Option<f32>,
+}
+
+/// Fill properties for a shape element
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeFillData {
+    /// "none" | "solid" | "gradient"
+    #[serde(rename = "type", default)]
+    pub fill_type: String,
+    /// Solid fill color (CSS hex or rgba string)
+    pub color: Option<String>,
+    /// Gradient definition
+    pub gradient: Option<ShapeGradientData>,
+    /// Fill opacity (0.0–1.0)
+    #[serde(default = "default_shape_opacity")]
+    pub opacity: f32,
+}
+
+/// Stroke properties for a shape element
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeStrokeData {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub color: String,
+    /// Stroke width in pixels
+    #[serde(default = "default_stroke_width")]
+    pub width: f32,
+    #[serde(default = "default_shape_opacity")]
+    pub opacity: f32,
+    /// "butt" | "round" | "square"
+    #[serde(default = "default_line_cap")]
+    pub line_cap: String,
+    /// "miter" | "round" | "bevel"
+    #[serde(default = "default_line_join")]
+    pub line_join: String,
+    #[serde(default = "default_miter_limit")]
+    pub miter_limit: f32,
+    #[serde(default)]
+    pub dash_array: Vec<f32>,
+    #[serde(default)]
+    pub dash_offset: f32,
+}
+
+impl Default for ShapeStrokeData {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            color: "#000000".to_string(),
+            width: default_stroke_width(),
+            opacity: default_shape_opacity(),
+            line_cap: default_line_cap(),
+            line_join: default_line_join(),
+            miter_limit: default_miter_limit(),
+            dash_array: Vec::new(),
+            dash_offset: 0.0,
+        }
+    }
+}
+
+/// Shadow properties for a shape element
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeShadowData {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub color: String,
+    /// Blur radius in pixels
+    #[serde(default)]
+    pub blur: f32,
+    #[serde(default)]
+    pub offset_x: f32,
+    #[serde(default)]
+    pub offset_y: f32,
 }
 
 /// Subtitle element data
@@ -1442,6 +1555,26 @@ pub struct Scene3DElementData {
     /// Override camera parameters (instead of using model camera)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera_override: Option<CameraOverride>,
+}
+
+fn default_shape_opacity() -> f32 {
+    1.0
+}
+
+fn default_stroke_width() -> f32 {
+    2.0
+}
+
+fn default_line_cap() -> String {
+    "round".to_string()
+}
+
+fn default_line_join() -> String {
+    "round".to_string()
+}
+
+fn default_miter_limit() -> f32 {
+    10.0
 }
 
 fn default_animation_speed() -> f64 {

@@ -1509,6 +1509,77 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+/// Luma Key texture-to-texture shader.
+/// Uniforms: threshold(f32), softness(f32), invert(f32), _pad(f32)
+/// Pixels with luminance below threshold become transparent.
+pub const LUMA_KEY_TEX_SHADER: &str = r#"
+struct Uniforms { threshold: f32, softness: f32, invert: f32, _pad: f32, }
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+fn luma(c: vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)); }
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let coord = vec2<i32>(gid.xy);
+    let c = textureLoad(input_tex, coord, 0);
+    let l = luma(c.rgb);
+    let half_soft = max(u.softness * 0.5, 0.001);
+    var alpha = smoothstep(u.threshold - half_soft, u.threshold + half_soft, l);
+    if (u.invert > 0.5) { alpha = 1.0 - alpha; }
+    textureStore(output_tex, coord, vec4<f32>(c.rgb, c.a * alpha));
+}
+"#;
+
+/// Chroma Key (green/blue screen) texture-to-texture shader.
+/// Uniforms: key_r, key_g, key_b, similarity, smoothness, spill, _pad0, _pad1
+/// Uses BT.601 YCbCr chroma distance with spill suppression.
+pub const CHROMA_KEY_TEX_SHADER: &str = r#"
+struct Uniforms {
+    key_r: f32, key_g: f32, key_b: f32, similarity: f32,
+    smoothness: f32, spill: f32, _pad0: f32, _pad1: f32,
+}
+@group(0) @binding(0) var input_tex:  texture_2d<f32>;
+@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> u: Uniforms;
+
+// BT.601 RGB → CbCr chroma components (range −0.5..0.5)
+fn rgb_to_cbcr(c: vec3<f32>) -> vec2<f32> {
+    let cb = -0.168736*c.r - 0.331264*c.g + 0.5*c.b;
+    let cr =  0.5*c.r - 0.418688*c.g - 0.081312*c.b;
+    return vec2<f32>(cb, cr);
+}
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let dims = textureDimensions(input_tex);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let coord = vec2<i32>(gid.xy);
+    let src = textureLoad(input_tex, coord, 0);
+
+    let key_cbcr = rgb_to_cbcr(vec3<f32>(u.key_r, u.key_g, u.key_b));
+    let pix_cbcr = rgb_to_cbcr(src.rgb);
+    let dist = length(pix_cbcr - key_cbcr);
+
+    // similarity is the keying threshold, softness controls the transition edge
+    let soft = max(u.smoothness * 0.5, 0.001);
+    let alpha = smoothstep(u.similarity - soft, u.similarity + soft, dist);
+
+    // Spill suppression: desaturate pixels near key color toward luminance
+    var rgb = src.rgb;
+    if (u.spill > 0.001) {
+        let spill_mask = clamp((1.0 - alpha) * u.spill, 0.0, 1.0);
+        let lum = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        rgb = mix(rgb, vec3<f32>(lum, lum, lum), spill_mask);
+    }
+
+    textureStore(output_tex, coord, vec4<f32>(rgb, src.a * alpha));
+}
+"#;
+
 /// Transition compute shader (storage buffer format)
 /// Supports 18 transition types between two frames
 pub const TRANSITION_COMPUTE_SHADER: &str = r#"

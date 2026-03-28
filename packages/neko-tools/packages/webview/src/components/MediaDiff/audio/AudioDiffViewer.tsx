@@ -106,6 +106,7 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
           currentTime={localTime}
           duration={duration}
           diffRegions={details?.diffRegions}
+          silenceRegions={details?.silenceRegions}
           zoom={zoom}
           scrollOffset={scrollOffset}
           onZoomChange={handleZoomChange}

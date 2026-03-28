@@ -10,16 +10,16 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
-| **neko-engine** | Alpha | 90% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML） |
-| **neko-cut** | Alpha | 82% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 |
+| **neko-engine** | Alpha | 96% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）|
+| **neko-cut** | Alpha | 87% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 |
 | **neko-agent** | Alpha | 95% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化 |
-| **neko-story** | WIP | 75% | Fountain 解析器 + LSP + 预览 + 时间线生成 + PDF 导出 |
+| **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；文档预览（PDF/DOCX/EPUB/XLSX）规划中 — [ADR](./docs/architecture/document-preview.md) |
+| **neko-story** | WIP | 82% | Fountain 解析器 + LSP + 预览（标题栏入口 + 行业标准缩进 + 媒体占位渲染）+ 时间线生成 + PDF 导出 |
 | **neko-assets** | Alpha | 92% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 |
 | **neko-market** | Alpha | 97% | **客户端完全完成** ✅（Phase 6.5.1-6.5.6）；Registry Server 在 neko-hub |
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO（auth-core 43 tests + SecretStorage）；后端待接入 |
-| **neko-tools** | WIP | 62% | 媒体 Diff + 并行优化 + 协议增强 |
+| **neko-tools** | WIP | 68% | 媒体 Diff + 静音检测 UI（琥珀色叠加层）+ 并行优化 + 协议增强 |
 | **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 分组 + 画板导出 + Port UI + EditOperation |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL |
 | **neko-model** | Alpha | 65% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情） |
@@ -62,7 +62,16 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 
 ---
 
-## Phase 3: 视觉增强 + 3D 能力 (~75%)
+## Phase 3: 视觉增强 + 3D 能力 (~82%)
+
+### neko-engine GPU 效果管线 ✅
+> 完成时间：2026-03-27（Phase 3 GPU 零拷贝重构）
+
+- 零拷贝纹理到纹理效果链（ping-pong Rgba8Unorm，macOS 全链路零拷贝）
+- 色彩校正完整管线：基础调整 + Curves（5×256 LUT）+ Color Wheels（3 向色轮）+ HSL（8 色域独立调整）+ 3D LUT（.cube）
+- Sharpen / Blur / Vignette / Film Grain / Glow / Chromatic Aberration
+- Chroma Key（色度抠像）✅ + Luma Key（亮度抠像）✅
+- Shape 元素渲染 ✅（tiny-skia CPU 光栅化 → GPU upload；6 种形状 + 填充/描边/阴影/渐变）
 
 ### neko-canvas — 待完成
 - 大量节点性能优化（按需，当前 DOM/SVG 方案足够）
@@ -182,4 +191,4 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 
 ---
 
-*最后更新: 2026-03-26*
+*最后更新: 2026-03-28（P2 全部完成；neko-story 预览入口 + 亮色主题 CSS 优化）*

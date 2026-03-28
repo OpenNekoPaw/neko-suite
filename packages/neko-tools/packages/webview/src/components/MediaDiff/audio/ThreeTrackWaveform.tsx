@@ -14,6 +14,10 @@ interface ThreeTrackWaveformProps {
   currentTime: number;
   duration: number;
   diffRegions?: Array<{ start: number; end: number }>;
+  silenceRegions?: {
+    current: Array<{ start: number; end: number }>;
+    previous: Array<{ start: number; end: number }>;
+  };
   zoom: number;
   scrollOffset: number;
   onZoomChange: (zoom: number) => void;
@@ -27,6 +31,7 @@ export const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
   currentTime,
   duration,
   diffRegions = [],
+  silenceRegions,
   zoom,
   scrollOffset,
   onZoomChange,
@@ -132,9 +137,24 @@ export const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
   }, [zoom, scrollOffset, containerWidth, onScrollOffsetChange]);
 
   const tracks = [
-    { label: t('mediaDiff.audio.trackPrevious'), peaks: previousWaveform, color: '#ef4444' },
-    { label: t('mediaDiff.audio.trackCurrent'), peaks: currentWaveform, color: '#22c55e' },
-    { label: t('mediaDiff.audio.trackDiff'), peaks: diffWaveform, color: '#eab308' },
+    {
+      key: 'previous' as const,
+      label: t('mediaDiff.audio.trackPrevious'),
+      peaks: previousWaveform,
+      color: '#ef4444',
+    },
+    {
+      key: 'current' as const,
+      label: t('mediaDiff.audio.trackCurrent'),
+      peaks: currentWaveform,
+      color: '#22c55e',
+    },
+    {
+      key: 'diff' as const,
+      label: t('mediaDiff.audio.trackDiff'),
+      peaks: diffWaveform,
+      color: '#eab308',
+    },
   ];
 
   return (
@@ -156,13 +176,14 @@ export const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
         </div>
       )}
       {tracks.map((track) => (
-        <div key={track.label} className="relative">
+        <div key={track.key} className="relative">
           <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-0.5 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: track.color }} />
             {track.label}
           </div>
           <div className="relative bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
-            {track.label.startsWith('Diff') && (
+            {/* Diff regions overlay (diff track only) */}
+            {track.key === 'diff' && diffRegions.length > 0 && (
               <DiffRegionOverlay
                 regions={diffRegions}
                 duration={duration}
@@ -170,6 +191,31 @@ export const ThreeTrackWaveform = memo(function ThreeTrackWaveform({
                 height={trackHeight}
                 zoom={zoom}
                 scrollOffset={scrollOffset}
+              />
+            )}
+            {/* Silence region overlays (previous / current tracks) */}
+            {track.key === 'previous' && (silenceRegions?.previous.length ?? 0) > 0 && (
+              <DiffRegionOverlay
+                regions={silenceRegions!.previous}
+                duration={duration}
+                width={containerWidth}
+                height={trackHeight}
+                zoom={zoom}
+                scrollOffset={scrollOffset}
+                fillColor="rgba(251, 191, 36, 0.18)"
+                strokeColor="rgba(251, 191, 36, 0.5)"
+              />
+            )}
+            {track.key === 'current' && (silenceRegions?.current.length ?? 0) > 0 && (
+              <DiffRegionOverlay
+                regions={silenceRegions!.current}
+                duration={duration}
+                width={containerWidth}
+                height={trackHeight}
+                zoom={zoom}
+                scrollOffset={scrollOffset}
+                fillColor="rgba(251, 191, 36, 0.18)"
+                strokeColor="rgba(251, 191, 36, 0.5)"
               />
             )}
             <WaveformCanvas

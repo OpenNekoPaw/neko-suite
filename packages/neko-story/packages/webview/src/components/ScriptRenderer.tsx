@@ -114,19 +114,9 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
   return (
     <div className="screenplay">
-      {/* Print button — hidden during actual printing via .print-button class in print.css */}
-      <div className="print-button" style={{ textAlign: 'right', padding: '4px 8px' }}>
-        <button
-          onClick={() => window.print()}
-          style={{
-            cursor: 'pointer',
-            padding: '4px 12px',
-            fontSize: '12px',
-            opacity: 0.7,
-          }}
-          title="导出为 PDF（在打印对话框中选择「另存为 PDF」）"
-        >
-          打印 / PDF
+      <div className="print-button">
+        <button onClick={() => window.print()} title="打印 / 导出 PDF">
+          🖨 打印 / PDF
         </button>
       </div>
       {rendered}
@@ -172,8 +162,36 @@ function SynopsisRenderer({ element }: { element: Synopsis }) {
 }
 
 function NoteRenderer({ element }: { element: Note }) {
+  const handleClick = () => navigateToLine(element.range.start.line);
+
+  if (element.assetRef) {
+    const { assetRef, resolvedUri } = element;
+    const fileName = assetRef.path.split('/').pop() ?? assetRef.path;
+
+    if (assetRef.type === 'image') {
+      return (
+        <div className="asset-note asset-note--image element" onClick={handleClick}>
+          {resolvedUri ? (
+            <img src={resolvedUri} alt={fileName} className="asset-thumb" />
+          ) : (
+            <span className="asset-badge asset-badge--image">🖼 {fileName}</span>
+          )}
+        </div>
+      );
+    }
+
+    const icon = assetRef.type === 'video' ? '🎬' : '🎵';
+    return (
+      <div className="asset-note asset-note--media element" onClick={handleClick}>
+        <span className={`asset-badge asset-badge--${assetRef.type}`}>
+          {icon} {fileName}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="note element" onClick={() => navigateToLine(element.range.start.line)}>
+    <div className="note element" onClick={handleClick}>
       {element.text}
     </div>
   );

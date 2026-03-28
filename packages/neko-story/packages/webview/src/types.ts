@@ -96,9 +96,17 @@ export interface Synopsis extends FountainElement {
   text: string;
 }
 
+export interface AssetReference {
+  type: 'image' | 'video' | 'audio';
+  path: string;
+}
+
 export interface Note extends FountainElement {
   type: 'note';
   text: string;
+  assetRef?: AssetReference;
+  /** Resolved webview URI, injected by PreviewPanel before sending */
+  resolvedUri?: string;
 }
 
 export interface PageBreak extends FountainElement {
@@ -133,8 +141,7 @@ export interface FountainDocument {
 // Message types for VSCode communication
 export type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number }
-  | { type: 'print' };
+  | { type: 'scrollTo'; line: number };
 
 export type MessageToExtension =
   | { type: 'ready' }

@@ -34,9 +34,18 @@
 /* Light theme overrides */
 body.vscode-light {
   --hover-bg: rgba(0, 0, 0, 0.04);
-  --divider-color: rgba(0, 0, 0, 0.1);
+  --divider-color: rgba(0, 0, 0, 0.12);
   --page-break-color: rgba(0, 0, 0, 0.2);
   --empty-state-color: rgba(0, 0, 0, 0.4);
+  /* Darken syntax colors for legibility on white background */
+  --character-color: #7a5800;
+  --scene-heading-color: #0052a3;
+  --parenthetical-color: #005f7f;
+  --section-color: #1a6b5e;
+  --note-color: #3a6830;
+  --synopsis-color: #854010;
+  --lyrics-color: #7a5e00;
+  --transition-color: #7a3a8a;
 }
 
 /* High contrast — remove transparency */
@@ -55,17 +64,22 @@ body.vscode-high-contrast-light {
 }
 
 body {
-  background-color: var(--bg-color);
+  background-color: var(--vscode-sideBar-background, var(--bg-color));
   color: var(--text-color);
   font-family: var(--font-family);
   font-size: var(--font-size);
   line-height: var(--line-height);
+  padding: 1.5em 0;
 }
 
 .screenplay {
   max-width: var(--page-width);
   margin: 0 auto;
-  padding: var(--page-padding);
+  /* Screen: compact padding so percentage margins work at any panel width */
+  padding: 2em 2.5em;
+  background-color: var(--bg-color);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  border-radius: 2px;
 }
 
 /* Clickable elements */
@@ -109,8 +123,8 @@ body {
   color: var(--scene-heading-color);
   font-weight: bold;
   text-transform: uppercase;
-  margin-top: 2em;
-  margin-bottom: 1em;
+  margin-top: 2.5em;
+  margin-bottom: 0.75em;
 }
 
 .scene-heading .scene-number {
@@ -121,6 +135,7 @@ body {
 /* Action */
 .action {
   margin: 1em 0;
+  line-height: 1.4;
   white-space: pre-wrap;
 }
 
@@ -128,30 +143,37 @@ body {
   text-align: center;
 }
 
-/* Character */
+/* Dialogue block wrapper — groups character + lines together */
+.dialogue-block {
+  margin: 1em 0;
+}
+
+/* Character — screen: percentage-based so it adapts to any panel width.
+   Standard US: 3.7" of 8.5" page ≈ 43.5% */
 .character {
   color: var(--character-color);
   text-transform: uppercase;
-  margin-top: 1em;
-  margin-left: 2in;
+  margin-top: 0;
+  margin-left: 43%;
 }
 
 .character .extension {
   font-weight: normal;
 }
 
-/* Dialogue */
+/* Dialogue — standard: 2.5"–6.0" of 8.5" page ≈ 29% left, 29% right */
 .dialogue {
-  margin-left: 1in;
-  margin-right: 1.5in;
+  margin-left: 29%;
+  margin-right: 22%;
+  line-height: 1.3;
   white-space: pre-wrap;
 }
 
-/* Parenthetical */
+/* Parenthetical — standard: 3.0"–5.9" ≈ 35% left, 30% right */
 .parenthetical {
   color: var(--parenthetical-color);
-  margin-left: 1.5in;
-  margin-right: 2in;
+  margin-left: 35%;
+  margin-right: 22%;
 }
 
 /* Transition */
@@ -168,35 +190,66 @@ body {
   margin: 1em 0;
 }
 
-/* Section */
+/* Section — structural annotation, not a printed element.
+   Rendered as a subtle divider rule so it doesn't compete with screenplay content. */
 .section {
   color: var(--section-color);
-  font-weight: bold;
-  margin-top: 2em;
-  margin-bottom: 1em;
+  font-size: 0.7em;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-top: 3em;
+  margin-bottom: 1.25em;
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  cursor: pointer;
 }
 
-.section.level-1 { font-size: 1.4em; }
-.section.level-2 { font-size: 1.2em; }
-.section.level-3 { font-size: 1.1em; }
+.section::before,
+.section::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--divider-color);
+}
 
-/* Synopsis */
+/* All section levels share the same subtle treatment */
+.section.level-1,
+.section.level-2,
+.section.level-3 { font-size: 0.7em; }
+
+/* Synopsis — editorial summary, not printed. Subtle left-margin annotation. */
 .synopsis {
   color: var(--synopsis-color);
+  font-size: 0.8em;
   font-style: italic;
-  margin: 0.5em 0;
-  padding-left: 1em;
-  border-left: 2px solid var(--synopsis-color);
+  opacity: 0.6;
+  margin: 0.25em 0;
+  padding-left: 0.75em;
+  border-left: 2px solid color-mix(in srgb, var(--synopsis-color) 40%, transparent);
 }
 
-/* Note */
+/* Note — [[...]] comments, not printed. Hidden by default, revealed on hover. */
 .note {
   color: var(--note-color);
+  font-size: 0.75em;
   font-style: italic;
-  margin: 0.5em 0;
-  padding: 0.5em;
-  background-color: color-mix(in srgb, #6a9955 12%, transparent);
-  border-radius: 4px;
+  opacity: 0;
+  margin: 0.1em 0;
+  padding: 0.25em 0.5em;
+  border-radius: 3px;
+  transition: opacity 0.2s;
+}
+
+.screenplay:hover .note {
+  opacity: 0.4;
+}
+
+.note:hover {
+  opacity: 1 !important;
+  background-color: color-mix(in srgb, var(--note-color) 10%, transparent);
 }
 
 /* Page Break */
@@ -217,6 +270,44 @@ body {
   padding: 0 1em;
   font-size: 0.7em;
   color: var(--page-break-color);
+}
+
+/* Asset Notes — [[IMAGE:]], [[VIDEO:]], [[AUDIO:]] */
+.asset-note {
+  margin: 0.75em 0;
+  cursor: pointer;
+}
+
+.asset-note--image {
+  line-height: 0; /* collapse whitespace around img */
+}
+
+.asset-thumb {
+  display: block;
+  max-width: 320px;
+  max-height: 200px;
+  border-radius: 4px;
+  border: 1px solid var(--divider-color);
+  object-fit: cover;
+  opacity: 0.9;
+  transition: opacity 0.15s;
+}
+
+.asset-thumb:hover {
+  opacity: 1;
+}
+
+.asset-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.78em;
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  border: 1px solid var(--divider-color);
+  color: var(--empty-state-color);
+  background: color-mix(in srgb, var(--divider-color) 30%, transparent);
+  font-family: inherit;
 }
 
 /* Lyrics */
