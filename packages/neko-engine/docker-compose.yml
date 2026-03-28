@@ -1,0 +1,51 @@
+# neko-engine 独立开发/测试用 docker-compose
+# 集成到 neko-hub 时请参考 neko-hub/deploy/docker-compose.yml 的 neko-engine service 定义
+#
+# 用法:
+#   docker compose up --build          # 构建并启动（首次）
+#   docker compose up                  # 直接启动（已有镜像）
+#   docker compose logs -f             # 查看日志
+#   curl http://localhost:8765/health  # 健康检查
+
+services:
+  neko-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neko-engine:latest
+    container_name: neko-engine
+    restart: unless-stopped
+
+    ports:
+      - "8765:8765"
+
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      # 指定首选 GPU 设备名称（留空则自动选择）
+      NEKO_GPU_DEVICE: ${NEKO_GPU_DEVICE:-}
+
+    # ---- GPU 直通（取消注释对应平台）----
+
+    # Linux NVIDIA GPU（需要 nvidia-container-toolkit）:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu, video]
+
+    # Linux AMD/Intel GPU（VAAPI DRI 设备直通）:
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+    # Linux Vulkan（所有 GPU）:
+    # volumes:
+    #   - /dev/dri:/dev/dri
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
