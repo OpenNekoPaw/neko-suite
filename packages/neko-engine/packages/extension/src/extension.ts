@@ -23,6 +23,7 @@ import {
 } from './mediaEngine/export';
 import { setRootLogger, setErrorHandler, handleError, getLogger } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import { initOrtDylib } from './mediaEngine/OrtInitializer';
 
 // =============================================================================
 // Extension State
@@ -52,6 +53,9 @@ export function activate(context: vscode.ExtensionContext): void {
   setErrorHandler(new VSCodeErrorHandler(logger));
 
   log('Activating extension...');
+
+  // Initialize ORT dylib path for ML inference (no-op if ORT_DYLIB_PATH already set)
+  initOrtDylib(context.extensionUri, logger);
 
   // Create status bar item
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

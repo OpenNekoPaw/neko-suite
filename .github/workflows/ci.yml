@@ -285,3 +285,61 @@ jobs:
       - uses: actions/dependency-review-action@v4
         with:
           comment-summary-in-pr: on-failure
+
+  # ── Release: Bundle ORT + Package VSIX ────
+  # Runs on push to main only. Downloads ORT dylibs for all 4 platforms,
+  # then packages neko-engine as a VSIX with dylibs bundled in bin/.
+  package-vsix:
+    name: Package VSIX (with ORT)
+    runs-on: macos-latest
+    needs: [build, test-ts, test-rust]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/neko-engine
+
+      - name: Cache ORT dylibs
+        uses: actions/cache@v4
+        with:
+          path: packages/neko-engine/bin
+          key: ort-bin-${{ env.ORT_VERSION }}
+        env:
+          ORT_VERSION: "1.20.1"
+
+      - name: Install FFmpeg (macOS)
+        run: brew install ffmpeg pkg-config
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build neko-engine extension
+        run: pnpm build:neko-engine
+
+      - name: Download ORT dylibs (all platforms)
+        # vscode:prepublish already calls bundle:ort:all, but run explicitly
+        # here so the cache step above can populate bin/ on cache miss.
+        run: node scripts/download-ort.js --all
+        working-directory: packages/neko-engine
+
+      - name: Package VSIX
+        run: npm run package
+        working-directory: packages/neko-engine
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neko-engine-vsix
+          path: packages/neko-engine/*.vsix
+          retention-days: 30

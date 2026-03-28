@@ -39,16 +39,18 @@
 
 ## 🔵 P3 — 长期功能
 
-- [ ] neko-preview 文档预览（PDF.js + mammoth.js + epub.js + SheetJS，策略见 [ADR](./docs/architecture/document-preview.md)）
+- [ ] neko-preview 文档预览（pdfjs-dist + docx-preview + epub.js + x-data-spreadsheet，策略见 [ADR](./docs/architecture/document-preview.md)）
   - P1：PdfPreviewProvider / DocxPreviewProvider / EpubPreviewProvider + 注册表
   - P2：XlsxPreviewProvider / CbzPreviewProvider + 缩略图 → neko-assets 集成
   - P3：PptxPreviewProvider（LibreOffice headless via Rust 引擎）
-- [ ] Diff/LSP AI 增强（CLIP 语义打分 + Whisper ASR Diff + Demucs 音源分离 + VQA，按需推进）— [ADR](./docs/architecture/lsp.md)
+- [x] Diff/LSP AI 增强 L1：ScriptIndex（neko-story WorkspaceIndexService.getScriptIndex + GetScriptIndex agent tool）✅
+- [x] Diff/LSP AI 增强 L3：SearchScriptIndex 语义搜索（ScriptEmbeddingIndex 余弦相似度 + platform.embed() 注入 + EmbedFn 懒加载）✅
+- [ ] Diff/LSP AI 增强 L3 扩展：Whisper ASR Diff + Demucs 音源分离（按需推进）— [ADR](./docs/architecture/lsp.md)
 - [ ] neko-agent MCP 客户端重连退避（低复杂度，低优先级）
 - [ ] neko-model AI MCP Tools：`face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] neko-sketch S.4：`sketch.generate` / `style_transfer` / 跨模块集成
 - [ ] `neko://` 协议 + MediaResolver 代理/原始自动切换（Phase 6.6 客户端，依赖服务端）
-- [ ] ONNX 跨平台打包：随扩展分发 onnxruntime 动态库（Windows/Linux）
+- [x] ONNX 跨平台打包：随扩展分发 onnxruntime 动态库（download-ort.js + OrtInitializer.ts + bin/ bundling）
 - [ ] neko-live 虚拟制片（MediaPipe + VMC + VRM + 录制 + 推流）
 - [ ] VR/AR 沉浸式创作（远期 Phase 7）
 - [ ] Git LFS 集成（.gitignore/.gitattributes 模板 + pHash + OID 自动填充）
@@ -66,4 +68,4 @@
 
 ---
 
-*最后更新：2026-03-28（P2 全部完成：Shape 渲染 + 音频静音检测 UI）*
+*最后更新：2026-03-28（LSP L1 ScriptIndex + L3 SearchScriptIndex 语义搜索全部完成）*

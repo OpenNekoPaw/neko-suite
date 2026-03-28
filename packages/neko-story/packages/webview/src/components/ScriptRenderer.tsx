@@ -112,16 +112,7 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
     i++;
   }
 
-  return (
-    <div className="screenplay">
-      <div className="print-button">
-        <button onClick={() => window.print()} title="打印 / 导出 PDF">
-          🖨 打印 / PDF
-        </button>
-      </div>
-      {rendered}
-    </div>
-  );
+  return <div className="screenplay">{rendered}</div>;
 }
 
 // Simple inline renderers for less common elements

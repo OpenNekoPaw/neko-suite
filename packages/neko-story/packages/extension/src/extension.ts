@@ -193,6 +193,19 @@ export function activate(context: vscode.ExtensionContext) {
       const converter = new TimelineConverter();
       return converter.convert(doc, projectName);
     },
+
+    /**
+     * Returns a structured ScriptIndex for the given file path or URI string,
+     * suitable for agent tools (Read offset/limit access patterns).
+     * Returns undefined if the file has not been indexed yet.
+     */
+    getScriptIndex(uriOrPath: string) {
+      const uri =
+        uriOrPath.startsWith('file://') || uriOrPath.includes('://')
+          ? vscode.Uri.parse(uriOrPath)
+          : vscode.Uri.file(uriOrPath);
+      return indexService.getScriptIndex(uri);
+    },
   };
 
   return api;

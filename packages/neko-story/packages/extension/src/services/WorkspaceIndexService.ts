@@ -1,7 +1,13 @@
 import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Character, SceneHeading, Section } from '@neko-story/types';
-import type { IWorkspaceIndex, SymbolLocation } from './types';
+import type {
+  IWorkspaceIndex,
+  SymbolLocation,
+  ScriptIndex,
+  SceneEntry,
+  CharacterEntry,
+} from './types';
 
 const FOUNTAIN_GLOB = '**/*.fountain';
 
@@ -113,6 +119,94 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
 
   getAllSceneLocations(): readonly string[] {
     return Array.from(this.sceneIndex.keys()).sort();
+  }
+
+  getScriptIndex(uri: vscode.Uri): ScriptIndex | undefined {
+    const doc = this.fileCache.get(uri.toString());
+    if (!doc) return undefined;
+
+    const uriStr = uri.toString();
+
+    // Collect scene headings in document order
+    const sceneHeadings: Array<{ element: SceneHeading; lineStart: number }> = [];
+    let maxLine = 0;
+
+    for (const element of doc.elements) {
+      const endLine = element.range.end.line;
+      if (endLine > maxLine) maxLine = endLine;
+      if (element.type === 'scene_heading') {
+        sceneHeadings.push({
+          element: element as SceneHeading,
+          lineStart: element.range.start.line,
+        });
+      }
+    }
+
+    // Build SceneEntry[] — line_end = next scene's start - 1 (or EOF)
+    const scenes: SceneEntry[] = sceneHeadings.map((sh, idx) => {
+      const next = sceneHeadings[idx + 1];
+      const lineEnd = next ? next.lineStart - 1 : maxLine;
+      const heading = sh.element.raw.trim();
+      const parts = [sh.element.intExt, sh.element.location, sh.element.time]
+        .filter(Boolean)
+        .join('. ');
+      return {
+        id: `S${idx + 1}`,
+        heading: heading || parts,
+        intExt: sh.element.intExt,
+        location: sh.element.location,
+        time: sh.element.time,
+        line_start: sh.lineStart,
+        line_end: lineEnd,
+      };
+    });
+
+    // Build scene membership map: sceneIndex (0-based) → sceneId
+    // A character appearing between sceneHeadings[i].lineStart and sceneHeadings[i+1].lineStart
+    // belongs to scene S(i+1).
+    const getSceneIdForLine = (line: number): string | undefined => {
+      let sceneId: string | undefined;
+      for (const scene of scenes) {
+        if (line >= scene.line_start && line <= scene.line_end) {
+          sceneId = scene.id;
+          break;
+        }
+      }
+      return sceneId;
+    };
+
+    // Collect character appearances in this file
+    const charMap = new Map<string, { firstLine: number; sceneIds: Set<string> }>();
+    for (const element of doc.elements) {
+      if (element.type === 'character') {
+        const char = element as Character;
+        const line = element.range.start.line;
+        const sceneId = getSceneIdForLine(line);
+        let entry = charMap.get(char.name);
+        if (!entry) {
+          entry = { firstLine: line, sceneIds: new Set() };
+          charMap.set(char.name, entry);
+        } else if (line < entry.firstLine) {
+          entry.firstLine = line;
+        }
+        if (sceneId) entry.sceneIds.add(sceneId);
+      }
+    }
+
+    const characters: CharacterEntry[] = Array.from(charMap.entries())
+      .sort(([, a], [, b]) => a.firstLine - b.firstLine)
+      .map(([name, entry]) => ({
+        name,
+        first_line: entry.firstLine,
+        scene_ids: Array.from(entry.sceneIds),
+      }));
+
+    return {
+      uri: uriStr,
+      total_lines: maxLine + 1,
+      scenes,
+      characters,
+    };
   }
 
   dispose(): void {

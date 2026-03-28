@@ -180,6 +180,66 @@ export interface NekoCanvasAPI {
 }
 
 // =============================================================================
+// NekoStory API
+// =============================================================================
+
+/**
+ * Structured representation of a scene in a Fountain screenplay.
+ * `line_start` / `line_end` are 0-based line numbers enabling
+ * `Read(offset=line_start, limit=line_end-line_start+1)` access patterns.
+ */
+export interface NekoStorySceneEntry {
+  readonly id: string;
+  readonly heading: string;
+  readonly intExt: string | null;
+  readonly location: string;
+  readonly time: string | null;
+  readonly line_start: number;
+  readonly line_end: number;
+}
+
+/**
+ * Aggregated character information within a single Fountain file.
+ */
+export interface NekoStoryCharacterEntry {
+  readonly name: string;
+  readonly first_line: number;
+  readonly scene_ids: readonly string[];
+}
+
+/**
+ * Agent-accessible structured representation of a Fountain screenplay file.
+ */
+export interface NekoStoryScriptIndex {
+  readonly uri: string;
+  readonly total_lines: number;
+  readonly scenes: readonly NekoStorySceneEntry[];
+  readonly characters: readonly NekoStoryCharacterEntry[];
+}
+
+/**
+ * NekoStory Extension API
+ * Exported by neko-story extension for screenplay parsing and index access
+ */
+export interface NekoStoryAPI {
+  /**
+   * Parse Fountain screenplay text into a structured document
+   */
+  parseScript(content: string): unknown;
+
+  /**
+   * Convert a Fountain screenplay to neko-cut timeline ProjectData
+   */
+  convertToTimeline(fountainContent: string, projectName?: string): unknown;
+
+  /**
+   * Returns a structured ScriptIndex for the given file path or URI string.
+   * Returns undefined if the file has not been indexed yet.
+   */
+  getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+}
+
+// =============================================================================
 // Extension Discovery Constants
 // =============================================================================
 
@@ -190,4 +250,5 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_CUT: 'neko.nekocut',
   NEKO_CANVAS: 'neko.nekocanvas',
   NEKO_AGENT: 'neko.nekoagent',
+  NEKO_STORY: 'neko.neko-story',
 } as const;

@@ -283,6 +283,7 @@ function createMockIndex(files: Record<string, string>): IWorkspaceIndex {
     },
     getAllCharacterNames: () => Array.from(characterIndex.keys()).sort(),
     getAllSceneLocations: () => Array.from(sceneIndex.keys()).sort(),
+    getScriptIndex: () => undefined,
     onDidUpdateIndex: (() => ({ dispose: () => {} })) as any,
     dispose: () => {},
   };

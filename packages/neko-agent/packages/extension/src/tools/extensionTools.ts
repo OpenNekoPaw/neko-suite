@@ -6,7 +6,8 @@
  */
 
 import * as vscode from 'vscode';
-import type { NekoCutAPI, NekoCanvasAPI, ToolParameters } from '@neko/shared';
+import type { NekoCutAPI, NekoCanvasAPI, NekoStoryAPI, ToolParameters } from '@neko/shared';
+import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
 import { getLogger } from '../base';
@@ -499,4 +500,173 @@ export function createTranscribeTools(): Tool[] {
       },
     },
   ];
+}
+
+// =============================================================================
+// NekoStory Tools
+// =============================================================================
+
+/**
+ * Module-level embedding index cache — persists for the extension's lifetime.
+ * Invalidated automatically when a file's total_lines changes.
+ */
+const scriptEmbeddingIndex = new ScriptEmbeddingIndex();
+
+/**
+ * Create tools for NekoStory screenplay index access.
+ * Returns empty array if NekoStory is not installed.
+ *
+ * Tools:
+ * - GetScriptIndex   — structural index (scenes + characters with line numbers)
+ * - SearchScriptIndex — semantic similarity search using text embeddings
+ *                       (requires embedFn; omit for L1-only mode)
+ */
+export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
+  const ext = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
+
+  if (!ext) {
+    logger.info('NekoStory extension not found, skipping NekoStory tools');
+    return [];
+  }
+
+  const getAPI = async (): Promise<NekoStoryAPI> => {
+    if (ext.isActive) {
+      return ext.exports;
+    }
+    return ext.activate() as Promise<NekoStoryAPI>;
+  };
+
+  const tools: Tool[] = [
+    {
+      name: 'GetScriptIndex',
+      description:
+        'Get a structured index of a Fountain screenplay (.fountain) file. ' +
+        'Returns scenes with sequential IDs (S1, S2...) and 0-based line_start/line_end so you can ' +
+        'fetch exact scene content with Read(offset=line_start, limit=line_end-line_start+1). ' +
+        'Also returns all characters with their first appearance line and which scenes they appear in.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Absolute file path or URI string of the .fountain screenplay file',
+          },
+        },
+        required: ['path'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const index = api.getScriptIndex(args.path as string);
+        if (!index) {
+          return {
+            error: 'Script not indexed yet. The file may not exist or has not been opened.',
+          };
+        }
+        return index;
+      },
+    },
+  ];
+
+  // SearchScriptIndex requires an embedding function — only register when available
+  if (embedFn) {
+    tools.push({
+      name: 'SearchScriptIndex',
+      description:
+        'Semantically search scenes in a Fountain screenplay by meaning, not just keywords. ' +
+        'Useful for queries like "all tense confrontation scenes" or "scenes about loss or grief". ' +
+        'Returns the top matching scenes with scene IDs, similarity scores, and line numbers. ' +
+        'Use Read(offset=line_start, limit=line_end-line_start+1) to fetch the full scene text.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Absolute file path of the .fountain screenplay file',
+          },
+          query: {
+            type: 'string',
+            description: 'Natural language description of the scenes to find',
+          },
+          top_k: {
+            type: 'number',
+            description: 'Maximum number of results to return (default: 5, max: 20)',
+          },
+        },
+        required: ['path', 'query'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const filePath = args.path as string;
+        const query = args.query as string;
+        const topK = Math.min((args.top_k as number | undefined) ?? 5, 20);
+
+        // 1. Get structural index from neko-story
+        const api = await getAPI();
+        const index = api.getScriptIndex(filePath);
+        if (!index) {
+          return {
+            error: 'Script not indexed yet. Open the .fountain file in VSCode first, then retry.',
+          };
+        }
+        if (index.scenes.length === 0) {
+          return { results: [], message: 'No scenes found in this screenplay.' };
+        }
+
+        // 2. Read file content to extract scene body text for richer embeddings
+        let lines: string[];
+        try {
+          const uri = filePath.startsWith('file://')
+            ? vscode.Uri.parse(filePath)
+            : vscode.Uri.file(filePath);
+          const bytes = await vscode.workspace.fs.readFile(uri);
+          lines = new TextDecoder('utf-8').decode(bytes).split('\n');
+        } catch (err) {
+          return { error: `Failed to read screenplay file: ${String(err)}` };
+        }
+
+        // 3. Build scene text inputs (heading + body lines)
+        const sceneTexts = index.scenes.map((scene) => ({
+          id: scene.id,
+          heading: scene.heading,
+          line_start: scene.line_start,
+          line_end: scene.line_end,
+          text: lines
+            .slice(scene.line_start, scene.line_end + 1)
+            .join('\n')
+            .trim(),
+        }));
+
+        // 4. Ensure embeddings are cached (re-embeds if total_lines changed)
+        let cachedEmbeddings: Awaited<ReturnType<ScriptEmbeddingIndex['ensureIndexed']>>;
+        try {
+          cachedEmbeddings = await scriptEmbeddingIndex.ensureIndexed(
+            index.uri,
+            index.total_lines,
+            sceneTexts,
+            embedFn,
+          );
+        } catch (err) {
+          return { error: `Embedding failed: ${String(err)}` };
+        }
+
+        // 5. Embed the query and search
+        let queryVec: number[];
+        try {
+          const result = await embedFn([query]);
+          queryVec = result[0] ?? [];
+        } catch (err) {
+          return { error: `Failed to embed query: ${String(err)}` };
+        }
+
+        const results = scriptEmbeddingIndex.search(queryVec, cachedEmbeddings, topK);
+
+        logger.info(
+          `SearchScriptIndex: query="${query}" topK=${topK} scenes=${index.scenes.length} results=${results.length}`,
+        );
+
+        return { results };
+      },
+    });
+  }
+
+  return tools;
 }

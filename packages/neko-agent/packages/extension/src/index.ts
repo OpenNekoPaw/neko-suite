@@ -24,6 +24,7 @@ import {
   createNekoCanvasTools,
   createNekoEngineEffectsTools,
   createTranscribeTools,
+  createNekoStoryTools,
 } from './tools/extensionTools';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -53,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   logServicesStatus(bootstrapResult);
 
   // Register tools from other Neko extensions
-  registerExtensionTools(bootstrapResult.toolRegistry);
+  registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
 
   // Initialize Pipeline orchestration layer (L2)
   bootstrapPipeline(bootstrapResult.platform, bootstrapResult.toolRegistry);
@@ -77,7 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.extensions.onDidChange(() => {
       if (!extensionToolsRegistered) {
-        registerExtensionTools(bootstrapResult.toolRegistry);
+        registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
         extensionToolsRegistered = true;
       }
     }),
@@ -87,9 +88,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 /**
- * Register tools from other Neko extensions (NekoCut, NekoCanvas, Engine Effects)
+ * Register tools from other Neko extensions (NekoCut, NekoCanvas, Engine Effects, NekoStory).
+ *
+ * `platform` is used to build an embedFn for SearchScriptIndex (L3 semantic search).
+ * If no embedding-capable provider is configured, SearchScriptIndex is omitted gracefully.
  */
-function registerExtensionTools(toolRegistry: { register: (tool: unknown) => void }): void {
+function registerExtensionTools(
+  toolRegistry: { register: (tool: unknown) => void },
+  platform: Platform,
+): void {
   // Register NekoCut tools
   const nekocutTools = createNekoCutTools();
   nekocutTools.forEach((tool) => toolRegistry.register(tool));
@@ -106,9 +113,34 @@ function registerExtensionTools(toolRegistry: { register: (tool: unknown) => voi
   const transcribeTools = createTranscribeTools();
   transcribeTools.forEach((tool) => toolRegistry.register(tool));
 
+  // Build embedding function from the platform's service (requires an embedding-capable provider).
+  // Returns undefined if no such provider is configured — SearchScriptIndex is silently omitted.
+  const embedFn = buildEmbedFn(platform);
+
+  // Register NekoStory tools (screenplay index + semantic search)
+  const storyTools = createNekoStoryTools(embedFn);
+  storyTools.forEach((tool) => toolRegistry.register(tool));
+
   getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length} extension tools`,
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length} extension tools`,
   );
+}
+
+/**
+ * Builds an embed function backed by the platform's AI service.
+ * The service is created lazily on first call. Errors (e.g. no embedding-capable
+ * provider configured) propagate to the caller so SearchScriptIndex can surface
+ * a descriptive error message instead of silently failing.
+ */
+function buildEmbedFn(platform: Platform): (texts: string[]) => Promise<number[][]> {
+  let service: ReturnType<Platform['createService']> | undefined;
+  return async (texts: string[]) => {
+    if (!service) {
+      service = platform.createService();
+    }
+    const result = await service.embed(texts);
+    return result.embeddings;
+  };
 }
 
 /** Default max tokens for the internal chat command. */
