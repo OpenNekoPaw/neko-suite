@@ -5,6 +5,7 @@
  * NativeEngine and frame server via NekoPreviewAPI.
  */
 import * as vscode from 'vscode';
+import * as fs from 'node:fs';
 import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { loadNkc } from '@neko/shared';
@@ -274,6 +275,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           status,
           dataUrl,
         });
+        if (status === 'done' && dataUrl) {
+          void this.pushGeneratedToCut(nodeId, dataUrl);
+        }
       },
     });
   }
@@ -281,6 +285,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async generateBatchForNodes(nodeIds: string[]): Promise<void> {
     for (const nodeId of nodeIds) {
       await this.generateImageForNode(nodeId);
+    }
+  }
+
+  /** Save a base64 data URL to workspace .neko/generated/ and return the file path. */
+  private saveGeneratedImage(workspaceDir: string, nodeId: string, dataUrl: string): string {
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+    const dir = path.join(workspaceDir, '.neko', 'generated');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `${nodeId}-${Date.now()}.${ext}`);
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+    return filePath;
+  }
+
+  /** If neko-cut is active, import the generated asset into the cut timeline. */
+  private async pushGeneratedToCut(nodeId: string, dataUrl: string): Promise<void> {
+    const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceDir) return;
+    const cutExt = vscode.extensions.getExtension('neko.neko-cut');
+    if (!cutExt?.isActive) return;
+    try {
+      const assetPath = this.saveGeneratedImage(workspaceDir, nodeId, dataUrl);
+      await vscode.commands.executeCommand('neko.cut.importGeneratedClip', { assetPath });
+      logger.info('Auto-pushed generated image to neko-cut', { nodeId, assetPath });
+    } catch (err) {
+      logger.warn('Failed to push generated image to neko-cut', { nodeId, err });
     }
   }
 

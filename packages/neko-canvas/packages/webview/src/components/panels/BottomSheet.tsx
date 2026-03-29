@@ -9,7 +9,7 @@
  * Utility nodes (annotation/media): compact single-section.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type {
   CanvasNode,
   ShotCanvasNode,
@@ -35,8 +35,6 @@ export interface BottomSheetProps {
   onClose: () => void;
   /** Fires when user confirms generation */
   onGenerate: (nodeId: string, cellId: string | undefined, params: GenerationParams) => void;
-  /** Returns an auto-generated prompt string */
-  onRequestAutoPrompt?: (nodeId: string, cellId?: string) => Promise<string>;
   /** Enqueues batch generation for all empty gallery cells */
   onBatchGenerate?: (nodeId: string) => void;
   /**
@@ -51,7 +49,6 @@ export interface BottomSheetProps {
 // Constants (mirrored from GenerationPromptPanel to avoid circular dep)
 // =============================================================================
 
-const STYLES = ['Anime', 'Realistic', 'Illustration', 'Oil Painting', 'Sketch', 'Watercolor'];
 const RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'] as const;
 
 const SHOT_SCALES = [
@@ -229,7 +226,6 @@ export function BottomSheet({
   onDeleteNode,
   onClose,
   onGenerate,
-  onRequestAutoPrompt,
   onBatchGenerate,
   initialGenerationTarget,
   onInitialGenerationHandled,
@@ -263,7 +259,6 @@ export function BottomSheet({
           onDeleteNode={onDeleteNode}
           onClose={onClose}
           onGenerate={onGenerate}
-          onRequestAutoPrompt={onRequestAutoPrompt}
           onBatchGenerate={onBatchGenerate}
           initialGenerationTarget={initialGenerationTarget}
           onInitialGenerationHandled={onInitialGenerationHandled}
@@ -304,71 +299,46 @@ function ShotSheet({
   onDeleteNode,
   onClose,
   onGenerate,
-  onRequestAutoPrompt,
   initialGenerationTarget,
   onInitialGenerationHandled,
 }: {
   node: ShotCanvasNode;
-} & Omit<BottomSheetProps, 'selectedNode' | 'onBatchGenerate'>) {
+} & Omit<BottomSheetProps, 'selectedNode' | 'onBatchGenerate' | 'onRequestAutoPrompt'>) {
   const d = node.data;
   const [dialogueOpen, setDialogueOpen] = useState(false);
-  const [genExpanded, setGenExpanded] = useState(false);
-
-  // Generation state
-  const [prompt, setPrompt] = useState(d.visualDescription ?? '');
-  const [style, setStyle] = useState<string>('');
   const [ratio, setRatio] = useState<(typeof RATIOS)[number]>('16:9');
-  const [isLoadingPrompt, setIsLoadingPrompt] = useState(false);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-expand when triggered externally (e.g. clicking "生成" on the canvas node)
+  // Trigger generate immediately when externally requested (e.g. clicking "生成" on the canvas node)
   useEffect(() => {
     if (
       initialGenerationTarget &&
       initialGenerationTarget.nodeId === node.id &&
       !initialGenerationTarget.cellId
     ) {
-      setGenExpanded(true);
       onInitialGenerationHandled?.();
-      setTimeout(() => promptRef.current?.focus(), 80);
+      const p = (node.data.visualDescription ?? '').trim();
+      if (p) {
+        onGenerate(node.id, undefined, { prompt: p, ratio });
+      }
     }
+    // ratio intentionally excluded — snapshot the ratio at trigger time
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGenerationTarget, node.id, onInitialGenerationHandled]);
-
-  // Keep prompt in sync when visual description changes externally
-  useEffect(() => {
-    if (!genExpanded) {
-      setPrompt(d.visualDescription ?? '');
-    }
-  }, [d.visualDescription, genExpanded]);
 
   const update = (patch: Record<string, unknown>) => onUpdateNodeData(node.id, patch);
 
-  async function handleAutoPrompt() {
-    if (!onRequestAutoPrompt) return;
-    setIsLoadingPrompt(true);
-    try {
-      const p = await onRequestAutoPrompt(node.id);
-      setPrompt(p);
-    } finally {
-      setIsLoadingPrompt(false);
-    }
-  }
-
   function handleGenerate() {
-    if (!prompt.trim()) return;
-    onGenerate(node.id, undefined, { prompt: prompt.trim(), style: style || undefined, ratio });
-    setGenExpanded(false);
+    const p = (d.visualDescription ?? '').trim();
+    if (!p) return;
+    onGenerate(node.id, undefined, { prompt: p, ratio });
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleGenerate();
-    if (e.key === 'Escape' && genExpanded) {
-      e.stopPropagation();
-      setGenExpanded(false);
-    }
   }
 
   const paddedNum = String(d.shotNumber).padStart(3, '0');
+  const canGenerate = !!(d.visualDescription ?? '').trim();
 
   return (
     <div onKeyDown={handleKeyDown}>
@@ -425,22 +395,43 @@ function ShotSheet({
           <SheetLabel>s</SheetLabel>
         </div>
 
+        {/* Ratio selector — inline with generate button */}
+        <select
+          value={ratio}
+          onChange={(e) => setRatio(e.target.value as (typeof RATIOS)[number])}
+          title="生成比例"
+          style={{
+            fontSize: 11,
+            padding: '2px 4px',
+            borderRadius: 4,
+            border: '1px solid var(--neko-border)',
+            backgroundColor: 'var(--neko-surface)',
+            color: 'var(--neko-fg)',
+            flexShrink: 0,
+          }}
+        >
+          {RATIOS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+
         <div className="flex-1" />
 
         <button
-          onClick={() => {
-            setGenExpanded((v) => !v);
-            if (!genExpanded) setTimeout(() => promptRef.current?.focus(), 80);
-          }}
+          onClick={handleGenerate}
+          disabled={!canGenerate}
+          title={canGenerate ? 'Ctrl+Enter' : '请先填写画面描述'}
           style={{
             fontSize: 11,
             padding: '3px 10px',
             borderRadius: 4,
             border: 'none',
-            cursor: 'pointer',
+            cursor: canGenerate ? 'pointer' : 'not-allowed',
             fontWeight: 500,
-            backgroundColor: genExpanded ? '#3b82f6' : 'rgba(59,130,246,0.15)',
-            color: genExpanded ? '#fff' : '#3b82f6',
+            backgroundColor: canGenerate ? 'rgba(59,130,246,0.15)' : 'var(--neko-surface)',
+            color: canGenerate ? '#3b82f6' : 'var(--neko-fg-secondary)',
             flexShrink: 0,
           }}
         >
@@ -566,134 +557,6 @@ function ShotSheet({
           </div>
         )}
       </div>
-
-      {/* ── Inline generation section ─────────────────────────── */}
-      {genExpanded && (
-        <div
-          className="px-3 pt-2 pb-3 flex flex-col gap-2"
-          style={{ borderTop: '1px solid var(--neko-border)', backgroundColor: 'var(--neko-bg)' }}
-        >
-          {/* Prompt row */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <SheetLabel>提示词</SheetLabel>
-              {onRequestAutoPrompt && (
-                <button
-                  onClick={handleAutoPrompt}
-                  disabled={isLoadingPrompt}
-                  style={{
-                    fontSize: 11,
-                    background: 'none',
-                    border: 'none',
-                    cursor: isLoadingPrompt ? 'wait' : 'pointer',
-                    color: '#3b82f6',
-                    opacity: isLoadingPrompt ? 0.6 : 1,
-                    padding: 0,
-                  }}
-                >
-                  {isLoadingPrompt ? '生成中…' : '✨ 自动填写'}
-                </button>
-              )}
-            </div>
-            <textarea
-              ref={promptRef}
-              rows={2}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="描述画面内容，例如: A young woman standing in a modern office..."
-              style={{
-                width: '100%',
-                fontSize: 11,
-                padding: '6px 8px',
-                borderRadius: 5,
-                resize: 'none',
-                border: '1px solid var(--neko-border)',
-                backgroundColor: 'var(--neko-surface)',
-                color: 'var(--neko-fg)',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = '#3b82f6';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--neko-border)';
-              }}
-            />
-          </div>
-
-          {/* Style + Ratio row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1">
-              <SheetLabel>风格</SheetLabel>
-              <select
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                style={{
-                  fontSize: 11,
-                  padding: '2px 4px',
-                  borderRadius: 4,
-                  border: '1px solid var(--neko-border)',
-                  backgroundColor: 'var(--neko-surface)',
-                  color: 'var(--neko-fg)',
-                }}
-              >
-                <option value="">默认</option>
-                {STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <SheetLabel>比例</SheetLabel>
-              <div className="flex gap-1">
-                {RATIOS.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRatio(r)}
-                    style={{
-                      fontSize: 9,
-                      padding: '1px 5px',
-                      borderRadius: 3,
-                      cursor: 'pointer',
-                      border: `1px solid ${ratio === r ? '#3b82f6' : 'var(--neko-border)'}`,
-                      backgroundColor: ratio === r ? '#3b82f620' : 'transparent',
-                      color: ratio === r ? '#3b82f6' : 'var(--neko-fg-secondary)',
-                    }}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex-1" />
-
-            <div className="flex items-center gap-2">
-              <span style={{ fontSize: 10, color: 'var(--neko-fg-secondary)' }}>Ctrl+Enter</span>
-              <button
-                onClick={handleGenerate}
-                disabled={!prompt.trim()}
-                style={{
-                  fontSize: 12,
-                  padding: '4px 14px',
-                  borderRadius: 5,
-                  border: 'none',
-                  fontWeight: 500,
-                  cursor: prompt.trim() ? 'pointer' : 'not-allowed',
-                  backgroundColor: prompt.trim() ? '#3b82f6' : '#3b82f640',
-                  color: '#fff',
-                }}
-              >
-                生成 ▶
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

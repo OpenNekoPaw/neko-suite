@@ -1316,6 +1316,59 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
     });
   }
 
+  // story_apply_suggestion — present an AI edit suggestion inline and let user accept/reject
+  tools.push({
+    name: 'story_apply_suggestion',
+    description:
+      'Propose a text edit to a specific range of a Fountain screenplay and let the user ' +
+      'accept or reject it interactively. Opens the file, highlights the range, shows a modal ' +
+      'with the suggested new text, and applies the edit only if the user accepts. ' +
+      'Use this after analysing script content via GetScriptIndex and reading the relevant lines. ' +
+      'Line numbers are 0-based, matching GetScriptIndex output.',
+    parameters: {
+      type: 'object',
+      properties: {
+        script_path: {
+          type: 'string',
+          description: 'Absolute path to the .fountain screenplay file',
+        },
+        start_line: {
+          type: 'number',
+          description: '0-based start line of the range to replace',
+        },
+        end_line: {
+          type: 'number',
+          description: '0-based end line (inclusive) of the range to replace',
+        },
+        new_text: {
+          type: 'string',
+          description: 'The replacement text (will replace the entire highlighted range)',
+        },
+      },
+      required: ['script_path', 'start_line', 'end_line', 'new_text'],
+    } satisfies ToolParameters,
+    execute: async (args) => {
+      const scriptPath = args.script_path as string;
+      const startLine = args.start_line as number;
+      const endLine = args.end_line as number;
+      const newText = args.new_text as string;
+
+      await vscode.commands.executeCommand('neko.story.applyInlineDiff', {
+        scriptPath,
+        range: {
+          start: { line: startLine, character: 0 },
+          end: { line: endLine, character: Number.MAX_SAFE_INTEGER },
+        },
+        newText,
+      });
+
+      logger.info(
+        `story_apply_suggestion: presented diff for ${scriptPath} lines ${startLine}–${endLine}`,
+      );
+      return { presented: true, scriptPath, startLine, endLine };
+    },
+  });
+
   // import_script_to_canvas — convert screenplay scenes to SceneGroupNode + ShotNode chain
   // Requires both NekoStory (script index) and NekoCanvas (node creation)
   const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');

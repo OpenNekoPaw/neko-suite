@@ -152,19 +152,10 @@ export function CanvasApp() {
 
   // =========================================================================
   // AutoPrompt resolver — bridges postMessage round-trip into a Promise
+  // Used by onBuildPromptResult to resolve pending buildPrompt requests
   // =========================================================================
 
   const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
-
-  const handleRequestAutoPrompt = useCallback(
-    (nodeId: string, cellId?: string): Promise<string> => {
-      return new Promise((resolve) => {
-        buildPromptResolverRef.current = resolve;
-        vscode?.postMessage({ type: 'buildPrompt', nodeId, cellId });
-      });
-    },
-    [],
-  );
 
   // =========================================================================
   // Node helpers
@@ -759,7 +750,6 @@ export function CanvasApp() {
             onDeleteNode={handleDeleteNode}
             onClose={clearSelection}
             onGenerate={handleBottomSheetGenerate}
-            onRequestAutoPrompt={handleRequestAutoPrompt}
             onBatchGenerate={handleGalleryBatchGenerateClick}
             initialGenerationTarget={bottomSheetGenTarget}
             onInitialGenerationHandled={() => setBottomSheetGenTarget(null)}

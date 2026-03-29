@@ -1219,16 +1219,23 @@ await ensureProjectModel('image');  // 从 ConfigManager 解析并写入 workspa
 - 监听文本选中事件 → 更新 AgentContext `storyContext: { filePath, selectedRange, selectedText }`
 - 右键菜单 "→ Agent 续写/优化" → postMessage `sendToAgent` → Extension 注入 `AgentContextPayload`
 
-**4.2 Story InlineDiff**
-- Agent 对剧本文本生成结果时，返回 `{ type: 'inlineDiff', range, newText }`
-- neko-story webview 接收后渲染 accept/reject overlay（绿色 +/红色 × 样式）
-- 接受：`vscode.workspace.applyEdit()` via Extension；拒绝：清除 overlay
+**4.2 Story InlineDiff** ✅
+- Agent 工具 `story_apply_suggestion` — `packages/neko-agent/packages/extension/src/tools/extensionTools.ts`
+  - 参数：`script_path`, `start_line`, `end_line`, `new_text`
+  - 调用 `neko.story.applyInlineDiff` 命令 → 弹出 accept/reject 模态框
+- 命令实现：`packages/neko-story/packages/extension/src/extension.ts:142`
+  - 接受：`vscode.workspace.applyEdit()` 应用 WorkspaceEdit；拒绝：关闭模态框
 
 **4.3 neko-cut 占位符 Clip** ✅
-- 命令已实现：
+- 命令侧：
   - `neko.cut.importGeneratedClip` — `packages/neko-cut/packages/extension/src/commands/index.ts:107`
   - `neko.cut.importStoryboard` — `packages/neko-cut/packages/extension/src/commands/timeline-commands.ts:441`
-- Agent 生成完成后调用 `neko.cut.importGeneratedClip(assetPath, duration)` → 插入占位符 Clip
+- 触发侧：`packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts`
+  - `generateImageForNode()` — `onProgress('done', dataUrl)` 时调用 `pushGeneratedToCut()`
+  - `pushGeneratedToCut()` — 仅在 `neko.neko-cut` 扩展激活时触发：
+    1. `saveGeneratedImage()` 将 base64 dataUrl 写入 `<workspace>/.neko/generated/<nodeId>-<ts>.jpg`
+    2. `executeCommand('neko.cut.importGeneratedClip', { assetPath })` → 插入占位符 Clip
+  - 条件：workspace folder 存在 + neko-cut 处于激活状态；失败时仅 warn 不中断生成流程
 
 **4.4 Script→Shot 跨工具链路** ✅
 - Agent 工具 `import_script_to_canvas(scriptPath)` — `extensionTools.ts:1325`
@@ -1324,6 +1331,7 @@ await ensureProjectModel('image');  // 从 ConfigManager 解析并写入 workspa
 |------|------|------|------|
 | `packages/neko-types/src/types/extension-api.ts` | `NekoCanvasAPI.nodes` 命名空间 | Ph1 | ✅ |
 | `packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts` | 实现 `nodes` API + selectionChange | Ph1 | ✅ |
+| `packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts` | `pushGeneratedToCut` + `saveGeneratedImage` — 生成完自动推 cut | Ph4 | ✅ |
 | `packages/neko-agent/packages/extension/src/tools/extensionTools.ts` | `createNekoCanvasTools(media, config)` + `ensureProjectModel` + 全部工具 | Ph2 | ✅ |
 | `packages/neko-agent/packages/extension/src/index.ts` | 传 `platform.config`，订阅 `onDidChangeCanvasSelection` | Ph2 | ✅ |
 | `packages/neko-agent/packages/extension/src/chat/chatProvider.ts` | `sendAmbientCanvasContext()` | Ph2 | ✅ |
