@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
+import type { AgentContextPayload } from '@neko/shared';
 import { ShellExecutionMode, PromptMode, SessionMode, AgentState } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { Header } from '@/components/Header';
@@ -94,6 +95,12 @@ export function AIAssistant() {
   // Force update counter to trigger re-render when ref values change
   const [, forceUpdate] = useState(0);
 
+  // Agent context chips — attached via neko.agent.sendContext from canvas/cut/story
+  const [contextChips, setContextChips] = useState<AgentContextPayload[]>([]);
+  const handleRemoveContextChip = useCallback((id: string) => {
+    setContextChips((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   // Agent state (session-bound, per-conversation indicator: idle/thinking/acting/streaming)
   const [agentState, setAgentState] = useState<AgentState | null>(null);
   const conversationAgentStateRef = useRef<Map<string, AgentState>>(new Map());
@@ -183,12 +190,6 @@ export function AIAssistant() {
     forceContextUpdate: triggerForceUpdate,
   });
 
-  // Listen for messages from extension
-  useEffect(() => {
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [handleMessage]);
-
   // Request data on mount
   useEffect(() => {
     VSCodeMessages.getConversations();
@@ -252,16 +253,19 @@ export function AIAssistant() {
             return { providerId: m.providerId || undefined, modelId: m.modelId };
           };
           const result: import('@/hooks/useChatActions').AgentMediaModels = {};
-          const img = resolve('image'); if (img) result.image = img;
-          const vid = resolve('video'); if (vid) result.video = vid;
-          const aud = resolve('audio'); if (aud) result.audio = aud;
+          const img = resolve('image');
+          if (img) result.image = img;
+          const vid = resolve('video');
+          if (vid) result.video = vid;
+          const aud = resolve('audio');
+          if (aud) result.audio = aud;
           return Object.keys(result).length > 0 ? result : undefined;
         })()
       : undefined;
 
   // --- Extracted behavior hooks ---
 
-  const { handleSend, handleCancelMessage, copyLastResponse } = useChatActions({
+  const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue,
     isThinking,
     selectedModel,
@@ -280,6 +284,50 @@ export function AIAssistant() {
     clearInput,
     setAttachedFiles,
   });
+
+  // Pre-intercept handler: catches messages not registered in the registry
+  // (externalMessage/prefillInput from chatProvider, injectContext from sendContext command)
+  const handleMessageWithExtras = useCallback(
+    (event: MessageEvent) => {
+      const msg = event.data as { type?: string; message?: string; payload?: AgentContextPayload };
+      if (!msg?.type) return handleMessage(event);
+      switch (msg.type) {
+        case 'externalMessage':
+          if (typeof msg.message === 'string') {
+            setActiveTab('chat');
+            triggerSend(msg.message);
+          }
+          break;
+        case 'prefillInput':
+          if (typeof msg.message === 'string') {
+            setActiveTab('chat');
+            setInputValue(msg.message);
+          }
+          break;
+        case 'injectContext':
+          if (msg.payload) {
+            setActiveTab('chat');
+            setContextChips((prev) => {
+              const exists = prev.some((c) => c.id === msg.payload!.id);
+              return exists ? prev : [...prev, msg.payload!];
+            });
+            if (msg.payload.intent) {
+              setInputValue(msg.payload.intent);
+            }
+          }
+          break;
+        default:
+          handleMessage(event);
+      }
+    },
+    [handleMessage, triggerSend, setInputValue, setActiveTab],
+  );
+
+  // Listen for messages from extension (must come after useChatActions for triggerSend)
+  useEffect(() => {
+    window.addEventListener('message', handleMessageWithExtras);
+    return () => window.removeEventListener('message', handleMessageWithExtras);
+  }, [handleMessageWithExtras]);
 
   const planActions = usePlanActions({ activeConversationId });
 
@@ -456,6 +504,9 @@ export function AIAssistant() {
           skills={skills}
           onSlashCommand={handleSlashCommand}
           onRequestFiles={(filter) => VSCodeMessages.searchProjectFiles(filter)}
+          contextChips={contextChips}
+          onRemoveContextChip={handleRemoveContextChip}
+          onTriggerSend={triggerSend}
         >
           <ChatView
             messages={messages}

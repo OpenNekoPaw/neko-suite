@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { AgentContextPayload } from '@neko/shared';
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
@@ -131,6 +132,99 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('neko.story.generateStoryboard', () => {
       vscode.window.showInformationMessage('Generate storyboard - Coming soon');
+    }),
+    vscode.commands.registerCommand(
+      'neko.story.applyInlineDiff',
+      async (params: {
+        scriptPath: string;
+        range: {
+          start: { line: number; character: number };
+          end: { line: number; character: number };
+        };
+        newText: string;
+      }) => {
+        const uri = vscode.Uri.file(params.scriptPath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(document, { preserveFocus: false });
+
+        // Highlight the range so the user can see what will change
+        const vsRange = new vscode.Range(
+          params.range.start.line,
+          params.range.start.character,
+          params.range.end.line,
+          params.range.end.character,
+        );
+        editor.selection = new vscode.Selection(vsRange.start, vsRange.end);
+        editor.revealRange(vsRange, vscode.TextEditorRevealType.InCenter);
+
+        const originalText = document.getText(vsRange);
+        const preview = params.newText.slice(0, 120) + (params.newText.length > 120 ? '…' : '');
+        const answer = await vscode.window.showInformationMessage(
+          `AI 建议修改：\n"${preview}"`,
+          { modal: true },
+          '接受',
+          '拒绝',
+        );
+
+        if (answer === '接受') {
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(uri, vsRange, params.newText);
+          await vscode.workspace.applyEdit(edit);
+        } else {
+          // Restore selection to nothing on reject
+          editor.selection = new vscode.Selection(vsRange.start, vsRange.start);
+          void originalText; // suppress unused warning
+        }
+      },
+    ),
+    vscode.commands.registerCommand('neko.story.sendToAgent', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'nekostory') return;
+
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection.isEmpty ? undefined : selection);
+      const scriptPath = editor.document.uri.fsPath;
+
+      // Determine nearest scene heading above cursor
+      let sceneLabel = 'Story Selection';
+      if (!selection.isEmpty) {
+        const line = selection.start.line;
+        for (let i = line; i >= 0; i--) {
+          const lineText = editor.document.lineAt(i).text.trim();
+          if (/^(INT|EXT|INT\.\/EXT|I\/E)[. ]/i.test(lineText)) {
+            sceneLabel = lineText.length > 40 ? lineText.slice(0, 38) + '…' : lineText;
+            break;
+          }
+        }
+      } else {
+        // No selection — use file name as label
+        const baseName = scriptPath.split('/').pop() ?? scriptPath;
+        sceneLabel = baseName.replace(/\.fountain$/, '');
+      }
+
+      const summary = selectedText
+        ? `Scene: ${sceneLabel}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`
+        : `Script file: ${scriptPath.split('/').pop() ?? scriptPath}`;
+
+      const payload: AgentContextPayload = {
+        type: 'story-selection',
+        id: `story:${scriptPath}:${selection.start.line}`,
+        label: sceneLabel,
+        summary,
+        data: {
+          scriptPath,
+          selectedText: selectedText || null,
+          range: selection.isEmpty
+            ? null
+            : {
+                start: { line: selection.start.line, character: selection.start.character },
+                end: { line: selection.end.line, character: selection.end.character },
+              },
+        },
+        intent: selectedText ? '请帮我改写这段内容：' : undefined,
+      };
+
+      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
     }),
     vscode.commands.registerCommand('neko.story.newFile', async (uri?: vscode.Uri) => {
       // Determine target folder from context menu uri or workspace root

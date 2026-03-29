@@ -287,6 +287,11 @@
         "command": "neko.cut.previewMedia",
         "title": "Preview Media",
         "category": "NekoCut"
+      },
+      {
+        "command": "neko.cut.importGeneratedClip",
+        "title": "Import Generated Clip",
+        "category": "NekoCut"
       }
     ],
     "menus": {

@@ -1,0 +1,44 @@
+/**
+ * AgentContextChip — inline chip showing an attached agent context payload.
+ *
+ * Rendered above the textarea in InputArea when the user has attached
+ * context from canvas nodes, cut clips, or story selections via the
+ * neko.agent.sendContext command.
+ */
+
+import type { AgentContextPayload } from '@neko/shared';
+
+const TYPE_ICONS: Record<string, string> = {
+  'canvas-node': '⬡',
+  'cut-clip': '🎬',
+  'story-selection': '📄',
+  file: '📎',
+  image: '🖼',
+};
+
+interface AgentContextChipProps {
+  payload: AgentContextPayload;
+  onRemove: (id: string) => void;
+}
+
+export function AgentContextChip({ payload, onRemove }: AgentContextChipProps) {
+  const icon = TYPE_ICONS[payload.type] ?? '◈';
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] select-none"
+      title={payload.summary}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span className="max-w-[120px] truncate">{payload.label}</span>
+      <button
+        type="button"
+        aria-label={`Remove ${payload.label}`}
+        onClick={() => onRemove(payload.id)}
+        className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
+      >
+        ×
+      </button>
+    </span>
+  );
+}

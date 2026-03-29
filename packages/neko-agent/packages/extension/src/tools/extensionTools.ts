@@ -887,6 +887,134 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
     });
   }
 
+  // import_script_to_canvas — convert screenplay scenes to SceneGroupNode + ShotNode chain
+  // Requires both NekoStory (script index) and NekoCanvas (node creation)
+  const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+  if (canvasExt) {
+    const getCanvasAPI = async (): Promise<NekoCanvasAPI> => {
+      if (canvasExt.isActive) return canvasExt.exports;
+      return canvasExt.activate() as Promise<NekoCanvasAPI>;
+    };
+
+    tools.push({
+      name: 'import_script_to_canvas',
+      description:
+        'Import a Fountain screenplay into the active canvas as a storyboard skeleton. ' +
+        'Each scene heading becomes a SceneGroupNode; each dialogue/action block becomes a ShotNode ' +
+        'inside its parent scene. Call GetScriptIndex first to verify the file is indexed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Absolute path to the .fountain screenplay file',
+          },
+          startX: {
+            type: 'number',
+            description: 'Canvas X position of the first SceneGroupNode (default: 100)',
+          },
+          startY: {
+            type: 'number',
+            description: 'Canvas Y position of the first SceneGroupNode (default: 100)',
+          },
+          scenesLimit: {
+            type: 'number',
+            description: 'Maximum number of scenes to import (default: all, max: 50)',
+          },
+        },
+        required: ['path'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const storyApi = await getAPI();
+        const canvasApi = await getCanvasAPI();
+
+        const index = storyApi.getScriptIndex(args.path as string);
+        if (!index) {
+          return {
+            error: 'Script not indexed. Open the .fountain file in VSCode first, then retry.',
+          };
+        }
+        if (index.scenes.length === 0) {
+          return { error: 'No scenes found in this screenplay.' };
+        }
+
+        const startX = (args.startX as number | undefined) ?? 100;
+        const startY = (args.startY as number | undefined) ?? 100;
+        const maxScenes = Math.min(
+          (args.scenesLimit as number | undefined) ?? index.scenes.length,
+          50,
+        );
+
+        const SCENE_WIDTH = 900;
+        const SCENE_GAP = 80;
+        const SHOT_WIDTH = 200;
+        const SHOT_GAP = 20;
+
+        const created: { sceneId: string; shotIds: string[] }[] = [];
+
+        for (let si = 0; si < maxScenes; si++) {
+          const scene = index.scenes[si];
+          if (!scene) continue;
+          const sceneX = startX + si * (SCENE_WIDTH + SCENE_GAP);
+
+          // Create SceneGroupNode
+          const sceneNodeId = await canvasApi.nodes.create(
+            'scene' as import('@neko/shared').CanvasNodeType,
+            { x: sceneX, y: startY },
+            {
+              sceneTitle: scene.heading,
+              sceneNumber: si + 1,
+              shotIds: [] as string[],
+            },
+          );
+
+          // Create ShotNodes for each dialogue/action block in the scene
+          // We estimate shots from line range: one shot per ~10 lines, min 1
+          const lineSpan = scene.line_end - scene.line_start;
+          const shotCount = Math.max(1, Math.min(Math.round(lineSpan / 10), 8));
+          const shotIds: string[] = [];
+
+          for (let sh = 0; sh < shotCount; sh++) {
+            const shotX = sceneX + sh * (SHOT_WIDTH + SHOT_GAP);
+            const shotY = startY + 240;
+            const shotNodeId = await canvasApi.nodes.create(
+              'shot' as import('@neko/shared').CanvasNodeType,
+              { x: shotX, y: shotY },
+              {
+                shotNumber: si * 8 + sh + 1,
+                sceneGroupId: sceneNodeId,
+                duration: 3,
+                visualDescription: '',
+                shotScale: 'MS' as const,
+                characters: [] as unknown[],
+                emotion: [] as string[],
+                sceneTags: [] as string[],
+                generationStatus: 'idle' as const,
+                generationHistory: [] as unknown[],
+              },
+            );
+            shotIds.push(shotNodeId);
+          }
+
+          // Update SceneGroupNode with shot IDs
+          await canvasApi.nodes.update(sceneNodeId, { shotIds });
+
+          created.push({ sceneId: sceneNodeId, shotIds });
+        }
+
+        logger.info(
+          `import_script_to_canvas: created ${created.length} scenes with ${created.reduce((n, s) => n + s.shotIds.length, 0)} shots`,
+        );
+        return {
+          success: true,
+          scenesCreated: created.length,
+          totalShots: created.reduce((n, s) => n + s.shotIds.length, 0),
+          scenes: created,
+        };
+      },
+    });
+  }
+
   return tools;
 }
 

@@ -248,6 +248,16 @@ function registerCommands(
     }),
   );
 
+  // Attach agent context from any sub-package (canvas node, cut clip, story selection, etc.)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.sendContext',
+      async (payload: import('@neko/shared').AgentContextPayload) => {
+        await chatViewProvider.sendContextPayload(payload);
+      },
+    ),
+  );
+
   // Generate Image (placeholder)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.generateImage', async () => {

@@ -63,6 +63,10 @@
 - [x] **CanvasNodeType 扩展**：@neko/shared canvas.ts 补全 `shot` / `scene` / `gallery` / `script` / `document` / `model` / `canvas-embed` 类型及 validator 白名单 ✅
 - [x] **BatchGenerationScheduler P1**：批量分镜生图队列（maxConcurrent=2，指数退避重试，AbortController 取消，进度 postMessage 回传 canvas）✅
 - [x] **Canvas × Agent MCP Tools P1**：`canvas_list_nodes` / `canvas_get_node` / `canvas_update_node` / `canvas_create_node` / `canvas_generate_image` / `canvas_generate_batch` / `set_project_generation_config` ✅（neko-agent extensionTools.ts + sendRequest↔_response 全链路；canvasAmbientContext 环境注入 + system prompt 自动注入选中节点）
+- [x] **Agent Context Protocol P1**：`neko.agent.sendContext` 命令 + `AgentContextPayload` + `AgentContextChip` UI ✅（InputAreaContext contextChips + onTriggerSend；pre-intercept handler 修复 externalMessage/prefillInput；ChatViewProvider.sendContextPayload）
+- [x] **neko-story → Agent P1**：右键 "→ Agent" 注入 `story-selection` payload；`neko.story.applyInlineDiff` 命令（WorkspaceEdit + 接受/拒绝确认）✅
+- [x] **neko-cut importGeneratedClip P1**：`neko.cut.importGeneratedClip(assetPath, duration?, trackIndex?)` → postMessage `importGeneratedClip` 到 timeline webview ✅
+- [x] **import_script_to_canvas MCP Tool P1**：screenplay → SceneGroupNode + ShotNode 链（每场景 1 SceneGroupNode + ~lineSpan/10 ShotNodes）✅
 - [ ] **ScriptNode P2**：剧本节点（TOC 目录模式，`neko-story.getScriptIndex` 获取结构，不渲染全文；点击场景导航到 SceneGroupNode）
 - [ ] **DocumentNode P2**：文档节点（PDF/DOCX/EPUB — 封面缩略图 + 委托 neko-preview 打开，`docType` 字段区分类型）
 - [ ] **ModelNode P2**：AI 模型节点（`reference` 模式展示模型信息卡；`workflow` 模式有 port 连接 ShotNode 指定生图模型；从 neko-market 查询 installed 状态）
@@ -86,4 +90,4 @@
 
 ---
 
-*最后更新：2026-03-29（CanvasNodeType 全集类型扩展；BatchGenerationScheduler；Canvas × Agent MCP Tools 全链路（sendRequest↔_response + canvasAmbientContext 环境注入）；AutoPrompt neko.agent.buildPrompt（LLM shot→英文 prompt）；statusBar.ts（活跃模型状态栏）；neko-cut 时间线导入（storyboardExport.exportToNekoCut）））*
+*最后更新：2026-03-29（Agent Context Protocol：neko.agent.sendContext + AgentContextChip + pre-intercept handler；neko-story sendToAgent 右键 + applyInlineDiff；neko-cut importGeneratedClip；import_script_to_canvas MCP tool（screenplay → SceneGroupNode + ShotNode 链））*

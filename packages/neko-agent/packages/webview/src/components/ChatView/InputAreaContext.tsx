@@ -8,6 +8,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ShellExecutionMode, PromptMode, SessionMode } from '@/components/types';
 import type { ChatModelOption } from '@neko/shared';
+import type { AgentContextPayload } from '@neko/shared';
 import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 
@@ -42,6 +43,14 @@ export interface InputAreaContextValue {
   skills: SkillSummary[];
   onSlashCommand?: (command: SlashCommand) => void;
   onRequestFiles?: (filter: string) => void;
+  // Agent context chips (attached context from canvas/cut/story)
+  contextChips: AgentContextPayload[];
+  onRemoveContextChip: (id: string) => void;
+  /** Send a message string directly (bypasses inputValue closure) — used when chips modify message */
+  onTriggerSend?: (
+    message: string,
+    attachments?: import('./InputArea/types').MessageAttachment[],
+  ) => void;
 }
 
 const InputAreaContext = createContext<InputAreaContextValue | null>(null);
@@ -71,6 +80,9 @@ export function InputAreaProvider({
       skills: value.skills,
       onSlashCommand: value.onSlashCommand,
       onRequestFiles: value.onRequestFiles,
+      contextChips: value.contextChips,
+      onRemoveContextChip: value.onRemoveContextChip,
+      onTriggerSend: value.onTriggerSend,
     }),
     [
       value.selectedModel,
@@ -92,6 +104,9 @@ export function InputAreaProvider({
       value.skills,
       value.onSlashCommand,
       value.onRequestFiles,
+      value.contextChips,
+      value.onRemoveContextChip,
+      value.onTriggerSend,
     ],
   );
 

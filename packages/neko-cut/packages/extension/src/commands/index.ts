@@ -101,6 +101,39 @@ export function registerCommands(
     }),
   );
 
+  // Command: Import a generated media clip (image/video) into the active timeline
+  // Used by neko-agent after AI generation completes (canvas_generate_image / sketch.generate)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.cut.importGeneratedClip',
+      async (params: { assetPath: string; duration?: number; trackIndex?: number }) => {
+        const webview = videoEditorProvider.getActiveWebview();
+        if (!webview) {
+          vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+          return;
+        }
+        const ext = path.extname(params.assetPath).toLowerCase();
+        const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+        const imageExts = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+        const mediaType = videoExts.includes(ext)
+          ? 'video'
+          : imageExts.includes(ext)
+            ? 'image'
+            : 'video';
+
+        webview.postMessage({
+          type: 'importGeneratedClip',
+          assetPath: params.assetPath,
+          mediaType,
+          duration: params.duration ?? (mediaType === 'image' ? 3 : undefined),
+          trackIndex: params.trackIndex,
+        });
+
+        logger.info(`importGeneratedClip: ${params.assetPath} (${mediaType})`);
+      },
+    ),
+  );
+
   // Register timeline commands (element, track, effect, transition, animation, render, export)
   registerTimelineCommands(context, videoEditorProvider);
 }

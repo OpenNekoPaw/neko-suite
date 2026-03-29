@@ -14,6 +14,7 @@ import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
 import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileReferenceMenu';
 import { MessageAttachment, ProjectFile, SlashCommand } from './types';
+import { AgentContextChip } from './AgentContextChip';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
@@ -65,6 +66,9 @@ export function InputArea({
     skills,
     onSlashCommand,
     onRequestFiles,
+    contextChips,
+    onRemoveContextChip,
+    onTriggerSend,
   } = useInputAreaContext();
 
   // In non-agent modes, only show models for the active category
@@ -166,7 +170,11 @@ export function InputArea({
   };
 
   // Cycle execution mode: plan → ask → auto → plan
-  const EXECUTION_MODES: import('@/components/types').ShellExecutionMode[] = ['plan', 'ask', 'auto'];
+  const EXECUTION_MODES: import('@/components/types').ShellExecutionMode[] = [
+    'plan',
+    'ask',
+    'auto',
+  ];
   const cycleExecutionMode = useCallback(() => {
     const idx = EXECUTION_MODES.indexOf(executionMode);
     const next = EXECUTION_MODES[(idx + 1) % EXECUTION_MODES.length];
@@ -304,12 +312,26 @@ export function InputArea({
   };
 
   const handleSend = () => {
-    if (!inputValue.trim() && attachedFiles.length === 0) return;
+    if (!inputValue.trim() && attachedFiles.length === 0 && contextChips.length === 0) return;
     // Add to history before sending
     if (inputValue.trim()) {
       addToHistory(inputValue);
     }
-    onSend(attachedFiles.length > 0 ? attachedFiles : undefined);
+    const files = attachedFiles.length > 0 ? attachedFiles : undefined;
+    // When context chips are present, prepend their summaries to the message and
+    // use onTriggerSend to bypass the inputValue closure in useChatActions.
+    if (contextChips.length > 0 && onTriggerSend) {
+      const contextBlock = contextChips
+        .map((c) => `[Context: ${c.label}]\n${c.summary}`)
+        .join('\n\n');
+      const combined = contextBlock + '\n\n' + inputValue.trim();
+      contextChips.forEach((c) => onRemoveContextChip(c.id));
+      onInputChange('');
+      onTriggerSend(combined, files);
+      updateAttachedFiles([]);
+      return;
+    }
+    onSend(files);
     updateAttachedFiles([]);
   };
 
@@ -407,7 +429,7 @@ export function InputArea({
     textareaRef.current?.focus();
   };
 
-  const canSend = inputValue.trim() || attachedFiles.length > 0;
+  const canSend = inputValue.trim() || attachedFiles.length > 0 || contextChips.length > 0;
 
   return (
     <div className="border-t border-[var(--vscode-panel-border)] p-3 flex-shrink-0">
@@ -432,6 +454,15 @@ export function InputArea({
           onSelect={insertFilePath}
           onClose={() => setShowAtMenu(false)}
         />
+
+        {/* Agent context chips — shown above textarea when context is attached */}
+        {contextChips.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-3 pt-2">
+            {contextChips.map((chip) => (
+              <AgentContextChip key={chip.id} payload={chip} onRemove={onRemoveContextChip} />
+            ))}
+          </div>
+        )}
 
         {/* File attachment preview */}
         <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
@@ -568,7 +599,6 @@ export function InputArea({
     </div>
   );
 }
-
 
 export type { MessageAttachment, ProjectFile };
 

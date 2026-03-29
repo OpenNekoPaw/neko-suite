@@ -387,6 +387,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Attach an agent context payload to the chat panel.
+   * Focuses the panel and injects the chip + optional intent prefill.
+   */
+  public async sendContextPayload(
+    payload: import('@neko/shared').AgentContextPayload,
+  ): Promise<void> {
+    await vscode.commands.executeCommand('neko.aiAssistant.focus');
+    if (!this._view?.webview) {
+      logger.warn('AI Assistant webview not available for sendContextPayload');
+      return;
+    }
+    this._view.webview.postMessage({ type: 'injectContext', payload });
+  }
+
+  /**
    * Send a message to the AI assistant from external commands
    * Opens the assistant panel and prefills/sends the message
    */

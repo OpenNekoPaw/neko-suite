@@ -76,6 +76,16 @@
         "command": "neko.story.newFile",
         "title": "%neko.story.newFile.title%",
         "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.sendToAgent",
+        "title": "→ Agent",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.applyInlineDiff",
+        "title": "Apply AI Inline Diff",
+        "category": "Neko Story"
       }
     ],
     "menus": {
@@ -84,6 +94,13 @@
           "command": "neko.story.preview",
           "when": "editorLangId == nekostory",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "neko.story.sendToAgent",
+          "when": "editorLangId == nekostory",
+          "group": "neko@1"
         }
       ],
       "explorer/context": [
