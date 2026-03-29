@@ -12,6 +12,7 @@ import type { Platform, MediaTask } from '@neko/platform';
 import type { ConversationMessage } from './conversationManager';
 import type { IAgentManager } from '../ai/agentManager';
 import { createDefaultAgentContext } from '../ai/agentContext';
+import { getCanvasSelection } from '../services/canvasAmbientContext';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import { SettingsManager } from './settingsManager';
 import { ProviderManager } from './providerManager';
@@ -451,7 +452,18 @@ export class MessageHandler {
       // Configure agent
       const effectiveModelId = modelId;
 
-      const systemPrompt = this._settings.customSystemPrompt || this._getSystemPrompt();
+      let systemPrompt = this._settings.customSystemPrompt || this._getSystemPrompt();
+
+      // Append ambient canvas context to system prompt if nodes are selected
+      const ambientCanvas = getCanvasSelection();
+      if (ambientCanvas.length > 0) {
+        const nodeLines = ambientCanvas
+          .map((n) => `  - [${n.type}] ${n.summary} (id: ${n.nodeId})`)
+          .join('\n');
+        systemPrompt +=
+          `\n\n## Current Canvas Selection\nThe user has selected the following canvas node(s):\n${nodeLines}\n` +
+          `Use canvas_get_node / canvas_update_node / canvas_generate_image tools to operate on them.`;
+      }
 
       await agentRunner.configure({
         platform: this._platform,
@@ -472,6 +484,11 @@ export class MessageHandler {
       context.projectType = context.activeEditor?.type || 'unknown';
       if (imageAttachments && imageAttachments.length > 0) {
         context.imageAttachments = imageAttachments;
+      }
+      // Inject ambient canvas selection (updated by onSelectionChange subscription)
+      const canvasSelection = getCanvasSelection();
+      if (canvasSelection.length > 0) {
+        context.canvasContext = { selectedNodes: canvasSelection };
       }
 
       // Subscribe to tool confirmation requests (ask mode)

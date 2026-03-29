@@ -25,7 +25,10 @@ import {
   createNekoEngineEffectsTools,
   createTranscribeTools,
   createNekoStoryTools,
+  createNekoSketchTools,
 } from './tools/extensionTools';
+import { setCanvasSelection, clearCanvasSelection } from './services/canvasAmbientContext';
+import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import type { Platform } from '@neko/platform';
@@ -80,11 +83,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!extensionToolsRegistered) {
         registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
         extensionToolsRegistered = true;
+        // Re-subscribe to canvas selection after late activation
+        subscribeCanvasSelection(context);
       }
     }),
   );
 
+  // Subscribe to canvas selection changes for ambient context injection
+  subscribeCanvasSelection(context);
+
   getRootLogger().info('Extension activated');
+}
+
+/**
+ * Subscribe to NekoCanvas selection changes for ambient context injection.
+ * Safe to call multiple times — only one subscription per activation.
+ */
+function subscribeCanvasSelection(context: vscode.ExtensionContext): void {
+  const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+  if (!canvasExt) return;
+
+  const activate = canvasExt.isActive ? Promise.resolve(canvasExt.exports) : canvasExt.activate();
+
+  activate
+    .then((api) => {
+      if (!api?.nodes?.onSelectionChange) return;
+      context.subscriptions.push(api.nodes.onSelectionChange((nodes) => setCanvasSelection(nodes)));
+      // Clear ambient context when canvas editor loses focus is handled by
+      // canvas extension firing onSelectionChange with [] on dispose.
+    })
+    .catch(() => {
+      // neko-canvas not available — ambient context simply stays empty
+    });
 }
 
 /**
@@ -121,8 +151,12 @@ function registerExtensionTools(
   const storyTools = createNekoStoryTools(embedFn);
   storyTools.forEach((tool) => toolRegistry.register(tool));
 
+  // Register NekoSketch tools (AI image generation → canvas layer)
+  const sketchTools = createNekoSketchTools(platform.media);
+  sketchTools.forEach((tool) => toolRegistry.register(tool));
+
   getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length} extension tools`,
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length} extension tools`,
   );
 }
 

@@ -185,6 +185,17 @@ export function registerCommands(
     }),
   );
 
+  // Import image data — accepts base64 string + name, injects directly as a new layer.
+  // Used by neko-agent SketchGenerate tool for AI-generated image import.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.sketch.importImageData',
+      (base64: string, name: string) => {
+        editorProvider.postImageData(base64, name);
+      },
+    ),
+  );
+
   // New Puppet - create .nkp file with inline rename
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.puppet.new', async (uri?: vscode.Uri) => {

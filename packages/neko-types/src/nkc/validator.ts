@@ -35,7 +35,25 @@ function isArray(v: unknown): v is unknown[] {
 // Allowed values
 // =============================================================================
 
-const ALLOWED_NODE_TYPES = new Set(['media', 'storyboard', 'annotation', 'group']);
+const ALLOWED_NODE_TYPES = new Set([
+  // Core nodes
+  'media',
+  'storyboard',
+  'annotation',
+  'group',
+  // Rich content
+  'text',
+  'artboard',
+  // Storyboard system
+  'shot',
+  'scene',
+  'gallery',
+  // Content reference
+  'script',
+  'document',
+  'model',
+  'canvas-embed',
+]);
 
 const ALLOWED_ANCHOR_VALUES = new Set(['top', 'right', 'bottom', 'left']);
 

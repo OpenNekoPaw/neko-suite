@@ -1,7 +1,7 @@
 # 2D 创作能力架构分析
 
-> 日期：2026-03-09（更新：2026-03-14）
-> 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 ✅ 完成（滤镜 ✅ 像素网格 ✅ 大气效果 ✅ 场景模板 ✅ Vector 拖拽预览 ✅ 序列帧播放器 ✅）| S.4 规划中
+> 日期：2026-03-09（更新：2026-03-28）
+> 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 ✅ 完成（滤镜 ✅ 像素网格 ✅ 大气效果 ✅ 场景模板 ✅ Vector 拖拽预览 ✅ 序列帧播放器 ✅）| S.4 P1 ✅（sketch.generate，2026-03-28）
 > 范围：neko-sketch / neko-cut / neko-canvas / neko-agent
 
 ---
@@ -373,11 +373,13 @@ Scene Layer Stack：
 
 ## 7. AI 辅助 2D 创作
 
+### 7.1 neko-sketch MCP Tools
+
 **通过 neko-agent MCP Tools 集成**：
 
 ```
 AI MCP Tools：
-├─ sketch.generate          → Text-to-Image API → 生成 2D 立绘/场景
+├─ sketch.generate          → Text-to-Image API → 生成 2D 立绘/场景  ✅ P1 完成（2026-03-28）
 ├─ sketch.style_transfer    → 风格迁移（照片 → 动漫/油画/水彩风格）
 ├─ sketch.auto_layer        → AI 自动分层（单图 → 线稿/色块/阴影/高光图层）
 ├─ sketch.auto_rig          → AI 辅助骨骼绑定（2D 立绘 → Inochi2D 参数建议）
@@ -400,6 +402,79 @@ type Gen2DOptions = {
   height: number;
   style?: string;
 };
+```
+
+### 7.2 neko-canvas 内嵌生图对话框（ADR-2D-007）
+
+> **参考**：liblibtv 节点点击后弹出的内嵌生图面板（图片节点 → 画面描述 + 风格 + 摄像机控制 + @引用素材）
+
+**交互模式**：点击画布图片节点 → 节点下方展开 `GenerationPromptPanel` → 输入 prompt → 委托 neko-agent Extension Host 执行 → 结果回写节点。
+
+**架构决策（ADR-2D-007）**：canvas 内嵌面板只做 UI，AI 执行完全委托 neko-agent Extension Host，不在 canvas webview 中引入 AI 逻辑。详见 [附录 ADR-2D-007](#adr-2d-007-neko-canvas-内嵌生图面板委托模式)。
+
+```
+neko-canvas webview
+  → 点击图片节点 → GenerationPromptPanel 展开（纯 UI）
+  → 用户输入: prompt + 风格 + 分辨率 + @引用素材 + 摄像机参数
+  → postMessage({ type: 'canvas.generate', nodeId, prompt, referenceAssets, style, aspectRatio, cameraHint })
+      ↓
+  canvasEditorProvider.ts (Extension Host)
+  → vscode.commands.executeCommand('neko.agent.generateForNode', context)
+      ↓
+  neko-agent Extension Host
+  → MediaGenerationService.generateImage() → 进度回传
+  → 完成 → base64 → postMessage({ type: 'canvas.nodeImageUpdated', nodeId, imageData })
+      ↓
+  canvas webview → 更新图片节点内容
+```
+
+**GenerationPromptPanel 控件设计**（对标 liblibtv）：
+
+| 控件 | 功能 | 实现 |
+|------|------|------|
+| 文本输入区 | 画面描述 prompt，支持 `/` 指令 | contentEditable + slash command |
+| **风格** | 全局风格锁（动漫/写实/水彩） | CanvasStyleLock → 自动前缀注入 prompt |
+| **标记** | 分镜元数据标签（景别/运镜/机位） | ShotMetadataPanel（景别/运镜/色调） |
+| **聚焦** | 主体构图聚焦参数 | focal subject → prompt suffix |
+| `@引用素材` | 引用画布上的角色/场景节点 → IP-Adapter 参考图 | `@` 触发节点选择器 → referenceAssets[] |
+| 模型选择 | 复用 neko-agent 已配置的模型 | agent.getAvailableModels() |
+| 分辨率 | 随节点宽高自适应，可手动覆盖 | aspect ratio + resolution picker |
+| **摄像机控制** | 景别(特/近/中/全/远) + 机位(正/侧/俯/仰) | 注入为结构化 prompt suffix |
+| 生成数量 | 1-4 张候选 | batch size |
+| 发送按钮 | 触发生成 | postMessage → agent |
+
+**`@引用素材` 角色一致性机制**：
+
+```
+画布上的角色参考图节点（已有 base64 图片）
+  → 用户输入 @沈昭昭 → 触发节点选择器
+  → 选中角色节点 → referenceAssets: [{ nodeId, imageData, role: 'character' }]
+  → 发送给 agent
+  → agent 将 imageData 作为 IP-Adapter reference 注入生图参数
+  → 生成图保持角色外貌一致
+```
+
+**摄像机控制 → Prompt 注入**：
+
+```typescript
+function cameraHintToPromptSuffix(hint: CameraHint): string {
+  const shotScale = {
+    'extreme-close': 'extreme close-up shot',
+    'close':         'close-up shot',
+    'medium':        'medium shot',
+    'full':          'full shot',
+    'long':          'long shot, wide angle',
+  }[hint.shotScale] ?? '';
+
+  const angle = {
+    'eye-level': '',
+    'high':      'high angle, bird\'s eye view',
+    'low':       'low angle, worm\'s eye view',
+    'dutch':     'dutch angle',
+  }[hint.angle] ?? '';
+
+  return [shotScale, angle].filter(Boolean).join(', ');
+}
 ```
 
 ---
@@ -600,7 +675,7 @@ AI 辅助（S.4 阶段实现）：
 
 ```
 AI MCP Tools：
-├─ sketch.generate（文本 → 2D 图像）
+├─ sketch.generate（文本 → 2D 图像）✅ P1 完成（SketchGenerate MCP tool，2026-03-28）
 ├─ sketch.style_transfer（风格迁移）
 ├─ sketch.auto_layer（自动分层）
 ├─ sketch.auto_rig（骨骼绑定建议）
@@ -693,6 +768,462 @@ neko-sketch 在 AI 视频工作流中的核心价值：
 
 ---
 
+## 12. 分镜系统架构（Storyboard System）
+
+> 分析日期：2026-03-28
+> 参考：liblibtv 脚本视图（表格）+ 创意视图（卡片网格）交互截图
+
+### 12.1 职责划分
+
+```
+neko-story（数据 SSOT + 编辑界面）
+  ├── 脚本视图（ScriptTableView）     → 表格编辑，多列扩展，角色/景别/情绪录入
+  └── 创意视图（CreativeGridView）    → 卡片网格，同一数据的视觉化
+
+neko-canvas（空间排布 + 生图入口）
+  ├── ShotNode                        → 单镜节点，引用脚本视图数据
+  └── SceneGroupNode（extends Group） → 场景容器，包含多个 ShotNode
+```
+
+**原则：脚本视图 / 创意视图不内嵌入 neko-canvas。**
+
+- neko-story 拥有分镜数据（`.nks` 文件扩展）和两种编辑视图
+- neko-canvas 中的 ShotNode 是空间展示节点，点击触发 GenerationPromptPanel（§7.2）
+- 数据单向流：neko-story 修改 → ShotNode 反映；canvas 的图片生成结果回写 neko-story
+
+### 12.2 ShotNode 数据模型
+
+从脚本视图列定义完整的 `ShotNode` 数据结构：
+
+```typescript
+// 替换/扩展现有 StoryboardNode
+interface ShotNodeData {
+  // Identity
+  shotNumber: number;
+  sceneGroupId?: string;         // 所属 SceneGroupNode ID
+
+  // Core
+  duration: number;              // 时长（秒）
+  visualDescription: string;     // 画面描述
+
+  // Multi-character（动态数组，非固定角色1/角色2）
+  characters: ShotCharacter[];
+
+  // Shot metadata（脚本视图完整列集）
+  shotScale: ShotScale;          // 景别
+  cameraMovement?: CameraMovement; // 运镜
+  cameraAngle?: CameraAngle;     // 机位
+  characterAction: string;       // 角色动作（合并描述）
+  emotion: string[];             // 情绪标签
+  sceneTags: string[];           // 场景标签
+  referenceNodeId?: string;      // 参考图（画布上其他节点 ID）
+
+  // Generation state
+  generatedImage?: string;       // base64 AI 生成分镜图
+  generationStatus: ShotGenerationStatus;
+  generationHistory: GeneratedImageVersion[]; // 多版本候选
+}
+
+interface ShotCharacter {
+  name: string;
+  description: string;           // 角色描述
+  referenceNodeId?: string;      // 角色参考图节点 ID（用于 IP-Adapter 注入）
+  action?: string;               // 该角色在本镜的动作
+}
+
+type ShotScale =
+  | 'extreme-close'   // 特写
+  | 'close'           // 近景
+  | 'medium-close'    // 中近景
+  | 'medium'          // 中景
+  | 'medium-full'     // 中全景
+  | 'full'            // 全景
+  | 'long'            // 远景
+  | 'extreme-long'    // 大全景
+  | 'overhead'        // 俯拍
+  | 'pov'             // 主观视角
+  | 'medium-group';   // 中景组接
+
+type CameraMovement = 'push' | 'pull' | 'pan' | 'tilt' | 'track' | 'crane' | 'handheld' | 'static';
+type CameraAngle = 'eye-level' | 'high' | 'low' | 'dutch' | 'overhead';
+type ShotGenerationStatus = 'none' | 'pending' | 'generating' | 'done' | 'error';
+
+interface GeneratedImageVersion {
+  imageData: string;             // base64
+  timestamp: number;
+  prompt: string;                // 生成时使用的 prompt（含风格/摄像机参数）
+}
+```
+
+### 12.3 SceneGroupNode（场景容器）
+
+```typescript
+interface SceneGroupNodeData {
+  sceneNumber: number;
+  heading: string;               // 场景标题：INT. 深夜办公室 · 现代
+  shotOrder: string[];           // 有序的 ShotNode ID 列表
+}
+```
+
+`SceneGroupNode` 继承 `GroupNode` 的包围盒逻辑，但：
+- 子节点只能是 `ShotNode`
+- 在 canvas 中横向排列 ShotNode（左→右 = 镜头顺序）
+- 场景内 ShotNode 按 `shotOrder` 顺序渲染，position.x 自动排布
+
+### 12.4 neko-story 双视图架构
+
+```
+.nks 文件（或 Fountain 派生）
+  └── StoryboardDocument
+        ├── title: string
+        ├── scenes: StoryboardScene[]
+        └── styleConfig: StyleConfig   // 全局画风锁
+
+StoryboardScene
+  ├── id / heading / sceneNumber
+  └── shots: StoryboardShot[]
+
+StoryboardShot = ShotNodeData（共享类型，定义于 @neko/shared）
+```
+
+**脚本视图（ScriptTableView）**：
+
+```
+列定义（固定列 + 动态角色列）：
+  镜号 | 时长 | 画面描述
+  [角色N | 角色描述N | 角色图N] × N  ← 动态列组，角色数决定列数
+  参考 | 景别 | 角色动作 | 情绪 | 场景标签 | [自定义列...]
+```
+
+关键设计：角色列是**动态列组**（非固定角色1/角色2），按镜头中实际角色数量生成列。
+
+**创意视图（CreativeGridView）**：
+
+```
+Shot 卡片布局（对标 liblibtv 创意视图）：
+┌─────────────────────────────────────┐
+│  #1                        5.00s    │
+│  ┌─────────────────────────────┐   │
+│  │   生成图 / 暂无图片 占位     │   │  ← 点击触发 GenerationPromptPanel
+│  └─────────────────────────────┘   │
+│  [沈昭昭]              ← 角色标签   │
+│  现代深夜，沈昭昭在凌乱...          │
+│  特写 · 极度紧张                    │
+│  场景 1                             │
+└─────────────────────────────────────┘
+```
+
+### 12.4.1 GalleryNode（多视图画廊节点）
+
+> 角色三视图 / 四视图 / 九宫格表情表等多视图参考图的专用节点类型（新增 `gallery`）
+
+**为什么不用 ArtboardNode + 子节点**：子节点是独立画布对象，无法作为整体引用/导出；GalleryNode 将多图作为**内聚数据**管理，可整节点移动/导出，且每格可独立生成。
+
+```typescript
+type GalleryLayout =
+  | '1x2' | '1x3' | '1x4'   // 横向条带（二/三/四视图）
+  | '2x2' | '2x3' | '3x3'   // 网格（四格/六格/九宫格）
+  | 'custom';
+
+type GalleryPreset =
+  | 'character-3view'   // 正面 / 侧面 / 背面
+  | 'character-4view'   // 正面 / 3/4面 / 侧面 / 背面
+  | 'expression-9'      // 表情九宫格
+  | 'turnaround-8'      // 360°转面 8方向（2×4）
+  | 'custom';
+
+interface GalleryCell {
+  id: string;
+  label: string;         // '正面' / '侧面' / '开心'...
+  image?: string;        // base64
+  prompt?: string;       // 单格独立 prompt（覆盖全局前缀）
+  generationStatus: 'none' | 'pending' | 'generating' | 'done' | 'error';
+}
+
+interface GalleryCanvasNode extends CanvasNodeBase {
+  type: 'gallery';
+  data: {
+    preset: GalleryPreset;
+    layout: GalleryLayout;
+    rows: number;
+    cols: number;
+    cells: GalleryCell[];            // length === rows × cols
+    globalPromptPrefix?: string;     // 全局风格/角色前缀，所有格子共享
+    characterName?: string;          // 角色名，用于 IP-Adapter 绑定
+  };
+}
+```
+
+**预置模板与格子标签**：
+
+| Preset | Layout | 格子标签 |
+|--------|--------|---------|
+| `character-3view` | 1×3 | 正面 / 侧面 / 背面 |
+| `character-4view` | 1×4 | 正面 / 3/4面 / 侧面 / 背面 |
+| `expression-9` | 3×3 | 喜 / 怒 / 哀 / 惊 / 蔑 / 恐 / 疑 / 冷 / 哭 |
+| `turnaround-8` | 2×4 | 0° / 45° / 90° / 135° / 180° / 225° / 270° / 315° |
+| `custom` | 任意 | 用户自定义标签 |
+
+**GalleryNode × 分镜角色一致性**：
+
+```
+GalleryNode（沈昭昭·三视图）
+  ├── cell[0] 正面  ─→ ShotNode @引用 → IP-Adapter 正面参考
+  ├── cell[1] 侧面  ─→ ShotNode @引用 → IP-Adapter 侧面参考
+  └── cell[2] 背面  ─→ 同理
+
+GenerationPromptPanel 中 @引用粒度 = 单格（cell），而非整个 GalleryNode
+→ 根据镜头摄像机角度自动建议引用对应格子
+```
+
+**生成交互**：
+- 点击单格 → GenerationPromptPanel（单格 prompt，含摄像机角度提示）
+- "批量生图" → 顺序生成所有空格，globalPromptPrefix + 格子 label 组合 prompt
+- "导出参考图" → 合并所有格子为单张图片（适合发给外部协作者）
+
+### 12.5 批量生图调度器（BatchGenerationScheduler）
+
+"全部分镜一键生图"需要队列/并发控制，不能直接逐个调用 GenerationPromptPanel：
+
+```
+BatchGenerationScheduler（neko-agent Extension Host 侧）
+  ├── 队列：ShotNode[] 按 SceneGroup + shotOrder 排列
+  ├── 并发控制：maxConcurrent = 2（防止 API 限流/超时）
+  ├── 进度回传：{ total, done, failed, currentShotId }
+  │         → postMessage → canvas webview → 每卡实时更新 generationStatus
+  ├── 失败重试：指数退避（1s / 2s / 4s），最多 3 次
+  ├── 单镜重试：从创意视图卡片右键触发，跳过已完成的镜
+  └── 取消：AbortController 全局取消，已完成的不回滚
+
+进度订阅（canvas webview）：
+  → onMessage({ type: 'batch.progress', ... })
+  → ShotNode generationStatus 实时更新
+  → 全部完成 → 通知弹窗（含失败统计）
+```
+
+### 12.6 自动 Prompt 生成（中文描述 → 英文 Prompt）
+
+图像生成 API 通常需要英文 prompt，GenerationPromptPanel 必须支持自动翻译/扩写：
+
+```
+用户输入（中文）：现代深夜，沈昭昭在凌乱的办公室疯狂加班
+  + 角色描述（角色名 + GalleryNode 选中格标签）
+  + 景别（特写）+ 情绪（极度紧张）+ 摄像机（eye-level）
+        ↓
+neko-agent LLM（轻量 prompt 工程）
+        ↓
+结构化英文 prompt：
+  "extreme close-up shot, eye-level angle, modern office interior at midnight,
+   young Asian woman with black-framed glasses frantically typing,
+   blue monitor glow reflecting on exhausted face, papers and coffee cups scattered,
+   cinematic lighting, photorealistic, highly detailed"
+```
+
+实现：GenerationPromptPanel 的"发送"按钮触发前，先调用 `neko.agent.buildPrompt(shotContext)` → LLM 返回英文 prompt → 可预览/编辑 → 再调用生图。
+
+### 12.7 分镜导出
+
+| 导出格式 | 用途 | 实现方案 |
+|---------|------|---------|
+| **PDF 分镜表** | 发送导演/甲方审核 | `html-to-image` 每镜渲染 → `jsPDF` 拼装（每页含镜号/时长/画面图/台词） |
+| **图片包（ZIP）** | 外部协作/存档 | `JSZip` 按场景目录打包，文件名 `场景N_镜M_label.png` |
+| **导入 neko-cut** | 生成视频粗剪底稿 | 分镜图 → `MediaElement`（duration 来自 ShotNode.duration）+ 字幕轨（dialogue 字段） |
+
+### 12.8 生图候选选择 UI
+
+`GeneratedImageVersion[]` 已在 ShotNode 数据模型，交互设计：
+
+```
+创意视图卡片（有候选时）：
+  ┌──────────────────────────┐
+  │  [图片]         ← 当前采用  │
+  │  ◀  1 / 3  ▶            │  ← 滑动切换候选
+  │  [确认采用] [重新生成]    │
+  └──────────────────────────┘
+单次生成张数：1-4 张（GenerationPromptPanel 底部 "N张" 选择器）
+```
+
+### 12.9 补充字段（ShotNode + GalleryNode）
+
+```typescript
+// ShotNodeData 补充
+dialogue?: string;       // 该镜头对白（从 Fountain 提取或手动输入）
+voiceOver?: string;      // 画外音/旁白
+soundCue?: string;       // 音效/音乐备注
+
+// GalleryCell 补充
+costumeLabel?: string;   // '现代职场' / '唐代宫装'（同一角色多套服装）
+```
+
+### 12.10 视图与数据流总结
+
+```
+Fountain / 手动录入
+      ↓
+neko-story SSOT（.nks）
+      ├──→ 脚本视图（ScriptTableView）   ←→ 用户编辑所有字段（含台词/音效）
+      ├──→ 创意视图（CreativeGridView）
+      │       ├── 单镜点击 → GenerationPromptPanel（含自动 prompt 生成）
+      │       ├── 批量生图 → BatchGenerationScheduler → 进度实时更新
+      │       ├── 候选选择 → GeneratedImageVersion[] 滑动切换
+      │       └── 导出 → PDF / ZIP / neko-cut 时间线
+      │
+      └──→ neko-canvas ShotNode + SceneGroupNode   → 空间构图
+               + GalleryNode（角色/场景多视图参考）
+               + GenerationPromptPanel（@引用单格 cell）
+```
+
+---
+
+## 13. neko-canvas 资产导入与节点扩展
+
+> 分析日期：2026-03-28
+> 代码审计：useDragDrop / canvasEditorProvider / CanvasToolbar / useVSCodeMessages
+
+### 13.1 当前导入能力（代码实测）
+
+| 方式 | 支持类型 | 状态 |
+|------|---------|------|
+| Explorer 拖拽 | image / video / audio | ✅ 完整 |
+| 素材库拖拽 | image / video / audio | ✅ 完整（`application/json` 协议）|
+| 工具栏按钮 → 文件选择器 | image / video / audio | ⚠️ 85%（缺 `pickMedia` handler）|
+| PathVariable 解析 | `${VAR}/path` | ✅ 完整 |
+| 文档类型（PDF/DOCX/Fountain） | — | ❌ 未支持 |
+| AI 模型节点 | — | ❌ 未支持 |
+
+**最小修复**：`canvasEditorProvider.ts` 补 `case 'pickMedia'` handler（已有 showOpenDialog 调用样板），工具栏文件选择立即可用。
+
+### 13.2 待新增节点类型
+
+#### ScriptNode（剧本节点）
+
+```typescript
+interface ScriptCanvasNode extends CanvasNodeBase {
+  type: 'script';
+  data: {
+    filePath: string;            // .nks / .fountain
+    title: string;
+    sceneCount: number;
+    characterCount: number;
+    // 展示模式：TOC 目录（不渲染全文）
+    expandedSceneIds: string[];  // 当前展开的场景 ID
+    linkedSceneGroupIds: Record<string, string>; // sceneId → SceneGroupNode ID
+  };
+}
+```
+
+**渲染策略（TOC 模式）**：通过 `neko-story.getScriptIndex(path)` 获取 `scenes[]`，仅渲染场景目录，不渲染全文。全文过长（100+ 场景）不适合在画布内展开。
+
+```
+ScriptNode 渲染：
+┌────────────────────────────────────┐
+│ 📄 我在盛唐写天下            .nks  │
+│ ─────────────────────────────────  │
+│ ▶ 【序幕】               3 镜      │  ← 折叠，点击展开
+│ ▼ 【现代·深夜办公室】     5 镜      │  ← 展开，显示分镜列表
+│   ├── 镜1 沈昭昭·深夜加班          │
+│   └── 镜2 视觉黑暗...              │
+│ [筛选场景] [在 neko-story 中打开]  │
+└────────────────────────────────────┘
+```
+
+点击场景 → 高亮/导航到画布上对应的 SceneGroupNode（若已创建）。
+
+#### DocumentNode（文档节点）
+
+```typescript
+interface DocumentCanvasNode extends CanvasNodeBase {
+  type: 'document';
+  data: {
+    filePath: string;
+    docType: 'pdf' | 'docx' | 'epub' | 'xlsx' | 'pptx';
+    title: string;
+    pageCount?: number;
+    thumbnailData?: string;       // 首页/封面 base64 缩略图
+    summary?: string;             // AI 摘要（可选）
+  };
+}
+```
+
+渲染：封面缩略图 + 文件名 + 页数徽标 + "在预览器中打开"按钮（委托 document-preview ADR 策略）。
+
+#### ModelNode（AI 模型节点）
+
+```typescript
+type ModelNodeRole = 'reference' | 'workflow';
+
+interface ModelCanvasNode extends CanvasNodeBase {
+  type: 'model';
+  data: {
+    modelId: string;             // neko-market 中的模型 ID
+    name: string;
+    modelType: 'image-gen' | 'llm' | 'audio' | 'video-gen';
+    paramCount?: string;         // '3.5B' / '7B'
+    installed: boolean;
+    role: ModelNodeRole;
+    // workflow 模式时有出口 port → 连接到 ShotNode
+    // reference 模式时仅展示信息
+  };
+}
+```
+
+**两种语义**：
+- `reference`：展示画板中使用了哪个模型（信息卡）
+- `workflow`：有出口 port，连接 ShotNode 指定该镜头使用此模型生图
+
+#### CanvasEmbedNode（嵌套画布）
+
+```typescript
+interface CanvasEmbedCanvasNode extends CanvasNodeBase {
+  type: 'canvas-embed';
+  data: {
+    filePath: string;            // .nkc 文件
+    title: string;
+    thumbnailData?: string;      // 画布缩略图 base64
+    nodeCount: number;
+  };
+}
+```
+
+渲染为缩略图 + 双击打开嵌套画布（`vscode.commands.executeCommand('vscode.open', uri)`）。
+
+### 13.3 章节筛选策略
+
+| 内容类型 | 数据量 | 策略 |
+|---------|--------|------|
+| 剧本（ScriptNode） | 100+ 场景 | TOC 折叠目录；`getScriptIndex` 只取结构不取全文 |
+| PDF（DocumentNode） | 1000+ 页 | 只显示封面缩略图 + 页数，点击委托 neko-preview |
+| AI 模型列表 | 10-50 个 | 从 neko-market 查询，节点仅绑定单个模型 ID |
+| 画布引用（CanvasEmbed） | 任意 | 缩略图 + 节点数，不递归渲染内容 |
+
+**原则：画布节点是"入口"，不是"查看器"**——复杂内容委托专用扩展打开。
+
+### 13.4 扩展后的节点类型全集
+
+```typescript
+// @neko/shared types/canvas.ts
+export type CanvasNodeType =
+  // 现有
+  | 'media'          // image / video / audio
+  | 'storyboard'     // 旧版（迁移到 'shot'）
+  | 'annotation'     // 文本标注
+  | 'group'          // 分组容器
+  // Webview 扩展（已有）
+  | 'text'           // 富文本
+  | 'artboard'       // 画板（固定尺寸容器）
+  // 分镜系统（§12）
+  | 'shot'           // 分镜节点（替换 storyboard）
+  | 'scene'          // 场景容器（SceneGroupNode）
+  | 'gallery'        // 多视图画廊（角色三视图/九宫格）
+  // 资产扩展（§13）
+  | 'script'         // 剧本节点（TOC 模式）
+  | 'document'       // 文档节点（PDF/DOCX/EPUB）
+  | 'model'          // AI 模型节点（参考卡/工作流）
+  | 'canvas-embed';  // 嵌套画布引用
+```
+
+---
+
 ## 附录：关键技术依赖
 
 | 依赖 | 用途 | 许可 |
@@ -765,6 +1296,20 @@ neko-sketch 在 AI 视频工作流中的核心价值：
   2. 新增 4 个 GLSL ES 3.0 滤镜着色器（`filter-shaders.ts`）：exposure / temperature / glow / film-grain（从 neko-engine WGSL 转译）
   3. `filter-registry.ts`：注册新增 4 个滤镜，内置滤镜总数达 10 个
 - **架构意义**：滤镜管线与逐帧动画相互独立，滤镜应用于合成后的完整图层栈，而非单帧；onion skin overlay 在滤镜之后由 2D canvas 覆盖渲染，不受滤镜影响
+
+### ADR-2D-007: neko-canvas 内嵌生图面板委托模式
+
+- **日期**：2026-03-28
+- **背景**：liblibtv 分析显示，图片节点点击后弹出内嵌生图对话框是核心 UX，支持 prompt + 风格 + @引用素材（角色一致性）+ 摄像机控制。
+- **决策**：neko-canvas webview 内嵌轻量 `GenerationPromptPanel`（纯 UI），AI 执行完全委托给 neko-agent Extension Host，**不在 canvas webview 内引入任何 AI Provider 逻辑**。
+- **原因**：
+  1. neko-agent 已有完整的 `MediaGenerationService` + 模型路由 + API Key 管理，重复实现代价高
+  2. canvas webview 遵循沙箱限制，无法直接访问 API Key 或外部网络
+  3. 委托模式保持单一职责：canvas 管 UI + 节点状态，agent 管 AI 执行
+  4. 用户不需要看到 agent webview panel —— agent Extension Host 作为后台服务透明执行
+- **数据流**：`canvas postMessage` → `canvasEditorProvider` → `executeCommand('neko.agent.generateForNode')` → `MediaGenerationService` → 进度回传 → `canvas updateNodeImage`
+- **`@引用素材` 角色一致性**：canvas 节点的 base64 图片数据随 referenceAssets[] 传给 agent，agent 注入为 IP-Adapter reference；neko-agent 侧需新增 `generateForNode` 命令处理函数。
+- **摄像机控制**：景别/机位参数转换为结构化 prompt suffix，由 `cameraHintToPromptSuffix()` 函数处理（canvas 侧实现）。
 
 ### ADR-2D-004: Spine 整体否决，统一 inox2d
 

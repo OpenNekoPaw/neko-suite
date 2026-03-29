@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import type { CanvasNode } from '@neko/shared';
+import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
 import { t } from '../i18n';
 
 // =============================================================================
@@ -28,6 +29,12 @@ export interface UseNodeHelpersReturn {
     uri?: string,
     name?: string,
   ) => void;
+  /** Add a ShotNode at the given canvas position */
+  addShotAt: (pos: { x: number; y: number }) => void;
+  /** Add a SceneGroupNode container at the given canvas position */
+  addSceneGroupAt: (pos: { x: number; y: number }) => void;
+  /** Add a GalleryNode at the given canvas position */
+  addGalleryAt: (pos: { x: number; y: number }) => void;
 }
 
 // =============================================================================
@@ -95,5 +102,80 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     [addNode, nodeCount, reportAction],
   );
 
-  return { addTextAt, addSceneAt, addMediaAt };
+  const addShotAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 220,
+        h = 200;
+      addNode({
+        type: 'shot',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          shotNumber: nodeCount + 1,
+          duration: 3,
+          visualDescription: '',
+          characters: [],
+          shotScale: 'MS',
+          characterAction: '',
+          emotion: [],
+          sceneTags: [],
+          generationStatus: 'idle',
+          generationHistory: [],
+        },
+      });
+      reportAction('addNode', 'Add shot');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  const addSceneGroupAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 600,
+        h = 300;
+      addNode({
+        type: 'scene',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          sceneTitle: t('node.newScene'),
+          sceneNumber: nodeCount + 1,
+          shotIds: [],
+        },
+      });
+      reportAction('addNode', 'Add scene group');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  const addGalleryAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const preset = 'character-3view' as const;
+      const config = GALLERY_PRESET_CONFIGS[preset];
+      const cells = config.labels.map((label, i) => ({
+        id: `cell-${Date.now()}-${i}`,
+        label,
+        generationStatus: 'idle' as const,
+      }));
+      const w = Math.max(240, config.cols * 90 + 20);
+      const h = config.rows * 100 + 60;
+      addNode({
+        type: 'gallery',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          preset,
+          rows: config.rows,
+          cols: config.cols,
+          cells,
+        },
+      });
+      reportAction('addNode', 'Add gallery');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  return { addTextAt, addSceneAt, addMediaAt, addShotAt, addSceneGroupAt, addGalleryAt };
 }

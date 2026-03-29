@@ -4,8 +4,9 @@ import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
-import { PropertyPanel } from './components/panels/PropertyPanel';
 import { LayerPanel } from './components/controls/LayerPanel';
+import { BottomSheet } from './components/panels/BottomSheet';
+import type { BottomSheetGenerateTarget } from './components/panels/BottomSheet';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
@@ -14,6 +15,7 @@ import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
+import type { GenerationParams } from './components/panels/GenerationPromptPanel';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
@@ -59,33 +61,12 @@ export function CanvasApp() {
 
   // Panel state
   const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(false);
-  const [isPropertyPanelOpen, setIsPropertyPanelOpen] = useState(true);
-  const [propertyPanelWidth, setPropertyPanelWidth] = useState(240);
 
-  // Horizontal resize for PropertyPanel
-  const [isHResizing, setIsHResizing] = useState(false);
+  // Bottom sheet generation trigger
+  const [bottomSheetGenTarget, setBottomSheetGenTarget] =
+    useState<BottomSheetGenerateTarget | null>(null);
+
   const rootRef = useRef<HTMLDivElement>(null);
-
-  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsHResizing(true);
-  }, []);
-
-  const handleHResizeMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isHResizing || !rootRef.current) return;
-      const rootRect = rootRef.current.getBoundingClientRect();
-      const newWidth = Math.max(200, Math.min(400, rootRect.right - e.clientX));
-      setPropertyPanelWidth(newWidth);
-    },
-    [isHResizing],
-  );
-
-  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    setIsHResizing(false);
-  }, []);
 
   const {
     setCanvasData,
@@ -113,8 +94,6 @@ export function CanvasApp() {
     rotateNode,
     rotateNodeEnd,
     selectNodes,
-    updateNodePorts,
-    updateConnection,
     reorderNode,
     removeNode,
     groupNodes,
@@ -172,14 +151,31 @@ export function CanvasApp() {
   }, []);
 
   // =========================================================================
+  // AutoPrompt resolver — bridges postMessage round-trip into a Promise
+  // =========================================================================
+
+  const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
+
+  const handleRequestAutoPrompt = useCallback(
+    (nodeId: string, cellId?: string): Promise<string> => {
+      return new Promise((resolve) => {
+        buildPromptResolverRef.current = resolve;
+        vscode?.postMessage({ type: 'buildPrompt', nodeId, cellId });
+      });
+    },
+    [],
+  );
+
+  // =========================================================================
   // Node helpers
   // =========================================================================
 
-  const { addTextAt, addSceneAt, addMediaAt } = useNodeHelpers({
-    addNode,
-    nodeCount: nodes.length,
-    reportAction,
-  });
+  const { addTextAt, addSceneAt, addMediaAt, addShotAt, addSceneGroupAt, addGalleryAt } =
+    useNodeHelpers({
+      addNode,
+      nodeCount: nodes.length,
+      reportAction,
+    });
 
   // =========================================================================
   // Clipboard
@@ -200,9 +196,17 @@ export function CanvasApp() {
     addTextAt(getViewportCenter());
   }, [addTextAt, getViewportCenter]);
 
-  const handleAddScene = useCallback(() => {
-    addSceneAt(getViewportCenter());
-  }, [addSceneAt, getViewportCenter]);
+  const handleAddShot = useCallback(() => {
+    addShotAt(getViewportCenter());
+  }, [addShotAt, getViewportCenter]);
+
+  const handleAddSceneGroup = useCallback(() => {
+    addSceneGroupAt(getViewportCenter());
+  }, [addSceneGroupAt, getViewportCenter]);
+
+  const handleAddGallery = useCallback(() => {
+    addGalleryAt(getViewportCenter());
+  }, [addGalleryAt, getViewportCenter]);
 
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
@@ -255,7 +259,147 @@ export function CanvasApp() {
       });
       dropPositionRef.current = null;
     },
+    onBuildPromptResult: (prompt) => {
+      buildPromptResolverRef.current?.(prompt);
+      buildPromptResolverRef.current = null;
+    },
+    onGenerationProgress: ({ nodeId, cellId, status, dataUrl }) => {
+      const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+
+      if (node.type === 'shot') {
+        if (status === 'done' && dataUrl) {
+          const shotNode = node as import('@neko/shared').ShotCanvasNode;
+          const history = [
+            ...(shotNode.data.generationHistory ?? []),
+            {
+              id: `v-${Date.now()}`,
+              dataUrl,
+              prompt: '',
+              timestamp: Date.now(),
+              selected: true,
+            },
+          ];
+          updateNodeData(nodeId, {
+            generationStatus: 'done',
+            generatedImage: dataUrl,
+            generationHistory: history,
+          });
+        } else {
+          updateNodeData(nodeId, { generationStatus: status });
+        }
+      } else if (node.type === 'gallery' && cellId) {
+        const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
+        const cells = galleryNode.data.cells.map((c) =>
+          c.id === cellId
+            ? {
+                ...c,
+                generationStatus: status as import('@neko/shared').GalleryCell['generationStatus'],
+                ...(status === 'done' && dataUrl ? { image: dataUrl } : {}),
+              }
+            : c,
+        );
+        updateNodeData(nodeId, { cells });
+      }
+    },
+    onScriptIndexResult: (nodeId, scenes) => {
+      updateNodeData(nodeId, { scenes });
+    },
+    onModelInstalledResult: (nodeId, installedVersion) => {
+      updateNodeData(nodeId, { installedVersion: installedVersion ?? undefined });
+    },
+    getNodes: (type) => {
+      const allNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+      return type ? allNodes.filter((n) => n.type === type) : allNodes;
+    },
+    getNode: (id) => useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === id),
+    updateNode: (id, updates) => useCanvasStore.getState().updateNode(id, updates),
+    createNode: (node) => useCanvasStore.getState().addNode(node),
   });
+
+  // =========================================================================
+  // Generation panel handlers
+  // =========================================================================
+
+  const handleShotGenerateClick = useCallback(
+    (nodeId: string) => {
+      selectNode(nodeId, false);
+      setBottomSheetGenTarget({ nodeId });
+    },
+    [selectNode],
+  );
+
+  const handleGalleryCellGenerateClick = useCallback(
+    (nodeId: string, cellId: string) => {
+      selectNode(nodeId, false);
+      setBottomSheetGenTarget({ nodeId, cellId });
+    },
+    [selectNode],
+  );
+
+  const handleGalleryBatchGenerateClick = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node || node.type !== 'gallery') return;
+      const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
+      // Enqueue generation for all cells without images
+      for (const cell of galleryNode.data.cells) {
+        if (
+          !cell.image &&
+          cell.generationStatus !== 'generating' &&
+          cell.generationStatus !== 'pending'
+        ) {
+          vscode?.postMessage({
+            type: 'generateForNode',
+            nodeId,
+            cellId: cell.id,
+            params: { prompt: cell.prompt ?? galleryNode.data.globalPromptPrefix ?? cell.label },
+          });
+        }
+      }
+    },
+    [nodes],
+  );
+
+  const handleScriptLoadScenes = useCallback((nodeId: string, scriptPath: string) => {
+    vscode?.postMessage({ type: 'getScriptIndex', nodeId, scriptPath });
+  }, []);
+
+  const handleScriptOpen = useCallback((scriptPath: string) => {
+    vscode?.postMessage({ type: 'openDocument', docPath: scriptPath });
+  }, []);
+
+  const handleScriptNavigateToScene = useCallback(
+    (linkedSceneGroupId: string) => {
+      // Scroll the canvas viewport to center on the linked SceneGroupNode
+      const target = nodes.find((n) => n.id === linkedSceneGroupId);
+      if (!target) return;
+      const cx = target.position.x + target.size.width / 2;
+      const cy = target.position.y + target.size.height / 2;
+      setViewport({
+        pan: {
+          x: containerSize.width / 2 - cx * viewport.zoom,
+          y: containerSize.height / 2 - cy * viewport.zoom,
+        },
+      });
+    },
+    [nodes, viewport.zoom, containerSize, setViewport],
+  );
+
+  const handleDocumentOpen = useCallback((docPath: string) => {
+    vscode?.postMessage({ type: 'openDocument', docPath });
+  }, []);
+
+  const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
+    vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
+  }, []);
+
+  const handleBottomSheetGenerate = useCallback(
+    (nodeId: string, cellId: string | undefined, params: GenerationParams) => {
+      vscode?.postMessage({ type: 'generateForNode', nodeId, cellId, params });
+    },
+    [],
+  );
 
   // =========================================================================
   // Context menu
@@ -366,6 +510,20 @@ export function CanvasApp() {
       },
     });
   }, [nodes.length, connections.length, viewport.zoom, selectedNodeIds, canvasData]);
+
+  // =========================================================================
+  // Notify extension of selection changes for ambient agent context
+  // =========================================================================
+
+  const lastSelectionRef = useRef<string>('');
+  useEffect(() => {
+    if (!vscode || !canvasData) return;
+    const selKey = selectedNodeIds.join(',');
+    if (selKey === lastSelectionRef.current) return;
+    lastSelectionRef.current = selKey;
+    const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
+    vscode.postMessage({ type: 'selectionChange', nodes: selectedNodes });
+  }, [selectedNodeIds, nodes, canvasData]);
 
   // =========================================================================
   // Viewport & node event handlers (thin wrappers)
@@ -498,14 +656,7 @@ export function CanvasApp() {
   // =========================================================================
 
   const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
-  const selectedConnections = connections.filter((c) => selectedConnectionIds.includes(c.id));
 
-  const handleUpdateNode = useCallback(
-    (id: string, updates: Partial<import('@neko/shared').CanvasNode>) => {
-      useCanvasStore.getState().updateNode(id, updates);
-    },
-    [],
-  );
   const handleToggleLock = useCallback(
     (id: string) => {
       const node = nodes.find((n) => n.id === id);
@@ -538,14 +689,14 @@ export function CanvasApp() {
       <div ref={rootRef} className="flex-1 flex overflow-hidden">
         <CanvasToolbar
           onAddText={handleAddText}
-          onAddScene={handleAddScene}
           onAddMedia={handleAddMedia}
           onUndo={undo}
           onRedo={redo}
           onToggleLayerPanel={() => setIsLayerPanelOpen((prev) => !prev)}
           isLayerPanelOpen={isLayerPanelOpen}
-          onTogglePropertyPanel={() => setIsPropertyPanelOpen((prev) => !prev)}
-          isPropertyPanelOpen={isPropertyPanelOpen}
+          onAddShot={handleAddShot}
+          onAddSceneGroup={handleAddSceneGroup}
+          onAddGallery={handleAddGallery}
         />
 
         {isLayerPanelOpen && (
@@ -591,6 +742,27 @@ export function CanvasApp() {
             onConnectionCancel={handleConnectionCancel}
             onCanvasClick={handleCanvasClick}
             onMarqueeSelect={handleMarqueeSelect}
+            onShotGenerateClick={handleShotGenerateClick}
+            onGalleryCellGenerateClick={handleGalleryCellGenerateClick}
+            onGalleryBatchGenerateClick={handleGalleryBatchGenerateClick}
+            onScriptLoadScenes={handleScriptLoadScenes}
+            onScriptOpen={handleScriptOpen}
+            onScriptNavigateToScene={handleScriptNavigateToScene}
+            onDocumentOpen={handleDocumentOpen}
+            onModelCheckInstalled={handleModelCheckInstalled}
+          />
+
+          {/* ── Bottom Sheet (node editor + generation) ── */}
+          <BottomSheet
+            selectedNode={selectedNodes[0] ?? null}
+            onUpdateNodeData={handleNodeUpdateData}
+            onDeleteNode={handleDeleteNode}
+            onClose={clearSelection}
+            onGenerate={handleBottomSheetGenerate}
+            onRequestAutoPrompt={handleRequestAutoPrompt}
+            onBatchGenerate={handleGalleryBatchGenerateClick}
+            initialGenerationTarget={bottomSheetGenTarget}
+            onInitialGenerationHandled={() => setBottomSheetGenTarget(null)}
           />
 
           {/* Empty state hint */}
@@ -683,32 +855,6 @@ export function CanvasApp() {
             </div>
           )}
         </div>
-
-        {isPropertyPanelOpen && (
-          <>
-            {/* Horizontal Resize Handle */}
-            <div
-              onPointerDown={handleHResizeStart}
-              onPointerMove={handleHResizeMove}
-              onPointerUp={handleHResizeEnd}
-              className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
-                isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
-              }`}
-              style={{ touchAction: 'none' }}
-            />
-            <PropertyPanel
-              selectedNodes={selectedNodes}
-              selectedConnections={selectedConnections}
-              onUpdateNode={handleUpdateNode}
-              onUpdateNodeData={handleNodeUpdateData}
-              onUpdateConnection={updateConnection}
-              onUpdatePorts={updateNodePorts}
-              onDeleteNode={handleDeleteNode}
-              onToggleLock={handleToggleLock}
-              width={propertyPanelWidth}
-            />
-          </>
-        )}
       </div>
     </div>
   );

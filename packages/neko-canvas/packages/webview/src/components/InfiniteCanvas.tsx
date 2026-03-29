@@ -11,6 +11,12 @@ import type {
   MediaCanvasNode,
   StoryboardCanvasNode,
   AnnotationCanvasNode,
+  ShotCanvasNode,
+  SceneGroupCanvasNode,
+  GalleryCanvasNode,
+  ScriptCanvasNode,
+  DocumentCanvasNode,
+  ModelCanvasNode,
 } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
@@ -21,6 +27,12 @@ import {
   TextNode,
   ArtboardNode,
   GroupNode,
+  ShotNode,
+  SceneGroupNode,
+  GalleryNode,
+  ScriptNode,
+  DocumentNode,
+  ModelNode,
 } from './nodes';
 import { ConnectionLayer } from './connections';
 import type { TextCanvasNode } from '../types/extendedCanvas';
@@ -77,6 +89,32 @@ export interface InfiniteCanvasProps {
   onMarqueeSelect?: (nodeIds: string[], additive: boolean) => void;
   /** 是否启用视口裁剪（默认启用） */
   enableCulling?: boolean;
+
+  // ── ShotNode callbacks ─────────────────────────────────────────────────────
+  /** Called when user clicks "generate" on a ShotNode */
+  onShotGenerateClick?: (nodeId: string) => void;
+
+  // ── GalleryNode callbacks ──────────────────────────────────────────────────
+  /** Called when user clicks "+" on a gallery cell */
+  onGalleryCellGenerateClick?: (nodeId: string, cellId: string) => void;
+  /** Called when user clicks batch generate on a GalleryNode */
+  onGalleryBatchGenerateClick?: (nodeId: string) => void;
+
+  // ── ScriptNode callbacks ───────────────────────────────────────────────────
+  /** Called to load scene TOC from neko-story */
+  onScriptLoadScenes?: (nodeId: string, scriptPath: string) => void;
+  /** Called when user opens a script file */
+  onScriptOpen?: (scriptPath: string) => void;
+  /** Called when user navigates to a linked SceneGroupNode */
+  onScriptNavigateToScene?: (linkedSceneGroupId: string) => void;
+
+  // ── DocumentNode callbacks ─────────────────────────────────────────────────
+  /** Called when user opens a document */
+  onDocumentOpen?: (docPath: string) => void;
+
+  // ── ModelNode callbacks ────────────────────────────────────────────────────
+  /** Called to check if a model is installed */
+  onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
 }
 
 // =============================================================================
@@ -105,6 +143,14 @@ export function InfiniteCanvas({
   onCanvasClick,
   onMarqueeSelect,
   enableCulling = true,
+  onShotGenerateClick,
+  onGalleryCellGenerateClick,
+  onGalleryBatchGenerateClick,
+  onScriptLoadScenes,
+  onScriptOpen,
+  onScriptNavigateToScene,
+  onDocumentOpen,
+  onModelCheckInstalled,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -248,6 +294,14 @@ export function InfiniteCanvas({
             onNodeRotateEnd,
             onNodeUpdateData,
             startDragConnection,
+            onShotGenerateClick,
+            onGalleryCellGenerateClick,
+            onGalleryBatchGenerateClick,
+            onScriptLoadScenes,
+            onScriptOpen,
+            onScriptNavigateToScene,
+            onDocumentOpen,
+            onModelCheckInstalled,
           );
         })}
       </CanvasViewport>
@@ -311,6 +365,14 @@ function renderNode(
   onRotateEnd?: (nodeId: string, rotation: number) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
+  onShotGenerateClick?: (nodeId: string) => void,
+  onGalleryCellGenerateClick?: (nodeId: string, cellId: string) => void,
+  onGalleryBatchGenerateClick?: (nodeId: string) => void,
+  onScriptLoadScenes?: (nodeId: string, scriptPath: string) => void,
+  onScriptOpen?: (scriptPath: string) => void,
+  onScriptNavigateToScene?: (linkedSceneGroupId: string) => void,
+  onDocumentOpen?: (docPath: string) => void,
+  onModelCheckInstalled?: (nodeId: string, modelPath: string) => void,
 ): React.ReactNode {
   const commonProps = {
     viewport,
@@ -356,6 +418,56 @@ function renderNode(
           node={node as import('@neko/shared').GroupCanvasNode}
           allNodes={allNodes}
           {...commonProps}
+        />
+      );
+    case 'shot':
+      return (
+        <ShotNode
+          key={node.id}
+          node={node as ShotCanvasNode}
+          {...commonProps}
+          onGenerateClick={onShotGenerateClick}
+        />
+      );
+    case 'scene':
+      return <SceneGroupNode key={node.id} node={node as SceneGroupCanvasNode} {...commonProps} />;
+    case 'gallery':
+      return (
+        <GalleryNode
+          key={node.id}
+          node={node as GalleryCanvasNode}
+          {...commonProps}
+          onGenerateCellClick={onGalleryCellGenerateClick}
+          onBatchGenerateClick={onGalleryBatchGenerateClick}
+        />
+      );
+    case 'script':
+      return (
+        <ScriptNode
+          key={node.id}
+          node={node as ScriptCanvasNode}
+          {...commonProps}
+          onLoadScenes={onScriptLoadScenes}
+          onOpenScript={onScriptOpen}
+          onNavigateToScene={onScriptNavigateToScene}
+        />
+      );
+    case 'document':
+      return (
+        <DocumentNode
+          key={node.id}
+          node={node as DocumentCanvasNode}
+          {...commonProps}
+          onOpenDocument={onDocumentOpen}
+        />
+      );
+    case 'model':
+      return (
+        <ModelNode
+          key={node.id}
+          node={node as ModelCanvasNode}
+          {...commonProps}
+          onCheckInstalled={onModelCheckInstalled}
         />
       );
     default:

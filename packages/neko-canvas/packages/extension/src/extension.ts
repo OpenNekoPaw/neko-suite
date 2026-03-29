@@ -107,6 +107,15 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
         canvasEditorProvider.updateShape(shapeId, updates),
       deleteShape: (canvasId, shapeId) => canvasEditorProvider.deleteShape(shapeId),
     },
+    nodes: {
+      list: (type) => canvasEditorProvider.listNodes(type),
+      get: (nodeId) => canvasEditorProvider.getNode(nodeId),
+      update: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
+      create: (type, position, data) => canvasEditorProvider.createNode(type, position, data),
+      generateImage: (nodeId, cellId) => canvasEditorProvider.generateImageForNode(nodeId, cellId),
+      generateBatch: (nodeIds) => canvasEditorProvider.generateBatchForNodes(nodeIds),
+      onSelectionChange: canvasEditorProvider.onSelectionChange,
+    },
     events: {
       onDidChangeAssets: new vscode.EventEmitter<import('./api').AssetChangeEvent>().event,
       onDidChangeCanvas: canvasEditorProvider.onDidChangeCanvas,

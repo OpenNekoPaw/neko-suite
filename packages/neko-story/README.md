@@ -10,7 +10,7 @@
 
 ## Quick Reference
 
-- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线
+- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**分镜系统**（脚本视图 + 创意视图，规划中）
 - **入口**：`packages/extension/src/extension.ts`
 - **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
 - **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
@@ -26,9 +26,9 @@ VSCode 原生编辑器（.nks / .fountain 文件）
   └── Extension Host
         ├── @neko-story/parser → 剧本解析 → AST
         └── 命令
-              ├── Preview Story   → 开启 Webview 预览面板
-              ├── Convert to Timeline → 生成 .nkv 项目文件 → neko-cut
-              └── Generate Storyboard → 调用 neko-agent AI 生成分镜
+              ├── Preview Story        → 开启 Webview 预览面板
+              ├── Convert to Timeline  → 生成 .nkv 项目文件 → neko-cut
+              └── Generate Storyboard  → [规划] 脚本视图 + 创意视图 + AI 批量生图
 ```
 
 ### 包结构

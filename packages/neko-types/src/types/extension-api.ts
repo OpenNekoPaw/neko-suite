@@ -10,6 +10,15 @@
  * - neko-agent discovers and calls these APIs via vscode.extensions.getExtension()
  */
 
+import type { Event } from 'vscode';
+import type {
+  CanvasNode,
+  CanvasNodeType,
+  ShotCanvasNode,
+  SceneGroupCanvasNode,
+  GalleryCanvasNode,
+} from './canvas';
+
 // =============================================================================
 // NekoCut API
 // =============================================================================
@@ -142,6 +151,12 @@ export interface ShapeConfig {
   [key: string]: unknown;
 }
 
+/** Partial update data for canvas nodes managed by the agent */
+export type CanvasNodeUpdateData =
+  | Partial<ShotCanvasNode['data']>
+  | Partial<SceneGroupCanvasNode['data']>
+  | Partial<GalleryCanvasNode['data']>;
+
 /**
  * NekoCanvas Extension API
  * Exported by neko-canvas extension for asset and canvas manipulation
@@ -176,6 +191,46 @@ export interface NekoCanvasAPI {
      * @returns The ID of the created shape
      */
     addShape(canvasId: string, shape: ShapeConfig): Promise<string>;
+  };
+
+  nodes: {
+    /**
+     * List all nodes on the active canvas, optionally filtered by type
+     */
+    list(type?: CanvasNodeType): Promise<CanvasNode[]>;
+
+    /**
+     * Get a single node by ID
+     */
+    get(nodeId: string): Promise<CanvasNode | undefined>;
+
+    /**
+     * Update a node's data fields
+     */
+    update(nodeId: string, data: CanvasNodeUpdateData): Promise<void>;
+
+    /**
+     * Create a new node at the given canvas position
+     * @returns The ID of the created node
+     */
+    create(type: CanvasNodeType, position: { x: number; y: number }, data: object): Promise<string>;
+
+    /**
+     * Trigger image generation for a ShotNode or a specific GalleryCell.
+     * Delegates to BatchGenerationScheduler.
+     */
+    generateImage(nodeId: string, cellId?: string): Promise<void>;
+
+    /**
+     * Trigger batch image generation for multiple nodes
+     */
+    generateBatch(nodeIds: string[]): Promise<void>;
+
+    /**
+     * Fired whenever the canvas selection changes.
+     * Ambient context listener for neko-agent.
+     */
+    onSelectionChange: Event<CanvasNode[]>;
   };
 }
 
@@ -240,6 +295,23 @@ export interface NekoStoryAPI {
 }
 
 // =============================================================================
+// NekoSketch API
+// =============================================================================
+
+/**
+ * NekoSketch Extension API
+ * Exported by neko-sketch extension for programmatic canvas access.
+ * Primary use case: injecting AI-generated images as new layers.
+ */
+export interface NekoSketchAPI {
+  /**
+   * Import an image (base64-encoded PNG/JPEG) into the active sketch canvas
+   * as a new raster layer. No-ops silently when no sketch editor is open.
+   */
+  importImageData(base64: string, name: string): void;
+}
+
+// =============================================================================
 // Extension Discovery Constants
 // =============================================================================
 
@@ -251,4 +323,5 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_CANVAS: 'neko.nekocanvas',
   NEKO_AGENT: 'neko.nekoagent',
   NEKO_STORY: 'neko.neko-story',
+  NEKO_SKETCH: 'neko.neko-sketch',
 } as const;

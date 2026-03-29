@@ -5,7 +5,24 @@
 /**
  * Canvas node type discriminator
  */
-export type CanvasNodeType = 'media' | 'storyboard' | 'annotation' | 'group';
+export type CanvasNodeType =
+  // Core nodes
+  | 'media'
+  | 'storyboard'
+  | 'annotation'
+  | 'group'
+  // Rich content nodes
+  | 'text'
+  | 'artboard'
+  // Storyboard system
+  | 'shot'
+  | 'scene'
+  | 'gallery'
+  // Content reference nodes
+  | 'script'
+  | 'document'
+  | 'model'
+  | 'canvas-embed';
 
 /**
  * Connection anchor position on a node
@@ -132,6 +149,248 @@ export interface GroupCanvasNode extends CanvasNodeBase {
   };
 }
 
+// =============================================================================
+// Rich Content Nodes (text / artboard)
+// =============================================================================
+
+export interface TextNodeStyle {
+  fontSize?: number;
+  fontWeight?: 'normal' | 'bold';
+  color?: string;
+  backgroundColor?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  lineHeight?: number;
+  padding?: number;
+}
+
+/**
+ * Rich text node - supports plain text and Markdown
+ */
+export interface TextCanvasNode extends CanvasNodeBase {
+  type: 'text';
+  data: {
+    content: string;
+    format?: 'plain' | 'markdown';
+    style?: TextNodeStyle;
+  };
+}
+
+export type ArtboardPreset = 'custom' | '1080p' | '4k' | 'instagram' | 'story' | 'youtube';
+
+/**
+ * Artboard node - fixed-size exportable canvas region
+ */
+export interface ArtboardCanvasNode extends CanvasNodeBase {
+  type: 'artboard';
+  data: {
+    name: string;
+    description?: string;
+    backgroundColor?: string;
+    showBorder?: boolean;
+    preset?: ArtboardPreset;
+  };
+}
+
+// =============================================================================
+// Storyboard System (shot / scene / gallery)
+// =============================================================================
+
+/** Shot scale codes following cinematography conventions */
+export type ShotScale = 'ECU' | 'CU' | 'MCU' | 'MS' | 'MLS' | 'LS' | 'VLS' | 'ELS';
+
+/** Camera movement type */
+export type CameraMovement =
+  | 'static'
+  | 'pan'
+  | 'tilt'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'dolly'
+  | 'dolly-in'
+  | 'dolly-out'
+  | 'handheld'
+  | 'crane';
+
+/** Camera angle */
+export type CameraAngle = 'eye-level' | 'high-angle' | 'low-angle' | 'bird-eye' | 'dutch';
+
+/** Generation status for a shot or gallery cell */
+export type ShotGenerationStatus = 'idle' | 'pending' | 'generating' | 'done' | 'error';
+
+/** A single generated image candidate */
+export interface GeneratedImageVersion {
+  id: string;
+  /** Base64 data URL or asset path */
+  dataUrl: string;
+  prompt: string;
+  timestamp: number;
+  /** Whether this is the currently selected candidate */
+  selected: boolean;
+}
+
+/** Character reference within a shot */
+export interface ShotCharacter {
+  characterName: string;
+  /** GalleryNode id used for IP-Adapter reference */
+  referenceNodeId?: string;
+  emotion?: string;
+}
+
+/**
+ * Shot node - a single storyboard panel with full production metadata
+ */
+export interface ShotCanvasNode extends CanvasNodeBase {
+  type: 'shot';
+  data: {
+    shotNumber: number;
+    /** Parent SceneGroupNode id */
+    sceneGroupId?: string;
+    /** Estimated duration in seconds */
+    duration: number;
+    visualDescription: string;
+    characters: ShotCharacter[];
+    shotScale: ShotScale;
+    cameraMovement?: CameraMovement;
+    cameraAngle?: CameraAngle;
+    characterAction: string;
+    emotion: string[];
+    sceneTags: string[];
+    /** GalleryNode id for background/IP-Adapter reference */
+    referenceNodeId?: string;
+    /** Currently displayed image (data URL or asset path) */
+    generatedImage?: string;
+    generationStatus: ShotGenerationStatus;
+    generationHistory: GeneratedImageVersion[];
+    /** Script dialogue line */
+    dialogue?: string;
+    /** Voice-over text */
+    voiceOver?: string;
+    /** Sound effect cue */
+    soundCue?: string;
+  };
+}
+
+/**
+ * Scene group node - semantic container for a sequence of ShotNodes
+ */
+export interface SceneGroupCanvasNode extends CanvasNodeBase {
+  type: 'scene';
+  data: {
+    sceneTitle: string;
+    sceneNumber: number;
+    location?: string;
+    timeOfDay?: string;
+    /** Ordered shot node IDs (children remain in canvasData.nodes) */
+    shotIds: string[];
+  };
+}
+
+/** Gallery preset layout */
+export type GalleryPreset =
+  | 'character-3view'
+  | 'character-4view'
+  | 'expression-9'
+  | 'turnaround-8'
+  | 'scene-views'
+  | 'custom';
+
+/** A single cell within a GalleryNode */
+export interface GalleryCell {
+  id: string;
+  label: string;
+  /** Base64 data URL or asset path */
+  image?: string;
+  prompt?: string;
+  generationStatus: ShotGenerationStatus;
+  /** Costume variant label for character consistency */
+  costumeLabel?: string;
+  generationHistory?: GeneratedImageVersion[];
+}
+
+/**
+ * Gallery node - multi-view character reference sheet (3-view, 9-expression, etc.)
+ */
+export interface GalleryCanvasNode extends CanvasNodeBase {
+  type: 'gallery';
+  data: {
+    preset: GalleryPreset;
+    rows: number;
+    cols: number;
+    cells: GalleryCell[];
+    globalPromptPrefix?: string;
+    characterName?: string;
+  };
+}
+
+// =============================================================================
+// Content Reference Nodes (script / document / model / canvas-embed)
+// =============================================================================
+
+/** A scene entry returned by neko-story getScriptIndex */
+export interface ScriptScene {
+  id: string;
+  title: string;
+  lineStart: number;
+  lineEnd: number;
+}
+
+/**
+ * Script node - TOC-mode reference to a .nks / .fountain screenplay
+ */
+export interface ScriptCanvasNode extends CanvasNodeBase {
+  type: 'script';
+  data: {
+    /** Relative or absolute path to script file */
+    scriptPath: string;
+    scriptTitle: string;
+    /** Scene list from getScriptIndex() — structure only, no full text */
+    scenes: ScriptScene[];
+    /** Linked SceneGroupNode id for scene → shot navigation */
+    linkedSceneGroupId?: string;
+  };
+}
+
+/**
+ * Document node - thumbnail preview for PDF/DOCX/EPUB files
+ */
+export interface DocumentCanvasNode extends CanvasNodeBase {
+  type: 'document';
+  data: {
+    docPath: string;
+    docType: 'pdf' | 'docx' | 'epub' | 'cbz';
+    title: string;
+    /** Base64 cover thumbnail */
+    thumbnailData?: string;
+  };
+}
+
+/**
+ * Model node - AI model reference card or workflow connector
+ */
+export interface ModelCanvasNode extends CanvasNodeBase {
+  type: 'model';
+  data: {
+    modelPath: string;
+    modelName: string;
+    modelType: 'lora' | 'checkpoint' | 'controlnet' | 'vae';
+    /** reference: info card; workflow: has output port → connects to ShotNode */
+    role: 'reference' | 'workflow';
+    installedVersion?: string;
+  };
+}
+
+/**
+ * Canvas embed node - nested .nkc reference with thumbnail
+ */
+export interface CanvasEmbedCanvasNode extends CanvasNodeBase {
+  type: 'canvas-embed';
+  data: {
+    canvasPath: string;
+    canvasTitle: string;
+    thumbnailData?: string;
+  };
+}
+
 /**
  * Union type of all canvas node types
  */
@@ -139,7 +398,16 @@ export type CanvasNode =
   | MediaCanvasNode
   | StoryboardCanvasNode
   | AnnotationCanvasNode
-  | GroupCanvasNode;
+  | GroupCanvasNode
+  | TextCanvasNode
+  | ArtboardCanvasNode
+  | ShotCanvasNode
+  | SceneGroupCanvasNode
+  | GalleryCanvasNode
+  | ScriptCanvasNode
+  | DocumentCanvasNode
+  | ModelCanvasNode
+  | CanvasEmbedCanvasNode;
 
 // =============================================================================
 // Connection Types
@@ -241,6 +509,42 @@ export function isGroupNode(node: CanvasNode): node is GroupCanvasNode {
   return node.type === 'group';
 }
 
+export function isTextNode(node: CanvasNode): node is TextCanvasNode {
+  return node.type === 'text';
+}
+
+export function isArtboardNode(node: CanvasNode): node is ArtboardCanvasNode {
+  return node.type === 'artboard';
+}
+
+export function isShotNode(node: CanvasNode): node is ShotCanvasNode {
+  return node.type === 'shot';
+}
+
+export function isSceneGroupNode(node: CanvasNode): node is SceneGroupCanvasNode {
+  return node.type === 'scene';
+}
+
+export function isGalleryNode(node: CanvasNode): node is GalleryCanvasNode {
+  return node.type === 'gallery';
+}
+
+export function isScriptNode(node: CanvasNode): node is ScriptCanvasNode {
+  return node.type === 'script';
+}
+
+export function isDocumentNode(node: CanvasNode): node is DocumentCanvasNode {
+  return node.type === 'document';
+}
+
+export function isModelNode(node: CanvasNode): node is ModelCanvasNode {
+  return node.type === 'model';
+}
+
+export function isCanvasEmbedNode(node: CanvasNode): node is CanvasEmbedCanvasNode {
+  return node.type === 'canvas-embed';
+}
+
 // =============================================================================
 // Port Helpers
 // =============================================================================
@@ -265,6 +569,27 @@ export const GROUP_NODE_PORTS: PortDefinition[] = [
   { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
 ];
 
+/** Shot node: output image port for IP-Adapter reference */
+export const SHOT_NODE_PORTS: PortDefinition[] = [
+  { id: 'img-out', type: 'output', position: 'right', dataType: 'image', label: 'Image' },
+];
+
+/** Scene group node: pass-through ports */
+export const SCENE_NODE_PORTS: PortDefinition[] = [
+  { id: 'in', type: 'input', position: 'left', dataType: 'any', label: 'Input' },
+  { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
+];
+
+/** Gallery node: output image port (cell images → IP-Adapter) */
+export const GALLERY_NODE_PORTS: PortDefinition[] = [
+  { id: 'img-out', type: 'output', position: 'right', dataType: 'image', label: 'Reference' },
+];
+
+/** Model node (workflow role): output port → ShotNode model selector */
+export const MODEL_WORKFLOW_PORTS: PortDefinition[] = [
+  { id: 'model-out', type: 'output', position: 'right', dataType: 'any', label: 'Model' },
+];
+
 /**
  * Get default ports for a node type.
  * Returns empty array for types that use legacy anchors.
@@ -279,10 +604,64 @@ export function getDefaultPorts(nodeType: CanvasNodeType): PortDefinition[] {
       return ANNOTATION_NODE_PORTS;
     case 'group':
       return GROUP_NODE_PORTS;
+    case 'shot':
+      return SHOT_NODE_PORTS;
+    case 'scene':
+      return SCENE_NODE_PORTS;
+    case 'gallery':
+      return GALLERY_NODE_PORTS;
+    // text, artboard, script, document, canvas-embed: no default ports
     default:
       return [];
   }
 }
+
+// =============================================================================
+// Rich Content Constants
+// =============================================================================
+
+export const DEFAULT_TEXT_STYLE: Required<TextNodeStyle> = {
+  fontSize: 14,
+  fontWeight: 'normal',
+  color: '#e5e5e5',
+  backgroundColor: 'transparent',
+  textAlign: 'left',
+  lineHeight: 1.5,
+  padding: 12,
+};
+
+export const ARTBOARD_PRESETS: Record<
+  ArtboardPreset,
+  { width: number; height: number; label: string }
+> = {
+  custom: { width: 800, height: 600, label: 'Custom' },
+  '1080p': { width: 1920, height: 1080, label: '1080p (16:9)' },
+  '4k': { width: 3840, height: 2160, label: '4K (16:9)' },
+  instagram: { width: 1080, height: 1080, label: 'Instagram (1:1)' },
+  story: { width: 1080, height: 1920, label: 'Story (9:16)' },
+  youtube: { width: 1280, height: 720, label: 'YouTube (16:9)' },
+};
+
+/** Pre-defined gallery presets with layout and cell labels */
+export const GALLERY_PRESET_CONFIGS: Record<
+  GalleryPreset,
+  { rows: number; cols: number; labels: string[] }
+> = {
+  'character-3view': { rows: 1, cols: 3, labels: ['正面', '侧面', '背面'] },
+  'character-4view': { rows: 1, cols: 4, labels: ['正面', '3/4 正面', '侧面', '背面'] },
+  'expression-9': {
+    rows: 3,
+    cols: 3,
+    labels: ['开心', '悲伤', '愤怒', '恐惧', '惊讶', '厌恶', '平静', '轻蔑', '困惑'],
+  },
+  'turnaround-8': {
+    rows: 2,
+    cols: 4,
+    labels: ['0°', '45°', '90°', '135°', '180°', '225°', '270°', '315°'],
+  },
+  'scene-views': { rows: 1, cols: 3, labels: ['全景', '中景', '特写'] },
+  custom: { rows: 2, cols: 2, labels: [] },
+};
 
 /**
  * Check if two port data types are compatible for connection.

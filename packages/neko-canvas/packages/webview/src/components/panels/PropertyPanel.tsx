@@ -86,6 +86,9 @@ export function PropertyPanel({
   const isMulti = selectedNodes.length > 1;
   const node = selectedNodes[0]!;
 
+  // Creator nodes (shot/scene/gallery) collapse technical fields by default
+  const isCreatorNode = node.type === 'shot' || node.type === 'scene' || node.type === 'gallery';
+
   return (
     <div
       className="flex flex-col h-full overflow-y-auto"
@@ -109,82 +112,84 @@ export function PropertyPanel({
         <MultiSelectionInfo nodes={selectedNodes} />
       ) : (
         <>
-          {/* Position & Size */}
-          <CollapsibleSection title={t('panel.transform')}>
-            <div className="grid grid-cols-2 gap-2">
-              <NumberField
-                label="X"
-                value={node.position.x}
-                onChange={(v) => onUpdateNode(node.id, { position: { ...node.position, x: v } })}
-              />
-              <NumberField
-                label="Y"
-                value={node.position.y}
-                onChange={(v) => onUpdateNode(node.id, { position: { ...node.position, y: v } })}
-              />
-              <NumberField
-                label="W"
-                value={node.size.width}
-                onChange={(v) =>
-                  onUpdateNode(node.id, { size: { ...node.size, width: Math.max(50, v) } })
-                }
-              />
-              <NumberField
-                label="H"
-                value={node.size.height}
-                onChange={(v) =>
-                  onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })
-                }
-              />
-              <NumberField
-                label="R"
-                value={node.rotation ?? 0}
-                onChange={(v) =>
-                  onUpdateNode(node.id, { rotation: ((v % 360) + 360) % 360 })
-                }
-              />
-            </div>
-          </CollapsibleSection>
-
-          {/* Layer */}
-          <CollapsibleSection title={t('panel.layer')}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-                Z-Index: {node.zIndex}
-              </span>
-              <button
-                style={{
-                  fontSize: 11,
-                  padding: '3px 8px',
-                  borderRadius: 5,
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'background 0.15s',
-                  color: node.locked ? '#ffffff' : '#ffffff',
-                  backgroundColor: node.locked ? '#f59e0b' : '#6b7280',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = node.locked ? '#d97706' : '#4b5563';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = node.locked ? '#f59e0b' : '#6b7280';
-                }}
-                onClick={() => onToggleLock(node.id)}
-              >
-                {node.locked ? '🔒 ' + t('menu.unlock') : '🔓 ' + t('menu.lock')}
-              </button>
-            </div>
-          </CollapsibleSection>
-
           {/* Node-specific properties */}
           <NodeSpecificProperties
             node={node}
             onUpdateData={(data) => onUpdateNodeData(node.id, data)}
           />
 
-          {/* Port editor */}
-          {onUpdatePorts && (
-            <PortEditor node={node} onUpdatePorts={onUpdatePorts} />
+          {/* Technical sections — hidden for creator nodes */}
+          {!isCreatorNode && (
+            <>
+              <CollapsibleSection title={t('panel.transform')}>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="X"
+                    value={node.position.x}
+                    onChange={(v) =>
+                      onUpdateNode(node.id, { position: { ...node.position, x: v } })
+                    }
+                  />
+                  <NumberField
+                    label="Y"
+                    value={node.position.y}
+                    onChange={(v) =>
+                      onUpdateNode(node.id, { position: { ...node.position, y: v } })
+                    }
+                  />
+                  <NumberField
+                    label="W"
+                    value={node.size.width}
+                    onChange={(v) =>
+                      onUpdateNode(node.id, { size: { ...node.size, width: Math.max(50, v) } })
+                    }
+                  />
+                  <NumberField
+                    label="H"
+                    value={node.size.height}
+                    onChange={(v) =>
+                      onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })
+                    }
+                  />
+                  <NumberField
+                    label="R"
+                    value={node.rotation ?? 0}
+                    onChange={(v) => onUpdateNode(node.id, { rotation: ((v % 360) + 360) % 360 })}
+                  />
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection title={t('panel.layer')}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+                    Z-Index: {node.zIndex}
+                  </span>
+                  <button
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      borderRadius: 5,
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s',
+                      color: '#ffffff',
+                      backgroundColor: node.locked ? '#f59e0b' : '#6b7280',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = node.locked ? '#d97706' : '#4b5563';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = node.locked ? '#f59e0b' : '#6b7280';
+                    }}
+                    onClick={() => onToggleLock(node.id)}
+                  >
+                    {node.locked ? '🔒 ' + t('menu.unlock') : '🔓 ' + t('menu.lock')}
+                  </button>
+                </div>
+              </CollapsibleSection>
+
+              {onUpdatePorts && <PortEditor node={node} onUpdatePorts={onUpdatePorts} />}
+            </>
           )}
 
           {/* Actions */}
@@ -223,13 +228,8 @@ export function PropertyPanel({
 // =============================================================================
 
 function PanelHeader({ title }: { title: string }) {
-  return (
-    <div className="neko-panel-header">
-      {title}
-    </div>
-  );
+  return <div className="neko-panel-header">{title}</div>;
 }
-
 
 function NumberField({
   label,
@@ -357,10 +357,7 @@ function NodeSpecificProperties({
         <CollapsibleSection title={t('panel.storyboard')}>
           <div className="space-y-2">
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.title')}
               </label>
               <input
@@ -376,10 +373,7 @@ function NodeSpecificProperties({
               />
             </div>
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.description')}
               </label>
               <textarea
@@ -404,10 +398,7 @@ function NodeSpecificProperties({
         <CollapsibleSection title={t('panel.textStyle')}>
           <div className="space-y-2">
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.fontSize')}
               </label>
               <select
@@ -457,10 +448,7 @@ function NodeSpecificProperties({
               </button>
             </div>
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.textAlign')}
               </label>
               <div className="flex gap-1">
@@ -484,9 +472,7 @@ function NodeSpecificProperties({
                           ? 'rgba(59,130,246,0.45)'
                           : 'var(--control-border)',
                       color:
-                        (textStyle.textAlign ?? 'left') === align
-                          ? '#93bbfd'
-                          : 'var(--neko-fg)',
+                        (textStyle.textAlign ?? 'left') === align ? '#93bbfd' : 'var(--neko-fg)',
                     }}
                     onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
                   >
@@ -517,10 +503,7 @@ function NodeSpecificProperties({
         <CollapsibleSection title={t('panel.group')}>
           <div className="space-y-2">
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.groupLabel')}
               </label>
               <input
@@ -547,10 +530,7 @@ function NodeSpecificProperties({
               />
             </div>
             <div>
-              <label
-                className="text-xs block mb-1"
-                style={{ color: 'var(--neko-fg-secondary)' }}
-              >
+              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
                 {t('panel.groupChildren')} ({childIds.length})
               </label>
               <div className="space-y-0.5 max-h-[120px] overflow-auto">
@@ -609,9 +589,342 @@ function NodeSpecificProperties({
         </CollapsibleSection>
       );
 
+    case 'shot':
+      return <ShotProperties data={data} onUpdateData={onUpdateData} />;
+
+    case 'scene':
+      return <SceneProperties data={data} onUpdateData={onUpdateData} />;
+
+    case 'gallery':
+      return <GalleryProperties data={data} onUpdateData={onUpdateData} />;
+
     default:
       return null;
   }
+}
+
+// =============================================================================
+// Creator node property panels
+// =============================================================================
+
+const SHOT_SCALE_OPTIONS = [
+  { value: 'ECU', label: 'ECU — 极近景' },
+  { value: 'CU', label: 'CU — 近景' },
+  { value: 'MCU', label: 'MCU — 中近景' },
+  { value: 'MS', label: 'MS — 中景' },
+  { value: 'MLS', label: 'MLS — 中远景' },
+  { value: 'LS', label: 'LS — 全景' },
+  { value: 'VLS', label: 'VLS — 大全景' },
+  { value: 'ELS', label: 'ELS — 远景' },
+];
+
+const CAMERA_MOVEMENT_OPTIONS = [
+  { value: '', label: '无' },
+  { value: 'static', label: '静止' },
+  { value: 'pan', label: '摇镜 Pan' },
+  { value: 'tilt', label: '俯仰 Tilt' },
+  { value: 'zoom-in', label: '推镜 Zoom In' },
+  { value: 'zoom-out', label: '拉镜 Zoom Out' },
+  { value: 'dolly', label: '移镜 Dolly' },
+  { value: 'handheld', label: '手持 Handheld' },
+];
+
+const CAMERA_ANGLE_OPTIONS = [
+  { value: '', label: '无' },
+  { value: 'eye-level', label: '平视' },
+  { value: 'high-angle', label: '俯拍' },
+  { value: 'low-angle', label: '仰拍' },
+  { value: 'bird-eye', label: '鸟瞰' },
+  { value: 'dutch', label: '斜角' },
+];
+
+const TIME_OF_DAY_OPTIONS = [
+  { value: '', label: '不限' },
+  { value: 'dawn', label: '黎明' },
+  { value: 'morning', label: '上午' },
+  { value: 'noon', label: '正午' },
+  { value: 'afternoon', label: '下午' },
+  { value: 'dusk', label: '黄昏' },
+  { value: 'night', label: '夜晚' },
+];
+
+const GALLERY_PRESET_OPTIONS = [
+  { value: 'character-3view', label: '三视图' },
+  { value: 'character-4view', label: '四视图' },
+  { value: 'expression-9', label: '表情包 (9格)' },
+  { value: 'turnaround-8', label: '转身动画 (8帧)' },
+  { value: 'scene-views', label: '场景三视' },
+  { value: 'custom', label: '自定义' },
+];
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+      {children}
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+  minHeight = 52,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  minHeight?: number;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <textarea
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
+        style={{
+          backgroundColor: 'var(--control-bg)',
+          borderColor: 'var(--control-border)',
+          color: 'var(--control-fg)',
+          minHeight,
+        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = 'var(--node-selected)';
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = 'var(--control-border)';
+        }}
+      />
+    </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <input
+        type="text"
+        className="w-full text-xs px-2 py-1 rounded border outline-none"
+        style={{
+          backgroundColor: 'var(--control-bg)',
+          borderColor: 'var(--control-border)',
+          color: 'var(--control-fg)',
+        }}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = 'var(--node-selected)';
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = 'var(--control-border)';
+        }}
+      />
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <select
+        className="w-full text-xs px-2 py-1 rounded border outline-none"
+        style={{
+          backgroundColor: 'var(--control-bg)',
+          borderColor: 'var(--control-border)',
+          color: 'var(--control-fg)',
+        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function ShotProperties({
+  data,
+  onUpdateData,
+}: {
+  data: Record<string, unknown>;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}) {
+  return (
+    <>
+      <CollapsibleSection title="画面">
+        <div className="space-y-2">
+          <TextareaField
+            label="画面描述"
+            value={(data.visualDescription as string) ?? ''}
+            onChange={(v) => onUpdateData({ visualDescription: v })}
+            minHeight={72}
+          />
+          <div className="grid grid-cols-3 gap-1.5">
+            <SelectField
+              label="景别"
+              value={(data.shotScale as string) ?? 'MS'}
+              options={SHOT_SCALE_OPTIONS}
+              onChange={(v) => onUpdateData({ shotScale: v })}
+            />
+            <SelectField
+              label="运镜"
+              value={(data.cameraMovement as string) ?? ''}
+              options={CAMERA_MOVEMENT_OPTIONS}
+              onChange={(v) => onUpdateData({ cameraMovement: v || undefined })}
+            />
+            <SelectField
+              label="角度"
+              value={(data.cameraAngle as string) ?? ''}
+              options={CAMERA_ANGLE_OPTIONS}
+              onChange={(v) => onUpdateData({ cameraAngle: v || undefined })}
+            />
+          </div>
+          <div>
+            <FieldLabel>时长 (秒)</FieldLabel>
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              className="w-full text-xs px-2 py-1 rounded border outline-none"
+              style={{
+                backgroundColor: 'var(--control-bg)',
+                borderColor: 'var(--control-border)',
+                color: 'var(--control-fg)',
+              }}
+              value={(data.duration as number) ?? 3}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v > 0) onUpdateData({ duration: v });
+              }}
+            />
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="台词与音效" defaultExpanded={false}>
+        <div className="space-y-2">
+          <TextareaField
+            label="台词"
+            value={(data.dialogue as string) ?? ''}
+            onChange={(v) => onUpdateData({ dialogue: v || undefined })}
+          />
+          <TextareaField
+            label="旁白"
+            value={(data.voiceOver as string) ?? ''}
+            onChange={(v) => onUpdateData({ voiceOver: v || undefined })}
+          />
+          <TextField
+            label="音效提示"
+            value={(data.soundCue as string) ?? ''}
+            onChange={(v) => onUpdateData({ soundCue: v || undefined })}
+            placeholder="例：脚步声、风声…"
+          />
+        </div>
+      </CollapsibleSection>
+    </>
+  );
+}
+
+function SceneProperties({
+  data,
+  onUpdateData,
+}: {
+  data: Record<string, unknown>;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}) {
+  return (
+    <CollapsibleSection title="场景信息">
+      <div className="space-y-2">
+        <TextField
+          label="场景标题"
+          value={(data.sceneTitle as string) ?? ''}
+          onChange={(v) => onUpdateData({ sceneTitle: v })}
+          placeholder="例：INT. 办公室 - 白天"
+        />
+        <div className="grid grid-cols-2 gap-1.5">
+          <TextField
+            label="地点"
+            value={(data.location as string) ?? ''}
+            onChange={(v) => onUpdateData({ location: v || undefined })}
+            placeholder="例：办公室"
+          />
+          <SelectField
+            label="时间"
+            value={(data.timeOfDay as string) ?? ''}
+            options={TIME_OF_DAY_OPTIONS}
+            onChange={(v) => onUpdateData({ timeOfDay: v || undefined })}
+          />
+        </div>
+        <div>
+          <FieldLabel>包含镜头数</FieldLabel>
+          <span className="text-xs" style={{ color: 'var(--neko-fg)' }}>
+            {((data.shotIds as string[]) ?? []).length}
+          </span>
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function GalleryProperties({
+  data,
+  onUpdateData,
+}: {
+  data: Record<string, unknown>;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}) {
+  return (
+    <CollapsibleSection title="画廊设置">
+      <div className="space-y-2">
+        <TextField
+          label="角色名"
+          value={(data.characterName as string) ?? ''}
+          onChange={(v) => onUpdateData({ characterName: v || undefined })}
+          placeholder="例：Alice"
+        />
+        <SelectField
+          label="预设布局"
+          value={(data.preset as string) ?? 'character-3view'}
+          options={GALLERY_PRESET_OPTIONS}
+          onChange={(v) => onUpdateData({ preset: v })}
+        />
+        <TextareaField
+          label="全局提示词前缀"
+          value={(data.globalPromptPrefix as string) ?? ''}
+          onChange={(v) => onUpdateData({ globalPromptPrefix: v || undefined })}
+          minHeight={48}
+        />
+      </div>
+    </CollapsibleSection>
+  );
 }
 
 function ConnectionProperties({
@@ -693,12 +1006,19 @@ function ConnectionProperties({
 
 function getNodeTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    media: 'Media',
-    storyboard: 'Storyboard',
-    annotation: 'Annotation',
-    group: 'Group',
-    text: 'Text',
-    artboard: 'Artboard',
+    media: '媒体',
+    storyboard: '场景板',
+    annotation: '备注',
+    group: '组',
+    text: '文本',
+    artboard: '画板',
+    shot: '镜头',
+    scene: '场景',
+    gallery: '角色画廊',
+    script: '剧本',
+    document: '文档',
+    model: '模型',
+    'canvas-embed': '嵌入画布',
   };
   return labels[type] ?? type;
 }

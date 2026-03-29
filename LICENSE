@@ -21,3 +21,7 @@ licensed under different open-source licenses:
 
 Each package's license is also specified in its package.json or Cargo.toml file.
 When in doubt, refer to the license field of the specific package you are using.
+
+Additionally, please review:
+- ETHICS.md    — Ethical use guidelines (community expectations, not license terms)
+- TRADEMARK.md — Trademark policy for the Neko Suite brand and module names

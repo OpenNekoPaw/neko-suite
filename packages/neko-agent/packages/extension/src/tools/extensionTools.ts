@@ -6,8 +6,15 @@
  */
 
 import * as vscode from 'vscode';
-import type { NekoCutAPI, NekoCanvasAPI, NekoStoryAPI, ToolParameters } from '@neko/shared';
+import type {
+  NekoCutAPI,
+  NekoCanvasAPI,
+  NekoStoryAPI,
+  NekoSketchAPI,
+  ToolParameters,
+} from '@neko/shared';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
+import type { MediaGenerationService } from '@neko/platform';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
 import { getLogger } from '../base';
@@ -335,6 +342,218 @@ export function createNekoCanvasTools(): Tool[] {
           fill: shape.fill as string | undefined,
           stroke: shape.stroke as string | undefined,
         });
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // Storyboard / Node tools (Phase 2)
+    // -------------------------------------------------------------------------
+    {
+      name: 'canvas_list_nodes',
+      description:
+        'List all nodes on the active canvas. Optionally filter by type (shot, scene, gallery, media, annotation, etc.).',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            description: 'Optional node type filter',
+          },
+        },
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.list(args.type as import('@neko/shared').CanvasNodeType | undefined);
+      },
+    },
+    {
+      name: 'canvas_get_node',
+      description: 'Get full details of a single canvas node by its ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: 'Canvas node ID' },
+        },
+        required: ['nodeId'],
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.get(args.nodeId as string);
+      },
+    },
+    {
+      name: 'canvas_update_node',
+      description:
+        "Update a canvas node's data fields. Use this to set shot descriptions, characters, " +
+        'camera settings, or generation parameters. Always write generation params to the node ' +
+        'before calling canvas_generate_image so they persist across sessions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: 'Canvas node ID' },
+          data: {
+            type: 'object',
+            description:
+              'Partial node data to merge. For ShotNode: visualDescription, shotScale, ' +
+              'cameraMovement, characters[], emotion[], dialogue. ' +
+              'For SceneGroupNode: sceneTitle, location, timeOfDay.',
+          },
+        },
+        required: ['nodeId', 'data'],
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.update(args.nodeId as string, args.data as Record<string, unknown>);
+      },
+    },
+    {
+      name: 'canvas_create_node',
+      description: "Create a new node on the active canvas. Returns the new node's ID.",
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: [
+              'shot',
+              'scene',
+              'gallery',
+              'annotation',
+              'media',
+              'storyboard',
+              'text',
+              'artboard',
+              'script',
+              'document',
+              'model',
+            ],
+            description: 'Node type',
+          },
+          x: { type: 'number', description: 'Canvas X position' },
+          y: { type: 'number', description: 'Canvas Y position' },
+          data: {
+            type: 'object',
+            description:
+              'Initial node data. For shot: { shotNumber, duration, visualDescription, shotScale }. ' +
+              'For scene: { sceneTitle, sceneNumber }. For gallery: { preset, rows, cols, cells }.',
+          },
+        },
+        required: ['type', 'x', 'y', 'data'],
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.create(
+          args.type as import('@neko/shared').CanvasNodeType,
+          { x: args.x as number, y: args.y as number },
+          args.data as object,
+        );
+      },
+    },
+    {
+      name: 'canvas_generate_image',
+      description:
+        'Trigger image generation for a ShotNode or a specific GalleryCell. ' +
+        'Call canvas_update_node first to write the prompt/params to the node ' +
+        'so they are persisted. Generation runs asynchronously in the background.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: 'ShotNode or GalleryNode ID' },
+          cellId: {
+            type: 'string',
+            description: 'GalleryCell ID (required when nodeId is a GalleryNode)',
+          },
+        },
+        required: ['nodeId'],
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.generateImage(args.nodeId as string, args.cellId as string | undefined);
+      },
+    },
+    {
+      name: 'canvas_generate_batch',
+      description:
+        'Trigger image generation for multiple nodes at once. ' +
+        'Useful for generating all shots in a scene in one command. ' +
+        'Runs up to 2 generations concurrently via the scheduler.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of ShotNode IDs to generate images for',
+          },
+        },
+        required: ['nodeIds'],
+      },
+      execute: async (args) => {
+        const api = await getAPI();
+        return api.nodes.generateBatch(args.nodeIds as string[]);
+      },
+    },
+    {
+      name: 'set_project_generation_config',
+      description:
+        'Persist project-level generation parameters and model configuration. ' +
+        'These become the default for all nodes unless overridden per-node. ' +
+        'Always call this before batch generation to ensure params survive context compression.',
+      parameters: {
+        type: 'object',
+        properties: {
+          imageRatio: {
+            type: 'string',
+            enum: ['16:9', '9:16', '1:1', '4:3', '2.39:1'],
+            description: 'Image aspect ratio',
+          },
+          imageResolution: {
+            type: 'string',
+            enum: ['512', '720p', '1080p', '2K'],
+            description: 'Image resolution',
+          },
+          videoRatio: {
+            type: 'string',
+            enum: ['16:9', '9:16', '1:1'],
+            description: 'Video aspect ratio',
+          },
+          videoResolution: {
+            type: 'string',
+            enum: ['480p', '720p', '1080p'],
+            description: 'Video resolution',
+          },
+          videoDuration: { type: 'number', description: 'Video duration in seconds' },
+          videoFps: { type: 'number', enum: [24, 30], description: 'Video frame rate' },
+          imageModel: { type: 'string', description: 'Image generation model id' },
+          videoModel: { type: 'string', description: 'Video generation model id' },
+          audioModel: { type: 'string', description: 'Audio generation model id' },
+        },
+      },
+      execute: async (args) => {
+        const config: Record<string, unknown> = {};
+        if (args.imageRatio !== undefined)
+          config['neko.project.generation.image.ratio'] = args.imageRatio;
+        if (args.imageResolution !== undefined)
+          config['neko.project.generation.image.resolution'] = args.imageResolution;
+        if (args.videoRatio !== undefined)
+          config['neko.project.generation.video.ratio'] = args.videoRatio;
+        if (args.videoResolution !== undefined)
+          config['neko.project.generation.video.resolution'] = args.videoResolution;
+        if (args.videoDuration !== undefined)
+          config['neko.project.generation.video.duration'] = args.videoDuration;
+        if (args.videoFps !== undefined)
+          config['neko.project.generation.video.fps'] = args.videoFps;
+        if (args.imageModel !== undefined) config['neko.project.models.image'] = args.imageModel;
+        if (args.videoModel !== undefined) config['neko.project.models.video'] = args.videoModel;
+        if (args.audioModel !== undefined) config['neko.project.models.audio'] = args.audioModel;
+
+        const wsConfig = vscode.workspace.getConfiguration();
+        await Promise.all(
+          Object.entries(config).map(([key, value]) =>
+            wsConfig.update(key, value, vscode.ConfigurationTarget.Workspace),
+          ),
+        );
+        return { ok: true, updated: Object.keys(config) };
       },
     },
   ];
@@ -669,4 +888,123 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
   }
 
   return tools;
+}
+
+// =============================================================================
+// NekoSketch Tools
+// =============================================================================
+
+/**
+ * Create tools for NekoSketch AI integration.
+ * Returns empty array if NekoSketch is not installed or media service is unavailable.
+ *
+ * Tools:
+ * - SketchGenerate — Text-to-Image → import as new canvas layer
+ */
+export function createNekoSketchTools(media: MediaGenerationService | undefined): Tool[] {
+  const ext = vscode.extensions.getExtension<NekoSketchAPI>('neko.neko-sketch');
+
+  if (!ext) {
+    logger.info('NekoSketch extension not found, skipping NekoSketch tools');
+    return [];
+  }
+
+  if (!media) {
+    logger.info('MediaGenerationService unavailable, skipping NekoSketch tools');
+    return [];
+  }
+
+  const getAPI = async (): Promise<NekoSketchAPI> => {
+    if (ext.isActive) {
+      return ext.exports;
+    }
+    return ext.activate() as Promise<NekoSketchAPI>;
+  };
+
+  return [
+    {
+      name: 'SketchGenerate',
+      description:
+        'Generate a 2D image from a text prompt using AI and import it as a new layer in ' +
+        'the active neko-sketch canvas. Waits for generation to complete before importing. ' +
+        'Returns an error if no sketch editor is currently open.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Text description of the image to generate',
+          },
+          size: {
+            type: 'string',
+            enum: ['512x512', '1024x1024', '1792x1024', '1024x1792'],
+            description: 'Image dimensions (default: 1024x1024)',
+          },
+          layerName: {
+            type: 'string',
+            description: 'Name for the new layer (default: derived from prompt)',
+          },
+        },
+        required: ['prompt'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const prompt = args.prompt as string;
+        const sizeStr = (args.size as string | undefined) ?? '1024x1024';
+        const layerName =
+          (args.layerName as string | undefined) ??
+          `AI-${prompt.slice(0, 20).replace(/\s+/g, '-')}`;
+
+        // Submit generation task
+        const [w, h] = sizeStr.split('x').map(Number);
+        let task;
+        try {
+          task = await media.generateImage({ prompt, width: w, height: h });
+        } catch (err) {
+          return { error: `Image generation failed: ${String(err)}` };
+        }
+
+        // Wait for completion (up to 3 minutes)
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 3 * 60 * 1000);
+        } catch (err) {
+          return { error: `Waiting for image timed out or failed: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          return {
+            error: `Generation ${completed.status}${completed.error ? `: ${completed.error.message}` : ''}`,
+          };
+        }
+
+        const output = completed.outputs[0]!;
+        const imageUrl = output.url;
+
+        // Download image and convert to base64
+        let base64: string;
+        try {
+          const response = await fetch(imageUrl);
+          if (!response.ok) {
+            return { error: `Failed to download generated image: HTTP ${response.status}` };
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          base64 = Buffer.from(arrayBuffer).toString('base64');
+        } catch (err) {
+          return { error: `Failed to fetch generated image: ${String(err)}` };
+        }
+
+        // Import into the active sketch canvas
+        const api = await getAPI();
+        api.importImageData(base64, `${layerName}.png`);
+
+        logger.info(`SketchGenerate: imported layer "${layerName}" (${sizeStr})`);
+        return {
+          success: true,
+          message: `图像已生成并导入画布，图层名称：${layerName}`,
+          size: sizeStr,
+          taskId: task.id,
+        };
+      },
+    },
+  ];
 }

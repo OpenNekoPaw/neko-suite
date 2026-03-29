@@ -6,6 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import type { NekoSketchAPI } from '@neko/shared';
 import { SketchEditorProvider, PuppetEditorProvider } from './editor';
 import { LayerOutlineProvider, SketchStatusBar } from './views';
 import { setRootLogger, getRootLogger } from './utils/logger';
@@ -21,7 +22,7 @@ let sketchStatusBar: SketchStatusBar;
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
   const rootLogger = createVSCodeLogger('Neko Sketch', 'NekoSketch', context);
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
@@ -93,6 +94,14 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCommands(context, sketchEditorProvider);
 
   logger.info('Extension activated');
+
+  const api: NekoSketchAPI = {
+    importImageData(base64: string, name: string): void {
+      sketchEditorProvider.postImageData(base64, name);
+    },
+  };
+
+  return api;
 }
 
 /**

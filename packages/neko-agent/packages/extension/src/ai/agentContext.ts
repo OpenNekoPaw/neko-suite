@@ -82,6 +82,24 @@ export interface IAgentContext {
     media_type: string;
     data: string;
   }>;
+
+  // -------------------------------------------------------------------------
+  // Canvas 画布上下文（ambient context — auto-updated on selection change）
+  // -------------------------------------------------------------------------
+
+  /**
+   * Currently selected canvas nodes, injected automatically into the system
+   * prompt whenever the user selects nodes in neko-canvas.
+   * Updated via NekoCanvasAPI.nodes.onSelectionChange.
+   */
+  canvasContext?: {
+    selectedNodes: Array<{
+      nodeId: string;
+      type: string;
+      /** One-line human-readable summary (e.g. "#3 MS PAN — Alice meets Bob") */
+      summary: string;
+    }>;
+  };
 }
 
 /**

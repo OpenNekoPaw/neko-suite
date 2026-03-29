@@ -19,6 +19,16 @@ export interface CanvasSelection {
   connectionIds: string[];
 }
 
+export interface GenerationPanelState {
+  visible: boolean;
+  /** Target ShotNode or GalleryNode ID */
+  nodeId: string | null;
+  /** Target GalleryCell ID (null = shot-level generation) */
+  cellId?: string | null;
+  /** Pre-filled prompt from AutoPrompt or shot.visualDescription */
+  initialPrompt?: string;
+}
+
 export interface CanvasStore {
   // ==================== State ====================
   canvasData: CanvasData | null;
@@ -27,6 +37,12 @@ export interface CanvasStore {
   pendingConnectionSource: { nodeId: string; anchor: string } | null;
   /** Currently playing media node ID (only one at a time) */
   activePlayingNodeId: string | null;
+  /** Generation prompt panel state */
+  generationPanelState: GenerationPanelState;
+
+  // ==================== Generation Panel Actions ====================
+  openGenerationPanel: (nodeId: string, cellId?: string, initialPrompt?: string) => void;
+  closeGenerationPanel: () => void;
 
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
@@ -125,6 +141,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   isConnecting: false,
   pendingConnectionSource: null,
   activePlayingNodeId: null,
+  generationPanelState: { visible: false, nodeId: null, cellId: null },
+
+  openGenerationPanel: (nodeId, cellId, initialPrompt) =>
+    set({ generationPanelState: { visible: true, nodeId, cellId: cellId ?? null, initialPrompt } }),
+
+  closeGenerationPanel: () =>
+    set({ generationPanelState: { visible: false, nodeId: null, cellId: null } }),
 
   // ==================== Data Actions ====================
   setCanvasData: (data) => {

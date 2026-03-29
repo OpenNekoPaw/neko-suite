@@ -8,10 +8,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { loadNkc } from '@neko/shared';
+import type { CanvasNode, CanvasNodeType } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
 import { getLogger } from '../utils/logger';
+import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
 
@@ -54,6 +56,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly _onDidChangeCanvas = new vscode.EventEmitter<CanvasChangeEvent>();
   public readonly onDidChangeCanvas = this._onDidChangeCanvas.event;
 
+  private readonly _onSelectionChange = new vscode.EventEmitter<CanvasNode[]>();
+  public readonly onSelectionChange = this._onSelectionChange.event;
+
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private activeDocument: vscode.CustomDocument | undefined;
 
@@ -63,6 +68,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   // Shared neko-preview API for media playback
   private _previewApi: NekoPreviewAPI | null = null;
+  // Batch image generation scheduler
+  private readonly scheduler = new BatchGenerationScheduler();
   // Track active streams per panel for cleanup
   private _activeStreams = new Map<
     vscode.WebviewPanel,
@@ -215,6 +222,66 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
     await this.sendRequest('deleteShape', { shapeId });
     this._onDidChangeCanvas.fire({ type: 'delete', shapeId });
+  }
+
+  // ===========================================================================
+  // Node API — used by neko-agent Canvas MCP tools
+  // ===========================================================================
+
+  async listNodes(type?: CanvasNodeType): Promise<CanvasNode[]> {
+    if (!this.activeWebviewPanel) return [];
+    const result = await this.sendRequest<{ nodes: CanvasNode[] }>('nodes.list', { type });
+    return result.nodes;
+  }
+
+  async getNode(nodeId: string): Promise<CanvasNode | undefined> {
+    if (!this.activeWebviewPanel) return undefined;
+    const result = await this.sendRequest<{ node: CanvasNode | null }>('nodes.get', { nodeId });
+    return result.node ?? undefined;
+  }
+
+  async updateNode(nodeId: string, data: Record<string, unknown>): Promise<void> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    await this.sendRequest('nodes.update', { nodeId, data });
+    this._onDidChangeCanvas.fire({ type: 'update' });
+  }
+
+  async createNode(
+    type: CanvasNodeType,
+    position: { x: number; y: number },
+    data: object,
+  ): Promise<string> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<{ nodeId: string }>('nodes.create', {
+      type,
+      position,
+      data,
+    });
+    this._onDidChangeCanvas.fire({ type: 'add' });
+    return result.nodeId;
+  }
+
+  async generateImageForNode(nodeId: string, cellId?: string): Promise<void> {
+    this.scheduler.enqueue({
+      nodeId,
+      cellId,
+      params: { prompt: '' },
+      onProgress: (status, dataUrl) => {
+        this.activeWebviewPanel?.webview.postMessage({
+          type: 'generationProgress',
+          nodeId,
+          cellId,
+          status,
+          dataUrl,
+        });
+      },
+    });
+  }
+
+  async generateBatchForNodes(nodeIds: string[]): Promise<void> {
+    for (const nodeId of nodeIds) {
+      await this.generateImageForNode(nodeId);
+    }
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
@@ -585,6 +652,137 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'generateForNode': {
+        // Delegate image generation to BatchGenerationScheduler → neko-agent
+        const nodeId = message.nodeId as string;
+        const cellId = message.cellId as string | undefined;
+        const rawParams = message.params as Record<string, unknown>;
+        if (!nodeId || typeof rawParams['prompt'] !== 'string') break;
+        const params = rawParams as typeof rawParams & { prompt: string };
+
+        this.scheduler.enqueue({
+          nodeId,
+          cellId,
+          params,
+          onProgress: (status: string, dataUrl?: string) => {
+            webviewPanel.webview.postMessage({
+              type: 'generationProgress',
+              nodeId,
+              cellId,
+              status,
+              dataUrl,
+            });
+          },
+        });
+        break;
+      }
+
+      case 'buildPrompt': {
+        // Delegate AutoPrompt to neko-agent's buildPrompt command
+        const { nodeId, shotData } = message;
+        try {
+          const prompt = await vscode.commands.executeCommand<string>(
+            'neko.agent.buildPrompt',
+            shotData,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'buildPromptResult',
+            nodeId,
+            prompt: prompt ?? '',
+          });
+        } catch {
+          webviewPanel.webview.postMessage({
+            type: 'buildPromptResult',
+            nodeId,
+            prompt: '',
+            error: 'neko-agent not available',
+          });
+        }
+        break;
+      }
+
+      case 'getScriptIndex': {
+        // Fetch scene TOC from neko-story
+        const scriptPath = message.scriptPath as string;
+        const requestNodeId = message.nodeId as string;
+        try {
+          const index = await vscode.commands.executeCommand(
+            'neko.story.getScriptIndex',
+            scriptPath,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'scriptIndexResult',
+            nodeId: requestNodeId,
+            index,
+          });
+        } catch {
+          webviewPanel.webview.postMessage({
+            type: 'scriptIndexResult',
+            nodeId: requestNodeId,
+            index: null,
+            error: 'neko-story not available',
+          });
+        }
+        break;
+      }
+
+      case 'openDocument': {
+        // Open a document file using VSCode's default handler
+        const docPath = message.docPath as string;
+        if (!docPath) break;
+        try {
+          const fsPath = await this.resolveAssetPath(docPath, document.uri);
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(fsPath));
+        } catch (error) {
+          logger.error(`Failed to open document: ${error}`);
+          vscode.window.showErrorMessage(`Cannot open document: ${docPath}`);
+        }
+        break;
+      }
+
+      case 'checkModelInstalled': {
+        // Query neko-market for model installation status
+        const modelPath = message.modelPath as string;
+        const modelNodeId = message.nodeId as string;
+        try {
+          const installed = await vscode.commands.executeCommand<boolean>(
+            'neko.market.isInstalled',
+            modelPath,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'modelInstalledResult',
+            nodeId: modelNodeId,
+            installed: installed ?? false,
+          });
+        } catch {
+          webviewPanel.webview.postMessage({
+            type: 'modelInstalledResult',
+            nodeId: modelNodeId,
+            installed: false,
+          });
+        }
+        break;
+      }
+
+      case 'importToTimeline': {
+        // Forward storyboard shots to neko-cut for timeline import
+        const { projectName, shots } = message as unknown as {
+          projectName: string;
+          shots: unknown[];
+        };
+        try {
+          await vscode.commands.executeCommand('neko.cut.importStoryboard', {
+            projectName,
+            shots,
+          });
+        } catch {
+          vscode.window.showWarningMessage(
+            'neko-cut is not available. Install neko-cut to import storyboard to timeline.',
+          );
+        }
+        break;
+      }
+
       case 'exportArtboard': {
         const artboardData = message.data as Record<string, unknown>;
         const artboardName = (artboardData.name as string) || 'Untitled Artboard';
@@ -625,6 +823,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             logger.error(`Failed to export artboard: ${error}`);
             vscode.window.showErrorMessage('Failed to export artboard');
           }
+        }
+        break;
+      }
+      case 'selectionChange': {
+        const nodes = (message.nodes ?? []) as CanvasNode[];
+        this._onSelectionChange.fire(nodes);
+        break;
+      }
+
+      case '_response': {
+        // Resolve a pending sendRequest() promise from the webview
+        const id = message._requestId as number;
+        const pending = this.pendingRequests.get(id);
+        if (pending) {
+          this.pendingRequests.delete(id);
+          pending.resolve(message);
         }
         break;
       }
@@ -767,6 +981,47 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           break;
         case 'group':
           label = String(data.label ?? 'Group');
+          break;
+        case 'text':
+          label = String(data.content ?? 'Text').slice(0, 30) || 'Text';
+          detail = 'text';
+          break;
+        case 'artboard':
+          label = String(data.title ?? 'Artboard');
+          detail = data.preset ? String(data.preset) : undefined;
+          break;
+        case 'shot': {
+          const num = String(data.shotNumber ?? '?');
+          const scale = data.shotScale ? ` [${String(data.shotScale)}]` : '';
+          label = `#${num.padStart(3, '0')}${scale}`;
+          detail = data.visualDescription ? String(data.visualDescription).slice(0, 40) : undefined;
+          break;
+        }
+        case 'scene':
+          label = String(data.sceneTitle ?? 'Scene');
+          detail = data.location
+            ? `${String(data.location)} · ${String(data.timeOfDay ?? '')}`
+            : undefined;
+          break;
+        case 'gallery':
+          label = String(data.characterName ?? '角色画廊');
+          detail = data.preset ? String(data.preset) : undefined;
+          break;
+        case 'script':
+          label = String(data.scriptTitle ?? 'Script');
+          detail = data.scriptPath ? String(data.scriptPath).split('/').pop() : undefined;
+          break;
+        case 'document':
+          label = String(data.title ?? 'Document');
+          detail = data.docType ? String(data.docType).toUpperCase() : undefined;
+          break;
+        case 'model':
+          label = String(data.modelName ?? 'Model');
+          detail = data.modelType ? String(data.modelType) : undefined;
+          break;
+        case 'canvas-embed':
+          label = String(data.canvasTitle ?? 'Canvas');
+          detail = 'embed';
           break;
       }
 

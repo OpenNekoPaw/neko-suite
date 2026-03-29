@@ -165,3 +165,9 @@ export * from './extension-api';
 
 // Auth types (shared interfaces for neko-auth ecosystem)
 export * from './auth';
+
+// Generation types (output params + model config)
+export * from './generation';
+
+// Agent context types (unified sendToAgent payload)
+export * from './agent-context';

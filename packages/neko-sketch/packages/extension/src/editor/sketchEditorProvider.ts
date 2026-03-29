@@ -121,6 +121,16 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
+  /** Inject a base64-encoded image into the active webview as a new layer */
+  postImageData(base64: string, name: string): void {
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'file:imported',
+      name,
+      data: base64,
+      path: '',
+    });
+  }
+
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
     const webviewUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),

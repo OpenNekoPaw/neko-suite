@@ -2,6 +2,7 @@
  * NekoCanvas API - Exported interface for other extensions
  */
 import * as vscode from 'vscode';
+import type { CanvasNode, CanvasNodeType } from '@neko/shared';
 
 // Types
 export interface Asset {
@@ -116,6 +117,26 @@ export interface NekoCanvasAPI {
      * Delete shape
      */
     deleteShape(canvasId: string, shapeId: string): Promise<void>;
+  };
+
+  /**
+   * Canvas node operations — primary API for neko-agent Canvas MCP tools
+   */
+  nodes: {
+    /** List all nodes on the active canvas, optionally filtered by type */
+    list(type?: CanvasNodeType): Promise<CanvasNode[]>;
+    /** Get a single node by ID */
+    get(nodeId: string): Promise<CanvasNode | undefined>;
+    /** Update a node's data fields */
+    update(nodeId: string, data: Record<string, unknown>): Promise<void>;
+    /** Create a new node; returns the new node's ID */
+    create(type: CanvasNodeType, position: { x: number; y: number }, data: object): Promise<string>;
+    /** Trigger image generation for a ShotNode or a specific GalleryCell */
+    generateImage(nodeId: string, cellId?: string): Promise<void>;
+    /** Trigger batch image generation for multiple nodes */
+    generateBatch(nodeIds: string[]): Promise<void>;
+    /** Fired whenever the canvas selection changes */
+    onSelectionChange: vscode.Event<CanvasNode[]>;
   };
 
   /**

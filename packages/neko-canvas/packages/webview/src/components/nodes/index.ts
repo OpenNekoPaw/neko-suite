@@ -19,3 +19,21 @@ export type { ArtboardNodeProps } from './ArtboardNode';
 
 export { GroupNode } from './GroupNode';
 export type { GroupNodeProps } from './GroupNode';
+
+export { ShotNode } from './ShotNode';
+export type { ShotNodeProps } from './ShotNode';
+
+export { SceneGroupNode } from './SceneGroupNode';
+export type { SceneGroupNodeProps } from './SceneGroupNode';
+
+export { GalleryNode } from './GalleryNode';
+export type { GalleryNodeProps } from './GalleryNode';
+
+export { ScriptNode } from './ScriptNode';
+export type { ScriptNodeProps } from './ScriptNode';
+
+export { DocumentNode } from './DocumentNode';
+export type { DocumentNodeProps } from './DocumentNode';
+
+export { ModelNode } from './ModelNode';
+export type { ModelNodeProps } from './ModelNode';

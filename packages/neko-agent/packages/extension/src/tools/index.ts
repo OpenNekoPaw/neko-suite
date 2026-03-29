@@ -10,6 +10,7 @@ export {
   createNekoEngineEffectsTools,
   createTranscribeTools,
   createNekoStoryTools,
+  createNekoSketchTools,
   type Tool,
 } from './extensionTools';
 

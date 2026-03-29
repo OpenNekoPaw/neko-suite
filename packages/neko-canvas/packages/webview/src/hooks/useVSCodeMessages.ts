@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { CanvasData } from '@neko/shared';
+import type { CanvasData, CanvasNode } from '@neko/shared';
 import { setLocale } from '../i18n';
 
 // =============================================================================
@@ -20,12 +20,35 @@ export type VSCodeAPI = {
   setState: (state: unknown) => void;
 } | null;
 
+export interface GenerationProgressPayload {
+  nodeId: string;
+  cellId?: string;
+  status: 'pending' | 'generating' | 'done' | 'error';
+  dataUrl?: string;
+}
+
 export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
   onAddMediaFromExtension: (mediaType: string, uri: string, name: string) => void;
   onDropMedia: (files: Array<{ uri: string; name: string; mediaType: string }>) => void;
+  /** Called when generation status/image arrives from the extension scheduler */
+  onGenerationProgress?: (payload: GenerationProgressPayload) => void;
+  /** Called with the AI-built prompt string for AutoPrompt */
+  onBuildPromptResult?: (prompt: string) => void;
+  /** Called when scene TOC is available for a ScriptNode */
+  onScriptIndexResult?: (nodeId: string, scenes: unknown[]) => void;
+  /** Called when model install status is known */
+  onModelInstalledResult?: (nodeId: string, installedVersion: string | null) => void;
+  /** Return all nodes (optionally filtered by type) — used to respond to nodes.list requests */
+  getNodes?: (type?: string) => CanvasNode[];
+  /** Return a single node by id — used to respond to nodes.get requests */
+  getNode?: (id: string) => CanvasNode | undefined;
+  /** Update a node — used to respond to nodes.update requests */
+  updateNode?: (id: string, updates: Partial<CanvasNode>) => void;
+  /** Create a node — used to respond to nodes.create requests */
+  createNode?: (node: Omit<CanvasNode, 'id'>) => string;
 }
 
 export interface UseVSCodeMessagesReturn {
@@ -38,8 +61,21 @@ export interface UseVSCodeMessagesReturn {
 // =============================================================================
 
 export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeMessagesReturn {
-  const { vscode, defaultCanvasData, setCanvasData, onAddMediaFromExtension, onDropMedia } =
-    options;
+  const {
+    vscode,
+    defaultCanvasData,
+    setCanvasData,
+    onAddMediaFromExtension,
+    onDropMedia,
+    onGenerationProgress,
+    onBuildPromptResult,
+    onScriptIndexResult,
+    onModelInstalledResult,
+    getNodes,
+    getNode,
+    updateNode,
+    createNode,
+  } = options;
 
   const [isReady, setIsReady] = useState(false);
   const keyboardActionRef = useRef<(action: string) => void>(() => {});
@@ -49,6 +85,22 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onAddMediaRef.current = onAddMediaFromExtension;
   const onDropMediaRef = useRef(onDropMedia);
   onDropMediaRef.current = onDropMedia;
+  const onGenerationProgressRef = useRef(onGenerationProgress);
+  onGenerationProgressRef.current = onGenerationProgress;
+  const onBuildPromptResultRef = useRef(onBuildPromptResult);
+  onBuildPromptResultRef.current = onBuildPromptResult;
+  const onScriptIndexResultRef = useRef(onScriptIndexResult);
+  onScriptIndexResultRef.current = onScriptIndexResult;
+  const onModelInstalledResultRef = useRef(onModelInstalledResult);
+  onModelInstalledResultRef.current = onModelInstalledResult;
+  const getNodesRef = useRef(getNodes);
+  getNodesRef.current = getNodes;
+  const getNodeRef = useRef(getNode);
+  getNodeRef.current = getNode;
+  const updateNodeRef = useRef(updateNode);
+  updateNodeRef.current = updateNode;
+  const createNodeRef = useRef(createNode);
+  createNodeRef.current = createNode;
 
   useEffect(() => {
     if (vscode) {
@@ -81,6 +133,64 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               mediaType: string;
             }>;
             onDropMediaRef.current(files);
+            break;
+          }
+          case 'generationProgress':
+            onGenerationProgressRef.current?.({
+              nodeId: message.nodeId as string,
+              cellId: message.cellId as string | undefined,
+              status: message.status as GenerationProgressPayload['status'],
+              dataUrl: message.dataUrl as string | undefined,
+            });
+            break;
+          case 'buildPromptResult':
+            onBuildPromptResultRef.current?.(message.prompt as string);
+            break;
+          case 'scriptIndexResult':
+            onScriptIndexResultRef.current?.(message.nodeId as string, message.scenes as unknown[]);
+            break;
+          case 'modelInstalledResult':
+            onModelInstalledResultRef.current?.(
+              message.nodeId as string,
+              (message.installedVersion as string | null) ?? null,
+            );
+            break;
+
+          // ----------------------------------------------------------------
+          // nodes.* — request/response API for MCP Canvas tools
+          // The extension sends { type, _requestId, ...payload } and expects
+          // { type: '_response', _requestId, ...result } back.
+          // ----------------------------------------------------------------
+          case 'nodes.list': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            const typeFilter = message.nodeType as string | undefined;
+            const nodes = getNodesRef.current?.(typeFilter) ?? [];
+            vscode.postMessage({ type: '_response', _requestId: requestId, nodes });
+            break;
+          }
+          case 'nodes.get': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            const node = getNodeRef.current?.(message.nodeId as string) ?? null;
+            vscode.postMessage({ type: '_response', _requestId: requestId, node });
+            break;
+          }
+          case 'nodes.update': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            updateNodeRef.current?.(
+              message.nodeId as string,
+              message.updates as Partial<CanvasNode>,
+            );
+            vscode.postMessage({ type: '_response', _requestId: requestId, success: true });
+            break;
+          }
+          case 'nodes.create': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            const id = createNodeRef.current?.(message.node as Omit<CanvasNode, 'id'>) ?? '';
+            vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
             break;
           }
         }

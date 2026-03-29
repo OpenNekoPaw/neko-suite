@@ -194,6 +194,9 @@ neko-assets 资产卡片通过 `neko.assets.getThumbnail` 命令获取缩略图�
 ## 五、实施计划
 
 ### P1（核心格式）
+
+> **决策（2026-03-28）**：暂缓自建，委托第三方扩展（Book Reader / Office Viewer）。当用户需求积累到足够规模时再推进。
+
 - [ ] `PdfPreviewProvider`（`pdfjs-dist`）
 - [ ] `DocxPreviewProvider`（`docx-preview`，参考 Office Viewer 实现）
 - [ ] `EpubPreviewProvider`（`epub.js`，neko-story 剧本场景高优）
