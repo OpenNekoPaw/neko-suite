@@ -213,7 +213,57 @@ neko-assets 资产卡片通过 `neko.assets.getThumbnail` 命令获取缩略图�
 
 ---
 
-## 六、约束与注意事项
+## 六、AI 右键菜单（Explorer Context Menu）
+
+### 6.1 跨 Webview 限制
+
+第三方扩展的 Webview（Book Reader、Office Viewer）是独立沙箱 iframe，**不允许跨扩展 DOM 注入或脚本执行**，无法向其内部右键菜单添加条目。
+
+可行方案对比：
+
+| 方案 | 入口 | 限制 |
+|------|------|------|
+| `explorer/context` | 文件树右键 | 需文件未打开也可触发，最通用 |
+| `editor/title` | 编辑器标题栏按钮 | 需文件已打开 |
+| `webview/context` | 仅限自建 Webview | 无法注入第三方 Webview |
+
+**决策（2026-03-29）**：优先实现 `explorer/context`，对文档、图片、视频按类型分组挂载 AI 操作。
+
+### 6.2 命令设计
+
+neko-agent 在 `explorer/context` 按媒体类型分组注册以下命令：
+
+| 文件类型 | 命令 | 说明 |
+|----------|------|------|
+| 文档（PDF/DOCX/EPUB/XLSX 等）| `neko.ai.summarizeDocument` | 提取文本 → AI 摘要 → 发送到 Chat |
+| 文档 | `neko.ai.chatWithDocument` | 提取文本 → 注入 Agent 上下文 → 打开对话 |
+| 文档 | `neko.pipeline.startFromFile` | 生成视频创意流水线（已有） |
+| 图片（PNG/JPG/WEBP 等）| `neko.ai.analyzeImage` | 文件路径 → Agent 工具分析 |
+| 图片 | `neko.ai.extractImageText` | OCR 提取图片文字 |
+| 视频（MP4/MOV/MKV 等）| `neko.ai.analyzeVideo` | 文件路径 → Agent 工具分析 |
+| 视频 | `neko.ai.generateSubtitles` | 生成字幕 → 发送到 Agent |
+
+### 6.3 文档文本提取流程
+
+```
+explorer/context 右键
+  └─ neko.ai.summarizeDocument / neko.ai.chatWithDocument
+       └─ Extension Host
+            ├─ DocumentReaderService.read(filePath)   # 已有，支持 16 种格式
+            ├─ 文本截断（≤8000 chars，超长附 truncated 提示）
+            └─ chatViewProvider.sendMessageToAssistant(prompt, true)
+                 └─ Agent Chat Panel 打开并开始对话
+```
+
+`DocumentReaderService`（`services/DocumentReaderService.ts`）已支持所有目标格式，无需新增解析逻辑。
+
+### 6.4 进度提示
+
+文档读取通过 `vscode.window.withProgress` 显示通知级进度条，防止大文件无响应感。
+
+---
+
+## 七、约束与注意事项
 
 **Webview 沙箱**：所有 JS 库必须在 Webview 内运行，文件读取通过 Extension Host postMessage 传递 `ArrayBuffer`。
 

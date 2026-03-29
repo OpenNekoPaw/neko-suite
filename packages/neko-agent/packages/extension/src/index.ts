@@ -5,6 +5,7 @@
  * Provides AI-powered assistance for video and canvas editing.
  */
 
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   ServiceCollection,
@@ -27,7 +28,11 @@ import {
   createNekoStoryTools,
   createNekoSketchTools,
 } from './tools/extensionTools';
-import { setCanvasSelection, clearCanvasSelection } from './services/canvasAmbientContext';
+import {
+  setCanvasSelection,
+  clearCanvasSelection,
+  onDidChangeCanvasSelection,
+} from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -35,6 +40,7 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
+import { createDocumentReaderService } from './services/DocumentReaderService';
 
 /**
  * Activate the extension
@@ -79,6 +85,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register pipeline commands
   registerPipelineCommands(context, chatViewProvider);
 
+  // Register document/media context menu commands (explorer/context)
+  registerDocumentContextCommands(context, chatViewProvider);
+
   // Listen for extension changes to update tools (register disposable + avoid duplicates)
   let extensionToolsRegistered = true; // Already registered above
   context.subscriptions.push(
@@ -94,6 +103,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Subscribe to canvas selection changes for ambient context injection
   subscribeCanvasSelection(context);
+
+  // Broadcast canvas selection changes to webview for ambient chip display
+  context.subscriptions.push(
+    onDidChangeCanvasSelection((nodes) => {
+      chatViewProvider.sendAmbientCanvasContext(nodes);
+    }),
+  );
 
   // Status bar — shows active LLM model, click to open chat
   context.subscriptions.push(createStatusBar(bootstrapResult.platform));
@@ -137,8 +153,8 @@ function registerExtensionTools(
   const nekocutTools = createNekoCutTools();
   nekocutTools.forEach((tool) => toolRegistry.register(tool));
 
-  // Register NekoCanvas tools (pass media service so keyframe video tool is available)
-  const nekocanvasTools = createNekoCanvasTools(platform.media);
+  // Register NekoCanvas tools (pass media + config so model auto-resolution works)
+  const nekocanvasTools = createNekoCanvasTools(platform.media, platform.config);
   nekocanvasTools.forEach((tool) => toolRegistry.register(tool));
 
   // Register Engine Effects tools (GPU shader management)
@@ -609,6 +625,142 @@ function registerPipelineCommands(
     vscode.commands.registerCommand('neko.pipeline.retryFailed', async () => {
       await chatViewProvider.sendMessageToAssistant(
         'Retry the failed scenes from my last pipeline',
+        true,
+      );
+    }),
+  );
+}
+
+/** Max characters of document text forwarded to the AI chat. */
+const DOC_CONTEXT_CHAR_LIMIT = 8000;
+
+function truncateDocText(text: string): string {
+  if (text.length <= DOC_CONTEXT_CHAR_LIMIT) return text;
+  const remaining = Math.ceil((text.length - DOC_CONTEXT_CHAR_LIMIT) / 1000);
+  return (
+    text.slice(0, DOC_CONTEXT_CHAR_LIMIT) + `\n\n[... ~${remaining}k more characters truncated]`
+  );
+}
+
+/**
+ * Register AI commands surfaced in the Explorer context menu.
+ *
+ * Document commands (summarize / chat) use DocumentReaderService to extract
+ * text in the Extension Host, then forward a prompt to the Agent chat panel.
+ * Image / video commands send the file path as intent so Agent tools can handle them.
+ */
+function registerDocumentContextCommands(
+  context: vscode.ExtensionContext,
+  chatViewProvider: ChatViewProvider,
+): void {
+  const logger = getRootLogger();
+
+  /** Resolve file path from context-menu URI or fall back to active editor. */
+  function resolveFilePath(uri: vscode.Uri | undefined): string | undefined {
+    return uri?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+  }
+
+  /** Extract document text and send a prompt to the Agent chat. */
+  async function sendDocumentPrompt(
+    uri: vscode.Uri | undefined,
+    buildPrompt: (fileName: string, text: string, pageCount: number | undefined) => string,
+  ): Promise<void> {
+    const filePath = resolveFilePath(uri);
+    if (!filePath) {
+      vscode.window.showErrorMessage('No file selected');
+      return;
+    }
+
+    const docReader = createDocumentReaderService();
+    if (!docReader.supports(filePath)) {
+      vscode.window.showErrorMessage(`Unsupported format: ${path.extname(filePath)}`);
+      return;
+    }
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Reading document…',
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const content = await docReader.read(filePath);
+          const fileName = path.basename(filePath);
+          const prompt = buildPrompt(fileName, truncateDocText(content.text), content.pageCount);
+          await chatViewProvider.sendMessageToAssistant(prompt, true);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          vscode.window.showErrorMessage(`Failed to read document: ${msg}`);
+          logger.error('Document context command failed', { error: err, filePath });
+        }
+      },
+    );
+  }
+
+  // Summarize document — extract text → AI summary
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.summarizeDocument', async (uri?: vscode.Uri) => {
+      await sendDocumentPrompt(uri, (fileName, text, pageCount) => {
+        const meta = pageCount !== undefined ? ` (${pageCount} pages)` : '';
+        return `Please summarize the key points of this document "${fileName}"${meta}:\n\n${text}`;
+      });
+    }),
+  );
+
+  // Chat with document — inject full text as context, open conversation
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.chatWithDocument', async (uri?: vscode.Uri) => {
+      await sendDocumentPrompt(uri, (fileName, text, pageCount) => {
+        const meta = pageCount !== undefined ? ` (${pageCount} pages)` : '';
+        return `I'd like to discuss the document "${fileName}"${meta}. Here's the content:\n\n${text}\n\nWhat would you like to know about this document?`;
+      });
+    }),
+  );
+
+  // Analyze image — send file path to Agent (multimodal tool handles it)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.analyzeImage', async (uri?: vscode.Uri) => {
+      const filePath = resolveFilePath(uri);
+      if (!filePath) return;
+      await chatViewProvider.sendMessageToAssistant(
+        `Please analyze this image and describe what you see: ${filePath}`,
+        true,
+      );
+    }),
+  );
+
+  // Extract image text — OCR intent
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.extractImageText', async (uri?: vscode.Uri) => {
+      const filePath = resolveFilePath(uri);
+      if (!filePath) return;
+      await chatViewProvider.sendMessageToAssistant(
+        `Please extract all text from this image (OCR): ${filePath}`,
+        true,
+      );
+    }),
+  );
+
+  // Analyze video — send file path to Agent
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.analyzeVideo', async (uri?: vscode.Uri) => {
+      const filePath = resolveFilePath(uri);
+      if (!filePath) return;
+      await chatViewProvider.sendMessageToAssistant(
+        `Please analyze this video and provide a summary of its content: ${filePath}`,
+        true,
+      );
+    }),
+  );
+
+  // Generate subtitles — send file path to Agent
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.ai.generateSubtitles', async (uri?: vscode.Uri) => {
+      const filePath = resolveFilePath(uri);
+      if (!filePath) return;
+      await chatViewProvider.sendMessageToAssistant(
+        `Please generate subtitles for this video: ${filePath}`,
         true,
       );
     }),

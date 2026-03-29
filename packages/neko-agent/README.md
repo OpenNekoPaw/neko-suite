@@ -105,6 +105,21 @@ packages/
 
 **模型选择**：优先级 fallback（显式指定 → 配置默认 → 首个可用），无复杂路由策略。
 
+**媒体模型默认值**：在 `~/.neko/config.json` 中通过 `defaultMediaModels` 为各媒体类型配置默认模型：
+
+```json
+{
+  "defaultMediaModels": {
+    "image": "flux-kontext-pro",
+    "video": "sora-2",
+    "audio": "tts-1",
+    "music": "suno-v4"
+  }
+}
+```
+
+值为 `models[]` 中对应模型的 `id`。Webview 启动时自动应用为初始选择；用户在 AgentMediaBar 中手动切换后，运行时选择优先。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio` / `music`）控制模型在选择器中的分组。
+
 ## 核心概念
 
 ### 执行模式

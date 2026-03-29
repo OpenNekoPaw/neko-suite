@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 // In-memory state
 // =============================================================================
 
-interface SelectedNodeSummary {
+export interface SelectedNodeSummary {
   nodeId: string;
   type: string;
   summary: string;
@@ -35,6 +35,10 @@ const _onDidChangeGenerationConfig = new vscode.EventEmitter<GenerationModelConf
 /** Fired when the active project generation model config changes. */
 export const onDidChangeGenerationConfig = _onDidChangeGenerationConfig.event;
 
+const _onDidChangeCanvasSelection = new vscode.EventEmitter<SelectedNodeSummary[]>();
+/** Fired when the canvas selection changes — used to push ambient chips to the webview. */
+export const onDidChangeCanvasSelection = _onDidChangeCanvasSelection.event;
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -42,6 +46,7 @@ export const onDidChangeGenerationConfig = _onDidChangeGenerationConfig.event;
 /** Update the stored selection (called from onSelectionChange handler) */
 export function setCanvasSelection(nodes: CanvasNode[]): void {
   _selectedNodes = nodes.slice(0, MAX_AMBIENT_NODES).map(summarizeNode);
+  _onDidChangeCanvasSelection.fire(_selectedNodes);
 }
 
 /** Read the current selection for injection into agent context */
@@ -52,6 +57,7 @@ export function getCanvasSelection(): SelectedNodeSummary[] {
 /** Clear the selection (called when canvas editor closes) */
 export function clearCanvasSelection(): void {
   _selectedNodes = [];
+  _onDidChangeCanvasSelection.fire(_selectedNodes);
 }
 
 /** Update the active generation model config (called after set_project_generation_config) */

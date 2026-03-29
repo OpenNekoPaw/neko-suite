@@ -13,6 +13,7 @@ import type {
   SettingsState,
   AgentState,
 } from '@/components/types';
+import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type {
@@ -84,6 +85,7 @@ export interface TabContext {
 export interface SettingsContext {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
+  setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
   updateSettings: (partial: Partial<SettingsState>) => void;
 }
 

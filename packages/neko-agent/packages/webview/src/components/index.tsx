@@ -106,6 +106,11 @@ export function AIAssistant() {
 
   // Agent context chips — attached via neko.agent.sendContext from canvas/cut/story
   const [contextChips, setContextChips] = useState<AgentContextPayload[]>([]);
+
+  // Ambient canvas nodes — auto-synced from canvas selection, shown as non-removable chips
+  const [ambientNodes, setAmbientNodes] = useState<
+    Array<{ nodeId: string; type: string; summary: string }>
+  >([]);
   const handleRemoveContextChip = useCallback((id: string) => {
     setContextChips((prev) => prev.filter((c) => c.id !== id));
   }, []);
@@ -191,6 +196,7 @@ export function AIAssistant() {
     setActiveTab,
     setSettings,
     setSelectedModel,
+    setMediaModelSelection,
     setBackgroundTasks,
     setProjectFiles,
     setMentionItems,
@@ -307,7 +313,12 @@ export function AIAssistant() {
   // (externalMessage/prefillInput from chatProvider, injectContext from sendContext command)
   const handleMessageWithExtras = useCallback(
     (event: MessageEvent) => {
-      const msg = event.data as { type?: string; message?: string; payload?: AgentContextPayload };
+      const msg = event.data as {
+        type?: string;
+        message?: string;
+        payload?: AgentContextPayload;
+        nodes?: Array<{ nodeId: string; type: string; summary: string }>;
+      };
       if (!msg?.type) return handleMessage(event);
       switch (msg.type) {
         case 'externalMessage':
@@ -333,6 +344,9 @@ export function AIAssistant() {
               setInputValue(msg.payload.intent);
             }
           }
+          break;
+        case 'ambientCanvasUpdate':
+          setAmbientNodes(msg.nodes ?? []);
           break;
         default:
           handleMessage(event);
@@ -527,6 +541,7 @@ export function AIAssistant() {
           onAddContextChip={handleAddContextChip}
           contextChips={contextChips}
           onRemoveContextChip={handleRemoveContextChip}
+          ambientNodes={ambientNodes}
           onTriggerSend={triggerSend}
         >
           <ChatView

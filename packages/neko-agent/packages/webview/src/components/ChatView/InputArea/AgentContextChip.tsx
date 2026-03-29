@@ -18,7 +18,8 @@ const TYPE_ICONS: Record<string, string> = {
 
 interface AgentContextChipProps {
   payload: AgentContextPayload;
-  onRemove: (id: string) => void;
+  /** Omit to render a non-removable ambient chip (no × button). */
+  onRemove?: (id: string) => void;
 }
 
 export function AgentContextChip({ payload, onRemove }: AgentContextChipProps) {
@@ -31,14 +32,16 @@ export function AgentContextChip({ payload, onRemove }: AgentContextChipProps) {
     >
       <span aria-hidden="true">{icon}</span>
       <span className="max-w-[120px] truncate">{payload.label}</span>
-      <button
-        type="button"
-        aria-label={`Remove ${payload.label}`}
-        onClick={() => onRemove(payload.id)}
-        className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
-      >
-        ×
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Remove ${payload.label}`}
+          onClick={() => onRemove(payload.id)}
+          className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
+        >
+          ×
+        </button>
+      )}
     </span>
   );
 }

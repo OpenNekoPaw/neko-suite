@@ -18,7 +18,7 @@ import type {
 } from '@neko/shared';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
-import type { MediaGenerationService } from '@neko/platform';
+import type { MediaGenerationService, ConfigManager } from '@neko/platform';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
 import { getLogger } from '../base';
@@ -180,7 +180,10 @@ export function createNekoCutTools(): Tool[] {
  * Create tools for NekoCanvas integration
  * Returns empty array if NekoCanvas is not installed
  */
-export function createNekoCanvasTools(media?: MediaGenerationService): Tool[] {
+export function createNekoCanvasTools(
+  media?: MediaGenerationService,
+  config?: ConfigManager,
+): Tool[] {
   const nekocanvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
 
   if (!nekocanvasExt) {
@@ -194,6 +197,21 @@ export function createNekoCanvasTools(media?: MediaGenerationService): Tool[] {
     }
     return nekocanvasExt.activate();
   };
+
+  // Auto-resolve model from ConfigManager when workspace config has no model set.
+  // Writes to workspace config so neko-canvas can read it on next generation.
+  async function ensureProjectModel(type: 'image' | 'video' | 'audio'): Promise<void> {
+    if (!config) return;
+    const key = `neko.project.models.${type}`;
+    const wsConfig = vscode.workspace.getConfiguration();
+    const current = wsConfig.get<string>(key, '');
+    if (current) return;
+    const model = config.getEnabledModels().find((m) => m.type === type);
+    if (model?.name) {
+      await wsConfig.update(key, model.name, vscode.ConfigurationTarget.Workspace);
+      logger.info(`Auto-resolved ${type} model from ConfigManager: ${model.name}`);
+    }
+  }
 
   const tools: Tool[] = [
     {
@@ -471,6 +489,7 @@ export function createNekoCanvasTools(media?: MediaGenerationService): Tool[] {
         required: ['nodeId'],
       },
       execute: async (args) => {
+        await ensureProjectModel('image');
         const api = await getAPI();
         return api.nodes.generateImage(args.nodeId as string, args.cellId as string | undefined);
       },
@@ -493,6 +512,7 @@ export function createNekoCanvasTools(media?: MediaGenerationService): Tool[] {
         required: ['nodeIds'],
       },
       execute: async (args) => {
+        await ensureProjectModel('image');
         const api = await getAPI();
         return api.nodes.generateBatch(args.nodeIds as string[]);
       },

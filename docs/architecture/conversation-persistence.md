@@ -170,7 +170,7 @@ Webview 已实现运行时媒体模型选择，TUI 仅有静态配置，无法�
 |------|--------------------|----|
 | 每类别模型选择 | `AgentMediaBar`（image/video/audio 三个独立 chip）| ❌ 无运行时 UI |
 | 运行时切换 | 点击 chip → 下拉选择，立即生效 | ❌ 无机制 |
-| 静态默认值 | `defaultMediaModels` from config | ✅ 已读取 |
+| 静态默认值 | ✅ `defaultMediaModels` from config（已接通 webview 初始化）| ✅ 已读取 |
 | 可用模型列表 | `availableMediaModels: ChatModelOption[]` | ✅ `CLIConfig.mediaModels: string[]` |
 | 选择传递方式 | `sendMessage(mediaModelId)` → Extension → Platform | ❌ 未实现 |
 
@@ -178,7 +178,14 @@ Webview 已实现运行时媒体模型选择，TUI 仅有静态配置，无法�
 
 **Webview 流程**：
 ```
-用户点击 AgentMediaBar chip
+config.json defaultMediaModels
+  → ConfigManager.getDefaultMediaModels()                [settingsHandler.ts]
+  → 解析 modelId → ChatModelOption.id (providerId:modelId)
+  → settingsData 消息 { defaultMediaModels }             [Extension → Webview]
+  → handleSettingsData                                   [config-handlers.ts]
+  → setMediaModelSelection({ image: '...', video: '...' }) [仅对 'none' 初始化]
+
+用户点击 AgentMediaBar chip（运行时覆盖）：
   → setMediaModelSelection({ image: 'dall-e-3', ... })  [useUIState]
   → sendMessage(..., mediaModelId: 'dall-e-3')           [VSCodeMessages]
   → Extension messageHandler                              [chatProvider.ts]

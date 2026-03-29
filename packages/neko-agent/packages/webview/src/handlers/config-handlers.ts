@@ -35,6 +35,17 @@ const handleSettingsData: MessageHandler = (message, context) => {
     // Use the correct format: 'providerId:modelId' to match chatModelOptions
     context.setSelectedModel(`${message.selectedProviderId}:${message.selectedModelId}`);
   }
+  // Apply defaultMediaModels from config for categories still set to 'none'
+  const defaults = message.defaultMediaModels as Record<string, string> | undefined;
+  if (defaults) {
+    context.setMediaModelSelection((prev) => {
+      const next = { ...prev };
+      for (const cat of ['image', 'video', 'audio'] as const) {
+        if (next[cat] === 'none' && defaults[cat]) next[cat] = defaults[cat]!;
+      }
+      return next;
+    });
+  }
 };
 
 /**

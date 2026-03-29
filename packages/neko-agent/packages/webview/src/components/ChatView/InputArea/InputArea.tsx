@@ -71,6 +71,7 @@ export function InputArea({
     onAddContextChip,
     contextChips,
     onRemoveContextChip,
+    ambientNodes = [],
     onTriggerSend,
   } = useInputAreaContext();
 
@@ -488,6 +489,24 @@ export function InputArea({
         {/* Context-aware suggestion chips — click to pre-fill input */}
         {contextChips.length > 0 && (
           <SuggestionChips contextChips={contextChips} onSuggest={onInputChange} />
+        )}
+
+        {/* Ambient canvas chips — auto-injected from canvas selection, non-removable */}
+        {ambientNodes.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-3 pt-2">
+            {ambientNodes.map((n) => (
+              <AgentContextChip
+                key={n.nodeId}
+                payload={{
+                  type: 'canvas-node',
+                  id: n.nodeId,
+                  label: n.summary,
+                  summary: n.summary,
+                  data: undefined,
+                }}
+              />
+            ))}
+          </div>
         )}
 
         {/* Agent context chips — shown above textarea when context is attached */}

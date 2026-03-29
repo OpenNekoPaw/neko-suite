@@ -57,6 +57,8 @@ export interface InputAreaContextValue {
   // Agent context chips (attached context from canvas/cut/story)
   contextChips: AgentContextPayload[];
   onRemoveContextChip: (id: string) => void;
+  /** Ambient canvas selection — auto-injected from canvas, non-removable. */
+  ambientNodes?: Array<{ nodeId: string; type: string; summary: string }>;
   /** Send a message string directly (bypasses inputValue closure) — used when chips modify message */
   onTriggerSend?: (
     message: string,
@@ -96,6 +98,7 @@ export function InputAreaProvider({
       onAddContextChip: value.onAddContextChip,
       contextChips: value.contextChips,
       onRemoveContextChip: value.onRemoveContextChip,
+      ambientNodes: value.ambientNodes,
       onTriggerSend: value.onTriggerSend,
     }),
     [
@@ -123,6 +126,7 @@ export function InputAreaProvider({
       value.onAddContextChip,
       value.contextChips,
       value.onRemoveContextChip,
+      value.ambientNodes,
       value.onTriggerSend,
     ],
   );

@@ -30,6 +30,7 @@ import type {
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
 import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from './types';
+import type { MediaModelSelection } from '@/hooks/useUIState';
 
 /**
  * Props for useMessageHandler hook
@@ -63,6 +64,7 @@ export interface UseMessageHandlerProps {
   // State setters - Settings
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
+  setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
 
   // State setters - Tasks
   setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
@@ -123,6 +125,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setActiveTab,
     setSettings,
     setSelectedModel,
+    setMediaModelSelection,
     setBackgroundTasks,
 
     setProjectFiles,
@@ -188,6 +191,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTab,
       setSettings,
       setSelectedModel,
+      setMediaModelSelection,
       setBackgroundTasks,
 
       setProjectFiles,
@@ -225,6 +229,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTab,
       setSettings,
       setSelectedModel,
+      setMediaModelSelection,
       setBackgroundTasks,
 
       setProjectFiles,

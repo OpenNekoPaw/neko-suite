@@ -1,7 +1,7 @@
 # Canvas × Agent 集成设计
 
-**状态**: 设计确认
-**日期**: 2026-03-28
+**状态**: 实现中（Ph1–Ph3 完成，Ph4–Ph6 完成）
+**日期**: 2026-03-29（最后更新）
 **关联**: neko-canvas BottomSheet、neko-agent Canvas 工具
 
 ---
@@ -670,12 +670,18 @@ export function buildShotNodeMenuItems(ctx: CanvasMenuContext & AIMenuContext): 
 ```
 节点 generationConfig.model（节点级覆盖）
   ↑
-项目 ProjectGenerationConfig.*.model（项目级强制指定）
+项目 ProjectGenerationConfig.*.model（workspace config 强制指定）
   ↑
-neko-market activeModel(mediaType)（已安装并激活的模型）
+ConfigManager.getEnabledModels(type)（~/.neko/config.json 用户配置的生成模型）
   ↑
-系统云端默认（未安装本地模型时的兜底）
+系统云端默认（未配置时的兜底）
 ```
+
+**模型来源说明**：生成模型从 neko-agent 的 `ConfigManager` 读取，而非 neko-market。
+`ModelConfig.type` 字段区分 `llm / image / video / audio / music`，`getEnabledModels()`
+按 type 过滤后作为 `resolveGenerationParams()` 的 `market` 参数层。neko-market 仅负责
+包安装/卸载，安装完成后触发 `neko.agent.refreshModels` 写入 `~/.neko/config.json`，
+不参与运行时模型选择。
 
 `ProjectGenerationConfig` 扩展 model 字段：
 
@@ -684,7 +690,7 @@ interface ProjectGenerationConfig {
   image: {
     ratio: '16:9' | '9:16' | '1:1' | '4:3' | '2.39:1';
     resolution: '512' | '720p' | '1080p' | '2K';
-    model?: string;  // 项目级强制指定，留空则走 neko-market activeModel
+    model?: string;  // 项目级强制指定，留空则走 ConfigManager 用户配置
   };
   video: {
     ratio: '16:9' | '9:16' | '1:1';
@@ -700,7 +706,7 @@ interface ProjectGenerationConfig {
 }
 ```
 
-用户无需在右键菜单里选模型；如需更换，通过 Agent 输入框生成参数栏或 neko-market 设置。
+用户无需在右键菜单里选模型；如需更换，通过 Agent 输入框生成参数栏或编辑 `~/.neko/config.json`。
 
 ### 架构职责划分
 
@@ -1026,7 +1032,8 @@ export interface NodeGenerationConfig {
 ### `ResolvedGenerationParams` — 运行时合并结果
 
 ```typescript
-export type ParamSource = 'node' | 'project' | 'market' | 'system';
+export type ParamSource = 'node' | 'project' | 'config' | 'system';
+// 'config' = ConfigManager (~/.neko/config.json), 原 'market' 已废弃
 
 export interface ResolvedGenerationParams {
   image: ImageGenerationParams & { model: string; modelSource: ParamSource };
@@ -1039,7 +1046,7 @@ export interface ResolvedGenerationParams {
 **参数优先级**（从高到低）：
 ```
 node oneshot → node.generationConfig → project.generationParams
-→ neko-market.activeModel → system default
+→ ConfigManager.getEnabledModels(type)（~/.neko/config.json） → system default
 ```
 
 **锁定参数**（🔒）：剪辑时长由 neko-cut timeline 锁定，tool layer 拒绝覆盖。
@@ -1094,60 +1101,72 @@ nodes: {
 
 ## 开发方案 Phase 1–6
 
-### Phase 1 — 基础设施（@neko/shared 类型 + API 接口）
+### Phase 1 — 基础设施（@neko/shared 类型 + API 接口）✅
 
 **目标**：铺设所有后续阶段依赖的类型和接口，不含任何 UI。
 
-**1.1 新建 `packages/neko-types/src/types/generation.ts`**
+**1.1 `packages/neko-types/src/types/generation.ts`** ✅
 - `ImageGenerationParams`, `VideoGenerationParams`, `AudioGenerationParams`
 - `GenerationParams`, `GenerationModelConfig`, `NodeGenerationConfig`
 - `ResolvedGenerationParams`, `ParamSource`
-- `resolveGenerationParams(node, project, market, system)` — 合并函数
+- `resolveGenerationParams(node, project, config, system)` — 合并函数
 
-**1.2 新建 `packages/neko-types/src/types/agent-context.ts`**
+**1.2 `packages/neko-types/src/types/agent-context.ts`** ✅
 - `AgentContextType`, `AgentContextPayload`
 
-**1.3 扩展 `packages/neko-types/src/types/extension-api.ts`**
+**1.3 `packages/neko-types/src/types/extension-api.ts`** ✅
 - `NekoCanvasAPI.nodes` 命名空间（list/get/update/create/generateImage/generateBatch/onSelectionChange）
 
-**1.4 neko-canvas extension 实现 `nodes` API**
+**1.4 neko-canvas extension 实现 `nodes` API** ✅
 - 文件：`packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts`
 - 实现 `nodes.list/get/update/create` — 读写 canvasData
 - `nodes.generateImage/generateBatch` — 委托 BatchGenerationScheduler（已有）
 - `nodes.onSelectionChange` — 监听 webview postMessage `{ type: 'selectionChange', nodeIds[] }`
 
-**1.5 neko-market activeModel API**
-- 文件：`packages/neko-market/packages/extension/src/index.ts`
-- 导出 `getActiveModel(): ModelConfig` — 读取 workspace config `neko.market.activeModel`
+**1.5 ~~neko-market activeModel API~~（已取消）**
+
+生成模型不通过 neko-market 查询。neko-agent `ConfigManager` 已有完整基础设施：
+- `ConfigManager.getEnabledModels()` — 返回 `~/.neko/config.json` 中 `enabled: true` 的模型列表
+- `ModelConfig.type` 字段区分 `llm / image / video / audio / music`
+- 安装新模型后，neko-market 触发 `neko.agent.refreshModels` 写入配置，无需额外 API
+
+**生成工具调用时的模型解析**（`extensionTools.ts` 已实现，`ensureProjectModel()` 自动写入 workspace config）：
+```typescript
+// canvas_generate_image / canvas_generate_batch 工具执行前
+await ensureProjectModel('image');  // 从 ConfigManager 解析并写入 workspace config（若未配置）
+```
 
 **验证**：`cd packages/neko-types && npx tsc --noEmit`
 
 ---
 
-### Phase 2 — Canvas × Agent 核心流程
+### Phase 2 — Canvas × Agent 核心流程 ✅
 
 **目标**：Agent 能读写 Canvas 节点，Ambient Context 自动注入，节点生图状态同步。
 
-**2.1 Canvas MCP Tools（neko-agent extensionTools）**
+**2.1 Canvas MCP Tools（neko-agent extensionTools）** ✅
 - 文件：`packages/neko-agent/packages/extension/src/tools/extensionTools.ts`
-- 新增 `createNekoCanvasTools()` — 调用 `vscode.extensions.getExtension<NekoCanvasAPI>('neko.neko-canvas').exports`
-- 工具列表：
+- `createNekoCanvasTools(media?, config?)` — 接受 `ConfigManager`，`ensureProjectModel()` 自动解析
+- 工具列表（全部已实现）：
   - `canvas_list_nodes(type?)` → `nodes.list(type)`
   - `canvas_get_node(nodeId)` → `nodes.get(nodeId)`
   - `canvas_update_node(nodeId, data)` → `nodes.update(nodeId, data)` + 写 NodeGenerationConfig
   - `canvas_create_node(type, position, data)` → `nodes.create(...)`
-  - `canvas_generate_image(nodeId, cellId?)` → `nodes.generateImage(...)`
-  - `canvas_generate_batch(nodeIds[])` → `nodes.generateBatch(...)`
+  - `canvas_generate_image(nodeId, cellId?)` → 先 `ensureProjectModel('image')` → `nodes.generateImage(...)`
+  - `canvas_generate_batch(nodeIds[])` → 先 `ensureProjectModel('image')` → `nodes.generateBatch(...)`
   - `set_project_generation_config(params, models)` → 写 workspace config
+- `index.ts` 传入：`createNekoCanvasTools(platform.media, platform.config)`
 
-**2.2 Ambient Context 自动注入**
-- 文件：`packages/neko-agent/packages/extension/src/ai/agentContext.ts`
-- 扩展 `IAgentContext`：`canvasContext?: { selectedNodes: Array<{ nodeId, type, summary }> }`
-- 订阅 `NekoCanvasAPI.nodes.onSelectionChange` → 更新 agentContext
-- `buildSystemPrompt()` 中注入所选节点摘要（最多 5 个，超出截断）
+**2.2 Ambient Context 自动注入** ✅
+- `packages/neko-agent/packages/extension/src/services/canvasAmbientContext.ts` — 节点存储与摘要、导出 `SelectedNodeSummary` + `onDidChangeCanvasSelection` 事件
+- `packages/neko-agent/packages/extension/src/index.ts` — 订阅 `NekoCanvasAPI.nodes.onSelectionChange`，触发 `chatViewProvider.sendAmbientCanvasContext()`
+- `packages/neko-agent/packages/extension/src/chat/messageHandler.ts` — 系统提示注入（最多 5 个节点）
+- `packages/neko-agent/packages/extension/src/chat/chatProvider.ts` — `sendAmbientCanvasContext()` postMessage 到 webview（`type: 'ambientCanvasUpdate'`）
+- `packages/neko-agent/packages/webview/src/components/index.tsx` — 接收 `ambientCanvasUpdate`，更新 `ambientNodes` state
+- `packages/neko-agent/packages/webview/src/components/ChatView/InputArea/InputArea.tsx` — 渲染不可删除 ambient chips（`AgentContextChip` 无 `onRemove`）
 
-**2.3 BottomSheet 精简**
-- 文件：`packages/neko-canvas/packages/webview/src/components/panels/BottomSheet.tsx`（待创建）
+**2.3 BottomSheet 精简** ✅
+- 文件：`packages/neko-canvas/packages/webview/src/components/panels/BottomSheet.tsx`
 - 保留：生图参数（比例/分辨率/时长）、生成历史候选图切换、接受/拒绝按钮
 - 移除：完整 prompt 编辑器、风格选择（→ Agent）、角色引用选择（→ Agent）
 
@@ -1159,31 +1178,24 @@ nodes: {
 
 ---
 
-### Phase 3 — Agent 输入框 UI + 状态栏
+### Phase 3 — Agent 输入框 UI + 状态栏 ✅
 
 **目标**：完成 Agent 输入框的附件 Chip + 建议 Chip，以及状态栏模型显示。
 
-**3.1 附件 Chip 区域**
-- 文件：`packages/neko-agent/packages/webview/src/components/input/AgentInput.tsx`
-- 在输入框顶部（同一容器内）渲染 `AgentContextChip[]`
-- Chip 来源：
-  - 用户通过 `@` 主动添加
-  - 右键菜单 "→ Agent" 触发时由 Extension 注入（`AgentContextPayload`）
-  - Canvas 选中节点变化时自动更新（Ambient Context，不可手动删除）
-- Chip 样式：`[🎬 #3 镜头]×`（可手动删除），Ambient 类型无 `×`
+**3.1 附件 Chip 区域** ✅
+- 实际路径：`packages/neko-agent/packages/webview/src/components/ChatView/InputArea/`
+  - `InputArea.tsx` — 主组件，渲染 ambient chips（无 ×）+ contextChips（有 ×）
+  - `AgentContextChip.tsx` — `onRemove` 可选，不传时不显示 × 按钮
+- Ambient chips 来源：`canvasAmbientContext.onDidChangeCanvasSelection` → webview `ambientCanvasUpdate` 消息
+- 用户 chips 来源：`@` mention / 右键菜单 `neko.agent.sendContext`
 
-**3.2 建议 Chip（上下文感知）**
-- 根据当前 Chip 内容生成操作建议，点击填入输入框（不直接发送）
-- 规则（本地，非 LLM）：
-  - 附件含 ShotNode → `[批量生成图片]` `[重构这场戏]` `[优化镜头描述]`
-  - 附件含 story-selection → `[续写]` `[优化]` `[生成分镜]`
-  - 无附件 + canvas 激活 → `[生成全部镜头]` `[检查角色一致性]`
+**3.2 建议 Chip（上下文感知）** ✅
+- 文件：`packages/neko-agent/packages/webview/src/components/ChatView/InputArea/SuggestionChips.tsx`
 
-**3.3 / 斜杠命令**
-- 输入 `/` 显示命令选择器：`/task` `/batch` `/export` `/clear` `/help`
-- 本地过滤，无 LLM 调用
+**3.3 / 斜杠命令** ✅
+- 文件：`packages/neko-agent/packages/webview/src/components/ChatView/InputArea/SlashCommandMenu.tsx`
 
-**3.4 状态栏**
+**3.4 状态栏** ✅
 - 文件：`packages/neko-agent/packages/extension/src/statusBar.ts`
 - 左侧：`$(hubot) claude-sonnet-4-6`（LLM 模型，点击切换）
 - 右侧（context-aware）：
@@ -1197,12 +1209,13 @@ nodes: {
 
 ---
 
-### Phase 4 — neko-story + neko-cut 跨工具集成
+### Phase 4 — neko-story + neko-cut 跨工具集成 ✅
 
 **目标**：剧本编辑器内联 AI Diff，neko-cut 占位符 clip 生成。
 
-**4.1 neko-story 编辑器上下文**
-- 文件：`packages/neko-story/packages/extension/src/storyEditorProvider.ts`
+**4.1 neko-story 编辑器上下文** ✅
+- 实际文件：`packages/neko-story/packages/extension/src/extension.ts`（lines 186–234）
+  - 非独立 storyEditorProvider.ts，上下文注入直接在 extension.ts 激活逻辑中
 - 监听文本选中事件 → 更新 AgentContext `storyContext: { filePath, selectedRange, selectedText }`
 - 右键菜单 "→ Agent 续写/优化" → postMessage `sendToAgent` → Extension 注入 `AgentContextPayload`
 
@@ -1211,13 +1224,14 @@ nodes: {
 - neko-story webview 接收后渲染 accept/reject overlay（绿色 +/红色 × 样式）
 - 接受：`vscode.workspace.applyEdit()` via Extension；拒绝：清除 overlay
 
-**4.3 neko-cut 占位符 Clip**
-- `canvas_generate_image` / `canvas_generate_batch` 成功后：
-  - Agent 调用 `neko.cut.importGeneratedClip(assetPath, duration)` command
-  - neko-cut 在时间轴末尾插入占位符 Clip，资产准备好后自动替换
+**4.3 neko-cut 占位符 Clip** ✅
+- 命令已实现：
+  - `neko.cut.importGeneratedClip` — `packages/neko-cut/packages/extension/src/commands/index.ts:107`
+  - `neko.cut.importStoryboard` — `packages/neko-cut/packages/extension/src/commands/timeline-commands.ts:441`
+- Agent 生成完成后调用 `neko.cut.importGeneratedClip(assetPath, duration)` → 插入占位符 Clip
 
-**4.4 Script→Shot 跨工具链路**
-- Agent 工具 `import_script_to_canvas(scriptPath)`：
+**4.4 Script→Shot 跨工具链路** ✅
+- Agent 工具 `import_script_to_canvas(scriptPath)` — `extensionTools.ts:1325`
   1. 调用 `neko.story.getScriptIndex(scriptPath)` 获取场景列表
   2. 为每个场景调用 `canvas_create_node('scene', ...)` 创建 SceneGroupNode
   3. 解析场景内对话行，为每句调用 `canvas_create_node('shot', ...)` 创建 ShotNode
@@ -1227,12 +1241,12 @@ nodes: {
 
 ---
 
-### Phase 5 — 智能补全（Story + Agent）
+### Phase 5 — 智能补全（Story + Agent）✅
 
 **目标**：story/markdown 双层补全，Agent 输入框 @mention 补全。
 
-**5.1 Story 本地规则补全**
-- 文件：`packages/neko-story/packages/extension/src/completionProvider.ts`
+**5.1 Story 本地规则补全** ✅
+- 文件：`packages/neko-story/packages/extension/src/providers/completion.ts`
 - 注册 `vscode.languages.registerCompletionItemProvider(['nks', 'fountain', 'markdown'])`
 - 本地规则（< 50ms）：
   - `INT.` / `EXT.` → 场景位置模板
@@ -1240,17 +1254,20 @@ nodes: {
   - `@` → 角色名列表（从 ScriptIndex 提取）
   - Markdown 标题 `#` → 结构模板
 
-**5.2 Story LLM Ghost Text**
+**5.2 Story LLM Ghost Text** ✅
+- 文件：`packages/neko-story/packages/extension/src/providers/inlineCompletion.ts`
 - 400ms debounce，仅在行尾触发
-- postMessage → Extension → `executeCommand('neko.agent.complete', { text, context })` → 返回 ghost text
-- Webview 渲染浅灰色 ghost text，Tab 接受，Esc 拒绝
+- `executeCommand('neko.agent.internalChat', { text, context })` → 返回 ghost text
+- Tab 接受，Esc / 继续输入忽略
 - 模型使用 `ModelConfig.llm`（状态栏可见）
 
-**5.3 Agent @mention 补全**
+**5.3 Agent @mention 补全** ✅
+- 文件：`packages/neko-agent/packages/webview/src/components/ChatView/InputArea/MentionMenu.tsx`
 - `@` 触发 → 本地搜索：文件树 + canvas nodes + story 角色列表
 - 补全结果为 `AgentContextPayload`，选中后生成 Chip
 
-**5.4 Agent / 斜杠命令扩展**
+**5.4 Agent / 斜杠命令扩展** ✅
+- 文件：`packages/neko-agent/packages/webview/src/components/ChatView/InputArea/SlashCommandMenu.tsx`
 - 允许插件注册自定义斜杠命令：`registerSlashCommand(name, description, handler)`
 - neko-canvas 注册：`/batch` `/export` `/storyboard`
 - neko-cut 注册：`/render` `/timeline`
@@ -1259,31 +1276,30 @@ nodes: {
 
 ---
 
-### Phase 6 — 高级生成功能
+### Phase 6 — 高级生成功能 ✅
 
 **目标**：首尾帧、风格迁移、neko-sketch 集成。
 
-**6.1 首尾帧生成（video）**
-- `canvas_generate_video_with_keyframes(nodeId, firstFrameNodeId, lastFrameNodeId)` tool
-- Extension 调用 neko-market video 模型，传入首尾帧 base64
+**6.1 首尾帧生成（video）** ✅
+- `canvas_generate_video_with_keyframes(nodeId, firstFrameNodeId, lastFrameNodeId)` — `extensionTools.ts:859`
+- Extension 调用 MediaGenerationService video 模型，传入首尾帧 base64
 - 结果写回 ShotNode `generatedVideo` 字段
 
-**6.2 风格迁移**
-- `canvas_apply_style_transfer(targetNodeIds[], referenceNodeId)` tool
+**6.2 风格迁移** ✅
+- `canvas_apply_style_transfer(targetNodeIds[], referenceNodeId)` — `extensionTools.ts:789`
 - referenceNodeId 为 GalleryNode（IP-Adapter reference）
 - BatchGenerationScheduler 批量处理，逐一更新状态
 
-**6.3 neko-sketch 集成**
-- Agent 工具 `sketch_generate(prompt, canvasNodeId?)`：
-  - 调用 `NekoSketchAPI.importImageData()` 将生成图导入 sketch 图层
-  - 可选绑定到 canvas ShotNode（写入 `generatedImage`）
+**6.3 neko-sketch 集成** ✅
+- Agent 工具 `sketch_generate(prompt)` — `createNekoSketchTools()` in `extensionTools.ts:1458`
+- 调用 `NekoSketchAPI.importImageData(base64, name)` 将生成图导入 sketch 图层
 - neko-sketch 右键菜单 "→ Agent 优化" → sendToAgent + canvas 节点 Chip
 
-**6.4 分镜导出增强**
-- `export_storyboard(format: 'pdf'|'zip'|'neko-cut')` tool
+**6.4 分镜导出增强** ✅
+- `export_storyboard(format: 'pdf'|'zip'|'neko-cut')` — `extensionTools.ts:599`
 - PDF：每页一个 ShotNode，jsPDF 渲染
 - ZIP：JSZip 打包，`shots/001_[MS]_Alice.png` + `manifest.json`
-- neko-cut：`executeCommand('neko.cut.importStoryboard', shots[])` → 生成字幕轨
+- neko-cut：`executeCommand('neko.cut.importStoryboard', shots[])` — `timeline-commands.ts:441`
 
 **验证**：`pnpm build:neko-canvas && pnpm build:neko-agent`
 
@@ -1293,25 +1309,38 @@ nodes: {
 
 #### 新增文件
 
-| 文件 | 阶段 |
-|------|------|
-| `packages/neko-types/src/types/generation.ts` | Ph1 |
-| `packages/neko-types/src/types/agent-context.ts` | Ph1 |
-| `packages/neko-canvas/packages/webview/src/components/panels/BottomSheet.tsx` | Ph2 |
-| `packages/neko-story/packages/extension/src/completionProvider.ts` | Ph5 |
+| 文件 | 阶段 | 状态 |
+|------|------|------|
+| `packages/neko-types/src/types/generation.ts` | Ph1 | ✅ |
+| `packages/neko-types/src/types/agent-context.ts` | Ph1 | ✅ |
+| `packages/neko-canvas/packages/webview/src/components/panels/BottomSheet.tsx` | Ph2 | ✅ |
+| `packages/neko-agent/packages/extension/src/services/canvasAmbientContext.ts` | Ph2 | ✅ |
+| `packages/neko-story/packages/extension/src/providers/completion.ts` | Ph5 | ✅ |
+| `packages/neko-story/packages/extension/src/providers/inlineCompletion.ts` | Ph5 | ✅ |
 
 #### 修改文件
 
-| 文件 | 变更 | 阶段 |
-|------|------|------|
-| `packages/neko-types/src/types/extension-api.ts` | `NekoCanvasAPI.nodes` 命名空间 | Ph1 |
-| `packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts` | 实现 `nodes` API + selectionChange | Ph1 |
-| `packages/neko-agent/packages/extension/src/tools/extensionTools.ts` | `createNekoCanvasTools()` | Ph2 |
-| `packages/neko-agent/packages/extension/src/ai/agentContext.ts` | `canvasContext` + ambient sync | Ph2 |
-| `packages/neko-agent/packages/webview/src/components/input/AgentInput.tsx` | Chip 区 + 建议 Chip + / 命令 | Ph3 |
-| `packages/neko-agent/packages/extension/src/statusBar.ts` | LLM + 生成模型展示 | Ph3 |
-| `packages/neko-story/packages/extension/src/storyEditorProvider.ts` | 上下文注入 + 右键菜单 | Ph4 |
-| `packages/neko-market/packages/extension/src/index.ts` | `getActiveModel()` export | Ph1 |
+| 文件 | 变更 | 阶段 | 状态 |
+|------|------|------|------|
+| `packages/neko-types/src/types/extension-api.ts` | `NekoCanvasAPI.nodes` 命名空间 | Ph1 | ✅ |
+| `packages/neko-canvas/packages/extension/src/editor/canvasEditorProvider.ts` | 实现 `nodes` API + selectionChange | Ph1 | ✅ |
+| `packages/neko-agent/packages/extension/src/tools/extensionTools.ts` | `createNekoCanvasTools(media, config)` + `ensureProjectModel` + 全部工具 | Ph2 | ✅ |
+| `packages/neko-agent/packages/extension/src/index.ts` | 传 `platform.config`，订阅 `onDidChangeCanvasSelection` | Ph2 | ✅ |
+| `packages/neko-agent/packages/extension/src/chat/chatProvider.ts` | `sendAmbientCanvasContext()` | Ph2 | ✅ |
+| `packages/neko-agent/packages/extension/src/chat/messageHandler.ts` | 系统提示注入 ambient 节点 | Ph2 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/index.tsx` | `ambientCanvasUpdate` 消息处理 + state | Ph2 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/ChatView/InputAreaContext.tsx` | `ambientNodes` prop | Ph2 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/ChatView/InputArea/InputArea.tsx` | 渲染 ambient chips + contextChips | Ph3 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/ChatView/InputArea/AgentContextChip.tsx` | `onRemove` 可选 | Ph3 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/ChatView/InputArea/SuggestionChips.tsx` | 上下文感知建议 chip | Ph3 | ✅ |
+| `packages/neko-agent/packages/webview/src/components/ChatView/InputArea/SlashCommandMenu.tsx` | / 斜杠命令 + MentionMenu | Ph3 | ✅ |
+| `packages/neko-agent/packages/extension/src/statusBar.ts` | LLM + 生成模型展示 | Ph3 | ✅ |
+| `packages/neko-story/packages/extension/src/extension.ts` | 上下文注入 + 右键菜单（lines 186–234） | Ph4 | ✅ |
+| `packages/neko-cut/packages/extension/src/commands/index.ts` | `neko.cut.importGeneratedClip` (line 107) | Ph4 | ✅ |
+| `packages/neko-cut/packages/extension/src/commands/timeline-commands.ts` | `neko.cut.importStoryboard` (line 441) | Ph4 | ✅ |
+
+> **已取消**：`packages/neko-market/packages/extension/src/index.ts` — `getActiveModel()` 方案废弃，
+> 改用 neko-agent `ConfigManager.getEnabledModels()` 读取 `~/.neko/config.json`。
 
 ---
 

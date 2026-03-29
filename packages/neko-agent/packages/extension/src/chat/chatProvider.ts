@@ -396,6 +396,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Push the current canvas ambient selection to the webview so it can render
+   * non-removable ambient chips in the input area.
+   */
+  public sendAmbientCanvasContext(
+    nodes: import('../services/canvasAmbientContext').SelectedNodeSummary[],
+  ): void {
+    if (!this._view?.webview) return;
+    this._view.webview.postMessage({ type: 'ambientCanvasUpdate', nodes });
+  }
+
+  /**
    * Attach an agent context payload to the chat panel.
    * Focuses the panel and injects the chip + optional intent prefill.
    */

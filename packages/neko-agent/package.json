@@ -161,6 +161,16 @@
         "category": "NekoAgent: Script"
       },
       {
+        "command": "neko.ai.summarizeDocument",
+        "title": "%neko.ai.summarizeDocument.title%",
+        "category": "NekoAgent: AI"
+      },
+      {
+        "command": "neko.ai.chatWithDocument",
+        "title": "%neko.ai.chatWithDocument.title%",
+        "category": "NekoAgent: AI"
+      },
+      {
         "command": "neko.pipeline.start",
         "title": "Start Creative Pipeline...",
         "category": "NekoAgent: Pipeline"
@@ -206,9 +216,39 @@
       ],
       "explorer/context": [
         {
-          "command": "neko.pipeline.startFromFile",
+          "command": "neko.ai.summarizeDocument",
           "group": "neko@1",
+          "when": "resourceExtname =~ /\\.pdf|\\.docx|\\.doc|\\.epub|\\.pptx|\\.ppt|\\.xlsx|\\.xls|\\.fdx|\\.txt|\\.md|\\.fountain/"
+        },
+        {
+          "command": "neko.ai.chatWithDocument",
+          "group": "neko@2",
+          "when": "resourceExtname =~ /\\.pdf|\\.docx|\\.doc|\\.epub|\\.pptx|\\.ppt|\\.xlsx|\\.xls|\\.fdx|\\.txt|\\.md|\\.fountain/"
+        },
+        {
+          "command": "neko.pipeline.startFromFile",
+          "group": "neko@3",
           "when": "resourceExtname =~ /\\.fountain|\\.md|\\.txt|\\.pdf|\\.docx/"
+        },
+        {
+          "command": "neko.ai.analyzeImage",
+          "group": "neko@4",
+          "when": "resourceExtname =~ /\\.png|\\.jpg|\\.jpeg|\\.gif|\\.webp|\\.bmp/"
+        },
+        {
+          "command": "neko.ai.extractImageText",
+          "group": "neko@5",
+          "when": "resourceExtname =~ /\\.png|\\.jpg|\\.jpeg|\\.gif|\\.webp|\\.bmp/"
+        },
+        {
+          "command": "neko.ai.analyzeVideo",
+          "group": "neko@6",
+          "when": "resourceExtname =~ /\\.mp4|\\.mov|\\.mkv|\\.avi|\\.webm|\\.m4v/"
+        },
+        {
+          "command": "neko.ai.generateSubtitles",
+          "group": "neko@7",
+          "when": "resourceExtname =~ /\\.mp4|\\.mov|\\.mkv|\\.avi|\\.webm|\\.m4v/"
         }
       ]
     },

@@ -47,6 +47,15 @@ export class SettingsHandler {
     // Get chat model options from Platform ConfigManager
     const chatModelOptions = this.deps.platform?.config.getChatModelOptions() ?? [];
 
+    // Resolve defaultMediaModels model IDs to ChatModelOption IDs (providerId:modelId format)
+    const rawDefaults = this.deps.platform?.config.getDefaultMediaModels() ?? {};
+    const defaultMediaModels: Partial<Record<string, string>> = {};
+    for (const [category, modelId] of Object.entries(rawDefaults)) {
+      if (!modelId) continue;
+      const option = chatModelOptions.find((o) => o.modelId === modelId);
+      if (option) defaultMediaModels[category] = option.id;
+    }
+
     webview.postMessage({
       type: 'settingsData',
       selectedProviderId: this.deps.settings.selectedProviderId,
@@ -59,6 +68,7 @@ export class SettingsHandler {
       maxTokens: this.deps.settings.maxTokens,
       executionMode: this.deps.settings.executionMode,
       chatModelOptions,
+      defaultMediaModels,
     });
   }
 
