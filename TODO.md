@@ -54,7 +54,7 @@
 - [ ] **分镜系统 P2**：GenerationPromptPanel（内嵌生图对话框，ADR-2D-007）— 风格/景别/@引用素材委托 neko-agent.generateForNode
 - [ ] **分镜系统 P2**：角色一致性 — @引用素材节点图片 → IP-Adapter reference 注入
 - [ ] **GalleryNode P2**：多视图画廊节点（`gallery` 类型）— 预置三视图/四视图/九宫格/转面8方向；单格独立生图 + 批量生图；@引用粒度到单格（cell），用于分镜 IP-Adapter 角色一致性；`costumeLabel` 支持服装版本切换
-- [ ] **AutoPrompt P1**：`neko.agent.buildPrompt(shotContext)` — 中文画面描述 + 角色/景别/情绪 → 结构化英文 prompt；GenerationPromptPanel 发送前预览/编辑
+- [x] **AutoPrompt P1**：`neko.agent.buildPrompt(shotContext)` — 中文画面描述 + 角色/景别/情绪 → 结构化英文 prompt；GenerationPromptPanel 发送前预览/编辑 ✅
 - [ ] **分镜导出 P1**：PDF 分镜表（jsPDF）+ ZIP 图片包（JSZip）+ neko-cut 时间线导入（分镜图 → MediaElement + 字幕轨）
 - [ ] **候选选择 UI P2**：创意视图卡片候选滑动（GeneratedImageVersion[] ◀ N/M ▶）；单次生成 1-4 张
 - [ ] **ShotNode 补充字段 P2**：`dialogue` / `voiceOver` / `soundCue`（台词/画外音/音效，连通 neko-cut 字幕轨）
@@ -86,4 +86,4 @@
 
 ---
 
-*最后更新：2026-03-29（CanvasNodeType 全集类型扩展；BatchGenerationScheduler；Canvas × Agent MCP Tools 全链路（sendRequest↔_response + canvasAmbientContext 环境注入））*
+*最后更新：2026-03-29（CanvasNodeType 全集类型扩展；BatchGenerationScheduler；Canvas × Agent MCP Tools 全链路（sendRequest↔_response + canvasAmbientContext 环境注入）；AutoPrompt neko.agent.buildPrompt（LLM shot→英文 prompt）；statusBar.ts（活跃模型状态栏）；neko-cut 时间线导入（storyboardExport.exportToNekoCut）））*

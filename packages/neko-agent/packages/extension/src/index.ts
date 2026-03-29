@@ -31,6 +31,7 @@ import { setCanvasSelection, clearCanvasSelection } from './services/canvasAmbie
 import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
+import { createStatusBar } from './statusBar';
 import type { Platform } from '@neko/platform';
 
 /**
@@ -91,6 +92,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Subscribe to canvas selection changes for ambient context injection
   subscribeCanvasSelection(context);
+
+  // Status bar — shows active LLM model, click to open chat
+  context.subscriptions.push(createStatusBar(bootstrapResult.platform));
 
   getRootLogger().info('Extension activated');
 }
@@ -354,6 +358,75 @@ function registerCommands(
       if (!platform) return;
       await refreshOllamaModels(platform);
     }),
+  );
+
+  // AutoPrompt: converts shot metadata (visual description, characters, scale, etc.)
+  // from Chinese to a structured English image-generation prompt.
+  // Called by canvasEditorProvider when GenerationPromptPanel requests AutoPrompt.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.buildPrompt',
+      async (shotData: {
+        visualDescription?: string;
+        characters?: Array<{ characterName: string }>;
+        shotScale?: string;
+        cameraMovement?: string;
+        cameraAngle?: string;
+        characterAction?: string;
+        emotion?: string[];
+        sceneTags?: string[];
+        dialogue?: string;
+      }): Promise<string> => {
+        try {
+          const platform = services.get(IPlatform);
+          if (!platform) return '';
+          const service = platform.createService();
+
+          const parts: string[] = [];
+          if (shotData.visualDescription) parts.push(`Scene: ${shotData.visualDescription}`);
+          if (shotData.characters?.length) {
+            parts.push(`Characters: ${shotData.characters.map((c) => c.characterName).join(', ')}`);
+          }
+          if (shotData.shotScale) parts.push(`Shot scale: ${shotData.shotScale}`);
+          if (shotData.cameraMovement && shotData.cameraMovement !== 'static') {
+            parts.push(`Camera: ${shotData.cameraMovement}`);
+          }
+          if (shotData.cameraAngle && shotData.cameraAngle !== 'eye-level') {
+            parts.push(`Angle: ${shotData.cameraAngle}`);
+          }
+          if (shotData.characterAction) parts.push(`Action: ${shotData.characterAction}`);
+          if (shotData.emotion?.length) parts.push(`Emotion: ${shotData.emotion.join(', ')}`);
+          if (shotData.sceneTags?.length) parts.push(`Tags: ${shotData.sceneTags.join(', ')}`);
+          if (shotData.dialogue) parts.push(`Dialogue: "${shotData.dialogue}"`);
+
+          const userContent = parts.join('\n');
+          const messages: ChatMessage[] = [
+            {
+              role: 'system',
+              content:
+                'You are an expert cinematographer and image generation prompt engineer. ' +
+                'Given shot metadata (which may be in Chinese or English), output a single, ' +
+                'concise English image generation prompt (≤120 words). ' +
+                'Follow this structure: subject + environment + lighting + composition + style. ' +
+                'Include shot scale, camera angle, and character emotions naturally. ' +
+                'Output ONLY the prompt text, no explanations or markdown.',
+            },
+            {
+              role: 'user',
+              content: userContent || 'Generate an image prompt for this shot.',
+            },
+          ];
+
+          const response = await service.chat(messages, { maxTokens: 300 });
+
+          const content = response.message.content;
+          return typeof content === 'string' ? content.trim() : '';
+        } catch (err) {
+          getRootLogger().warn('neko.agent.buildPrompt failed', { error: err });
+          return '';
+        }
+      },
+    ),
   );
 
   // Internal API: allows other Neko extensions to use the configured LLM
