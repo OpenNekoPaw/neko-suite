@@ -12,9 +12,11 @@ import { ModeSelector } from './ModeSelector';
 import { SessionModeSelector } from './SessionModeSelector';
 import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
-import { FileReferenceMenu, getFilteredFiles, parseFileReference } from './FileReferenceMenu';
-import { MessageAttachment, ProjectFile, SlashCommand } from './types';
+import { parseFileReference } from './FileReferenceMenu';
+import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
+import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
 import { AgentContextChip } from './AgentContextChip';
+import { SuggestionChips } from './SuggestionChips';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
@@ -23,7 +25,6 @@ import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
-  projectFiles?: ProjectFile[];
   droppedFiles?: MessageAttachment[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
@@ -38,7 +39,6 @@ interface InputAreaProps {
 export function InputArea({
   inputValue,
   isThinking,
-  projectFiles = [],
   droppedFiles,
   onDroppedFilesProcessed,
   onInputChange,
@@ -64,8 +64,11 @@ export function InputArea({
     onCompressContext,
     mediaModelCallCount,
     skills,
+    pluginCommands = [],
     onSlashCommand,
     onRequestFiles,
+    mentionItems = [],
+    onAddContextChip,
     contextChips,
     onRemoveContextChip,
     onTriggerSend,
@@ -122,8 +125,8 @@ export function InputArea({
   }, [droppedFiles, onDroppedFilesProcessed, updateAttachedFiles]);
 
   // Filtered data
-  const filteredCommands = getFilteredCommands(slashFilter, skills);
-  const filteredFiles = getFilteredFiles(projectFiles, atFilter);
+  const filteredCommands = getFilteredCommands(slashFilter, skills, pluginCommands);
+  const filteredMentionItems = getFilteredMentionItems(mentionItems, atFilter);
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -222,20 +225,22 @@ export function InputArea({
     }
 
     // @ menu navigation
-    if (showAtMenu && filteredFiles.length > 0) {
+    if (showAtMenu && filteredMentionItems.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedFileIndex((prev) => (prev + 1) % filteredFiles.length);
+        setSelectedFileIndex((prev) => (prev + 1) % filteredMentionItems.length);
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedFileIndex((prev) => (prev - 1 + filteredFiles.length) % filteredFiles.length);
+        setSelectedFileIndex(
+          (prev) => (prev - 1 + filteredMentionItems.length) % filteredMentionItems.length,
+        );
         return;
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault();
-        insertFilePath(filteredFiles[selectedFileIndex].path);
+        handleMentionSelect(filteredMentionItems[selectedFileIndex]!);
         return;
       }
       if (e.key === 'Escape') {
@@ -309,6 +314,21 @@ export function InputArea({
     onInputChange(newValue);
     setShowAtMenu(false);
     textareaRef.current?.focus();
+  };
+
+  /** Handle selection from MentionMenu — file inserts @path, others create a context chip */
+  const handleMentionSelect = (item: MentionItem) => {
+    if (item.kind === 'file' && item.filePath) {
+      insertFilePath(item.filePath);
+    } else if (item.contextPayload && onAddContextChip) {
+      // Remove the trailing @filter from input
+      const lastAtIndex = inputValue.lastIndexOf('@');
+      const newValue = inputValue.slice(0, lastAtIndex);
+      onInputChange(newValue);
+      onAddContextChip(item.contextPayload);
+      setShowAtMenu(false);
+      textareaRef.current?.focus();
+    }
   };
 
   const handleSend = () => {
@@ -443,17 +463,32 @@ export function InputArea({
           onSelect={selectSlashCommand}
           onClose={() => setShowSlashMenu(false)}
           skills={skills}
+          pluginCommands={pluginCommands}
         />
 
-        {/* File reference menu */}
-        <FileReferenceMenu
+        {/* @mention menu — files, canvas nodes, story characters */}
+        <MentionMenu
           isOpen={showAtMenu}
           filter={atFilter}
-          files={projectFiles}
+          items={mentionItems}
           selectedIndex={selectedFileIndex}
-          onSelect={insertFilePath}
+          onSelectFile={insertFilePath}
+          onSelectContext={(payload) => {
+            if (onAddContextChip) {
+              const lastAtIndex = inputValue.lastIndexOf('@');
+              onInputChange(inputValue.slice(0, lastAtIndex));
+              onAddContextChip(payload);
+              setShowAtMenu(false);
+              textareaRef.current?.focus();
+            }
+          }}
           onClose={() => setShowAtMenu(false)}
         />
+
+        {/* Context-aware suggestion chips — click to pre-fill input */}
+        {contextChips.length > 0 && (
+          <SuggestionChips contextChips={contextChips} onSuggest={onInputChange} />
+        )}
 
         {/* Agent context chips — shown above textarea when context is attached */}
         {contextChips.length > 0 && (

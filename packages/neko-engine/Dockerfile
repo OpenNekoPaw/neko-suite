@@ -1,28 +1,64 @@
-# ==================== 构建阶段 ====================
-FROM rust:1.82-bookworm AS builder
+# ==================== 阶段1：下载预构建 FFmpeg 7.x ==================
+FROM debian:bookworm-slim AS ffmpeg-dl
 
-# 安装 FFmpeg 开发库 + Vulkan 开发库 + 构建工具
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    wget xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 下载 BtbN FFmpeg 7.1 预构建共享库（含头文件），用于编译
+# https://github.com/BtbN/FFmpeg-Builds/releases
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then PLATFORM="linuxarm64"; else PLATFORM="linux64"; fi && \
+    wget -q "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-${PLATFORM}-gpl-shared-7.1.tar.xz" \
+         -O /tmp/ffmpeg.tar.xz && \
+    mkdir -p /opt/ffmpeg && \
+    tar -xJf /tmp/ffmpeg.tar.xz -C /opt/ffmpeg --strip-components=1 && \
+    rm /tmp/ffmpeg.tar.xz
+
+# ==================== 阶段2：Rust 构建 ====================
+FROM rust:1.85-bookworm AS builder
+
+# 安装构建工具（不需要系统 FFmpeg）
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
-    libavcodec-dev \
-    libavformat-dev \
-    libavfilter-dev \
-    libavutil-dev \
-    libavdevice-dev \
-    libswscale-dev \
-    libswresample-dev \
     libvulkan-dev \
     vulkan-validationlayers-dev \
     libclang-dev \
     clang \
+    libasound2-dev \
+    libudev-dev \
+    libxkbcommon-dev \
+    libwayland-dev \
+    libx11-dev \
+    libxrandr-dev \
+    libxi-dev \
+    libxcursor-dev \
+    libxfixes-dev \
+    libssl-dev \
+    libva-dev \
+    mold \
     && rm -rf /var/lib/apt/lists/*
+
+# 从 ffmpeg-dl 阶段复制预构建的 FFmpeg 头文件和库
+COPY --from=ffmpeg-dl /opt/ffmpeg /opt/ffmpeg
+
+# 设置 FFmpeg 路径（ffmpeg-sys-next 使用 FFMPEG_DIR 发现头文件和库）
+ENV FFMPEG_DIR=/opt/ffmpeg
+ENV PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig
+ENV LD_LIBRARY_PATH=/opt/ffmpeg/lib
 
 WORKDIR /app
 
-# 复制 workspace 配置（利用 Docker 缓存层）
+# 复制 workspace 配置 + vendor（离线构建）
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo/ ./.cargo/
+COPY vendor/ ./vendor/
 
-# 复制所有 crate（workspace 需要全部存在）
+# 复制所有 crate
 COPY packages/types/           ./packages/types/
 COPY packages/native-core/     ./packages/native-core/
 COPY packages/native-api/      ./packages/native-api/
@@ -30,34 +66,37 @@ COPY packages/native-http/     ./packages/native-http/
 COPY packages/native-cli/      ./packages/native-cli/
 COPY packages/native-scene/    ./packages/native-scene/
 COPY packages/native-puppet/   ./packages/native-puppet/
-# native-napi 不参与 CLI 构建，跳过
-# COPY packages/native-napi/   ./packages/native-napi/
+COPY packages/native-napi/     ./packages/native-napi/
 
-# 构建 CLI binary（跳过 native-napi，避免 napi-rs 依赖）
-RUN cargo build --release --bin neko-engine -p neko-native-cli
+# 构建 CLI binary（离线，使用 vendor + 预构建 FFmpeg）
+# - mold 链接器：内存占用极低
+# - strip symbols：减少链接内存峰值
+# - CARGO_PROFILE_RELEASE_LTO=thin：覆盖 Cargo.toml 的 lto=true（fat LTO 极耗内存），
+#   thin LTO 仍能跨 crate 优化，但内存占用降低约 70%
+RUN RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=mold -C strip=symbols" \
+    CARGO_PROFILE_RELEASE_LTO=thin \
+    cargo build --release --offline --frozen --bin neko-engine -p neko-native-cli
 
-# ==================== 运行阶段 ====================
+# ==================== 阶段3：运行阶段 ====================
 FROM debian:bookworm-slim AS runner
 
-# 安装 FFmpeg 运行时 + Vulkan 运行时 + Mesa 软件渲染器（GPU fallback）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # FFmpeg 运行时库
-    libavcodec60 \
-    libavformat60 \
-    libavfilter9 \
-    libavutil58 \
-    libswscale7 \
-    libswresample4 \
-    # Vulkan loader（wgpu 需要）
+# 安装 Vulkan + Mesa 软件渲染器 + VAAPI + 基础工具
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     libvulkan1 \
-    # Mesa llvmpipe — 无 GPU 时的 CPU 软件渲染器
     mesa-vulkan-drivers \
-    # VAAPI（Linux 硬件编码，有 GPU 时使用）
     libva-drm2 \
     libva2 \
-    # 基础工具
+    libasound2 \
+    libudev1 \
+    wget \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# 复制预构建的 FFmpeg 运行时库（比系统包版本新）
+COPY --from=ffmpeg-dl /opt/ffmpeg/lib/*.so* /usr/local/lib/
+RUN ldconfig
 
 WORKDIR /app
 
@@ -72,5 +111,4 @@ EXPOSE 8765
 
 ENV RUST_LOG=info
 
-# 默认以服务模式启动
 CMD ["./neko-engine", "serve", "--port", "8765"]

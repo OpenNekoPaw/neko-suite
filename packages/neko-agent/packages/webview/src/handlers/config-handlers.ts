@@ -38,10 +38,43 @@ const handleSettingsData: MessageHandler = (message, context) => {
 };
 
 /**
- * Handle 'projectFiles' message - Project file list
+ * Handle 'projectFiles' message - Project file list + optional canvas/story mention extras
  */
 const handleProjectFiles: MessageHandler = (message, context) => {
-  context.setProjectFiles(message.files || []);
+  const files: Array<{ path: string; name: string; type: 'file' | 'folder'; icon?: string }> =
+    message.files || [];
+  context.setProjectFiles(files);
+
+  // Build unified MentionItem list: files first, then canvas nodes / characters
+  const fileMentions = files.map((f) => ({
+    id: `file:${f.path}`,
+    kind: 'file' as const,
+    label: f.name,
+    description: f.path,
+    filePath: f.path,
+  }));
+
+  const extras: Array<{
+    type: 'canvas-node' | 'character' | 'scene';
+    id: string;
+    label: string;
+    summary: string;
+  }> = message.mentionExtras || [];
+
+  const extraMentions = extras.map((e) => ({
+    id: `${e.type}:${e.id}`,
+    kind: e.type as import('@/components/ChatView/InputArea/types').MentionItemKind,
+    label: e.label,
+    description: e.type === 'canvas-node' ? 'Canvas node' : e.type,
+    contextPayload: {
+      type: e.type,
+      id: e.id,
+      label: e.label,
+      summary: e.summary,
+    } as import('@neko/shared').AgentContextPayload,
+  }));
+
+  context.setMentionItems([...fileMentions, ...extraMentions]);
 };
 
 /**
@@ -90,6 +123,20 @@ const handleMCPServerTestResult: MessageHandler = (_message, _context) => {
 };
 
 /**
+ * Handle 'pluginCommands' message - Plugin slash commands from external extensions
+ */
+const handlePluginCommands: MessageHandler = (message, context) => {
+  const commands: Array<{
+    id: string;
+    name: string;
+    description: string;
+    icon?: string;
+    extensionId: string;
+  }> = message.commands || [];
+  context.setPluginCommands(commands);
+};
+
+/**
  * Skills/hooks data handlers removed — webview does not consume this data.
  * Skills and hooks are managed internally by Extension (ConfigBridge accessors).
  */
@@ -103,4 +150,5 @@ export const configHandlers: HandlerRegistration[] = [
   { type: 'configState', handler: handleConfigState },
   { type: 'configChanged', handler: handleConfigChanged },
   { type: 'mcpServerTestResult', handler: handleMCPServerTestResult },
+  { type: 'pluginCommands', handler: handlePluginCommands },
 ];

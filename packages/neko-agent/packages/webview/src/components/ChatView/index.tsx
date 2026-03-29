@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Message, AgentState } from '@/components/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
-import { InputArea, ProjectFile, MessageAttachment } from '@/components/ChatView/InputArea';
+import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
 import { EmptyState } from '@/components/ChatView/EmptyState';
 import { DropZone } from '@/components/ChatView/DropZone';
 import { BackgroundTask } from '@/components/TaskListView';
@@ -18,7 +18,6 @@ interface ChatViewProps {
   inputValue: string;
   isThinking: boolean;
   streamingMessageId: string | null;
-  projectFiles?: ProjectFile[];
   /** Pending skill confirmation request */
   pendingSkillConfirm?: SkillConfirmRequest | null;
   /** Active skill indicator */
@@ -57,7 +56,6 @@ export function ChatView({
   inputValue,
   isThinking,
   streamingMessageId,
-  projectFiles,
   pendingSkillConfirm,
   activeSkill,
   onConfirmSkill,
@@ -148,7 +146,6 @@ export function ChatView({
         <InputArea
           inputValue={inputValue}
           isThinking={isThinking}
-          projectFiles={projectFiles}
           droppedFiles={droppedFiles}
           onDroppedFilesProcessed={handleDroppedFilesProcessed}
           onInputChange={onInputChange}

@@ -46,6 +46,17 @@ export function useSlashCommands({
         return;
       }
 
+      // Handle plugin commands (registered by external extensions)
+      if (command.source === 'plugin' && command.extensionId) {
+        clearInput();
+        VSCodeMessages.invokePluginSlashCommand(
+          command.extensionId,
+          command.id,
+          inputValue || undefined,
+        );
+        return;
+      }
+
       // Handle builtin commands
       switch (command.id) {
         case 'clear':

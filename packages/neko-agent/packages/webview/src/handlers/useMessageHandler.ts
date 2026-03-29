@@ -24,7 +24,11 @@ import type {
 } from '@/components/types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
-import type { SkillSummary } from '@/components/ChatView/InputArea/types';
+import type {
+  SkillSummary,
+  MentionItem,
+  PluginSlashCommandDef,
+} from '@/components/ChatView/InputArea/types';
 import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from './types';
 
 /**
@@ -65,6 +69,8 @@ export interface UseMessageHandlerProps {
 
   // State setters - Project
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
+  setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
+  setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
 
   // State setters - Agent state
   setAgentState: React.Dispatch<React.SetStateAction<AgentState | null>>;
@@ -120,6 +126,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setBackgroundTasks,
 
     setProjectFiles,
+    setMentionItems,
+    setPluginCommands,
     setAgentState,
     conversationAgentStateRef,
     forceAgentStateUpdate,
@@ -183,6 +191,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setBackgroundTasks,
 
       setProjectFiles,
+      setMentionItems,
+      setPluginCommands,
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,
@@ -218,6 +228,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setBackgroundTasks,
 
       setProjectFiles,
+      setMentionItems,
+      setPluginCommands,
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,

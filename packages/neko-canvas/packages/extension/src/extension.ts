@@ -77,6 +77,9 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
   // Register commands
   registerCommands(context);
 
+  // Register plugin slash commands into neko-agent chat panel
+  registerAgentSlashCommands(context);
+
   logger.info('Extension activated');
 
   // Return API for other extensions
@@ -326,6 +329,79 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
   const content = getCanvasTemplate(config.name);
   await vscode.workspace.fs.writeFile(vscode.Uri.file(canvasFile), Buffer.from(content, 'utf-8'));
   return canvasFile;
+}
+
+/**
+ * Register plugin slash commands into the neko-agent chat panel.
+ * Uses the `neko.agent.registerSlashCommands` VSCode command API.
+ * Also registers the handler commands that neko-agent invokes on selection.
+ */
+function registerAgentSlashCommands(context: vscode.ExtensionContext): void {
+  // Register command handlers that neko-agent will call via invokePluginSlashCommand
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.nekocanvas.slashCommand.batch', async (args?: string) => {
+      // Trigger batch image generation for selected shots
+      const nodeIds = canvasEditorProvider.listNodes('shot').map((n) => n.id);
+      if (nodeIds.length === 0) {
+        vscode.window.showInformationMessage(
+          'No shot nodes found. Add shot nodes to the canvas first.',
+        );
+        return;
+      }
+      await canvasEditorProvider.generateBatchForNodes(nodeIds);
+      getRootLogger().info(`/batch: queued ${nodeIds.length} shots`, { args });
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.nekocanvas.slashCommand.export',
+      async (_args?: string) => {
+        // Export storyboard — show quick pick for format
+        const choice = await vscode.window.showQuickPick(
+          [
+            { label: '$(file-pdf) PDF', description: 'Export storyboard as PDF', value: 'pdf' },
+            {
+              label: '$(file-zip) ZIP',
+              description: 'Export shot images as ZIP archive',
+              value: 'zip',
+            },
+          ],
+          { placeHolder: 'Select export format' },
+        );
+        if (!choice) return;
+        await vscode.commands.executeCommand('neko.canvas.exportStoryboard', choice.value);
+      },
+    ),
+  );
+
+  // Register the slash commands with neko-agent (fires after agent extension activates)
+  const doRegister = () => {
+    vscode.commands
+      .executeCommand('neko.agent.registerSlashCommands', 'neko.nekocanvas', [
+        {
+          id: 'batch',
+          name: '/batch',
+          description: 'Batch generate images for all shot nodes',
+          icon: '🖼️',
+        },
+        {
+          id: 'export',
+          name: '/export',
+          description: 'Export storyboard to PDF or ZIP',
+          icon: '📦',
+        },
+      ])
+      .then(undefined, () => {
+        // neko-agent not installed — silently ignore
+      });
+  };
+
+  // Try immediately (agent may already be active)
+  doRegister();
+
+  // Re-register if extensions change (late activation of neko-agent)
+  context.subscriptions.push(vscode.extensions.onDidChange(doRegister));
 }
 
 /**

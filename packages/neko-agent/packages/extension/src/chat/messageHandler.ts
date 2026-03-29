@@ -626,37 +626,44 @@ export class MessageHandler {
   }
 
   /**
-   * Search project files for @ reference
+   * Search project files for @ reference.
+   * Also appends canvas ambient nodes as mention extras so the webview can
+   * show them as context-chip candidates alongside file results.
    */
   async searchProjectFiles(webview: vscode.Webview, filter: string): Promise<void> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-      webview.postMessage({ type: 'projectFiles', files: [] });
-      return;
+
+    let projectFiles: Array<{ path: string; name: string; type: 'file' }> = [];
+
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      try {
+        const pattern = filter ? `**/*${filter}*` : '**/*';
+        const excludePattern = '**/node_modules/**,**/.git/**,**/dist/**,**/build/**';
+        const files = await vscode.workspace.findFiles(pattern, excludePattern, 30);
+
+        projectFiles = files.map((file) => {
+          const relativePath = vscode.workspace.asRelativePath(file);
+          const name = relativePath.split('/').pop() || relativePath;
+          return { path: relativePath, name, type: 'file' as const };
+        });
+      } catch (error) {
+        logger.error('Error searching project files:', error);
+      }
     }
 
-    try {
-      const pattern = filter ? `**/*${filter}*` : '**/*';
-      const excludePattern = '**/node_modules/**,**/.git/**,**/dist/**,**/build/**';
+    // Include canvas ambient nodes as mention extras
+    const { getCanvasSelection } = await import('../services/canvasAmbientContext');
+    const canvasNodes = getCanvasSelection();
+    const mentionExtras = canvasNodes
+      .filter((n) => !filter || n.summary.toLowerCase().includes(filter.toLowerCase()))
+      .map((n) => ({
+        type: 'canvas-node' as const,
+        id: n.nodeId,
+        label: n.summary,
+        summary: `Canvas: ${n.summary}`,
+      }));
 
-      const files = await vscode.workspace.findFiles(pattern, excludePattern, 30);
-
-      const projectFiles = files.map((file) => {
-        const relativePath = vscode.workspace.asRelativePath(file);
-        const name = relativePath.split('/').pop() || relativePath;
-
-        return {
-          path: relativePath,
-          name,
-          type: 'file' as const,
-        };
-      });
-
-      webview.postMessage({ type: 'projectFiles', files: projectFiles });
-    } catch (error) {
-      logger.error('Error searching project files:', error);
-      webview.postMessage({ type: 'projectFiles', files: [] });
-    }
+    webview.postMessage({ type: 'projectFiles', files: projectFiles, mentionExtras });
   }
 
   /**

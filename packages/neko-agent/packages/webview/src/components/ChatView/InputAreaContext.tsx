@@ -9,7 +9,12 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ShellExecutionMode, PromptMode, SessionMode } from '@/components/types';
 import type { ChatModelOption } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
-import type { SlashCommand, SkillSummary } from '@/components/ChatView/InputArea/types';
+import type {
+  SlashCommand,
+  SkillSummary,
+  MentionItem,
+  PluginSlashCommandDef,
+} from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 
 export type { MediaModelSelection };
@@ -41,8 +46,14 @@ export interface InputAreaContextValue {
   mediaModelCallCount: number;
   // Skills
   skills: SkillSummary[];
+  /** Plugin slash commands from external extensions */
+  pluginCommands?: PluginSlashCommandDef[];
   onSlashCommand?: (command: SlashCommand) => void;
   onRequestFiles?: (filter: string) => void;
+  /** Unified @mention items (files + canvas nodes + characters) — updated after onRequestFiles */
+  mentionItems?: MentionItem[];
+  /** Called when user selects a non-file @mention item to create a context chip */
+  onAddContextChip?: (payload: AgentContextPayload) => void;
   // Agent context chips (attached context from canvas/cut/story)
   contextChips: AgentContextPayload[];
   onRemoveContextChip: (id: string) => void;
@@ -78,8 +89,11 @@ export function InputAreaProvider({
       onCompressContext: value.onCompressContext,
       mediaModelCallCount: value.mediaModelCallCount,
       skills: value.skills,
+      pluginCommands: value.pluginCommands,
       onSlashCommand: value.onSlashCommand,
       onRequestFiles: value.onRequestFiles,
+      mentionItems: value.mentionItems,
+      onAddContextChip: value.onAddContextChip,
       contextChips: value.contextChips,
       onRemoveContextChip: value.onRemoveContextChip,
       onTriggerSend: value.onTriggerSend,
@@ -102,8 +116,11 @@ export function InputAreaProvider({
       value.onCompressContext,
       value.mediaModelCallCount,
       value.skills,
+      value.pluginCommands,
       value.onSlashCommand,
       value.onRequestFiles,
+      value.mentionItems,
+      value.onAddContextChip,
       value.contextChips,
       value.onRemoveContextChip,
       value.onTriggerSend,

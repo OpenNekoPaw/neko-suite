@@ -71,7 +71,16 @@ export function AIAssistant() {
     clearMessages,
   } = conversation;
 
-  const { settings, setSettings, projectFiles, setProjectFiles, updateSettings } = config;
+  const {
+    settings,
+    setSettings,
+    setProjectFiles,
+    mentionItems,
+    setMentionItems,
+    pluginCommands,
+    setPluginCommands,
+    updateSettings,
+  } = config;
 
   const { backgroundTasks, setBackgroundTasks } = resource;
 
@@ -99,6 +108,13 @@ export function AIAssistant() {
   const [contextChips, setContextChips] = useState<AgentContextPayload[]>([]);
   const handleRemoveContextChip = useCallback((id: string) => {
     setContextChips((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+  const handleAddContextChip = useCallback((payload: AgentContextPayload) => {
+    setContextChips((prev) => {
+      // Deduplicate by id
+      if (prev.some((c) => c.id === payload.id)) return prev;
+      return [...prev, payload];
+    });
   }, []);
 
   // Agent state (session-bound, per-conversation indicator: idle/thinking/acting/streaming)
@@ -177,6 +193,8 @@ export function AIAssistant() {
     setSelectedModel,
     setBackgroundTasks,
     setProjectFiles,
+    setMentionItems,
+    setPluginCommands,
     setAgentState,
     conversationAgentStateRef,
     forceAgentStateUpdate,
@@ -502,8 +520,11 @@ export function AIAssistant() {
           onCompressContext={handleCompressContext}
           mediaModelCallCount={mediaModelCallCount}
           skills={skills}
+          pluginCommands={pluginCommands}
           onSlashCommand={handleSlashCommand}
           onRequestFiles={(filter) => VSCodeMessages.searchProjectFiles(filter)}
+          mentionItems={mentionItems}
+          onAddContextChip={handleAddContextChip}
           contextChips={contextChips}
           onRemoveContextChip={handleRemoveContextChip}
           onTriggerSend={triggerSend}
@@ -513,7 +534,6 @@ export function AIAssistant() {
             inputValue={inputValue}
             isThinking={isThinking}
             streamingMessageId={streamingMessageId}
-            projectFiles={projectFiles}
             pendingSkillConfirm={
               pendingSkillConfirm?.conversationId === activeConversationId
                 ? pendingSkillConfirm

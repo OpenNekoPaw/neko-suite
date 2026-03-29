@@ -6,6 +6,9 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import AdmZip from 'adm-zip';
 import type {
   NekoCutAPI,
   NekoCanvasAPI,
@@ -14,6 +17,7 @@ import type {
   ToolParameters,
 } from '@neko/shared';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
+import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
 import type { MediaGenerationService } from '@neko/platform';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
@@ -176,7 +180,7 @@ export function createNekoCutTools(): Tool[] {
  * Create tools for NekoCanvas integration
  * Returns empty array if NekoCanvas is not installed
  */
-export function createNekoCanvasTools(): Tool[] {
+export function createNekoCanvasTools(media?: MediaGenerationService): Tool[] {
   const nekocanvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
 
   if (!nekocanvasExt) {
@@ -191,7 +195,7 @@ export function createNekoCanvasTools(): Tool[] {
     return nekocanvasExt.activate();
   };
 
-  return [
+  const tools: Tool[] = [
     {
       name: 'ImportAsset',
       description: 'Import an asset file into the asset library',
@@ -523,7 +527,7 @@ export function createNekoCanvasTools(): Tool[] {
             description: 'Video resolution',
           },
           videoDuration: { type: 'number', description: 'Video duration in seconds' },
-          videoFps: { type: 'number', enum: [24, 30], description: 'Video frame rate' },
+          videoFps: { type: 'number', enum: ['24', '30'], description: 'Video frame rate' },
           imageModel: { type: 'string', description: 'Image generation model id' },
           videoModel: { type: 'string', description: 'Video generation model id' },
           audioModel: { type: 'string', description: 'Audio generation model id' },
@@ -553,10 +557,415 @@ export function createNekoCanvasTools(): Tool[] {
             wsConfig.update(key, value, vscode.ConfigurationTarget.Workspace),
           ),
         );
+
+        // Update status bar with new generation model display
+        const imageModel = args.imageModel as string | undefined;
+        const videoModel = args.videoModel as string | undefined;
+        const audioModel = args.audioModel as string | undefined;
+        if (imageModel !== undefined || videoModel !== undefined || audioModel !== undefined) {
+          setActiveGenerationConfig({
+            llm: wsConfig.get<string>('neko.project.models.llm', ''),
+            image: imageModel,
+            video: videoModel,
+            audio: audioModel,
+          });
+        }
+
         return { ok: true, updated: Object.keys(config) };
       },
     },
+
+    // -------------------------------------------------------------------------
+    // Storyboard Export
+    // -------------------------------------------------------------------------
+    {
+      name: 'export_storyboard',
+      description:
+        'Export the storyboard as a ZIP image pack or import it into the neko-cut timeline. ' +
+        'ZIP format: creates a .zip file with shot images + manifest.json at a user-chosen path. ' +
+        'neko-cut format: sends all shots to the active neko-cut timeline as MediaElement clips. ' +
+        'Returns the saved file path (ZIP) or a confirmation (neko-cut).',
+      parameters: {
+        type: 'object',
+        properties: {
+          format: {
+            type: 'string',
+            enum: ['zip', 'neko-cut'],
+            description:
+              '"zip" to save image pack + manifest.json, "neko-cut" to import into timeline',
+          },
+          projectName: {
+            type: 'string',
+            description: 'Project name used for file naming and manifest (default: "storyboard")',
+          },
+        },
+        required: ['format'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const format = args.format as 'zip' | 'neko-cut';
+        const projectName = (args.projectName as string | undefined) ?? 'storyboard';
+
+        // Fetch all shot and scene nodes
+        const [allShots, allScenes] = await Promise.all([
+          api.nodes.list('shot' as import('@neko/shared').CanvasNodeType),
+          api.nodes.list('scene' as import('@neko/shared').CanvasNodeType),
+        ]);
+
+        if (allShots.length === 0) {
+          return { error: 'No shot nodes found on the canvas. Create ShotNodes first.' };
+        }
+
+        // Build scene title lookup
+        const sceneTitleMap = new Map<string, string>();
+        for (const scene of allScenes) {
+          const d = scene.data as Record<string, unknown>;
+          sceneTitleMap.set(scene.id, (d['sceneTitle'] as string | undefined) ?? '');
+        }
+
+        // Build manifest shots
+        interface ManifestShot {
+          id: string;
+          shotNumber: number;
+          sceneId?: string;
+          sceneTitle?: string;
+          shotScale?: string;
+          cameraMovement?: string;
+          duration: number;
+          visualDescription: string;
+          characters: string[];
+          emotion: string[];
+          dialogue?: string;
+          voiceOver?: string;
+          soundCue?: string;
+          imageFile?: string;
+        }
+
+        const manifestShots: ManifestShot[] = allShots.map((node) => {
+          const d = node.data as Record<string, unknown>;
+          const shotNumber = (d['shotNumber'] as number | undefined) ?? 0;
+          const sceneId = d['sceneGroupId'] as string | undefined;
+          const chars = (d['characters'] as Array<{ characterName?: string }> | undefined) ?? [];
+          const pad = String(shotNumber).padStart(3, '0');
+          const scale = (d['shotScale'] as string | undefined) ?? '';
+          const firstChar =
+            typeof chars[0]?.characterName === 'string' ? chars[0].characterName : '';
+          const imageFile = `shots/${pad}_${scale}${firstChar ? `_${firstChar}` : ''}.png`;
+          return {
+            id: node.id,
+            shotNumber,
+            sceneId,
+            sceneTitle: sceneId ? sceneTitleMap.get(sceneId) : undefined,
+            shotScale: scale || undefined,
+            cameraMovement: d['cameraMovement'] as string | undefined,
+            duration: (d['duration'] as number | undefined) ?? 3,
+            visualDescription: (d['visualDescription'] as string | undefined) ?? '',
+            characters: chars.map((c) => c.characterName ?? '').filter(Boolean),
+            emotion: (d['emotion'] as string[] | undefined) ?? [],
+            dialogue: d['dialogue'] as string | undefined,
+            voiceOver: d['voiceOver'] as string | undefined,
+            soundCue: d['soundCue'] as string | undefined,
+            imageFile: (d['generatedImage'] as string | undefined) ? imageFile : undefined,
+          };
+        });
+
+        if (format === 'neko-cut') {
+          // Import into neko-cut timeline
+          const timelineShots = manifestShots.map((s) => ({
+            id: s.id,
+            shotNumber: s.shotNumber,
+            duration: s.duration,
+            imageDataUrl: allShots.find((n) => n.id === s.id)
+              ? ((allShots.find((n) => n.id === s.id)!.data as Record<string, unknown>)[
+                  'generatedImage'
+                ] as string | undefined)
+              : undefined,
+            dialogue: s.dialogue,
+            voiceOver: s.voiceOver,
+            soundCue: s.soundCue,
+            label: `#${String(s.shotNumber).padStart(3, '0')} ${s.shotScale ?? ''}`.trim(),
+          }));
+
+          await vscode.commands.executeCommand('neko.cut.importStoryboard', {
+            projectName,
+            shots: timelineShots,
+          });
+
+          return {
+            success: true,
+            format: 'neko-cut',
+            shotsImported: timelineShots.length,
+            message: `${timelineShots.length} shots imported into neko-cut timeline`,
+          };
+        }
+
+        // ZIP format
+        const defaultName = `${projectName.replace(/[^a-z0-9-_]/gi, '_')}_storyboard.zip`;
+        const saveUri = await vscode.window.showSaveDialog({
+          defaultUri: vscode.workspace.workspaceFolders?.[0]
+            ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, defaultName)
+            : undefined,
+          filters: { 'ZIP Archive': ['zip'] },
+          saveLabel: 'Export Storyboard ZIP',
+        });
+
+        if (!saveUri) {
+          return { error: 'Export cancelled by user.' };
+        }
+
+        const zip = new AdmZip();
+
+        // Add manifest.json
+        const manifest = {
+          projectName,
+          exportedAt: new Date().toISOString(),
+          totalShots: manifestShots.length,
+          shots: manifestShots,
+        };
+        zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+
+        // Add images
+        let imagesAdded = 0;
+        for (const node of allShots) {
+          const d = node.data as Record<string, unknown>;
+          const generatedImage = d['generatedImage'] as string | undefined;
+          if (!generatedImage) continue;
+
+          const shot = manifestShots.find((s) => s.id === node.id);
+          if (!shot?.imageFile) continue;
+
+          // Strip data URL prefix if present
+          const base64Match = generatedImage.match(/^data:[^;]+;base64,(.+)$/);
+          const base64 = base64Match ? base64Match[1] : generatedImage;
+
+          try {
+            const imgBuffer = Buffer.from(base64, 'base64');
+            zip.addFile(shot.imageFile, imgBuffer);
+            imagesAdded++;
+          } catch {
+            // Skip malformed images
+          }
+        }
+
+        const zipBuffer = zip.toBuffer();
+        fs.writeFileSync(saveUri.fsPath, zipBuffer);
+
+        logger.info(
+          `export_storyboard: wrote ZIP to ${saveUri.fsPath} (${manifestShots.length} shots, ${imagesAdded} images)`,
+        );
+
+        return {
+          success: true,
+          format: 'zip',
+          savedTo: saveUri.fsPath,
+          totalShots: manifestShots.length,
+          imagesIncluded: imagesAdded,
+          message: `Storyboard exported to ${path.basename(saveUri.fsPath)}`,
+        };
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // Ph6.2 — Style Transfer (IP-Adapter reference via GalleryNode)
+    // -------------------------------------------------------------------------
+    {
+      name: 'canvas_apply_style_transfer',
+      description:
+        'Apply style transfer to target ShotNodes using a GalleryNode as IP-Adapter reference. ' +
+        'Sets referenceNodeId on each target shot to the given GalleryNode, then triggers batch ' +
+        'image generation so each shot is re-generated with the style reference applied. ' +
+        'Use canvas_list_nodes to find GalleryNode IDs before calling this.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetNodeIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of ShotNode IDs to apply style transfer to',
+          },
+          referenceNodeId: {
+            type: 'string',
+            description: 'GalleryNode ID to use as IP-Adapter style reference',
+          },
+        },
+        required: ['targetNodeIds', 'referenceNodeId'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const targetNodeIds = args.targetNodeIds as string[];
+        const refNodeId = args.referenceNodeId as string;
+
+        // Verify the reference node is a gallery node
+        const refNode = await api.nodes.get(refNodeId);
+        if (!refNode) {
+          return { error: `Reference node "${refNodeId}" not found` };
+        }
+        if (refNode.type !== 'gallery') {
+          return { error: `Reference node must be a GalleryNode (got type: "${refNode.type}")` };
+        }
+
+        // Set referenceNodeId on each target shot
+        const updateErrors: string[] = [];
+        for (const nodeId of targetNodeIds) {
+          try {
+            await api.nodes.update(nodeId, { referenceNodeId: refNodeId });
+          } catch (err) {
+            updateErrors.push(`${nodeId}: ${String(err)}`);
+          }
+        }
+
+        if (updateErrors.length > 0) {
+          return { error: `Failed to update reference on some nodes: ${updateErrors.join(', ')}` };
+        }
+
+        // Trigger batch generation with the style reference set
+        await api.nodes.generateBatch(targetNodeIds);
+
+        logger.info(
+          `canvas_apply_style_transfer: ref="${refNodeId}" targets=${targetNodeIds.length}`,
+        );
+        return {
+          success: true,
+          message: `Style transfer queued for ${targetNodeIds.length} shot(s) using GalleryNode "${refNodeId}"`,
+          targetNodeIds,
+          referenceNodeId: refNodeId,
+        };
+      },
+    },
   ];
+
+  // -------------------------------------------------------------------------
+  // Ph6.1 — Keyframe Video Generation (requires MediaGenerationService)
+  // -------------------------------------------------------------------------
+  if (media) {
+    tools.push({
+      name: 'canvas_generate_video_with_keyframes',
+      description:
+        'Generate a video clip for a ShotNode using first-frame and last-frame images as keyframes. ' +
+        'The first frame node and last frame node must already have generated images. ' +
+        'Calls the configured video model with the keyframe references and stores the result ' +
+        "in the target node's generatedVideo field. Returns error if media service is unavailable.",
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: {
+            type: 'string',
+            description: 'Target ShotNode ID where the generated video will be stored',
+          },
+          firstFrameNodeId: {
+            type: 'string',
+            description: 'ShotNode ID whose generatedImage is used as the first (start) frame',
+          },
+          lastFrameNodeId: {
+            type: 'string',
+            description: 'ShotNode ID whose generatedImage is used as the last (end) frame',
+          },
+          duration: {
+            type: 'number',
+            description: 'Video duration in seconds (default: 3)',
+          },
+          aspectRatio: {
+            type: 'string',
+            description: 'Aspect ratio e.g. "16:9" or "9:16" (default: "16:9")',
+          },
+        },
+        required: ['nodeId', 'firstFrameNodeId', 'lastFrameNodeId'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const nodeId = args.nodeId as string;
+        const firstFrameNodeId = args.firstFrameNodeId as string;
+        const lastFrameNodeId = args.lastFrameNodeId as string;
+        const duration = (args.duration as number | undefined) ?? 3;
+        const aspectRatio = (args.aspectRatio as string | undefined) ?? '16:9';
+
+        // Fetch all three nodes in parallel
+        const [targetNode, firstNode, lastNode] = await Promise.all([
+          api.nodes.get(nodeId),
+          api.nodes.get(firstFrameNodeId),
+          api.nodes.get(lastFrameNodeId),
+        ]);
+
+        if (!targetNode) return { error: `Target node "${nodeId}" not found` };
+        if (!firstNode) return { error: `First frame node "${firstFrameNodeId}" not found` };
+        if (!lastNode) return { error: `Last frame node "${lastFrameNodeId}" not found` };
+
+        const firstFrameData = (firstNode.data as Record<string, unknown>)['generatedImage'] as
+          | string
+          | undefined;
+        const lastFrameData = (lastNode.data as Record<string, unknown>)['generatedImage'] as
+          | string
+          | undefined;
+
+        if (!firstFrameData) {
+          return {
+            error: `First frame node "${firstFrameNodeId}" has no generated image. Run canvas_generate_image first.`,
+          };
+        }
+
+        // Build prompt from target node's visual description
+        const visualDesc = (targetNode.data as Record<string, unknown>)['visualDescription'] as
+          | string
+          | undefined;
+        const shotNumber = (targetNode.data as Record<string, unknown>)['shotNumber'] as
+          | number
+          | undefined;
+        const prompt = visualDesc?.trim() || `Shot ${shotNumber ?? ''} video clip`;
+
+        // Mark node as generating
+        await api.nodes.update(nodeId, { generationStatus: 'generating' });
+
+        let task;
+        try {
+          task = await media.generateVideo({
+            prompt,
+            aspectRatio,
+            duration,
+            referenceImageUrl: firstFrameData,
+            // Pass last frame via metadata for adapters that support keyframe endpoints
+            metadata: lastFrameData ? { lastFrameUrl: lastFrameData } : undefined,
+          });
+        } catch (err) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return { error: `Video generation failed to start: ${String(err)}` };
+        }
+
+        // Wait for completion (up to 5 minutes)
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 5 * 60 * 1000);
+        } catch (err) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return { error: `Video generation timed out: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return {
+            error: `Video generation ${completed.status}${completed.error ? `: ${completed.error.message}` : ''}`,
+          };
+        }
+
+        const output = completed.outputs[0]!;
+        await api.nodes.update(nodeId, {
+          generatedVideo: output.url,
+          generationStatus: 'done',
+        });
+
+        logger.info(`canvas_generate_video_with_keyframes: nodeId=${nodeId} taskId=${task.id}`);
+        return {
+          success: true,
+          message: `Video generated for shot "${nodeId}"`,
+          videoUrl: output.url,
+          taskId: task.id,
+          duration,
+          aspectRatio,
+        };
+      },
+    });
+  }
+
+  return tools;
 }
 
 // =============================================================================

@@ -4,7 +4,7 @@
  */
 
 import { useRef, useMemo } from 'react';
-import { SlashCommand, SkillSummary, getAllCommands } from './types';
+import { SlashCommand, SkillSummary, PluginSlashCommandDef, getAllCommands } from './types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useTranslation } from '@/i18n/I18nContext';
 
@@ -16,6 +16,8 @@ interface SlashCommandMenuProps {
   onClose: () => void;
   /** Skills loaded from Extension Host */
   skills?: SkillSummary[];
+  /** Plugin commands from external extensions */
+  pluginCommands?: PluginSlashCommandDef[];
 }
 
 export function SlashCommandMenu({
@@ -25,14 +27,18 @@ export function SlashCommandMenu({
   onSelect,
   onClose,
   skills = [],
+  pluginCommands = [],
 }: SlashCommandMenuProps) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, onClose);
 
-  // Merge builtin commands with skill commands
-  const allCommands = useMemo(() => getAllCommands(skills), [skills]);
+  // Merge builtin + skill + plugin commands
+  const allCommands = useMemo(
+    () => getAllCommands(skills, pluginCommands),
+    [skills, pluginCommands],
+  );
 
   // Filter commands by name or description
   const filteredCommands = useMemo(() => {
@@ -73,6 +79,11 @@ export function SlashCommandMenu({
                 skill
               </span>
             )}
+            {cmd.source === 'plugin' && (
+              <span className="ml-auto text-[9px] px-1 py-0.5 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
+                plugin
+              </span>
+            )}
           </button>
         );
       })}
@@ -81,7 +92,11 @@ export function SlashCommandMenu({
 }
 
 // Export filtered commands helper
-export function getFilteredCommands(filter: string, skills: SkillSummary[] = []): SlashCommand[] {
-  const allCommands = getAllCommands(skills);
+export function getFilteredCommands(
+  filter: string,
+  skills: SkillSummary[] = [],
+  pluginCommands: PluginSlashCommandDef[] = [],
+): SlashCommand[] {
+  const allCommands = getAllCommands(skills, pluginCommands);
   return allCommands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
 }

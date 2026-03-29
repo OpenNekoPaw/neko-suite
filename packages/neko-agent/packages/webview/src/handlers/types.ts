@@ -15,7 +15,11 @@ import type {
 } from '@/components/types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
-import type { SkillSummary } from '@/components/ChatView/InputArea/types';
+import type {
+  SkillSummary,
+  MentionItem,
+  PluginSlashCommandDef,
+} from '@/components/ChatView/InputArea/types';
 import type {
   SkillConfirmRequest,
   ActiveSkillIndicator,
@@ -140,6 +144,10 @@ export interface MessageHandlerContext
   setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
   // Project files
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
+  // Unified @mention items (files + canvas nodes + characters)
+  setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
+  // Plugin slash commands registered by external extensions
+  setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   // SSO/Onboarding
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
 }

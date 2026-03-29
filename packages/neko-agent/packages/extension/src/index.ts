@@ -32,6 +32,8 @@ import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
+import { getSlashCommandRegistry } from './services/slashCommandRegistry';
+import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
 
 /**
@@ -135,8 +137,8 @@ function registerExtensionTools(
   const nekocutTools = createNekoCutTools();
   nekocutTools.forEach((tool) => toolRegistry.register(tool));
 
-  // Register NekoCanvas tools
-  const nekocanvasTools = createNekoCanvasTools();
+  // Register NekoCanvas tools (pass media service so keyframe video tool is available)
+  const nekocanvasTools = createNekoCanvasTools(platform.media);
   nekocanvasTools.forEach((tool) => toolRegistry.register(tool));
 
   // Register Engine Effects tools (GPU shader management)
@@ -438,6 +440,31 @@ function registerCommands(
       },
     ),
   );
+
+  // Plugin slash command registration API.
+  // Other Neko extensions (neko-canvas, neko-cut, etc.) call this to add
+  // custom slash commands to the agent chat panel.
+  const slashRegistry = getSlashCommandRegistry();
+  context.subscriptions.push(
+    slashRegistry,
+    vscode.commands.registerCommand(
+      'neko.agent.registerSlashCommands',
+      (extensionId: string, commands: PluginSlashCommandDef[]) => {
+        if (!extensionId || !Array.isArray(commands)) return;
+        slashRegistry.register(extensionId, commands);
+        // Push updated list to webview immediately
+        chatViewProvider.sendPluginSlashCommands(slashRegistry.getAll());
+      },
+    ),
+  );
+  // Also push on registry changes triggered by late-registering extensions
+  context.subscriptions.push(
+    slashRegistry.onDidChange(() => {
+      chatViewProvider.sendPluginSlashCommands(slashRegistry.getAll());
+    }),
+  );
+  // Register getter so _restoreState can push plugin commands on panel visibility restore
+  chatViewProvider.setPluginCommandsGetter(() => slashRegistry.getAll());
 
   // Internal API: allows other Neko extensions to use the configured LLM
   // without taking a direct dependency on @neko/platform.

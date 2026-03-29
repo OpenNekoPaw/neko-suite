@@ -7,7 +7,7 @@ import type { AttachmentType } from '@neko/shared';
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 // Command source type
-export type CommandSource = 'builtin' | 'skill';
+export type CommandSource = 'builtin' | 'skill' | 'plugin';
 
 // Slash command definition
 export interface SlashCommand {
@@ -15,10 +15,24 @@ export interface SlashCommand {
   name: string;
   descriptionKey: string; // i18n key or direct description for skills
   icon: string;
-  /** Command source: builtin or skill */
+  /** Command source: builtin, skill, or plugin */
   source?: CommandSource;
   /** Skill ID if source is 'skill' */
   skillId?: string;
+  /** Extension ID if source is 'plugin' */
+  extensionId?: string;
+}
+
+/**
+ * Plugin slash command registered by an external extension via
+ * `vscode.commands.executeCommand('neko.agent.registerSlashCommands', ...)`.
+ */
+export interface PluginSlashCommandDef {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  extensionId: string;
 }
 
 // Predefined slash commands - descriptions use i18n keys
@@ -159,14 +173,31 @@ export function skillToSlashCommand(skill: SkillSummary): SlashCommand | null {
 }
 
 /**
- * Get all available commands (builtin + skills)
+ * Convert a plugin slash command def to a SlashCommand
  */
-export function getAllCommands(skills: SkillSummary[] = []): SlashCommand[] {
+export function pluginToSlashCommand(def: PluginSlashCommandDef): SlashCommand {
+  return {
+    id: `plugin:${def.extensionId}:${def.id}`,
+    name: def.name.startsWith('/') ? def.name : `/${def.name}`,
+    descriptionKey: def.description,
+    icon: def.icon || '🔌',
+    source: 'plugin',
+    extensionId: def.extensionId,
+  };
+}
+
+/**
+ * Get all available commands (builtin + skills + plugins)
+ */
+export function getAllCommands(
+  skills: SkillSummary[] = [],
+  pluginCommands: PluginSlashCommandDef[] = [],
+): SlashCommand[] {
   const skillCommands = skills
     .map(skillToSlashCommand)
     .filter((cmd): cmd is SlashCommand => cmd !== null);
 
-  return [...SLASH_COMMANDS, ...skillCommands];
+  return [...SLASH_COMMANDS, ...skillCommands, ...pluginCommands.map(pluginToSlashCommand)];
 }
 
 // Project file for @ reference
@@ -175,6 +206,27 @@ export interface ProjectFile {
   name: string;
   type: 'file' | 'folder';
   icon?: string;
+}
+
+// @mention item kinds
+export type MentionItemKind = 'file' | 'canvas-node' | 'character' | 'scene';
+
+/**
+ * Unified item shown in the @mention popup.
+ * Files insert a @path reference; non-file items create an AgentContextChip.
+ */
+export interface MentionItem {
+  /** Stable unique key */
+  id: string;
+  kind: MentionItemKind;
+  /** Display label */
+  label: string;
+  /** Secondary hint text */
+  description?: string;
+  /** For files: relative workspace path to insert */
+  filePath?: string;
+  /** For canvas-node / character / scene: payload for AgentContextChip */
+  contextPayload?: import('@neko/shared').AgentContextPayload;
 }
 
 // File type icons

@@ -259,6 +259,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     referenceNodeId?: string;
     /** Currently displayed image (data URL or asset path) */
     generatedImage?: string;
+    /** AI-generated video URL — result of keyframe/video generation */
+    generatedVideo?: string;
     generationStatus: ShotGenerationStatus;
     generationHistory: GeneratedImageVersion[];
     /** Script dialogue line */

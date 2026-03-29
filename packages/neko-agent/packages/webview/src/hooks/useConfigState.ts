@@ -6,6 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import type { SettingsState, ShellExecutionMode, PromptMode } from '@/components/types';
+import type { MentionItem, PluginSlashCommandDef } from '@/components/ChatView/InputArea/types';
 
 /**
  * Project file info
@@ -43,6 +44,10 @@ export const DEFAULT_SETTINGS: SettingsState = {
 export interface ConfigState {
   settings: SettingsState;
   projectFiles: ProjectFileInfo[];
+  /** Unified @mention items (files + canvas nodes + characters) */
+  mentionItems: MentionItem[];
+  /** Plugin slash commands registered by external extensions */
+  pluginCommands: PluginSlashCommandDef[];
 }
 
 /**
@@ -51,6 +56,8 @@ export interface ConfigState {
 export interface ConfigStateActions {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
+  setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
+  setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   updateSettings: (updates: Partial<SettingsState>) => void;
   resetSettings: () => void;
 }
@@ -69,6 +76,8 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
     ...initialSettings,
   });
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
+  const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
+  const [pluginCommands, setPluginCommands] = useState<PluginSlashCommandDef[]>([]);
 
   // Helper: partial update settings
   const updateSettings = useCallback((updates: Partial<SettingsState>) => {
@@ -84,9 +93,13 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
     // State
     settings,
     projectFiles,
+    mentionItems,
+    pluginCommands,
     // Actions
     setSettings,
     setProjectFiles,
+    setMentionItems,
+    setPluginCommands,
     updateSettings,
     resetSettings,
   };

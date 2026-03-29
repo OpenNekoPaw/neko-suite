@@ -8,6 +8,7 @@ import { FountainHoverProvider } from './providers/hover';
 import { FountainWorkspaceSymbolProvider } from './providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from './providers/documentLink';
 import { FountainDiagnosticsProvider } from './providers/diagnostics';
+import { FountainInlineCompletionProvider } from './providers/inlineCompletion';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
@@ -68,6 +69,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerDocumentLinkProvider(
       FOUNTAIN_SELECTOR,
       new FountainDocumentLinkProvider(),
+    ),
+    // LLM ghost text — 400 ms debounce, delegates to neko.agent.internalChat
+    vscode.languages.registerInlineCompletionItemProvider(
+      FOUNTAIN_SELECTOR,
+      new FountainInlineCompletionProvider(),
     ),
   );
 

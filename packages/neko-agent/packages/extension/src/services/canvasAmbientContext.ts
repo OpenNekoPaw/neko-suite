@@ -9,6 +9,8 @@
  */
 
 import type { CanvasNode } from '@neko/shared';
+import type { GenerationModelConfig } from '@neko/shared';
+import * as vscode from 'vscode';
 
 // =============================================================================
 // In-memory state
@@ -21,8 +23,17 @@ interface SelectedNodeSummary {
 }
 
 let _selectedNodes: SelectedNodeSummary[] = [];
+let _generationConfig: GenerationModelConfig | undefined;
 
 const MAX_AMBIENT_NODES = 5;
+
+// =============================================================================
+// Generation config event (for status bar subscription)
+// =============================================================================
+
+const _onDidChangeGenerationConfig = new vscode.EventEmitter<GenerationModelConfig | undefined>();
+/** Fired when the active project generation model config changes. */
+export const onDidChangeGenerationConfig = _onDidChangeGenerationConfig.event;
 
 // =============================================================================
 // Public API
@@ -41,6 +52,17 @@ export function getCanvasSelection(): SelectedNodeSummary[] {
 /** Clear the selection (called when canvas editor closes) */
 export function clearCanvasSelection(): void {
   _selectedNodes = [];
+}
+
+/** Update the active generation model config (called after set_project_generation_config) */
+export function setActiveGenerationConfig(config: GenerationModelConfig): void {
+  _generationConfig = config;
+  _onDidChangeGenerationConfig.fire(config);
+}
+
+/** Read the active generation model config */
+export function getActiveGenerationConfig(): GenerationModelConfig | undefined {
+  return _generationConfig;
 }
 
 // =============================================================================

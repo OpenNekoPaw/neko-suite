@@ -75,6 +75,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
 
+  // Lazy getter for plugin slash commands (set from index.ts after registry is ready)
+  private _pluginCommandsGetter?: () => Array<{
+    id: string;
+    name: string;
+    description: string;
+    icon?: string;
+    extensionId: string;
+  }>;
+
   // Services
   private _agentManager?: IAgentManager;
   private _editorRegistry?: IEditorRegistry;
@@ -422,6 +431,39 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Push the current plugin slash command list to the webview.
+   * Called on initial load and whenever the SlashCommandRegistry changes.
+   */
+  public sendPluginSlashCommands(
+    commands: Array<{
+      id: string;
+      name: string;
+      description: string;
+      icon?: string;
+      extensionId: string;
+    }>,
+  ): void {
+    if (!this._view?.webview) return;
+    this._view.webview.postMessage({ type: 'pluginCommands', commands });
+  }
+
+  /**
+   * Register a getter for plugin slash commands so _restoreState can push them
+   * on panel visibility restore.
+   */
+  public setPluginCommandsGetter(
+    getter: () => Array<{
+      id: string;
+      name: string;
+      description: string;
+      icon?: string;
+      extensionId: string;
+    }>,
+  ): void {
+    this._pluginCommandsGetter = getter;
+  }
+
+  /**
    * Set up message handlers for webview communication
    */
   private _setupMessageHandlers(webview: vscode.Webview) {
@@ -737,6 +779,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           );
           break;
 
+        // Plugin slash command invocation — route to the registering extension
+        case 'invokePluginSlashCommand': {
+          const extId = message.extensionId as string;
+          const cmdId = message.commandId as string;
+          const args = message.args as string | undefined;
+          vscode.commands
+            .executeCommand(`${extId}.slashCommand.${cmdId}`, args)
+            .then(undefined, (err) => {
+              logger.warn(`Plugin slash command ${extId}/${cmdId} failed`, { error: err });
+            });
+          break;
+        }
+
         // Context management
         case 'getContextTokenCount':
           this._contextHandler.getTokenCount(webview, message.conversationId as string | undefined);
@@ -770,6 +825,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this._sendTabState();
       this._taskHandler.sendTasks(this._view.webview);
       this._conversationMessageHandler.sendAgentStateSnapshot(this._view.webview);
+      if (this._pluginCommandsGetter) {
+        this.sendPluginSlashCommands(this._pluginCommandsGetter());
+      }
     }
   }
 

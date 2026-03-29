@@ -718,7 +718,6 @@ struct CudaExternalMemoryBufferDesc {
 
 /// CUDA_MEMCPY2D for cuMemcpy2DAsync
 #[repr(C)]
-#[derive(Default)]
 struct CudaMemcpy2D {
     src_x_in_bytes: usize,
     src_y: usize,
@@ -736,6 +735,29 @@ struct CudaMemcpy2D {
     dst_pitch: usize,
     width_in_bytes: usize,
     height: usize,
+}
+
+impl Default for CudaMemcpy2D {
+    fn default() -> Self {
+        Self {
+            src_x_in_bytes: 0,
+            src_y: 0,
+            src_memory_type: 0,
+            src_host: std::ptr::null(),
+            src_device: 0,
+            src_array: std::ptr::null(),
+            src_pitch: 0,
+            dst_x_in_bytes: 0,
+            dst_y: 0,
+            dst_memory_type: 0,
+            dst_host: std::ptr::null_mut(),
+            dst_device: 0,
+            dst_array: std::ptr::null_mut(),
+            dst_pitch: 0,
+            width_in_bytes: 0,
+            height: 0,
+        }
+    }
 }
 
 const CU_MEMORYTYPE_DEVICE: u32 = 2;

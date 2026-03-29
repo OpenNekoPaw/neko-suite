@@ -354,6 +354,17 @@ export const VSCodeMessages = {
     postMessage({ type: 'invokeSlashCommand', command, args });
   },
 
+  /**
+   * Invoke a plugin slash command registered by an external extension.
+   * Extension host routes it to the registering extension via VSCode command API.
+   * @param extensionId - The extension that registered the command
+   * @param commandId   - The command id (without /)
+   * @param args        - Optional arguments string
+   */
+  invokePluginSlashCommand: (extensionId: string, commandId: string, args?: string) => {
+    postMessage({ type: 'invokePluginSlashCommand', extensionId, commandId, args });
+  },
+
   // ===========================================================================
   // Skill Marketplace
   // ===========================================================================
