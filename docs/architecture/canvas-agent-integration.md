@@ -1170,9 +1170,10 @@ await ensureProjectModel('image');  // 从 ConfigManager 解析并写入 workspa
 - 保留：生图参数（比例/分辨率/时长）、生成历史候选图切换、接受/拒绝按钮
 - 移除：完整 prompt 编辑器、风格选择（→ Agent）、角色引用选择（→ Agent）
 
-**2.4 节点生图状态同步**
+**2.4 节点生图状态同步** ✅
 - neko-canvas webview：`ShotNode` / `GalleryNode` 监听 `generationStatus` 字段变化
 - Extension 通过 `generationProgress` postMessage 推送状态 → webview 更新 canvasStore
+- 处理：`packages/neko-canvas/packages/webview/src/hooks/useVSCodeMessages.ts:138`
 
 **验证**：手动测试 Agent 指令 "列出所有镜头" → `canvas_list_nodes('shot')` 返回正确数据
 
