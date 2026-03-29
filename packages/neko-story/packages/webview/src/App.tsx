@@ -1,12 +1,69 @@
 import { useState, useCallback } from 'react';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
-import type { FountainDocument, MessageToWebview } from './types';
+import { ScriptTableView } from './components/ScriptTableView';
+import { CreativeGridView } from './components/CreativeGridView';
+import type { FountainDocument, MessageToWebview, StoryViewMode } from './types';
 import './styles/screenplay.css';
 import './styles/print.css';
 
+// =============================================================================
+// Tab bar
+// =============================================================================
+
+const TABS: { id: StoryViewMode; label: string }[] = [
+  { id: 'screenplay', label: '剧本预览' },
+  { id: 'table', label: '分镜表' },
+  { id: 'grid', label: '创意视图' },
+];
+
+function TabBar({
+  active,
+  onChange,
+}: {
+  active: StoryViewMode;
+  onChange: (v: StoryViewMode) => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-0 flex-shrink-0"
+      style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
+    >
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onChange(tab.id)}
+          style={{
+            padding: '6px 14px',
+            fontSize: 12,
+            background: 'none',
+            border: 'none',
+            borderBottom:
+              active === tab.id ? '2px solid var(--vscode-focusBorder)' : '2px solid transparent',
+            color:
+              active === tab.id
+                ? 'var(--vscode-foreground)'
+                : 'var(--vscode-descriptionForeground)',
+            cursor: 'pointer',
+            transition: 'color 0.1s',
+            fontWeight: active === tab.id ? 600 : 400,
+            marginBottom: -1,
+          }}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// =============================================================================
+// App
+// =============================================================================
+
 export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
+  const [view, setView] = useState<StoryViewMode>('screenplay');
 
   const handleMessage = useCallback((message: MessageToWebview) => {
     switch (message.type) {
@@ -14,19 +71,40 @@ export function App() {
         setDocument(message.document);
         break;
       case 'scrollTo':
-        // Find element at line and scroll to it
         scrollToLine(message.line);
+        break;
+      case 'setView':
+        setView(message.view);
         break;
     }
   }, []);
 
   useVSCodeMessaging(handleMessage);
 
-  return <ScriptRenderer document={document} />;
+  const handleNavigate = useCallback((line: number) => {
+    // Switch to screenplay view and scroll to line
+    setView('screenplay');
+    // Give the DOM a tick to switch views before scrolling
+    setTimeout(() => scrollToLine(line), 50);
+  }, []);
+
+  return (
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{ backgroundColor: 'var(--vscode-editor-background)' }}
+    >
+      <TabBar active={view} onChange={setView} />
+
+      <div className="flex-1 overflow-hidden">
+        {view === 'screenplay' && <ScriptRenderer document={document} />}
+        {view === 'table' && <ScriptTableView document={document} onNavigate={handleNavigate} />}
+        {view === 'grid' && <CreativeGridView document={document} onNavigate={handleNavigate} />}
+      </div>
+    </div>
+  );
 }
 
 function scrollToLine(line: number) {
-  // Find element with matching line number via data attribute
   const elements = window.document.querySelectorAll<HTMLElement>('[data-line]');
   let closestElement: HTMLElement | null = null;
   let closestDiff = Infinity;

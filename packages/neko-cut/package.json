@@ -292,6 +292,11 @@
         "command": "neko.cut.importGeneratedClip",
         "title": "Import Generated Clip",
         "category": "NekoCut"
+      },
+      {
+        "command": "neko.cut.importStoryboard",
+        "title": "Import Storyboard",
+        "category": "NekoCut"
       }
     ],
     "menus": {

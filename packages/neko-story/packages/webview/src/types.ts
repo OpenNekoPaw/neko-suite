@@ -139,9 +139,12 @@ export interface FountainDocument {
 }
 
 // Message types for VSCode communication
+export type StoryViewMode = 'screenplay' | 'table' | 'grid';
+
 export type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number };
+  | { type: 'scrollTo'; line: number }
+  | { type: 'setView'; view: StoryViewMode };
 
 export type MessageToExtension =
   | { type: 'ready' }

@@ -226,6 +226,14 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.commands.executeCommand('neko.agent.sendContext', payload);
     }),
+    vscode.commands.registerCommand('neko.story.scriptTableView', () => {
+      const panel = PreviewPanel.createOrShow(context.extensionUri);
+      panel?.postMessage({ type: 'setView', view: 'table' });
+    }),
+    vscode.commands.registerCommand('neko.story.creativeGridView', () => {
+      const panel = PreviewPanel.createOrShow(context.extensionUri);
+      panel?.postMessage({ type: 'setView', view: 'grid' });
+    }),
     vscode.commands.registerCommand('neko.story.newFile', async (uri?: vscode.Uri) => {
       // Determine target folder from context menu uri or workspace root
       let targetFolder: vscode.Uri | undefined = uri;

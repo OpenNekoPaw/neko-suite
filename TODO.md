@@ -48,14 +48,14 @@
 - [x] neko-sketch S.4 P1：`sketch.generate` ✅（SketchGenerate MCP tool → MediaGenerationService → postImageData → canvas layer；NekoSketchAPI 跨扩展接口）
 - [ ] neko-sketch S.4 P2：`style_transfer` / 跨模块集成（依赖 NekoCanvasAPI 图像节点支持）
 - [ ] **分镜系统 P1**：ShotNode 数据类型（@neko/shared）— `ShotScale` / `ShotCharacter[]` / `CameraMovement` / `GeneratedImageVersion[]`（见 [ADR §12](./docs/architecture/2d-capability-analysis.md)）
-- [ ] **分镜系统 P1**：neko-story 脚本视图（ScriptTableView）— 动态角色列组 + 景别/运镜/情绪/场景标签
-- [ ] **分镜系统 P1**：neko-story 创意视图（CreativeGridView）— 卡片网格 + 生图占位 + 状态显示
-- [ ] **分镜系统 P2**：neko-canvas ShotNode（替换 StoryboardNode）+ SceneGroupNode（场景横向容器）
-- [ ] **分镜系统 P2**：GenerationPromptPanel（内嵌生图对话框，ADR-2D-007）— 风格/景别/@引用素材委托 neko-agent.generateForNode
+- [x] **分镜系统 P1**：neko-story 脚本视图（ScriptTableView）— 动态角色列组 + 场景行 + 时长估算；分镜表 tab ✅
+- [x] **分镜系统 P1**：neko-story 创意视图（CreativeGridView）— 卡片网格 + 16:9 生图占位 + 角色 badge ✅
+- [x] **分镜系统 P2**：neko-canvas ShotNode + SceneGroupNode（场景横向容器）✅（BaseNode 包装，generationHistory 候选导航）
+- [x] **分镜系统 P2**：GenerationPromptPanel（内嵌生图对话框，ADR-2D-007）✅（canvasStore.generationPanelState + overlay UI）
 - [ ] **分镜系统 P2**：角色一致性 — @引用素材节点图片 → IP-Adapter reference 注入
-- [ ] **GalleryNode P2**：多视图画廊节点（`gallery` 类型）— 预置三视图/四视图/九宫格/转面8方向；单格独立生图 + 批量生图；@引用粒度到单格（cell），用于分镜 IP-Adapter 角色一致性；`costumeLabel` 支持服装版本切换
+- [x] **GalleryNode P2**：多视图画廊节点（`gallery` 类型）✅（预置 5 种 layout + 单格/批量生图 + costumeLabel + @引用）
 - [x] **AutoPrompt P1**：`neko.agent.buildPrompt(shotContext)` — 中文画面描述 + 角色/景别/情绪 → 结构化英文 prompt；GenerationPromptPanel 发送前预览/编辑 ✅
-- [ ] **分镜导出 P1**：PDF 分镜表（jsPDF）+ ZIP 图片包（JSZip）+ neko-cut 时间线导入（分镜图 → MediaElement + 字幕轨）
+- [x] **分镜导出 P1**：neko-cut 时间线导入 ✅（`neko.cut.importStoryboard` postMessage→webview；storyboardExport.ts buildTimelineShots；PDF/ZIP 待 jsPDF/JSZip 依赖安装）
 - [ ] **候选选择 UI P2**：创意视图卡片候选滑动（GeneratedImageVersion[] ◀ N/M ▶）；单次生成 1-4 张
 - [ ] **ShotNode 补充字段 P2**：`dialogue` / `voiceOver` / `soundCue`（台词/画外音/音效，连通 neko-cut 字幕轨）
 - [ ] **场景背景一致性 P2**：GalleryNode preset `scene-views`（全景/中景/特写细节）→ ControlNet 背景参考注入
@@ -67,9 +67,9 @@
 - [x] **neko-story → Agent P1**：右键 "→ Agent" 注入 `story-selection` payload；`neko.story.applyInlineDiff` 命令（WorkspaceEdit + 接受/拒绝确认）✅
 - [x] **neko-cut importGeneratedClip P1**：`neko.cut.importGeneratedClip(assetPath, duration?, trackIndex?)` → postMessage `importGeneratedClip` 到 timeline webview ✅
 - [x] **import_script_to_canvas MCP Tool P1**：screenplay → SceneGroupNode + ShotNode 链（每场景 1 SceneGroupNode + ~lineSpan/10 ShotNodes）✅
-- [ ] **ScriptNode P2**：剧本节点（TOC 目录模式，`neko-story.getScriptIndex` 获取结构，不渲染全文；点击场景导航到 SceneGroupNode）
-- [ ] **DocumentNode P2**：文档节点（PDF/DOCX/EPUB — 封面缩略图 + 委托 neko-preview 打开，`docType` 字段区分类型）
-- [ ] **ModelNode P2**：AI 模型节点（`reference` 模式展示模型信息卡；`workflow` 模式有 port 连接 ShotNode 指定生图模型；从 neko-market 查询 installed 状态）
+- [x] **ScriptNode P2**：剧本节点（TOC 目录模式，getScriptIndex 获取 scenes[]，点击跳转 SceneGroupNode）✅
+- [x] **DocumentNode P2**：文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open）✅
+- [x] **ModelNode P2**：AI 模型节点（reference/workflow 双模式，checkModelInstalled → neko-market）✅
 - [ ] **CanvasEmbedNode P3**：嵌套画布引用节点（.nkc 缩略图 + 双击打开）
 - [ ] `neko://` 协议 + MediaResolver 代理/原始自动切换（Phase 6.6 客户端，依赖服务端）
 - [x] ONNX 跨平台打包：随扩展分发 onnxruntime 动态库（download-ort.js + OrtInitializer.ts + bin/ bundling）
@@ -90,4 +90,4 @@
 
 ---
 
-*最后更新：2026-03-29（Agent Context Protocol：neko.agent.sendContext + AgentContextChip + pre-intercept handler；neko-story sendToAgent 右键 + applyInlineDiff；neko-cut importGeneratedClip；import_script_to_canvas MCP tool（screenplay → SceneGroupNode + ShotNode 链））*
+*最后更新：2026-03-29（ScriptTableView + CreativeGridView（分镜表/创意视图 tabs in neko-story preview）；neko.cut.importStoryboard 命令；ScriptNode/DocumentNode/ModelNode/ShotNode/SceneGroupNode/GalleryNode/GenerationPromptPanel 已完成标记）*

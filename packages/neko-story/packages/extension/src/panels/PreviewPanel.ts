@@ -5,7 +5,8 @@ import type { FountainDocument, Note } from '@neko-story/types';
 
 type MessageToWebview =
   | { type: 'update'; document: FountainDocument }
-  | { type: 'scrollTo'; line: number };
+  | { type: 'scrollTo'; line: number }
+  | { type: 'setView'; view: 'screenplay' | 'table' | 'grid' };
 
 type MessageFromWebview =
   | { type: 'ready' }
@@ -66,7 +67,7 @@ export class PreviewPanel implements vscode.Disposable {
     );
   }
 
-  public static createOrShow(extensionUri: vscode.Uri) {
+  public static createOrShow(extensionUri: vscode.Uri): PreviewPanel | undefined {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
       : vscode.ViewColumn.One;
@@ -75,7 +76,7 @@ export class PreviewPanel implements vscode.Disposable {
     if (PreviewPanel.currentPanel) {
       PreviewPanel.currentPanel.panel.reveal(column);
       PreviewPanel.currentPanel.updatePreview();
-      return;
+      return PreviewPanel.currentPanel;
     }
 
     // Create new panel
@@ -90,6 +91,7 @@ export class PreviewPanel implements vscode.Disposable {
     });
 
     PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
+    return PreviewPanel.currentPanel;
   }
 
   private isStoryDocument(document: vscode.TextDocument): boolean {
@@ -175,7 +177,7 @@ export class PreviewPanel implements vscode.Disposable {
     this.postMessage({ type: 'scrollTo', line });
   }
 
-  private postMessage(message: MessageToWebview) {
+  public postMessage(message: MessageToWebview) {
     this.panel.webview.postMessage(message);
   }
 

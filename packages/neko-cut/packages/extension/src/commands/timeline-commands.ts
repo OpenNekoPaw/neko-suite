@@ -436,4 +436,38 @@ export function registerTimelineCommands(
       await vscode.commands.executeCommand('neko.exportVideo');
     }),
   );
+
+  // Storyboard Import Command — receives shots from neko-canvas storyboard export
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.cut.importStoryboard',
+      async (params: {
+        projectName: string;
+        shots: Array<{
+          id: string;
+          shotNumber: number;
+          duration: number;
+          imageDataUrl?: string;
+          dialogue?: string;
+          voiceOver?: string;
+          soundCue?: string;
+          label: string;
+        }>;
+      }) => {
+        const webview = videoEditorProvider.getActiveWebview();
+        if (!webview) {
+          vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+          return;
+        }
+        webview.postMessage({
+          type: 'importStoryboard',
+          projectName: params.projectName,
+          shots: params.shots,
+        });
+        vscode.window.showInformationMessage(
+          `Importing ${params.shots.length} shots from "${params.projectName}" storyboard…`,
+        );
+      },
+    ),
+  );
 }

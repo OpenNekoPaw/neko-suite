@@ -86,12 +86,34 @@
         "command": "neko.story.applyInlineDiff",
         "title": "Apply AI Inline Diff",
         "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.scriptTableView",
+        "title": "Open Breakdown Table",
+        "icon": "$(table)",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.creativeGridView",
+        "title": "Open Creative Grid",
+        "icon": "$(layout)",
+        "category": "Neko Story"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "neko.story.preview",
+          "when": "editorLangId == nekostory",
+          "group": "navigation"
+        },
+        {
+          "command": "neko.story.scriptTableView",
+          "when": "editorLangId == nekostory",
+          "group": "navigation"
+        },
+        {
+          "command": "neko.story.creativeGridView",
           "when": "editorLangId == nekostory",
           "group": "navigation"
         }
