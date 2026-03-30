@@ -13,6 +13,7 @@ export {
   type MenuSeparator,
 } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
+import { buildAIMenuSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 
 export type MenuEntry = MenuItem;
@@ -52,7 +53,7 @@ export interface CanvasMenuContext {
   // AI actions
   onGenerateSelected?: () => void;
   onBatchGenerate?: () => void;
-  onSendToAgent?: () => void;
+  onSendToAgent?: (intent?: string) => void;
   hasShotSelected?: boolean;
 }
 
@@ -147,21 +148,42 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
       icon: '🖼',
       onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
     },
-    { separator: true },
-    {
-      label: '用 Agent 生成图像',
-      icon: '✨',
-      shortcut: '⌘G',
-      onClick: () => ctx.onGenerateSelected?.(),
-      disabled: !ctx.hasShotSelected,
-    },
-    {
-      label: '批量生成选中镜头',
-      icon: '⚡',
-      onClick: () => ctx.onBatchGenerate?.(),
-      disabled: !ctx.hasShotSelected || (ctx.selectedCount ?? 0) < 2,
-    },
-    { separator: true },
-    { label: '发送到 Agent', icon: '→', onClick: () => ctx.onSendToAgent?.() },
+    // ── AI section (unified shell) ──
+    ...buildAIMenuSection({
+      quickActions: [
+        {
+          id: 'generate-image',
+          label: t('menu.ai.generateImage'),
+          icon: '✨',
+          disabled: !ctx.hasShotSelected,
+          onClick: () => ctx.onGenerateSelected?.(),
+        },
+        {
+          id: 'batch-generate',
+          label: t('menu.ai.batchGenerate'),
+          icon: '⚡',
+          disabled: !ctx.hasShotSelected || (ctx.selectedCount ?? 0) < 2,
+          onClick: () => ctx.onBatchGenerate?.(),
+        },
+      ],
+      agentActions: [
+        {
+          id: 'optimize-desc',
+          label: t('menu.ai.optimizeDesc'),
+          onClick: () => ctx.onSendToAgent?.('optimize'),
+        },
+        {
+          id: 'adjust-camera',
+          label: t('menu.ai.adjustCamera'),
+          onClick: () => ctx.onSendToAgent?.('camera'),
+        },
+        {
+          id: 'understand',
+          label: t('menu.ai.understand'),
+          onClick: () => ctx.onSendToAgent?.('understand'),
+        },
+      ],
+      sendToAgentLabel: t('menu.ai.sendToAgent'),
+    }),
   ];
 }

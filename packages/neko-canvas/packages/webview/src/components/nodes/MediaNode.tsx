@@ -411,48 +411,68 @@ export function MediaNode({
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full">
+        {/* ── Header: type tag + filename + controls ── */}
+        <div
+          className="flex items-center gap-1.5 px-2 py-1.5"
+          style={{
+            borderBottom: '1px solid var(--node-border)',
+            backgroundColor: 'var(--node-header-bg)',
+          }}
+        >
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0 uppercase"
+            style={{
+              backgroundColor:
+                mediaType === 'video'
+                  ? '#f59e0b20'
+                  : mediaType === 'audio'
+                    ? '#22c55e20'
+                    : '#8b5cf620',
+              color:
+                mediaType === 'video' ? '#f59e0b' : mediaType === 'audio' ? '#22c55e' : '#8b5cf6',
+            }}
+          >
+            {mediaType || 'MEDIA'}
+          </span>
+          <div
+            className="text-xs truncate flex-1"
+            style={{ color: 'var(--node-fg)' }}
+            title={fileName}
+          >
+            {fileName || 'Untitled'}
+          </div>
+          {duration && (
+            <span className="text-xs flex-shrink-0" style={{ color: 'var(--node-fg-secondary)' }}>
+              {formatDuration(duration)}
+            </span>
+          )}
+          {(mediaType === 'video' || mediaType === 'audio') && (
+            <button
+              className="p-0.5 rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors shrink-0"
+              onClick={openInPreview}
+              title="Open in Neko Preview"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                style={{ color: 'var(--node-fg-secondary)' }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+
         {/* Media content area */}
         {renderMediaContent()}
-
-        {/* Info area */}
-        <div className="p-2 border-t border-[var(--node-border)]">
-          <div className="flex items-center gap-1">
-            <div
-              className="text-sm truncate flex-1"
-              style={{ color: 'var(--toolbar-fg)' }}
-              title={fileName}
-            >
-              {fileName || 'Untitled'}
-            </div>
-            {/* Open in Preview button for video/audio */}
-            {(mediaType === 'video' || mediaType === 'audio') && (
-              <button
-                className="p-0.5 rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors shrink-0"
-                onClick={openInPreview}
-                title="Open in Neko Preview"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  style={{ color: 'var(--toolbar-fg-secondary)' }}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-          <div className="text-xs truncate" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-            {getMediaIcon(mediaType)} {mediaType || 'media'}
-            {duration ? ` · ${formatDuration(duration)}` : ''}
-          </div>
-        </div>
       </div>
     </BaseNode>
   );

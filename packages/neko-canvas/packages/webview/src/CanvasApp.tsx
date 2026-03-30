@@ -324,18 +324,26 @@ export function CanvasApp() {
 
   /** Route selected ShotNodes to Agent for generation */
   const handleGenerateSelected = useCallback(() => {
-    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'generate' });
+    vscode?.postMessage({ type: 'sendToAgent', nodeIds: selectedNodeIds, action: 'generate' });
   }, [selectedNodeIds]);
 
   /** Batch-generate all selected ShotNodes via Agent */
   const handleBatchGenerate = useCallback(() => {
-    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'batch' });
+    vscode?.postMessage({ type: 'sendToAgent', nodeIds: selectedNodeIds, action: 'batch' });
   }, [selectedNodeIds]);
 
   /** Send selected nodes as context to the Agent panel */
-  const handleSendToAgent = useCallback(() => {
-    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'context' });
-  }, [selectedNodeIds]);
+  const handleSendToAgent = useCallback(
+    (intent?: string) => {
+      vscode?.postMessage({
+        type: 'sendToAgent',
+        nodeIds: selectedNodeIds,
+        action: 'context',
+        intent,
+      });
+    },
+    [selectedNodeIds],
+  );
 
   const handleScriptLoadScenes = useCallback((nodeId: string, scriptPath: string) => {
     vscode?.postMessage({ type: 'getScriptIndex', nodeId, scriptPath });

@@ -66,14 +66,20 @@ export function AnnotationNode({
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="px-3 py-1.5 border-b border-[var(--node-border)] bg-yellow-900/20">
-          <div className="flex items-center gap-2">
-            <span className="text-sm">📝</span>
-            <span className="text-xs text-yellow-500/80 uppercase font-medium">
-              {t('node.note')}
-            </span>
-          </div>
+        {/* ── Header: unified type tag + label ── */}
+        <div
+          className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--node-border)]"
+          style={{ backgroundColor: 'var(--node-header-bg)' }}
+        >
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: '#eab30820', color: '#eab308' }}
+          >
+            NOTE
+          </span>
+          <span className="text-xs flex-1 truncate" style={{ color: 'var(--node-fg-secondary)' }}>
+            {t('node.note')}
+          </span>
         </div>
 
         {/* Content area - editable */}

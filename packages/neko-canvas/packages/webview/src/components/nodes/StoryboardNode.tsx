@@ -75,7 +75,7 @@ export function StoryboardNode({
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full">
-        {/* Header with color accent */}
+        {/* ── Header: type tag + color + title + duration ── */}
         <div
           className="px-3 py-2"
           style={{
@@ -84,7 +84,12 @@ export function StoryboardNode({
           }}
         >
           <div className="flex items-center gap-2">
-            {/* Color indicator */}
+            <span
+              className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+              style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}
+            >
+              BOARD
+            </span>
             {color && (
               <div
                 className="w-3 h-3 rounded-full flex-shrink-0"
@@ -101,7 +106,6 @@ export function StoryboardNode({
                 disabled={node.locked}
               />
             </div>
-            {/* Duration badge */}
             {duration && (
               <div className="text-xs flex-shrink-0" style={{ color: 'var(--node-fg-secondary)' }}>
                 {formatDuration(duration)}
@@ -111,10 +115,7 @@ export function StoryboardNode({
         </div>
 
         {/* Description area - editable */}
-        <div
-          className="flex-1 p-3 overflow-hidden flex flex-col"
-          style={{ borderBottom: '1px solid var(--node-divider)' }}
-        >
+        <div className="flex-1 p-3 overflow-hidden flex flex-col">
           <EditableText
             value={description || ''}
             onChange={(val) => onUpdateData?.(node.id, { description: val })}
@@ -125,18 +126,6 @@ export function StoryboardNode({
             style={{ color: 'var(--node-fg-secondary)' }}
             disabled={node.locked}
           />
-        </div>
-
-        {/* Footer */}
-        <div className="px-3 py-1.5" style={{ backgroundColor: 'var(--node-header-bg)' }}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase" style={{ color: 'var(--node-fg-secondary)' }}>
-              {t('node.storyboard')}
-            </span>
-            <span className="text-xs" style={{ color: 'var(--node-fg-secondary)' }}>
-              📋
-            </span>
-          </div>
         </div>
       </div>
     </BaseNode>

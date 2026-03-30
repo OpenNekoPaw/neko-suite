@@ -50,6 +50,14 @@ export const zhCN = {
   'menu.undo': '撤销',
   'menu.redo': '重做',
 
+  // Context menu — AI section
+  'menu.ai.generateImage': '生成图像',
+  'menu.ai.batchGenerate': '批量生成选中镜头',
+  'menu.ai.optimizeDesc': '优化描述',
+  'menu.ai.adjustCamera': '调整机位',
+  'menu.ai.understand': '理解内容',
+  'menu.ai.sendToAgent': '发送到 Agent',
+
   // Nodes
   'node.note': '注释',
   'node.storyboard': '故事板',

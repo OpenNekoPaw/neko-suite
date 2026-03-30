@@ -94,6 +94,10 @@ export interface CanvasStore {
   completeConnection: (nodeId: string, anchor: string) => void;
   cancelConnection: () => void;
 
+  // ==================== Derive Actions ====================
+  /** Create a successor node positioned to the right, auto-connected. Uses targetType if given, else same type as source. */
+  deriveSuccessorNode: (sourceNodeId: string, targetType?: string) => string | null;
+
   // ==================== Viewport Actions ====================
   setViewport: (viewport: Partial<CanvasViewport>) => void;
   panCanvas: (delta: { x: number; y: number }) => void;
@@ -647,6 +651,93 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   cancelConnection: () => {
     set({ isConnecting: false, pendingConnectionSource: null });
+  },
+
+  // ==================== Derive Actions ====================
+  deriveSuccessorNode: (sourceNodeId, targetType?) => {
+    const { canvasData } = get();
+    if (!canvasData) return null;
+
+    const sourceNode = canvasData.nodes.find((n) => n.id === sourceNodeId);
+    if (!sourceNode) return null;
+
+    const nodeType = targetType ?? sourceNode.type;
+
+    // Position new node to the right of source with gap
+    const gap = 60;
+    const newPosition = {
+      x: sourceNode.position.x + sourceNode.size.width + gap,
+      y: sourceNode.position.y,
+    };
+
+    // Build new node data based on target type
+    let newData: Record<string, unknown> = {};
+    let newSize = { ...sourceNode.size };
+
+    if (nodeType === 'shot') {
+      const srcData =
+        sourceNode.type === 'shot' ? (sourceNode.data as Record<string, unknown>) : {};
+      // Auto-increment shot number
+      const allShotNumbers = canvasData.nodes
+        .filter((n) => n.type === 'shot')
+        .map((n) => (n.data as Record<string, unknown>).shotNumber as number)
+        .filter((n) => typeof n === 'number');
+      const nextNumber = allShotNumbers.length > 0 ? Math.max(...allShotNumbers) + 1 : 1;
+      newData = {
+        shotNumber: nextNumber,
+        shotScale: srcData.shotScale ?? 'MS',
+        cameraMovement: srcData.cameraMovement,
+        cameraAngle: srcData.cameraAngle,
+        duration: srcData.duration ?? 3,
+        characters: [],
+        emotion: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      };
+      newSize = { width: 280, height: 320 };
+    } else if (nodeType === 'scene') {
+      newData = { sceneTitle: '', subtitle: '', shotIds: [] };
+      newSize = { width: 300, height: 200 };
+    } else if (nodeType === 'gallery') {
+      newData = {
+        preset: 'character-3view',
+        rows: 1,
+        cols: 3,
+        cells: [
+          { id: 'cell-0', label: '正面', generationStatus: 'idle' },
+          { id: 'cell-1', label: '侧面', generationStatus: 'idle' },
+          { id: 'cell-2', label: '背面', generationStatus: 'idle' },
+        ],
+      };
+      newSize = { width: 320, height: 260 };
+    } else if (nodeType === 'annotation') {
+      newData = { text: '' };
+      newSize = { width: 200, height: 120 };
+    }
+
+    // Create the new node
+    const newNodeId = get().addNode({
+      type: nodeType,
+      position: newPosition,
+      size: newSize,
+      zIndex: (canvasData.nodes.length + 1) * 10,
+      data: newData,
+    } as Omit<CanvasNode, 'id'>);
+
+    // Auto-connect source → new node
+    if (newNodeId) {
+      get().addConnection({
+        sourceId: sourceNodeId,
+        targetId: newNodeId,
+        sourceAnchor: 'right',
+        targetAnchor: 'left',
+      });
+
+      // Select the new node
+      get().selectNode(newNodeId);
+    }
+
+    return newNodeId;
   },
 
   // ==================== Viewport Actions ====================

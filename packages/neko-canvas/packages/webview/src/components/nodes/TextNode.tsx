@@ -112,14 +112,23 @@ export function TextNode({
         className="w-full h-full flex flex-col"
         style={{
           backgroundColor: style.backgroundColor,
-          padding: style.padding,
         }}
         onDoubleClick={handleDoubleClick}
       >
-        {/* 节点标题栏 */}
-        <div className="flex items-center gap-2 mb-2 text-xs text-gray-400 border-b border-gray-700 pb-1">
-          <span className="text-blue-400">T</span>
-          <span>Text</span>
+        {/* ── Header: unified type tag ── */}
+        <div
+          className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--node-border)]"
+          style={{ backgroundColor: 'var(--node-header-bg)' }}
+        >
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: '#06b6d420', color: '#06b6d4' }}
+          >
+            TEXT
+          </span>
+          <span className="text-xs flex-1 truncate" style={{ color: 'var(--node-fg-secondary)' }}>
+            {node.data.content ? node.data.content.slice(0, 30) : 'Text'}
+          </span>
         </div>
 
         {/* Format toolbar (visible during editing) */}
@@ -131,43 +140,45 @@ export function TextNode({
         )}
 
         {/* 文本内容区域 */}
-        {isEditing ? (
-          <textarea
-            ref={textareaRef}
-            value={editContent}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            className={clsx(
-              'flex-1 w-full resize-none bg-transparent border-none outline-none',
-              'text-[var(--text-primary)]',
-            )}
-            style={{
-              fontSize: style.fontSize,
-              fontWeight: style.fontWeight,
-              color: style.color,
-              textAlign: style.textAlign,
-              lineHeight: style.lineHeight,
-            }}
-            placeholder="Enter text..."
-          />
-        ) : (
-          <div
-            className={clsx(
-              'flex-1 overflow-auto whitespace-pre-wrap break-words',
-              !node.data.content && 'text-gray-500 italic',
-            )}
-            style={{
-              fontSize: style.fontSize,
-              fontWeight: style.fontWeight,
-              color: style.color,
-              textAlign: style.textAlign,
-              lineHeight: style.lineHeight,
-            }}
-          >
-            {node.data.content || 'Double-click to edit...'}
-          </div>
-        )}
+        <div className="flex-1" style={{ padding: style.padding }}>
+          {isEditing ? (
+            <textarea
+              ref={textareaRef}
+              value={editContent}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              className={clsx(
+                'w-full h-full resize-none bg-transparent border-none outline-none',
+                'text-[var(--text-primary)]',
+              )}
+              style={{
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                color: style.color,
+                textAlign: style.textAlign,
+                lineHeight: style.lineHeight,
+              }}
+              placeholder="Enter text..."
+            />
+          ) : (
+            <div
+              className={clsx(
+                'w-full h-full overflow-auto whitespace-pre-wrap break-words',
+                !node.data.content && 'text-gray-500 italic',
+              )}
+              style={{
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                color: style.color,
+                textAlign: style.textAlign,
+                lineHeight: style.lineHeight,
+              }}
+            >
+              {node.data.content || 'Double-click to edit...'}
+            </div>
+          )}
+        </div>
       </div>
     </BaseNode>
   );

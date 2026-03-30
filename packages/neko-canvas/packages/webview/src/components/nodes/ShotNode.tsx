@@ -168,69 +168,72 @@ export function ShotNode({
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full text-xs">
-        {/* ── Header: shot number + scale + camera + status ── */}
+        {/* ── Header ── */}
         <div
-          className="flex items-center gap-1.5 px-2 py-1.5 flex-shrink-0"
+          className="px-2 py-1.5 flex-shrink-0"
           style={{
             borderBottom: '1px solid var(--node-divider)',
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          <span className="font-mono font-semibold" style={{ color: 'var(--node-fg)' }}>
-            #{String(shotNumber).padStart(3, '0')}
-          </span>
-          {editable ? (
-            <>
-              <InlineSelect
-                value={shotScale ?? 'MS'}
-                options={SHOT_SCALES}
-                onChange={(v) => onUpdateData?.(node.id, { shotScale: v as ShotScale })}
-                width={56}
+          {/* Row 1: type + shot number + status */}
+          <div className="flex items-center gap-1.5">
+            <span
+              className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+              style={{ backgroundColor: '#3b82f620', color: '#3b82f6' }}
+            >
+              SHOT
+            </span>
+            <span className="font-mono font-semibold" style={{ color: 'var(--node-fg)' }}>
+              #{String(shotNumber).padStart(3, '0')}
+            </span>
+            <div className="flex-1" />
+            <StatusBadge status={generationStatus} />
+          </div>
+          {/* Row 2: controls */}
+          <div className="flex items-center gap-1 mt-1">
+            <InlineSelect
+              value={shotScale ?? 'MS'}
+              options={SHOT_SCALES}
+              onChange={(v) => onUpdateData?.(node.id, { shotScale: v as ShotScale })}
+              width={56}
+            />
+            <InlineSelect
+              value={cameraMovement ?? ''}
+              options={CAMERA_MOVEMENTS}
+              onChange={(v) =>
+                onUpdateData?.(node.id, {
+                  cameraMovement: (v || undefined) as CameraMovement | undefined,
+                })
+              }
+              width={64}
+            />
+            <InlineSelect
+              value={node.data.cameraAngle ?? ''}
+              options={CAMERA_ANGLES}
+              onChange={(v) =>
+                onUpdateData?.(node.id, {
+                  cameraAngle: (v || undefined) as CameraAngle | undefined,
+                })
+              }
+              width={56}
+            />
+            <div className="flex-1" />
+            <div className="flex items-center gap-0.5" style={{ flexShrink: 0 }}>
+              <InlineInput
+                type="number"
+                value={node.data.duration ?? 3}
+                min={0.5}
+                step={0.5}
+                onChange={(v) => {
+                  const n = parseFloat(v);
+                  if (!isNaN(n) && n > 0) onUpdateData?.(node.id, { duration: n });
+                }}
+                width={36}
               />
-              <InlineSelect
-                value={cameraMovement ?? ''}
-                options={CAMERA_MOVEMENTS}
-                onChange={(v) =>
-                  onUpdateData?.(node.id, {
-                    cameraMovement: (v || undefined) as CameraMovement | undefined,
-                  })
-                }
-                width={64}
-              />
-              <InlineSelect
-                value={node.data.cameraAngle ?? ''}
-                options={CAMERA_ANGLES}
-                onChange={(v) =>
-                  onUpdateData?.(node.id, {
-                    cameraAngle: (v || undefined) as CameraAngle | undefined,
-                  })
-                }
-                width={56}
-              />
-              <div className="flex items-center gap-0.5" style={{ flexShrink: 0 }}>
-                <InlineLabel>时长</InlineLabel>
-                <InlineInput
-                  type="number"
-                  value={node.data.duration ?? 3}
-                  min={0.5}
-                  step={0.5}
-                  onChange={(v) => {
-                    const n = parseFloat(v);
-                    if (!isNaN(n) && n > 0) onUpdateData?.(node.id, { duration: n });
-                  }}
-                  width={40}
-                />
-                <InlineLabel>s</InlineLabel>
-              </div>
-            </>
-          ) : (
-            <>
-              {shotScale && <Tag>{shotScale}</Tag>}
-              {cameraMovement && cameraMovement !== 'static' && <Tag>{cameraMovement}</Tag>}
-            </>
-          )}
-          <div className="flex-1" />
-          <StatusBadge status={generationStatus} />
+              <InlineLabel>s</InlineLabel>
+            </div>
+          </div>
         </div>
 
         {/* ── Image area ── */}
@@ -428,15 +431,6 @@ export function ShotNode({
             )}
           </div>
         )}
-
-        {/* ── Footer ── */}
-        <div
-          className="px-2 py-1 flex items-center justify-between flex-shrink-0"
-          style={{ backgroundColor: 'var(--node-header-bg)' }}
-        >
-          <span style={{ color: 'var(--node-fg-secondary)' }}>SHOT</span>
-          <span style={{ color: 'var(--node-fg-secondary)' }}>🎬</span>
-        </div>
       </div>
     </BaseNode>
   );

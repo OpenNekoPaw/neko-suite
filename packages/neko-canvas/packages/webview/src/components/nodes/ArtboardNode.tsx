@@ -111,27 +111,54 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
           backgroundColor: backgroundColor || '#1a1a1a',
         }}
       >
-        {/* 画板标题栏 */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gray-800/80 border-b border-gray-700">
-          <div className="flex items-center gap-2">
-            <span className="text-purple-400 text-sm">⬜</span>
-            <span className="text-sm font-medium text-gray-200 truncate max-w-[150px]">
-              {name || 'Untitled Artboard'}
+        {/* ── Header: type tag + name + preset + dimensions + export ── */}
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-800/80 border-b border-gray-700">
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: '#a855f720', color: '#a855f7' }}
+          >
+            ARTBOARD
+          </span>
+          <span className="text-sm font-medium text-gray-200 truncate flex-1 min-w-0">
+            {name || 'Untitled Artboard'}
+          </span>
+          {presetInfo && (
+            <span className="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400 flex-shrink-0">
+              {presetInfo.label}
             </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            {presetInfo && (
-              <span className="px-1.5 py-0.5 bg-gray-700 rounded">{presetInfo.label}</span>
+          )}
+          <span className="text-xs text-gray-500 flex-shrink-0">
+            {node.size.width}×{node.size.height}
+          </span>
+          <div className="flex items-center gap-1 flex-shrink-0 text-xs text-gray-500">
+            {exporting ? (
+              <span className="text-yellow-400">{t('artboard.exporting')}</span>
+            ) : (
+              <>
+                <button
+                  className="hover:text-gray-300 transition-colors"
+                  title={t('artboard.exportPng')}
+                  onClick={handleExportPng}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  PNG
+                </button>
+                <button
+                  className="hover:text-gray-300 transition-colors"
+                  title={t('artboard.exportSvg')}
+                  onClick={handleExportSvg}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  SVG
+                </button>
+              </>
             )}
-            <span>
-              {node.size.width} × {node.size.height}
-            </span>
           </div>
         </div>
 
         {/* 画板内容区域 */}
         <div className="flex-1 relative overflow-hidden" data-artboard-content>
-          {/* 网格背景（可选） */}
+          {/* 网格背景 */}
           <div
             className="absolute inset-0 opacity-10"
             style={{
@@ -142,46 +169,16 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
               backgroundSize: '20px 20px',
             }}
           />
-
           {/* 中心十字线 */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-600/30" />
             <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-600/30" />
           </div>
-
-          {/* 描述文本 */}
           {description && (
             <div className="absolute bottom-2 left-2 right-2 text-xs text-gray-500 truncate">
               {description}
             </div>
           )}
-        </div>
-
-        {/* 画板底部信息 */}
-        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/50 border-t border-gray-700 text-xs text-gray-500">
-          <span>{t('artboard.label')}</span>
-          <div className="flex items-center gap-2">
-            {exporting ? (
-              <span className="text-yellow-400">{t('artboard.exporting')}</span>
-            ) : (
-              <>
-                <button
-                  className="hover:text-gray-300 transition-colors"
-                  title={t('artboard.exportPng')}
-                  onClick={handleExportPng}
-                >
-                  PNG
-                </button>
-                <button
-                  className="hover:text-gray-300 transition-colors"
-                  title={t('artboard.exportSvg')}
-                  onClick={handleExportSvg}
-                >
-                  SVG
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </div>
     </BaseNode>

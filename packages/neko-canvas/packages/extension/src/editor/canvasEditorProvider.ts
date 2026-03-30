@@ -857,9 +857,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+      case 'sendToAgent':
       case 'sendNodeToAgent': {
         const nodeIds = (message.nodeIds ?? []) as string[];
         const action = message.action as string;
+        const intent = (message.intent as string | undefined) ?? undefined;
 
         if (action === 'generate') {
           // Generate image for the first selected ShotNode via Agent
@@ -884,6 +886,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                 : ((d.characterName as string | undefined) ?? node.type),
             summary: String(d.visualDescription ?? d.sceneTitle ?? ''),
             data: { nodes: nodeIds },
+            intent,
           };
           await vscode.commands.executeCommand('neko.agent.sendContext', payload);
         }

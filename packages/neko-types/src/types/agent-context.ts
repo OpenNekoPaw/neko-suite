@@ -8,7 +8,15 @@ import type { ResolvedGenerationParams } from './generation.js';
  * Source type for agent context attachments.
  * Used to determine how the agent should interpret the payload.
  */
-export type AgentContextType = 'canvas-node' | 'cut-clip' | 'story-selection' | 'file' | 'image';
+export type AgentContextType =
+  | 'canvas-node'
+  | 'cut-clip'
+  | 'story-selection'
+  | 'sketch-layer'
+  | 'model-scene'
+  | 'audio-clip'
+  | 'file'
+  | 'image';
 
 /**
  * Unified context payload sent from any sub-package to the agent panel.

@@ -95,12 +95,15 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       e.stopPropagation();
 
       const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      const hasSelection = selectedNodeIds.length > 0;
+
+      // Detect whether the right-click landed on a node or on blank canvas
+      const clickedOnNode = (e.target as HTMLElement).closest('[data-node-id]') !== null;
+      const showNodeMenu = clickedOnNode && selectedNodeIds.length > 0;
 
       const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
       const menuCtx = {
         canvasPosition: canvasPos,
-        hasSelection,
+        hasSelection: showNodeMenu,
         selectedCount: selectedNodeIds.length,
         onAddText: addTextAt,
         onAddScene: addSceneAt,
@@ -136,7 +139,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onSendToAgent,
       };
 
-      const items = hasSelection ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
+      const items = showNodeMenu ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
 
       setContextMenu({ x: e.clientX, y: e.clientY, items });
     },

@@ -558,48 +558,58 @@ Task     自主任务执行（agent loop）
 | 理解图片/视频 | 任意含媒体上下文 | **→ Agent** | 各包 → sendContext |
 | 理解剪辑/分镜/特效 | cut / canvas | **→ Agent** | 各包 → sendContext |
 
-### 统一 ContextMenu 框架
+### 统一 ContextMenu 框架 ✅
 
 **现状**：neko-canvas 和 neko-cut 已共用同一套 `@neko/shared/components` ContextMenu，支持 submenu。
 
-**扩展方案**：在 `@neko/shared` 增加 `buildAIMenuSection()` helper，各包 menu builder 统一附加：
+**已实现**：`@neko/shared/components/contextMenuAI.ts` — `buildAIMenuSection()` 统一 AI 菜单 shell：
 
 ```typescript
 // @neko/shared/components/contextMenuAI.ts
 
-export interface AIMenuContext {
-  onSendToAgent: (payload: AgentContextPayload) => void;
-  onQuickGenerate?: () => void;
-  onQuickStyle?: () => void;       // 风格迁移
-  onQuickFirstLastFrame?: () => void;
+export interface AICapability {
+  id: string;
+  label: string;      // 已 i18n 的显示文本
+  icon?: string;
+  shortcut?: string;
+  disabled?: boolean;
+  onClick: () => void;
 }
 
-export function buildAIMenuSection(ctx: AIMenuContext): MenuItem[] {
-  const items: MenuItem[] = [{ separator: true }];
-  if (ctx.onQuickGenerate)        items.push({ label: '生成图片', icon: '✨', onClick: ctx.onQuickGenerate });
-  if (ctx.onQuickStyle)           items.push({ label: '风格迁移', icon: '🎨', onClick: ctx.onQuickStyle });
-  if (ctx.onQuickFirstLastFrame)  items.push({ label: '首尾帧补间', icon: '🎞', onClick: ctx.onQuickFirstLastFrame });
-  items.push({
-    label: '发送到 Agent ▶', icon: '🤖',
-    submenu: [
-      { label: '优化描述', onClick: () => ctx.onSendToAgent({ intent: 'optimize' }) },
-      { label: '调整机位', onClick: () => ctx.onSendToAgent({ intent: 'camera' }) },
-      { label: '理解内容', onClick: () => ctx.onSendToAgent({ intent: 'understand' }) },
-    ],
-  });
-  return items;
+export interface AIMenuConfig {
+  quickActions?: AICapability[];   // 快速执行项
+  agentActions?: AICapability[];   // "发送到 Agent" submenu 子项
+  onSendToAgent?: () => void;      // 无 submenu 时的 flat 入口
+  sendToAgentLabel?: string;
 }
+
+export function buildAIMenuSection(config: AIMenuConfig): MenuItem[];
 ```
 
-各包 menu builder 只需追加：
+各包使用方式：
 
 ```typescript
-export function buildShotNodeMenuItems(ctx: CanvasMenuContext & AIMenuContext): MenuEntry[] {
-  return [
-    ...buildNodeMenuItems(ctx),   // 现有项
-    ...buildAIMenuSection(ctx),   // AI section 统一附加
-  ];
-}
+// neko-canvas: buildNodeMenuItems 末尾
+...buildAIMenuSection({
+  quickActions: [
+    { id: 'generate-image', label: t('menu.ai.generateImage'), icon: '✨', onClick: ... },
+    { id: 'batch-generate', label: t('menu.ai.batchGenerate'), icon: '⚡', onClick: ... },
+  ],
+  agentActions: [
+    { id: 'optimize-desc', label: t('menu.ai.optimizeDesc'), onClick: ... },
+    { id: 'adjust-camera', label: t('menu.ai.adjustCamera'), onClick: ... },
+    { id: 'understand', label: t('menu.ai.understand'), onClick: ... },
+  ],
+})
+
+// neko-cut: useTimelineContextMenu 末尾
+...fromSharedItems(buildAIMenuSection({
+  quickActions: [
+    { id: 'ai-subtitles', label: t('...'), icon: '💬', onClick: aiGenerateSubtitles },
+    ...
+  ],
+  onSendToAgent: () => sendToAgent(),
+}))
 ```
 
 实际菜单效果：
@@ -787,21 +797,36 @@ Agent 返回优化段落 → story webview 渲染 inline diff：
 
 postMessage 协议：`{ type: 'inlineDiff', range: {start, end}, newText, source: 'agent' }`
 
-### neko-canvas — 选中工具栏 + 节点状态
+### neko-canvas — 统一节点 Header + 派生按钮 + 节点状态
 
-节点选中时浮出轻量工具条（比 BottomSheet 更小，不展开面板）：
+**统一 Header 规范**（所有节点类型）：
 
 ```
-选中 1 个 ShotNode:
-┌──────────────────────────────────┐
-│ ✨ 生成  🔁 重新生成  🤖 → Agent │  ← 浮在节点上方
-└──────────────────────────────────┘
-
-选中多个节点:
-┌──────────────────────────────────────┐
-│ ✨ 批量生成 (3)  🤖 → Agent 编排     │
-└──────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ [TYPE]  标题/名称         右侧控件/元数据       │  ← Row 1
+│ [控件▼] [控件▼] [控件▼]                 [3s]   │  ← Row 2（仅控件多时）
+├─────────────────────────────────────────────────┤
+│                 内容区域                         │
+└─────────────────────────────────────────────────┘
 ```
+
+- **左侧**：类型 Tag（彩色圆角标签）+ 标题/编号
+- **右侧**：InlineSelect/InlineInput 控件，始终可交互（无需选中）
+- **Footer 已移除**，所有信息集中在 Header
+- **节点右侧 "+" 按钮**：hover 出现，点击弹出类型选择菜单（Shot/Scene/Gallery/Annotation），创建后继节点并自动连接
+
+节点类型 Tag 颜色：
+
+| 类型 | Tag | 颜色 |
+|------|-----|------|
+| ShotNode | `SHOT` | #3b82f6 蓝 |
+| SceneGroupNode | `SCENE` | #22c55e 绿 |
+| GalleryNode | `GALLERY` | #8b5cf6 紫 |
+| MediaNode | `VIDEO`/`IMAGE`/`AUDIO` | #f59e0b/#8b5cf6/#22c55e |
+| StoryboardNode | `BOARD` | #f59e0b 黄 |
+| ArtboardNode | `ARTBOARD` | #a855f7 紫 |
+| AnnotationNode | `NOTE` | #eab308 黄 |
+| TextNode | `TEXT` | #06b6d4 青 |
 
 节点自身渲染生成状态：
 

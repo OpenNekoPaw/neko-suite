@@ -7,12 +7,13 @@
  * - Otherwise falls back to legacy 4-direction anchor points
  */
 
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanvasViewport, CanvasNodeType, PortDefinition } from '@neko/shared';
 import { getDefaultPorts } from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
 import { useNodeResize, type ResizeHandle } from '../../hooks/useNodeResize';
 import { useNodeRotate } from '../../hooks/useNodeRotate';
+import { useCanvasStore } from '../../stores/canvasStore';
 import clsx from 'clsx';
 
 // =============================================================================
@@ -98,6 +99,103 @@ const RESIZE_HANDLES: { handle: ResizeHandle; cursor: string; style: React.CSSPr
   { handle: 'se', cursor: 'nwse-resize', style: { bottom: -4, right: -4, width: 10, height: 10 } },
   { handle: 'sw', cursor: 'nwse-resize', style: { bottom: -4, left: -4, width: 10, height: 10 } },
 ];
+
+// =============================================================================
+// DeriveButton — "+" with type picker popup
+// =============================================================================
+
+const DERIVE_NODE_TYPES = [
+  { type: 'shot', icon: '🎬', label: '镜头' },
+  { type: 'scene', icon: '📋', label: '场景' },
+  { type: 'gallery', icon: '🖼', label: '画廊' },
+  { type: 'annotation', icon: '📝', label: '注释' },
+] as const;
+
+function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handleDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleDown, true);
+    return () => document.removeEventListener('pointerdown', handleDown, true);
+  }, [open]);
+
+  return (
+    <div
+      className="absolute z-30 derive-btn"
+      style={{ right: -16, top: '50%', transform: 'translateY(-50%)' }}
+    >
+      {/* "+" trigger */}
+      <button
+        className="flex items-center justify-center rounded-full"
+        style={{
+          width: 28,
+          height: 28,
+          backgroundColor: 'var(--node-selected, #3b82f6)',
+          color: '#fff',
+          border: '2px solid var(--node-bg, #1e1e1e)',
+          fontSize: 16,
+          fontWeight: 'bold',
+          lineHeight: 1,
+          cursor: 'pointer',
+        }}
+        title="添加后继节点"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        +
+      </button>
+
+      {/* Type picker popup */}
+      {open && (
+        <div
+          ref={menuRef}
+          className="absolute rounded-lg shadow-xl py-1"
+          style={{
+            left: 30,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            backgroundColor: 'var(--node-bg, #1e1e1e)',
+            border: '1px solid var(--node-border, #333)',
+            whiteSpace: 'nowrap',
+            minWidth: 100,
+          }}
+        >
+          {DERIVE_NODE_TYPES.map(({ type, icon, label }) => (
+            <button
+              key={type}
+              className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
+              style={{
+                color: 'var(--node-fg, #ccc)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                useCanvasStore.getState().deriveSuccessorNode(sourceNodeId, type);
+                setOpen(false);
+              }}
+            >
+              <span>{icon}</span>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // =============================================================================
 // Component
@@ -270,6 +368,22 @@ export function BaseNode({
     sideList.push({ port, index: sideList.length });
   }
 
+  // Auto-height: detect content overflow and expand node height
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || isResizing) return;
+    // Use RAF to measure after layout settles
+    const raf = requestAnimationFrame(() => {
+      const scrollH = el.scrollHeight;
+      // Only expand, never shrink below stored size
+      if (scrollH > currentSize.height + 4) {
+        onResizeEnd?.(node.id, { width: currentSize.width, height: scrollH + 4 }, currentPosition);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  });
+
   return (
     <div
       className={clsx(
@@ -294,6 +408,7 @@ export function BaseNode({
     >
       {/* Node content */}
       <div
+        ref={contentRef}
         className={clsx(
           'w-full h-full rounded-lg border-2 shadow-lg overflow-hidden',
           'bg-[var(--node-bg)] transition-colors duration-150',
@@ -303,6 +418,9 @@ export function BaseNode({
       >
         {children}
       </div>
+
+      {/* Derive successor node — "+" button with type picker */}
+      {!node.locked && <DeriveButton sourceNodeId={node.id} />}
 
       {/* Resize handles (visible when selected) */}
       {isSelected &&

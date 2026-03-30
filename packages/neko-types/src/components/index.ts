@@ -24,6 +24,9 @@ export type { PanelProps, PanelSectionProps } from './Panel';
 export { ContextMenu } from './ContextMenu';
 export type { ContextMenuProps, MenuItem, MenuAction, MenuSeparator } from './ContextMenu';
 
+export { buildAIMenuSection } from './contextMenuAI';
+export type { AICapability, AIMenuConfig } from './contextMenuAI';
+
 // ── Media ─────────────────────────────────────────────────────────────────────
 
 export { TimelineRuler } from './TimelineRuler';

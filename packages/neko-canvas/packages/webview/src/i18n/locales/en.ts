@@ -50,6 +50,14 @@ export const en = {
   'menu.undo': 'Undo',
   'menu.redo': 'Redo',
 
+  // Context menu — AI section
+  'menu.ai.generateImage': 'Generate Image',
+  'menu.ai.batchGenerate': 'Batch Generate Selected Shots',
+  'menu.ai.optimizeDesc': 'Optimize Description',
+  'menu.ai.adjustCamera': 'Adjust Camera',
+  'menu.ai.understand': 'Understand Content',
+  'menu.ai.sendToAgent': 'Send to Agent',
+
   // Nodes
   'node.note': 'Note',
   'node.storyboard': 'Storyboard',

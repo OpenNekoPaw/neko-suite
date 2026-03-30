@@ -8,6 +8,7 @@ import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
 import type { MenuItem } from '../components/ContextMenu';
 import type { TimelineTrack } from '../types';
+import { buildAIMenuSection, type MenuItem as SharedMenuItem } from '@neko/shared/components';
 
 export interface ContextMenuState {
   x: number;
@@ -24,6 +25,26 @@ export interface TimelineContextMenuOptions {
   onToggleLocked: (trackId: string) => void;
   onToggleHidden: (trackId: string) => void;
   onDeleteTrack: (trackId: string) => void;
+  onSendToAgent?: () => void;
+}
+
+/** Convert shared MenuItem[] (discriminated union) to neko-cut MenuItem[] (optional bool separator) */
+function fromSharedItems(items: SharedMenuItem[]): MenuItem[] {
+  return items.map((item): MenuItem => {
+    if ('separator' in item && item.separator === true) {
+      return { label: '', onClick: () => {}, separator: true };
+    }
+    const action = item as Exclude<SharedMenuItem, { separator: true }>;
+    return {
+      label: action.label,
+      icon: action.icon,
+      onClick: action.onClick,
+      disabled: action.disabled,
+      danger: action.danger,
+      shortcut: action.shortcut,
+      submenu: action.submenu ? fromSharedItems(action.submenu) : undefined,
+    };
+  });
 }
 
 export function useTimelineContextMenu({
@@ -33,6 +54,7 @@ export function useTimelineContextMenu({
   onToggleLocked,
   onToggleHidden,
   onDeleteTrack,
+  onSendToAgent,
 }: TimelineContextMenuOptions) {
   const { t } = useTranslation();
 
@@ -204,29 +226,38 @@ export function useTimelineContextMenu({
         onClick: () => {},
         separator: true,
       },
-      // AI Operations
-      {
-        label: t('timeline.contextMenu.aiOperations'),
-        onClick: () => {},
-        submenu: [
-          {
-            label: t('timeline.contextMenu.aiGenerateSubtitles'),
-            onClick: aiGenerateSubtitles,
-          },
-          {
-            label: t('timeline.contextMenu.aiAutoEdit'),
-            onClick: aiAutoEdit,
-          },
-          {
-            label: t('timeline.contextMenu.aiMatchMusic'),
-            onClick: aiMatchMusic,
-          },
-          {
-            label: t('timeline.contextMenu.aiRemoveSilence'),
-            onClick: aiRemoveSilence,
-          },
-        ],
-      },
+      // AI Operations — unified shell
+      ...fromSharedItems(
+        buildAIMenuSection({
+          quickActions: [
+            {
+              id: 'ai-subtitles',
+              label: t('timeline.contextMenu.aiGenerateSubtitles'),
+              icon: '💬',
+              onClick: aiGenerateSubtitles,
+            },
+            {
+              id: 'ai-auto-edit',
+              label: t('timeline.contextMenu.aiAutoEdit'),
+              icon: '✂️',
+              onClick: aiAutoEdit,
+            },
+            {
+              id: 'ai-match-music',
+              label: t('timeline.contextMenu.aiMatchMusic'),
+              icon: '🎵',
+              onClick: aiMatchMusic,
+            },
+            {
+              id: 'ai-remove-silence',
+              label: t('timeline.contextMenu.aiRemoveSilence'),
+              icon: '🔇',
+              onClick: aiRemoveSilence,
+            },
+          ],
+          onSendToAgent,
+        }),
+      ),
     ];
   }, [
     addTrack,
@@ -244,6 +275,7 @@ export function useTimelineContextMenu({
     aiAutoEdit,
     aiMatchMusic,
     aiRemoveSilence,
+    onSendToAgent,
   ]);
 
   // Get menu items based on context menu type

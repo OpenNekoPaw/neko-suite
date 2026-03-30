@@ -5,6 +5,7 @@
  */
 
 import type { GalleryCanvasNode, GalleryCell, GalleryPreset, CanvasViewport } from '@neko/shared';
+import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
 import { InlineSelect, GALLERY_PRESETS } from '../common/InlineControls';
@@ -142,9 +143,6 @@ export function GalleryNode({
   onUpdateData,
 }: GalleryNodeProps) {
   const { preset, rows, cols, cells, characterName } = node.data;
-  const editable = isSelected && !node.locked;
-
-  const presetLabel = preset === 'custom' ? '自定义' : preset;
 
   const doneCount = cells.filter((c) => c.generationStatus === 'done').length;
 
@@ -161,7 +159,7 @@ export function GalleryNode({
       onConnectionStart={onConnectionStart}
     >
       <div className="flex flex-col h-full text-xs">
-        {/* ── Header ── */}
+        {/* ── Header: type tag + name + preset + progress ── */}
         <div
           className="flex items-center gap-2 px-2 py-1.5 flex-shrink-0"
           style={{
@@ -169,33 +167,39 @@ export function GalleryNode({
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          {editable ? (
-            <>
-              <EditableText
-                value={characterName ?? ''}
-                onChange={(val) => onUpdateData?.(node.id, { characterName: val || undefined })}
-                placeholder="角色名"
-                className="font-medium flex-1 truncate"
-                style={{ color: 'var(--node-fg)', fontSize: 11 }}
-              />
-              <InlineSelect
-                value={preset ?? 'character-3view'}
-                options={GALLERY_PRESETS}
-                onChange={(v) => onUpdateData?.(node.id, { preset: v as GalleryPreset })}
-                width={96}
-              />
-            </>
-          ) : (
-            <>
-              <span className="font-medium flex-1 truncate" style={{ color: 'var(--node-fg)' }}>
-                {characterName ?? '角色画廊'}
-              </span>
-              <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
-                {presetLabel} {rows}×{cols}
-              </span>
-            </>
-          )}
-          {/* Progress */}
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: '#8b5cf620', color: '#8b5cf6' }}
+          >
+            GALLERY
+          </span>
+          <EditableText
+            value={characterName ?? ''}
+            onChange={(val) => onUpdateData?.(node.id, { characterName: val || undefined })}
+            placeholder="角色名"
+            className="font-medium flex-1 truncate"
+            style={{ color: 'var(--node-fg)', fontSize: 11 }}
+          />
+          <InlineSelect
+            value={preset ?? 'character-3view'}
+            options={GALLERY_PRESETS}
+            onChange={(v) => {
+              const newPreset = v as GalleryPreset;
+              const config = GALLERY_PRESET_CONFIGS[newPreset];
+              const newCells: GalleryCell[] = config.labels.map((label, i) => ({
+                id: `cell-${i}`,
+                label,
+                generationStatus: 'idle' as const,
+              }));
+              onUpdateData?.(node.id, {
+                preset: newPreset,
+                rows: config.rows,
+                cols: config.cols,
+                cells: newCells,
+              });
+            }}
+            width={96}
+          />
           <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
             {doneCount}/{cells.length}
           </span>
@@ -226,18 +230,6 @@ export function GalleryNode({
               }}
             />
           ))}
-        </div>
-
-        {/* ── Footer ── */}
-        <div
-          className="px-2 py-1 flex items-center justify-between flex-shrink-0"
-          style={{
-            borderTop: '1px solid var(--node-divider)',
-            backgroundColor: 'var(--node-header-bg)',
-          }}
-        >
-          <span style={{ color: 'var(--node-fg-secondary)' }}>GALLERY</span>
-          <span style={{ color: 'var(--node-fg-secondary)' }}>🖼</span>
         </div>
       </div>
     </BaseNode>
