@@ -386,6 +386,7 @@ export function BaseNode({
 
   return (
     <div
+      data-node-id={node.id}
       className={clsx(
         'absolute select-none',
         (isResizing || isRotating) && 'pointer-events-auto',
