@@ -46,7 +46,7 @@ export interface UseContextMenuOptions {
   redo: () => void;
   onGenerateSelected?: () => void;
   onBatchGenerate?: () => void;
-  onSendToAgent?: () => void;
+  onSendToAgent?: (intent?: string) => void;
 }
 
 export interface UseContextMenuReturn {
