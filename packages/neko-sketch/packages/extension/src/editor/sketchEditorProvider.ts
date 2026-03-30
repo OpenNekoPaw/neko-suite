@@ -13,6 +13,15 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('SketchEditorProvider');
 
+/** Image file extensions supported for import */
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+
+/** Check if a URI points to an importable image file */
+function isImageUri(uri: vscode.Uri): boolean {
+  const ext = uri.path.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
 export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'neko.sketchEditor';
 
@@ -243,6 +252,30 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
             } catch (error) {
               logger.error(`Failed to import file: ${error}`);
             }
+          }
+        }
+        break;
+      }
+      case 'file:dropRequest': {
+        const rawUris = message.uris as string;
+        const uriStrings = rawUris.split('\n').filter(Boolean);
+        for (const uriStr of uriStrings) {
+          const uri = vscode.Uri.parse(uriStr.trim());
+          if (isImageUri(uri)) {
+            try {
+              const fileData = await vscode.workspace.fs.readFile(uri);
+              const base64 = Buffer.from(fileData).toString('base64');
+              const name = uri.path.split('/').pop() || 'dropped';
+              webviewPanel.webview.postMessage({
+                type: 'file:imported',
+                name,
+                data: base64,
+                path: uri.fsPath,
+              });
+            } catch (error) {
+              logger.error(`Failed to import dropped file: ${error}`);
+            }
+            return; // Import the first valid image only
           }
         }
         break;

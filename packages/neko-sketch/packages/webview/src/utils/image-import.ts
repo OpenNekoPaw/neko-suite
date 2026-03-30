@@ -1,14 +1,14 @@
 /**
  * Image import utility
  *
- * Decodes a base64-encoded image and creates a new layer
- * with the image dimensions.
+ * Decodes images from various sources (base64, Blob, File) and creates
+ * new raster layers with the image dimensions.
  */
 import type { LayerData } from '../types';
 import { generateLayerId } from '../layer';
 
 /**
- * Create a LayerData from an imported image.
+ * Create a LayerData from a base64-encoded image.
  * Returns the layer and a decoded ImageBitmap for texture upload.
  */
 export async function importImageAsLayer(
@@ -24,18 +24,55 @@ export async function importImageAsLayer(
   }
 
   const blob = new Blob([bytes], { type: mime });
+  return importImageFromBlob(blob, name);
+}
+
+/**
+ * Create a LayerData from a Blob or File.
+ * Used by clipboard paste and drag-and-drop import.
+ */
+export async function importImageFromBlob(
+  blob: Blob,
+  name: string,
+): Promise<{ layer: LayerData; bitmap: ImageBitmap }> {
   const bitmap = await createImageBitmap(blob);
 
-  const layer: LayerData = {
+  const layer: LayerData = buildLayerData(
+    blob instanceof File ? stripExtension(blob.name) : stripExtension(name),
+    bitmap.width,
+    bitmap.height,
+  );
+
+  return { layer, bitmap };
+}
+
+/** Supported image MIME types for import validation */
+const IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/svg+xml',
+]);
+
+/** Check if a MIME type represents an importable image */
+export function isImageMimeType(mimeType: string): boolean {
+  return IMAGE_MIME_TYPES.has(mimeType);
+}
+
+/** Build a raster LayerData with common defaults */
+function buildLayerData(name: string, width: number, height: number): LayerData {
+  return {
     id: generateLayerId(),
-    name: stripExtension(name),
+    name,
     type: 'raster',
     visible: true,
     locked: false,
     opacity: 1.0,
     blendMode: 'normal',
-    width: bitmap.width,
-    height: bitmap.height,
+    width,
+    height,
     offsetX: 0,
     offsetY: 0,
     clippingMask: false,
@@ -43,8 +80,6 @@ export async function importImageAsLayer(
     children: [],
     texture: null, // Will be uploaded by renderer
   };
-
-  return { layer, bitmap };
 }
 
 function guessMimeType(filename: string): string {

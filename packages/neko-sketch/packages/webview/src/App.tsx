@@ -24,7 +24,7 @@ import {
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
-import { importImageAsLayer } from './utils/image-import';
+import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider } from './i18n/I18nContext';
 import type { SupportedLocale } from '@neko/shared';
@@ -54,6 +54,9 @@ export function App() {
   const brushSize = store((s) => s.brushSettings).size;
   const sidebarWidth = store((s) => s.sidebarWidth);
   const setSidebarWidth = store((s) => s.setSidebarWidth);
+
+  // Drag-over visual state
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Horizontal resize for sidebar
   const [isHResizing, setIsHResizing] = useState(false);
@@ -165,9 +168,98 @@ export function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
 
+  // --- Clipboard paste: import image from Ctrl+V / Cmd+V ---
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent): void => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (isImageMimeType(item.type)) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            void handleBlobImport(file, 'Pasted Image');
+          }
+          return; // Only import the first image
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  // --- Drag-and-drop: import image files ---
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    const handleDragOver = (e: DragEvent): void => {
+      // Only show feedback if transfer contains files or URIs
+      if (
+        e.dataTransfer?.types.includes('Files') ||
+        e.dataTransfer?.types.includes('text/uri-list')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        setIsDragOver(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent): void => {
+      // Only reset when leaving the root element (not children)
+      if (e.relatedTarget === null || !root.contains(e.relatedTarget as Node)) {
+        setIsDragOver(false);
+      }
+    };
+
+    const handleDrop = (e: DragEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+
+      if (!e.dataTransfer) return;
+
+      // Case 1: OS file manager drag — dataTransfer.files available
+      if (e.dataTransfer.files.length > 0) {
+        for (const file of Array.from(e.dataTransfer.files)) {
+          if (isImageMimeType(file.type)) {
+            void handleBlobImport(file, file.name);
+            return; // Import the first valid image
+          }
+        }
+      }
+
+      // Case 2: VSCode Explorer drag — text/uri-list (sandbox blocks file data)
+      const uriList = e.dataTransfer.getData('text/uri-list');
+      if (uriList) {
+        vscode.postMessage({ type: 'file:dropRequest', uris: uriList });
+      }
+    };
+
+    root.addEventListener('dragover', handleDragOver);
+    root.addEventListener('dragleave', handleDragLeave);
+    root.addEventListener('drop', handleDrop);
+    return () => {
+      root.removeEventListener('dragover', handleDragOver);
+      root.removeEventListener('dragleave', handleDragLeave);
+      root.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
   return (
     <I18nProvider service={i18nService}>
-      <div className="flex flex-col h-screen w-screen overflow-hidden">
+      <div className="flex flex-col h-screen w-screen overflow-hidden relative">
+        {/* Drag-over visual feedback */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/30 border-2 border-dashed border-[var(--vscode-focusBorder,#007acc)]">
+            <div className="text-white text-lg font-medium px-6 py-3 rounded-lg bg-black/60">
+              Drop image to import as layer
+            </div>
+          </div>
+        )}
         <div ref={rootRef} className="flex flex-1 overflow-hidden">
           <Toolbar />
           <div className="sketch-canvas-container">
@@ -190,7 +282,9 @@ export function App() {
                 style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
               >
                 <div className="flex flex-col h-full overflow-y-auto">
-                  <CollapsiblePanel titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}>
+                  <CollapsiblePanel
+                    titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}
+                  >
                     <BrushPanel />
                   </CollapsiblePanel>
                   {activeTool === 'shape' && (
@@ -240,5 +334,18 @@ async function handleFileImport(name: string, base64Data: string): Promise<void>
     state.markDirty();
   } catch {
     // Silently fail — extension already logged the error
+  }
+}
+
+/** Import an image from a Blob/File (clipboard paste or drag-drop) */
+async function handleBlobImport(blob: Blob, name: string): Promise<void> {
+  try {
+    const { layer } = await importImageFromBlob(blob, name);
+    const state = useSketchStore.getState();
+    state.setLayers([...state.layers, layer]);
+    state.setActiveLayer(layer.id);
+    state.markDirty();
+  } catch {
+    // Silently fail — bitmap decode may fail for unsupported formats
   }
 }

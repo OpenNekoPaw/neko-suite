@@ -44,49 +44,46 @@ neko-sketch is a **lightweight 2D creation tool** embedded in VSCode, closer to 
 
 ## 3. Drag-and-Drop Image Support
 
-### Current State: NOT Supported
+### Current State: Implemented (2026-03-30)
 
-Image import currently works only through a file dialog:
+Three import methods are now supported in addition to the file dialog (Ctrl+I):
 
-```
-User triggers Ctrl+I / Cmd+I
-  -> VSCode Extension opens file picker dialog
-    -> Reads file as base64
-      -> postMessage('file:imported', { name, data })
-        -> Webview importImageAsLayer()
-          -> base64 -> Blob -> ImageBitmap -> new raster layer
-```
+| Operation | Status | Implementation |
+|-----------|--------|----------------|
+| Ctrl+V paste clipboard image | ✅ | Webview `paste` event → `clipboardData.items` → `importImageFromBlob()` |
+| Drag from OS file manager | ✅ | Webview `drop` event → `dataTransfer.files` → `importImageFromBlob()` |
+| Drag from VSCode Explorer | ✅ | Webview `drop` → `text/uri-list` → `file:dropRequest` msg → Extension reads file → `file:imported` |
 
-### Gap Analysis
-
-| Operation | Status | Blocker |
-|-----------|--------|---------|
-| Drag image from file explorer to canvas | ❌ | Webview sandbox restricts `dataTransfer`; needs Extension Host relay |
-| Drag from browser / other apps | ❌ | Same sandbox restriction |
-| Ctrl+V paste clipboard image | ❌ | Needs `paste` event listener + `clipboard.read()` |
-| Drag from VSCode Explorer sidebar | ❌ | Needs `WebviewPanel.onDidReceiveMessage` + Drop API |
-
-### Root Cause
-
-VSCode Webview runs in a sandboxed iframe. Native drag-and-drop events lose `dataTransfer.files` across the sandbox boundary. All file I/O must be proxied through the Extension Host via `postMessage`.
-
-### Recommended Implementation Path
+**Architecture:**
 
 ```
-Phase 1: Clipboard paste (lowest friction)
-  - Webview: listen 'paste' event -> extract image from clipboardData
-  - If sandbox blocks clipboard: Extension 'editor.action.clipboardPasteAction'
-    -> read clipboard in Extension Host -> postMessage to Webview
-
-Phase 2: VSCode Explorer drag
-  - Extension: register WebviewDragAndDropProvider
-  - Handle 'application/vnd.code.uri-list' data transfer
-  - Read file -> base64 -> postMessage('file:imported')
-
-Phase 3: External file manager drag
-  - Extension: WebviewOptions.enableDropIntoEditor (VSCode 1.87+)
-  - Or: custom Drop handler on WebviewPanel
+                     ┌─────────────────────────────┐
+                     │        Webview (React)       │
+                     │                              │
+  Ctrl+V paste ─────>│  paste event                 │
+                     │  → clipboardData.items       │
+  OS file drag ─────>│  drop event                  │──> importImageFromBlob()
+                     │  → dataTransfer.files         │     → createImageBitmap()
+                     │                              │     → new LayerData
+  VSCode drag ──────>│  drop event                  │
+                     │  → text/uri-list (no files)  │
+                     │  → postMessage(dropRequest)  │
+                     └──────────┬───────────────────┘
+                                │ file:dropRequest
+                                ▼
+                     ┌─────────────────────────────┐
+                     │     Extension Host (Node)    │
+                     │  → vscode.workspace.fs.read  │
+                     │  → base64 encode             │
+                     │  → postMessage(file:imported) │
+                     └─────────────────────────────┘
 ```
+
+**Key files:**
+- `packages/neko-sketch/packages/webview/src/utils/image-import.ts` — `importImageFromBlob()`, `isImageMimeType()`
+- `packages/neko-sketch/packages/webview/src/App.tsx` — paste/drag/drop event listeners + drop overlay
+- `packages/neko-sketch/packages/extension/src/editor/sketchEditorProvider.ts` — `file:dropRequest` handler + `isImageUri()`
+- `packages/neko-sketch/packages/webview/src/types/index.ts` — `file:dropRequest` message type
 
 ---
 
@@ -167,8 +164,10 @@ Core Value Proposition:
   3. Hybrid strategy: lightweight built-in + MCP bridge PS/ComfyUI for pro needs
 
 Key Gaps to Address (Priority Order):
-  P0: Clipboard paste (Ctrl+V) for image import
-  P1: VSCode Explorer drag-and-drop
+  P0: Clipboard paste (Ctrl+V) for image import        ✅ Done
+  P0: Drag-and-drop (OS file manager + VSCode Explorer) ✅ Done
+  P1: Canvas→Sketch→Cut workflow integration             ⏳ Planned
+  P1: AI Inpaint / Auto-layer / Style Transfer           ⏳ Planned
   P1: Text tool implementation
   P2: Brush texture/tip system
   P2: Layer styles/effects
@@ -180,6 +179,7 @@ Key Gaps to Address (Priority Order):
 ## 6. Related Documents
 
 - [2D Capability Analysis](./2d-capability-analysis.md) - Full architecture design
+- [Sketch Enhancement Plan](./sketch-enhancement-plan.md) - Implementation plan for Phase 1-3
 - [Device Access](./device-access.md) - Hardware API proxy via Rust sidecar
 - [3D Capability Analysis](./3d-capability-analysis.md) - neko-model counterpart
 - [Panel Placement](./panel-placement.md) - Editor-bound vs global panels

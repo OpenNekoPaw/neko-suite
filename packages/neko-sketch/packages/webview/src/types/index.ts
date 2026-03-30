@@ -162,5 +162,6 @@ export type WebviewToExtensionMessage =
   | { type: 'document:save'; data: unknown }
   | { type: 'file:import' }
   | { type: 'file:export'; data: { format: string; data: string } }
+  | { type: 'file:dropRequest'; uris: string }
   | { type: 'status:update'; data: unknown }
   | { type: 'layer:outline'; data: unknown };
