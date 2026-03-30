@@ -14,7 +14,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { ToolbarButton, ToolbarSeparator } from '@neko/shared/components';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import { PlusIcon, LayersIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
+import { PlusIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
 
 // =============================================================================
 // Types
@@ -25,8 +25,6 @@ export interface CanvasToolbarProps {
   onAddMedia: (type: 'image' | 'video' | 'audio') => void;
   onUndo: () => void;
   onRedo: () => void;
-  onToggleLayerPanel: () => void;
-  isLayerPanelOpen: boolean;
   /** Storyboard node creation callbacks */
   onAddShot?: () => void;
   onAddSceneGroup?: () => void;
@@ -47,8 +45,6 @@ export function CanvasToolbar({
   onAddMedia,
   onUndo,
   onRedo,
-  onToggleLayerPanel,
-  isLayerPanelOpen,
   onAddShot,
   onAddSceneGroup,
   onAddGallery,
@@ -108,14 +104,6 @@ export function CanvasToolbar({
         title={t('toolbar.addNode')}
         active={expandedPanel === 'add'}
         onClick={() => togglePanel('add')}
-      />
-
-      {/* Layer Panel Toggle */}
-      <ToolbarButton
-        icon={<LayersIcon size={18} />}
-        title={t('toolbar.layers')}
-        active={isLayerPanelOpen}
-        onClick={onToggleLayerPanel}
       />
 
       <ToolbarSeparator />

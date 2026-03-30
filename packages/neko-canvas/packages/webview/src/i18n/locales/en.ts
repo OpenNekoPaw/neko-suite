@@ -27,6 +27,8 @@ export const en = {
   // Context menu
   'menu.addText': 'Add Text',
   'menu.addScene': 'Add Scene',
+  'menu.addShot': 'Add Shot',
+  'menu.addGallery': 'Add Gallery',
   'menu.addImage': 'Add Image',
   'menu.addVideo': 'Add Video',
   'menu.addAudio': 'Add Audio',

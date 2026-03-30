@@ -4,8 +4,10 @@
  * Each cell can be independently generated and used as IP-Adapter reference.
  */
 
-import type { GalleryCanvasNode, GalleryCell, CanvasViewport } from '@neko/shared';
+import type { GalleryCanvasNode, GalleryCell, GalleryPreset, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
+import { EditableText } from '../common/EditableText';
+import { InlineSelect, GALLERY_PRESETS } from '../common/InlineControls';
 
 // =============================================================================
 // Types
@@ -137,8 +139,10 @@ export function GalleryNode({
   onResize,
   onResizeEnd,
   onConnectionStart,
+  onUpdateData,
 }: GalleryNodeProps) {
   const { preset, rows, cols, cells, characterName } = node.data;
+  const editable = isSelected && !node.locked;
 
   const presetLabel = preset === 'custom' ? '自定义' : preset;
 
@@ -165,12 +169,32 @@ export function GalleryNode({
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          <span className="font-medium flex-1 truncate" style={{ color: 'var(--node-fg)' }}>
-            {characterName ?? '角色画廊'}
-          </span>
-          <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
-            {presetLabel} {rows}×{cols}
-          </span>
+          {editable ? (
+            <>
+              <EditableText
+                value={characterName ?? ''}
+                onChange={(val) => onUpdateData?.(node.id, { characterName: val || undefined })}
+                placeholder="角色名"
+                className="font-medium flex-1 truncate"
+                style={{ color: 'var(--node-fg)', fontSize: 11 }}
+              />
+              <InlineSelect
+                value={preset ?? 'character-3view'}
+                options={GALLERY_PRESETS}
+                onChange={(v) => onUpdateData?.(node.id, { preset: v as GalleryPreset })}
+                width={96}
+              />
+            </>
+          ) : (
+            <>
+              <span className="font-medium flex-1 truncate" style={{ color: 'var(--node-fg)' }}>
+                {characterName ?? '角色画廊'}
+              </span>
+              <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
+                {presetLabel} {rows}×{cols}
+              </span>
+            </>
+          )}
           {/* Progress */}
           <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
             {doneCount}/{cells.length}

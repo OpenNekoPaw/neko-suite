@@ -77,11 +77,12 @@ export function AnnotationNode({
         </div>
 
         {/* Content area - editable */}
-        <div className="flex-1 p-3 overflow-auto">
+        <div className="flex-1 p-3 overflow-auto flex flex-col">
           <EditableText
             value={content || ''}
             onChange={(val) => onUpdateData?.(node.id, { content: val })}
             multiline
+            fillHeight
             placeholder={t('node.editPlaceholder')}
             className="whitespace-pre-wrap break-words"
             style={{ fontSize: `${fontSize}px`, color, lineHeight: 1.5 }}

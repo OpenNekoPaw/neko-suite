@@ -2,23 +2,24 @@
  * GenerationParamsBar — right side of the InputArea top bar.
  *
  * In agent mode:
- *   - Collapsed to [⚙] when no generation context (no ambient nodes / canvas chips).
- *   - Auto-expands when canvas nodes are selected or canvas/cut chips are attached.
- *   - Manual toggle via [⚙] button.
- *   - Shows: [Category▼] [ratio▼] [resolution▼] [duration▼?]
+ *   - Collapsed to [⚙] when no generation context.
+ *   - Expanded: [Category▼] [MediaModel▼] [ratio▼] [resolution▼] [duration▼?] [×]
+ *   - Media model selector is integrated (no separate AgentMediaBar).
  *
  * In image/video/audio session modes:
  *   - Always visible, no category selector (implied by sessionMode).
- *   - Shows params for that category.
+ *   - Shows params for that category (model is shown in left area by InputArea).
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import type { GenCategory, GenerationParams } from './types';
 import { SESSION_MODE_COLORS } from './SessionModeSelector';
+import type { ChatModelOption } from '@neko/shared';
+import { getCategoryColor, ModelDot } from './ModelIcon';
 
 // ─── small reusable param chip ─────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) 
   );
 }
 
-// ─── category icon (reused from SessionModeSelector shape) ─────────────────
+// ─── category icon ──────────────────────────────────────────────────────────
 
 function CategoryIcon({ cat }: { cat: GenCategory }) {
   if (cat === 'image') {
@@ -162,6 +163,100 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
                 <CategoryIcon cat={cat} />
               </span>
               {CATEGORY_LABELS[cat]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── inline media model chip (for agent mode, integrated into params bar) ───
+
+interface InlineMediaModelChipProps {
+  category: GenCategory;
+  selectedId: string;
+  models: ChatModelOption[];
+  onSelect: (modelId: string) => void;
+}
+
+function InlineMediaModelChip({
+  category,
+  selectedId,
+  models,
+  onSelect,
+}: InlineMediaModelChipProps) {
+  const [open, setOpen] = useState(false);
+  const [direction, setDirection] = useState<'up' | 'down'>('down');
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutsideSingle(ref, () => setOpen(false));
+  const getDirection = useDropdownDirection(ref, 'down');
+
+  const color = getCategoryColor(category);
+  const selected = models.find((m) => m.id === selectedId);
+  const isConfigured = !!selected && selectedId !== 'none';
+  const hasModels = models.length > 0;
+
+  const handleOpen = () => {
+    if (!hasModels) return;
+    if (!open) setDirection(getDirection());
+    setOpen((v) => !v);
+  };
+
+  const shortenLabel = (label: string): string => {
+    const short = label.includes('/') ? (label.split('/').pop()?.trim() ?? label) : label;
+    return short.length > 10 ? `${short.slice(0, 9)}…` : short;
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={handleOpen}
+        className="flex items-center gap-1 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+        style={{
+          color: isConfigured ? color : 'var(--vscode-descriptionForeground)',
+          opacity: isConfigured ? 1 : 0.6,
+        }}
+        title={selected?.label ?? (hasModels ? `Select ${category} model` : `No ${category} model`)}
+      >
+        <ModelDot color={isConfigured ? color : 'var(--vscode-descriptionForeground)'} />
+        <span>{isConfigured ? shortenLabel(selected.label) : 'none'}</span>
+        {hasModels && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
+      </button>
+
+      {open && hasModels && (
+        <div
+          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[180px] py-1 z-50`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onSelect('none');
+              setOpen(false);
+            }}
+            className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
+              selectedId === 'none'
+                ? 'text-[var(--vscode-textLink-foreground)]'
+                : 'text-[var(--vscode-descriptionForeground)]'
+            }`}
+          >
+            不使用
+          </button>
+          {models.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => {
+                onSelect(m.id);
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+            >
+              <ModelDot color={color} />
+              <span style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}>
+                {m.label}
+              </span>
             </button>
           ))}
         </div>
@@ -296,6 +391,9 @@ export function GenerationParamsBar() {
     genParams,
     onGenCategoryChange,
     onGenParamsChange,
+    mediaModelSelection,
+    availableMediaModels,
+    onMediaModelSelect,
     ambientNodes = [],
     contextChips,
   } = useInputAreaContext();
@@ -313,6 +411,12 @@ export function GenerationParamsBar() {
 
   const isExpanded = !isAgentMode || hasGenContext || manuallyExpanded;
   const color = SESSION_MODE_COLORS[effectiveCategory];
+
+  // Filter media models for current category (agent mode)
+  const categoryModels = useMemo(
+    () => availableMediaModels.filter((m) => m.category === effectiveCategory),
+    [availableMediaModels, effectiveCategory],
+  );
 
   if (!isExpanded) {
     return (
@@ -333,6 +437,16 @@ export function GenerationParamsBar() {
     <div className="flex items-center gap-0.5">
       {/* Category selector — only in agent mode */}
       {isAgentMode && <CategorySelector category={genCategory} onChange={onGenCategoryChange} />}
+
+      {/* Inline media model selector — agent mode only (non-agent uses InputArea left side) */}
+      {isAgentMode && (
+        <InlineMediaModelChip
+          category={effectiveCategory}
+          selectedId={mediaModelSelection[effectiveCategory]}
+          models={categoryModels}
+          onSelect={(modelId) => onMediaModelSelect(effectiveCategory, modelId)}
+        />
+      )}
 
       {/* Per-category params */}
       <ParamsPanel

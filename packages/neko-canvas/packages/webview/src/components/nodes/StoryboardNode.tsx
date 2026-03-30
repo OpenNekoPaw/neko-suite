@@ -103,10 +103,7 @@ export function StoryboardNode({
             </div>
             {/* Duration badge */}
             {duration && (
-              <div
-                className="text-xs flex-shrink-0"
-                style={{ color: 'var(--node-fg-secondary)' }}
-              >
+              <div className="text-xs flex-shrink-0" style={{ color: 'var(--node-fg-secondary)' }}>
                 {formatDuration(duration)}
               </div>
             )}
@@ -115,15 +112,16 @@ export function StoryboardNode({
 
         {/* Description area - editable */}
         <div
-          className="flex-1 p-3 overflow-hidden"
+          className="flex-1 p-3 overflow-hidden flex flex-col"
           style={{ borderBottom: '1px solid var(--node-divider)' }}
         >
           <EditableText
             value={description || ''}
             onChange={(val) => onUpdateData?.(node.id, { description: val })}
             multiline
+            fillHeight
             placeholder={t('node.descPlaceholder')}
-            className="text-xs line-clamp-4"
+            className="text-xs"
             style={{ color: 'var(--node-fg-secondary)' }}
             disabled={node.locked}
           />

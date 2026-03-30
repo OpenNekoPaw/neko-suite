@@ -28,6 +28,8 @@ export interface CanvasMenuContext {
   isNodeLocked?: boolean;
   onAddText: (pos: { x: number; y: number }) => void;
   onAddScene: (pos: { x: number; y: number }) => void;
+  onAddShot?: (pos: { x: number; y: number }) => void;
+  onAddGallery?: (pos: { x: number; y: number }) => void;
   onAddMedia: (type: 'image' | 'video' | 'audio') => void;
   onDelete: () => void;
   onSelectAll: () => void;
@@ -61,6 +63,12 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
   return [
     { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
     { label: t('menu.addScene'), icon: '🎬', onClick: () => ctx.onAddScene(ctx.canvasPosition) },
+    { label: t('menu.addShot'), icon: '🎬', onClick: () => ctx.onAddShot?.(ctx.canvasPosition) },
+    {
+      label: t('menu.addGallery'),
+      icon: '🖼',
+      onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
+    },
     { separator: true },
     { label: t('menu.addImage'), icon: '🖼️', onClick: () => ctx.onAddMedia('image') },
     { label: t('menu.addVideo'), icon: '🎥', onClick: () => ctx.onAddMedia('video') },
@@ -133,6 +141,12 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
     { separator: true },
     { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
     { label: t('menu.addScene'), icon: '🎬', onClick: () => ctx.onAddScene(ctx.canvasPosition) },
+    { label: t('menu.addShot'), icon: '🎬', onClick: () => ctx.onAddShot?.(ctx.canvasPosition) },
+    {
+      label: t('menu.addGallery'),
+      icon: '🖼',
+      onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
+    },
     { separator: true },
     {
       label: '用 Agent 生成图像',

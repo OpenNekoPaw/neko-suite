@@ -7,6 +7,7 @@
 import type { SceneGroupCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
+import { InlineInput, InlineSelect, TIME_OF_DAY } from '../common/InlineControls';
 
 // =============================================================================
 // Types
@@ -51,6 +52,8 @@ export function SceneGroupNode({
 }: SceneGroupNodeProps) {
   const { sceneTitle, sceneNumber, location, timeOfDay, shotIds } = node.data;
 
+  const editable = isSelected && !node.locked;
+
   const subtitle = [location, timeOfDay].filter(Boolean).join(' · ');
 
   return (
@@ -91,13 +94,30 @@ export function SceneGroupNode({
               style={{ color: 'var(--node-fg)', fontSize: 12 }}
               disabled={node.locked}
             />
-            {subtitle && (
-              <div
-                className="truncate mt-0.5"
-                style={{ color: 'var(--node-fg-secondary)', fontSize: 10 }}
-              >
-                {subtitle}
+            {editable ? (
+              <div className="flex items-center gap-1 mt-0.5">
+                <InlineInput
+                  value={location ?? ''}
+                  onChange={(v) => onUpdateData?.(node.id, { location: v || undefined })}
+                  placeholder="地点"
+                  width={80}
+                />
+                <InlineSelect
+                  value={timeOfDay ?? ''}
+                  options={TIME_OF_DAY}
+                  onChange={(v) => onUpdateData?.(node.id, { timeOfDay: v || undefined })}
+                  width={64}
+                />
               </div>
+            ) : (
+              subtitle && (
+                <div
+                  className="truncate mt-0.5"
+                  style={{ color: 'var(--node-fg-secondary)', fontSize: 10 }}
+                >
+                  {subtitle}
+                </div>
+              )
             )}
           </div>
 

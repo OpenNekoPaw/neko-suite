@@ -4,8 +4,6 @@ import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
-import { LayerPanel } from './components/controls/LayerPanel';
-import { NodePanel } from './components/panels/NodePanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
@@ -57,8 +55,6 @@ export function CanvasApp() {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  // Panel state
-  const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(false);
   // Hand tool: drag-to-pan mode (toggle with H key)
   const [isPanMode, setIsPanMode] = useState(false);
   // Minimap width tracks ZoomControls width for alignment
@@ -93,8 +89,6 @@ export function CanvasApp() {
     rotateNode,
     rotateNodeEnd,
     selectNodes,
-    reorderNode,
-    removeNode,
     groupNodes,
     ungroupNodes,
   } = useCanvasStore();
@@ -398,6 +392,8 @@ export function CanvasApp() {
     screenToCanvas,
     addTextAt,
     addSceneAt,
+    addShotAt,
+    addGalleryAt,
     handleAddMedia,
     deleteSelected,
     handleFitContent,
@@ -649,23 +645,6 @@ export function CanvasApp() {
   }
 
   // =========================================================================
-  // Property panel helpers
-  // =========================================================================
-
-  const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
-
-  const handleToggleLock = useCallback(
-    (id: string) => {
-      const node = nodes.find((n) => n.id === id);
-      if (node) useCanvasStore.getState().updateNode(id, { locked: !node.locked });
-    },
-    [nodes],
-  );
-  const handleDeleteNode = useCallback((id: string) => {
-    useCanvasStore.getState().removeNode(id);
-  }, []);
-
-  // =========================================================================
   // Render
   // =========================================================================
 
@@ -689,27 +668,12 @@ export function CanvasApp() {
           onAddMedia={handleAddMedia}
           onUndo={undo}
           onRedo={redo}
-          onToggleLayerPanel={() => setIsLayerPanelOpen((prev) => !prev)}
-          isLayerPanelOpen={isLayerPanelOpen}
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />
-
-        {isLayerPanelOpen && (
-          <div className="w-[200px] flex-shrink-0">
-            <LayerPanel
-              nodes={nodes}
-              selectedNodeIds={selectedNodeIds}
-              onSelectNode={handleNodeSelect}
-              onReorderNode={reorderNode}
-              onToggleLock={handleToggleLock}
-              onDeleteNode={removeNode}
-            />
-          </div>
-        )}
 
         <div
           ref={canvasContainerRef}
@@ -747,14 +711,6 @@ export function CanvasApp() {
             onDocumentOpen={handleDocumentOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
             isPanMode={isPanMode}
-          />
-
-          {/* ── Node Panel (compact property editor) ── */}
-          <NodePanel
-            node={selectedNodes[0] ?? null}
-            onUpdateNodeData={handleNodeUpdateData}
-            onDeleteNode={handleDeleteNode}
-            onClose={clearSelection}
           />
 
           {/* Empty state hint */}

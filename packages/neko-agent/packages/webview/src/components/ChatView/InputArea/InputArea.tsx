@@ -15,7 +15,7 @@ import { parseFileReference } from './FileReferenceMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
 import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
 import { AgentContextChip } from './AgentContextChip';
-import { AgentMediaBar, CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
+import { CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
 import { SuggestionChips } from './SuggestionChips';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -457,7 +457,7 @@ export function InputArea({
       )}
 
       <div className="border-t border-[var(--vscode-panel-border)]">
-        {/* ── Top bar: mode + model | media models (agent) | generation params ── */}
+        {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         <div className="flex items-center px-2 py-1 gap-0.5">
           {/* Left: session mode */}
           <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
@@ -489,24 +489,7 @@ export function InputArea({
             style={{ background: 'var(--vscode-panel-border)' }}
           />
 
-          {/* Media model selectors (per-category) — agent mode only */}
-          {sessionMode === 'agent' && (
-            <>
-              <AgentMediaBar
-                selection={mediaModelSelection}
-                availableModels={availableMediaModels}
-                onSelect={onMediaModelSelect}
-              />
-              {availableMediaModels.length > 0 && (
-                <div
-                  className="w-px h-3.5 mx-1 opacity-30"
-                  style={{ background: 'var(--vscode-panel-border)' }}
-                />
-              )}
-            </>
-          )}
-
-          {/* Right: generation params (ratio / resolution / duration / ...) */}
+          {/* Right: generation params (media model integrated in agent mode) */}
           <GenerationParamsBar />
         </div>
 

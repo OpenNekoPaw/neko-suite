@@ -4,9 +4,25 @@
  * and an image area for AI-generated images.
  */
 
-import type { ShotCanvasNode, CanvasViewport } from '@neko/shared';
+import { useState } from 'react';
+import type {
+  ShotCanvasNode,
+  CanvasViewport,
+  ShotScale,
+  CameraMovement,
+  CameraAngle,
+} from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
+import {
+  InlineSelect,
+  InlineInput,
+  InlineTextarea,
+  InlineLabel,
+  SHOT_SCALES,
+  CAMERA_MOVEMENTS,
+  CAMERA_ANGLES,
+} from '../common/InlineControls';
 
 // =============================================================================
 // Types
@@ -104,6 +120,9 @@ export function ShotNode({
   onUpdateData,
   onSelectCandidate,
 }: ShotNodeProps) {
+  const editable = isSelected && !node.locked;
+  const [dialogueOpen, setDialogueOpen] = useState(false);
+
   const {
     shotNumber,
     shotScale,
@@ -160,8 +179,56 @@ export function ShotNode({
           <span className="font-mono font-semibold" style={{ color: 'var(--node-fg)' }}>
             #{String(shotNumber).padStart(3, '0')}
           </span>
-          {shotScale && <Tag>{shotScale}</Tag>}
-          {cameraMovement && cameraMovement !== 'static' && <Tag>{cameraMovement}</Tag>}
+          {editable ? (
+            <>
+              <InlineSelect
+                value={shotScale ?? 'MS'}
+                options={SHOT_SCALES}
+                onChange={(v) => onUpdateData?.(node.id, { shotScale: v as ShotScale })}
+                width={56}
+              />
+              <InlineSelect
+                value={cameraMovement ?? ''}
+                options={CAMERA_MOVEMENTS}
+                onChange={(v) =>
+                  onUpdateData?.(node.id, {
+                    cameraMovement: (v || undefined) as CameraMovement | undefined,
+                  })
+                }
+                width={64}
+              />
+              <InlineSelect
+                value={node.data.cameraAngle ?? ''}
+                options={CAMERA_ANGLES}
+                onChange={(v) =>
+                  onUpdateData?.(node.id, {
+                    cameraAngle: (v || undefined) as CameraAngle | undefined,
+                  })
+                }
+                width={56}
+              />
+              <div className="flex items-center gap-0.5" style={{ flexShrink: 0 }}>
+                <InlineLabel>时长</InlineLabel>
+                <InlineInput
+                  type="number"
+                  value={node.data.duration ?? 3}
+                  min={0.5}
+                  step={0.5}
+                  onChange={(v) => {
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0) onUpdateData?.(node.id, { duration: n });
+                  }}
+                  width={40}
+                />
+                <InlineLabel>s</InlineLabel>
+              </div>
+            </>
+          ) : (
+            <>
+              {shotScale && <Tag>{shotScale}</Tag>}
+              {cameraMovement && cameraMovement !== 'static' && <Tag>{cameraMovement}</Tag>}
+            </>
+          )}
           <div className="flex-1" />
           <StatusBadge status={generationStatus} />
         </div>
@@ -259,17 +326,15 @@ export function ShotNode({
           style={{ borderBottom: '1px solid var(--node-divider)' }}
         >
           {/* Description */}
-          {visualDescription && (
-            <EditableText
-              value={visualDescription}
-              onChange={(val) => onUpdateData?.(node.id, { visualDescription: val })}
-              multiline
-              placeholder="画面描述"
-              className="line-clamp-2"
-              style={{ color: 'var(--node-fg-secondary)', fontSize: 11 }}
-              disabled={node.locked}
-            />
-          )}
+          <EditableText
+            value={visualDescription ?? ''}
+            onChange={(val) => onUpdateData?.(node.id, { visualDescription: val })}
+            multiline
+            placeholder="画面描述"
+            className="line-clamp-2"
+            style={{ color: 'var(--node-fg-secondary)', fontSize: 11 }}
+            disabled={node.locked}
+          />
 
           {/* Characters */}
           {characters.length > 0 && (
@@ -305,6 +370,64 @@ export function ShotNode({
             </div>
           )}
         </div>
+
+        {/* ── Dialogue & sound (inline, selected only) ── */}
+        {editable && (
+          <div
+            className="px-2 pb-1.5 flex-shrink-0"
+            style={{ borderBottom: '1px solid var(--node-divider)' }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDialogueOpen((v) => !v);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                fontSize: 10,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                color: 'var(--node-fg-secondary)',
+              }}
+            >
+              {dialogueOpen ? '▾' : '▸'} 台词与音效
+            </button>
+            {dialogueOpen && (
+              <div className="mt-1.5 space-y-1">
+                <div className="flex gap-1.5">
+                  <div className="flex-1">
+                    <InlineLabel>台词</InlineLabel>
+                    <InlineTextarea
+                      value={dialogue ?? ''}
+                      onChange={(v) => onUpdateData?.(node.id, { dialogue: v || undefined })}
+                      placeholder="台词…"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InlineLabel>旁白</InlineLabel>
+                    <InlineTextarea
+                      value={node.data.voiceOver ?? ''}
+                      onChange={(v) => onUpdateData?.(node.id, { voiceOver: v || undefined })}
+                      placeholder="旁白…"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <InlineLabel>音效提示</InlineLabel>
+                  <InlineInput
+                    value={node.data.soundCue ?? ''}
+                    onChange={(v) => onUpdateData?.(node.id, { soundCue: v || undefined })}
+                    placeholder="例：脚步声、风声…"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <div

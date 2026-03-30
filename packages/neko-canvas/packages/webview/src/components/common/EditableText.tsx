@@ -18,6 +18,8 @@ export interface EditableTextProps {
   onChange: (value: string) => void;
   /** Use textarea for multiline editing */
   multiline?: boolean;
+  /** When true, the component stretches to fill its flex parent height */
+  fillHeight?: boolean;
   /** Placeholder when empty */
   placeholder?: string;
   /** Additional class names for display mode */
@@ -36,6 +38,7 @@ export function EditableText({
   value,
   onChange,
   multiline = false,
+  fillHeight = false,
   placeholder = 'Click to edit...',
   className = '',
   style,
@@ -149,15 +152,29 @@ export function EditableText({
     };
 
     if (multiline) {
+      // textarea is a replaced element — flex-1 doesn't work on it directly.
+      // Wrap in a flex-1 div and stretch textarea via h-full.
+      if (fillHeight) {
+        return (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <textarea
+              {...commonProps}
+              className={`${commonProps.className} flex-1`}
+              style={{ ...commonProps.style, height: '100%' }}
+            />
+          </div>
+        );
+      }
       return <textarea {...commonProps} rows={3} />;
     }
     return <input type="text" {...commonProps} />;
   }
 
   // Display mode
+  const displayFillCls = fillHeight ? 'flex-1 h-full min-h-0 overflow-auto' : '';
   return (
     <div
-      className={`cursor-text ${className}`}
+      className={`cursor-text ${displayFillCls} ${className}`}
       style={style}
       onDoubleClick={startEditing}
       title={disabled ? undefined : placeholder}

@@ -411,6 +411,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         // Webview reports status update (selection change, viewport change, etc.)
         const data = message.data as Record<string, unknown>;
         this.syncStatusBar(data);
+        this.syncOutline(data);
         break;
       }
       case 'openMediaPreview': {
@@ -1093,10 +1094,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       return {
         id,
-        type: type as 'media' | 'storyboard' | 'annotation' | 'group',
+        type,
         label,
         detail,
         locked: Boolean(n.locked),
+        ...(type === 'scene' && Array.isArray(data.shotIds)
+          ? { shotIds: data.shotIds as string[] }
+          : {}),
       };
     });
 

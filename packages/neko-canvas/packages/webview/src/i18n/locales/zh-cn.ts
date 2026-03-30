@@ -27,6 +27,8 @@ export const zhCN = {
   // Context menu
   'menu.addText': '添加文本',
   'menu.addScene': '添加场景',
+  'menu.addShot': '添加镜头',
+  'menu.addGallery': '添加角色画廊',
   'menu.addImage': '添加图片',
   'menu.addVideo': '添加视频',
   'menu.addAudio': '添加音频',

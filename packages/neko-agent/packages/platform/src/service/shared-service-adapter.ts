@@ -51,8 +51,13 @@ export class SharedServiceAdapter implements SharedIService {
   ): AsyncIterable<StreamChunk> {
     const { stream, response } = this._service.chatStream(messages, options);
 
-    // Prevent unhandled rejection from the response Promise
-    response.catch(() => {});
+    // Prevent unhandled rejection from the response Promise.
+    // The error is already propagated via the stream iterator (re-thrown from AI SDK error parts).
+    response.catch((error) => {
+      logger.warn('Stream response promise rejected (error already propagated via stream)', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     for await (const chunk of stream) {
       // Extended thinking (Claude)
