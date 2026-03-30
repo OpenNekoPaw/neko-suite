@@ -1039,22 +1039,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           break;
         }
         case 'storyboard':
-          label = String(data.title ?? 'Scene');
+          label = String(data.title || 'Scene');
           detail = data.description ? String(data.description).slice(0, 40) : undefined;
           break;
         case 'annotation':
-          label = String(data.content ?? 'Note').slice(0, 30);
+          label = String(data.content || 'Note').slice(0, 30) || 'Note';
           detail = 'annotation';
           break;
         case 'group':
-          label = String(data.label ?? 'Group');
+          label = String(data.label || 'Group');
           break;
         case 'text':
-          label = String(data.content ?? 'Text').slice(0, 30) || 'Text';
+          label = String(data.content || 'Text').slice(0, 30) || 'Text';
           detail = 'text';
           break;
         case 'artboard':
-          label = String(data.title ?? 'Artboard');
+          label = String(data.title || data.name || 'Artboard');
           detail = data.preset ? String(data.preset) : undefined;
           break;
         case 'shot': {
@@ -1065,13 +1065,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           break;
         }
         case 'scene':
-          label = String(data.sceneTitle ?? 'Scene');
+          label = String(data.sceneTitle || 'Scene');
           detail = data.location
             ? `${String(data.location)} · ${String(data.timeOfDay ?? '')}`
             : undefined;
           break;
         case 'gallery':
-          label = String(data.characterName ?? '角色画廊');
+          label = String(data.characterName || '角色画廊');
           detail = data.preset ? String(data.preset) : undefined;
           break;
         case 'script':
