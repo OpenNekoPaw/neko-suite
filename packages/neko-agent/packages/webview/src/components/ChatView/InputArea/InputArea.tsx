@@ -6,10 +6,9 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { SendIcon, StopIcon, PlusIcon } from '@neko/shared/icons';
 import { ModelSelector } from './ModelSelector';
-import { MediaModelSelector } from './MediaModelSelector';
-import { AgentMediaBar } from './AgentMediaBar';
 import { ModeSelector } from './ModeSelector';
 import { SessionModeSelector } from './SessionModeSelector';
+import { GenerationParamsBar } from './GenerationParamsBar';
 import { AttachmentPreview } from './FileAttachment';
 import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
 import { parseFileReference } from './FileReferenceMenu';
@@ -54,9 +53,6 @@ export function InputArea({
     selectedModel,
     availableModels,
     onModelSelect,
-    mediaModelSelection,
-    availableMediaModels,
-    onMediaModelSelect,
     executionMode,
     onExecutionModeChange,
     contextTokenCount,
@@ -74,11 +70,6 @@ export function InputArea({
     ambientNodes = [],
     onTriggerSend,
   } = useInputAreaContext();
-
-  // In non-agent modes, only show models for the active category
-  const filteredMediaModels = availableMediaModels.filter((m) =>
-    sessionMode === 'agent' ? true : m.category === sessionMode,
-  );
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -453,159 +444,119 @@ export function InputArea({
   const canSend = inputValue.trim() || attachedFiles.length > 0 || contextChips.length > 0;
 
   return (
-    <div className="border-t border-[var(--vscode-panel-border)] p-3 flex-shrink-0">
-      {/* Main input container - Codex style */}
-      <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl focus-within:border-[var(--vscode-focusBorder)] transition-colors">
-        {/* Slash command menu */}
-        <SlashCommandMenu
-          isOpen={showSlashMenu}
-          filter={slashFilter}
-          selectedIndex={selectedCommandIndex}
-          onSelect={selectSlashCommand}
-          onClose={() => setShowSlashMenu(false)}
-          skills={skills}
-          pluginCommands={pluginCommands}
-        />
-
-        {/* @mention menu — files, canvas nodes, story characters */}
-        <MentionMenu
-          isOpen={showAtMenu}
-          filter={atFilter}
-          items={mentionItems}
-          selectedIndex={selectedFileIndex}
-          onSelectFile={insertFilePath}
-          onSelectContext={(payload) => {
-            if (onAddContextChip) {
-              const lastAtIndex = inputValue.lastIndexOf('@');
-              onInputChange(inputValue.slice(0, lastAtIndex));
-              onAddContextChip(payload);
-              setShowAtMenu(false);
-              textareaRef.current?.focus();
-            }
-          }}
-          onClose={() => setShowAtMenu(false)}
-        />
-
-        {/* Context-aware suggestion chips — click to pre-fill input */}
-        {contextChips.length > 0 && (
+    <div className="flex-shrink-0">
+      {/* ── Suggestion chips — float above border-t, at bottom of message list ── */}
+      {contextChips.length > 0 && (
+        <div className="px-3 pb-1">
           <SuggestionChips contextChips={contextChips} onSuggest={onInputChange} />
-        )}
+        </div>
+      )}
 
-        {/* Ambient canvas chips — auto-injected from canvas selection, non-removable */}
-        {ambientNodes.length > 0 && (
-          <div className="flex flex-wrap gap-1 px-3 pt-2">
-            {ambientNodes.map((n) => (
-              <AgentContextChip
-                key={n.nodeId}
-                payload={{
-                  type: 'canvas-node',
-                  id: n.nodeId,
-                  label: n.summary,
-                  summary: n.summary,
-                  data: undefined,
-                }}
-              />
-            ))}
-          </div>
-        )}
+      <div className="border-t border-[var(--vscode-panel-border)]">
+        {/* ── Top bar: mode + model | generation params ── */}
+        <div className="flex items-center px-2 py-1 gap-0.5">
+          {/* Left: session mode + LLM model (agent only) */}
+          <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+          {sessionMode === 'agent' && (
+            <ModelSelector
+              selectedModel={selectedModel}
+              models={availableModels}
+              onSelect={onModelSelect}
+            />
+          )}
 
-        {/* Agent context chips — shown above textarea when context is attached */}
-        {contextChips.length > 0 && (
-          <div className="flex flex-wrap gap-1 px-3 pt-2">
-            {contextChips.map((chip) => (
-              <AgentContextChip key={chip.id} payload={chip} onRemove={onRemoveContextChip} />
-            ))}
-          </div>
-        )}
+          <div className="flex-1" />
 
-        {/* File attachment preview */}
-        <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
-
-        {/* Input row */}
-        <div className="flex items-end gap-1 px-2 py-2">
-          <textarea
-            ref={textareaRef}
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={
-              isThinking ? t('chat.input.thinkingPlaceholder') : t('chat.input.placeholder')
-            }
-            className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
-            rows={1}
+          {/* Separator */}
+          <div
+            className="w-px h-3.5 mx-1 opacity-30"
+            style={{ background: 'var(--vscode-panel-border)' }}
           />
+
+          {/* Right: generation params (ratio / resolution / duration / ...) */}
+          <GenerationParamsBar />
         </div>
 
-        {/* Bottom action bar — two rows */}
-        <div className="border-t border-[var(--vscode-panel-border)] border-opacity-30">
-          {/* Row 1: session mode + model selectors + execution mode + send */}
-          <div className="flex items-center px-2 pt-1.5 pb-0.5 gap-0.5">
-            {/* Session mode — always first, determines what follows */}
-            <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+        {/* ── Input container ── */}
+        <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl mx-2 mb-2 focus-within:border-[var(--vscode-focusBorder)] transition-colors">
+          {/* Slash command menu */}
+          <SlashCommandMenu
+            isOpen={showSlashMenu}
+            filter={slashFilter}
+            selectedIndex={selectedCommandIndex}
+            onSelect={selectSlashCommand}
+            onClose={() => setShowSlashMenu(false)}
+            skills={skills}
+            pluginCommands={pluginCommands}
+          />
 
-            {/* LLM model — only in agent mode */}
-            {sessionMode === 'agent' && (
-              <ModelSelector
-                selectedModel={selectedModel}
-                models={availableModels}
-                onSelect={onModelSelect}
-              />
-            )}
+          {/* @mention menu — files, canvas nodes, story characters */}
+          <MentionMenu
+            isOpen={showAtMenu}
+            filter={atFilter}
+            items={mentionItems}
+            selectedIndex={selectedFileIndex}
+            onSelectFile={insertFilePath}
+            onSelectContext={(payload) => {
+              if (onAddContextChip) {
+                const lastAtIndex = inputValue.lastIndexOf('@');
+                onInputChange(inputValue.slice(0, lastAtIndex));
+                onAddContextChip(payload);
+                setShowAtMenu(false);
+                textareaRef.current?.focus();
+              }
+            }}
+            onClose={() => setShowAtMenu(false)}
+          />
 
-            {/* Agent mode: per-category media bar */}
-            {sessionMode === 'agent' && (
-              <AgentMediaBar
-                selection={mediaModelSelection}
-                availableModels={availableMediaModels}
-                onSelect={onMediaModelSelect}
-              />
-            )}
+          {/* Ambient canvas chips — auto-injected from canvas selection, non-removable */}
+          {ambientNodes.length > 0 && (
+            <div className="flex flex-wrap gap-1 px-3 pt-2">
+              {ambientNodes.map((n) => (
+                <AgentContextChip
+                  key={n.nodeId}
+                  payload={{
+                    type: 'canvas-node',
+                    id: n.nodeId,
+                    label: n.summary,
+                    summary: n.summary,
+                    data: undefined,
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
-            {/* Non-agent modes: single filtered media selector */}
-            {sessionMode !== 'agent' && (
-              <MediaModelSelector
-                selectedModel={mediaModelSelection[sessionMode]}
-                models={filteredMediaModels}
-                onSelect={(modelId) => onMediaModelSelect(sessionMode, modelId)}
-              />
-            )}
+          {/* Agent context chips — shown above textarea when context is attached */}
+          {contextChips.length > 0 && (
+            <div className="flex flex-wrap gap-1 px-3 pt-2">
+              {contextChips.map((chip) => (
+                <AgentContextChip key={chip.id} payload={chip} onRemove={onRemoveContextChip} />
+              ))}
+            </div>
+          )}
 
-            {/* Spacer */}
-            <div className="flex-1" />
+          {/* File attachment preview */}
+          <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
 
-            {/* Execution mode — only relevant in agent mode */}
-            {sessionMode === 'agent' && (
-              <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
-            )}
-
-            {/* Send / Stop */}
-            {isThinking ? (
-              <button
-                onClick={onCancel}
-                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white hover:opacity-90 transition-opacity"
-                title={t('chat.input.cancel')}
-              >
-                <StopIcon className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={!canSend}
-                className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
-                  canSend
-                    ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                    : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
-                }`}
-                title={t('chat.input.send')}
-              >
-                <SendIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
+          {/* Input row */}
+          <div className="flex items-end gap-1 px-2 py-2">
+            <textarea
+              ref={textareaRef}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={
+                isThinking ? t('chat.input.thinkingPlaceholder') : t('chat.input.placeholder')
+              }
+              className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
+              rows={1}
+            />
           </div>
 
-          {/* Row 2: utility actions + indicators */}
-          <div className="flex items-center px-2 pb-1.5 gap-0.5">
+          {/* ── Bottom bar: utilities + execution mode + send ── */}
+          <div className="border-t border-[var(--vscode-panel-border)] border-opacity-30 flex items-center px-2 py-1 gap-0.5">
             {/* Attachment button */}
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -640,13 +591,46 @@ export function InputArea({
             />
 
             {/* Media call count */}
-            <div
-              className="flex items-center gap-0.5 px-1 text-[10px] text-[var(--vscode-descriptionForeground)]"
-              title={`Media model calls: ${mediaModelCallCount}`}
-            >
-              <MediaCallIcon className="w-3 h-3" />
-              <span>{mediaModelCallCount}</span>
-            </div>
+            {mediaModelCallCount > 0 && (
+              <div
+                className="flex items-center gap-0.5 px-1 text-[10px] text-[var(--vscode-descriptionForeground)]"
+                title={`Media model calls: ${mediaModelCallCount}`}
+              >
+                <MediaCallIcon className="w-3 h-3" />
+                <span>{mediaModelCallCount}</span>
+              </div>
+            )}
+
+            <div className="flex-1" />
+
+            {/* Execution mode — only relevant in agent mode */}
+            {sessionMode === 'agent' && (
+              <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
+            )}
+
+            {/* Send / Stop */}
+            {isThinking ? (
+              <button
+                onClick={onCancel}
+                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white hover:opacity-90 transition-opacity"
+                title={t('chat.input.cancel')}
+              >
+                <StopIcon className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
+                  canSend
+                    ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
+                    : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
+                }`}
+                title={t('chat.input.send')}
+              >
+                <SendIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

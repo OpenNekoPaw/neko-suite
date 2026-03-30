@@ -31,6 +31,9 @@ export interface CanvasToolbarProps {
   onAddShot?: () => void;
   onAddSceneGroup?: () => void;
   onAddGallery?: () => void;
+  /** Hand tool (drag-to-pan) mode */
+  isPanMode?: boolean;
+  onTogglePanMode?: () => void;
 }
 
 type ExpandedPanel = 'add' | null;
@@ -49,6 +52,8 @@ export function CanvasToolbar({
   onAddShot,
   onAddSceneGroup,
   onAddGallery,
+  isPanMode = false,
+  onTogglePanMode,
 }: CanvasToolbarProps) {
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const canUndo = useHistoryStore((s) => s.canUndo());
@@ -85,6 +90,18 @@ export function CanvasToolbar({
 
   return (
     <div ref={toolbarRef} className="neko-vtoolbar relative z-20" style={{ width: 48 }}>
+      {/* Hand Tool (drag-to-pan) */}
+      <ToolbarButton
+        icon={
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10 15V6a1.5 1.5 0 0 1 3 0v5a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.243-1.757l-3.5-3.5a1.5 1.5 0 0 1 2.121-2.121L8 17V6" />
+          </svg>
+        }
+        title={`${t('toolbar.handTool') ?? '移动工具'} (H)`}
+        active={isPanMode}
+        onClick={onTogglePanMode}
+      />
+
       {/* Add Node Button */}
       <ToolbarButton
         icon={<PlusIcon size={18} />}

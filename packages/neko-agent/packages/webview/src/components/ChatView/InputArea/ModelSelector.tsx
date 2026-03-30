@@ -13,6 +13,8 @@ interface ModelSelectorProps {
   selectedModel: string;
   models: ChatModelOption[];
   onSelect: (modelId: string) => void;
+  /** Direction the dropdown opens. Defaults to 'up' for bottom-bar placement. */
+  direction?: 'up' | 'down';
 }
 
 // Category labels and order
@@ -24,7 +26,12 @@ const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = 
   music: { labelKey: 'chat.categoryMusic', order: 5 },
 };
 
-export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {
+export function ModelSelector({
+  selectedModel,
+  models,
+  onSelect,
+  direction = 'up',
+}: ModelSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -95,7 +102,9 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[200px] max-h-[400px] overflow-y-auto py-1 z-50">
+        <div
+          className={`absolute ${direction === 'down' ? 'top-full mt-0.5' : 'bottom-full mb-1'} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[200px] max-h-[400px] overflow-y-auto py-1 z-50`}
+        >
           {/* Auto option */}
           {groupedModels.autoModel && (
             <button

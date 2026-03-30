@@ -42,6 +42,9 @@ export interface UseContextMenuOptions {
   handleUngroup: () => void;
   undo: () => void;
   redo: () => void;
+  onGenerateSelected?: () => void;
+  onBatchGenerate?: () => void;
+  onSendToAgent?: () => void;
 }
 
 export interface UseContextMenuReturn {
@@ -75,6 +78,9 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     handleUngroup,
     undo,
     redo,
+    onGenerateSelected,
+    onBatchGenerate,
+    onSendToAgent,
   } = options;
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -87,6 +93,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       const canvasPos = screenToCanvas(e.clientX, e.clientY);
       const hasSelection = selectedNodeIds.length > 0;
 
+      const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
       const menuCtx = {
         canvasPosition: canvasPos,
         hasSelection,
@@ -117,6 +124,10 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         canPaste: useClipboardStore.getState().canPaste(),
         canUndo: useHistoryStore.getState().canUndo(),
         canRedo: useHistoryStore.getState().canRedo(),
+        hasShotSelected: selectedNodes.some((n) => n.type === 'shot'),
+        onGenerateSelected,
+        onBatchGenerate,
+        onSendToAgent,
       };
 
       const items = hasSelection ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
@@ -142,6 +153,9 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       handleUngroup,
       undo,
       redo,
+      onGenerateSelected,
+      onBatchGenerate,
+      onSendToAgent,
     ],
   );
 

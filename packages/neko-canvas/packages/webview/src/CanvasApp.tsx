@@ -5,8 +5,7 @@ import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { LayerPanel } from './components/controls/LayerPanel';
-import { BottomSheet } from './components/panels/BottomSheet';
-import type { BottomSheetGenerateTarget } from './components/panels/BottomSheet';
+import { NodePanel } from './components/panels/NodePanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
@@ -15,7 +14,6 @@ import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
-import type { GenerationParams } from './components/panels/GenerationPromptPanel';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
@@ -61,10 +59,11 @@ export function CanvasApp() {
 
   // Panel state
   const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(false);
-
-  // Bottom sheet generation trigger
-  const [bottomSheetGenTarget, setBottomSheetGenTarget] =
-    useState<BottomSheetGenerateTarget | null>(null);
+  // Hand tool: drag-to-pan mode (toggle with H key)
+  const [isPanMode, setIsPanMode] = useState(false);
+  // Minimap width tracks ZoomControls width for alignment
+  const zoomControlsRef = useRef<HTMLDivElement>(null);
+  const [miniMapWidth, setMiniMapWidth] = useState(200);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -108,20 +107,8 @@ export function CanvasApp() {
   const selectedConnectionIds = selection.connectionIds;
 
   // =========================================================================
-  // Container size tracking
+  // Container size tracking  (moved after useVSCodeMessages — see below)
   // =========================================================================
-
-  useEffect(() => {
-    const container = canvasContainerRef.current;
-    if (!container) return;
-    const updateSize = () => {
-      setContainerSize({ width: container.clientWidth, height: container.clientHeight });
-    };
-    updateSize();
-    const resizeObserver = new ResizeObserver(updateSize);
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, []);
 
   // =========================================================================
   // Coordinate conversion (wrapping pure utils with container ref)
@@ -309,48 +296,52 @@ export function CanvasApp() {
   });
 
   // =========================================================================
-  // Generation panel handlers
+  // Container size tracking
+  // Must be after useVSCodeMessages so isReady is available.
+  // Canvas container is only mounted once isReady=true, so deps=[isReady] ensures
+  // the ResizeObserver is attached after the element appears in the DOM.
   // =========================================================================
 
-  const handleShotGenerateClick = useCallback(
-    (nodeId: string) => {
-      selectNode(nodeId, false);
-      setBottomSheetGenTarget({ nodeId });
-    },
-    [selectNode],
-  );
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    const updateSize = () => {
+      setContainerSize({ width: container.clientWidth, height: container.clientHeight });
+    };
+    updateSize();
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [isReady]);
 
-  const handleGalleryCellGenerateClick = useCallback(
-    (nodeId: string, cellId: string) => {
-      selectNode(nodeId, false);
-      setBottomSheetGenTarget({ nodeId, cellId });
-    },
-    [selectNode],
-  );
+  // Track ZoomControls width so MiniMap stays aligned
+  useEffect(() => {
+    const el = zoomControlsRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setMiniMapWidth(el.offsetWidth));
+    ro.observe(el);
+    setMiniMapWidth(el.offsetWidth);
+    return () => ro.disconnect();
+  }, [isReady]);
 
-  const handleGalleryBatchGenerateClick = useCallback(
-    (nodeId: string) => {
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node || node.type !== 'gallery') return;
-      const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
-      // Enqueue generation for all cells without images
-      for (const cell of galleryNode.data.cells) {
-        if (
-          !cell.image &&
-          cell.generationStatus !== 'generating' &&
-          cell.generationStatus !== 'pending'
-        ) {
-          vscode?.postMessage({
-            type: 'generateForNode',
-            nodeId,
-            cellId: cell.id,
-            params: { prompt: cell.prompt ?? galleryNode.data.globalPromptPrefix ?? cell.label },
-          });
-        }
-      }
-    },
-    [nodes],
-  );
+  // =========================================================================
+  // AI generation / agent handlers
+  // =========================================================================
+
+  /** Route selected ShotNodes to Agent for generation */
+  const handleGenerateSelected = useCallback(() => {
+    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'generate' });
+  }, [selectedNodeIds]);
+
+  /** Batch-generate all selected ShotNodes via Agent */
+  const handleBatchGenerate = useCallback(() => {
+    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'batch' });
+  }, [selectedNodeIds]);
+
+  /** Send selected nodes as context to the Agent panel */
+  const handleSendToAgent = useCallback(() => {
+    vscode?.postMessage({ type: 'sendNodeToAgent', nodeIds: selectedNodeIds, action: 'context' });
+  }, [selectedNodeIds]);
 
   const handleScriptLoadScenes = useCallback((nodeId: string, scriptPath: string) => {
     vscode?.postMessage({ type: 'getScriptIndex', nodeId, scriptPath });
@@ -384,13 +375,6 @@ export function CanvasApp() {
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
-
-  const handleBottomSheetGenerate = useCallback(
-    (nodeId: string, cellId: string | undefined, params: GenerationParams) => {
-      vscode?.postMessage({ type: 'generateForNode', nodeId, cellId, params });
-    },
-    [],
-  );
 
   // =========================================================================
   // Context menu
@@ -427,6 +411,9 @@ export function CanvasApp() {
     handleUngroup,
     undo,
     redo,
+    onGenerateSelected: handleGenerateSelected,
+    onBatchGenerate: handleBatchGenerate,
+    onSendToAgent: handleSendToAgent,
   });
 
   // =========================================================================
@@ -454,11 +441,30 @@ export function CanvasApp() {
     handlePaste,
     handlePasteInPlace,
     handleDuplicate,
+    onGenerateSelected: handleGenerateSelected,
     reportAction,
   });
 
   // Keep ref in sync with latest handler (for VSCode message dispatch)
   keyboardActionRef.current = handleKeyboardAction;
+
+  // H key toggles hand tool (drag-to-pan)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyH' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active as HTMLElement)?.isContentEditable
+        )
+          return;
+        setIsPanMode((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // =========================================================================
   // Debounced save
@@ -688,6 +694,8 @@ export function CanvasApp() {
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
+          isPanMode={isPanMode}
+          onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />
 
         {isLayerPanelOpen && (
@@ -733,26 +741,20 @@ export function CanvasApp() {
             onConnectionCancel={handleConnectionCancel}
             onCanvasClick={handleCanvasClick}
             onMarqueeSelect={handleMarqueeSelect}
-            onShotGenerateClick={handleShotGenerateClick}
-            onGalleryCellGenerateClick={handleGalleryCellGenerateClick}
-            onGalleryBatchGenerateClick={handleGalleryBatchGenerateClick}
             onScriptLoadScenes={handleScriptLoadScenes}
             onScriptOpen={handleScriptOpen}
             onScriptNavigateToScene={handleScriptNavigateToScene}
             onDocumentOpen={handleDocumentOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
+            isPanMode={isPanMode}
           />
 
-          {/* ── Bottom Sheet (node editor + generation) ── */}
-          <BottomSheet
-            selectedNode={selectedNodes[0] ?? null}
+          {/* ── Node Panel (compact property editor) ── */}
+          <NodePanel
+            node={selectedNodes[0] ?? null}
             onUpdateNodeData={handleNodeUpdateData}
             onDeleteNode={handleDeleteNode}
             onClose={clearSelection}
-            onGenerate={handleBottomSheetGenerate}
-            onBatchGenerate={handleGalleryBatchGenerateClick}
-            initialGenerationTarget={bottomSheetGenTarget}
-            onInitialGenerationHandled={() => setBottomSheetGenTarget(null)}
           />
 
           {/* Empty state hint */}
@@ -778,25 +780,27 @@ export function CanvasApp() {
             </div>
           )}
 
-          <div className="absolute bottom-4 left-4 z-10">
-            <ZoomControls
-              zoom={viewport.zoom}
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onZoomTo={handleZoomTo}
-              onFitContent={handleFitContent}
-              onResetViewport={handleResetViewport}
-            />
-          </div>
-
-          <div className="absolute bottom-4 right-4 z-10">
+          {/* Bottom-left cluster: MiniMap + ZoomControls (always visible, widths aligned) */}
+          <div className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2">
             <MiniMap
               nodes={nodes}
               viewport={viewport}
               containerWidth={containerSize.width}
               containerHeight={containerSize.height}
               onViewportChange={handleViewportChange}
+              width={miniMapWidth}
+              height={Math.round(miniMapWidth * 0.7)}
             />
+            <div ref={zoomControlsRef}>
+              <ZoomControls
+                zoom={viewport.zoom}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onZoomTo={handleZoomTo}
+                onFitContent={handleFitContent}
+                onResetViewport={handleResetViewport}
+              />
+            </div>
           </div>
 
           {contextMenu && (

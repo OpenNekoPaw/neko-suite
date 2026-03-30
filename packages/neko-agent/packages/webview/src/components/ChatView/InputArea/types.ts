@@ -200,6 +200,30 @@ export function getAllCommands(
   return [...SLASH_COMMANDS, ...skillCommands, ...pluginCommands.map(pluginToSlashCommand)];
 }
 
+// Generation params -------------------------------------------------------
+
+export type GenCategory = 'image' | 'video' | 'audio';
+
+export interface GenerationParams {
+  ratio: '16:9' | '9:16' | '1:1' | '4:3' | '2.39:1';
+  resolution: '512' | '720p' | '1080p' | '2K';
+  /** Video duration in seconds */
+  videoDuration: number;
+  videoFps: 24 | 30;
+  /** Audio duration in seconds */
+  audioDuration: number;
+  audioType: 'music' | 'sfx' | 'ambient' | 'voice';
+}
+
+export const DEFAULT_GENERATION_PARAMS: GenerationParams = {
+  ratio: '16:9',
+  resolution: '1080p',
+  videoDuration: 4,
+  videoFps: 24,
+  audioDuration: 3,
+  audioType: 'sfx',
+};
+
 // Project file for @ reference
 export interface ProjectFile {
   path: string;

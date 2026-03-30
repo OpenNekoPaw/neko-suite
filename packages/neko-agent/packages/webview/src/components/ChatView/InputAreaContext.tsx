@@ -14,6 +14,8 @@ import type {
   SkillSummary,
   MentionItem,
   PluginSlashCommandDef,
+  GenCategory,
+  GenerationParams,
 } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 
@@ -64,6 +66,11 @@ export interface InputAreaContextValue {
     message: string,
     attachments?: import('./InputArea/types').MessageAttachment[],
   ) => void;
+  // Generation params (shown in top bar, fed into tool calls)
+  genCategory: GenCategory;
+  genParams: GenerationParams;
+  onGenCategoryChange: (cat: GenCategory) => void;
+  onGenParamsChange: (partial: Partial<GenerationParams>) => void;
 }
 
 const InputAreaContext = createContext<InputAreaContextValue | null>(null);
@@ -100,6 +107,10 @@ export function InputAreaProvider({
       onRemoveContextChip: value.onRemoveContextChip,
       ambientNodes: value.ambientNodes,
       onTriggerSend: value.onTriggerSend,
+      genCategory: value.genCategory,
+      genParams: value.genParams,
+      onGenCategoryChange: value.onGenCategoryChange,
+      onGenParamsChange: value.onGenParamsChange,
     }),
     [
       value.selectedModel,
@@ -128,6 +139,10 @@ export function InputAreaProvider({
       value.onRemoveContextChip,
       value.ambientNodes,
       value.onTriggerSend,
+      value.genCategory,
+      value.genParams,
+      value.onGenCategoryChange,
+      value.onGenParamsChange,
     ],
   );
 

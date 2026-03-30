@@ -4,7 +4,6 @@
  * Each cell can be independently generated and used as IP-Adapter reference.
  */
 
-import { useState } from 'react';
 import type { GalleryCanvasNode, GalleryCell, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 
@@ -31,10 +30,7 @@ export interface GalleryNodeProps {
   ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<GalleryCanvasNode['data']>) => void;
-  /** Called when the user clicks "+" on a cell (single cell generation) */
-  onGenerateCellClick?: (nodeId: string, cellId: string) => void;
-  /** Called when the user clicks batch generate */
-  onBatchGenerateClick?: (nodeId: string) => void;
+  // Generation is triggered via right-click context menu, not directly on the node
 }
 
 // =============================================================================
@@ -72,19 +68,7 @@ function CellOverlay({ status }: { status: GalleryCell['generationStatus'] }) {
   return null;
 }
 
-function GalleryCellView({
-  cell,
-  nodeId,
-  locked,
-  onGenerateClick,
-}: {
-  cell: GalleryCell;
-  nodeId: string;
-  locked?: boolean;
-  onGenerateClick?: (nodeId: string, cellId: string) => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
+function GalleryCellView({ cell }: { cell: GalleryCell }) {
   return (
     <div
       className="relative overflow-hidden flex flex-col"
@@ -93,12 +77,8 @@ function GalleryCellView({
         borderRadius: 4,
         backgroundColor: 'var(--node-surface)',
         minHeight: 60,
-        cursor: locked ? 'default' : 'pointer',
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => !locked && !cell.image && onGenerateClick?.(nodeId, cell.id)}
-      title={cell.image ? cell.label : '点击生成'}
+      title={cell.label}
     >
       {/* Image or placeholder */}
       {cell.image ? (
@@ -113,7 +93,7 @@ function GalleryCellView({
           className="flex-1 flex flex-col items-center justify-center gap-0.5"
           style={{
             color: 'var(--node-fg-secondary)',
-            opacity: hovered ? 0.8 : 0.4,
+            opacity: 0.4,
           }}
         >
           <span style={{ fontSize: 18 }}>+</span>
@@ -139,30 +119,6 @@ function GalleryCellView({
         {cell.label}
         {cell.costumeLabel && ` · ${cell.costumeLabel}`}
       </div>
-
-      {/* Hover generate overlay for cells with images */}
-      {cell.image && hovered && !locked && (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ backgroundColor: '#00000040' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onGenerateClick?.(nodeId, cell.id);
-          }}
-        >
-          <span
-            style={{
-              color: '#fff',
-              fontSize: 10,
-              backgroundColor: '#00000060',
-              padding: '2px 6px',
-              borderRadius: 4,
-            }}
-          >
-            重新生成
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -181,16 +137,11 @@ export function GalleryNode({
   onResize,
   onResizeEnd,
   onConnectionStart,
-  onGenerateCellClick,
-  onBatchGenerateClick,
 }: GalleryNodeProps) {
   const { preset, rows, cols, cells, characterName } = node.data;
 
   const presetLabel = preset === 'custom' ? '自定义' : preset;
 
-  const pendingCount = cells.filter(
-    (c) => c.generationStatus === 'generating' || c.generationStatus === 'pending',
-  ).length;
   const doneCount = cells.filter((c) => c.generationStatus === 'done').length;
 
   return (
@@ -224,29 +175,6 @@ export function GalleryNode({
           <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>
             {doneCount}/{cells.length}
           </span>
-          {/* Batch generate button */}
-          {!node.locked && (
-            <button
-              className="flex-shrink-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onBatchGenerateClick?.(node.id);
-              }}
-              disabled={pendingCount > 0}
-              title="批量生成所有格子"
-              style={{
-                fontSize: 9,
-                padding: '1px 5px',
-                borderRadius: 3,
-                border: '1px solid var(--node-border)',
-                backgroundColor: pendingCount > 0 ? 'var(--node-header-bg)' : '#3b82f620',
-                color: pendingCount > 0 ? 'var(--node-fg-secondary)' : '#3b82f6',
-                cursor: pendingCount > 0 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {pendingCount > 0 ? `生成中 ${pendingCount}` : '批量 ▶'}
-            </button>
-          )}
         </div>
 
         {/* ── Cell grid ── */}
@@ -260,13 +188,7 @@ export function GalleryNode({
           }}
         >
           {cells.map((cell) => (
-            <GalleryCellView
-              key={cell.id}
-              cell={cell}
-              nodeId={node.id}
-              locked={node.locked}
-              onGenerateClick={onGenerateCellClick}
-            />
+            <GalleryCellView key={cell.id} cell={cell} />
           ))}
           {/* Fill empty slots if cells < rows*cols */}
           {Array.from({ length: Math.max(0, rows * cols - cells.length) }).map((_, i) => (

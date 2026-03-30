@@ -6,6 +6,8 @@
 
 import { useState, useCallback } from 'react';
 import type { TabType } from '@/components/types';
+import type { GenCategory, GenerationParams } from '@/components/ChatView/InputArea/types';
+import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 
 /** Per-category media model selection */
 export interface MediaModelSelection {
@@ -22,6 +24,8 @@ export interface UIState {
   inputValue: string;
   selectedModel: string;
   mediaModelSelection: MediaModelSelection;
+  genCategory: GenCategory;
+  genParams: GenerationParams;
 }
 
 /**
@@ -33,6 +37,8 @@ export interface UIStateActions {
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
   clearInput: () => void;
+  setGenCategory: React.Dispatch<React.SetStateAction<GenCategory>>;
+  updateGenParams: (partial: Partial<GenerationParams>) => void;
 }
 
 /**
@@ -48,6 +54,8 @@ const DEFAULT_UI_STATE: UIState = {
   inputValue: '',
   selectedModel: 'auto',
   mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
+  genCategory: 'image',
+  genParams: DEFAULT_GENERATION_PARAMS,
 };
 
 /**
@@ -66,9 +74,19 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
   const [mediaModelSelection, setMediaModelSelection] = useState<MediaModelSelection>(
     initialState?.mediaModelSelection ?? DEFAULT_UI_STATE.mediaModelSelection,
   );
+  const [genCategory, setGenCategory] = useState<GenCategory>(
+    initialState?.genCategory ?? DEFAULT_UI_STATE.genCategory,
+  );
+  const [genParams, setGenParams] = useState<GenerationParams>(
+    initialState?.genParams ?? DEFAULT_UI_STATE.genParams,
+  );
 
   const clearInput = useCallback(() => {
     setInputValue('');
+  }, []);
+
+  const updateGenParams = useCallback((partial: Partial<GenerationParams>) => {
+    setGenParams((prev) => ({ ...prev, ...partial }));
   }, []);
 
   return {
@@ -77,11 +95,15 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
     inputValue,
     selectedModel,
     mediaModelSelection,
+    genCategory,
+    genParams,
     // Actions
     setActiveTab,
     setInputValue,
     setSelectedModel,
     setMediaModelSelection,
     clearInput,
+    setGenCategory,
+    updateGenParams,
   };
 }

@@ -35,6 +35,7 @@ export interface UseKeyboardActionsOptions {
   handlePaste: () => void;
   handlePasteInPlace: () => void;
   handleDuplicate: () => void;
+  onGenerateSelected?: () => void;
   reportAction: (action: string, label: string, detail?: string) => void;
 }
 
@@ -68,6 +69,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     handlePaste,
     handlePasteInPlace,
     handleDuplicate,
+    onGenerateSelected,
     reportAction,
   } = options;
 
@@ -137,6 +139,9 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
         case 'resetZoom':
           resetViewport();
           break;
+        case 'generateSelected':
+          onGenerateSelected?.();
+          break;
       }
     },
     [
@@ -155,6 +160,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       handlePaste,
       handlePasteInPlace,
       handleDuplicate,
+      onGenerateSelected,
       selectNode,
       selectConnection,
       resetViewport,
@@ -204,6 +210,10 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
         e.preventDefault();
         handleKeyboardAction('duplicate');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+        e.preventDefault();
+        handleKeyboardAction('generateSelected');
       }
     };
     window.addEventListener('keydown', handleKeyDown);

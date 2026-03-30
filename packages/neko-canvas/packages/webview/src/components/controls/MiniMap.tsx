@@ -126,20 +126,22 @@ export function MiniMap({
   // Handle click on minimap to pan
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      e.stopPropagation();
       const rect = miniMapRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      // Click position in minimap
+      // Click position relative to SVG content area (account for 10px border offset)
       const clickX = e.clientX - rect.left - 10;
       const clickY = e.clientY - rect.top - 10;
 
-      // Convert to canvas coordinates
+      // Convert minimap pixel → canvas coordinate
       const canvasX = clickX / scale + bounds.minX;
       const canvasY = clickY / scale + bounds.minY;
 
-      // Calculate new pan to center on clicked point
-      const newPanX = -(canvasX - containerWidth / viewport.zoom / 2) * viewport.zoom;
-      const newPanY = -(canvasY - containerHeight / viewport.zoom / 2) * viewport.zoom;
+      // Pan so that canvasX/Y appears at the center of the screen:
+      //   screenPos = canvasPos * zoom + pan  →  pan = screenCenter - canvasPos * zoom
+      const newPanX = containerWidth / 2 - canvasX * viewport.zoom;
+      const newPanY = containerHeight / 2 - canvasY * viewport.zoom;
 
       onViewportChange({
         pan: { x: newPanX, y: newPanY },
@@ -151,7 +153,7 @@ export function MiniMap({
   return (
     <div
       ref={miniMapRef}
-      className="rounded-lg shadow-lg overflow-hidden cursor-pointer"
+      className="relative rounded-lg shadow-lg overflow-hidden cursor-pointer"
       style={{
         width,
         height,

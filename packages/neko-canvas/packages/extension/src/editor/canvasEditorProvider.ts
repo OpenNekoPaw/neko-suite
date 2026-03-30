@@ -856,6 +856,39 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+      case 'sendNodeToAgent': {
+        const nodeIds = (message.nodeIds ?? []) as string[];
+        const action = message.action as string;
+
+        if (action === 'generate') {
+          // Generate image for the first selected ShotNode via Agent
+          const nodeId = nodeIds[0];
+          if (nodeId) await this.generateImageForNode(nodeId);
+        } else if (action === 'batch') {
+          // Batch-generate all selected ShotNodes
+          await this.generateBatchForNodes(nodeIds);
+        } else {
+          // Send selected node as context to the Agent panel
+          const nodeId = nodeIds[0];
+          if (!nodeId) break;
+          const node = await this.getNode(nodeId);
+          if (!node) break;
+          const d = node.data as Record<string, unknown>;
+          const payload = {
+            type: 'canvas-node' as const,
+            id: node.id,
+            label:
+              node.type === 'shot'
+                ? `Shot #${String(d.shotNumber ?? '?').padStart(3, '0')}`
+                : ((d.characterName as string | undefined) ?? node.type),
+            summary: String(d.visualDescription ?? d.sceneTitle ?? ''),
+            data: { nodes: nodeIds },
+          };
+          await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+        }
+        break;
+      }
+
       case 'selectionChange': {
         const nodes = (message.nodes ?? []) as CanvasNode[];
         this._onSelectionChange.fire(nodes);

@@ -35,6 +35,8 @@ export interface UseViewportTransformOptions {
   containerRef: React.RefObject<HTMLElement | null>;
   minZoom?: number;
   maxZoom?: number;
+  /** When true, left-button drag pans the canvas (hand tool mode) */
+  isPanMode?: boolean;
 }
 
 export interface UseViewportTransformReturn {
@@ -67,6 +69,7 @@ export function useViewportTransform(
     containerRef,
     minZoom = MIN_ZOOM,
     maxZoom = MAX_ZOOM,
+    isPanMode = false,
   } = options;
 
   // State
@@ -105,8 +108,8 @@ export function useViewportTransform(
   // Mouse down - start panning
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Only pan with middle mouse button or space + left click
-      const shouldPan = e.button === 1 || (e.button === 0 && isSpacePressed.current);
+      // Pan with: middle mouse button, space + left click, or hand tool mode
+      const shouldPan = e.button === 1 || (e.button === 0 && (isSpacePressed.current || isPanMode));
 
       if (!shouldPan) return;
 
@@ -118,7 +121,7 @@ export function useViewportTransform(
         startViewport: { ...viewport },
       });
     },
-    [viewport],
+    [viewport, isPanMode],
   );
 
   // Mouse move - update pan

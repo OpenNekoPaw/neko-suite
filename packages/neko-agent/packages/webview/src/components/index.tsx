@@ -47,6 +47,10 @@ export function AIAssistant() {
     mediaModelSelection,
     setMediaModelSelection,
     clearInput,
+    genCategory,
+    setGenCategory,
+    genParams,
+    updateGenParams,
   } = ui;
 
   const {
@@ -543,6 +547,10 @@ export function AIAssistant() {
           onRemoveContextChip={handleRemoveContextChip}
           ambientNodes={ambientNodes}
           onTriggerSend={triggerSend}
+          genCategory={genCategory}
+          genParams={genParams}
+          onGenCategoryChange={setGenCategory}
+          onGenParamsChange={updateGenParams}
         >
           <ChatView
             messages={messages}

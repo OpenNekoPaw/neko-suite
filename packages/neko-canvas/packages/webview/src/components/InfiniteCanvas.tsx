@@ -89,16 +89,8 @@ export interface InfiniteCanvasProps {
   onMarqueeSelect?: (nodeIds: string[], additive: boolean) => void;
   /** 是否启用视口裁剪（默认启用） */
   enableCulling?: boolean;
-
-  // ── ShotNode callbacks ─────────────────────────────────────────────────────
-  /** Called when user clicks "generate" on a ShotNode */
-  onShotGenerateClick?: (nodeId: string) => void;
-
-  // ── GalleryNode callbacks ──────────────────────────────────────────────────
-  /** Called when user clicks "+" on a gallery cell */
-  onGalleryCellGenerateClick?: (nodeId: string, cellId: string) => void;
-  /** Called when user clicks batch generate on a GalleryNode */
-  onGalleryBatchGenerateClick?: (nodeId: string) => void;
+  /** Hand tool: left-drag pans canvas instead of marquee-selecting */
+  isPanMode?: boolean;
 
   // ── ScriptNode callbacks ───────────────────────────────────────────────────
   /** Called to load scene TOC from neko-story */
@@ -143,9 +135,7 @@ export function InfiniteCanvas({
   onCanvasClick,
   onMarqueeSelect,
   enableCulling = true,
-  onShotGenerateClick,
-  onGalleryCellGenerateClick,
-  onGalleryBatchGenerateClick,
+  isPanMode = false,
   onScriptLoadScenes,
   onScriptOpen,
   onScriptNavigateToScene,
@@ -160,6 +150,7 @@ export function InfiniteCanvas({
     viewport,
     onViewportChange,
     containerRef,
+    isPanMode,
   });
 
   // Connection drag hook - enables drag-to-connect with mouse-follow preview
@@ -185,7 +176,7 @@ export function InfiniteCanvas({
     containerRef: containerRef as React.RefObject<HTMLElement | null>,
     nodes,
     onSelect: onMarqueeSelect,
-    enabled: !viewportState.isPanning && !isDraggingConnection,
+    enabled: !viewportState.isPanning && !isDraggingConnection && !isPanMode,
   });
 
   // Viewport culling - 只渲染可见节点
@@ -238,6 +229,7 @@ export function InfiniteCanvas({
     if (viewportState.isPanning) return 'grabbing';
     if (isDraggingConnection) return 'crosshair';
     if (isMarqueeSelecting) return 'crosshair';
+    if (isPanMode) return 'grab';
     return 'default';
   };
 
@@ -294,9 +286,6 @@ export function InfiniteCanvas({
             onNodeRotateEnd,
             onNodeUpdateData,
             startDragConnection,
-            onShotGenerateClick,
-            onGalleryCellGenerateClick,
-            onGalleryBatchGenerateClick,
             onScriptLoadScenes,
             onScriptOpen,
             onScriptNavigateToScene,
@@ -365,9 +354,6 @@ function renderNode(
   onRotateEnd?: (nodeId: string, rotation: number) => void,
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
-  onShotGenerateClick?: (nodeId: string) => void,
-  onGalleryCellGenerateClick?: (nodeId: string, cellId: string) => void,
-  onGalleryBatchGenerateClick?: (nodeId: string) => void,
   onScriptLoadScenes?: (nodeId: string, scriptPath: string) => void,
   onScriptOpen?: (scriptPath: string) => void,
   onScriptNavigateToScene?: (linkedSceneGroupId: string) => void,
@@ -421,26 +407,11 @@ function renderNode(
         />
       );
     case 'shot':
-      return (
-        <ShotNode
-          key={node.id}
-          node={node as ShotCanvasNode}
-          {...commonProps}
-          onGenerateClick={onShotGenerateClick}
-        />
-      );
+      return <ShotNode key={node.id} node={node as ShotCanvasNode} {...commonProps} />;
     case 'scene':
       return <SceneGroupNode key={node.id} node={node as SceneGroupCanvasNode} {...commonProps} />;
     case 'gallery':
-      return (
-        <GalleryNode
-          key={node.id}
-          node={node as GalleryCanvasNode}
-          {...commonProps}
-          onGenerateCellClick={onGalleryCellGenerateClick}
-          onBatchGenerateClick={onGalleryBatchGenerateClick}
-        />
-      );
+      return <GalleryNode key={node.id} node={node as GalleryCanvasNode} {...commonProps} />;
     case 'script':
       return (
         <ScriptNode

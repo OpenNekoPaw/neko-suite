@@ -31,8 +31,6 @@ export interface ShotNodeProps {
   ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<ShotCanvasNode['data']>) => void;
-  /** Called when the user clicks the generate image area */
-  onGenerateClick?: (nodeId: string) => void;
   /** Called when the user navigates between generation history candidates */
   onSelectCandidate?: (nodeId: string, candidateId: string) => void;
 }
@@ -104,7 +102,6 @@ export function ShotNode({
   onResizeEnd,
   onConnectionStart,
   onUpdateData,
-  onGenerateClick,
   onSelectCandidate,
 }: ShotNodeProps) {
   const {
@@ -171,13 +168,11 @@ export function ShotNode({
 
         {/* ── Image area ── */}
         <div
-          className="relative flex-1 min-h-[80px] overflow-hidden cursor-pointer flex items-center justify-center"
+          className="relative flex-1 min-h-[80px] overflow-hidden flex items-center justify-center"
           style={{
             backgroundColor: 'var(--node-surface)',
             borderBottom: '1px solid var(--node-divider)',
           }}
-          onClick={() => !node.locked && onGenerateClick?.(node.id)}
-          title={node.locked ? undefined : '点击生成图像'}
         >
           {generationStatus === 'generating' ? (
             <div className="flex flex-col items-center gap-1" style={{ color: '#3b82f6' }}>
@@ -199,11 +194,11 @@ export function ShotNode({
             />
           ) : (
             <div
-              className="flex flex-col items-center gap-1 opacity-40"
+              className="flex flex-col items-center gap-1 opacity-30"
               style={{ color: 'var(--node-fg-secondary)' }}
             >
-              <span className="text-2xl">+</span>
-              <span>点击生图</span>
+              <span className="text-2xl">⌘</span>
+              <span style={{ fontSize: 9 }}>右键生图</span>
             </div>
           )}
 

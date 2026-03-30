@@ -16,6 +16,8 @@ import { useTranslation } from '@/i18n/I18nContext';
 interface SessionModeSelectorProps {
   mode: SessionMode;
   onChange: (mode: SessionMode) => void;
+  /** Direction the dropdown opens. Defaults to 'up' for bottom-bar placement. */
+  direction?: 'up' | 'down';
 }
 
 interface ModeOption {
@@ -69,7 +71,11 @@ export const SESSION_MODE_COLORS: Record<SessionMode, string> = {
   audio: '#06B6D4',
 };
 
-export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps) {
+export function SessionModeSelector({
+  mode,
+  onChange,
+  direction = 'up',
+}: SessionModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -121,7 +127,9 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[180px] py-1 z-50">
+        <div
+          className={`absolute ${direction === 'down' ? 'top-full mt-0.5' : 'bottom-full mb-1'} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[180px] py-1 z-50`}
+        >
           {OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -130,23 +138,20 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
                 setIsOpen(false);
               }}
               className={`w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-                mode === opt.value ? 'bg-[var(--vscode-list-activeSelectionBackground,rgba(0,0,0,0.06))]' : ''
+                mode === opt.value
+                  ? 'bg-[var(--vscode-list-activeSelectionBackground,rgba(0,0,0,0.06))]'
+                  : ''
               }`}
             >
               {/* Colored icon */}
-              <span className="mt-0.5 flex-shrink-0" style={{ color: opt.color }}>
+              <span className="flex-shrink-0" style={{ color: opt.color }}>
                 {opt.icon}
               </span>
-              <span>
-                <div
-                  className="text-[11px] font-medium"
-                  style={{ color: mode === opt.value ? opt.color : 'var(--vscode-foreground)' }}
-                >
-                  {t(opt.labelKey)}
-                </div>
-                <div className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-                  {t(opt.descKey)}
-                </div>
+              <span
+                className="text-[11px]"
+                style={{ color: mode === opt.value ? opt.color : 'var(--vscode-foreground)' }}
+              >
+                {t(opt.labelKey)}
               </span>
             </button>
           ))}
@@ -155,4 +160,3 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
     </div>
   );
 }
-

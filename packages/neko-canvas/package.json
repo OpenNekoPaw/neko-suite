@@ -146,6 +146,11 @@
         "command": "neko.canvas.resetZoom",
         "title": "Reset Zoom",
         "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.generateSelected",
+        "title": "Generate Selected Shots",
+        "category": "NekoCanvas"
       }
     ],
     "keybindings": [
@@ -180,6 +185,12 @@
         "command": "neko.canvas.redo",
         "key": "ctrl+shift+z",
         "mac": "cmd+shift+z",
+        "when": "activeCustomEditorId == 'neko.canvasEditor'"
+      },
+      {
+        "command": "neko.canvas.generateSelected",
+        "key": "ctrl+g",
+        "mac": "cmd+g",
         "when": "activeCustomEditorId == 'neko.canvasEditor'"
       }
     ],
