@@ -15,6 +15,7 @@
 import { useState, useRef } from 'react';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useClickOutsideSingle } from './useClickOutside';
+import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import type { GenCategory, GenerationParams } from './types';
 import { SESSION_MODE_COLORS } from './SessionModeSelector';
@@ -30,15 +31,22 @@ interface ParamDropdownProps {
 
 function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [direction, setDirection] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
+  const getDirection = useDropdownDirection(ref, 'down');
   const selected = options.find((o) => o.value === value);
+
+  const handleOpen = () => {
+    if (!open) setDirection(getDirection());
+    setOpen((v) => !v);
+  };
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         className="flex items-center gap-0.5 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
         style={{ color: color ?? 'var(--vscode-descriptionForeground)' }}
       >
@@ -47,7 +55,9 @@ function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) 
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-0.5 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[96px] py-1 z-50">
+        <div
+          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[96px] py-1 z-50`}
+        >
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -109,15 +119,22 @@ interface CategorySelectorProps {
 
 function CategorySelector({ category, onChange }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
+  const [direction, setDirection] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
+  const getDirection = useDropdownDirection(ref, 'down');
   const color = SESSION_MODE_COLORS[category];
+
+  const handleOpen = () => {
+    if (!open) setDirection(getDirection());
+    setOpen((v) => !v);
+  };
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         className="flex items-center gap-1 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
         style={{ color }}
       >
@@ -127,7 +144,9 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-0.5 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[96px] py-1 z-50">
+        <div
+          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[96px] py-1 z-50`}
+        >
           {(['image', 'video', 'audio'] as GenCategory[]).map((cat) => (
             <button
               key={cat}
@@ -158,6 +177,8 @@ const RATIO_OPTIONS = [
   { value: '9:16', label: '9:16' },
   { value: '1:1', label: '1:1' },
   { value: '4:3', label: '4:3' },
+  { value: '3:2', label: '3:2' },
+  { value: '21:9', label: '21:9' },
   { value: '2.39:1', label: '2.39:1' },
 ];
 
@@ -166,15 +187,17 @@ const IMAGE_RESOLUTION_OPTIONS = [
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' },
   { value: '2K', label: '2K' },
+  { value: '4K', label: '4K' },
 ];
 
 const VIDEO_RESOLUTION_OPTIONS = [
-  { value: '480p', label: '480p' },
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' },
+  { value: '2K', label: '2K' },
+  { value: '4K', label: '4K' },
 ];
 
-const VIDEO_DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 8].map((n) => ({
+const VIDEO_DURATION_OPTIONS = [5, 6, 8, 10, 12, 15, 20].map((n) => ({
   value: String(n),
   label: `${n}s`,
 }));
@@ -225,7 +248,7 @@ function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
       <>
         <ParamDropdown
           value={params.ratio}
-          options={RATIO_OPTIONS.filter((r) => r.value !== '4:3' && r.value !== '2.39:1')}
+          options={RATIO_OPTIONS}
           onChange={(v) => onChange({ ratio: v as GenerationParams['ratio'] })}
           color={color}
         />

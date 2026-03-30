@@ -198,6 +198,10 @@ export abstract class AISdkAdapter implements Adapter {
             delta: {},
             thinking: part.text,
           };
+        } else if (part.type === 'error') {
+          // AI SDK emits errors as stream parts instead of throwing.
+          // Re-throw so the error propagates to the agent error handler.
+          throw part.error;
         } else if (part.type === 'finish') {
           yield {
             id: chunkId,

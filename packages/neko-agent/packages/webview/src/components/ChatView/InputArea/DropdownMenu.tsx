@@ -5,6 +5,7 @@
 
 import { useRef } from 'react';
 import { useClickOutsideSingle } from './useClickOutside';
+import { dropdownPositionClass, type DropdownDirection } from './useDropdownDirection';
 export { ChevronDownIcon } from '@neko/shared/icons';
 
 interface DropdownMenuProps<T> {
@@ -16,6 +17,8 @@ interface DropdownMenuProps<T> {
   onSelect: (item: T, index: number) => void;
   className?: string;
   emptyMessage?: string;
+  /** Direction the dropdown opens. Defaults to 'up'. */
+  direction?: DropdownDirection;
 }
 
 export function DropdownMenu<T>({
@@ -27,6 +30,7 @@ export function DropdownMenu<T>({
   onSelect,
   className = '',
   emptyMessage,
+  direction = 'up',
 }: DropdownMenuProps<T>) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +42,7 @@ export function DropdownMenu<T>({
     return (
       <div
         ref={menuRef}
-        className={`absolute bottom-full left-0 mb-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg py-1 z-50 ${className}`}
+        className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg py-1 z-50 ${className}`}
       >
         <div className="px-3 py-2 text-[10px] text-[var(--vscode-descriptionForeground)]">
           {emptyMessage}
@@ -50,7 +54,7 @@ export function DropdownMenu<T>({
   return (
     <div
       ref={menuRef}
-      className={`absolute bottom-full left-0 mb-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg max-h-[300px] overflow-y-auto py-1 z-50 ${className}`}
+      className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg max-h-[300px] overflow-y-auto py-1 z-50 ${className}`}
     >
       {items.map((item, index) => (
         <div key={index} onClick={() => onSelect(item, index)} className="cursor-pointer">
@@ -60,4 +64,3 @@ export function DropdownMenu<T>({
     </div>
   );
 }
-

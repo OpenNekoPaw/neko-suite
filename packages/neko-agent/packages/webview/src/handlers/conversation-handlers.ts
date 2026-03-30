@@ -141,6 +141,7 @@ function rehydrateBackgroundTasks(messages: Message[]): BackgroundTask[] {
  * Handle 'error' message - Error occurred
  */
 const handleError: MessageHandler = (message, context) => {
+  const errorMsg = message.message || 'An error occurred';
   if (context.isCurrentConversation(message.conversationId)) {
     context.setIsThinking(false);
     context.setStreamingMessageId(null);
@@ -149,8 +150,9 @@ const handleError: MessageHandler = (message, context) => {
       {
         id: Date.now().toString(),
         role: 'assistant',
-        content: `Error: ${message.message || 'An error occurred'}`,
+        content: errorMsg,
         timestamp: Date.now(),
+        isError: true,
       },
     ]);
   } else if (message.conversationId) {
@@ -160,8 +162,9 @@ const handleError: MessageHandler = (message, context) => {
         {
           id: Date.now().toString(),
           role: 'assistant' as const,
-          content: `Error: ${message.message || 'An error occurred'}`,
+          content: errorMsg,
           timestamp: Date.now(),
+          isError: true,
         },
       ],
       streaming: { streamingMessageId: null, isThinking: false },

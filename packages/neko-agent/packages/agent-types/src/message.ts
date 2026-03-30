@@ -95,6 +95,8 @@ export interface Message {
   originalContent?: string;
   /** Message cancelled by user (ESC key) */
   isCancelled?: boolean;
+  /** Message is an error notification (API failure, timeout, etc.) */
+  isError?: boolean;
   /** Message was queued while agent is running */
   isQueued?: boolean;
   /**

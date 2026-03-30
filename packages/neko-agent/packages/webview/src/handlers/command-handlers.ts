@@ -185,8 +185,9 @@ Or use the Settings panel to configure providers and models.`,
       {
         id: Date.now().toString(),
         role: 'assistant',
-        content: `Error: ${message.error || 'Command failed'}`,
+        content: message.error || 'Command failed',
         timestamp: Date.now(),
+        isError: true,
       },
     ]);
   }

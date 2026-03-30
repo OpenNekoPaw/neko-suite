@@ -5,6 +5,7 @@
 import { useState, useRef, useMemo } from 'react';
 import type { ChatModelOption, ModelType } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
+import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ModelDot, getProviderColor } from './ModelIcon';
@@ -13,8 +14,6 @@ interface ModelSelectorProps {
   selectedModel: string;
   models: ChatModelOption[];
   onSelect: (modelId: string) => void;
-  /** Direction the dropdown opens. Defaults to 'up' for bottom-bar placement. */
-  direction?: 'up' | 'down';
 }
 
 // Category labels and order
@@ -26,17 +25,14 @@ const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = 
   music: { labelKey: 'chat.categoryMusic', order: 5 },
 };
 
-export function ModelSelector({
-  selectedModel,
-  models,
-  onSelect,
-  direction = 'up',
-}: ModelSelectorProps) {
+export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [direction, setDirection] = useState<'up' | 'down'>('up');
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
+  const getDirection = useDropdownDirection(menuRef, 'up');
 
   // Group models by category
   const groupedModels = useMemo(() => {
@@ -92,7 +88,10 @@ export function ModelSelector({
   return (
     <div className="relative" ref={menuRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen) setDirection(getDirection());
+          setIsOpen(!isOpen);
+        }}
         className="flex items-center gap-1 px-1.5 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
         title={selectedModelObj?.label ?? t('chat.autoMode')}
       >
@@ -103,7 +102,7 @@ export function ModelSelector({
 
       {isOpen && (
         <div
-          className={`absolute ${direction === 'down' ? 'top-full mt-0.5' : 'bottom-full mb-1'} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[200px] max-h-[400px] overflow-y-auto py-1 z-50`}
+          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[200px] max-h-[400px] overflow-y-auto py-1 z-50`}
         >
           {/* Auto option */}
           {groupedModels.autoModel && (

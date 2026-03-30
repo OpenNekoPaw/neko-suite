@@ -11,13 +11,12 @@
 import { useState, useRef } from 'react';
 import type { SessionMode } from '@/components/types';
 import { useClickOutsideSingle } from './useClickOutside';
+import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { useTranslation } from '@/i18n/I18nContext';
 
 interface SessionModeSelectorProps {
   mode: SessionMode;
   onChange: (mode: SessionMode) => void;
-  /** Direction the dropdown opens. Defaults to 'up' for bottom-bar placement. */
-  direction?: 'up' | 'down';
 }
 
 interface ModeOption {
@@ -71,16 +70,14 @@ export const SESSION_MODE_COLORS: Record<SessionMode, string> = {
   audio: '#06B6D4',
 };
 
-export function SessionModeSelector({
-  mode,
-  onChange,
-  direction = 'up',
-}: SessionModeSelectorProps) {
+export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [direction, setDirection] = useState<'up' | 'down'>('up');
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
+  const getDirection = useDropdownDirection(menuRef, 'up');
 
   const OPTIONS: ModeOption[] = [
     {
@@ -118,7 +115,10 @@ export function SessionModeSelector({
   return (
     <div className="relative" ref={menuRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen) setDirection(getDirection());
+          setIsOpen(!isOpen);
+        }}
         className="flex items-center justify-center w-7 h-7 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors"
         style={{ color: current.color }}
         title={t(current.labelKey)}
@@ -128,7 +128,7 @@ export function SessionModeSelector({
 
       {isOpen && (
         <div
-          className={`absolute ${direction === 'down' ? 'top-full mt-0.5' : 'bottom-full mb-1'} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[180px] py-1 z-50`}
+          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[180px] py-1 z-50`}
         >
           {OPTIONS.map((opt) => (
             <button

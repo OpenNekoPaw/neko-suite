@@ -15,6 +15,7 @@ import { parseFileReference } from './FileReferenceMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
 import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
 import { AgentContextChip } from './AgentContextChip';
+import { AgentMediaBar, CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
 import { SuggestionChips } from './SuggestionChips';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -59,6 +60,9 @@ export function InputArea({
     isCompressing,
     onCompressContext,
     mediaModelCallCount,
+    mediaModelSelection,
+    availableMediaModels,
+    onMediaModelSelect,
     skills,
     pluginCommands = [],
     onSlashCommand,
@@ -453,15 +457,27 @@ export function InputArea({
       )}
 
       <div className="border-t border-[var(--vscode-panel-border)]">
-        {/* ── Top bar: mode + model | generation params ── */}
+        {/* ── Top bar: mode + model | media models (agent) | generation params ── */}
         <div className="flex items-center px-2 py-1 gap-0.5">
-          {/* Left: session mode + LLM model (agent only) */}
+          {/* Left: session mode */}
           <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
-          {sessionMode === 'agent' && (
+
+          {/* Model selector — contextual based on session mode */}
+          {sessionMode === 'agent' ? (
             <ModelSelector
               selectedModel={selectedModel}
               models={availableModels}
               onSelect={onModelSelect}
+            />
+          ) : (
+            <CategoryChip
+              category={sessionMode as 'image' | 'video' | 'audio'}
+              Icon={MEDIA_CATEGORY_ICONS[sessionMode as 'image' | 'video' | 'audio']}
+              selectedId={mediaModelSelection[sessionMode as 'image' | 'video' | 'audio']}
+              models={availableMediaModels.filter((m) => m.category === sessionMode)}
+              onSelect={(modelId) =>
+                onMediaModelSelect(sessionMode as 'image' | 'video' | 'audio', modelId)
+              }
             />
           )}
 
@@ -472,6 +488,23 @@ export function InputArea({
             className="w-px h-3.5 mx-1 opacity-30"
             style={{ background: 'var(--vscode-panel-border)' }}
           />
+
+          {/* Media model selectors (per-category) — agent mode only */}
+          {sessionMode === 'agent' && (
+            <>
+              <AgentMediaBar
+                selection={mediaModelSelection}
+                availableModels={availableMediaModels}
+                onSelect={onMediaModelSelect}
+              />
+              {availableMediaModels.length > 0 && (
+                <div
+                  className="w-px h-3.5 mx-1 opacity-30"
+                  style={{ background: 'var(--vscode-panel-border)' }}
+                />
+              )}
+            </>
+          )}
 
           {/* Right: generation params (ratio / resolution / duration / ...) */}
           <GenerationParamsBar />

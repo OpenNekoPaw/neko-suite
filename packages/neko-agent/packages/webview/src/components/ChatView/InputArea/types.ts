@@ -205,8 +205,8 @@ export function getAllCommands(
 export type GenCategory = 'image' | 'video' | 'audio';
 
 export interface GenerationParams {
-  ratio: '16:9' | '9:16' | '1:1' | '4:3' | '2.39:1';
-  resolution: '512' | '720p' | '1080p' | '2K';
+  ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:2' | '21:9' | '2.39:1';
+  resolution: '512' | '720p' | '1080p' | '2K' | '4K';
   /** Video duration in seconds */
   videoDuration: number;
   videoFps: 24 | 30;
@@ -218,7 +218,7 @@ export interface GenerationParams {
 export const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   ratio: '16:9',
   resolution: '1080p',
-  videoDuration: 4,
+  videoDuration: 5,
   videoFps: 24,
   audioDuration: 3,
   audioType: 'sfx',
