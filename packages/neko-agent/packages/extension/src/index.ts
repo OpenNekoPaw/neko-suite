@@ -27,11 +27,14 @@ import {
   createTranscribeTools,
   createNekoStoryTools,
   createNekoSketchTools,
+  createNekoCutVideoGenerationTools,
+  createSkillProviderTools,
 } from './tools/extensionTools';
 import {
   setCanvasSelection,
   clearCanvasSelection,
   onDidChangeCanvasSelection,
+  recordCanvasChange,
 } from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
@@ -119,6 +122,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 /**
  * Subscribe to NekoCanvas selection changes for ambient context injection.
+ * Also subscribes to asset and canvas change events (P1) so the agent can
+ * track mutations between interactions.
  * Safe to call multiple times — only one subscription per activation.
  */
 function subscribeCanvasSelection(context: vscode.ExtensionContext): void {
@@ -129,10 +134,42 @@ function subscribeCanvasSelection(context: vscode.ExtensionContext): void {
 
   activate
     .then((api) => {
-      if (!api?.nodes?.onSelectionChange) return;
-      context.subscriptions.push(api.nodes.onSelectionChange((nodes) => setCanvasSelection(nodes)));
-      // Clear ambient context when canvas editor loses focus is handled by
-      // canvas extension firing onSelectionChange with [] on dispose.
+      if (!api) return;
+
+      // Selection → ambient chip injection
+      if (api.nodes?.onSelectionChange) {
+        context.subscriptions.push(
+          api.nodes.onSelectionChange((nodes) => setCanvasSelection(nodes)),
+        );
+      }
+
+      // Asset changes → ring buffer for ambient context injection
+      if (api.events?.onDidChangeAssets) {
+        context.subscriptions.push(
+          api.events.onDidChangeAssets((ev) =>
+            recordCanvasChange({
+              domain: 'assets',
+              changeType: ev.type,
+              id: ev.assetId,
+              timestamp: Date.now(),
+            }),
+          ),
+        );
+      }
+
+      // Canvas node/shape changes → ring buffer
+      if (api.events?.onDidChangeCanvas) {
+        context.subscriptions.push(
+          api.events.onDidChangeCanvas((ev) =>
+            recordCanvasChange({
+              domain: 'canvas',
+              changeType: ev.type,
+              id: ev.nodeId ?? ev.shapeId,
+              timestamp: Date.now(),
+            }),
+          ),
+        );
+      }
     })
     .catch(() => {
       // neko-canvas not available — ambient context simply stays empty
@@ -177,8 +214,16 @@ function registerExtensionTools(
   const sketchTools = createNekoSketchTools(platform.media);
   sketchTools.forEach((tool) => toolRegistry.register(tool));
 
+  // Register NekoCut AI video generation tools (P2)
+  const cutVideoTools = createNekoCutVideoGenerationTools(platform.media);
+  cutVideoTools.forEach((tool) => toolRegistry.register(tool));
+
+  // Register Skill Provider discovery tool (P3)
+  const skillTools = createSkillProviderTools();
+  skillTools.forEach((tool) => toolRegistry.register(tool));
+
   getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length} extension tools`,
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length + cutVideoTools.length + skillTools.length} extension tools`,
   );
 }
 
@@ -479,6 +524,122 @@ function registerCommands(
       chatViewProvider.sendPluginSlashCommands(slashRegistry.getAll());
     }),
   );
+
+  // ── P1: Generation progress broadcast ──────────────────────────────────────
+  // Called by neko-canvas BatchGenerationScheduler after each status change.
+  // Forwards the event to the chat webview so users can see generation progress
+  // without switching to the canvas panel.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.reportGenerationProgress',
+      (progress: {
+        nodeId: string;
+        taskId: string;
+        cellId?: string;
+        status: 'pending' | 'generating' | 'done' | 'error';
+        count?: number;
+        total?: number;
+      }) => {
+        chatViewProvider.postMessage({ type: 'generationProgress', progress });
+      },
+    ),
+  );
+
+  // ── P1: Image generation for canvas nodes ──────────────────────────────────
+  // Called by neko-canvas BatchGenerationScheduler (callAgent).
+  // Executes a text-to-image generation via the configured platform media service
+  // and returns the result as a base64 data URL.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.generateForNode',
+      async (input: {
+        nodeId: string;
+        cellId?: string;
+        prompt: string;
+        style?: string;
+        ratio?: string;
+        shotScale?: string;
+        cameraMovement?: string;
+        cameraAngle?: string;
+        referenceRefs?: string[];
+        count?: number;
+      }): Promise<{ dataUrl: string } | undefined> => {
+        try {
+          const platform = services.get(IPlatform);
+          if (!platform?.media) {
+            getRootLogger().warn('neko.agent.generateForNode: no media service configured');
+            return undefined;
+          }
+
+          // Build an image generation prompt from shot metadata
+          const parts: string[] = [input.prompt];
+          if (input.shotScale) parts.push(`Shot: ${input.shotScale}`);
+          if (input.cameraAngle) parts.push(`Angle: ${input.cameraAngle}`);
+          if (input.cameraMovement && input.cameraMovement !== 'static') {
+            parts.push(`Camera: ${input.cameraMovement}`);
+          }
+          if (input.style) parts.push(`Style: ${input.style}`);
+
+          const task = await platform.media.generateImage({
+            prompt: parts.join(', '),
+            ratio: (input.ratio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined) ?? '16:9',
+            count: input.count ?? 1,
+          });
+
+          // Report generating status to the webview
+          chatViewProvider.postMessage({
+            type: 'generationProgress',
+            progress: {
+              nodeId: input.nodeId,
+              taskId: task.id,
+              cellId: input.cellId,
+              status: 'generating',
+            },
+          });
+
+          const completed = await platform.media.waitForTask(task.id, 3 * 60 * 1000);
+
+          if (completed.status !== 'completed' || !completed.outputs?.length) {
+            chatViewProvider.postMessage({
+              type: 'generationProgress',
+              progress: {
+                nodeId: input.nodeId,
+                taskId: task.id,
+                cellId: input.cellId,
+                status: 'error',
+              },
+            });
+            return undefined;
+          }
+
+          const output = completed.outputs[0]!;
+          const response = await fetch(output.url);
+          if (!response.ok) return undefined;
+
+          const buffer = await response.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString('base64');
+          const mimeType = output.mimeType ?? 'image/png';
+          const dataUrl = `data:${mimeType};base64,${base64}`;
+
+          chatViewProvider.postMessage({
+            type: 'generationProgress',
+            progress: {
+              nodeId: input.nodeId,
+              taskId: task.id,
+              cellId: input.cellId,
+              status: 'done',
+            },
+          });
+
+          return { dataUrl };
+        } catch (err) {
+          getRootLogger().warn('neko.agent.generateForNode failed', { error: err });
+          return undefined;
+        }
+      },
+    ),
+  );
+
   // Register getter so _restoreState can push plugin commands on panel visibility restore
   chatViewProvider.setPluginCommandsGetter(() => slashRegistry.getAll());
 

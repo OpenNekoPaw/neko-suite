@@ -184,9 +184,10 @@ export type CanvasNodeUpdateData =
   | Partial<GalleryCanvasNode['data']>;
 
 /**
- * Fired when an asset is added, updated, or removed from the library.
+ * Fired when an asset is added, updated, or removed from the canvas asset library.
+ * Distinct from the asset-registry AssetChangeEvent to avoid naming conflicts.
  */
-export interface AssetChangeEvent {
+export interface NekoCanvasAssetChangeEvent {
   readonly type: 'add' | 'update' | 'delete';
   readonly assetId: string;
 }
@@ -284,7 +285,7 @@ export interface NekoCanvasAPI {
     /**
      * Fired whenever an asset is added, updated, or deleted in the project library.
      */
-    onDidChangeAssets: Event<AssetChangeEvent>;
+    onDidChangeAssets: Event<NekoCanvasAssetChangeEvent>;
 
     /**
      * Fired whenever nodes or shapes on the active canvas are added, updated, or deleted.

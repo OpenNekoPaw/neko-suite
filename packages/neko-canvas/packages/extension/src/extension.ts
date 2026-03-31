@@ -22,7 +22,7 @@ let canvasStatusBar: CanvasStatusBar;
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
+export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISkillProvider {
   const rootLogger = createVSCodeLogger('Neko Canvas', 'NekoCanvas', context);
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
@@ -85,7 +85,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
 
   // Return API for other extensions
   // Asset operations now delegate to neko-assets via commands
-  const api: NekoCanvasAPI = {
+  const api: NekoCanvasAPI & ISkillProvider = {
     asset: {
       import: async (filePath) => {
         await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
@@ -123,6 +123,40 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI {
     events: {
       onDidChangeAssets: new vscode.EventEmitter<import('./api').AssetChangeEvent>().event,
       onDidChangeCanvas: canvasEditorProvider.onDidChangeCanvas,
+    },
+
+    // ── P3: ISkillProvider ────────────────────────────────────────────────────
+    getSkills(): readonly SkillDef[] {
+      return [
+        {
+          id: 'batch-generate',
+          name: 'Batch Generate Images',
+          description:
+            'Trigger AI image generation for all shot nodes on the active storyboard canvas. ' +
+            'Runs up to 2 generations in parallel with automatic retry on failure.',
+          icon: '$(images)',
+          command: 'neko.nekocanvas.slashCommand.batch',
+          tags: ['generation', 'image', 'storyboard', 'batch'],
+        },
+        {
+          id: 'export-storyboard',
+          name: 'Export Storyboard',
+          description:
+            'Export the current storyboard canvas as a PDF document or ZIP archive of shot images.',
+          icon: '$(package)',
+          command: 'neko.nekocanvas.slashCommand.export',
+          tags: ['export', 'storyboard', 'pdf', 'zip'],
+        },
+        {
+          id: 'generate-selected',
+          name: 'Generate Image for Selected Shot',
+          description:
+            'Trigger AI image generation for the currently selected shot node on the canvas.',
+          icon: '$(sparkle)',
+          command: 'neko.canvas.generateSelected',
+          tags: ['generation', 'image', 'shot'],
+        },
+      ];
     },
   };
 

@@ -18,11 +18,14 @@ import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/exte
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { registerCommands } from './commands';
+import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
 
 /**
  * Activate the extension
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<NekoCutAPI & ISkillProvider> {
   // Initialize logger → VSCode OutputChannel + Console
   const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context);
   setRootLogger(logger);
@@ -83,6 +86,88 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   getRootLogger().info('Extension activated');
+
+  // ── P2: Exported API for neko-agent cross-extension communication ──────────
+  // The `ai` namespace delegates to neko-agent via VSCode command so that
+  // neko-cut doesn't take a direct dependency on @neko/platform.
+  const api: NekoCutAPI & ISkillProvider = {
+    timeline: {
+      getInfo: () => vscode.commands.executeCommand('neko.cut.timeline.getInfo'),
+      addElement: (config) =>
+        vscode.commands.executeCommand('neko.cut.timeline.addElement', config),
+      updateElement: (id, updates) =>
+        vscode.commands.executeCommand('neko.cut.timeline.updateElement', id, updates),
+      deleteElement: (id) => vscode.commands.executeCommand('neko.cut.timeline.deleteElement', id),
+      listElements: () => vscode.commands.executeCommand('neko.cut.timeline.listElements'),
+    },
+
+    ai: {
+      /**
+       * Generate a video clip via neko-agent and add it to the timeline.
+       * Delegates the heavy lifting to the `neko.agent.generateForNode`-like command.
+       */
+      generateVideoForClip: async (options) => {
+        const result = await vscode.commands.executeCommand<{ elementId: string } | undefined>(
+          'neko.cut.ai.generateVideoForClip',
+          options,
+        );
+        if (!result?.elementId) {
+          throw new Error('Video generation failed or neko-agent is not installed');
+        }
+        return result.elementId;
+      },
+    },
+
+    // ── P3: ISkillProvider ────────────────────────────────────────────────────
+    getSkills(): readonly SkillDef[] {
+      return [
+        {
+          id: 'generate-video-clip',
+          name: 'Generate Video Clip',
+          description:
+            'Generate an AI video clip from a text prompt and add it directly to the timeline. ' +
+            'Supports image-to-video when a reference image is provided.',
+          icon: '$(play-circle)',
+          command: 'neko.cut.ai.generateVideoForClip',
+          tags: ['generation', 'video', 'timeline'],
+        },
+        {
+          id: 'transcribe-audio',
+          name: 'Transcribe Audio to Subtitles',
+          description:
+            'Transcribe audio or video file speech to text using Whisper, then add subtitle ' +
+            'elements to the timeline with word-level timestamps.',
+          icon: '$(mic)',
+          command: 'neko.cut.ai.transcribeToSubtitles',
+          tags: ['transcription', 'audio', 'subtitles'],
+        },
+      ];
+    },
+  };
+
+  // Register the VSCode command for ai.generateVideoForClip
+  // so the API method above can delegate properly.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.cut.ai.generateVideoForClip',
+      async (options: Parameters<NekoCutAPI['ai']['generateVideoForClip']>[0]) => {
+        // Delegate to neko-agent GenerateVideoForClip tool via internal chat command
+        const elementId = await vscode.commands.executeCommand<string | undefined>(
+          'neko.agent.generateForNode',
+          {
+            nodeId: `cut-${Date.now()}`,
+            prompt: options.prompt,
+            referenceRefs: options.referenceImageBase64
+              ? [options.referenceImageBase64]
+              : undefined,
+          },
+        );
+        return elementId ? { elementId } : undefined;
+      },
+    ),
+  );
+
+  return api;
 }
 
 /**

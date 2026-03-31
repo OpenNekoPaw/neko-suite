@@ -407,6 +407,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Forward an arbitrary typed message to the webview.
+   * Used for low-priority notifications (e.g. generation progress) that don't
+   * require the panel to be focused.
+   */
+  public postMessage(message: Record<string, unknown>): void {
+    if (!this._view?.webview) return;
+    this._view.webview.postMessage(message);
+  }
+
+  /**
    * Attach an agent context payload to the chat panel.
    * Focuses the panel and injects the chip + optional intent prefill.
    */

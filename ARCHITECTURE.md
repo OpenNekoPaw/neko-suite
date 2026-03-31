@@ -304,3 +304,94 @@ neko-tools  ◀── neko-cut
 ```
 
 `neko-engine` 是所有媒体处理扩展的基础，必须最先激活。所有扩展通过 `EngineClient`（`@neko/neko-client`）与 neko-engine 的统一 HTTP/WS 端口通信。
+
+---
+
+## 跨扩展 AI 联动
+
+Neko Suite 各扩展通过两种机制协同：**Exported API**（类型安全的双向调用）和 **VSCode 命令总线**（松耦合的单向触发）。
+
+### 通信模式
+
+```
+neko-canvas / neko-cut / neko-story
+  │
+  ├─ [模式 A] vscode.extensions.getExtension<T>(id).exports
+  │     → 直接调用类型化 API（NekoCanvasAPI / NekoCutAPI / NekoStoryAPI）
+  │
+  └─ [模式 B] vscode.commands.executeCommand('neko.agent.*', payload)
+        → 命令总线 IPC（松耦合，neko-agent 未安装时静默失败）
+```
+
+### Exported API 契约（`@neko/shared/types/extension-api.ts`）
+
+| 扩展 | 导出类型 | 关键命名空间 |
+|------|---------|-------------|
+| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `nodes` / `events` |
+| neko-cut | `NekoCutAPI & ISkillProvider` | `timeline` / `ai` |
+| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` |
+| neko-auth | `NekoAuthAPI` | `getSession` / `onDidChangeSession` |
+
+### 跨扩展命令协议
+
+neko-agent 注册以下命令供其他扩展调用，命令未注册时静默 no-op：
+
+| 命令 | 调用方 | 功能 |
+|------|-------|------|
+| `neko.agent.generateForNode` | neko-canvas `BatchGenerationScheduler` | 触发平台媒体服务生图，返回 `{ dataUrl: string }` |
+| `neko.agent.reportGenerationProgress` | neko-canvas `BatchGenerationScheduler` | 将生成进度广播至 Agent Chat Webview |
+| `neko.agent.registerSlashCommands` | neko-canvas / neko-cut 等 | 向 Agent 聊天面板注册 `/slash` 命令 |
+| `neko.agent.internalChat` | 任意扩展 | 复用已配置的 LLM 服务进行推理 |
+
+### ISkillProvider — 技能发现接口
+
+实现了 `ISkillProvider` 的扩展，其 `getSkills()` 会被 neko-agent 的 `ListPluginSkills` 工具聚合并暴露给 LLM：
+
+```typescript
+// @neko/shared
+interface ISkillProvider {
+  getSkills(): readonly SkillDef[];
+}
+interface SkillDef {
+  id: string;
+  name: string;
+  description: string;       // LLM 可读的能力描述
+  icon?: string;             // VSCode codicon
+  command: string;           // 执行该能力的 VSCode 命令 ID
+  tags?: readonly string[];  // 用于过滤（'generation' | 'export' | ...）
+}
+```
+
+当前实现了 `ISkillProvider` 的扩展：
+
+| 扩展 | Skills |
+|------|--------|
+| neko-canvas | `batch-generate` / `export-storyboard` / `generate-selected` |
+| neko-cut | `generate-video-clip` / `transcribe-audio` |
+
+### 生图数据流（Canvas → Agent → Platform）
+
+```
+BatchGenerationScheduler（Extension Host）
+  │
+  ├─ callAgent()
+  │     └─ executeCommand('neko.agent.generateForNode', { nodeId, prompt, ratio, ... })
+  │                │
+  │                ▼ neko-agent Extension Host
+  │           platform.media.generateImage({ prompt, ratio, count })
+  │                │
+  │                ▼ @neko/platform → AI 媒体服务（Replicate / ComfyUI / ...）
+  │           platform.media.waitForTask(taskId, timeout=3min)
+  │                │
+  │                ▼ fetch(output.url) → base64
+  │           return { dataUrl: 'data:image/png;base64,...' }
+  │
+  ├─ reportToAgent(task, status)
+  │     └─ executeCommand('neko.agent.reportGenerationProgress', { nodeId, taskId, status, total })
+  │                │
+  │                ▼ chatViewProvider.postMessage({ type: 'generationProgress', ... })
+  │                      → Chat Webview 实时进度卡片
+  │
+  └─ onProgress('done', dataUrl)
+        → Webview postMessage → ShotNode 更新生成图片
+```

@@ -6,6 +6,9 @@
  *
  * Updated by subscribing to NekoCanvasAPI.nodes.onSelectionChange in index.ts.
  * Read by messageHandler when building the agent context per conversation.
+ *
+ * Also tracks asset and canvas change events (P1) so the agent is aware of
+ * canvas mutations that occurred since the last interaction.
  */
 
 import type { CanvasNode } from '@neko/shared';
@@ -22,8 +25,22 @@ export interface SelectedNodeSummary {
   summary: string;
 }
 
+/** Lightweight summary of a canvas/asset change event for ambient injection. */
+export interface CanvasChangeSummary {
+  /** 'canvas' for node/shape changes, 'assets' for library changes */
+  readonly domain: 'canvas' | 'assets';
+  readonly changeType: 'add' | 'update' | 'delete';
+  /** nodeId or assetId, when available */
+  readonly id?: string;
+  readonly timestamp: number;
+}
+
 let _selectedNodes: SelectedNodeSummary[] = [];
 let _generationConfig: GenerationModelConfig | undefined;
+
+/** Ring buffer of recent canvas/asset changes (max 20). */
+let _pendingChanges: CanvasChangeSummary[] = [];
+const MAX_PENDING_CHANGES = 20;
 
 const MAX_AMBIENT_NODES = 5;
 
@@ -38,6 +55,14 @@ export const onDidChangeGenerationConfig = _onDidChangeGenerationConfig.event;
 const _onDidChangeCanvasSelection = new vscode.EventEmitter<SelectedNodeSummary[]>();
 /** Fired when the canvas selection changes — used to push ambient chips to the webview. */
 export const onDidChangeCanvasSelection = _onDidChangeCanvasSelection.event;
+
+const _onDidReceiveCanvasChange = new vscode.EventEmitter<CanvasChangeSummary>();
+/**
+ * Fired when a canvas or asset change event is received from neko-canvas.
+ * Subscribers (e.g. the chat view) can use this to surface a "canvas changed"
+ * indicator without polling.
+ */
+export const onDidReceiveCanvasChange = _onDidReceiveCanvasChange.event;
 
 // =============================================================================
 // Public API
@@ -69,6 +94,34 @@ export function setActiveGenerationConfig(config: GenerationModelConfig): void {
 /** Read the active generation model config */
 export function getActiveGenerationConfig(): GenerationModelConfig | undefined {
   return _generationConfig;
+}
+
+/**
+ * Record an incoming canvas or asset change event.
+ * Appends to the ring buffer and fires the event emitter.
+ * Called from the canvas event subscriptions in index.ts.
+ */
+export function recordCanvasChange(summary: CanvasChangeSummary): void {
+  _pendingChanges.push(summary);
+  if (_pendingChanges.length > MAX_PENDING_CHANGES) {
+    _pendingChanges = _pendingChanges.slice(_pendingChanges.length - MAX_PENDING_CHANGES);
+  }
+  _onDidReceiveCanvasChange.fire(summary);
+}
+
+/**
+ * Return all pending canvas/asset changes and clear the buffer.
+ * Called by messageHandler to inject change context before an agent response.
+ */
+export function drainPendingCanvasChanges(): CanvasChangeSummary[] {
+  const changes = _pendingChanges;
+  _pendingChanges = [];
+  return changes;
+}
+
+/** Peek at the pending changes without clearing them. */
+export function getPendingCanvasChanges(): readonly CanvasChangeSummary[] {
+  return _pendingChanges;
 }
 
 // =============================================================================

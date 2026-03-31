@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
@@ -285,12 +285,22 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Expose API for cross-extension communication (e.g., neko-agent pipeline)
-  const api = {
+  const api: NekoStoryAPI = {
     /**
      * Parse Fountain screenplay text into structured document
      */
     parseScript(content: string) {
-      return parse(content);
+      const doc = parse(content);
+      // Extract title from titlePage entries (key='Title' by Fountain convention)
+      const title = doc.titlePage?.entries.find((e) => e.key.toLowerCase() === 'title')?.value;
+      return {
+        title,
+        elements: doc.elements.map((el) => ({
+          type: el.type,
+          text: 'text' in el ? (el.text as string) : '',
+          ...(el as unknown as Record<string, unknown>),
+        })),
+      };
     },
 
     /**
