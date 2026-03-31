@@ -14,7 +14,7 @@
  * Vector drag preview:
  *   - A separate 2D canvas overlay shows the shape outline while dragging.
  */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useSketchStore } from '../stores';
 import { SketchRenderer } from '../engine';
 import { BrushEngine } from '../brush';
@@ -24,12 +24,16 @@ import type { OnionSkinGhost } from '../types/frame';
 import type { ViewportState } from '../types';
 import { drawPixel, drawLine } from '../tools/pixel-tool';
 import type { PixelBrushSize } from '../tools/pixel-tool';
-import { createRectangle, createEllipse } from '../tools/vector-tool';
+import { createRectangle, createEllipse, createPolygon, createStar } from '../tools/vector-tool';
+import { floodFill } from '../tools/fill-tool';
 import { renderPaths } from '../engine/vector-renderer';
 import { computeOnionSkinGhosts } from '../utils/frame-manager';
 import { atmosphereToEmitter } from '../data/atmosphere-presets';
 import { computeParallaxOffsets, buildParallaxTransform } from '../engine/parallax-renderer';
 import { PixelGrid } from './PixelGrid';
+import { ContextMenu } from '@neko/shared/components';
+import type { MenuItem } from '@neko/shared/components';
+import { useTranslation } from '../i18n/I18nContext';
 
 // ─── Helpers ───
 
@@ -164,6 +168,54 @@ function clearOverlayCanvas(canvas: HTMLCanvasElement | null): void {
 }
 
 /**
+ * Render a selection rectangle preview on a 2D overlay canvas.
+ * Draws a blue dashed rectangle in document coordinates.
+ */
+function renderSelectionPreview(
+  previewCanvas: HTMLCanvasElement,
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  docW: number,
+  docH: number,
+  viewport: ViewportState,
+): void {
+  const phW = previewCanvas.width;
+  const phH = previewCanvas.height;
+  const ctx = previewCanvas.getContext('2d');
+  if (!ctx || phW === 0 || phH === 0) return;
+
+  ctx.clearRect(0, 0, phW, phH);
+
+  const { zoom, panX, panY } = viewport;
+  const scaleX = (zoom * phW) / docW;
+  const scaleY = (zoom * phH) / docH;
+  const tx = (phW / 2) * (1 - zoom) + panX;
+  const ty = (phH / 2) * (1 - zoom) + panY;
+
+  const minX = Math.min(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const w = Math.abs(end.x - start.x);
+  const h = Math.abs(end.y - start.y);
+  if (w < 1 && h < 1) return;
+
+  ctx.save();
+  ctx.setTransform(scaleX, 0, 0, scaleY, tx, ty);
+
+  const invScale = 1 / Math.min(scaleX, scaleY);
+  ctx.lineWidth = invScale;
+  ctx.setLineDash([4 * invScale, 4 * invScale]);
+  ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+
+  ctx.beginPath();
+  ctx.rect(minX, minY, w, h);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/**
  * Render a vector shape drag preview on a 2D overlay canvas.
  *
  * Draws a translucent filled shape with a dashed stroke outline in document
@@ -244,6 +296,15 @@ export function SketchCanvas() {
   // Vector tool state
   const vectorStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Move tool state — tracks starting screen position for pan delta
+  const moveStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Select-rect tool state — tracks starting canvas position
+  const selectStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Alt key state for zoom tool (Alt+click = zoom out)
+  const altHeldRef = useRef(false);
+
   // Brush stroke scratch texture (created in onStrokeStart, merged in onStrokeEnd)
   const strokeTexRef = useRef<WebGLTexture | null>(null);
   const strokeFboRef = useRef<WebGLFramebuffer | null>(null);
@@ -261,6 +322,12 @@ export function SketchCanvas() {
   const activeTool = useSketchStore((s) => s.activeTool);
   const activeLayerId = useSketchStore((s) => s.activeLayerId);
   const markDirty = useSketchStore((s) => s.markDirty);
+
+  // Tool actions
+  const setBrushColor = useSketchStore((s) => s.setBrushColor);
+  const selectRect = useSketchStore((s) => s.selectRect);
+  const zoomTo = useSketchStore((s) => s.zoomTo);
+  const panBy = useSketchStore((s) => s.panBy);
 
   // P1: filters and particles
   const filters = useSketchStore((s) => s.filters);
@@ -601,11 +668,17 @@ export function SketchCanvas() {
   }, [currentFrameIndex, selectedFrameLayerId]);
 
   // Determine which tools accept pointer input
-  const isDrawTool =
+  const isPointerTool =
     activeTool === 'brush' ||
     activeTool === 'eraser' ||
     activeTool === 'pixel' ||
-    activeTool === 'vector';
+    activeTool === 'shape' ||
+    activeTool === 'eyedropper' ||
+    activeTool === 'fill' ||
+    activeTool === 'move' ||
+    activeTool === 'zoom' ||
+    activeTool === 'transform' ||
+    activeTool === 'select-rect';
 
   const onStrokeStart = useCallback(
     (point: StrokePoint) => {
@@ -645,7 +718,93 @@ export function SketchCanvas() {
         return;
       }
 
-      if (activeTool === 'vector') {
+      if (activeTool === 'eyedropper') {
+        // Read pixel color from the WebGL canvas at the pointer position
+        const el = canvasRef.current;
+        if (!el) return;
+        const dpr = window.devicePixelRatio || 1;
+        const readX = Math.floor(point.x * dpr);
+        const readY = Math.floor((el.clientHeight - point.y) * dpr); // GL y-flip
+        const gl = el.getContext('webgl2');
+        if (!gl) return;
+        const pixel = new Uint8Array(4);
+        gl.readPixels(readX, readY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        const hex = `#${(pixel[0] ?? 0).toString(16).padStart(2, '0')}${(pixel[1] ?? 0).toString(16).padStart(2, '0')}${(pixel[2] ?? 0).toString(16).padStart(2, '0')}`;
+        setBrushColor(hex);
+        // Switch back to brush after picking
+        useSketchStore.getState().setActiveTool('brush');
+        return;
+      }
+
+      if (activeTool === 'fill') {
+        // Flood fill at click position with current brush color
+        const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+        if (!layer) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        const imageData = layer.texture
+          ? readTextureToImageData(renderer, layer.texture, w, h)
+          : new ImageData(w, h);
+
+        const { x: fx, y: fy } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        floodFill(imageData, Math.floor(fx), Math.floor(fy), hexToRGBA(brushSettings.color));
+
+        const texture = layer.texture ?? renderer.textures.createTexture(w, h);
+        uploadImageDataToTexture(renderer, texture, imageData);
+        const state = useSketchStore.getState();
+        state.setLayers(state.layers.map((l) => (l.id === activeLayerId ? { ...l, texture } : l)));
+        markDirty();
+        needsRenderRef.current = true;
+        return;
+      }
+
+      if (activeTool === 'transform') {
+        // Transform tool: show transform context menu at click position
+        setTransformMenu({ x: point.x, y: point.y });
+        return;
+      }
+
+      if (activeTool === 'zoom') {
+        // Click to zoom in, Alt+click to zoom out
+        const state = useSketchStore.getState();
+        const el = canvasRef.current;
+        if (!el) return;
+        const factor = altHeldRef.current ? 1 / 1.5 : 1.5;
+        const newZoom = Math.max(0.1, Math.min(32, state.viewport.zoom * factor));
+        const dz = newZoom / state.viewport.zoom;
+        const newPanX = point.x - dz * (point.x - state.viewport.panX);
+        const newPanY = point.y - dz * (point.y - state.viewport.panY);
+        useSketchStore.getState().setViewport({ zoom: newZoom, panX: newPanX, panY: newPanY });
+        needsRenderRef.current = true;
+        return;
+      }
+
+      if (activeTool === 'move') {
+        // Start layer drag — tracks screen position for delta
+        moveStartRef.current = { x: point.x, y: point.y };
+        return;
+      }
+
+      if (activeTool === 'select-rect') {
+        // Start rectangular selection
+        const { x, y } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        selectStartRef.current = { x, y };
+        return;
+      }
+
+      if (activeTool === 'shape') {
         const { x, y } = screenToCanvas(
           point.x,
           point.y,
@@ -678,7 +837,15 @@ export function SketchCanvas() {
       );
       needsRenderRef.current = true;
     },
-    [brushSettings, activeLayerId, activeTool, canvas.width, canvas.height, viewport],
+    [
+      brushSettings,
+      activeLayerId,
+      activeTool,
+      canvas.width,
+      canvas.height,
+      viewport,
+      setBrushColor,
+    ],
   );
 
   const onStrokeMove = useCallback(
@@ -711,7 +878,61 @@ export function SketchCanvas() {
         return;
       }
 
-      if (activeTool === 'vector') {
+      if (activeTool === 'move') {
+        // Move active layer by adjusting offsetX/offsetY
+        const last = moveStartRef.current;
+        if (!last) return;
+        const dx = (point.x - last.x) / viewport.zoom;
+        const dy = (point.y - last.y) / viewport.zoom;
+        moveStartRef.current = { x: point.x, y: point.y };
+        if (activeLayerId) {
+          const state = useSketchStore.getState();
+          state.setLayers(
+            state.layers.map((l) =>
+              l.id === activeLayerId
+                ? { ...l, offsetX: (l.offsetX ?? 0) + dx, offsetY: (l.offsetY ?? 0) + dy }
+                : l,
+            ),
+          );
+        }
+        needsRenderRef.current = true;
+        return;
+      }
+
+      if (activeTool === 'select-rect') {
+        // Render selection preview rectangle
+        const start = selectStartRef.current;
+        const previewEl = vectorPreviewCanvasRef.current;
+        if (!start || !previewEl) return;
+        const { x: ex, y: ey } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        renderSelectionPreview(
+          previewEl,
+          start,
+          { x: ex, y: ey },
+          canvas.width,
+          canvas.height,
+          viewport,
+        );
+        return;
+      }
+
+      // zoom, eyedropper, fill, transform do nothing on move
+      if (
+        activeTool === 'zoom' ||
+        activeTool === 'eyedropper' ||
+        activeTool === 'fill' ||
+        activeTool === 'transform'
+      ) {
+        return;
+      }
+
+      if (activeTool === 'shape') {
         const start = vectorStartRef.current;
         const vectorEl = vectorPreviewCanvasRef.current;
         if (!start || !vectorEl) return;
@@ -745,7 +966,7 @@ export function SketchCanvas() {
       brushRef.current?.addPoint({ ...point, x: bx, y: by });
       needsRenderRef.current = true;
     },
-    [activeTool, brushSettings, viewport],
+    [activeTool, brushSettings, viewport, panBy, activeLayerId, canvas.width, canvas.height],
   );
 
   const onStrokeEnd = useCallback(
@@ -783,7 +1004,61 @@ export function SketchCanvas() {
         return;
       }
 
-      if (activeTool === 'vector') {
+      if (activeTool === 'move') {
+        // Finish layer move — apply final delta
+        const last = moveStartRef.current;
+        if (last && activeLayerId) {
+          const dx = (point.x - last.x) / viewport.zoom;
+          const dy = (point.y - last.y) / viewport.zoom;
+          const state = useSketchStore.getState();
+          state.setLayers(
+            state.layers.map((l) =>
+              l.id === activeLayerId
+                ? { ...l, offsetX: (l.offsetX ?? 0) + dx, offsetY: (l.offsetY ?? 0) + dy }
+                : l,
+            ),
+          );
+          markDirty();
+          needsRenderRef.current = true;
+        }
+        moveStartRef.current = null;
+        return;
+      }
+
+      if (activeTool === 'select-rect') {
+        // Finish rectangular selection + clear preview overlay
+        clearOverlayCanvas(vectorPreviewCanvasRef.current);
+        const start = selectStartRef.current;
+        if (!start) return;
+        const { x: ex, y: ey } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        const x = Math.floor(Math.min(start.x, ex));
+        const y = Math.floor(Math.min(start.y, ey));
+        const w = Math.floor(Math.abs(ex - start.x));
+        const h = Math.floor(Math.abs(ey - start.y));
+        if (w > 0 && h > 0) {
+          selectRect(x, y, w, h);
+        }
+        selectStartRef.current = null;
+        return;
+      }
+
+      // zoom, eyedropper, fill, and transform are single-click tools — nothing to do on end
+      if (
+        activeTool === 'zoom' ||
+        activeTool === 'eyedropper' ||
+        activeTool === 'fill' ||
+        activeTool === 'transform'
+      ) {
+        return;
+      }
+
+      if (activeTool === 'shape') {
         const start = vectorStartRef.current;
         if (!start || !renderer || !activeLayerId) return;
 
@@ -814,10 +1089,24 @@ export function SketchCanvas() {
         };
 
         const shapeType = useSketchStore.getState().activeShapeType;
-        const paths =
-          shapeType === 'ellipse'
-            ? [createEllipse(cx, cy, w / 2, h / 2, fill)]
-            : [createRectangle(minX, minY, w, h, fill)];
+        const radius = Math.min(w, h) / 2;
+        let paths;
+        switch (shapeType) {
+          case 'ellipse':
+            paths = [createEllipse(cx, cy, w / 2, h / 2, fill)];
+            break;
+          case 'polygon':
+            paths = [createPolygon(cx, cy, radius, useSketchStore.getState().polygonSides, fill)];
+            break;
+          case 'star':
+            paths = [
+              createStar(cx, cy, radius, radius * 0.4, useSketchStore.getState().starPoints, fill),
+            ];
+            break;
+          default:
+            paths = [createRectangle(minX, minY, w, h, fill)];
+            break;
+        }
 
         const offscreen = new OffscreenCanvas(canvas.width, canvas.height);
         const ctx = offscreen.getContext('2d');
@@ -959,13 +1248,22 @@ export function SketchCanvas() {
         needsRenderRef.current = true;
       }
     },
-    [activeTool, activeLayerId, markDirty, canvas.width, canvas.height, viewport, brushSettings],
+    [
+      activeTool,
+      activeLayerId,
+      markDirty,
+      canvas.width,
+      canvas.height,
+      viewport,
+      brushSettings,
+      selectRect,
+      panBy,
+    ],
   );
 
-  usePointerInput(canvasRef, { onStrokeStart, onStrokeMove, onStrokeEnd }, isDrawTool);
+  usePointerInput(canvasRef, { onStrokeStart, onStrokeMove, onStrokeEnd }, isPointerTool);
 
   // ── Zoom & Pan interactions ──
-  const panBy = useSketchStore((s) => s.panBy);
   const isPanningRef = useRef(false);
   const panLastPosRef = useRef<{ x: number; y: number } | null>(null);
   const spaceHeldRef = useRef(false);
@@ -1028,11 +1326,17 @@ export function SketchCanvas() {
         spaceHeldRef.current = true;
         el.style.cursor = 'grab';
       }
+      if (e.key === 'Alt') {
+        altHeldRef.current = true;
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         spaceHeldRef.current = false;
         el.style.cursor = '';
+      }
+      if (e.key === 'Alt') {
+        altHeldRef.current = false;
       }
     };
 
@@ -1053,8 +1357,236 @@ export function SketchCanvas() {
     };
   }, [panBy]);
 
+  // ── Tool cursor mapping ──
+  const TOOL_CURSORS: Record<string, string> = {
+    brush: 'crosshair',
+    eraser: 'crosshair',
+    'select-rect': 'crosshair',
+    'select-lasso': 'crosshair',
+    'select-wand': 'crosshair',
+    move: 'grab',
+    shape: 'crosshair',
+    transform: 'default',
+    eyedropper: 'crosshair',
+    fill: 'crosshair',
+    zoom: 'zoom-in',
+    pixel: 'crosshair',
+  };
+  // Dynamic cursor: alt+zoom shows zoom-out
+  const toolCursor =
+    activeTool === 'zoom' && altHeldRef.current
+      ? 'zoom-out'
+      : (TOOL_CURSORS[activeTool] ?? 'crosshair');
+
+  // ── Transform menu (shown when transform tool clicks canvas) ──
+  const [transformMenu, setTransformMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // ── Canvas right-click context menu ──
+  const { t } = useTranslation();
+  const [canvasMenu, setCanvasMenu] = useState<{ x: number; y: number } | null>(null);
+  const selectAll = useSketchStore((s) => s.selectAll);
+  const clearSelection = useSketchStore((s) => s.clearSelection);
+  const selection = useSketchStore((s) => s.selection);
+  const undo = useSketchStore((s) => s.undo);
+  const redo = useSketchStore((s) => s.redo);
+  const canUndo = useSketchStore((s) => s.canUndo);
+  const canRedo = useSketchStore((s) => s.canRedo);
+
+  // ── Layer pixel operations (flip, rotate, clear) ──
+  const flipActiveLayerH = useCallback(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !activeLayerId) return;
+    const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+    if (!layer?.texture) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const imgData = readTextureToImageData(renderer, layer.texture, w, h);
+    // Flip horizontal: swap columns
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < Math.floor(w / 2); x++) {
+        const left = (y * w + x) * 4;
+        const right = (y * w + (w - 1 - x)) * 4;
+        for (let c = 0; c < 4; c++) {
+          const tmp = imgData.data[left + c]!;
+          imgData.data[left + c] = imgData.data[right + c]!;
+          imgData.data[right + c] = tmp;
+        }
+      }
+    }
+    uploadImageDataToTexture(renderer, layer.texture, imgData);
+    markDirty();
+    needsRenderRef.current = true;
+  }, [activeLayerId, canvas.width, canvas.height, markDirty]);
+
+  const flipActiveLayerV = useCallback(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !activeLayerId) return;
+    const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+    if (!layer?.texture) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const imgData = readTextureToImageData(renderer, layer.texture, w, h);
+    // Flip vertical: swap rows
+    for (let y = 0; y < Math.floor(h / 2); y++) {
+      for (let x = 0; x < w; x++) {
+        const top = (y * w + x) * 4;
+        const bottom = ((h - 1 - y) * w + x) * 4;
+        for (let c = 0; c < 4; c++) {
+          const tmp = imgData.data[top + c]!;
+          imgData.data[top + c] = imgData.data[bottom + c]!;
+          imgData.data[bottom + c] = tmp;
+        }
+      }
+    }
+    uploadImageDataToTexture(renderer, layer.texture, imgData);
+    markDirty();
+    needsRenderRef.current = true;
+  }, [activeLayerId, canvas.width, canvas.height, markDirty]);
+
+  const rotateActiveLayer90 = useCallback(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !activeLayerId) return;
+    const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+    if (!layer?.texture) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    // For non-square canvases, rotation crops/pads. Keep it simple: rotate in-place.
+    const imgData = readTextureToImageData(renderer, layer.texture, w, h);
+    const rotated = new ImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        // 90° CW: (x, y) → (h-1-y, x) — clamped to canvas bounds
+        const srcX = y;
+        const srcY = w - 1 - x;
+        if (srcX >= 0 && srcX < w && srcY >= 0 && srcY < h) {
+          const si = (srcY * w + srcX) * 4;
+          const di = (y * w + x) * 4;
+          rotated.data[di] = imgData.data[si]!;
+          rotated.data[di + 1] = imgData.data[si + 1]!;
+          rotated.data[di + 2] = imgData.data[si + 2]!;
+          rotated.data[di + 3] = imgData.data[si + 3]!;
+        }
+      }
+    }
+    uploadImageDataToTexture(renderer, layer.texture, rotated);
+    markDirty();
+    needsRenderRef.current = true;
+  }, [activeLayerId, canvas.width, canvas.height, markDirty]);
+
+  const clearActiveLayer = useCallback(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !activeLayerId) return;
+    const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+    if (!layer?.texture) return;
+    const empty = new Uint8Array(canvas.width * canvas.height * 4);
+    renderer.textures.updateTexture(layer.texture, 0, 0, canvas.width, canvas.height, empty);
+    markDirty();
+    needsRenderRef.current = true;
+  }, [activeLayerId, canvas.width, canvas.height, markDirty]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setCanvasMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Transform menu items (shown when transform tool clicks canvas)
+  const transformMenuItems = useCallback(
+    (): MenuItem[] => [
+      { label: t('sketch.canvas.flipH'), onClick: flipActiveLayerH },
+      { label: t('sketch.canvas.flipV'), onClick: flipActiveLayerV },
+      { separator: true },
+      { label: t('sketch.canvas.rotate90'), onClick: rotateActiveLayer90 },
+      { separator: true },
+      { label: t('sketch.canvas.clearLayer'), danger: true, onClick: clearActiveLayer },
+    ],
+    [t, flipActiveLayerH, flipActiveLayerV, rotateActiveLayer90, clearActiveLayer],
+  );
+
+  const contextMenuItems = useCallback((): MenuItem[] => {
+    const state = useSketchStore.getState();
+    const items: MenuItem[] = [
+      {
+        label: t('sketch.canvas.undo'),
+        shortcut: '⌘Z',
+        disabled: !state.canUndo,
+        onClick: () => undo(),
+      },
+      {
+        label: t('sketch.canvas.redo'),
+        shortcut: '⇧⌘Z',
+        disabled: !state.canRedo,
+        onClick: () => redo(),
+      },
+      { separator: true },
+      {
+        label: t('sketch.canvas.selectAll'),
+        shortcut: '⌘A',
+        onClick: () => selectAll(),
+      },
+    ];
+    if (state.selection) {
+      items.push({
+        label: t('sketch.canvas.deselect'),
+        onClick: () => clearSelection(),
+      });
+    }
+    items.push(
+      { separator: true },
+      { label: t('sketch.canvas.flipH'), onClick: flipActiveLayerH },
+      { label: t('sketch.canvas.flipV'), onClick: flipActiveLayerV },
+      { label: t('sketch.canvas.rotate90'), onClick: rotateActiveLayer90 },
+      { separator: true },
+      { label: t('sketch.canvas.clearLayer'), danger: true, onClick: clearActiveLayer },
+      { separator: true },
+      {
+        label: t('sketch.canvas.zoomIn'),
+        onClick: () => {
+          const s = useSketchStore.getState();
+          const newZoom = Math.min(32, s.viewport.zoom * 1.5);
+          zoomTo(newZoom);
+          needsRenderRef.current = true;
+        },
+      },
+      {
+        label: t('sketch.canvas.zoomOut'),
+        onClick: () => {
+          const s = useSketchStore.getState();
+          const newZoom = Math.max(0.1, s.viewport.zoom / 1.5);
+          zoomTo(newZoom);
+          needsRenderRef.current = true;
+        },
+      },
+      {
+        label: t('sketch.canvas.resetZoom'),
+        onClick: () => {
+          useSketchStore.getState().resetViewport();
+          needsRenderRef.current = true;
+        },
+      },
+    );
+    return items;
+  }, [
+    t,
+    selectAll,
+    clearSelection,
+    zoomTo,
+    selection,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    flipActiveLayerH,
+    flipActiveLayerV,
+    rotateActiveLayer90,
+    clearActiveLayer,
+  ]);
+
   return (
-    <div className="relative block w-full h-full">
+    <div
+      className="relative block w-full h-full"
+      style={{ cursor: toolCursor }}
+      onContextMenu={handleContextMenu}
+    >
       <canvas
         ref={canvasRef}
         id="sketch-canvas"
@@ -1075,6 +1607,26 @@ export function SketchCanvas() {
       />
       {/* Pixel grid — visible only in pixel tool at sufficient zoom */}
       <PixelGrid canvasWidth={canvas.width} canvasHeight={canvas.height} />
+
+      {/* Canvas right-click context menu */}
+      {canvasMenu && (
+        <ContextMenu
+          x={canvasMenu.x}
+          y={canvasMenu.y}
+          items={contextMenuItems()}
+          onClose={() => setCanvasMenu(null)}
+        />
+      )}
+
+      {/* Transform tool action menu */}
+      {transformMenu && (
+        <ContextMenu
+          x={transformMenu.x}
+          y={transformMenu.y}
+          items={transformMenuItems()}
+          onClose={() => setTransformMenu(null)}
+        />
+      )}
     </div>
   );
 }

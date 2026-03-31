@@ -229,4 +229,20 @@ export const zhCN: MessageBundle = {
   // Status bar
   'sketch.status.ready': '就绪',
   'sketch.status.layers': '个图层',
+
+  // Canvas context menu
+  'sketch.canvas.undo': '撤销',
+  'sketch.canvas.redo': '重做',
+  'sketch.canvas.selectAll': '全选',
+  'sketch.canvas.deselect': '取消选择',
+  'sketch.canvas.zoomIn': '放大',
+  'sketch.canvas.zoomOut': '缩小',
+  'sketch.canvas.resetZoom': '重置缩放',
+  'sketch.canvas.flipH': '水平翻转',
+  'sketch.canvas.flipV': '垂直翻转',
+  'sketch.canvas.rotate90': '顺时针旋转 90°',
+  'sketch.canvas.clearLayer': '清空图层',
+
+  // Tool labels
+  'sketch.tool.eraser': '橡皮擦',
 };

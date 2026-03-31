@@ -53,6 +53,34 @@ export function dispatchKeyboardAction(
       store.setActiveTool('brush');
       break;
 
+    case 'selectEraser':
+      store.setActiveTool('eraser');
+      break;
+
+    case 'selectMove':
+      store.setActiveTool('move');
+      break;
+
+    case 'selectShape':
+      store.setActiveTool('shape');
+      break;
+
+    case 'selectZoom':
+      store.setActiveTool('zoom');
+      break;
+
+    case 'selectFill':
+      store.setActiveTool('fill');
+      break;
+
+    case 'selectSelect':
+      store.setActiveTool('select-rect');
+      break;
+
+    case 'selectTransform':
+      store.setActiveTool('transform');
+      break;
+
     case 'pickColor':
       store.setActiveTool('eyedropper');
       break;

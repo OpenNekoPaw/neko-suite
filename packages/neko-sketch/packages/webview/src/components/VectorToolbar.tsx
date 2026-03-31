@@ -1,40 +1,43 @@
 /**
  * VectorToolbar - vector drawing tool options
  *
- * Shown in the sidebar when activeTool === 'shape'. Manages its own
- * activeShape state internally so it can be dropped into the sidebar
- * without any props from the parent.
+ * Shown in the sidebar when activeTool === 'shape'. Uses Zustand store
+ * for all shape state so SketchCanvas can read polygon sides / star points.
  *
  * Shape sub-types: path, rectangle, ellipse, polygon, star.
  */
-import { useState } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
+import type { ShapeType } from '../types';
 
-export type VectorShapeTool = 'path' | 'rectangle' | 'ellipse' | 'polygon' | 'star';
+type VectorShapeTool = 'path' | 'rectangle' | 'ellipse' | 'polygon' | 'star';
 
 const SHAPE_ICONS: Record<VectorShapeTool, string> = {
-  path:      '✐',
+  path: '✐',
   rectangle: '▭',
-  ellipse:   '◯',
-  polygon:   '⬠',
-  star:      '★',
+  ellipse: '◯',
+  polygon: '⬠',
+  star: '★',
 };
 
 export function VectorToolbar() {
   const { t } = useTranslation();
+  const activeShapeType = useSketchStore((s) => s.activeShapeType);
   const setActiveShapeType = useSketchStore((s) => s.setActiveShapeType);
+  const polygonSides = useSketchStore((s) => s.polygonSides);
+  const setPolygonSides = useSketchStore((s) => s.setPolygonSides);
+  const starPoints = useSketchStore((s) => s.starPoints);
+  const setStarPoints = useSketchStore((s) => s.setStarPoints);
 
-  const [activeShape, setActiveShape] = useState<VectorShapeTool>('rectangle');
-  const [polygonSides, setPolygonSides] = useState(6);
-  const [starPoints, setStarPoints]     = useState(5);
+  // Map VectorShapeTool to the broader ShapeType for toolbar display
+  const activeShape = (
+    ['path', 'rectangle', 'ellipse', 'polygon', 'star'] as VectorShapeTool[]
+  ).includes(activeShapeType as VectorShapeTool)
+    ? (activeShapeType as VectorShapeTool)
+    : 'rectangle';
 
   const handleShapeSelect = (shape: VectorShapeTool) => {
-    setActiveShape(shape);
-    // Sync overlapping shapes to the store's ShapeType for canvas rendering
-    if (shape === 'rectangle' || shape === 'ellipse') {
-      setActiveShapeType(shape);
-    }
+    setActiveShapeType(shape as ShapeType);
   };
 
   return (
@@ -73,7 +76,10 @@ export function VectorToolbar() {
             className="sketch-slider"
             aria-label={t('sketch.vector.sidesLabel')}
           />
-          <span className="w-4 text-right tabular-nums text-xs" style={{ color: 'var(--sketch-text-secondary)' }}>
+          <span
+            className="w-4 text-right tabular-nums text-xs"
+            style={{ color: 'var(--sketch-text-secondary)' }}
+          >
             {polygonSides}
           </span>
         </div>
@@ -93,7 +99,10 @@ export function VectorToolbar() {
             className="sketch-slider"
             aria-label={t('sketch.vector.pointsLabel')}
           />
-          <span className="w-4 text-right tabular-nums text-xs" style={{ color: 'var(--sketch-text-secondary)' }}>
+          <span
+            className="w-4 text-right tabular-nums text-xs"
+            style={{ color: 'var(--sketch-text-secondary)' }}
+          >
             {starPoints}
           </span>
         </div>

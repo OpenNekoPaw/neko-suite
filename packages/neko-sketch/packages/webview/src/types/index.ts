@@ -86,7 +86,7 @@ export type ToolType =
   | 'pixel'
   | 'vector';
 
-export type ShapeType = 'rectangle' | 'ellipse' | 'line';
+export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'polygon' | 'star' | 'path';
 
 // ─── Selection Types ───
 

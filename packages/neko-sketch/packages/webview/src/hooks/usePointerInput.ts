@@ -35,7 +35,8 @@ export function usePointerInput(
   const onPointerDown = useCallback(
     (e: PointerEvent) => {
       const canvas = canvasRef.current;
-      if (!canvas || !enabled) return;
+      // Only respond to primary (left) mouse button
+      if (!canvas || !enabled || e.button !== 0) return;
       canvas.setPointerCapture(e.pointerId);
       drawingRef.current = true;
       cbRef.current.onStrokeStart(toStrokePoint(e, canvas));

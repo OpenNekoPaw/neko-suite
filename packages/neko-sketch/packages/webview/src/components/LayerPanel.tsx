@@ -13,17 +13,19 @@ import type { LayerData } from '../types';
 
 export function LayerPanel() {
   const { t } = useTranslation();
-  const layers              = useSketchStore((s) => s.layers);
-  const activeLayerId       = useSketchStore((s) => s.activeLayerId);
-  const setActiveLayer      = useSketchStore((s) => s.setActiveLayer);
-  const addNewLayer         = useSketchStore((s) => s.addNewLayer);
-  const removeLayerById     = useSketchStore((s) => s.removeLayerById);
-  const updateLayerProps    = useSketchStore((s) => s.updateLayerProps);
-  const duplicateLayerById  = useSketchStore((s) => s.duplicateLayerById);
-  const moveLayerTo         = useSketchStore((s) => s.moveLayerTo);
-  const show                = useSketchStore((s) => s.showLayerPanel);
+  const layers = useSketchStore((s) => s.layers);
+  const activeLayerId = useSketchStore((s) => s.activeLayerId);
+  const setActiveLayer = useSketchStore((s) => s.setActiveLayer);
+  const addNewLayer = useSketchStore((s) => s.addNewLayer);
+  const removeLayerById = useSketchStore((s) => s.removeLayerById);
+  const updateLayerProps = useSketchStore((s) => s.updateLayerProps);
+  const duplicateLayerById = useSketchStore((s) => s.duplicateLayerById);
+  const moveLayerTo = useSketchStore((s) => s.moveLayerTo);
+  const show = useSketchStore((s) => s.showLayerPanel);
 
-  const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
+    null,
+  );
 
   const handleLayerContextMenu = useCallback(
     (e: React.MouseEvent, layer: LayerData) => {
@@ -49,8 +51,11 @@ export function LayerPanel() {
         { separator: true },
         {
           label: t('sketch.layer.mergeDown'),
-          disabled: true,
-          onClick: () => { /* not implemented */ },
+          disabled: arrayIndex <= 0,
+          // TODO(P1): implement pixel-level merge via SketchCanvas renderer callback
+          onClick: () => {
+            /* requires renderer access — not yet available in LayerPanel */
+          },
         },
         { separator: true },
         {
@@ -119,7 +124,8 @@ function LayerItem(props: {
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
-  const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove, onContextMenu } = props;
+  const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove, onContextMenu } =
+    props;
 
   return (
     <div
@@ -138,7 +144,10 @@ function LayerItem(props: {
         aria-label={layer.visible ? t('sketch.layer.hide') : t('sketch.layer.show')}
         className="sketch-icon-button"
         style={{ opacity: layer.visible ? 1 : 0.35 }}
-        onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleVisible();
+        }}
         title={layer.visible ? t('sketch.layer.hide') : t('sketch.layer.show')}
       >
         {layer.visible ? <EyeOnIcon /> : <EyeOffIcon />}
@@ -149,7 +158,10 @@ function LayerItem(props: {
         aria-label={layer.locked ? t('sketch.layer.unlock') : t('sketch.layer.lock')}
         className="sketch-icon-button"
         style={{ opacity: layer.locked ? 1 : 0.35 }}
-        onClick={(e) => { e.stopPropagation(); onToggleLock(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleLock();
+        }}
         title={layer.locked ? t('sketch.layer.unlock') : t('sketch.layer.lock')}
       >
         {layer.locked ? <LockClosedIcon /> : <LockOpenIcon />}
@@ -159,9 +171,7 @@ function LayerItem(props: {
       <span
         className="flex-1 truncate text-xs"
         style={{
-          color: isActive
-            ? 'var(--sketch-text-primary)'
-            : 'var(--sketch-text-secondary)',
+          color: isActive ? 'var(--sketch-text-primary)' : 'var(--sketch-text-secondary)',
           fontWeight: isActive ? 500 : 400,
         }}
       >
@@ -172,7 +182,10 @@ function LayerItem(props: {
       <button
         aria-label={t('sketch.layer.remove')}
         className="sketch-icon-button danger"
-        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
         title={t('sketch.layer.remove')}
       >
         <CloseIcon />
@@ -185,8 +198,15 @@ function LayerItem(props: {
 
 function PlusIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
-      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    >
       <path d="M6 2v8M2 6h8" />
     </svg>
   );
@@ -194,8 +214,16 @@ function PlusIcon() {
 
 function EyeOnIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
-      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 13 13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M1 6.5C2.5 3.5 5 2 6.5 2s4 1.5 5.5 4.5C10.5 9.5 8 11 6.5 11S2.5 9.5 1 6.5z" />
       <circle cx="6.5" cy="6.5" r="1.5" />
     </svg>
@@ -204,8 +232,16 @@ function EyeOnIcon() {
 
 function EyeOffIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
-      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 13 13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 2l9 9" />
       <path d="M5 3.5C5.6 3.2 6 3 6.5 3c1.5 0 3.5 1.5 5 3.5-.5.8-1.1 1.5-1.8 2" />
       <path d="M9.5 9.8C8.5 10.5 7.5 11 6.5 11c-1.5 0-3.5-1.5-5-4 .5-.9 1.2-1.7 2-2.3" />
@@ -215,8 +251,16 @@ function EyeOffIcon() {
 
 function LockClosedIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
-      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="5" width="8" height="6" rx="1" />
       <path d="M4 5V4a2 2 0 014 0v1" />
     </svg>
@@ -225,8 +269,16 @@ function LockClosedIcon() {
 
 function LockOpenIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
-      stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="5" width="8" height="6" rx="1" />
       <path d="M4 5V4a2 2 0 014 0" />
     </svg>
@@ -235,8 +287,15 @@ function LockOpenIcon() {
 
 function CloseIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
       <path d="M2 2l6 6M8 2L2 8" />
     </svg>
   );

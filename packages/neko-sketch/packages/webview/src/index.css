@@ -222,7 +222,7 @@ html, body, #root {
   position: relative;
   flex: 1;
   overflow: hidden;
-  cursor: crosshair;
+  /* cursor is now set dynamically per active tool in SketchCanvas */
 }
 
 .sketch-canvas-container canvas {

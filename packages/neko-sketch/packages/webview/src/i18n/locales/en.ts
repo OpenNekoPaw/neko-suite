@@ -229,4 +229,20 @@ export const en: MessageBundle = {
   // Status bar
   'sketch.status.ready': 'Ready',
   'sketch.status.layers': 'layers',
+
+  // Canvas context menu
+  'sketch.canvas.undo': 'Undo',
+  'sketch.canvas.redo': 'Redo',
+  'sketch.canvas.selectAll': 'Select All',
+  'sketch.canvas.deselect': 'Deselect',
+  'sketch.canvas.zoomIn': 'Zoom In',
+  'sketch.canvas.zoomOut': 'Zoom Out',
+  'sketch.canvas.resetZoom': 'Reset Zoom',
+  'sketch.canvas.flipH': 'Flip Horizontal',
+  'sketch.canvas.flipV': 'Flip Vertical',
+  'sketch.canvas.rotate90': 'Rotate 90° CW',
+  'sketch.canvas.clearLayer': 'Clear Layer',
+
+  // Tool labels
+  'sketch.tool.eraser': 'Eraser',
 };

@@ -49,6 +49,34 @@ Extension Host（Node.js）
               └── 动画曲线（bevy_animation ParameterCurve）
 ```
 
+## 工具栏
+
+| 工具 | 快捷键 | 功能 |
+|------|--------|------|
+| Brush | B | 压感手绘（7 种笔刷） |
+| Eraser | E | 压感擦除 |
+| Select | S | 矩形选区（拖拽预览 + bitmask） |
+| Move | M | 移动图层偏移（offsetX/offsetY） |
+| Shape | V | 矢量形状（矩形/椭圆/多边形/星形） |
+| Transform | T | 图层变换（翻转 H/V、旋转 90°、清空） |
+| Eyedropper | I | 拾取画布像素颜色 → 自动切回 Brush |
+| Fill | G | 洪水填充（stack-based flood fill, tolerance=32） |
+| Zoom | Z | 点击放大 1.5×，Alt+click 缩小 |
+
+## 画布右键菜单
+
+```
+Undo / Redo
+──────────
+Select All / Deselect
+──────────
+Flip Horizontal / Flip Vertical / Rotate 90° CW
+──────────
+Clear Layer (danger)
+──────────
+Zoom In / Zoom Out / Reset Zoom
+```
+
 ## 笔刷类型
 
 | 笔刷 | 特点 |

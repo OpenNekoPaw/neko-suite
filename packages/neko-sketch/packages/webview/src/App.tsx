@@ -103,7 +103,7 @@ export function App() {
 
   // Handle messages from extension
   const handleMessage = useCallback(
-    (event: MessageEvent<ExtensionToWebviewMessage>) => {
+    async (event: MessageEvent<ExtensionToWebviewMessage>) => {
       const msg = event.data;
       switch (msg.type) {
         case 'document:load': {
