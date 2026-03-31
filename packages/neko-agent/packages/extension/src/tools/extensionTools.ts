@@ -1165,9 +1165,10 @@ const scriptEmbeddingIndex = new ScriptEmbeddingIndex();
  * Returns empty array if NekoStory is not installed.
  *
  * Tools:
- * - GetScriptIndex   — structural index (scenes + characters with line numbers)
- * - SearchScriptIndex — semantic similarity search using text embeddings
- *                       (requires embedFn; omit for L1-only mode)
+ * - GetScriptIndex    — structural index (scenes + characters with line numbers)
+ * - SearchScriptIndex — semantic similarity search using text embeddings when
+ *                       embedFn is provided; falls back to TF-IDF keyword search
+ *                       so the tool is always available regardless of provider config.
  */
 export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
   const ext = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
@@ -1215,75 +1216,80 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
     },
   ];
 
-  // SearchScriptIndex requires an embedding function — only register when available
-  if (embedFn) {
-    tools.push({
-      name: 'SearchScriptIndex',
-      description:
-        'Semantically search scenes in a Fountain screenplay by meaning, not just keywords. ' +
-        'Useful for queries like "all tense confrontation scenes" or "scenes about loss or grief". ' +
-        'Returns the top matching scenes with scene IDs, similarity scores, and line numbers. ' +
-        'Use Read(offset=line_start, limit=line_end-line_start+1) to fetch the full scene text.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description: 'Absolute file path of the .fountain screenplay file',
-          },
-          query: {
-            type: 'string',
-            description: 'Natural language description of the scenes to find',
-          },
-          top_k: {
-            type: 'number',
-            description: 'Maximum number of results to return (default: 5, max: 20)',
-          },
+  // SearchScriptIndex — always registered; uses vector embeddings when embedFn is
+  // configured, or falls back to TF-IDF keyword scoring so the tool works even
+  // without an embedding provider.
+  tools.push({
+    name: 'SearchScriptIndex',
+    description:
+      'Search scenes in a Fountain screenplay by meaning or keywords. ' +
+      (embedFn
+        ? 'Uses semantic vector search for rich queries like "tense confrontation" or "scenes about loss". '
+        : 'Uses keyword scoring (no embedding provider configured). ') +
+      'Returns the top matching scenes with scene IDs, scores, and line numbers. ' +
+      'Use Read(offset=line_start, limit=line_end-line_start+1) to fetch the full scene text.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Absolute file path of the .fountain screenplay file',
         },
-        required: ['path', 'query'],
-      } satisfies ToolParameters,
-      execute: async (args) => {
-        const filePath = args.path as string;
-        const query = args.query as string;
-        const topK = Math.min((args.top_k as number | undefined) ?? 5, 20);
+        query: {
+          type: 'string',
+          description: 'Natural language description of the scenes to find',
+        },
+        top_k: {
+          type: 'number',
+          description: 'Maximum number of results to return (default: 5, max: 20)',
+        },
+      },
+      required: ['path', 'query'],
+    } satisfies ToolParameters,
+    execute: async (args) => {
+      const filePath = args.path as string;
+      const query = args.query as string;
+      const topK = Math.min((args.top_k as number | undefined) ?? 5, 20);
 
-        // 1. Get structural index from neko-story
-        const api = await getAPI();
-        const index = api.getScriptIndex(filePath);
-        if (!index) {
-          return {
-            error: 'Script not indexed yet. Open the .fountain file in VSCode first, then retry.',
-          };
-        }
-        if (index.scenes.length === 0) {
-          return { results: [], message: 'No scenes found in this screenplay.' };
-        }
+      // 1. Get structural index from neko-story
+      const api = await getAPI();
+      const index = api.getScriptIndex(filePath);
+      if (!index) {
+        return {
+          error: 'Script not indexed yet. Open the .fountain file in VSCode first, then retry.',
+        };
+      }
+      if (index.scenes.length === 0) {
+        return { results: [], message: 'No scenes found in this screenplay.' };
+      }
 
-        // 2. Read file content to extract scene body text for richer embeddings
-        let lines: string[];
-        try {
-          const uri = filePath.startsWith('file://')
-            ? vscode.Uri.parse(filePath)
-            : vscode.Uri.file(filePath);
-          const bytes = await vscode.workspace.fs.readFile(uri);
-          lines = new TextDecoder('utf-8').decode(bytes).split('\n');
-        } catch (err) {
-          return { error: `Failed to read screenplay file: ${String(err)}` };
-        }
+      // 2. Read file content to extract scene body text for richer matching
+      let lines: string[];
+      try {
+        const uri = filePath.startsWith('file://')
+          ? vscode.Uri.parse(filePath)
+          : vscode.Uri.file(filePath);
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        lines = new TextDecoder('utf-8').decode(bytes).split('\n');
+      } catch (err) {
+        return { error: `Failed to read screenplay file: ${String(err)}` };
+      }
 
-        // 3. Build scene text inputs (heading + body lines)
-        const sceneTexts = index.scenes.map((scene) => ({
-          id: scene.id,
-          heading: scene.heading,
-          line_start: scene.line_start,
-          line_end: scene.line_end,
-          text: lines
-            .slice(scene.line_start, scene.line_end + 1)
-            .join('\n')
-            .trim(),
-        }));
+      // 3. Build scene text inputs (heading + body lines)
+      const sceneTexts = index.scenes.map((scene) => ({
+        id: scene.id,
+        heading: scene.heading,
+        line_start: scene.line_start,
+        line_end: scene.line_end,
+        text: lines
+          .slice(scene.line_start, scene.line_end + 1)
+          .join('\n')
+          .trim(),
+      }));
 
-        // 4. Ensure embeddings are cached (re-embeds if total_lines changed)
+      // 4a. Vector path — requires embedFn (preferred)
+      if (embedFn) {
+        // Ensure embeddings are cached (re-embeds if total_lines changed)
         let cachedEmbeddings: Awaited<ReturnType<ScriptEmbeddingIndex['ensureIndexed']>>;
         try {
           cachedEmbeddings = await scriptEmbeddingIndex.ensureIndexed(
@@ -1296,7 +1302,6 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
           return { error: `Embedding failed: ${String(err)}` };
         }
 
-        // 5. Embed the query and search
         let queryVec: number[];
         try {
           const result = await embedFn([query]);
@@ -1306,15 +1311,56 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
         }
 
         const results = scriptEmbeddingIndex.search(queryVec, cachedEmbeddings, topK);
-
         logger.info(
-          `SearchScriptIndex: query="${query}" topK=${topK} scenes=${index.scenes.length} results=${results.length}`,
+          `SearchScriptIndex: query="${query}" topK=${topK} scenes=${index.scenes.length} results=${results.length} mode=vector`,
         );
+        return { results, mode: 'vector' };
+      }
 
-        return { results };
-      },
-    });
-  }
+      // 4b. TF-IDF keyword fallback — no embedding provider required.
+      // Score each scene by how many query tokens appear in its text (case-insensitive).
+      const queryTokens = query
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((t) => t.length > 1);
+
+      if (queryTokens.length === 0) {
+        return { results: [], message: 'Query produced no searchable tokens.' };
+      }
+
+      const scored = sceneTexts.map((scene) => {
+        const haystack = `${scene.heading} ${scene.text}`.toLowerCase();
+        // Term-frequency: count each token hit, weighted by heading match
+        let score = 0;
+        for (const token of queryTokens) {
+          const headingHit = scene.heading.toLowerCase().includes(token);
+          const bodyCount = (haystack.match(new RegExp(token, 'g')) ?? []).length;
+          score += headingHit ? bodyCount + 2 : bodyCount; // heading bonus
+        }
+        return {
+          scene_id: scene.id,
+          score: parseFloat((score / queryTokens.length).toFixed(3)),
+          line_start: scene.line_start,
+          line_end: scene.line_end,
+          heading: scene.heading,
+        };
+      });
+
+      const results = scored
+        .filter((r) => r.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topK);
+
+      logger.info(
+        `SearchScriptIndex: query="${query}" topK=${topK} scenes=${index.scenes.length} results=${results.length} mode=tfidf`,
+      );
+      return {
+        results,
+        mode: 'tfidf',
+        note: 'Configure an embedding provider for semantic search.',
+      };
+    },
+  });
 
   // story_apply_suggestion — present an AI edit suggestion inline and let user accept/reject
   tools.push({
@@ -1510,6 +1556,9 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
  *
  * Tools:
  * - SketchGenerate — Text-to-Image → import as new canvas layer
+ * - SketchInpaint — Inpaint selected region using mask + AI
+ * - SketchStyleTransfer — Apply artistic style to layer/canvas
+ * - SketchAutoLayer — Decompose image into line art / color / shadow / highlight layers
  */
 export function createNekoSketchTools(media: MediaGenerationService | undefined): Tool[] {
   const ext = vscode.extensions.getExtension<NekoSketchAPI>('neko.neko-sketch');
@@ -1614,6 +1663,511 @@ export function createNekoSketchTools(media: MediaGenerationService | undefined)
           size: sizeStr,
           taskId: task.id,
         };
+      },
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SketchInpaint — Repaint a selected region using AI
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      name: 'SketchInpaint',
+      description:
+        'Inpaint (locally redraw) the rectangular selection in the active neko-sketch canvas. ' +
+        'Requires an active rectangular selection. The selected region is regenerated with ' +
+        'AI-generated content and added as a new layer above the current one.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'What to draw in the selected area',
+          },
+          strength: {
+            type: 'number',
+            description:
+              'Inpaint strength 0.0–1.0 (default: 0.8). Higher = more creative, lower = closer to original.',
+          },
+          layerName: {
+            type: 'string',
+            description: 'Name for the result layer (default: "Inpaint")',
+          },
+        },
+        required: ['prompt'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+
+        const selection = await api.getSelectionMask();
+        if (!selection) {
+          return {
+            error:
+              'No active selection in sketch editor. Use a selection tool first (rect/lasso/wand).',
+          };
+        }
+
+        const prompt = args.prompt as string;
+        const strength = (args.strength as number | undefined) ?? 0.8;
+        const layerName = (args.layerName as string | undefined) ?? 'Inpaint';
+
+        let task;
+        try {
+          task = await media.generateImage({
+            prompt,
+            referenceImageBase64: selection.layerImageData,
+            maskBase64: selection.mask,
+            inpaintStrength: strength,
+            width: selection.width,
+            height: selection.height,
+          });
+        } catch (err) {
+          return { error: `Inpaint generation failed: ${String(err)}` };
+        }
+
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 3 * 60 * 1000);
+        } catch (err) {
+          return { error: `Waiting for inpaint timed out: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          return {
+            error: `Inpaint ${completed.status}${completed.error ? `: ${completed.error.message}` : ''}`,
+          };
+        }
+
+        const output = completed.outputs[0]!;
+        let base64: string;
+        try {
+          const response = await fetch(output.url);
+          if (!response.ok) {
+            return { error: `Failed to download inpainted image: HTTP ${response.status}` };
+          }
+          base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
+        } catch (err) {
+          return { error: `Failed to fetch inpainted image: ${String(err)}` };
+        }
+
+        api.importImageData(base64, `${layerName}.png`);
+        logger.info(`SketchInpaint: imported inpainted layer "${layerName}"`);
+        return {
+          success: true,
+          message: `局部重绘完成，图层名称：${layerName}`,
+          taskId: task.id,
+        };
+      },
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SketchStyleTransfer — Apply an artistic style to the active layer/canvas
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      name: 'SketchStyleTransfer',
+      description:
+        'Apply an artistic style transformation to the active layer or full canvas composite. ' +
+        'The result is added as a new layer. Use for converting sketches to anime, painting, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          style: {
+            type: 'string',
+            enum: ['anime', 'oil-painting', 'watercolor', 'pixel-art', 'sketch', 'comic', 'ghibli'],
+            description: 'Target artistic style',
+          },
+          prompt: {
+            type: 'string',
+            description: 'Additional style guidance (optional)',
+          },
+          strength: {
+            type: 'number',
+            description: 'Style strength 0.0–1.0 (default: 0.7)',
+          },
+          scope: {
+            type: 'string',
+            enum: ['layer', 'canvas'],
+            description: 'Apply to active layer or full canvas composite (default: canvas)',
+          },
+          layerName: {
+            type: 'string',
+            description: 'Name for the result layer (default: derived from style)',
+          },
+        },
+        required: ['style'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+
+        const style = args.style as string;
+        const strength = (args.strength as number | undefined) ?? 0.7;
+        const scope = (args.scope as string | undefined) ?? 'canvas';
+        const extraPrompt = (args.prompt as string | undefined) ?? '';
+        const layerName = (args.layerName as string | undefined) ?? `${style}-style`;
+
+        const imageData =
+          scope === 'layer' ? await api.getLayerImageData() : await api.getCanvasImageData();
+
+        if (!imageData) {
+          return { error: 'No image data available from sketch editor' };
+        }
+
+        const stylePromptMap: Record<string, string> = {
+          anime: 'anime style illustration, cel shading, vibrant colors',
+          'oil-painting': 'oil painting, thick brushstrokes, textured canvas, artistic',
+          watercolor: 'watercolor painting, soft washes, transparent layers',
+          'pixel-art': 'pixel art, 8-bit retro style, pixelated',
+          sketch: 'pencil sketch, line art, black and white',
+          comic: 'comic book style, bold outlines, halftone shading',
+          ghibli: 'Studio Ghibli animation style, soft colors, hand-drawn',
+        };
+        const stylePrompt = stylePromptMap[style] ?? style;
+        const fullPrompt = extraPrompt ? `${stylePrompt}, ${extraPrompt}` : stylePrompt;
+
+        let task;
+        try {
+          task = await media.generateImage({
+            prompt: fullPrompt,
+            referenceImageBase64: imageData,
+            inpaintStrength: strength,
+            style,
+          });
+        } catch (err) {
+          return { error: `Style transfer failed: ${String(err)}` };
+        }
+
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 3 * 60 * 1000);
+        } catch (err) {
+          return { error: `Style transfer timed out: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          return {
+            error: `Style transfer ${completed.status}${completed.error ? `: ${completed.error.message}` : ''}`,
+          };
+        }
+
+        const output = completed.outputs[0]!;
+        let base64: string;
+        try {
+          const response = await fetch(output.url);
+          if (!response.ok) {
+            return { error: `Failed to download styled image: HTTP ${response.status}` };
+          }
+          base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
+        } catch (err) {
+          return { error: `Failed to fetch styled image: ${String(err)}` };
+        }
+
+        api.importImageData(base64, `${layerName}.png`);
+        logger.info(`SketchStyleTransfer: imported "${layerName}" (style=${style})`);
+        return {
+          success: true,
+          message: `风格迁移完成，图层名称：${layerName}`,
+          style,
+          taskId: task.id,
+        };
+      },
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SketchAutoLayer — Decompose image into separate artistic layers via AI
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      name: 'SketchAutoLayer',
+      description:
+        'Automatically decompose the active layer or canvas into separate layers: ' +
+        'line art, flat color, shadow, and highlight. Each decomposed component is imported ' +
+        'as an individual layer. Note: requires AI provider support for image decomposition.',
+      parameters: {
+        type: 'object',
+        properties: {
+          layers: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['lineart', 'flatcolor', 'shadow', 'highlight'],
+            },
+            description: 'Which layers to extract (default: all four)',
+          },
+        },
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const requestedLayers = (args.layers as string[] | undefined) ?? [
+          'lineart',
+          'flatcolor',
+          'shadow',
+          'highlight',
+        ];
+
+        const imageData = await api.getCanvasImageData();
+        if (!imageData) {
+          return { error: 'No canvas image data available' };
+        }
+
+        // Generate each layer component via style-transfer approach
+        const layerStyleMap: Record<string, string> = {
+          lineart: 'line art extraction, black outlines on white background, no fill',
+          flatcolor: 'flat color extraction, solid colors, no shading or outlines',
+          shadow: 'shadow layer extraction, dark values only, multiply blend mode',
+          highlight: 'highlight layer extraction, bright values only, screen blend mode',
+        };
+
+        const results: string[] = [];
+        for (const layerType of requestedLayers) {
+          const stylePrompt = layerStyleMap[layerType];
+          if (!stylePrompt) continue;
+
+          try {
+            const task = await media.generateImage({
+              prompt: stylePrompt,
+              referenceImageBase64: imageData,
+              inpaintStrength: 1.0,
+            });
+            const completed = await media.waitForTask(task.id, 3 * 60 * 1000);
+
+            if (completed.status === 'completed' && completed.outputs?.length) {
+              const output = completed.outputs[0]!;
+              const response = await fetch(output.url);
+              if (response.ok) {
+                const base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
+                api.importImageData(base64, `${layerType}.png`);
+                results.push(layerType);
+              }
+            }
+          } catch (err) {
+            logger.warn(`SketchAutoLayer: failed to extract "${layerType}": ${String(err)}`);
+          }
+        }
+
+        if (results.length === 0) {
+          return { error: 'Failed to extract any layers. Check AI provider configuration.' };
+        }
+
+        logger.info(`SketchAutoLayer: imported layers: ${results.join(', ')}`);
+        return {
+          success: true,
+          message: `已提取 ${results.length} 个图层：${results.join(', ')}`,
+          layersCreated: results,
+        };
+      },
+    },
+  ];
+}
+
+// =============================================================================
+// P2: NekoCut AI Video Generation Tool
+// =============================================================================
+
+/**
+ * Create the AI video generation tool for NekoCut.
+ * Requires both neko-cut (timeline) and a MediaGenerationService (video provider).
+ * Returns empty array if either is unavailable.
+ */
+export function createNekoCutVideoGenerationTools(media?: MediaGenerationService): Tool[] {
+  const nekocutExt = vscode.extensions.getExtension<NekoCutAPI>('neko.nekocut');
+  if (!nekocutExt) return [];
+  if (!media) {
+    logger.info('MediaGenerationService unavailable, skipping NekoCut video generation tool');
+    return [];
+  }
+
+  const getAPI = async (): Promise<NekoCutAPI> => {
+    if (nekocutExt.isActive) return nekocutExt.exports;
+    return nekocutExt.activate() as Promise<NekoCutAPI>;
+  };
+
+  return [
+    {
+      name: 'GenerateVideoForClip',
+      description:
+        'Generate an AI video clip from a text prompt and automatically add it to the NekoCut ' +
+        'timeline. Optionally accepts a reference image (base64 PNG/JPEG) for image-to-video ' +
+        'generation. The clip is placed at the end of the first video track unless trackId and ' +
+        'startTime are specified. Returns the new timeline element ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Text description of the video to generate',
+          },
+          trackId: {
+            type: 'string',
+            description: 'Timeline track ID to insert into (default: first video track)',
+          },
+          startTime: {
+            type: 'number',
+            description: 'Start time in seconds (default: end of selected track)',
+          },
+          referenceImageBase64: {
+            type: 'string',
+            description: 'Base64-encoded PNG/JPEG for image-to-video generation (optional)',
+          },
+          durationHint: {
+            type: 'number',
+            description:
+              'Requested duration in seconds — actual length depends on provider (default: 5)',
+          },
+        },
+        required: ['prompt'],
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const api = await getAPI();
+        const prompt = args.prompt as string;
+        const durationHint = (args.durationHint as number | undefined) ?? 5;
+        const referenceImageBase64 = args.referenceImageBase64 as string | undefined;
+
+        logger.info(
+          `GenerateVideoForClip: prompt="${prompt.slice(0, 80)}" duration=${durationHint}s`,
+        );
+
+        // Submit generation task
+        let task;
+        try {
+          task = await media.generateVideo({
+            prompt,
+            referenceImageBase64,
+            durationSeconds: durationHint,
+          });
+        } catch (err) {
+          return { error: `Video generation failed to start: ${String(err)}` };
+        }
+
+        // Wait for completion (up to 10 minutes for longer clips)
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 10 * 60 * 1000);
+        } catch (err) {
+          return { error: `Video generation timed out: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          return {
+            error: `Video generation ${completed.status}${completed.error ? `: ${completed.error.message}` : ''}`,
+          };
+        }
+
+        const output = completed.outputs[0]!;
+        const videoUrl = output.url;
+
+        // Determine target track and start time from timeline info
+        const timelineInfo = await api.timeline.getInfo().catch(() => null);
+        const resolvedTrackId = (args.trackId as string | undefined) ?? 'track-0';
+        const resolvedStartTime =
+          (args.startTime as number | undefined) ?? timelineInfo?.duration ?? 0;
+
+        // Add generated video clip to the timeline
+        const elementId = await api.timeline.addElement({
+          type: 'video',
+          trackId: resolvedTrackId,
+          startTime: resolvedStartTime,
+          duration: durationHint,
+          source: videoUrl,
+          generatedBy: 'ai',
+          prompt,
+          taskId: task.id,
+        });
+
+        logger.info(
+          `GenerateVideoForClip: element ${elementId} added at t=${resolvedStartTime}s track=${resolvedTrackId}`,
+        );
+
+        return {
+          success: true,
+          elementId,
+          trackId: resolvedTrackId,
+          startTime: resolvedStartTime,
+          videoUrl,
+          taskId: task.id,
+        };
+      },
+    },
+  ];
+}
+
+// =============================================================================
+// P3: Skill Provider Discovery Tool
+// =============================================================================
+
+/**
+ * Create the ListPluginSkills tool which enumerates all SkillDef entries
+ * advertised by installed Neko extensions that implement ISkillProvider.
+ *
+ * This gives the agent (and the user via the skill browser) a live, up-to-date
+ * catalogue of what each plugin can do, without hard-coding capabilities.
+ */
+export function createSkillProviderTools(): Tool[] {
+  const SKILL_EXTENSION_IDS = [
+    'neko.nekocut',
+    'neko.nekocanvas',
+    'neko.neko-story',
+    'neko.neko-sketch',
+    'neko.neko-auth',
+  ] as const;
+
+  return [
+    {
+      name: 'ListPluginSkills',
+      description:
+        'List all AI capabilities (skills) advertised by installed Neko suite plugins. ' +
+        'Returns a catalogue of skills grouped by extension, each with an id, name, description, ' +
+        'tags, and the VSCode command to invoke it. Use this to discover what plugins can do ' +
+        'before recommending or invoking a workflow.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tag: {
+            type: 'string',
+            description: 'Optional tag filter (e.g. "generation", "image", "timeline")',
+          },
+        },
+      } satisfies ToolParameters,
+      execute: async (args) => {
+        const tagFilter = args.tag as string | undefined;
+
+        const catalogue: Array<{
+          extensionId: string;
+          skills: import('@neko/shared').SkillDef[];
+        }> = [];
+
+        for (const extId of SKILL_EXTENSION_IDS) {
+          const ext = vscode.extensions.getExtension<{
+            getSkills?: () => import('@neko/shared').SkillDef[];
+          }>(extId);
+          if (!ext) continue;
+
+          let exports: { getSkills?: () => import('@neko/shared').SkillDef[] };
+          try {
+            exports = ext.isActive ? ext.exports : await ext.activate();
+          } catch {
+            continue;
+          }
+
+          if (typeof exports?.getSkills !== 'function') continue;
+
+          let skills: import('@neko/shared').SkillDef[];
+          try {
+            skills = exports.getSkills();
+          } catch {
+            continue;
+          }
+
+          if (tagFilter) {
+            skills = skills.filter((s) => s.tags?.includes(tagFilter));
+          }
+
+          if (skills.length > 0) {
+            catalogue.push({ extensionId: extId, skills });
+          }
+        }
+
+        const totalSkills = catalogue.reduce((n, e) => n + e.skills.length, 0);
+        logger.info(
+          `ListPluginSkills: found ${totalSkills} skills across ${catalogue.length} extensions`,
+        );
+        return { catalogue, totalSkills };
       },
     },
   ];

@@ -147,6 +147,19 @@ export interface RegionSnapshot {
 
 // ─── Message Protocol (Extension ↔ Webview) ───
 
+// ─── Selection response payload (used by request:selectionMask) ───
+
+export interface SketchSelectionResponse {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Grayscale mask PNG (base64): white = selected, black = unselected */
+  mask: string;
+  /** Composite canvas PNG (base64) used as inpaint source image */
+  layerImageData: string;
+}
+
 export type ExtensionToWebviewMessage =
   | { type: 'document:load'; data: unknown }
   | { type: 'document:revert' }
@@ -155,7 +168,13 @@ export type ExtensionToWebviewMessage =
   | { type: 'file:imported'; name: string; data: string; path: string }
   | { type: 'file:exportResult'; success: boolean; path?: string; error?: string }
   | { type: 'keyboardAction'; action: string }
-  | { type: 'setLocale'; locale: string };
+  | { type: 'setLocale'; locale: string }
+  // Phase 2: export request from extension
+  | { type: 'request:exportCanvas'; requestId: string }
+  // Phase 3: data read requests from extension
+  | { type: 'request:canvasImageData'; requestId: string }
+  | { type: 'request:layerImageData'; requestId: string; layerId?: string }
+  | { type: 'request:selectionMask'; requestId: string };
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }
@@ -164,4 +183,10 @@ export type WebviewToExtensionMessage =
   | { type: 'file:export'; data: { format: string; data: string } }
   | { type: 'file:dropRequest'; uris: string }
   | { type: 'status:update'; data: unknown }
-  | { type: 'layer:outline'; data: unknown };
+  | { type: 'layer:outline'; data: unknown }
+  // Phase 2: export response
+  | { type: 'response:exportCanvas'; requestId: string; data: string | null }
+  // Phase 3: data read responses
+  | { type: 'response:canvasImageData'; requestId: string; data: string | null }
+  | { type: 'response:layerImageData'; requestId: string; data: string | null }
+  | { type: 'response:selectionMask'; requestId: string; data: SketchSelectionResponse | null };

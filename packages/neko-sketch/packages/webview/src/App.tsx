@@ -156,6 +156,139 @@ export function App() {
           break;
         }
 
+        // ─── Phase 2/3: Extension → Webview data requests ───
+
+        case 'request:exportCanvas':
+        case 'request:canvasImageData': {
+          const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
+          let data: string | null = null;
+          if (canvas) {
+            try {
+              const dataUrl = canvas.toDataURL('image/png');
+              data = dataUrl.split(',')[1] ?? null;
+            } catch {
+              // WebGL canvas may lack preserveDrawingBuffer — data stays null
+            }
+          }
+          const responseType =
+            msg.type === 'request:exportCanvas'
+              ? 'response:exportCanvas'
+              : 'response:canvasImageData';
+          vscode.postMessage({ type: responseType, requestId: msg.requestId, data });
+          break;
+        }
+
+        case 'request:layerImageData': {
+          // Currently returns the full composite canvas.
+          // Individual layer extraction requires renderer changes (future work).
+          const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
+          let data: string | null = null;
+          if (canvas) {
+            try {
+              data = canvas.toDataURL('image/png').split(',')[1] ?? null;
+            } catch {
+              /* ignore */
+            }
+          }
+          vscode.postMessage({ type: 'response:layerImageData', requestId: msg.requestId, data });
+          break;
+        }
+
+        case 'request:selectionMask': {
+          const state = store.getState();
+          const sel = state.selection;
+          if (!sel) {
+            vscode.postMessage({
+              type: 'response:selectionMask',
+              requestId: msg.requestId,
+              data: null,
+            });
+            break;
+          }
+
+          // Compute bounding box of selected pixels
+          let minX = sel.width,
+            maxX = 0,
+            minY = sel.height,
+            maxY = 0,
+            found = false;
+          for (let y = 0; y < sel.height; y++) {
+            for (let x = 0; x < sel.width; x++) {
+              if ((sel.data[y * sel.width + x] ?? 0) > 0) {
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                found = true;
+              }
+            }
+          }
+          if (!found) {
+            vscode.postMessage({
+              type: 'response:selectionMask',
+              requestId: msg.requestId,
+              data: null,
+            });
+            break;
+          }
+
+          // Build grayscale mask PNG via OffscreenCanvas
+          let maskBase64: string | null = null;
+          let canvasBase64: string | null = null;
+          try {
+            const oc = new OffscreenCanvas(sel.width, sel.height);
+            const octx = oc.getContext('2d')!;
+            const imgData = new ImageData(sel.width, sel.height);
+            for (let i = 0; i < sel.data.length; i++) {
+              const v = sel.data[i] ?? 0;
+              imgData.data[i * 4] = v;
+              imgData.data[i * 4 + 1] = v;
+              imgData.data[i * 4 + 2] = v;
+              imgData.data[i * 4 + 3] = 255;
+            }
+            octx.putImageData(imgData, 0, 0);
+            const blob = await oc.convertToBlob({ type: 'image/png' });
+            maskBase64 = await new Promise<string>((res) => {
+              const fr = new FileReader();
+              fr.onload = () => res((fr.result as string).split(',')[1] ?? '');
+              fr.readAsDataURL(blob);
+            });
+
+            // Composite canvas as source image for inpainting
+            const sketchCanvas = document.getElementById(
+              'sketch-canvas',
+            ) as HTMLCanvasElement | null;
+            if (sketchCanvas) {
+              canvasBase64 = sketchCanvas.toDataURL('image/png').split(',')[1] ?? null;
+            }
+          } catch {
+            /* OffscreenCanvas may not be available */
+          }
+
+          if (!maskBase64 || !canvasBase64) {
+            vscode.postMessage({
+              type: 'response:selectionMask',
+              requestId: msg.requestId,
+              data: null,
+            });
+            break;
+          }
+
+          vscode.postMessage({
+            type: 'response:selectionMask',
+            requestId: msg.requestId,
+            data: {
+              x: minX,
+              y: minY,
+              width: maxX - minX + 1,
+              height: maxY - minY + 1,
+              mask: maskBase64,
+              layerImageData: canvasBase64,
+            },
+          });
+          break;
+        }
+
         default:
           break;
       }

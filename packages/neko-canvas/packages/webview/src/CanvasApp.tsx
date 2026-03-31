@@ -280,6 +280,34 @@ export function CanvasApp() {
     onModelInstalledResult: (nodeId, installedVersion) => {
       updateNodeData(nodeId, { installedVersion: installedVersion ?? undefined });
     },
+    onUpdateNodeImage: (nodeId, imageData, cellId) => {
+      // Sketch round-trip: update the shot node's generatedImage and append to history
+      const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      if (node.type === 'shot') {
+        const shotNode = node as import('@neko/shared').ShotCanvasNode;
+        const history = [
+          ...(shotNode.data.generationHistory ?? []),
+          {
+            id: `sketch-${Date.now()}`,
+            dataUrl: imageData,
+            prompt: '',
+            timestamp: Date.now(),
+            selected: true,
+          },
+        ];
+        updateNodeData(nodeId, {
+          generatedImage: imageData,
+          generationHistory: history,
+        });
+      } else if (node.type === 'gallery' && cellId) {
+        const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
+        const cells = galleryNode.data.cells.map((c) =>
+          c.id === cellId ? { ...c, image: imageData } : c,
+        );
+        updateNodeData(nodeId, { cells });
+      }
+    },
     getNodes: (type) => {
       const allNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
       return type ? allNodes.filter((n) => n.type === type) : allNodes;
@@ -344,6 +372,17 @@ export function CanvasApp() {
     },
     [selectedNodeIds],
   );
+
+  /** Open the selected ShotNode's generated image in neko-sketch for editing */
+  const handleEditInSketch = useCallback(() => {
+    const nodeId = selectedNodeIds[0];
+    if (!nodeId) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const data = node.data as Record<string, unknown>;
+    const imageData = (data['generatedImage'] as string | undefined) ?? null;
+    vscode?.postMessage({ type: 'editInSketch', nodeId, imageData });
+  }, [selectedNodeIds, nodes]);
 
   const handleScriptLoadScenes = useCallback((nodeId: string, scriptPath: string) => {
     vscode?.postMessage({ type: 'getScriptIndex', nodeId, scriptPath });
@@ -418,6 +457,7 @@ export function CanvasApp() {
     onGenerateSelected: handleGenerateSelected,
     onBatchGenerate: handleBatchGenerate,
     onSendToAgent: handleSendToAgent,
+    onEditInSketch: handleEditInSketch,
   });
 
   // =========================================================================

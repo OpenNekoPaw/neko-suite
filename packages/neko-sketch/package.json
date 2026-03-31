@@ -136,6 +136,21 @@
         "command": "neko.sketch.resetZoom",
         "title": "%neko.sketch.resetZoom.title%",
         "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.sendToTimeline",
+        "title": "%neko.sketch.sendToTimeline.title%",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.sendToCanvas",
+        "title": "%neko.sketch.sendToCanvas.title%",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.editImage",
+        "title": "%neko.sketch.editImage.title%",
+        "category": "NekoSketch"
       }
     ],
     "keybindings": [

@@ -81,6 +81,12 @@ export interface ImageGenerationRequest extends MediaGenerationRequestBase {
   count?: number;
   /** Reference image URL for image-to-image */
   referenceImageUrl?: string;
+  /** Reference image as base64-encoded PNG (alternative to URL, used for inpaint/style-transfer) */
+  referenceImageBase64?: string;
+  /** Inpaint mask as base64-encoded grayscale PNG (white = repaint, black = keep) */
+  maskBase64?: string;
+  /** Inpaint strength 0.0–1.0 (only meaningful when maskBase64 is set) */
+  inpaintStrength?: number;
   /** Image quality setting */
   quality?: 'standard' | 'hd';
   /** Style preset */

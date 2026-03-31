@@ -2,6 +2,7 @@
  * NekoSketch command registration
  */
 import * as vscode from 'vscode';
+import type { SketchImportContext } from '@neko/shared';
 import type { SketchEditorProvider } from '../editor/sketchEditorProvider';
 import { handleError } from '../utils/errorHandler';
 
@@ -192,6 +193,86 @@ export function registerCommands(
       'neko.sketch.importImageData',
       (base64: string, name: string) => {
         editorProvider.postImageData(base64, name);
+      },
+    ),
+  );
+
+  // ─── Phase 2: Cross-module workflow commands ───
+
+  // Send current canvas export to neko-cut timeline
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.sketch.sendToTimeline', async () => {
+      const base64 = await editorProvider.requestExport();
+      if (!base64) {
+        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToTimeline.noCanvas'));
+        return;
+      }
+      try {
+        await vscode.commands.executeCommand('neko.cut.importGeneratedClip', {
+          data: base64,
+          type: 'image',
+          name: 'sketch-export',
+          duration: 3,
+          source: 'sketch',
+        });
+      } catch {
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.sendToTimeline.failed'));
+      }
+    }),
+  );
+
+  // Send current canvas export back to the source Canvas node
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.sketch.sendToCanvas', async () => {
+      const ctx = editorProvider.getImportContext();
+      if (!ctx?.sourceNodeId) {
+        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToCanvas.noContext'));
+        return;
+      }
+      const base64 = await editorProvider.requestExport();
+      if (!base64) {
+        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToCanvas.noCanvas'));
+        return;
+      }
+      try {
+        await vscode.commands.executeCommand('neko.canvas.updateNodeImage', {
+          nodeId: ctx.sourceNodeId,
+          cellId: ctx.metadata?.['cellId'],
+          imageData: base64,
+        });
+      } catch {
+        vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.sendToCanvas.failed'));
+      }
+    }),
+  );
+
+  // Open an image in Sketch with optional source context (called by canvas/preview)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.sketch.editImage',
+      async (args: { base64: string; name: string; context: SketchImportContext }) => {
+        if (editorProvider.isActive()) {
+          editorProvider.importImageWithContext(args.base64, args.name, args.context);
+        } else {
+          // Create a temp .nks file so the custom editor opens
+          const workspaceFolders = vscode.workspace.workspaceFolders;
+          if (!workspaceFolders?.[0]) {
+            vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.editImage.noWorkspace'));
+            return;
+          }
+          const tempDir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'temp');
+          try {
+            await vscode.workspace.fs.createDirectory(tempDir);
+          } catch {
+            // Directory may already exist
+          }
+          const tempFile = vscode.Uri.joinPath(tempDir, `edit-${Date.now()}.nks`);
+          const content = getSketchTemplate('Sketch Edit');
+          await vscode.workspace.fs.writeFile(tempFile, Buffer.from(content, 'utf-8'));
+          // Store import as pending — provider will inject it once the editor is ready
+          editorProvider.importImageWithContext(args.base64, args.name, args.context);
+          await vscode.commands.executeCommand('vscode.openWith', tempFile, 'neko.sketchEditor');
+        }
       },
     ),
   );

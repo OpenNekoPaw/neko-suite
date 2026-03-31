@@ -57,6 +57,7 @@ export const en = {
   'menu.ai.adjustCamera': 'Adjust Camera',
   'menu.ai.understand': 'Understand Content',
   'menu.ai.sendToAgent': 'Send to Agent',
+  'menu.ai.editInSketch': 'Edit in Sketch',
 
   // Nodes
   'node.note': 'Note',

@@ -9,6 +9,7 @@ import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { LayerOutlineProvider } from '../views/layerOutlineProvider';
 import type { SketchStatusBar } from '../views/sketchStatusBar';
 import type { NksDocument, LayerOutlineData, SketchStatusInfo } from '../types';
+import type { SketchImportContext, SketchSelectionData } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('SketchEditorProvider');
@@ -20,6 +21,13 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 function isImageUri(uri: vscode.Uri): boolean {
   const ext = uri.path.split('.').pop()?.toLowerCase() ?? '';
   return IMAGE_EXTENSIONS.has(ext);
+}
+
+/** Pending promise entry for Extension → Webview request/response round-trips */
+interface PendingRequest<T> {
+  resolve: (value: T) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
@@ -36,6 +44,14 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   // External providers for VSCode integration
   private outlineProvider: LayerOutlineProvider | undefined;
   private statusBar: SketchStatusBar | undefined;
+
+  // Phase 2: import context for round-trip workflow
+  private importContext: SketchImportContext | undefined;
+  private pendingImport: { base64: string; name: string; context: SketchImportContext } | undefined;
+
+  // Phase 2/3: pending Extension → Webview request/response round-trips
+  // Key: requestId, Value: pending promise
+  private readonly pendingRequests = new Map<string, PendingRequest<unknown>>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -78,8 +94,15 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
         this.activeDocument = undefined;
+        this.importContext = undefined;
         this.outlineProvider?.updateData(null);
         this.statusBar?.hide();
+        // Reject any pending requests
+        for (const [id, pending] of this.pendingRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error('Sketch editor closed'));
+          this.pendingRequests.delete(id);
+        }
       }
     });
 
@@ -140,6 +163,137 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
+  // ===========================================================================
+  // Phase 2: Workflow API
+  // ===========================================================================
+
+  /** Whether a sketch editor is currently open and active */
+  isActive(): boolean {
+    return this.activeWebviewPanel !== undefined;
+  }
+
+  /** Return the current import context (source for round-trip "send back" actions) */
+  getImportContext(): SketchImportContext | undefined {
+    return this.importContext;
+  }
+
+  /**
+   * Import an image with source context.
+   * If an editor is open, injects immediately; otherwise stores as pending
+   * and injects once the next editor sends its `ready` message.
+   */
+  importImageWithContext(base64: string, name: string, context: SketchImportContext): void {
+    this.importContext = context;
+    this.statusBar?.updateContext(context);
+    if (this.activeWebviewPanel) {
+      this.postImageData(base64, name);
+    } else {
+      this.pendingImport = { base64, name, context };
+    }
+  }
+
+  /**
+   * Request the webview to export the current canvas composite as base64 PNG.
+   * Returns null if no editor is open or the request times out.
+   */
+  async requestExport(timeoutMs = 10_000): Promise<string | null> {
+    if (!this.activeWebviewPanel) return null;
+    try {
+      const data = await this.sendRequestToWebview<string | null>(
+        'request:exportCanvas',
+        {},
+        timeoutMs,
+      );
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  // ===========================================================================
+  // Phase 3: AI Data-Read API
+  // ===========================================================================
+
+  async getCanvasImageData(timeoutMs = 10_000): Promise<string | null> {
+    if (!this.activeWebviewPanel) return null;
+    try {
+      return await this.sendRequestToWebview<string | null>(
+        'request:canvasImageData',
+        {},
+        timeoutMs,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async getLayerImageData(layerId?: string, timeoutMs = 10_000): Promise<string | null> {
+    if (!this.activeWebviewPanel) return null;
+    try {
+      return await this.sendRequestToWebview<string | null>(
+        'request:layerImageData',
+        { layerId },
+        timeoutMs,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async getSelectionMask(timeoutMs = 10_000): Promise<SketchSelectionData | null> {
+    if (!this.activeWebviewPanel) return null;
+    try {
+      // Response has same shape as SketchSelectionData
+      return await this.sendRequestToWebview<SketchSelectionData | null>(
+        'request:selectionMask',
+        {},
+        timeoutMs,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  // ===========================================================================
+  // Private helpers
+  // ===========================================================================
+
+  /**
+   * Send a typed request to the webview and await the matching response.
+   * Responses must arrive as `{ type: 'response:*', requestId, data }`.
+   */
+  private sendRequestToWebview<T>(
+    requestType: string,
+    extra: Record<string, unknown>,
+    timeoutMs: number,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const requestId = `${requestType}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error(`Request ${requestType} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.pendingRequests.set(requestId, {
+        resolve: resolve as (v: unknown) => void,
+        reject,
+        timer,
+      });
+
+      this.activeWebviewPanel?.webview.postMessage({ type: requestType, requestId, ...extra });
+    });
+  }
+
+  /** Resolve a pending request from a webview response message */
+  private resolveRequest(requestId: string, data: unknown): void {
+    const pending = this.pendingRequests.get(requestId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingRequests.delete(requestId);
+      pending.resolve(data);
+    }
+  }
+
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
     const webviewUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
@@ -192,6 +346,17 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
         } catch {
           webviewPanel.webview.postMessage({ type: 'document:load', data: null });
+        }
+        // Phase 2: inject any pending import after document is loaded
+        if (this.pendingImport) {
+          const { base64, name } = this.pendingImport;
+          this.pendingImport = undefined;
+          webviewPanel.webview.postMessage({
+            type: 'file:imported',
+            name,
+            data: base64,
+            path: '',
+          });
         }
         break;
       }
@@ -306,6 +471,24 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+
+      // ─── Phase 2/3: webview response messages ───
+      case 'response:exportCanvas': {
+        this.resolveRequest(message.requestId as string, message.data);
+        break;
+      }
+      case 'response:canvasImageData': {
+        this.resolveRequest(message.requestId as string, message.data);
+        break;
+      }
+      case 'response:layerImageData': {
+        this.resolveRequest(message.requestId as string, message.data);
+        break;
+      }
+      case 'response:selectionMask': {
+        this.resolveRequest(message.requestId as string, message.data);
+        break;
+      }
     }
   }
 
@@ -314,7 +497,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
 
     const layers = data.layers ?? [];
     const mapLayers = (items: NksDocument['layers']): LayerOutlineData['layers'] =>
-      items.map((l) => ({
+      items.map((l: NksDocument['layers'][number]) => ({
         id: l.id,
         name: l.name,
         type: l.type,

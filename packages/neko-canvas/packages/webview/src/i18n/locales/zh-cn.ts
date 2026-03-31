@@ -57,6 +57,7 @@ export const zhCN = {
   'menu.ai.adjustCamera': '调整机位',
   'menu.ai.understand': '理解内容',
   'menu.ai.sendToAgent': '发送到 Agent',
+  'menu.ai.editInSketch': '在 Sketch 中编辑',
 
   // Nodes
   'node.note': '注释',

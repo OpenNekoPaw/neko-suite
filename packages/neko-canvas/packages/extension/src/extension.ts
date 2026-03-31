@@ -10,6 +10,7 @@ import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/exte
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
+import type { ISkillProvider, SkillDef } from '@neko/shared';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 
@@ -293,6 +294,22 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('neko.canvas.resetZoom', () => {
       canvasEditorProvider.postKeyboardAction('resetZoom');
     }),
+  );
+
+  // Round-trip: receive an edited image back from neko-sketch and update the shot node
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.updateNodeImage',
+      (args: { nodeId: string; imageData: string; cellId?: string }) => {
+        const { nodeId, imageData, cellId } = args;
+        const delivered = canvasEditorProvider.postUpdateNodeImage(nodeId, imageData, cellId);
+        if (!delivered) {
+          vscode.window.showWarningMessage(
+            'No active canvas editor — open the canvas first, then send back from Sketch.',
+          );
+        }
+      },
+    ),
   );
 
   // Preview media files with neko-preview (hardware-accelerated customEditor)

@@ -18,6 +18,7 @@ import type {
   SceneGroupCanvasNode,
   GalleryCanvasNode,
 } from './canvas';
+import type { ProjectData } from './project';
 
 // =============================================================================
 // NekoCut API
@@ -101,6 +102,31 @@ export interface NekoCutAPI {
      */
     listElements(): Promise<NekoCutTimelineElement[]>;
   };
+
+  /**
+   * AI-powered generation capabilities.
+   * All methods are no-ops (return rejected promise) when neko-agent is not installed.
+   */
+  ai: {
+    /**
+     * Generate a video clip from a text prompt and optionally a reference image.
+     * The generated clip is automatically imported into the asset library and added
+     * to the timeline at the specified position.
+     *
+     * @returns The ID of the newly created timeline element.
+     */
+    generateVideoForClip(options: {
+      prompt: string;
+      /** Track to insert into (default: first video track) */
+      trackId?: string;
+      /** Start time in seconds (default: end of track) */
+      startTime?: number;
+      /** Reference image base64 for image-to-video generation */
+      referenceImageBase64?: string;
+      /** Duration hint in seconds — actual duration depends on provider */
+      durationHint?: number;
+    }): Promise<string>;
+  };
 }
 
 // =============================================================================
@@ -156,6 +182,23 @@ export type CanvasNodeUpdateData =
   | Partial<ShotCanvasNode['data']>
   | Partial<SceneGroupCanvasNode['data']>
   | Partial<GalleryCanvasNode['data']>;
+
+/**
+ * Fired when an asset is added, updated, or removed from the library.
+ */
+export interface AssetChangeEvent {
+  readonly type: 'add' | 'update' | 'delete';
+  readonly assetId: string;
+}
+
+/**
+ * Fired when nodes or shapes on the active canvas change.
+ */
+export interface CanvasChangeEvent {
+  readonly type: 'add' | 'update' | 'delete';
+  readonly nodeId?: string;
+  readonly shapeId?: string;
+}
 
 /**
  * NekoCanvas Extension API
@@ -232,6 +275,22 @@ export interface NekoCanvasAPI {
      */
     onSelectionChange: Event<CanvasNode[]>;
   };
+
+  /**
+   * Cross-extension event subscriptions.
+   * neko-agent subscribes to these to track canvas state for ambient context.
+   */
+  events: {
+    /**
+     * Fired whenever an asset is added, updated, or deleted in the project library.
+     */
+    onDidChangeAssets: Event<AssetChangeEvent>;
+
+    /**
+     * Fired whenever nodes or shapes on the active canvas are added, updated, or deleted.
+     */
+    onDidChangeCanvas: Event<CanvasChangeEvent>;
+  };
 }
 
 // =============================================================================
@@ -273,19 +332,50 @@ export interface NekoStoryScriptIndex {
 }
 
 /**
+ * Minimal structural representation of a parsed Fountain document.
+ * Returned by NekoStoryAPI.parseScript — consumers iterate elements for
+ * headings, action lines, dialogue, etc.
+ */
+export interface NekoStoryParsedScript {
+  readonly title?: string;
+  readonly elements: ReadonlyArray<{
+    readonly type: string;
+    readonly text: string;
+    readonly [key: string]: unknown;
+  }>;
+}
+
+/**
+ * Result of converting a Fountain screenplay to a neko-cut ProjectData timeline.
+ * Returned by NekoStoryAPI.convertToTimeline.
+ */
+export interface NekoStoryConversionResult {
+  /** The generated ProjectData ready to be saved as a .nkv file */
+  readonly project: ProjectData;
+  /** Number of scene headings found */
+  readonly sceneCount: number;
+  /** Total estimated timeline duration in seconds */
+  readonly totalDurationSec: number;
+  /** Deduplicated character names (upper-case) */
+  readonly characterNames: readonly string[];
+}
+
+/**
  * NekoStory Extension API
  * Exported by neko-story extension for screenplay parsing and index access
  */
 export interface NekoStoryAPI {
   /**
-   * Parse Fountain screenplay text into a structured document
+   * Parse Fountain screenplay text into a structured document.
+   * Useful for inspecting element types before converting to a timeline.
    */
-  parseScript(content: string): unknown;
+  parseScript(content: string): NekoStoryParsedScript;
 
   /**
-   * Convert a Fountain screenplay to neko-cut timeline ProjectData
+   * Convert a Fountain screenplay to a neko-cut timeline ProjectData.
+   * The result's `project` field can be saved directly as a .nkv file.
    */
-  convertToTimeline(fountainContent: string, projectName?: string): unknown;
+  convertToTimeline(fountainContent: string, projectName?: string): NekoStoryConversionResult;
 
   /**
    * Returns a structured ScriptIndex for the given file path or URI string.
@@ -299,9 +389,39 @@ export interface NekoStoryAPI {
 // =============================================================================
 
 /**
+ * Source context for images imported into neko-sketch from other modules.
+ * Used to enable round-trip "send back" workflow buttons.
+ */
+export interface SketchImportContext {
+  /** Module that initiated the import */
+  source: 'canvas' | 'cut' | 'preview' | 'agent';
+  /** Source canvas node ID (ShotNode / GalleryNode) */
+  sourceNodeId?: string;
+  /** Source cut clip ID */
+  sourceClipId?: string;
+  /** Additional metadata (prompt, cellId, shotNumber, etc.) */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Selection state data for AI inpainting operations.
+ * Returned by `getSelectionMask()`.
+ */
+export interface SketchSelectionData {
+  /** Bounding box of the selection in canvas coordinates */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Grayscale mask PNG (base64): white = selected, black = unselected */
+  mask: string;
+  /** Base64 PNG of the composite canvas (used as the source image for inpainting) */
+  layerImageData: string;
+}
+
+/**
  * NekoSketch Extension API
  * Exported by neko-sketch extension for programmatic canvas access.
- * Primary use case: injecting AI-generated images as new layers.
  */
 export interface NekoSketchAPI {
   /**
@@ -309,6 +429,41 @@ export interface NekoSketchAPI {
    * as a new raster layer. No-ops silently when no sketch editor is open.
    */
   importImageData(base64: string, name: string): void;
+
+  /**
+   * Import an image with a source context to enable round-trip workflow buttons
+   * (Back to Canvas, Send to Timeline). If no sketch editor is currently open,
+   * stores the import as pending and injects it once the next editor becomes ready.
+   */
+  importImageWithContext(base64: string, name: string, context: SketchImportContext): void;
+
+  /**
+   * Export the current sketch canvas composite as a base64 PNG.
+   * Returns null when no sketch editor is open or canvas data is unavailable.
+   */
+  exportCanvas(): Promise<string | null>;
+
+  /** Whether a sketch editor is currently open and active. */
+  isActive(): boolean;
+
+  /**
+   * Get the current rectangular selection mask for AI inpainting.
+   * Returns null when there is no active selection in the sketch editor.
+   */
+  getSelectionMask(): Promise<SketchSelectionData | null>;
+
+  /**
+   * Get the pixel data of the specified layer (or the active layer) as base64 PNG.
+   * Falls back to the composite canvas when individual layer extraction is unsupported.
+   * Returns null when no sketch editor is open.
+   */
+  getLayerImageData(layerId?: string): Promise<string | null>;
+
+  /**
+   * Get the composite canvas image (all visible layers) as base64 PNG.
+   * Returns null when no sketch editor is open.
+   */
+  getCanvasImageData(): Promise<string | null>;
 }
 
 // =============================================================================
@@ -324,4 +479,60 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_AGENT: 'neko.nekoagent',
   NEKO_STORY: 'neko.neko-story',
   NEKO_SKETCH: 'neko.neko-sketch',
+  NEKO_AUTH: 'neko.neko-auth',
 } as const;
+
+// =============================================================================
+// P3: Skill Provider Interface
+// =============================================================================
+
+/**
+ * A single capability advertised by a plugin for discovery in the agent UI.
+ *
+ * Skills appear in the agent's skill browser and can be invoked directly by
+ * the user or matched automatically by the LLM when the user's intent aligns
+ * with the skill description.
+ */
+export interface SkillDef {
+  /** Unique within the owning extension, e.g. "batch-generate" */
+  readonly id: string;
+  /** Short display name shown in the skill browser (e.g. "Batch Generate Images") */
+  readonly name: string;
+  /** One-sentence description for LLM intent matching */
+  readonly description: string;
+  /** Optional emoji or codicon name (\$(symbol-name)) for the skill icon */
+  readonly icon?: string;
+  /**
+   * VSCode command to invoke when the skill is selected.
+   * The agent passes `{ intent?: string }` as the first argument.
+   */
+  readonly command: string;
+  /**
+   * Broad capability categories for filtering in the skill browser.
+   * @example ['generation', 'image']
+   */
+  readonly tags?: readonly string[];
+}
+
+/**
+ * Interface that Neko extensions implement to advertise their AI capabilities.
+ *
+ * Extensions that expose `ISkillProvider` as part of their exported API allow
+ * neko-agent to enumerate all installed skills across the suite without
+ * hard-coding plugin names.
+ *
+ * @example
+ * // In neko-canvas/extension.ts activate():
+ * const api: NekoCanvasAPI & ISkillProvider = {
+ *   ...existingApi,
+ *   getSkills: () => [{ id: 'batch', name: 'Batch Generate', ... }],
+ * };
+ * return api;
+ */
+export interface ISkillProvider {
+  /**
+   * Returns the list of skills exposed by this extension.
+   * The agent calls this once on activation and re-calls on `vscode.extensions.onDidChange`.
+   */
+  getSkills(): readonly SkillDef[];
+}

@@ -49,6 +49,8 @@ export interface UseVSCodeMessagesOptions {
   updateNode?: (id: string, updates: Partial<CanvasNode>) => void;
   /** Create a node — used to respond to nodes.create requests */
   createNode?: (node: Omit<CanvasNode, 'id'>) => string;
+  /** Called when the Sketch round-trip sends an edited image back to a canvas node */
+  onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
 }
 
 export interface UseVSCodeMessagesReturn {
@@ -75,6 +77,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     getNode,
     updateNode,
     createNode,
+    onUpdateNodeImage,
   } = options;
 
   const [isReady, setIsReady] = useState(false);
@@ -101,6 +104,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   updateNodeRef.current = updateNode;
   const createNodeRef = useRef(createNode);
   createNodeRef.current = createNode;
+  const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
+  onUpdateNodeImageRef.current = onUpdateNodeImage;
 
   useEffect(() => {
     if (vscode) {
@@ -193,6 +198,15 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
             break;
           }
+
+          // Round-trip: Sketch sends back an edited image for a canvas shot node
+          case 'updateNodeImage':
+            onUpdateNodeImageRef.current?.(
+              message.nodeId as string,
+              message.imageData as string,
+              message.cellId as string | undefined,
+            );
+            break;
         }
       };
 

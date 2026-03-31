@@ -199,6 +199,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
+  /**
+   * Update the generatedImage of a shot node and push the change to the webview.
+   * Called by the `neko.canvas.updateNodeImage` command when Sketch sends back
+   * an edited image via the round-trip workflow.
+   */
+  postUpdateNodeImage(nodeId: string, imageData: string, cellId?: string): boolean {
+    if (!this.activeWebviewPanel) return false;
+    this.activeWebviewPanel.webview.postMessage({
+      type: 'updateNodeImage',
+      nodeId,
+      imageData,
+      cellId,
+    });
+    return true;
+  }
+
   // API Methods
   async addShape(shape: ShapeConfig): Promise<string> {
     if (!this.activeWebviewPanel) {
@@ -889,6 +905,46 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             intent,
           };
           await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+        }
+        break;
+      }
+
+      case 'editInSketch': {
+        // Open the ShotNode's generated image in neko-sketch for round-trip editing
+        const nodeId = message.nodeId as string;
+        const imageDataFromWebview = (message.imageData as string | undefined) ?? null;
+
+        const node = await this.getNode(nodeId);
+        if (!node) break;
+
+        const d = node.data as Record<string, unknown>;
+        // Prefer the image provided by the webview; fall back to the stored generatedImage
+        const raw = imageDataFromWebview ?? (d['generatedImage'] as string | undefined) ?? null;
+        if (!raw) {
+          vscode.window.showWarningMessage('No generated image found for this shot node');
+          break;
+        }
+        // Strip data URL prefix if present
+        const base64 = raw.startsWith('data:') ? (raw.split(',')[1] ?? raw) : raw;
+        const name = `Shot-${String(d['shotNumber'] ?? '').padStart(3, '0')}.png`;
+
+        try {
+          await vscode.commands.executeCommand('neko.sketch.editImage', {
+            base64,
+            name,
+            context: {
+              source: 'canvas',
+              sourceNodeId: nodeId,
+              metadata: {
+                shotNumber: d['shotNumber'],
+                cellId: d['cellId'],
+              },
+            },
+          });
+        } catch {
+          vscode.window.showErrorMessage(
+            'Failed to open image in Sketch — is neko-sketch installed?',
+          );
         }
         break;
       }

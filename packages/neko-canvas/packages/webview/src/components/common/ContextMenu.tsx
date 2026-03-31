@@ -55,6 +55,9 @@ export interface CanvasMenuContext {
   onBatchGenerate?: () => void;
   onSendToAgent?: (intent?: string) => void;
   hasShotSelected?: boolean;
+  // Workflow: open selected shot image in neko-sketch
+  onEditInSketch?: () => void;
+  hasShotWithImage?: boolean;
 }
 
 /**
@@ -164,6 +167,13 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
           icon: '⚡',
           disabled: !ctx.hasShotSelected || (ctx.selectedCount ?? 0) < 2,
           onClick: () => ctx.onBatchGenerate?.(),
+        },
+        {
+          id: 'edit-in-sketch',
+          label: t('menu.ai.editInSketch'),
+          icon: '🎨',
+          disabled: !ctx.hasShotWithImage,
+          onClick: () => ctx.onEditInSketch?.(),
         },
       ],
       agentActions: [

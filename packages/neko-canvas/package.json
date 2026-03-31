@@ -151,6 +151,11 @@
         "command": "neko.canvas.generateSelected",
         "title": "Generate Selected Shots",
         "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.updateNodeImage",
+        "title": "Update Node Image (from Sketch)",
+        "category": "NekoCanvas"
       }
     ],
     "keybindings": [

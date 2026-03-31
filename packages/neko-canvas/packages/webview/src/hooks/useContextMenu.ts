@@ -47,6 +47,7 @@ export interface UseContextMenuOptions {
   onGenerateSelected?: () => void;
   onBatchGenerate?: () => void;
   onSendToAgent?: (intent?: string) => void;
+  onEditInSketch?: () => void;
 }
 
 export interface UseContextMenuReturn {
@@ -85,6 +86,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     onGenerateSelected,
     onBatchGenerate,
     onSendToAgent,
+    onEditInSketch,
   } = options;
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -134,9 +136,14 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         canUndo: useHistoryStore.getState().canUndo(),
         canRedo: useHistoryStore.getState().canRedo(),
         hasShotSelected: selectedNodes.some((n) => n.type === 'shot'),
+        hasShotWithImage: selectedNodes.some(
+          (n) =>
+            n.type === 'shot' && Boolean((n.data as Record<string, unknown>)['generatedImage']),
+        ),
         onGenerateSelected,
         onBatchGenerate,
         onSendToAgent,
+        onEditInSketch,
       };
 
       const items = showNodeMenu ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
@@ -167,6 +174,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       onGenerateSelected,
       onBatchGenerate,
       onSendToAgent,
+      onEditInSketch,
     ],
   );
 

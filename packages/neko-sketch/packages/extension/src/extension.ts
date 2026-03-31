@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
-import type { NekoSketchAPI } from '@neko/shared';
+import type { NekoSketchAPI, SketchImportContext } from '@neko/shared';
 import { SketchEditorProvider, PuppetEditorProvider } from './editor';
 import { LayerOutlineProvider, SketchStatusBar } from './views';
 import { setRootLogger, getRootLogger } from './utils/logger';
@@ -98,6 +98,24 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
   const api: NekoSketchAPI = {
     importImageData(base64: string, name: string): void {
       sketchEditorProvider.postImageData(base64, name);
+    },
+    importImageWithContext(base64: string, name: string, context: SketchImportContext) {
+      sketchEditorProvider.importImageWithContext(base64, name, context);
+    },
+    async exportCanvas() {
+      return sketchEditorProvider.requestExport();
+    },
+    isActive() {
+      return sketchEditorProvider.isActive();
+    },
+    async getSelectionMask() {
+      return sketchEditorProvider.getSelectionMask();
+    },
+    async getLayerImageData(layerId?: string) {
+      return sketchEditorProvider.getLayerImageData(layerId);
+    },
+    async getCanvasImageData() {
+      return sketchEditorProvider.getCanvasImageData();
     },
   };
 
