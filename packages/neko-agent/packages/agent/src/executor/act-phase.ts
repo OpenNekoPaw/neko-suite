@@ -10,10 +10,13 @@
 import type {
   AgentStep,
   ChatMessage,
+  ContentPart,
   IToolRegistry,
   ExecutorHooks,
   ToolCallInfo,
   ToolResultWithMeta,
+  ToolResultAttachment,
+  ToolProgress,
 } from '@neko/shared';
 import { runHooks } from './hook-runner';
 import { partitionToolCalls } from './partition-tool-calls';
@@ -21,6 +24,15 @@ import { partitionToolCalls } from './partition-tool-calls';
 // =============================================================================
 // Types
 // =============================================================================
+
+/** Collected progress event from a tool execution */
+export interface ToolProgressEvent {
+  toolCallId: string;
+  toolName: string;
+  percent: number;
+  stage: string;
+  preview?: string;
+}
 
 /** Dependencies for act-phase functions */
 export interface ActDeps {
@@ -52,6 +64,7 @@ export async function act(
 
   const signal = deps.abortController?.signal;
   const results: ToolResultWithMeta[] = [];
+  const progressEvents: ToolProgressEvent[] = [];
 
   // Partition tool calls: concurrency-safe tools run in parallel,
   // unsafe tools run sequentially after (Fail-Closed default).
@@ -60,7 +73,7 @@ export async function act(
   // Phase 1: Execute concurrency-safe tools in parallel
   if (concurrent.length > 0) {
     const settled = await Promise.allSettled(
-      concurrent.map((info) => executeToolCall(deps, info, signal)),
+      concurrent.map((info) => executeToolCall(deps, info, progressEvents, signal)),
     );
     for (let i = 0; i < settled.length; i++) {
       const s = settled[i]!;
@@ -81,7 +94,7 @@ export async function act(
   // Phase 2: Execute unsafe tools sequentially
   for (const info of serial) {
     try {
-      const result = await executeToolCall(deps, info, signal);
+      const result = await executeToolCall(deps, info, progressEvents, signal);
       results.push(result);
     } catch (err) {
       results.push({
@@ -105,6 +118,7 @@ export async function act(
       arguments: tc.arguments,
     })),
     toolResults: results,
+    ...(progressEvents.length > 0 && { toolProgress: progressEvents }),
     timestamp: Date.now(),
   };
 }
@@ -134,18 +148,57 @@ export function observe(results: ToolResultWithMeta[]): AgentStep {
 
 /**
  * Build tool result messages for context history.
+ *
+ * When a tool result contains attachments (image/audio/video),
+ * the message content becomes a ContentPart[] with mixed text + media parts.
  */
 export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMessage[] {
-  return results.map(
-    (result) =>
-      ({
+  return results.map((result) => {
+    const textContent = result.success
+      ? JSON.stringify(result.data)
+      : JSON.stringify({ error: result.error });
+
+    // If no attachments, return plain string content (fast path)
+    if (!result.attachments || result.attachments.length === 0) {
+      return {
         role: 'tool',
-        content: result.success
-          ? JSON.stringify(result.data)
-          : JSON.stringify({ error: result.error }),
+        content: textContent,
         toolCallId: result.callId,
-      }) as ChatMessage,
-  );
+      } as ChatMessage;
+    }
+
+    // Build multimodal content parts
+    const parts: ContentPart[] = [{ type: 'text', text: textContent }];
+
+    for (const attachment of result.attachments) {
+      if (attachment.type === 'image') {
+        parts.push({
+          type: 'image',
+          imageUrl: `file://${attachment.path}`,
+        });
+      } else {
+        // Audio/video attachments: append as text reference (LLM APIs don't support inline audio/video yet)
+        const mime = attachment.mimeType ? ` (${attachment.mimeType})` : '';
+        parts.push({
+          type: 'text',
+          text: `[Attachment: ${attachment.type}${mime} ${attachment.path}]`,
+        });
+      }
+    }
+
+    return {
+      role: 'tool',
+      content: parts,
+      toolCallId: result.callId,
+    } as ChatMessage;
+  });
+}
+
+/**
+ * Extract attachments from a tool result (used by event converter).
+ */
+export function extractAttachments(result: ToolResultWithMeta): ToolResultAttachment[] | undefined {
+  return result.attachments && result.attachments.length > 0 ? result.attachments : undefined;
 }
 
 // =============================================================================
@@ -153,11 +206,13 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
 // =============================================================================
 
 /**
- * Execute a single tool call through the hook chain
+ * Execute a single tool call through the hook chain.
+ * Wires an onProgress callback that collects progress events.
  */
 async function executeToolCall(
   deps: ActDeps,
   info: ToolCallInfo,
+  progressEvents: ToolProgressEvent[],
   signal?: AbortSignal,
 ): Promise<ToolResultWithMeta> {
   // Check abort signal before execution
@@ -165,7 +220,18 @@ async function executeToolCall(
     return { success: false, error: 'Execution aborted', callId: info.id, name: info.name };
   }
 
-  const execute = () => deps.toolRegistry.execute(info.name, info.arguments);
+  // Create progress callback that collects events
+  const onProgress = (progress: ToolProgress) => {
+    progressEvents.push({
+      toolCallId: info.id,
+      toolName: info.name,
+      percent: progress.percent,
+      stage: progress.stage,
+      preview: progress.preview,
+    });
+  };
+
+  const execute = () => deps.toolRegistry.execute(info.name, info.arguments, { onProgress });
 
   // Check if any hook wants to handle the tool call
   for (const hook of deps.hooks) {

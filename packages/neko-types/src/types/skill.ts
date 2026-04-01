@@ -159,6 +159,13 @@ export interface Skill {
   toolDefinitions?: SkillToolDefinition[];
 
   /**
+   * File path patterns that trigger this skill on save.
+   * Uses glob syntax (e.g. "**\/*.fountain", "src/**\/*.ts").
+   * When a file matching these patterns is saved, the skill is auto-activated.
+   */
+  paths?: string[];
+
+  /**
    * Model override for this skill
    * @example "claude-sonnet-4-20250514"
    */
@@ -925,6 +932,7 @@ export function createSkill(
     allowedTools: parseAllowedTools(frontmatter['allowed-tools']),
     toolsRef: frontmatter['tools-ref'],
     toolDefinitions,
+    paths: frontmatter.paths,
     model: frontmatter.model,
     icon: frontmatter.icon,
     source,

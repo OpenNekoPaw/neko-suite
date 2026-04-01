@@ -15,6 +15,7 @@ import type {
   Tool,
   ToolCategory,
   ToolResult,
+  ToolExecuteOptions,
   ToolExecutionConfig,
   ToolFilterOptions,
   IToolRegistry,
@@ -114,7 +115,11 @@ export class ToolRegistry implements IToolRegistry {
    * @param args Tool arguments
    * @returns Tool execution result
    */
-  async execute(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(
+    name: string,
+    args: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult> {
     const tool = this.get(name);
 
     if (!tool) {
@@ -138,7 +143,7 @@ export class ToolRegistry implements IToolRegistry {
 
     try {
       const startTime = Date.now();
-      const result = await tool.execute(args);
+      const result = await tool.execute(args, options);
       const duration = Date.now() - startTime;
 
       return {

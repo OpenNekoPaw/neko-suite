@@ -115,6 +115,36 @@ describe('stepToEvents', () => {
     expect(resultEvents[0]!.toolResult!.success).toBe(true);
   });
 
+  it('should emit tool_progress events before tool_result for act step', () => {
+    const step: AgentStep = {
+      type: 'act',
+      content: 'Executed 1 tool(s)',
+      toolResults: [{ callId: 'c1', success: true, data: 'ok', name: 'GenImg' }] as any,
+      toolProgress: [
+        { toolCallId: 'c1', toolName: 'GenImg', percent: 50, stage: 'Rendering' },
+        { toolCallId: 'c1', toolName: 'GenImg', percent: 100, stage: 'Done' },
+      ],
+      timestamp: Date.now(),
+    };
+    const ss = freshStreamState();
+
+    const events = collect(stepToEvents(step, 1, 10, ss));
+
+    const progressEvents = events.filter((e) => e.type === 'tool_progress');
+    const resultEvents = events.filter((e) => e.type === 'tool_result');
+
+    expect(progressEvents).toHaveLength(2);
+    expect(progressEvents[0]!.toolProgress!.percent).toBe(50);
+    expect(progressEvents[0]!.toolProgress!.stage).toBe('Rendering');
+    expect(progressEvents[1]!.toolProgress!.percent).toBe(100);
+    expect(resultEvents).toHaveLength(1);
+
+    // Progress events should come before result events
+    const firstProgress = events.indexOf(progressEvents[0]!);
+    const firstResult = events.indexOf(resultEvents[0]!);
+    expect(firstProgress).toBeLessThan(firstResult);
+  });
+
   it('should emit text for respond step', () => {
     const step: AgentStep = { type: 'respond', content: 'Done!', timestamp: Date.now() };
     const ss = freshStreamState();

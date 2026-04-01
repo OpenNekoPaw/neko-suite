@@ -240,7 +240,11 @@ export interface IToolRegistry {
   listByCategory(category: ToolCategory): Tool[];
 
   /** Execute a tool */
-  execute(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+  execute(
+    name: string,
+    args: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult>;
 
   /**
    * Convert tools to LLM tool definitions

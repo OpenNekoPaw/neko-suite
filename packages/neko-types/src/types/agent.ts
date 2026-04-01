@@ -83,6 +83,14 @@ export interface AgentStep {
   }>;
   /** Tool results if any */
   toolResults?: ToolResult[];
+  /** Tool progress events collected during act phase */
+  toolProgress?: Array<{
+    toolCallId: string;
+    toolName: string;
+    percent: number;
+    stage: string;
+    preview?: string;
+  }>;
   /** Timestamp */
   timestamp: number;
   /** Token usage for this step (from LLM API response) */

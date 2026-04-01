@@ -229,6 +229,10 @@ export {
   // Skill Conflict Resolver
   SkillConflictResolver,
   createSkillConflictResolver,
+  // Path Matcher
+  matchSkillPaths,
+  globMatch,
+  type SkillPathInfo,
   // Markdown Parser
   MarkdownParser,
   createMarkdownParser,

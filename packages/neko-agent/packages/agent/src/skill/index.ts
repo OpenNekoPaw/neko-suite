@@ -81,6 +81,9 @@ export {
 // Skill Conflict Resolver
 export { SkillConflictResolver, createSkillConflictResolver } from './skill-conflict-resolver';
 
+// Path Matcher (for Skill paths trigger)
+export { matchSkillPaths, globMatch, type SkillPathInfo } from './path-matcher';
+
 // Markdown parser
 export {
   MarkdownParser,

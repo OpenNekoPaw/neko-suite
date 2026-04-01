@@ -247,12 +247,34 @@ Phase A (P0, 基础能力补齐) ✅ COMPLETED 2026-04-01:
     ├─ SkillFrontmatter 新增 shell/paths 字段
     └─ 6 单测通过
 
-Phase B (P1, 智能化增强):
-├─ B.1 Auto-Compact 熔断器
-├─ B.2 ToolProgress streaming
-├─ B.3 MCP 健壮性 (截断/并发/重连)
-├─ B.4 Skill paths 条件触发
-└─ B.5 多模态 ToolResult attachments
+Phase B (P1, 智能化增强): ✅ COMPLETED
+├─ B.1 Auto-Compact 熔断器 ✅
+│   ├─ auto-compact.ts: 纯函数 + 熔断器 (3次失败熔断, 30min 冷却)
+│   ├─ AgentSession.execute() 每步后检查 shouldCompress → 自动压缩
+│   ├─ 压缩后 _syncSystemPrompt() 重注入 Skill + ToolSet
+│   └─ 9 单测通过
+├─ B.2 ToolProgress streaming ✅
+│   ├─ AgentEventType 新增 'tool_progress'
+│   ├─ AgentEvent.toolProgress: toolCallId/toolName/percent/stage/preview
+│   ├─ ToolRegistry.execute() 传递 ToolExecuteOptions(onProgress)
+│   ├─ act-phase 收集 ToolProgressEvent → AgentStep.toolProgress
+│   ├─ step-event-converter 先 yield progress 再 yield result
+│   └─ 4 新增单测通过
+├─ B.3 MCP 健壮性 ✅
+│   ├─ MCPTool 描述截断 2048 字符 (truncateDescription)
+│   ├─ MCPManager.callTool() 自动重连 (disconnect → reconnect → retry)
+│   ├─ MCPManager.connectAll() 并发限制 (batch 3)
+│   └─ 8 新增单测通过 (mcp-tool 5 + mcp-manager 3)
+├─ B.4 Skill paths 条件触发 ✅
+│   ├─ path-matcher.ts: globMatch + matchSkillPaths 纯函数 (无外部依赖)
+│   ├─ Skill 接口新增 paths?: string[]，createSkill() 映射 frontmatter.paths
+│   ├─ SkillFileService: onDidSaveTextDocument → matchSkillPaths → emit onSkillPathTriggered
+│   └─ 11 单测通过
+└─ B.5 多模态 ToolResult attachments ✅
+    ├─ buildToolResultMessages: attachments → ContentPart[] (image → ImagePart, audio/video → 文本引用)
+    ├─ AgentEvent.toolResult 新增 attachments 字段
+    ├─ step-event-converter 传递 attachments
+    └─ 4 新增单测通过
 
 Phase C (P2, 体验打磨):
 ├─ C.1 buildTool() 工厂 + 安全分级
@@ -503,12 +525,12 @@ Phase A (P0, 基础能力补齐) ✅ COMPLETED 2026-04-01:
 ├─ A.3 Schema 校验 + LLM 错误重试引导 (轻量 JSON Schema, 无 Zod)  ✅
 └─ A.4 SkillInjector Shell 替换 (!`command` 语法)  ✅
 
-Phase B (P1, 智能化增强):
-├─ B.1 Auto-Compact 熔断器（auto-compact + 状态补偿）
-├─ B.2 ToolProgress streaming
-├─ B.3 MCP 健壮性 (截断/并发/重连)
-├─ B.4 Skill paths 条件触发
-├─ B.5 多模态 ToolResult attachments
+Phase B (P1, 智能化增强) ✅ COMPLETED 2026-04-01:
+├─ B.1 Auto-Compact 熔断器（auto-compact + 熔断器 + 状态补偿）  ✅
+├─ B.2 ToolProgress streaming（onProgress callback → AgentEvent）  ✅
+├─ B.3 MCP 健壮性 (描述截断 + 自动重连 + 并发限制)  ✅
+├─ B.4 Skill paths 条件触发（globMatch + onDidSave → 自动激活）  ✅
+├─ B.5 多模态 ToolResult attachments（image/audio/video → ContentPart[]）  ✅
 ├─ B.6 Creative Coordinator Mode（SubAgent + task notification + permission bridge）
 └─ B.7 CreativeVersionLog 版本锚点
 

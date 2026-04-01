@@ -606,25 +606,54 @@ describe('MCPManager', () => {
       expect(result).toEqual({ success: true, data: 'Tool result' });
     });
 
-    it('should return error for disconnected server', async () => {
-      const result = await manager.callTool('unknown', 'myTool', {});
+    it('should auto-reconnect when server is disconnected', async () => {
+      const config = createServerConfig();
+      const mockClient = createMockClient();
+      let connectCount = 0;
 
-      expect(result).toEqual({
-        success: false,
-        error: 'MCP server unknown is not connected',
+      // First connection succeeds, then client appears disconnected,
+      // then reconnect succeeds and client is connected again
+      mockClient.isConnected = vi.fn().mockImplementation(() => connectCount > 0);
+      mockClient.connect = vi.fn().mockImplementation(() => {
+        connectCount++;
+        return Promise.resolve();
       });
+      const mockResult = {
+        isError: false,
+        content: [{ type: 'text', text: 'reconnected result' }],
+      };
+      mockClient.callTool = vi.fn().mockResolvedValue(mockResult);
+      mockCreateMCPClient.mockReturnValue(mockClient);
+
+      manager.register(config);
+      // First connect
+      await manager.connect('test-server');
+
+      // Reset isConnected to simulate disconnection
+      connectCount = 0;
+      mockClient.isConnected = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+
+      const result = await manager.callTool('test-server', 'myTool', {});
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe('reconnected result');
     });
 
-    it('should return error for registered but not connected server', async () => {
-      const config = createServerConfig();
+    it('should return error when reconnect fails', async () => {
+      const config = createServerConfig({ enabled: false }); // disabled so reconnect will fail
       manager.register(config);
 
       const result = await manager.callTool('test-server', 'myTool', {});
 
-      expect(result).toEqual({
-        success: false,
-        error: 'MCP server test-server is not connected',
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('reconnect failed');
+    });
+
+    it('should return error for completely unknown server', async () => {
+      const result = await manager.callTool('unknown', 'myTool', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not connected');
     });
 
     it('should handle tool errors from result', async () => {

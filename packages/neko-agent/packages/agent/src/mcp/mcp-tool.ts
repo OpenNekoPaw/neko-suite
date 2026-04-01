@@ -14,6 +14,19 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MCPTool');
 
+/** Maximum description length to prevent context bloat from verbose MCP tools */
+const MAX_DESCRIPTION_LENGTH = 2048;
+
+/**
+ * Truncate description to MAX_DESCRIPTION_LENGTH, appending ellipsis if truncated.
+ */
+function truncateDescription(description: string): string {
+  if (description.length <= MAX_DESCRIPTION_LENGTH) {
+    return description;
+  }
+  return description.slice(0, MAX_DESCRIPTION_LENGTH - 3) + '...';
+}
+
 /**
  * MCP tool wrapper - wraps an MCP tool as an agent tool
  */
@@ -35,7 +48,7 @@ export class MCPTool implements Tool {
     // Prefix tool name with server ID to avoid conflicts
     // Use double underscore to match permission system's mcp__ prefix convention
     this.name = `mcp__${serverId}__${mcpTool.name}`;
-    this.description = mcpTool.description || `MCP tool from ${serverId}`;
+    this.description = truncateDescription(mcpTool.description || `MCP tool from ${serverId}`);
     this.parameters = mcpTool.inputSchema || {};
   }
 

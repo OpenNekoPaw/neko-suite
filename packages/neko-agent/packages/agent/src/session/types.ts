@@ -140,6 +140,7 @@ export type AgentEventType =
   | 'text_delta' // Streaming text chunk (incremental)
   | 'tool_call' // Tool invocation
   | 'tool_result' // Tool execution result
+  | 'tool_progress' // Tool execution progress update
   | 'tool_confirmation' // Tool requires confirmation
   | 'iteration' // Iteration info
   | 'done' // Execution complete
@@ -172,6 +173,17 @@ export interface AgentEvent {
     success: boolean;
     data: unknown;
     error?: string;
+    /** Multimodal attachments from tool execution (e.g. generated images) */
+    attachments?: import('@neko/shared').ToolResultAttachment[];
+  };
+
+  /** Tool execution progress update */
+  toolProgress?: {
+    toolCallId: string;
+    toolName: string;
+    percent: number;
+    stage: string;
+    preview?: string;
   };
 
   /** Tool confirmation request */

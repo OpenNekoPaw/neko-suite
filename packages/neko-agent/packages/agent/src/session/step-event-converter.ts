@@ -75,6 +75,22 @@ export function* stepToEvents(
       break;
 
     case 'act':
+      // Emit progress events before results (for proper UI sequencing)
+      if (step.toolProgress) {
+        for (const progress of step.toolProgress) {
+          yield {
+            type: 'tool_progress',
+            toolProgress: {
+              toolCallId: progress.toolCallId,
+              toolName: progress.toolName,
+              percent: progress.percent,
+              stage: progress.stage,
+              preview: progress.preview,
+            },
+          };
+        }
+      }
+
       if (step.toolResults) {
         for (let i = 0; i < step.toolResults.length; i++) {
           const result = step.toolResults[i] as {
@@ -82,6 +98,7 @@ export function* stepToEvents(
             success: boolean;
             data?: unknown;
             error?: string;
+            attachments?: import('@neko/shared').ToolResultAttachment[];
           };
           yield {
             type: 'tool_result',
@@ -90,6 +107,8 @@ export function* stepToEvents(
               success: result.success,
               data: result.data,
               error: result.error,
+              ...(result.attachments &&
+                result.attachments.length > 0 && { attachments: result.attachments }),
             },
           };
         }

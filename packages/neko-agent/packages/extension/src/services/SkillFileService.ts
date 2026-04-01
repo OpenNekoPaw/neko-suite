@@ -26,7 +26,7 @@ import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
 } from '@neko/shared';
-import { SkillLoader, createNodeSkillLoader } from '@neko/agent';
+import { SkillLoader, createNodeSkillLoader, matchSkillPaths } from '@neko/agent';
 import { builtinSkills } from '@neko/agent';
 
 const logger = getLogger('SkillFileService');
@@ -72,12 +72,23 @@ export class SkillFileService implements vscode.Disposable {
   private readonly _onSkillsChanged = new vscode.EventEmitter<SkillScanResult>();
   readonly onSkillsChanged = this._onSkillsChanged.event;
 
+  // Event emitter for path-triggered skill activation
+  private readonly _onSkillPathTriggered = new vscode.EventEmitter<{
+    skillName: string;
+    filePath: string;
+  }>();
+  readonly onSkillPathTriggered = this._onSkillPathTriggered.event;
+
   // Cache of loaded skills
   private cachedResult: SkillScanResult | null = null;
+
+  // Debounce timer for path triggers
+  private pathTriggerTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.skillLoader = createNodeSkillLoader(fs, path);
     this.setupFileWatchers();
+    this.setupPathTriggers();
   }
 
   // ==========================================================================
@@ -669,12 +680,77 @@ Add your command instructions here.
   }
 
   // ==========================================================================
+  // Path Triggers (Skill.paths matching on file save)
+  // ==========================================================================
+
+  /**
+   * Watch for document saves and check against skill paths patterns.
+   * When a saved file matches a skill's `paths` glob, emit onSkillPathTriggered.
+   */
+  private setupPathTriggers(): void {
+    const DEBOUNCE_MS = 300;
+
+    const handler = vscode.workspace.onDidSaveTextDocument((document) => {
+      // Debounce rapid saves
+      if (this.pathTriggerTimer) {
+        clearTimeout(this.pathTriggerTimer);
+      }
+
+      this.pathTriggerTimer = setTimeout(() => {
+        this.pathTriggerTimer = null;
+        this.checkPathTriggers(document.uri.fsPath);
+      }, DEBOUNCE_MS);
+    });
+
+    this.disposables.push(handler);
+  }
+
+  /**
+   * Check if a file path matches any skill's paths patterns.
+   */
+  private checkPathTriggers(filePath: string): void {
+    if (!this.cachedResult) {
+      return;
+    }
+
+    // Collect all skills with paths from both personal and project
+    const allSkills = [...this.cachedResult.personal.skills, ...this.cachedResult.project.skills];
+
+    // Build SkillPathInfo array
+    const skillInfos = allSkills
+      .filter((s) => s.paths && s.paths.length > 0)
+      .map((s) => ({ name: s.name, paths: s.paths }));
+
+    if (skillInfos.length === 0) {
+      return;
+    }
+
+    // Get workspace-relative path for better glob matching
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const relativePath =
+      workspaceRoot && filePath.startsWith(workspaceRoot)
+        ? filePath.slice(workspaceRoot.length + 1)
+        : filePath;
+
+    const matchedNames = matchSkillPaths(relativePath, skillInfos);
+
+    for (const skillName of matchedNames) {
+      logger.info('Skill path triggered', { skillName, filePath: relativePath });
+      this._onSkillPathTriggered.fire({ skillName, filePath: relativePath });
+    }
+  }
+
+  // ==========================================================================
   // Dispose
   // ==========================================================================
 
   dispose(): void {
+    if (this.pathTriggerTimer) {
+      clearTimeout(this.pathTriggerTimer);
+    }
     this.disposeWatchers();
     this._onSkillsChanged.dispose();
+    this._onSkillPathTriggered.dispose();
     for (const disposable of this.disposables) {
       disposable.dispose();
     }

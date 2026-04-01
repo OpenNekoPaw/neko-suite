@@ -121,24 +121,27 @@ export class MCPManager implements IMCPManager {
   }
 
   /**
-   * Connect to all enabled servers
+   * Connect to all enabled servers with concurrency limit.
+   * Limits to MAX_CONCURRENT_CONNECTIONS simultaneous connections
+   * to avoid overwhelming the system during startup.
    */
   async connectAll(): Promise<void> {
-    const connectPromises: Promise<void>[] = [];
+    const MAX_CONCURRENT = 3;
+    const enabledConfigs = Array.from(this.servers.values()).filter((c) => c.enabled);
 
-    for (const config of this.servers.values()) {
-      if (config.enabled) {
-        connectPromises.push(
+    // Process in batches of MAX_CONCURRENT
+    for (let i = 0; i < enabledConfigs.length; i += MAX_CONCURRENT) {
+      const batch = enabledConfigs.slice(i, i + MAX_CONCURRENT);
+      await Promise.all(
+        batch.map((config) =>
           this.connect(config.id)
             .then(() => {})
             .catch((error) => {
               logger.error('Failed to connect', { serverId: config.id, error });
             }),
-        );
-      }
+        ),
+      );
     }
-
-    await Promise.all(connectPromises);
   }
 
   /**
@@ -162,14 +165,31 @@ export class MCPManager implements IMCPManager {
   }
 
   /**
-   * Call a tool on a specific server
+   * Call a tool on a specific server.
+   * Attempts one automatic reconnect if the server is disconnected.
    */
   async callTool(
     serverId: string,
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const client = this.clients.get(serverId);
+    let client = this.clients.get(serverId);
+
+    // Auto-reconnect: if disconnected, try one reconnect attempt
+    if (!client?.isConnected()) {
+      try {
+        await this.connect(serverId);
+        client = this.clients.get(serverId);
+      } catch (error) {
+        return {
+          success: false,
+          error: `MCP server ${serverId} is not connected and reconnect failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
     if (!client?.isConnected()) {
       return {
         success: false,

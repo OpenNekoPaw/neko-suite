@@ -35,6 +35,11 @@ import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import { type ConversationCompressor } from '../context';
+import {
+  autoCompactIfNeeded,
+  createAutoCompactState,
+  type AutoCompactState,
+} from '../context/auto-compact';
 import { type IPermissionManager, type PermissionMode } from '../permission';
 import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
@@ -92,6 +97,8 @@ export class AgentSession implements IAgentSession {
   // State
   private _history: ChatMessage[] = [];
   private _isRunning = false;
+  /** Circuit breaker state for auto-compact */
+  private _compactState: AutoCompactState = createAutoCompactState();
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
   private _pendingConfirmations = new Map<
@@ -256,6 +263,22 @@ export class AgentSession implements IAgentSession {
         // Record history first (side effects), then emit events (pure)
         recordStepInHistory(step, iteration, this._history);
         yield* stepToEvents(step, iteration, maxIterations, this._streamState);
+
+        // Auto-compact: check if context compression is needed after each step
+        if (this._compressor) {
+          const tokens = this._compressor.estimateTokens(this._history);
+          const compactResult = await autoCompactIfNeeded(
+            this._compressor,
+            this._history,
+            tokens,
+            this._compactState,
+          );
+          if (compactResult.compressed && compactResult.newHistory) {
+            this._history.length = 0;
+            this._history.push(...compactResult.newHistory);
+            this._syncSystemPrompt(); // Re-inject active Skills + ToolSet declarations
+          }
+        }
       }
 
       // Emit done event with real accumulated usage
