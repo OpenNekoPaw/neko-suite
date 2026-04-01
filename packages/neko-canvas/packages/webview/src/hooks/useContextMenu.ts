@@ -48,6 +48,8 @@ export interface UseContextMenuOptions {
   onBatchGenerate?: () => void;
   onSendToAgent?: (intent?: string) => void;
   onEditInSketch?: () => void;
+  onGenerateVideo?: () => void;
+  onEditWithControlNet?: () => void;
 }
 
 export interface UseContextMenuReturn {
@@ -87,6 +89,8 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     onBatchGenerate,
     onSendToAgent,
     onEditInSketch,
+    onGenerateVideo,
+    onEditWithControlNet,
   } = options;
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -144,6 +148,8 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onBatchGenerate,
         onSendToAgent,
         onEditInSketch,
+        onGenerateVideo,
+        onEditWithControlNet,
       };
 
       const items = showNodeMenu ? buildNodeMenuItems(menuCtx) : buildCanvasMenuItems(menuCtx);
@@ -175,6 +181,8 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       onBatchGenerate,
       onSendToAgent,
       onEditInSketch,
+      onGenerateVideo,
+      onEditWithControlNet,
     ],
   );
 

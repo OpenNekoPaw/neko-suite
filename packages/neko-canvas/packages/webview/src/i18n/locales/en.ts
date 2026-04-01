@@ -58,6 +58,8 @@ export const en = {
   'menu.ai.understand': 'Understand Content',
   'menu.ai.sendToAgent': 'Send to Agent',
   'menu.ai.editInSketch': 'Edit in Sketch',
+  'menu.ai.generateVideo': 'Generate Video',
+  'menu.ai.editWithControlNet': 'ControlNet Edit',
 
   // Nodes
   'node.note': 'Note',
@@ -124,4 +126,12 @@ export const en = {
   'artboard.exportPng': 'Export as PNG',
   'artboard.exportSvg': 'Export as SVG',
   'artboard.exporting': 'Exporting...',
+
+  // Generation panel — advanced section
+  'gen.advanced': 'Advanced',
+  'gen.controlMode': 'Control',
+  'gen.controlStrength': 'Strength',
+  'gen.editInstruction': 'Edit instruction (optional)',
+  'gen.generateVideo': 'Generate Video',
+  'gen.videoDuration': 'Duration',
 } as const satisfies MessageBundle;

@@ -1,7 +1,7 @@
 # AI 媒体编辑能力分析
 
 > 日期：2026-04-01
-> 状态：E1-E4 + E2.5 已实施
+> 状态：E1-E4 + E2.5 + E6 已实施（剩余 E5 Engine 感知模块）
 > 范围：neko-cut / neko-canvas / neko-sketch / neko-agent / neko-engine
 > 关联：[ai-capabilities.md](./ai-capabilities.md) · [ai-capabilities-roadmap.md](./ai-capabilities-roadmap.md) · [model-runtime.md](./model-runtime.md) · [2d-capability-analysis.md](./2d-capability-analysis.md)
 
@@ -739,22 +739,34 @@ Canvas ShotNode → "局部重绘"
 
 **产出**：Engine 内置 depth/normal/pose/edge 提取，<1s 推理
 
-### Phase E6：Canvas 编辑 UI + 跨扩展联动（~3 天）
+### Phase E6：Canvas 编辑 UI + 跨扩展联动（~2 天）✅ 已完成
 
-**目标**：Canvas 端编辑入口 + 全链路联动
+**目标**：Canvas 端 ControlNet/Video 编辑入口 + GenerationPromptPanel 集成
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| ShotNode 右键菜单扩展（视角/打光/姿态/生成视频） | `canvas/webview/src/components/nodes/ShotNode.tsx` | ~80 行 |
-| EditShotPanel（视角/打光/姿态编辑 UI） | `canvas/webview/src/components/panels/EditShotPanel.tsx` | ~200 行 |
-| ├── Engine 实时 depth/pose 预览 | | |
-| ├── 控制参数调节（strength/mode） | | |
-| └── "应用" → 调用 generateForNode + 新参数 | | |
-| Canvas↔Sketch editImage 联动 | `canvas/extension/src/editor/` + `sketch/extension/src/commands/` | ~60 行 |
-| canvasStore 扩展（editMode 状态） | `canvas/webview/src/stores/canvasStore.ts` | ~30 行 |
-| ShotNode→Video 生成入口（i2v + 运镜参数） | `canvas/webview/src/components/nodes/ShotNode.tsx` | ~40 行 |
+**已完成（2026-04-01）**：
 
-**产出**：Canvas 端修改机位/打光/视角/姿态，联动 Sketch inpaint，ShotNode→Video
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| GenerationPromptPanel 集成到 CanvasApp | `canvas/webview/src/CanvasApp.tsx` | ✅ |
+| ├── onGenerate → generateForNode postMessage | params 自动透传 | ✅ |
+| ├── "Generate Image" 改为打开 Panel（原直发 agent） | handleGenerateSelected | ✅ |
+| └── AutoPrompt 回调接线 | buildPrompt postMessage | ✅ |
+| GenerationPromptPanel 扩展 | `canvas/webview/src/components/panels/GenerationPromptPanel.tsx` | ✅ |
+| ├── GenerationParams + controlMode/controlStrength/editInstruction | 类型扩展 | ✅ |
+| ├── generateVideo + videoDuration 参数 | 视频生成 toggle | ✅ |
+| └── Advanced 折叠面板 UI（ControlNet/Strength/Instruction/Video） | SelectPill + range slider | ✅ |
+| 右键菜单扩展 | `canvas/webview/src/components/common/ContextMenu.tsx` | ✅ |
+| ├── "ControlNet Edit" 菜单项 | 预填 controlMode=depth | ✅ |
+| └── "Generate Video" 菜单项 | 预填 generateVideo=true | ✅ |
+| canvasStore 扩展 | `canvas/webview/src/stores/canvasStore.ts` | ✅ |
+| └── GenerationPanelState + initialControlMode/initialGenerateVideo | openGenerationPanel opts 参数 | ✅ |
+| i18n 补充（en + zh-cn，8 键） | `canvas/webview/src/i18n/locales/` | ✅ |
+
+**产出**：
+- ✅ ShotNode 右键可选 "Generate Image" / "ControlNet Edit" / "Generate Video"，打开带高级参数的 Panel
+- ✅ Panel 新增 ControlMode（8 种）、Strength 滑块、Edit Instruction、Video Duration
+- ✅ Canvas↔Sketch 双向联动已有（E2.5 实现），无需额外工作
+- ⏳ Engine 实时 depth/pose 预览依赖 E5（Engine 感知模块）
 
 ---
 

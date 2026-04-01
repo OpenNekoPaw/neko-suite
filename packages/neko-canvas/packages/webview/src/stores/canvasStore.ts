@@ -27,6 +27,10 @@ export interface GenerationPanelState {
   cellId?: string | null;
   /** Pre-filled prompt from AutoPrompt or shot.visualDescription */
   initialPrompt?: string;
+  /** Pre-fill ControlNet mode (from "ControlNet Edit" menu) */
+  initialControlMode?: string;
+  /** Pre-fill video generation mode (from "Generate Video" menu) */
+  initialGenerateVideo?: boolean;
 }
 
 export interface CanvasStore {
@@ -41,7 +45,12 @@ export interface CanvasStore {
   generationPanelState: GenerationPanelState;
 
   // ==================== Generation Panel Actions ====================
-  openGenerationPanel: (nodeId: string, cellId?: string, initialPrompt?: string) => void;
+  openGenerationPanel: (
+    nodeId: string,
+    cellId?: string,
+    initialPrompt?: string,
+    opts?: { controlMode?: string; generateVideo?: boolean },
+  ) => void;
   closeGenerationPanel: () => void;
 
   // ==================== Data Actions ====================
@@ -147,8 +156,17 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   activePlayingNodeId: null,
   generationPanelState: { visible: false, nodeId: null, cellId: null },
 
-  openGenerationPanel: (nodeId, cellId, initialPrompt) =>
-    set({ generationPanelState: { visible: true, nodeId, cellId: cellId ?? null, initialPrompt } }),
+  openGenerationPanel: (nodeId, cellId, initialPrompt, opts) =>
+    set({
+      generationPanelState: {
+        visible: true,
+        nodeId,
+        cellId: cellId ?? null,
+        initialPrompt,
+        initialControlMode: opts?.controlMode,
+        initialGenerateVideo: opts?.generateVideo,
+      },
+    }),
 
   closeGenerationPanel: () =>
     set({ generationPanelState: { visible: false, nodeId: null, cellId: null } }),

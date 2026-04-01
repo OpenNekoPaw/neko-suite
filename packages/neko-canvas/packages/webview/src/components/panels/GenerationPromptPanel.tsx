@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { ShotScale, CameraMovement, CameraAngle } from '@neko/shared';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -27,6 +28,16 @@ export interface GenerationParams {
   /** GalleryCell references for IP-Adapter: [nodeId:cellId, ...] */
   referenceRefs?: string[];
   count?: number;
+  /** ControlNet mode (E6: depth/canny/pose/...) */
+  controlMode?: string;
+  /** ControlNet conditioning strength 0-1 */
+  controlStrength?: number;
+  /** Natural-language edit instruction (alternative to prompt for image edits) */
+  editInstruction?: string;
+  /** Generate video instead of image */
+  generateVideo?: boolean;
+  /** Video duration in seconds */
+  videoDuration?: number;
 }
 
 export interface GenerationPanelTarget {
@@ -38,6 +49,10 @@ export interface GenerationPanelTarget {
   initialShotScale?: ShotScale;
   initialCameraMovement?: CameraMovement;
   initialCameraAngle?: CameraAngle;
+  /** Pre-fill ControlNet mode (e.g. from "ControlNet Edit" menu) */
+  initialControlMode?: string;
+  /** Pre-fill video generation mode (e.g. from "Generate Video" menu) */
+  initialGenerateVideo?: boolean;
 }
 
 export interface GenerationPromptPanelProps {
@@ -74,6 +89,19 @@ const CAMERA_MOVEMENTS: CameraMovement[] = [
 ];
 
 const CAMERA_ANGLES: CameraAngle[] = ['eye-level', 'high-angle', 'low-angle', 'bird-eye', 'dutch'];
+
+const CONTROL_MODES = [
+  'canny',
+  'depth',
+  'pose',
+  'normal',
+  'segment',
+  'lineart',
+  'softedge',
+  'scribble',
+];
+
+const VIDEO_DURATIONS = [3, 5, 10, 15] as const;
 
 // =============================================================================
 // Helpers
@@ -135,6 +163,12 @@ export function GenerationPromptPanel({
   const [cameraMovement, setCameraMovement] = useState<CameraMovement | undefined>(undefined);
   const [cameraAngle, setCameraAngle] = useState<CameraAngle | undefined>(undefined);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [controlMode, setControlMode] = useState<string | undefined>(undefined);
+  const [controlStrength, setControlStrength] = useState(0.7);
+  const [editInstruction, setEditInstruction] = useState('');
+  const [generateVideo, setGenerateVideo] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(5);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   // Sync initial values when target changes
@@ -144,6 +178,12 @@ export function GenerationPromptPanel({
     setShotScale(target.initialShotScale);
     setCameraMovement(target.initialCameraMovement);
     setCameraAngle(target.initialCameraAngle);
+    setControlMode(target.initialControlMode);
+    setGenerateVideo(target.initialGenerateVideo ?? false);
+    setAdvancedOpen(Boolean(target.initialControlMode || target.initialGenerateVideo));
+    setEditInstruction('');
+    setControlStrength(0.7);
+    setVideoDuration(5);
   }, [target?.nodeId, target?.cellId]);
 
   // Focus prompt textarea when panel opens
@@ -168,14 +208,22 @@ export function GenerationPromptPanel({
 
   function handleGenerate() {
     if (!prompt.trim() || !target) return;
-    onGenerate(target, {
+    const params: GenerationParams = {
       prompt: prompt.trim(),
       style,
       ratio,
       shotScale,
       cameraMovement,
       cameraAngle,
-    });
+    };
+    if (controlMode) params.controlMode = controlMode;
+    if (controlMode && controlStrength !== 0.7) params.controlStrength = controlStrength;
+    if (editInstruction.trim()) params.editInstruction = editInstruction.trim();
+    if (generateVideo) {
+      params.generateVideo = true;
+      params.videoDuration = videoDuration;
+    }
+    onGenerate(target, params);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -351,6 +399,120 @@ export function GenerationPromptPanel({
               options={CAMERA_ANGLES}
               onChange={setCameraAngle}
             />
+          </div>
+
+          {/* Advanced section (ControlNet / Video / Edit instruction) */}
+          <div>
+            <button
+              onClick={() => setAdvancedOpen((v) => !v)}
+              style={{
+                fontSize: 11,
+                color: 'var(--neko-fg-secondary)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              {advancedOpen ? '▾' : '▸'} {t('gen.advanced')}
+            </button>
+
+            {advancedOpen && (
+              <div className="flex flex-col gap-2 mt-2">
+                {/* ControlNet mode + strength */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <SelectPill
+                    label={t('gen.controlMode')}
+                    value={controlMode}
+                    options={CONTROL_MODES}
+                    onChange={setControlMode}
+                  />
+                  {controlMode && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: 'var(--neko-fg-secondary)', fontSize: 11 }}>
+                        {t('gen.controlStrength')}:
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={controlStrength}
+                        onChange={(e) => setControlStrength(Number(e.target.value))}
+                        style={{ width: 80, accentColor: '#3b82f6' }}
+                      />
+                      <span
+                        style={{ fontSize: 10, color: 'var(--neko-fg-secondary)', minWidth: 28 }}
+                      >
+                        {controlStrength.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Edit instruction */}
+                <input
+                  type="text"
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  placeholder={t('gen.editInstruction')}
+                  style={{
+                    fontSize: 11,
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    border: '1px solid var(--neko-border)',
+                    backgroundColor: 'var(--neko-surface)',
+                    color: 'var(--neko-fg)',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                  }}
+                />
+
+                {/* Generate Video toggle + duration */}
+                <div className="flex items-center gap-3">
+                  <label
+                    className="flex items-center gap-1 cursor-pointer"
+                    style={{ fontSize: 11 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={generateVideo}
+                      onChange={(e) => setGenerateVideo(e.target.checked)}
+                      style={{ accentColor: '#3b82f6' }}
+                    />
+                    <span style={{ color: 'var(--neko-fg-secondary)' }}>
+                      {t('gen.generateVideo')}
+                    </span>
+                  </label>
+                  {generateVideo && (
+                    <div className="flex items-center gap-1">
+                      <span style={{ color: 'var(--neko-fg-secondary)', fontSize: 11 }}>
+                        {t('gen.videoDuration')}:
+                      </span>
+                      <select
+                        value={videoDuration}
+                        onChange={(e) => setVideoDuration(Number(e.target.value))}
+                        style={{
+                          fontSize: 11,
+                          padding: '1px 4px',
+                          borderRadius: 4,
+                          border: '1px solid var(--neko-border)',
+                          backgroundColor: 'var(--neko-surface)',
+                          color: 'var(--neko-fg)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {VIDEO_DURATIONS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}s
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

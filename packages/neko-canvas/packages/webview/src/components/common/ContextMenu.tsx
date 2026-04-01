@@ -58,6 +58,9 @@ export interface CanvasMenuContext {
   // Workflow: open selected shot image in neko-sketch
   onEditInSketch?: () => void;
   hasShotWithImage?: boolean;
+  // E6: ControlNet editing + video generation
+  onGenerateVideo?: () => void;
+  onEditWithControlNet?: () => void;
 }
 
 /**
@@ -174,6 +177,20 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
           icon: '🎨',
           disabled: !ctx.hasShotWithImage,
           onClick: () => ctx.onEditInSketch?.(),
+        },
+        {
+          id: 'edit-with-controlnet',
+          label: t('menu.ai.editWithControlNet'),
+          icon: '🎛',
+          disabled: !ctx.hasShotWithImage,
+          onClick: () => ctx.onEditWithControlNet?.(),
+        },
+        {
+          id: 'generate-video',
+          label: t('menu.ai.generateVideo'),
+          icon: '🎥',
+          disabled: !ctx.hasShotWithImage,
+          onClick: () => ctx.onGenerateVideo?.(),
         },
       ],
       agentActions: [

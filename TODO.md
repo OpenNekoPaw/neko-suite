@@ -37,7 +37,7 @@
 
 ---
 
-## ✅ P2.5 — AI 媒体编辑能力（已完成 E1-E4 + E2.5）
+## ✅ P2.5 — AI 媒体编辑能力（已完成 E1-E4 + E2.5 + E6）
 
 > [ADR](./docs/architecture/ai-media-editing.md)
 
@@ -47,7 +47,7 @@
 - [x] **E3 DashScope Adapter**：DashScopeMediaAdapter 统一 Qwen-Image 2.0（2K 原生 + 指令编辑 + ControlNet）+ Wan 2.7（text/image-to-video + Camera Code 运镜 + 首尾帧）
 - [x] **E4 OpenAICompat Kling 增强**：generateVideo +8 运镜/编辑参数（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/editInstruction/motionStrength）；generateImage +5 ControlNet/编辑参数
 - [ ] **E5 Engine 感知模块**：depth/normal/pose/edge 本地 ONNX 提取（<1s）
-- [ ] **E6 Canvas 编辑 UI**：ControlBar + VariationPanel + 跨扩展联动
+- [x] **E6 Canvas 编辑 UI**：GenerationPromptPanel 集成到 CanvasApp + ControlMode/Strength/EditInstruction/GenerateVideo 高级参数 + 右键菜单 "ControlNet Edit"/"Generate Video" + canvasStore 扩展
 
 ---
 

@@ -58,6 +58,8 @@ export const zhCN = {
   'menu.ai.understand': '理解内容',
   'menu.ai.sendToAgent': '发送到 Agent',
   'menu.ai.editInSketch': '在 Sketch 中编辑',
+  'menu.ai.generateVideo': '生成视频',
+  'menu.ai.editWithControlNet': 'ControlNet 编辑',
 
   // Nodes
   'node.note': '注释',
@@ -124,4 +126,12 @@ export const zhCN = {
   'artboard.exportPng': '导出为 PNG',
   'artboard.exportSvg': '导出为 SVG',
   'artboard.exporting': '导出中...',
+
+  // Generation panel — advanced section
+  'gen.advanced': '高级选项',
+  'gen.controlMode': '控制模式',
+  'gen.controlStrength': '强度',
+  'gen.editInstruction': '编辑指令（可选）',
+  'gen.generateVideo': '生成视频',
+  'gen.videoDuration': '时长',
 } as const satisfies MessageBundle;

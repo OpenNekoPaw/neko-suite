@@ -11,7 +11,7 @@
 |------|------|------|------|
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
 | **neko-engine** | Alpha | 96% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）|
-| **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + **AI Action Handler（12 action 含 remove-silence 路由到 EngineClient/neko-agent）** |
+| **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + AI Action Handler（12 action 含 remove-silence） |
 | **neko-agent** | Alpha | 97% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器（ControlNet/IP-Adapter/运镜/指令编辑全链路）**；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；文档预览（PDF/DOCX/EPUB/XLSX）规划中 — [ADR](./docs/architecture/document-preview.md) |
@@ -55,7 +55,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - SSO 接入 + AccountBar + OnboardingFlow
 </details>
 
-### AI 媒体编辑能力（E1-E4 + E2.5 ✅，E5-E6 待做）
+### AI 媒体编辑能力（E1-E4 + E2.5 + E6 ✅，E5 待做）
 > [ADR](./docs/architecture/ai-media-editing.md)
 
 - ✅ E1：媒体类型扩展（ControlMode/IPAdapterReference/image-edit/video-edit + ImageRequest 5 字段 + VideoRequest 8 字段）
@@ -64,7 +64,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ E3：DashScope Adapter（Qwen-Image 2.0 + Wan 2.7 统一适配器，Camera Code 运镜 + 首尾帧 + 指令编辑）
 - ✅ E4：OpenAICompat Kling 增强（generateVideo +8 运镜参数，generateImage +5 ControlNet 参数）
 - ⏳ E5：Engine 感知模块（depth/pose/edge 本地 ONNX）
-- ⏳ E6：Canvas 编辑 UI + 跨扩展联动
+- ✅ E6：Canvas 编辑 UI（GenerationPromptPanel + ControlNet/Video 参数 + 右键菜单扩展）
 
 ### 延后项
 - MCP 桥接专业软件（Blender / ComfyUI / Photoshop → Phase 3.4）
@@ -212,4 +212,4 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 
 ---
 
-*最后更新: 2026-04-01（AI 媒体编辑 E1-E4 全部完成 + E2.5 remove-silence 接通；fal.ai/DashScope/Kling 适配器）*
+*最后更新: 2026-04-01（AI 媒体编辑 E1-E4+E6 全部完成；E6 Canvas GenerationPromptPanel + ControlNet/Video UI）*

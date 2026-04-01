@@ -3,6 +3,11 @@ import type { CanvasData, CanvasViewport } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
+import {
+  GenerationPromptPanel,
+  type GenerationPanelTarget,
+  type GenerationParams,
+} from './components/panels/GenerationPromptPanel';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
@@ -91,6 +96,9 @@ export function CanvasApp() {
     selectNodes,
     groupNodes,
     ungroupNodes,
+    generationPanelState,
+    openGenerationPanel,
+    closeGenerationPanel,
   } = useCanvasStore();
 
   // Derive computed values from canvasData
@@ -350,10 +358,14 @@ export function CanvasApp() {
   // AI generation / agent handlers
   // =========================================================================
 
-  /** Route selected ShotNodes to Agent for generation */
+  /** Open GenerationPromptPanel for the selected ShotNode */
   const handleGenerateSelected = useCallback(() => {
-    vscode?.postMessage({ type: 'sendToAgent', nodeIds: selectedNodeIds, action: 'generate' });
-  }, [selectedNodeIds]);
+    const nodeId = selectedNodeIds[0];
+    if (!nodeId) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    const data = node?.data as Record<string, unknown> | undefined;
+    openGenerationPanel(nodeId, undefined, (data?.['visualDescription'] as string) ?? '');
+  }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Batch-generate all selected ShotNodes via Agent */
   const handleBatchGenerate = useCallback(() => {
@@ -372,6 +384,26 @@ export function CanvasApp() {
     },
     [selectedNodeIds],
   );
+
+  /** Open GenerationPromptPanel in video mode for the selected ShotNode */
+  const handleGenerateVideo = useCallback(() => {
+    const nodeId = selectedNodeIds[0];
+    if (!nodeId) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    const data = node?.data as Record<string, unknown> | undefined;
+    const prompt = (data?.['visualDescription'] as string) ?? '';
+    openGenerationPanel(nodeId, undefined, prompt, { generateVideo: true });
+  }, [selectedNodeIds, nodes, openGenerationPanel]);
+
+  /** Open GenerationPromptPanel with ControlNet pre-selected */
+  const handleEditWithControlNet = useCallback(() => {
+    const nodeId = selectedNodeIds[0];
+    if (!nodeId) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    const data = node?.data as Record<string, unknown> | undefined;
+    const prompt = (data?.['visualDescription'] as string) ?? '';
+    openGenerationPanel(nodeId, undefined, prompt, { controlMode: 'depth' });
+  }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Open the selected ShotNode's generated image in neko-sketch for editing */
   const handleEditInSketch = useCallback(() => {
@@ -418,6 +450,46 @@ export function CanvasApp() {
   }, []);
 
   // =========================================================================
+  // Generation panel
+  // =========================================================================
+
+  const generationPanelTarget: GenerationPanelTarget | null =
+    generationPanelState.visible && generationPanelState.nodeId
+      ? {
+          nodeId: generationPanelState.nodeId,
+          cellId: generationPanelState.cellId ?? undefined,
+          initialPrompt: generationPanelState.initialPrompt,
+          initialControlMode: generationPanelState.initialControlMode,
+          initialGenerateVideo: generationPanelState.initialGenerateVideo,
+        }
+      : null;
+
+  const handlePanelGenerate = useCallback(
+    (target: GenerationPanelTarget, params: GenerationParams) => {
+      vscode?.postMessage({
+        type: 'generateForNode',
+        nodeId: target.nodeId,
+        cellId: target.cellId,
+        params,
+      });
+      closeGenerationPanel();
+    },
+    [closeGenerationPanel],
+  );
+
+  const handlePanelAutoPrompt = useCallback(
+    async (target: GenerationPanelTarget): Promise<string> => {
+      const node = nodes.find((n) => n.id === target.nodeId);
+      if (!node) return '';
+      vscode?.postMessage({ type: 'buildPrompt', nodeId: target.nodeId, shotData: node.data });
+      // The result arrives via 'buildPromptResult' message — handled by useVSCodeMessages
+      // For now return empty; AutoPrompt is async via postMessage roundtrip
+      return '';
+    },
+    [nodes],
+  );
+
+  // =========================================================================
   // Context menu
   // =========================================================================
 
@@ -458,6 +530,8 @@ export function CanvasApp() {
     onBatchGenerate: handleBatchGenerate,
     onSendToAgent: handleSendToAgent,
     onEditInSketch: handleEditInSketch,
+    onGenerateVideo: handleGenerateVideo,
+    onEditWithControlNet: handleEditWithControlNet,
   });
 
   // =========================================================================
@@ -815,6 +889,15 @@ export function CanvasApp() {
               onClose={closeContextMenu}
             />
           )}
+
+          {/* Generation Prompt Panel (E6: ControlNet / Video / image generation) */}
+          <GenerationPromptPanel
+            visible={generationPanelState.visible}
+            target={generationPanelTarget}
+            onGenerate={handlePanelGenerate}
+            onClose={closeGenerationPanel}
+            onRequestAutoPrompt={handlePanelAutoPrompt}
+          />
 
           {isDragOver && (
             <div
