@@ -113,7 +113,9 @@ export type ProviderType =
   | 'liblib'
   | 'suno'
   | 'vidu'
-  | 'midjourney';
+  | 'midjourney'
+  | 'fal'
+  | 'dashscope';
 
 /**
  * AI service provider configuration
@@ -181,6 +183,10 @@ export type ModelCapability =
   | 'text_to_audio'
   | 'text_to_music'
   | 'workflow'
+  | 'image_edit'
+  | 'video_edit'
+  | 'controlnet'
+  | 'ip_adapter'
   // Legacy aliases (for backwards compatibility)
   | 'image_generation'
   | 'video_generation';

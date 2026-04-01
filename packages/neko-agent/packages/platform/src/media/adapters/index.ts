@@ -16,3 +16,5 @@ export { LiblibMediaAdapter } from './liblib-media-adapter';
 export { SunoMediaAdapter } from './suno-media-adapter';
 export { ViduMediaAdapter } from './vidu-media-adapter';
 export { MidjourneyMediaAdapter } from './midjourney-media-adapter';
+export { FalMediaAdapter } from './fal-media-adapter';
+export { DashScopeMediaAdapter } from './dashscope-media-adapter';

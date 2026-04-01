@@ -121,7 +121,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   ): Promise<MediaAdapterResult> {
     const url = this.getMediaEndpoint(provider, 'imageGenerations');
 
-    const body = {
+    const body: Record<string, unknown> = {
       model: model.name,
       prompt: request.prompt,
       n: request.count || 1,
@@ -129,6 +129,13 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
       quality: request.quality || 'standard',
       style: request.style,
     };
+
+    // ControlNet / IP-Adapter / edit parameters (E4 enhancement)
+    if (request.controlImageBase64) body.control_image = request.controlImageBase64;
+    if (request.controlMode) body.control_mode = request.controlMode;
+    if (request.controlStrength != null) body.control_strength = request.controlStrength;
+    if (request.editInstruction) body.edit_instruction = request.editInstruction;
+    if (request.referenceImageBase64) body.reference_image = request.referenceImageBase64;
 
     const { data, error } = await this.request<OpenAIImageResponse>(
       url,
@@ -191,6 +198,16 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
       body.image = request.referenceImageUrl;
       body.image_url = request.referenceImageUrl;
     }
+
+    // Camera / motion / edit parameters (E4 enhancement for Kling 3.0 etc.)
+    if (request.cameraMovement) body.camera_movement = request.cameraMovement;
+    if (request.cameraAngle) body.camera_angle = request.cameraAngle;
+    if (request.shotScale) body.shot_scale = request.shotScale;
+    if (request.startFrameImageBase64) body.first_frame_image = request.startFrameImageBase64;
+    if (request.endFrameImageBase64) body.last_frame_image = request.endFrameImageBase64;
+    if (request.sourceVideoUrl) body.source_video = request.sourceVideoUrl;
+    if (request.editInstruction) body.edit_instruction = request.editInstruction;
+    if (request.motionStrength != null) body.motion_strength = request.motionStrength;
 
     const { data, error } = await this.request<OpenAIVideoResponse>(
       url,

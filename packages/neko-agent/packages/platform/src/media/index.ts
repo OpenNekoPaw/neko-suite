@@ -32,7 +32,11 @@ export type {
 // =============================================================================
 
 export { MediaGenerationService } from './media-generation-service';
-export { downloadMediaOutputs, detectMediaExtension, type DownloadMediaOptions } from './media-file-downloader';
+export {
+  downloadMediaOutputs,
+  detectMediaExtension,
+  type DownloadMediaOptions,
+} from './media-file-downloader';
 
 // Factory
 import { ConfigManager } from '../config/config-manager';
@@ -47,6 +51,8 @@ import { LiblibMediaAdapter } from './adapters/liblib-media-adapter';
 import { SunoMediaAdapter } from './adapters/suno-media-adapter';
 import { ViduMediaAdapter } from './adapters/vidu-media-adapter';
 import { MidjourneyMediaAdapter } from './adapters/midjourney-media-adapter';
+import { FalMediaAdapter } from './adapters/fal-media-adapter';
+import { DashScopeMediaAdapter } from './adapters/dashscope-media-adapter';
 import { MediaRoutingManager } from './routing/media-routing-manager';
 import { MediaTaskExecutor } from './media-task-executor';
 import { MediaGenerationService } from './media-generation-service';
@@ -105,6 +111,8 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
   adapterRegistry.registerBuiltin('suno', new SunoMediaAdapter());
   adapterRegistry.registerBuiltin('vidu', new ViduMediaAdapter());
   adapterRegistry.registerBuiltin('midjourney', new MidjourneyMediaAdapter());
+  adapterRegistry.registerBuiltin('fal', new FalMediaAdapter());
+  adapterRegistry.registerBuiltin('dashscope', new DashScopeMediaAdapter());
 
   // Create routing manager
   const routingManager = new MediaRoutingManager(deps.providerRegistry, deps.configManager);
