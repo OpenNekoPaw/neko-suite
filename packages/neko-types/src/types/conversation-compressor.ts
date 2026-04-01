@@ -192,6 +192,144 @@ export interface ISummarizer {
 /**
  * Conversation compressor interface
  */
+// ────────────────────────────────────────────
+// Creative-domain compression types
+// ────────────────────────────────────────────
+
+/**
+ * Information type classification for creative workflows.
+ * Lower numeric priority = higher retention importance.
+ */
+export type CreativeInfoType =
+  | 'user_message' // P1: user messages — always keep verbatim
+  | 'creative_decision' // P2: style/tone/character/narrative decisions
+  | 'version_anchor' // P3: version checkpoints + user satisfaction signals
+  | 'iteration_chain' // P4: prompt → params → result → feedback chains
+  | 'asset_state' // P5: layer/timeline/canvas structural changes
+  | 'aesthetic_pref' // P6: accumulated accept/reject aesthetic signals
+  | 'other'; // P7: everything else
+
+/**
+ * Classification result for a single message
+ */
+export interface MessageClassification {
+  /** Original message */
+  message: ChatMessage;
+  /** Detected information type */
+  infoType: CreativeInfoType;
+  /** Numeric priority (1-7, lower = more important) */
+  priority: number;
+  /** Suggested retention action */
+  retentionHint: 'keep' | 'summarize' | 'discard';
+}
+
+/**
+ * Message classifier interface — classifies conversation messages
+ * by creative information type for priority-based compression.
+ */
+export interface IMessageClassifier {
+  /** Classify an array of messages */
+  classify(messages: ChatMessage[]): MessageClassification[];
+}
+
+/**
+ * Per-category token budget for layered summarisation
+ */
+export interface CreativeSummaryBudget {
+  /** P2: creative direction decisions */
+  creativeDecisions: number;
+  /** P3: version anchors and evaluations */
+  versionAnchors: number;
+  /** P4: iteration chains (prompt→result→feedback) */
+  iterationChains: number;
+  /** P5: asset state snapshots */
+  assetStates: number;
+  /** P6: aesthetic preference signals */
+  aestheticPrefs: number;
+}
+
+/**
+ * Creative-domain compression configuration.
+ * Extends the base compressor with semantic classification.
+ */
+export interface CreativeCompressionConfig {
+  /** Whether to keep ALL user messages verbatim ('all') or only within window ('recent') */
+  userMessageRetention: 'all' | 'recent';
+  /** Keywords that signal a version anchor / satisfaction checkpoint */
+  versionAnchorKeywords: string[];
+  /** Keywords that signal a creative direction decision */
+  creativeDecisionKeywords: string[];
+  /** Keywords that signal aesthetic preference (accept/reject) */
+  aestheticPrefKeywords: string[];
+  /** Per-category token budget for summarisation */
+  summaryBudget: CreativeSummaryBudget;
+}
+
+/**
+ * Default creative compression configuration
+ */
+export const DEFAULT_CREATIVE_COMPRESSION_CONFIG: CreativeCompressionConfig = {
+  userMessageRetention: 'all',
+  versionAnchorKeywords: [
+    '这版不错',
+    '满意',
+    '就这样',
+    'OK',
+    '完美',
+    '可以',
+    'keep this',
+    'looks good',
+    'perfect',
+    'love it',
+  ],
+  creativeDecisionKeywords: [
+    '风格',
+    '基调',
+    '色调',
+    '构图',
+    '节奏',
+    '氛围',
+    '主题',
+    '角色设定',
+    '叙事',
+    'style',
+    'tone',
+    'palette',
+    'composition',
+    'mood',
+    'theme',
+    'character design',
+    'narrative',
+  ],
+  aestheticPrefKeywords: [
+    '太暗',
+    '太亮',
+    '更暖',
+    '更冷',
+    '饱和',
+    '对比',
+    '不够',
+    '过了',
+    'too dark',
+    'too bright',
+    'warmer',
+    'cooler',
+    'more contrast',
+    'less saturated',
+  ],
+  summaryBudget: {
+    creativeDecisions: 500,
+    versionAnchors: 300,
+    iterationChains: 600,
+    assetStates: 300,
+    aestheticPrefs: 300,
+  },
+};
+
+// ────────────────────────────────────────────
+// Core compressor interface
+// ────────────────────────────────────────────
+
 export interface IConversationCompressor {
   /**
    * Configure the compressor

@@ -77,6 +77,15 @@ export interface AgentSessionConfig {
     reservedTokens?: number;
   };
 
+  /**
+   * Enable creative-domain context compression.
+   * When true (or a config object), older turns are compressed using
+   * priority-based classification (user messages preserved verbatim,
+   * creative decisions / version anchors / iteration chains summarised
+   * with per-category token budgets).
+   */
+  creativeCompression?: boolean | import('@neko/shared').CreativeCompressionConfig;
+
   /** Tool confirmation callback (required for 'ask' mode) */
   onConfirmTool?: (
     request: import('../permission/types').ToolConfirmationRequest,

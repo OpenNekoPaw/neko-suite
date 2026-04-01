@@ -12,6 +12,7 @@ import type {
   TurnInfo,
   ISummarizer,
   IConversationCompressor,
+  IMessageClassifier,
 } from '@neko/shared';
 import { DEFAULT_COMPRESSOR_CONFIG } from '@neko/shared';
 import { getLogger } from '../utils/logger';
@@ -52,9 +53,17 @@ export class ConversationCompressor implements IConversationCompressor {
   /** Optional summarizer for generating summaries */
   private summarizer?: ISummarizer;
 
-  constructor(config?: Partial<ConversationCompressorConfig>, summarizer?: ISummarizer) {
+  /** Optional message classifier for priority-based compression */
+  private classifier?: IMessageClassifier;
+
+  constructor(
+    config?: Partial<ConversationCompressorConfig>,
+    summarizer?: ISummarizer,
+    classifier?: IMessageClassifier,
+  ) {
     this.config = { ...DEFAULT_COMPRESSOR_CONFIG, ...config };
     this.summarizer = summarizer;
+    this.classifier = classifier;
   }
 
   /**
@@ -76,6 +85,14 @@ export class ConversationCompressor implements IConversationCompressor {
    */
   setSummarizer(summarizer: ISummarizer): void {
     this.summarizer = summarizer;
+  }
+
+  /**
+   * Set message classifier for creative-domain priority-based compression.
+   * When set, older turns are compressed by category instead of a single bulk summary.
+   */
+  setClassifier(classifier: IMessageClassifier): void {
+    this.classifier = classifier;
   }
 
   /**
@@ -150,9 +167,53 @@ export class ConversationCompressor implements IConversationCompressor {
 
     // Handle older turns
     if (olderTurns.length > 0) {
-      if (this.config.conversationWindow.olderTurnsStrategy === 'summary') {
-        // Summarize older turns
-        const olderMessages = olderTurns.flatMap((t) => t.messages);
+      const olderMessages = olderTurns.flatMap((t) => t.messages);
+
+      if (this.classifier && this.config.conversationWindow.olderTurnsStrategy === 'summary') {
+        // Creative-domain classified compression:
+        // 1. Classify all older messages
+        // 2. Preserve user messages verbatim (P1)
+        // 3. Delegate P2–P7 to the summariser (which handles per-category budgets)
+        const classified = this.classifier.classify(olderMessages);
+
+        // P1: keep user messages verbatim
+        const userMsgs = classified.filter((c) => c.infoType === 'user_message');
+        for (const item of userMsgs) {
+          compressedMessages.push({
+            message: item.message,
+            isSummary: false,
+            compressedTokens: estimateMessageTokens(item.message),
+          });
+        }
+
+        // P2–P7: summarise the rest (classifier-aware summariser handles per-category budgets)
+        const nonUserMessages = classified
+          .filter((c) => c.infoType !== 'user_message')
+          .map((c) => c.message);
+
+        if (nonUserMessages.length > 0) {
+          const summary = await this.summarizeMessages(
+            nonUserMessages,
+            this.config.conversationWindow.olderTurnsSummaryMaxTokens,
+          );
+          if (summary) {
+            compressedMessages.push({
+              message: {
+                role: 'system',
+                content: `[Creative summary of turns 1-${olderTurns.length}]\n${summary}`,
+              },
+              isSummary: true,
+              originalCount: nonUserMessages.length,
+              originalTokens: nonUserMessages.reduce((sum, m) => sum + estimateMessageTokens(m), 0),
+              compressedTokens: estimateTokens(summary),
+              turnRange: `turns 1-${olderTurns.length}`,
+            });
+            summariesCreated++;
+          }
+        }
+        messagesRemoved += nonUserMessages.length;
+      } else if (this.config.conversationWindow.olderTurnsStrategy === 'summary') {
+        // Default bulk summary (no classifier)
         const summary = await this.summarizeMessages(
           olderMessages,
           this.config.conversationWindow.olderTurnsSummaryMaxTokens,
@@ -175,7 +236,7 @@ export class ConversationCompressor implements IConversationCompressor {
         }
       } else {
         // Discard older turns
-        messagesRemoved += olderTurns.flatMap((t) => t.messages).length;
+        messagesRemoved += olderMessages.length;
       }
     }
 
@@ -387,6 +448,7 @@ export class ConversationCompressor implements IConversationCompressor {
 export function createConversationCompressor(
   config?: Partial<ConversationCompressorConfig>,
   summarizer?: ISummarizer,
+  classifier?: IMessageClassifier,
 ): IConversationCompressor {
-  return new ConversationCompressor(config, summarizer);
+  return new ConversationCompressor(config, summarizer, classifier);
 }

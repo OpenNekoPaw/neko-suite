@@ -117,6 +117,8 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 本地模型部署 | [docs/architecture/model-runtime.md](./docs/architecture/model-runtime.md) | 不建 neko-runtime 包；onPostInstall GGUF→Ollama / ONNX→Engine；Engine ort/candle 原生 ML；外部运行时 Provider/MCP 接入 |
 | Registry Server | [docs/architecture/registry-server.md](./docs/architecture/registry-server.md) | 薄 API + 对象存储直传 + 上游代理（HF/Civitai）+ 多 Registry + 私有部署 Docker |
 | 文档预览 | [docs/architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ 委托 Book Reader 或自建（pdfjs-dist/epub.js）；DOCX→docx-preview；XLSX→x-data-spreadsheet；PPTX→LibreOffice headless；priority: option |
+| 创作上下文压缩 | [docs/architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
+| 消融实验框架 | [docs/architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles + MetricsHooks 零侵入消融实验 |
 
 ### Rust 引擎开发约束
 

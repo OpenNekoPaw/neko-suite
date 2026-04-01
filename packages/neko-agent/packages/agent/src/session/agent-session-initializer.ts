@@ -18,7 +18,7 @@ import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import type { Tool } from '@neko/shared';
-import { ConversationCompressor } from '../context';
+import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
 import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
 import {
@@ -87,12 +87,29 @@ export function initializeSession(
   callbacks: SessionCallbacks,
 ): SessionComponents {
   // Step 1: Conversation compressor
-  const compressor = new ConversationCompressor({
-    triggers: {
-      tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
-      turnThreshold: 20,
+  // When creative compression is enabled, inject MessageClassifier + CreativeSummarizer
+  // so older turns are compressed with priority-based classification instead of bulk summary.
+  const creativeOpt = config.creativeCompression;
+  const classifier = creativeOpt
+    ? new MessageClassifier(typeof creativeOpt === 'object' ? creativeOpt : undefined)
+    : undefined;
+  const creativeSummarizer = classifier
+    ? new CreativeSummarizer(classifier, {
+        service: config.service,
+        creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
+      })
+    : undefined;
+
+  const compressor = new ConversationCompressor(
+    {
+      triggers: {
+        tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
+        turnThreshold: 20,
+      },
     },
-  });
+    creativeSummarizer ?? undefined,
+    classifier ?? undefined,
+  );
 
   // Step 2: Tool group registry
   const toolGroupRegistry =
