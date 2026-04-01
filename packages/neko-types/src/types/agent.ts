@@ -170,6 +170,64 @@ export interface CreativeVersionEntry {
   iterationIndex: number;
 }
 
+// =============================================================================
+// Coordinator Types (shared for extension layer consumption)
+// =============================================================================
+
+/** Task notification from Coordinator — structured result backflow */
+export interface TaskNotification {
+  taskId: string;
+  subAgentId: string;
+  status: 'completed' | 'failed';
+  result?: {
+    response: string;
+    artifacts?: Array<{
+      type: string;
+      path: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  };
+  error?: string;
+  duration: number;
+  timestamp: number;
+}
+
+/** Coordinator event types */
+export type CoordinatorEventType =
+  | 'phase_changed'
+  | 'task_claimed'
+  | 'task_completed'
+  | 'task_failed'
+  | 'confirmation_required'
+  | 'coordinator_done';
+
+/** Coordinator phase */
+export type CoordinatorPhase = 'plan' | 'confirm' | 'execute' | 'verify' | 'done';
+
+/** Coordinator progress */
+export interface CoordinatorProgress {
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+/** Coordinator event (shared for UI consumption) */
+export interface CoordinatorEvent {
+  type: CoordinatorEventType;
+  coordinatorId: string;
+  phase?: CoordinatorPhase;
+  notification?: TaskNotification;
+  summary?: string;
+  progress?: CoordinatorProgress;
+  timestamp: number;
+}
+
+// =============================================================================
+// Tool Call Types
+// =============================================================================
+
 /**
  * Tool call info for hooks
  */

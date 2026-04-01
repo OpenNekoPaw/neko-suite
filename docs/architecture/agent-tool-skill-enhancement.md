@@ -298,7 +298,12 @@ Phase C (P2, 体验打磨):
 │   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
 │   └─ 9 单测通过
 ├─ C.4 Creative Agent Memory（三 scope + snapshot + relevant recall）
-└─ C.5 SubAgent 创作专家模式
+└─ C.5 SubAgent 创作专家模式 ✅ COMPLETED 2026-04-01
+    ├─ 5 种创作专家预设（creative-director/cinematographer/composer/editor/vfx-artist）
+    ├─ CREATIVE_PRESETS 领域系统提示词 + 工具白名单 + 模型层级
+    ├─ QualityTier（draft/standard/premium）影响模型选择
+    ├─ TaskTool 扩展支持创作类型 + quality_tier 参数
+    └─ 9 单测通过
 ```
 
 ---
@@ -550,7 +555,12 @@ Phase B (P1, 智能化增强) ✅ COMPLETED 2026-04-01:
 ├─ B.3 MCP 健壮性 (描述截断 + 自动重连 + 并发限制)  ✅
 ├─ B.4 Skill paths 条件触发（globMatch + onDidSave → 自动激活）  ✅
 ├─ B.5 多模态 ToolResult attachments（image/audio/video → ContentPart[]）  ✅
-├─ B.6 Creative Coordinator Mode（SubAgent + task notification + permission bridge）
+├─ B.6 Creative Coordinator Mode（SubAgent + task notification + permission bridge）  ✅
+│   ├─ Coordinator 多阶段编排（plan→confirm→execute→verify→done）
+│   ├─ TaskPool 依赖解析 + 优先级队列 + 进度追踪
+│   ├─ PermissionBridge 权限桥接（SubAgent 确认回流父 Session）
+│   ├─ CoordinateTool LLM 入口（coordinate 工具）
+│   └─ 48 单测通过（coordinator 14 + task-pool 26 + permission-bridge 8）
 └─ B.7 CreativeVersionLog 版本锚点  ✅
     ├─ CreativeVersionLog 纯状态容器（record/evaluate/query/toSummary）
     ├─ CreativeVersionEntry 类型 + isGenerationTool() + detectEvaluation()
@@ -571,7 +581,12 @@ Phase C (P2, 体验打磨):
 │   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
 │   └─ 9 单测通过
 ├─ C.4 Creative Agent Memory（三 scope + snapshot + relevant recall）
-└─ C.5 SubAgent 创作专家模式
+└─ C.5 SubAgent 创作专家模式  ✅
+    ├─ 5 种创作专家预设（creative-director/cinematographer/composer/editor/vfx-artist）
+    ├─ CREATIVE_PRESETS 领域系统提示词 + 工具白名单 + 模型层级
+    ├─ QualityTier（draft/standard/premium）影响模型选择
+    ├─ TaskTool 扩展支持创作类型 + quality_tier 参数
+    └─ 9 单测通过
 ```
 
 ---

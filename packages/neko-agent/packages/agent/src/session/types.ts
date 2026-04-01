@@ -143,6 +143,7 @@ export type AgentEventType =
   | 'tool_progress' // Tool execution progress update
   | 'tool_confirmation' // Tool requires confirmation
   | 'version_recorded' // Creative version entry recorded
+  | 'coordinator_event' // Coordinator orchestration event
   | 'iteration' // Iteration info
   | 'done' // Execution complete
   | 'error' // Error occurred
@@ -192,6 +193,9 @@ export interface AgentEvent {
 
   /** Creative version entry (on version_recorded) */
   versionEntry?: import('@neko/shared').CreativeVersionEntry;
+
+  /** Coordinator event (on coordinator_event) */
+  coordinatorEvent?: import('@neko/shared').CoordinatorEvent;
 
   /** Iteration info */
   iteration?: {

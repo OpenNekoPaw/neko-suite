@@ -43,7 +43,13 @@ export type SpecializedAgentType =
   | 'file-explorer' // Navigate file system
   | 'test-runner' // Run and analyze tests
   | 'document-writer' // Write documentation
-  | 'general'; // General purpose agent
+  | 'general' // General purpose agent
+  // Creative domain experts (C.5)
+  | 'creative-director' // Scene planning, visual storytelling, direction
+  | 'cinematographer' // Composition, lighting, camera work
+  | 'composer' // Music creation, sound design
+  | 'editor' // Timeline editing, transitions, pacing
+  | 'vfx-artist'; // Visual effects, compositing, color grading
 
 /**
  * Model tier for SubAgent
@@ -121,6 +127,16 @@ export interface SubAgentConfig {
    * @default false
    */
   inheritParentToolSkills?: boolean;
+
+  // ==========================================================================
+  // Creative (C.5)
+  // ==========================================================================
+
+  /**
+   * Quality tier for creative generation tasks.
+   * Affects model selection and generation parameters.
+   */
+  qualityTier?: 'draft' | 'standard' | 'premium';
 }
 
 /**
@@ -333,6 +349,10 @@ export interface TaskToolArgs {
   tool_skills?: string[];
   /** Whether to inherit parent agent's active ToolSkills */
   inherit_parent_tool_skills?: boolean;
+
+  // Creative (C.5)
+  /** Quality tier for creative generation tasks */
+  quality_tier?: 'draft' | 'standard' | 'premium';
 }
 
 /**

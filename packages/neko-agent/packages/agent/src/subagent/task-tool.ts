@@ -84,8 +84,26 @@ Launch multiple SubAgents in a single turn for independent tasks:
         },
         subagent_type: {
           type: 'string',
-          enum: ['code-search', 'file-explorer', 'test-runner', 'document-writer', 'general'],
-          description: 'Type of specialized agent to use (default: general)',
+          enum: [
+            'code-search',
+            'file-explorer',
+            'test-runner',
+            'document-writer',
+            'general',
+            'creative-director',
+            'cinematographer',
+            'composer',
+            'editor',
+            'vfx-artist',
+          ],
+          description:
+            'Type of specialized agent. Creative types: creative-director, cinematographer, composer, editor, vfx-artist',
+        },
+        quality_tier: {
+          type: 'string',
+          enum: ['draft', 'standard', 'premium'],
+          description:
+            'Quality tier for creative generation tasks (default: standard). Affects model selection.',
         },
         run_in_background: {
           type: 'boolean',
@@ -141,6 +159,8 @@ Launch multiple SubAgents in a single turn for independent tasks:
         inherit_parent_skills = false,
         tool_skills,
         inherit_parent_tool_skills = false,
+        // Creative
+        quality_tier,
       } = typedArgs;
 
       // Handle resume case
@@ -204,6 +224,8 @@ Launch multiple SubAgents in a single turn for independent tasks:
         inheritParentSkills: inherit_parent_skills,
         toolSkills: tool_skills,
         inheritParentToolSkills: inherit_parent_tool_skills,
+        // Creative
+        qualityTier: quality_tier,
       };
 
       try {

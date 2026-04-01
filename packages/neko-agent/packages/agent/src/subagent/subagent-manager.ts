@@ -21,10 +21,10 @@ import type {
   SubAgentManagerDeps,
   ISubAgentManager,
   SpecializedAgentPreset,
-  SpecializedAgentType,
   ModelTier,
   SubAgentExecutor,
 } from './types';
+import { CREATIVE_PRESETS } from './creative-presets';
 
 const logger = getLogger('SubAgentManager');
 
@@ -35,7 +35,7 @@ const logger = getLogger('SubAgentManager');
 /**
  * Predefined configurations for specialized agent types
  */
-export const SPECIALIZED_PRESETS: Record<SpecializedAgentType, SpecializedAgentPreset> = {
+const BASE_PRESETS: Record<string, SpecializedAgentPreset> = {
   'code-search': {
     description: 'Search and analyze code in the codebase',
     systemPrompt: `You are a code search specialist. Your task is to find relevant code patterns, definitions, and references.
@@ -100,6 +100,14 @@ Guidelines:
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
+};
+
+/**
+ * All specialized presets (base + creative)
+ */
+export const SPECIALIZED_PRESETS: Record<string, SpecializedAgentPreset> = {
+  ...BASE_PRESETS,
+  ...CREATIVE_PRESETS,
 };
 
 // =============================================================================

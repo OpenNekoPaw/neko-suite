@@ -64,6 +64,42 @@ export {
 export { createTaskTool, createTaskOutputTool, registerSubAgentTools } from './task-tool';
 
 // =============================================================================
+// Creative Presets
+// =============================================================================
+
+export { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from './creative-presets';
+export type { CreativeAgentType, QualityTier } from './creative-presets';
+
+// =============================================================================
+// Coordinator
+// =============================================================================
+
+export {
+  Coordinator,
+  createCoordinator,
+  TaskPool,
+  createTaskPool,
+  PermissionBridge,
+  createPermissionBridge,
+  createCoordinateTool,
+} from './coordinator';
+
+export type {
+  CoordinatorPhase,
+  CoordinatorConfig,
+  CoordinatorDeps,
+  CoordinatorEvent,
+  CoordinatorEventType,
+  CoordinateToolDeps,
+  ICoordinator,
+  TaskItem,
+  TaskStatus,
+  TaskNotification,
+  TaskPoolProgress,
+  PermissionBridgeConfig,
+} from './coordinator';
+
+// =============================================================================
 // Factory Function
 // =============================================================================
 
