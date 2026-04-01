@@ -224,6 +224,7 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     customHooks: config.hooks,
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
+    traitsRegistry: config.traitsRegistry,
   });
 
   const executor = new AgentExecutor({

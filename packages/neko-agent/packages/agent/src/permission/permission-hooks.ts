@@ -19,6 +19,7 @@ import type {
 import type { IPermissionManager } from './permission-manager-types';
 import { DEFAULT_PERMISSION_CONFIG } from './types';
 import { PermissionRuleMatcher, normalizeToolCall } from './rule-matcher';
+import type { ToolTraitsRegistry } from './tool-traits-registry';
 import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
 import { getLogger } from '../utils/logger';
 
@@ -45,6 +46,9 @@ export interface PermissionHooksOptions {
 
   /** Shell hook loader for executing PreToolUse hooks from settings.json */
   settingsHookLoader?: SettingsHookLoader;
+
+  /** Tool traits registry for conditional auto mode (creative scenarios) */
+  traitsRegistry?: ToolTraitsRegistry;
 }
 
 /**
@@ -74,7 +78,7 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
 
   constructor(options: PermissionHooksOptions = {}) {
     const config = options.config || DEFAULT_PERMISSION_CONFIG;
-    this.matcher = new PermissionRuleMatcher(config);
+    this.matcher = new PermissionRuleMatcher(config, options.traitsRegistry);
     this.onConfirmTool = options.onConfirmTool;
     this.onToolDenied = options.onToolDenied;
     this.onToolAllowed = options.onToolAllowed;

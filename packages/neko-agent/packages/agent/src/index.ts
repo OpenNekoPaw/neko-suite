@@ -99,7 +99,11 @@ export {
 } from './hooks';
 
 // Export memory
-export { InMemorySessionMemory, FileProjectMemoryManager, createFileProjectMemoryManager } from './memory';
+export {
+  InMemorySessionMemory,
+  FileProjectMemoryManager,
+  createFileProjectMemoryManager,
+} from './memory';
 
 // Export MCP
 export {
@@ -193,6 +197,10 @@ export {
   // Permission Hooks
   PermissionHooks,
   createPermissionHooks,
+  // Creative Permission
+  CREATIVE_PLAN_TOOLS,
+  ToolTraitsRegistry,
+  DEFAULT_CREATIVE_TOOL_TRAITS,
 } from './permission';
 
 // Export skill

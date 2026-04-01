@@ -19,6 +19,7 @@ import type {
   PermissionConfig,
 } from './types';
 import { DEFAULT_READ_ONLY_TOOLS, READ_ONLY_MCP_PREFIXES, PLAN_FILE_PATH } from './types';
+import type { ToolTraitsRegistry } from './tool-traits-registry';
 
 // Re-export pattern matching utilities from centralized module for backward compatibility
 export { normalizeToolCall, matchesPattern, isInPatternList } from '../tools/tool-pattern-matcher';
@@ -96,9 +97,11 @@ export function isReadOnlyTool(
  */
 export class PermissionRuleMatcher {
   private config: PermissionConfig;
+  private traitsRegistry?: ToolTraitsRegistry;
 
-  constructor(config: PermissionConfig) {
+  constructor(config: PermissionConfig, traitsRegistry?: ToolTraitsRegistry) {
     this.config = config;
+    this.traitsRegistry = traitsRegistry;
   }
 
   /**
@@ -195,6 +198,28 @@ export class PermissionRuleMatcher {
 
     // Step 5: Apply mode-based default
     if (mode === 'auto') {
+      // Creative conditional auto: use traits when available
+      if (this.traitsRegistry) {
+        const traits = this.traitsRegistry.get(toolCall.name);
+
+        // Reversible OR local → auto-allow (safe, zero-cost operations)
+        if (traits.reversible || traits.locality === 'local') {
+          return {
+            decision: 'allow',
+            reason: `Auto mode: '${normalizedTool}' auto-allowed (reversible=${String(traits.reversible)}, locality=${traits.locality})`,
+            toolCall,
+          };
+        }
+
+        // Network + irreversible → ask user (costs money, user should confirm)
+        return {
+          decision: 'ask',
+          reason: `Auto mode: '${normalizedTool}' requires confirmation (network + irreversible, cost=${traits.cost})`,
+          toolCall,
+        };
+      }
+
+      // Fallback: no traits registry → unconditional allow (backward compatible)
       return {
         decision: 'allow',
         reason: `Auto mode: tool '${normalizedTool}' allowed by default`,

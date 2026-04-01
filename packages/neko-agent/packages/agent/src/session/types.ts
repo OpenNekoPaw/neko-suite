@@ -13,6 +13,7 @@ import type {
   IToolGroupRegistry,
   IToolCategoryRegistry,
 } from '@neko/shared';
+import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -105,6 +106,15 @@ export interface AgentSessionConfig {
    * Backed by `.neko/memory.md` in the project workspace root.
    */
   projectMemoryManager?: import('@neko/shared').IProjectMemoryManager;
+
+  /**
+   * Tool traits registry for creative auto mode.
+   * When provided, auto mode uses trait-based decisions:
+   * - reversible OR local → auto-allow
+   * - network + irreversible → ask user
+   * Without this, auto mode unconditionally allows (backward compatible).
+   */
+  traitsRegistry?: ToolTraitsRegistry;
 }
 
 // =============================================================================

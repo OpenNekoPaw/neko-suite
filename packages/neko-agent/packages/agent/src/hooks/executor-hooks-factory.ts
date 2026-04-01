@@ -13,6 +13,8 @@ import type { ConversationCompressor } from '../context';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode, PermissionRules } from '../permission/types';
 import type { ToolConfirmationRequest } from '../permission/types';
+import { CREATIVE_PLAN_TOOLS, DEFAULT_READ_ONLY_TOOLS } from '../permission/types';
+import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 import type { ValidationWarning, ValidationError } from '../validation/types';
 import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
 
@@ -63,6 +65,9 @@ export interface ExecutorHooksFactoryConfig {
 
   /** Validation error callback */
   onValidationError?: (error: ValidationError) => void;
+
+  /** Tool traits registry for conditional auto mode (creative scenarios) */
+  traitsRegistry?: ToolTraitsRegistry;
 }
 
 /**
@@ -112,14 +117,16 @@ export function createExecutorHooks(
     onValidationError: config.onValidationError,
   });
 
-  // 3. Permission hooks
+  // 3. Permission hooks (with creative plan tools and optional traits/budget)
   const permissionHooks = createPermissionHooks({
     config: {
       mode: config.permissionMode,
       rules: config.permissionRules ?? {},
+      readOnlyTools: [...DEFAULT_READ_ONLY_TOOLS, ...CREATIVE_PLAN_TOOLS],
     },
     onToolAskStarted: config.onToolAskStarted,
     settingsHookLoader: config.settingsHookLoader,
+    traitsRegistry: config.traitsRegistry,
   });
 
   // 4. Retry hooks — auto-retry failed tool calls for transient errors

@@ -69,6 +69,36 @@ export interface ToolParameters {
 }
 
 /**
+ * Tool behavioral traits for creative permission decisions.
+ *
+ * Used by PermissionRuleMatcher to conditionally allow/ask in auto mode:
+ * - Reversible OR local tools → auto-allow
+ * - Network + within budget → auto-allow
+ * - Over budget or irreversible + network → ask user
+ */
+export interface ToolTraits {
+  /** Estimated cost tier for a single invocation */
+  cost: 'free' | 'cheap' | 'moderate' | 'expensive';
+  /** Whether the operation can be undone */
+  reversible: boolean;
+  /** Where computation happens */
+  locality: 'local' | 'network' | 'hybrid';
+  /** Severity of impact if something goes wrong */
+  impactLevel: 'none' | 'low' | 'high' | 'critical';
+}
+
+/**
+ * Default traits for tools without explicit declaration.
+ * Assumes safe, local, free, reversible — the most permissive defaults.
+ */
+export const DEFAULT_TOOL_TRAITS: ToolTraits = {
+  cost: 'free',
+  reversible: true,
+  locality: 'local',
+  impactLevel: 'none',
+};
+
+/**
  * Tool definition
  */
 export interface Tool {
@@ -82,6 +112,8 @@ export interface Tool {
   category: ToolCategory;
   /** Whether tool requires confirmation */
   requiresConfirmation?: boolean;
+  /** Behavioral traits for creative permission system */
+  traits?: ToolTraits;
   /** Tool execution handler */
   execute(args: Record<string, unknown>): Promise<ToolResult>;
 }

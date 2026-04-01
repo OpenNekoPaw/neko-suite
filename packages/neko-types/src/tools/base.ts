@@ -7,7 +7,7 @@
  * - Standard interface implementation
  */
 
-import type { Tool, ToolCategory, ToolParameters, ToolResult } from '../types/tool';
+import type { Tool, ToolCategory, ToolParameters, ToolResult, ToolTraits } from '../types/tool';
 
 /**
  * Base class for builtin tools
@@ -69,6 +69,7 @@ export function createTool(config: {
   parameters: ToolParameters;
   category: ToolCategory;
   requiresConfirmation?: boolean;
+  traits?: ToolTraits;
   execute: (args: Record<string, unknown>) => Promise<ToolResult>;
 }): Tool {
   return {
@@ -77,6 +78,7 @@ export function createTool(config: {
     parameters: config.parameters,
     category: config.category,
     requiresConfirmation: config.requiresConfirmation ?? false,
+    ...(config.traits && { traits: config.traits }),
     execute: config.execute,
   };
 }

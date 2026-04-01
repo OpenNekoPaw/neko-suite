@@ -27,7 +27,11 @@ export {
   DEFAULT_PERMISSION_CONFIG,
   PLAN_MODE_SYSTEM_REMINDER,
   PLAN_FILE_PATH,
+  CREATIVE_PLAN_TOOLS,
 } from './types';
+
+// Tool Traits Registry
+export { ToolTraitsRegistry, DEFAULT_CREATIVE_TOOL_TRAITS } from './tool-traits-registry';
 
 // Rule Matcher
 export {

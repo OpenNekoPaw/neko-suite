@@ -181,6 +181,26 @@ export const READ_ONLY_MCP_PREFIXES = [
 ];
 
 /**
+ * Creative preview/discovery tools allowed in plan mode.
+ * These are non-destructive, zero-cost tools for creative exploration.
+ * Merged into readOnlyTools at initialization time.
+ */
+export const CREATIVE_PLAN_TOOLS = [
+  // NekoCut timeline read-only
+  'GetTimelineInfo',
+  'ListTimelineElements',
+  // Canvas read-only
+  'canvas_list_nodes',
+  'canvas_get_node',
+  // Effects discovery
+  'ListVideoEffects',
+  'GetVideoEffectInfo',
+  // Asset browsing
+  'ListAssets',
+  'GetAsset',
+];
+
+/**
  * Default permission config
  */
 export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
