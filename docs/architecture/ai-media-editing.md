@@ -1,7 +1,7 @@
 # AI 媒体编辑能力分析
 
-> 日期：2026-03-31
-> 状态：分析完成，待实施
+> 日期：2026-04-01
+> 状态：E1 + E2.5 已实施
 > 范围：neko-cut / neko-canvas / neko-sketch / neko-agent / neko-engine
 > 关联：[ai-capabilities.md](./ai-capabilities.md) · [ai-capabilities-roadmap.md](./ai-capabilities-roadmap.md) · [model-runtime.md](./model-runtime.md) · [2d-capability-analysis.md](./2d-capability-analysis.md)
 
@@ -622,20 +622,24 @@ Canvas ShotNode → "局部重绘"
 
 ## 7. 开发计划
 
-### Phase E1：类型扩展 + Sora 替代（~2 天）
+### Phase E1：类型扩展 + Sora 替代（~2 天）✅ 已完成
 
 **目标**：扩展生成请求类型，应对 Sora 下线
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| ImageGenerationRequest 增加 control/ipAdapter/edit 字段 | `platform/src/media/types.ts` | ~30 行 |
-| VideoGenerationRequest 增加 camera/motion/edit 字段 | 同上 | ~30 行 |
-| CameraMovement/CameraAngle 从 `@neko/shared` 导入 | 同上 | ~5 行 |
-| OpenAICompatMediaAdapter 传递新字段到 fal.ai/Replicate | `adapters/openai-compat-media-adapter.ts` | ~40 行 |
-| 默认视频模型配置：添加 Kling 3.0 / Wan 2.7 作为 Sora 替代 | `config/default-config.ts` | ~20 行 |
-| Sora 下线警告：检测 sora-2 模型配置时提示用户迁移 | `media/media-generation-service.ts` | ~15 行 |
+**已完成（2026-04-01）**：
 
-**产出**：现有 Adapter 可传递 ControlNet/IP-Adapter/运镜参数给支持的 API
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| `ControlMode` 类型（8 种 ControlNet 模式） | `platform/src/media/types.ts` | ✅ |
+| `IPAdapterReference` 接口（imageBase64 + strength + mode） | 同上 | ✅ |
+| `MediaGenerationType` 新增 `image-edit` / `video-edit` | 同上 | ✅ |
+| `ImageGenerationRequest` +5 字段（controlImage/controlMode/controlStrength/ipAdapterRefs/editInstruction） | 同上 | ✅ |
+| `VideoGenerationRequest` +8 字段（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/referenceImages/editInstruction） | 同上 | ✅ |
+| OpenAICompatMediaAdapter 传递新字段到 fal.ai/Replicate | `adapters/openai-compat-media-adapter.ts` | ⏳ 待适配器实现时完成 |
+| 默认视频模型配置：添加 Kling 3.0 / Wan 2.7 作为 Sora 替代 | `config/default-config.ts` | ⏳ |
+| Sora 下线警告：检测 sora-2 模型配置时提示用户迁移 | `media/media-generation-service.ts` | ⏳ |
+
+**产出**：类型系统已支持 ControlNet/IP-Adapter/运镜/指令编辑参数，适配器可在实现时直接使用
 
 ### Phase E2：fal.ai ControlNet Adapter（~3 天）
 
@@ -654,37 +658,29 @@ Canvas ShotNode → "局部重绘"
 
 **产出**：通过 fal.ai 实现 depth/canny/pose ControlNet + IP-Adapter 云端生成
 
-### Phase E2.5：Cut AI 编辑接通（~2 天）
+### Phase E2.5：Cut AI 编辑接通（~2 天）✅ 核心链路已完成
 
 **目标**：接通 neko-cut 已有的 12 个 AI action UI 入口到真实 AI 服务（ROI 最高：UI 全有，只差后端）
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| CutAIActionHandler 服务 | `cut/extension/src/services/cutAIActionHandler.ts` | ~200 行 |
-| ├── 接收 webview `executeAIAction` 消息 | | |
-| ├── 按 actionId 路由到 MediaGenerationService / EngineClient | | |
-| ├── ai-enhance → upscale + denoise 组合 | | |
-| ├── ai-style-transfer → img2img style | | |
-| ├── ai-upscale → Engine ONNX / 云端 | | |
-| ├── ai-denoise → Engine ONNX / 云端 | | |
-| ├── ai-color-grade → Qwen-Image 指令编辑 | | |
-| ├── ai-background-remove → segmentation | | |
-| └── ai-smart-crop → object detection + crop | | |
-| AI Edit Panel（PropertyPanel 新 section） | `cut/webview/src/components/PropertyPanel/AIEditSection.tsx` | ~150 行 |
-| ├── 快捷按钮行（打光/运镜/风格/增强/裁剪/去背） | | |
-| ├── 指令编辑输入框 + "应用" 按钮 | | |
-| └── 联动入口（Sketch 编辑 / Canvas 查看） | | |
-| Cut↔Sketch 联动命令 | `cut/extension/src/commands/` | ~40 行 |
-| ├── neko.cut.editInSketch → 取当前帧 → sketch.editImage | | |
-| └── neko.cut.updateClipFrame → 接收 sketch 回写 | | |
-| aiActionSlice 扩展（新 action 类型） | `cut/webview/src/stores/slices/aiActionSlice.ts` | ~30 行 |
-| 进度 UI（action 执行中状态显示） | `cut/webview/src/components/PropertyPanel/` | ~40 行 |
-| 单元测试 | | ~80 行 |
+**已完成（2026-04-01）**：
+
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| AIActionHandler 服务（12 action 路由） | `cut/extension/src/services/AIActionHandler.ts` | ✅ ~300 行 |
+| ├── P0 本地 ONNX: upscale/denoise/enhance/speech-to-text/subtitles | via EngineClient | ✅ |
+| ├── P1 云端 AI: style-transfer/color-grade | via `neko.agent.generateForNode` | ✅ |
+| └── P2 Stub: background-remove/auto-edit/match-music/remove-silence/smart-crop | 返回 "coming soon" | ✅ |
+| messageHandler.ts 添加 `executeAIAction` case | `cut/extension/src/editor/video/messageHandler.ts` | ✅ |
+| `MessageFromWebview` 补全 `trackIds` 字段 | `neko-types/src/types/message.ts` | ✅ |
+| AI Edit Panel（PropertyPanel 新 section） | `cut/webview/src/components/PropertyPanel/AIEditSection.tsx` | ⏳ |
+| Cut↔Sketch 联动命令 | `cut/extension/src/commands/` | ⏳ |
+| 单元测试 | | ⏳ |
 
 **产出**：
-- 用户在时间线右键 → AI 操作直接可用（无需通过 agent 对话）
-- PropertyPanel 新增 AI 编辑区（快捷按钮 + 指令输入 + 联动入口）
-- Cut↔Sketch 帧级编辑联动
+- ✅ webview 的 12 个 AI action 消息不再落入 "Unknown message type"，已路由到 AIActionHandler
+- ✅ P0 action（upscale/denoise/enhance/whisper）通过 EngineClient 本地执行
+- ✅ P1 action（style-transfer/color-grade）通过跨扩展命令调用 neko-agent
+- ⏳ PropertyPanel AI 编辑区 + Cut↔Sketch 联动 + 单元测试待后续
 
 ### Phase E3：Qwen-Image Adapter（~2 天）
 

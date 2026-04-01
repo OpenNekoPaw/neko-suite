@@ -18,6 +18,7 @@ import {
 } from '@neko/shared';
 import { getLogger } from '../../base';
 import { normalizePathsForSave, resolveMediaPath } from '../../services/tools/helpers';
+import { AIActionHandler } from '../../services/AIActionHandler';
 
 const logger = getLogger('MessageHandler');
 
@@ -28,6 +29,8 @@ export class MessageHandler {
   // 当前导出文件的写入流
   private _exportWriteStream: fs.WriteStream | null = null;
   private _exportFilePath: string | null = null;
+  // AI action handler (lazy initialized)
+  private _aiActionHandler: AIActionHandler | null = null;
 
   constructor(
     private readonly webview: vscode.Webview,
@@ -96,6 +99,10 @@ export class MessageHandler {
         this.handleOperationApplied(message.operation);
         break;
 
+      case 'executeAIAction':
+        await this.handleExecuteAIAction(message);
+        break;
+
       // These are handled by videoEditorProvider before reaching messageHandler
       case 'export:start':
       case 'export:cancel':
@@ -126,6 +133,32 @@ export class MessageHandler {
       type: 'error',
       message,
     });
+  }
+
+  // ==========================================================================
+  // AI Action 处理
+  // ==========================================================================
+
+  /**
+   * Handle AI action request from Webview.
+   * Delegates to AIActionHandler which routes to EngineClient or neko-agent.
+   */
+  private async handleExecuteAIAction(message: {
+    type: 'executeAIAction';
+    actionId: string;
+    elementIds: string[];
+    trackIds?: string[];
+    params?: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this._aiActionHandler) {
+      this._aiActionHandler = new AIActionHandler(this.webview, this.model.uri);
+    }
+    await this._aiActionHandler.handleAction(
+      message.actionId,
+      message.elementIds,
+      message.trackIds,
+      message.params,
+    );
   }
 
   // ==========================================================================

@@ -442,6 +442,7 @@ export type MessageFromWebview =
       type: 'executeAIAction';
       actionId: string;
       elementIds: string[];
+      trackIds?: string[];
       params?: Record<string, unknown>;
     }
   // Template execution requests (WebView -> Extension)

@@ -16,9 +16,11 @@ import type { Model, Provider } from '../types/provider';
 export type MediaGenerationType =
   | 'text-to-image'
   | 'image-to-image'
+  | 'image-edit'
   | 'text-to-video'
   | 'image-to-video'
   | 'video-to-video'
+  | 'video-edit'
   | 'text-to-audio'
   | 'text-to-music'
   | 'workflow';
@@ -32,6 +34,35 @@ export type MediaTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' 
  * Media output type
  */
 export type MediaOutputType = 'image' | 'video' | 'audio';
+
+// =============================================================================
+// ControlNet & IP-Adapter Types
+// =============================================================================
+
+/**
+ * ControlNet conditioning mode
+ */
+export type ControlMode =
+  | 'canny'
+  | 'depth'
+  | 'pose'
+  | 'normal'
+  | 'segment'
+  | 'lineart'
+  | 'softedge'
+  | 'scribble';
+
+/**
+ * IP-Adapter reference for style/subject transfer
+ */
+export interface IPAdapterReference {
+  /** Reference image as base64-encoded PNG */
+  imageBase64: string;
+  /** Influence strength 0.0–1.0 */
+  strength?: number;
+  /** Focus on style vs subject */
+  mode?: 'style' | 'subject' | 'both';
+}
 
 // =============================================================================
 // Request Interfaces
@@ -91,6 +122,16 @@ export interface ImageGenerationRequest extends MediaGenerationRequestBase {
   quality?: 'standard' | 'hd';
   /** Style preset */
   style?: string;
+  /** ControlNet conditioning image as base64-encoded PNG */
+  controlImageBase64?: string;
+  /** ControlNet mode (canny, depth, pose, etc.) */
+  controlMode?: ControlMode;
+  /** ControlNet conditioning strength 0.0–1.0 */
+  controlStrength?: number;
+  /** IP-Adapter references for style/subject transfer */
+  ipAdapterRefs?: IPAdapterReference[];
+  /** Natural language instruction for edit (e.g., "make it night time") */
+  editInstruction?: string;
 }
 
 /**
@@ -111,6 +152,22 @@ export interface VideoGenerationRequest extends MediaGenerationRequestBase {
   referenceVideoUrl?: string;
   /** Motion strength (0-1) */
   motionStrength?: number;
+  /** Camera movement directive (matches @neko/shared CameraMovement values) */
+  cameraMovement?: string;
+  /** Camera angle (matches @neko/shared CameraAngle values) */
+  cameraAngle?: string;
+  /** Shot scale (matches @neko/shared ShotScale values) */
+  shotScale?: string;
+  /** Start frame image for video generation (base64 PNG) */
+  startFrameImageBase64?: string;
+  /** End frame image for video generation (base64 PNG) */
+  endFrameImageBase64?: string;
+  /** Source video URL for video-to-video editing */
+  sourceVideoUrl?: string;
+  /** Reference images for subject consistency (IP-Adapter) */
+  referenceImages?: IPAdapterReference[];
+  /** Natural language edit instruction */
+  editInstruction?: string;
 }
 
 /**
