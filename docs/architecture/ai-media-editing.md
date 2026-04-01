@@ -1,7 +1,7 @@
 # AI 媒体编辑能力分析
 
 > 日期：2026-04-01
-> 状态：E1 + E2.5 已实施
+> 状态：E1-E4 + E2.5 已实施
 > 范围：neko-cut / neko-canvas / neko-sketch / neko-agent / neko-engine
 > 关联：[ai-capabilities.md](./ai-capabilities.md) · [ai-capabilities-roadmap.md](./ai-capabilities-roadmap.md) · [model-runtime.md](./model-runtime.md) · [2d-capability-analysis.md](./2d-capability-analysis.md)
 
@@ -635,26 +635,27 @@ Canvas ShotNode → "局部重绘"
 | `MediaGenerationType` 新增 `image-edit` / `video-edit` | 同上 | ✅ |
 | `ImageGenerationRequest` +5 字段（controlImage/controlMode/controlStrength/ipAdapterRefs/editInstruction） | 同上 | ✅ |
 | `VideoGenerationRequest` +8 字段（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/referenceImages/editInstruction） | 同上 | ✅ |
-| OpenAICompatMediaAdapter 传递新字段到 fal.ai/Replicate | `adapters/openai-compat-media-adapter.ts` | ⏳ 待适配器实现时完成 |
+| OpenAICompatMediaAdapter 传递新字段（E4 增强） | `adapters/openai-compat-media-adapter.ts` | ✅ |
 | 默认视频模型配置：添加 Kling 3.0 / Wan 2.7 作为 Sora 替代 | `config/default-config.ts` | ⏳ |
 | Sora 下线警告：检测 sora-2 模型配置时提示用户迁移 | `media/media-generation-service.ts` | ⏳ |
 
 **产出**：类型系统已支持 ControlNet/IP-Adapter/运镜/指令编辑参数，适配器可在实现时直接使用
 
-### Phase E2：fal.ai ControlNet Adapter（~3 天）
+### Phase E2：fal.ai ControlNet Adapter（~3 天）✅ 已完成
 
 **目标**：接入 fal.ai 最完整的 ControlNet 云端 API
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| FalAIMediaAdapter | `adapters/fal-media-adapter.ts` | ~250 行 |
-| ├── Flux-General + ControlNet（depth/canny/pose） | | |
-| ├── Flux-General + IP-Adapter | | |
-| ├── Flux-General image-to-image + inpaint | | |
-| └── 异步轮询（Flux 快速，通常 <10s） | | |
-| fal.ai Provider 配置模板 | `config/default-config.ts` | ~20 行 |
-| MediaAdapterRegistry 注册 | `adapters/media-adapter-registry.ts` | ~5 行 |
-| 单元测试 | `adapters/__tests__/fal-media-adapter.test.ts` | ~150 行 |
+**已完成（2026-04-01）**：
+
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| FalMediaAdapter（queue-based API） | `adapters/fal-media-adapter.ts` | ✅ ~270 行 |
+| ├── Flux + ControlNet（depth/canny/pose） | 自动路由 endpoint | ✅ |
+| ├── Flux + IP-Adapter | ipAdapterRefs 映射 | ✅ |
+| ├── Flux image-to-image + inpaint | referenceImage/mask 支持 | ✅ |
+| └── composite taskId 多模型异步轮询 | "modelId\|requestId" 格式 | ✅ |
+| ProviderType 扩展 + 注册 | `config.ts` + `media/index.ts` | ✅ |
+| 单元测试 | | ⏳ |
 
 **产出**：通过 fal.ai 实现 depth/canny/pose ControlNet + IP-Adapter 云端生成
 
@@ -669,7 +670,8 @@ Canvas ShotNode → "局部重绘"
 | AIActionHandler 服务（12 action 路由） | `cut/extension/src/services/AIActionHandler.ts` | ✅ ~300 行 |
 | ├── P0 本地 ONNX: upscale/denoise/enhance/speech-to-text/subtitles | via EngineClient | ✅ |
 | ├── P1 云端 AI: style-transfer/color-grade | via `neko.agent.generateForNode` | ✅ |
-| └── P2 Stub: background-remove/auto-edit/match-music/remove-silence/smart-crop | 返回 "coming soon" | ✅ |
+| ├── P0 本地 Engine: remove-silence（detectSilence） | via EngineClient | ✅ |
+| └── P2 Stub: background-remove/auto-edit/match-music/smart-crop | 返回 "coming soon" | ✅ |
 | messageHandler.ts 添加 `executeAIAction` case | `cut/extension/src/editor/video/messageHandler.ts` | ✅ |
 | `MessageFromWebview` 补全 `trackIds` 字段 | `neko-types/src/types/message.ts` | ✅ |
 | AI Edit Panel（PropertyPanel 新 section） | `cut/webview/src/components/PropertyPanel/AIEditSection.tsx` | ⏳ |
@@ -682,36 +684,43 @@ Canvas ShotNode → "局部重绘"
 - ✅ P1 action（style-transfer/color-grade）通过跨扩展命令调用 neko-agent
 - ⏳ PropertyPanel AI 编辑区 + Cut↔Sketch 联动 + 单元测试待后续
 
-### Phase E3：Qwen-Image Adapter（~2 天）
+### Phase E3：DashScope Adapter — Qwen-Image + Wan 2.7（~2 天）✅ 已完成
 
-**目标**：接入 Qwen-Image 2.0 原生编辑能力
+**目标**：接入 Qwen-Image 2.0 + Wan 2.7，统一 DashScope API
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| QwenImageMediaAdapter | `adapters/qwen-image-media-adapter.ts` | ~200 行 |
-| ├── text-to-image（2K 原生） | | |
-| ├── 指令编辑（editInstruction + sourceImage） | | |
-| ├── 原生 ControlNet（depth/canny/inpaint） | | |
-| └── DashScope API 集成 | | |
-| 单元测试 | `adapters/__tests__/qwen-image-media-adapter.test.ts` | ~100 行 |
+**已完成（2026-04-01）**：
 
-**产出**：通过 Qwen-Image 2.0 实现指令级编辑（"将打光改为暖色夕阳"）
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| DashScopeMediaAdapter（统一适配器） | `adapters/dashscope-media-adapter.ts` | ✅ ~340 行 |
+| ├── Qwen-Image: text-to-image / image-to-image / image-edit | resolveImageService 路由 | ✅ |
+| ├── Qwen-Image: ControlNet + 指令编辑 | buildQwenImageBody 映射 | ✅ |
+| ├── Wan 2.7: text-to-video / image-to-video / video-edit | resolveVideoService 路由 | ✅ |
+| ├── Wan 2.7: Camera Code 运镜控制 | CAMERA_MOVEMENT_MAP 映射表 | ✅ |
+| └── Wan 2.7: 首尾帧 + 指令编辑 | buildWanVideoBody 映射 | ✅ |
+| ProviderType 扩展 + 注册 | `config.ts` + `media/index.ts` | ✅ |
+| 单元测试 | | ⏳ |
 
-### Phase E4：Wan 2.7 + Kling 增强（~2 天）
+**产出**：统一 DashScope 适配器覆盖 Qwen-Image 2.0 指令编辑 + Wan 2.7 视频运镜
 
-**目标**：视频编辑能力
+### Phase E4：OpenAICompat Kling 增强（~1 天）✅ 已完成
 
-| 任务 | 文件 | 代码量 |
-|------|------|--------|
-| WanVideoAdapter | `adapters/wan-media-adapter.ts` | ~200 行 |
-| ├── Camera Code 运镜控制 | | |
-| ├── 首尾帧控制 | | |
-| ├── 指令编辑 | | |
-| └── DashScope API 集成 | | |
-| Kling Adapter 增强：Motion Control 参数 | `adapters/kling-media-adapter.ts`（已有） | ~50 行 |
-| 单元测试 | | ~100 行 |
+**目标**：OpenAICompat 适配器传递 E1 新字段到 Kling 3.0 等兼容 API
 
-**产出**：视频运镜控制 + 视频编辑 + 首尾帧控制
+**已完成（2026-04-01）**：
+
+| 任务 | 文件 | 状态 |
+|------|------|------|
+| generateVideo +8 参数 | `adapters/openai-compat-media-adapter.ts` | ✅ |
+| ├── cameraMovement/cameraAngle/shotScale | 运镜参数传递 | ✅ |
+| ├── startFrame/endFrame 首尾帧 | body.first_frame_image/last_frame_image | ✅ |
+| ├── sourceVideo + editInstruction | 视频编辑参数 | ✅ |
+| └── motionStrength | 运动强度控制 | ✅ |
+| generateImage +5 参数 | 同上 | ✅ |
+| ├── controlImage/controlMode/controlStrength | ControlNet 参数 | ✅ |
+| └── editInstruction/referenceImage | 编辑参数 | ✅ |
+
+**产出**：OpenAICompat 适配器完整传递 ControlNet/运镜/编辑参数到 Kling 等兼容 API
 
 ### Phase E5：Engine 感知模块（~4 天）
 

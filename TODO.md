@@ -37,15 +37,15 @@
 
 ---
 
-## ✅ P2.5 — AI 媒体编辑能力（已完成 E1+E2.5）
+## ✅ P2.5 — AI 媒体编辑能力（已完成 E1-E4 + E2.5）
 
 > [ADR](./docs/architecture/ai-media-editing.md)
 
 - [x] **E1 类型扩展**：MediaGenerationType +`image-edit`/`video-edit`；`ControlMode`（8 种）+ `IPAdapterReference`；ImageGenerationRequest +5 字段（controlImage/controlMode/controlStrength/ipAdapterRefs/editInstruction）；VideoGenerationRequest +8 字段（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/referenceImages/editInstruction）
-- [x] **E2.5 Cut AI Action Handler**：AIActionHandler 服务路由 12 个 AI action（P0 本地 ONNX: upscale/denoise/enhance/whisper；P1 跨扩展 neko-agent: style-transfer/color-grade；P2 stub: 5 个 action）；messageHandler.ts `executeAIAction` case 补全；message.ts `trackIds` 字段补全
-- [ ] **E2 fal.ai ControlNet Adapter**：FalAIMediaAdapter（Flux + ControlNet depth/canny/pose + IP-Adapter）
-- [ ] **E3 Qwen-Image Adapter**：QwenImageMediaAdapter（2K 原生 + 指令编辑 + 原生 ControlNet）
-- [ ] **E4 Wan 2.7 + Kling 增强**：视频运镜控制 + 首尾帧控制 + 指令编辑
+- [x] **E2.5 Cut AI Action Handler**：AIActionHandler 服务路由 12 个 AI action（P0 本地 ONNX: upscale/denoise/enhance/whisper/remove-silence；P1 跨扩展 neko-agent: style-transfer/color-grade；P2 stub: 4 个 action）；messageHandler.ts `executeAIAction` case 补全；message.ts `trackIds` 字段补全
+- [x] **E2 fal.ai ControlNet Adapter**：FalMediaAdapter（queue-based API，Flux + ControlNet depth/canny/pose + IP-Adapter，composite taskId 多模型路由）
+- [x] **E3 DashScope Adapter**：DashScopeMediaAdapter 统一 Qwen-Image 2.0（2K 原生 + 指令编辑 + ControlNet）+ Wan 2.7（text/image-to-video + Camera Code 运镜 + 首尾帧）
+- [x] **E4 OpenAICompat Kling 增强**：generateVideo +8 运镜/编辑参数（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/editInstruction/motionStrength）；generateImage +5 ControlNet/编辑参数
 - [ ] **E5 Engine 感知模块**：depth/normal/pose/edge 本地 ONNX 提取（<1s）
 - [ ] **E6 Canvas 编辑 UI**：ControlBar + VariationPanel + 跨扩展联动
 

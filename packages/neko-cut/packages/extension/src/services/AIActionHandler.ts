@@ -108,11 +108,15 @@ export class AIActionHandler implements vscode.Disposable {
           await this.handleColorGrade(ctx);
           break;
 
+        // P0: Local engine audio analysis
+        case 'ai-remove-silence':
+          await this.handleRemoveSilence(ctx);
+          break;
+
         // P2: Stub (future implementation)
         case 'ai-background-remove':
         case 'ai-auto-edit':
         case 'ai-match-music':
-        case 'ai-remove-silence':
         case 'ai-smart-crop':
           this.sendResult(ctx, false, undefined, `${actionId} is not yet available. Coming soon.`);
           break;
@@ -250,6 +254,31 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 90, 'Subtitles generated');
     this.sendResult(ctx, true, { srt, segments: result.segments, language: result.language });
+  }
+
+  // ===========================================================================
+  // P0: Local engine audio analysis
+  // ===========================================================================
+
+  private async handleRemoveSilence(ctx: AIActionContext): Promise<void> {
+    const engine = await this.ensureEngine();
+    if (!engine) return this.sendEngineUnavailable(ctx);
+
+    const thresholdDbfs = (ctx.params?.['thresholdDbfs'] as number) ?? -40;
+    const minDuration = (ctx.params?.['minDuration'] as number) ?? 0.5;
+
+    this.sendProgress(ctx, 10, 'Preparing silence detection...');
+
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    if (!inputPath) {
+      return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
+    }
+
+    this.sendProgress(ctx, 30, 'Analyzing audio for silence regions...');
+    const result = await engine.detectSilence(inputPath, thresholdDbfs, minDuration);
+
+    this.sendProgress(ctx, 90, 'Silence detection complete');
+    this.sendResult(ctx, true, result);
   }
 
   // ===========================================================================

@@ -11,8 +11,8 @@
 |------|------|------|------|
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
 | **neko-engine** | Alpha | 96% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）|
-| **neko-cut** | Alpha | 88% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + **AI Action Handler（12 action 路由到 EngineClient/neko-agent）** |
-| **neko-agent** | Alpha | 96% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **媒体编辑类型扩展（ControlNet/IP-Adapter/指令编辑/运镜参数）**；剩余：MCP 重连 |
+| **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + **AI Action Handler（12 action 含 remove-silence 路由到 EngineClient/neko-agent）** |
+| **neko-agent** | Alpha | 97% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器（ControlNet/IP-Adapter/运镜/指令编辑全链路）**；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；文档预览（PDF/DOCX/EPUB/XLSX）规划中 — [ADR](./docs/architecture/document-preview.md) |
 | **neko-story** | WIP | 82% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统**规划中：脚本视图（表格）+ 创意视图（卡片网格）+ ShotNode 数据模型（[架构](./docs/architecture/2d-capability-analysis.md)） |
@@ -55,14 +55,14 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - SSO 接入 + AccountBar + OnboardingFlow
 </details>
 
-### AI 媒体编辑能力（E1+E2.5 ✅，E2-E6 待做）
+### AI 媒体编辑能力（E1-E4 + E2.5 ✅，E5-E6 待做）
 > [ADR](./docs/architecture/ai-media-editing.md)
 
 - ✅ E1：媒体类型扩展（ControlMode/IPAdapterReference/image-edit/video-edit + ImageRequest 5 字段 + VideoRequest 8 字段）
-- ✅ E2.5：Cut AI Action Handler（12 action 路由；P0 本地 ONNX + P1 跨扩展 neko-agent + P2 stub）
-- ⏳ E2：fal.ai ControlNet Adapter
-- ⏳ E3：Qwen-Image 2.0 Adapter
-- ⏳ E4：Wan 2.7 + Kling 3.0 视频编辑
+- ✅ E2：fal.ai ControlNet Adapter（queue-based API, Flux + ControlNet/IP-Adapter, composite taskId）
+- ✅ E2.5：Cut AI Action Handler（12 action 路由 + remove-silence 接通 EngineClient.detectSilence）
+- ✅ E3：DashScope Adapter（Qwen-Image 2.0 + Wan 2.7 统一适配器，Camera Code 运镜 + 首尾帧 + 指令编辑）
+- ✅ E4：OpenAICompat Kling 增强（generateVideo +8 运镜参数，generateImage +5 ControlNet 参数）
 - ⏳ E5：Engine 感知模块（depth/pose/edge 本地 ONNX）
 - ⏳ E6：Canvas 编辑 UI + 跨扩展联动
 
@@ -212,4 +212,4 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 
 ---
 
-*最后更新: 2026-04-01（AI 媒体编辑 E1 类型扩展 + E2.5 Cut AI Action Handler；ADR ai-media-editing.md）*
+*最后更新: 2026-04-01（AI 媒体编辑 E1-E4 全部完成 + E2.5 remove-silence 接通；fal.ai/DashScope/Kling 适配器）*
