@@ -37,6 +37,20 @@
 
 ---
 
+## ✅ P2.5 — AI 媒体编辑能力（已完成 E1+E2.5）
+
+> [ADR](./docs/architecture/ai-media-editing.md)
+
+- [x] **E1 类型扩展**：MediaGenerationType +`image-edit`/`video-edit`；`ControlMode`（8 种）+ `IPAdapterReference`；ImageGenerationRequest +5 字段（controlImage/controlMode/controlStrength/ipAdapterRefs/editInstruction）；VideoGenerationRequest +8 字段（cameraMovement/cameraAngle/shotScale/startFrame/endFrame/sourceVideo/referenceImages/editInstruction）
+- [x] **E2.5 Cut AI Action Handler**：AIActionHandler 服务路由 12 个 AI action（P0 本地 ONNX: upscale/denoise/enhance/whisper；P1 跨扩展 neko-agent: style-transfer/color-grade；P2 stub: 5 个 action）；messageHandler.ts `executeAIAction` case 补全；message.ts `trackIds` 字段补全
+- [ ] **E2 fal.ai ControlNet Adapter**：FalAIMediaAdapter（Flux + ControlNet depth/canny/pose + IP-Adapter）
+- [ ] **E3 Qwen-Image Adapter**：QwenImageMediaAdapter（2K 原生 + 指令编辑 + 原生 ControlNet）
+- [ ] **E4 Wan 2.7 + Kling 增强**：视频运镜控制 + 首尾帧控制 + 指令编辑
+- [ ] **E5 Engine 感知模块**：depth/normal/pose/edge 本地 ONNX 提取（<1s）
+- [ ] **E6 Canvas 编辑 UI**：ControlBar + VariationPanel + 跨扩展联动
+
+---
+
 ## 🔵 P3 — 长期功能
 
 - [ ] neko-preview 文档预览（暂缓，当前委托 Book Reader / Office Viewer 等第三方扩展，策略见 [ADR](./docs/architecture/document-preview.md)）
@@ -90,4 +104,4 @@
 
 ---
 
-*最后更新：2026-03-29（ScriptTableView + CreativeGridView（分镜表/创意视图 tabs in neko-story preview）；neko.cut.importStoryboard 命令；ScriptNode/DocumentNode/ModelNode/ShotNode/SceneGroupNode/GalleryNode/GenerationPromptPanel 已完成标记）*
+*最后更新：2026-04-01（E1 媒体类型扩展 + E2.5 Cut AI Action Handler 完成；AI 媒体编辑能力 ADR）*
