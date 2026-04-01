@@ -564,6 +564,19 @@ export function SketchCanvas() {
             }
           }
 
+          // Apply layer offsetX/offsetY as transforms for the move tool
+          for (const lr of layersToRender) {
+            const ox = lr.offsetX ?? 0;
+            const oy = lr.offsetY ?? 0;
+            if ((ox !== 0 || oy !== 0) && !layerTransforms?.has(lr.id)) {
+              if (!layerTransforms) layerTransforms = new Map();
+              // Convert document-pixel offset to NDC-space translation
+              const tx = (ox / state.canvas.width) * 2;
+              const ty = -(oy / state.canvas.height) * 2;
+              layerTransforms.set(lr.id, new Float32Array([1, 0, 0, 0, 1, 0, tx, ty, 1]));
+            }
+          }
+
           renderer.renderWithEffects(
             layersToRender,
             state.viewport,

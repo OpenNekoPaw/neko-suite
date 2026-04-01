@@ -151,6 +151,41 @@
         "command": "neko.sketch.editImage",
         "title": "%neko.sketch.editImage.title%",
         "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectEraser",
+        "title": "Select Eraser",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectMove",
+        "title": "Select Move Tool",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectShape",
+        "title": "Select Shape Tool",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectZoom",
+        "title": "Select Zoom Tool",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectFill",
+        "title": "Select Fill Tool",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectSelect",
+        "title": "Select Selection Tool",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.selectTransform",
+        "title": "Select Transform Tool",
+        "category": "NekoSketch"
       }
     ],
     "keybindings": [
@@ -185,6 +220,51 @@
         "command": "neko.sketch.redo",
         "key": "ctrl+shift+z",
         "mac": "cmd+shift+z",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectBrush",
+        "key": "b",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectEraser",
+        "key": "e",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectMove",
+        "key": "m",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectShape",
+        "key": "v",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectZoom",
+        "key": "z",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectFill",
+        "key": "g",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.pickColor",
+        "key": "i",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectSelect",
+        "key": "s",
+        "when": "activeCustomEditorId == 'neko.sketchEditor'"
+      },
+      {
+        "command": "neko.sketch.selectTransform",
+        "key": "t",
         "when": "activeCustomEditorId == 'neko.sketchEditor'"
       }
     ],

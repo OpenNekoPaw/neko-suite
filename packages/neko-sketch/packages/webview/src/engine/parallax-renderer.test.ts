@@ -47,10 +47,11 @@ describe('buildParallaxTransform', () => {
     expect(m).toBeInstanceOf(Float32Array);
     expect(m).toHaveLength(9);
     // [sx, 0, 0,  0, sy, 0,  tx, ty, 1]
-    expect(m[0]).toBe(2); // sx = zoom
-    expect(m[4]).toBe(2); // sy = zoom
-    expect(m[6]).toBeCloseTo((200 / 800) * 2); // tx
-    expect(m[7]).toBeCloseTo((100 / 600) * 2); // ty
+    // No scaling — zoom is handled by the viewport transform in the final blit pass
+    expect(m[0]).toBe(1); // sx = 1 (no per-layer zoom)
+    expect(m[4]).toBe(1); // sy = 1
+    expect(m[6]).toBeCloseTo((200 / 800) * 2); // tx in NDC
+    expect(m[7]).toBeCloseTo(-(100 / 600) * 2); // ty in NDC (Y flipped)
     expect(m[8]).toBe(1);
   });
 });

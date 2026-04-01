@@ -139,6 +139,13 @@ export function registerCommands(
     'neko.sketch.undo',
     'neko.sketch.redo',
     'neko.sketch.selectBrush',
+    'neko.sketch.selectEraser',
+    'neko.sketch.selectMove',
+    'neko.sketch.selectShape',
+    'neko.sketch.selectZoom',
+    'neko.sketch.selectFill',
+    'neko.sketch.selectSelect',
+    'neko.sketch.selectTransform',
     'neko.sketch.adjustSize',
     'neko.sketch.pickColor',
   ];
