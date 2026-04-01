@@ -53,6 +53,9 @@ export type {
   PromptLayerBudget,
   LayerUsage,
   SystemPromptComposerOptions,
+  ComposedPromptSection,
+  ComposedPromptResult,
+  PromptDumpInfo,
 } from './system-prompt-composer-types';
 
 export { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';

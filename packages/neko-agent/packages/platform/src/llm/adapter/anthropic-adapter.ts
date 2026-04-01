@@ -160,6 +160,28 @@ export class AnthropicAdapter extends AISdkAdapter {
       };
     }
 
+    // Prompt caching: convert structured sections to AI SDK system message format
+    if (options.systemPromptSections && options.systemPromptSections.length > 0) {
+      providerOptions.system = options.systemPromptSections.map((section) => {
+        const part: Record<string, unknown> = {
+          type: 'text',
+          text: section.content,
+        };
+        if (section.cacheControl) {
+          part.providerOptions = {
+            anthropic: {
+              cacheControl: { type: section.cacheControl },
+            },
+          };
+        }
+        return part;
+      });
+      logger.debug('Prompt caching: system prompt split into sections', {
+        sectionCount: options.systemPromptSections.length,
+        cachedSections: options.systemPromptSections.filter((s) => s.cacheControl).length,
+      });
+    }
+
     logger.debug('providerOptions result', { providerOptions });
     return providerOptions;
   }

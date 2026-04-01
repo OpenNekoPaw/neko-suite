@@ -276,10 +276,29 @@ Phase B (P1, 智能化增强): ✅ COMPLETED
     ├─ step-event-converter 传递 attachments
     └─ 4 新增单测通过
 
+Phase B.7 CreativeVersionLog 版本锚点 ✅ COMPLETED 2026-04-01:
+├─ CreativeVersionLog: record/evaluate/getByTool/getApproved/getLatest/toSummary
+├─ CreativeVersionEntry 类型 (shared @neko/shared)
+├─ isGenerationTool() 匹配 generate*/render*/create_image* 等
+├─ detectEvaluation() 关键词检测 (approval/rejection)
+├─ AgentSession: act 阶段自动记录 + 用户输入评价检测 + ephemeral 层摘要注入
+├─ AgentEventType 新增 'version_recorded'
+└─ 17 单测通过
+
 Phase C (P2, 体验打磨):
-├─ C.1 buildTool() 工厂 + 安全分级
+├─ C.1 buildTool() 工厂 + 安全分级 ✅ COMPLETED 2026-04-01
+│   ├─ ToolSafetyPreset: readOnly/safeWrite/destructive/aiGenerate/custom
+│   ├─ SAFETY_PRESETS 常量 + buildTool() 工厂 (预设 + 显式覆盖 + Fail-Closed)
+│   └─ 13 单测通过
 ├─ C.2 Session 持久化 JSONL
-└─ C.3 Prompt Cache Boundary
+├─ C.3 Prompt Cache Optimization ✅ COMPLETED 2026-04-01
+│   ├─ PromptSection.cacheControl + ComposedPromptResult 结构化输出
+│   ├─ composeStructured(): base 缓存 + skill+env 缓存 + ephemeral 不缓存
+│   ├─ AnthropicAdapter: systemPromptSections → providerOptions.anthropic.cacheControl
+│   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
+│   └─ 9 单测通过
+├─ C.4 Creative Agent Memory（三 scope + snapshot + relevant recall）
+└─ C.5 SubAgent 创作专家模式
 ```
 
 ---
@@ -532,12 +551,25 @@ Phase B (P1, 智能化增强) ✅ COMPLETED 2026-04-01:
 ├─ B.4 Skill paths 条件触发（globMatch + onDidSave → 自动激活）  ✅
 ├─ B.5 多模态 ToolResult attachments（image/audio/video → ContentPart[]）  ✅
 ├─ B.6 Creative Coordinator Mode（SubAgent + task notification + permission bridge）
-└─ B.7 CreativeVersionLog 版本锚点
+└─ B.7 CreativeVersionLog 版本锚点  ✅
+    ├─ CreativeVersionLog 纯状态容器（record/evaluate/query/toSummary）
+    ├─ CreativeVersionEntry 类型 + isGenerationTool() + detectEvaluation()
+    ├─ AgentSession 集成：act 阶段自动记录 + 用户输入评价检测
+    ├─ version_recorded AgentEvent + ephemeral 层摘要注入
+    └─ 17 单测通过
 
 Phase C (P2, 体验打磨):
-├─ C.1 buildTool() 工厂 + 安全分级
+├─ C.1 buildTool() 工厂 + 安全分级  ✅
+│   ├─ ToolSafetyPreset 4 种预设（readOnly/safeWrite/destructive/aiGenerate）
+│   ├─ SAFETY_PRESETS 常量 + buildTool() 工厂（预设 + 显式覆盖）
+│   └─ 13 单测通过
 ├─ C.2 Session 持久化 JSONL（append-only + sidechain + resume）
-├─ C.3 Prompt Cache Optimization（boundary + 专项模板 + 可观测性）
+├─ C.3 Prompt Cache Optimization  ✅
+│   ├─ PromptSection.cacheControl + ComposedPromptResult 结构化输出
+│   ├─ composeStructured(): base 缓存 + skill+env 缓存 + ephemeral 不缓存
+│   ├─ AnthropicAdapter: sections → AI SDK providerOptions.anthropic.cacheControl
+│   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
+│   └─ 9 单测通过
 ├─ C.4 Creative Agent Memory（三 scope + snapshot + relevant recall）
 └─ C.5 SubAgent 创作专家模式
 ```

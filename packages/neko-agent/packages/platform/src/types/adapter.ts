@@ -75,6 +75,16 @@ export interface ChatOptions {
   thinkingBudget?: number;
   /** Abort signal for cancellation */
   signal?: AbortSignal;
+
+  /**
+   * Structured system prompt sections with cache control markers.
+   * When provided, Anthropic adapter uses these to apply prompt caching
+   * instead of sending a flat string. Other adapters ignore this field.
+   */
+  systemPromptSections?: Array<{
+    content: string;
+    cacheControl?: 'ephemeral';
+  }>;
 }
 
 /**

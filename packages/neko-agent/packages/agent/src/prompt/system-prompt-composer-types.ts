@@ -38,6 +38,8 @@ export interface PromptSection {
   tokenEstimate: number;
   /** Timestamp when section was added */
   addedAt: number;
+  /** Cache control hint for LLM API prompt caching (Anthropic: 'ephemeral') */
+  cacheControl?: 'ephemeral';
 }
 
 // =============================================================================
@@ -82,6 +84,44 @@ export interface PromptSectionInput {
   layer: PromptLayer;
   content: string;
   priority?: number;
+  /** Cache control hint for LLM API prompt caching */
+  cacheControl?: 'ephemeral';
+}
+
+// =============================================================================
+// Structured Composition Result
+// =============================================================================
+
+/** A section in the composed prompt with optional cache control */
+export interface ComposedPromptSection {
+  /** Section text content */
+  content: string;
+  /** Cache control marker (when set, LLM API may cache this section) */
+  cacheControl?: 'ephemeral';
+}
+
+/**
+ * Structured composition result with cache boundary information.
+ * Used by LLM adapters to apply provider-specific prompt caching.
+ */
+export interface ComposedPromptResult {
+  /** Full composed text (backward compatible with compose()) */
+  text: string;
+  /** Sections with cache control markers for provider-specific caching */
+  sections: ComposedPromptSection[];
+}
+
+// =============================================================================
+// Prompt Dump (observability)
+// =============================================================================
+
+/** Debug info for a single prompt section */
+export interface PromptDumpInfo {
+  id: string;
+  layer: PromptLayer;
+  tokenEstimate: number;
+  priority: number;
+  cacheControl?: 'ephemeral';
 }
 
 /** Layer usage info */
@@ -110,11 +150,27 @@ export interface ISystemPromptComposer {
   /** Compose the final system prompt string */
   compose(): string;
 
+  /**
+   * Compose structured output with cache boundary information.
+   * Used by LLM adapters to apply provider-specific prompt caching.
+   * Layers are grouped into cacheable sections based on stability:
+   * - base layer → cacheable (stable across turns)
+   * - skill + environment layers → cacheable (stable within session)
+   * - ephemeral layer → not cached (changes every turn)
+   */
+  composeStructured(): ComposedPromptResult;
+
   /** Get total estimated token usage across all sections */
   getTotalTokens(): number;
 
   /** Get usage breakdown by layer */
   getLayerUsage(): Record<PromptLayer, LayerUsage>;
+
+  /**
+   * Dump section metadata for observability/debugging.
+   * Returns id, layer, tokenEstimate, priority, cacheControl per section.
+   */
+  dumpSections(): PromptDumpInfo[];
 
   /** Clear all non-base sections */
   reset(): void;

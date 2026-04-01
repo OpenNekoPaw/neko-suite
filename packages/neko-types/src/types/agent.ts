@@ -144,6 +144,33 @@ export interface AgentCheckpoint {
 }
 
 /**
+ * Creative version log entry — records AI generation parameters,
+ * result, and optional user evaluation for version tracking.
+ */
+export interface CreativeVersionEntry {
+  /** Unique ID (timestamp-based) */
+  id: string;
+  /** Generation tool name (e.g. GenerateImage, GenerateVideo) */
+  toolName: string;
+  /** Associated tool call ID */
+  toolCallId: string;
+  /** Generation parameters snapshot */
+  parameters: Record<string, unknown>;
+  /** Result file path (if available) */
+  resultPath?: string;
+  /** Whether generation succeeded */
+  resultSuccess: boolean;
+  /** User evaluation (set later via evaluate()) */
+  userEvaluation?: 'approved' | 'rejected' | 'revised';
+  /** User evaluation note (original text) */
+  evaluationNote?: string;
+  /** Timestamp of creation */
+  timestamp: number;
+  /** Iteration index within the session */
+  iterationIndex: number;
+}
+
+/**
  * Tool call info for hooks
  */
 export interface ToolCallInfo {

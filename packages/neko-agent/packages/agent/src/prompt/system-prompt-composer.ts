@@ -22,6 +22,9 @@ import type {
   LayerUsage,
   ISystemPromptComposer,
   SystemPromptComposerOptions,
+  ComposedPromptResult,
+  ComposedPromptSection,
+  PromptDumpInfo,
 } from './system-prompt-composer-types';
 
 import { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';
@@ -84,6 +87,7 @@ export class SystemPromptComposer implements ISystemPromptComposer {
       priority: input.priority ?? DEFAULT_PRIORITY,
       tokenEstimate: estimateTokens(input.content),
       addedAt: Date.now(),
+      ...(input.cacheControl && { cacheControl: input.cacheControl }),
     };
     this._sections.set(input.id, section);
   }
@@ -115,6 +119,48 @@ export class SystemPromptComposer implements ISystemPromptComposer {
     }
 
     return parts.join(this._separator);
+  }
+
+  /**
+   * Compose structured output with cache boundary information.
+   *
+   * Groups layers into cacheable sections:
+   * - base layer → marked with cacheControl: 'ephemeral' (= cacheable in Anthropic API)
+   * - skill + environment layers → merged, marked with cacheControl: 'ephemeral'
+   * - ephemeral layer → no cache marker (changes every turn)
+   */
+  composeStructured(): ComposedPromptResult {
+    const sections: ComposedPromptSection[] = [];
+    const textParts: string[] = [];
+
+    // Group 1: base layer (stable, cacheable)
+    const baseContent = this._composeLayer('base');
+    if (baseContent) {
+      sections.push({ content: baseContent, cacheControl: 'ephemeral' });
+      textParts.push(baseContent);
+    }
+
+    // Group 2: skill + environment layers (session-stable, cacheable)
+    const skillContent = this._composeLayer('skill');
+    const envContent = this._composeLayer('environment');
+    const midParts = [skillContent, envContent].filter(Boolean);
+    if (midParts.length > 0) {
+      const midContent = midParts.join(this._separator);
+      sections.push({ content: midContent, cacheControl: 'ephemeral' });
+      textParts.push(midContent);
+    }
+
+    // Group 3: ephemeral layer (changes every turn, not cached)
+    const ephContent = this._composeLayer('ephemeral');
+    if (ephContent) {
+      sections.push({ content: ephContent });
+      textParts.push(ephContent);
+    }
+
+    return {
+      text: textParts.join(this._separator),
+      sections,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -150,6 +196,24 @@ export class SystemPromptComposer implements ISystemPromptComposer {
       };
     }
     return usage;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Observability
+  // ---------------------------------------------------------------------------
+
+  dumpSections(): PromptDumpInfo[] {
+    const infos: PromptDumpInfo[] = [];
+    for (const section of this._sections.values()) {
+      infos.push({
+        id: section.id,
+        layer: section.layer,
+        tokenEstimate: section.tokenEstimate,
+        priority: section.priority,
+        ...(section.cacheControl && { cacheControl: section.cacheControl }),
+      });
+    }
+    return infos;
   }
 
   // ---------------------------------------------------------------------------

@@ -306,4 +306,122 @@ describe('SystemPromptComposer', () => {
       expect(c.getLayerUsage().skill.budget).toBe(999);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // composeStructured — cache boundaries
+  // -------------------------------------------------------------------------
+
+  describe('composeStructured', () => {
+    it('returns empty sections when no content', () => {
+      const result = composer.composeStructured();
+      expect(result.text).toBe('');
+      expect(result.sections).toHaveLength(0);
+    });
+
+    it('groups base layer as cacheable section', () => {
+      composer.setBase('System instructions');
+      const result = composer.composeStructured();
+
+      expect(result.sections).toHaveLength(1);
+      expect(result.sections[0]!.content).toBe('System instructions');
+      expect(result.sections[0]!.cacheControl).toBe('ephemeral');
+    });
+
+    it('merges skill + environment into one cacheable section', () => {
+      composer.setBase('Base.');
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'Skill content.' });
+      composer.setSection({ id: 'env:mem', layer: 'environment', content: 'Memory context.' });
+
+      const result = composer.composeStructured();
+
+      expect(result.sections).toHaveLength(2);
+      // Section 0: base (cacheable)
+      expect(result.sections[0]!.cacheControl).toBe('ephemeral');
+      // Section 1: skill + environment merged (cacheable)
+      expect(result.sections[1]!.content).toContain('Skill content.');
+      expect(result.sections[1]!.content).toContain('Memory context.');
+      expect(result.sections[1]!.cacheControl).toBe('ephemeral');
+    });
+
+    it('ephemeral layer has no cache control', () => {
+      composer.setBase('Base.');
+      composer.setSection({ id: 'eph:1', layer: 'ephemeral', content: 'Turn-specific context.' });
+
+      const result = composer.composeStructured();
+
+      expect(result.sections).toHaveLength(2);
+      // Section 0: base (cacheable)
+      expect(result.sections[0]!.cacheControl).toBe('ephemeral');
+      // Section 1: ephemeral (not cached)
+      expect(result.sections[1]!.content).toBe('Turn-specific context.');
+      expect(result.sections[1]!.cacheControl).toBeUndefined();
+    });
+
+    it('text matches compose() output', () => {
+      composer.setBase('Base.');
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'Skill.' });
+      composer.setSection({ id: 'eph:x', layer: 'ephemeral', content: 'Eph.' });
+
+      const structured = composer.composeStructured();
+      const flat = composer.compose();
+      expect(structured.text).toBe(flat);
+    });
+
+    it('handles all four layers', () => {
+      composer.setBase('Base.');
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'Skill.' });
+      composer.setSection({ id: 'env:x', layer: 'environment', content: 'Env.' });
+      composer.setSection({ id: 'eph:x', layer: 'ephemeral', content: 'Eph.' });
+
+      const result = composer.composeStructured();
+
+      // base (1) + skill+env merged (1) + ephemeral (1) = 3 sections
+      expect(result.sections).toHaveLength(3);
+      expect(result.sections[0]!.cacheControl).toBe('ephemeral');
+      expect(result.sections[1]!.cacheControl).toBe('ephemeral');
+      expect(result.sections[2]!.cacheControl).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // dumpSections — observability
+  // -------------------------------------------------------------------------
+
+  describe('dumpSections', () => {
+    it('returns empty array when no sections', () => {
+      expect(composer.dumpSections()).toEqual([]);
+    });
+
+    it('returns section metadata', () => {
+      composer.setBase('Base content.');
+      composer.setSection({
+        id: 'skill:x',
+        layer: 'skill',
+        content: 'Skill.',
+        priority: 80,
+        cacheControl: 'ephemeral',
+      });
+
+      const dump = composer.dumpSections();
+      expect(dump).toHaveLength(2);
+
+      const baseDump = dump.find((d) => d.id === 'base');
+      expect(baseDump).toBeDefined();
+      expect(baseDump!.layer).toBe('base');
+      expect(baseDump!.tokenEstimate).toBeGreaterThan(0);
+
+      const skillDump = dump.find((d) => d.id === 'skill:x');
+      expect(skillDump).toBeDefined();
+      expect(skillDump!.layer).toBe('skill');
+      expect(skillDump!.priority).toBe(80);
+      expect(skillDump!.cacheControl).toBe('ephemeral');
+    });
+
+    it('section without cacheControl omits the field', () => {
+      composer.setBase('Base.');
+      const dump = composer.dumpSections();
+      const baseDump = dump.find((d) => d.id === 'base');
+      expect(baseDump!.cacheControl).toBeUndefined();
+    });
+  });
 });

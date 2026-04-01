@@ -89,6 +89,16 @@ export interface ServiceOptions {
   signal?: AbortSignal;
   /** Timeout in milliseconds */
   timeout?: number;
+
+  /**
+   * Structured system prompt sections with cache control markers.
+   * When provided, Anthropic adapter uses these to apply prompt caching.
+   * Other adapters ignore this field.
+   */
+  systemPromptSections?: Array<{
+    content: string;
+    cacheControl?: 'ephemeral';
+  }>;
 }
 
 /**

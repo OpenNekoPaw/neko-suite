@@ -142,6 +142,7 @@ export type AgentEventType =
   | 'tool_result' // Tool execution result
   | 'tool_progress' // Tool execution progress update
   | 'tool_confirmation' // Tool requires confirmation
+  | 'version_recorded' // Creative version entry recorded
   | 'iteration' // Iteration info
   | 'done' // Execution complete
   | 'error' // Error occurred
@@ -188,6 +189,9 @@ export interface AgentEvent {
 
   /** Tool confirmation request */
   toolConfirmation?: import('../permission/types').ToolConfirmationRequest;
+
+  /** Creative version entry (on version_recorded) */
+  versionEntry?: import('@neko/shared').CreativeVersionEntry;
 
   /** Iteration info */
   iteration?: {

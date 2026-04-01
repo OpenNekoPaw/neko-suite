@@ -16,6 +16,57 @@ import type {
   ToolTraits,
 } from '../types/tool';
 
+// =============================================================================
+// Safety Presets
+// =============================================================================
+
+/**
+ * Safety preset for common tool archetypes.
+ *
+ * - readOnly:    Stateless query tools (concurrent-safe, read-only, non-destructive)
+ * - safeWrite:   Reversible write tools (non-concurrent, non-destructive)
+ * - destructive: Irreversible write tools (non-concurrent, requires confirmation)
+ * - aiGenerate:  AI generation tools (concurrent-safe, non-destructive, may cost)
+ * - custom:      No preset applied — use explicit flags (Fail-Closed defaults)
+ */
+export type ToolSafetyPreset = 'readOnly' | 'safeWrite' | 'destructive' | 'aiGenerate' | 'custom';
+
+/** Safety flag bundle applied by presets */
+interface SafetyFlags {
+  isConcurrencySafe: boolean;
+  isReadOnly: boolean;
+  isDestructive: boolean;
+  requiresConfirmation: boolean;
+}
+
+/** Predefined safety flag combinations per preset */
+export const SAFETY_PRESETS: Record<Exclude<ToolSafetyPreset, 'custom'>, SafetyFlags> = {
+  readOnly: {
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    isDestructive: false,
+    requiresConfirmation: false,
+  },
+  safeWrite: {
+    isConcurrencySafe: false,
+    isReadOnly: false,
+    isDestructive: false,
+    requiresConfirmation: false,
+  },
+  destructive: {
+    isConcurrencySafe: false,
+    isReadOnly: false,
+    isDestructive: true,
+    requiresConfirmation: true,
+  },
+  aiGenerate: {
+    isConcurrencySafe: true,
+    isReadOnly: false,
+    isDestructive: false,
+    requiresConfirmation: false,
+  },
+};
+
 /**
  * Base class for builtin tools
  *
@@ -106,4 +157,77 @@ export function createTool(config: {
     ...(config.traits && { traits: config.traits }),
     execute: config.execute,
   };
+}
+
+// =============================================================================
+// buildTool — Safety-preset-aware factory
+// =============================================================================
+
+/**
+ * Configuration for buildTool().
+ * Extends createTool config with an optional safety preset.
+ * Explicit safety flags override the preset when both are provided.
+ */
+export interface BuildToolConfig {
+  name: string;
+  description: string;
+  parameters: ToolParameters;
+  category: ToolCategory;
+  /** Safety preset — applies predefined flag combination. Default: 'custom' (Fail-Closed). */
+  safety?: ToolSafetyPreset;
+  /** Override preset's requiresConfirmation */
+  requiresConfirmation?: boolean;
+  /** Override preset's isConcurrencySafe */
+  isConcurrencySafe?: boolean;
+  /** Override preset's isReadOnly */
+  isReadOnly?: boolean;
+  /** Override preset's isDestructive */
+  isDestructive?: boolean;
+  traits?: ToolTraits;
+  execute: (args: Record<string, unknown>, options?: ToolExecuteOptions) => Promise<ToolResult>;
+}
+
+/**
+ * Build a tool with safety preset support.
+ *
+ * Safety presets provide sensible defaults for common tool archetypes:
+ * - `readOnly`: concurrent-safe, read-only, non-destructive
+ * - `safeWrite`: non-concurrent, non-destructive
+ * - `destructive`: non-concurrent, destructive, requires confirmation
+ * - `aiGenerate`: concurrent-safe, non-destructive
+ * - `custom` (default): Fail-Closed — all safety flags false
+ *
+ * Explicit flags always override the preset value.
+ *
+ * @example
+ * ```ts
+ * const readTool = buildTool({
+ *   name: 'GetTimelineInfo',
+ *   description: 'Query timeline metadata',
+ *   parameters: { type: 'object', properties: {} },
+ *   category: 'timeline',
+ *   safety: 'readOnly',
+ *   execute: async (args) => ({ success: true, data: {} }),
+ * });
+ * // readTool.isConcurrencySafe === true
+ * // readTool.isReadOnly === true
+ * ```
+ */
+export function buildTool(config: BuildToolConfig): Tool {
+  const preset =
+    config.safety && config.safety !== 'custom' ? SAFETY_PRESETS[config.safety] : undefined;
+
+  return createTool({
+    name: config.name,
+    description: config.description,
+    parameters: config.parameters,
+    category: config.category,
+    traits: config.traits,
+    execute: config.execute,
+    // Preset provides base, explicit flags override
+    requiresConfirmation: config.requiresConfirmation ?? preset?.requiresConfirmation,
+    isConcurrencySafe: config.isConcurrencySafe ?? preset?.isConcurrencySafe,
+    isReadOnly: config.isReadOnly ?? preset?.isReadOnly,
+    isDestructive: config.isDestructive ?? preset?.isDestructive,
+  });
 }

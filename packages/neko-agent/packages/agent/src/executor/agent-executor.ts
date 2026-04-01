@@ -97,6 +97,20 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /**
+   * Update service options (merges with existing).
+   * Used by AgentSession to inject dynamic options like prompt cache sections.
+   */
+  updateServiceOptions(options: Record<string, unknown>): void {
+    this.config = {
+      ...this.config,
+      serviceOptions: {
+        ...this.config.serviceOptions,
+        ...options,
+      },
+    };
+  }
+
+  /**
    * Execute agent with user input
    */
   async execute(input: string, context?: Partial<AgentContext>): Promise<AgentResult> {

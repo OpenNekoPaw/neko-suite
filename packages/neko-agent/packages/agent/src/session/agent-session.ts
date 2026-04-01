@@ -40,6 +40,12 @@ import {
   createAutoCompactState,
   type AutoCompactState,
 } from '../context/auto-compact';
+import {
+  CreativeVersionLog,
+  createCreativeVersionLog,
+  isGenerationTool,
+  detectEvaluation,
+} from '../context/creative-version-log';
 import { type IPermissionManager, type PermissionMode } from '../permission';
 import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
@@ -99,6 +105,8 @@ export class AgentSession implements IAgentSession {
   private _isRunning = false;
   /** Circuit breaker state for auto-compact */
   private _compactState: AutoCompactState = createAutoCompactState();
+  /** Creative version log for generation tracking */
+  private _versionLog: CreativeVersionLog = createCreativeVersionLog();
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
   private _pendingConfirmations = new Map<
@@ -238,6 +246,15 @@ export class AgentSession implements IAgentSession {
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
       this._history.push({ role: 'user', content: processedInput });
+
+      // Creative version log: detect user evaluation keywords in input
+      if (this._versionLog.size > 0) {
+        const evalResult = detectEvaluation(processedInput);
+        if (evalResult) {
+          this._versionLog.evaluateLatest(evalResult.evaluation, evalResult.note);
+        }
+      }
+
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
 
@@ -262,6 +279,27 @@ export class AgentSession implements IAgentSession {
 
         // Record history first (side effects), then emit events (pure)
         recordStepInHistory(step, iteration, this._history);
+
+        // Creative version log: record generation tool results
+        if (step.type === 'act' && step.toolResults) {
+          for (const result of step.toolResults) {
+            if ('name' in result && isGenerationTool(result.name as string)) {
+              const toolCall = step.toolCalls?.find(
+                (tc) => tc.id === (result as { callId?: string }).callId,
+              );
+              const entry = this._versionLog.record({
+                toolName: result.name as string,
+                toolCallId: (result as { callId?: string }).callId ?? '',
+                parameters: toolCall?.arguments ?? {},
+                resultPath: result.attachments?.[0]?.path,
+                resultSuccess: result.success,
+                timestamp: Date.now(),
+              });
+              yield { type: 'version_recorded', versionEntry: entry };
+            }
+          }
+        }
+
         yield* stepToEvents(step, iteration, maxIterations, this._streamState);
 
         // Auto-compact: check if context compression is needed after each step
@@ -437,9 +475,29 @@ export class AgentSession implements IAgentSession {
 
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
-    const composed = this._promptComposer.compose();
+    // Inject version log summary into ephemeral layer (if entries exist)
+    if (this._versionLog.size > 0) {
+      this._promptComposer.setSection({
+        id: 'creative-version-log',
+        layer: 'ephemeral',
+        content: this._versionLog.toSummary(),
+        priority: 30,
+      });
+    } else {
+      this._promptComposer.removeSection('creative-version-log');
+    }
+
+    // Compose both flat text and structured sections
+    const structured = this._promptComposer.composeStructured();
     if (this._history.length > 0 && this._history[0]?.role === 'system') {
-      this._history[0].content = composed;
+      this._history[0].content = structured.text;
+    }
+
+    // Push cache-boundary sections to executor for provider-specific caching
+    if (this._executor && structured.sections.length > 0) {
+      this._executor.updateServiceOptions({
+        systemPromptSections: structured.sections,
+      });
     }
   }
 

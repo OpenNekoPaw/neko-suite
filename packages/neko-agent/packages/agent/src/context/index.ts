@@ -37,6 +37,15 @@ export {
   type CreativeSummarizerConfig,
 } from './creative-summarizer';
 
+// Creative version log
+export {
+  CreativeVersionLog,
+  createCreativeVersionLog,
+  isGenerationTool,
+  detectEvaluation,
+  type VersionRecordInput,
+} from './creative-version-log';
+
 // Re-export types from shared for convenience
 export type {
   // Context manager types
