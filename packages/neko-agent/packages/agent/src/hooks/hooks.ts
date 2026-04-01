@@ -170,6 +170,10 @@ export interface MemoryHooksOptions {
   sessionMemory?: SessionMemory;
   /** Conversation compressor for turn-aware token management */
   compressor?: IConversationCompressor;
+  /** Disable compression in beforeThink (for ablation experiments) */
+  disableCompression?: boolean;
+  /** Disable session memory load/save (for ablation experiments) */
+  disableSessionMemory?: boolean;
 }
 
 /**
@@ -179,12 +183,16 @@ export class MemoryHooks implements ExecutorHooks {
   name = 'memory';
   private sessionMemory?: SessionMemory;
   private compressor?: IConversationCompressor;
+  private disableCompression: boolean;
+  private disableSessionMemory: boolean;
   private userInput?: string;
   private historyLoaded = false;
 
   constructor(options: MemoryHooksOptions = {}) {
     this.sessionMemory = options.sessionMemory;
     this.compressor = options.compressor;
+    this.disableCompression = options.disableCompression ?? false;
+    this.disableSessionMemory = options.disableSessionMemory ?? false;
   }
 
   async onExecuteStart(input: string, context: AgentContext): Promise<void> {
@@ -192,7 +200,7 @@ export class MemoryHooks implements ExecutorHooks {
     this.historyLoaded = false;
 
     // Load session memory if available
-    if (this.sessionMemory) {
+    if (this.sessionMemory && !this.disableSessionMemory) {
       const hasOnlySystemPrompt =
         context.messages.length <= 2 &&
         context.messages.every((m) => m.role === 'system' || m.role === 'user');
@@ -216,7 +224,7 @@ export class MemoryHooks implements ExecutorHooks {
 
   async beforeThink(context: AgentContext): Promise<AgentContext> {
     // Apply context compression via ConversationCompressor
-    if (this.compressor) {
+    if (this.compressor && !this.disableCompression) {
       const result = await this.compressor.compress(context.messages);
       context.messages = result.messages.map((m) => m.message);
     }
@@ -225,7 +233,7 @@ export class MemoryHooks implements ExecutorHooks {
 
   async onExecuteEnd(result: AgentResult): Promise<void> {
     // Save to session memory (only successful responses)
-    if (this.sessionMemory && this.userInput && result.success) {
+    if (this.sessionMemory && !this.disableSessionMemory && this.userInput && result.success) {
       await this.sessionMemory.addMessage({ role: 'user', content: this.userInput });
       await this.sessionMemory.addMessage({ role: 'assistant', content: result.response });
     }

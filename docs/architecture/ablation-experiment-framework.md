@@ -2,7 +2,21 @@
 
 ## Context
 
-neko-agent 已具备多层可配置子系统（权限、压缩、Skill、工具注入、校验、重试等），但缺乏统一的功能开关和实验基础设施。无法系统性地对比"关闭某子系统对 Agent 质量的影响"。本方案设计一个轻量消融实验框架，通过组合现有 hooks 和配置机制实现，**零侵入**现有子系统代码。
+neko-agent 已具备多层可配置子系统（权限、压缩、Skill、工具注入、校验、重试等），但缺乏统一的功能开关和实验基础设施。无法系统性地对比"关闭某子系统对 Agent 质量的影响"。本方案设计一个轻量消融实验框架，通过组合现有 hooks 和配置机制实现，**近零侵入**现有子系统代码。
+
+### 设计原则：每个功能点可独立消融
+
+消融实验的核心要求是**单变量控制**——每次只关闭一个功能点，对比与 baseline 的差异。这要求每个开关对应一个**不可再分**的功能单元。
+
+初版设计中发现以下耦合问题，本方案已修正：
+
+| 问题 | 初版设计 | 修正后 |
+|------|---------|--------|
+| MemoryHooks 捆绑压缩+会话记忆 | `memory: false` 同时关闭两者 | 拆为 `compression` + `sessionMemory` |
+| 缺少创意压缩开关 | 未覆盖 `creativeCompression` | 新增独立开关 |
+| Skill 系统 3 个子功能捆绑 | `skillSystem: false` 一刀切 | 拆为 `skillDiscovery` + `skillInjection` + `dynamicToolSets` |
+| 缺少外部集成开关 | 未覆盖 settingsHooks/projectMemory/traitsRegistry | 各自新增开关 |
+| toolInjection 映射错误 | 空 registry 破坏 always 层 | 改为设置 dynamic 层 maxTools=0 |
 
 ---
 
@@ -31,28 +45,93 @@ packages/neko-agent/packages/agent/src/experiment/
 
 ### AblationToggles（核心开关）
 
+15 个独立开关，按子系统分组，每个对应一个不可再分的功能单元：
+
 ```typescript
 export interface AblationToggles {
-  /** 上下文压缩: false=禁用, object=覆盖阈值 */
+  // === 上下文管理（3 个独立维度） ===
+
+  /** 普通上下文压缩（ConversationCompressor.compress）
+   *  false=禁用, object=覆盖阈值 */
   compression?: false | { tokenThreshold?: number; turnThreshold?: number };
-  /** Skill 系统: false=禁用发现和注入 */
-  skillSystem?: false;
+  /** 创意压缩（MessageClassifier + CreativeSummarizer 优先级压缩）
+   *  false=禁用，回退到普通压缩 */
+  creativeCompression?: false;
+  /** 会话记忆加载/保存（SessionMemory 跨 turn 历史持久化）
+   *  false=禁用，不影响压缩 */
+  sessionMemory?: false;
+
+  // === Skill 系统（3 个独立维度） ===
+
+  /** Skill 发现和自动匹配（SkillService.match）
+   *  false=禁用自动发现，手动激活仍可用 */
+  skillDiscovery?: false;
+  /** Skill 提示词注入（SkillInjectionCoordinator 3-track: prompt+tools+rules）
+   *  false=禁用注入，Skill 可被发现但不注入 */
+  skillInjection?: false;
+  /** ToolSet 动态激活（ActivateToolSet/DeactivateToolSet 元工具）
+   *  false=禁用动态 ToolSet，仅 always 层工具可用 */
+  dynamicToolSets?: false;
+
+  // === 工具注入 ===
+
   /** 工具注入层: 'always-only'=仅核心工具, 默认 'always+dynamic' */
   toolInjection?: 'always-only' | 'always+dynamic';
-  /** 权限模式覆盖 */
-  permissionMode?: PermissionMode;
+
+  // === Hooks 链 ===
+
   /** 校验 hooks: false=全部禁用 */
   validation?: false;
   /** 重试 hooks: false=禁用, object=覆盖 maxRetries */
   retry?: false | { maxRetries?: number };
-  /** Memory hooks: false=禁用压缩和会话记忆 */
-  memory?: false;
+
+  // === 权限 ===
+
+  /** 权限模式覆盖 */
+  permissionMode?: PermissionMode;
+  /** Traits 权限策略（creative auto mode: reversible/local → auto-allow）
+   *  false=禁用，auto 模式无条件允许所有工具 */
+  traitsRegistry?: false;
+
+  // === 外部集成 ===
+
+  /** 外部 shell hooks (PreToolUse/UserPromptSubmit from .neko/settings.json)
+   *  false=禁用，不执行任何外部 hook */
+  settingsHooks?: false;
+  /** 项目记忆注入（projectMemoryManager → system prompt environment 层）
+   *  false=禁用，system prompt 不含项目记忆 */
+  projectMemory?: false;
+
+  // === LLM 参数 ===
+
   /** 思考预算覆盖（0=禁用 extended thinking） */
   thinkingBudget?: number;
   /** 最大迭代数覆盖 */
   maxIterations?: number;
 }
 ```
+
+### 功能点独立性验证矩阵
+
+每个开关只影响一个功能单元，无交叉副作用：
+
+| 开关 | 影响的组件 | 不影响的组件 | 可独立验证 |
+|------|-----------|-------------|-----------|
+| `compression: false` | ConversationCompressor.compress | SessionMemory, CreativeSummarizer | ✅ |
+| `creativeCompression: false` | MessageClassifier + CreativeSummarizer | 普通压缩仍生效 | ✅ |
+| `sessionMemory: false` | MemoryHooks.onExecuteStart/End 中的记忆加载保存 | 压缩仍生效 | ✅ |
+| `skillDiscovery: false` | SkillService.match() 自动匹配 | 手动激活 + 注入 + ToolSet | ✅ |
+| `skillInjection: false` | SkillInjectionCoordinator 3-track 注入 | 发现 + ToolSet | ✅ |
+| `dynamicToolSets: false` | ActivateToolSet/DeactivateToolSet 元工具 | 发现 + 注入 | ✅ |
+| `toolInjection: 'always-only'` | ToolInjectionManager dynamic 层 | always 层不变 | ✅ |
+| `validation: false` | ValidationHooks（image+output） | 其他 hooks | ✅ |
+| `retry: false` | RetryHooks | 其他 hooks | ✅ |
+| `permissionMode` | PermissionHooks 决策逻辑 | 其他 hooks | ✅ |
+| `traitsRegistry: false` | Auto 模式 trait-based 决策 | 其他权限逻辑 | ✅ |
+| `settingsHooks: false` | SettingsHookLoader shell 执行 | 内置 hooks | ✅ |
+| `projectMemory: false` | SystemPromptComposer environment 层记忆注入 | 其他 prompt 层 | ✅ |
+| `thinkingBudget` | LLM extended thinking | 其他所有 | ✅ |
+| `maxIterations` | 执行循环上限 | 其他所有 | ✅ |
 
 ### ExperimentVariant
 
@@ -163,40 +242,80 @@ export interface ComparisonEntry {
 
 **核心函数**: `applyAblationToggles(base, toggles) → AgentSessionConfig`
 
-纯函数，克隆 base config 后按 toggles 逐项覆盖。**不修改** `createExecutorHooks`，而是通过两个机制实现 hook 过滤：
+纯函数，克隆 base config 后按 toggles 逐项覆盖。
 
-### 策略：包装 customHooks + 替换内置 hooks 的依赖
+### 完整映射表
 
-| Toggle | 映射方式 |
-|--------|---------|
-| `compression: false` | 传入 no-op `ConversationCompressor`（`shouldCompress()` 始终返回 false） |
-| `compression: { thresholds }` | 覆盖 `contextSettings.maxTokens` / turn 阈值 |
-| `memory: false` | 同 compression:false（MemoryHooks 依赖 compressor） |
-| `validation: false` | 在 `customHooks` 前插入一个 `FilterHook`，拦截 validation hook 的效果 |
-| `retry: false` | 同上，过滤 retry hook |
-| `retry: { maxRetries }` | 通过 `customHooks` 插入覆盖版 RetryHooks |
-| `permissionMode` | 直接映射到 `executionMode` |
-| `skillSystem: false` | 不提供 `toolGroupRegistry`（阻止 Skill 注册） |
-| `toolInjection: 'always-only'` | 提供空的 `toolCategoryRegistry`（dynamic 层为空） |
-| `thinkingBudget` | 直接覆盖 `config.thinkingBudget` |
-| `maxIterations` | 直接覆盖 `config.maxIterations` |
+| Toggle | 映射层 | 具体机制 |
+|--------|-------|---------|
+| **上下文管理** | | |
+| `compression: false` | MemoryHooks | 传入 `MemoryHooksOptions.disableCompression: true`（新增字段） |
+| `compression: { thresholds }` | initializeSession | 覆盖 `contextSettings.maxTokens` / `turnThreshold` |
+| `creativeCompression: false` | initializeSession | 设置 `config.creativeCompression = undefined`（不创建 Classifier/Summarizer） |
+| `sessionMemory: false` | MemoryHooks | 传入 `MemoryHooksOptions.disableSessionMemory: true`（新增字段） |
+| **Skill 系统** | | |
+| `skillDiscovery: false` | AgentSession | 不调用 `SkillService.match()`（通过 customHooks 拦截或 config flag） |
+| `skillInjection: false` | AgentSession | 不创建 `SkillInjectionCoordinator`，`applySkillInjection` 为 no-op |
+| `dynamicToolSets: false` | ToolInjectionManager | 不注册 `ActivateToolSet/DeactivateToolSet` 元工具 |
+| **工具注入** | | |
+| `toolInjection: 'always-only'` | ToolInjectionManager | 设置 dynamic 层 `maxTools: 0`（always 层正常工作） |
+| **Hooks 链** | | |
+| `validation: false` | ExecutorHooksFactory | `disableHooks: ['validation']` |
+| `retry: false` | ExecutorHooksFactory | `disableHooks: ['retry']` |
+| `retry: { maxRetries }` | ExecutorHooksFactory | 替换 RetryHooks 实例 |
+| **权限** | | |
+| `permissionMode` | AgentSessionConfig | 直接映射到 `config.executionMode` |
+| `traitsRegistry: false` | AgentSessionConfig | 设置 `config.traitsRegistry = undefined` |
+| **外部集成** | | |
+| `settingsHooks: false` | AgentSessionConfig | 设置 `config.settingsHookLoader = undefined` |
+| `projectMemory: false` | AgentSessionConfig | 设置 `config.projectMemoryManager = undefined` |
+| **LLM 参数** | | |
+| `thinkingBudget` | AgentSessionConfig | 直接覆盖 `config.thinkingBudget` |
+| `maxIterations` | AgentSessionConfig | 直接覆盖 `config.maxIterations` |
 
-**关键实现**：由于 `createExecutorHooks` 硬编码了 4 个内置 hook，对于 validation/retry 的禁用，最简洁的方式是**扩展 `ExecutorHooksFactoryConfig` 增加可选的 `disableHooks?: string[]` 字段**。这是对 `executor-hooks-factory.ts` 的**唯一小改动**（3 行），符合 OCP：
+### 对现有代码的改动
+
+需要改动 **2 个文件**（均为小改动，符合 OCP）：
+
+**改动 1**：`executor-hooks-factory.ts` — 增加 `disableHooks` 过滤（约 6 行）
 
 ```typescript
-// executor-hooks-factory.ts 新增（仅 3 行改动）
 export interface ExecutorHooksFactoryConfig {
   // ... existing fields ...
   /** Hook names to exclude from the chain (for ablation experiments) */
   disableHooks?: string[];
 }
 
-// createExecutorHooks 内：
-const allHooks = [memoryHooks, validationHooks, permissionHooks, retryHooks];
-const hooks = config.disableHooks
-  ? allHooks.filter(h => !config.disableHooks!.includes(h.name!))
-  : allHooks;
+// createExecutorHooks 内部:
+const builtinHooks = [memoryHooks, validationHooks, permissionHooks, retryHooks];
+const hooks = [
+  ...(config.disableHooks
+    ? builtinHooks.filter(h => !config.disableHooks!.includes(h.name!))
+    : builtinHooks),
+  ...(config.customHooks ?? []),
+];
 ```
+
+**改动 2**：`hooks/hooks.ts` — MemoryHooks 增加细粒度开关（约 6 行）
+
+```typescript
+export interface MemoryHooksOptions {
+  sessionMemory?: SessionMemory;
+  compressor?: IConversationCompressor;
+  /** Disable compression in beforeThink (for ablation) */
+  disableCompression?: boolean;
+  /** Disable session memory load/save (for ablation) */
+  disableSessionMemory?: boolean;
+}
+
+// MemoryHooks.beforeThink 内:
+if (this.compressor && !this.disableCompression) { ... }
+
+// MemoryHooks.onExecuteStart/onExecuteEnd 内:
+if (this.sessionMemory && !this.disableSessionMemory) { ... }
+```
+
+**不改动**的文件：session、permission、context、skill、validation、retry 的核心逻辑。
 
 ---
 
@@ -267,38 +386,101 @@ export type ExperimentProgressEvent =
 
 ## 5. 预置变体 — `presets.ts`
 
+### 单功能消融（标准套件，每次仅关闭一个）
+
 ```typescript
 export const BASELINE: ExperimentVariant = {
   name: 'baseline', description: 'All features enabled', toggles: {}
 };
 
+// --- 上下文管理 ---
 export const NO_COMPRESSION: ExperimentVariant = {
   name: 'no-compression', description: 'Context compression disabled',
-  toggles: { compression: false, memory: false }
+  toggles: { compression: false }
+};
+export const NO_CREATIVE_COMPRESSION: ExperimentVariant = {
+  name: 'no-creative-compression', description: 'Creative compression disabled, fallback to basic',
+  toggles: { creativeCompression: false }
+};
+export const NO_SESSION_MEMORY: ExperimentVariant = {
+  name: 'no-session-memory', description: 'Session memory load/save disabled',
+  toggles: { sessionMemory: false }
 };
 
-export const NO_SKILLS: ExperimentVariant = {
-  name: 'no-skills', description: 'Skill system disabled',
-  toggles: { skillSystem: false }
+// --- Skill 系统 ---
+export const NO_SKILL_DISCOVERY: ExperimentVariant = {
+  name: 'no-skill-discovery', description: 'Skill auto-matching disabled',
+  toggles: { skillDiscovery: false }
+};
+export const NO_SKILL_INJECTION: ExperimentVariant = {
+  name: 'no-skill-injection', description: 'Skill prompt/tools/rules injection disabled',
+  toggles: { skillInjection: false }
+};
+export const NO_DYNAMIC_TOOLSETS: ExperimentVariant = {
+  name: 'no-dynamic-toolsets', description: 'ToolSet activation/deactivation disabled',
+  toggles: { dynamicToolSets: false }
 };
 
+// --- Hooks ---
 export const NO_VALIDATION: ExperimentVariant = {
   name: 'no-validation', description: 'Validation hooks disabled',
   toggles: { validation: false }
 };
-
 export const NO_RETRY: ExperimentVariant = {
   name: 'no-retry', description: 'Retry hooks disabled',
   toggles: { retry: false }
 };
 
-export const MINIMAL: ExperimentVariant = {
-  name: 'minimal', description: 'Only permission hooks',
-  toggles: { validation: false, retry: false, memory: false, compression: false }
+// --- 外部集成 ---
+export const NO_SETTINGS_HOOKS: ExperimentVariant = {
+  name: 'no-settings-hooks', description: 'External shell hooks disabled',
+  toggles: { settingsHooks: false }
+};
+export const NO_PROJECT_MEMORY: ExperimentVariant = {
+  name: 'no-project-memory', description: 'Project memory injection disabled',
+  toggles: { projectMemory: false }
+};
+export const NO_TRAITS: ExperimentVariant = {
+  name: 'no-traits', description: 'Trait-based permission disabled',
+  toggles: { traitsRegistry: false }
 };
 
-/** 标准消融套件：baseline + 逐个关闭每个子系统 */
+// --- LLM 参数 ---
+export const NO_THINKING: ExperimentVariant = {
+  name: 'no-thinking', description: 'Extended thinking disabled',
+  toggles: { thinkingBudget: 0 }
+};
+```
+
+### 组合消融（验证子系统整体贡献）
+
+```typescript
+export const NO_ALL_COMPRESSION: ExperimentVariant = {
+  name: 'no-all-compression', description: 'All compression disabled',
+  toggles: { compression: false, creativeCompression: false }
+};
+
+export const NO_ALL_SKILLS: ExperimentVariant = {
+  name: 'no-all-skills', description: 'Entire skill system disabled',
+  toggles: { skillDiscovery: false, skillInjection: false, dynamicToolSets: false }
+};
+
+export const MINIMAL: ExperimentVariant = {
+  name: 'minimal', description: 'Only permission hooks, nothing else',
+  toggles: {
+    compression: false, creativeCompression: false, sessionMemory: false,
+    skillDiscovery: false, skillInjection: false, dynamicToolSets: false,
+    validation: false, retry: false,
+    settingsHooks: false, projectMemory: false, traitsRegistry: false,
+    thinkingBudget: 0,
+  }
+};
+
+/** 标准消融套件：baseline + 逐个关闭每个功能点（15 个变体） */
 export function createStandardAblationSuite(): ExperimentVariant[]
+
+/** 组合消融套件：baseline + 按子系统整体关闭 */
+export function createGroupAblationSuite(): ExperimentVariant[]
 ```
 
 ---
@@ -324,7 +506,9 @@ export function formatComparisonMarkdown(entries: ComparisonEntry[]): string
 
 ## 7. 对现有代码的改动
 
-**唯一改动**：`executor-hooks-factory.ts`（约 6 行）
+共改动 **2 个文件**，均为非侵入式扩展（新增可选字段，不改变默认行为）：
+
+### 改动 1：`hooks/executor-hooks-factory.ts`（约 6 行）
 
 ```diff
  export interface ExecutorHooksFactoryConfig {
@@ -347,7 +531,30 @@ export function formatComparisonMarkdown(entries: ComparisonEntry[]): string
   ];
 ```
 
-**不改动**的文件：session、permission、context、skill、validation、retry — 全部通过组合集成。
+### 改动 2：`hooks/hooks.ts` MemoryHooks（约 6 行）
+
+```diff
+ export interface MemoryHooksOptions {
+   sessionMemory?: SessionMemory;
+   compressor?: IConversationCompressor;
++  /** Disable compression in beforeThink (for ablation) */
++  disableCompression?: boolean;
++  /** Disable session memory load/save (for ablation) */
++  disableSessionMemory?: boolean;
+ }
+
+ // MemoryHooks.beforeThink:
+-  if (this.compressor) {
++  if (this.compressor && !this.disableCompression) {
+
+ // MemoryHooks.onExecuteStart + onExecuteEnd:
+-  if (this.sessionMemory) {
++  if (this.sessionMemory && !this.disableSessionMemory) {
+```
+
+### 不改动的文件
+
+session、permission、context、skill、validation、retry 的核心逻辑 — 全部通过 config 组合集成。
 
 ---
 
@@ -391,52 +598,61 @@ export function formatComparisonMarkdown(entries: ComparisonEntry[]): string
 
 ---
 
-## 9. 实施优先级
+## 9. 实施状态
 
-### Phase 1 — 核心框架（可立即使用）
+**已完成** — 全部 Phase 1-3 已实现，构建和测试通过。
 
-1. `types.ts` — 所有接口定义
-2. `metrics-hooks.ts` — MetricsHooks 实现 ExecutorHooks
-3. `apply-toggles.ts` — applyAblationToggles 纯函数
-4. **修改** `executor-hooks-factory.ts` — 增加 `disableHooks` 字段
-5. `index.ts` — 公共导出
+### 已修改文件
 
-### Phase 2 — 运行器
+| 文件 | 改动 |
+|------|------|
+| `packages/neko-agent/packages/agent/src/hooks/hooks.ts` | MemoryHooks 增加 `disableCompression` / `disableSessionMemory` |
+| `packages/neko-agent/packages/agent/src/hooks/executor-hooks-factory.ts` | 增加 `disableHooks?: string[]` 按名称过滤 built-in hooks |
+| `packages/neko-agent/packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts` | 修正 hook 数量期望 + 新增 disableHooks 测试 |
 
-6. `experiment-runner.ts` — ExperimentRunner
-7. `presets.ts` — 预置变体
-8. `comparison.ts` — 对比表生成
+### 新增文件
 
-### Phase 3 — 测试
+```
+packages/neko-agent/packages/agent/src/experiment/
+  types.ts              — 15 个 AblationToggles + Metrics/Result/ProgressEvent 类型
+  apply-toggles.ts      — applyAblationToggles() 纯函数 + AblationMarkerHook
+  metrics-hooks.ts      — MetricsHooks（ExecutorHooks 被动观察者）
+  experiment-runner.ts  — ExperimentRunner（ISessionFactory 依赖注入，支持 mock）
+  presets.ts            — 13 个单功能变体 + 4 个组合变体 + 2 个套件构建器
+  comparison.ts         — buildComparison() + formatComparisonMarkdown()
+  index.ts              — 公共导出
+```
 
-9. `__tests__/apply-toggles.test.ts`
-10. `__tests__/metrics-hooks.test.ts`
-11. `__tests__/experiment-runner.test.ts`（mock IService）
+### 待实现
+
+- `experiment/__tests__/` — 单元测试（apply-toggles / metrics-hooks / experiment-runner）
+- Session 初始化层读取 `AblationMarkerHook` 并传递 `disableHooks` / `disableCompression` / `disableSessionMemory` 到对应组件
+- Skill 系统 3 个子开关（skillDiscovery / skillInjection / dynamicToolSets）的 session 层接线
 
 ---
 
 ## 10. 关键文件路径
 
-| 文件 | 作用 |
+| 文件 | 状态 |
 |------|------|
-| `packages/neko-agent/packages/agent/src/hooks/executor-hooks-factory.ts` | **唯一需修改** — 增加 disableHooks |
-| `packages/neko-agent/packages/agent/src/session/types.ts` | AgentSessionConfig 定义（只读参考） |
-| `packages/neko-agent/packages/agent/src/session/agent-session-initializer.ts` | initializeSession 流程（只读参考） |
-| `packages/neko-types/src/types/agent.ts` | ExecutorHooks / AgentResult / ToolCallInfo 接口（只读参考） |
-| `packages/neko-agent/packages/agent/src/hooks/hooks.ts` | MemoryHooks / RetryHooks 实现（只读参考） |
+| `packages/neko-agent/packages/agent/src/hooks/executor-hooks-factory.ts` | ✅ 已修改 |
+| `packages/neko-agent/packages/agent/src/hooks/hooks.ts` | ✅ 已修改 |
+| `packages/neko-agent/packages/agent/src/experiment/` | ✅ 新增模块 |
+| `packages/neko-agent/packages/agent/src/session/types.ts` | 只读参考 |
+| `packages/neko-agent/packages/agent/src/session/agent-session-initializer.ts` | 只读参考 |
+| `packages/neko-types/src/types/agent.ts` | 只读参考 |
 
 ---
 
 ## 11. 验证方式
 
 ```bash
-# 1. 构建
+# 1. 构建（已通过）
 pnpm build
 
-# 2. 单元测试
+# 2. 单元测试（已通过，既有 33 个失败与本次无关）
 cd packages/neko-agent && pnpm test
 
-# 3. 集成验证（mock service）
-# experiment-runner.test.ts 中用 mock IService 运行标准消融套件
-# 验证：每个变体产出独立的 ExperimentMetrics，对比表正确生成
+# 3. hooks factory 测试（8/8 通过，含新增 disableHooks 测试）
+pnpm vitest --run packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts
 ```

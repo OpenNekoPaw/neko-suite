@@ -68,6 +68,9 @@ export interface ExecutorHooksFactoryConfig {
 
   /** Tool traits registry for conditional auto mode (creative scenarios) */
   traitsRegistry?: ToolTraitsRegistry;
+
+  /** Hook names to exclude from the chain (for ablation experiments) */
+  disableHooks?: string[];
 }
 
 /**
@@ -143,12 +146,12 @@ export function createExecutorHooks(
     },
   });
 
-  // 5. Compose: built-in hooks + custom hooks
+  // 5. Compose: built-in hooks (optionally filtered) + custom hooks
+  const builtinHooks: ExecutorHooks[] = [memoryHooks, validationHooks, permissionHooks, retryHooks];
   const hooks: ExecutorHooks[] = [
-    memoryHooks,
-    validationHooks,
-    permissionHooks,
-    retryHooks,
+    ...(config.disableHooks
+      ? builtinHooks.filter((h) => !config.disableHooks!.includes(h.name!))
+      : builtinHooks),
     ...(config.customHooks ?? []),
   ];
 

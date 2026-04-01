@@ -24,14 +24,14 @@ function createMockCompressor() {
 // =============================================================================
 
 describe('createExecutorHooks', () => {
-  it('should return hooks array with 3 built-in hooks', () => {
+  it('should return hooks array with 4 built-in hooks', () => {
     const result = createExecutorHooks({
       compressor: createMockCompressor(),
       permissionMode: 'auto',
     });
 
-    // memory + validation + permission = 3
-    expect(result.hooks.length).toBe(3);
+    // memory + validation + permission + retry = 4
+    expect(result.hooks.length).toBe(4);
   });
 
   it('should return permissionHooks reference', () => {
@@ -45,14 +45,14 @@ describe('createExecutorHooks', () => {
     expect((result.permissionHooks as unknown as { name: string }).name).toBe('permission');
   });
 
-  it('should place hooks in correct order: memory → validation → permission', () => {
+  it('should place hooks in correct order: memory → validation → permission → retry', () => {
     const result = createExecutorHooks({
       compressor: createMockCompressor(),
       permissionMode: 'auto',
     });
 
     const names = result.hooks.map((h) => h.name);
-    expect(names).toEqual(['memory', 'validation', 'permission']);
+    expect(names).toEqual(['memory', 'validation', 'permission', 'retry']);
   });
 
   it('should append custom hooks after built-in hooks', () => {
@@ -63,8 +63,8 @@ describe('createExecutorHooks', () => {
       customHooks: [customHook],
     });
 
-    expect(result.hooks.length).toBe(4);
-    expect(result.hooks[3]!.name).toBe('custom');
+    expect(result.hooks.length).toBe(5);
+    expect(result.hooks[4]!.name).toBe('custom');
   });
 
   it('should set permission mode on created permission hooks', () => {
@@ -83,6 +83,26 @@ describe('createExecutorHooks', () => {
       customHooks: [],
     });
 
-    expect(result.hooks.length).toBe(3);
+    expect(result.hooks.length).toBe(4);
+  });
+
+  it('should exclude hooks listed in disableHooks', () => {
+    const result = createExecutorHooks({
+      compressor: createMockCompressor(),
+      permissionMode: 'auto',
+      disableHooks: ['validation', 'retry'],
+    });
+
+    const names = result.hooks.map((h) => h.name);
+    expect(names).toEqual(['memory', 'permission']);
+  });
+
+  it('should not filter hooks when disableHooks is undefined', () => {
+    const result = createExecutorHooks({
+      compressor: createMockCompressor(),
+      permissionMode: 'auto',
+    });
+
+    expect(result.hooks.length).toBe(4);
   });
 });
