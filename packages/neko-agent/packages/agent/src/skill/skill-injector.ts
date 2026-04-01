@@ -7,6 +7,7 @@
  */
 
 import type { Skill, SkillInjection, ISkillInjector } from '@neko/shared';
+import { replaceShellCommands } from './shell-replacer';
 
 /**
  * Skill injector implementation
@@ -22,11 +23,14 @@ export class SkillInjector implements ISkillInjector {
    * **Argument Interpolation**: When skill.supportsArguments is true and
    * args are provided, supports $ARGUMENTS and $1-$99 placeholders.
    *
+   * **Shell Execution**: Replaces !`command` patterns with their stdout.
+   * Disabled for skills with shell: false in frontmatter.
+   *
    * @param skill Skill to inject
    * @param args Optional arguments (for skills with command trigger)
    * @returns Injection configuration
    */
-  injectSkill(skill: Skill, args?: string): SkillInjection {
+  async injectSkill(skill: Skill, args?: string): Promise<SkillInjection> {
     let systemPrompt = skill.content;
 
     // Argument interpolation (for skills with slash command trigger)
@@ -36,6 +40,16 @@ export class SkillInjector implements ISkillInjector {
       } else {
         systemPrompt = this.cleanPlaceholders(systemPrompt);
       }
+    }
+
+    // Shell command execution (after variable substitution)
+    // Default: enabled for file-based skills, disabled if shell: false
+    const shellEnabled = (skill as { shell?: boolean }).shell !== false;
+    if (shellEnabled) {
+      systemPrompt = await replaceShellCommands(systemPrompt, {
+        cwd: skill.directoryPath,
+        timeout: 5000,
+      });
     }
 
     // Add hint about support files location if skill has a directory

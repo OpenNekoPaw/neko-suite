@@ -193,12 +193,12 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         activateSkill: (name: string) => {
           const skill = skillService!.registry.getSkill(name);
           if (!skill) return { success: false, message: `Skill "${name}" not found` };
-          const injection = skillService!.apply(skill);
-          session.applySkillInjection(injection, skill);
+          void skillService!.apply(skill).then((injection) => {
+            session.applySkillInjection(injection, skill);
+          });
           return {
             success: true,
             message: `Activated skill "${name}"`,
-            allowedTools: injection.allowedTools,
           };
         },
         deactivateSkill: () => {
@@ -466,7 +466,16 @@ export interface AgentRunnerWithContextOptions extends AgentRunnerOptions {
 export async function runAgentWithContext(
   options: AgentRunnerWithContextOptions,
 ): Promise<CLIResult> {
-  const { config, runOptions, session, inputProcessor, onOutput, onToolCall, onThinking, platform } = options;
+  const {
+    config,
+    runOptions,
+    session,
+    inputProcessor,
+    onOutput,
+    onToolCall,
+    onThinking,
+    platform,
+  } = options;
   const startTime = Date.now();
 
   if (!session) {
@@ -700,12 +709,12 @@ async function initializeInteractiveSession(
       activateSkill: (name: string) => {
         const skill = skillService!.registry.getSkill(name);
         if (!skill) return { success: false, message: `Skill "${name}" not found` };
-        const injection = skillService!.apply(skill);
-        session.applySkillInjection(injection, skill);
+        void skillService!.apply(skill).then((injection) => {
+          session.applySkillInjection(injection, skill);
+        });
         return {
           success: true,
           message: `Activated skill "${name}"`,
-          allowedTools: injection.allowedTools,
         };
       },
       deactivateSkill: () => {
@@ -752,7 +761,9 @@ async function initializeInteractiveSession(
       session.loadHistory(record.messages);
       conversationId = record.id;
       conversationTitle = record.title;
-      console.log(theme.info(`Resumed: "${record.title}" (${record.messages.length - 1} messages)`));
+      console.log(
+        theme.info(`Resumed: "${record.title}" (${record.messages.length - 1} messages)`),
+      );
     } else {
       console.log(theme.warning(`Conversation "${resumeId}" not found — starting fresh`));
     }
@@ -1009,7 +1020,9 @@ export async function runInteractive(
                 ? state!.mediaModelOverrides
                 : undefined,
           };
-          state!.conversationStorage.save(record).catch(() => {/* silent — storage is best-effort */});
+          state!.conversationStorage.save(record).catch(() => {
+            /* silent — storage is best-effort */
+          });
         } catch (error) {
           console.error(
             theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`),

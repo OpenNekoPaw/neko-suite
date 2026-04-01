@@ -7,7 +7,14 @@
  * - Standard interface implementation
  */
 
-import type { Tool, ToolCategory, ToolParameters, ToolResult, ToolTraits } from '../types/tool';
+import type {
+  Tool,
+  ToolCategory,
+  ToolExecuteOptions,
+  ToolParameters,
+  ToolResult,
+  ToolTraits,
+} from '../types/tool';
 
 /**
  * Base class for builtin tools
@@ -18,6 +25,9 @@ import type { Tool, ToolCategory, ToolParameters, ToolResult, ToolTraits } from 
  * - parameters: JSON Schema for arguments
  * - category: Tool category
  * - execute: Execution handler
+ *
+ * Concurrency & safety fields default to Fail-Closed (false).
+ * Subclasses should override to true where appropriate.
  */
 export abstract class BuiltinTool implements Tool {
   abstract readonly name: string;
@@ -26,7 +36,15 @@ export abstract class BuiltinTool implements Tool {
   abstract readonly category: ToolCategory;
   readonly requiresConfirmation: boolean = false;
 
-  abstract execute(args: Record<string, unknown>): Promise<ToolResult>;
+  // Fail-Closed defaults: assume unsafe until explicitly declared otherwise
+  readonly isConcurrencySafe: boolean = false;
+  readonly isReadOnly: boolean = false;
+  readonly isDestructive: boolean = false;
+
+  abstract execute(
+    args: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult>;
 
   /**
    * Validate arguments against parameters schema
@@ -70,7 +88,10 @@ export function createTool(config: {
   category: ToolCategory;
   requiresConfirmation?: boolean;
   traits?: ToolTraits;
-  execute: (args: Record<string, unknown>) => Promise<ToolResult>;
+  isConcurrencySafe?: boolean;
+  isReadOnly?: boolean;
+  isDestructive?: boolean;
+  execute: (args: Record<string, unknown>, options?: ToolExecuteOptions) => Promise<ToolResult>;
 }): Tool {
   return {
     name: config.name,
@@ -78,6 +99,10 @@ export function createTool(config: {
     parameters: config.parameters,
     category: config.category,
     requiresConfirmation: config.requiresConfirmation ?? false,
+    // Fail-Closed: default all safety flags to false
+    isConcurrencySafe: config.isConcurrencySafe ?? false,
+    isReadOnly: config.isReadOnly ?? false,
+    isDestructive: config.isDestructive ?? false,
     ...(config.traits && { traits: config.traits }),
     execute: config.execute,
   };

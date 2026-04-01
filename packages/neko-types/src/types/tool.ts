@@ -32,6 +32,44 @@ export interface ToolFilterOptions {
 }
 
 /**
+ * Validation error detail for schema validation failures.
+ * Structured so LLM can self-correct on retry.
+ */
+export interface ToolValidationError {
+  /** JSON path to the invalid field (e.g. "duration") */
+  field: string;
+  /** Expected constraint description */
+  expected: string;
+  /** Actual value that was provided */
+  actual: unknown;
+  /** Human-readable error message */
+  message: string;
+}
+
+/**
+ * Multimodal attachment returned by a tool (e.g. generated image preview).
+ */
+export interface ToolResultAttachment {
+  type: 'image' | 'audio' | 'video';
+  /** Absolute file path to the generated asset */
+  path: string;
+  /** Optional MIME type hint */
+  mimeType?: string;
+}
+
+/**
+ * Progress update emitted during long-running tool execution.
+ */
+export interface ToolProgress {
+  /** Completion percentage (0-100) */
+  percent: number;
+  /** Current processing stage description */
+  stage: string;
+  /** Optional preview path or data URI */
+  preview?: string;
+}
+
+/**
  * Tool execution result
  */
 export interface ToolResult {
@@ -43,6 +81,10 @@ export interface ToolResult {
   error?: string;
   /** Execution time in ms */
   duration?: number;
+  /** Schema validation errors (present when input fails validation) */
+  validationErrors?: ToolValidationError[];
+  /** Multimodal attachments (e.g. generated image/audio/video previews) */
+  attachments?: ToolResultAttachment[];
 }
 
 /**
@@ -99,6 +141,14 @@ export const DEFAULT_TOOL_TRAITS: ToolTraits = {
 };
 
 /**
+ * Options passed to Tool.execute() at call time.
+ */
+export interface ToolExecuteOptions {
+  /** Progress callback for long-running tools */
+  onProgress?: (progress: ToolProgress) => void;
+}
+
+/**
  * Tool definition
  */
 export interface Tool {
@@ -114,8 +164,32 @@ export interface Tool {
   requiresConfirmation?: boolean;
   /** Behavioral traits for creative permission system */
   traits?: ToolTraits;
+
+  // --- Concurrency & safety metadata (Fail-Closed: all default false) ---
+
+  /**
+   * Whether this tool is safe to run concurrently with other tool calls.
+   * Default false (Fail-Closed). Mark true for stateless generation tools
+   * (e.g. GenerateImage, GenerateTTS) that don't mutate shared state.
+   */
+  isConcurrencySafe?: boolean;
+
+  /**
+   * Whether this tool only reads state and never modifies it.
+   * Default false (Fail-Closed). Mark true for query tools
+   * (e.g. GetTimelineInfo, ListElements).
+   */
+  isReadOnly?: boolean;
+
+  /**
+   * Whether this tool performs irreversible destructive operations.
+   * Default false. Mark true for deletion tools (e.g. DeleteElement, DeleteTrack).
+   * Destructive tools may require additional user confirmation.
+   */
+  isDestructive?: boolean;
+
   /** Tool execution handler */
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
+  execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult>;
 }
 
 /**

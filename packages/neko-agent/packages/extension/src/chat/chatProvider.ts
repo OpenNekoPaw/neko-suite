@@ -291,12 +291,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               if (!skill) return { success: false, message: `Skill "${name}" not found` };
               const activeId = this._conversations.getActiveId();
               if (!activeId) return { success: false, message: 'No active conversation' };
-              const injection = skillService.apply(skill);
-              this._agentManager?.applySkillInjection(activeId, injection, skill);
+              void skillService.apply(skill).then((injection) => {
+                this._agentManager?.applySkillInjection(activeId, injection, skill);
+              });
               return {
                 success: true,
                 message: `Activated skill "${name}"`,
-                allowedTools: injection.allowedTools,
               };
             },
             deactivateSkill: () => {

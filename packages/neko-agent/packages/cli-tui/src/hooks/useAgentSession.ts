@@ -63,7 +63,7 @@ export interface AgentSessionHandle {
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
   /** Activate a skill by name; returns false if skill not found */
-  activateSkill: (name: string) => boolean;
+  activateSkill: (name: string) => Promise<boolean>;
   /** Deactivate the currently active skill */
   deactivateSkill: () => void;
   /** Skill service (for slash commands) */
@@ -259,12 +259,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             activateSkill: (name: string) => {
               const skill = skillService!.registry.getSkill(name);
               if (!skill) return { success: false, message: `Skill "${name}" not found` };
-              const injection = skillService!.apply(skill);
-              session.applySkillInjection(injection, skill);
+              // apply() is async (shell execution), fire-and-forget for sync callback
+              void skillService!.apply(skill).then((injection) => {
+                session.applySkillInjection(injection, skill);
+              });
               return {
                 success: true,
                 message: `Activated skill "${name}"`,
-                allowedTools: injection.allowedTools,
               };
             },
             deactivateSkill: () => {
@@ -385,7 +386,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
   }, []);
 
-  const activateSkill = useCallback((name: string): boolean => {
+  const activateSkill = useCallback(async (name: string): Promise<boolean> => {
     const skillService = skillServiceRef.current;
     const session = sessionRef.current;
     if (!skillService || !session) return false;
@@ -393,7 +394,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const skill = skillService.registry.getSkill(name);
     if (!skill) return false;
 
-    const injection = skillService.apply(skill);
+    const injection = await skillService.apply(skill);
     session.applySkillInjection(injection, skill);
     useAgentStore.getState().setActiveSkill(name);
     return true;

@@ -21,6 +21,7 @@ import type {
 } from '@neko/shared';
 import { AgentError } from '../errors';
 import { getLogger } from '../utils/logger';
+import { validateSchema, formatValidationErrors } from './schema-validator';
 
 const logger = getLogger('ToolRegistry');
 
@@ -121,6 +122,18 @@ export class ToolRegistry implements IToolRegistry {
         success: false,
         error: `Tool not found: ${name}`,
       };
+    }
+
+    // Schema validation: catch parameter errors before execution
+    if (tool.parameters) {
+      const validationErrors = validateSchema(args, tool.parameters);
+      if (validationErrors.length > 0) {
+        return {
+          success: false,
+          error: formatValidationErrors(validationErrors),
+          validationErrors,
+        };
+      }
     }
 
     try {

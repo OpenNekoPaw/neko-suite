@@ -41,6 +41,7 @@ export class BashTool extends BuiltinTool {
   };
   readonly category: ToolCategory = 'system';
   override readonly requiresConfirmation = true;
+  override readonly isDestructive = true;
 
   private defaultCwd?: string;
   private defaultTimeout: number;

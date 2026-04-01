@@ -133,7 +133,7 @@ export async function executeSlashCommand(
   context: CommandContext,
   skillService?: {
     getSkillByCommand(name: string): unknown | undefined;
-    apply(skill: unknown, args?: string): unknown;
+    apply(skill: unknown, args?: string): Promise<unknown>;
   },
 ): Promise<CommandResult> {
   const { command, args } = parseSlashCommand(input);
@@ -149,7 +149,7 @@ export async function executeSlashCommand(
     const skill = skillService.getSkillByCommand(command);
     if (skill) {
       try {
-        const injection = skillService.apply(skill, args.join(' '));
+        const injection = await skillService.apply(skill, args.join(' '));
         return {
           handled: true,
           continueExecution: true,

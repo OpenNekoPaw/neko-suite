@@ -25,6 +25,7 @@ export function registerMediaAgentTools(
       description:
         'Submit an async IMAGE generation task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
       category: 'generation',
+      isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
@@ -96,6 +97,7 @@ export function registerMediaAgentTools(
       description:
         'Submit an async VIDEO generation task (clips, animations, motion content). Use this when the user asks for a video, animation, or moving content — for still images use GenerateImage instead. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
       category: 'generation',
+      isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
@@ -158,6 +160,7 @@ export function registerMediaAgentTools(
       description:
         'Submit an async music generation task. This tool only SUBMITS the task and returns immediately with a taskId — the music is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the music is ready or finished.',
       category: 'generation',
+      isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
@@ -220,6 +223,7 @@ export function registerMediaAgentTools(
       description:
         'Submit an async text-to-speech task. This tool only SUBMITS the task and returns immediately with a taskId — the audio is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the audio is ready or finished.',
       category: 'generation',
+      isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {

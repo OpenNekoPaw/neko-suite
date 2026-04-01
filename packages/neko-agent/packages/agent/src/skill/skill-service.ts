@@ -69,7 +69,7 @@ export class SkillService {
    * @param skill Skill to apply
    * @param args Optional arguments (for skills with command trigger)
    */
-  apply(skill: Skill, args?: string): SkillInjection {
+  async apply(skill: Skill, args?: string): Promise<SkillInjection> {
     return this._injector.injectSkill(skill, args);
   }
 
@@ -124,7 +124,7 @@ export class SkillService {
       }
     }
 
-    const injection = this.apply(topMatch.skill);
+    const injection = await this.apply(topMatch.skill);
     return { applied: true, injection, skill: topMatch.skill };
   }
 

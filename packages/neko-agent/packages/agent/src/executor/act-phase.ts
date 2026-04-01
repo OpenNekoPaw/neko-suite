@@ -16,6 +16,7 @@ import type {
   ToolResultWithMeta,
 } from '@neko/shared';
 import { runHooks } from './hook-runner';
+import { partitionToolCalls } from './partition-tool-calls';
 
 // =============================================================================
 // Types
@@ -49,24 +50,48 @@ export async function act(
   // Hook: beforeAct
   await runHooks(deps.hooks, 'beforeAct', toolCallInfos);
 
-  // Execute all tool calls in parallel for better performance
   const signal = deps.abortController?.signal;
-  const settled = await Promise.allSettled(
-    toolCallInfos.map((info) => executeToolCall(deps, info, signal)),
-  );
+  const results: ToolResultWithMeta[] = [];
 
-  const results: ToolResultWithMeta[] = settled.map((s, i) => {
-    if (s.status === 'fulfilled') {
-      return s.value;
+  // Partition tool calls: concurrency-safe tools run in parallel,
+  // unsafe tools run sequentially after (Fail-Closed default).
+  const { concurrent, serial } = partitionToolCalls(toolCallInfos, deps.toolRegistry);
+
+  // Phase 1: Execute concurrency-safe tools in parallel
+  if (concurrent.length > 0) {
+    const settled = await Promise.allSettled(
+      concurrent.map((info) => executeToolCall(deps, info, signal)),
+    );
+    for (let i = 0; i < settled.length; i++) {
+      const s = settled[i]!;
+      if (s.status === 'fulfilled') {
+        results.push(s.value);
+      } else {
+        const info = concurrent[i]!;
+        results.push({
+          success: false,
+          error: (s.reason as Error).message ?? 'Unknown error',
+          callId: info.id,
+          name: info.name,
+        });
+      }
     }
-    const info = toolCallInfos[i]!;
-    return {
-      success: false,
-      error: (s.reason as Error).message ?? 'Unknown error',
-      callId: info.id,
-      name: info.name,
-    };
-  });
+  }
+
+  // Phase 2: Execute unsafe tools sequentially
+  for (const info of serial) {
+    try {
+      const result = await executeToolCall(deps, info, signal);
+      results.push(result);
+    } catch (err) {
+      results.push({
+        success: false,
+        error: (err as Error).message ?? 'Unknown error',
+        callId: info.id,
+        name: info.name,
+      });
+    }
+  }
 
   // Hook: afterAct
   await runHooks(deps.hooks, 'afterAct', results);

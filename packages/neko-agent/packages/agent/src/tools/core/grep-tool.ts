@@ -51,6 +51,8 @@ export class GrepTool extends BuiltinTool {
     required: ['pattern', 'path'],
   };
   readonly category: ToolCategory = 'file';
+  override readonly isConcurrencySafe = true;
+  override readonly isReadOnly = true;
 
   private defaultCwd?: string;
 

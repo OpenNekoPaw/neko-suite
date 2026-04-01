@@ -36,6 +36,8 @@ export class ListDirectoryTool extends BuiltinTool {
     required: ['path'],
   };
   readonly category: ToolCategory = 'file';
+  override readonly isConcurrencySafe = true;
+  override readonly isReadOnly = true;
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const validation = this.validateArgs(args);

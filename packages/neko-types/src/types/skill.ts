@@ -383,9 +383,9 @@ export interface SkillInjection {
  */
 export interface ISkillInjector {
   /**
-   * Inject a skill (with optional argument interpolation for command-enabled skills)
+   * Inject a skill (with optional argument interpolation and shell execution)
    */
-  injectSkill(skill: Skill, args?: string): SkillInjection;
+  injectSkill(skill: Skill, args?: string): Promise<SkillInjection>;
 
   /**
    * Interpolate arguments in content
@@ -537,6 +537,24 @@ export interface SkillFrontmatter {
 
   /** Enabled state */
   enabled?: boolean;
+
+  // ===========================================================================
+  // Shell & Conditional Trigger (Claude Code compatible)
+  // ===========================================================================
+
+  /**
+   * Whether to execute embedded shell commands (!`command`) in skill content.
+   * Default true for file-based skills, false for MCP-sourced skills.
+   * Set to false to disable shell execution for security.
+   */
+  shell?: boolean;
+
+  /**
+   * File glob patterns that conditionally trigger this skill.
+   * When a file matching these patterns is saved, the skill is auto-activated.
+   * @example ["**\/*.fountain", "**\/*.fdx"]
+   */
+  paths?: string[];
 
   // ===========================================================================
   // Pipeline Configuration (Neko Suite extension)

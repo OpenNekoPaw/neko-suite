@@ -119,11 +119,11 @@ export class SkillHandler {
    * @param command Slash command name (without /)
    * @param args Arguments passed to the command
    */
-  handleSlashCommand(
+  async handleSlashCommand(
     webview: vscode.Webview,
     command: string,
     args?: string,
-  ): SkillApplicationResult | null {
+  ): Promise<SkillApplicationResult | null> {
     const { skillService } = this._deps;
     if (!skillService) {
       return { applied: false, error: 'SkillService not initialized' };
@@ -137,7 +137,7 @@ export class SkillHandler {
 
     // Apply the skill with argument interpolation
     try {
-      const injection = skillService.apply(skill, args);
+      const injection = await skillService.apply(skill, args);
 
       // Send injection to webview for conversation context
       this._sendSkillInjection(webview, injection);
@@ -216,11 +216,11 @@ export class SkillHandler {
    * @param skillId Skill ID to execute
    * @param input Input data for the skill
    */
-  handleExecuteSkill(
+  async handleExecuteSkill(
     webview: vscode.Webview,
     skillId: string,
     input: Record<string, unknown>,
-  ): SkillApplicationResult | null {
+  ): Promise<SkillApplicationResult | null> {
     const { skillService } = this._deps;
     if (!skillService) {
       return { applied: false, error: 'SkillService not initialized' };
@@ -232,8 +232,8 @@ export class SkillHandler {
       return { applied: false, error: `Unknown skill: ${skillId}` };
     }
 
-    // Apply the skill
-    const injection = skillService.apply(skill);
+    // Apply the skill (async: may execute shell commands)
+    const injection = await skillService.apply(skill);
 
     // Store active skill state (tool guard is now managed by AgentSession)
     this._activeSkill = {

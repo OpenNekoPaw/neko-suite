@@ -57,6 +57,8 @@ export class GetContextTool extends BuiltinTool {
     },
   };
   readonly category: ToolCategory = 'system';
+  override readonly isConcurrencySafe = true;
+  override readonly isReadOnly = true;
 
   private categoryRegistry: IToolCategoryRegistry;
   private skillRegistry?: IToolGroupRegistry;
