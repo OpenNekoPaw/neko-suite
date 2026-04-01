@@ -59,5 +59,8 @@ coverage/
 .env.*
 !.env.example
 
+# Bun build artifacts
+*.bun-build
+
 # 系统杂项
 .DS_Store
