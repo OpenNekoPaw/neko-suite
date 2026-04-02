@@ -219,6 +219,28 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 
 ---
 
+## Extension Pack 分层安装
+> [ADR](./docs/architecture/extension-pack-strategy.md)
+
+14 个扩展按场景拆分为可叠加的子包，降低用户安装和认知负担：
+
+| 子包 | 包含扩展 | 目标用户 |
+|------|---------|---------|
+| **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | 基础设施 + AI（自动依赖） |
+| **neko-suite-video** | core + cut + canvas + story | AIGC 视频制作者 |
+| **neko-suite-2d** | core + sketch | 2D 插画/动画创作者 |
+| **neko-suite-audio** | core + audio | 音频创作者 |
+| **neko-suite** | 全部 14 个 | 全栈创作者 |
+
+agent/market 已包含在 core 中，场景子包叠加时零重复：
+```bash
+./install.sh --pack video            # AIGC 视频全流程
+./install.sh --pack video --pack 2d  # 视频 + 2D（agent/market 共享）
+./install.sh --all                   # 全部 release-ready
+```
+
+---
+
 ## 贡献指南
 
 - [CLAUDE.md](./CLAUDE.md) - 开发规范和架构指南

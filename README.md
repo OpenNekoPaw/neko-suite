@@ -48,14 +48,14 @@ pnpm install
 
 | 你想做什么 | 安装命令 | 获得的能力 |
 |-----------|---------|-----------|
-| **AIGC 视频制作** — 从剧本到成片 | `./install.sh --pack video` | 剧本编辑 + 分镜画布 + AI 生成 + 时间线剪辑 + 市场 |
-| **2D 插画/动画** — 手绘 + 骨骼 | `./install.sh --pack 2d` | 压感绘画 + Puppet 骨骼动画 + AI 辅助生成 + 市场 |
-| **音频编辑** — 录制 + 混音 | `./install.sh --pack audio` | 波形编辑 + 效果链 + 频谱分析 + AI 降噪 |
-| **全部功能** | `./install.sh --all` | 上述全部 + 3D 编辑 + 直播 |
+| **AIGC 视频制作** — 从剧本到成片 | `./install.sh --pack video` | 剧本编辑 + 分镜画布 + 时间线剪辑 |
+| **2D 插画/动画** — 手绘 + 骨骼 | `./install.sh --pack 2d` | 压感绘画 + Puppet 骨骼动画 |
+| **音频编辑** — 录制 + 混音 | `./install.sh --pack audio` | 波形编辑 + 效果链 + 频谱分析 |
+| **全部功能** | `./install.sh --all` | 上述全部 release-ready 扩展 |
 
-子包可叠加：`./install.sh --pack video --pack 2d`（共享扩展自动去重）。
+子包可叠加：`./install.sh --pack video --pack 2d`（场景子包零重复）。
 
-> 所有子包自动包含 core 基础设施（engine + tools + preview + assets + auth）。不带参数运行 `./install.sh` 将显示交互式选择菜单。详见 [Extension Pack 分层策略](./docs/architecture/extension-pack-strategy.md)。
+> 所有子包自动包含 core（engine + tools + preview + assets + auth + **agent + market**）。AI 能力、资产管理、技能市场是所有场景的共享基础设施。不带参数运行 `./install.sh` 将显示交互式选择菜单。详见 [Extension Pack 分层策略](./docs/architecture/extension-pack-strategy.md)。
 
 ### 开发模式
 

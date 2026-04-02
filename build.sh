@@ -11,16 +11,61 @@ export npm_config_cache="${PWD}/.npm-cache"
 # 抑制 pnpm 配置项在 npm 中的警告
 export npm_config_loglevel=error
 
+# =============================================================================
+# Extension classification
+# =============================================================================
+
+# Release-ready extensions (included in --all builds)
+RELEASE_PACKAGES=(
+  "neko-engine"
+  "neko-tools"
+  "neko-cut"
+  "neko-canvas"
+  "neko-agent"
+  "neko-story"
+  "neko-sketch"
+  "neko-audio"
+  "neko-assets"
+)
+
+# Development-only extensions (only included in --dev builds)
+DEV_ONLY_PACKAGES=(
+  "neko-live"
+  "neko-model"
+)
+
+# =============================================================================
 # Parse arguments
+# =============================================================================
+
 BUILD_ALL=0
+BUILD_DEV=0
 BUILD_PACKAGE=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --all) BUILD_ALL=1; shift ;;
+    --dev) BUILD_DEV=1; shift ;;
     --package) BUILD_PACKAGE="$2"; shift 2 ;;
+    --help|-h)
+      echo "Usage: ./build.sh [options]"
+      echo ""
+      echo "Options:"
+      echo "  --all              Build release-ready extensions (${#RELEASE_PACKAGES[@]} packages)"
+      echo "  --dev              Build ALL extensions including dev-only (${#RELEASE_PACKAGES[@]} + ${#DEV_ONLY_PACKAGES[@]} packages)"
+      echo "  --package <name>   Build specific package (e.g., neko-cut)"
+      echo "  (no options)       Build neko-cut only (default)"
+      echo ""
+      echo "Release packages: ${RELEASE_PACKAGES[*]}"
+      echo "Dev-only packages: ${DEV_ONLY_PACKAGES[*]}"
+      exit 0
+      ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+
+# =============================================================================
+# Build functions
+# =============================================================================
 
 # Clean previous builds
 clean_builds() {
@@ -83,31 +128,19 @@ package_extension() {
   cp -f "$pkg_dir"/*.vsix . 2>/dev/null || true
 }
 
-# Build all neko packages
-build_all_neko() {
-  local packages=(
-    "neko-cut"
-    "neko-canvas"
-    "neko-agent"
-    "neko-engine"
-    "neko-story"
-    "neko-sketch"
-    "neko-audio"
-    "neko-live"
-    "neko-assets"
-    "neko-tools"
-  )
-
+# Build a list of packages
+build_package_list() {
+  local packages=("$@")
   for pkg in "${packages[@]}"; do
     build_neko_package "$pkg"
     package_extension "$pkg"
   done
-
-  # Package extension pack
-  package_extension "neko-suite"
 }
 
+# =============================================================================
 # Main build flow
+# =============================================================================
+
 main() {
   if [ -n "$BUILD_PACKAGE" ]; then
     # Build single package
@@ -115,14 +148,26 @@ main() {
     build_ui
     build_neko_package "$BUILD_PACKAGE"
     package_extension "$BUILD_PACKAGE"
-  elif [ "$BUILD_ALL" = "1" ]; then
-    # Build all packages
+  elif [ "$BUILD_DEV" = "1" ]; then
+    # Build ALL packages (release + dev-only)
     clean_builds
     install_deps
     build_effects
     build_ui
     build_rust
-    build_all_neko
+    build_package_list "${RELEASE_PACKAGES[@]}" "${DEV_ONLY_PACKAGES[@]}"
+    package_extension "neko-suite"
+    echo ""
+    echo "⚠️  Dev build: includes neko-live, neko-model (not release-ready)"
+  elif [ "$BUILD_ALL" = "1" ]; then
+    # Build release-ready packages only
+    clean_builds
+    install_deps
+    build_effects
+    build_ui
+    build_rust
+    build_package_list "${RELEASE_PACKAGES[@]}"
+    package_extension "neko-suite"
   else
     # Default: build neko-cut only
     install_deps

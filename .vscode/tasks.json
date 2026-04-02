@@ -1,6 +1,68 @@
 {
   "version": "2.0.0",
   "tasks": [
+    // =========================================================================
+    // Scene Pack builds (recommended for daily development)
+    // =========================================================================
+    {
+      "label": "build:pack-video",
+      "type": "shell",
+      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-cut && pnpm build:neko-canvas && pnpm build:neko-story",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build Video Pack: core (7) + cut + canvas + story"
+    },
+    {
+      "label": "build:pack-2d",
+      "type": "shell",
+      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-sketch && pnpm build:neko-puppet",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build 2D Pack: core (7) + sketch + puppet"
+    },
+    {
+      "label": "build:pack-audio",
+      "type": "shell",
+      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-audio",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build Audio Pack: core (7) + audio"
+    },
+
+    // =========================================================================
+    // Release / Dev full builds
+    // =========================================================================
+    {
+      "label": "build:release",
+      "type": "shell",
+      "command": "./build.sh --all",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build all release-ready extensions (excludes neko-live, neko-model)"
+    },
+    {
+      "label": "build:dev",
+      "type": "shell",
+      "command": "./build.sh --dev",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build ALL extensions including dev-only (neko-live, neko-model)"
+    },
+    {
+      "label": "build:all",
+      "type": "shell",
+      "command": "pnpm build:extensions",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$tsc"],
+      "detail": "Build all extensions (turbo)"
+    },
+
+    // =========================================================================
+    // Single extension builds
+    // =========================================================================
     {
       "label": "build:core",
       "type": "shell",
@@ -59,13 +121,6 @@
       "problemMatcher": ["$tsc"]
     },
     {
-      "label": "build:neko-live",
-      "type": "shell",
-      "command": "pnpm build:neko-live",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
       "label": "build:neko-story",
       "type": "shell",
       "command": "pnpm build:neko-story",
@@ -101,13 +156,6 @@
       "problemMatcher": ["$tsc"]
     },
     {
-      "label": "build:neko-model",
-      "type": "shell",
-      "command": "pnpm build:neko-model",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
       "label": "build:neko-auth",
       "type": "shell",
       "command": "pnpm build:neko-auth",
@@ -115,15 +163,72 @@
       "problemMatcher": ["$tsc"]
     },
     {
-      "label": "build:all",
+      "label": "build:neko-live",
       "type": "shell",
-      "command": "pnpm build:extensions",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
+      "command": "pnpm build:neko-live",
+      "group": "build",
       "problemMatcher": ["$tsc"],
-      "detail": "Build all extensions"
+      "detail": "Dev-only: neko-live (5% complete)"
+    },
+    {
+      "label": "build:neko-model",
+      "type": "shell",
+      "command": "pnpm build:neko-model",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Dev-only: neko-model (65% complete)"
+    },
+
+    // =========================================================================
+    // Webview development (hot reload)
+    // =========================================================================
+    {
+      "label": "dev:webview-cut",
+      "type": "shell",
+      "command": "npm -w @neko/webview run dev",
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": {
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "ready in"
+        }
+      },
+      "detail": "Vite dev server for neko-cut webview"
+    },
+    {
+      "label": "dev:webview-agent",
+      "type": "shell",
+      "command": "npm -w @neko-agent/webview run dev",
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": {
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "ready in"
+        }
+      },
+      "detail": "Vite dev server for neko-agent webview"
+    },
+    {
+      "label": "dev:webview-canvas",
+      "type": "shell",
+      "command": "npm -w @neko/canvas run dev",
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": {
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "ready in"
+        }
+      },
+      "detail": "Vite dev server for neko-canvas webview"
     },
     {
       "label": "watch:neko-cut",
@@ -132,15 +237,93 @@
       "isBackground": true,
       "group": "build",
       "problemMatcher": {
-        "pattern": {
-          "regexp": "^.*$"
-        },
+        "pattern": { "regexp": "^.*$" },
         "background": {
           "activeOnStart": true,
           "beginsPattern": ".",
           "endsPattern": "Build succeeded"
         }
-      }
+      },
+      "detail": "Watch mode for neko-cut extension (esbuild)"
+    },
+
+    // =========================================================================
+    // Testing & Quality
+    // =========================================================================
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "detail": "Run all unit tests (Vitest)"
+    },
+    {
+      "label": "test:coverage",
+      "type": "shell",
+      "command": "pnpm test -- --coverage",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Run tests with coverage report"
+    },
+    {
+      "label": "check",
+      "type": "shell",
+      "command": "pnpm check",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Run Knip + dependency-cruiser quality checks"
+    },
+    {
+      "label": "lint",
+      "type": "shell",
+      "command": "pnpm lint",
+      "group": "test",
+      "problemMatcher": ["$eslint-stylish"],
+      "detail": "ESLint check all source files"
+    },
+    {
+      "label": "lint:fix",
+      "type": "shell",
+      "command": "pnpm lint:fix",
+      "group": "test",
+      "problemMatcher": ["$eslint-stylish"],
+      "detail": "ESLint auto-fix"
+    },
+    {
+      "label": "format",
+      "type": "shell",
+      "command": "pnpm format",
+      "problemMatcher": [],
+      "detail": "Format all source files (Prettier)"
+    },
+    {
+      "label": "format:check",
+      "type": "shell",
+      "command": "pnpm format:check",
+      "problemMatcher": [],
+      "detail": "Check formatting (CI)"
+    },
+
+    // =========================================================================
+    // Utilities
+    // =========================================================================
+    {
+      "label": "clean",
+      "type": "shell",
+      "command": "pnpm clean",
+      "problemMatcher": [],
+      "detail": "Clean all build artifacts and caches"
+    },
+    {
+      "label": "generate:types",
+      "type": "shell",
+      "command": "pnpm generate:types",
+      "problemMatcher": [],
+      "detail": "Regenerate Protobuf TS types"
     }
   ]
 }

@@ -60,6 +60,36 @@ pnpm build
 ./install.sh
 ```
 
+### 按需安装（推荐）
+
+Neko Suite 支持按场景安装子包，无需全量安装所有扩展：
+
+```bash
+# 场景子包（自动包含 core 基础设施）
+./install.sh --pack video     # AIGC 视频：core + cut + canvas + story（10 个扩展）
+./install.sh --pack 2d        # 2D 创作：core + sketch（8 个扩展）
+./install.sh --pack audio     # 音频编辑：core + audio（8 个扩展）
+
+# 叠加安装
+./install.sh --pack video --pack 2d   # 视频 + 2D（共享扩展不重复）
+
+# 全量安装（release-ready）
+./install.sh --all            # 全部 release-ready 扩展
+
+# 开发模式（含未完成模块）
+./install.sh --dev            # 包含 neko-live, neko-model
+```
+
+| 子包 | 包含扩展 | 适用场景 |
+|------|---------|---------|
+| **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | 基础设施 + AI（自动依赖） |
+| **neko-suite-video** | core + cut + canvas + story | 素材→剧本→分镜→视频 |
+| **neko-suite-2d** | core + sketch | 绘画 + Puppet + AI 辅助 |
+| **neko-suite-audio** | core + audio | 波形编辑 + 效果链 |
+| **neko-suite** | 全部 | 全栈创作 |
+
+详见 [Extension Pack 分层策略 ADR](./docs/architecture/extension-pack-strategy.md)。
+
 ---
 
 ## 项目结构速览
