@@ -70,6 +70,8 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | traitsRegistry: false | traitsRegistry = undefined                         |
  * | settingsHooks: false  | settingsHookLoader = undefined                     |
  * | projectMemory: false  | projectMemoryManager = undefined                   |
+ * | globalMemory: false   | globalMemoryManager = undefined                    |
+ * | autoMemoryExtraction  | autoMemoryExtraction = false                       |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
  */
@@ -111,6 +113,14 @@ export function applyAblationToggles(
 
   if (toggles.projectMemory === false) {
     config.projectMemoryManager = undefined;
+  }
+
+  if (toggles.globalMemory === false) {
+    config.globalMemoryManager = undefined;
+  }
+
+  if (toggles.autoMemoryExtraction === false) {
+    config.autoMemoryExtraction = false;
   }
 
   // --- LLM parameters ---

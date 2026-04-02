@@ -117,6 +117,31 @@ export interface AgentSessionConfig {
   projectMemoryManager?: import('@neko/shared').IProjectMemoryManager;
 
   /**
+   * Global memory manager for cross-project persistence.
+   * When provided, memory content is injected into the `environment` layer
+   * of the system prompt. Backed by `~/.neko/global-memory.md`.
+   */
+  globalMemoryManager?: import('@neko/shared').IProjectMemoryManager;
+
+  /**
+   * Enable automatic KeyFact extraction from conversations.
+   * When true, CreativeMemoryHooks will extract key facts after each turn.
+   */
+  autoMemoryExtraction?: boolean;
+
+  /**
+   * JSONL journal writer for session event persistence.
+   * When provided, all non-streaming events are appended to a JSONL file
+   * for crash recovery and session replay.
+   */
+  journalWriter?: import('./journal-writer').JournalWriter;
+
+  /**
+   * Conversation ID for journal correlation.
+   */
+  conversationId?: string;
+
+  /**
    * Tool traits registry for creative auto mode.
    * When provided, auto mode uses trait-based decisions:
    * - reversible OR local → auto-allow

@@ -107,6 +107,10 @@ export class AgentSession implements IAgentSession {
   private _compactState: AutoCompactState = createAutoCompactState();
   /** Creative version log for generation tracking */
   private _versionLog: CreativeVersionLog = createCreativeVersionLog();
+  /** JSONL journal writer for session persistence */
+  private _journalWriter: import('./journal-writer').JournalWriter | null = null;
+  /** Journal sequence counter */
+  private _journalSeq = 0;
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
   private _pendingConfirmations = new Map<
@@ -134,6 +138,11 @@ export class AgentSession implements IAgentSession {
     this._permissionHooks = components.permissionHooks;
     this._history = components.history;
     this._metaTools = components.metaTools;
+
+    // Journal writer for session persistence
+    if (config.journalWriter) {
+      this._journalWriter = config.journalWriter;
+    }
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here
@@ -300,7 +309,13 @@ export class AgentSession implements IAgentSession {
           }
         }
 
-        yield* stepToEvents(step, iteration, maxIterations, this._streamState);
+        // Yield events and append to journal (skip high-frequency text_delta)
+        for (const event of stepToEvents(step, iteration, maxIterations, this._streamState)) {
+          yield event;
+          if (this._journalWriter && event.type !== 'text_delta') {
+            await this._journalWriter.appendEvent(++this._journalSeq, event);
+          }
+        }
 
         // Auto-compact: check if context compression is needed after each step
         if (this._compressor) {
@@ -320,14 +335,26 @@ export class AgentSession implements IAgentSession {
       }
 
       // Emit done event with real accumulated usage
-      yield {
-        type: 'done',
+      const doneEvent = {
+        type: 'done' as const,
         usage: {
           inputTokens: totalUsage.promptTokens,
           outputTokens: totalUsage.completionTokens,
           totalTokens: totalUsage.totalTokens,
         },
       };
+      yield doneEvent;
+
+      // Write state snapshot and flush journal
+      if (this._journalWriter) {
+        await this._journalWriter.appendEvent(++this._journalSeq, doneEvent);
+        await this._journalWriter.appendSnapshot(++this._journalSeq, {
+          historyLength: this._history.length,
+          executionMode: this._executionMode,
+          versionLogSize: this._versionLog.size,
+        });
+        await this._journalWriter.flush();
+      }
     } catch (error) {
       yield {
         type: 'error',
@@ -460,6 +487,8 @@ export class AgentSession implements IAgentSession {
   dispose(): void {
     this.cancel();
     this._isRunning = false;
+    // Flush journal writer
+    void this._journalWriter?.dispose();
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.request.confirmationToken && this._permissionHooks) {

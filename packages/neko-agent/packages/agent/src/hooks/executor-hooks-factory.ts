@@ -71,6 +71,9 @@ export interface ExecutorHooksFactoryConfig {
 
   /** Hook names to exclude from the chain (for ablation experiments) */
   disableHooks?: string[];
+
+  /** Pre-built creative memory hooks (recall + extraction). Inserted after MemoryHooks. */
+  creativeMemoryHooks?: ExecutorHooks;
 }
 
 /**
@@ -147,7 +150,9 @@ export function createExecutorHooks(
   });
 
   // 5. Compose: built-in hooks (optionally filtered) + custom hooks
-  const builtinHooks: ExecutorHooks[] = [memoryHooks, validationHooks, permissionHooks, retryHooks];
+  const builtinHooks: ExecutorHooks[] = [memoryHooks];
+  if (config.creativeMemoryHooks) builtinHooks.push(config.creativeMemoryHooks);
+  builtinHooks.push(validationHooks, permissionHooks, retryHooks);
   const hooks: ExecutorHooks[] = [
     ...(config.disableHooks
       ? builtinHooks.filter((h) => !config.disableHooks!.includes(h.name!))

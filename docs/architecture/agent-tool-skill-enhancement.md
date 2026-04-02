@@ -573,14 +573,25 @@ Phase C (P2, 体验打磨):
 │   ├─ ToolSafetyPreset 4 种预设（readOnly/safeWrite/destructive/aiGenerate）
 │   ├─ SAFETY_PRESETS 常量 + buildTool() 工厂（预设 + 显式覆盖）
 │   └─ 13 单测通过
-├─ C.2 Session 持久化 JSONL（append-only + sidechain + resume）
+├─ C.2 Session 持久化 JSONL  ✅
+│   ├─ JournalWriter: append-only JSONL 写入（序列化 Error、链式写入）
+│   ├─ JournalReader: JSONL 读取 + 状态重建（容错跳过损坏行）
+│   ├─ JournalStorage: 路径管理 + SubAgent sidechain + cleanup
+│   ├─ AgentSession 集成: execute() 逐事件追加 + snapshot + flush
+│   └─ 33 单测通过
 ├─ C.3 Prompt Cache Optimization  ✅
 │   ├─ PromptSection.cacheControl + ComposedPromptResult 结构化输出
 │   ├─ composeStructured(): base 缓存 + skill+env 缓存 + ephemeral 不缓存
 │   ├─ AnthropicAdapter: sections → AI SDK providerOptions.anthropic.cacheControl
 │   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
 │   └─ 9 单测通过
-├─ C.4 Creative Agent Memory（三 scope + snapshot + relevant recall）
+├─ C.4 Creative Agent Memory  ✅
+│   ├─ GlobalMemoryManager: 复用 FileProjectMemoryManager（~/.neko/global-memory.md）
+│   ├─ KeyFactExtractor: 启发式 KeyFact 提取（偏好/决策/上下文/动作 4 类）
+│   ├─ MemoryRecall: 三层检索（Session + Project + Global）+ 关键词 relevance 排序
+│   ├─ CreativeMemoryHooks: ExecutorHooks 自动 recall 注入 + extraction 保存
+│   ├─ 集成: hooks factory + initializer global memory 注入 + ablation toggles
+│   └─ 34 单测通过
 └─ C.5 SubAgent 创作专家模式  ✅
     ├─ 5 种创作专家预设（creative-director/cinematographer/composer/editor/vfx-artist）
     ├─ CREATIVE_PRESETS 领域系统提示词 + 工具白名单 + 模型层级

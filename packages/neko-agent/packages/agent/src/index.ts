@@ -103,6 +103,17 @@ export {
   InMemorySessionMemory,
   FileProjectMemoryManager,
   createFileProjectMemoryManager,
+  createGlobalMemoryManager,
+  DEFAULT_GLOBAL_MEMORY_PATH,
+  KeyFactExtractor,
+  MemoryRecall,
+  CreativeMemoryHooks,
+} from './memory';
+export type {
+  KeyFactExtractorOptions,
+  MemoryRecallOptions,
+  RecalledMemory,
+  CreativeMemoryHooksOptions,
 } from './memory';
 
 // Export MCP

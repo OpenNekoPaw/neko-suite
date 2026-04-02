@@ -185,6 +185,25 @@ export function initializeSession(
     config.projectMemoryManager.on('change', injectMemory);
   }
 
+  // Inject global memory into environment layer (if available)
+  if (config.globalMemoryManager) {
+    const injectGlobal = (content: string | null): void => {
+      if (content) {
+        promptComposer.setSection({
+          id: 'memory:global',
+          layer: 'environment',
+          content: `## Global Memory\n\n${content}`,
+          priority: 50,
+        });
+      } else {
+        promptComposer.removeSection('memory:global');
+      }
+    };
+
+    injectGlobal(config.globalMemoryManager.getContent());
+    config.globalMemoryManager.on('change', injectGlobal);
+  }
+
   const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
 
   return {

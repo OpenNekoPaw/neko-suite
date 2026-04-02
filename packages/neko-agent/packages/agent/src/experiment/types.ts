@@ -70,6 +70,12 @@ export interface AblationToggles {
   /** Project memory injection into system prompt.
    *  false = disable */
   projectMemory?: false;
+  /** Global memory injection into system prompt.
+   *  false = disable */
+  globalMemory?: false;
+  /** Automatic KeyFact extraction from conversations.
+   *  false = disable */
+  autoMemoryExtraction?: false;
 
   // --- LLM parameters ---
 
