@@ -104,4 +104,34 @@
 
 ---
 
-*最后更新：2026-04-01（E1 媒体类型扩展 + E2.5 Cut AI Action Handler 完成；AI 媒体编辑能力 ADR）*
+## ✅ P2.5b — AI 媒体质量评估系统（已完成）
+
+> [ADR](./docs/architecture/media-quality-assessment.md)
+
+- [x] **Phase 1**：结构化评估 + 修复映射（VisionEvaluator + RemediationPlanner 15 category）
+- [x] **Phase 2**：视频评估（VideoFrameEvaluator 多帧采样 + 3 种视频 category + VideoPart adapter 支持）
+- [x] **Phase 3**：音频评估（AudioEvaluator LUFS/TruePeak/静音检测，零 LLM 成本）
+- [x] **Phase 4**：跨场景一致性（ConsistencyEvaluator CLIP 快筛 + Vision LLM 精评 + 角色追踪 + qualityGate 管线阶段 + quality-checker SubAgent）
+- [x] **Phase 5**：Skill + ToolSet 集成（qualityAssessmentSkill + `/quality-check` 斜杠命令 + mediaQAToolSet）
+
+### 待做增强（非阻塞，需 Engine Rust 层扩展）
+- [ ] VMAF 集成（使用 SSIM/PSNR 替代，收益有限）
+- [ ] FFT 频谱分析 / onset detection（需新增 Rust 音频模块）
+- [ ] LLM 语义音频评估（对话清晰度/情感匹配 → 需 ASR + LLM）
+- [ ] SSIM/PSNR 相邻帧指标填充（VideoTechnicalMetrics optional 字段，待 Engine 图片 diff 扩展）
+- [ ] 长视频分段评估（无分片机制）
+- [ ] elementEditingToolSet / animationKeyframesToolSet 映射到 RemediationPlanner
+
+---
+
+## ✅ P2.5c — Agent 工具/技能/MCP 增强（已完成）
+
+> [ADR](./docs/architecture/agent-tool-skill-enhancement.md)
+
+- [x] **Phase A**：Tool 并发安全 + Schema 校验 + Shell 替换
+- [x] **Phase B**：Auto-Compact + Progress + MCP 健壮性 + Paths 触发 + Coordinator + 版本锚点
+- [x] **Phase C**：buildTool 工厂 + JSONL 持久化 + Prompt Cache + Agent Memory + SubAgent 预设
+
+---
+
+*最后更新：2026-04-02（媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*

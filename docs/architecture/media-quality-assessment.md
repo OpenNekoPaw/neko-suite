@@ -20,7 +20,7 @@
 | 人物/物品/场景一致性 | ✅ ConsistencyEvaluator（角色一致性追踪 + LLM 参考对比） | `consistency-evaluator.ts` |
 | 风格一致性检测 | ✅ ConsistencyEvaluator（CLIP 快筛 + Vision LLM 精评双层） | `consistency-evaluator.ts` |
 | 视频帧级问题检测 | ✅ 3 种视频 category（jitter/tearing/stuttering）+ RemediationPlanner 映射 | `qa-types.ts` + `remediation-planner.ts` |
-| 长视频分段评估 | ❌ 无分片机制 | — |
+| 长视频分段评估 | TODO 无分片机制 | — |
 | 跨素材一致性 | ✅ QualityCheckConsistency 工具 + qualityGate 管线阶段 | `consistencyCheckTools.ts` + `quality-gate.ts` |
 | SSIM/PSNR 对比 | ✅ 完整（图片+视频+音频 diff） | `neko-engine` Rust 层 |
 | CLIP 评分 | ✅ EngineClient.clipScore() | `neko-client` |
@@ -161,9 +161,9 @@ Pipeline 和 ToolSet 中存在大量可用于"修复"的工具。Phase 1 已通�
 | `effectsTransitionsToolSet` | AddEffect, UpdateEffect | 添加去噪/锐化/稳定滤镜 | ✅ | ✅ `artifact→AddEffect(denoise)` |
 | `colorGradingToolSet` | SetColorCorrection | 色调统一、风格校正 | ✅ | ✅ `color-distortion/style-drift→SetColorCorrection` |
 | `audioEditingToolSet` | SetAudioProperties | 音量归一化、降噪 | ✅ | ✅ `audio-noise/clipping/loudness→SetAudioProperties` |
-| `elementEditingToolSet` | TrimElement, SplitElement | 裁剪问题片段 | ✅ | ❌ 未映射 |
-| `animationKeyframesToolSet` | AddKeyframe | 平滑过渡修复 | ✅ | ❌ 未映射 |
-| `mediaQAToolSet` | QualityCheck | 质量检测 | ❌ 按需激活 | — |
+| `elementEditingToolSet` | TrimElement, SplitElement | 裁剪问题片段 | ✅ | TODO 未映射到 RemediationPlanner |
+| `animationKeyframesToolSet` | AddKeyframe | 平滑过渡修复 | ✅ | TODO 未映射到 RemediationPlanner |
+| `mediaQAToolSet` | QualityCheck, QualityCheckConsistency | 质量检测 + 一致性 | ✅ 按需激活 | — |
 
 ### 1.5 底层已有能力（neko-engine Rust 层）
 
@@ -183,9 +183,9 @@ Quality Assessment 可直接复用的 Engine 能力：
 | **CLIP 评分** | `EngineClient.clipScore()` | 文本-图像对齐分数 [-1, 1] |
 
 **未实现**：
-- ❌ VMAF（未集成，使用 SSIM/PSNR 替代）
-- ❌ FFT 频谱分析（无音频频域能力）
-- ❌ cpal 实时音频采集（使用 FFmpeg 替代）
+- TODO VMAF（未集成，使用 SSIM/PSNR 替代）
+- TODO FFT 频谱分析（无音频频域能力，需 Rust 扩展）
+- TODO cpal 实时音频采集（使用 FFmpeg 替代，需 Rust 扩展）
 
 ### 1.6 ReactiveStage 状态
 
@@ -935,12 +935,12 @@ enableClipScreen: {
 - ✅ 安全解析（coerceScore/isValidIssue/normalizeIssue）
 
 **未做（延后或设计变更）**:
-- ❌ `media-evaluator.ts` 接口文件未新增 — VisionEvaluator 依赖 vscode.workspace.fs，保持 extension 层内联
-- ❌ CLIP Score 快筛未集成 — `EngineClient.clipScore()` 需 3 参数 `(model, image, text)`，需 pipeline-bootstrap 注入，独立改动
-- ❌ 多图比较模式未实现 — 需 referenceImages 参数 + 多图 content parts，延至 Phase 4
-- ❌ `serviceBootstrap.ts` 未改动 — CLIP 快筛延后导致无需注入 EngineClient
+- `media-evaluator.ts` 接口文件未新增 — VisionEvaluator 依赖 vscode.workspace.fs，保持 extension 层内联（设计决策，非缺失）
+- ~~CLIP Score 快筛未集成~~ → ✅ Phase 4 ConsistencyEvaluator Layer 1 已集成（IClipScorer 可选注入）
+- ~~多图比较模式未实现~~ → ✅ Phase 4 ConsistencyEvaluator 已实现多图对比
+- `serviceBootstrap.ts` 未改动 — CLIP 通过 ConsistencyCheckToolsDeps.clipScorer 注入（设计决策）
 - 不新增 QualityAssessmentService orchestrator（仍在 tool 内直接组合）
-- 不实现视频/音频评估（Phase 2/3）
+- ~~不实现视频/音频评估~~ → ✅ Phase 2 视频 + Phase 3 音频已完成
 
 ---
 
@@ -1042,9 +1042,9 @@ enableClipScreen: {
 | `extension/src/tools/__tests__/qualityCheckTools.test.ts` | 扩展 | +8 个音频测试（35 tests total） |
 
 **延后（不在此阶段）**:
-- ❌ LLM 语义音频评估（对话清晰度/情感匹配 → 需 ASR + LLM）
-- ❌ FFT 频谱分析 / onset detection（需新增 Rust）
-- ❌ SNR 分析（EngineClient.diff() 的 SNR 是双文件比较，非单文件质量指标）
+- TODO LLM 语义音频评估（对话清晰度/情感匹配 → 需 ASR + LLM）
+- TODO FFT 频谱分析 / onset detection（需新增 Rust）
+- TODO SNR 分析（EngineClient.diff() 的 SNR 是双文件比较，非单文件质量指标）
 
 ---
 

@@ -12,7 +12,7 @@
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
 | **neko-engine** | Alpha | 96% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）|
 | **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + AI Action Handler（12 action 含 remove-silence） |
-| **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **5 种创作专家 SubAgent** + **JSONL Session 持久化**（JournalWriter/Reader/Storage + crash recovery）+ **Creative Memory**（Global/Project/Session 三层 + KeyFact 启发式提取 + 关键词 Recall + CreativeMemoryHooks）；剩余：MCP 重连 |
+| **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **6 种创作专家 SubAgent**（含 quality-checker）+ **JSONL Session 持久化** + **Creative Memory** + **媒体质量评估系统**（VisionEvaluator/VideoFrameEvaluator/AudioEvaluator/ConsistencyEvaluator + RemediationPlanner 15 category + qualityGate 管线）；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；文档预览（PDF/DOCX/EPUB/XLSX）规划中 — [ADR](./docs/architecture/document-preview.md) |
 | **neko-story** | WIP | 82% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统**规划中：脚本视图（表格）+ 创意视图（卡片网格）+ ShotNode 数据模型（[架构](./docs/architecture/2d-capability-analysis.md)） |
@@ -65,6 +65,22 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ E4：OpenAICompat Kling 增强（generateVideo +8 运镜参数，generateImage +5 ControlNet 参数）
 - ⏳ E5：Engine 感知模块（depth/pose/edge 本地 ONNX）
 - ✅ E6：Canvas 编辑 UI（GenerationPromptPanel + ControlNet/Video 参数 + 右键菜单扩展）
+
+### 媒体质量评估系统 ✅
+> [ADR](./docs/architecture/media-quality-assessment.md)
+
+- ✅ 图片/视频/音频质量评估（VisionEvaluator + VideoFrameEvaluator + AudioEvaluator）
+- ✅ 跨场景一致性（ConsistencyEvaluator：CLIP 快筛 + Vision LLM 精评 + 角色追踪）
+- ✅ 确定性修复映射（RemediationPlanner 15 category → ToolSet 工具调用）
+- ✅ quality-checker SubAgent + qualityGate Pipeline 阶段 + `/quality-check` Skill
+- ⏳ 增强：VMAF / FFT / 长视频分段 / 语义音频评估（需 Engine Rust 扩展）
+
+### Agent 工具/技能/MCP 增强 ✅
+> [ADR](./docs/architecture/agent-tool-skill-enhancement.md)
+
+- ✅ Tool 并发安全 + Schema 校验 + Shell 替换 + Paths 条件触发
+- ✅ Auto-Compact + Progress Streaming + MCP 健壮性
+- ✅ Coordinator 多阶段编排 + Creative Memory + JSONL 持久化 + Prompt Cache
 
 ### 延后项
 - MCP 桥接专业软件（Blender / ComfyUI / Photoshop → Phase 3.4）
@@ -212,4 +228,4 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 
 ---
 
-*最后更新: 2026-04-01（AI 媒体编辑 E1-E4+E6 全部完成；E6 Canvas GenerationPromptPanel + ControlNet/Video UI）*
+*最后更新: 2026-04-02（媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
