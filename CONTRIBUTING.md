@@ -225,6 +225,14 @@ pnpm check:deps          # 检查架构规则违反
 | `extension-no-react` | error | Extension 包禁止导入 React/ReactDOM | ✅ 通过 |
 | `no-cross-extension-deps-*` | warn | 扩展包之间不能直接互相依赖 | ✅ 通过 |
 
+**常见循环依赖模式及修复指南**：
+
+| 模式 | 示例 | 修复方法 |
+|------|------|----------|
+| **Barrel 回导入** | `index.ts` 定义接口 → 实现文件从 `./index` 导入 → `index.ts` 导入实现 | 将接口移到 `types.ts`，双方从 `types.ts` 导入 |
+| **Hook/Service 互引** | Service 依赖 Hook 中的工具函数 → Hook 通过 barrel 依赖 Service | 提取工具函数到 `utils/` 独立模块 |
+| **Inline `import()` 类型** | `types.ts` 用 `import('./impl').Class` 引用实现类 | 在 `types.ts` 定义接口（依赖倒置），实现类 `implements` 该接口 |
+
 ### 覆盖率配置
 
 所有包的 vitest 覆盖率配置通过 `vitest.shared.ts` 统一管理（reporters、exclude 模式）。

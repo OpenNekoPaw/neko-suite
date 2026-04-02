@@ -5,6 +5,7 @@
  */
 
 import type { Model, Provider } from '../types/provider';
+import type { ITaskManager } from '@neko/shared';
 
 // =============================================================================
 // Generation Types
@@ -357,3 +358,24 @@ export interface MediaTask {
  * Progress callback
  */
 export type MediaProgressCallback = (task: MediaTask) => void;
+
+// =============================================================================
+// Task Manager Dependencies (used by MediaTaskExecutor + factory)
+// =============================================================================
+
+/**
+ * Extended task manager interface for media platform.
+ * Includes optional methods needed by MediaTaskExecutor for registration and recovery.
+ */
+export interface MediaTaskManagerDeps extends ITaskManager {
+  /** Register a task executor for a type */
+  registerExecutor?(type: string, executor: unknown): void;
+  /** Save recovery info for crash recovery */
+  saveRecoveryInfo?(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
+  /** Delete recovery info after completion */
+  deleteRecoveryInfo?(taskId: string): Promise<void>;
+  /** Get recovery storage */
+  getRecoveryStorage?(): unknown;
+  /** Update task output data */
+  updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+}

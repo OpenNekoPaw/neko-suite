@@ -17,7 +17,7 @@ import type {
 import { getMediaAdapterRegistry } from './adapters/media-adapter-registry';
 import type { ProviderRegistry } from '../provider/provider-registry';
 import type { ConfigManager } from '../config/config-manager';
-import type { MediaTaskManagerDeps } from './index';
+import type { MediaTaskManagerDeps } from './types';
 import { getLogger } from '../utils/logger';
 import { resolveProvider } from '@neko/ai-sdk';
 import { generateImage, experimental_generateVideo, experimental_generateSpeech } from 'ai';

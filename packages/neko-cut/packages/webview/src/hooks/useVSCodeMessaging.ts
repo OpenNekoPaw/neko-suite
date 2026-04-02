@@ -7,91 +7,20 @@ const logger = getLogger('useVSCodeMessaging');
 import { DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
 import { getMediaInfoService } from '../services';
 import { getVSCodeAPI, postMessage } from '../utils/vscodeApi';
+import {
+  getFileUri as getFileUriAsync,
+  handleFileUriResponse,
+  requestFileUri as requestFileUriUtil,
+} from '../utils/fileUri';
 
 // Get VSCode API singleton
 const vscode = getVSCodeAPI();
 
-// Cache for file path -> webview URI mappings
-const fileUriCache = new Map<string, string>();
-
-// Reverse cache for webview URI -> file path mappings (for proxyFetch optimization)
-const uriToPathCache = new Map<string, string>();
-
-// Pending requests for file URIs
-const pendingFileRequests = new Map<string, Array<(uri: string) => void>>();
-
-// Listeners for cache updates (for components to re-render when URI arrives)
-const cacheUpdateListeners: Array<() => void> = [];
-
 // Pending context menu callbacks
 const pendingContextMenuCallbacks = new Map<string, (selectedId?: string) => void>();
 
-// =============================================================================
-// Module-level message listener for fileUri responses
-// This ensures getFileUri works even outside React component tree (e.g., export)
-// =============================================================================
-let globalListenerInitialized = false;
-
-function initGlobalFileUriListener(): void {
-  if (globalListenerInitialized) return;
-  globalListenerInitialized = true;
-
-  window.addEventListener('message', (event: MessageEvent) => {
-    const message = event.data;
-    if (!message || typeof message !== 'object') return;
-
-    // Handle fileUri response
-    if (message.type === 'fileUri' && message.path && message.uri) {
-      // Decode URI to handle special characters
-      const decodedUri = message.uri.replace(/%2B/g, '+');
-      fileUriCache.set(message.path, decodedUri);
-      // Also update reverse mapping for proxyFetch optimization
-      uriToPathCache.set(decodedUri, message.path);
-
-      // Resolve any pending promises
-      const pending = pendingFileRequests.get(message.path);
-      if (pending) {
-        pending.forEach((resolve) => resolve(decodedUri));
-        pendingFileRequests.delete(message.path);
-      }
-
-      // Notify listeners
-      cacheUpdateListeners.forEach((listener) => listener());
-    }
-  });
-}
-
-// Initialize global listener immediately when module loads
-initGlobalFileUriListener();
-
-/**
- * Get a webview URI for a file path asynchronously
- * This is a module-level function for use outside of React components
- */
-export function getFileUri(path: string): Promise<string> {
-  // Check cache first
-  const cached = fileUriCache.get(path);
-  if (cached) {
-    return Promise.resolve(cached);
-  }
-
-  // Request from extension
-  return new Promise((resolve) => {
-    // Add to pending requests
-    if (!pendingFileRequests.has(path)) {
-      pendingFileRequests.set(path, []);
-      // Send request via vscode API
-      if (vscode) {
-        vscode.postMessage({ type: 'requestFile', path });
-      } else {
-        // In dev mode, just return the path as-is
-        resolve(path);
-        return;
-      }
-    }
-    pendingFileRequests.get(path)!.push(resolve);
-  });
-}
+// Re-export getFileUri from shared module for backward compatibility
+export { getFileUri } from '../utils/fileUri';
 
 export function useVSCodeMessaging() {
   const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } =
@@ -168,39 +97,15 @@ export function useVSCodeMessaging() {
 
             // Request webview URIs for all unique media paths
             mediaPaths.forEach((path) => {
-              if (!fileUriCache.has(path)) {
-                vscode?.postMessage({ type: 'requestFile', path });
-              }
+              requestFileUriUtil(path);
             });
-
-            // If we have paths to request, notify listeners after a short delay
-            // to trigger re-render when URIs arrive
-            if (mediaPaths.size > 0) {
-              setTimeout(() => {
-                cacheUpdateListeners.forEach((listener) => listener());
-              }, 100);
-            }
           }
           break;
 
         case 'fileUri':
-          // Handle file URI response - cache it for future use
+          // Delegate to shared fileUri module (handles caching, pending promises, listeners)
           if (message.path && message.uri) {
-            // Decode URI to handle special characters like + (which may be encoded as %2B)
-            // The URI from extension may have been double-encoded during JSON serialization
-            const decodedUri = message.uri.replace(/%2B/g, '+');
-
-            fileUriCache.set(message.path, decodedUri);
-
-            // Resolve any pending promises
-            const pending = pendingFileRequests.get(message.path);
-            if (pending) {
-              pending.forEach((resolve) => resolve(decodedUri));
-              pendingFileRequests.delete(message.path);
-            }
-
-            // Notify all listeners that cache was updated
-            cacheUpdateListeners.forEach((listener) => listener());
+            handleFileUriResponse(message.path as string, message.uri as string);
           }
           break;
 
@@ -448,28 +353,10 @@ export function useVSCodeMessaging() {
     [sendMessage],
   );
 
-  // Get webview URI for a file path (with caching and async request)
-  const getFileUri = useCallback(
-    (path: string): Promise<string> => {
-      // Check cache first
-      const cached = fileUriCache.get(path);
-      if (cached) {
-        return Promise.resolve(cached);
-      }
-
-      // Request from extension
-      return new Promise((resolve) => {
-        // Add to pending requests
-        if (!pendingFileRequests.has(path)) {
-          pendingFileRequests.set(path, []);
-          // Send request
-          sendMessage({ type: 'requestFile', path });
-        }
-        pendingFileRequests.get(path)!.push(resolve);
-      });
-    },
-    [sendMessage],
-  );
+  // Get webview URI for a file path (delegates to shared fileUri module)
+  const getFileUri = useCallback((path: string): Promise<string> => {
+    return getFileUriAsync(path);
+  }, []);
 
   // Add media to timeline
   const addMediaToTimeline = useCallback(

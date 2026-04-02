@@ -5,7 +5,7 @@
  * Designed for crash recovery: every write is immediately flushed to disk.
  */
 
-import type { AgentEvent, ExecutionMode } from './types';
+import type { AgentEvent, ExecutionMode, IJournalWriter } from './types';
 
 // =============================================================================
 // Types
@@ -55,7 +55,7 @@ export interface JournalWriterOptions {
 // JournalWriter
 // =============================================================================
 
-export class JournalWriter {
+export class JournalWriter implements IJournalWriter {
   private readonly _filePath: string;
   private readonly _fsOps: JournalFsOps;
   private _initialized = false;

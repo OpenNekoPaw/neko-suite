@@ -22,6 +22,24 @@ export type { ValidationError, ValidationWarning } from '../validation/types';
 export type { ToolConfirmationRequest, PermissionMode } from '../permission/types';
 
 // =============================================================================
+// Journal Writer Interface (avoids circular dep with journal-writer.ts)
+// =============================================================================
+
+/**
+ * Journal writer interface for session event persistence.
+ * Implemented by JournalWriter — defined here to break the circular dependency.
+ */
+export interface IJournalWriter {
+  appendEvent(seq: number, event: AgentEvent): Promise<void>;
+  appendSnapshot(
+    seq: number,
+    snapshot: { historyLength: number; executionMode: ExecutionMode; versionLogSize: number },
+  ): Promise<void>;
+  flush(): Promise<void>;
+  dispose(): Promise<void>;
+}
+
+// =============================================================================
 // Execution Mode
 // =============================================================================
 
@@ -134,7 +152,7 @@ export interface AgentSessionConfig {
    * When provided, all non-streaming events are appended to a JSONL file
    * for crash recovery and session replay.
    */
-  journalWriter?: import('./journal-writer').JournalWriter;
+  journalWriter?: IJournalWriter;
 
   /**
    * Conversation ID for journal correlation.

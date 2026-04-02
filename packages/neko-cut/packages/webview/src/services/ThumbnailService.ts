@@ -15,7 +15,7 @@
  */
 
 import type { UrlResolver } from './urlResolverFactory';
-import { getFileUri } from '../hooks/useVSCodeMessaging';
+import { getFileUri } from '../utils/fileUri';
 import { getMediaProxy } from './mediaProxyFactory';
 import { getLogger } from '../utils/logger';
 
