@@ -10,8 +10,10 @@
  * ort 2.0.0-rc.12 → ONNX Runtime 1.20.1 binaries.
  *
  * Usage:
- *   node scripts/download-ort.js          # current platform only
- *   node scripts/download-ort.js --all    # all 4 platforms (for VSIX release)
+ *   node scripts/download-ort.js                         # current platform only
+ *   node scripts/download-ort.js --all                   # all 4 platforms
+ *   node scripts/download-ort.js --platform darwin-arm64 # specific platform
+ *   node scripts/download-ort.js --platform darwin-arm64 --clean  # + remove other platforms
  */
 
 'use strict';
@@ -102,15 +104,39 @@ function downloadPlatform(platformKey) {
 fs.mkdirSync(BIN_DIR, { recursive: true });
 
 const downloadAll = process.argv.includes('--all');
+const shouldClean = process.argv.includes('--clean');
+const platformIdx = process.argv.indexOf('--platform');
+const explicitPlatform = platformIdx !== -1 ? process.argv[platformIdx + 1] : null;
 const currentKey = `${process.platform}-${process.arch}`;
 
-const targets = downloadAll
-  ? Object.keys(PLATFORMS)
-  : [currentKey].filter((k) => k in PLATFORMS);
+let targets;
+if (downloadAll) {
+  targets = Object.keys(PLATFORMS);
+} else if (explicitPlatform) {
+  if (!(explicitPlatform in PLATFORMS)) {
+    console.error(`Unknown platform: "${explicitPlatform}". Valid: ${Object.keys(PLATFORMS).join(', ')}`);
+    process.exit(1);
+  }
+  targets = [explicitPlatform];
+} else {
+  targets = [currentKey].filter((k) => k in PLATFORMS);
+}
 
 if (targets.length === 0) {
   console.warn(`Warning: no ORT config for platform "${currentKey}". Skipping.`);
   process.exit(0);
+}
+
+// Clean other platforms' dylibs when --clean is specified
+if (shouldClean) {
+  const keepDests = new Set(targets.map((t) => PLATFORMS[t].dest));
+  for (const key of Object.keys(PLATFORMS)) {
+    const destPath = path.join(BIN_DIR, PLATFORMS[key].dest);
+    if (!keepDests.has(PLATFORMS[key].dest) && fs.existsSync(destPath)) {
+      fs.unlinkSync(destPath);
+      console.log(`  [clean] ${PLATFORMS[key].dest}`);
+    }
+  }
 }
 
 console.log(`Downloading ORT ${ORT_VERSION} for: ${targets.join(', ')}`);

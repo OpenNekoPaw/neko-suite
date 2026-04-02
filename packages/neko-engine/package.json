@@ -92,14 +92,16 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run bundle:ort:all && npm run compile",
+    "vscode:prepublish": "npm run compile",
     "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test": "vitest --passWithNoTests",
     "bundle:ort": "node scripts/download-ort.js",
     "bundle:ort:all": "node scripts/download-ort.js --all",
-    "package": "vsce package --no-dependencies"
+    "bundle:ffmpeg": "node scripts/bundle-ffmpeg.js",
+    "package": "vsce package --no-dependencies",
+    "package:platform": "bash scripts/package-platform.sh"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -1,7 +1,6 @@
 .vscode/**
 .vscode-test/**
 src/**
-packages/**
 node_modules/**
 scripts/**
 *.ts
@@ -14,11 +13,21 @@ tsconfig.json
 .turbo/**
 Cargo.lock
 Cargo.toml
+.cargo/**
 
-# Rust build artifacts - exclude everything except the final .dylib
+# Rust build artifacts — not needed in VSIX
 target/**
-!target/release/libneko_native_napi.dylib
 
-# ORT dylibs for ML inference - must be included in VSIX
-# Run `node scripts/download-ort.js --all` before packaging
+# Sub-packages — exclude all, then re-include runtime files
+packages/**
+!packages/native-napi/index.js
+!packages/native-napi/index.d.ts
+!packages/native-napi/neko-engine.*.node
+
+# FFmpeg dylibs (copied to native-napi dir by bundle-ffmpeg.js)
+!packages/native-napi/*.dylib
+!packages/native-napi/*.so*
+!packages/native-napi/*.dll
+
+# ORT dylibs for ML inference
 !bin/**

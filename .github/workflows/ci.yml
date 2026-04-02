@@ -286,13 +286,12 @@ jobs:
         with:
           comment-summary-in-pr: on-failure
 
-  # ── Release: Bundle ORT + Package VSIX ────
-  # Runs on push to main only. Downloads ORT dylibs for all 4 platforms,
-  # then packages neko-engine as a VSIX with dylibs bundled in bin/.
-  package-vsix:
-    name: Package VSIX (with ORT)
-    runs-on: macos-latest
-    needs: [build, test-ts, test-rust]
+  # ── Release: TS extensions VSIX packaging ────
+  # Runs on push to main only. Packages all TS-only extensions.
+  package-ts-vsix:
+    name: Package TS Extensions VSIX
+    runs-on: ubuntu-latest
+    needs: [build, test-ts]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -306,41 +305,120 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build TS extensions
+        run: |
+          pnpm turbo compile \
+            --filter=neko-tools \
+            --filter=neko-preview \
+            --filter=neko-cut \
+            --filter=neko-canvas \
+            --filter=neko-agent \
+            --filter=neko-story \
+            --filter=neko-sketch \
+            --filter=neko-puppet \
+            --filter=neko-audio \
+            --filter=neko-assets \
+            --filter=neko-auth \
+            --filter=neko-market
+
+      - name: Package TS extensions
+        run: |
+          mkdir -p vsix-artifacts
+          for pkg in neko-tools neko-preview neko-cut neko-canvas neko-agent \
+                     neko-story neko-sketch neko-puppet neko-audio neko-assets \
+                     neko-auth neko-market neko-suite; do
+            if [ -d "packages/$pkg" ]; then
+              echo "📦 Packaging $pkg..."
+              (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository) || true
+              cp -f packages/$pkg/*.vsix vsix-artifacts/ 2>/dev/null || true
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ts-extensions-vsix
+          path: vsix-artifacts/*.vsix
+          retention-days: 30
+
+  # ── Release: Platform-specific neko-engine VSIX packaging ────
+  # Runs on push to main only. Builds native addon + bundles ORT/FFmpeg
+  # per platform, producing a platform-specific VSIX for each target.
+  package-engine-vsix:
+    name: Package neko-engine VSIX (${{ matrix.target }})
+    needs: [build, test-ts]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            os: macos-14
+            rust-target: aarch64-apple-darwin
+            ffmpeg-install: brew install ffmpeg pkg-config
+          - target: darwin-x64
+            os: macos-13
+            rust-target: x86_64-apple-darwin
+            ffmpeg-install: brew install ffmpeg pkg-config
+          - target: linux-x64
+            os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            ffmpeg-install: sudo apt-get update && sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev libva-dev pkg-config patchelf
+          - target: win32-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            ffmpeg-install: choco install ffmpeg-shared
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/neko-engine
+          key: ${{ matrix.target }}
 
-      - name: Cache ORT dylibs
-        uses: actions/cache@v4
-        with:
-          path: packages/neko-engine/bin
-          key: ort-bin-${{ env.ORT_VERSION }}
-        env:
-          ORT_VERSION: "1.20.1"
-
-      - name: Install FFmpeg (macOS)
-        run: brew install ffmpeg pkg-config
+      - name: Install FFmpeg
+        run: ${{ matrix.ffmpeg-install }}
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build neko-engine extension
-        run: pnpm build:neko-engine
+      # Build the native .node for this platform
+      - name: Build native-napi
+        working-directory: packages/neko-engine/packages/native-napi
+        run: |
+          npm run build:ffmpeg-env
+          npx @napi-rs/cli build --platform --release --target ${{ matrix.rust-target }}
 
-      - name: Download ORT dylibs (all platforms)
-        # vscode:prepublish already calls bundle:ort:all, but run explicitly
-        # here so the cache step above can populate bin/ on cache miss.
-        run: node scripts/download-ort.js --all
+      # Package platform-specific VSIX (handles ORT + FFmpeg bundling)
+      - name: Package platform VSIX
         working-directory: packages/neko-engine
-
-      - name: Package VSIX
-        run: npm run package
-        working-directory: packages/neko-engine
+        run: bash scripts/package-platform.sh ${{ matrix.target }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: neko-engine-vsix
+          name: neko-engine-vsix-${{ matrix.target }}
           path: packages/neko-engine/*.vsix
           retention-days: 30
 

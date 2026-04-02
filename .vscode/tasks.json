@@ -7,26 +7,26 @@
     {
       "label": "build:pack-video",
       "type": "shell",
-      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-cut && pnpm build:neko-canvas && pnpm build:neko-story",
+      "command": "pnpm build:pack-video",
       "group": "build",
       "problemMatcher": ["$tsc"],
-      "detail": "Build Video Pack: core (7) + cut + canvas + story"
+      "detail": "Build Video Pack: core + cut + canvas + story (turbo cached + parallel)"
     },
     {
       "label": "build:pack-2d",
       "type": "shell",
-      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-sketch && pnpm build:neko-puppet",
+      "command": "pnpm build:pack-2d",
       "group": "build",
       "problemMatcher": ["$tsc"],
-      "detail": "Build 2D Pack: core (7) + sketch + puppet"
+      "detail": "Build 2D Pack: core + sketch + puppet (turbo cached + parallel)"
     },
     {
       "label": "build:pack-audio",
       "type": "shell",
-      "command": "pnpm build:neko-engine && pnpm build:neko-tools && pnpm build:neko-preview && pnpm build:neko-assets && pnpm build:neko-auth && pnpm build:neko-agent && pnpm build:neko-market && pnpm build:neko-audio",
+      "command": "pnpm build:pack-audio",
       "group": "build",
       "problemMatcher": ["$tsc"],
-      "detail": "Build Audio Pack: core (7) + audio"
+      "detail": "Build Audio Pack: core + audio (turbo cached + parallel)"
     },
 
     // =========================================================================
@@ -36,7 +36,10 @@
       "label": "build:release",
       "type": "shell",
       "command": "./build.sh --all",
-      "group": "build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
       "problemMatcher": ["$tsc"],
       "detail": "Build all release-ready extensions (excludes neko-live, neko-model)"
     },
@@ -48,136 +51,6 @@
       "problemMatcher": ["$tsc"],
       "detail": "Build ALL extensions including dev-only (neko-live, neko-model)"
     },
-    {
-      "label": "build:all",
-      "type": "shell",
-      "command": "pnpm build:extensions",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": ["$tsc"],
-      "detail": "Build all extensions (turbo)"
-    },
-
-    // =========================================================================
-    // Single extension builds
-    // =========================================================================
-    {
-      "label": "build:core",
-      "type": "shell",
-      "command": "pnpm build:core",
-      "group": "build",
-      "problemMatcher": ["$tsc"],
-      "detail": "Build core packages (neko-engine, neko-tools)"
-    },
-    {
-      "label": "build:neko-engine",
-      "type": "shell",
-      "command": "pnpm build:neko-engine",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-tools",
-      "type": "shell",
-      "command": "pnpm build:neko-tools",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-cut",
-      "type": "shell",
-      "command": "pnpm build:neko-cut",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-canvas",
-      "type": "shell",
-      "command": "pnpm build:neko-canvas",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-agent",
-      "type": "shell",
-      "command": "pnpm build:neko-agent",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-audio",
-      "type": "shell",
-      "command": "pnpm build:neko-audio",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-assets",
-      "type": "shell",
-      "command": "pnpm build:neko-assets",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-story",
-      "type": "shell",
-      "command": "pnpm build:neko-story",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-sketch",
-      "type": "shell",
-      "command": "pnpm build:neko-sketch",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-puppet",
-      "type": "shell",
-      "command": "pnpm build:neko-puppet",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-preview",
-      "type": "shell",
-      "command": "pnpm build:neko-preview",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-market",
-      "type": "shell",
-      "command": "pnpm build:neko-market",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-auth",
-      "type": "shell",
-      "command": "pnpm build:neko-auth",
-      "group": "build",
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "build:neko-live",
-      "type": "shell",
-      "command": "pnpm build:neko-live",
-      "group": "build",
-      "problemMatcher": ["$tsc"],
-      "detail": "Dev-only: neko-live (5% complete)"
-    },
-    {
-      "label": "build:neko-model",
-      "type": "shell",
-      "command": "pnpm build:neko-model",
-      "group": "build",
-      "problemMatcher": ["$tsc"],
-      "detail": "Dev-only: neko-model (65% complete)"
-    },
 
     // =========================================================================
     // Webview development (hot reload)
@@ -185,7 +58,7 @@
     {
       "label": "dev:webview-cut",
       "type": "shell",
-      "command": "npm -w @neko/webview run dev",
+      "command": "pnpm --filter @neko/webview dev",
       "isBackground": true,
       "group": "build",
       "problemMatcher": {
@@ -201,7 +74,7 @@
     {
       "label": "dev:webview-agent",
       "type": "shell",
-      "command": "npm -w @neko-agent/webview run dev",
+      "command": "pnpm --filter @neko-agent/webview dev",
       "isBackground": true,
       "group": "build",
       "problemMatcher": {
@@ -217,7 +90,7 @@
     {
       "label": "dev:webview-canvas",
       "type": "shell",
-      "command": "npm -w @neko/canvas run dev",
+      "command": "pnpm --filter @neko-canvas/webview dev",
       "isBackground": true,
       "group": "build",
       "problemMatcher": {
@@ -229,22 +102,6 @@
         }
       },
       "detail": "Vite dev server for neko-canvas webview"
-    },
-    {
-      "label": "watch:neko-cut",
-      "type": "shell",
-      "command": "pnpm dev:neko",
-      "isBackground": true,
-      "group": "build",
-      "problemMatcher": {
-        "pattern": { "regexp": "^.*$" },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "Build succeeded"
-        }
-      },
-      "detail": "Watch mode for neko-cut extension (esbuild)"
     },
 
     // =========================================================================

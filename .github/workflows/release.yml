@@ -1,10 +1,9 @@
 # Release workflow — triggered by version tags (e.g. v0.1.0)
 #
-# Steps:
-#   1. Build all packages
-#   2. Run tests
-#   3. Package each VSCode extension into .vsix
-#   4. Create GitHub Release with all .vsix artifacts
+# Jobs:
+#   1. release-ts:     Build + test + package TS-only extensions (ubuntu)
+#   2. release-engine: Build neko-engine per platform (4x matrix)
+#   3. create-release: Collect all VSIX and create GitHub Release
 #
 # Usage:
 #   git tag v0.1.0
@@ -24,8 +23,9 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 jobs:
-  release:
-    name: Build & Package
+  # ── TypeScript-only extensions (no native code) ──
+  release-ts:
+    name: Build & Package (TS extensions)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,37 +39,134 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - run: pnpm install --frozen-lockfile
+
+      # Build TS-only extensions (skip neko-engine compile — no Rust on ubuntu)
+      - name: Build TS extensions
+        run: |
+          pnpm turbo compile \
+            --filter=neko-tools \
+            --filter=neko-preview \
+            --filter=neko-cut \
+            --filter=neko-canvas \
+            --filter=neko-agent \
+            --filter=neko-story \
+            --filter=neko-sketch \
+            --filter=neko-puppet \
+            --filter=neko-audio \
+            --filter=neko-assets \
+            --filter=neko-auth \
+            --filter=neko-market
+
+      - run: pnpm test
+
+      # Package each TS extension
+      - name: Package TS extensions
+        run: |
+          for pkg in neko-tools neko-preview neko-cut neko-canvas neko-agent \
+                     neko-story neko-sketch neko-puppet neko-audio neko-assets \
+                     neko-auth neko-market neko-suite; do
+            if [ -d "packages/$pkg" ]; then
+              echo "📦 Packaging $pkg..."
+              (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository) || true
+            fi
+          done
+
+      - name: Collect VSIX artifacts
+        run: |
+          mkdir -p release-artifacts
+          find packages -maxdepth 2 -name '*.vsix' -exec cp {} release-artifacts/ \;
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-ts-extensions
+          path: release-artifacts/*.vsix
+          retention-days: 7
+
+  # ── neko-engine: platform-specific native builds ──
+  release-engine:
+    name: Package neko-engine (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            os: macos-14
+            rust-target: aarch64-apple-darwin
+            ffmpeg-install: brew install ffmpeg pkg-config
+          - target: darwin-x64
+            os: macos-13
+            rust-target: x86_64-apple-darwin
+            ffmpeg-install: brew install ffmpeg pkg-config
+          - target: linux-x64
+            os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            ffmpeg-install: sudo apt-get update && sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev libva-dev pkg-config patchelf
+          - target: win32-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            ffmpeg-install: choco install ffmpeg-shared
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/neko-engine
+          key: release-${{ matrix.target }}
 
-      - name: Install FFmpeg dev libraries
-        run: sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev libva-dev pkg-config
+      - name: Install FFmpeg
+        run: ${{ matrix.ffmpeg-install }}
 
       - run: pnpm install --frozen-lockfile
 
-      # Build everything
-      - run: pnpm build
-
-      # Run tests
-      - run: pnpm test
-
-      # Package all extensions into .vsix files
-      # neko-auth excluded: early stage, compile not yet stable
-      - name: Package all extensions
-        run: pnpm package:all
-
-      # Collect .vsix files from each extension directory
-      - name: Collect .vsix artifacts
+      # Build native addon
+      - name: Build native-napi
+        working-directory: packages/neko-engine/packages/native-napi
         run: |
-          mkdir -p release-artifacts
-          find packages -maxdepth 2 -name '*.vsix' -exec cp {} release-artifacts/ \;
-          echo "## Packaged extensions:" >> $GITHUB_STEP_SUMMARY
+          npm run build:ffmpeg-env
+          npx @napi-rs/cli build --platform --release --target ${{ matrix.rust-target }}
+
+      # Package platform VSIX (ORT + FFmpeg bundling handled by script)
+      - name: Package platform VSIX
+        working-directory: packages/neko-engine
+        run: bash scripts/package-platform.sh ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-neko-engine-${{ matrix.target }}
+          path: packages/neko-engine/*.vsix
+          retention-days: 7
+
+  # ── Collect all artifacts and create release ──
+  create-release:
+    name: Create GitHub Release
+    needs: [release-ts, release-engine]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List release artifacts
+        run: |
+          echo "## Release artifacts:" >> $GITHUB_STEP_SUMMARY
           ls -lh release-artifacts/*.vsix | awk '{print "- " $NF " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
 
-      # Create GitHub Release with all .vsix files
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
