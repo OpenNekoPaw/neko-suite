@@ -226,7 +226,7 @@ Extension Host
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
 | 3D 能力 | [architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene + R3F 前端，不用 Bevy 全框架 |
-| 2D 能力 | [architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | native-puppet（bevy_ecs + inox2d + bevy_animation），替代 Spine/Live2D；WS 实时流供 neko-live |
+| 2D 能力 | [architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；native-puppet（bevy_ecs + inox2d + bevy_animation）；WS 实时流供 neko-live |
 | 面板放置策略 | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突 |
 | 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |
 | 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |

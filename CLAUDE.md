@@ -47,7 +47,7 @@
 - `neko-client` - @neko/neko-client 流媒体客户端 + EngineClient
 - `neko-proto` - Protobuf IDL（类型契约源）
 
-**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-model（3D 编辑）、neko-sketch（2D 创作）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）、neko-market（市场）
+**功能扩展**：neko-cut（视频编辑）、neko-agent（AI）、neko-canvas（画布）、neko-model（3D 编辑）、neko-sketch（2D 绘画）、neko-puppet（2D 骨骼动画）、neko-story（剧本）、neko-preview（预览）、neko-tools（工具）、neko-assets（资产）、neko-market（市场）
 
 **构建命令**:
 ```bash
@@ -109,7 +109,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 共享包设计 | *已内化* | @neko/shared 通过 exports 子路径分层 |
 | 资产管理 | *已内化* | 统一 AssetManifest + Handler 注册表模式 |
 | 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene，不用 Bevy 全框架；混合策略（内置轻量 + MCP 桥接 Blender） |
-| 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch 轻量绘画 + Spine/Live2D；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
+| 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
 | 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
 | 格式策略 | [docs/architecture/format-strategy.md](./docs/architecture/format-strategy.md) | nk* 统一命名，JSON Schema 为文件格式 SSOT，Proto 仅引擎通信；Format SDK（@neko/shared/nkv）提供 load/validate/migrate/save；增量操作 20 种 + 全量 fallback |

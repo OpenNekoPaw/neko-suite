@@ -120,6 +120,9 @@ const config: KnipConfig = {
     'packages/neko-sketch': {},
     'packages/neko-sketch/packages/extension': {},
     'packages/neko-sketch/packages/webview': {},
+    'packages/neko-puppet': {},
+    'packages/neko-puppet/packages/extension': {},
+    'packages/neko-puppet/packages/webview': {},
     'packages/neko-suite': {
       // Meta package with only documentation
       entry: ['package.json'],

@@ -1,22 +1,22 @@
 # Neko Sketch
 
-> 2D 创作套件：压感手绘 + Inochi2D 骨骼动画 + 逐帧动画 + 滤镜/粒子/场景/像素/矢量 + 中英双语 i18n
+> 2D 绘画套件：压感手绘 + 逐帧动画 + 滤镜/粒子/场景/像素/矢量 + 中英双语 i18n
 
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Extension Host（CustomEditorProvider .nks）+ Webview（React 18 + WebGL2）+ neko-engine（native-puppet sidecar）
+- 架构：Extension Host（CustomEditorProvider .nks）+ Webview（React 18 + WebGL2）
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 - 能力分析：[docs/architecture/2d-capability-analysis.md](../../docs/architecture/2d-capability-analysis.md)
+- 骨骼动画：已拆分为独立子插件 [neko-puppet](../neko-puppet/)
 
 ## Quick Reference
 
-- **职责**：2D 绘画创作、Inochi2D 立绘动画预览与参数驱动、逐帧动画编辑、高级 2D 特效
+- **职责**：2D 绘画创作、逐帧动画编辑、高级 2D 特效
 - **入口**：`packages/extension/src/extension.ts`
-- **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 native-puppet）
-- **激活依赖**：`neko-engine`（extensionDependency，native-puppet sidecar）
+- **依赖**：`@neko/shared`
 - **国际化**：I18nProvider + useTranslation hook，130 翻译 key，中英双语 13 组件全覆盖
-- **状态**：S.1 ✅ 绘画基础 | S.2 ✅ 骨骼动画 | S.3 ✅ 高级 2D + i18n
+- **状态**：S.1 ✅ 绘画基础 | S.3 ✅ 高级 2D + i18n
 
 ## Architecture
 
@@ -35,18 +35,11 @@ Webview（React 18 + WebGL2）
   ├── 场景系统（视差渲染 + 4 模板 + 氛围效果 5 预设）
   ├── 像素/矢量绘制（Bresenham + 贝塞尔路径 + SVG 导出）
   ├── 国际化（I18nProvider + useTranslation，130 key 中英双语）
-  ├── Inochi2D 动画控制器
-  │     ├── 参数滑块驱动（POST /v1/puppets/param）
-  │     ├── bevy_animation 动画回放（POST /v1/puppets/anim/play）
-  │     └── WebSocket 实时流（WS /v1/puppets/stream，供 neko-live）
   └── 逐帧动画编辑器
-        │ postMessage / EngineClient HTTP
+        │ postMessage
         ▼
 Extension Host（Node.js）
   └── SketchEditorProvider（CustomEditorProvider .nks）
-        └── EngineClient → neko-engine native-puppet
-              ├── 变形计算（bevy_ecs + inox2d）
-              └── 动画曲线（bevy_animation ParameterCurve）
 ```
 
 ## 工具栏
@@ -94,11 +87,9 @@ Zoom In / Zoom Out / Reset Zoom
 | 层级 | 技术 |
 |------|------|
 | 前端渲染 | WebGL2（自建引擎，RAF 连续渲染 + ping-pong FBO 合成） |
-| 状态管理 | Zustand（13+ slices） |
+| 状态管理 | Zustand（12+ slices） |
 | 国际化 | @neko/shared I18nService + I18nProvider + useTranslation |
 | 输入 | Pointer Events API（pressure / tiltX / tiltY） |
-| 2D 骨骼后端 | neko-engine native-puppet（bevy_ecs + inox2d + bevy_animation） |
-| 通信 | EngineClient HTTP + WebSocket（@neko/neko-client） |
 | Extension | VSCode Extension API + TypeScript + esbuild |
 
 ### EditOperation 集成

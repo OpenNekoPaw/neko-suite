@@ -17,7 +17,5 @@
   "neko.sketch.config.title": "Neko 素描",
   "neko.sketch.config.pressureSensitivity": "启用绘图板压感",
   "neko.sketch.config.defaultBrush": "默认画笔类型",
-  "neko.sketch.puppet.title": "Puppet 编辑器",
-  "neko.sketch.editImage.title": "在素描中编辑",
-  "neko.puppet.new.title": "新建 Puppet"
+  "neko.sketch.editImage.title": "在素描中编辑"
 }

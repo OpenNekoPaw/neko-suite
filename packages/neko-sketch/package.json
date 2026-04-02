@@ -41,19 +41,6 @@
           }
         ],
         "priority": "default"
-      },
-      {
-        "viewType": "neko.puppetEditor",
-        "displayName": "%neko.sketch.puppet.title%",
-        "selector": [
-          {
-            "filenamePattern": "*.nkp"
-          },
-          {
-            "filenamePattern": "*.inp"
-          }
-        ],
-        "priority": "default"
       }
     ],
     "views": {
@@ -70,11 +57,6 @@
       {
         "command": "neko.sketch.new",
         "title": "%neko.sketch.new.title%",
-        "category": "NekoSketch"
-      },
-      {
-        "command": "neko.puppet.new",
-        "title": "%neko.puppet.new.title%",
         "category": "NekoSketch"
       },
       {
@@ -274,11 +256,6 @@
           "command": "neko.sketch.new",
           "group": "navigation@10",
           "when": "explorerResourceIsFolder"
-        },
-        {
-          "command": "neko.puppet.new",
-          "group": "navigation@11",
-          "when": "explorerResourceIsFolder"
         }
       ]
     },
@@ -309,12 +286,10 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run compile:webview && npm run compile:puppet-webview && npm run copy:extension && npm run copy:webview && npm run copy:puppet-webview",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview",
     "compile:extension": "cd packages/extension && npm run build",
     "compile:webview": "cd packages/webview && npm run build",
-    "compile:puppet-webview": "cd packages/puppet-webview && npm run build",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
-    "copy:puppet-webview": "rm -rf dist/puppet-webview && mkdir -p dist/puppet-webview/assets && cp packages/puppet-webview/dist/*.html dist/puppet-webview/ 2>/dev/null || true && cp -R packages/puppet-webview/dist/assets/* dist/puppet-webview/assets/ 2>/dev/null || true",
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",

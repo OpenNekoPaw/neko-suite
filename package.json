@@ -14,6 +14,7 @@
     "build:neko-cut": "turbo run compile --filter=neko-cut",
     "build:neko-canvas": "turbo run compile --filter=neko-canvas",
     "build:neko-sketch": "turbo run compile --filter=neko-sketch",
+    "build:neko-puppet": "turbo run compile --filter=neko-puppet",
     "build:neko-agent": "turbo run compile --filter=neko-agent",
     "build:neko-engine": "turbo run compile --filter=neko-engine",
     "build:neko-story": "turbo run compile --filter=neko-story",

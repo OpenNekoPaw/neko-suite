@@ -100,9 +100,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
 
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'puppet-webview'),
-      ],
+      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
     };
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
@@ -329,7 +327,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const webviewUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'puppet-webview'),
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
     );
     const nonce = this.getNonce();
 

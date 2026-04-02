@@ -91,6 +91,11 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
+    "neko-puppet#compile": {
+      "dependsOn": ["neko-engine#compile"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
     "dev": {
       "cache": false,
       "persistent": true

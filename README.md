@@ -38,14 +38,24 @@ pnpm install
 ### 构建 + 打包
 
 ```bash
-./build.sh
+./build.sh            # 构建 neko-cut（默认）
+./build.sh --all      # 构建全部扩展
 ```
 
 ### 安装到 VS Code
 
-```bash
-./install.sh
-```
+**不确定装哪个？** 根据你的创作方向选择：
+
+| 你想做什么 | 安装命令 | 获得的能力 |
+|-----------|---------|-----------|
+| **AIGC 视频制作** — 从剧本到成片 | `./install.sh --pack video` | 剧本编辑 + 分镜画布 + AI 生成 + 时间线剪辑 + 市场 |
+| **2D 插画/动画** — 手绘 + 骨骼 | `./install.sh --pack 2d` | 压感绘画 + Puppet 骨骼动画 + AI 辅助生成 + 市场 |
+| **音频编辑** — 录制 + 混音 | `./install.sh --pack audio` | 波形编辑 + 效果链 + 频谱分析 + AI 降噪 |
+| **全部功能** | `./install.sh --all` | 上述全部 + 3D 编辑 + 直播 |
+
+子包可叠加：`./install.sh --pack video --pack 2d`（共享扩展自动去重）。
+
+> 所有子包自动包含 core 基础设施（engine + tools + preview + assets + auth）。不带参数运行 `./install.sh` 将显示交互式选择菜单。详见 [Extension Pack 分层策略](./docs/architecture/extension-pack-strategy.md)。
 
 ### 开发模式
 
@@ -230,10 +240,14 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（.gltf/.glb/.vrm/.nkm）
 │   │       └── webview/       # React Three Fiber UI
-│   ├── neko-sketch/           # 2D 创作（手绘 + 滤镜/粒子/场景 + 骨骼/逐帧动画）
+│   ├── neko-sketch/           # 2D 绘画（手绘 + 滤镜/粒子/场景 + 逐帧动画）
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）
 │   │       └── webview/       # React 18 + WebGL2 UI
+│   ├── neko-puppet/           # 2D 骨骼动画（Inochi2D puppet 编辑器）
+│   │   └── packages/
+│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nkp/.inp）
+│   │       └── webview/       # React 18 + EngineClient UI
 │   ├── neko-live/             # 虚拟直播（Planned）
 │   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
 │   └── neko-proto/            # 协议定义（Protobuf IDL）
@@ -307,7 +321,7 @@ ext install neko.neko-suite
 - [docs/editoperation.md](./docs/editoperation.md) - 编辑操作设计
 - [docs/architecture/](./docs/architecture/) - 架构设计文档
   - [3D 能力集成分析](./docs/architecture/3d-capability-analysis.md) - neko-model + native-scene 架构决策
-  - [2D 能力集成分析](./docs/architecture/2d-capability-analysis.md) - neko-sketch + native-puppet 架构决策
+  - [2D 能力集成分析](./docs/architecture/2d-capability-analysis.md) - neko-sketch + neko-puppet + native-puppet 架构决策
   - [面板放置策略](./docs/architecture/panel-placement.md) - 编辑器面板架构
   - [设备访问策略](./docs/architecture/device-access.md) - 硬件设备代理方案
   - [格式策略](./docs/architecture/format-strategy.md) - nk* 文件格式设计

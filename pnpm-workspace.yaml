@@ -9,6 +9,7 @@ packages:
   - packages/neko-model/packages/*
   - packages/neko-preview/packages/*
   - packages/neko-sketch/packages/*
+  - packages/neko-puppet/packages/*
   - packages/neko-story/packages/*
   - packages/neko-tools/packages/*
   - packages/neko-market/packages/*

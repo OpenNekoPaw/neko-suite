@@ -80,6 +80,13 @@
       "problemMatcher": ["$tsc"]
     },
     {
+      "label": "build:neko-puppet",
+      "type": "shell",
+      "command": "pnpm build:neko-puppet",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
       "label": "build:neko-preview",
       "type": "shell",
       "command": "pnpm build:neko-preview",

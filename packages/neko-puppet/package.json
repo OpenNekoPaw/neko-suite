@@ -1,0 +1,84 @@
+{
+  "name": "neko-puppet",
+  "displayName": "Neko Puppet",
+  "description": "Inochi2D puppet animation editor with parameter control and real-time streaming",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "puppet",
+    "inochi2d",
+    "animation",
+    "vtuber",
+    "2d"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "neko.neko-engine"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "neko.puppetEditor",
+        "displayName": "%neko.puppet.editor.title%",
+        "selector": [
+          {
+            "filenamePattern": "*.nkp"
+          },
+          {
+            "filenamePattern": "*.inp"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "neko.puppet.new",
+        "title": "%neko.puppet.new.title%",
+        "category": "NekoPuppet"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "neko.puppet.new",
+          "group": "navigation@11",
+          "when": "explorerResourceIsFolder"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview",
+    "compile:extension": "cd packages/extension && npm run build",
+    "compile:webview": "cd packages/webview && npm run build",
+    "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "watch": "npm run compile:extension -- --watch",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2"
+  }
+}

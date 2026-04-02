@@ -234,10 +234,14 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (.gltf/.glb/.vrm/.nkm)
 │   │       └── webview/       # React Three Fiber UI
-│   ├── neko-sketch/           # 2D creation (drawing + filters/particles/scene + skeletal/frame animation)
+│   ├── neko-sketch/           # 2D drawing (painting + filters/particles/scene + frame animation)
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
 │   │       └── webview/       # React 18 + WebGL2 UI
+│   ├── neko-puppet/           # 2D skeletal animation (Inochi2D puppet editor)
+│   │   └── packages/
+│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.inp)
+│   │       └── webview/       # React 18 + EngineClient UI
 │   ├── neko-live/             # Virtual production (Planned)
 │   ├── neko-types/            # Shared types + Logger + i18n + Theme
 │   └── neko-proto/            # Protocol definitions (Protobuf IDL)
@@ -311,7 +315,7 @@ Install sub-extensions based on your needs:
 - [docs/editoperation.md](./docs/editoperation.md) - Edit operation design
 - [docs/architecture/](./docs/architecture/) - Architecture design documents
   - [3D Capability Analysis](./docs/architecture/3d-capability-analysis.md) - neko-model + native-scene architecture decisions
-  - [2D Capability Analysis](./docs/architecture/2d-capability-analysis.md) - neko-sketch + native-puppet architecture decisions
+  - [2D Capability Analysis](./docs/architecture/2d-capability-analysis.md) - neko-sketch + neko-puppet + native-puppet architecture decisions
   - [Panel Placement Strategy](./docs/architecture/panel-placement.md) - Editor panel architecture
   - [Device Access Strategy](./docs/architecture/device-access.md) - Hardware device proxy solution
   - [Format Strategy](./docs/architecture/format-strategy.md) - nk* file format design

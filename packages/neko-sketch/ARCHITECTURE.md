@@ -2,7 +2,9 @@
 
 ## Overview
 
-neko-sketch is the 2D creation module of neko-suite, providing drawing, painting, and animation capabilities within VSCode. It operates independently (no dependency on neko-canvas), symmetric to neko-model (3D).
+neko-sketch is the 2D drawing module of neko-suite, providing painting and frame animation capabilities within VSCode. It operates independently (no dependency on neko-canvas or neko-engine).
+
+Puppet skeletal animation has been split into a separate extension: [neko-puppet](../neko-puppet/).
 
 Detailed capability analysis: [docs/architecture/2d-capability-analysis.md](../../docs/architecture/2d-capability-analysis.md)
 
@@ -52,8 +54,8 @@ packages/neko-sketch/
 │           ├── tools/
 │           │   └── tool-manager.ts       # Cursor mapping per tool type
 │           ├── stores/
-│           │   ├── sketch-store.ts       # Combined Zustand store (8 slices)
-│           │   └── slices/               # document, layer, tool, brush, viewport, history, UI, animation
+│           │   ├── sketch-store.ts       # Combined Zustand store (12 slices)
+│           │   └── slices/               # document, layer, tool, brush, viewport, history, UI, selection, frame, filter, particle, scene
 │           ├── components/
 │           │   ├── SketchCanvas.tsx       # WebGL canvas + pointer input + brush engine
 │           │   ├── Toolbar.tsx            # 9 tool buttons
@@ -69,12 +71,8 @@ packages/neko-sketch/
 │           │   └── image-import.ts        # Base64 → ImageBitmap → new layer
 │           ├── i18n/                     # I18nService + en/zh-cn bundles
 │           ├── types/                    # All type definitions
-│           ├── animation/    # S.2: Inochi2D puppet animation
-│           │   ├── types.ts              # PuppetSnapshot, PuppetDelta, DeformedMesh
-│           │   ├── inochi2d-controller.ts # IInochi2DController → EngineClient HTTP
-│           │   └── index.ts              # Public exports
-│           ├── effects/      # S.3 placeholder
-│           └── scene/        # S.3 placeholder
+│           ├── effects/      # S.3: Filters, particles, scene effects
+│           └── scene/        # S.3: Scene/atmosphere management
 ```
 
 ## Communication Protocol
@@ -97,9 +95,6 @@ Webview → Extension:
   file:export      { format, data }          # Export canvas (base64)
   status:update    { SketchStatusInfo }      # Update status bar
   layer:outline    { LayerOutlineData }      # Update layer tree view
-
-Note: Puppet/animation communication goes directly via EngineClient HTTP/WS,
-      not through the extension postMessage protocol.
 ```
 
 ## Key Design Decisions
@@ -114,10 +109,7 @@ Note: Puppet/animation communication goes directly via EngineClient HTTP/WS,
 | GLSL blend modes from WGSL | 12 modes translated from neko-engine `blend_modes.wgsl` |
 | Independent from neko-canvas | Own CustomEditorProvider, no `extensionDependencies` |
 | .nks JSON format | Simple, human-readable, version-controlled |
-| native-puppet in neko-engine | Symmetric to native-scene; no WASM (size/threading limits); full bevy_ecs + bevy_animation |
-| bevy_animation over inox2d anim | inox2d animation not yet implemented upstream; bevy_animation ParameterCurve bridges the gap |
-| inox2d over Spine/Live2D | BSD 2-Clause license; Spine Runtimes License rejected (ADR-2D-004); Live2D rejected (ADR-2D-001) |
-| WS /v1/puppets/stream | Real-time face-tracking (neko-live) requires <2ms latency; HTTP round-trip not sufficient at 60fps |
+| Puppet split to neko-puppet | Independent install granularity; sketch has no engine dependency; puppet needs `@neko/neko-client` |
 
 ## .nks Document Format
 
@@ -166,39 +158,21 @@ Note: Puppet/animation communication goes directly via EngineClient HTTP/WS,
 | Selection system | ✅ | Rect/all/invert with Uint8Array bitmask |
 | History (undo/redo) | ✅ | Region snapshots, 100-step limit |
 | Tool manager | ✅ | 11 tools with cursor mapping |
-| Zustand store | ✅ | 7 slices composed into single store |
+| Zustand store | ✅ | 12 slices composed into single store |
 | UI components | ✅ | Canvas, Toolbar, BrushPanel, ColorPanel, LayerPanel, StatusBar |
 | Document I/O | ✅ | Serialize/deserialize .nks, save/load/revert |
 | Keyboard dispatch | ✅ | undo/redo/tool switch/zoom reset/import/export |
 | Image import | ✅ | Base64 → ImageBitmap → new layer |
 | i18n locale switch | ✅ | Runtime setLocale via extension message |
 
-### S.2: Puppet Animation — MOSTLY COMPLETE (frame-by-frame pending)
+### S.3: Effects & Scenes — COMPLETE ✅
 
 | Module | Status | Details |
 |--------|--------|---------|
-| native-puppet crate | ✅ | bevy_ecs 0.15 + inox2d + bevy_animation, INP loading → ECS World |
-| ECS components | ✅ | PuppetNode, Transform2D, DeformRegion, DrawOrder, Param, PhysicsConfig, AnimationTarget |
-| Hierarchy management | ✅ | Parent-child tree traversal, subtree collect |
-| PuppetWorld trait | ✅ | load_model / set_param / tick / snapshot / get_deformed_meshes |
-| INP loader | ✅ | Stub (inox2d API TBD), returns PuppetLoadResult |
-| Deformation system | ✅ | Rotation + warp mesh deform, param → vertex pipeline |
-| PuppetService | ✅ | native-core integration, world lifecycle management |
-| PuppetsController | ✅ | HTTP actions via ActionRouter (load/param/tick/meshes/snapshot/params) |
-| Frontend controller | ✅ | IInochi2DController → EngineClient HTTP dispatch |
-| Animation Zustand slice | ✅ | puppet state, param cache, loading/playing status |
-| bevy_animation bridge | ✅ | animation.rs: ParameterCurve keyframe curves → inox2d param values; anim_play/anim_stop/anim_seek/anims endpoints |
-| WebSocket stream | ✅ | WS /v1/puppets/stream — 60fps PuppetDelta push for neko-live |
-| Animation UI | ✅ | AnimationPanel.tsx: clip list + playback controls; animationSlice extended |
-| Frame-by-frame animation | 📋 | Onion skin + frame timeline |
-| ~~Spine integration~~ | ❌ | Rejected (ADR-2D-004): Spine Runtimes License + overlap with inox2d |
-
-### S.3: Effects & Scenes — PLANNED
-
-- 2D particle system (WebGL instanced rendering)
-- 2D filter pipeline (GLSL from neko-engine WGSL shaders)
-- Sprite sheet editor
-- Scene manager + parallax layers
+| Filter pipeline | ✅ | 6 built-in GLSL filters + FilterPipeline ping-pong FBO |
+| Particle system | ✅ | Object pool + WebGL2 instanced rendering |
+| Scene manager | ✅ | Parallax rendering + 4 templates + 5 atmosphere presets |
+| Sprite sheet | ✅ | Import/export sprite sheets |
 
 ### S.4: AI Assistance & Cross-Module — PLANNED
 
@@ -206,11 +180,3 @@ Note: Puppet/animation communication goes directly via EngineClient HTTP/WS,
 - Export to neko-cut (PNG sequence / sprite sheet → timeline)
 - Export to neko-canvas (PNG/SVG → canvas node)
 - Asset registration in neko-assets
-
-## Remaining TODOs
-
-| Location | TODO | Priority |
-|----------|------|----------|
-| `animation/` | Frame-by-frame editor (onion skin + frame timeline) | S.2 |
-| `effects/` | S.3 full implementation | S.3 |
-| `scene/` | S.3 full implementation | S.3 |
