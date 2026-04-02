@@ -1,7 +1,9 @@
 # Source code (not needed in VSIX — dist/ has compiled output)
 src/**
-packages/**/src/**
-packages/**/node_modules/**
+
+# Sub-packages — exclude all, then re-include webview dist
+packages/**
+!packages/webview/dist/**
 
 # Config & tooling
 .vscode/**
@@ -34,6 +36,15 @@ node_modules/**
 out/**
 *.map
 *.tsbuildinfo
+
+# CLI binary (built separately, not part of extension)
+neko
+
+# Test utilities
+test-utils/**
+
+# Docs (not needed in VSIX)
+docs/**
 
 # Include compiled output and localization
 !dist/**

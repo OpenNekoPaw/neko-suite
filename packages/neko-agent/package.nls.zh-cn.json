@@ -5,5 +5,7 @@
   "neko.script.generate.title": "生成剧本",
   "neko.script.optimize.title": "优化剧本",
   "neko.script.generateImage.title": "从剧本生成图片",
-  "neko.script.generateVideo.title": "从剧本生成视频"
+  "neko.script.generateVideo.title": "从剧本生成视频",
+  "neko.ai.summarizeDocument.title": "总结文档",
+  "neko.ai.chatWithDocument.title": "与文档对话"
 }

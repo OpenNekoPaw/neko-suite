@@ -1,7 +1,9 @@
 # Source code (not needed in VSIX — dist/ has compiled output)
 src/**
-packages/**/src/**
-packages/**/node_modules/**
+
+# Sub-packages — exclude all, then re-include webview dist
+packages/**
+!packages/webview/dist/**
 
 # Config & tooling
 .vscode/**

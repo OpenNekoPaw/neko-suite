@@ -5,5 +5,7 @@
   "neko.script.generate.title": "Generate Script",
   "neko.script.optimize.title": "Optimize Script",
   "neko.script.generateImage.title": "Generate Image from Script",
-  "neko.script.generateVideo.title": "Generate Video from Script"
+  "neko.script.generateVideo.title": "Generate Video from Script",
+  "neko.ai.summarizeDocument.title": "Summarize Document",
+  "neko.ai.chatWithDocument.title": "Chat with Document"
 }
