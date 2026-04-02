@@ -6,6 +6,8 @@ scripts/**
 .vscode/**
 .vscode-test/**
 .turbo/**
+.claude/**
+.serena/**
 .gitignore
 tsconfig.json
 tsconfig.*.json
@@ -13,15 +15,22 @@ eslint.config.*
 vitest.config.*
 *.md
 
-# TypeScript source
-*.ts
-!*.d.ts
+# Docker (not needed in VSIX)
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
 
-# Test & coverage artifacts
+# Test files
+tests/**
+test_*.html
 **/*.test.ts
 **/*.spec.ts
 **/__tests__/**
 coverage/**
+
+# TypeScript source
+*.ts
+!*.d.ts
 
 # Build intermediaries
 node_modules/**

@@ -2,6 +2,8 @@
 .vscode/**
 node_modules/**
 .turbo/**
+.claude/**
+.serena/**
 .gitignore
 *.ts
 *.map
