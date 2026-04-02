@@ -9,7 +9,6 @@ import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { useTranslation } from '../i18n/I18nContext';
-import type { DocumentDataMessage } from '../shared/document-types';
 
 export const DocxViewer: FC = () => {
   const { t } = useTranslation();
@@ -23,8 +22,7 @@ export const DocxViewer: FC = () => {
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      const docMsg = msg as unknown as DocumentDataMessage;
-      loadDocx(docMsg.payload.data);
+      loadDocx(msg.payload.data);
     }
   });
 

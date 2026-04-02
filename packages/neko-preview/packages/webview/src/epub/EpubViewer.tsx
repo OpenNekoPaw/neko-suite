@@ -8,7 +8,6 @@ import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { useTranslation } from '../i18n/I18nContext';
-import type { DocumentDataMessage } from '../shared/document-types';
 
 interface TocItem {
   label: string;
@@ -30,8 +29,7 @@ export const EpubViewer: FC = () => {
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      const docMsg = msg as unknown as DocumentDataMessage;
-      loadEpub(docMsg.payload.data);
+      loadEpub(msg.payload.data);
     }
   });
 

@@ -9,7 +9,9 @@ import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { useTranslation } from '../i18n/I18nContext';
-import type { DocumentDataMessage } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PdfViewer');
 
 // Configure pdfjs worker — loaded from the same assets directory
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -33,8 +35,7 @@ export const PdfViewer: FC = () => {
   // Listen for messages from extension
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      const docMsg = msg as unknown as DocumentDataMessage;
-      loadPdf(docMsg.payload.data);
+      loadPdf(msg.payload.data);
     }
   });
 
@@ -121,7 +122,7 @@ export const PdfViewer: FC = () => {
 
       container.appendChild(pageDiv);
     } catch (err) {
-      console.error('Failed to render page:', err);
+      logger.error('Failed to render page:', err);
     } finally {
       renderingRef.current = false;
     }

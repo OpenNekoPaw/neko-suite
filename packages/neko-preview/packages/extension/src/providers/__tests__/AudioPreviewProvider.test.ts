@@ -415,20 +415,16 @@ describe('AudioPreviewProvider', () => {
       expect(statusBar.updatePlayback).toHaveBeenCalledWith('paused', 30.0);
     });
 
-    it('should stop previous stream before starting new playback', async () => {
+    it('should resume existing stream on second play', async () => {
       const { mockService, messageHandler } = await setupWithMessageHandler();
 
-      // First play
+      // First play — creates stream
       await messageHandler({ type: 'preview:play' });
 
-      // Second play — should stop first stream
-      (mockService.dispatch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        status: 'ok',
-        data: { streamId: 'audio-stream-2' },
-      });
+      // Second play — should resume existing stream (not stop + restart)
       await messageHandler({ type: 'preview:play' });
 
-      expect(mockService.stopStreams).toHaveBeenCalledWith(null, 'audio-stream-1');
+      expect(mockService.resumeStreams).toHaveBeenCalledWith(null, 'audio-stream-1');
     });
 
     it('should seek to startTime when provided in play message', async () => {
@@ -436,14 +432,8 @@ describe('AudioPreviewProvider', () => {
 
       await messageHandler({ type: 'preview:play', startTime: 45 });
 
-      // Should dispatch seek after stream creation
-      expect(mockService.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          group: 'audios',
-          action: 'seek',
-          options: expect.objectContaining({ time: 45 }),
-        }),
-      );
+      // Should call seekStreams after stream creation (not dispatch a separate seek action)
+      expect(mockService.seekStreams).toHaveBeenCalledWith(null, 'audio-stream-1', 45);
     });
   });
 

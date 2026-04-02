@@ -81,13 +81,16 @@ export interface PreviewStreamReconnectMessage {
   };
 }
 
+import type { DocumentDataMessage } from './document-types';
+
 export type ExtensionMessage =
   | PreviewInitMessage
   | PreviewStreamReadyMessage
   | PreviewStreamReconnectMessage
   | PreviewFrameDataMessage
   | PreviewWaveformMessage
-  | PreviewLyricsMessage;
+  | PreviewLyricsMessage
+  | DocumentDataMessage;
 
 // =============================================================================
 // Webview → Extension Messages

@@ -9,7 +9,6 @@ import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { useTranslation } from '../i18n/I18nContext';
-import type { DocumentDataMessage } from '../shared/document-types';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
 
@@ -42,8 +41,7 @@ export const CbzViewer: FC = () => {
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      const docMsg = msg as unknown as DocumentDataMessage;
-      loadCbz(docMsg.payload.data);
+      loadCbz(msg.payload.data);
     }
   });
 
@@ -74,7 +72,7 @@ export const CbzViewer: FC = () => {
       // Extract all images as Blob URLs
       const urls: string[] = [];
       for (const entry of imageEntries) {
-        if (entry.getData) {
+        if ('getData' in entry) {
           const blobWriter = new BlobWriter();
           const imgBlob = await entry.getData(blobWriter);
           urls.push(URL.createObjectURL(imgBlob));

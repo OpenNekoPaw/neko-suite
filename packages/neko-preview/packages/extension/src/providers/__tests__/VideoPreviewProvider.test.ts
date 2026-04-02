@@ -514,21 +514,16 @@ describe('VideoPreviewProvider', () => {
       expect(statusBar.updatePlayback).toHaveBeenCalledWith('playing', 15.5);
     });
 
-    it('should stop previous streams before starting new playback', async () => {
+    it('should resume existing streams on second play', async () => {
       const { mockService, messageHandler } = await setupWithMessageHandler();
 
-      // First play
+      // First play — creates streams
       await messageHandler({ type: 'preview:play' });
 
-      // Second play — should stop first streams
-      mockService.startVideoPlayback = vi.fn().mockResolvedValue({
-        videoStreamId: 'vid-2',
-        audioStreamId: 'aud-2',
-      });
-
+      // Second play — should resume existing streams (not stop + restart)
       await messageHandler({ type: 'preview:play' });
 
-      expect(mockService.stopStreams).toHaveBeenCalledWith('vid-1', 'aud-1');
+      expect(mockService.resumeStreams).toHaveBeenCalledWith('vid-1', 'aud-1');
     });
 
     it('should ignore unknown message types', async () => {
