@@ -53,7 +53,8 @@
 
 ## 🔵 P3 — 长期功能
 
-- [ ] neko-preview 文档预览（暂缓，当前委托 Book Reader / Office Viewer 等第三方扩展，策略见 [ADR](./docs/architecture/document-preview.md)）
+- [x] neko-preview 文档预览 P0 ✅（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接；策略见 [ADR](./docs/architecture/document-preview.md)）
+- [ ] neko-preview 文档预览 P1：XLSX（x-data-spreadsheet）/ PPTX（LibreOffice headless）/ FDX（XML 解析）/ 缩略图缓存
 - [x] Diff/LSP AI 增强 L1：ScriptIndex（neko-story WorkspaceIndexService.getScriptIndex + GetScriptIndex agent tool）✅
 - [x] Diff/LSP AI 增强 L3：SearchScriptIndex 语义搜索（ScriptEmbeddingIndex 余弦相似度 + platform.embed() 注入 + EmbedFn 懒加载）✅
 - [ ] Diff/LSP AI 增强 L3 扩展：Whisper ASR Diff + Demucs 音源分离（按需推进）— [ADR](./docs/architecture/lsp.md)

@@ -8,13 +8,19 @@
 import * as vscode from 'vscode';
 import { getNonce } from './nonce';
 
+/** Supported preview entry points */
+export type PreviewEntry = 'video' | 'audio' | 'pdf' | 'cbz' | 'epub' | 'docx';
+
+/** Document entries that do not require engine streaming */
+const DOCUMENT_ENTRIES = new Set<PreviewEntry>(['pdf', 'cbz', 'epub', 'docx']);
+
 export interface WebviewHtmlOptions {
   /** Webview instance */
   webview: vscode.Webview;
   /** Extension URI for resolving local resources */
   extensionUri: vscode.Uri;
-  /** Entry point: 'video' or 'audio' */
-  entry: 'video' | 'audio';
+  /** Entry point */
+  entry: PreviewEntry;
   /** Whether to use Vite dev server */
   devMode?: boolean;
   /** Vite dev server port */
@@ -38,8 +44,25 @@ export function getWebviewHtml(options: WebviewHtmlOptions): string {
 /**
  * Dev mode: connect to Vite dev server for HMR
  */
-function getDevHtml(nonce: string, entry: string, devPort: number): string {
+/** Display names for entry types */
+const ENTRY_TITLES: Record<PreviewEntry, string> = {
+  video: 'Video Preview',
+  audio: 'Audio Preview',
+  pdf: 'PDF Preview',
+  cbz: 'CBZ Preview',
+  epub: 'EPUB Preview',
+  docx: 'DOCX Preview',
+};
+
+function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string {
   const devUrl = `http://localhost:${devPort}`;
+  const isDocument = DOCUMENT_ENTRIES.has(entry);
+  // Documents don't need WebSocket streaming to engine; PDF needs worker-src for pdfjs
+  const connectSrc = isDocument
+    ? `connect-src http://localhost:${devPort};`
+    : `connect-src ws://localhost:${devPort} ws://127.0.0.1:* http://localhost:${devPort} http://127.0.0.1:*;`;
+  const workerSrc = entry === 'pdf' ? `worker-src blob:;` : '';
+  const frameSrc = entry === 'epub' ? `frame-src blob: ${devUrl};` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -48,14 +71,16 @@ function getDevHtml(nonce: string, entry: string, devPort: number): string {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<meta http-equiv="Content-Security-Policy" content="
 		default-src 'none';
-		connect-src ws://localhost:${devPort} ws://127.0.0.1:* http://localhost:${devPort} http://127.0.0.1:*;
+		${connectSrc}
 		img-src ${devUrl} data: blob:;
 		media-src blob:;
 		script-src 'nonce-${nonce}' ${devUrl};
 		style-src 'unsafe-inline' ${devUrl};
 		font-src ${devUrl};
+		${workerSrc}
+		${frameSrc}
 	" />
-	<title>${entry === 'video' ? 'Video' : 'Audio'} Preview</title>
+	<title>${ENTRY_TITLES[entry]}</title>
 </head>
 <body>
 	<div id="root"></div>
@@ -72,11 +97,19 @@ function getProdHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
   nonce: string,
-  entry: string,
+  entry: PreviewEntry,
 ): string {
   const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', `${entry}.js`));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'style.css'));
+
+  const isDocument = DOCUMENT_ENTRIES.has(entry);
+  // Documents don't need WebSocket streaming to engine
+  const connectSrc = isDocument ? '' : `connect-src ws://127.0.0.1:* http://127.0.0.1:*;`;
+  // PDF needs worker-src for pdfjs-dist Web Worker
+  const workerSrc = entry === 'pdf' ? `worker-src blob: ${webview.cspSource};` : '';
+  // EPUB uses iframe for chapter rendering
+  const frameSrc = entry === 'epub' ? `frame-src blob: ${webview.cspSource};` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -85,15 +118,17 @@ function getProdHtml(
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<meta http-equiv="Content-Security-Policy" content="
 		default-src 'none';
-		connect-src ws://127.0.0.1:* http://127.0.0.1:*;
+		${connectSrc}
 		img-src ${webview.cspSource} data: blob:;
 		media-src blob:;
 		script-src 'nonce-${nonce}';
 		style-src 'unsafe-inline' ${webview.cspSource};
 		font-src ${webview.cspSource};
+		${workerSrc}
+		${frameSrc}
 	" />
 	<link rel="stylesheet" href="${styleUri}" />
-	<title>${entry === 'video' ? 'Video' : 'Audio'} Preview</title>
+	<title>${ENTRY_TITLES[entry]}</title>
 </head>
 <body>
 	<div id="root"></div>

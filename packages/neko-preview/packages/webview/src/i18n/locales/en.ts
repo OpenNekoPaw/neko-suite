@@ -41,6 +41,29 @@ const preview: MessageBundle = {
   'preview.audio.viewLyrics': 'Lyrics',
   'preview.audio.viewWaveform': 'Waveform',
   'preview.audio.viewSpectrum': 'Spectrum',
+  // Document shared
+  'preview.document.sendToAi': 'Send to AI',
+  'preview.document.sendPageToAi': 'Analyze Page',
+  'preview.document.loading': 'Loading...',
+  'preview.document.error': 'Error: {error}',
+  'preview.document.pageOf': 'Page {current} of {total}',
+  'preview.document.zoomIn': 'Zoom in',
+  'preview.document.zoomOut': 'Zoom out',
+  'preview.document.fitWidth': 'Fit width',
+  'preview.document.fitPage': 'Fit page',
+  // PDF
+  'preview.pdf.loading': 'Loading PDF...',
+  // CBZ
+  'preview.cbz.loading': 'Loading comic...',
+  'preview.cbz.spreadMode': 'Two-page spread',
+  'preview.cbz.selectRegion': 'Select region for AI',
+  // EPUB
+  'preview.epub.loading': 'Loading book...',
+  'preview.epub.toc': 'Table of Contents',
+  'preview.epub.theme': 'Reading theme',
+  'preview.epub.fontSize': 'Font size',
+  // DOCX
+  'preview.docx.loading': 'Loading document...',
 };
 
 export const bundles: Record<string, MessageBundle> = {

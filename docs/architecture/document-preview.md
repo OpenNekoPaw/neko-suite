@@ -191,25 +191,351 @@ neko-assets 资产卡片通过 `neko.assets.getThumbnail` 命令获取缩略图�
 
 ---
 
-## 五、实施计划
+## 五、实施方案
 
-### P1（核心格式）
+> **决策更新（2026-04-02）**：启动自建实现。核心需求：**用户在预览中选中文本/区域 → 发送到 AI 分析**。三方扩展为黑盒 Webview，无法获取用户选区，因此必须自建。
 
-> **决策（2026-03-28）**：暂缓自建，委托第三方扩展（Book Reader / Office Viewer）。当用户需求积累到足够规模时再推进。
+### 5.1 开发顺序
 
-- [ ] `PdfPreviewProvider`（`pdfjs-dist`）
-- [ ] `DocxPreviewProvider`（`docx-preview`，参考 Office Viewer 实现）
-- [ ] `EpubPreviewProvider`（`epub.js`，neko-story 剧本场景高优）
-- [ ] `DocumentPreviewRegistry`（含策略 D 提示逻辑）+ `package.json` customEditors 注册
+**PDF → CBZ → EPUB → DOCX**，其他格式（XLSX/PPTX/FDX/MOBI）放入 TODO。
 
-### P2（补全格式）
-- [ ] `XlsxPreviewProvider`（`x-data-spreadsheet` + `xlsx`）
-- [ ] 策略 D：CBZ / MOBI / AZW3 → 检测并提示安装 Book Reader
-- [ ] 缩略图生成 + neko-assets 集成（首页渲染 → `.neko/thumbnails/` 缓存）
+### 5.2 共享基础设施（首先实现）
 
-### P3（高质量）
-- [ ] `PptxPreviewProvider`（LibreOffice headless via Rust 引擎）
-- [ ] `FdxPreviewProvider`（Final Draft XML）
+#### AgentContextType 扩展
+
+`packages/neko-types/src/types/agent-context.ts` 添加 `'document-selection'`：
+
+```typescript
+export type AgentContextType =
+  | 'canvas-node' | 'cut-clip' | 'story-selection'
+  | 'sketch-layer' | 'model-scene' | 'audio-clip'
+  | 'file' | 'image'
+  | 'document-selection';  // NEW
+```
+
+#### 文档消息协议
+
+新建 `packages/neko-preview/packages/extension/src/types/document-messages.ts`：
+
+```typescript
+// Extension → Webview
+interface DocumentDataMessage {
+  type: 'document:data';
+  payload: { data: string; fileName: string; fileSize: number };  // base64
+}
+
+// Webview → Extension
+interface DocumentReadyMessage { type: 'ready' }
+interface DocumentSendToAiMessage {
+  type: 'document:sendToAi';
+  payload: {
+    selectedText?: string;
+    pageNumber?: number;
+    chapterTitle?: string;
+    imageDataUrl?: string;  // CBZ 区域截图
+  };
+}
+```
+
+#### Selection → AI 桥接（统一模式）
+
+所有 Provider 共享同一处理逻辑（参考 `neko-story.sendToAgent` 模式）：
+
+```typescript
+// Extension 侧 onMessage handler（每个 Provider 共用）
+case 'document:sendToAi': {
+  const { selectedText, pageNumber, chapterTitle, imageDataUrl } = msg.payload;
+  const label = `${fileName}${pageNumber ? ` p.${pageNumber}` : ''}${chapterTitle ? ` · ${chapterTitle}` : ''}`;
+  const payload: AgentContextPayload = {
+    type: 'document-selection',
+    id: `doc:${filePath}:${pageNumber ?? 0}:${Date.now()}`,
+    label,
+    summary: selectedText?.slice(0, 400) ?? 'Image selection',
+    data: { filePath, selectedText, pageNumber, chapterTitle, imageDataUrl },
+    intent: selectedText ? '请分析这段内容：' : '请分析这张图片：',
+  };
+  await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+}
+```
+
+Webview 侧共享 `useDocumentSelection` hook：
+
+1. 监听 `selectionchange` 事件，300ms 防抖
+2. 非空选区 → 显示 `DocumentSelectionFab`（定位在选区附近）
+3. 点击 FAB → `postMessage({ type: 'document:sendToAi', payload })`
+4. 选区清空 → 隐藏 FAB
+
+#### 构建配置变更
+
+| 文件 | 变更 |
+|------|------|
+| `packages/neko-preview/packages/webview/vite.config.ts` | 新增 4 个入口：`pdf.html`, `cbz.html`, `epub.html`, `docx.html` + pdfjs Worker 复制插件 |
+| `packages/neko-preview/packages/webview/tailwind.config.js` | content 添加 4 个 HTML 文件 |
+| `packages/neko-preview/packages/extension/src/utils/html.ts` | entry 类型扩展 + PDF 入口 `worker-src blob:` CSP |
+| `packages/neko-preview/packages/extension/src/extension.ts` | 注册 4 个 Provider（不依赖 PreviewService） |
+
+#### Webview 新增依赖
+
+`packages/neko-preview/packages/webview/package.json`：
+
+```json
+"pdfjs-dist": "^4.0.0",
+"@zip.js/zip.js": "^2.7.0",
+"epubjs": "^0.3.93",
+"docx-preview": "^0.3.0"
+```
+
+#### package.json — customEditors 注册
+
+`packages/neko-preview/package.json` 添加（`"priority": "option"` 不抢占默认打开方式）：
+
+| viewType | filenamePattern | displayName |
+|----------|----------------|-------------|
+| `neko.pdfPreview` | `*.pdf` | Neko PDF Preview |
+| `neko.cbzPreview` | `*.cbz` | Neko CBZ Preview |
+| `neko.epubPreview` | `*.epub` | Neko EPUB Preview |
+| `neko.docxPreview` | `*.{docx,doc}` | Neko DOCX Preview |
+
+同步添加 4 个 `neko.preview.open*` 命令。
+
+#### 共享 Webview 组件
+
+新建 `packages/neko-preview/packages/webview/src/shared/`：
+
+| 文件 | 职责 |
+|------|------|
+| `useDocumentSelection.ts` | Hook：监听 selectionchange，防抖，捕获文本选区 |
+| `DocumentSelectionFab.tsx` | 浮动按钮：靠近选区显示 "Send to AI"，点击发 postMessage |
+| `DocumentToolbar.tsx` | 通用工具栏：页码、缩放、适应宽度等通用控件 |
+
+### 5.3 PDF 预览（P0）
+
+**渲染库**：`pdfjs-dist` 5.x — 三层架构（Canvas + TextLayer + AnnotationLayer），文本可选中。
+
+**新增文件**：
+
+```
+packages/neko-preview/packages/extension/src/providers/document/
+  PdfPreviewProvider.ts
+
+packages/neko-preview/packages/webview/
+  pdf.html
+  src/pdf/
+    main.tsx
+    PdfViewer.tsx        — pdfjs-dist 渲染 + 翻页 + 缩放
+    PdfToolbar.tsx       — 页码导航、缩放、适应宽度/页面
+```
+
+**Provider 逻辑**：
+
+```
+openCustomDocument(uri) → { uri, dispose() }
+resolveCustomEditor(doc, panel):
+  1. webview.options = { enableScripts, localResourceRoots }
+  2. webview.html = getWebviewHtml({ entry: 'pdf' })
+  3. onMessage('ready') → fs.readFile → base64 → postMessage('document:data')
+  4. onMessage('document:sendToAi') → AgentContextPayload → sendContext
+```
+
+**Webview 逻辑**：
+
+```
+document:data → base64 → Uint8Array → pdfjsLib.getDocument({ data })
+→ 逐页 page.render() 到 <canvas> + TextLayer 覆盖（原生文本选择）
+→ useDocumentSelection hook → 浮动 FAB
+→ sendToAi({ selectedText, pageNumber })
+```
+
+**CSP**：`worker-src blob: ${cspSource}`，`workerSrc` 指向 `asWebviewUri(pdf.worker.min.mjs)`。
+
+### 5.4 CBZ 预览（P0）
+
+**渲染库**：`@zip.js/zip.js` (~100KB) — ZIP 解压 + `<img>` 展示。
+
+**新增文件**：
+
+```
+packages/neko-preview/packages/extension/src/providers/document/
+  CbzPreviewProvider.ts
+
+packages/neko-preview/packages/webview/
+  cbz.html
+  src/cbz/
+    main.tsx
+    CbzViewer.tsx        — zip 解压 + 图片画廊 + 翻页
+    CbzToolbar.tsx       — 页码、单页/双页模式
+    CbzRegionSelect.tsx  — 框选区域（拖拽矩形 → canvas 截图）
+```
+
+**Webview 逻辑**：
+
+```
+document:data → base64 → Uint8Array → ZipReader
+→ 过滤图片条目 → 自然排序 → 逐页 Blob URL（IntersectionObserver 懒加载）
+→ 用户框选区域 → canvas.toDataURL() → imageDataUrl
+→ sendToAi({ imageDataUrl, pageNumber }) → Vision 模型分析
+```
+
+**选区方式**：无文本层，走**区域截图**路径 — 用户拖拽画矩形 → FAB → 发送截图给 AI。也可整页发送（toolbar "Analyze Page" 按钮）。
+
+### 5.5 EPUB 预览（P1）
+
+**渲染库**：`epub.js` 0.3.x — DOM 渲染，原生文本可选。
+
+**新增文件**：
+
+```
+packages/neko-preview/packages/extension/src/providers/document/
+  EpubPreviewProvider.ts
+
+packages/neko-preview/packages/webview/
+  epub.html
+  src/epub/
+    main.tsx
+    EpubViewer.tsx       — epub.js 渲染 + 导航
+    EpubToolbar.tsx      — 章节导航、字号、主题
+    EpubToc.tsx          — 目录侧栏
+```
+
+**Webview 逻辑**：
+
+```
+document:data → ArrayBuffer → ePub(data) → book.renderTo(container)
+→ book.loaded.navigation → TOC 侧栏
+→ epub.js 'selected' 事件 → 选中文本 + CFI 定位
+→ useDocumentSelection → FAB → sendToAi({ selectedText, chapterTitle })
+```
+
+**主题**：`rendition.themes.register('dark', { body: { background: 'var(--vscode-editor-background)', color: 'var(--vscode-editor-foreground)' } })`
+
+**CSP**：epub.js 内部用 iframe，CSP 需 `frame-src blob:`。已有 Book Reader 验证可行。
+
+### 5.6 DOCX 预览（P1）
+
+**渲染库**：`docx-preview` — 高保真 DOM 渲染（表格/图片/页眉/分页/修订标记）。
+
+**新增文件**：
+
+```
+packages/neko-preview/packages/extension/src/providers/document/
+  DocxPreviewProvider.ts
+
+packages/neko-preview/packages/webview/
+  docx.html
+  src/docx/
+    main.tsx
+    DocxViewer.tsx        — docx-preview 渲染 + 缩放
+    DocxToolbar.tsx       — 缩放、滚动位置指示
+```
+
+**Webview 逻辑**：
+
+```
+document:data → ArrayBuffer → renderAsync(data, container, styleContainer, {
+  breakPages: true, ignoreWidth: false
+})
+→ 标准 HTML DOM → window.getSelection() 原生可用
+→ useDocumentSelection → FAB → sendToAi({ selectedText, pageNumber })
+```
+
+无特殊 CSP 需求（纯 DOM 渲染）。
+
+### 5.7 文件结构总览
+
+```
+packages/neko-preview/
+├── package.json                          # +4 customEditors, +4 commands
+├── packages/
+│   ├── extension/src/
+│   │   ├── extension.ts                  # +4 provider 注册
+│   │   ├── providers/
+│   │   │   ├── VideoPreviewProvider.ts   # 已有
+│   │   │   ├── AudioPreviewProvider.ts   # 已有
+│   │   │   └── document/                 # NEW
+│   │   │       ├── PdfPreviewProvider.ts
+│   │   │       ├── CbzPreviewProvider.ts
+│   │   │       ├── EpubPreviewProvider.ts
+│   │   │       └── DocxPreviewProvider.ts
+│   │   ├── types/
+│   │   │   ├── api.ts                    # 已有
+│   │   │   └── document-messages.ts      # NEW
+│   │   └── utils/
+│   │       └── html.ts                   # 修改：扩展 entry 类型 + CSP
+│   └── webview/
+│       ├── package.json                  # +4 依赖
+│       ├── vite.config.ts                # +4 入口 + worker 插件
+│       ├── tailwind.config.js            # +4 html 文件
+│       ├── pdf.html                      # NEW
+│       ├── cbz.html                      # NEW
+│       ├── epub.html                     # NEW
+│       ├── docx.html                     # NEW
+│       └── src/
+│           ├── pdf/                      # NEW
+│           │   ├── main.tsx
+│           │   ├── PdfViewer.tsx
+│           │   └── PdfToolbar.tsx
+│           ├── cbz/                      # NEW
+│           │   ├── main.tsx
+│           │   ├── CbzViewer.tsx
+│           │   ├── CbzToolbar.tsx
+│           │   └── CbzRegionSelect.tsx
+│           ├── epub/                     # NEW
+│           │   ├── main.tsx
+│           │   ├── EpubViewer.tsx
+│           │   ├── EpubToolbar.tsx
+│           │   └── EpubToc.tsx
+│           ├── docx/                     # NEW
+│           │   ├── main.tsx
+│           │   ├── DocxViewer.tsx
+│           │   └── DocxToolbar.tsx
+│           ├── shared/
+│           │   ├── useDocumentSelection.ts  # NEW
+│           │   ├── DocumentSelectionFab.tsx  # NEW
+│           │   ├── DocumentToolbar.tsx       # NEW
+│           │   └── types.ts                 # 修改：+document 消息类型
+│           └── i18n/locales/
+│               ├── en.ts                    # 修改：+document 键
+│               └── zh-cn.ts                 # 修改：+document 键
+```
+
+### 5.8 测试策略
+
+**Extension 单元测试**（每个 Provider 一个文件）：
+
+- Mock `vscode.window.registerCustomEditorProvider`
+- Mock `fs.readFile` 返回测试 Buffer
+- 验证 `openCustomDocument` → `{ uri, dispose }`
+- 验证 `resolveCustomEditor` 设置正确 entry HTML
+- 模拟 `ready` → 验证发送 `document:data`
+- 模拟 `document:sendToAi` → 验证调用 `neko.agent.sendContext`
+
+**构建验证**：
+
+```bash
+pnpm build    # 全量构建
+pnpm test     # 单元测试
+pnpm check    # Knip + dependency-cruiser
+```
+
+### 5.9 TODO：未来格式
+
+| 格式 | 策略 | 渲染库 | 备注 |
+|------|------|--------|------|
+| **XLSX** | B: 自建 | x-data-spreadsheet + xlsx（短期）/ Univer（长期） | x-data-spreadsheet 已 3 年停维，长期需迁移 |
+| **PPTX** | C: 引擎转换 | neko-engine → LibreOffice headless → PDF → pdfjs | 需用户安装 LibreOffice；无可靠纯 JS 方案 |
+| **FDX** | A: 自建 | fast-xml-parser → styled HTML | Final Draft XML 结构简单，neko-story 场景 |
+| **MOBI/AZW3** | D: 委托 | 提示安装 Book Reader 扩展 | 小众格式，自建 ROI 低 |
+| **CBR** | D: 委托 | Node 端 node-unrar-js 已支持 AI 提取 | RAR WASM 解压复杂度高，Webview 端不自建 |
+| **LaTeX** | 不支持 | LaTeX Workshop（6M+ 下载）已覆盖 | AI 分析可直接读 .tex 源码（纯文本） |
+
+### 5.10 风险与缓解
+
+| 风险 | 影响 | 缓解 |
+|------|------|------|
+| pdfjs Worker CSP 被阻止 | PDF 无法渲染 | workerSrc 指向 asWebviewUri 路径，已有扩展验证可行 |
+| epub.js 嵌套 iframe 限制 | EPUB 渲染失败 | Book Reader 已验证可行；CSP 添加 frame-src blob: |
+| 大文件内存溢出 | Webview 崩溃 | PDF 分页渲染（虚拟滚动），CBZ 懒加载（IntersectionObserver） |
+| base64 传输大文件慢 | 打开卡顿 | 分块传输或使用 asWebviewUri 直接引用文件（需评估 CSP） |
 
 ---
 

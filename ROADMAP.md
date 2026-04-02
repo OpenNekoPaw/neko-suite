@@ -14,7 +14,7 @@
 | **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + AI Action Handler（12 action 含 remove-silence） |
 | **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **6 种创作专家 SubAgent**（含 quality-checker）+ **JSONL Session 持久化** + **Creative Memory** + **媒体质量评估系统**（VisionEvaluator/VideoFrameEvaluator/AudioEvaluator/ConsistencyEvaluator + RemediationPlanner 15 category + qualityGate 管线）；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 85% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；文档预览（PDF/DOCX/EPUB/XLSX）规划中 — [ADR](./docs/architecture/document-preview.md) |
+| **neko-preview** | Alpha | 92% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接）— [ADR](./docs/architecture/document-preview.md) |
 | **neko-story** | WIP | 82% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统**规划中：脚本视图（表格）+ 创意视图（卡片网格）+ ShotNode 数据模型（[架构](./docs/architecture/2d-capability-analysis.md)） |
 | **neko-assets** | Alpha | 92% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 |
 | **neko-market** | Alpha | 97% | **客户端完全完成** ✅（Phase 6.5.1-6.5.6）；Registry Server 在 neko-hub |

@@ -16,7 +16,8 @@ export type AgentContextType =
   | 'model-scene'
   | 'audio-clip'
   | 'file'
-  | 'image';
+  | 'image'
+  | 'document-selection';
 
 /**
  * Unified context payload sent from any sub-package to the agent panel.

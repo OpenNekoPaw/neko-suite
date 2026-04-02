@@ -28,10 +28,7 @@ export default defineConfig({
       port: 5174,
     },
     fs: {
-      allow: [
-        path.resolve(__dirname, '../../..'),
-        path.resolve(__dirname, '../../../..'),
-      ],
+      allow: [path.resolve(__dirname, '../../..'), path.resolve(__dirname, '../../../..')],
     },
   },
   build: {
@@ -41,6 +38,10 @@ export default defineConfig({
       input: {
         video: path.resolve(__dirname, 'video.html'),
         audio: path.resolve(__dirname, 'audio.html'),
+        pdf: path.resolve(__dirname, 'pdf.html'),
+        cbz: path.resolve(__dirname, 'cbz.html'),
+        epub: path.resolve(__dirname, 'epub.html'),
+        docx: path.resolve(__dirname, 'docx.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',

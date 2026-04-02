@@ -1,7 +1,7 @@
 {
   "name": "neko-preview",
   "displayName": "Neko Preview",
-  "description": "Lightweight media preview for video and audio files, powered by neko-engine",
+  "description": "Lightweight media and document preview for video, audio, PDF, EPUB, CBZ and DOCX files",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -22,7 +22,12 @@
     "audio",
     "preview",
     "media",
-    "player"
+    "player",
+    "pdf",
+    "epub",
+    "cbz",
+    "docx",
+    "document"
   ],
   "extensionKind": [
     "workspace"
@@ -53,6 +58,46 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "neko.pdfPreview",
+        "displayName": "Neko PDF Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "neko.cbzPreview",
+        "displayName": "Neko CBZ Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.cbz"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "neko.epubPreview",
+        "displayName": "Neko EPUB Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.epub"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "neko.docxPreview",
+        "displayName": "Neko DOCX Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.{docx,doc}"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "commands": [
@@ -64,6 +109,26 @@
       {
         "command": "neko.preview.openAudio",
         "title": "Open Audio Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.preview.openPdf",
+        "title": "Open PDF Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.preview.openCbz",
+        "title": "Open CBZ Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.preview.openEpub",
+        "title": "Open EPUB Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.preview.openDocx",
+        "title": "Open DOCX Preview",
         "category": "Neko Preview"
       }
     ],

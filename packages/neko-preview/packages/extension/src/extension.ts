@@ -16,6 +16,11 @@
 import * as vscode from 'vscode';
 import { VideoPreviewProvider } from './providers/VideoPreviewProvider';
 import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
+import { PdfPreviewProvider } from './providers/document/PdfPreviewProvider';
+import { CbzPreviewProvider } from './providers/document/CbzPreviewProvider';
+import { EpubPreviewProvider } from './providers/document/EpubPreviewProvider';
+import { DocxPreviewProvider } from './providers/document/DocxPreviewProvider';
+import { registerOpenCommand } from './providers/document/documentProviderHelper';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
@@ -30,6 +35,10 @@ const logger = getLogger('Extension');
 
 let videoProvider: VideoPreviewProvider | null = null;
 let audioProvider: AudioPreviewProvider | null = null;
+let pdfProvider: PdfPreviewProvider | null = null;
+let cbzProvider: CbzPreviewProvider | null = null;
+let epubProvider: EpubPreviewProvider | null = null;
+let docxProvider: DocxPreviewProvider | null = null;
 let statusBarManager: StatusBarManager | null = null;
 let sharedPreviewService: PreviewService | null = null;
 
@@ -127,6 +136,76 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   context.subscriptions.push(videoProvider);
   context.subscriptions.push(audioProvider);
 
+  // =========================================================================
+  // Document Preview Providers (no engine dependency)
+  // =========================================================================
+
+  pdfProvider = new PdfPreviewProvider(context.extensionUri);
+  cbzProvider = new CbzPreviewProvider(context.extensionUri);
+  epubProvider = new EpubPreviewProvider(context.extensionUri);
+  docxProvider = new DocxPreviewProvider(context.extensionUri);
+
+  // Register document custom editors
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(PdfPreviewProvider.viewType, pdfProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+      supportsMultipleEditorsPerDocument: false,
+    }),
+    vscode.window.registerCustomEditorProvider(CbzPreviewProvider.viewType, cbzProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+      supportsMultipleEditorsPerDocument: false,
+    }),
+    vscode.window.registerCustomEditorProvider(EpubPreviewProvider.viewType, epubProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+      supportsMultipleEditorsPerDocument: false,
+    }),
+    vscode.window.registerCustomEditorProvider(DocxPreviewProvider.viewType, docxProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+      supportsMultipleEditorsPerDocument: false,
+    }),
+  );
+
+  // Register document open commands
+  registerOpenCommand(
+    context,
+    'neko.preview.openPdf',
+    PdfPreviewProvider.viewType,
+    {
+      'PDF Files': ['pdf'],
+    },
+    'Open PDF Preview',
+  );
+  registerOpenCommand(
+    context,
+    'neko.preview.openCbz',
+    CbzPreviewProvider.viewType,
+    {
+      'CBZ Files': ['cbz'],
+    },
+    'Open CBZ Preview',
+  );
+  registerOpenCommand(
+    context,
+    'neko.preview.openEpub',
+    EpubPreviewProvider.viewType,
+    {
+      'EPUB Files': ['epub'],
+    },
+    'Open EPUB Preview',
+  );
+  registerOpenCommand(
+    context,
+    'neko.preview.openDocx',
+    DocxPreviewProvider.viewType,
+    {
+      'Word Files': ['docx', 'doc'],
+    },
+    'Open DOCX Preview',
+  );
+
+  // Register document providers for disposal
+  context.subscriptions.push(pdfProvider, cbzProvider, epubProvider, docxProvider);
+
   logger.info('Extension activated');
 
   // Build and return public API for other extensions
@@ -205,6 +284,18 @@ export function deactivate(): void {
 
   audioProvider?.dispose();
   audioProvider = null;
+
+  pdfProvider?.dispose();
+  pdfProvider = null;
+
+  cbzProvider?.dispose();
+  cbzProvider = null;
+
+  epubProvider?.dispose();
+  epubProvider = null;
+
+  docxProvider?.dispose();
+  docxProvider = null;
 
   statusBarManager?.dispose();
   statusBarManager = null;

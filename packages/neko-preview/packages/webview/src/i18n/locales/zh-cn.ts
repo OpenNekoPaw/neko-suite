@@ -41,6 +41,29 @@ const preview: MessageBundle = {
   'preview.audio.viewLyrics': '歌词',
   'preview.audio.viewWaveform': '波形',
   'preview.audio.viewSpectrum': '频谱',
+  // Document shared
+  'preview.document.sendToAi': '发送到 AI',
+  'preview.document.sendPageToAi': '分析页面',
+  'preview.document.loading': '加载中...',
+  'preview.document.error': '错误：{error}',
+  'preview.document.pageOf': '第 {current} 页 / 共 {total} 页',
+  'preview.document.zoomIn': '放大',
+  'preview.document.zoomOut': '缩小',
+  'preview.document.fitWidth': '适应宽度',
+  'preview.document.fitPage': '适应页面',
+  // PDF
+  'preview.pdf.loading': '正在加载 PDF...',
+  // CBZ
+  'preview.cbz.loading': '正在加载漫画...',
+  'preview.cbz.spreadMode': '双页模式',
+  'preview.cbz.selectRegion': '框选区域发送 AI',
+  // EPUB
+  'preview.epub.loading': '正在加载书籍...',
+  'preview.epub.toc': '目录',
+  'preview.epub.theme': '阅读主题',
+  'preview.epub.fontSize': '字号',
+  // DOCX
+  'preview.docx.loading': '正在加载文档...',
 };
 
 export const bundles: Record<string, MessageBundle> = {
