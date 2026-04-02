@@ -1,21 +1,38 @@
+# Source code
+src/**
+scripts/**
+
+# Config & tooling
 .vscode/**
 .vscode-test/**
-src/**
-node_modules/**
-scripts/**
-*.ts
-!dist/**
+.turbo/**
 .gitignore
 tsconfig.json
+tsconfig.*.json
+eslint.config.*
+vitest.config.*
 *.md
 
-# Build tools
-.turbo/**
+# TypeScript source
+*.ts
+!*.d.ts
+
+# Test & coverage artifacts
+**/*.test.ts
+**/*.spec.ts
+**/__tests__/**
+coverage/**
+
+# Build intermediaries
+node_modules/**
+out/**
+*.map
+*.tsbuildinfo
+
+# Rust workspace (cargo sources + build artifacts)
 Cargo.lock
 Cargo.toml
 .cargo/**
-
-# Rust build artifacts — not needed in VSIX
 target/**
 
 # Sub-packages — exclude all, then re-include runtime files
@@ -24,10 +41,12 @@ packages/**
 !packages/native-napi/index.d.ts
 !packages/native-napi/neko-engine.*.node
 
-# FFmpeg dylibs (copied to native-napi dir by bundle-ffmpeg.js)
+# FFmpeg dylibs (bundled by scripts/bundle-ffmpeg.js)
 !packages/native-napi/*.dylib
 !packages/native-napi/*.so*
 !packages/native-napi/*.dll
 
-# ORT dylibs for ML inference
+# Include compiled output, ORT dylibs, and localization
+!dist/**
 !bin/**
+!l10n/**

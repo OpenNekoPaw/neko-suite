@@ -1,9 +1,38 @@
-.vscode/**
+# Source code (not needed in VSIX — dist/ has compiled output)
 src/**
-packages/**
-node_modules/**
-*.ts
-!dist/**
+packages/**/src/**
+packages/**/node_modules/**
+
+# Config & tooling
+.vscode/**
+.vscode-test/**
+.turbo/**
 .gitignore
 tsconfig.json
+tsconfig.*.json
+eslint.config.*
+vitest.config.*
+vite.config.*
+postcss.config.*
+tailwind.config.*
 *.md
+
+# TypeScript source (redundant with src/** but catches root-level .ts)
+*.ts
+!*.d.ts
+
+# Test & coverage artifacts
+**/*.test.ts
+**/*.spec.ts
+**/__tests__/**
+coverage/**
+
+# Build intermediaries
+node_modules/**
+out/**
+*.map
+*.tsbuildinfo
+
+# Include compiled output and localization
+!dist/**
+!l10n/**
