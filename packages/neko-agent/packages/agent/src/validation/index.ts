@@ -87,3 +87,7 @@ export type {
 } from './json-validator';
 export { LengthValidator, createLengthValidator } from './length-validator';
 export type { ILengthValidator, LengthValidationOptions } from './length-validator';
+
+// Remediation Planner
+export { RemediationPlanner, createRemediationPlanner } from './remediation-planner';
+export type { IRemediationPlanner } from './remediation-planner';

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./pipeline": "./src/pipeline/index.ts",
+    "./validation": "./src/validation/index.ts",
     "./*": "./src/*"
   },
   "scripts": {

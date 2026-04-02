@@ -12,6 +12,7 @@ import {
   aiGenerateSkill,
   videoEditingSkill,
   storyboardToTimelineSkill,
+  qualityAssessmentSkill,
 } from '../index';
 
 describe('Builtin Skills', () => {
@@ -126,6 +127,78 @@ describe('Builtin Skills', () => {
     });
   });
 
+  describe('qualityAssessmentSkill', () => {
+    it('should have correct name', () => {
+      expect(qualityAssessmentSkill.name).toBe('quality-assessment');
+    });
+
+    it('should have description with trigger keywords (en + zh)', () => {
+      expect(qualityAssessmentSkill.description).toContain('quality');
+      expect(qualityAssessmentSkill.description).toContain('artifacts');
+      expect(qualityAssessmentSkill.description).toContain('loudness');
+      expect(qualityAssessmentSkill.description).toContain('质量检查');
+      expect(qualityAssessmentSkill.description).toContain('音频质量');
+    });
+
+    it('should have content with workflow instructions', () => {
+      expect(qualityAssessmentSkill.content).toContain('Workflow');
+      expect(qualityAssessmentSkill.content).toContain('Evaluate Media');
+      expect(qualityAssessmentSkill.content).toContain('Interpret Results');
+      expect(qualityAssessmentSkill.content).toContain('Apply Fixes');
+    });
+
+    it('should have content with issue categories reference', () => {
+      expect(qualityAssessmentSkill.content).toContain('artifact');
+      expect(qualityAssessmentSkill.content).toContain('audio-clipping');
+      expect(qualityAssessmentSkill.content).toContain('loudness-off');
+      expect(qualityAssessmentSkill.content).toContain('prompt-mismatch');
+      expect(qualityAssessmentSkill.content).toContain('style-drift');
+    });
+
+    it('should have content with remediation tool mapping', () => {
+      expect(qualityAssessmentSkill.content).toContain('AddEffect');
+      expect(qualityAssessmentSkill.content).toContain('SetColorCorrection');
+      expect(qualityAssessmentSkill.content).toContain('SetAudioProperties');
+      expect(qualityAssessmentSkill.content).toContain('GenerateImage');
+    });
+
+    it('should have QualityCheck as primary tool', () => {
+      expect(qualityAssessmentSkill.allowedTools).toContain('QualityCheck');
+    });
+
+    it('should have remediation tools for all fix types', () => {
+      // Effects
+      expect(qualityAssessmentSkill.allowedTools).toContain('AddEffect');
+      expect(qualityAssessmentSkill.allowedTools).toContain('UpdateEffect');
+      // Color
+      expect(qualityAssessmentSkill.allowedTools).toContain('SetColorCorrection');
+      // Audio
+      expect(qualityAssessmentSkill.allowedTools).toContain('SetAudioProperties');
+      // Regeneration
+      expect(qualityAssessmentSkill.allowedTools).toContain('GenerateImage');
+      expect(qualityAssessmentSkill.allowedTools).toContain('GenerateVideo');
+    });
+
+    it('should have timeline query tools for context', () => {
+      expect(qualityAssessmentSkill.allowedTools).toContain('GetTimelineInfo');
+      expect(qualityAssessmentSkill.allowedTools).toContain('ListElements');
+    });
+
+    it('should be registered as /quality-check slash command', () => {
+      expect(qualityAssessmentSkill.command).toBe('quality-check');
+      expect(qualityAssessmentSkill.supportsArguments).toBe(true);
+    });
+
+    it('should have quality icon', () => {
+      expect(qualityAssessmentSkill.icon).toBe('📊');
+    });
+
+    it('should be enabled and builtin', () => {
+      expect(qualityAssessmentSkill.enabled).toBe(true);
+      expect(qualityAssessmentSkill.source).toBe('builtin');
+    });
+  });
+
   describe('skill integration', () => {
     it('should include comicToStoryboardSkill in builtinSkills', () => {
       expect(builtinSkills).toContain(comicToStoryboardSkill);
@@ -133,6 +206,10 @@ describe('Builtin Skills', () => {
 
     it('should include scriptGenerationSkill in builtinSkills', () => {
       expect(builtinSkills).toContain(scriptGenerationSkill);
+    });
+
+    it('should include qualityAssessmentSkill in builtinSkills', () => {
+      expect(builtinSkills).toContain(qualityAssessmentSkill);
     });
 
     it('should have complementary skills for full workflow', () => {
@@ -157,6 +234,9 @@ describe('Builtin Skills', () => {
       expect(skillNames).toContain('color-grading');
       expect(skillNames).toContain('audio-mixing');
       expect(skillNames).toContain('subtitle-assistant');
+
+      // Quality assessment
+      expect(skillNames).toContain('quality-assessment');
     });
   });
 

@@ -83,4 +83,14 @@ export type {
   StyleDriftPair,
   CharacterAppearance,
   ConsistencyReport,
+  EvalMediaType,
+  IssueSeverity,
+  QualityIssueCategory,
+  QualityIssue,
+  RemediationActionType,
+  RemediationAction,
+  MediaEvaluation,
+  AudioTechnicalMetrics,
+  VideoTechnicalMetrics,
 } from './qa-types';
+export { QUALITY_ISSUE_CATEGORIES } from './qa-types';

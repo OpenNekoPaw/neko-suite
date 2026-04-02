@@ -63,6 +63,7 @@ export {
   storyboardToTimelineSkill,
   comicToStoryboardSkill,
   pipelineRetrySkill,
+  qualityAssessmentSkill,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,

@@ -429,6 +429,15 @@ export abstract class AISdkAdapter implements Adapter {
           content: message.content.map((part) => {
             if (part.type === 'text') {
               return { type: 'text' as const, text: part.text };
+            } else if (part.type === 'video') {
+              // Pass video as file content for models with native video understanding
+              // For models without native video support, VideoFrameEvaluator
+              // decomposes videos into frame images before sending
+              return {
+                type: 'file' as const,
+                data: part.videoUrl,
+                mediaType: part.mimeType ?? 'video/mp4',
+              };
             } else {
               return {
                 type: 'image' as const,

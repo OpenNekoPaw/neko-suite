@@ -8,6 +8,7 @@ import type { Skill, ISkillRegistry } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
 import { scriptGenerationSkill } from './script-generation';
+import { qualityAssessmentSkill } from './quality-assessment';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
@@ -15,6 +16,7 @@ export { aiGenerateSkill, aiGenerateToolDefinitions };
 // Re-export new skills
 export { comicToStoryboardSkill } from './comic-to-storyboard';
 export { scriptGenerationSkill } from './script-generation';
+export { qualityAssessmentSkill } from './quality-assessment';
 
 // Re-export ToolGroups
 export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
@@ -702,6 +704,8 @@ export const builtinSkills: Skill[] = [
   pipelineRetrySkill,
   // Diagnostics
   pipelineDiagnosticsSkill,
+  // Quality Assessment
+  qualityAssessmentSkill,
 ];
 
 /**
