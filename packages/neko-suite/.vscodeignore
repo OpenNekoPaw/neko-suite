@@ -1,5 +1,10 @@
+# Extension pack — minimal content, no compiled code
 .vscode/**
 node_modules/**
-*.ts
+.turbo/**
 .gitignore
+*.ts
+*.map
+*.tsbuildinfo
+coverage/**
 *.md
