@@ -424,6 +424,13 @@ export interface ISkillRegistry {
   // Search
   searchSkills(keyword: string): Skill[];
 
+  /**
+   * Ensure a skill's content is fully loaded (tiered loading support).
+   * For lazy skills, triggers deferred content load.
+   * For eager skills, returns immediately.
+   */
+  ensureLoaded(name: string): Promise<Skill | undefined>;
+
   // Counts
   readonly skillCount: number;
 

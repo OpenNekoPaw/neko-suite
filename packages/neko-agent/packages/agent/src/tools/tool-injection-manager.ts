@@ -1,12 +1,13 @@
 /**
- * Tool Injection Manager - Implements two-layer tool injection mechanism
+ * Tool Injection Manager - Implements tiered tool injection mechanism
  *
- * Two layers:
- * - always: Core tools always injected — Read, Write, Bash, ListDirectory, Grep + meta-tools
- *           + tools from alwaysActive ToolSets
- * - dynamic: Tools from manually activated ToolSets (via ActivateToolSet or SkillService)
+ * Two injection layers (always / dynamic) driven by three loading tiers:
+ * - resident: Always in LLM context (core tools, file editing, shell, meta-tools)
+ * - eager:    Schema injected when the ToolSet is first activated in session
+ * - lazy:     Schema injected only on explicit activation
  *
- * Works with ToolCategoryRegistry for categorization and IToolProvider for ToolSet-based tools.
+ * The core lever is ToolGroupRegistry.getDefaultTools() which now only returns
+ * resident-tier tools. Eager/lazy tools enter via activateToolSet().
  */
 
 import type {
@@ -120,10 +121,10 @@ export class ToolInjectionManager implements IToolInjectionManager {
   }
 
   /**
-   * Get dynamic-layer tools based on active ToolSets
+   * Get dynamic-layer tools based on active ToolSets.
    *
-   * With 1M context, all ToolSets are alwaysActive so this layer
-   * is effectively unused but retained for compatibility.
+   * getDefaultTools() returns only resident-tier tools.
+   * Eager/lazy tools appear here only after activateToolSet().
    */
   private getDynamicTools(): string[] {
     if (!this.toolProvider) {
@@ -224,6 +225,40 @@ export class ToolInjectionManager implements IToolInjectionManager {
       skillName: toolSetName,
       layer: 'dynamic',
     });
+  }
+
+  /**
+   * Activate ToolSets that contain any of the given tool names.
+   * Used by SkillInjectionCoordinator to auto-activate ToolSets
+   * when a skill's allowedTools reference eager/lazy tools.
+   */
+  activateToolSetsForTools(toolNames: string[]): string[] {
+    if (!this.toolProvider) return [];
+
+    // toolProvider is IToolProvider which may be ToolGroupRegistry
+    // Use getActiveTools to check — but we need group names.
+    // We'll check if toolProvider has getGroupsForTool (duck-typing)
+    const registry = this.toolProvider as {
+      getGroupsForTool?: (name: string) => string[];
+    };
+    if (!registry.getGroupsForTool) return [];
+
+    const groupsToActivate = new Set<string>();
+    for (const toolName of toolNames) {
+      const groups = registry.getGroupsForTool(toolName);
+      for (const g of groups) {
+        groupsToActivate.add(g);
+      }
+    }
+
+    const activated: string[] = [];
+    for (const groupName of groupsToActivate) {
+      if (!this.getActiveToolSets().includes(groupName)) {
+        this.activateToolSet(groupName);
+        activated.push(groupName);
+      }
+    }
+    return activated;
   }
 
   /**

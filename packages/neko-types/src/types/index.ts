@@ -171,3 +171,6 @@ export * from './generation';
 
 // Agent context types (unified sendToAgent payload)
 export * from './agent-context';
+
+// Loading tier types (tiered lazy loading for tools, skills, commands)
+export * from './loading-tier';

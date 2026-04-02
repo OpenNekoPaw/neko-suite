@@ -15,6 +15,7 @@
  */
 
 import type { IToolProvider } from './tool-injection';
+import type { LoadingTier } from './loading-tier';
 
 /**
  * ToolGroup source
@@ -51,6 +52,17 @@ export interface ToolGroup {
 
   /** Whether this group is enabled */
   enabled: boolean;
+
+  /**
+   * Loading tier. Controls when tool schemas are injected into LLM context.
+   * Metadata (name/description/tools[]) is always resident regardless of tier.
+   *
+   * When omitted, resolved from alwaysActive + priority:
+   * - !alwaysActive → 'lazy'
+   * - alwaysActive && priority >= 100 → 'resident'
+   * - alwaysActive && priority < 100 → 'eager'
+   */
+  loadingTier?: LoadingTier;
 
   /** Optional icon for UI */
   icon?: string;

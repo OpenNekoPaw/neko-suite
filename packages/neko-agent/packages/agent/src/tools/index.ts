@@ -73,5 +73,8 @@ export {
   type ToolCallLike,
 } from './tool-pattern-matcher';
 
+// Tier resolver (tiered lazy loading)
+export { resolveToolGroupTier, resolveSkillTier } from './tier-resolver';
+
 // Re-export injection constants
 export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';

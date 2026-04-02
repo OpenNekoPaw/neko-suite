@@ -13,8 +13,9 @@
  * Note: "ToolGroup" and "ToolSet" are aliases (IToolSetRegistry = IToolGroupRegistry).
  */
 
-import type { ToolGroup, ToolGroupMatch, IToolGroupRegistry } from '@neko/shared';
+import type { ToolGroup, ToolGroupMatch, IToolGroupRegistry, LoadingTier } from '@neko/shared';
 import { getLogger } from '../utils/logger';
+import { resolveToolGroupTier } from '../tools/tier-resolver';
 
 const logger = getLogger('ToolGroupRegistry');
 
@@ -150,13 +151,41 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
   }
 
   /**
-   * Get default active tools (from groups with alwaysActive: true)
+   * Get default active tools — only from resident-tier groups.
+   *
+   * This is the core lever for tiered lazy loading: tools from eager/lazy
+   * groups are excluded from the default set and only appear after explicit
+   * activation via activateToolSet().
    */
   getDefaultTools(): string[] {
     const tools = new Set<string>();
 
     for (const group of this.listEnabled()) {
-      if (group.alwaysActive) {
+      if (resolveToolGroupTier(group) === 'resident') {
+        for (const tool of group.tools) {
+          tools.add(tool);
+        }
+      }
+    }
+
+    return Array.from(tools);
+  }
+
+  /**
+   * List groups by resolved loading tier
+   */
+  listByTier(tier: LoadingTier): ToolGroup[] {
+    return this.listEnabled().filter((g) => resolveToolGroupTier(g) === tier);
+  }
+
+  /**
+   * Get tools from eager-tier groups (for on-demand schema injection)
+   */
+  getEagerTools(): string[] {
+    const tools = new Set<string>();
+
+    for (const group of this.listEnabled()) {
+      if (resolveToolGroupTier(group) === 'eager') {
         for (const tool of group.tools) {
           tools.add(tool);
         }

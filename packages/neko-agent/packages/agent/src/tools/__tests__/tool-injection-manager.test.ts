@@ -315,6 +315,58 @@ describe('ToolInjectionManager', () => {
   });
 
   // -----------------------------------------------------------------------
+  // activateToolSetsForTools
+  // -----------------------------------------------------------------------
+  describe('activateToolSetsForTools', () => {
+    it('activates ToolSets that contain the given tools', () => {
+      const provider = {
+        getActiveTools: vi.fn(() => ['ToolA', 'ToolB']),
+        getDefaultTools: vi.fn(() => []),
+        getGroupsForTool: vi.fn((name: string) => {
+          if (name === 'ToolA') return ['group-alpha'];
+          if (name === 'ToolB') return ['group-beta'];
+          return [];
+        }),
+      } as unknown as IToolProvider;
+
+      const mgr = new ToolInjectionManager(registry, provider);
+      const activated = mgr.activateToolSetsForTools(['ToolA', 'ToolB']);
+
+      expect(activated).toContain('group-alpha');
+      expect(activated).toContain('group-beta');
+      expect(mgr.getActiveToolSets()).toContain('group-alpha');
+      expect(mgr.getActiveToolSets()).toContain('group-beta');
+    });
+
+    it('returns empty when no tool provider', () => {
+      const mgr = new ToolInjectionManager(registry);
+      const activated = mgr.activateToolSetsForTools(['ToolA']);
+      expect(activated).toEqual([]);
+    });
+
+    it('skips already-active ToolSets', () => {
+      const provider = {
+        getActiveTools: vi.fn(() => []),
+        getDefaultTools: vi.fn(() => []),
+        getGroupsForTool: vi.fn(() => ['group-alpha']),
+      } as unknown as IToolProvider;
+
+      const mgr = new ToolInjectionManager(registry, provider);
+      mgr.activateToolSet('group-alpha'); // pre-activate
+
+      const activated = mgr.activateToolSetsForTools(['ToolA']);
+      expect(activated).toEqual([]); // already active, not re-activated
+    });
+
+    it('returns empty when provider lacks getGroupsForTool', () => {
+      const provider = makeMockToolProvider([], []);
+      const mgr = new ToolInjectionManager(registry, provider);
+      const activated = mgr.activateToolSetsForTools(['ToolA']);
+      expect(activated).toEqual([]);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // createToolInjectionManager factory
   // -----------------------------------------------------------------------
   describe('createToolInjectionManager factory', () => {

@@ -26,7 +26,13 @@ import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
 } from '@neko/shared';
-import { SkillLoader, createNodeSkillLoader, matchSkillPaths } from '@neko/agent';
+import {
+  SkillLoader,
+  createNodeSkillLoader,
+  matchSkillPaths,
+  type LazySkill,
+  type LazyCommand,
+} from '@neko/agent';
 import { builtinSkills } from '@neko/agent';
 
 const logger = getLogger('SkillFileService');
@@ -43,6 +49,22 @@ export interface SkillScanResult {
   project: {
     skills: Skill[];
     commands: SlashCommand[];
+  };
+  errors: Array<{ file: string; message: string }>;
+}
+
+/**
+ * Lazy scan result — frontmatter-only skills/commands for tiered loading.
+ * Lazy skills have deferred `loadContent()` for on-demand content loading.
+ */
+export interface LazySkillScanResult {
+  personal: {
+    skills: LazySkill[];
+    commands: LazyCommand[];
+  };
+  project: {
+    skills: LazySkill[];
+    commands: LazyCommand[];
   };
   errors: Array<{ file: string; message: string }>;
 }
@@ -227,6 +249,97 @@ export class SkillFileService implements vscode.Disposable {
     this.cachedResult = result;
 
     return result;
+  }
+
+  /**
+   * Scan skills lazily — only load frontmatter, defer content loading.
+   * Returns LazySkill/LazyCommand objects with deferred loadContent().
+   * Used by the tiered loading system to reduce startup overhead.
+   */
+  async scanSkillsLazy(): Promise<LazySkillScanResult> {
+    const result: LazySkillScanResult = {
+      personal: { skills: [], commands: [] },
+      project: { skills: [], commands: [] },
+      errors: [],
+    };
+
+    await this.ensureDirectories();
+
+    // Load personal skills lazily
+    const userSkillsDir = this.getUserSkillsDir();
+    const userCommandsDir = this.getUserCommandsDir();
+
+    const personalSkillsResult = await this.loadLazyFromDirectory(userSkillsDir, 'personal');
+    result.personal.skills = personalSkillsResult.skills;
+    result.personal.commands = personalSkillsResult.commands;
+    result.errors.push(
+      ...personalSkillsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+    );
+
+    const personalCommandsResult = await this.loadLazyFromDirectory(userCommandsDir, 'personal');
+    result.personal.commands.push(...personalCommandsResult.commands);
+    result.errors.push(
+      ...personalCommandsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+    );
+
+    // Load project skills lazily
+    const workspaceSkillsDir = this.getWorkspaceSkillsDir();
+    const workspaceCommandsDir = this.getWorkspaceCommandsDir();
+
+    if (workspaceSkillsDir) {
+      const projectSkillsResult = await this.loadLazyFromDirectory(workspaceSkillsDir, 'project');
+      result.project.skills = projectSkillsResult.skills;
+      result.project.commands = projectSkillsResult.commands;
+      result.errors.push(
+        ...projectSkillsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+      );
+    }
+
+    if (workspaceCommandsDir) {
+      const projectCommandsResult = await this.loadLazyFromDirectory(
+        workspaceCommandsDir,
+        'project',
+      );
+      result.project.commands.push(...projectCommandsResult.commands);
+      result.errors.push(
+        ...projectCommandsResult.errors.map((e) => ({ file: e.file, message: e.message })),
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Load skills and commands lazily from a directory (frontmatter only)
+   */
+  private async loadLazyFromDirectory(
+    dirPath: string,
+    source: SkillSource,
+  ): Promise<{
+    skills: LazySkill[];
+    commands: LazyCommand[];
+    errors: Array<{ file: string; message: string }>;
+  }> {
+    try {
+      const result = await this.skillLoader.loadLazyFromDirectory(dirPath, source);
+      return {
+        skills: result.skills,
+        commands: result.commands,
+        errors: result.errors.map((e) => ({ file: e.file, message: e.message })),
+      };
+    } catch (err) {
+      logger.warn(`Failed to lazy-load from directory: ${dirPath}`, err);
+      return {
+        skills: [],
+        commands: [],
+        errors: [
+          {
+            file: dirPath,
+            message: `Failed to lazy-load: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+      };
+    }
   }
 
   /**

@@ -1,15 +1,19 @@
 /**
- * Builtin ToolSets - Semantic tool groupings
+ * Builtin ToolSets - Semantic tool groupings with tiered loading
  *
- * With 1M context window, all tools are always visible to LLM.
- * ToolSets serve as semantic categories for organization and GetContext display.
- * All ToolSets are alwaysActive — no dynamic injection needed.
+ * Each ToolSet has a loadingTier controlling when its tool schemas are
+ * injected into LLM context. Metadata (name/description/tools[]) is always
+ * resident in registries for AI discovery via GetContext.
+ *
+ * - resident: Schema always in LLM context (core system, file editing, shell)
+ * - eager:    Schema injected on first ToolSet use (timeline, git, pipeline)
+ * - lazy:     Schema injected only on explicit activation (effects, audio, AI gen)
  */
 
 import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
 
 // =============================================================================
-// Always-Active ToolSets
+// Resident ToolSets — schema always in LLM context
 // =============================================================================
 
 /**
@@ -21,6 +25,7 @@ export const coreSystemToolSet: ToolGroup = {
   tools: ['Read', 'ListDirectory', 'Glob', 'Grep', 'WebSearch'],
   alwaysActive: true,
   priority: 100,
+  loadingTier: 'resident',
   source: 'builtin',
   enabled: true,
   icon: '📁',
@@ -35,28 +40,11 @@ export const planModeToolSet: ToolGroup = {
   tools: ['EnterPlanMode', 'ExitPlanMode'],
   alwaysActive: true,
   priority: 100,
+  loadingTier: 'resident',
   source: 'builtin',
   enabled: true,
   icon: '📋',
 };
-
-/**
- * Timeline query tools - read-only timeline operations
- */
-export const timelineQueryToolSet: ToolGroup = {
-  name: 'timeline-query',
-  description: 'Timeline query tools for viewing timeline info, elements, effects, and transitions',
-  tools: ['GetTimelineInfo', 'GetElementInfo', 'ListElements', 'ListEffects', 'ListTransitions'],
-  alwaysActive: true,
-  priority: 90,
-  source: 'builtin',
-  enabled: true,
-  icon: '🎬',
-};
-
-// =============================================================================
-// Domain ToolSets (all alwaysActive with 1M context)
-// =============================================================================
 
 /**
  * File editing tools
@@ -67,23 +55,10 @@ export const fileEditingToolSet: ToolGroup = {
   tools: ['Write', 'Edit', 'CreateDirectory', 'DeleteFile'],
   alwaysActive: true,
   priority: 90,
+  loadingTier: 'resident',
   source: 'builtin',
   enabled: true,
   icon: '✏️',
-};
-
-/**
- * Git operations tools
- */
-export const gitOperationsToolSet: ToolGroup = {
-  name: 'git-operations',
-  description: 'Git version control tools for status, diff, and log',
-  tools: ['GitStatus', 'GitDiff', 'GitLog'],
-  alwaysActive: true,
-  priority: 80,
-  source: 'builtin',
-  enabled: true,
-  icon: '📦',
 };
 
 /**
@@ -95,9 +70,44 @@ export const shellExecutionToolSet: ToolGroup = {
   tools: ['Bash'],
   alwaysActive: true,
   priority: 70,
+  loadingTier: 'resident',
   source: 'builtin',
   enabled: true,
   icon: '💻',
+};
+
+// =============================================================================
+// Eager ToolSets — schema injected on first ToolSet use in session
+// =============================================================================
+
+/**
+ * Timeline query tools - read-only timeline operations
+ */
+export const timelineQueryToolSet: ToolGroup = {
+  name: 'timeline-query',
+  description: 'Timeline query tools for viewing timeline info, elements, effects, and transitions',
+  tools: ['GetTimelineInfo', 'GetElementInfo', 'ListElements', 'ListEffects', 'ListTransitions'],
+  alwaysActive: true,
+  priority: 90,
+  loadingTier: 'eager',
+  source: 'builtin',
+  enabled: true,
+  icon: '🎬',
+};
+
+/**
+ * Git operations tools
+ */
+export const gitOperationsToolSet: ToolGroup = {
+  name: 'git-operations',
+  description: 'Git version control tools for status, diff, and log',
+  tools: ['GitStatus', 'GitDiff', 'GitLog'],
+  alwaysActive: true,
+  priority: 80,
+  loadingTier: 'eager',
+  source: 'builtin',
+  enabled: true,
+  icon: '📦',
 };
 
 /**
@@ -110,11 +120,16 @@ export const elementEditingToolSet: ToolGroup = {
   tools: ['AddElement', 'UpdateElement', 'DeleteElement', 'TrimElement', 'SplitElement'],
   alwaysActive: true,
   priority: 80,
+  loadingTier: 'eager',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
   icon: '🎞️',
 };
+
+// =============================================================================
+// Lazy ToolSets — schema injected only on explicit activation
+// =============================================================================
 
 /**
  * Effects and transitions tools
@@ -125,6 +140,7 @@ export const effectsTransitionsToolSet: ToolGroup = {
   tools: ['AddEffect', 'UpdateEffect', 'RemoveEffect', 'SetTransition', 'RemoveTransition'],
   alwaysActive: true,
   priority: 70,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -140,6 +156,7 @@ export const animationKeyframesToolSet: ToolGroup = {
   tools: ['GetKeyframes', 'AddKeyframe', 'UpdateKeyframe', 'RemoveKeyframe'],
   alwaysActive: true,
   priority: 60,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -155,6 +172,7 @@ export const colorGradingToolSet: ToolGroup = {
   tools: ['SetColorCorrection', 'ResetColorCorrection'],
   alwaysActive: true,
   priority: 60,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -170,6 +188,7 @@ export const audioEditingToolSet: ToolGroup = {
   tools: ['SetAudioProperties', 'AddAudioKeyframe', 'SetPlaybackSpeed', 'SeparateAudio'],
   alwaysActive: true,
   priority: 60,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -185,6 +204,7 @@ export const trackManagementToolSet: ToolGroup = {
   tools: ['AddTrack', 'DeleteTrack', 'ReorderTracks', 'SetTrackProperties'],
   alwaysActive: true,
   priority: 50,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -200,6 +220,7 @@ export const shapeMaskToolSet: ToolGroup = {
   tools: ['AddShape', 'UpdateShape', 'AddMask', 'UpdateMask', 'RemoveMask'],
   alwaysActive: true,
   priority: 50,
+  loadingTier: 'lazy',
   dependencies: ['timeline-query'],
   source: 'builtin',
   enabled: true,
@@ -215,6 +236,7 @@ export const exportRenderToolSet: ToolGroup = {
   tools: ['ExportVideo', 'GetExportProgress', 'RenderFrame', 'RenderClip', 'GetThumbnail'],
   alwaysActive: true,
   priority: 70,
+  loadingTier: 'eager',
   source: 'builtin',
   enabled: true,
   icon: '📤',
@@ -238,6 +260,7 @@ export const aiGenerationToolSet: ToolGroup = {
   ],
   alwaysActive: true,
   priority: 70,
+  loadingTier: 'lazy',
   source: 'builtin',
   enabled: true,
   icon: '🤖',
@@ -252,6 +275,7 @@ export const pipelineControlToolSet: ToolGroup = {
   tools: ['StartPipeline', 'ConfirmPipelineGate', 'RetryPipelineScenes'],
   alwaysActive: true,
   priority: 80,
+  loadingTier: 'eager',
   source: 'builtin',
   enabled: true,
   icon: '🔄',
@@ -270,6 +294,7 @@ export const mediaQAToolSet: ToolGroup = {
   tools: ['QualityCheck', 'QualityCheckConsistency'],
   alwaysActive: false,
   priority: 70,
+  loadingTier: 'lazy',
   dependencies: ['ai-generation'],
   source: 'builtin',
   enabled: true,
@@ -281,27 +306,28 @@ export const mediaQAToolSet: ToolGroup = {
 // =============================================================================
 
 /**
- * All builtin ToolSets (all alwaysActive)
+ * All builtin ToolSets — ordered by loading tier
  */
 export const builtinToolGroups: ToolGroup[] = [
-  // Core
+  // Resident
   coreSystemToolSet,
   planModeToolSet,
-  timelineQueryToolSet,
-  // Domain
   fileEditingToolSet,
-  gitOperationsToolSet,
   shellExecutionToolSet,
+  // Eager
+  timelineQueryToolSet,
+  gitOperationsToolSet,
   elementEditingToolSet,
+  exportRenderToolSet,
+  pipelineControlToolSet,
+  // Lazy
   effectsTransitionsToolSet,
   animationKeyframesToolSet,
   colorGradingToolSet,
   audioEditingToolSet,
   trackManagementToolSet,
   shapeMaskToolSet,
-  exportRenderToolSet,
   aiGenerationToolSet,
-  pipelineControlToolSet,
   mediaQAToolSet,
 ];
 

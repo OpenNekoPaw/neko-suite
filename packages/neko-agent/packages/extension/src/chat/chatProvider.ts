@@ -41,8 +41,12 @@ import {
   SlashCommandHandler,
   ConversationMessageHandler,
 } from './handlers';
-import { createSkillService, builtinSkills } from '@neko/agent';
-import { getSkillFileService, type SkillScanResult } from '../services/SkillFileService';
+import { createSkillService, builtinSkills, SkillRegistry } from '@neko/agent';
+import {
+  getSkillFileService,
+  type SkillScanResult,
+  type LazySkillScanResult,
+} from '../services/SkillFileService';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.aiAssistant';
@@ -205,6 +209,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  /**
+   * Populate the skill registry using lazy loading — frontmatter only.
+   * Builtins are still eagerly registered (they are always resident).
+   * Personal/project skills are registered as lazy (content loaded on activation).
+   */
+  private _populateLazySkillRegistry(
+    skillService: ReturnType<typeof createSkillService>,
+    scanResult: LazySkillScanResult,
+  ): void {
+    skillService.registry.clear();
+
+    // Builtins: always eagerly registered (resident tier)
+    for (const skill of builtinSkills) {
+      skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
+    }
+
+    // Personal + project: lazy registration (frontmatter only)
+    // registerLazySkill is on the concrete SkillRegistry, not on ISkillRegistry interface
+    const registry = skillService.registry as SkillRegistry;
+    const allLazy = [...scanResult.personal.skills, ...scanResult.project.skills];
+    for (const lazySkill of allLazy) {
+      registry.registerLazySkill(lazySkill);
+    }
+
+    logger.info(`Skill registry populated (lazy): ${skillService.skillCount} skills`, {
+      builtin: builtinSkills.length,
+      personalLazy: scanResult.personal.skills.length,
+      projectLazy: scanResult.project.skills.length,
+    });
+  }
+
   private _initializeServices(): void {
     try {
       this._agentManager = getService(IAgentManagerId);
@@ -253,18 +288,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._platform,
         );
 
+        // Use lazy scanning: load frontmatter only, content deferred until activation
         skillFileService
-          .getSkills()
+          .scanSkillsLazy()
           .then((result) => {
-            this._populateSkillRegistry(skillService, result);
+            this._populateLazySkillRegistry(skillService, result);
           })
           .catch((err: unknown) => {
-            logger.warn('Failed to load initial skills into SkillService:', err);
+            logger.warn('Failed to lazy-load initial skills into SkillService:', err);
           });
+        // On file changes, rescan lazily and repopulate
         this._disposables.push(
-          skillFileService.onSkillsChanged((result) =>
-            this._populateSkillRegistry(skillService, result),
-          ),
+          skillFileService.onSkillsChanged(() => {
+            skillFileService
+              .scanSkillsLazy()
+              .then((result) => {
+                this._populateLazySkillRegistry(skillService, result);
+              })
+              .catch((err: unknown) => {
+                logger.warn('Failed to lazy-rescan skills:', err);
+              });
+          }),
         );
         this._skillHandler.setDependencies({
           skillService,
@@ -287,12 +331,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               return skill ? { name: skill.name, description: skill.description || '' } : null;
             },
             activateSkill: (name: string) => {
-              const skill = skillService.registry.getSkill(name);
-              if (!skill) return { success: false, message: `Skill "${name}" not found` };
               const activeId = this._conversations.getActiveId();
               if (!activeId) return { success: false, message: 'No active conversation' };
-              void skillService.apply(skill).then((injection) => {
-                this._agentManager?.applySkillInjection(activeId, injection, skill);
+
+              // ensureLoaded() handles lazy skills: loads content on first activation
+              void skillService.registry.ensureLoaded(name).then((skill) => {
+                if (!skill) {
+                  logger.warn(`Skill "${name}" not found during activation`);
+                  return;
+                }
+                return skillService.apply(skill).then((injection) => {
+                  this._agentManager?.applySkillInjection(activeId, injection, skill);
+                });
               });
               return {
                 success: true,

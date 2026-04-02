@@ -26,6 +26,7 @@ import {
   ToolInjectionManager,
   createCoreMetaTools,
   DEFAULT_INJECTION_CONFIG,
+  resolveToolGroupTier,
 } from '../tools';
 import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 
@@ -118,15 +119,25 @@ export function initializeSession(
     registerBuiltinToolGroups(toolGroupRegistry);
   }
 
-  // Step 3: Tool category registry
+  // Step 3: Tool category registry — categorize tools by loading tier
   const toolCategoryRegistry =
     (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
   if (!config.toolCategoryRegistry) {
-    const defaultActiveGroups = toolGroupRegistry.list().filter((g) => g.alwaysActive);
-    for (const group of defaultActiveGroups) {
-      for (const toolName of group.tools) {
-        toolCategoryRegistry.categorizeTool(toolName, 'system', 'dynamic');
+    for (const group of toolGroupRegistry.listEnabled()) {
+      const tier = resolveToolGroupTier(group);
+      if (tier === 'resident') {
+        // Resident tools: always in LLM context (CORE_TOOLS forces 'always' layer)
+        for (const toolName of group.tools) {
+          toolCategoryRegistry.categorizeTool(toolName, 'system', 'always');
+        }
+      } else if (tier === 'eager') {
+        // Eager tools: registered but not injected until ToolSet activation
+        for (const toolName of group.tools) {
+          toolCategoryRegistry.categorizeTool(toolName, 'system', 'dynamic');
+        }
       }
+      // Lazy tools: not registered in ToolCategoryRegistry at init.
+      // Metadata stays in ToolGroupRegistry for AI discovery via GetContext.
     }
   }
 

@@ -598,6 +598,22 @@ Phase C (P2, 体验打磨):
     ├─ QualityTier（draft/standard/premium）影响模型选择
     ├─ TaskTool 扩展支持创作类型 + quality_tier 参数
     └─ 9 单测通过
+
+Phase D (P1, 性能优化):
+└─ D.1 分级延迟加载（Tiered Lazy Loading）  ✅ COMPLETED 2026-04-02
+    ├─ LoadingTier 三级模型：resident（始终注入）/ eager（首次使用注入）/ lazy（显式激活）
+    ├─ tier-resolver.ts: resolveToolGroupTier() + resolveSkillTier() 纯函数
+    ├─ 17 个 ToolSet 标注 loadingTier: 4 resident / 5 eager / 8 lazy
+    ├─ ToolGroupRegistry.getDefaultTools() 核心杠杆：仅返回 resident 层工具
+    ├─ CORE_TOOLS 扩展至 15 项（全部 resident 工具）
+    ├─ SkillInjectionCoordinator Track D: 技能激活自动联动 ToolSet 激活/反激活
+    ├─ ToolInjectionManager.activateToolSetsForTools(): 按工具名反查并激活关联 ToolSet
+    ├─ agent-session-initializer Step 3: 按 tier 分类工具（resident→always, eager→dynamic, lazy→不注册）
+    ├─ SkillRegistry: registerLazySkill() + ensureLoaded() + isLazy() 延迟加载支持
+    ├─ SkillFileService.scanSkillsLazy(): frontmatter-only 扫描，content 延迟到激活时加载
+    ├─ chatProvider: 切换到 lazy 扫描 + activateSkill 自动 ensureLoaded()
+    ├─ Token 基线从 ~60K+ 降到 ~8K（仅 resident），按需增长
+    └─ 35 新增单测通过（tier-resolver 14 + registry-tier 9 + registry-lazy 12）
 ```
 
 ---
@@ -614,7 +630,8 @@ Claude Code:
 neko-agent:
 ├─ 注册表模式 — 四个 Registry 分离关注点
 ├─ 分层注入 — always + dynamic 双层 + token 预算
-├─ 三轨协调 — Prompt/Permission/Guard 原子操作
+├─ 分级加载 — resident/eager/lazy 三级 + 元数据常驻 + schema 按需注入
+├─ 四轨协调 — Prompt/Permission/Guard/ToolSet 原子操作
 └─ 契约优先 — 接口定义先行，实现后置
 
 核心差异：
