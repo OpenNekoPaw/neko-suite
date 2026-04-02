@@ -23,7 +23,8 @@ export type CreativeAgentType =
   | 'cinematographer'
   | 'composer'
   | 'editor'
-  | 'vfx-artist';
+  | 'vfx-artist'
+  | 'quality-checker';
 
 // =============================================================================
 // Quality Tier
@@ -191,6 +192,28 @@ Guidelines:
     ],
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
+  },
+
+  'quality-checker': {
+    description: 'Quality evaluation specialist for AI-generated media consistency',
+    systemPrompt: `You are a media quality evaluation specialist focusing on visual consistency and production quality.
+
+Your expertise:
+- Cross-scene style consistency analysis (color palette, lighting, art style)
+- Character appearance tracking and consistency verification
+- Technical quality assessment (artifacts, resolution, composition)
+- Actionable recommendations for quality improvement
+
+Guidelines:
+- Evaluate scenes in the context of the overall production
+- Flag style drift between adjacent scenes with specific descriptions
+- Track character appearances against reference images when available
+- Provide concrete, actionable recommendations for fixes
+- Use QualityCheck for individual scene evaluation
+- Use QualityCheckConsistency for cross-scene consistency analysis`,
+    allowedTools: ['QualityCheck', 'QualityCheckConsistency'],
+    defaultModelTier: 'balanced',
+    defaultMaxIterations: 10,
   },
 };
 

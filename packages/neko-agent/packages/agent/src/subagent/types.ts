@@ -49,7 +49,8 @@ export type SpecializedAgentType =
   | 'cinematographer' // Composition, lighting, camera work
   | 'composer' // Music creation, sound design
   | 'editor' // Timeline editing, transitions, pacing
-  | 'vfx-artist'; // Visual effects, compositing, color grading
+  | 'vfx-artist' // Visual effects, compositing, color grading
+  | 'quality-checker'; // Media quality evaluation, consistency analysis
 
 /**
  * Model tier for SubAgent

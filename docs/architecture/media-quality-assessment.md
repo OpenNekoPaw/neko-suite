@@ -17,11 +17,11 @@
 | 剧本 ↔ 素材符合度 | ✅ `sceneDialogue` + `globalStyle` 参数传入评估 prompt | `qualityCheckTools.ts` |
 | 视频质量评估 | ✅ VideoFrameEvaluator（多帧采样 + Vision LLM 评估，含 videoQuality 维度） | `qualityCheckTools.ts` — VideoFrameEvaluator |
 | 音频质量评估 | ✅ AudioEvaluator（Engine LUFS/TruePeak/静音 → 确定性阈值检测，零 LLM 成本） | `qualityCheckTools.ts` — AudioEvaluator |
-| 人物/物品/场景一致性 | ❌ 类型已定义，零实现 | `qa-types.ts` |
-| 风格一致性检测 | ❌ 类型已定义，零实现 | `qa-types.ts` |
+| 人物/物品/场景一致性 | ✅ ConsistencyEvaluator（角色一致性追踪 + LLM 参考对比） | `consistency-evaluator.ts` |
+| 风格一致性检测 | ✅ ConsistencyEvaluator（CLIP 快筛 + Vision LLM 精评双层） | `consistency-evaluator.ts` |
 | 视频帧级问题检测 | ✅ 3 种视频 category（jitter/tearing/stuttering）+ RemediationPlanner 映射 | `qa-types.ts` + `remediation-planner.ts` |
 | 长视频分段评估 | ❌ 无分片机制 | — |
-| 跨素材一致性 | ❌ 类型已定义，零实现 | `qa-types.ts` |
+| 跨素材一致性 | ✅ QualityCheckConsistency 工具 + qualityGate 管线阶段 | `consistencyCheckTools.ts` + `quality-gate.ts` |
 | SSIM/PSNR 对比 | ✅ 完整（图片+视频+音频 diff） | `neko-engine` Rust 层 |
 | CLIP 评分 | ✅ EngineClient.clipScore() | `neko-client` |
 | 响度分析 | ✅ ITU-R BS.1770-4 LUFS | `neko-engine` loudness.rs |
@@ -29,7 +29,9 @@
 | 音频技术指标类型 | ✅ `AudioTechnicalMetrics`（LUFS/TruePeak/LRA/静音率/削波检测） | `qa-types.ts` |
 | 媒体类型路由 | ✅ `detectMediaType()` 自动路由 image/video/audio 到对应 Evaluator | `qualityCheckTools.ts` |
 | 质量评估 Skill | ✅ `qualityAssessmentSkill` + `/quality-check` 斜杠命令 | `quality-assessment.ts` |
-| 质量评估 ToolSet | ✅ `mediaQAToolSet`（QualityCheck 工具 + 按需激活） | `tool-skills.ts` |
+| 质量评估 ToolSet | ✅ `mediaQAToolSet`（QualityCheck + QualityCheckConsistency + 按需激活） | `tool-skills.ts` |
+| quality-checker SubAgent | ✅ 专用质量评估 SubAgent 预设（QualityCheck + QualityCheckConsistency） | `creative-presets.ts` |
+| Pipeline qualityGate | ✅ 可选质量门禁（opt-in，batchGenerate 后、arrangeOnTimeline 前） | `quality-gate.ts` |
 
 ### 1.2 现有架构
 
@@ -56,6 +58,19 @@ AudioEvaluator (qualityCheckTools.ts) — 音频评估（零 LLM 成本）
 ├── evaluate(): 音频 → Engine LUFS/TruePeak/LRA/静音 → 确定性阈值 → MediaEvaluation
 ├── IAudioAnalyzer 接口: analyzeLoudness() + detectSilence()
 └── 音频不进入 retry 循环（技术问题通过 RemediationPlanner 确定性修复）
+
+ConsistencyEvaluator (consistency-evaluator.ts) — 跨场景一致性评估
+├── evaluate(): 多场景 → 代表图提取 → CLIP 快筛 → Vision LLM 精评 → ConsistencyReport
+│   ├── Layer 1: CLIP 快筛（IClipScorer 可选，drift < 15 → 跳过 LLM）
+│   └── Layer 2: Vision LLM 双图对比（driftScore + description + characterIssues）
+├── 角色一致性: 首次出场为参考 → 后续场景逐一对比 → CharacterAppearance[]
+├── 视频支持: IFrameExtractor 提取中间帧作为代表图
+└── QualityCheckConsistency Tool (consistencyCheckTools.ts) 封装为 Agent 可调用工具
+
+QualityGate Stage (quality-gate.ts) — 管线质量门禁（opt-in）
+├── 位置: batchGenerate 之后、arrangeOnTimeline 之前
+├── 默认禁用: stageParams.qualityGate.enabled = false 时 passthrough
+└── 启用时: 调用 ConsistencyEvaluator → ctx.qualityReport
 
 RemediationPlanner (remediation-planner.ts)
 ├── plan(): QualityIssue → RemediationAction（确定性映射，零 LLM）
@@ -97,8 +112,8 @@ QualityCheck Tool 返回:
 
 **剩余局限**：
 1. ~~**仅图片**~~ → ✅ Phase 2 完成视频（VideoFrameEvaluator）、Phase 3 完成音频（AudioEvaluator）
-2. **无跨场景上下文**：每个 scene 独立评估，不感知其他 scene 的风格/角色（Phase 4）
-3. **CLIP Score 快筛未集成**：`EngineClient.clipScore()` 需 3 参数注入，延后（Phase 1+）
+2. ~~**无跨场景上下文**~~ → ✅ Phase 4 完成跨场景一致性（ConsistencyEvaluator + QualityCheckConsistency）
+3. ~~**CLIP Score 快筛未集成**~~ → ✅ Phase 4 ConsistencyEvaluator Layer 1 集成 CLIP 快筛（IClipScorer 可选注入）
 4. **SSIM/PSNR 相邻帧指标待填充**：`VideoTechnicalMetrics` 中 `meanAdjacentSsim/minAdjacentSsim/meanAdjacentPsnr` 为 optional，待 Engine 扩展图片 diff 能力后接入
 
 ### 1.3 已有类型基础（qa-types.ts）
@@ -1033,100 +1048,83 @@ enableClipScreen: {
 
 ---
 
-#### Phase 4: 跨素材一致性 + 批量评估（P2）
+#### Phase 4: 跨素材一致性 + 批量评估（P2）✅ 已完成 2026-04-02
 
-**目标**：实现 `ConsistencyReport`（qa-types.ts 已定义），支持 Coordinator 批量评估
+**实现内容**：`ConsistencyReport` 完整实现，双层评估架构（CLIP 快筛 + Vision LLM 精评），角色一致性追踪，quality-checker SubAgent，Pipeline qualityGate
 
-##### 4a. ConsistencyEvaluator
+##### 4a. ConsistencyEvaluator（已实现）
 
-**新增文件**: `agent/src/validation/consistency-evaluator.ts`（agent 层）
+**文件**: `agent/src/validation/consistency-evaluator.ts`（~320 行）
 
-```typescript
-export class ConsistencyEvaluator implements IConsistencyEvaluator {
-  async evaluate(inputs: EvalInput[], context: ConsistencyContext): Promise<ConsistencyEvaluation> {
-    // Layer 1（快筛）: CLIP embedding 余弦相似度（EngineClient.clipScore 已有）
-    //   相邻场景 pair → CLIP 快筛 → driftScore
-    //   低于阈值的 pair 进入 Layer 2
-
-    // Layer 2（精评）: Vision LLM 成对比较（仅对 Layer 1 低分 pair）
-    //   传入两张图 + globalStyle → LLM 判断风格漂移具体方面
-
-    // 角色一致性: 第一次出现作为参考 → 后续场景 vs 参考比较
-    //   不一致 → RemediationAction { type: 'regenerate-ref', ipAdapterRef }
-  }
-}
+```
+ConsistencyEvaluator
+├── evaluate(inputs, context) → ConsistencyReport
+│   ├── Step 1: extractRepresentativeImages() — 图片读路径，视频提取中间帧
+│   ├── Step 2: clipFastScreen() — Layer 1 CLIP 快筛（IClipScorer 可选注入）
+│   │   └── 相邻对各自对 globalStyle 做 clipScore → drift = |scoreA - scoreB| * 50
+│   │   └── drift < CLIP_DRIFT_THRESHOLD(15) → 标记 Consistent，跳过 LLM
+│   ├── Step 3: llmPairwiseEval() — Layer 2 Vision LLM 精评（仅高 drift 对）
+│   │   └── 发两张图 + globalStyle + prompts → JSON { driftScore, description, characterIssues }
+│   ├── Step 4: evaluateCharacterConsistency() — 首次出场为参考，逐场景对比
+│   └── Step 5: 聚合 overallConsistency = 100 - mean(driftScores) + recommendations
+├── 接口: IClipScorer { score(imagePath, text) }
+│   └── EngineClient.clipScore() 预绑定 model 参数
+├── 接口: IFrameExtractor（复用 Phase 2 定义）
+└── 模型无关: createService() 工厂 → 任意 vision 模型
 ```
 
-##### 4b. QualityCheckConsistency tool
+##### 4b. QualityCheckConsistency tool（已实现）
 
-**新增文件**: `extension/src/tools/consistencyCheckTools.ts`
-
-独立 tool（不修改现有 QualityCheck），专门做跨场景一致性：
+**文件**: `extension/src/tools/consistencyCheckTools.ts`（~160 行）
 
 ```typescript
 {
   name: 'QualityCheckConsistency',
-  description: 'Check style and character consistency across multiple scenes',
   parameters: {
-    scenes: [...],           // 多场景 mediaPath + prompt
-    globalStyle: string,
-    characters: [{ name, description, referenceImagePath? }],
+    scenes: [{ sceneIndex, mediaPath, prompt }],  // required
+    globalStyle: string,                            // optional
+    characters: [{ name, description, referenceImagePath? }],  // optional
   },
+  // → { success: true, data: ConsistencyReport }
 }
 ```
 
-##### 4c. quality-checker SubAgent Preset
+##### 4c. quality-checker SubAgent Preset（已实现）
 
-**改动文件**: `agent/src/subagent/creative-presets.ts`（现 209 行）
+**文件**: `agent/src/subagent/creative-presets.ts` + `types.ts`
 
-新增 `quality-checker` preset（当前 5 种 creative preset 不含它）：
+- `SpecializedAgentType` 新增 `'quality-checker'`
+- `CreativeAgentType` 新增 `'quality-checker'`
+- CREATIVE_PRESETS 新增条目：allowedTools `['QualityCheck', 'QualityCheckConsistency']`，tier `'balanced'`，maxIterations `10`
 
-```typescript
-'quality-checker': {
-  systemPromptAddition: 'You are a media quality evaluation specialist...',
-  defaultModelTier: 'balanced',
-  maxIterations: 10,
-  allowedTools: ['QualityCheck', 'QualityCheckConsistency'],
-  toolSets: ['media-qa'],
-} satisfies SpecializedAgentPreset,
+##### 4d. Pipeline qualityGate（已实现，opt-in）
+
+**文件**: `agent/src/pipeline/stages/quality-gate.ts`（~85 行）
+
+```
+qualityGate stage
+├── gate: 'auto', type: 'linear'
+├── 默认禁用: stageParams.qualityGate.enabled 未设置时直接 passthrough
+├── 启用时: scenes + generatedPaths → ConsistencyEvaluator → ctx.qualityReport
+└── 位置: flowA/B/C/E/F 的 batchGenerate 与 arrangeOnTimeline 之间
 ```
 
-**改动文件**: `agent/src/subagent/types.ts`
-
-`SpecializedAgentType` union 新增 `'quality-checker'`
-
-##### 4d. Pipeline qualityGate（opt-in）
-
-**新增文件**: `agent/src/pipeline/stages/quality-gate.ts`
-
-```typescript
-export const qualityGateStage: IPipelineStage = {
-  name: 'qualityGate',
-  type: 'linear',
-  gate: 'confirm',  // 仅门控展示，不做判断
-  async execute(ctx: PipelineContext): Promise<PipelineContext> {
-    // 调用 QualityAssessmentService 评估所有 generatedPaths
-    // 结果写入 ctx.qualityReport
-    // Gate preview 展示报告，由用户决定 accept/regenerate
-    return ctx;
-  },
-};
-```
-
-**改动文件**: `agent/src/pipeline/pipeline-registry.ts`
-
-在 flowA/B/E/F 中 `batchGenerate` 和 `arrangeOnTimeline` 之间可选插入 `qualityGate`。通过 `stageParams.enableQualityGate` 控制（默认 false）。
-
-##### Phase 4 文件变更清单
+##### Phase 4 实际文件变更
 
 | 文件 | 操作 | 改动量 |
 |------|------|--------|
-| `agent/src/validation/consistency-evaluator.ts` | **新增** | ~150 行 |
-| `extension/src/tools/consistencyCheckTools.ts` | **新增** | ~100 行 |
-| `agent/src/subagent/creative-presets.ts` | 扩展 | +1 preset ~15 行 |
-| `agent/src/subagent/types.ts` | 扩展 | +1 类型 |
-| `agent/src/pipeline/stages/quality-gate.ts` | **新增** | ~60 行 |
-| `agent/src/pipeline/pipeline-registry.ts` | 扩展 | ~20 行 |
+| `agent/src/validation/consistency-evaluator.ts` | **新增** | ~320 行 |
+| `agent/src/validation/__tests__/consistency-evaluator.test.ts` | **新增** | ~250 行 (11 tests) |
+| `agent/src/validation/index.ts` | 扩展 | +8 行 |
+| `extension/src/tools/consistencyCheckTools.ts` | **新增** | ~160 行 |
+| `extension/src/tools/__tests__/consistencyCheckTools.test.ts` | **新增** | ~130 行 (5 tests) |
+| `agent/src/subagent/creative-presets.ts` | 扩展 | +22 行 |
+| `agent/src/subagent/types.ts` | 扩展 | +1 行 |
+| `agent/src/pipeline/stages/quality-gate.ts` | **新增** | ~85 行 |
+| `agent/src/pipeline/pipeline-registry.ts` | 扩展 | +6 行 |
+| `agent/src/pipeline/index.ts` | 扩展 | +3 行 |
+| `extension/src/pipeline/pipeline-bootstrap.ts` | 扩展 | +25 行 |
+| `agent/src/skill/builtins/tool-skills.ts` | 扩展 | +1 行 |
 
 ---
 
@@ -1135,7 +1133,7 @@ export const qualityGateStage: IPipelineStage = {
 **目标**：质量评估作为 Agent Skill，评估→修复完整自动化
 
 **已完成**：Skill 定义 + ToolSet 升级 + Slash Command
-**待完成**：QualityCheckConsistency 工具集成（依赖 Phase 4）。~~RemediationPlanner 视频 category 扩展~~ ✅ 已在 Phase 2 中完成。
+~~待完成~~：~~QualityCheckConsistency 工具集成（依赖 Phase 4）~~ ✅ Phase 4 已完成集成。~~RemediationPlanner 视频 category 扩展~~ ✅ 已在 Phase 2 中完成。
 
 ##### 5a. qualityAssessmentSkill ✅
 
@@ -1160,7 +1158,7 @@ export const qualityAssessmentSkill: Skill = {
 };
 ```
 
-Skill content 包含：评估→解读→修复→报告四步工作流、12 种 issue category 参考、修复工具映射表。
+Skill content 包含：评估→解读→修复→报告四步工作流、15 种 issue category 参考、修复工具映射表。
 
 注册: `builtinSkills[]` + `skill/index.ts` re-export。
 
@@ -1198,7 +1196,7 @@ Phase 1 已实现全部 12 种 `QualityIssueCategory` 的确定性映射：
 export const mediaQAToolSet: ToolGroup = {
   name: 'media-qa',
   description: '...（含音频评估能力说明）',
-  tools: ['QualityCheck'],  // Phase 4 完成后添加 QualityCheckConsistency
+  tools: ['QualityCheck', 'QualityCheckConsistency'],
   alwaysActive: false,
   dependencies: ['ai-generation'],  // 移除 pipeline-control（可独立使用）
   icon: '📊',
@@ -1236,10 +1234,11 @@ Phase 3 (P1) — ✅ 已完成 (2026-04-02)
   改动: qa-types.ts (+AudioTechnicalMetrics), pipeline/index.ts, qualityCheckTools.ts (+AudioEvaluator +detectMediaType)
   测试: qualityCheckTools.test.ts (+8 audio tests, 35 total)
 
-Phase 4 (P2) — 依赖 Phase 1 + 2
-  改动: creative-presets.ts, types.ts, pipeline-registry.ts
+Phase 4 (P2) — ✅ 已完成 (2026-04-02)
+  改动: creative-presets.ts, types.ts, pipeline-registry.ts, pipeline/index.ts,
+        validation/index.ts, pipeline-bootstrap.ts, tool-skills.ts
   新增: consistency-evaluator.ts, consistencyCheckTools.ts, quality-gate.ts
-  测试: consistency-evaluator.test.ts
+  测试: consistency-evaluator.test.ts (11 tests), consistencyCheckTools.test.ts (5 tests)
 
 Phase 5 (P2) — ✅ 已完成 (2026-04-02)
   已完成: quality-assessment.ts (Skill定义), index.ts/skill/index.ts (注册), tool-skills.ts (ToolSet升级)
@@ -1254,7 +1253,7 @@ Phase 1 ✅ (类型 + 图片评估 + 修复映射) — 已完成
   │
   ├─→ Phase 2 ✅ (视频评估 + 帧提取 + 视频 categories) — 已完成
   │     │
-  │     └─→ Phase 4 (跨素材一致性 + 批量评估) — 当前唯一阻塞项
+  │     └─→ Phase 4 ✅ (跨素材一致性 + 批量评估) — 已完成
   │
   ├─→ Phase 3 ✅ (音频评估) — 已完成
   │
@@ -1283,7 +1282,7 @@ Phase 1 ✅ (类型 + 图片评估 + 修复映射) — 已完成
 Phase 1 → ✅ 已完成 (2026-04-01)
 Phase 2 → ✅ 已完成 (2026-04-02)（VideoFrameEvaluator + VideoPart + 3 video categories + RemediationPlanner 映射）
 Phase 3 → ✅ 已完成 (2026-04-02)（AudioEvaluator + AudioTechnicalMetrics + IAudioAnalyzer）
-Phase 4 → Phase 1 (结构化类型) + Phase 2 (视频评估) — 当前唯一阻塞项
+Phase 4 → ✅ 已完成 (2026-04-02)（ConsistencyEvaluator + QualityCheckConsistency + qualityGate + quality-checker SubAgent）
 Phase 5 → ✅ 已完成 (2026-04-02)（Skill + ToolSet + quality-check slash command）
 ```
 

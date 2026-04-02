@@ -91,3 +91,13 @@ export type { ILengthValidator, LengthValidationOptions } from './length-validat
 // Remediation Planner
 export { RemediationPlanner, createRemediationPlanner } from './remediation-planner';
 export type { IRemediationPlanner } from './remediation-planner';
+
+// Consistency Evaluator
+export { ConsistencyEvaluator, createConsistencyEvaluator } from './consistency-evaluator';
+export type {
+  IClipScorer,
+  ConsistencyInput,
+  CharacterRef,
+  ConsistencyContext,
+  ConsistencyEvaluatorDeps,
+} from './consistency-evaluator';

@@ -17,14 +17,17 @@ import {
   createBatchGenerateStage,
   createGeneratePilotStage,
   createArrangeOnTimelineStage,
+  createQualityGateStage,
   type IPipelineRegistry,
   type PipelineContext,
   type FlowId,
   type PipelineHandle,
   type MediaGenerateOptions,
 } from '@neko/agent/pipeline';
+import { createConsistencyEvaluator } from '@neko/agent/validation';
 import { createPipelineTools } from '../tools/pipelineTools';
 import { createQualityCheckTools } from '../tools/qualityCheckTools';
+import { createConsistencyCheckTools } from '../tools/consistencyCheckTools';
 import { createRunReportTools } from '../tools/runReportTools';
 import {
   VSCodeFileReader,
@@ -124,6 +127,19 @@ export function bootstrapPipeline(
   registry.registerStage(createBatchGenerateStage({ mediaGenerator }));
   registry.registerStage(createArrangeOnTimelineStage({ timelineArranger }));
 
+  // Register quality gate stage (opt-in via stageParams.qualityGate.enabled)
+  registry.registerStage(
+    createQualityGateStage({
+      evaluateConsistency: async (inputs, globalStyle) => {
+        const evaluator = createConsistencyEvaluator({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
+          createService: () => platform.createService() as any,
+        });
+        return evaluator.evaluate(inputs, { globalStyle });
+      },
+    }),
+  );
+
   // Create the startPipeline function for pipeline tools
   const startPipeline = (
     flowId: FlowId,
@@ -143,6 +159,15 @@ export function bootstrapPipeline(
     mediaGenerator,
   });
   for (const tool of qaTools) {
+    toolRegistry.register(tool);
+  }
+
+  // Register consistency check tools (cross-scene evaluation)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
+  const consistencyTools = createConsistencyCheckTools({
+    createService: () => platform.createService() as any,
+  });
+  for (const tool of consistencyTools) {
     toolRegistry.register(tool);
   }
 

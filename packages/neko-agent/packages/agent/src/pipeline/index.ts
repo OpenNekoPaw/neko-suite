@@ -62,6 +62,9 @@ export type { ITimelineArranger, ArrangeOnTimelineStageDeps } from './stages/arr
 export { createGeneratePilotStage } from './stages/generate-pilot';
 export type { GeneratePilotStageDeps } from './stages/generate-pilot';
 
+export { createQualityGateStage } from './stages/quality-gate';
+export type { QualityGateStageDeps, QualityGateInput } from './stages/quality-gate';
+
 // Hook Registry
 export { PipelineHookRegistry, createPipelineHookRegistry } from './hook-registry';
 export type { HookHandler } from './hook-registry';
