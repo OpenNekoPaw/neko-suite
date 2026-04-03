@@ -30,6 +30,7 @@ import {
   createNekoCutVideoGenerationTools,
   createSkillProviderTools,
 } from './tools/extensionTools';
+import { createPuppetFaceTools } from './tools/puppetFaceTools';
 import {
   setCanvasSelection,
   clearCanvasSelection,
@@ -222,8 +223,12 @@ function registerExtensionTools(
   const skillTools = createSkillProviderTools();
   skillTools.forEach((tool) => toolRegistry.register(tool));
 
+  // Register Puppet Face tools (AI face parameter manipulation)
+  const puppetFaceTools = createPuppetFaceTools();
+  puppetFaceTools.forEach((tool) => toolRegistry.register(tool));
+
   getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length + cutVideoTools.length + skillTools.length} extension tools`,
+    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length + cutVideoTools.length + skillTools.length + puppetFaceTools.length} extension tools`,
   );
 }
 

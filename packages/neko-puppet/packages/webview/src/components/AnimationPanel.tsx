@@ -4,7 +4,7 @@
  * Shows available animation clips from the loaded Inochi2D puppet and provides
  * play/stop/seek controls. Connects to the engine backend via IInochi2DController.
  */
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { usePuppetStore } from '../stores/puppet-store';
 import { useTranslation } from '../i18n/I18nContext';
 import type { AnimationClipInfo } from '../animation/types';
@@ -16,9 +16,11 @@ interface AnimationPanelProps {
   onStop: () => void;
   /** Called when the user seeks via the time slider (timeMs) */
   onSeek: (timeMs: number) => void;
+  /** Called when switching clips during playback (crossfade blend) */
+  onCrossfade: (name: string, fadeDurationMs: number, loop: boolean) => void;
 }
 
-export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) {
+export function AnimationPanel({ onPlay, onStop, onSeek, onCrossfade }: AnimationPanelProps) {
   const { t } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const animations = usePuppetStore((s) => s.animations);
@@ -26,6 +28,8 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
   const playState = usePuppetStore((s) => s.playState);
   const streamConnected = usePuppetStore((s) => s.streamConnected);
   const animationTimeMs = usePuppetStore((s) => s.animationTimeMs);
+
+  const [fadeDurationMs, setFadeDurationMs] = useState(300);
 
   const isPlaying = playState === 'playing';
 
@@ -39,12 +43,16 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
   const handleClipClick = useCallback(
     (clip: AnimationClipInfo) => {
       if (isPlaying && currentAnimation === clip.name) {
+        // Clicking the active playing clip stops it
         onStop();
+      } else if (isPlaying && currentAnimation !== clip.name) {
+        // Switching to a different clip while playing — crossfade
+        onCrossfade(clip.name, fadeDurationMs, clip.loop_default);
       } else {
         onPlay(clip.name, clip.loop_default);
       }
     },
-    [isPlaying, currentAnimation, onPlay, onStop],
+    [isPlaying, currentAnimation, onPlay, onStop, onCrossfade, fadeDurationMs],
   );
 
   const handleSeek = useCallback(
@@ -119,6 +127,24 @@ export function AnimationPanel({ onPlay, onStop, onSeek }: AnimationPanelProps) 
             aria-label={t('puppet.animation.seek')}
             onChange={handleSeek}
           />
+
+          {/* Fade duration for crossfade */}
+          <div className="flex items-center gap-1">
+            <label htmlFor="fade-duration" className="text-[10px] opacity-60 whitespace-nowrap">
+              {t('puppet.animation.fadeDuration')}
+            </label>
+            <input
+              id="fade-duration"
+              type="number"
+              min={0}
+              max={5000}
+              step={50}
+              value={fadeDurationMs}
+              className="w-14 text-[10px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded px-1 py-0.5"
+              onChange={(e) => setFadeDurationMs(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            />
+            <span className="text-[10px] opacity-50">ms</span>
+          </div>
         </div>
       )}
     </div>

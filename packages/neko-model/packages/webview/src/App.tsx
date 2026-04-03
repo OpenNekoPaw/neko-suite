@@ -11,6 +11,7 @@ import { BoneExpressionPanel } from './components/bone-expression';
 import { CsgPanel } from './components/csg';
 import { TextEditorPanel } from './components/text-editor';
 import { ShapeCreatorPanel } from './components/shape-creator';
+import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { useModelStore } from './stores/modelStore';
 import type { AnimationClipInfo, ExtensionMessage } from './types';
 import type { AnimationClip } from 'three';
@@ -55,6 +56,8 @@ export function App(): React.JSX.Element {
   const toggleCsgPanel = useModelStore((s) => s.toggleCsgPanel);
   const toggleTextEditor = useModelStore((s) => s.toggleTextEditor);
   const toggleShapeCreator = useModelStore((s) => s.toggleShapeCreator);
+  const isKeyframeEditorOpen = useModelStore((s) => s.isKeyframeEditorOpen);
+  const toggleKeyframeEditor = useModelStore((s) => s.toggleKeyframeEditor);
 
   const setModelUrl = useModelStore((s) => s.setModelUrl);
   const selectNode = useModelStore((s) => s.selectNode);
@@ -116,6 +119,27 @@ export function App(): React.JSX.Element {
           break;
         case 'exportComplete':
           // Export GLB completed — no-op (extension shows save dialog)
+          break;
+        case 'keyframeTracks':
+          useModelStore.getState().setKeyframeTracks(message.tracks);
+          break;
+        case 'keyframeAdded':
+          // Acknowledge — request fresh tracks to stay in sync
+          {
+            const currentClip = useModelStore.getState().activeAnimation;
+            if (currentClip) {
+              vscode?.postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
+            }
+          }
+          break;
+        case 'keyframeRemoved':
+          // Acknowledge — request fresh tracks to stay in sync
+          {
+            const currentClip = useModelStore.getState().activeAnimation;
+            if (currentClip) {
+              vscode?.postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
+            }
+          }
           break;
         case 'projectSaved':
           // Project saved — no-op (extension shows save dialog)
@@ -253,6 +277,16 @@ export function App(): React.JSX.Element {
         >
           CSG
         </button>
+        <button
+          onClick={toggleKeyframeEditor}
+          className={`px-2 py-1 text-xs rounded transition-colors ${
+            isKeyframeEditorOpen
+              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
+          }`}
+        >
+          Keyframes
+        </button>
         <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
         <button
           onClick={() => vscode?.postMessage({ type: 'exportGlb' })}
@@ -334,6 +368,13 @@ export function App(): React.JSX.Element {
           />
         )}
       </div>
+
+      {/* Collapsible Keyframe Timeline (bottom panel) */}
+      {isKeyframeEditorOpen && (
+        <div className="h-48 border-t border-[var(--vscode-panel-border)] overflow-hidden">
+          <ModelKeyframeTimeline />
+        </div>
+      )}
     </div>
   );
 }

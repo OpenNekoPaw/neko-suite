@@ -119,6 +119,8 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 文档预览 | [docs/architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ 委托 Book Reader 或自建（pdfjs-dist/epub.js）；DOCX→docx-preview；XLSX→x-data-spreadsheet；PPTX→LibreOffice headless；priority: option |
 | 创作上下文压缩 | [docs/architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [docs/architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles + MetricsHooks 零侵入消融实验 |
+| Agent 媒体架构 | [docs/architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | GeneratedAsset 磁盘存储 + JSON 引用；Agent 自足性（无 canvas 可独立运行）；跨插件"发送到"按钮；预览组件分层（neko-preview 流媒体 / agent MediaPreview 轻量卡片） |
+| 角色编辑 | [docs/architecture/character-editing-analysis.md](./docs/architecture/character-editing-analysis.md) | 2D/3D 捏脸/动作/绘制/建模缺口分析；标准面部参数模板（32 参数）；共享 KeyframeTimeline；.nkm 项目格式 |
 
 ### Rust 引擎开发约束
 

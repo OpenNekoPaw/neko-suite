@@ -761,6 +761,217 @@ export class EngineClient {
     this.assertOk(resp, 'puppets:anim_seek');
   }
 
+  // ── Puppet Keyframe CRUD ──
+
+  /** Get keyframe tracks for a puppet animation clip */
+  async getPuppetKeyframeTracks(clipName: string): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'keyframe_tracks',
+      options: { clip_name: clipName },
+    });
+    this.assertOk(resp, 'puppets:keyframe_tracks');
+    return (resp.data ?? []) as unknown[];
+  }
+
+  /** Add a keyframe to a puppet parameter curve */
+  async addPuppetKeyframe(
+    clipName: string,
+    paramName: string,
+    timeMs: number,
+    value: number,
+  ): Promise<{ id: string }> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'keyframe_add',
+      options: { clip_name: clipName, param_name: paramName, time_ms: timeMs, value },
+    });
+    this.assertOk(resp, 'puppets:keyframe_add');
+    return resp.data as { id: string };
+  }
+
+  /** Remove a keyframe from a puppet parameter curve */
+  async removePuppetKeyframe(
+    clipName: string,
+    paramName: string,
+    keyframeId: string,
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'keyframe_remove',
+      options: { clip_name: clipName, param_name: paramName, keyframe_id: keyframeId },
+    });
+    this.assertOk(resp, 'puppets:keyframe_remove');
+  }
+
+  /** Update a puppet keyframe's time and/or value */
+  async updatePuppetKeyframe(
+    clipName: string,
+    paramName: string,
+    keyframeId: string,
+    updates: { timeMs?: number; value?: number; easing?: string },
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'keyframe_update',
+      options: {
+        clip_name: clipName,
+        param_name: paramName,
+        keyframe_id: keyframeId,
+        ...updates,
+      },
+    });
+    this.assertOk(resp, 'puppets:keyframe_update');
+  }
+
+  /** Create a new empty puppet animation clip */
+  async createPuppetClip(name: string, durationMs: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'clip_create',
+      options: { name, duration_ms: durationMs },
+    });
+    this.assertOk(resp, 'puppets:clip_create');
+  }
+
+  // ── Puppet Animation Blending ──
+
+  /** Crossfade to a new puppet animation clip */
+  async crossfadePuppetAnimation(
+    clipName: string,
+    fadeDurationMs: number,
+    loop = false,
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'anim_crossfade',
+      options: { clip_name: clipName, fade_duration_ms: fadeDurationMs, loop_anim: loop },
+    });
+    this.assertOk(resp, 'puppets:anim_crossfade');
+  }
+
+  /** Set blend weight for a puppet animation layer */
+  async setPuppetBlendWeight(clipName: string, weight: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'blend_weight',
+      options: { clip_name: clipName, weight },
+    });
+    this.assertOk(resp, 'puppets:blend_weight');
+  }
+
+  /** Get current puppet blend state */
+  async getPuppetBlendState(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'blend_state',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:blend_state');
+    return (resp.data ?? []) as unknown[];
+  }
+
+  // ── Scene Keyframe CRUD ──
+
+  /** Get keyframe tracks for a scene animation clip */
+  async getSceneKeyframeTracks(clipName: string): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'keyframe_tracks',
+      options: { clip_name: clipName },
+    });
+    this.assertOk(resp, 'scenes:keyframe_tracks');
+    return (resp.data ?? []) as unknown[];
+  }
+
+  /** Add a keyframe to a scene animation channel */
+  async addSceneKeyframe(
+    clipName: string,
+    nodeId: string,
+    property: string,
+    timestamp: number,
+    values: number[],
+  ): Promise<{ id: string }> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'keyframe_add',
+      options: { clip_name: clipName, node_id: nodeId, property, timestamp, values },
+    });
+    this.assertOk(resp, 'scenes:keyframe_add');
+    return resp.data as { id: string };
+  }
+
+  /** Remove a keyframe from a scene animation channel */
+  async removeSceneKeyframe(clipName: string, keyframeId: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'keyframe_remove',
+      options: { clip_name: clipName, keyframe_id: keyframeId },
+    });
+    this.assertOk(resp, 'scenes:keyframe_remove');
+  }
+
+  /** Update a scene keyframe's timestamp and/or values */
+  async updateSceneKeyframe(
+    clipName: string,
+    keyframeId: string,
+    updates: { timestamp?: number; values?: number[]; easing?: string },
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'keyframe_update',
+      options: { clip_name: clipName, keyframe_id: keyframeId, ...updates },
+    });
+    this.assertOk(resp, 'scenes:keyframe_update');
+  }
+
+  /** Create a new empty scene animation clip */
+  async createSceneClip(name: string, duration: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'clip_create',
+      options: { name, duration },
+    });
+    this.assertOk(resp, 'scenes:clip_create');
+  }
+
+  // ── Scene Animation Blending ──
+
+  /** Crossfade to a new scene animation clip */
+  async crossfadeSceneAnimation(
+    clipName: string,
+    fadeDuration: number,
+    loop = false,
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'anim_crossfade',
+      options: { clip_name: clipName, fade_duration: fadeDuration, loop_anim: loop },
+    });
+    this.assertOk(resp, 'scenes:anim_crossfade');
+  }
+
+  /** Set blend weight for a scene animation layer */
+  async setSceneBlendWeight(clipName: string, weight: number): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'blend_weight',
+      options: { clip_name: clipName, weight },
+    });
+    this.assertOk(resp, 'scenes:blend_weight');
+  }
+
+  /** Get current scene blend state */
+  async getSceneBlendState(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'blend_state',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:blend_state');
+    return (resp.data ?? []) as unknown[];
+  }
+
   /**
    * Open a WebSocket connection to the puppet delta stream.
    * The server pushes PuppetDelta at ~60fps while the connection is active.

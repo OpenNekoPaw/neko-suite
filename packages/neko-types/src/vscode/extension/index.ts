@@ -20,3 +20,6 @@ export { VSCodeErrorHandler } from './error-reporter';
 
 // i18n bridge (locale detection + webview injection)
 export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';
+
+// Webview asset utilities (GeneratedAsset → webviewUri conversion)
+export { toWebviewAsset } from './webview-asset';

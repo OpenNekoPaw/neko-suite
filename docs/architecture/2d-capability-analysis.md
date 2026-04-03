@@ -1,8 +1,9 @@
 # 2D 创作能力架构分析
 
-> 日期：2026-03-09（更新：2026-03-28）
+> 日期：2026-03-09（更新：2026-04-03）
 > 状态：S.1 ✅ 完成 | S.2 ✅ 完成 | S.3 ✅ 完成（滤镜 ✅ 像素网格 ✅ 大气效果 ✅ 场景模板 ✅ Vector 拖拽预览 ✅ 序列帧播放器 ✅）| S.4 P1 ✅（sketch.generate，2026-03-28）
 > 范围：neko-sketch / neko-cut / neko-canvas / neko-agent
+> 关联：[角色编辑综合分析](./character-editing-analysis.md) | [3D 能力分析](./3d-capability-analysis.md)
 
 ---
 
@@ -19,6 +20,8 @@
 9. [包架构设计](#9-包架构设计)
 10. [实施路线图](#10-实施路线图)
 11. [混合策略：内置轻量创作 + MCP 桥接专业软件](#11-混合策略内置轻量创作--mcp-桥接专业软件)
+    - [11.5 2D 角色编辑能力缺口](#115-2d-角色编辑能力缺口2026-04-03-分析)
+12. [分镜系统架构](#12-分镜系统架构storyboard-system)
 
 ---
 
@@ -765,6 +768,29 @@ neko-sketch 在 AI 视频工作流中的核心价值：
 | **风格参考** | 手绘风格样板 → 风格迁移 | 统一视频风格 |
 | **分镜草图** | 快速草图 → 批量 AI 视频生成 | 加速分镜到视频 |
 | **后期修正** | AI 视频帧截取 → 手动修正 → 重新生成 | 修复 AI 瑕疵 |
+
+### 11.5 2D 角色编辑能力缺口（2026-04-03 分析）
+
+> 详细分析见 [角色编辑综合分析](./character-editing-analysis.md)
+
+**捏脸**：✅ P1 TS 侧完成。标准面部参数模板已定义（32 参数 / 7 分类），`FaceParameterSection` 分组 UI 已集成到 `ParameterPanel`。AI 捏脸 MCP Tools 已实现（PuppetGenerateParams / PuppetFromImage / PuppetAdjust）。受限于 INP 模型预埋参数——模型需按 [制作指南](../guides/inochi2d-face-parameter-guide.md) 预埋全部参数才能完整捏脸。
+
+**动作编辑**：⚠️ TS 侧完成，Rust 引擎待实现。共享 `KeyframeTimeline` 组件 + `PuppetKeyframeTimeline` 适配器已就绪，EngineClient 关键帧 CRUD + crossfade/blend API 已定义。`AnimationPanel` 已支持 crossfade 切换 + fade duration 滑块。**Rust 引擎 action handlers 待实现**（native-puppet keyframe CRUD + AnimationBlendState + animation_blend_tick 系统）。
+
+**绘制集成**：neko-sketch 画板独立完整（7 笔刷 + 压感 + 图层），但未与 puppet 打通——无法直接为 Inochi2D 部件绘制贴图并替换。
+
+**Puppet 制作**：骨骼绑定、mesh 划分、deform 区域完全缺失，推荐 MCP 桥接 Inochi2D Creator。
+
+| 缺口 | 优先级 | 状态 | 推荐方案 |
+|------|--------|------|----------|
+| 标准面部参数模板 | P1 | ✅ 完成 | 32 参数 / 7 分类，`puppet-face-params.ts` + [制作指南](../guides/inochi2d-face-parameter-guide.md) |
+| 2D AI 捏脸 MCP Tools | P1 | ✅ 完成 | `puppetFaceTools.ts`（PuppetGenerateParams / PuppetFromImage / PuppetAdjust） |
+| 参数关键帧编辑器 | P1 | ✅ TS完成 | 共享 `KeyframeTimeline` + `PuppetKeyframeTimeline` 适配器。**Rust 引擎待实现** |
+| 动画混合/过渡 | P1 | ✅ TS完成 | `AnimationPanel` crossfade UI + EngineClient blend API。**Rust blend system 待实现** |
+| Puppet 贴图绘制集成 | P2 | ❌ | neko-sketch → PNG → INP 纹理替换 |
+| 动画录制 | P2 | ❌ | 从手动参数操作录制关键帧 |
+| Inochi2D Creator MCP | P3 | ❌ | PSD → INP 自动转换桥接 |
+| sketch → puppet 导出 | P3 | ❌ | 图层 → INP 部件自动映射 |
 
 ---
 

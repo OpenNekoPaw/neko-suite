@@ -154,6 +154,15 @@ export * from './sketch';
 // Puppet types (.nkp project format)
 export * from './puppet';
 
+// Puppet face parameter template (standard 32-param face model)
+export * from './puppet-face-params';
+
+// Keyframe editor types (shared mini-timeline for puppet/model editors)
+export * from './keyframe-editor';
+
+// 3D Model project types (.nkm project format)
+export * from './model-project';
+
 // Audio project types (.nka file format)
 export * from './audioProject';
 
@@ -174,3 +183,6 @@ export * from './agent-context';
 
 // Loading tier types (tiered lazy loading for tools, skills, commands)
 export * from './loading-tier';
+
+// Generated asset types (cross-plugin asset reference schema, ADR-4)
+export * from './generated-asset';

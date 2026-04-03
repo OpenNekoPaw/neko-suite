@@ -13,6 +13,9 @@ export const zhCN: MessageBundle = {
   'puppet.animation.disablePhysicsSim': '禁用物理模拟',
   'puppet.animation.enablePhysicsSim': '启用物理模拟',
 
+  // Crossfade
+  'puppet.animation.fadeDuration': '渐变',
+
   // Parameter panel
   'puppet.panel.parameters': '参数',
   'puppet.parameter.resetDefault': '重置为默认值',

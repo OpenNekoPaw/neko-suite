@@ -14,6 +14,8 @@ export {
   type Tool,
 } from './extensionTools';
 
+export { createPuppetFaceTools } from './puppetFaceTools';
+
 export {
   createPipelineTools,
   getActivePipeline,

@@ -13,6 +13,9 @@ export const en: MessageBundle = {
   'puppet.animation.disablePhysicsSim': 'Disable physics simulation',
   'puppet.animation.enablePhysicsSim': 'Enable physics simulation',
 
+  // Crossfade
+  'puppet.animation.fadeDuration': 'Fade',
+
   // Parameter panel
   'puppet.panel.parameters': 'Parameters',
   'puppet.parameter.resetDefault': 'Reset to default',

@@ -468,6 +468,33 @@ export interface NekoSketchAPI {
 }
 
 // =============================================================================
+// NekoPuppet API
+// =============================================================================
+
+/**
+ * NekoPuppet Extension API
+ * Exported by neko-puppet extension for programmatic face parameter access.
+ *
+ * The standard face parameters are defined in puppet-face-params.ts (32 params).
+ * Values are keyed by the stable `PuppetFaceParameter.id` field.
+ */
+export interface NekoPuppetAPI {
+  /**
+   * Get the current face parameter values for the active puppet model.
+   * Returns a Record keyed by parameter id (e.g. "faceWidth", "eyeOpenL") with numeric values.
+   * Returns an empty record when no puppet editor is open.
+   */
+  getCurrentFaceParams(): Record<string, number>;
+
+  /**
+   * Set one or more face parameters on the active puppet model.
+   * Keys must be valid PuppetFaceParameter ids. Values are clamped to each parameter's [min, max].
+   * Silently no-ops when no puppet editor is open.
+   */
+  setFaceParams(params: Record<string, number>): Promise<void>;
+}
+
+// =============================================================================
 // Extension Discovery Constants
 // =============================================================================
 
@@ -480,6 +507,7 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_AGENT: 'neko.nekoagent',
   NEKO_STORY: 'neko.neko-story',
   NEKO_SKETCH: 'neko.neko-sketch',
+  NEKO_PUPPET: 'neko.neko-puppet',
   NEKO_AUTH: 'neko.neko-auth',
 } as const;
 

@@ -11,5 +11,7 @@ export interface NkpProjectData {
   name: string;
   puppet: { src: string | null };
   parameters: Record<string, number>;
+  /** Standard face parameter values (subset matching PUPPET_FACE_PARAMETERS) */
+  faceParameters?: Record<string, number>;
   viewport: { zoom: number };
 }

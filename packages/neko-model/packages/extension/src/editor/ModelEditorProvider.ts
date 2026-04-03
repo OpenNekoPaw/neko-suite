@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { ModelDocument } from './ModelDocument';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
 
@@ -324,6 +325,112 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             success: false,
             error: err instanceof Error ? err.message : String(err),
           });
+        }
+        break;
+      }
+
+      // ── Keyframe CRUD ──
+
+      case 'requestKeyframeTracks': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const tracks = await client.getSceneKeyframeTracks(message.clipName as string);
+          webviewPanel.webview.postMessage({ type: 'keyframeTracks', tracks });
+        } catch (err) {
+          this.logError('requestKeyframeTracks', err);
+        }
+        break;
+      }
+
+      case 'addKeyframe': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const result = await client.addSceneKeyframe(
+            message.clipName as string,
+            message.nodeId as string,
+            message.property as string,
+            message.timestamp as number,
+            message.values as number[],
+          );
+          webviewPanel.webview.postMessage({
+            type: 'keyframeAdded',
+            trackProperty: `${message.nodeId as string}.${message.property as string}`,
+            keyframeId: result.id,
+          });
+        } catch (err) {
+          this.logError('addKeyframe', err);
+        }
+        break;
+      }
+
+      case 'removeKeyframe': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          await client.removeSceneKeyframe(
+            message.clipName as string,
+            message.keyframeId as string,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'keyframeRemoved',
+            trackProperty: '',
+            keyframeId: message.keyframeId as string,
+          });
+        } catch (err) {
+          this.logError('removeKeyframe', err);
+        }
+        break;
+      }
+
+      case 'updateKeyframe': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          await client.updateSceneKeyframe(
+            message.clipName as string,
+            message.keyframeId as string,
+            {
+              timestamp: message.timestamp as number | undefined,
+              values: message.values as number[] | undefined,
+              easing: message.easing as string | undefined,
+            },
+          );
+        } catch (err) {
+          this.logError('updateKeyframe', err);
+        }
+        break;
+      }
+
+      case 'createClip': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          await client.createSceneClip(message.name as string, message.duration as number);
+        } catch (err) {
+          this.logError('createClip', err);
+        }
+        break;
+      }
+
+      case 'crossfadeAnimation': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          await client.crossfadeSceneAnimation(
+            message.clipName as string,
+            message.fadeDuration as number,
+            (message.loop as boolean | undefined) ?? false,
+          );
+        } catch (err) {
+          this.logError('crossfadeAnimation', err);
         }
         break;
       }

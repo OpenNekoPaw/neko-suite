@@ -1,3 +1,5 @@
+import type { EditorKeyframeTrack } from '@neko/shared';
+
 /** Scene node snapshot from the backend */
 export interface SceneNodeSnapshot {
   id: string;
@@ -54,7 +56,10 @@ export type ExtensionMessage =
   | { type: 'latency:response'; timestamp: number }
   | { type: 'exportComplete'; success: boolean; filePath?: string; error?: string }
   | { type: 'projectSaved'; success: boolean; filePath?: string; error?: string }
-  | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown };
+  | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown }
+  | { type: 'keyframeTracks'; tracks: EditorKeyframeTrack[] }
+  | { type: 'keyframeAdded'; trackProperty: string; keyframeId: string }
+  | { type: 'keyframeRemoved'; trackProperty: string; keyframeId: string };
 
 /** Messages from Webview to Extension Host */
 export type WebviewMessage =
@@ -85,4 +90,24 @@ export type WebviewMessage =
       rotation: [number, number, number, number];
     }
   | { type: 'exportGlb' }
-  | { type: 'saveProject'; editorState: unknown };
+  | { type: 'saveProject'; editorState: unknown }
+  | {
+      type: 'addKeyframe';
+      clipName: string;
+      nodeId: string;
+      property: string;
+      timestamp: number;
+      values: number[];
+    }
+  | { type: 'removeKeyframe'; clipName: string; keyframeId: string }
+  | {
+      type: 'updateKeyframe';
+      clipName: string;
+      keyframeId: string;
+      timestamp?: number;
+      values?: number[];
+      easing?: string;
+    }
+  | { type: 'createClip'; name: string; duration: number }
+  | { type: 'requestKeyframeTracks'; clipName: string }
+  | { type: 'crossfadeAnimation'; clipName: string; fadeDuration: number; loop?: boolean };

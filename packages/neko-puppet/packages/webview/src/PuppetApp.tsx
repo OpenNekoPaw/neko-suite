@@ -10,6 +10,7 @@ import { usePuppetStore } from './stores/puppet-store';
 import { AnimationPanel } from './components/AnimationPanel';
 import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
+import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { Inochi2DController } from './animation';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
@@ -79,9 +80,11 @@ function PuppetImportUI() {
 
 export function PuppetApp() {
   const controllerRef = useRef<Inochi2DController | null>(null);
-  const { onPlay, onStop, onSeek } = usePuppetPlayback(controllerRef.current);
+  const { onPlay, onStop, onSeek, onCrossfade } = usePuppetPlayback(controllerRef.current);
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const noPuppetSource = usePuppetStore((s) => s.noPuppetSource);
+  const isKeyframeEditorOpen = usePuppetStore((s) => s.isKeyframeEditorOpen);
+  const toggleKeyframeEditor = usePuppetStore((s) => s.toggleKeyframeEditor);
 
   /** Pending parameter overrides received before puppet loads */
   const pendingStateRef = useRef<Record<string, number> | null>(null);
@@ -222,11 +225,41 @@ export function PuppetApp() {
               <>
                 <PuppetNodeTree />
                 <ParameterPanel controller={controllerRef.current} />
-                <AnimationPanel onPlay={onPlay} onStop={onStop} onSeek={onSeek} />
+                <AnimationPanel
+                  onPlay={onPlay}
+                  onStop={onStop}
+                  onSeek={onSeek}
+                  onCrossfade={onCrossfade}
+                />
               </>
             )}
           </div>
         </div>
+
+        {/* Bottom keyframe editor (collapsible) */}
+        {puppetLoaded && (
+          <div className="flex flex-col border-t border-[var(--sketch-border)]">
+            <button
+              type="button"
+              className="flex items-center gap-1 px-2 py-1 text-xs hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer"
+              onClick={toggleKeyframeEditor}
+              aria-expanded={isKeyframeEditorOpen}
+              aria-label={
+                isKeyframeEditorOpen ? 'Collapse keyframe editor' : 'Expand keyframe editor'
+              }
+            >
+              <span className="w-3 text-center" aria-hidden>
+                {isKeyframeEditorOpen ? '▾' : '▸'}
+              </span>
+              <span>Keyframes</span>
+            </button>
+            {isKeyframeEditorOpen && (
+              <div style={{ height: 180 }}>
+                <PuppetKeyframeTimeline controller={controllerRef.current} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </I18nProvider>
   );

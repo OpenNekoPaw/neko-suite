@@ -14,6 +14,7 @@ export interface PuppetPlaybackCallbacks {
   onPlay: (name: string, loop: boolean) => void;
   onStop: () => void;
   onSeek: (timeMs: number) => void;
+  onCrossfade: (name: string, fadeDurationMs: number, loop: boolean) => void;
 }
 
 /**
@@ -94,5 +95,42 @@ export function usePuppetPlayback(controller: IInochi2DController | null): Puppe
     void ctrl.seekAnimation(timeMs);
   }, []);
 
-  return { onPlay, onStop, onSeek };
+  const onCrossfade = useCallback((name: string, fadeDurationMs: number, loop: boolean) => {
+    const ctrl = controllerRef.current;
+    if (!ctrl) return;
+
+    const store = usePuppetStore.getState();
+
+    // 1. Send crossfade command via HTTP
+    void ctrl.crossfadeTo(name, fadeDurationMs, loop);
+
+    // 2. Update store state
+    store.setCurrentAnimation(name);
+    store.setPlayState('playing');
+
+    // 3. Ensure preview stream is connected for continuous mesh updates
+    if (!ctrl.isStreaming()) {
+      ctrl.startPreviewStream(
+        (delta) => {
+          const s = usePuppetStore.getState();
+          s.setDeformedMeshes(delta.deformed_meshes);
+
+          if (delta.animation_time_ms != null) {
+            s.setAnimationTimeMs(delta.animation_time_ms);
+          }
+
+          if (delta.animation_playing === false) {
+            s.setPlayState('idle');
+            ctrl.stopPreviewStream();
+            s.setStreamConnected(false);
+          }
+        },
+        (connected) => {
+          usePuppetStore.getState().setStreamConnected(connected);
+        },
+      );
+    }
+  }, []);
+
+  return { onPlay, onStop, onSeek, onCrossfade };
 }

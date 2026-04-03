@@ -6,6 +6,7 @@
 
 import { create } from 'zustand';
 import type { SceneNodeSnapshot, AnimationClipInfo, PlaybackState, TransformMode } from '../types';
+import type { EditorKeyframeTrack } from '@neko/shared';
 
 export interface ModelState {
   // Scene
@@ -42,6 +43,12 @@ export interface ModelState {
   isShapeCreatorOpen: boolean;
   csgOperandA: string | null;
   csgOperandB: string | null;
+
+  // Keyframe Editor
+  keyframeTracks: EditorKeyframeTrack[];
+  selectedKeyframeIds: Set<string>;
+  isKeyframeEditorOpen: boolean;
+  currentTimeMs: number;
 
   // Actions — Scene
   setSceneNodes: (nodes: SceneNodeSnapshot[]) => void;
@@ -90,6 +97,13 @@ export interface ModelState {
   toggleShapeCreator: () => void;
   setCsgOperand: (slot: 'A' | 'B', nodeId: string | null) => void;
 
+  // Actions — Keyframe Editor
+  setKeyframeTracks: (tracks: EditorKeyframeTrack[]) => void;
+  selectKeyframe: (id: string, multi?: boolean) => void;
+  clearKeyframeSelection: () => void;
+  toggleKeyframeEditor: () => void;
+  setCurrentTimeMs: (timeMs: number) => void;
+
   // Actions — Project
   getEditorState: () => Record<string, unknown>;
   restoreEditorState: (state: Record<string, unknown>) => void;
@@ -116,6 +130,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
   isShapeCreatorOpen: false,
   csgOperandA: null,
   csgOperandB: null,
+  keyframeTracks: [],
+  selectedKeyframeIds: new Set<string>(),
+  isKeyframeEditorOpen: false,
+  currentTimeMs: 0,
 
   // Scene actions
   setSceneNodes: (nodes) => set({ sceneNodes: nodes }),
@@ -191,6 +209,27 @@ export const useModelStore = create<ModelState>((set, get) => ({
   setCsgOperand: (slot, nodeId) =>
     set(slot === 'A' ? { csgOperandA: nodeId } : { csgOperandB: nodeId }),
 
+  // Keyframe Editor actions
+  setKeyframeTracks: (tracks) => set({ keyframeTracks: tracks }),
+
+  selectKeyframe: (id, multi) =>
+    set((state) => {
+      const next = new Set(multi ? state.selectedKeyframeIds : []);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return { selectedKeyframeIds: next };
+    }),
+
+  clearKeyframeSelection: () => set({ selectedKeyframeIds: new Set<string>() }),
+
+  toggleKeyframeEditor: () =>
+    set((state) => ({ isKeyframeEditorOpen: !state.isKeyframeEditorOpen })),
+
+  setCurrentTimeMs: (timeMs) => set({ currentTimeMs: timeMs }),
+
   // Project actions
   getEditorState: () => {
     const s = get();
@@ -202,6 +241,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       isCsgPanelOpen: s.isCsgPanelOpen,
       isTextEditorOpen: s.isTextEditorOpen,
       isShapeCreatorOpen: s.isShapeCreatorOpen,
+      faceParams: s.faceParams,
+      keyframeTracks: s.keyframeTracks,
+      currentTimeMs: s.currentTimeMs,
+      isKeyframeEditorOpen: s.isKeyframeEditorOpen,
     };
   },
 
@@ -214,5 +257,9 @@ export const useModelStore = create<ModelState>((set, get) => ({
       isCsgPanelOpen: (state['isCsgPanelOpen'] as boolean) ?? false,
       isTextEditorOpen: (state['isTextEditorOpen'] as boolean) ?? false,
       isShapeCreatorOpen: (state['isShapeCreatorOpen'] as boolean) ?? false,
+      faceParams: (state['faceParams'] as Record<string, number>) ?? {},
+      keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
+      currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
+      isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
     }),
 }));

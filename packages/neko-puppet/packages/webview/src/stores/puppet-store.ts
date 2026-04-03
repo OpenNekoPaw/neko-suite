@@ -11,6 +11,7 @@ import type {
   ParameterInfo,
   PuppetSnapshot,
 } from '../animation/types';
+import type { EditorKeyframeTrack } from '@neko/shared';
 
 export type AnimationPlayState = 'idle' | 'playing' | 'paused';
 
@@ -36,6 +37,14 @@ export interface PuppetStore {
   /** Current animation elapsed time in ms (from stream delta) */
   animationTimeMs: number;
 
+  // ── Keyframe editor state ────────────────────────────────────────────────
+  /** Keyframe tracks for the current animation clip */
+  keyframeTracks: EditorKeyframeTrack[];
+  /** Currently selected keyframe IDs in the mini-timeline */
+  selectedKeyframeIds: Set<string>;
+  /** Whether the bottom keyframe editor panel is open */
+  isKeyframeEditorOpen: boolean;
+
   // ── Actions ───────────────────────────────────────────────────────────────
   setPuppetLoaded: (loaded: boolean) => void;
   setPuppetSnapshot: (snapshot: PuppetSnapshot | null) => void;
@@ -50,6 +59,10 @@ export interface PuppetStore {
   setPlayState: (state: AnimationPlayState) => void;
   setStreamConnected: (connected: boolean) => void;
   setAnimationTimeMs: (timeMs: number) => void;
+
+  setKeyframeTracks: (tracks: EditorKeyframeTrack[]) => void;
+  setSelectedKeyframeIds: (ids: Set<string>) => void;
+  toggleKeyframeEditor: () => void;
 
   resetAnimation: () => void;
 }
@@ -69,6 +82,11 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   playState: 'idle',
   streamConnected: false,
   animationTimeMs: 0,
+
+  // ── Keyframe editor state ────────────────────────────────────────────────
+  keyframeTracks: [],
+  selectedKeyframeIds: new Set<string>(),
+  isKeyframeEditorOpen: false,
 
   // ── Actions ───────────────────────────────────────────────────────────────
   setPuppetLoaded: (loaded) => set({ puppetLoaded: loaded }),
@@ -92,6 +110,11 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   setStreamConnected: (connected) => set({ streamConnected: connected }),
   setAnimationTimeMs: (timeMs) => set({ animationTimeMs: timeMs }),
 
+  setKeyframeTracks: (tracks) => set({ keyframeTracks: tracks }),
+  setSelectedKeyframeIds: (ids) => set({ selectedKeyframeIds: ids }),
+  toggleKeyframeEditor: () =>
+    set((state) => ({ isKeyframeEditorOpen: !state.isKeyframeEditorOpen })),
+
   resetAnimation: () =>
     set({
       puppetLoaded: false,
@@ -104,5 +127,8 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
       playState: 'idle',
       streamConnected: false,
       animationTimeMs: 0,
+      keyframeTracks: [],
+      selectedKeyframeIds: new Set<string>(),
+      isKeyframeEditorOpen: false,
     }),
 }));

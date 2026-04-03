@@ -12,6 +12,7 @@
  */
 
 import type { EngineClient } from '@neko/neko-client';
+import type { EditorKeyframeTrack, ParameterCurveInfo, EasingType } from '@neko/shared';
 import type {
   AnimationClipInfo,
   DeformedMesh,
@@ -81,6 +82,31 @@ export interface IInochi2DController {
 
   /** Whether the preview stream is currently active */
   isStreaming(): boolean;
+
+  // ── Keyframe CRUD ──────────────────────────────────────────────────────────
+
+  /** Get keyframe tracks for a named animation clip */
+  getKeyframeTracks(clipName: string): Promise<EditorKeyframeTrack[]>;
+
+  /** Add a keyframe to a parameter curve; returns the new keyframe ID */
+  addKeyframe(clipName: string, paramName: string, timeMs: number, value: number): Promise<string>;
+
+  /** Remove a keyframe from a parameter curve */
+  removeKeyframe(clipName: string, paramName: string, keyframeId: string): Promise<void>;
+
+  /** Update a keyframe's time, value, or easing */
+  updateKeyframe(
+    clipName: string,
+    paramName: string,
+    keyframeId: string,
+    updates: { timeMs?: number; value?: number; easing?: EasingType },
+  ): Promise<void>;
+
+  /** Create a new empty animation clip */
+  createClip(name: string, durationMs: number): Promise<void>;
+
+  /** Crossfade from the current animation to another clip */
+  crossfadeTo(clipName: string, fadeDurationMs: number, loop?: boolean): Promise<void>;
 }
 
 /** Concrete implementation using EngineClient HTTP dispatch */
@@ -191,6 +217,61 @@ export class Inochi2DController implements IInochi2DController {
 
   isStreaming(): boolean {
     return this.previewActive && this.activeStream?.readyState === WebSocket.OPEN;
+  }
+
+  // ── Keyframe CRUD ────────────────────────────────────────────────────────
+
+  async getKeyframeTracks(clipName: string): Promise<EditorKeyframeTrack[]> {
+    const raw = await this.engine.getPuppetKeyframeTracks(clipName);
+    const curves = raw as unknown as ParameterCurveInfo[];
+    return curves.map((c) => ({
+      property: c.param_name,
+      label: c.param_name,
+      min: 0,
+      max: 1,
+      defaultValue: 0,
+      keyframes: c.keyframes.map((kf) => ({
+        id: kf.id,
+        timeMs: kf.time_ms,
+        value: kf.value,
+        easing: (kf.easing as EasingType) || 'linear',
+      })),
+    }));
+  }
+
+  async addKeyframe(
+    clipName: string,
+    paramName: string,
+    timeMs: number,
+    value: number,
+  ): Promise<string> {
+    const result = await this.engine.addPuppetKeyframe(clipName, paramName, timeMs, value);
+    return result.id;
+  }
+
+  async removeKeyframe(clipName: string, paramName: string, keyframeId: string): Promise<void> {
+    await this.engine.removePuppetKeyframe(clipName, paramName, keyframeId);
+  }
+
+  async updateKeyframe(
+    clipName: string,
+    paramName: string,
+    keyframeId: string,
+    updates: { timeMs?: number; value?: number; easing?: EasingType },
+  ): Promise<void> {
+    await this.engine.updatePuppetKeyframe(clipName, paramName, keyframeId, {
+      timeMs: updates.timeMs,
+      value: updates.value,
+      easing: updates.easing,
+    });
+  }
+
+  async createClip(name: string, durationMs: number): Promise<void> {
+    await this.engine.createPuppetClip(name, durationMs);
+  }
+
+  async crossfadeTo(clipName: string, fadeDurationMs: number, loop = false): Promise<void> {
+    await this.engine.crossfadePuppetAnimation(clipName, fadeDurationMs, loop);
   }
 
   /** Internal: open the WebSocket and wire up reconnect on unexpected close */

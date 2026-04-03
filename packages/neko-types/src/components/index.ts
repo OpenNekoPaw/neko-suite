@@ -35,6 +35,14 @@ export type { TimelineRulerProps } from './TimelineRuler';
 export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
 
+// ── Keyframe Editing ─────────────────────────────────────────────────────────
+
+export { KeyframeDiamond } from './KeyframeDiamond';
+export type { KeyframeDiamondProps } from './KeyframeDiamond';
+
+export { KeyframeTimeline } from './KeyframeTimeline';
+export type { KeyframeTimelineProps } from './KeyframeTimeline';
+
 // ── Primitives (macOS-style controls) ─────────────────────────────────────────
 
 export { MacButton } from './MacButton';

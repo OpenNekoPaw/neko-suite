@@ -4,9 +4,11 @@
  * Displays all parameters from the loaded puppet with min/max/current values.
  * Slider changes are sent to the engine backend via the controller.
  */
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { usePuppetStore } from '../stores/puppet-store';
 import { useTranslation } from '../i18n/I18nContext';
+import { FaceParameterSection } from './FaceParameterSection';
+import { PUPPET_FACE_PARAMETERS } from '@neko/shared';
 import type { IInochi2DController } from '../animation';
 
 interface ParameterPanelProps {
@@ -29,25 +31,35 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
     [controller, updateParameterValue],
   );
 
+  // Check if any puppet parameters match the standard face parameter template
+  const hasFaceParams = useMemo(() => {
+    const faceNames = new Set(PUPPET_FACE_PARAMETERS.map((p) => p.name));
+    return parameters.some((p) => faceNames.has(p.name));
+  }, [parameters]);
+
   if (!puppetLoaded || parameters.length === 0) return null;
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('puppet.panel.parameters')}>
       <h3 className="sketch-panel-title m-0 mb-1">{t('puppet.panel.parameters')}</h3>
 
-      <div className="flex flex-col gap-1">
-        {parameters.map((param) => (
-          <ParameterSlider
-            key={param.name}
-            name={param.name}
-            min={param.min}
-            max={param.max}
-            value={param.current}
-            defaultValue={param.default}
-            onChange={handleChange}
-          />
-        ))}
-      </div>
+      {hasFaceParams ? (
+        <FaceParameterSection parameters={parameters} onParameterChange={handleChange} />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {parameters.map((param) => (
+            <ParameterSlider
+              key={param.name}
+              name={param.name}
+              min={param.min}
+              max={param.max}
+              value={param.current}
+              defaultValue={param.default}
+              onChange={handleChange}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 # 3D 能力集成架构分析
 
-> 日期：2025-06（更新：2026-03-14）
+> 日期：2025-06（更新：2026-04-03）
 > 状态：Phase 3.1 ✅ Phase 3.2 ✅ Phase 3.3 ✅ | Phase 3.4 规划中
 > 范围：neko-engine / neko-model / neko-canvas / neko-live
+> 关联：[角色编辑综合分析](./character-editing-analysis.md) | [2D 能力分析](./2d-capability-analysis.md)
 
 ---
 
@@ -18,6 +19,8 @@
 8. [VSCode Webview 限制与对策](#8-vscode-webview-限制与对策)
 9. [实施路线图](#9-实施路线图)
 10. [混合策略：内置轻量创作 + MCP 桥接专业软件](#10-混合策略内置轻量创作--mcp-桥接专业软件)
+11. [更新日志](#更新日志)
+    - [2026-04-03：角色编辑能力缺口分析](#2026-04-03角色编辑能力缺口分析)
 
 ---
 
@@ -1231,3 +1234,31 @@ AI 视频生成（neko-agent MediaGenerationService）
 - ✅ 后处理链（Tone Mapping ACES/Reinhard/Uncharted2 + bloom + vignette + color grading）
 - ✅ GPU 粒子系统（compute shader + billboard 渲染，fire/smoke/magic/debris 预设）
 - ✅ 前端集成（TS 类型 + neko-cut 时间线 + neko-canvas 节点类型 + AI action 映射）
+
+### 2026-04-03：角色编辑能力缺口分析
+
+> 详细分析见 [角色编辑综合分析](./character-editing-analysis.md)
+
+**3D 捏脸（已完成 ✅）**：22 参数 / 5 分类，Morph Target 驱动 < 1ms，VRM 52 表情预设，AI MCP Tools（face.generate_params / face.from_image / face.adjust）。
+
+**动画编辑（⚠️ TS 侧完成）**：动画播放完整（AnimationMixer play/stop/seek）。共享 `KeyframeTimeline` + `ModelKeyframeTimeline` 适配器已就绪，EngineClient 关键帧 CRUD + crossfade/blend API 已定义，`AnimationPlayer` crossfade UI + fade duration 已完成。**Rust 引擎 action handlers 待实现**（native-scene keyframe CRUD + SceneAnimationBlend + animation_blend.rs）。
+
+**建模（轻量级 ⚠️）**：CSG + 参数化几何体 + 3D 文字已完成，专业建模交给 Blender MCP 桥接。
+
+**.nkm 项目格式（✅ 完成）**：`NkmProjectData` v2 类型 + `ModelDocument.ts` + ModelEditorProvider 升级，支持 face_params / custom_clips / camera / editorState 持久化。
+
+**Phase 4 剩余任务优先级重排**：
+
+| 优先级 | 任务 | 状态 | 说明 |
+|--------|------|------|------|
+| **P1** | 动画关键帧编辑器 | ✅ TS完成 | 共享 `KeyframeTimeline` + `ModelKeyframeTimeline` 适配器。**Rust 引擎待实现** |
+| **P1** | 动画混合/过渡 | ✅ TS完成 | `AnimationPlayer` crossfade UI + EngineClient blend API。**Rust blend system 待实现** |
+| **P1** | .nkm 项目格式 | ✅ 完成 | `NkmProjectData` v2 + `ModelDocument` + ModelEditorProvider |
+| P2 | 面部直接拖拽编辑 | ❌ | Raycasting → Blend Shape 映射 |
+| P2 | AI 动画生成 | ❌ | 文本 → 关键帧序列 |
+| P2 | 动画录制 | ❌ | 从手动操作录制关键帧 |
+| P3 | Blender MCP Server | ❌ | 复杂建模/修改器/UV 桥接 |
+| P3 | ComfyUI MCP Server | ❌ | ControlNet + AI pipeline |
+| P3 | IK 交互编辑 | ❌ | 逆运动学拖拽 + 约束 |
+| P3 | rapier3d 物理 | ❌ | 碰撞/布料/刚体 |
+| P3 | neko-live 面部捕获 | ❌ | 摄像头 → 面部追踪 → 骨骼映射 |
