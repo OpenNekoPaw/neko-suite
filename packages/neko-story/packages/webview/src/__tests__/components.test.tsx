@@ -419,8 +419,8 @@ describe('Complex document rendering', () => {
     expect(screen.getByText('Hello everyone.')).toBeInTheDocument();
     expect(screen.getByText('CUT TO:')).toBeInTheDocument();
 
-    // Verify structure: print-button + 5 rendered elements (section, scene_heading, action, DialogueBlock, transition)
+    // Verify structure: 5 rendered elements (section, scene_heading, action, DialogueBlock, transition)
     const screenplay = container.querySelector('.screenplay');
-    expect(screenplay?.children.length).toBe(6);
+    expect(screenplay?.children.length).toBe(5);
   });
 });

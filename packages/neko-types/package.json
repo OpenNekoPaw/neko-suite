@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "generate": "node ../../scripts/proto-gen-ts.mjs",
-    "test": "vitest --run --passWithNoTests"
+    "test": "vitest --passWithNoTests"
   },
   "exports": {
     ".": "./src/index.ts",

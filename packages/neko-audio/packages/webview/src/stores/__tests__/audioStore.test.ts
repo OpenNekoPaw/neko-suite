@@ -125,17 +125,32 @@ describe('audioStore', () => {
   // =========================================================================
 
   describe('UI toggles', () => {
-    it.each([
-      ['toggleSpectrum', 'showSpectrum'],
-      ['toggleEffects', 'showEffects'],
-      ['toggleRecording', 'showRecording'],
-      ['toggleExport', 'showExport'],
-    ] as const)('%s toggles %s', (action, field) => {
-      expect(getState()[field]).toBe(false);
-      (getState()[action] as () => void)();
-      expect(getState()[field]).toBe(true);
-      (getState()[action] as () => void)();
-      expect(getState()[field]).toBe(false);
+    it('toggleSpectrum toggles showSpectrum', () => {
+      expect(getState().showSpectrum).toBe(false);
+      getState().toggleSpectrum();
+      expect(getState().showSpectrum).toBe(true);
+      getState().toggleSpectrum();
+      expect(getState().showSpectrum).toBe(false);
+    });
+
+    it.each(['effects', 'recording', 'export'] as const)(
+      'toggleSidePanel(%s) activates and deactivates panel',
+      (panel) => {
+        expect(getState().activeSidePanel).toBeNull();
+        getState().toggleSidePanel(panel);
+        expect(getState().activeSidePanel).toBe(panel);
+        getState().toggleSidePanel(panel);
+        expect(getState().activeSidePanel).toBeNull();
+      },
+    );
+
+    it('toggleSidePanel switches between panels and closeSidePanel resets', () => {
+      getState().toggleSidePanel('effects');
+      expect(getState().activeSidePanel).toBe('effects');
+      getState().toggleSidePanel('recording');
+      expect(getState().activeSidePanel).toBe('recording');
+      getState().closeSidePanel();
+      expect(getState().activeSidePanel).toBeNull();
     });
 
     it('setError sets error and clears loading', () => {

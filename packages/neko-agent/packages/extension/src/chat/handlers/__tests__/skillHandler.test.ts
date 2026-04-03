@@ -18,6 +18,7 @@ function createMockSkillService() {
       ]),
       getCommand: vi.fn().mockReturnValue(null),
       getSkill: vi.fn().mockReturnValue(null),
+      getSkillByCommand: vi.fn().mockReturnValue(null),
     },
     applyCommand: vi.fn().mockReturnValue({
       applied: true,
@@ -95,30 +96,35 @@ describe('SkillHandler', () => {
   });
 
   describe('handleSlashCommand', () => {
-    it('should return error when no skillService', () => {
+    it('should return error when no skillService', async () => {
       handler = new SkillHandler();
-      const result = handler.handleSlashCommand(webview as any, 'commit');
+      const result = await handler.handleSlashCommand(webview as any, 'commit');
 
       expect(result).toEqual({ applied: false, error: 'SkillService not initialized' });
     });
 
-    it('should return error for unknown command', () => {
-      skillService.registry.getCommand.mockReturnValue(null);
+    it('should return error for unknown command', async () => {
+      skillService.registry.getSkillByCommand.mockReturnValue(null);
       handler = new SkillHandler({ skillService: skillService as any });
 
-      const result = handler.handleSlashCommand(webview as any, 'unknown');
+      const result = await handler.handleSlashCommand(webview as any, 'unknown');
 
       expect(result).toEqual({ applied: false, error: 'Unknown command: /unknown' });
     });
 
-    it('should apply slash command and send injection', () => {
-      const mockCommand = { name: 'commit', body: 'Create commit' };
-      skillService.registry.getCommand.mockReturnValue(mockCommand);
+    it('should apply slash command and send injection', async () => {
+      const mockSkill = { name: 'commit', description: 'Create a commit', slashCommand: '/commit' };
+      skillService.registry.getSkillByCommand.mockReturnValue(mockSkill);
+      skillService.apply.mockReturnValue({
+        name: 'commit',
+        systemPrompt: 'You are a commit assistant',
+        allowedTools: ['bash'],
+      });
 
       handler = new SkillHandler({ skillService: skillService as any });
-      const result = handler.handleSlashCommand(webview as any, 'commit', 'fix bug');
+      const result = await handler.handleSlashCommand(webview as any, 'commit', 'fix bug');
 
-      expect(skillService.applyCommand).toHaveBeenCalledWith(mockCommand, 'fix bug');
+      expect(skillService.apply).toHaveBeenCalledWith(mockSkill, 'fix bug');
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'skillInjection',
@@ -169,28 +175,28 @@ describe('SkillHandler', () => {
   });
 
   describe('handleExecuteSkill', () => {
-    it('should return error when no skillService', () => {
+    it('should return error when no skillService', async () => {
       handler = new SkillHandler();
-      const result = handler.handleExecuteSkill(webview as any, 'commit', {});
+      const result = await handler.handleExecuteSkill(webview as any, 'commit', {});
 
       expect(result).toEqual({ applied: false, error: 'SkillService not initialized' });
     });
 
-    it('should return error for unknown skill', () => {
+    it('should return error for unknown skill', async () => {
       skillService.registry.getSkill.mockReturnValue(null);
       handler = new SkillHandler({ skillService: skillService as any });
 
-      const result = handler.handleExecuteSkill(webview as any, 'unknown', {});
+      const result = await handler.handleExecuteSkill(webview as any, 'unknown', {});
 
       expect(result).toEqual({ applied: false, error: 'Unknown skill: unknown' });
     });
 
-    it('should apply skill, set active state, and send injection', () => {
+    it('should apply skill, set active state, and send injection', async () => {
       const mockSkill = { name: 'review', description: 'Review code', toolDefinitions: [] };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
 
       handler = new SkillHandler({ skillService: skillService as any });
-      const result = handler.handleExecuteSkill(webview as any, 'review', { pr: '123' });
+      const result = await handler.handleExecuteSkill(webview as any, 'review', { pr: '123' });
 
       expect(skillService.apply).toHaveBeenCalledWith(mockSkill);
       expect(result).toEqual(expect.objectContaining({ applied: true }));
@@ -200,11 +206,11 @@ describe('SkillHandler', () => {
   });
 
   describe('handleCancelSkill', () => {
-    it('should clear active skill when matching', () => {
+    it('should clear active skill when matching', async () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       handler = new SkillHandler({ skillService: skillService as any });
-      handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', {});
 
       expect(handler.getActiveSkill()).toBeDefined();
 
@@ -212,11 +218,11 @@ describe('SkillHandler', () => {
       expect(handler.getActiveSkill()).toBeUndefined();
     });
 
-    it('should not clear active skill for different name', () => {
+    it('should not clear active skill for different name', async () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       handler = new SkillHandler({ skillService: skillService as any });
-      handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', {});
 
       handler.handleCancelSkill('commit');
       expect(handler.getActiveSkill()).toBeDefined();
@@ -224,7 +230,7 @@ describe('SkillHandler', () => {
   });
 
   describe('clearActiveSkill', () => {
-    it('should clear active skill and delegate to agentManager', () => {
+    it('should clear active skill and delegate to agentManager', async () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       const mockAgentManager = { clearActiveSkill: vi.fn(), applySkillInjection: vi.fn() } as any;
@@ -233,7 +239,7 @@ describe('SkillHandler', () => {
         agentManager: mockAgentManager,
         getActiveConversationId: () => 'conv-1',
       });
-      handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', {});
 
       handler.clearActiveSkill();
 
