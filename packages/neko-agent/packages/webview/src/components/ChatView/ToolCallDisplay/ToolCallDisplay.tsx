@@ -8,7 +8,7 @@
 import { useState, useCallback, memo } from 'react';
 import { ToolCall } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
-import { ImagePreview, AudioPlayer, VideoPlayer } from '@/components/ChatView/MediaPreview';
+import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
@@ -84,7 +84,9 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   const shouldShowMediaPreview = !isBackgroundMode || isBackgroundTaskCompleted;
 
   // Look up live task for inline TaskCard progress
-  const backgroundTaskId = isBackgroundMode ? (resultData?.taskId as string | undefined) : undefined;
+  const backgroundTaskId = isBackgroundMode
+    ? (resultData?.taskId as string | undefined)
+    : undefined;
   const liveTask = backgroundTaskId
     ? backgroundTasks?.find((t) => t.id === backgroundTaskId)
     : undefined;
@@ -296,16 +298,19 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
         <TaskCard task={liveTask} onCancel={onCancelTask} onViewResult={onViewTaskResult} />
       )}
 
-      {/* Media previews */}
+      {/* Media previews — registry-driven rendering (ADR-6 §6.2) */}
       {isImageTool && imageUrls.length > 0 && (
         <div className="mt-2 space-y-2">
           {imageUrls.map((url, index) => (
-            <ImagePreview
+            <RichContentRenderer
               key={index}
-              src={url}
-              alt={`Generated image ${index + 1}`}
-              name={`generated_${index + 1}.png`}
-              localPath={localPaths[index] || localPaths[0]}
+              kind="image"
+              data={{
+                src: url,
+                alt: `Generated image ${index + 1}`,
+                name: `generated_${index + 1}.png`,
+                localPath: localPaths[index] || localPaths[0],
+              }}
             />
           ))}
         </div>
@@ -313,11 +318,14 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
       {isVideoTool && videoUrls.length > 0 && (
         <div className="mt-2 space-y-2">
           {videoUrls.map((url, index) => (
-            <VideoPlayer
+            <RichContentRenderer
               key={index}
-              src={url}
-              title={`generated_${index + 1}.mp4`}
-              localPath={localPaths[index] || localPaths[0]}
+              kind="video"
+              data={{
+                src: url,
+                title: `generated_${index + 1}.mp4`,
+                localPath: localPaths[index] || localPaths[0],
+              }}
             />
           ))}
         </div>
@@ -325,11 +333,14 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
       {isAudioTool && audioUrls.length > 0 && (
         <div className="mt-2 space-y-2">
           {audioUrls.map((url, index) => (
-            <AudioPlayer
+            <RichContentRenderer
               key={index}
-              src={url}
-              title={`generated_${index + 1}.mp3`}
-              localPath={localPaths[index] || localPaths[0]}
+              kind="audio"
+              data={{
+                src: url,
+                title: `generated_${index + 1}.mp3`,
+                localPath: localPaths[index] || localPaths[0],
+              }}
             />
           ))}
         </div>

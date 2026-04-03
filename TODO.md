@@ -117,6 +117,12 @@
 - [ ] neko-live 虚拟制片（MediaPipe + VMC + VRM + 录制 + 推流）
 - [ ] VR/AR 沉浸式创作（远期 Phase 7）
 - [ ] Git LFS 集成（.gitignore/.gitattributes 模板 + pHash + OID 自动填充）
+- [ ] **DragDropBroker P1**（ADR-5）：Extension Host 代理拖拽，支持从 Agent chat 拖拽生成资产到 Canvas/Cut/Explorer
+  - `DragDropBroker` singleton 在 Extension Host：`dnd:start` → 暂存 `GeneratedAsset` JSON → `dnd:query/drop` → `vscode.commands.executeCommand('neko.{target}.importAsset', asset)`
+  - Agent webview: `ResultPreview`/`ImageGridCard` 添加 `draggable` + `dragstart` → `postMessage({ type: 'dnd:start', asset })`
+  - Canvas/Cut webview: `drop` 事件 → `postMessage({ type: 'dnd:drop' })` → broker 分发 `importAsset` 命令
+  - 前置条件：`neko.canvas.importAsset` ✅ / `neko.cut.importGeneratedClip` ✅ 已就绪
+  - ~100 行 Extension Host + ~20 行/webview drop zone
 
 ---
 

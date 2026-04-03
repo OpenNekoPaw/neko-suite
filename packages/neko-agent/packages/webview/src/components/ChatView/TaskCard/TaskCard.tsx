@@ -1,5 +1,8 @@
 /**
  * TaskCard - Inline task status card displayed in conversation
+ *
+ * ADR-3: Enhanced with multi-image grid (ImageGridCard) and
+ * cross-plugin "Send to" buttons (SendToMenu, ADR-5 P0).
  */
 
 import { useState, useCallback } from 'react';
@@ -7,7 +10,8 @@ import { useState, useCallback } from 'react';
 const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
-import { ImagePreview, VideoPlayer, AudioPlayer } from '@/components/ChatView/MediaPreview';
+import { RichContentRenderer } from '@/components/ChatView/RichContent';
+import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import {
   SuccessIcon,
   ErrorIcon,
@@ -20,9 +24,11 @@ interface TaskCardProps {
   task: BackgroundTask;
   onCancel?: (taskId: string) => void;
   onViewResult?: (taskId: string) => void;
+  /** Available neko-suite plugins for "Send to" buttons (ADR-5) */
+  plugins?: PluginsAvailable;
 }
 
-export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
+export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -196,74 +202,8 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
             </div>
           )}
 
-          {/* Result preview (for completed tasks) */}
-          {isCompleted && task.result && (
-            <div className="mb-2">
-              {task.type === 'video' && task.result.urls?.[0] && (
-                <VideoPlayer
-                  src={task.result.urls[0]}
-                  poster={task.result.thumbnailUrl}
-                  title={task.name}
-                  localPath={task.result.localPaths?.[0]}
-                  inline
-                />
-              )}
-              {task.type === 'image' && (task.result.thumbnailUrl || task.result.urls?.[0]) && (
-                <ImagePreview
-                  src={task.result.thumbnailUrl || task.result.urls[0]}
-                  name={task.name}
-                  localPath={task.result.localPaths?.[0]}
-                  inline
-                />
-              )}
-              {task.type === 'audio' && task.result.urls?.[0] && (
-                <AudioPlayer
-                  src={task.result.urls[0]}
-                  title={task.name}
-                  localPath={task.result.localPaths?.[0]}
-                  inline
-                />
-              )}
-
-              {/* Result info badges + download */}
-              <div className="flex flex-wrap items-center gap-1 mt-2">
-                {task.result.width && task.result.height && (
-                  <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
-                    {task.result.width}×{task.result.height}
-                  </span>
-                )}
-                {task.result.duration && (
-                  <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
-                    {formatDuration(task.result.duration)}
-                  </span>
-                )}
-                <span className="flex-1" />
-                {task.result.localPaths?.[0] && (
-                  <span
-                    className="text-[var(--vscode-descriptionForeground)] text-xs truncate max-w-[140px]"
-                    title={task.result.localPaths[0]}
-                  >
-                    {task.result.localPaths[0].split(/[\\/]/).pop()}
-                  </span>
-                )}
-                {task.result.localPaths?.[0] && (
-                  <button
-                    onClick={() => {
-                      vscode?.postMessage({
-                        type: 'revealFile',
-                        filePath: task.result!.localPaths![0],
-                      });
-                    }}
-                    className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1"
-                    title={t('tasks.revealInExplorer')}
-                  >
-                    <DownloadIcon className="w-3 h-3" />
-                    <span>{t('tasks.revealInExplorer')}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Result preview (for completed tasks) — ADR-3 enhanced */}
+          {isCompleted && task.result && <ResultPreview task={task} plugins={plugins} />}
 
           {/* Provider info */}
           <div className="text-[var(--vscode-descriptionForeground)] pt-1 border-t border-[var(--vscode-panel-border)]">
@@ -273,6 +213,157 @@ export function TaskCard({ task, onCancel, onViewResult }: TaskCardProps) {
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// ResultPreview - Completed task result display (ADR-3/4 enhanced)
+//
+// When `result.assets` (GeneratedAsset[]) is available, uses asset metadata
+// (webviewUri, width, height, duration, path) as the authoritative source.
+// Falls back to legacy `result.urls / localPaths` for backward compatibility.
+// ---------------------------------------------------------------------------
+
+function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: PluginsAvailable }) {
+  const { t } = useTranslation();
+  const result = task.result!;
+  const assets = result.assets;
+
+  // Derive display data: prefer assets, fall back to legacy fields
+  const displayUrls = assets && assets.length > 0 ? assets.map((a) => a.webviewUri) : result.urls;
+  const displayLocalPaths =
+    assets && assets.length > 0 ? assets.map((a) => a.path) : result.localPaths;
+  const firstLocalPath = displayLocalPaths?.[0];
+
+  // Extract dimension/duration from first asset if available
+  const firstAsset = assets?.[0];
+  const displayWidth =
+    firstAsset && 'width' in firstAsset ? (firstAsset as { width: number }).width : result.width;
+  const displayHeight =
+    firstAsset && 'height' in firstAsset
+      ? (firstAsset as { height: number }).height
+      : result.height;
+  const displayDuration =
+    firstAsset && 'duration' in firstAsset
+      ? (firstAsset as { duration: number }).duration
+      : result.duration;
+
+  // Derive RichContent kind + data from task type and display URLs (ADR-6 §6.2)
+  const { contentKind, contentData } = deriveRichContent(
+    task,
+    displayUrls,
+    displayLocalPaths,
+    result.thumbnailUrl,
+  );
+
+  return (
+    <div className="mb-2">
+      {/* Media result — registry-driven rendering (ADR-6 §6.2) */}
+      {contentKind && contentData && (
+        <RichContentRenderer kind={contentKind} data={contentData} inline />
+      )}
+
+      {/* Result info badges + download */}
+      <div className="flex flex-wrap items-center gap-1 mt-2">
+        {displayWidth && displayHeight && (
+          <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
+            {displayWidth}×{displayHeight}
+          </span>
+        )}
+        {displayDuration && displayDuration > 0 && (
+          <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
+            {formatDuration(displayDuration)}
+          </span>
+        )}
+        <span className="flex-1" />
+        {firstLocalPath && (
+          <span
+            className="text-[var(--vscode-descriptionForeground)] text-xs truncate max-w-[140px]"
+            title={firstLocalPath}
+          >
+            {firstLocalPath.split(/[\\/]/).pop()}
+          </span>
+        )}
+        {firstLocalPath && (
+          <button
+            onClick={() => {
+              vscode?.postMessage({
+                type: 'revealFile',
+                filePath: firstLocalPath,
+              });
+            }}
+            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1"
+            title={t('tasks.revealInExplorer')}
+          >
+            <DownloadIcon className="w-3 h-3" />
+            <span>{t('tasks.revealInExplorer')}</span>
+          </button>
+        )}
+      </div>
+
+      {/* "Send to" cross-plugin buttons (ADR-5 P0) */}
+      {firstLocalPath && plugins && (
+        <SendToMenu
+          assetPath={firstLocalPath}
+          mediaType={task.type === 'video' ? 'video' : task.type === 'audio' ? 'audio' : 'image'}
+          plugins={plugins}
+          className="mt-1.5"
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: derive RichContent kind + data payload from BackgroundTask
+// ---------------------------------------------------------------------------
+
+function deriveRichContent(
+  task: BackgroundTask,
+  displayUrls: string[] | undefined,
+  displayLocalPaths: string[] | undefined,
+  thumbnailUrl: string | undefined,
+): { contentKind: string | null; contentData: Record<string, unknown> | null } {
+  const firstUrl = displayUrls?.[0];
+  const firstLocalPath = displayLocalPaths?.[0];
+
+  switch (task.type) {
+    case 'video':
+      if (!firstUrl) return { contentKind: null, contentData: null };
+      return {
+        contentKind: 'video',
+        contentData: {
+          src: firstUrl,
+          poster: thumbnailUrl,
+          title: task.name,
+          localPath: firstLocalPath,
+        },
+      };
+
+    case 'audio':
+      if (!firstUrl) return { contentKind: null, contentData: null };
+      return {
+        contentKind: 'audio',
+        contentData: { src: firstUrl, title: task.name, localPath: firstLocalPath },
+      };
+
+    case 'image': {
+      if (displayUrls && displayUrls.length > 1) {
+        return {
+          contentKind: 'image-grid',
+          contentData: { urls: displayUrls, localPaths: displayLocalPaths, name: task.name },
+        };
+      }
+      const imgSrc = thumbnailUrl || firstUrl;
+      if (!imgSrc) return { contentKind: null, contentData: null };
+      return {
+        contentKind: 'image',
+        contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath },
+      };
+    }
+
+    default:
+      return { contentKind: null, contentData: null };
+  }
 }
 
 function DownloadIcon({ className }: { className?: string }) {

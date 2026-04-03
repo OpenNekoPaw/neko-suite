@@ -105,7 +105,13 @@ function InlineAudioPlayer({
   );
 }
 
-function AudioPlayerComponent({ src, title, className, localPath, inline = false }: AudioPlayerProps) {
+function AudioPlayerComponent({
+  src,
+  title,
+  className,
+  localPath,
+  inline = false,
+}: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [duration, setDuration] = useState(0);
