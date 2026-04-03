@@ -200,6 +200,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   /**
+   * Forward a GeneratedAsset import to the active canvas webview (ADR-5 P0).
+   * Returns false if no canvas editor is open.
+   */
+  postImportAsset(asset: { path?: string; type?: string }): boolean {
+    if (!this.activeWebviewPanel) return false;
+    this.activeWebviewPanel.webview.postMessage({
+      type: 'importGeneratedAsset',
+      asset,
+    });
+    return true;
+  }
+
+  /**
    * Update the generatedImage of a shot node and push the change to the webview.
    * Called by the `neko.canvas.updateNodeImage` command when Sketch sends back
    * an edited image via the round-trip workflow.
@@ -304,15 +317,23 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
-  /** Save a base64 data URL to workspace .neko/generated/ and return the file path. */
-  private saveGeneratedImage(workspaceDir: string, nodeId: string, dataUrl: string): string {
+  /**
+   * Save a base64 data URL to workspace .neko/generated/image/ and return a GeneratedImage.
+   * ADR-4: writes binary to disk, returns JSON reference only.
+   */
+  private saveGeneratedImage(
+    workspaceDir: string,
+    nodeId: string,
+    dataUrl: string,
+  ): { filePath: string; assetId: string } {
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
     const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
-    const dir = path.join(workspaceDir, '.neko', 'generated');
+    const dir = path.join(workspaceDir, '.neko', 'generated', 'image');
     fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, `${nodeId}-${Date.now()}.${ext}`);
+    const assetId = crypto.randomUUID();
+    const filePath = path.join(dir, `${assetId}.${ext}`);
     fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
-    return filePath;
+    return { filePath, assetId };
   }
 
   /** If neko-cut is active, import the generated asset into the cut timeline. */
@@ -322,9 +343,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const cutExt = vscode.extensions.getExtension('neko.neko-cut');
     if (!cutExt?.isActive) return;
     try {
-      const assetPath = this.saveGeneratedImage(workspaceDir, nodeId, dataUrl);
-      await vscode.commands.executeCommand('neko.cut.importGeneratedClip', { assetPath });
-      logger.info('Auto-pushed generated image to neko-cut', { nodeId, assetPath });
+      const { filePath } = this.saveGeneratedImage(workspaceDir, nodeId, dataUrl);
+      await vscode.commands.executeCommand('neko.cut.importGeneratedClip', { assetPath: filePath });
+      logger.info('Auto-pushed generated image to neko-cut', { nodeId, assetPath: filePath });
     } catch (err) {
       logger.warn('Failed to push generated image to neko-cut', { nodeId, err });
     }

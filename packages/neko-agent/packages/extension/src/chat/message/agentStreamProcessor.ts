@@ -12,10 +12,20 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { Platform } from '@neko/platform';
+import type { Platform, MediaOutput } from '@neko/platform';
 import { parsePlanMarkdown, type AgentEvent } from '@neko/agent';
 import type { AgentPhase, ContentBlock, Plan } from '@neko-agent/types';
+import type {
+  GeneratedAsset,
+  GeneratedImage,
+  GeneratedAudio,
+  GeneratedVideo,
+  WebviewGeneratedAsset,
+} from '@neko/shared';
 import type { ConversationHandler } from '../conversationHandler';
+import type { GeneratedAssetIndex } from '../../services/generatedAssetIndex';
+import { generateAssetId } from '../../services/generatedAssetIndex';
+import { toWebviewAsset } from '@neko/shared/vscode/extension';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -54,6 +64,8 @@ export interface StreamCallbacks {
 export interface AgentStreamProcessorDeps {
   platform?: Platform;
   conversations?: ConversationHandler;
+  /** Asset index for registering generated assets (ADR-4) */
+  assetIndex?: GeneratedAssetIndex;
   /**
    * Optional transcoder for converting incompatible media formats.
    * Called when a downloaded file uses a codec not supported by Electron webview
@@ -398,6 +410,7 @@ export class AgentStreamProcessor {
     const unsubscribe = this.deps.platform.media?.onProgress(taskId, async (task) => {
       let resultUrls = task.outputs?.map((o) => o.url).filter(Boolean) || [];
       let thumbnailUrl = task.outputs?.[0]?.url;
+      let generatedAssets: GeneratedAsset[] = [];
 
       if (task.status === 'completed' && task.outputs && task.outputs.length > 0) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -413,6 +426,24 @@ export class AgentStreamProcessor {
           if (localPaths.length > 0) {
             resultUrls = localPaths;
             thumbnailUrl = localPaths[0];
+
+            // Construct GeneratedAsset objects from saved outputs (ADR-4)
+            generatedAssets = buildGeneratedAssets(
+              localPaths,
+              task.outputs,
+              taskType,
+              task.request?.prompt,
+              task.modelId,
+            );
+
+            // Register assets in the index for cross-plugin discovery
+            if (this.deps.assetIndex && generatedAssets.length > 0) {
+              for (const asset of generatedAssets) {
+                this.deps.assetIndex.add(asset);
+              }
+              logger.info(`Registered ${generatedAssets.length} generated asset(s) in index`);
+            }
+
             const showNotification = mediaConfig.get<boolean>('showSaveNotification', true);
             if (showNotification) {
               const displayPath = localPaths[0];
@@ -439,6 +470,11 @@ export class AgentStreamProcessor {
         (url) => url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url),
       );
 
+      // Convert GeneratedAssets to webview-safe variants
+      const webviewAssets: WebviewGeneratedAsset[] = generatedAssets.map((asset) =>
+        toWebviewAsset(asset, webview),
+      );
+
       webview.postMessage({
         type: 'taskUpdated',
         task: {
@@ -459,6 +495,7 @@ export class AgentStreamProcessor {
                   urls: webviewUrls,
                   thumbnailUrl: webviewThumbnailUrl,
                   localPaths: localPaths.length > 0 ? localPaths : undefined,
+                  assets: webviewAssets.length > 0 ? webviewAssets : undefined,
                 }
               : undefined,
           error: task.error?.message,
@@ -559,4 +596,113 @@ export class AgentStreamProcessor {
       logger.error('Failed to update tool result with URLs:', error);
     }
   }
+}
+
+// =============================================================================
+// GeneratedAsset construction helpers (pure functions)
+// =============================================================================
+
+/** Infer MIME type from file extension */
+function inferMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.flac': 'audio/flac',
+    '.ogg': 'audio/ogg',
+    '.aac': 'audio/aac',
+  };
+  return mimeMap[ext] ?? 'application/octet-stream';
+}
+
+/** Compute aspect ratio label from width/height */
+function computeRatio(width: number, height: number): string {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const d = gcd(width, height);
+  return `${width / d}:${height / d}`;
+}
+
+/**
+ * Build GeneratedAsset objects from saved file paths and MediaOutput metadata.
+ *
+ * Each localPath is paired with the corresponding MediaOutput (by index) to
+ * extract width/height/duration metadata. Falls back to safe defaults when
+ * metadata is incomplete.
+ */
+function buildGeneratedAssets(
+  localPaths: string[],
+  outputs: MediaOutput[],
+  taskType: 'image' | 'video' | 'audio',
+  prompt?: string,
+  model?: string,
+): GeneratedAsset[] {
+  const now = new Date().toISOString();
+  const assets: GeneratedAsset[] = [];
+
+  for (let i = 0; i < localPaths.length; i++) {
+    const localPath = localPaths[i];
+    if (!localPath) continue;
+
+    const output = outputs[i];
+    const id = generateAssetId();
+    const mimeType = output?.mimeType ?? inferMimeType(localPath);
+
+    const base = {
+      id,
+      path: localPath,
+      mimeType,
+      generatedAt: now,
+      prompt,
+      model,
+    };
+
+    switch (taskType) {
+      case 'image': {
+        const width = output?.width ?? 1024;
+        const height = output?.height ?? 1024;
+        const asset: GeneratedImage = {
+          ...base,
+          type: 'generated-image',
+          width,
+          height,
+          ratio: computeRatio(width, height),
+        };
+        assets.push(asset);
+        break;
+      }
+      case 'video': {
+        const asset: GeneratedVideo = {
+          ...base,
+          type: 'generated-video',
+          duration: output?.duration ?? 0,
+          width: output?.width ?? 1280,
+          height: output?.height ?? 720,
+          fps: 24,
+        };
+        assets.push(asset);
+        break;
+      }
+      case 'audio': {
+        const asset: GeneratedAudio = {
+          ...base,
+          type: 'generated-audio',
+          duration: output?.duration ?? 0,
+          sampleRate: 44100,
+          channels: 2,
+        };
+        assets.push(asset);
+        break;
+      }
+    }
+  }
+
+  return assets;
 }

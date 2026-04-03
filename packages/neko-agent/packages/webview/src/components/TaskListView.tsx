@@ -6,6 +6,8 @@
  * Only the type definitions are still used (by TaskCard, handlers, hooks).
  */
 
+import type { WebviewGeneratedAsset } from '@neko/shared';
+
 export type TaskStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type TaskType = 'image' | 'video' | 'audio';
 
@@ -40,6 +42,8 @@ export interface BackgroundTask {
     width?: number;
     height?: number;
     duration?: number;
+    /** GeneratedAsset references with webview-safe URIs (ADR-4) */
+    assets?: WebviewGeneratedAsset[];
   };
   error?: string;
   steps?: TaskStep[];

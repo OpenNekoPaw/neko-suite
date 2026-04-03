@@ -1412,3 +1412,63 @@ cd packages/neko-story/packages/extension && npx tsc --noEmit
 # Ph5/Ph6
 pnpm build:neko-canvas && pnpm build:neko-agent
 ```
+
+---
+
+## GeneratedAsset 集成（ADR-4, 2026-04-03）
+
+### 类型迁移
+
+`ShotNode` 数据模型新增 GeneratedAsset 引用字段（双写兼容）：
+
+```typescript
+interface ShotCanvasNode {
+  data: {
+    // 旧字段（向下兼容，@deprecated）
+    generatedImage?: string;      // data URL or asset path
+    generatedVideo?: string;
+
+    // 新字段（ADR-4 — JSON 引用，不含二进制）
+    generatedAsset?: GeneratedImage;
+    generatedVideoAsset?: GeneratedVideo;
+  }
+}
+
+// GeneratedImageVersion 增加可选 assetId
+interface GeneratedImageVersion {
+  id: string;
+  dataUrl: string;
+  prompt: string;
+  timestamp: number;
+  selected: boolean;
+  assetId?: string;  // 关联 GeneratedAsset.id
+}
+```
+
+### 跨插件导入命令
+
+`neko.canvas.importAsset` — agent "发送到 Canvas" 的入口：
+
+```typescript
+// 注册在 neko-canvas/extension.ts
+vscode.commands.registerCommand('neko.canvas.importAsset',
+  async (asset: { path: string; type?: string }) => {
+    canvasEditorProvider.postImportAsset(asset);
+  }
+);
+
+// 调用方（neko-agent chatProvider.ts）
+case 'sendToPlugin':
+  if (target === 'canvas') {
+    await vscode.commands.executeCommand('neko.canvas.importAsset', { path: assetPath });
+  }
+```
+
+### 磁盘目录迁移
+
+```
+旧: .neko/generated/{nodeId}-{timestamp}.{ext}
+新: .neko/generated/image/{uuid}.{ext}
+```
+
+`saveGeneratedImage()` 现返回 `{ filePath, assetId }` 而非纯路径。

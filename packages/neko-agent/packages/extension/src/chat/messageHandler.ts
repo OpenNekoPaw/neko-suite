@@ -23,6 +23,7 @@ import { AgentStreamProcessor } from './message/agentStreamProcessor';
 import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
 import { EngineClient } from '@neko/neko-client';
 import type { AgentPhase } from '@neko-agent/types';
+import { GeneratedAssetIndex, resolveGeneratedDir } from '../services/generatedAssetIndex';
 import { getLogger } from '../base';
 
 const logger = getLogger('MessageHandler');
@@ -96,6 +97,7 @@ export class MessageHandler {
   private _inputProcessor: InputProcessor | null = null;
   private readonly _attachmentProcessor: AttachmentProcessor;
   private readonly _streamProcessor: AgentStreamProcessor;
+  private readonly _assetIndex: GeneratedAssetIndex | undefined;
 
   constructor(
     private readonly _settings: SettingsManager,
@@ -107,9 +109,24 @@ export class MessageHandler {
     private readonly _platform?: Platform,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
+
+    // Initialize GeneratedAssetIndex if workspace is available (ADR-4)
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      try {
+        const generatedDir = resolveGeneratedDir(workspaceFolders[0].uri.fsPath);
+        this._assetIndex = new GeneratedAssetIndex(generatedDir);
+        this._assetIndex.load();
+      } catch {
+        // Directory may not be writable (e.g. tests, readonly workspace)
+        logger.warn('Failed to initialize GeneratedAssetIndex — asset tracking disabled');
+      }
+    }
+
     this._streamProcessor = new AgentStreamProcessor({
       platform: this._platform,
       conversations: this._conversations,
+      assetIndex: this._assetIndex,
       transcodeFile,
     });
   }
@@ -671,5 +688,12 @@ export class MessageHandler {
    */
   private _generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  /**
+   * Dispose resources. Flushes asset index to disk.
+   */
+  dispose(): void {
+    this._assetIndex?.dispose();
   }
 }

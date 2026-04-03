@@ -226,6 +226,8 @@ export interface GeneratedImageVersion {
   timestamp: number;
   /** Whether this is the currently selected candidate */
   selected: boolean;
+  /** GeneratedAsset ID reference (ADR-4 migration — present for new assets) */
+  assetId?: string;
 }
 
 /** Character reference within a shot */
@@ -257,10 +259,14 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     sceneTags: string[];
     /** GalleryNode id for background/IP-Adapter reference */
     referenceNodeId?: string;
-    /** Currently displayed image (data URL or asset path) */
+    /** Currently displayed image (data URL or asset path) @deprecated Use generatedAsset.path */
     generatedImage?: string;
-    /** AI-generated video URL — result of keyframe/video generation */
+    /** AI-generated video URL — result of keyframe/video generation @deprecated Use generatedVideoAsset */
     generatedVideo?: string;
+    /** GeneratedAsset reference (ADR-4 — replaces generatedImage) */
+    generatedAsset?: import('./generated-asset').GeneratedImage;
+    /** GeneratedAsset reference for video (ADR-4 — replaces generatedVideo) */
+    generatedVideoAsset?: import('./generated-asset').GeneratedVideo;
     generationStatus: ShotGenerationStatus;
     generationHistory: GeneratedImageVersion[];
     /** Script dialogue line */

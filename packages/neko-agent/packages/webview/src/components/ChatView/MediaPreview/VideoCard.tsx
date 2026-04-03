@@ -1,5 +1,5 @@
 /**
- * VideoPlayer - Compact video preview card
+ * VideoCard - Compact video result card (renamed from VideoPlayer, ADR-6)
  *
  * Displays video metadata with a thumbnail preview.
  * Clicking "Open" or the thumbnail opens the file in neko-preview
@@ -238,7 +238,10 @@ function VideoPlayerComponent({
   );
 }
 
-export const VideoPlayer = memo(VideoPlayerComponent);
+export const VideoCard = memo(VideoPlayerComponent);
+
+/** @deprecated Use VideoCard instead */
+export const VideoPlayer = VideoCard;
 
 // Icons
 function VideoIcon({ className }: { className?: string }) {

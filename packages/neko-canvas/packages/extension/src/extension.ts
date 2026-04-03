@@ -286,6 +286,31 @@ function registerCommands(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Import GeneratedAsset from another plugin (ADR-5 P0)
+  // Receives a GeneratedAsset JSON payload (or { path } shorthand) from agent/other extensions
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.importAsset',
+      async (asset?: { path?: string; type?: string }) => {
+        if (!asset?.path) {
+          vscode.window.showWarningMessage('neko.canvas.importAsset: missing asset path');
+          return;
+        }
+
+        // Forward to the active canvas editor via a public method
+        const accepted = canvasEditorProvider.postImportAsset(asset);
+        if (!accepted) {
+          vscode.window.showInformationMessage(
+            'Open a canvas file (.nkc) first, then try "Send to Canvas" again.',
+          );
+          return;
+        }
+
+        logger.info(`importAsset: received ${asset.path} (${asset.type ?? 'unknown'})`);
+      },
+    ),
+  );
+
   // Canvas keyboard shortcuts - forwarded to webview
   const keyboardActions = [
     'neko.canvas.deleteSelected',

@@ -438,6 +438,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
 
+    // Notify webview which neko-suite plugins are installed (ADR-5)
+    this._sendPluginsAvailable(webviewView.webview);
+
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         this._restoreState();
@@ -804,6 +807,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._fileOperationHandler.handleOpenUrl(message.url as string);
           break;
 
+        // Cross-plugin "Send to" handler (ADR-5 P0)
+        case 'sendToPlugin': {
+          const target = message.target as string;
+          const assetPath = message.assetPath as string;
+          if (target && assetPath) {
+            void this._handleSendToPlugin(target, assetPath);
+          }
+          break;
+        }
+
         // Mermaid error feedback - send as new message to ask AI to fix
         case 'mermaidError':
           if (message.feedbackMessage) {
@@ -928,6 +941,52 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _updateTabState(openTabs: OpenTab[], activeTabId: string | null): void {
     this._tabState = { openTabs, activeTabId };
     this._saveTabState();
+  }
+
+  // ============================================================================
+  // Cross-plugin transfer (ADR-5 P0)
+  // ============================================================================
+
+  /**
+   * Dispatch a generated asset to another neko-suite plugin.
+   * Payload is the file path on disk — the target plugin loads it directly.
+   */
+  private async _handleSendToPlugin(target: string, assetPath: string): Promise<void> {
+    try {
+      switch (target) {
+        case 'canvas':
+          await vscode.commands.executeCommand('neko.canvas.importAsset', { path: assetPath });
+          break;
+        case 'cut':
+          await vscode.commands.executeCommand('neko.cut.importGeneratedClip', {
+            assetPath,
+          });
+          break;
+        case 'explorer':
+          await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(assetPath));
+          break;
+        default:
+          this._logger.warn(`Unknown sendToPlugin target: ${target}`);
+      }
+    } catch (err) {
+      this._logger.error(`Failed to send to ${target}:`, err);
+      vscode.window.showWarningMessage(`Failed to send to ${target}. Is the extension installed?`);
+    }
+  }
+
+  /**
+   * Detect which neko-suite plugins are installed and notify the webview.
+   * Called when the webview first becomes visible.
+   */
+  private _sendPluginsAvailable(webview: vscode.Webview): void {
+    webview.postMessage({
+      type: 'pluginsAvailable',
+      plugins: {
+        canvas: !!vscode.extensions.getExtension('neko.nekocanvas'),
+        cut: !!vscode.extensions.getExtension('neko.nekocut'),
+        sketch: !!vscode.extensions.getExtension('neko.nekosketch'),
+      },
+    });
   }
 
   // ============================================================================
