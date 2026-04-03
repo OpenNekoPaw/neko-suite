@@ -151,6 +151,40 @@ Extension Host
               └── 音视频混流 → .mp4 文件
 ```
 
+### 分镜创作流水线（Script → Canvas → Cut）
+
+```
+neko-story 剧本（.fountain）
+  │ import_script_to_canvas MCP Tool
+  │   └── 每场景 1 SceneGroupNode + ~lineSpan/10 ShotNodes
+  ▼
+neko-canvas
+  ├── GenerationPromptPanel
+  │     └── neko.agent.buildPrompt（中文描述 → 结构化英文 prompt）
+  │     └── neko.agent.generateForNode → BatchGenerationScheduler
+  │           └── platform.media.generateImage → waitForTask → fetch base64
+  │                 └── ShotNode.generatedImage 更新
+  ├── GalleryNode（候选多视图 layout：三视图/四视图/九宫格）
+  ├── 7 Canvas MCP Tools（canvas_list/get/update/create_node +
+  │   generate_image/batch + set_project_generation_config）
+  └── 导出：neko.cut.importStoryboard
+          │ postMessage → webview
+          ▼
+    neko-cut 时间线（ShotNode → VideoClip 轨道段）
+```
+
+**Canvas 节点类型全览**（@neko/shared `types/canvas.ts`）：
+
+| 节点类型 | 用途 |
+|---------|------|
+| `shot` | 分镜帧（ShotScale + GeneratedImageVersion[] + 候选导航）|
+| `scene` | 场景横向容器（SceneGroupNode，按场景聚合 ShotNode）|
+| `gallery` | 多视图画廊（5 种 layout + costumeLabel + @引用 + 批量生图）|
+| `script` | 剧本节点（TOC 目录 + getScriptIndex → 点击跳转 SceneGroupNode）|
+| `document` | 文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open）|
+| `model` | AI 模型节点（reference/workflow 双模式 + checkModelInstalled）|
+| `canvas-embed` | 嵌套画布引用（P3 规划中，.nkc 缩略图 + 双击打开）|
+
 ### AI Agent 工作流
 
 ```
@@ -231,6 +265,7 @@ Extension Host
 | 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |
 | 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
+| Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性（无 canvas 可独立运行）；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递 |
 
 ---
 
@@ -344,6 +379,9 @@ neko-agent 注册以下命令供其他扩展调用，命令未注册时静默 no
 | `neko.agent.reportGenerationProgress` | neko-canvas `BatchGenerationScheduler` | 将生成进度广播至 Agent Chat Webview |
 | `neko.agent.registerSlashCommands` | neko-canvas / neko-cut 等 | 向 Agent 聊天面板注册 `/slash` 命令 |
 | `neko.agent.internalChat` | 任意扩展 | 复用已配置的 LLM 服务进行推理 |
+| `neko.agent.sendContext` | neko-canvas / neko-story | 注入上下文 payload（AgentContextChip UI + story-selection / canvas-selection）|
+| `neko.agent.buildPrompt` | neko-canvas `GenerationPromptPanel` | 中文场景描述 → 结构化英文 prompt（含角色/景别/情绪）|
+| `neko.story.applyInlineDiff` | neko-agent | 对剧本文件应用 WorkspaceEdit（接受/拒绝确认）|
 
 ### ISkillProvider — 技能发现接口
 

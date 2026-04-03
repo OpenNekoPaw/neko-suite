@@ -15,15 +15,15 @@
 | **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **6 种创作专家 SubAgent**（含 quality-checker）+ **JSONL Session 持久化** + **Creative Memory** + **媒体质量评估系统**（VisionEvaluator/VideoFrameEvaluator/AudioEvaluator/ConsistencyEvaluator + RemediationPlanner 15 category + qualityGate 管线）；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 92% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接）— [ADR](./docs/architecture/document-preview.md) |
-| **neko-story** | WIP | 82% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统**规划中：脚本视图（表格）+ 创意视图（卡片网格）+ ShotNode 数据模型（[架构](./docs/architecture/2d-capability-analysis.md)） |
+| **neko-story** | Alpha | 90% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同（[架构](./docs/architecture/2d-capability-analysis.md)） |
 | **neko-assets** | Alpha | 92% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 |
 | **neko-market** | Alpha | 97% | **客户端完全完成** ✅（Phase 6.5.1-6.5.6）；Registry Server 在 neko-hub |
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO（auth-core 43 tests + SecretStorage）；后端待接入 |
 | **neko-tools** | WIP | 68% | 媒体 Diff + 静音检测 UI（琥珀色叠加层）+ 并行优化 + 协议增强 |
-| **neko-canvas** | Alpha | 87% | 无限画布 + 6 种节点 + 分组 + 画板导出 + Port UI + EditOperation；**ShotNode + SceneGroupNode**（内嵌生图对话框，ADR-2D-007）规划中 |
+| **neko-canvas** | Alpha | 93% | 无限画布 + 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中 |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL |
 | **neko-model** | Alpha | 65% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情） |
-| **neko-sketch** | Alpha | 90% | S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）；S.4 P1 ✅（sketch.generate AI 生图导入） |
+| **neko-sketch** | Alpha | 95% | S.1-S.4 全部完成（绘画 + 骨骼动画 + 高级 2D + Inpaint/StyleTransfer/AutoLayer + sketch.generate + 跨模块工作流 Timeline/Canvas）|
 | **neko-audio** | Alpha | 95% | 完整音频工作站 + 12 种效果链 + Engine 麦克风 + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
 | **neko-suite** | Stable | 90% | Extension Pack + Release workflow |
@@ -82,6 +82,14 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ Auto-Compact + Progress Streaming + MCP 健壮性
 - ✅ Coordinator 多阶段编排 + Creative Memory + JSONL 持久化 + Prompt Cache
 
+### 跨扩展 AI 联动 ✅
+> 见 [ARCHITECTURE.md](./ARCHITECTURE.md#跨扩展-ai-联动)
+
+- ✅ `neko.agent.generateForNode` / `reportGenerationProgress` / `registerSlashCommands` / `internalChat` 命令注册
+- ✅ `ISkillProvider`（neko-canvas 3 skills + neko-cut 2 skills）+ `ListPluginSkills` Agent Tool
+- ✅ Agent Context Protocol（`neko.agent.sendContext` + story-selection / canvas-selection payload + AgentContextChip UI）
+- ✅ `NekoCutAPI.ai.generateVideoForClip` + 跨扩展 story/canvas/cut 数据流
+
 ### 延后项
 - MCP 桥接专业软件（Blender / ComfyUI / Photoshop → Phase 3.4）
 - SubAgent Skills（Seed_Manager / Audio_Mixer / 镜头语言）
@@ -100,17 +108,28 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - Chroma Key（色度抠像）✅ + Luma Key（亮度抠像）✅
 - Shape 元素渲染 ✅（tiny-skia CPU 光栅化 → GPU upload；6 种形状 + 填充/描边/阴影/渐变）
 
-### neko-story — 待完成（分镜系统）
+### neko-story — 分镜系统 ✅
 > [ADR §12](./docs/architecture/2d-capability-analysis.md)
-- 脚本视图（ScriptTableView）：动态角色列组 + 景别/运镜/情绪/场景标签全字段表格编辑
-- 创意视图（CreativeGridView）：卡片网格 + 生图状态 + 点击触发 GenerationPromptPanel
-- ShotNode 数据类型（@neko/shared）：`ShotScale` / `ShotCharacter[]` / `GeneratedImageVersion[]` / `CameraMovement`
+- ✅ 脚本视图（ScriptTableView）：动态角色列组 + 景别/运镜/情绪/场景标签全字段表格编辑
+- ✅ 创意视图（CreativeGridView）：卡片网格 + 生图状态 + 点击触发 GenerationPromptPanel
+- ✅ ShotNode 数据类型（@neko/shared）：`ShotScale` / `ShotCharacter[]` / `GeneratedImageVersion[]` / `CameraMovement`
+- ✅ 分镜导出到 neko-cut 时间线（`neko.cut.importStoryboard` postMessage→webview）
+- ✅ neko-story → Agent 协同（右键 "→ Agent" context 注入 + `neko.story.applyInlineDiff`）
 
-### neko-canvas — 待完成
-- ShotNode（扩展 StoryboardNode）+ SceneGroupNode（场景横向容器）
-- GenerationPromptPanel（内嵌生图对话框）— 委托 neko-agent.generateForNode，含 @引用素材角色一致性（ADR-2D-007）
-- **GalleryNode**（多视图画廊节点）— 三视图/四视图/九宫格/转面8方向预置；单格独立生图 + 批量；@引用粒度到格子
-- 大量节点性能优化（按需，当前 DOM/SVG 方案足够）
+### neko-canvas — 分镜 + AI 协同 ✅
+- ✅ ShotNode + SceneGroupNode（场景横向容器）
+- ✅ GenerationPromptPanel（内嵌生图对话框，委托 neko-agent.generateForNode，ADR-2D-007）
+- ✅ GalleryNode（5 种 layout + 单格/批量生图 + costumeLabel + @引用）
+- ✅ AutoPrompt（`neko.agent.buildPrompt`：场景上下文 → 结构化英文 prompt + 预览编辑）
+- ✅ BatchGenerationScheduler（maxConcurrent=2 + 指数退避 + AbortController + 进度回传）
+- ✅ 7 Canvas MCP Tools（`canvas_list/get/update/create_node` + `generate_image/batch` + `set_project_generation_config`）
+- ✅ ScriptNode（TOC 目录 + getScriptIndex 跳转）/ DocumentNode（PDF/DOCX/EPUB 封面缩略图）/ ModelNode（reference/workflow 双模式）
+- ✅ `import_script_to_canvas` MCP Tool（screenplay → SceneGroupNode + ShotNode 链）
+- ✅ Agent Context Protocol（`neko.agent.sendContext` + AgentContextChip + canvasAmbientContext 系统注入）
+- [ ] 候选选择 UI P2（GeneratedImageVersion[] ◀ N/M ▶；单次生成 1-4 张）
+- [ ] 角色一致性 P2（@引用素材 → IP-Adapter reference 注入）
+- [ ] CanvasEmbedNode P3（.nkc 缩略图 + 双击打开）
+- [ ] 节点性能优化（按需，当前 DOM/SVG 方案足够）
 
 ### neko-model (3D) — 待完成
 > [ADR](./docs/architecture/3d-capability-analysis.md)
@@ -118,11 +137,13 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
-### neko-sketch (2D) — 待完成
+### neko-sketch (2D) — S.1-S.4 全部完成 ✅
 > [ADR](./docs/architecture/2d-capability-analysis.md)
-- Phase S.1-S.3 ✅（绘画 + 骨骼动画 + 高级 2D）
-- Phase S.4 P1 ✅：`sketch.generate`（SketchGenerate MCP tool → MediaGenerationService → canvas layer）
-- Phase S.4 P2：`style_transfer` + 跨模块集成（依赖 NekoCanvasAPI 图像节点）
+- ✅ Phase S.1-S.3（绘画 + 骨骼动画 + 高级 2D）
+- ✅ Phase S.4 P1：`sketch.generate`（SketchGenerate MCP tool → MediaGenerationService → canvas layer）
+- ✅ Phase S.4 P1：Inpaint / StyleTransfer / AutoLayer AI 工具（getSelectionMask/getCanvasImageData → generate → 新图层）
+- ✅ Phase S.4：跨模块工作流（editImage → SketchEditorProvider → pendingImport；sendToTimeline / sendToCanvas 命令）
+- [ ] Phase S.4 P2：`style_transfer` 跨模块集成增强（依赖 NekoCanvasAPI 图像节点支持）
 
 ---
 
@@ -250,4 +271,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-02（媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
+*最后更新: 2026-04-02（分镜创作流水线 + 跨扩展 AI 联动全部完成；neko-story/canvas/sketch 分镜系统收尾；媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*

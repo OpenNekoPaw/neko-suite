@@ -75,7 +75,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 18 �
 |------|------|------|------|
 | **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + 导出 + 粒子/后处理 + 3D 场景/2D 骨骼 ECS + ONNX ML 推理 | Alpha 90% | 76.6K Rust + TS, 236 files |
 | **neko-cut** | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 + 29 EditOperation | Alpha 82% | 63.4K TS/TSX (293 files), 21 tests |
-| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI + Pipeline 工作流 + AI 字幕 + 自动配乐 | Alpha 95% | 99.6K TS/TSX (540 files), 79 tests |
+| **neko-agent** | AI Agent - 多 LLM + MCP + Skills + CLI + Pipeline 工作流 + AI 字幕 + 自动配乐 + 媒体质量评估 + Coordinator 多阶段编排 + Canvas/Story 跨扩展协同 | Alpha 99% | 99.6K TS/TSX (540 files), 79 tests |
 
 ### 基础设施
 
@@ -91,19 +91,19 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 18 �
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
-| **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + Apple Music 风格波形 | Alpha 85% | 7.2K TS/TSX (42 files), 5 tests |
-| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成；**分镜系统**规划：脚本视图（表格）+ 创意视图（卡片网格）+ AI 批量生图（[架构](./docs/architecture/2d-capability-analysis.md)） | WIP 82% | 5.9K TS/TSX (41 files), 3 tests |
+| **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + Apple Music 风格波形；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接） | Alpha 92% | 7.2K TS/TSX (42 files), 5 tests |
+| **neko-story** | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 90% | 5.9K TS/TSX (41 files), 3 tests |
 | **neko-market** | 资产市场 - Skills/着色器/模型/预设搜索 + 安装 + 版本管理 + 本地模型部署 | Alpha 97% | 4.4K TS/TSX (47 files), 9 tests |
 | **neko-assets** | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + Document + PathVariable 全格式 | Alpha 92% | 9.2K TS (47 files), 7 tests |
 | **neko-tools** | 媒体工具 - Diff 比较 + 并行优化 + 协议增强 | WIP 62% | 14.9K TS (69 files), 6 tests |
-| **neko-canvas** | 无限画布 - 6 种节点 + 分组 + 画板导出 + Port UI + EditOperation；**规划**：ShotNode + SceneGroupNode + GalleryNode（多视图）+ 内嵌生图对话框 + ScriptNode/DocumentNode/ModelNode（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 87% | 14.1K TS/TSX (79 files), 4 tests |
+| **neko-canvas** | 无限画布 - 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 93% | 14.1K TS/TSX (79 files), 4 tests |
 
 ### 创作模块
 
 | 模块 | 职能 | 状态 | 规模 |
 |------|------|------|------|
 | **neko-model** | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成（[架构](./docs/architecture/3d-capability-analysis.md)） | Alpha 65% | 3.5K TS/TSX (39 files) |
-| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + AI 生图导入 + i18n（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 90% | 13.9K TS/TSX (126 files), 7 tests |
+| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + AI 生图/Inpaint/风格迁移/自动分层 + 跨模块工作流（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 95% | 13.9K TS/TSX (126 files), 7 tests |
 | **neko-audio** | 音频工作站 - 波形编辑 + 12 种效果链 + 频谱分析 + AI 降噪 + 麦克风录音 + 导出 | Alpha 95% | 9.2K TS/TSX (54 files), 3 tests |
 
 ### 规划中

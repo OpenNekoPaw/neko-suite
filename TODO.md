@@ -51,6 +51,32 @@
 
 ---
 
+## ✅ P2.5d — 分镜创作流水线 + 跨扩展协同（已完成）
+
+> 完整的 Script → Canvas → Cut 创作流水线及跨扩展 AI 协同机制。
+
+- [x] **ShotNode 数据类型**（@neko/shared）：`ShotScale` / `ShotCharacter[]` / `CameraMovement` / `GeneratedImageVersion[]` ✅
+- [x] **neko-story 脚本视图**（ScriptTableView）：动态角色列组 + 景别/运镜/情绪/场景标签全字段 ✅
+- [x] **neko-story 创意视图**（CreativeGridView）：卡片网格 + 16:9 生图占位 + 角色 badge ✅
+- [x] **neko-story → Agent P1**：右键 "→ Agent" 注入 story-selection payload；`neko.story.applyInlineDiff` 命令 ✅
+- [x] **ShotNode + SceneGroupNode**：neko-canvas 分镜节点 + 场景横向容器（generationHistory 候选导航）✅
+- [x] **GalleryNode**：多视图画廊节点（5 种 layout + 单格/批量生图 + costumeLabel + @引用）✅
+- [x] **GenerationPromptPanel**：内嵌生图对话框（canvasStore.generationPanelState + overlay UI）✅
+- [x] **AutoPrompt P1**：`neko.agent.buildPrompt`（中文描述 + 角色/景别/情绪 → 结构化英文 prompt）✅
+- [x] **BatchGenerationScheduler P1**：批量分镜生图队列（maxConcurrent=2 + 指数退避 + AbortController + 进度回传）✅
+- [x] **Canvas × Agent MCP Tools P1**：7 工具（`canvas_list/get/update/create_node` + `generate_image/batch` + `set_project_generation_config`）+ canvasAmbientContext 环境注入 ✅
+- [x] **Agent Context Protocol P1**：`neko.agent.sendContext` + `AgentContextPayload` + `AgentContextChip` UI ✅
+- [x] **import_script_to_canvas MCP Tool P1**：screenplay → SceneGroupNode + ShotNode 链（每场景 1 SceneGroupNode + ~lineSpan/10 ShotNodes）✅
+- [x] **分镜导出 P1**：`neko.cut.importStoryboard` postMessage→webview；storyboardExport.ts buildTimelineShots ✅
+- [x] **ScriptNode / DocumentNode / ModelNode P2**：剧本 TOC 目录节点 / PDF 封面缩略图节点 / AI 模型参考节点 ✅
+- [x] **neko-cut importGeneratedClip P1**：`neko.cut.importGeneratedClip(assetPath, duration?, trackIndex?)` ✅
+- [x] **ISkillProvider P3**（跨扩展技能发现）：neko-canvas 3 skills + neko-cut 2 skills；`ListPluginSkills` Agent Tool ✅
+- [x] **NekoCutAPI.ai.generateVideoForClip**：`neko.cut.ai.generateVideoForClip` 命令 ✅
+- [x] **CanvasNodeType 扩展**：@neko/shared canvas.ts 补全 `shot/scene/gallery/script/document/model/canvas-embed` + validator 白名单 ✅
+- [x] **canvas 文件选择器 P1**：`canvasEditorProvider.ts` 补 `case 'pickMedia'` handler ✅
+
+---
+
 ## 🔵 P3 — 长期功能
 
 - [x] neko-preview 文档预览 P0 ✅（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接；策略见 [ADR](./docs/architecture/document-preview.md)）
@@ -135,4 +161,4 @@
 
 ---
 
-*最后更新：2026-04-02（媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
+*最后更新：2026-04-02（分镜创作流水线 + 跨扩展协同全部完成；媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
