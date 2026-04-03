@@ -3,12 +3,16 @@
 //! Isolates bevy_ecs API details behind a stable interface.
 //! Mirrors native-scene's SceneWorld pattern.
 
-use crate::animation::{AnimationClipInfo, AnimationLibrary, AnimationPlayback};
+use crate::animation::{AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo};
+use crate::animation_blend::{
+    AnimationBlendState, BlendLayer, BlendLayerInfo, CrossfadeRequest,
+};
 use crate::components::*;
 use crate::hierarchy;
 use crate::loader::{self, LoadError};
 use crate::systems;
 use bevy_ecs::prelude::*;
+use neko_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
 /// Full snapshot of a loaded puppet for serialization to the frontend
@@ -107,6 +111,56 @@ pub trait PuppetWorld: Send + Sync {
 
     /// Seek the current animation to a specific time position (milliseconds)
     fn seek_animation(&mut self, time_ms: f32);
+
+    /// Get all keyframe tracks for a named animation clip
+    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<ParameterCurveInfo>, String>;
+
+    /// Add a keyframe to a parameter curve within a named clip.
+    /// Creates the curve if it doesn't exist for the given param_name.
+    /// Returns the new keyframe's UUID.
+    fn add_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        time_ms: f32,
+        value: f32,
+    ) -> Result<String, String>;
+
+    /// Remove a keyframe by ID from a parameter curve within a named clip
+    fn remove_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        keyframe_id: &str,
+    ) -> Result<(), String>;
+
+    /// Update a keyframe by ID (partial update — only provided fields change)
+    fn update_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        keyframe_id: &str,
+        time_ms: Option<f32>,
+        value: Option<f32>,
+        easing: Option<EasingType>,
+    ) -> Result<(), String>;
+
+    /// Create a new empty animation clip
+    fn create_clip(&mut self, name: &str, duration_ms: f32) -> Result<(), String>;
+
+    /// Crossfade from current animation(s) to a target clip over fade_duration_ms
+    fn crossfade_animation(
+        &mut self,
+        clip_name: &str,
+        fade_duration_ms: f32,
+        loop_anim: bool,
+    ) -> Result<(), String>;
+
+    /// Set the blend weight for a specific clip layer
+    fn set_blend_weight(&mut self, clip_name: &str, weight: f32) -> Result<(), String>;
+
+    /// Get the current blend state (all active layers)
+    fn get_blend_state(&mut self) -> Vec<BlendLayerInfo>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -119,6 +173,12 @@ impl BevyPuppetWorld {
         Self {
             world: World::new(),
         }
+    }
+
+    /// Find the root entity carrying PuppetRoot component
+    fn find_root(&mut self) -> Option<Entity> {
+        let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
+        q.iter(&self.world).next()
     }
 }
 
@@ -142,7 +202,7 @@ impl PuppetWorld for BevyPuppetWorld {
             };
             self.world
                 .entity_mut(load_result.root_entity)
-                .insert((lib, AnimationPlayback::default()));
+                .insert((lib, AnimationPlayback::default(), AnimationBlendState::default()));
         }
 
         // Run initial transform propagation
@@ -273,8 +333,24 @@ impl PuppetWorld for BevyPuppetWorld {
     }
 
     fn tick(&mut self, delta_ms: f32) -> PuppetDelta {
-        // 1. Advance animation and write parameter values (must run before parameter_update)
-        systems::animation_tick(&mut self.world, delta_ms);
+        // Check if blend layers exist — use blend_tick instead of animation_tick
+        let has_blend_layers = {
+            let mut q = self
+                .world
+                .query_filtered::<&AnimationBlendState, With<PuppetRoot>>();
+            q.iter(&self.world)
+                .next()
+                .map(|s| !s.layers.is_empty())
+                .unwrap_or(false)
+        };
+
+        if has_blend_layers {
+            // 1. Multi-layer blend animation
+            systems::animation_blend_tick(&mut self.world, delta_ms);
+        } else {
+            // 1. Single-clip animation
+            systems::animation_tick(&mut self.world, delta_ms);
+        }
 
         // 2. Run physics step
         systems::physics_tick(&mut self.world, delta_ms);
@@ -407,6 +483,246 @@ impl PuppetWorld for BevyPuppetWorld {
                 pb.elapsed_ms = time_ms.max(0.0);
             }
         }
+    }
+
+    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<ParameterCurveInfo>, String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let lib = self
+            .world
+            .get::<AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        let clip = lib
+            .clips
+            .iter()
+            .find(|c| c.name == clip_name)
+            .ok_or_else(|| format!("Clip '{}' not found", clip_name))?;
+        Ok(clip.get_tracks())
+    }
+
+    fn add_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        time_ms: f32,
+        value: f32,
+    ) -> Result<String, String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let mut lib = self
+            .world
+            .get_mut::<AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        let clip = lib
+            .clips
+            .iter_mut()
+            .find(|c| c.name == clip_name)
+            .ok_or_else(|| format!("Clip '{}' not found", clip_name))?;
+        let curve = clip.get_or_create_curve(param_name);
+        Ok(curve.add_keyframe(time_ms, value))
+    }
+
+    fn remove_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        keyframe_id: &str,
+    ) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let mut lib = self
+            .world
+            .get_mut::<AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        let clip = lib
+            .clips
+            .iter_mut()
+            .find(|c| c.name == clip_name)
+            .ok_or_else(|| format!("Clip '{}' not found", clip_name))?;
+        let curve = clip
+            .curves
+            .iter_mut()
+            .find(|c| c.param_name == param_name)
+            .ok_or_else(|| format!("Curve for param '{}' not found", param_name))?;
+        curve.remove_keyframe(keyframe_id)
+    }
+
+    fn update_keyframe(
+        &mut self,
+        clip_name: &str,
+        param_name: &str,
+        keyframe_id: &str,
+        time_ms: Option<f32>,
+        value: Option<f32>,
+        easing: Option<EasingType>,
+    ) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let mut lib = self
+            .world
+            .get_mut::<AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        let clip = lib
+            .clips
+            .iter_mut()
+            .find(|c| c.name == clip_name)
+            .ok_or_else(|| format!("Clip '{}' not found", clip_name))?;
+        let curve = clip
+            .curves
+            .iter_mut()
+            .find(|c| c.param_name == param_name)
+            .ok_or_else(|| format!("Curve for param '{}' not found", param_name))?;
+        curve.update_keyframe(keyframe_id, time_ms, value, easing)
+    }
+
+    fn create_clip(&mut self, name: &str, duration_ms: f32) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let mut lib = self
+            .world
+            .get_mut::<AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        if lib.clips.iter().any(|c| c.name == name) {
+            return Err(format!("Clip '{}' already exists", name));
+        }
+        lib.clips
+            .push(crate::animation::AnimationClip::create(name, duration_ms));
+        Ok(())
+    }
+
+    fn crossfade_animation(
+        &mut self,
+        clip_name: &str,
+        fade_duration_ms: f32,
+        loop_anim: bool,
+    ) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+
+        // Find target clip index
+        let target_clip_index = {
+            let lib = self
+                .world
+                .get::<AnimationLibrary>(root)
+                .ok_or("No animation library")?;
+            lib.clips
+                .iter()
+                .position(|c| c.name == clip_name)
+                .ok_or_else(|| format!("Clip '{}' not found", clip_name))?
+        };
+
+        // Migrate current single-clip playback into blend layer if needed
+        {
+            let blend_empty = self
+                .world
+                .get::<AnimationBlendState>(root)
+                .map(|s| s.layers.is_empty())
+                .unwrap_or(true);
+
+            if blend_empty {
+                // Check if there's an active single-clip playback to migrate
+                if let Some(pb) = self.world.get::<AnimationPlayback>(root) {
+                    if let Some(idx) = pb.clip_index {
+                        let layer = BlendLayer {
+                            clip_index: idx,
+                            elapsed_ms: pb.elapsed_ms,
+                            weight: 1.0,
+                            looping: pb.looping,
+                        };
+                        if let Some(mut blend) = self.world.get_mut::<AnimationBlendState>(root) {
+                            blend.layers.push(layer);
+                        }
+                    }
+                }
+                // Stop single-clip playback
+                if let Some(mut pb) = self.world.get_mut::<AnimationPlayback>(root) {
+                    pb.playing = false;
+                }
+            }
+        }
+
+        // Add target clip layer if not already present
+        {
+            let already_present = self
+                .world
+                .get::<AnimationBlendState>(root)
+                .map(|s| s.layers.iter().any(|l| l.clip_index == target_clip_index))
+                .unwrap_or(false);
+
+            if !already_present {
+                if let Some(mut blend) = self.world.get_mut::<AnimationBlendState>(root) {
+                    blend.layers.push(BlendLayer {
+                        clip_index: target_clip_index,
+                        elapsed_ms: 0.0,
+                        weight: 0.0,
+                        looping: loop_anim,
+                    });
+                }
+            }
+        }
+
+        // Insert or replace CrossfadeRequest
+        self.world.entity_mut(root).insert(CrossfadeRequest {
+            target_clip_index,
+            fade_duration_ms,
+            fade_elapsed_ms: 0.0,
+            loop_anim,
+        });
+
+        Ok(())
+    }
+
+    fn set_blend_weight(&mut self, clip_name: &str, weight: f32) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+
+        let clip_index = {
+            let lib = self
+                .world
+                .get::<AnimationLibrary>(root)
+                .ok_or("No animation library")?;
+            lib.clips
+                .iter()
+                .position(|c| c.name == clip_name)
+                .ok_or_else(|| format!("Clip '{}' not found", clip_name))?
+        };
+
+        let mut blend = self
+            .world
+            .get_mut::<AnimationBlendState>(root)
+            .ok_or("No blend state")?;
+        let layer = blend
+            .layers
+            .iter_mut()
+            .find(|l| l.clip_index == clip_index)
+            .ok_or_else(|| format!("No blend layer for clip '{}'", clip_name))?;
+        layer.weight = weight.clamp(0.0, 1.0);
+        Ok(())
+    }
+
+    fn get_blend_state(&mut self) -> Vec<BlendLayerInfo> {
+        let root = match self.find_root() {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
+
+        let clip_names: Vec<String> = self
+            .world
+            .get::<AnimationLibrary>(root)
+            .map(|lib| lib.clips.iter().map(|c| c.name.clone()).collect())
+            .unwrap_or_default();
+
+        self.world
+            .get::<AnimationBlendState>(root)
+            .map(|blend| {
+                blend
+                    .layers
+                    .iter()
+                    .map(|l| BlendLayerInfo {
+                        clip_name: clip_names
+                            .get(l.clip_index)
+                            .cloned()
+                            .unwrap_or_else(|| format!("clip_{}", l.clip_index)),
+                        elapsed_ms: l.elapsed_ms,
+                        weight: l.weight,
+                        looping: l.looping,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 

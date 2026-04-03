@@ -2,6 +2,7 @@
 
 use bevy_ecs::prelude::*;
 use glam::{Mat4, Quat, Vec3};
+use neko_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
 /// Unique stable identifier for serialization
@@ -135,13 +136,189 @@ pub enum AnimationProperty {
     MorphWeights,
 }
 
+/// A single keyframe in a scene animation channel
+#[derive(Clone, Debug)]
+pub struct SceneKeyframe {
+    /// Unique identifier (UUID v4)
+    pub id: String,
+    /// Timestamp in seconds
+    pub timestamp: f32,
+    /// Channel values at this keyframe (3 floats for translation/scale, 4 for rotation, N for morph weights)
+    pub values: Vec<f32>,
+    /// Easing function to the next keyframe
+    pub easing: EasingType,
+}
+
+impl SceneKeyframe {
+    pub fn new(timestamp: f32, values: Vec<f32>) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp,
+            values,
+            easing: EasingType::default(),
+        }
+    }
+}
+
+/// Serialized keyframe info returned by keyframe_tracks API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelKeyframeInfo {
+    pub id: String,
+    pub timestamp: f32,
+    pub values: Vec<f32>,
+    pub easing: String,
+}
+
+/// Serialized animation channel info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimationChannelInfo {
+    pub target_node: String,
+    pub property: String,
+    pub keyframes: Vec<ChannelKeyframeInfo>,
+}
+
 /// Keyframe data for one channel
 #[derive(Clone, Debug)]
 pub struct AnimationChannel {
     pub target_node: String,
     pub property: AnimationProperty,
-    pub timestamps: Vec<f32>,
-    pub values: Vec<f32>,
+    pub keyframes: Vec<SceneKeyframe>,
+}
+
+impl AnimationChannel {
+    /// Construct from flat timestamp/value arrays (migration constructor for glTF loader)
+    pub fn from_flat(
+        target_node: String,
+        property: AnimationProperty,
+        timestamps: &[f32],
+        values: &[f32],
+    ) -> Self {
+        let stride = if property.value_stride() > 0 {
+            property.value_stride()
+        } else if !timestamps.is_empty() {
+            // MorphWeights: infer stride from total values / number of keyframes
+            values.len() / timestamps.len()
+        } else {
+            1
+        };
+        let keyframes = timestamps
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| {
+                let start = i * stride;
+                let end = (start + stride).min(values.len());
+                SceneKeyframe::new(t, values[start..end].to_vec())
+            })
+            .collect();
+        Self {
+            target_node,
+            property,
+            keyframes,
+        }
+    }
+
+    /// Get flat timestamps for interpolation (backwards compatibility)
+    pub fn timestamps(&self) -> Vec<f32> {
+        self.keyframes.iter().map(|k| k.timestamp).collect()
+    }
+
+    /// Get flat values for interpolation (backwards compatibility)
+    pub fn values(&self) -> Vec<f32> {
+        self.keyframes.iter().flat_map(|k| k.values.iter().copied()).collect()
+    }
+
+    /// Add a keyframe, maintaining sorted order. Returns the new keyframe's ID.
+    pub fn add_keyframe(&mut self, timestamp: f32, values: Vec<f32>) -> String {
+        let kf = SceneKeyframe::new(timestamp, values);
+        let id = kf.id.clone();
+        let pos = self
+            .keyframes
+            .partition_point(|k| k.timestamp < timestamp);
+        self.keyframes.insert(pos, kf);
+        id
+    }
+
+    /// Remove a keyframe by ID
+    pub fn remove_keyframe(&mut self, id: &str) -> Result<(), String> {
+        let pos = self
+            .keyframes
+            .iter()
+            .position(|k| k.id == id)
+            .ok_or_else(|| format!("Keyframe '{}' not found", id))?;
+        self.keyframes.remove(pos);
+        Ok(())
+    }
+
+    /// Update a keyframe by ID (partial update). Re-sorts if timestamp changed.
+    pub fn update_keyframe(
+        &mut self,
+        id: &str,
+        timestamp: Option<f32>,
+        values: Option<Vec<f32>>,
+        easing: Option<EasingType>,
+    ) -> Result<(), String> {
+        let kf = self
+            .keyframes
+            .iter_mut()
+            .find(|k| k.id == id)
+            .ok_or_else(|| format!("Keyframe '{}' not found", id))?;
+
+        let time_changed = timestamp.is_some();
+        if let Some(t) = timestamp {
+            kf.timestamp = t;
+        }
+        if let Some(v) = values {
+            kf.values = v;
+        }
+        if let Some(e) = easing {
+            kf.easing = e;
+        }
+
+        if time_changed {
+            self.keyframes.sort_by(|a, b| {
+                a.timestamp
+                    .partial_cmp(&b.timestamp)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        Ok(())
+    }
+
+    /// Serialize to frontend-facing info
+    pub fn to_info(&self) -> AnimationChannelInfo {
+        let property_str = match self.property {
+            AnimationProperty::Translation => "translation",
+            AnimationProperty::Rotation => "rotation",
+            AnimationProperty::Scale => "scale",
+            AnimationProperty::MorphWeights => "morphWeights",
+        };
+        AnimationChannelInfo {
+            target_node: self.target_node.clone(),
+            property: property_str.to_string(),
+            keyframes: self
+                .keyframes
+                .iter()
+                .map(|k| ChannelKeyframeInfo {
+                    id: k.id.clone(),
+                    timestamp: k.timestamp,
+                    values: k.values.clone(),
+                    easing: k.easing.to_str().to_string(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl AnimationProperty {
+    /// Number of float values per keyframe for this property
+    pub fn value_stride(&self) -> usize {
+        match self {
+            AnimationProperty::Translation | AnimationProperty::Scale => 3,
+            AnimationProperty::Rotation => 4,
+            // Morph weights: variable, but handled separately
+            AnimationProperty::MorphWeights => 0,
+        }
+    }
 }
 
 /// Animation clip data
@@ -150,6 +327,44 @@ pub struct AnimationClipData {
     pub name: String,
     pub duration: f32,
     pub channels: Vec<AnimationChannel>,
+}
+
+impl AnimationClipData {
+    /// Create an empty animation clip
+    pub fn create(name: &str, duration: f32) -> Self {
+        Self {
+            name: name.to_string(),
+            duration,
+            channels: Vec::new(),
+        }
+    }
+
+    /// Get all channels as serialized info
+    pub fn get_tracks(&self) -> Vec<AnimationChannelInfo> {
+        self.channels.iter().map(|c| c.to_info()).collect()
+    }
+
+    /// Find a channel by target_node + property, or create one if not found.
+    pub fn get_or_create_channel(
+        &mut self,
+        target_node: &str,
+        property: AnimationProperty,
+    ) -> &mut AnimationChannel {
+        let exists = self.channels.iter().position(|c| {
+            c.target_node == target_node && std::mem::discriminant(&c.property) == std::mem::discriminant(&property)
+        });
+        match exists {
+            Some(idx) => &mut self.channels[idx],
+            None => {
+                self.channels.push(AnimationChannel {
+                    target_node: target_node.to_string(),
+                    property,
+                    keyframes: Vec::new(),
+                });
+                self.channels.last_mut().unwrap()
+            }
+        }
+    }
 }
 
 /// Attached animation clips on an entity

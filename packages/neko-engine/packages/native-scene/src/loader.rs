@@ -298,12 +298,12 @@ fn load_animations(
                 None => Vec::new(),
             };
 
-            channels.push(AnimationChannel {
-                target_node: target_node_id,
+            channels.push(AnimationChannel::from_flat(
+                target_node_id,
                 property,
-                timestamps,
-                values,
-            });
+                &timestamps,
+                &values,
+            ));
         }
 
         clips.push(AnimationClipData {

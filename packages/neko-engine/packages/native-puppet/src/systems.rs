@@ -3,11 +3,13 @@
 //! Called manually (not via a scheduler) — mirrors native-scene pattern.
 //! Systems operate on bevy_ecs::World directly.
 
-use crate::animation::{AnimationLibrary, AnimationPlayback};
+use crate::animation::{AnimationClip, AnimationLibrary, AnimationPlayback};
+use crate::animation_blend::{AnimationBlendState, BlendLayer, CrossfadeRequest};
 use crate::components::*;
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
+use neko_types::easing::{Easing, EasingType};
 
 /// Propagate local Transform2D through the hierarchy to compute GlobalTransform2D.
 ///
@@ -215,8 +217,8 @@ pub fn animation_tick(world: &mut World, delta_ms: f32) {
     };
 
     // 3. Read animation curves (cloned so we can mutate world later)
-    //    Format: Vec<(param_name, Vec<(time_ms, value)>)>
-    let (duration, raw_curves): (f32, Vec<(String, Vec<(f32, f32)>)>) = {
+    //    Format: Vec<(param_name, Vec<(time_ms, value, easing)>)>
+    let (duration, raw_curves): (f32, Vec<(String, Vec<(f32, f32, EasingType)>)>) = {
         match world.get::<AnimationLibrary>(root_entity) {
             Some(lib) => match lib.clips.get(clip_index) {
                 Some(clip) => {
@@ -224,7 +226,11 @@ pub fn animation_tick(world: &mut World, delta_ms: f32) {
                         .curves
                         .iter()
                         .map(|c| {
-                            let kfs = c.keyframes.iter().map(|k| (k.time_ms, k.value)).collect();
+                            let kfs = c
+                                .keyframes
+                                .iter()
+                                .map(|k| (k.time_ms, k.value, k.easing))
+                                .collect();
                             (c.param_name.clone(), kfs)
                         })
                         .collect();
@@ -248,10 +254,10 @@ pub fn animation_tick(world: &mut World, delta_ms: f32) {
         (advanced, true)
     };
 
-    // 5. Sample curves at new_elapsed using linear interpolation
+    // 5. Sample curves at new_elapsed using eased interpolation
     let param_updates: Vec<(String, f32)> = raw_curves
         .iter()
-        .map(|(name, kfs)| (name.clone(), sample_linear(kfs, new_elapsed)))
+        .map(|(name, kfs)| (name.clone(), sample_eased(kfs, new_elapsed)))
         .collect();
 
     // 6. Update playback state
@@ -271,8 +277,8 @@ pub fn animation_tick(world: &mut World, delta_ms: f32) {
     }
 }
 
-/// Linear interpolation helper for sampled keyframe data
-fn sample_linear(keyframes: &[(f32, f32)], time_ms: f32) -> f32 {
+/// Eased interpolation helper for sampled keyframe data (time, value, easing)
+fn sample_eased(keyframes: &[(f32, f32, EasingType)], time_ms: f32) -> f32 {
     if keyframes.is_empty() {
         return 0.0;
     }
@@ -288,14 +294,177 @@ fn sample_linear(keyframes: &[(f32, f32)], time_ms: f32) -> f32 {
         return first.1;
     }
     for i in 0..keyframes.len() - 1 {
-        let (t0, v0) = keyframes[i];
-        let (t1, v1) = keyframes[i + 1];
+        let (t0, v0, easing) = keyframes[i];
+        let (t1, v1, _) = keyframes[i + 1];
         if time_ms >= t0 && time_ms <= t1 {
-            let t = (time_ms - t0) / (t1 - t0);
-            return v0 + t * (v1 - v0);
+            let linear_t = (time_ms - t0) / (t1 - t0);
+            let eased_t = Easing::evaluate(easing, linear_t as f64) as f32;
+            return v0 + eased_t * (v1 - v0);
         }
     }
     last.1
+}
+
+/// Sample all parameter curves in a clip at the given time.
+/// Returns a list of (param_name, value) pairs.
+fn sample_clip_params(clip: &AnimationClip, time_ms: f32) -> Vec<(&str, f32)> {
+    clip.curves
+        .iter()
+        .map(|c| (c.param_name.as_str(), c.sample(time_ms)))
+        .collect()
+}
+
+/// Advance multi-layer animation blending and write weighted parameter values.
+///
+/// Must be called instead of animation_tick when AnimationBlendState has layers.
+///
+/// Steps:
+///   1. Read blend state + optional crossfade request from root
+///   2. Process crossfade: advance fade timer, adjust weights, clean up on completion
+///   3. Advance elapsed_ms per layer (with loop/stop handling)
+///   4. Sample each layer's clip curves at new elapsed_ms, multiply by weight
+///   5. Accumulate same-name parameters across layers → PuppetParameters.current
+pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
+    // Find root entity
+    let root_entity: Option<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<PuppetRoot>>();
+        q.iter(world).next()
+    };
+    let root_entity = match root_entity {
+        Some(e) => e,
+        None => return,
+    };
+
+    // Check if blend state has layers
+    let has_layers = world
+        .get::<AnimationBlendState>(root_entity)
+        .map(|s| !s.layers.is_empty())
+        .unwrap_or(false);
+    if !has_layers {
+        return;
+    }
+
+    // Read clip data (durations + curves) from AnimationLibrary
+    let clip_data: Vec<(f32, Vec<(String, Vec<(f32, f32, EasingType)>)>)> = {
+        match world.get::<AnimationLibrary>(root_entity) {
+            Some(lib) => lib
+                .clips
+                .iter()
+                .map(|clip| {
+                    let curves = clip
+                        .curves
+                        .iter()
+                        .map(|c| {
+                            let kfs = c
+                                .keyframes
+                                .iter()
+                                .map(|k| (k.time_ms, k.value, k.easing))
+                                .collect();
+                            (c.param_name.clone(), kfs)
+                        })
+                        .collect();
+                    (clip.duration_ms, curves)
+                })
+                .collect(),
+            None => return,
+        }
+    };
+
+    // Process crossfade
+    let crossfade_done = {
+        match world.get::<CrossfadeRequest>(root_entity) {
+            Some(cf) => cf.fade_elapsed_ms + delta_ms >= cf.fade_duration_ms,
+            None => false,
+        }
+    };
+
+    if let Some(mut cf) = world.get_mut::<CrossfadeRequest>(root_entity) {
+        cf.fade_elapsed_ms += delta_ms;
+        let fade_t = (cf.fade_elapsed_ms / cf.fade_duration_ms.max(0.001)).clamp(0.0, 1.0);
+        let target_idx = cf.target_clip_index;
+
+        // Adjust blend state weights: fade out old layers, fade in target
+        if let Some(mut blend) = world.get_mut::<AnimationBlendState>(root_entity) {
+            for layer in &mut blend.layers {
+                if layer.clip_index == target_idx {
+                    layer.weight = fade_t;
+                } else {
+                    layer.weight = (1.0 - fade_t).max(0.0);
+                }
+            }
+        }
+    }
+
+    // If crossfade completed, remove old layers and CrossfadeRequest
+    if crossfade_done {
+        let target_info = world
+            .get::<CrossfadeRequest>(root_entity)
+            .map(|cf| (cf.target_clip_index, cf.loop_anim));
+
+        if let Some((target_idx, _looping)) = target_info {
+            if let Some(mut blend) = world.get_mut::<AnimationBlendState>(root_entity) {
+                blend.layers.retain(|l| l.clip_index == target_idx);
+                // Ensure target weight is 1.0
+                for layer in &mut blend.layers {
+                    layer.weight = 1.0;
+                }
+            }
+        }
+        world.entity_mut(root_entity).remove::<CrossfadeRequest>();
+    }
+
+    // Clone layers for iteration (releases mutable borrow)
+    let mut layers: Vec<BlendLayer> = match world.get::<AnimationBlendState>(root_entity) {
+        Some(blend) => blend.layers.clone(),
+        None => return,
+    };
+
+    // Advance each layer's elapsed_ms
+    for layer in &mut layers {
+        if layer.clip_index >= clip_data.len() {
+            continue;
+        }
+        let duration = clip_data[layer.clip_index].0;
+        let advanced = layer.elapsed_ms + delta_ms;
+        if advanced >= duration {
+            if layer.looping {
+                layer.elapsed_ms = advanced % duration.max(0.001);
+            } else {
+                layer.elapsed_ms = duration;
+                layer.weight = 0.0; // Non-looping done → fade out
+            }
+        } else {
+            layer.elapsed_ms = advanced;
+        }
+    }
+
+    // Sample curves and accumulate weighted parameter values
+    let mut param_accum: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    for layer in &layers {
+        if layer.weight <= 0.0 || layer.clip_index >= clip_data.len() {
+            continue;
+        }
+        let (_, ref curves) = clip_data[layer.clip_index];
+        for (param_name, kfs) in curves {
+            let value = sample_eased(kfs, layer.elapsed_ms);
+            *param_accum.entry(param_name.clone()).or_insert(0.0) += value * layer.weight;
+        }
+    }
+
+    // Write back updated layers
+    if let Some(mut blend) = world.get_mut::<AnimationBlendState>(root_entity) {
+        blend.layers = layers;
+    }
+
+    // Apply accumulated values to PuppetParameters
+    let mut q = world.query::<&mut PuppetParameters>();
+    for mut params in q.iter_mut(world) {
+        for p in &mut params.params {
+            if let Some(&val) = param_accum.get(&p.name) {
+                p.current = val.clamp(p.min, p.max);
+            }
+        }
+    }
 }
 
 /// Run a single physics simulation step.

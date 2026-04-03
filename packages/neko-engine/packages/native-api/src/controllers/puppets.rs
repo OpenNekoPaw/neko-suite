@@ -206,6 +206,166 @@ impl Controller for PuppetsController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "keyframe_tracks" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeTracksOptions {
+                    clip_name: String,
+                }
+                let opts: KeyframeTracksOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let tracks = service
+                    .get_keyframe_tracks(&opts.clip_name)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(tracks)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "keyframe_add" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeAddOptions {
+                    clip_name: String,
+                    param_name: String,
+                    time_ms: f32,
+                    value: f32,
+                }
+                let opts: KeyframeAddOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let id = service
+                    .add_keyframe(&opts.clip_name, &opts.param_name, opts.time_ms, opts.value)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(serde_json::json!({ "id": id }))
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "keyframe_remove" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeRemoveOptions {
+                    clip_name: String,
+                    param_name: String,
+                    keyframe_id: String,
+                }
+                let opts: KeyframeRemoveOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .remove_keyframe(&opts.clip_name, &opts.param_name, &opts.keyframe_id)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "keyframe_update" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeUpdateOptions {
+                    clip_name: String,
+                    param_name: String,
+                    keyframe_id: String,
+                    time_ms: Option<f32>,
+                    value: Option<f32>,
+                    easing: Option<String>,
+                }
+                let opts: KeyframeUpdateOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                // Parse easing string to EasingType
+                let easing = opts
+                    .easing
+                    .map(|s| neko_types::easing::EasingType::from_str(&s));
+
+                let service = self.service()?;
+                service
+                    .update_keyframe(
+                        &opts.clip_name,
+                        &opts.param_name,
+                        &opts.keyframe_id,
+                        opts.time_ms,
+                        opts.value,
+                        easing,
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "clip_create" => {
+                #[derive(Debug, Deserialize)]
+                struct ClipCreateOptions {
+                    name: String,
+                    duration_ms: f32,
+                }
+                let opts: ClipCreateOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .create_clip(&opts.name, opts.duration_ms)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "anim_crossfade" => {
+                #[derive(Debug, Deserialize)]
+                struct CrossfadeOptions {
+                    clip_name: String,
+                    fade_duration_ms: f32,
+                    #[serde(default)]
+                    loop_anim: bool,
+                }
+                let opts: CrossfadeOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .crossfade_animation(&opts.clip_name, opts.fade_duration_ms, opts.loop_anim)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "blend_weight" => {
+                #[derive(Debug, Deserialize)]
+                struct BlendWeightOptions {
+                    clip_name: String,
+                    weight: f32,
+                }
+                let opts: BlendWeightOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_blend_weight(&opts.clip_name, opts.weight)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "blend_state" => {
+                let service = self.service()?;
+                let state = service
+                    .get_blend_state()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(state)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

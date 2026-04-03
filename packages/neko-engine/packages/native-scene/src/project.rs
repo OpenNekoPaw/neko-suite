@@ -21,7 +21,7 @@ pub enum ProjectError {
 }
 
 /// Current project format version.
-const CURRENT_VERSION: u32 = 1;
+const CURRENT_VERSION: u32 = 2;
 
 /// On-disk representation of a neko-model project (.nkm).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +39,18 @@ pub struct NkmProject {
     pub node_mesh_map: HashMap<String, String>,
     /// Opaque frontend editor state (selected node, camera position, active panel, etc.).
     pub editor_state: serde_json::Value,
+
+    // ── v2 fields (all #[serde(default)] for backwards compat with v1) ──
+
+    /// Saved face parameter templates (32-param standard set)
+    #[serde(default)]
+    pub face_params: HashMap<String, f32>,
+    /// Custom animation clips created by the user (not from glTF)
+    #[serde(default)]
+    pub custom_clips: Vec<serde_json::Value>,
+    /// Saved camera state for viewport restore
+    #[serde(default)]
+    pub camera: Option<serde_json::Value>,
 }
 
 impl NkmProject {
@@ -76,6 +88,9 @@ impl NkmProject {
             scene_snapshot,
             node_mesh_map,
             editor_state,
+            face_params: HashMap::new(),
+            custom_clips: Vec::new(),
+            camera: None,
         }
     }
 }
@@ -138,7 +153,7 @@ mod tests {
         project.save(&path).unwrap();
         let loaded = NkmProject::load(&path).unwrap();
 
-        assert_eq!(loaded.version, 1);
+        assert_eq!(loaded.version, 2);
         assert_eq!(loaded.source_models, vec!["model.glb"]);
         assert_eq!(loaded.scene_snapshot.nodes.len(), 1);
         assert_eq!(loaded.scene_snapshot.nodes[0].name, "Cube");
@@ -157,5 +172,23 @@ mod tests {
 
         let result = NkmProject::load(&path);
         assert!(matches!(result, Err(ProjectError::UnsupportedVersion(999))));
+    }
+
+    #[test]
+    fn v1_project_loads_with_defaults() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("v1.nkm");
+        // v1 format: no face_params, custom_clips, camera fields
+        std::fs::write(
+            &path,
+            r#"{"version":1,"source_models":[],"procedural_meshes":{},"scene_snapshot":{"nodes":[],"animations":[]},"editor_state":null}"#,
+        )
+        .unwrap();
+
+        let loaded = NkmProject::load(&path).unwrap();
+        assert_eq!(loaded.version, 1);
+        assert!(loaded.face_params.is_empty());
+        assert!(loaded.custom_clips.is_empty());
+        assert!(loaded.camera.is_none());
     }
 }

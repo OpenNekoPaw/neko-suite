@@ -1,7 +1,7 @@
 # 2D/3D 角色编辑能力综合分析
 
 > 日期：2026-04-03
-> 状态：**P1 TS 侧完成** ✅（Phase 1-7 全部完成，37 文件修改 + 13 新建，1835 行新增）| Phase 2 Rust 引擎待实施
+> 状态：**P1 TS 侧完成** ✅ | **Phase 2 Rust 引擎完成** ✅（关键帧 CRUD + 动画混合 + Scene 侧 + 项目 v2，91 个 Rust 测试通过）
 > 范围：neko-puppet / neko-model / neko-sketch / neko-engine
 > 关联：[2d-capability-analysis.md](./2d-capability-analysis.md) | [3d-capability-analysis.md](./3d-capability-analysis.md) | [制作指南](../guides/inochi2d-face-parameter-guide.md)
 

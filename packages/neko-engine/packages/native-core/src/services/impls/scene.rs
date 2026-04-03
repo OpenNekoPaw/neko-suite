@@ -8,7 +8,7 @@ use crate::gpu::scene_renderer::{AssetCache, CameraParams, PbrRenderer, SceneRen
 use crate::gpu::GpuContext;
 use crate::services::scene::ISceneService;
 use neko_native_scene::components::{
-    GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
+    AnimationChannelInfo, GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
 };
 use neko_native_scene::exporter::{self, ExportNode};
 use neko_native_scene::procedural_mesh::ProceduralMesh;
@@ -16,6 +16,7 @@ use neko_native_scene::project::NkmProject;
 use neko_native_scene::world::{
     AnimationClipInfo, BevySceneWorld, SceneDelta, SceneSnapshot, SceneWorld,
 };
+use neko_types::easing::EasingType;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -486,6 +487,66 @@ impl ISceneService for SceneService {
 
         let final_snapshot = world.get_snapshot();
         Ok((final_snapshot, project.editor_state))
+    }
+
+    fn get_keyframe_tracks(&self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world.get_keyframe_tracks(clip_name).map_err(Error::Other)
+    }
+
+    fn add_keyframe(
+        &self,
+        clip_name: &str,
+        node_id: &str,
+        property: &str,
+        timestamp: f32,
+        values: Vec<f32>,
+    ) -> Result<String> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .add_keyframe(clip_name, node_id, property, timestamp, values)
+            .map_err(Error::Other)
+    }
+
+    fn remove_keyframe(&self, clip_name: &str, keyframe_id: &str) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .remove_keyframe(clip_name, keyframe_id)
+            .map_err(Error::Other)
+    }
+
+    fn update_keyframe(
+        &self,
+        clip_name: &str,
+        keyframe_id: &str,
+        timestamp: Option<f32>,
+        values: Option<Vec<f32>>,
+        easing: Option<EasingType>,
+    ) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .update_keyframe(clip_name, keyframe_id, timestamp, values, easing)
+            .map_err(Error::Other)
+    }
+
+    fn create_clip(&self, name: &str, duration: f32) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world.create_clip(name, duration).map_err(Error::Other)
     }
 }
 

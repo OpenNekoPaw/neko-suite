@@ -8,6 +8,7 @@ use crate::loader::{self, LoadError, LoadResult};
 use crate::systems;
 use bevy_ecs::prelude::*;
 use glam::Vec3;
+use neko_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -80,6 +81,36 @@ pub trait SceneWorld: Send + Sync {
     fn get_animation_clips(&mut self) -> Vec<AnimationClipInfo>;
     /// Restore scene from a snapshot (used when loading .nkm projects).
     fn restore_snapshot(&mut self, snapshot: &SceneSnapshot);
+
+    /// Get keyframe tracks for a named animation clip
+    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>, String>;
+
+    /// Add a keyframe to a channel within a named clip.
+    /// `node_id` + `property` identify the channel; creates channel if needed.
+    fn add_keyframe(
+        &mut self,
+        clip_name: &str,
+        node_id: &str,
+        property: &str,
+        timestamp: f32,
+        values: Vec<f32>,
+    ) -> Result<String, String>;
+
+    /// Remove a keyframe by ID from a named clip
+    fn remove_keyframe(&mut self, clip_name: &str, keyframe_id: &str) -> Result<(), String>;
+
+    /// Update a keyframe by ID (partial update)
+    fn update_keyframe(
+        &mut self,
+        clip_name: &str,
+        keyframe_id: &str,
+        timestamp: Option<f32>,
+        values: Option<Vec<f32>>,
+        easing: Option<EasingType>,
+    ) -> Result<(), String>;
+
+    /// Create a new empty animation clip
+    fn create_clip(&mut self, name: &str, duration: f32) -> Result<(), String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -97,6 +128,29 @@ impl BevySceneWorld {
     /// Access the inner ECS World (for GPU rendering queries)
     pub fn ecs_world_mut(&mut self) -> &mut World {
         &mut self.world
+    }
+
+    /// Find the entity + clip by clip name within AnimationTarget components
+    fn find_clip_mut(&mut self, clip_name: &str) -> Result<(Entity, usize), String> {
+        let mut q = self.world.query::<(Entity, &AnimationTarget)>();
+        let targets: Vec<(Entity, Vec<String>)> = q
+            .iter(&self.world)
+            .map(|(e, t)| {
+                (
+                    e,
+                    t.clips.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+                )
+            })
+            .collect();
+
+        for (entity, names) in targets {
+            for (idx, name) in names.iter().enumerate() {
+                if name == clip_name {
+                    return Ok((entity, idx));
+                }
+            }
+        }
+        Err(format!("Clip '{}' not found", clip_name))
     }
 }
 
@@ -285,6 +339,100 @@ impl SceneWorld for BevySceneWorld {
 
         // Propagate transforms
         systems::transform_propagation(&mut self.world);
+    }
+
+    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>, String> {
+        let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
+        let target = self.world.get::<AnimationTarget>(entity).ok_or("No animation target")?;
+        Ok(target.clips[clip_idx].get_tracks())
+    }
+
+    fn add_keyframe(
+        &mut self,
+        clip_name: &str,
+        node_id: &str,
+        property: &str,
+        timestamp: f32,
+        values: Vec<f32>,
+    ) -> Result<String, String> {
+        let prop = parse_animation_property(property)?;
+        let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
+        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        let channel = target.clips[clip_idx].get_or_create_channel(node_id, prop);
+        Ok(channel.add_keyframe(timestamp, values))
+    }
+
+    fn remove_keyframe(&mut self, clip_name: &str, keyframe_id: &str) -> Result<(), String> {
+        let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
+        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        // Search all channels for the keyframe
+        for channel in &mut target.clips[clip_idx].channels {
+            if channel.keyframes.iter().any(|k| k.id == keyframe_id) {
+                return channel.remove_keyframe(keyframe_id);
+            }
+        }
+        Err(format!("Keyframe '{}' not found in clip '{}'", keyframe_id, clip_name))
+    }
+
+    fn update_keyframe(
+        &mut self,
+        clip_name: &str,
+        keyframe_id: &str,
+        timestamp: Option<f32>,
+        values: Option<Vec<f32>>,
+        easing: Option<EasingType>,
+    ) -> Result<(), String> {
+        let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
+        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        for channel in &mut target.clips[clip_idx].channels {
+            if channel.keyframes.iter().any(|k| k.id == keyframe_id) {
+                return channel.update_keyframe(keyframe_id, timestamp, values, easing);
+            }
+        }
+        Err(format!("Keyframe '{}' not found in clip '{}'", keyframe_id, clip_name))
+    }
+
+    fn create_clip(&mut self, name: &str, duration: f32) -> Result<(), String> {
+        // Check if clip already exists
+        let mut q = self.world.query::<&AnimationTarget>();
+        for target in q.iter(&self.world) {
+            if target.clips.iter().any(|c| c.name == name) {
+                return Err(format!("Clip '{}' already exists", name));
+            }
+        }
+
+        // Find scene root or first entity with AnimationTarget, or create AnimationTarget on root
+        let root = {
+            let mut rq = self.world.query_filtered::<Entity, With<SceneRoot>>();
+            rq.iter(&self.world).next()
+        };
+
+        if let Some(root) = root {
+            if let Some(mut target) = self.world.get_mut::<AnimationTarget>(root) {
+                target.clips.push(AnimationClipData::create(name, duration));
+            } else {
+                self.world.entity_mut(root).insert(AnimationTarget {
+                    clips: vec![AnimationClipData::create(name, duration)],
+                });
+            }
+        } else {
+            // No scene root — spawn a dedicated entity
+            self.world.spawn(AnimationTarget {
+                clips: vec![AnimationClipData::create(name, duration)],
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Parse animation property string to enum
+fn parse_animation_property(s: &str) -> Result<AnimationProperty, String> {
+    match s {
+        "translation" => Ok(AnimationProperty::Translation),
+        "rotation" => Ok(AnimationProperty::Rotation),
+        "scale" => Ok(AnimationProperty::Scale),
+        "morphWeights" | "morph_weights" => Ok(AnimationProperty::MorphWeights),
+        _ => Err(format!("Unknown animation property: {}", s)),
     }
 }
 

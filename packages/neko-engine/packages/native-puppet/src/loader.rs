@@ -249,10 +249,10 @@ fn parse_animation_curves(anim_obj: &Value) -> Vec<ParameterCurve> {
                 .and_then(|v| v.as_array())
                 .map(|kfs| {
                     kfs.iter()
-                        .map(|kf| Keyframe {
-                            time_ms: json_f32(kf, "time"),
-                            value: json_f32(kf, "value"),
-                        })
+                        .map(|kf| Keyframe::new(
+                            json_f32(kf, "time"),
+                            json_f32(kf, "value"),
+                        ))
                         .collect()
                 })
                 .unwrap_or_default();

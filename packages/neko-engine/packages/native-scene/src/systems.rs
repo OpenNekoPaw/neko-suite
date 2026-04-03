@@ -110,28 +110,31 @@ fn apply_clip_at_time(
             }
         };
 
-        if channel.timestamps.is_empty() {
+        let timestamps = channel.timestamps();
+        let values = channel.values();
+
+        if timestamps.is_empty() {
             continue;
         }
 
-        let (idx, t) = find_keyframe_lerp(&channel.timestamps, time);
-        let has_next = idx + 1 < channel.timestamps.len();
+        let (idx, t) = find_keyframe_lerp(&timestamps, time);
+        let has_next = idx + 1 < timestamps.len();
 
         match channel.property {
             AnimationProperty::Translation => {
-                if channel.values.len() >= (idx + 1) * 3 {
+                if values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
                     let a = glam::Vec3::new(
-                        channel.values[base],
-                        channel.values[base + 1],
-                        channel.values[base + 2],
+                        values[base],
+                        values[base + 1],
+                        values[base + 2],
                     );
-                    let pos = if has_next && channel.values.len() >= (idx + 2) * 3 {
+                    let pos = if has_next && values.len() >= (idx + 2) * 3 {
                         let next_base = (idx + 1) * 3;
                         let b = glam::Vec3::new(
-                            channel.values[next_base],
-                            channel.values[next_base + 1],
-                            channel.values[next_base + 2],
+                            values[next_base],
+                            values[next_base + 1],
+                            values[next_base + 2],
                         );
                         a.lerp(b, t)
                     } else {
@@ -143,21 +146,21 @@ fn apply_clip_at_time(
                 }
             }
             AnimationProperty::Rotation => {
-                if channel.values.len() >= (idx + 1) * 4 {
+                if values.len() >= (idx + 1) * 4 {
                     let base = idx * 4;
                     let a = glam::Quat::from_xyzw(
-                        channel.values[base],
-                        channel.values[base + 1],
-                        channel.values[base + 2],
-                        channel.values[base + 3],
+                        values[base],
+                        values[base + 1],
+                        values[base + 2],
+                        values[base + 3],
                     );
-                    let rot = if has_next && channel.values.len() >= (idx + 2) * 4 {
+                    let rot = if has_next && values.len() >= (idx + 2) * 4 {
                         let next_base = (idx + 1) * 4;
                         let b = glam::Quat::from_xyzw(
-                            channel.values[next_base],
-                            channel.values[next_base + 1],
-                            channel.values[next_base + 2],
-                            channel.values[next_base + 3],
+                            values[next_base],
+                            values[next_base + 1],
+                            values[next_base + 2],
+                            values[next_base + 3],
                         );
                         a.slerp(b, t)
                     } else {
@@ -169,19 +172,19 @@ fn apply_clip_at_time(
                 }
             }
             AnimationProperty::Scale => {
-                if channel.values.len() >= (idx + 1) * 3 {
+                if values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
                     let a = glam::Vec3::new(
-                        channel.values[base],
-                        channel.values[base + 1],
-                        channel.values[base + 2],
+                        values[base],
+                        values[base + 1],
+                        values[base + 2],
                     );
-                    let scl = if has_next && channel.values.len() >= (idx + 2) * 3 {
+                    let scl = if has_next && values.len() >= (idx + 2) * 3 {
                         let next_base = (idx + 1) * 3;
                         let b = glam::Vec3::new(
-                            channel.values[next_base],
-                            channel.values[next_base + 1],
-                            channel.values[next_base + 2],
+                            values[next_base],
+                            values[next_base + 1],
+                            values[next_base + 2],
                         );
                         a.lerp(b, t)
                     } else {
@@ -193,30 +196,30 @@ fn apply_clip_at_time(
                 }
             }
             AnimationProperty::MorphWeights => {
-                let n_frames = channel.timestamps.len();
-                if n_frames == 0 || channel.values.is_empty() {
+                let n_frames = timestamps.len();
+                if n_frames == 0 || values.is_empty() {
                     continue;
                 }
-                let morph_count = channel.values.len() / n_frames;
+                let morph_count = values.len() / n_frames;
                 if morph_count == 0 {
                     continue;
                 }
                 let base = idx * morph_count;
-                if channel.values.len() < base + morph_count {
+                if values.len() < base + morph_count {
                     continue;
                 }
-                let weights = if has_next && channel.values.len() >= (idx + 2) * morph_count {
+                let weights = if has_next && values.len() >= (idx + 2) * morph_count {
                     let next_base = (idx + 1) * morph_count;
                     // LERP each morph weight
                     (0..morph_count)
                         .map(|i| {
-                            let a = channel.values[base + i];
-                            let b = channel.values[next_base + i];
+                            let a = values[base + i];
+                            let b = values[next_base + i];
                             a + (b - a) * t
                         })
                         .collect()
                 } else {
-                    channel.values[base..base + morph_count].to_vec()
+                    values[base..base + morph_count].to_vec()
                 };
                 if let Some(mut mw) = world.get_mut::<MorphWeights>(target_entity) {
                     mw.weights = weights;
@@ -367,12 +370,12 @@ mod tests {
         let clip = AnimationClipData {
             name: "morph_test".to_string(),
             duration: 1.5,
-            channels: vec![AnimationChannel {
-                target_node: "node_0".to_string(),
-                property: AnimationProperty::MorphWeights,
-                timestamps: vec![0.0, 0.5, 1.0],
-                values: vec![0.0, 1.0, 0.5, 0.5, 1.0, 0.0],
-            }],
+            channels: vec![AnimationChannel::from_flat(
+                "node_0".to_string(),
+                AnimationProperty::MorphWeights,
+                &[0.0, 0.5, 1.0],
+                &[0.0, 1.0, 0.5, 0.5, 1.0, 0.0],
+            )],
         };
 
         let root = world

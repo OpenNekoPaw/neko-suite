@@ -5,6 +5,7 @@
 //! for 3D scenes but targets 2D Inochi2D puppet models (.inp files).
 
 pub mod animation;
+pub mod animation_blend;
 pub mod components;
 pub mod hierarchy;
 pub mod loader;

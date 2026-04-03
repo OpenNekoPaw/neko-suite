@@ -4,7 +4,9 @@
 
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
 use crate::gpu::PbrRenderError;
+use neko_native_scene::components::AnimationChannelInfo;
 use neko_native_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
+use neko_types::easing::EasingType;
 use std::path::Path;
 
 /// Service interface for 3D scene management
@@ -79,4 +81,33 @@ pub trait ISceneService: Send + Sync {
         &self,
         path: &str,
     ) -> crate::error::Result<(SceneSnapshot, serde_json::Value)>;
+
+    /// Get keyframe tracks for a named animation clip
+    fn get_keyframe_tracks(&self, clip_name: &str) -> crate::error::Result<Vec<AnimationChannelInfo>>;
+
+    /// Add a keyframe to a channel within a named clip
+    fn add_keyframe(
+        &self,
+        clip_name: &str,
+        node_id: &str,
+        property: &str,
+        timestamp: f32,
+        values: Vec<f32>,
+    ) -> crate::error::Result<String>;
+
+    /// Remove a keyframe by ID from a named clip
+    fn remove_keyframe(&self, clip_name: &str, keyframe_id: &str) -> crate::error::Result<()>;
+
+    /// Update a keyframe by ID (partial update)
+    fn update_keyframe(
+        &self,
+        clip_name: &str,
+        keyframe_id: &str,
+        timestamp: Option<f32>,
+        values: Option<Vec<f32>>,
+        easing: Option<EasingType>,
+    ) -> crate::error::Result<()>;
+
+    /// Create a new empty animation clip
+    fn create_clip(&self, name: &str, duration: f32) -> crate::error::Result<()>;
 }

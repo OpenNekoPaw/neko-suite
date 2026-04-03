@@ -335,6 +335,120 @@ impl Controller for ScenesController {
                 ))
             }
 
+            "keyframe_tracks" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeTracksOptions {
+                    clip_name: String,
+                }
+                let opts: KeyframeTracksOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let tracks = service
+                    .get_keyframe_tracks(&opts.clip_name)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(tracks)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "keyframe_add" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeAddOptions {
+                    clip_name: String,
+                    node_id: String,
+                    property: String,
+                    timestamp: f32,
+                    values: Vec<f32>,
+                }
+                let opts: KeyframeAddOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let id = service
+                    .add_keyframe(
+                        &opts.clip_name,
+                        &opts.node_id,
+                        &opts.property,
+                        opts.timestamp,
+                        opts.values,
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(serde_json::json!({ "id": id }))
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "keyframe_remove" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeRemoveOptions {
+                    clip_name: String,
+                    keyframe_id: String,
+                }
+                let opts: KeyframeRemoveOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .remove_keyframe(&opts.clip_name, &opts.keyframe_id)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "keyframe_update" => {
+                #[derive(Debug, Deserialize)]
+                struct KeyframeUpdateOptions {
+                    clip_name: String,
+                    keyframe_id: String,
+                    timestamp: Option<f32>,
+                    values: Option<Vec<f32>>,
+                    easing: Option<String>,
+                }
+                let opts: KeyframeUpdateOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let easing = opts
+                    .easing
+                    .map(|s| neko_types::easing::EasingType::from_str(&s));
+
+                let service = self.service()?;
+                service
+                    .update_keyframe(
+                        &opts.clip_name,
+                        &opts.keyframe_id,
+                        opts.timestamp,
+                        opts.values,
+                        easing,
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "clip_create" => {
+                #[derive(Debug, Deserialize)]
+                struct ClipCreateOptions {
+                    name: String,
+                    duration: f32,
+                }
+                let opts: ClipCreateOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .create_clip(&opts.name, opts.duration)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

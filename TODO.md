@@ -167,4 +167,37 @@
 
 ---
 
-*最后更新：2026-04-02（分镜创作流水线 + 跨扩展协同全部完成；媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
+## ✅ P2.5e — 角色编辑 Rust 引擎 Phase 2（已完成）
+
+> [ADR](./docs/architecture/character-editing-analysis.md)
+> TS 侧 Phase 1 已完成（37 files, +3603 LOC），本阶段实现 Rust 后端使关键帧编辑器和动画混合在运行时可用。
+
+### Step 0: EasingType 共享
+- [x] `EasingType` 从 `native-core` 迁移到 `neko-types/easing.rs`（30+ variants + evaluate + from_str/to_str kebab-case）
+- [x] `native-core/animation/easing.rs` 改为 re-export，零行为变化
+
+### Step 2a: Puppet 关键帧 CRUD
+- [x] `native-puppet/animation.rs` — Keyframe 扩展（UUID id + EasingType easing）、CRUD 方法（add/remove/update）、序列化类型（KeyframeInfo/ParameterCurveInfo）
+- [x] `native-puppet/systems.rs` — `sample_eased()` 替换线性插值，支持 30 种缓动函数
+- [x] `native-puppet/world.rs` — PuppetWorld +5 方法（get_keyframe_tracks/add/remove/update_keyframe/create_clip）
+- [x] Service + Controller — 5 个 action（`keyframe_tracks/keyframe_add/keyframe_remove/keyframe_update/clip_create`）
+
+### Step 2b: Puppet 动画混合
+- [x] `native-puppet/animation_blend.rs` — BlendLayer/AnimationBlendState/CrossfadeRequest ECS 组件
+- [x] `native-puppet/systems.rs` — `animation_blend_tick()` 多层加权混合 + 自动渐变
+- [x] `native-puppet/world.rs` — crossfade_animation/set_blend_weight/get_blend_state + tick 自动切换 blend/single 模式
+- [x] Service + Controller — 3 个 action（`anim_crossfade/blend_weight/blend_state`）
+
+### Step 2c: Scene 关键帧 CRUD + 项目 v2
+- [x] `native-scene/components.rs` — SceneKeyframe（UUID + easing）+ AnimationChannel 重构（from_flat/CRUD/to_info）+ AnimationClipData 扩展
+- [x] `native-scene/systems.rs` + `loader.rs` — 适配新 keyframe 结构，glTF 加载使用 `from_flat()`
+- [x] `native-scene/world.rs` — SceneWorld +5 方法（get_keyframe_tracks/add/remove/update_keyframe/create_clip）
+- [x] `native-scene/project.rs` — v2 升级（新增 face_params/custom_clips/camera，v1 兼容加载）
+- [x] Service + Controller — 5 个 action
+- [x] `neko-types/registry.rs` — PUPPETS +8 actions, SCENES +5 actions
+
+**测试结果**：puppet 51 tests + scene 40 tests = 91 全部通过
+
+---
+
+*最后更新：2026-04-03（角色编辑 Rust 引擎 Phase 2 全部完成：关键帧 CRUD + 动画混合 + Scene 侧 + 项目 v2）*

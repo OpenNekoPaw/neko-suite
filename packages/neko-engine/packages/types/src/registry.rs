@@ -136,6 +136,11 @@ pub mod actions {
         "export_gltf",
         "save_project",
         "load_project",
+        "keyframe_tracks",
+        "keyframe_add",
+        "keyframe_remove",
+        "keyframe_update",
+        "clip_create",
     ];
 
     pub const PUPPETS: &[&str] = &[
@@ -149,6 +154,14 @@ pub mod actions {
         "anim_play",
         "anim_stop",
         "anim_seek",
+        "keyframe_tracks",
+        "keyframe_add",
+        "keyframe_remove",
+        "keyframe_update",
+        "clip_create",
+        "anim_crossfade",
+        "blend_weight",
+        "blend_state",
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];

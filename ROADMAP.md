@@ -10,7 +10,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
-| **neko-engine** | Alpha | 96% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）|
+| **neko-engine** | Alpha | 97% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）+ **关键帧 CRUD + 动画混合**（puppet/scene 双端）|
 | **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + AI Action Handler（12 action 含 remove-silence） |
 | **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **6 种创作专家 SubAgent**（含 quality-checker）+ **JSONL Session 持久化** + **Creative Memory** + **媒体质量评估系统**（VisionEvaluator/VideoFrameEvaluator/AudioEvaluator/ConsistencyEvaluator + RemediationPlanner 15 category + qualityGate 管线）；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
@@ -22,7 +22,7 @@
 | **neko-tools** | WIP | 68% | 媒体 Diff + 静音检测 UI（琥珀色叠加层）+ 并行优化 + 协议增强 |
 | **neko-canvas** | Alpha | 93% | 无限画布 + 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中 |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL |
-| **neko-model** | Alpha | 65% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情） |
+| **neko-model** | Alpha | 72% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情）+ **关键帧编辑 Rust 后端 ✅** |
 | **neko-sketch** | Alpha | 95% | S.1-S.4 全部完成（绘画 + 骨骼动画 + 高级 2D + Inpaint/StyleTransfer/AutoLayer + sketch.generate + 跨模块工作流 Timeline/Canvas）|
 | **neko-audio** | Alpha | 95% | 完整音频工作站 + 12 种效果链 + Engine 麦克风 + 78 测试 |
 | **neko-live** | Planned | 5% | 仅扩展入口骨架 |
@@ -131,9 +131,12 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] CanvasEmbedNode P3（.nkc 缩略图 + 双击打开）
 - [ ] 节点性能优化（按需，当前 DOM/SVG 方案足够）
 
-### neko-model (3D) — 待完成
-> [ADR](./docs/architecture/3d-capability-analysis.md)
+### neko-model (3D) + neko-puppet (2D) — 角色编辑 Rust 引擎 ✅
+> [ADR](./docs/architecture/character-editing-analysis.md) | [3D ADR](./docs/architecture/3d-capability-analysis.md)
 - Phase 3.1-3.3 ✅（基础 3D + AI 捏脸 + CSG + PBR + 粒子 + 时间线集成）
+- Phase 2 Rust 引擎 ✅（关键帧 CRUD + 动画混合 + EasingType 30+ variants + 项目 v2）：
+  - native-puppet: 51 tests（Keyframe CRUD + blend_tick + 8 API actions）
+  - native-scene: 40 tests（SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2）
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
@@ -271,4 +274,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-02（分镜创作流水线 + 跨扩展 AI 联动全部完成；neko-story/canvas/sketch 分镜系统收尾；媒体质量评估全 5 Phase 完成；Agent 工具/技能/MCP 增强全 Phase 完成）*
+*最后更新: 2026-04-03（角色编辑 Rust 引擎 Phase 2 全部完成：关键帧 CRUD + 动画混合 + Scene 侧 + 项目 v2；91 个 Rust 测试通过）*

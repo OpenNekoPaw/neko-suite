@@ -12,6 +12,7 @@
 
 pub mod codec;
 pub mod common;
+pub mod easing;
 pub mod effects;
 pub mod error;
 pub mod export;
@@ -28,6 +29,7 @@ pub mod waveform;
 // Re-export commonly used types
 pub use codec::*;
 pub use common::*;
+pub use easing::*;
 pub use effects::*;
 pub use error::*;
 pub use export::*;
