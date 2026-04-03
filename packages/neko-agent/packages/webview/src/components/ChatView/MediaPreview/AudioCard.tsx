@@ -1,9 +1,12 @@
 /**
- * AudioPlayer - Compact audio preview card
+ * AudioCard - Compact audio result card (renamed from AudioPlayer, ADR-6)
  *
  * Displays audio metadata with file info.
  * Clicking "Open" opens the file in neko-preview
  * (hardware-accelerated audio preview with waveform via customEditor).
+ *
+ * ADR-6 fix: inline mode now shows a static waveform placeholder + click→neko-preview,
+ * consistent with VideoCard inline behaviour (no native <audio controls>).
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
@@ -45,11 +48,12 @@ function formatTime(time: number): string {
 }
 
 /**
- * Compact inline audio player shown inside TaskCard.
- * Uses native <audio controls> which works for MP3/WAV/AAC/OGG-Vorbis in Electron.
- * Falls back to "Open in Preview" if the browser cannot decode the format (e.g. raw Opus).
+ * Compact inline audio card shown inside TaskCard (ADR-6 fix).
+ * Shows static waveform placeholder + filename + duration.
+ * Clicking opens in neko-preview — consistent with VideoCard inline behaviour.
+ * A hidden <audio preload="metadata"> is used only to extract duration.
  */
-function InlineAudioPlayer({
+function InlineAudioCard({
   src,
   title,
   localPath,
@@ -60,7 +64,7 @@ function InlineAudioPlayer({
   localPath?: string;
   className?: string;
 }) {
-  const [cannotPlay, setCannotPlay] = useState(false);
+  const [duration, setDuration] = useState(0);
   const fileName = getFileName(src, title);
 
   const handleOpenPreview = useCallback(() => {
@@ -72,35 +76,45 @@ function InlineAudioPlayer({
     }
   }, [localPath, src]);
 
-  if (cannotPlay) {
-    return (
-      <div
-        className={`flex items-center gap-2 px-2 py-1.5 rounded bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#a855f7)] ${className || ''}`}
-      >
-        <AudioIcon className="w-3 h-3 text-[var(--vscode-charts-purple)] shrink-0" />
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] truncate flex-1">
-          {fileName}
-        </span>
-        <button
-          onClick={handleOpenPreview}
-          className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] text-[10px] transition-colors shrink-0"
-        >
-          Open in Preview
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className={`rounded overflow-hidden ${className || ''}`}>
+    <div
+      onClick={handleOpenPreview}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer
+        bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#a855f7)]
+        hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${className || ''}`}
+    >
+      {/* Hidden audio element — metadata extraction only */}
       <audio
         src={src}
-        controls
         preload="metadata"
-        className="w-full h-8"
-        style={{ colorScheme: 'dark' }}
-        onError={() => setCannotPlay(true)}
+        onLoadedMetadata={(e) => {
+          const audio = e.currentTarget;
+          if (isFinite(audio.duration)) {
+            setDuration(audio.duration);
+          }
+        }}
+        style={{ display: 'none' }}
       />
+
+      {/* Static waveform placeholder icon */}
+      <AudioWaveformIcon className="w-4 h-4 text-[var(--vscode-charts-purple)] shrink-0" />
+
+      {/* File name */}
+      <span className="flex-1 truncate text-[11px] text-[var(--vscode-foreground)]">
+        {fileName}
+      </span>
+
+      {/* Duration */}
+      {duration > 0 && (
+        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] tabular-nums shrink-0">
+          {formatTime(duration)}
+        </span>
+      )}
+
+      {/* "Open in Preview" hint */}
+      <span className="text-[9px] text-[var(--vscode-descriptionForeground)] opacity-60 shrink-0">
+        Open in Preview
+      </span>
     </div>
   );
 }
@@ -146,11 +160,9 @@ function AudioPlayerComponent({
     }
   }, [localPath, src]);
 
-  // Inline mode: compact native audio player for use inside TaskCard
+  // Inline mode: compact card with waveform placeholder + click-to-open (ADR-6)
   if (inline) {
-    return (
-      <InlineAudioPlayer src={src} title={title} localPath={localPath} className={className} />
-    );
+    return <InlineAudioCard src={src} title={title} localPath={localPath} className={className} />;
   }
 
   return (
@@ -257,7 +269,10 @@ function AudioPlayerComponent({
   );
 }
 
-export const AudioPlayer = memo(AudioPlayerComponent);
+export const AudioCard = memo(AudioPlayerComponent);
+
+/** @deprecated Use AudioCard instead */
+export const AudioPlayer = AudioCard;
 
 // Icons
 function AudioIcon({ className }: { className?: string }) {
@@ -306,6 +321,20 @@ function PlayIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+/** Static waveform placeholder icon for inline mode (ADR-6) */
+function AudioWaveformIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <rect x="2" y="10" width="2" height="4" rx="1" />
+      <rect x="6" y="7" width="2" height="10" rx="1" />
+      <rect x="10" y="4" width="2" height="16" rx="1" />
+      <rect x="14" y="8" width="2" height="8" rx="1" />
+      <rect x="18" y="6" width="2" height="12" rx="1" />
+      <rect x="22" y="9" width="2" height="6" rx="1" />
     </svg>
   );
 }
