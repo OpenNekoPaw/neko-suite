@@ -20,20 +20,33 @@ const logger = getLogger('HealthMonitor');
 /**
  * Create a concrete FileAccessChecker using Node.js fs.
  *
+ * Resolves path variables (e.g. "${A}/path") before checking file accessibility.
  * Distinguishes between:
  * - online: file readable
  * - missing: parent directory accessible but file not found (likely deleted)
- * - offline: parent directory not accessible (likely NAS disconnected)
+ * - offline: parent directory not accessible (likely NAS/variable not configured)
+ *
+ * @param resolvePath — optional function to expand path variables before checking.
+ *   Typically `(p) => library.resolvePath(p)` from AssetLibrary.
  */
-export function createFileAccessChecker(): FileAccessChecker {
+export function createFileAccessChecker(
+  resolvePath?: (storedPath: string) => string,
+): FileAccessChecker {
   return async (filePath: string): Promise<AssetFileStatus> => {
+    const resolved = resolvePath ? resolvePath(filePath) : filePath;
+
+    // If path still contains ${VAR} after resolve, the variable is not configured
+    if (resolved.includes('${')) {
+      return 'offline';
+    }
+
     try {
-      await fs.access(filePath, fs.constants.R_OK);
+      await fs.access(resolved, fs.constants.R_OK);
       return 'online';
     } catch {
       // Check if parent directory is accessible
       try {
-        const dir = path.dirname(filePath);
+        const dir = path.dirname(resolved);
         await fs.access(dir, fs.constants.R_OK);
         return 'missing'; // Directory ok but file gone → deleted/moved
       } catch {

@@ -48,6 +48,7 @@ const logger = getLogger('Extension');
 let library: AssetLibrary | null = null;
 let diffService: AssetDiffService | null = null;
 let thumbnailService: ThumbnailService | null = null;
+let healthMonitor: AssetHealthMonitor | null = null;
 
 // =============================================================================
 // Node.js IFileSystem Adapter
@@ -138,7 +139,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         classifier: new LLMClassifier(new RuleClassifier()),
         metadataExtractor,
         thumbnailGenerator: (filePath) => thumbnailService!.generate(filePath),
-        fileAccessChecker: createFileAccessChecker(),
+        fileAccessChecker: createFileAccessChecker((p) => library?.resolvePath(p) ?? p),
       });
 
       await library.initialize();
@@ -158,13 +159,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       });
       logger.info('AssetDiffService initialized with Git integration');
 
-      // Initialize Asset Health Monitor
-      const healthMonitor = new AssetHealthMonitor(library);
+      // Initialize Asset Health Monitor (initial check deferred until path variables are loaded)
+      healthMonitor = new AssetHealthMonitor(library);
       healthMonitor.registerCommands(context);
       context.subscriptions.push(healthMonitor);
-
-      // Run initial health check (non-blocking)
-      healthMonitor.runInitialCheck();
     } catch (error) {
       logger.error('Failed to initialize AssetLibrary:', error);
     }
@@ -209,11 +207,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await settingsService.load();
     context.subscriptions.push(settingsService);
 
-    // Sync path variables into library
+    // Sync path variables into library (must happen before health check)
     library.updatePathVariables(await settingsService.getPathVariableMap());
     settingsService.onDidChange(async () => {
       library!.updatePathVariables(await settingsService.getPathVariableMap());
     });
+
+    // Run initial health check now that path variables are available
+    healthMonitor?.runInitialCheck();
 
     // Initialize PathResolver for portable cache keys
     const cachePathResolver = new PathResolver();
