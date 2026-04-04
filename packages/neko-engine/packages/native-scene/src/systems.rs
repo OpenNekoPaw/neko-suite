@@ -2,10 +2,15 @@
 //!
 //! - transform_propagation: computes GlobalTransform from hierarchy
 //! - animation_tick: advances animation playback
+//! - scene_animation_blend_tick: multi-layer blended animation with crossfade
 
-use crate::components::{AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, Transform};
+use crate::animation_blend::{SceneAnimationBlendState, SceneBlendLayer, SceneCrossfadeRequest};
+use crate::components::{
+    AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, SceneRoot, Transform,
+};
 use crate::hierarchy::{Children, Parent};
 use bevy_ecs::prelude::*;
+use std::collections::HashMap;
 
 /// Propagate local transforms through the hierarchy to compute GlobalTransform.
 ///
@@ -255,6 +260,322 @@ fn find_keyframe_lerp(timestamps: &[f32], time: f32) -> (usize, f32) {
     }
     // Past the last keyframe
     (timestamps.len() - 1, 0.0)
+}
+
+/// Advance multi-layer scene animation blending and apply weighted transforms.
+///
+/// Must be called instead of animation_tick when SceneAnimationBlendState has layers.
+///
+/// Steps:
+///   1. Read blend state + optional crossfade request from scene root
+///   2. Process crossfade: advance fade timer, adjust weights, clean up on completion
+///   3. Advance elapsed per layer (with loop/stop handling)
+///   4. For each layer, evaluate all channels at new elapsed, multiply by weight
+///   5. Accumulate weighted transform values per node → apply to Transform components
+pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
+    // Find scene root entity
+    let root_entity: Option<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<SceneRoot>>();
+        q.iter(world).next()
+    };
+    let root_entity = match root_entity {
+        Some(e) => e,
+        None => return,
+    };
+
+    // Check if blend state has layers
+    let has_layers = world
+        .get::<SceneAnimationBlendState>(root_entity)
+        .map(|s| !s.layers.is_empty())
+        .unwrap_or(false);
+    if !has_layers {
+        return;
+    }
+
+    // Read clip data from AnimationTarget (durations + channels)
+    let clips: Vec<_> = {
+        match world.get::<AnimationTarget>(root_entity) {
+            Some(target) => target
+                .clips
+                .iter()
+                .map(|clip| (clip.name.clone(), clip.duration, clip.channels.clone()))
+                .collect(),
+            None => return,
+        }
+    };
+
+    // Process crossfade
+    let crossfade_done = {
+        match world.get::<SceneCrossfadeRequest>(root_entity) {
+            Some(cf) => cf.fade_elapsed + delta >= cf.fade_duration,
+            None => false,
+        }
+    };
+
+    if let Some(mut cf) = world.get_mut::<SceneCrossfadeRequest>(root_entity) {
+        cf.fade_elapsed += delta;
+        let fade_t = (cf.fade_elapsed / cf.fade_duration.max(0.001)).clamp(0.0, 1.0);
+        let target_idx = cf.target_clip_index;
+
+        if let Some(mut blend) = world.get_mut::<SceneAnimationBlendState>(root_entity) {
+            for layer in &mut blend.layers {
+                if layer.clip_index == target_idx {
+                    layer.weight = fade_t;
+                } else {
+                    layer.weight = (1.0 - fade_t).max(0.0);
+                }
+            }
+        }
+    }
+
+    // If crossfade completed, remove old layers and request
+    if crossfade_done {
+        let target_idx = world
+            .get::<SceneCrossfadeRequest>(root_entity)
+            .map(|cf| cf.target_clip_index);
+
+        if let Some(target_idx) = target_idx {
+            if let Some(mut blend) = world.get_mut::<SceneAnimationBlendState>(root_entity) {
+                blend.layers.retain(|l| l.clip_index == target_idx);
+                for layer in &mut blend.layers {
+                    layer.weight = 1.0;
+                }
+            }
+        }
+        world.entity_mut(root_entity).remove::<SceneCrossfadeRequest>();
+    }
+
+    // Clone layers for iteration
+    let mut layers: Vec<SceneBlendLayer> = match world.get::<SceneAnimationBlendState>(root_entity)
+    {
+        Some(blend) => blend.layers.clone(),
+        None => return,
+    };
+
+    // Advance each layer's elapsed time
+    for layer in &mut layers {
+        if layer.clip_index >= clips.len() {
+            continue;
+        }
+        let duration = clips[layer.clip_index].1;
+        let advanced = layer.elapsed + delta;
+        if advanced >= duration {
+            if layer.looping {
+                layer.elapsed = advanced % duration.max(0.001);
+            } else {
+                layer.elapsed = duration;
+                layer.weight = 0.0;
+            }
+        } else {
+            layer.elapsed = advanced;
+        }
+    }
+
+    // Write back updated layers
+    if let Some(mut blend) = world.get_mut::<SceneAnimationBlendState>(root_entity) {
+        blend.layers = layers.clone();
+    }
+
+    // Remove zero-weight non-looping layers
+    if let Some(mut blend) = world.get_mut::<SceneAnimationBlendState>(root_entity) {
+        blend.layers.retain(|l| l.weight > 0.0 || l.looping);
+    }
+
+    // Accumulate weighted transforms per node
+    // Key: (node_id, property) -> accumulated (value_vec, total_weight)
+    let mut translation_accum: HashMap<String, (glam::Vec3, f32)> = HashMap::new();
+    let mut rotation_accum: HashMap<String, (glam::Quat, f32)> = HashMap::new();
+    let mut scale_accum: HashMap<String, (glam::Vec3, f32)> = HashMap::new();
+    let mut morph_accum: HashMap<String, (Vec<f32>, f32)> = HashMap::new();
+
+    for layer in &layers {
+        if layer.weight <= 0.0 || layer.clip_index >= clips.len() {
+            continue;
+        }
+        let (_, duration, ref channels) = clips[layer.clip_index];
+        let time = if duration > 0.0 {
+            layer.elapsed % duration
+        } else {
+            0.0
+        };
+
+        for channel in channels {
+            let timestamps = channel.timestamps();
+            let values = channel.values();
+            if timestamps.is_empty() {
+                continue;
+            }
+
+            let (idx, t) = find_keyframe_lerp(&timestamps, time);
+            let has_next = idx + 1 < timestamps.len();
+
+            match channel.property {
+                AnimationProperty::Translation => {
+                    if values.len() >= (idx + 1) * 3 {
+                        let base = idx * 3;
+                        let a = glam::Vec3::new(values[base], values[base + 1], values[base + 2]);
+                        let val = if has_next && values.len() >= (idx + 2) * 3 {
+                            let nb = (idx + 1) * 3;
+                            let b = glam::Vec3::new(values[nb], values[nb + 1], values[nb + 2]);
+                            a.lerp(b, t)
+                        } else {
+                            a
+                        };
+                        let entry = translation_accum
+                            .entry(channel.target_node.clone())
+                            .or_insert((glam::Vec3::ZERO, 0.0));
+                        entry.0 += val * layer.weight;
+                        entry.1 += layer.weight;
+                    }
+                }
+                AnimationProperty::Rotation => {
+                    if values.len() >= (idx + 1) * 4 {
+                        let base = idx * 4;
+                        let a = glam::Quat::from_xyzw(
+                            values[base],
+                            values[base + 1],
+                            values[base + 2],
+                            values[base + 3],
+                        );
+                        let val = if has_next && values.len() >= (idx + 2) * 4 {
+                            let nb = (idx + 1) * 4;
+                            let b = glam::Quat::from_xyzw(
+                                values[nb],
+                                values[nb + 1],
+                                values[nb + 2],
+                                values[nb + 3],
+                            );
+                            a.slerp(b, t)
+                        } else {
+                            a
+                        };
+                        let entry = rotation_accum
+                            .entry(channel.target_node.clone())
+                            .or_insert((glam::Quat::IDENTITY, 0.0));
+                        if entry.1 == 0.0 {
+                            entry.0 = val;
+                        } else {
+                            // SLERP blend between accumulated and new
+                            let blend_t =
+                                layer.weight / (entry.1 + layer.weight);
+                            entry.0 = entry.0.slerp(val, blend_t);
+                        }
+                        entry.1 += layer.weight;
+                    }
+                }
+                AnimationProperty::Scale => {
+                    if values.len() >= (idx + 1) * 3 {
+                        let base = idx * 3;
+                        let a = glam::Vec3::new(values[base], values[base + 1], values[base + 2]);
+                        let val = if has_next && values.len() >= (idx + 2) * 3 {
+                            let nb = (idx + 1) * 3;
+                            let b = glam::Vec3::new(values[nb], values[nb + 1], values[nb + 2]);
+                            a.lerp(b, t)
+                        } else {
+                            a
+                        };
+                        let entry = scale_accum
+                            .entry(channel.target_node.clone())
+                            .or_insert((glam::Vec3::ZERO, 0.0));
+                        entry.0 += val * layer.weight;
+                        entry.1 += layer.weight;
+                    }
+                }
+                AnimationProperty::MorphWeights => {
+                    let n_frames = timestamps.len();
+                    if n_frames == 0 || values.is_empty() {
+                        continue;
+                    }
+                    let morph_count = values.len() / n_frames;
+                    if morph_count == 0 {
+                        continue;
+                    }
+                    let base = idx * morph_count;
+                    if values.len() < base + morph_count {
+                        continue;
+                    }
+                    let weights = if has_next && values.len() >= (idx + 2) * morph_count {
+                        let nb = (idx + 1) * morph_count;
+                        (0..morph_count)
+                            .map(|i| {
+                                let a = values[base + i];
+                                let b = values[nb + i];
+                                a + (b - a) * t
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        values[base..base + morph_count].to_vec()
+                    };
+
+                    let entry = morph_accum
+                        .entry(channel.target_node.clone())
+                        .or_insert((vec![0.0; morph_count], 0.0));
+                    for (i, w) in weights.iter().enumerate() {
+                        if i < entry.0.len() {
+                            entry.0[i] += w * layer.weight;
+                        }
+                    }
+                    entry.1 += layer.weight;
+                }
+            }
+        }
+    }
+
+    // Apply accumulated values to Transform components
+    for (node_id, (val, total_weight)) in &translation_accum {
+        if *total_weight <= 0.0 {
+            continue;
+        }
+        let normalized = *val / *total_weight;
+        apply_to_node_transform(world, node_id, |t| t.position = normalized);
+    }
+    for (node_id, (val, total_weight)) in &rotation_accum {
+        if *total_weight <= 0.0 {
+            continue;
+        }
+        apply_to_node_transform(world, node_id, |t| t.rotation = val.normalize());
+    }
+    for (node_id, (val, total_weight)) in &scale_accum {
+        if *total_weight <= 0.0 {
+            continue;
+        }
+        let normalized = *val / *total_weight;
+        apply_to_node_transform(world, node_id, |t| t.scale = normalized);
+    }
+    for (node_id, (weights, total_weight)) in &morph_accum {
+        if *total_weight <= 0.0 {
+            continue;
+        }
+        let normalized: Vec<f32> = weights.iter().map(|w| w / total_weight).collect();
+        let entity = find_entity_by_node_id(world, node_id);
+        if let Some(entity) = entity {
+            if let Some(mut mw) = world.get_mut::<MorphWeights>(entity) {
+                mw.weights = normalized;
+            } else {
+                world
+                    .entity_mut(entity)
+                    .insert(MorphWeights { weights: normalized });
+            }
+        }
+    }
+}
+
+fn find_entity_by_node_id(world: &mut World, node_id: &str) -> Option<Entity> {
+    let mut q = world.query::<(Entity, &crate::components::SceneNodeId)>();
+    for (entity, id) in q.iter(world) {
+        if id.0 == node_id {
+            return Some(entity);
+        }
+    }
+    None
+}
+
+fn apply_to_node_transform(world: &mut World, node_id: &str, f: impl FnOnce(&mut Transform)) {
+    if let Some(entity) = find_entity_by_node_id(world, node_id) {
+        if let Some(mut transform) = world.get_mut::<Transform>(entity) {
+            f(&mut transform);
+        }
+    }
 }
 
 #[cfg(test)]

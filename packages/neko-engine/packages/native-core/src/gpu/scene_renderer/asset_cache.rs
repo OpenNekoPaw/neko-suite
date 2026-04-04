@@ -5,7 +5,7 @@
 //! Independent of native-scene (preserves its zero-GPU-dependency).
 
 use crate::gpu::GpuContext;
-use super::vertex::PbrVertex;
+use super::vertex::{PbrVertex, SkinnedPbrVertex};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -17,6 +17,8 @@ pub struct GpuMesh {
     pub index_buffer: wgpu::Buffer,
     pub index_count: u32,
     pub index_format: wgpu::IndexFormat,
+    /// Whether this mesh uses skeletal skinning (has JOINTS_0 + WEIGHTS_0)
+    pub is_skinned: bool,
 }
 
 /// PBR material uniform data (16-byte aligned for GPU)
@@ -200,6 +202,7 @@ impl AssetCache {
                 index_buffer,
                 index_count: mesh.indices.len() as u32,
                 index_format: wgpu::IndexFormat::Uint32,
+                is_skinned: false,
             },
         );
 
@@ -253,61 +256,99 @@ impl AssetCache {
             .map(|iter| iter.collect())
             .unwrap_or_else(|| vec![[1.0, 0.0, 0.0, 1.0]; positions.len()]);
 
-        // Build PbrVertex array
-        let vertex_count = positions.len();
-        let mut vertices = Vec::with_capacity(vertex_count);
-        for i in 0..vertex_count {
-            vertices.push(PbrVertex {
-                position: positions[i],
-                normal: normals[i],
-                uv: uvs[i],
-                tangent: tangents[i],
-            });
-        }
+        // Read joint indices and weights (optional — for skinned meshes)
+        let joints: Option<Vec<[u16; 4]>> = reader
+            .read_joints(0)
+            .map(|iter| iter.into_u16().collect());
 
-        let vertex_buffer =
+        let weights: Option<Vec<[f32; 4]>> = reader
+            .read_weights(0)
+            .map(|iter| iter.into_f32().collect());
+
+        let is_skinned = joints.is_some() && weights.is_some();
+        let vertex_count = positions.len();
+
+        let vertex_buffer = if is_skinned {
+            let joints = joints.unwrap();
+            let weights = weights.unwrap();
+
+            let mut vertices = Vec::with_capacity(vertex_count);
+            for i in 0..vertex_count {
+                let j = if i < joints.len() { joints[i] } else { [0; 4] };
+                let w = if i < weights.len() { weights[i] } else { [0.0; 4] };
+                vertices.push(SkinnedPbrVertex {
+                    position: positions[i],
+                    normal: normals[i],
+                    uv: uvs[i],
+                    tangent: tangents[i],
+                    joint_indices: [j[0] as u32, j[1] as u32, j[2] as u32, j[3] as u32],
+                    joint_weights: w,
+                });
+            }
+
+            self.ctx
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("skinned_pbr_vertex_buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                })
+        } else {
+            let mut vertices = Vec::with_capacity(vertex_count);
+            for i in 0..vertex_count {
+                vertices.push(PbrVertex {
+                    position: positions[i],
+                    normal: normals[i],
+                    uv: uvs[i],
+                    tangent: tangents[i],
+                });
+            }
+
             self.ctx
                 .device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("pbr_vertex_buffer"),
                     contents: bytemuck::cast_slice(&vertices),
                     usage: wgpu::BufferUsages::VERTEX,
-                });
+                })
+        };
 
         // Read indices
-        let (index_buffer, index_count, index_format) = if let Some(indices) = reader.read_indices()
-        {
-            let indices_u32: Vec<u32> = indices.into_u32().collect();
-            let count = indices_u32.len() as u32;
-            let buf = self
-                .ctx
-                .device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("pbr_index_buffer"),
-                    contents: bytemuck::cast_slice(&indices_u32),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-            (buf, count, wgpu::IndexFormat::Uint32)
-        } else {
-            // No indices: generate sequential indices
-            let indices: Vec<u32> = (0..vertex_count as u32).collect();
-            let count = indices.len() as u32;
-            let buf = self
-                .ctx
-                .device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("pbr_index_buffer"),
-                    contents: bytemuck::cast_slice(&indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-            (buf, count, wgpu::IndexFormat::Uint32)
-        };
+        let reader2 = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+        let (index_buffer, index_count, index_format) =
+            if let Some(indices) = reader2.read_indices() {
+                let indices_u32: Vec<u32> = indices.into_u32().collect();
+                let count = indices_u32.len() as u32;
+                let buf = self
+                    .ctx
+                    .device()
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("pbr_index_buffer"),
+                        contents: bytemuck::cast_slice(&indices_u32),
+                        usage: wgpu::BufferUsages::INDEX,
+                    });
+                (buf, count, wgpu::IndexFormat::Uint32)
+            } else {
+                // No indices: generate sequential indices
+                let indices: Vec<u32> = (0..vertex_count as u32).collect();
+                let count = indices.len() as u32;
+                let buf = self
+                    .ctx
+                    .device()
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("pbr_index_buffer"),
+                        contents: bytemuck::cast_slice(&indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    });
+                (buf, count, wgpu::IndexFormat::Uint32)
+            };
 
         Ok(GpuMesh {
             vertex_buffer,
             index_buffer,
             index_count,
             index_format,
+            is_skinned,
         })
     }
 

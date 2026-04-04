@@ -449,6 +449,154 @@ impl Controller for ScenesController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "anim_crossfade" => {
+                #[derive(Debug, Deserialize)]
+                struct CrossfadeOptions {
+                    clip_name: String,
+                    fade_duration: f32,
+                    #[serde(default)]
+                    loop_anim: bool,
+                }
+                let opts: CrossfadeOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .crossfade_animation(&opts.clip_name, opts.fade_duration, opts.loop_anim)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "blend_weight" => {
+                #[derive(Debug, Deserialize)]
+                struct BlendWeightOptions {
+                    clip_name: String,
+                    weight: f32,
+                }
+                let opts: BlendWeightOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_blend_weight(&opts.clip_name, opts.weight)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "blend_state" => {
+                let service = self.service()?;
+                let state = service
+                    .get_blend_state()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(state)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "ik_create" => {
+                #[derive(Debug, Deserialize)]
+                struct IkCreateOptions {
+                    root_joint: String,
+                    end_effector: String,
+                    solver: Option<String>,
+                    iterations: Option<u32>,
+                    tolerance: Option<f32>,
+                }
+                let opts: IkCreateOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                let id = service
+                    .create_ik_chain(
+                        &opts.root_joint,
+                        &opts.end_effector,
+                        opts.solver.as_deref().unwrap_or("fabrik"),
+                        opts.iterations.unwrap_or(10),
+                        opts.tolerance.unwrap_or(0.001),
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "id": id }),
+                ))
+            }
+
+            "ik_remove" => {
+                #[derive(Debug, Deserialize)]
+                struct IkRemoveOptions {
+                    chain_id: String,
+                }
+                let opts: IkRemoveOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .remove_ik_chain(&opts.chain_id)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "ik_target" => {
+                #[derive(Debug, Deserialize)]
+                struct IkTargetOptions {
+                    chain_id: String,
+                    position: [f32; 3],
+                    rotation: Option<[f32; 4]>,
+                    pole: Option<[f32; 3]>,
+                }
+                let opts: IkTargetOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_ik_target(
+                        &opts.chain_id,
+                        opts.position,
+                        opts.rotation,
+                        opts.pole,
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "ik_enable" => {
+                #[derive(Debug, Deserialize)]
+                struct IkEnableOptions {
+                    chain_id: String,
+                    enabled: bool,
+                }
+                let opts: IkEnableOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_ik_enabled(&opts.chain_id, opts.enabled)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "ik_list" => {
+                let service = self.service()?;
+                let chains = service
+                    .get_ik_chains()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(chains)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

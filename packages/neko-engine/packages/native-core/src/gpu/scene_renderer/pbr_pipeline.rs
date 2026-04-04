@@ -16,12 +16,17 @@ use wgpu::util::DeviceExt;
 /// Maximum lights supported per scene
 const MAX_LIGHTS: usize = 16;
 
+/// Maximum joints per skeleton for GPU skinning
+const MAX_JOINTS: usize = 256;
+
 /// PBR forward renderer
 pub struct PbrRenderer {
     render_pipeline: wgpu::RenderPipeline,
+    skinned_render_pipeline: wgpu::RenderPipeline,
     camera_bind_group_layout: wgpu::BindGroupLayout,
     model_bind_group_layout: wgpu::BindGroupLayout,
     light_bind_group_layout: wgpu::BindGroupLayout,
+    joint_bind_group_layout: wgpu::BindGroupLayout,
     ctx: Arc<GpuContext>,
 }
 
@@ -175,17 +180,75 @@ impl PbrRenderer {
             }],
         });
 
+        // Joint matrices bind group layout for skinned meshes
+        let joint_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("pbr_joint_bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pbr_pipeline_layout"),
             bind_group_layouts: &[&camera_bgl, &model_bgl, &material_bgl, &light_bgl],
             push_constant_ranges: &[],
         });
 
+        let skinned_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("pbr_skinned_pipeline_layout"),
+                bind_group_layouts: &[
+                    &camera_bgl,
+                    &model_bgl,
+                    &material_bgl,
+                    &light_bgl,
+                    &joint_bgl,
+                ],
+                push_constant_ranges: &[],
+            });
+
         let shader_src = include_str!("../../../shaders/pbr_forward.wgsl");
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pbr_forward_shader"),
             source: wgpu::ShaderSource::Wgsl(shader_src.into()),
         });
+
+        let skinned_shader_src = include_str!("../../../shaders/pbr_forward_skinned.wgsl");
+        let skinned_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("pbr_forward_skinned_shader"),
+            source: wgpu::ShaderSource::Wgsl(skinned_shader_src.into()),
+        });
+
+        let depth_stencil = wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        };
+
+        let primitive = wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        };
+
+        let fragment_targets = [Some(wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba16Float,
+            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("pbr_render_pipeline"),
@@ -198,31 +261,33 @@ impl PbrRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
                 entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &fragment_targets,
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            primitive,
+            depth_stencil: Some(depth_stencil.clone()),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
+
+        let skinned_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("pbr_skinned_render_pipeline"),
+                layout: Some(&skinned_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &skinned_shader_module,
+                    entry_point: "vs_main",
+                    buffers: &[super::vertex::SkinnedPbrVertex::buffer_layout()],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &skinned_shader_module,
+                    entry_point: "fs_main",
+                    targets: &fragment_targets,
+                }),
+                primitive,
+                depth_stencil: Some(depth_stencil),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
 
         let material_bgl_clone = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("pbr_material_bgl_for_cache"),
@@ -279,9 +344,11 @@ impl PbrRenderer {
         (
             Self {
                 render_pipeline,
+                skinned_render_pipeline,
                 camera_bind_group_layout: camera_bgl,
                 model_bind_group_layout: model_bgl,
                 light_bind_group_layout: light_bgl,
+                joint_bind_group_layout: joint_bgl,
                 ctx,
             },
             material_bgl_clone,
@@ -412,14 +479,35 @@ impl PbrRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &camera_bind_group, &[]);
             render_pass.set_bind_group(3, &light_bind_group, &[]);
 
-            // Issue draw calls (all buffers live in draw_calls vec)
+            // Issue draw calls, switching pipeline for skinned vs non-skinned meshes
+            let mut current_skinned = false;
+            render_pass.set_pipeline(&self.render_pipeline);
+
             for call in &draw_calls {
+                if call.is_skinned != current_skinned {
+                    if call.is_skinned {
+                        render_pass.set_pipeline(&self.skinned_render_pipeline);
+                    } else {
+                        render_pass.set_pipeline(&self.render_pipeline);
+                    }
+                    current_skinned = call.is_skinned;
+                    // Re-bind shared groups after pipeline switch
+                    render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                    render_pass.set_bind_group(3, &light_bind_group, &[]);
+                }
+
                 render_pass.set_bind_group(1, &call.model_bind_group, &[]);
                 render_pass.set_bind_group(2, &call.material_bind_group, &[]);
+
+                if call.is_skinned {
+                    if let Some(ref jbg) = call.joint_bind_group {
+                        render_pass.set_bind_group(4, jbg, &[]);
+                    }
+                }
+
                 render_pass.set_vertex_buffer(0, call.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(call.index_buffer.slice(..), call.index_format);
                 render_pass.draw_indexed(0..call.index_count, 0, 0..1);
@@ -509,22 +597,43 @@ impl PbrRenderer {
         asset_cache: &'a AssetCache,
         device: &wgpu::Device,
     ) -> Vec<DrawCall<'a>> {
+        // Pre-collect skeleton data for joint matrix computation
+        let skeleton_data: Vec<(Entity, Vec<Entity>, Vec<Mat4>)> = {
+            let mut sq = world.query::<(Entity, &Skeleton)>();
+            sq.iter(world)
+                .map(|(e, s)| (e, s.joint_entities.clone(), s.inverse_bind_matrices.clone()))
+                .collect()
+        };
+
         let mut calls = Vec::new();
         let mut query =
-            world.query::<(&GlobalTransform, &MeshRef, Option<&MaterialRef>)>();
+            world.query::<(Entity, &GlobalTransform, &MeshRef, Option<&MaterialRef>)>();
 
-        for (global_transform, mesh_ref, material_ref) in query.iter(world) {
-            let gpu_mesh = match asset_cache.get_mesh(&mesh_ref.uri, mesh_ref.primitive_index) {
+        let draw_data: Vec<(Entity, Mat4, String, usize, Option<(String, usize)>)> = query
+            .iter(world)
+            .map(|(entity, gt, mesh_ref, mat_ref)| {
+                (
+                    entity,
+                    gt.0,
+                    mesh_ref.uri.clone(),
+                    mesh_ref.primitive_index,
+                    mat_ref.map(|m| (m.uri.clone(), m.material_index)),
+                )
+            })
+            .collect();
+
+        for (entity, model_matrix, mesh_uri, prim_idx, mat_info) in &draw_data {
+            let gpu_mesh = match asset_cache.get_mesh(mesh_uri, *prim_idx) {
                 Some(m) => m,
                 None => continue,
             };
 
-            let gpu_material = if let Some(mat_ref) = material_ref {
+            let gpu_material = if let Some((mat_uri, mat_idx)) = mat_info {
                 asset_cache
-                    .get_material(&mat_ref.uri, mat_ref.material_index)
-                    .or_else(|| asset_cache.get_default_material(&mesh_ref.uri))
+                    .get_material(mat_uri, *mat_idx)
+                    .or_else(|| asset_cache.get_default_material(mesh_uri))
             } else {
-                asset_cache.get_default_material(&mesh_ref.uri)
+                asset_cache.get_default_material(mesh_uri)
             };
 
             let gpu_material = match gpu_material {
@@ -533,7 +642,6 @@ impl PbrRenderer {
             };
 
             // Model uniforms
-            let model_matrix = global_transform.0;
             let normal_matrix = model_matrix.inverse().transpose();
             let model_uniforms = ModelUniformsGpu {
                 model: model_matrix.to_cols_array_2d(),
@@ -557,6 +665,60 @@ impl PbrRenderer {
                 }],
             });
 
+            // Compute joint matrices for skinned meshes
+            let (joint_bind_group, joint_buffer) = if gpu_mesh.is_skinned {
+                // Find skeleton for this entity (or its ancestors)
+                let skel = skeleton_data
+                    .iter()
+                    .find(|(e, _, _)| *e == *entity)
+                    .or_else(|| skeleton_data.first());
+
+                if let Some((_, joint_entities, ibms)) = skel {
+                    let mut joint_matrices =
+                        vec![Mat4::IDENTITY; MAX_JOINTS];
+
+                    for (i, joint_entity) in
+                        joint_entities.iter().enumerate().take(MAX_JOINTS)
+                    {
+                        let joint_global = world
+                            .get::<GlobalTransform>(*joint_entity)
+                            .map(|gt| gt.0)
+                            .unwrap_or(Mat4::IDENTITY);
+                        let ibm = ibms.get(i).copied().unwrap_or(Mat4::IDENTITY);
+                        joint_matrices[i] = joint_global * ibm;
+                    }
+
+                    // Flatten to f32 array
+                    let flat: Vec<f32> = joint_matrices
+                        .iter()
+                        .flat_map(|m| m.to_cols_array())
+                        .collect();
+
+                    let jbuf = device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("joint_matrices_buffer"),
+                            contents: bytemuck::cast_slice(&flat),
+                            usage: wgpu::BufferUsages::STORAGE,
+                        },
+                    );
+
+                    let jbg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("joint_matrices_bg"),
+                        layout: &self.joint_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: jbuf.as_entire_binding(),
+                        }],
+                    });
+
+                    (Some(jbg), Some(jbuf))
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
             calls.push(DrawCall {
                 model_buffer,
                 model_bind_group,
@@ -565,6 +727,9 @@ impl PbrRenderer {
                 index_buffer: &gpu_mesh.index_buffer,
                 index_count: gpu_mesh.index_count,
                 index_format: gpu_mesh.index_format,
+                is_skinned: gpu_mesh.is_skinned && joint_bind_group.is_some(),
+                joint_bind_group,
+                _joint_buffer: joint_buffer,
             });
         }
 
@@ -581,6 +746,10 @@ struct DrawCall<'a> {
     index_buffer: &'a wgpu::Buffer,
     index_count: u32,
     index_format: wgpu::IndexFormat,
+    is_skinned: bool,
+    joint_bind_group: Option<wgpu::BindGroup>,
+    /// Owned buffer for joint matrices (must outlive render pass)
+    _joint_buffer: Option<wgpu::Buffer>,
 }
 
 /// PBR rendering errors

@@ -24,10 +24,11 @@ pub mod groups {
     pub const MIDI: &str = "midi";
     pub const GAMEPAD: &str = "gamepad";
     pub const COLOR_CORRECTION: &str = "color-correction";
+    pub const DOCUMENTS: &str = "documents";
 
     pub const ALL: &[&str] = &[
         NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS, CANVAS, SCENES, PUPPETS,
-        EFFECTS, CAMERAS, MIDI, GAMEPAD, COLOR_CORRECTION,
+        EFFECTS, CAMERAS, MIDI, GAMEPAD, COLOR_CORRECTION, DOCUMENTS,
     ];
 }
 
@@ -141,6 +142,14 @@ pub mod actions {
         "keyframe_remove",
         "keyframe_update",
         "clip_create",
+        "anim_crossfade",
+        "blend_weight",
+        "blend_state",
+        "ik_create",
+        "ik_remove",
+        "ik_target",
+        "ik_enable",
+        "ik_list",
     ];
 
     pub const PUPPETS: &[&str] = &[
@@ -173,4 +182,6 @@ pub mod actions {
     pub const GAMEPAD: &[&str] = &["list", "connect", "disconnect"];
 
     pub const COLOR_CORRECTION: &[&str] = &["upload_lut", "remove_lut", "list_luts"];
+
+    pub const DOCUMENTS: &[&str] = &["probe"];
 }

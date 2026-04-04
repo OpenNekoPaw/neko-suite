@@ -40,6 +40,7 @@ import type {
   MidiConnectResult,
   GamepadInfo,
   GamepadConnectResult,
+  DocumentProbeResult,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
 
@@ -972,6 +973,77 @@ export class EngineClient {
     return (resp.data ?? []) as unknown[];
   }
 
+  // ── IK Editing ──
+
+  /** Create an IK chain between two joints */
+  async createIkChain(
+    rootJoint: string,
+    endEffector: string,
+    solver = 'fabrik',
+    iterations = 10,
+    tolerance = 0.001,
+  ): Promise<{ id: string }> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'ik_create',
+      options: {
+        root_joint: rootJoint,
+        end_effector: endEffector,
+        solver,
+        iterations,
+        tolerance,
+      },
+    });
+    this.assertOk(resp, 'scenes:ik_create');
+    return resp.data as { id: string };
+  }
+
+  /** Remove an IK chain by ID */
+  async removeIkChain(chainId: string): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'ik_remove',
+      options: { chain_id: chainId },
+    });
+    this.assertOk(resp, 'scenes:ik_remove');
+  }
+
+  /** Set target position/rotation/pole for an IK chain */
+  async setIkTarget(
+    chainId: string,
+    position: [number, number, number],
+    rotation?: [number, number, number, number],
+    pole?: [number, number, number],
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'ik_target',
+      options: { chain_id: chainId, position, rotation, pole },
+    });
+    this.assertOk(resp, 'scenes:ik_target');
+  }
+
+  /** Enable or disable an IK chain */
+  async setIkEnabled(chainId: string, enabled: boolean): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'ik_enable',
+      options: { chain_id: chainId, enabled },
+    });
+    this.assertOk(resp, 'scenes:ik_enable');
+  }
+
+  /** Get all IK chains */
+  async getIkChains(): Promise<unknown[]> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'ik_list',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:ik_list');
+    return (resp.data ?? []) as unknown[];
+  }
+
   /**
    * Open a WebSocket connection to the puppet delta stream.
    * The server pushes PuppetDelta at ~60fps while the connection is active.
@@ -1277,6 +1349,82 @@ export class EngineClient {
 
   // =========================================================================
   // Internals
+  // =========================================================================
+  // Documents API (PDF / EPUB / CBZ / DOCX)
+  // =========================================================================
+
+  /**
+   * Probe a document file for metadata.
+   *
+   * Returns format, file size, MIME type, and for ZIP-based formats (EPUB/CBZ/DOCX)
+   * the entry count and optional title/author from EPUB OPF.
+   */
+  async probeDocument(source: string): Promise<DocumentProbeResult> {
+    const resp = await this.dispatch({
+      group: 'documents',
+      action: 'probe',
+      options: { source },
+    });
+    this.assertOk(resp, 'documents:probe');
+    return resp.data as DocumentProbeResult;
+  }
+
+  /**
+   * Register a document file with the engine preview server.
+   * Returns an opaque token used for subsequent `readDocumentRange` / `readDocumentEntry` calls.
+   */
+  async registerDocument(source: string): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/v1/preview/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: source }),
+    });
+    if (!res.ok) {
+      throw new Error(`documents:register failed: ${res.status} ${res.statusText}`);
+    }
+    const body = (await res.json()) as { token: string };
+    return body.token;
+  }
+
+  /** Unregister a previously registered document token. */
+  async unregisterDocument(token: string): Promise<void> {
+    await fetch(`${this.baseUrl}/v1/preview/unregister/${token}`, {
+      method: 'DELETE',
+    }).catch(() => {
+      // Best-effort; engine may have already stopped.
+    });
+  }
+
+  /**
+   * Read a byte range from a registered document.
+   *
+   * Uses HTTP Range requests under the hood (Extension Host → neko-engine).
+   * Returns raw binary data as `ArrayBuffer`.
+   */
+  async readDocumentRange(token: string, start: number, end: number): Promise<ArrayBuffer> {
+    const res = await fetch(`${this.baseUrl}/v1/preview/file/${token}`, {
+      headers: { Range: `bytes=${start}-${end}` },
+    });
+    if (!res.ok && res.status !== 206) {
+      throw new Error(`documents:readRange failed: ${res.status}`);
+    }
+    return res.arrayBuffer();
+  }
+
+  /**
+   * Read a single entry from a ZIP-based document (EPUB, CBZ, DOCX).
+   *
+   * The engine extracts the entry on demand from the ZIP archive.
+   * Returns raw binary data as `ArrayBuffer`.
+   */
+  async readDocumentEntry(token: string, entryPath: string): Promise<ArrayBuffer> {
+    const res = await fetch(`${this.baseUrl}/v1/preview/epub/${token}/${entryPath}`);
+    if (!res.ok) {
+      throw new Error(`documents:readEntry(${entryPath}) failed: ${res.status}`);
+    }
+    return res.arrayBuffer();
+  }
+
   // =========================================================================
 
   private assertOk(resp: ActionResponse, label: string): void {

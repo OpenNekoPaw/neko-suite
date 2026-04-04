@@ -7,10 +7,12 @@ use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::{AssetCache, CameraParams, PbrRenderer, SceneRenderOutput};
 use crate::gpu::GpuContext;
 use crate::services::scene::ISceneService;
+use neko_native_scene::animation_blend::SceneBlendLayerInfo;
 use neko_native_scene::components::{
     AnimationChannelInfo, GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
 };
 use neko_native_scene::exporter::{self, ExportNode};
+use neko_native_scene::ik::IkChainInfo;
 use neko_native_scene::procedural_mesh::ProceduralMesh;
 use neko_native_scene::project::NkmProject;
 use neko_native_scene::world::{
@@ -547,6 +549,98 @@ impl ISceneService for SceneService {
             .lock()
             .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
         world.create_clip(name, duration).map_err(Error::Other)
+    }
+
+    fn crossfade_animation(
+        &self,
+        clip_name: &str,
+        fade_duration: f32,
+        loop_anim: bool,
+    ) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .crossfade_animation(clip_name, fade_duration, loop_anim)
+            .map_err(Error::Other)
+    }
+
+    fn set_blend_weight(&self, clip_name: &str, weight: f32) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .set_blend_weight(clip_name, weight)
+            .map_err(Error::Other)
+    }
+
+    fn get_blend_state(&self) -> Result<Vec<SceneBlendLayerInfo>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        Ok(world.get_blend_state())
+    }
+
+    fn create_ik_chain(
+        &self,
+        root_joint: &str,
+        end_effector: &str,
+        solver: &str,
+        iterations: u32,
+        tolerance: f32,
+    ) -> Result<String> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .create_ik_chain(root_joint, end_effector, solver, iterations, tolerance)
+            .map_err(Error::Other)
+    }
+
+    fn remove_ik_chain(&self, chain_id: &str) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world.remove_ik_chain(chain_id).map_err(Error::Other)
+    }
+
+    fn set_ik_target(
+        &self,
+        chain_id: &str,
+        position: [f32; 3],
+        rotation: Option<[f32; 4]>,
+        pole: Option<[f32; 3]>,
+    ) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .set_ik_target(chain_id, position, rotation, pole)
+            .map_err(Error::Other)
+    }
+
+    fn set_ik_enabled(&self, chain_id: &str, enabled: bool) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .set_ik_enabled(chain_id, enabled)
+            .map_err(Error::Other)
+    }
+
+    fn get_ik_chains(&self) -> Result<Vec<IkChainInfo>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        Ok(world.get_ik_chains())
     }
 }
 

@@ -121,6 +121,13 @@ export type {
   // Gamepad
   GamepadInfo,
   GamepadConnectResult,
+  // Documents
+  DocumentProbeResult,
+  // IK
+  IkSolverType,
+  IkChainInfo,
+  // Scene Blend
+  SceneBlendLayerInfo,
 } from './engine/types';
 
 export { transformDiffResponse } from './engine/responseTransform';

@@ -4,7 +4,9 @@
 
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
 use crate::gpu::PbrRenderError;
+use neko_native_scene::animation_blend::SceneBlendLayerInfo;
 use neko_native_scene::components::AnimationChannelInfo;
+use neko_native_scene::ik::IkChainInfo;
 use neko_native_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
 use neko_types::easing::EasingType;
 use std::path::Path;
@@ -110,4 +112,46 @@ pub trait ISceneService: Send + Sync {
 
     /// Create a new empty animation clip
     fn create_clip(&self, name: &str, duration: f32) -> crate::error::Result<()>;
+
+    /// Crossfade to a named animation clip
+    fn crossfade_animation(
+        &self,
+        clip_name: &str,
+        fade_duration: f32,
+        loop_anim: bool,
+    ) -> crate::error::Result<()>;
+
+    /// Set blend weight for a named clip layer
+    fn set_blend_weight(&self, clip_name: &str, weight: f32) -> crate::error::Result<()>;
+
+    /// Get the current blend state
+    fn get_blend_state(&self) -> crate::error::Result<Vec<SceneBlendLayerInfo>>;
+
+    /// Create an IK chain between two joints
+    fn create_ik_chain(
+        &self,
+        root_joint: &str,
+        end_effector: &str,
+        solver: &str,
+        iterations: u32,
+        tolerance: f32,
+    ) -> crate::error::Result<String>;
+
+    /// Remove an IK chain by ID
+    fn remove_ik_chain(&self, chain_id: &str) -> crate::error::Result<()>;
+
+    /// Set the IK target position/rotation/pole for a chain
+    fn set_ik_target(
+        &self,
+        chain_id: &str,
+        position: [f32; 3],
+        rotation: Option<[f32; 4]>,
+        pole: Option<[f32; 3]>,
+    ) -> crate::error::Result<()>;
+
+    /// Enable/disable an IK chain
+    fn set_ik_enabled(&self, chain_id: &str, enabled: bool) -> crate::error::Result<()>;
+
+    /// Get all IK chains
+    fn get_ik_chains(&self) -> crate::error::Result<Vec<IkChainInfo>>;
 }

@@ -108,8 +108,8 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 跨语言架构 | *已内化* | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
 | 共享包设计 | *已内化* | @neko/shared 通过 exports 子路径分层 |
 | 资产管理 | *已内化* | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene，不用 Bevy 全框架；混合策略（内置轻量 + MCP 桥接 Blender） |
-| 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
+| 3D 能力 | [docs/architecture/3d-capability-analysis.md](./docs/architecture/3d-capability-analysis.md) | bevy_ecs 独立 crate + native-scene；GPU Skinning 双管线；FABRIK/CCD/TwoBone IK；动画混合/Crossfade；混合策略（内置轻量 + MCP 桥接 Blender） |
+| 2D 能力 | [docs/architecture/2d-capability-analysis.md](./docs/architecture/2d-capability-analysis.md) | neko-sketch（绘画）+ neko-puppet（骨骼动画）；多层动画混合 + Crossfade；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
 | 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
 | 格式策略 | [docs/architecture/format-strategy.md](./docs/architecture/format-strategy.md) | nk* 统一命名，JSON Schema 为文件格式 SSOT，Proto 仅引擎通信；Format SDK（@neko/shared/nkv）提供 load/validate/migrate/save；增量操作 20 种 + 全量 fallback |
@@ -120,7 +120,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 创作上下文压缩 | [docs/architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [docs/architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles + MetricsHooks 零侵入消融实验 |
 | Agent 媒体架构 | [docs/architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | GeneratedAsset 磁盘存储 + JSON 引用；Agent 自足性（无 canvas 可独立运行）；跨插件"发送到"按钮；预览组件分层（neko-preview 流媒体 / agent MediaPreview 轻量卡片） |
-| 角色编辑 | [docs/architecture/character-editing-analysis.md](./docs/architecture/character-editing-analysis.md) | 2D/3D 捏脸/动作/绘制/建模缺口分析；标准面部参数模板（32 参数）；共享 KeyframeTimeline；.nkm 项目格式 |
+| 角色编辑 | [docs/architecture/character-editing-analysis.md](./docs/architecture/character-editing-analysis.md) | 2D/3D 捏脸/动作/绘制/建模；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享 KeyframeTimeline；.nkm 项目格式；IK 骨骼交互编辑 |
 
 ### Rust 引擎开发约束
 
@@ -132,8 +132,9 @@ TypeScript 层（Extension Host）
   ↕ N-API 绑定 (@neko-engine/native-napi)
   ↕ HTTP/WebSocket (axum)
 Rust 层（neko-engine）
-  ├─ native-core:  GPU 渲染(wgpu)、FFmpeg 编解码、音视频处理
-  ├─ native-scene: 3D 场景 ECS（bevy_ecs + glTF loader）
+  ├─ native-core:  GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
+  ├─ native-scene: 3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
+  ├─ native-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
   ├─ native-api:   ActionRouter、控制器注册
   ├─ native-http:  REST API + WebSocket 流
   └─ types:        共享 Rust 类型

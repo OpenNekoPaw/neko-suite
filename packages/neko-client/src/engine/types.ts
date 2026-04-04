@@ -525,3 +525,48 @@ export interface GamepadConnectResult {
   streamId: string;
   wsUrl: string;
 }
+
+// =============================================================================
+// Document types (from native-api/src/controllers/documents.rs)
+// =============================================================================
+
+/** Result of `documents:probe` — file metadata for PDF, EPUB, CBZ, DOCX */
+export interface DocumentProbeResult {
+  format: 'pdf' | 'epub' | 'cbz' | 'docx' | 'unknown';
+  fileSize: number;
+  mimeType: string;
+  /** Number of entries in ZIP-based formats (EPUB, CBZ, DOCX) */
+  entryCount?: number;
+  /** Document title (EPUB OPF metadata) */
+  title?: string;
+  /** Document author (EPUB OPF metadata) */
+  author?: string;
+}
+
+// =============================================================================
+// IK types (from native-scene/src/ik.rs)
+// =============================================================================
+
+/** IK solver type */
+export type IkSolverType = 'fabrik' | 'ccd' | 'two_bone';
+
+/** Info about an IK chain */
+export interface IkChainInfo {
+  id: string;
+  rootJoint: string;
+  endEffector: string;
+  jointCount: number;
+  solver: IkSolverType;
+  enabled: boolean;
+  targetPosition: [number, number, number];
+  targetRotation?: [number, number, number, number];
+  poleTarget?: [number, number, number];
+}
+
+/** Scene blend layer info */
+export interface SceneBlendLayerInfo {
+  clipName: string;
+  elapsed: number;
+  weight: number;
+  looping: boolean;
+}
