@@ -177,6 +177,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         assetHistoryProvider.refresh();
       }),
     );
+
+    // Register asset manager context menu commands (entity/variant CRUD)
+    registerAssetManagerCommands(context, library, assetManagerProvider, assetHistoryProvider);
   }
 
   // 4. Initialize Media Library Settings (P1)
@@ -239,6 +242,238 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerInternalCommands(context);
 
   logger.info('Extension activated');
+}
+
+// =============================================================================
+// Asset Manager Context Menu Commands (entity / variant CRUD)
+// =============================================================================
+
+function registerAssetManagerCommands(
+  context: vscode.ExtensionContext,
+  lib: AssetLibrary,
+  assetManagerProvider: AssetManagerTreeProvider,
+  assetHistoryProvider: AssetHistoryTreeProvider,
+): void {
+  const refresh = () => {
+    assetManagerProvider.refresh();
+    assetHistoryProvider.refresh();
+  };
+
+  // --- helpers ---------------------------------------------------------------
+
+  /** Extract entity from EntityItem duck-typed argument */
+  function getEntity(item: unknown) {
+    if (item && typeof item === 'object' && 'entity' in item) {
+      return (item as { entity: import('@neko/shared').AssetEntity }).entity;
+    }
+    return null;
+  }
+
+  /** Extract entity + variant from VariantItem duck-typed argument */
+  function getVariant(item: unknown) {
+    if (item && typeof item === 'object' && 'entity' in item && 'variant' in item) {
+      const typed = item as {
+        entity: import('@neko/shared').AssetEntity;
+        variant: import('@neko/shared').AssetVariant;
+      };
+      return { entity: typed.entity, variant: typed.variant };
+    }
+    return null;
+  }
+
+  /** Resolve the primary file path of an entity (first file of first variant) */
+  function primaryFilePath(entity: import('@neko/shared').AssetEntity): string | null {
+    const storedPath = entity.variants[0]?.files[0]?.path;
+    if (!storedPath) return null;
+    return lib.resolvePath(storedPath);
+  }
+
+  // --- entity commands -------------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.entity.preview', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const filePath = primaryFilePath(entity);
+      if (!filePath) return;
+      await vscode.commands.executeCommand('neko.assets.previewMedia', vscode.Uri.file(filePath));
+    }),
+
+    vscode.commands.registerCommand('neko.assets.entity.addToTimeline', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const filePath = primaryFilePath(entity);
+      if (!filePath) return;
+      await vscode.commands.executeCommand('neko.assets.addToTimeline', vscode.Uri.file(filePath));
+    }),
+
+    vscode.commands.registerCommand('neko.assets.entity.addToCanvas', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const filePath = primaryFilePath(entity);
+      if (!filePath) return;
+      await vscode.commands.executeCommand('neko.assets.addToCanvas', vscode.Uri.file(filePath));
+    }),
+
+    vscode.commands.registerCommand('neko.assets.entity.rename', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const newName = await vscode.window.showInputBox({
+        prompt: 'Enter new name',
+        value: entity.name,
+        valueSelection: [0, entity.name.length],
+      });
+      if (!newName || newName === entity.name) return;
+      try {
+        await lib.updateEntity(entity.id, { name: newName });
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+
+    vscode.commands.registerCommand('neko.assets.entity.addVariant', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const variantName = await vscode.window.showInputBox({
+        prompt: 'Enter variant name',
+        placeHolder: 'e.g., 4K, Draft, v2',
+      });
+      if (!variantName) return;
+      try {
+        await lib.addVariant(entity.id, { name: variantName });
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+
+    vscode.commands.registerCommand('neko.assets.entity.delete', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete "${entity.name}"? This cannot be undone.`,
+        { modal: true },
+        'Delete',
+      );
+      if (confirm !== 'Delete') return;
+      try {
+        await lib.deleteEntity(entity.id);
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+  );
+
+  // --- variant commands ------------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.variant.preview', async (item?: unknown) => {
+      const result = getVariant(item);
+      if (!result) return;
+      const storedPath = result.variant.files[0]?.path;
+      if (!storedPath) return;
+      const filePath = lib.resolvePath(storedPath);
+      await vscode.commands.executeCommand('neko.assets.previewMedia', vscode.Uri.file(filePath));
+    }),
+
+    vscode.commands.registerCommand('neko.assets.variant.addFile', async (item?: unknown) => {
+      const result = getVariant(item);
+      if (!result) return;
+      const uris = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectMany: false,
+        title: 'Select file to add to variant',
+      });
+      if (!uris?.[0]) return;
+      try {
+        await lib.addFile(result.variant.id, uris[0].fsPath);
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+
+    vscode.commands.registerCommand('neko.assets.variant.rename', async (item?: unknown) => {
+      const result = getVariant(item);
+      if (!result) return;
+      const newName = await vscode.window.showInputBox({
+        prompt: 'Enter new variant name',
+        value: result.variant.name,
+        valueSelection: [0, result.variant.name.length],
+      });
+      if (!newName || newName === result.variant.name) return;
+      try {
+        await lib.updateVariant(result.entity.id, result.variant.id, { name: newName });
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+
+    vscode.commands.registerCommand('neko.assets.variant.delete', async (item?: unknown) => {
+      const result = getVariant(item);
+      if (!result) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete variant "${result.variant.name}"? This cannot be undone.`,
+        { modal: true },
+        'Delete',
+      );
+      if (confirm !== 'Delete') return;
+      try {
+        await lib.deleteVariant(result.entity.id, result.variant.id);
+        await lib.flush();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+  );
+
+  // --- directory command -----------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.directory.reveal', (item?: unknown) => {
+      if (item && typeof item === 'object' && 'dirPath' in item) {
+        const dirPath = (item as { dirPath: string }).dirPath;
+        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(dirPath));
+      }
+    }),
+  );
+
+  // --- recent entity commands ------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.assets.recentEntity.addToTimeline',
+      async (item?: unknown) => {
+        if (item && typeof item === 'object' && 'resourceUri' in item) {
+          const uri = (item as { resourceUri: vscode.Uri }).resourceUri;
+          if (uri) {
+            await vscode.commands.executeCommand('neko.assets.addToTimeline', uri);
+          }
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand(
+      'neko.assets.recentEntity.addToCanvas',
+      async (item?: unknown) => {
+        if (item && typeof item === 'object' && 'resourceUri' in item) {
+          const uri = (item as { resourceUri: vscode.Uri }).resourceUri;
+          if (uri) {
+            await vscode.commands.executeCommand('neko.assets.addToCanvas', uri);
+          }
+        }
+      },
+    ),
+  );
 }
 
 // =============================================================================

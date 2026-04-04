@@ -54,6 +54,17 @@ export const en = {
   'metadata.sampleRate': 'Sample Rate',
   'metadata.channels': 'Channels',
   'metadata.bitrate': 'Bitrate',
+
+  // Asset Manager entity / variant CRUD
+  'entity.rename.prompt': 'Enter new name',
+  'entity.delete.confirm': 'Delete "{name}"? This cannot be undone.',
+  'entity.delete.action': 'Delete',
+  'entity.addVariant.prompt': 'Enter variant name',
+  'entity.addVariant.placeholder': 'e.g., 4K, Draft, v2',
+  'variant.rename.prompt': 'Enter new variant name',
+  'variant.delete.confirm': 'Delete variant "{name}"? This cannot be undone.',
+  'variant.delete.action': 'Delete',
+  'variant.addFile.title': 'Select file to add to variant',
 };
 
 export type AssetTranslations = typeof en;

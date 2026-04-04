@@ -342,6 +342,71 @@
           "command": "neko.assets.relocateFile",
           "when": "viewItem == variant:hasOffline",
           "group": "inline"
+        },
+        {
+          "command": "neko.assets.entity.preview",
+          "when": "viewItem == entity",
+          "group": "1_preview@1"
+        },
+        {
+          "command": "neko.assets.entity.addToTimeline",
+          "when": "viewItem == entity",
+          "group": "1_preview@2"
+        },
+        {
+          "command": "neko.assets.entity.addToCanvas",
+          "when": "viewItem == entity",
+          "group": "1_preview@3"
+        },
+        {
+          "command": "neko.assets.entity.rename",
+          "when": "viewItem == entity",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "neko.assets.entity.addVariant",
+          "when": "viewItem == entity",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "neko.assets.entity.delete",
+          "when": "viewItem == entity",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "neko.assets.variant.preview",
+          "when": "viewItem =~ /^variant/",
+          "group": "1_preview@1"
+        },
+        {
+          "command": "neko.assets.variant.addFile",
+          "when": "viewItem =~ /^variant/",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "neko.assets.variant.rename",
+          "when": "viewItem =~ /^variant/",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "neko.assets.variant.delete",
+          "when": "viewItem =~ /^variant/",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "neko.assets.directory.reveal",
+          "when": "viewItem == mediaLibrary:directory",
+          "group": "4_utils@1"
+        },
+        {
+          "command": "neko.assets.recentEntity.addToTimeline",
+          "when": "viewItem == recentEntity",
+          "group": "1_preview@1"
+        },
+        {
+          "command": "neko.assets.recentEntity.addToCanvas",
+          "when": "viewItem == recentEntity",
+          "group": "1_preview@2"
         }
       ],
       "explorer/context": [

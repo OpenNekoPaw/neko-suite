@@ -55,4 +55,15 @@ export const zhCn: AssetTranslations = {
   'metadata.sampleRate': '采样率',
   'metadata.channels': '声道',
   'metadata.bitrate': '比特率',
+
+  // Asset Manager entity / variant CRUD
+  'entity.rename.prompt': '输入新名称',
+  'entity.delete.confirm': '删除"{name}"？此操作无法撤销。',
+  'entity.delete.action': '删除',
+  'entity.addVariant.prompt': '输入变体名称',
+  'entity.addVariant.placeholder': '例如：4K、草稿、v2',
+  'variant.rename.prompt': '输入新变体名称',
+  'variant.delete.confirm': '删除变体"{name}"？此操作无法撤销。',
+  'variant.delete.action': '删除',
+  'variant.addFile.title': '选择要添加到变体的文件',
 };
