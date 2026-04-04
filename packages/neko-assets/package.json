@@ -149,7 +149,7 @@
         "command": "neko.assets.addMediaLibrary",
         "title": "%neko.assets.addMediaLibrary%",
         "category": "Neko Assets",
-        "icon": "$(folder-add)"
+        "icon": "$(plus)"
       },
       {
         "command": "neko.assets.removeMediaLibrary",
@@ -283,11 +283,6 @@
     "menus": {
       "view/title": [
         {
-          "command": "neko.assets.searchMediaLibrary",
-          "when": "view == neko.mediaLibraries",
-          "group": "navigation"
-        },
-        {
           "command": "neko.assets.addMediaLibrary",
           "when": "view == neko.mediaLibraries",
           "group": "navigation"
@@ -295,7 +290,12 @@
         {
           "command": "neko.assets.refreshMediaLibraries",
           "when": "view == neko.mediaLibraries",
-          "group": "navigation"
+          "group": "overflow"
+        },
+        {
+          "command": "neko.assets.searchMediaLibrary",
+          "when": "view == neko.mediaLibraries",
+          "group": "overflow"
         },
         {
           "command": "neko.assets.validateAll",
