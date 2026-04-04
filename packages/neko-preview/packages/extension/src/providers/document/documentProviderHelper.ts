@@ -23,6 +23,29 @@ import type { DocumentWebviewMessage } from '../../types/document-messages';
 const logger = getLogger('DocumentProvider');
 
 /**
+ * Resolve a file path that may contain asset/media library variables.
+ *
+ * Paths from asset libraries may contain unresolved variables like "${A}/..."
+ * which need to be expanded to absolute paths before passing to neko-engine.
+ * Always attempts resolution — the command is a no-op for plain absolute paths.
+ */
+export async function resolveDocumentPath(fsPath: string): Promise<string> {
+  try {
+    const resolved = await vscode.commands.executeCommand<string>(
+      'neko.assets.resolvePath',
+      fsPath,
+    );
+    if (resolved && resolved !== fsPath) {
+      logger.info(`Resolved path: ${fsPath} → ${resolved}`);
+      return resolved;
+    }
+  } catch {
+    // neko-assets not active — fall through to raw path
+  }
+  return fsPath;
+}
+
+/**
  * Configure a webview panel for document preview and wire up message handling.
  */
 export async function setupDocumentWebview(

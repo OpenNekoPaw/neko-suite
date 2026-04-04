@@ -66,6 +66,42 @@ const MAX_INLINE_FIGURES = 3;
 
 type ViewMode = 'paginated' | 'scrolled' | 'waterfall';
 
+/**
+ * Custom request function for epub.js that uses fetch() instead of XMLHttpRequest.
+ * VSCode webview service workers can block XHR to localhost; fetch works reliably.
+ */
+async function fetchForEpub(url: string, type?: string): Promise<unknown> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}: ${url}`);
+
+  if (type === 'blob' || type === 'binary') {
+    return resp.blob();
+  }
+  if (type === 'json') {
+    return resp.json();
+  }
+
+  const text = await resp.text();
+
+  // XML types: parse to Document
+  const ext = url.split('.').pop()?.split('?')[0]?.toLowerCase() ?? '';
+  const isXml = type === 'xml' || ['xml', 'opf', 'ncx', 'xhtml', 'svg'].includes(ext);
+  if (isXml) {
+    const parser = new DOMParser();
+    return parser.parseFromString(text, 'application/xml');
+  }
+  if (type === 'xhtml' || ext === 'xhtml') {
+    const parser = new DOMParser();
+    return parser.parseFromString(text, 'application/xhtml+xml');
+  }
+  if (type === 'html' || ext === 'html' || ext === 'htm') {
+    const parser = new DOMParser();
+    return parser.parseFromString(text, 'text/html');
+  }
+
+  return text;
+}
+
 /** VSCode theme CSS applied to waterfall chapter content */
 const WATERFALL_THEME_CSS = `
   .epub-chapter-content {
@@ -373,7 +409,9 @@ export const EpubViewer: FC = () => {
         setLoading(true);
         loadingRef.current = true;
         setError(null);
-        const book = ePub(url);
+        // Use custom requestMethod with fetch instead of epub.js's default XMLHttpRequest.
+        // VSCode webview service worker can interfere with XHR to localhost.
+        const book = ePub(url, { requestMethod: fetchForEpub });
         bookRef.current = book;
         await initBook(book);
         setLoading(false);

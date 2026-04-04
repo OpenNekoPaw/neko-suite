@@ -9,7 +9,8 @@
  * Zero dependencies — usable in Extension Host, CLI, and Engine contexts.
  */
 
-const VARIABLE_PATTERN = /^\$\{([^}]+)\}(.*)$/;
+// Match ${VAR}/rest — allows optional leading / (macOS fsPath adds it)
+const VARIABLE_PATTERN = /^\/?\$\{([^}]+)\}(.*)$/;
 
 /** Variable name → absolute directory path */
 export type PathVariableMap = Map<string, string>;

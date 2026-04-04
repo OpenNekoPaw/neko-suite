@@ -14,6 +14,7 @@
  *   const info = await client.probe('videos', '/path/to/file.mp4');
  */
 
+import { PathResolver } from '@neko/shared';
 import { getLogger } from './utils/logger';
 import type {
   ActionRequest,
@@ -69,10 +70,29 @@ const logger = getLogger('EngineClient');
 export class EngineClient {
   readonly port: number;
   private readonly timeout: number;
+  private pathResolver: PathResolver | null = null;
 
   constructor(port: number, config?: EngineClientConfig) {
     this.port = port;
     this.timeout = config?.timeout ?? 120_000;
+  }
+
+  /**
+   * Set a PathResolver for automatic path variable expansion.
+   *
+   * When set, all `source` parameters passed to engine methods will be
+   * resolved through the PathResolver before being sent to neko-engine.
+   * This handles `${VAR}/path` → `/absolute/path` expansion.
+   */
+  setPathResolver(resolver: PathResolver): void {
+    this.pathResolver = resolver;
+  }
+
+  /** Resolve a source path through the PathResolver if available. */
+  private resolveSource(source: string): string {
+    if (!this.pathResolver) return source;
+    const result = this.pathResolver.resolveSource(source, '');
+    return result.type === 'local' ? result.path : source;
   }
 
   // =========================================================================
@@ -100,14 +120,34 @@ export class EngineClient {
    * All convenience methods delegate here.
    */
   async dispatch(req: ActionRequest): Promise<ActionResponse> {
+    // Resolve path variables in source fields before sending to engine
+    const resolvedSource = req.source ? this.resolveSource(req.source) : undefined;
+    let options = req.options ?? {};
+    if (options && typeof options === 'object' && 'source' in options) {
+      const optSource = (options as Record<string, unknown>).source;
+      if (typeof optSource === 'string') {
+        options = { ...options, source: this.resolveSource(optSource) };
+      }
+    }
+    // Also resolve sourceA/sourceB for diff operations
+    if (options && typeof options === 'object') {
+      const opts = options as Record<string, unknown>;
+      if (typeof opts.sourceA === 'string') {
+        options = { ...options, sourceA: this.resolveSource(opts.sourceA as string) };
+      }
+      if (typeof opts.sourceB === 'string') {
+        options = { ...options, sourceB: this.resolveSource(opts.sourceB as string) };
+      }
+    }
+
     const body = JSON.stringify({
       group: req.group,
       action: req.action,
       id: req.id ?? '',
-      source: req.source ?? undefined,
+      source: resolvedSource,
       sessionId: req.sessionId ?? undefined,
       streamId: req.streamId ?? undefined,
-      options: req.options ?? {},
+      options,
       body: req.body ?? null,
     });
 
@@ -1374,10 +1414,11 @@ export class EngineClient {
    * Returns an opaque token used for subsequent `readDocumentRange` / `readDocumentEntry` calls.
    */
   async registerDocument(source: string): Promise<string> {
+    const resolved = this.resolveSource(source);
     const res = await fetch(`${this.baseUrl}/v1/preview/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: source }),
+      body: JSON.stringify({ filePath: resolved }),
     });
     if (!res.ok) {
       throw new Error(`documents:register failed: ${res.status} ${res.statusText}`);

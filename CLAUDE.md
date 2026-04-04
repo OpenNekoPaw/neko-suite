@@ -121,6 +121,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 消融实验框架 | [docs/architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles + MetricsHooks 零侵入消融实验 |
 | Agent 媒体架构 | [docs/architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | GeneratedAsset 磁盘存储 + JSON 引用；Agent 自足性（无 canvas 可独立运行）；跨插件"发送到"按钮；预览组件分层（neko-preview 流媒体 / agent MediaPreview 轻量卡片） |
 | 角色编辑 | [docs/architecture/character-editing-analysis.md](./docs/architecture/character-editing-analysis.md) | 2D/3D 捏脸/动作/绘制/建模；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享 KeyframeTimeline；.nkm 项目格式；IK 骨骼交互编辑 |
+| 路径体系 | *已内化* | 项目文件只存相对路径和 `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；变量来源: .neko/settings.json(媒体库) + .neko/settings.local.json(本机覆盖)；EngineClient/PreviewFileServer 在调 engine 前自动展开变量；Rust ProjectContext 支持 CLI 独立运行 |
 
 ### Rust 引擎开发约束
 

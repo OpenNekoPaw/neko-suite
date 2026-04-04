@@ -265,9 +265,18 @@ pub async fn handle_epub_entry(
     let entry_path_for_mime = entry_path.clone();
 
     let result = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, StatusCode> {
-        let file = std::fs::File::open(&epub_path).map_err(|_| StatusCode::NOT_FOUND)?;
-        let mut archive = zip::ZipArchive::new(file).map_err(|_| StatusCode::BAD_REQUEST)?;
-        let mut entry = archive.by_name(&entry_path).map_err(|_| StatusCode::NOT_FOUND)?;
+        let file = std::fs::File::open(&epub_path).map_err(|e| {
+            tracing::error!("EPUB: cannot open file {:?}: {}", epub_path, e);
+            StatusCode::NOT_FOUND
+        })?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+            tracing::error!("EPUB: cannot read ZIP archive: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
+        let mut entry = archive.by_name(&entry_path).map_err(|e| {
+            tracing::error!("EPUB: entry '{}' not found in archive: {}", entry_path, e);
+            StatusCode::NOT_FOUND
+        })?;
 
         let capacity = entry.size() as usize;
         let mut data = Vec::with_capacity(capacity);

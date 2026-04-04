@@ -20,6 +20,26 @@ const logger = getLogger('PreviewFileServer');
 export class PreviewFileServer {
   private _port: number | null = null;
 
+  /**
+   * Resolve path variables via neko-assets command.
+   * Handles ${VAR}/path expansion from media/asset library configuration.
+   */
+  private async resolvePath(filePath: string): Promise<string> {
+    try {
+      const resolved = await vscode.commands.executeCommand<string>(
+        'neko.assets.resolvePath',
+        filePath,
+      );
+      if (resolved && resolved !== filePath) {
+        logger.info(`Resolved path: ${filePath} → ${resolved}`);
+        return resolved;
+      }
+    } catch {
+      // neko-assets not active
+    }
+    return filePath;
+  }
+
   // ── Engine port ───────────────────────────────────────────────────────────
 
   /**
@@ -55,13 +75,14 @@ export class PreviewFileServer {
    * @throws if the engine is not available.
    */
   async registerFile(filePath: string): Promise<{ url: string; token: string }> {
+    const resolved = await this.resolvePath(filePath);
     const port = await this.getPort();
     const base = `http://127.0.0.1:${port}`;
 
     const res = await fetch(`${base}/v1/preview/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath }),
+      body: JSON.stringify({ filePath: resolved }),
     });
 
     if (!res.ok) {
@@ -85,13 +106,14 @@ export class PreviewFileServer {
    * @returns `{ url: 'http://127.0.0.1:{port}/v1/preview/epub/{token}/', token }`
    */
   async registerEpub(filePath: string): Promise<{ url: string; token: string }> {
+    const resolved = await this.resolvePath(filePath);
     const port = await this.getPort();
     const base = `http://127.0.0.1:${port}`;
 
     const res = await fetch(`${base}/v1/preview/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath }),
+      body: JSON.stringify({ filePath: resolved }),
     });
 
     if (!res.ok) {
