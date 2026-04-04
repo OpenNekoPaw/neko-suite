@@ -34,7 +34,8 @@ export const IProxyService = createServiceId<ProxyService>('proxyService');
 // Constants
 // =============================================================================
 
-const PROXY_DIR = '.neko/proxies';
+/** @deprecated Use resolveStorageLayout().project.cache.proxies instead */
+const PROXY_DIR = '.neko/.cache/proxies';
 const MANIFEST_FILE = 'manifest.json';
 const MAX_CONCURRENT = 2;
 

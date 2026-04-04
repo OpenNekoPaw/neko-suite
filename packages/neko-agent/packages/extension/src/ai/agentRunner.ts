@@ -422,7 +422,7 @@ export class AgentRunner implements IAgentRunner {
     // Initialize project memory manager (cross-session fact persistence)
     if (config.workspaceRoot) {
       try {
-        const memoryFilePath = nodePath.join(config.workspaceRoot, '.neko', 'memory.md');
+        const memoryFilePath = nodePath.join(config.workspaceRoot, '.neko', 'memory.md'); // L1 project source data
         const memoryManager = createFileProjectMemoryManager(memoryFilePath);
         await memoryManager.load();
         this._projectMemoryManager = memoryManager;

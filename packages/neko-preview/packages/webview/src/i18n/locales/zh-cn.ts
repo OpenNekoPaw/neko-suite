@@ -57,6 +57,9 @@ const preview: MessageBundle = {
   'preview.cbz.loading': '正在加载漫画...',
   'preview.cbz.spreadMode': '双页模式',
   'preview.cbz.selectRegion': '框选区域发送 AI',
+  // Document mode toggle (PDF / CBZ)
+  'preview.document.modeScroll': '切换为滚动模式',
+  'preview.document.modePage': '切换为分页模式',
   // EPUB
   'preview.epub.loading': '正在加载书籍...',
   'preview.epub.toc': '目录',
@@ -64,6 +67,7 @@ const preview: MessageBundle = {
   'preview.epub.fontSize': '字号',
   'preview.epub.modeScrolled': '切换为滚动模式',
   'preview.epub.modePaginated': '切换为分页模式',
+  'preview.epub.modeWaterfall': '切换为瀑布流模式',
   'preview.epub.sendPage': '发送页面到 AI',
   // DOCX
   'preview.docx.loading': '正在加载文档...',

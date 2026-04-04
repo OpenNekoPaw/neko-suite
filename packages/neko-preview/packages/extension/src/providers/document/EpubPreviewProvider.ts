@@ -1,15 +1,11 @@
 /**
  * EpubPreviewProvider - CustomReadonlyEditorProvider for EPUB ebooks
  *
- * Renders EPUB using epub.js in webview with chapter navigation and TOC.
- * Serves the file via neko-engine's local HTTP server (same as PDF/CBZ) so
- * the webview can fetch it directly over localhost without vscode-webview://
- * protocol overhead. Tracks open webview panels so the goToChapter command
- * can post navigate messages.
+ * On ready: registers file with neko-engine → sends directory URL to webview.
+ * Webview uses epub.js directory mode to fetch entries on demand via HTTP.
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { setupDocumentWebview, getErrorHtml } from './documentProviderHelper';
 import { previewFileServer } from './PreviewFileServer';
 
@@ -44,40 +40,35 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
       if (e.webviewPanel.active) this._activeUri = document.uri;
     });
 
-    webviewPanel.onDidDispose(async () => {
+    const filePath = document.uri.fsPath;
+
+    webviewPanel.onDidDispose(() => {
       this.panels.delete(key);
       if (this._activeUri?.fsPath === key) this._activeUri = null;
       const token = this.tokens.get(key);
       if (token) {
         this.tokens.delete(key);
-        await previewFileServer.unregisterFile(token);
+        void previewFileServer.unregisterFile(token);
       }
     });
 
-    const filePath = document.uri.fsPath;
-    const fileName = path.basename(filePath);
-
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'epub', {
       onReady: async () => {
-        let registration: { url: string; token: string };
         try {
-          registration = await previewFileServer.registerEpub(filePath);
+          const { url, token } = await previewFileServer.registerEpub(filePath);
+          this.tokens.set(key, token);
+
+          await webviewPanel.webview.postMessage({
+            type: 'document:data',
+            payload: { url },
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           webviewPanel.webview.html = getErrorHtml(msg);
-          return;
         }
-
-        this.tokens.set(key, registration.token);
-
-        await webviewPanel.webview.postMessage({
-          type: 'document:data',
-          payload: {
-            url: registration.url,
-            fileName,
-            fileSize: 0,
-          },
-        });
+      },
+      onMessage: (msg) => {
+        // EPUB-specific messages handled here if needed
       },
     });
   }

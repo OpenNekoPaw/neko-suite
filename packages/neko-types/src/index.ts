@@ -27,6 +27,9 @@ export * from './i18n/index';
 // Theme (design tokens + ThemeKind)
 export * from './theme/index';
 
+// Path resolution (PathResolver + variable expansion)
+export * from './path/index';
+
 // Format SDKs (load/validate/migrate/save project files)
 export * from './nkv/index';
 export * from './nkc/index';

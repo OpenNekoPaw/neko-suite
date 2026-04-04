@@ -123,6 +123,9 @@ export type {
   GamepadConnectResult,
   // Documents
   DocumentProbeResult,
+  // Project context
+  ProjectContext,
+  MissingVariable,
   // IK
   IkSolverType,
   IkChainInfo,

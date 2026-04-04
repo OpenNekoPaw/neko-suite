@@ -544,6 +544,30 @@ export interface DocumentProbeResult {
 }
 
 // =============================================================================
+// Project context (from types/src/project_context.rs)
+// =============================================================================
+
+/**
+ * Project context for resolving paths in project files.
+ *
+ * Passed to engine when processing project files that contain relative
+ * or variable paths (e.g. NKV, NKC). The engine uses this to resolve
+ * "${VAR}/rest" and relative paths to absolute local paths.
+ */
+export interface ProjectContext {
+  /** Project file's parent directory (absolute path) */
+  projectDir: string;
+  /** Path variable map: VAR_NAME → absolute directory path */
+  variables: Record<string, string>;
+}
+
+/** A variable referenced in source paths but not present in the context */
+export interface MissingVariable {
+  variable: string;
+  references: string[];
+}
+
+// =============================================================================
 // IK types (from native-scene/src/ik.rs)
 // =============================================================================
 

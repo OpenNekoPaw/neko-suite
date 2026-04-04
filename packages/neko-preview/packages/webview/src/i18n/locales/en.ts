@@ -57,6 +57,9 @@ const preview: MessageBundle = {
   'preview.cbz.loading': 'Loading comic...',
   'preview.cbz.spreadMode': 'Two-page spread',
   'preview.cbz.selectRegion': 'Select region for AI',
+  // Document mode toggle (PDF / CBZ)
+  'preview.document.modeScroll': 'Switch to scroll mode',
+  'preview.document.modePage': 'Switch to page mode',
   // EPUB
   'preview.epub.loading': 'Loading book...',
   'preview.epub.toc': 'Table of Contents',
@@ -64,6 +67,7 @@ const preview: MessageBundle = {
   'preview.epub.fontSize': 'Font size',
   'preview.epub.modeScrolled': 'Switch to scroll mode',
   'preview.epub.modePaginated': 'Switch to page mode',
+  'preview.epub.modeWaterfall': 'Switch to waterfall mode',
   'preview.epub.sendPage': 'Send page to AI',
   // DOCX
   'preview.docx.loading': 'Loading document...',

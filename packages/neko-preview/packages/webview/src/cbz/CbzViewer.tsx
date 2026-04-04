@@ -1,10 +1,11 @@
 /**
  * CBZ Viewer — renders comic book ZIP archives as image gallery.
- * Supports region selection for AI Vision analysis.
+ * Supports waterfall (continuous scroll) and single-page modes.
+ * Region selection for AI Vision analysis in both modes.
  *
- * Lazy loading strategy: only the current page ±2 pages are decompressed and
- * held as Blob URLs.  All other pages are kept as cheap zip entry references.
- * This keeps memory usage constant regardless of total page count.
+ * Lazy loading strategy:
+ * - Single-page: current ±2 pages decompressed as Blob URLs (sliding window)
+ * - Waterfall: IntersectionObserver decodes visible ±3 pages, revokes the rest
  */
 
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
@@ -15,8 +16,12 @@ import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { useTranslation } from '../i18n/I18nContext';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
-// Pages to keep decoded on each side of the current page (current ±PREFETCH)
+// Pages to keep decoded on each side of the current page
 const PREFETCH = 2;
+// Buffer for waterfall mode (larger since comics are big images)
+const WATERFALL_BUFFER = 3;
+// Default placeholder height before image is loaded
+const DEFAULT_PAGE_HEIGHT = 800;
 
 function naturalSort(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
@@ -31,10 +36,19 @@ export const CbzViewer: FC = () => {
   // Sparse cache of decoded pages: index → Blob URL
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
   const [currentPage, setCurrentPage] = useState(0);
+  const [scrollMode, setScrollMode] = useState(true);
+  // Track natural image heights after load (for stable scroll)
+  const [imageHeights, setImageHeights] = useState<Map<number, number>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Track which pages are currently being decoded to avoid duplicate work
   const decodingRef = useRef<Set<number>>(new Set());
+  // Waterfall mode refs
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  // Track active waterfall images for region selection
+  const waterfallImgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
 
   const { selection, sendToAi, sendImageToAi } = useDocumentSelection({
     pageNumber: currentPage + 1,
@@ -49,6 +63,8 @@ export const CbzViewer: FC = () => {
     endX: number;
     endY: number;
   } | null>(null);
+  // Which page index the region selection is on (for waterfall mode)
+  const [selectionPageIdx, setSelectionPageIdx] = useState(0);
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
@@ -64,15 +80,13 @@ export const CbzViewer: FC = () => {
     postMessage({ type: 'ready' } as never);
   }, []);
 
-  /** Load CBZ from a localhost URL — zip.js HttpReader uses Range requests,
-   *  so only the central directory + individual pages are fetched on demand. */
+  /** Load CBZ from a localhost URL — zip.js HttpReader uses Range requests. */
   const loadCbzFromUrl = useCallback(async (url: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const reader = new ZipReader(new HttpReader(url, { useRangeHeader: true }));
-      // getEntries() fetches only the ZIP central directory via Range requests
       const entries = await reader.getEntries();
       await reader.close();
 
@@ -82,6 +96,7 @@ export const CbzViewer: FC = () => {
 
       setImageEntries(filtered);
       setPageCache(new Map());
+      setImageHeights(new Map());
       setCurrentPage(0);
       decodingRef.current.clear();
       setLoading(false);
@@ -105,7 +120,6 @@ export const CbzViewer: FC = () => {
 
       const blob = new Blob([bytes], { type: 'application/zip' });
       const reader = new ZipReader(new BlobReader(blob));
-      // getEntries() only reads the central directory — O(entries), no image data
       const entries = await reader.getEntries();
       await reader.close();
 
@@ -115,6 +129,7 @@ export const CbzViewer: FC = () => {
 
       setImageEntries(filtered);
       setPageCache(new Map());
+      setImageHeights(new Map());
       setCurrentPage(0);
       decodingRef.current.clear();
       setLoading(false);
@@ -140,8 +155,12 @@ export const CbzViewer: FC = () => {
     }
   }, []);
 
-  // Sliding-window effect: keep current ±PREFETCH pages decoded, revoke the rest
+  // =========================================================================
+  // Single-page mode: sliding window (original behavior)
+  // =========================================================================
+
   useEffect(() => {
+    if (scrollMode) return;
     if (imageEntries.length === 0) return;
 
     const keep = new Set<number>();
@@ -149,14 +168,12 @@ export const CbzViewer: FC = () => {
       if (i >= 0 && i < imageEntries.length) keep.add(i);
     }
 
-    // Start decoding pages not yet in cache
     for (const i of keep) {
       if (!pageCache.has(i)) {
         void decodePage(i, imageEntries);
       }
     }
 
-    // Revoke Blob URLs outside the window to free memory
     setPageCache((prev) => {
       const next = new Map(prev);
       for (const [idx, url] of prev) {
@@ -167,7 +184,88 @@ export const CbzViewer: FC = () => {
       }
       return next;
     });
-  }, [currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [scrollMode, currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
+
+  // =========================================================================
+  // Waterfall mode: IntersectionObserver
+  // =========================================================================
+
+  useEffect(() => {
+    if (!scrollMode || imageEntries.length === 0) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    observerRef.current?.disconnect();
+
+    const visibleSet = new Set<number>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const idx = Number((entry.target as HTMLElement).dataset['idx']);
+          if (isNaN(idx)) continue;
+
+          if (entry.isIntersecting) {
+            visibleSet.add(idx);
+            // Decode this page and buffer pages
+            const bufferStart = Math.max(0, idx - WATERFALL_BUFFER);
+            const bufferEnd = Math.min(imageEntries.length - 1, idx + WATERFALL_BUFFER);
+            for (let i = bufferStart; i <= bufferEnd; i++) {
+              if (!pageCache.has(i)) {
+                void decodePage(i, imageEntries);
+              }
+            }
+          } else {
+            visibleSet.delete(idx);
+          }
+        }
+
+        // Update current page to first visible
+        if (visibleSet.size > 0) {
+          const sorted = [...visibleSet].sort((a, b) => a - b);
+          setCurrentPage(sorted[0] ?? 0);
+        }
+
+        // Revoke pages far from any visible page
+        const allVisible = [...visibleSet];
+        if (allVisible.length > 0) {
+          const minVisible = Math.min(...allVisible);
+          const maxVisible = Math.max(...allVisible);
+          const keepStart = Math.max(0, minVisible - WATERFALL_BUFFER);
+          const keepEnd = Math.min(imageEntries.length - 1, maxVisible + WATERFALL_BUFFER);
+
+          setPageCache((prev) => {
+            const next = new Map(prev);
+            let changed = false;
+            for (const [idx, url] of prev) {
+              if (idx < keepStart || idx > keepEnd) {
+                URL.revokeObjectURL(url);
+                next.delete(idx);
+                changed = true;
+              }
+            }
+            return changed ? next : prev;
+          });
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: '300% 0px',
+      },
+    );
+
+    observerRef.current = observer;
+
+    for (const [, el] of pageRefsMap.current) {
+      observer.observe(el);
+    }
+
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [scrollMode, imageEntries, decodePage]); // pageCache intentionally omitted
 
   // Revoke all Blob URLs on unmount
   useEffect(() => {
@@ -183,16 +281,25 @@ export const CbzViewer: FC = () => {
       if (page >= 0 && page < totalPages) {
         setCurrentPage(page);
         setSelectionRect(null);
+        if (scrollMode) {
+          const el = pageRefsMap.current.get(page);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
     },
-    [totalPages],
+    [totalPages, scrollMode],
   );
 
-  // Handle region selection for AI
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
+  // =========================================================================
+  // Region selection (shared between modes)
+  // =========================================================================
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>, pageIdx?: number) => {
+    const target = e.currentTarget.querySelector('img') as HTMLImageElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
     setIsSelecting(true);
+    setSelectionPageIdx(pageIdx ?? 0);
     setSelectionRect({
       startX: e.clientX - rect.left,
       startY: e.clientY - rect.top,
@@ -203,13 +310,15 @@ export const CbzViewer: FC = () => {
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isSelecting || !selectionRect || !imgRef.current) return;
-      const rect = imgRef.current.getBoundingClientRect();
+      if (!isSelecting || !selectionRect) return;
+      const img = scrollMode ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
+      if (!img) return;
+      const rect = img.getBoundingClientRect();
       setSelectionRect((prev) =>
         prev ? { ...prev, endX: e.clientX - rect.left, endY: e.clientY - rect.top } : null,
       );
     },
-    [isSelecting, selectionRect],
+    [isSelecting, selectionRect, scrollMode, selectionPageIdx],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -217,10 +326,11 @@ export const CbzViewer: FC = () => {
   }, []);
 
   const captureRegion = useCallback(() => {
-    if (!selectionRect || !imgRef.current) return;
-    const img = imgRef.current;
-    const canvas = document.createElement('canvas');
+    if (!selectionRect) return;
+    const img = scrollMode ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
+    if (!img) return;
 
+    const canvas = document.createElement('canvas');
     const x = Math.min(selectionRect.startX, selectionRect.endX);
     const y = Math.min(selectionRect.startY, selectionRect.endY);
     const w = Math.abs(selectionRect.endX - selectionRect.startX);
@@ -231,7 +341,6 @@ export const CbzViewer: FC = () => {
       return;
     }
 
-    // Scale to actual image dimensions
     const scaleX = img.naturalWidth / img.clientWidth;
     const scaleY = img.naturalHeight / img.clientHeight;
 
@@ -252,14 +361,15 @@ export const CbzViewer: FC = () => {
       canvas.height,
     );
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    sendImageToAi(dataUrl, currentPage + 1);
+    const pageNum = scrollMode ? selectionPageIdx + 1 : currentPage + 1;
+    sendImageToAi(dataUrl, pageNum);
     setSelectionRect(null);
-  }, [selectionRect, currentPage, sendImageToAi]);
+  }, [selectionRect, scrollMode, selectionPageIdx, currentPage, sendImageToAi]);
 
   const sendFullPage = useCallback(() => {
-    if (!imgRef.current) return;
+    const img = scrollMode ? waterfallImgRefs.current.get(currentPage) : imgRef.current;
+    if (!img) return;
     const canvas = document.createElement('canvas');
-    const img = imgRef.current;
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
@@ -267,7 +377,38 @@ export const CbzViewer: FC = () => {
     ctx.drawImage(img, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     sendImageToAi(dataUrl, currentPage + 1);
-  }, [currentPage, sendImageToAi]);
+  }, [scrollMode, currentPage, sendImageToAi]);
+
+  const toggleScrollMode = useCallback(() => {
+    setScrollMode((prev) => !prev);
+    setSelectionRect(null);
+  }, []);
+
+  const handleImageLoad = useCallback((idx: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageHeights((prev) => {
+      const next = new Map(prev);
+      next.set(idx, img.naturalHeight * (img.clientWidth / img.naturalWidth));
+      return next;
+    });
+  }, []);
+
+  // Store page ref callback
+  const setPageRef = useCallback((idx: number, el: HTMLDivElement | null) => {
+    if (el) {
+      pageRefsMap.current.set(idx, el);
+    } else {
+      pageRefsMap.current.delete(idx);
+    }
+  }, []);
+
+  const setWaterfallImgRef = useCallback((idx: number, el: HTMLImageElement | null) => {
+    if (el) {
+      waterfallImgRefs.current.set(idx, el);
+    } else {
+      waterfallImgRefs.current.delete(idx);
+    }
+  }, []);
 
   if (error) {
     return (
@@ -315,26 +456,30 @@ export const CbzViewer: FC = () => {
           background: 'var(--vscode-sideBar-background)',
         }}
       >
-        <button
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage <= 0}
-          className="px-2 py-0.5 disabled:opacity-30"
-        >
-          &lt;
-        </button>
+        {!scrollMode && (
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage <= 0}
+            className="px-2 py-0.5 disabled:opacity-30"
+          >
+            &lt;
+          </button>
+        )}
         <span>
           {t('preview.document.pageOf', {
             current: String(currentPage + 1),
             total: String(totalPages),
           })}
         </span>
-        <button
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage >= totalPages - 1}
-          className="px-2 py-0.5 disabled:opacity-30"
-        >
-          &gt;
-        </button>
+        {!scrollMode && (
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage >= totalPages - 1}
+            className="px-2 py-0.5 disabled:opacity-30"
+          >
+            &gt;
+          </button>
+        )}
         <span className="mx-2">|</span>
         <button
           onClick={sendFullPage}
@@ -347,46 +492,126 @@ export const CbzViewer: FC = () => {
         >
           {t('preview.document.sendPageToAi')}
         </button>
+        <span className="mx-1 opacity-20">|</span>
+        {/* Scroll / page mode toggle */}
+        <button
+          onClick={toggleScrollMode}
+          className="rounded px-2 py-0.5"
+          title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+          style={{
+            background: scrollMode
+              ? 'var(--vscode-button-background)'
+              : 'var(--vscode-button-secondaryBackground)',
+            color: scrollMode
+              ? 'var(--vscode-button-foreground)'
+              : 'var(--vscode-button-secondaryForeground)',
+          }}
+        >
+          {scrollMode ? '≡' : '⊡'}
+        </button>
       </div>
 
-      {/* Comic page */}
-      <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+      {scrollMode ? (
+        /* Waterfall mode */
         <div
-          className="relative select-none"
-          onMouseDown={handleMouseDown}
+          ref={scrollContainerRef}
+          className="flex-1 overflow-auto"
+          style={{ background: 'var(--vscode-editor-background)' }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          style={{ cursor: 'crosshair' }}
         >
-          {currentUrl ? (
-            <img
-              ref={imgRef}
-              src={currentUrl}
-              alt={`Page ${currentPage + 1}`}
-              className="max-h-full max-w-full object-contain"
-              draggable={false}
-            />
-          ) : (
-            <div
-              className="flex h-48 w-48 items-center justify-center text-sm"
-              style={{ color: 'var(--vscode-descriptionForeground)' }}
-            >
-              {t('preview.cbz.loading')}
-            </div>
-          )}
-          {/* Selection overlay */}
-          {selRectStyle && (
-            <div
-              className="pointer-events-none absolute border-2 border-dashed"
-              style={{
-                ...selRectStyle,
-                borderColor: 'var(--vscode-focusBorder)',
-                backgroundColor: 'rgba(0, 120, 215, 0.15)',
-              }}
-            />
-          )}
+          {imageEntries.map((_, idx) => {
+            const blobUrl = pageCache.get(idx);
+            const height = imageHeights.get(idx) ?? DEFAULT_PAGE_HEIGHT;
+            return (
+              <div
+                key={idx}
+                ref={(el) => setPageRef(idx, el)}
+                data-idx={idx}
+                className="relative mx-auto select-none"
+                style={{
+                  cursor: 'crosshair',
+                  minHeight: blobUrl ? undefined : `${height}px`,
+                  maxWidth: '100%',
+                  marginBottom: '4px',
+                }}
+                onMouseDown={(e) => handleMouseDown(e, idx)}
+              >
+                {blobUrl ? (
+                  <img
+                    ref={(el) => setWaterfallImgRef(idx, el)}
+                    src={blobUrl}
+                    alt={`Page ${idx + 1}`}
+                    className="mx-auto block max-w-full"
+                    draggable={false}
+                    onLoad={(e) => handleImageLoad(idx, e)}
+                  />
+                ) : (
+                  <div
+                    className="flex items-center justify-center text-sm"
+                    style={{
+                      height: `${height}px`,
+                      color: 'var(--vscode-descriptionForeground)',
+                    }}
+                  >
+                    {t('preview.cbz.loading')}
+                  </div>
+                )}
+                {/* Selection overlay for this page */}
+                {selRectStyle && selectionPageIdx === idx && (
+                  <div
+                    className="pointer-events-none absolute border-2 border-dashed"
+                    style={{
+                      ...selRectStyle,
+                      borderColor: 'var(--vscode-focusBorder)',
+                      backgroundColor: 'rgba(0, 120, 215, 0.15)',
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      ) : (
+        /* Single-page mode */
+        <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+          <div
+            className="relative select-none"
+            onMouseDown={(e) => handleMouseDown(e)}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            style={{ cursor: 'crosshair' }}
+          >
+            {currentUrl ? (
+              <img
+                ref={imgRef}
+                src={currentUrl}
+                alt={`Page ${currentPage + 1}`}
+                className="max-h-full max-w-full object-contain"
+                draggable={false}
+              />
+            ) : (
+              <div
+                className="flex h-48 w-48 items-center justify-center text-sm"
+                style={{ color: 'var(--vscode-descriptionForeground)' }}
+              >
+                {t('preview.cbz.loading')}
+              </div>
+            )}
+            {/* Selection overlay */}
+            {selRectStyle && !scrollMode && (
+              <div
+                className="pointer-events-none absolute border-2 border-dashed"
+                style={{
+                  ...selRectStyle,
+                  borderColor: 'var(--vscode-focusBorder)',
+                  backgroundColor: 'rgba(0, 120, 215, 0.15)',
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Region capture FAB */}
       {selectionRect &&

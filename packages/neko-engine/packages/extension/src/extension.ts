@@ -131,6 +131,65 @@ function registerCommands(context: vscode.ExtensionContext): void {
     ),
   );
 
+  // Extract Thumbnail — generates a JPEG thumbnail and writes to outputPath
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.engine.extractThumbnail',
+      async (
+        filePath: string,
+        outputPath: string,
+        maxWidth: number,
+        maxHeight: number,
+        timeOffset: number,
+      ) => {
+        try {
+          const engine = await getOrStartEngine();
+          if (!engine?.engine) return { success: false, path: '', width: 0, height: 0 };
+
+          const optionsJson = JSON.stringify({
+            source: filePath,
+            time: timeOffset,
+            width: maxWidth,
+            height: maxHeight,
+            format: 'jpeg',
+            quality: 85,
+          });
+
+          const resultJson = await engine.engine.dispatchAction(
+            'videos',
+            'capture',
+            null,
+            optionsJson,
+            null,
+            null,
+            null,
+            null,
+          );
+          if (!resultJson) return { success: false, path: '', width: 0, height: 0 };
+
+          const result = JSON.parse(resultJson);
+          if (result.status === 'ok' && result.data?.data) {
+            const buf = Buffer.from(result.data.data as string, 'base64');
+            const fsPromises = await import('fs/promises');
+            const pathMod = await import('path');
+            await fsPromises.mkdir(pathMod.dirname(outputPath), { recursive: true });
+            await fsPromises.writeFile(outputPath, buf);
+            return {
+              success: true,
+              path: outputPath,
+              width: (result.data.width as number) ?? maxWidth,
+              height: (result.data.height as number) ?? maxHeight,
+            };
+          }
+          return { success: false, path: '', width: 0, height: 0 };
+        } catch (error) {
+          log(`extractThumbnail failed for ${filePath}: ${error}`, 'error');
+          return { success: false, path: '', width: 0, height: 0 };
+        }
+      },
+    ),
+  );
+
   // Diff two media files (programmatic API for other extensions)
   // Dispatches to engine's native diff: audios:diff, videos:diff, images:diff, timelines:diff
   context.subscriptions.push(

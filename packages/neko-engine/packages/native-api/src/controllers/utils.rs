@@ -3,6 +3,7 @@
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_native_core::services::IStreamPlayback;
+use neko_types::project_context::{ProjectContext, ResolvedPath};
 use neko_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
@@ -146,6 +147,28 @@ pub async fn resolve_resource(
     Err(ApiError::InvalidRequest(
         "Either resource_id or source path required".to_string(),
     ))
+}
+
+/// Resolve a source path using an optional ProjectContext.
+///
+/// When `context` is provided, paths are resolved through it (variable expansion,
+/// relative path resolution, etc.). When absent, the source is treated as an
+/// absolute path (backward compatible with existing callers).
+pub fn resolve_source_with_context(
+    source: &str,
+    context: Option<&ProjectContext>,
+) -> ApiResult<PathBuf> {
+    if let Some(ctx) = context {
+        match ctx.resolve(source) {
+            Ok(ResolvedPath::Local(p)) => Ok(p),
+            Ok(ResolvedPath::Remote(url)) => Err(ApiError::InvalidRequest(format!(
+                "Remote URLs are not directly supported as source: {url}"
+            ))),
+            Err(e) => Err(ApiError::InvalidRequest(e.to_string())),
+        }
+    } else {
+        Ok(PathBuf::from(source))
+    }
 }
 
 /// Shared options for stream control actions (stop/pause/resume/speed/seek/loop)

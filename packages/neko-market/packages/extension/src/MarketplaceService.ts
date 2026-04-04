@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import * as os from 'os';
+// os import removed — paths resolved via resolveGlobalStorageLayout()
 import * as path from 'path';
 import {
   MarketClient,
@@ -49,10 +49,12 @@ async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
   return ext.exports;
 }
 
-/** Neko home directory paths */
-const NEKO_HOME = path.join(os.homedir(), '.neko');
-const CACHE_DIR = path.join(NEKO_HOME, 'market-cache');
-const INSTALLED_FILE = path.join(NEKO_HOME, 'market-installed.json');
+/** Neko home directory paths — resolved via global storage layout */
+import { resolveGlobalStorageLayout } from '@neko/shared';
+const _globalLayout = resolveGlobalStorageLayout();
+const NEKO_HOME = _globalLayout.root;
+const CACHE_DIR = _globalLayout.marketCache;
+const INSTALLED_FILE = _globalLayout.marketInstalled;
 
 export class MarketplaceService implements vscode.Disposable {
   private readonly _client: MarketClient;

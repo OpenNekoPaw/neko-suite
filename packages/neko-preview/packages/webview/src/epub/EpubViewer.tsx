@@ -1,10 +1,14 @@
 /**
  * EPUB Viewer — renders EPUB using epub.js with chapter navigation and text selection.
  *
+ * Three view modes:
+ * - Paginated: traditional page-by-page (epubjs rendition)
+ * - Scrolled-doc: single-chapter scroll with auto-advance (epubjs rendition)
+ * - Waterfall: true continuous scroll across all chapters (custom DOM, bypasses rendition)
+ *
  * Features:
- * - Paginated / scrolled-doc mode toggle
  * - Text selection → FAB → send text (+ nearby inline figures) to AI
- * - "Send page" toolbar button → captures all images on current page → send to AI
+ * - "Send page" toolbar button → captures images/text → send to AI
  * - Chapter navigation via toolbar and epub:navigate message from extension
  * - TOC via VSCode Outline (DocumentSymbolProvider in extension host)
  */
@@ -12,11 +16,28 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import ePub, { type Book, type Rendition } from 'epubjs';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
+import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import type { DocumentSelection } from '../shared/useDocumentSelection';
+
+/** Minimal section interface — epubjs doesn't export Section from its main entry.
+ *  The actual runtime returns Promises despite the .d.ts saying otherwise. */
+interface EpubSection {
+  index: number;
+  href: string;
+  url: string;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  render(request?: Function): Promise<string>;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  load(request?: Function): Promise<Document>;
+  unload(): void;
+}
 import { captureIframeImages, collectNearbyImages, fetchAndCompress } from '../shared/imageUtils';
 import type { CapturedImagePayload } from '../shared/document-types';
 import { useTranslation } from '../i18n/I18nContext';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('EpubViewer');
 
 interface TocItem {
   label: string;
@@ -29,6 +50,13 @@ interface EpubContents {
   window: Window;
 }
 
+/** Spine item metadata for waterfall mode */
+interface SpineEntry {
+  index: number;
+  href: string;
+  section: EpubSection;
+}
+
 /** Max characters forwarded to agent — stays within message size budget */
 const MAX_SELECTION_CHARS = 4000;
 /** Max images per send-page action */
@@ -36,25 +64,60 @@ const MAX_PAGE_IMAGES = 5;
 /** Max inline figures included alongside text selection */
 const MAX_INLINE_FIGURES = 3;
 
+type ViewMode = 'paginated' | 'scrolled' | 'waterfall';
+
+/** VSCode theme CSS applied to waterfall chapter content */
+const WATERFALL_THEME_CSS = `
+  .epub-chapter-content {
+    background: var(--vscode-editor-background) !important;
+    color: var(--vscode-editor-foreground) !important;
+    font-family: var(--vscode-font-family) !important;
+    line-height: 1.6;
+  }
+  .epub-chapter-content a,
+  .epub-chapter-content a:visited { color: var(--vscode-textLink-foreground) !important; }
+  .epub-chapter-content img,
+  .epub-chapter-content image {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 auto !important;
+  }
+`;
+
 export const EpubViewer: FC = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentChapter, setCurrentChapter] = useState('');
-  const [scrolled, setScrolled] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('waterfall');
   const [epubSelection, setEpubSelection] = useState<DocumentSelection | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
+  // Rendition mode refs (paginated / scrolled-doc)
   const viewerRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const tocRef = useRef<TocItem[]>([]);
   const loadingRef = useRef(false);
-  // Pending inline figures from the most recent text selection
   const selectionImagesRef = useRef<CapturedImagePayload[]>([]);
-  // Prevents rapid chapter-skip while auto-advancing in scrolled mode
   const scrollCooldownRef = useRef(false);
+
+  // Waterfall mode refs
+  const waterfallContainerRef = useRef<HTMLDivElement>(null);
+  const spineEntriesRef = useRef<SpineEntry[]>([]);
+  const chapterRefsMap = useRef<Map<number, HTMLElement>>(new Map());
+  const loadedChaptersRef = useRef<Set<number>>(new Set());
+  const loadingChaptersRef = useRef<Set<number>>(new Set());
+  const waterfallObserverRef = useRef<IntersectionObserver | null>(null);
+  const [waterfallReady, setWaterfallReady] = useState(false);
+  const chapterHeightsRef = useRef<Map<number, number>>(new Map());
+
+  // Waterfall text selection via native document selection
+  const { selection: waterfallSelection, sendToAi: waterfallSendToAi } = useDocumentSelection({
+    chapterTitle: currentChapter,
+  });
 
   // =========================================================================
   // Extension ↔ Webview messaging
@@ -63,14 +126,17 @@ export const EpubViewer: FC = () => {
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
       if ('url' in msg.payload && msg.payload.url) {
-        loadEpubFromUrl(msg.payload.url);
+        void loadEpubFromUrl(msg.payload.url);
       } else if (msg.payload.data) {
-        loadEpub(msg.payload.data);
+        void loadEpub(msg.payload.data);
       }
     } else if (msg.type === 'epub:navigate') {
-      renditionRef.current?.display(
-        (msg as { type: string; payload: { href: string } }).payload.href,
-      );
+      const href = (msg as { type: string; payload: { href: string } }).payload.href;
+      if (viewMode === 'waterfall') {
+        navigateWaterfallToHref(href);
+      } else {
+        renditionRef.current?.display(href);
+      }
     }
   });
 
@@ -99,7 +165,7 @@ export const EpubViewer: FC = () => {
   }, []);
 
   // =========================================================================
-  // Rendition helpers
+  // Rendition helpers (paginated + scrolled-doc modes)
   // =========================================================================
 
   const getContents = (): EpubContents | null => {
@@ -131,14 +197,10 @@ export const EpubViewer: FC = () => {
     rendition.on('relocated', (location: { start: { href: string } }) => {
       const chapter = tocItems.find((item) => location.start.href.includes(item.href));
       if (chapter) setCurrentChapter(chapter.label);
-      // Clear stale selection when page changes
       setEpubSelection(null);
       selectionImagesRef.current = [];
     });
 
-    // -----------------------------------------------------------------------
-    // Text selection inside the epub iframe
-    // -----------------------------------------------------------------------
     rendition.on('selected', async (_cfi: string, contents: EpubContents) => {
       const sel = contents.window.getSelection();
       const raw = sel?.toString().trim() ?? '';
@@ -149,7 +211,6 @@ export const EpubViewer: FC = () => {
       }
       const text = raw.length > MAX_SELECTION_CHARS ? raw.slice(0, MAX_SELECTION_CHARS) : raw;
 
-      // Map iframe-relative selection rect → parent viewport coords
       const iframeEl = viewerRef.current?.querySelector('iframe');
       const iframeRect = iframeEl?.getBoundingClientRect();
       const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
@@ -166,19 +227,16 @@ export const EpubViewer: FC = () => {
 
       setEpubSelection({ text, rect });
 
-      // Asynchronously collect nearby inline figures (fire-and-forget)
       if (range) {
         const nearbyImgEls = collectNearbyImages(range, contents.document, MAX_INLINE_FIGURES);
-        const compressed = await Promise.all(
-          nearbyImgEls.map(async (img) => {
-            const src = img.currentSrc || img.src;
-            const dataUrl = src ? await fetchAndCompress(src) : null;
-            return dataUrl ? { role: 'figure' as const, dataUrl } : null;
-          }),
-        );
-        selectionImagesRef.current = compressed.filter(
-          (x): x is CapturedImagePayload => x !== null,
-        );
+        const compressed: CapturedImagePayload[] = [];
+        for (const img of nearbyImgEls) {
+          const src = img.currentSrc || img.src;
+          if (!src) continue;
+          const dataUrl = await fetchAndCompress(src);
+          if (dataUrl) compressed.push({ role: 'figure', dataUrl });
+        }
+        selectionImagesRef.current = compressed;
       }
     });
 
@@ -187,11 +245,6 @@ export const EpubViewer: FC = () => {
       selectionImagesRef.current = [];
     });
 
-    // -----------------------------------------------------------------------
-    // Right-click context menu inside the epub iframe
-    // Events don't bubble out of the iframe, so we register via hooks.content
-    // which fires for every chapter document as it loads.
-    // -----------------------------------------------------------------------
     type ContentHooks = { content: { register: (fn: (c: EpubContents) => void) => void } };
     (rendition as unknown as { hooks: ContentHooks }).hooks?.content?.register(
       (contents: EpubContents) => {
@@ -220,8 +273,6 @@ export const EpubViewer: FC = () => {
       const isScrolled = flow === 'scrolled-doc';
       const rendition = book.renderTo(viewerRef.current, {
         width: '100%',
-        // In scrolled-doc mode don't constrain height — let the iframe expand naturally
-        // so the parent overflow-y-auto container can scroll through it.
         ...(isScrolled ? {} : { height: '100%' }),
         spread: 'none',
         flow,
@@ -233,60 +284,95 @@ export const EpubViewer: FC = () => {
     [setupRendition],
   );
 
-  // Shared post-ready TOC extraction and initial render
-  const initBook = useCallback(
-    async (book: Book) => {
-      await Promise.race([
-        book.ready,
-        new Promise<never>((_, reject) => {
-          book.on('openFailed', (err: unknown) => reject(err));
-        }),
-      ]);
+  /** Extract TOC and spine entries from book */
+  const extractBookMetadata = useCallback(async (book: Book) => {
+    await Promise.race([
+      book.ready,
+      new Promise<never>((_, reject) => {
+        book.on('openFailed', (err: unknown) => reject(err));
+      }),
+    ]);
 
-      const extractLabel = (raw: unknown): string => {
-        if (typeof raw === 'string') return raw.trim();
-        if (raw && typeof raw === 'object' && 'text' in raw)
-          return String((raw as { text: unknown }).text).trim();
-        return String(raw ?? '').trim();
-      };
+    const extractLabel = (raw: unknown): string => {
+      if (typeof raw === 'string') return raw.trim();
+      if (raw && typeof raw === 'object' && 'text' in raw)
+        return String((raw as { text: unknown }).text).trim();
+      return String(raw ?? '').trim();
+    };
 
-      const nav = await book.loaded.navigation;
-      const rawToc: unknown = nav.toc;
-      const tocItems: TocItem[] = Array.isArray(rawToc)
-        ? rawToc
-            .map((item) => ({
-              label: extractLabel(item.label),
-              href: String(item.href ?? ''),
-            }))
-            .filter((item) => item.href)
-        : [];
+    const nav = await book.loaded.navigation;
+    const rawToc: unknown = nav.toc;
+    const tocItems: TocItem[] = Array.isArray(rawToc)
+      ? rawToc
+          .map((item) => ({
+            label: extractLabel(item.label),
+            href: String(item.href ?? ''),
+          }))
+          .filter((item) => item.href)
+      : [];
 
-      if (tocItems.length === 0) {
-        type SpineItem = { href?: string; url?: string };
-        const spineItems = (book.spine as unknown as { items: SpineItem[] })?.items;
-        if (Array.isArray(spineItems)) {
-          spineItems.forEach((item, i) => {
-            const href = item.href ?? item.url ?? '';
-            if (href) tocItems.push({ label: `Section ${i + 1}`, href });
-          });
+    if (tocItems.length === 0) {
+      type SpItem = { href?: string; url?: string };
+      const spineItems = (book.spine as unknown as { items: SpItem[] })?.items;
+      if (Array.isArray(spineItems)) {
+        spineItems.forEach((item, i) => {
+          const href = item.href ?? item.url ?? '';
+          if (href) tocItems.push({ label: `Section ${i + 1}`, href });
+        });
+      }
+    }
+    tocRef.current = tocItems;
+
+    // Collect spine entries for waterfall mode
+    const entries: SpineEntry[] = [];
+    const spineItems = (
+      book.spine as unknown as { items: Array<{ index: number; href?: string; url?: string }> }
+    )?.items;
+    if (Array.isArray(spineItems)) {
+      for (const item of spineItems) {
+        const section = book.section(item.index) as unknown as EpubSection | null;
+        if (section) {
+          entries.push({ index: item.index, href: item.href ?? item.url ?? '', section });
         }
       }
-      tocRef.current = tocItems;
-      await renderBook(book, tocItems, 'paginated');
+    }
+    spineEntriesRef.current = entries;
+
+    return tocItems;
+  }, []);
+
+  /** Init book — unified entry point for all modes */
+  const initBook = useCallback(
+    async (book: Book) => {
+      const tocItems = await extractBookMetadata(book);
+
+      if (viewMode === 'waterfall') {
+        // Destroy any existing rendition
+        renditionRef.current?.destroy();
+        renditionRef.current = null;
+        loadedChaptersRef.current.clear();
+        loadingChaptersRef.current.clear();
+        chapterHeightsRef.current.clear();
+        setWaterfallReady(true);
+      } else {
+        const flow = viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated';
+        await renderBook(book, tocItems, flow as 'paginated' | 'scrolled-doc');
+      }
     },
-    [renderBook],
+    [viewMode, extractBookMetadata, renderBook],
   );
 
-  /** Load EPUB from a localhost URL served by neko-engine (preferred). */
+  // =========================================================================
+  // Book loaders
+  // =========================================================================
+
+  /** Load EPUB from a localhost URL served by neko-engine. */
   const loadEpubFromUrl = useCallback(
     async (url: string) => {
       try {
         setLoading(true);
         loadingRef.current = true;
         setError(null);
-        // URL ends with '/' (no extension) → epub.js uses DIRECTORY mode:
-        // fetches META-INF/container.xml, OPF, chapters, CSS, images on demand.
-        // neko-engine serves each ZIP entry from /v1/preview/epub/{token}/{path}.
         const book = ePub(url);
         bookRef.current = book;
         await initBook(book);
@@ -328,11 +414,205 @@ export const EpubViewer: FC = () => {
   );
 
   // =========================================================================
+  // Waterfall mode: load/unload chapter content
+  // =========================================================================
+
+  const loadChapterContent = useCallback(async (entry: SpineEntry) => {
+    const book = bookRef.current;
+    if (!book) return;
+    if (loadedChaptersRef.current.has(entry.index) || loadingChaptersRef.current.has(entry.index))
+      return;
+
+    const el = chapterRefsMap.current.get(entry.index);
+    if (!el) return;
+
+    loadingChaptersRef.current.add(entry.index);
+    try {
+      // section.render() returns HTML string with resource URLs resolved via book.load()
+      const html = await entry.section.render(book.load.bind(book));
+
+      if (!chapterRefsMap.current.has(entry.index)) return;
+
+      el.innerHTML = html;
+
+      // Rewrite relative resource URLs to absolute HTTP URLs served by neko-engine.
+      // Use section.url as base (e.g. http://…/epub/{token}/OEBPS/text/ch1.xhtml)
+      // so that relative paths like "../image/cover.jpg" resolve correctly.
+      const sectionBase = entry.section.url ?? '';
+      const rewriteAttr = (el2: Element, attr: string) => {
+        const val = el2.getAttribute(attr);
+        if (
+          val &&
+          !val.startsWith('blob:') &&
+          !val.startsWith('data:') &&
+          !val.startsWith('http')
+        ) {
+          try {
+            el2.setAttribute(attr, new URL(val, sectionBase).href);
+          } catch {
+            /* keep original */
+          }
+        }
+      };
+      el.querySelectorAll('img').forEach((img) => rewriteAttr(img, 'src'));
+      el.querySelectorAll('image').forEach((img) => {
+        rewriteAttr(img, 'href');
+        rewriteAttr(img, 'xlink:href');
+      });
+      el.querySelectorAll('link[rel="stylesheet"]').forEach((link) => rewriteAttr(link, 'href'));
+
+      loadedChaptersRef.current.add(entry.index);
+      chapterHeightsRef.current.set(entry.index, el.scrollHeight);
+    } catch (err) {
+      logger.error(`Failed to load chapter ${entry.index}:`, err);
+    } finally {
+      loadingChaptersRef.current.delete(entry.index);
+    }
+  }, []);
+
+  const unloadChapterContent = useCallback((entry: SpineEntry) => {
+    const el = chapterRefsMap.current.get(entry.index);
+    if (!el || !loadedChaptersRef.current.has(entry.index)) return;
+
+    chapterHeightsRef.current.set(entry.index, el.scrollHeight);
+    el.style.minHeight = `${el.scrollHeight}px`;
+    el.innerHTML = '';
+    loadedChaptersRef.current.delete(entry.index);
+  }, []);
+
+  // =========================================================================
+  // Waterfall mode: IntersectionObserver
+  // =========================================================================
+
+  useEffect(() => {
+    if (viewMode !== 'waterfall' || !waterfallReady) return;
+
+    const container = waterfallContainerRef.current;
+    if (!container) return;
+
+    waterfallObserverRef.current?.disconnect();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const observerEntry of entries) {
+          const idx = Number((observerEntry.target as HTMLElement).dataset['spineIndex']);
+          if (isNaN(idx)) continue;
+
+          const spineEntry = spineEntriesRef.current.find((e) => e.index === idx);
+          if (!spineEntry) continue;
+
+          if (observerEntry.isIntersecting) {
+            void loadChapterContent(spineEntry);
+          } else {
+            unloadChapterContent(spineEntry);
+          }
+        }
+        updateCurrentChapterFromScroll();
+      },
+      {
+        root: container,
+        rootMargin: '100% 0px',
+      },
+    );
+
+    waterfallObserverRef.current = observer;
+
+    for (const [, el] of chapterRefsMap.current) {
+      observer.observe(el);
+    }
+
+    return () => {
+      observer.disconnect();
+      waterfallObserverRef.current = null;
+    };
+  }, [viewMode, waterfallReady, loadChapterContent, unloadChapterContent]);
+
+  /** Update current chapter title based on scroll position */
+  const updateCurrentChapterFromScroll = useCallback(() => {
+    const container = waterfallContainerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const checkY = containerRect.top + containerRect.height * 0.3;
+
+    for (const entry of spineEntriesRef.current) {
+      const el = chapterRefsMap.current.get(entry.index);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.top <= checkY && rect.bottom >= checkY) {
+        const toc = tocRef.current.find(
+          (item) => entry.href.includes(item.href) || item.href.includes(entry.href),
+        );
+        if (toc) setCurrentChapter(toc.label);
+        return;
+      }
+    }
+  }, []);
+
+  /** Navigate waterfall to a specific href */
+  const navigateWaterfallToHref = useCallback((href: string) => {
+    const entry = spineEntriesRef.current.find(
+      (e) => e.href === href || e.href.includes(href) || href.includes(e.href),
+    );
+    if (entry) {
+      const el = chapterRefsMap.current.get(entry.index);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const setChapterRef = useCallback((index: number, el: HTMLElement | null) => {
+    if (el) {
+      chapterRefsMap.current.set(index, el);
+    } else {
+      chapterRefsMap.current.delete(index);
+    }
+  }, []);
+
+  // =========================================================================
   // Navigation
   // =========================================================================
 
-  const goToPrev = useCallback(() => renditionRef.current?.prev(), []);
-  const goToNext = useCallback(() => renditionRef.current?.next(), []);
+  const goToPrev = useCallback(() => {
+    if (viewMode === 'waterfall') {
+      const container = waterfallContainerRef.current;
+      if (!container) return;
+      const entries = spineEntriesRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const checkY = containerRect.top + 10;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const el = chapterRefsMap.current.get(entries[i]!.index);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top < checkY) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+      }
+    } else {
+      renditionRef.current?.prev();
+    }
+  }, [viewMode]);
+
+  const goToNext = useCallback(() => {
+    if (viewMode === 'waterfall') {
+      const container = waterfallContainerRef.current;
+      if (!container) return;
+      const entries = spineEntriesRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const checkY = containerRect.top + containerRect.height * 0.5;
+      for (const entry of entries) {
+        const el = chapterRefsMap.current.get(entry.index);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top > checkY) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+      }
+    } else {
+      renditionRef.current?.next();
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -344,21 +624,15 @@ export const EpubViewer: FC = () => {
   }, [goToPrev, goToNext]);
 
   // =========================================================================
-  // Cross-chapter scrolling (scrolled-doc mode)
-  //
-  // epubjs renders one chapter per iframe even in scrolled-doc mode.
-  // We bridge chapter boundaries by:
-  //   • scroll-to-bottom  → rendition.next(), reset viewer to top
-  //   • wheel-up at top   → rendition.prev(), jump viewer to bottom
-  // A cooldown ref prevents rapid chapter-skipping during fast scroll.
+  // Cross-chapter scrolling (scrolled-doc mode only)
   // =========================================================================
 
   useEffect(() => {
-    if (!scrolled) return;
+    if (viewMode !== 'scrolled') return;
     const viewer = viewerRef.current;
     if (!viewer) return;
 
-    const THRESHOLD = 40; // px from edge that counts as "at boundary"
+    const THRESHOLD = 40;
     const COOLDOWN_MS = 600;
 
     const advance = (direction: 'next' | 'prev') => {
@@ -371,7 +645,6 @@ export const EpubViewer: FC = () => {
           if (direction === 'next') {
             viewer.scrollTop = 0;
           } else {
-            // Jump to bottom so the reader can scroll back up naturally
             requestAnimationFrame(() => {
               viewer.scrollTop = viewer.scrollHeight;
             });
@@ -392,7 +665,6 @@ export const EpubViewer: FC = () => {
       }
     };
 
-    // Detect upward wheel at the very top to go to previous chapter
     const onWheel = (e: WheelEvent) => {
       if (scrollCooldownRef.current) return;
       if (e.deltaY < 0 && viewer.scrollTop <= 0) {
@@ -406,36 +678,91 @@ export const EpubViewer: FC = () => {
       viewer.removeEventListener('scroll', onScroll);
       viewer.removeEventListener('wheel', onWheel);
     };
-  }, [scrolled]);
-
-  const toggleScrollMode = useCallback(async () => {
-    const book = bookRef.current;
-    const rendition = renditionRef.current;
-    if (!book) return;
-    const newScrolled = !scrolled;
-    setScrolled(newScrolled);
-    const location = rendition?.currentLocation() as { start: { cfi: string } } | null | undefined;
-    await renderBook(
-      book,
-      tocRef.current,
-      newScrolled ? 'scrolled-doc' : 'paginated',
-      location?.start?.cfi,
-    );
-  }, [scrolled, renderBook]);
+  }, [viewMode]);
 
   // =========================================================================
-  // Send current page images to AI
+  // Mode switching
+  // =========================================================================
+
+  const cycleViewMode = useCallback(async () => {
+    const book = bookRef.current;
+    if (!book) return;
+
+    const modes: ViewMode[] = ['waterfall', 'paginated', 'scrolled'];
+    const currentIdx = modes.indexOf(viewMode);
+    const nextMode = modes[(currentIdx + 1) % modes.length]!;
+
+    const location = renditionRef.current?.currentLocation() as
+      | { start: { cfi: string } }
+      | null
+      | undefined;
+
+    setViewMode(nextMode);
+    setWaterfallReady(false);
+    loadedChaptersRef.current.clear();
+    loadingChaptersRef.current.clear();
+
+    if (nextMode === 'waterfall') {
+      renditionRef.current?.destroy();
+      renditionRef.current = null;
+      setWaterfallReady(true);
+    } else {
+      const flow = nextMode === 'scrolled' ? 'scrolled-doc' : 'paginated';
+      await renderBook(
+        book,
+        tocRef.current,
+        flow as 'paginated' | 'scrolled-doc',
+        location?.start?.cfi,
+      );
+    }
+  }, [viewMode, renderBook]);
+
+  // =========================================================================
+  // Send page to AI
   // =========================================================================
 
   const sendPageToAi = useCallback(async () => {
+    if (capturing) return;
+
+    if (viewMode === 'waterfall') {
+      setCapturing(true);
+      try {
+        const container = waterfallContainerRef.current;
+        if (!container) return;
+
+        for (const entry of spineEntriesRef.current) {
+          const el = chapterRefsMap.current.get(entry.index);
+          if (!el || !loadedChaptersRef.current.has(entry.index)) continue;
+          const rect = el.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          if (rect.bottom > containerRect.top && rect.top < containerRect.bottom) {
+            const bodyText = el.innerText?.trim().slice(0, MAX_SELECTION_CHARS);
+            if (bodyText) {
+              postMessage({
+                type: 'document:sendToAi',
+                payload: {
+                  selectedText: bodyText,
+                  chapterTitle: currentChapter || undefined,
+                  contentKind: 'text',
+                },
+              } as never);
+            }
+            break;
+          }
+        }
+      } finally {
+        setCapturing(false);
+      }
+      return;
+    }
+
     const contents = getContents();
-    if (!contents || capturing) return;
+    if (!contents) return;
 
     setCapturing(true);
     try {
       const captured = await captureIframeImages(contents.document, MAX_PAGE_IMAGES);
       if (captured.length === 0) {
-        // No images — fall back to sending visible text
         const bodyText = contents.document.body?.innerText?.trim().slice(0, MAX_SELECTION_CHARS);
         if (bodyText) {
           postMessage({
@@ -461,10 +788,10 @@ export const EpubViewer: FC = () => {
     } finally {
       setCapturing(false);
     }
-  }, [capturing, currentChapter]);
+  }, [capturing, currentChapter, viewMode]);
 
   // =========================================================================
-  // Send text selection (+ optional nearby figures) to AI
+  // Send text selection to AI (rendition modes)
   // =========================================================================
 
   const sendSelectionToAi = useCallback(() => {
@@ -485,6 +812,21 @@ export const EpubViewer: FC = () => {
     setEpubSelection(null);
     selectionImagesRef.current = [];
   }, [epubSelection, currentChapter]);
+
+  // =========================================================================
+  // View mode label & icon
+  // =========================================================================
+
+  const viewModeIcon = viewMode === 'waterfall' ? '⇕' : viewMode === 'scrolled' ? '≡' : '⊡';
+  const viewModeTitle =
+    viewMode === 'waterfall'
+      ? t('preview.epub.modePaginated')
+      : viewMode === 'paginated'
+        ? t('preview.epub.modeScrolled')
+        : t('preview.epub.modeWaterfall');
+
+  const activeSelection = viewMode === 'waterfall' ? waterfallSelection : epubSelection;
+  const activeSendToAi = viewMode === 'waterfall' ? waterfallSendToAi : sendSelectionToAi;
 
   // =========================================================================
   // Render
@@ -540,21 +882,23 @@ export const EpubViewer: FC = () => {
           {capturing ? '…' : '⌅'}
         </button>
 
-        {/* Scroll / paginated mode toggle */}
+        {/* View mode cycle button */}
         <button
-          onClick={toggleScrollMode}
+          onClick={cycleViewMode}
           className="rounded px-2 py-0.5"
-          title={scrolled ? t('preview.epub.modePaginated') : t('preview.epub.modeScrolled')}
+          title={viewModeTitle}
           style={{
-            background: scrolled
-              ? 'var(--vscode-button-background)'
-              : 'var(--vscode-button-secondaryBackground)',
-            color: scrolled
-              ? 'var(--vscode-button-foreground)'
-              : 'var(--vscode-button-secondaryForeground)',
+            background:
+              viewMode !== 'paginated'
+                ? 'var(--vscode-button-background)'
+                : 'var(--vscode-button-secondaryBackground)',
+            color:
+              viewMode !== 'paginated'
+                ? 'var(--vscode-button-foreground)'
+                : 'var(--vscode-button-secondaryForeground)',
           }}
         >
-          {scrolled ? '≡' : '⊡'}
+          {viewModeIcon}
         </button>
       </div>
 
@@ -572,22 +916,51 @@ export const EpubViewer: FC = () => {
           </div>
         )}
 
-        {/* EPUB content — scrolled-doc needs overflow-y-auto; paginated needs overflow-hidden */}
-        <div
-          ref={viewerRef}
-          className={`flex-1 ${scrolled ? 'overflow-y-auto' : 'overflow-hidden'}`}
-        />
+        {/* Waterfall mode: custom DOM container */}
+        {viewMode === 'waterfall' && (
+          <div
+            ref={waterfallContainerRef}
+            className="flex-1 overflow-y-auto"
+            style={{ display: loading ? 'none' : 'block' }}
+          >
+            <style>{WATERFALL_THEME_CSS}</style>
+            {spineEntriesRef.current.map((entry) => (
+              <article
+                key={entry.index}
+                ref={(el) => setChapterRef(entry.index, el)}
+                data-spine-index={entry.index}
+                data-href={entry.href}
+                className="epub-chapter-content mx-auto"
+                style={{
+                  maxWidth: '800px',
+                  padding: '20px',
+                  minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
+                  borderBottom: '1px solid var(--vscode-panel-border)',
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Rendition modes: epubjs viewer container */}
+        {viewMode !== 'waterfall' && (
+          <div
+            ref={viewerRef}
+            className={`flex-1 ${viewMode === 'scrolled' ? 'overflow-y-auto' : 'overflow-hidden'}`}
+            style={{ display: loading ? 'none' : undefined }}
+          />
+        )}
       </div>
 
-      {/* FAB: appears on text selection inside the epub iframe */}
+      {/* FAB: appears on text selection */}
       <DocumentSelectionFab
-        selection={epubSelection}
-        onSendToAi={sendSelectionToAi}
+        selection={activeSelection}
+        onSendToAi={activeSendToAi}
         label={t('preview.document.sendToAi')}
       />
 
-      {/* Context menu — right-click inside epub iframe */}
-      {contextMenu && (
+      {/* Context menu — right-click (rendition modes only) */}
+      {contextMenu && viewMode !== 'waterfall' && (
         <div
           className="fixed z-50 rounded py-1 text-xs shadow-lg"
           style={{

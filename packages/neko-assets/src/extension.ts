@@ -23,7 +23,7 @@ import {
 } from '@neko/asset';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
-import { detectMediaType } from '@neko/shared';
+import { detectMediaType, resolveStorageLayout, migrateStorageLayout } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
 import { MediaMetadataCache } from './services/MediaMetadataCache';
@@ -100,16 +100,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (workspaceRoot) {
     try {
-      const storagePath = path.join(workspaceRoot, '.neko', 'assets', 'library.json');
+      const layout = resolveStorageLayout(workspaceRoot);
+
+      // One-time migration from legacy paths
+      try {
+        const migrated = await migrateStorageLayout(workspaceRoot, {
+          exists: async (p) => {
+            try {
+              await fs.access(p);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          rename: (o, n) => fs.rename(o, n),
+          mkdir: (p, opts) => fs.mkdir(p, opts).then(() => {}),
+        });
+        if (migrated.length > 0) {
+          logger.info(`Storage migration: ${migrated.join('; ')}`);
+        }
+      } catch (err) {
+        logger.warn('Storage migration failed (non-fatal):', err);
+      }
 
       const storage = new JsonFileStorage({
-        filePath: storagePath,
+        filePath: layout.project.assetLibrary,
         fs: nodeFileSystem,
         autoSaveDelay: 1000,
       });
 
       // Initialize ThumbnailService
-      thumbnailService = new ThumbnailService(workspaceRoot);
+      thumbnailService = new ThumbnailService(layout.project.cache.thumbnails);
       context.subscriptions.push(thumbnailService);
 
       library = new AssetLibrary({
@@ -155,8 +176,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(vscode.window.registerFileDecorationProvider(decorationProvider));
 
     // 3. Register Activity Bar tree views
-    const assetManagerProvider = new AssetManagerTreeProvider(library);
-    const assetHistoryProvider = new AssetHistoryTreeProvider(library);
+    const assetManagerProvider = new AssetManagerTreeProvider(library, thumbnailService!);
+    const assetHistoryProvider = new AssetHistoryTreeProvider(library, thumbnailService!);
 
     context.subscriptions.push(
       vscode.window.createTreeView('neko.assetManager', {
@@ -202,8 +223,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
 
     // Initialize persistent metadata cache
-    const metadataCachePath = path.join(workspaceRoot, '.neko', 'cache', 'media-metadata.json');
-    const metadataCache = new MediaMetadataCache(metadataCachePath, cachePathResolver);
+    const metadataCache = new MediaMetadataCache(
+      resolveStorageLayout(workspaceRoot).project.cache.mediaMetadata,
+      cachePathResolver,
+    );
     await metadataCache.load();
     context.subscriptions.push(metadataCache);
 

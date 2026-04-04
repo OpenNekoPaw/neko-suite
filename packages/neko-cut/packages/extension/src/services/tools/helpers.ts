@@ -4,7 +4,12 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { ProjectData, TimelineElement, TimelineTrack } from '@neko/shared';
+import {
+  PathResolver,
+  type ProjectData,
+  type TimelineElement,
+  type TimelineTrack,
+} from '@neko/shared';
 
 // =============================================================================
 // Tool Element Types
@@ -95,9 +100,22 @@ async function contractPath(absolutePath: string, baseDir: string): Promise<stri
 
 /**
  * Resolve a stored path (PathVariable or relative) to an absolute path.
+ *
+ * Uses @neko/shared PathResolver for variable expansion when a resolver
+ * is available, otherwise falls back to neko.assets VSCode command.
  */
-export async function resolveMediaPath(storedPath: string, baseDir: string): Promise<string> {
-  // PathVariable: ${VAR}/rest → absolute
+export async function resolveMediaPath(
+  storedPath: string,
+  baseDir: string,
+  resolver?: PathResolver,
+): Promise<string> {
+  // If resolver is provided, use it directly (no async VSCode command needed)
+  if (resolver) {
+    const result = resolver.resolveSource(storedPath, baseDir);
+    return result.type === 'local' ? result.path : storedPath;
+  }
+
+  // PathVariable: ${VAR}/rest → absolute (via neko-assets command)
   if (storedPath.startsWith('${')) {
     try {
       const resolved = await vscode.commands.executeCommand<string>(

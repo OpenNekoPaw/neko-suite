@@ -1,15 +1,19 @@
 /**
  * DocxPreviewProvider - CustomReadonlyEditorProvider for DOCX/DOC files
  *
- * Renders DOCX using docx-preview in webview (high-fidelity DOM rendering).
- * Native text selection works directly on rendered DOM elements.
+ * On ready: registers file with neko-engine → sends URL to webview.
+ * Webview fetches the full file via HTTP, then passes to docx-preview.
  */
 
 import * as vscode from 'vscode';
-import { setupDocumentWebview } from './documentProviderHelper';
+import { setupDocumentWebview, getErrorHtml } from './documentProviderHelper';
+import { previewFileServer } from './PreviewFileServer';
 
 export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.docxPreview';
+
+  /** fsPath → registered token (for cleanup on panel dispose) */
+  private readonly tokens = new Map<string, string>();
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -26,8 +30,35 @@ export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'docx');
+    const filePath = document.uri.fsPath;
+
+    webviewPanel.onDidDispose(() => {
+      const token = this.tokens.get(filePath);
+      if (token) {
+        this.tokens.delete(filePath);
+        void previewFileServer.unregisterFile(token);
+      }
+    });
+
+    await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'docx', {
+      onReady: async () => {
+        try {
+          const { url, token } = await previewFileServer.registerFile(filePath);
+          this.tokens.set(filePath, token);
+
+          await webviewPanel.webview.postMessage({
+            type: 'document:data',
+            payload: { url },
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          webviewPanel.webview.html = getErrorHtml(msg);
+        }
+      },
+    });
   }
 
-  dispose(): void {}
+  dispose(): void {
+    this.tokens.clear();
+  }
 }

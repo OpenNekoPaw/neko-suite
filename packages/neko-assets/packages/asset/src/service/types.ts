@@ -35,5 +35,5 @@ export interface FileHealthResult {
 /** Progress callback for batch validation */
 export type HealthCheckProgress = (checked: number, total: number) => void;
 
-/** Path variable map: variable name → absolute directory path */
-export type PathVariableMap = Map<string, string>;
+/** Path variable map: re-exported from @neko/shared */
+export type { PathVariableMap } from '@neko/shared';

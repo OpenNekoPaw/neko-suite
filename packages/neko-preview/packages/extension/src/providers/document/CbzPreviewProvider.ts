@@ -1,13 +1,11 @@
 /**
  * CbzPreviewProvider - CustomReadonlyEditorProvider for CBZ comic archives
  *
- * Serves the CBZ file via neko-engine's local HTTP server so zip.js HttpReader
- * can use HTTP Range requests — only the ZIP central directory and individual
- * page images are fetched on demand, without a full-file transfer.
+ * On ready: registers file with neko-engine → sends URL to webview.
+ * Webview connects directly to neko-engine via HTTP Range requests.
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { setupDocumentWebview, getErrorHtml } from './documentProviderHelper';
 import { previewFileServer } from './PreviewFileServer';
 
@@ -33,37 +31,29 @@ export class CbzPreviewProvider implements vscode.CustomReadonlyEditorProvider, 
     _token: vscode.CancellationToken,
   ): Promise<void> {
     const filePath = document.uri.fsPath;
-    const fileName = path.basename(filePath);
 
-    webviewPanel.onDidDispose(async () => {
+    webviewPanel.onDidDispose(() => {
       const token = this.tokens.get(filePath);
       if (token) {
         this.tokens.delete(filePath);
-        await previewFileServer.unregisterFile(token);
+        void previewFileServer.unregisterFile(token);
       }
     });
 
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'cbz', {
       onReady: async () => {
-        let registration: { url: string; token: string };
         try {
-          registration = await previewFileServer.registerFile(filePath);
+          const { url, token } = await previewFileServer.registerFile(filePath);
+          this.tokens.set(filePath, token);
+
+          await webviewPanel.webview.postMessage({
+            type: 'document:data',
+            payload: { url },
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           webviewPanel.webview.html = getErrorHtml(msg);
-          return;
         }
-
-        this.tokens.set(filePath, registration.token);
-
-        await webviewPanel.webview.postMessage({
-          type: 'document:data',
-          payload: {
-            url: registration.url,
-            fileName,
-            fileSize: 0,
-          },
-        });
       },
     });
   }

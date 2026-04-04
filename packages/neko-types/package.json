@@ -10,6 +10,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./path": "./src/path/index.ts",
     "./nkv": "./src/nkv/index.ts",
     "./nkc": "./src/nkc/index.ts",
     "./nka": "./src/nka/index.ts",

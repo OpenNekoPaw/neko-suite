@@ -40,8 +40,15 @@ export interface ThumbnailResult {
 export class ThumbnailService implements vscode.Disposable {
   private readonly thumbnailDir: string;
 
-  constructor(workspaceRoot: string) {
-    this.thumbnailDir = path.join(workspaceRoot, '.neko', 'assets', 'thumbnails');
+  // Preheat infrastructure
+  private readonly _onDidGenerateThumbnail = new vscode.EventEmitter<string>();
+  readonly onDidGenerateThumbnail: vscode.Event<string> = this._onDidGenerateThumbnail.event;
+  private readonly preheatQueue: string[] = [];
+  private preheatRunning = 0;
+  private readonly preheatConcurrency = 2;
+
+  constructor(thumbnailDir: string) {
+    this.thumbnailDir = thumbnailDir;
   }
 
   /**
@@ -137,7 +144,41 @@ export class ThumbnailService implements vscode.Disposable {
     }
   }
 
+  /**
+   * Queue files for background thumbnail generation.
+   * Fire-and-forget — results delivered via onDidGenerateThumbnail event.
+   */
+  preheat(filePaths: string[]): void {
+    for (const fp of filePaths) {
+      if (!this.preheatQueue.includes(fp)) {
+        this.preheatQueue.push(fp);
+      }
+    }
+    this.drainPreheatQueue();
+  }
+
+  private drainPreheatQueue(): void {
+    while (this.preheatRunning < this.preheatConcurrency && this.preheatQueue.length > 0) {
+      const filePath = this.preheatQueue.shift()!;
+      this.preheatRunning++;
+      this.generate(filePath)
+        .then((result) => {
+          if (result) {
+            this._onDidGenerateThumbnail.fire(filePath);
+          }
+        })
+        .catch(() => {
+          // Silently ignore preheat failures
+        })
+        .finally(() => {
+          this.preheatRunning--;
+          this.drainPreheatQueue();
+        });
+    }
+  }
+
   dispose(): void {
-    // No resources to clean up
+    this._onDidGenerateThumbnail.dispose();
+    this.preheatQueue.length = 0;
   }
 }

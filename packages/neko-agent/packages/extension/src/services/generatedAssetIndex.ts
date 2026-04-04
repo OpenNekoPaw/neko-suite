@@ -183,7 +183,7 @@ export class GeneratedAssetIndex {
  * Creates the directory tree if it doesn't exist.
  */
 export function resolveGeneratedDir(workspaceRoot: string): string {
-  const dir = path.join(workspaceRoot, '.neko', 'generated');
+  const dir = path.join(workspaceRoot, '.neko', '.cache', 'generated');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

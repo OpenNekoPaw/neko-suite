@@ -20,6 +20,7 @@ pub mod health;
 pub mod id;
 pub mod keyframe;
 pub mod media;
+pub mod project_context;
 pub mod registry;
 pub mod request;
 pub mod stream;

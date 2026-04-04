@@ -11,7 +11,7 @@ import { getNonce } from './nonce';
 /** Supported preview entry points */
 export type PreviewEntry = 'video' | 'audio' | 'pdf' | 'cbz' | 'epub' | 'docx';
 
-/** Document entries that do not require engine streaming */
+/** Document entries — webview fetches data directly from neko-engine HTTP */
 const DOCUMENT_ENTRIES = new Set<PreviewEntry>(['pdf', 'cbz', 'epub', 'docx']);
 
 export interface WebviewHtmlOptions {
@@ -41,9 +41,6 @@ export function getWebviewHtml(options: WebviewHtmlOptions): string {
   return getProdHtml(webview, extensionUri, nonce, entry);
 }
 
-/**
- * Dev mode: connect to Vite dev server for HMR
- */
 /** Display names for entry types */
 const ENTRY_TITLES: Record<PreviewEntry, string> = {
   video: 'Video Preview',
@@ -54,25 +51,35 @@ const ENTRY_TITLES: Record<PreviewEntry, string> = {
   docx: 'DOCX Preview',
 };
 
+/** neko-engine HTTP origin pattern */
+const ENGINE = 'http://127.0.0.1:*';
+
+/**
+ * Dev mode: connect to Vite dev server for HMR
+ */
 function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string {
   const devUrl = `http://localhost:${devPort}`;
   const isDocument = DOCUMENT_ENTRIES.has(entry);
-  // Documents connect to neko-engine local HTTP file server (127.0.0.1:*)
-  // for Range requests. EPUB also needs blob: for epub.js chapter loading.
+  const isEpub = entry === 'epub';
+
+  // All documents connect to neko-engine; EPUB also needs blob: for epubjs
   const connectSrc = isDocument
-    ? entry === 'epub'
-      ? `connect-src blob: http://localhost:${devPort} http://127.0.0.1:*;`
-      : `connect-src http://localhost:${devPort} http://127.0.0.1:*;`
-    : `connect-src ws://localhost:${devPort} ws://127.0.0.1:* http://localhost:${devPort} http://127.0.0.1:*;`;
+    ? isEpub
+      ? `connect-src blob: ${devUrl} ${ENGINE};`
+      : `connect-src ${devUrl} ${ENGINE};`
+    : `connect-src ws://localhost:${devPort} ws://127.0.0.1:* ${devUrl} ${ENGINE};`;
+
+  // Documents load images/styles/fonts from neko-engine
+  const imgSrc = isDocument
+    ? `img-src ${devUrl} ${ENGINE} data: blob:;`
+    : `img-src ${devUrl} data: blob:;`;
+  const styleSrc = isDocument
+    ? `style-src 'unsafe-inline' blob: ${devUrl} ${ENGINE};`
+    : `style-src 'unsafe-inline' ${devUrl};`;
+  const fontSrc = isDocument ? `font-src ${devUrl} ${ENGINE} data:;` : `font-src ${devUrl};`;
+
   const workerSrc = entry === 'pdf' ? `worker-src blob:;` : '';
-  const frameSrc = entry === 'epub' ? `frame-src blob: ${devUrl};` : '';
-  // epubjs in directory mode loads CSS and fonts from our local HTTP server
-  const styleSrc =
-    entry === 'epub'
-      ? `style-src 'unsafe-inline' blob: ${devUrl} http://127.0.0.1:*;`
-      : `style-src 'unsafe-inline' ${devUrl};`;
-  const fontSrc =
-    entry === 'epub' ? `font-src ${devUrl} http://127.0.0.1:* data:;` : `font-src ${devUrl};`;
+  const frameSrc = isEpub ? `frame-src blob: ${devUrl};` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -82,7 +89,7 @@ function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string
 	<meta http-equiv="Content-Security-Policy" content="
 		default-src 'none';
 		${connectSrc}
-		img-src ${devUrl} data: blob: http://127.0.0.1:*;
+		${imgSrc}
 		media-src blob:;
 		script-src 'nonce-${nonce}' ${devUrl};
 		${styleSrc}
@@ -112,28 +119,27 @@ function getProdHtml(
   const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', `${entry}.js`));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'style.css'));
+  const csp = webview.cspSource;
 
   const isDocument = DOCUMENT_ENTRIES.has(entry);
-  // Documents connect to neko-engine local HTTP file server (127.0.0.1:*)
-  // for Range requests. EPUB also needs blob: for epub.js chapter loading.
+  const isEpub = entry === 'epub';
+
   const connectSrc = isDocument
-    ? entry === 'epub'
-      ? `connect-src blob: ${webview.cspSource} http://127.0.0.1:*;`
-      : `connect-src http://127.0.0.1:*;`
-    : `connect-src ws://127.0.0.1:* http://127.0.0.1:*;`;
-  // PDF needs worker-src for pdfjs-dist Web Worker
-  const workerSrc = entry === 'pdf' ? `worker-src blob: ${webview.cspSource};` : '';
-  // EPUB uses iframe for chapter rendering
-  const frameSrc = entry === 'epub' ? `frame-src blob: ${webview.cspSource};` : '';
-  // epubjs in directory mode loads CSS and fonts from our local HTTP server
-  const styleSrc =
-    entry === 'epub'
-      ? `style-src 'unsafe-inline' blob: ${webview.cspSource} http://127.0.0.1:*;`
-      : `style-src 'unsafe-inline' ${webview.cspSource};`;
-  const fontSrc =
-    entry === 'epub'
-      ? `font-src ${webview.cspSource} http://127.0.0.1:* data:;`
-      : `font-src ${webview.cspSource};`;
+    ? isEpub
+      ? `connect-src blob: ${ENGINE};`
+      : `connect-src ${ENGINE};`
+    : `connect-src ws://127.0.0.1:* ${ENGINE};`;
+
+  const imgSrc = isDocument
+    ? `img-src ${csp} ${ENGINE} data: blob:;`
+    : `img-src ${csp} data: blob:;`;
+  const styleSrc = isDocument
+    ? `style-src 'unsafe-inline' blob: ${csp} ${ENGINE};`
+    : `style-src 'unsafe-inline' ${csp};`;
+  const fontSrc = isDocument ? `font-src ${csp} ${ENGINE} data:;` : `font-src ${csp};`;
+
+  const workerSrc = entry === 'pdf' ? `worker-src blob: ${csp};` : '';
+  const frameSrc = isEpub ? `frame-src blob: ${csp};` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -143,7 +149,7 @@ function getProdHtml(
 	<meta http-equiv="Content-Security-Policy" content="
 		default-src 'none';
 		${connectSrc}
-		img-src ${webview.cspSource} data: blob: http://127.0.0.1:*;
+		${imgSrc}
 		media-src blob:;
 		script-src 'nonce-${nonce}';
 		${styleSrc}

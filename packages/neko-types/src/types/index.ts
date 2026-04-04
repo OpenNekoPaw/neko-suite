@@ -186,3 +186,6 @@ export * from './loading-tier';
 
 // Generated asset types (cross-plugin asset reference schema, ADR-4)
 export * from './generated-asset';
+
+// Storage layout types (unified path management, three-level hierarchy)
+export * from './storage';

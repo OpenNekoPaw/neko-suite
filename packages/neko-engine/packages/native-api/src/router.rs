@@ -2,9 +2,9 @@
 
 use crate::controllers::{
     AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
-    EffectsController, GamepadController, ImageController, MidiController, ModelsController,
-    NodeController, PuppetsController, ScenesController, StreamController, TaskController,
-    TimelineController, VideoController,
+    DocumentsController, EffectsController, GamepadController, ImageController, MidiController,
+    ModelsController, NodeController, PuppetsController, ScenesController, StreamController,
+    TaskController, TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
@@ -38,6 +38,7 @@ pub struct ActionRouter {
     midi_controller: MidiController,
     gamepad_controller: GamepadController,
     color_correction_controller: ColorCorrectionController,
+    documents_controller: DocumentsController,
 }
 
 impl ActionRouter {
@@ -92,6 +93,7 @@ impl ActionRouter {
             midi_controller: MidiController::new(midi_service),
             gamepad_controller: GamepadController::new(gamepad_service),
             color_correction_controller: ColorCorrectionController::new(),
+            documents_controller: DocumentsController::new(),
         }
     }
 
@@ -186,6 +188,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::DOCUMENTS => {
+                self.documents_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -217,6 +224,7 @@ impl ActionRouter {
             groups::MIDI => Some(self.midi_controller.actions()),
             groups::GAMEPAD => Some(self.gamepad_controller.actions()),
             groups::COLOR_CORRECTION => Some(self.color_correction_controller.actions()),
+            groups::DOCUMENTS => Some(self.documents_controller.actions()),
             _ => None,
         }
     }
