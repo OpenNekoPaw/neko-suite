@@ -17,14 +17,39 @@ import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('PreviewFileServer');
 
+/** Extract ${VAR} from a path like /${VAR}/rest or ${VAR}/rest */
+const PATH_VARIABLE_RE = /\/?\$\{([^}]+)\}/;
+
+/**
+ * Error thrown when a path contains an unresolved media/asset library variable.
+ * Providers should catch this and show the error HTML instead of opening the file.
+ */
+export class UnresolvedPathVariableError extends Error {
+  constructor(
+    public readonly variable: string,
+    public readonly originalPath: string,
+  ) {
+    super(
+      `Media library variable "\${${variable}}" is not configured.\n\n` +
+        `The file "${originalPath}" references a media library that is not set up on this machine.\n\n` +
+        `To fix:\n` +
+        `1. Open neko-assets settings (.neko/settings.json)\n` +
+        `2. Add a media library with variable name "${variable}"\n` +
+        `3. Or check that the neko-assets extension is activated`,
+    );
+    this.name = 'UnresolvedPathVariableError';
+  }
+}
+
 export class PreviewFileServer {
   private _port: number | null = null;
 
   /**
    * Resolve path variables via neko-assets command.
-   * Handles ${VAR}/path expansion from media/asset library configuration.
+   * Throws UnresolvedPathVariableError if the variable cannot be expanded.
    */
   private async resolvePath(filePath: string): Promise<string> {
+    // Try resolving via neko-assets
     try {
       const resolved = await vscode.commands.executeCommand<string>(
         'neko.assets.resolvePath',
@@ -37,6 +62,13 @@ export class PreviewFileServer {
     } catch {
       // neko-assets not active
     }
+
+    // If path still contains a variable, it wasn't resolved — fail early
+    const match = filePath.match(PATH_VARIABLE_RE);
+    if (match) {
+      throw new UnresolvedPathVariableError(match[1]!, filePath);
+    }
+
     return filePath;
   }
 

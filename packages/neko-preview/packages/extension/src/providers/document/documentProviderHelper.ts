@@ -217,3 +217,53 @@ export function getErrorHtml(message: string): string {
 <body><div><p>${message}</p></div></body>
 </html>`;
 }
+
+/**
+ * Error HTML for unresolved path variables — more descriptive than generic error.
+ */
+export function getUnresolvedVariableHtml(variable: string, filePath: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; margin: 0;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-foreground);
+      font-family: var(--vscode-font-family);
+      font-size: 14px; padding: 40px;
+    }
+    .container { max-width: 520px; text-align: left; }
+    .icon { font-size: 32px; margin-bottom: 12px; }
+    h2 { margin: 0 0 8px; color: var(--vscode-errorForeground, #f44); font-size: 16px; }
+    .path {
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 12px; padding: 8px 12px; margin: 12px 0; border-radius: 4px;
+      background: var(--vscode-textBlockQuote-background);
+      color: var(--vscode-textBlockQuote-foreground);
+      word-break: break-all;
+    }
+    .var { color: var(--vscode-charts-orange, #e89b17); font-weight: bold; }
+    ol { padding-left: 20px; margin: 12px 0; line-height: 1.8; }
+    .hint { opacity: 0.7; font-size: 12px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">&#9888;</div>
+    <h2>Media Library Not Configured</h2>
+    <p>This file references media library <span class="var">\${${variable}}</span> which is not set up on this machine.</p>
+    <div class="path">${filePath.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    <p>To fix:</p>
+    <ol>
+      <li>Open <strong>.neko/settings.json</strong> in your project</li>
+      <li>Add a media library entry with variable <span class="var">${variable}</span></li>
+      <li>Set the path to the directory on this machine</li>
+    </ol>
+    <div class="hint">Or ensure the neko-assets extension is activated and the media library is configured.</div>
+  </div>
+</body>
+</html>`;
+}

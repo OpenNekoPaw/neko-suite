@@ -6,8 +6,12 @@
  */
 
 import * as vscode from 'vscode';
-import { setupDocumentWebview, getErrorHtml } from './documentProviderHelper';
-import { previewFileServer } from './PreviewFileServer';
+import {
+  setupDocumentWebview,
+  getErrorHtml,
+  getUnresolvedVariableHtml,
+} from './documentProviderHelper';
+import { previewFileServer, UnresolvedPathVariableError } from './PreviewFileServer';
 
 export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.docxPreview';
@@ -51,8 +55,13 @@ export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider,
             payload: { url },
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          webviewPanel.webview.html = getErrorHtml(msg);
+          if (err instanceof UnresolvedPathVariableError) {
+            webviewPanel.webview.html = getUnresolvedVariableHtml(err.variable, err.originalPath);
+          } else {
+            webviewPanel.webview.html = getErrorHtml(
+              err instanceof Error ? err.message : String(err),
+            );
+          }
         }
       },
     });
