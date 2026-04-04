@@ -21,6 +21,7 @@ import { CbzPreviewProvider } from './providers/document/CbzPreviewProvider';
 import { EpubPreviewProvider } from './providers/document/EpubPreviewProvider';
 import { DocxPreviewProvider } from './providers/document/DocxPreviewProvider';
 import { registerOpenCommand } from './providers/document/documentProviderHelper';
+import { EpubSymbolProvider } from './epub/EpubSymbolProvider';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
@@ -205,6 +206,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
 
   // Register document providers for disposal
   context.subscriptions.push(pdfProvider, cbzProvider, epubProvider, docxProvider);
+
+  // =========================================================================
+  // EPUB Outline (DocumentSymbolProvider) + goToChapter command
+  // =========================================================================
+
+  const epubSymbolProvider = new EpubSymbolProvider();
+
+  context.subscriptions.push(
+    vscode.languages.registerDocumentSymbolProvider({ pattern: '**/*.epub' }, epubSymbolProvider),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.epub.goToChapter', async () => {
+      const activeUri = epubProvider.getActiveUri();
+      if (!activeUri) {
+        vscode.window.showInformationMessage('No EPUB file is currently open.');
+        return;
+      }
+      const toc = await epubSymbolProvider.getToc(activeUri.fsPath);
+      if (toc.length === 0) {
+        vscode.window.showInformationMessage('No table of contents found in this EPUB.');
+        return;
+      }
+      const items = toc.map((entry) => ({
+        label: '  '.repeat(entry.depth) + entry.label,
+        description: entry.href,
+        href: entry.href,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Go to chapter…',
+        matchOnDescription: true,
+      });
+      if (picked) {
+        epubProvider.navigateToChapter(picked.href);
+      }
+    }),
+  );
 
   logger.info('Extension activated');
 

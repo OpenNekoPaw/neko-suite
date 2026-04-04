@@ -57,12 +57,19 @@ const ENTRY_TITLES: Record<PreviewEntry, string> = {
 function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string {
   const devUrl = `http://localhost:${devPort}`;
   const isDocument = DOCUMENT_ENTRIES.has(entry);
-  // Documents don't need WebSocket streaming to engine; PDF needs worker-src for pdfjs
+  // Documents don't need WebSocket streaming to engine; EPUB needs blob: for internal resource loading
   const connectSrc = isDocument
-    ? `connect-src http://localhost:${devPort};`
+    ? entry === 'epub'
+      ? `connect-src blob: http://localhost:${devPort};`
+      : `connect-src http://localhost:${devPort};`
     : `connect-src ws://localhost:${devPort} ws://127.0.0.1:* http://localhost:${devPort} http://127.0.0.1:*;`;
   const workerSrc = entry === 'pdf' ? `worker-src blob:;` : '';
   const frameSrc = entry === 'epub' ? `frame-src blob: ${devUrl};` : '';
+  // epubjs loads stylesheets as blob: URLs (scrolled-doc mode injects a blob: <link>)
+  const styleSrc =
+    entry === 'epub'
+      ? `style-src 'unsafe-inline' blob: ${devUrl};`
+      : `style-src 'unsafe-inline' ${devUrl};`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -75,7 +82,7 @@ function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string
 		img-src ${devUrl} data: blob:;
 		media-src blob:;
 		script-src 'nonce-${nonce}' ${devUrl};
-		style-src 'unsafe-inline' ${devUrl};
+		${styleSrc}
 		font-src ${devUrl};
 		${workerSrc}
 		${frameSrc}
@@ -104,12 +111,21 @@ function getProdHtml(
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'style.css'));
 
   const isDocument = DOCUMENT_ENTRIES.has(entry);
-  // Documents don't need WebSocket streaming to engine
-  const connectSrc = isDocument ? '' : `connect-src ws://127.0.0.1:* http://127.0.0.1:*;`;
+  // Documents don't need WebSocket streaming to engine; EPUB needs blob: for internal resource loading
+  const connectSrc = isDocument
+    ? entry === 'epub'
+      ? `connect-src blob: ${webview.cspSource};`
+      : ''
+    : `connect-src ws://127.0.0.1:* http://127.0.0.1:*;`;
   // PDF needs worker-src for pdfjs-dist Web Worker
   const workerSrc = entry === 'pdf' ? `worker-src blob: ${webview.cspSource};` : '';
   // EPUB uses iframe for chapter rendering
   const frameSrc = entry === 'epub' ? `frame-src blob: ${webview.cspSource};` : '';
+  // epubjs loads stylesheets as blob: URLs (scrolled-doc mode injects a blob: <link>)
+  const styleSrc =
+    entry === 'epub'
+      ? `style-src 'unsafe-inline' blob: ${webview.cspSource};`
+      : `style-src 'unsafe-inline' ${webview.cspSource};`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -122,7 +138,7 @@ function getProdHtml(
 		img-src ${webview.cspSource} data: blob:;
 		media-src blob:;
 		script-src 'nonce-${nonce}';
-		style-src 'unsafe-inline' ${webview.cspSource};
+		${styleSrc}
 		font-src ${webview.cspSource};
 		${workerSrc}
 		${frameSrc}

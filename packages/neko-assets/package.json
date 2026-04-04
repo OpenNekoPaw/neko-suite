@@ -205,6 +205,73 @@
         "title": "%neko.assets.searchMediaLibrary%",
         "category": "Neko Assets",
         "icon": "$(search)"
+      },
+      {
+        "command": "neko.assets.entity.preview",
+        "title": "%neko.assets.entity.preview%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.addToTimeline",
+        "title": "%neko.assets.entity.addToTimeline%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.addToCanvas",
+        "title": "%neko.assets.entity.addToCanvas%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.rename",
+        "title": "%neko.assets.entity.rename%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.addVariant",
+        "title": "%neko.assets.entity.addVariant%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.delete",
+        "title": "%neko.assets.entity.delete%",
+        "category": "Neko Assets",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "neko.assets.variant.preview",
+        "title": "%neko.assets.variant.preview%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.variant.addFile",
+        "title": "%neko.assets.variant.addFile%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.variant.rename",
+        "title": "%neko.assets.variant.rename%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.variant.delete",
+        "title": "%neko.assets.variant.delete%",
+        "category": "Neko Assets",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "neko.assets.directory.reveal",
+        "title": "%neko.assets.directory.reveal%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.recentEntity.addToTimeline",
+        "title": "%neko.assets.recentEntity.addToTimeline%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.recentEntity.addToCanvas",
+        "title": "%neko.assets.recentEntity.addToCanvas%",
+        "category": "Neko Assets"
       }
     ],
     "menus": {

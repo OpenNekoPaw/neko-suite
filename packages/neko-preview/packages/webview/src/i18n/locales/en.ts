@@ -62,6 +62,9 @@ const preview: MessageBundle = {
   'preview.epub.toc': 'Table of Contents',
   'preview.epub.theme': 'Reading theme',
   'preview.epub.fontSize': 'Font size',
+  'preview.epub.modeScrolled': 'Switch to scroll mode',
+  'preview.epub.modePaginated': 'Switch to page mode',
+  'preview.epub.sendPage': 'Send page to AI',
   // DOCX
   'preview.docx.loading': 'Loading document...',
 };

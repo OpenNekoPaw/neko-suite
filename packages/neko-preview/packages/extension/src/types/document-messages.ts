@@ -12,8 +12,11 @@
 export interface DocumentDataMessage {
   type: 'document:data';
   payload: {
-    /** Base64-encoded file content */
-    data: string;
+    /** Base64-encoded file content (legacy / non-EPUB) */
+    data?: string;
+    /** Direct webview URI — preferred for large files (EPUB).
+     *  When present, the webview should load via URL instead of decoding base64. */
+    url?: string;
     /** File name for display */
     fileName: string;
     /** File size in bytes */
@@ -21,7 +24,12 @@ export interface DocumentDataMessage {
   };
 }
 
-export type DocumentExtensionMessage = DocumentDataMessage;
+export interface EpubNavigateMessage {
+  type: 'epub:navigate';
+  payload: { href: string };
+}
+
+export type DocumentExtensionMessage = DocumentDataMessage | EpubNavigateMessage;
 
 // =============================================================================
 // Webview → Extension Messages
@@ -29,6 +37,14 @@ export type DocumentExtensionMessage = DocumentDataMessage;
 
 export interface DocumentReadyMessage {
   type: 'ready';
+}
+
+/** A single captured image attached to a sendToAi payload. */
+export interface CapturedImagePayload {
+  /** Semantic role of the image in the document */
+  role: 'page' | 'figure' | 'region';
+  /** Base64 JPEG data URL, compressed to ≤280 KB */
+  dataUrl: string;
 }
 
 export interface DocumentSendToAiMessage {
@@ -40,8 +56,15 @@ export interface DocumentSendToAiMessage {
     pageNumber?: number;
     /** Chapter title (EPUB) */
     chapterTitle?: string;
-    /** Base64 image data URL for region selection (CBZ) */
+    /** Single image — legacy field for CBZ region selection */
     imageDataUrl?: string;
+    /** Multiple images — EPUB page/figure capture, CBZ multi-page */
+    images?: CapturedImagePayload[];
+    /**
+     * Characterises the content being sent so the agent helper can
+     * choose the right intent prompt.
+     */
+    contentKind?: 'text' | 'image' | 'mixed';
   };
 }
 
