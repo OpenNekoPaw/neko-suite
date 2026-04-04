@@ -27,6 +27,7 @@ import type { MediaLibrarySettingsService } from '../services/MediaLibrarySettin
 import type { ThumbnailService } from '../services/ThumbnailService';
 import type { MediaMetadataCache } from '../services/MediaMetadataCache';
 import { formatDuration, formatResolution, buildMetadataTooltipLines } from '../utils/formatters';
+import { createThumbnailTooltip } from '../utils/thumbnailTooltip';
 import { t } from '../i18n';
 
 // =============================================================================
@@ -161,17 +162,9 @@ class MediaFileItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon(iconMap[mediaType] ?? 'file');
     }
 
-    // Tooltip: metadata if available
-    if (metadata) {
-      const lines = buildMetadataTooltipLines(metadata);
-      if (lines.length > 0) {
-        const md = new vscode.MarkdownString();
-        md.appendText(fileName);
-        md.appendText('\n\n');
-        md.appendText(lines.join('\n'));
-        this.tooltip = md;
-      }
-    }
+    // Tooltip: thumbnail + metadata
+    const metaLines = metadata ? [fileName, ...buildMetadataTooltipLines(metadata)] : [fileName];
+    this.tooltip = createThumbnailTooltip(thumbnailPath, metaLines);
   }
 }
 

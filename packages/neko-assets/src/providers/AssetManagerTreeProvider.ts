@@ -8,6 +8,8 @@
 import * as vscode from 'vscode';
 import type { AssetEntity, AssetVariant, EntityCategory } from '@neko/shared';
 import type { AssetLibrary } from '@neko/asset';
+import type { ThumbnailService } from '../services/ThumbnailService';
+import { createThumbnailTooltip } from '../utils/thumbnailTooltip';
 
 // =============================================================================
 // Tree Item Types
@@ -38,18 +40,6 @@ class EntityItem extends vscode.TreeItem {
     this.description =
       entity.variants.length > 1 ? `${entity.variants.length} variants` : undefined;
     this.contextValue = 'entity';
-    const ownershipLabel = entity.ownership
-      ? `Scope: ${entity.ownership.scope} (${entity.ownership.access})`
-      : undefined;
-    this.tooltip = [
-      entity.name,
-      entity.description,
-      entity.tags.length > 0 ? `Tags: ${entity.tags.join(', ')}` : undefined,
-      ownershipLabel,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
     // Check if any files have accessibility issues
     const hasProblems = entity.variants.some((v) =>
       v.files.some((f) => f.status === 'offline' || f.status === 'missing'),
@@ -58,6 +48,16 @@ class EntityItem extends vscode.TreeItem {
     // Use thumbnail as icon if available, otherwise fall back to theme icon
     const defaultVariant =
       entity.variants.find((v) => v.id === entity.defaultVariantId) ?? entity.variants[0];
+
+    const ownershipLabel = entity.ownership
+      ? `Scope: ${entity.ownership.scope} (${entity.ownership.access})`
+      : undefined;
+    this.tooltip = createThumbnailTooltip(defaultVariant?.thumbnailPath, [
+      entity.name,
+      entity.description ?? '',
+      entity.tags.length > 0 ? `Tags: ${entity.tags.join(', ')}` : '',
+      ownershipLabel ?? '',
+    ]);
     if (hasProblems) {
       this.iconPath = new vscode.ThemeIcon(
         'warning',
@@ -114,6 +114,11 @@ class VariantItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('versions');
     }
 
+    this.tooltip = createThumbnailTooltip(variant.thumbnailPath, [
+      variant.name,
+      this.description as string,
+    ]);
+
     if (variant.files[0]) {
       this.resourceUri = vscode.Uri.file(variant.files[0].path);
       this.command = {
@@ -134,15 +139,29 @@ export class AssetManagerTreeProvider
 {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<AssetTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private readonly disposables: vscode.Disposable[] = [];
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly library: AssetLibrary) {}
+  constructor(
+    private readonly library: AssetLibrary,
+    private readonly thumbnailService: ThumbnailService,
+  ) {
+    this.disposables.push(thumbnailService.onDidGenerateThumbnail(() => this.debouncedRefresh()));
+  }
 
   refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
   }
 
+  private debouncedRefresh(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => this.refresh(), 500);
+  }
+
   dispose(): void {
     this._onDidChangeTreeData.dispose();
+    this.disposables.forEach((d) => d.dispose());
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
   }
 
   async getTreeItem(element: AssetTreeItem): Promise<vscode.TreeItem> {
@@ -177,7 +196,17 @@ export class AssetManagerTreeProvider
 
   private async getEntitiesForCategory(category: EntityCategory): Promise<EntityItem[]> {
     const entities = await this.library.getByCategory(category);
-    return entities.sort((a, b) => b.updatedAt - a.updatedAt).map((e) => new EntityItem(e));
+    const items = entities.sort((a, b) => b.updatedAt - a.updatedAt).map((e) => new EntityItem(e));
+
+    // Preheat thumbnails for visible entities
+    const filePaths = entities
+      .flatMap((e) => e.variants.flatMap((v) => v.files.map((f) => f.path)))
+      .filter(Boolean);
+    if (filePaths.length > 0) {
+      this.thumbnailService.preheat(filePaths);
+    }
+
+    return items;
   }
 }
 
