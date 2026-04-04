@@ -4,8 +4,8 @@
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { createDefaultProject } from '@neko/shared';
+import { createNewFile } from '@neko/shared/vscode/extension';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { getLogger, handleError } from '../base';
@@ -22,8 +22,17 @@ export function registerCommands(
 ): void {
   // Command: New Video Project
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.newProject', async (uri: vscode.Uri) => {
-      await createNewProject(uri);
+    vscode.commands.registerCommand('neko.newProject', async (uri?: vscode.Uri) => {
+      await createNewFile({
+        targetFolder: uri,
+        ext: '.nkv',
+        template: (title) => JSON.stringify(createDefaultProject(title), null, 2),
+        noFolderErrorMessage: vscode.l10n.t('neko.newProject.noFolder'),
+        onCreated: async (fileUri) => {
+          logger.info(`Created video project: ${fileUri.fsPath}`);
+          await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
+        },
+      });
     }),
   );
 
@@ -136,64 +145,6 @@ export function registerCommands(
 
   // Register timeline commands (element, track, effect, transition, animation, render, export)
   registerTimelineCommands(context, videoEditorProvider);
-}
-
-/**
- * Create a new .nkv project file
- */
-async function createNewProject(folderUri: vscode.Uri): Promise<void> {
-  // Ask for project name
-  const projectName = await vscode.window.showInputBox({
-    prompt: vscode.l10n.t('project.prompt.enterName'),
-    value: vscode.l10n.t('project.defaultName'),
-    validateInput: (value) => {
-      if (!value || value.trim() === '') {
-        return vscode.l10n.t('project.validation.nameEmpty');
-      }
-      // Check for invalid filename characters
-      if (/[<>:"/\\|?*]/.test(value)) {
-        return vscode.l10n.t('project.validation.invalidChars');
-      }
-      return null;
-    },
-  });
-
-  if (!projectName) {
-    return; // User cancelled
-  }
-
-  // Create the project file
-  const fileName = `${projectName.replace(/\s+/g, '-').toLowerCase()}.nkv`;
-  const fileUri = vscode.Uri.joinPath(folderUri, fileName);
-
-  // Check if file already exists
-  try {
-    await vscode.workspace.fs.stat(fileUri);
-    const overwrite = await vscode.window.showWarningMessage(
-      vscode.l10n.t('project.warning.fileExists', { filename: fileName }),
-      vscode.l10n.t('common.yes'),
-      vscode.l10n.t('common.no'),
-    );
-    if (overwrite !== vscode.l10n.t('common.yes')) {
-      return;
-    }
-  } catch {
-    // File doesn't exist, which is fine
-  }
-
-  // Create default project content
-  const projectData = createDefaultProject(projectName);
-  const content = JSON.stringify(projectData, null, 2);
-
-  // Write the file
-  await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
-
-  // Open the file in the video editor
-  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
-
-  vscode.window.showInformationMessage(
-    vscode.l10n.t('project.success.created', { filename: fileName }),
-  );
 }
 
 /**

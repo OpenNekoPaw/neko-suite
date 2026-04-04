@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
-import { type Entry, BlobReader, BlobWriter, ZipReader } from '@zip.js/zip.js';
+import { type Entry, BlobReader, BlobWriter, ZipReader, HttpReader } from '@zip.js/zip.js';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
@@ -52,7 +52,11 @@ export const CbzViewer: FC = () => {
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      loadCbz(msg.payload.data);
+      if ('url' in msg.payload && msg.payload.url) {
+        void loadCbzFromUrl(msg.payload.url as string);
+      } else if (msg.payload.data) {
+        void loadCbz(msg.payload.data as string);
+      }
     }
   });
 
@@ -60,6 +64,34 @@ export const CbzViewer: FC = () => {
     postMessage({ type: 'ready' } as never);
   }, []);
 
+  /** Load CBZ from a localhost URL — zip.js HttpReader uses Range requests,
+   *  so only the central directory + individual pages are fetched on demand. */
+  const loadCbzFromUrl = useCallback(async (url: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const reader = new ZipReader(new HttpReader(url, { useRangeHeader: true }));
+      // getEntries() fetches only the ZIP central directory via Range requests
+      const entries = await reader.getEntries();
+      await reader.close();
+
+      const filtered = entries
+        .filter((e) => !e.directory && IMAGE_EXTENSIONS.test(e.filename))
+        .sort((a, b) => naturalSort(a.filename, b.filename));
+
+      setImageEntries(filtered);
+      setPageCache(new Map());
+      setCurrentPage(0);
+      decodingRef.current.clear();
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setLoading(false);
+    }
+  }, []);
+
+  /** Load CBZ from base64 data (legacy fallback). */
   const loadCbz = useCallback(async (base64Data: string) => {
     try {
       setLoading(true);

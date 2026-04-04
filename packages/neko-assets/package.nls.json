@@ -31,5 +31,19 @@
   "neko.assets.addToTimelineFromLibrary": "Add to Timeline",
   "neko.assets.addToCanvasFromLibrary": "Add to Canvas",
   "neko.assets.refreshMediaLibraries": "Refresh Media Libraries",
-  "neko.assets.searchMediaLibrary": "Search Media Library"
+  "neko.assets.searchMediaLibrary": "Search Media Library",
+  "neko.assets.entity.preview": "Preview",
+  "neko.assets.entity.addToTimeline": "Add to Timeline",
+  "neko.assets.entity.addToCanvas": "Add to Canvas",
+  "neko.assets.entity.rename": "Rename",
+  "neko.assets.entity.addVariant": "Add Variant",
+  "neko.assets.entity.delete": "Delete",
+  "neko.assets.variant.preview": "Preview",
+  "neko.assets.variant.addFile": "Add File",
+  "neko.assets.variant.rename": "Rename",
+  "neko.assets.variant.delete": "Delete",
+  "neko.assets.directory.reveal": "Reveal in Finder",
+  "neko.assets.recentEntity.addToTimeline": "Add to Timeline",
+  "neko.assets.recentEntity.addToCanvas": "Add to Canvas",
+  "neko.assets.addToAgent": "Add to Agent"
 }

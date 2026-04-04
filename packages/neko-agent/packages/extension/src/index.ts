@@ -826,6 +826,36 @@ function registerDocumentContextCommands(
     return uri?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
   }
 
+  // Add to Agent — attach one or more files as context chips in the chat panel
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.addToContext',
+      async (uri?: vscode.Uri, allUris?: vscode.Uri[]) => {
+        // Support multi-select: use allUris when available, else single uri
+        const uris = allUris && allUris.length > 0 ? allUris : uri ? [uri] : [];
+        if (uris.length === 0) {
+          const filePath = resolveFilePath(undefined);
+          if (filePath) {
+            uris.push(vscode.Uri.file(filePath));
+          }
+        }
+        if (uris.length === 0) return;
+
+        for (const fileUri of uris) {
+          const relPath = vscode.workspace.asRelativePath(fileUri);
+          const fileName = path.basename(fileUri.fsPath);
+          await chatViewProvider.sendContextPayload({
+            type: 'file',
+            id: fileUri.toString(),
+            label: fileName,
+            summary: `File: ${relPath}`,
+            data: { path: fileUri.fsPath, relativePath: relPath },
+          });
+        }
+      },
+    ),
+  );
+
   /** Extract document text and send a prompt to the Agent chat. */
   async function sendDocumentPrompt(
     uri: vscode.Uri | undefined,

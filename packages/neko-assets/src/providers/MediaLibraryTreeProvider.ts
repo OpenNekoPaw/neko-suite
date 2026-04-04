@@ -100,10 +100,12 @@ class MediaFileItem extends vscode.TreeItem {
     thumbnailPath?: string | null,
   ) {
     super(fileName, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'mediaLibrary:file';
     this.resourceUri = vscode.Uri.file(filePath);
 
     const mediaType = detectMediaType(filePath);
+    // Encode media type into contextValue so view/item/context `when` clauses can
+    // filter menu items precisely (e.g. don't show "Add to Timeline" for documents).
+    this.contextValue = `mediaLibrary:file:${mediaType}`;
     const uri = vscode.Uri.file(filePath);
 
     // Command: open with the appropriate neko-preview custom editor when available,

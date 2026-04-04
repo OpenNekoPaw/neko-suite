@@ -2,19 +2,24 @@
  * EpubPreviewProvider - CustomReadonlyEditorProvider for EPUB ebooks
  *
  * Renders EPUB using epub.js in webview with chapter navigation and TOC.
- * Tracks open webview panels so the goToChapter command can post navigate messages.
+ * Serves the file via neko-engine's local HTTP server (same as PDF/CBZ) so
+ * the webview can fetch it directly over localhost without vscode-webview://
+ * protocol overhead. Tracks open webview panels so the goToChapter command
+ * can post navigate messages.
  */
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs/promises';
-import { setupDocumentWebview } from './documentProviderHelper';
+import { setupDocumentWebview, getErrorHtml } from './documentProviderHelper';
+import { previewFileServer } from './PreviewFileServer';
 
 export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.epubPreview';
 
   /** URI fsPath → webview panel */
   private readonly panels = new Map<string, vscode.WebviewPanel>();
+  /** fsPath → registered token (for cleanup on panel dispose) */
+  private readonly tokens = new Map<string, string>();
   private _activeUri: vscode.Uri | null = null;
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
@@ -39,40 +44,38 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
       if (e.webviewPanel.active) this._activeUri = document.uri;
     });
 
-    webviewPanel.onDidDispose(() => {
+    webviewPanel.onDidDispose(async () => {
       this.panels.delete(key);
       if (this._activeUri?.fsPath === key) this._activeUri = null;
+      const token = this.tokens.get(key);
+      if (token) {
+        this.tokens.delete(key);
+        await previewFileServer.unregisterFile(token);
+      }
     });
 
-    // Pass the file as a webview URI instead of base64 so epubjs loads
-    // chapters on demand — dramatically faster for large manga EPUBs.
-    const fileUri = document.uri;
-    const fileDir = vscode.Uri.file(path.dirname(fileUri.fsPath));
+    const filePath = document.uri.fsPath;
+    const fileName = path.basename(filePath);
 
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'epub', {
-      extraLocalRoots: [fileDir],
-      onMessage: (msg: { type: string; payload: Record<string, unknown> }) => {
-        if (msg.type === 'epub:rangeTestResult') {
-          const p = msg.payload;
-          if (p['error']) {
-            vscode.window.showWarningMessage(`[Range probe] fetch failed: ${String(p['error'])}`);
-          } else {
-            const supported = p['rangeSupported'] ? 'YES ✓' : 'NO ✗';
-            vscode.window.showInformationMessage(
-              `[Range probe] supported=${supported}  status=${p['status']}  Accept-Ranges=${p['acceptRanges'] ?? '-'}  Content-Range=${p['contentRange'] ?? '-'}  received=${p['receivedBytes']} bytes`,
-            );
-          }
-        }
-      },
       onReady: async () => {
-        const stat = await fs.stat(fileUri.fsPath).catch(() => null);
-        const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
+        let registration: { url: string; token: string };
+        try {
+          registration = await previewFileServer.registerEpub(filePath);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          webviewPanel.webview.html = getErrorHtml(msg);
+          return;
+        }
+
+        this.tokens.set(key, registration.token);
+
         await webviewPanel.webview.postMessage({
           type: 'document:data',
           payload: {
-            url: webviewUri.toString(),
-            fileName: path.basename(fileUri.fsPath),
-            fileSize: stat?.size ?? 0,
+            url: registration.url,
+            fileName,
+            fileSize: 0,
           },
         });
       },
@@ -95,5 +98,6 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
 
   dispose(): void {
     this.panels.clear();
+    this.tokens.clear();
   }
 }

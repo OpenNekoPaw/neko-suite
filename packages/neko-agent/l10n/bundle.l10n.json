@@ -26,5 +26,6 @@
   "neko.script.generateVideo.title": "Generate Video from Script",
   "neko.pipeline.start.title": "Start Creative Pipeline...",
   "neko.pipeline.startFromFile.title": "Create Video from This File",
-  "neko.pipeline.retryFailed.title": "Retry Failed Pipeline Scenes"
+  "neko.pipeline.retryFailed.title": "Retry Failed Pipeline Scenes",
+  "neko.agent.addToContext.title": "Add to Neko Agent"
 }

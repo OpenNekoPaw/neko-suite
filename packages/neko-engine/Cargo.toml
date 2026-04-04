@@ -27,7 +27,7 @@ pollster = "0.3"
 ffmpeg-next = "8.0"
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "io-util", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "io-util", "fs", "signal"] }
 
 # HTTP/WebSocket server
 axum = { version = "0.7", features = ["ws"] }
@@ -37,6 +37,7 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1.5"
 async-stream = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }
@@ -70,6 +71,9 @@ gltf = { version = "1.4", features = ["KHR_lights_punctual"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 crossbeam-channel = "0.5"
 indicatif = "0.17"
+
+# ZIP archive reading (EPUB extraction)
+zip = "2"
 
 # Base64 encoding
 base64 = "0.22"

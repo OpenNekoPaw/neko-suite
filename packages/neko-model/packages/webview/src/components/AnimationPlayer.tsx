@@ -1,14 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import type { AnimationClipInfo, PlaybackState } from '../types';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 interface AnimationPlayerProps {
   clips: AnimationClipInfo[];
@@ -41,7 +33,7 @@ export function AnimationPlayer({
     (clipName: string) => {
       // If currently playing, crossfade to the new clip instead of stop+play
       if (playbackState === 'playing' && activeClip && clipName !== activeClip) {
-        vscode?.postMessage({
+        postMessage({
           type: 'crossfadeAnimation',
           clipName,
           fadeDuration,

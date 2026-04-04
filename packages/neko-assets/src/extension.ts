@@ -785,6 +785,24 @@ function registerMediaLibraryCommands(
     ),
   );
 
+  // Add to Agent from Library — delegates to neko-agent via cross-extension command
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.assets.addToAgent',
+      async (item?: unknown, selectedItems?: unknown[]) => {
+        const items = getMediaFileItems(item, selectedItems);
+        if (items.length === 0) return;
+
+        for (const fileItem of items) {
+          await vscode.commands.executeCommand(
+            'neko.agent.addToContext',
+            vscode.Uri.file(fileItem.filePath),
+          );
+        }
+      },
+    ),
+  );
+
   // Refresh Media Libraries
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.refreshMediaLibraries', () => {

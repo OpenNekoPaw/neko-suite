@@ -5,16 +5,22 @@ pub mod gamepad_stream;
 pub mod health;
 pub mod midi_stream;
 pub mod monitor;
+pub mod preview_file;
 pub mod puppet_stream;
 pub mod streaming;
 
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use neko_native_api::EngineApi;
+use preview_file::PreviewFileRegistry;
 use std::sync::Arc;
 
-/// Build the complete HTTP router with all routes
+/// Build the complete HTTP router with all routes.
 pub fn build_router(engine: Arc<EngineApi>) -> Router {
+    // Shared token registry — injected as an axum Extension so it does not
+    // require changes to EngineApi.
+    let file_registry = Arc::new(PreviewFileRegistry::new());
+
     Router::new()
         // Health check
         .route("/health", get(health::health_handler))
@@ -33,10 +39,7 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
             get(streaming::handle_stream_websocket),
         )
         // Audio recording monitor (RMS/Peak level data)
-        .route(
-            "/v1/monitor/:stream_id",
-            get(monitor::handle_monitor),
-        )
+        .route("/v1/monitor/:stream_id", get(monitor::handle_monitor))
         // WebSocket puppet delta stream (60fps PuppetDelta push for neko-live)
         .route(
             "/v1/puppets/stream",
@@ -52,6 +55,19 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
             "/v1/gamepad/:stream_id",
             get(gamepad_stream::handle_gamepad_stream),
         )
+        // Document preview — Range-capable static file serving (PDF / CBZ)
+        .route("/v1/preview/register", post(preview_file::handle_register))
+        .route(
+            "/v1/preview/unregister/:token",
+            delete(preview_file::handle_unregister),
+        )
+        .route("/v1/preview/file/:token", get(preview_file::handle_file))
+        // EPUB on-demand entry serving (directory mode — avoids full-archive download)
+        .route(
+            "/v1/preview/epub/:token/*path",
+            get(preview_file::handle_epub_entry),
+        )
+        .layer(axum::Extension(file_registry))
         .with_state(engine)
 }
 

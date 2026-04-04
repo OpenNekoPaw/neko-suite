@@ -1,5 +1,18 @@
 import * as vscode from 'vscode';
+import { createNewFile } from '@neko/shared/vscode/extension';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
+
+/** Default .nkm document template */
+function getModelTemplate(_title: string): string {
+  return JSON.stringify(
+    {
+      version: 2,
+      scene_snapshot: { nodes: [], animations: [] },
+    },
+    null,
+    2,
+  );
+}
 
 let modelEditorProvider: ModelEditorProvider;
 
@@ -31,8 +44,16 @@ export function activate(context: vscode.ExtensionContext): void {
       }),
     );
   }
-}
 
-export function deactivate(): void {
-  // Cleanup handled by disposables
+  // New 3D Model Project
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.model.new', async (uri?: vscode.Uri) => {
+      await createNewFile({
+        targetFolder: uri,
+        ext: '.nkm',
+        template: getModelTemplate,
+        noFolderErrorMessage: vscode.l10n.t('neko.model.new.noFolder'),
+      });
+    }),
+  );
 }

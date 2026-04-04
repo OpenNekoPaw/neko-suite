@@ -277,36 +277,16 @@ export const EpubViewer: FC = () => {
     [renderBook],
   );
 
-  /** Load EPUB from a direct webview URL (preferred — no base64 overhead). */
+  /** Load EPUB from a localhost URL served by neko-engine (preferred). */
   const loadEpubFromUrl = useCallback(
     async (url: string) => {
-      // Probe whether the vscode-webview:// protocol supports HTTP Range requests.
-      // Result is posted back to the extension host so it can be surfaced to the user.
-      void fetch(url, { headers: { Range: 'bytes=0-1023' } })
-        .then(async (r) => {
-          const buf = await r.arrayBuffer();
-          postMessage({
-            type: 'epub:rangeTestResult',
-            payload: {
-              status: r.status,
-              acceptRanges: r.headers.get('Accept-Ranges'),
-              contentRange: r.headers.get('Content-Range'),
-              receivedBytes: buf.byteLength,
-              rangeSupported: r.status === 206,
-            },
-          } as never);
-        })
-        .catch((err: unknown) => {
-          postMessage({
-            type: 'epub:rangeTestResult',
-            payload: { error: String(err), rangeSupported: false },
-          } as never);
-        });
-
       try {
         setLoading(true);
         loadingRef.current = true;
         setError(null);
+        // URL ends with '/' (no extension) → epub.js uses DIRECTORY mode:
+        // fetches META-INF/container.xml, OPF, chapters, CSS, images on demand.
+        // neko-engine serves each ZIP entry from /v1/preview/epub/{token}/{path}.
         const book = ePub(url);
         bookRef.current = book;
         await initBook(book);

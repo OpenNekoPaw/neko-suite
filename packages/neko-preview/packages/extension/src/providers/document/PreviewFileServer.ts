@@ -1,0 +1,126 @@
+/**
+ * PreviewFileServer — client for the neko-engine document preview file server.
+ *
+ * Registers local file paths under opaque UUID tokens so webviews can fetch
+ * them via `http://127.0.0.1:{port}/v1/preview/file/{token}` with full HTTP
+ * Range request support (206 Partial Content).
+ *
+ * Usage:
+ *   const server = new PreviewFileServer();
+ *   const url = await server.registerFile('/path/to/file.pdf');
+ *   // → 'http://127.0.0.1:PORT/v1/preview/file/UUID' or throws
+ *   await server.unregisterFile(token);
+ */
+
+import * as vscode from 'vscode';
+import { getLogger } from '../../utils/logger';
+
+const logger = getLogger('PreviewFileServer');
+
+export class PreviewFileServer {
+  private _port: number | null = null;
+
+  // ── Engine port ───────────────────────────────────────────────────────────
+
+  /**
+   * Ensure the engine HTTP server is running and return its port.
+   * Throws if neko-engine is not installed or fails to start.
+   */
+  async getPort(): Promise<number> {
+    if (this._port !== null) return this._port;
+
+    const result = await vscode.commands
+      .executeCommand<{ port: number } | null>('neko.engine.ensureFrameServer')
+      .then(
+        (r) => r,
+        () => null,
+      );
+
+    if (!result?.port) {
+      throw new Error(
+        'Neko Engine is not running. Please install and activate the neko-engine extension.',
+      );
+    }
+
+    this._port = result.port;
+    return this._port;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  /**
+   * Register a local file path with the engine file server.
+   * @returns The full `http://127.0.0.1:{port}/v1/preview/file/{token}` URL
+   *          (Range-capable; suitable for PDF / CBZ).
+   * @throws if the engine is not available.
+   */
+  async registerFile(filePath: string): Promise<{ url: string; token: string }> {
+    const port = await this.getPort();
+    const base = `http://127.0.0.1:${port}`;
+
+    const res = await fetch(`${base}/v1/preview/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to register file: ${res.status} ${res.statusText}`);
+    }
+
+    const { token } = (await res.json()) as { token: string };
+    const url = `${base}/v1/preview/file/${token}`;
+    logger.info(`Registered preview file token=${token} → ${filePath}`);
+    return { url, token };
+  }
+
+  /**
+   * Register an EPUB file and return a directory-style base URL.
+   *
+   * The returned URL ends with `/` so epub.js detects it as a directory and
+   * fetches individual entries on demand via
+   * `GET /v1/preview/epub/{token}/{internal-path}`.
+   * This avoids downloading the entire (potentially 100 MB) archive up-front.
+   *
+   * @returns `{ url: 'http://127.0.0.1:{port}/v1/preview/epub/{token}/', token }`
+   */
+  async registerEpub(filePath: string): Promise<{ url: string; token: string }> {
+    const port = await this.getPort();
+    const base = `http://127.0.0.1:${port}`;
+
+    const res = await fetch(`${base}/v1/preview/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to register EPUB: ${res.status} ${res.statusText}`);
+    }
+
+    const { token } = (await res.json()) as { token: string };
+    // Trailing slash → epub.js DIRECTORY mode: fetches entries on demand
+    const url = `${base}/v1/preview/epub/${token}/`;
+    logger.info(`Registered EPUB token=${token} → ${filePath}`);
+    return { url, token };
+  }
+
+  /**
+   * Release a previously registered token.
+   * Safe to call even if the engine has stopped — errors are swallowed.
+   */
+  async unregisterFile(token: string): Promise<void> {
+    if (this._port === null) return;
+    try {
+      await fetch(`http://127.0.0.1:${this._port}/v1/preview/unregister/${token}`, {
+        method: 'DELETE',
+      });
+      logger.info(`Unregistered preview file token=${token}`);
+    } catch (err) {
+      logger.warn('Failed to unregister preview file token:', err);
+    }
+  }
+}
+
+/** Singleton shared across all document providers in this extension host. */
+export const previewFileServer = new PreviewFileServer();

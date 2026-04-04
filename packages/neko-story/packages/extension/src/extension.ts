@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { createVSCodeLogger, createNewFile } from '@neko/shared/vscode/extension';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
 import { FountainDefinitionProvider, FountainReferenceProvider } from './providers/definition';
@@ -241,46 +241,12 @@ export function activate(context: vscode.ExtensionContext) {
       panel?.postMessage({ type: 'setView', view: 'grid' });
     }),
     vscode.commands.registerCommand('neko.story.newFile', async (uri?: vscode.Uri) => {
-      // Determine target folder from context menu uri or workspace root
-      let targetFolder: vscode.Uri | undefined = uri;
-      if (!targetFolder) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          targetFolder = workspaceFolders[0]?.uri;
-        }
-      }
-      if (!targetFolder) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.story.newFile.noFolder'));
-        return;
-      }
-
-      // Generate a unique default file name (Untitled.fountain, Untitled-1.fountain, ...)
-      const baseName = 'Untitled';
-      const ext = '.fountain';
-      let fileName = `${baseName}${ext}`;
-      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-      let counter = 1;
-      while (true) {
-        try {
-          await vscode.workspace.fs.stat(fileUri);
-          // File exists, try next name
-          fileName = `${baseName}-${counter}${ext}`;
-          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-          counter++;
-        } catch {
-          // File does not exist — use this name
-          break;
-        }
-      }
-
-      // Create file with template content
-      const title = fileName.replace(/\.fountain$/, '');
-      const content = getStoryTemplate(title);
-      await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
-
-      // Reveal in explorer and trigger inline rename
-      await vscode.commands.executeCommand('revealInExplorer', fileUri);
-      await vscode.commands.executeCommand('renameFile');
+      await createNewFile({
+        targetFolder: uri,
+        ext: '.fountain',
+        template: (title) => getStoryTemplate(title),
+        noFolderErrorMessage: vscode.l10n.t('neko.story.newFile.noFolder'),
+      });
     }),
   );
 

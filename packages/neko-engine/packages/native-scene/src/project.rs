@@ -29,15 +29,19 @@ pub struct NkmProject {
     /// Format version for forward compatibility.
     pub version: u32,
     /// Paths to original model files (glTF/GLB/VRM) loaded during the session.
+    #[serde(default)]
     pub source_models: Vec<String>,
     /// CPU-side procedural mesh data, keyed by procedural URI.
+    #[serde(default)]
     pub procedural_meshes: HashMap<String, ProceduralMesh>,
     /// Full scene graph snapshot (nodes + animations).
+    #[serde(default)]
     pub scene_snapshot: SceneSnapshot,
     /// Mapping from node ID to mesh URI (for restoring MeshRef components).
     #[serde(default)]
     pub node_mesh_map: HashMap<String, String>,
     /// Opaque frontend editor state (selected node, camera position, active panel, etc.).
+    #[serde(default)]
     pub editor_state: serde_json::Value,
 
     // ── v2 fields (all #[serde(default)] for backwards compat with v1) ──

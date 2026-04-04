@@ -184,6 +184,12 @@
         "command": "neko.pipeline.retryFailed",
         "title": "%neko.pipeline.retryFailed.title%",
         "category": "NekoAgent: Pipeline"
+      },
+      {
+        "command": "neko.agent.addToContext",
+        "title": "%neko.agent.addToContext.title%",
+        "category": "NekoAgent: AI",
+        "icon": "$(comment-add)"
       }
     ],
     "menus": {
@@ -215,6 +221,11 @@
         }
       ],
       "explorer/context": [
+        {
+          "command": "neko.agent.addToContext",
+          "group": "9_nekoai@0",
+          "when": "!explorerResourceIsFolder"
+        },
         {
           "command": "neko.ai.summarizeDocument",
           "group": "9_nekoai@1",

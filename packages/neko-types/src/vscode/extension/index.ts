@@ -23,3 +23,7 @@ export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';
 
 // Webview asset utilities (GeneratedAsset → webviewUri conversion)
 export { toWebviewAsset } from './webview-asset';
+
+// New-file UX (unique name → write → reveal → rename)
+export { createNewFile } from './create-new-file';
+export type { CreateNewFileOptions } from './create-new-file';

@@ -203,7 +203,7 @@ function buildLabel(fileName: string, pageNumber?: number, chapterTitle?: string
   return label;
 }
 
-function getErrorHtml(message: string): string {
+export function getErrorHtml(message: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

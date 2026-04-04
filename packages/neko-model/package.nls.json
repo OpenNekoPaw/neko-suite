@@ -1,0 +1,9 @@
+{
+  "neko.model.new.title": "New 3D Model Project",
+  "neko.model.deleteSelected.title": "Delete Selected",
+  "neko.model.escape.title": "Cancel / Deselect",
+  "neko.model.selectAll.title": "Select All",
+  "neko.model.undo.title": "Undo",
+  "neko.model.redo.title": "Redo",
+  "neko.model.resetView.title": "Reset View"
+}

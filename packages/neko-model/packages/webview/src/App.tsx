@@ -17,15 +17,7 @@ import type { AnimationClipInfo, ExtensionMessage } from './types';
 import type { AnimationClip } from 'three';
 import type { VRM } from '@pixiv/three-vrm';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 /**
  * Root application component for the 3D Model Editor webview.
@@ -128,7 +120,7 @@ export function App(): React.JSX.Element {
           {
             const currentClip = useModelStore.getState().activeAnimation;
             if (currentClip) {
-              vscode?.postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
+              postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
             }
           }
           break;
@@ -137,7 +129,7 @@ export function App(): React.JSX.Element {
           {
             const currentClip = useModelStore.getState().activeAnimation;
             if (currentClip) {
-              vscode?.postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
+              postMessage({ type: 'requestKeyframeTracks', clipName: currentClip });
             }
           }
           break;
@@ -171,7 +163,7 @@ export function App(): React.JSX.Element {
     };
 
     window.addEventListener('message', handler);
-    vscode?.postMessage({ type: 'ready' });
+    postMessage({ type: 'ready' });
 
     return () => window.removeEventListener('message', handler);
   }, [setModelUrl, selectNode]);
@@ -289,7 +281,7 @@ export function App(): React.JSX.Element {
         </button>
         <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
         <button
-          onClick={() => vscode?.postMessage({ type: 'exportGlb' })}
+          onClick={() => postMessage({ type: 'exportGlb' })}
           className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
         >
           导出 GLB
@@ -297,7 +289,7 @@ export function App(): React.JSX.Element {
         <button
           onClick={() => {
             const editorState = useModelStore.getState().getEditorState();
-            vscode?.postMessage({ type: 'saveProject', editorState });
+            postMessage({ type: 'saveProject', editorState });
           }}
           className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
         >

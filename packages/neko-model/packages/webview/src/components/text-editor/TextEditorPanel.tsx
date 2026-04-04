@@ -1,13 +1,5 @@
 import React, { useState, useCallback } from 'react';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 /**
  * Text Editor Panel - Create extruded 3D text meshes.
@@ -21,7 +13,7 @@ export function TextEditorPanel(): React.JSX.Element {
 
   const handleCreate = useCallback(() => {
     if (!text.trim()) return;
-    vscode?.postMessage({
+    postMessage({
       type: 'createTextMesh',
       text: text.trim(),
       fontSize,

@@ -272,6 +272,12 @@
         "command": "neko.assets.recentEntity.addToCanvas",
         "title": "%neko.assets.recentEntity.addToCanvas%",
         "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.addToAgent",
+        "title": "%neko.assets.addToAgent%",
+        "category": "Neko Assets",
+        "icon": "$(comment-add)"
       }
     ],
     "menus": {
@@ -310,32 +316,32 @@
         },
         {
           "command": "neko.assets.importFromLibrary",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
           "group": "inline"
         },
         {
           "command": "neko.assets.previewMediaLibraryFile",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
           "group": "2_preview"
         },
         {
           "command": "neko.assets.addToTimelineFromLibrary",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:(video|audio|image|sequence)$/",
           "group": "3_actions"
         },
         {
           "command": "neko.assets.addToCanvasFromLibrary",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:(video|image|sequence)$/",
           "group": "3_actions"
         },
         {
           "command": "neko.assets.revealFileInOS",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
           "group": "4_utils"
         },
         {
           "command": "neko.assets.copyFilePath",
-          "when": "viewItem == mediaLibrary:file",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
           "group": "4_utils"
         },
         {
@@ -407,6 +413,11 @@
           "command": "neko.assets.recentEntity.addToCanvas",
           "when": "viewItem == recentEntity",
           "group": "1_preview@2"
+        },
+        {
+          "command": "neko.assets.addToAgent",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
+          "group": "5_agent@1"
         }
       ],
       "explorer/context": [

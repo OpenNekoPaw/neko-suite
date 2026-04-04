@@ -3,6 +3,7 @@
  */
 import * as vscode from 'vscode';
 import type { SketchImportContext } from '@neko/shared';
+import { createNewFile } from '@neko/shared/vscode/extension';
 import type { SketchEditorProvider } from '../editor/sketchEditorProvider';
 import { handleError } from '../utils/errorHandler';
 
@@ -64,41 +65,13 @@ export function registerCommands(
   // New Sketch - create .nks file with inline rename
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.sketch.new', async (uri?: vscode.Uri) => {
-      let targetFolder: vscode.Uri | undefined = uri;
-      if (!targetFolder) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          targetFolder = workspaceFolders[0]?.uri;
-        }
-      }
-      if (!targetFolder) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.new.noFolder'));
-        return;
-      }
-
-      const baseName = 'Untitled';
-      const ext = '.nks';
-      let fileName = `${baseName}${ext}`;
-      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-      let counter = 1;
-      while (true) {
-        try {
-          await vscode.workspace.fs.stat(fileUri);
-          fileName = `${baseName}-${counter}${ext}`;
-          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-          counter++;
-        } catch {
-          break;
-        }
-      }
-
       try {
-        const title = fileName.replace(/\.nks$/, '');
-        const content = getSketchTemplate(title);
-        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
-        await vscode.commands.executeCommand('revealInExplorer', fileUri);
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await vscode.commands.executeCommand('renameFile');
+        await createNewFile({
+          targetFolder: uri,
+          ext: '.nks',
+          template: (title) => getSketchTemplate(title),
+          noFolderErrorMessage: vscode.l10n.t('neko.sketch.new.noFolder'),
+        });
       } catch (error) {
         await handleError(error, { showToUser: true });
       }

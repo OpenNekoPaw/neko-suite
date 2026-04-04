@@ -304,12 +304,14 @@ impl NativeEngine {
 
     // ========== Frame Server Management ==========
 
-    /// Start the embedded HTTP/WebSocket server for frame streaming
+    /// Start the embedded HTTP/WebSocket server (full neko-native-http router).
     ///
     /// The server provides:
     /// - `ws://127.0.0.1:{port}/v1/streams/{stream_id}` — per-stream WebSocket
     /// - `POST http://127.0.0.1:{port}/v1/dispatch` — ActionRequest dispatch
     /// - `GET http://127.0.0.1:{port}/health` — health check
+    /// - `POST http://127.0.0.1:{port}/v1/preview/register` — register file for Range serving
+    /// - `GET http://127.0.0.1:{port}/v1/preview/file/:token` — serve file with Range support
     ///
     /// Returns the actual bound port (useful when port=0 for auto-assign).
     #[napi]

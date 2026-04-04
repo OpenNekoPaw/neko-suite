@@ -1,14 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { PHONEME_ROTATIONS, type Phoneme } from '../../types/boneExpression';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 const PHONEMES: Phoneme[] = ['A', 'I', 'U', 'E', 'O', 'silent'];
 
@@ -29,7 +21,7 @@ export function BoneExpressionPanel(): React.JSX.Element {
 
   const sendBoneTransform = useCallback(
     (nodeId: string, rotation: [number, number, number, number]) => {
-      vscode?.postMessage({
+      postMessage({
         type: 'updateBoneTransform',
         nodeId,
         rotation,

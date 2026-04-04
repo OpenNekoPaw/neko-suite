@@ -63,32 +63,32 @@
       },
       {
         "command": "neko.model.deleteSelected",
-        "title": "Delete Selected",
+        "title": "%neko.model.deleteSelected.title%",
         "category": "NekoModel"
       },
       {
         "command": "neko.model.escape",
-        "title": "Cancel / Deselect",
+        "title": "%neko.model.escape.title%",
         "category": "NekoModel"
       },
       {
         "command": "neko.model.selectAll",
-        "title": "Select All",
+        "title": "%neko.model.selectAll.title%",
         "category": "NekoModel"
       },
       {
         "command": "neko.model.undo",
-        "title": "Undo",
+        "title": "%neko.model.undo.title%",
         "category": "NekoModel"
       },
       {
         "command": "neko.model.redo",
-        "title": "Redo",
+        "title": "%neko.model.redo.title%",
         "category": "NekoModel"
       },
       {
         "command": "neko.model.resetView",
-        "title": "Reset View",
+        "title": "%neko.model.resetView.title%",
         "category": "NekoModel"
       }
     ],

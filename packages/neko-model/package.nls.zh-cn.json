@@ -1,0 +1,9 @@
+{
+  "neko.model.new.title": "新建 3D 模型项目",
+  "neko.model.deleteSelected.title": "删除选中项",
+  "neko.model.escape.title": "取消 / 取消选择",
+  "neko.model.selectAll.title": "全选",
+  "neko.model.undo.title": "撤销",
+  "neko.model.redo.title": "重做",
+  "neko.model.resetView.title": "重置视图"
+}

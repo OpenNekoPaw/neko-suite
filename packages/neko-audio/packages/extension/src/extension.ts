@@ -17,7 +17,7 @@ import { AudioService } from './services/AudioService';
 import { AudioOutlineProvider } from './views/audioOutlineProvider';
 import { AudioStatusBar } from './views/audioStatusBar';
 import type { NekoAudioAPI } from './types/api';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { createVSCodeLogger, createNewFile } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 
 const logger = getLogger('Extension');
@@ -160,50 +160,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
 
     // New Audio Project — create .nka file with inline rename (unified pattern)
     vscode.commands.registerCommand('neko.audio.new', async (uri?: vscode.Uri) => {
-      // Determine target folder from context menu uri or workspace root
-      let targetFolder: vscode.Uri | undefined = uri;
-      if (!targetFolder) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          targetFolder = workspaceFolders[0]?.uri;
-        }
-      }
-      if (!targetFolder) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.audio.new.noFolder'));
-        return;
-      }
-
-      // Generate a unique default file name (Untitled.nka, Untitled-1.nka, ...)
-      const baseName = 'Untitled';
-      const ext = '.nka';
-      let fileName = `${baseName}${ext}`;
-      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-      let counter = 1;
-      while (true) {
-        try {
-          await vscode.workspace.fs.stat(fileUri);
-          // File exists, try next name
-          fileName = `${baseName}-${counter}${ext}`;
-          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-          counter++;
-        } catch {
-          // File does not exist — use this name
-          break;
-        }
-      }
-
       try {
-        // Create .nka file with default template
-        const title = fileName.replace(/\.nka$/, '');
-        const content = getAudioProjectTemplate(title);
-        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
-
-        // Reveal in explorer, wait for file tree to refresh, then trigger inline rename
-        await vscode.commands.executeCommand('revealInExplorer', fileUri);
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await vscode.commands.executeCommand('renameFile');
-
-        logger.info(`Created audio project: ${fileUri.fsPath}`);
+        await createNewFile({
+          targetFolder: uri,
+          ext: '.nka',
+          template: (title) => getAudioProjectTemplate(title),
+          noFolderErrorMessage: vscode.l10n.t('neko.audio.new.noFolder'),
+        });
+        logger.info('Created audio project');
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(vscode.l10n.t('neko.audio.new.failed', msg));

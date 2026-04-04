@@ -44,5 +44,6 @@
   "neko.assets.variant.delete": "Delete",
   "neko.assets.directory.reveal": "Reveal in Finder",
   "neko.assets.recentEntity.addToTimeline": "Add to Timeline",
-  "neko.assets.recentEntity.addToCanvas": "Add to Canvas"
+  "neko.assets.recentEntity.addToCanvas": "Add to Canvas",
+  "neko.assets.addToAgent": "Add to Agent"
 }

@@ -19,6 +19,13 @@ tower-http = { workspace = true, features = ["cors"] }
 
 # Async runtime
 tokio.workspace = true
+tokio-util.workspace = true
+
+# UUID generation
+uuid.workspace = true
+
+# ZIP archive reading (for EPUB on-demand entry serving)
+zip.workspace = true
 
 # Serialization
 serde.workspace = true

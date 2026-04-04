@@ -6,7 +6,11 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  createNewFile,
+} from '@neko/shared/vscode/extension';
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
@@ -184,49 +188,13 @@ function registerCommands(context: vscode.ExtensionContext): void {
   // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.new', async (uri?: vscode.Uri) => {
-      // Determine target folder from context menu uri or workspace root
-      let targetFolder: vscode.Uri | undefined = uri;
-      if (!targetFolder) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          targetFolder = workspaceFolders[0]?.uri;
-        }
-      }
-      if (!targetFolder) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.new.noFolder'));
-        return;
-      }
-
-      // Generate a unique default file name (Untitled.nkc, Untitled-1.nkc, ...)
-      const baseName = 'Untitled';
-      const ext = '.nkc';
-      let fileName = `${baseName}${ext}`;
-      let fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-      let counter = 1;
-      while (true) {
-        try {
-          await vscode.workspace.fs.stat(fileUri);
-          // File exists, try next name
-          fileName = `${baseName}-${counter}${ext}`;
-          fileUri = vscode.Uri.joinPath(targetFolder, fileName);
-          counter++;
-        } catch {
-          // File does not exist — use this name
-          break;
-        }
-      }
-
       try {
-        // Create file with template content
-        const title = fileName.replace(/\.nkc$/, '');
-        const content = getCanvasTemplate(title);
-        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
-
-        // Reveal in explorer, wait for file tree to refresh, then trigger inline rename
-        await vscode.commands.executeCommand('revealInExplorer', fileUri);
-        // Small delay to ensure the file is selected in the explorer tree
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await vscode.commands.executeCommand('renameFile');
+        await createNewFile({
+          targetFolder: uri,
+          ext: '.nkc',
+          template: (title) => getCanvasTemplate(title),
+          noFolderErrorMessage: vscode.l10n.t('neko.canvas.new.noFolder'),
+        });
       } catch (error) {
         await handleError(error, { showToUser: true });
       }

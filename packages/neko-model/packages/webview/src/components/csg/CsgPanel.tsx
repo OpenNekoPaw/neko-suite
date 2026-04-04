@@ -1,14 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useModelStore } from '../../stores/modelStore';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 type CsgOperation = 'union' | 'difference' | 'intersection';
 
@@ -71,7 +63,7 @@ export function CsgPanel(): React.JSX.Element {
 
   const handleExecute = useCallback(() => {
     if (!operandA || !operandB) return;
-    vscode?.postMessage({
+    postMessage({
       type: 'csgBoolean',
       entityA: operandA,
       entityB: operandB,

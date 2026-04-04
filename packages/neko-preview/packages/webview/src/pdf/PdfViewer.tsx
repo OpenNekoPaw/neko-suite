@@ -35,7 +35,11 @@ export const PdfViewer: FC = () => {
   // Listen for messages from extension
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      loadPdf(msg.payload.data);
+      if ('url' in msg.payload && msg.payload.url) {
+        void loadPdfFromUrl(msg.payload.url as string);
+      } else if (msg.payload.data) {
+        void loadPdf(msg.payload.data as string);
+      }
     }
   });
 
@@ -44,6 +48,23 @@ export const PdfViewer: FC = () => {
     postMessage({ type: 'ready' } as never);
   }, []);
 
+  /** Load PDF from a localhost URL — pdfjs uses Range requests for per-page lazy loading. */
+  const loadPdfFromUrl = useCallback(async (url: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const pdf = await pdfjsLib.getDocument({ url }).promise;
+      pdfDocRef.current = pdf;
+      setNumPages(pdf.numPages);
+      setCurrentPage(1);
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setLoading(false);
+    }
+  }, []);
+
+  /** Load PDF from base64 data (legacy fallback). */
   const loadPdf = useCallback(async (base64Data: string) => {
     try {
       setLoading(true);

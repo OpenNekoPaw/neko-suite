@@ -9,15 +9,7 @@ import React, { useCallback, useMemo } from 'react';
 import { KeyframeTimeline } from '@neko/shared/components';
 import type { EasingType } from '@neko/shared';
 import { useModelStore } from '../stores/modelStore';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 export function ModelKeyframeTimeline(): React.JSX.Element {
   const keyframeTracks = useModelStore((s) => s.keyframeTracks);
@@ -52,7 +44,7 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
       const nodeId = dotIdx >= 0 ? trackProperty.slice(0, dotIdx) : trackProperty;
       const property = dotIdx >= 0 ? trackProperty.slice(dotIdx + 1) : trackProperty;
 
-      vscode?.postMessage({
+      postMessage({
         type: 'addKeyframe',
         clipName,
         nodeId,
@@ -67,7 +59,7 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
   const handleKeyframeRemove = useCallback(
     (_trackProperty: string, keyframeId: string) => {
       if (!clipName) return;
-      vscode?.postMessage({
+      postMessage({
         type: 'removeKeyframe',
         clipName,
         keyframeId,
@@ -83,7 +75,7 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
       updates: { timeMs?: number; value?: number; easing?: EasingType },
     ) => {
       if (!clipName) return;
-      vscode?.postMessage({
+      postMessage({
         type: 'updateKeyframe',
         clipName,
         keyframeId,
@@ -105,7 +97,7 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
   const handleKeyframeDrag = useCallback(
     (_trackProperty: string, keyframeId: string, newTimeMs: number) => {
       if (!clipName) return;
-      vscode?.postMessage({
+      postMessage({
         type: 'updateKeyframe',
         clipName,
         keyframeId,

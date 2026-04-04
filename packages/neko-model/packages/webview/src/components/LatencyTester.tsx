@@ -1,13 +1,5 @@
 import React, { useState, useCallback } from 'react';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 interface LatencyStats {
   min: number;
@@ -57,7 +49,7 @@ export function LatencyTester(): React.JSX.Element {
       const startTime = performance.now();
 
       // Send message to extension
-      vscode?.postMessage({
+      postMessage({
         type: 'latency:test',
         timestamp: startTime,
       });

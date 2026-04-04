@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Snapshot of the scene graph for serialization to the frontend
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SceneSnapshot {
     pub nodes: Vec<SceneNodeSnapshot>,
     pub animations: Vec<AnimationClipInfo>,

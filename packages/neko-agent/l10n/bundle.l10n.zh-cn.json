@@ -26,5 +26,6 @@
   "neko.script.generateVideo.title": "从脚本生成视频",
   "neko.pipeline.start.title": "启动创意流水线...",
   "neko.pipeline.startFromFile.title": "从此文件创建视频",
-  "neko.pipeline.retryFailed.title": "重试失败的场景"
+  "neko.pipeline.retryFailed.title": "重试失败的场景",
+  "neko.agent.addToContext.title": "添加到 Neko Agent"
 }

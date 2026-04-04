@@ -1,14 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { SHAPE_PARAMS, SHAPE_ICONS, type ShapeType } from '../../types/shapeParams';
-
-// Acquire VSCode API if available
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+import { postMessage } from '@neko/shared/vscode';
 
 const SHAPE_TYPES: ShapeType[] = ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane'];
 
@@ -33,7 +25,7 @@ export function ShapeCreatorPanel(): React.JSX.Element {
   }, []);
 
   const handleCreate = useCallback(() => {
-    vscode?.postMessage({
+    postMessage({
       type: 'createShape',
       shapeType,
       params,
