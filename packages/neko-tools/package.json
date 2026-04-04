@@ -89,32 +89,32 @@
     "commands": [
       {
         "command": "neko.tools.compareFiles",
-        "title": "Compare Files",
+        "title": "%neko.tools.compareFiles.title%",
         "category": "Neko Tools"
       },
       {
         "command": "neko.tools.compareImages",
-        "title": "Compare Images",
+        "title": "%neko.tools.compareImages.title%",
         "category": "Neko Tools"
       },
       {
         "command": "neko.tools.compareVideos",
-        "title": "Compare Videos",
+        "title": "%neko.tools.compareVideos.title%",
         "category": "Neko Tools"
       },
       {
         "command": "neko.tools.compareAudio",
-        "title": "Compare Audio Files",
+        "title": "%neko.tools.compareAudio.title%",
         "category": "Neko Tools"
       },
       {
         "command": "neko.tools.compareAssetVariants",
-        "title": "Compare Asset Variants",
+        "title": "%neko.tools.compareAssetVariants.title%",
         "category": "Neko Tools"
       },
       {
         "command": "neko.tools.showMediaInfo",
-        "title": "Show Media Info",
+        "title": "%neko.tools.showMediaInfo.title%",
         "category": "Neko Tools"
       }
     ],

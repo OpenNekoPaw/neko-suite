@@ -56,11 +56,11 @@
       }
     ],
     "menus": {
-      "explorer/context": [
+      "explorer/context": [],
+      "neko.explorer.newProject": [
         {
           "command": "neko.puppet.new",
-          "group": "navigation@11",
-          "when": "explorerResourceIsFolder"
+          "group": "1@5"
         }
       ]
     }

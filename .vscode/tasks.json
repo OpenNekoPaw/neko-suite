@@ -35,7 +35,7 @@
     {
       "label": "build:release",
       "type": "shell",
-      "command": "./build.sh --all",
+      "command": "./build.sh --all --skip-package",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -46,10 +46,26 @@
     {
       "label": "build:dev",
       "type": "shell",
-      "command": "./build.sh --dev",
+      "command": "./build.sh --dev --skip-package",
       "group": "build",
       "problemMatcher": ["$tsc"],
       "detail": "Build ALL extensions including dev-only (neko-live, neko-model)"
+    },
+    {
+      "label": "package:release",
+      "type": "shell",
+      "command": "./build.sh --all",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Compile + package all release-ready extensions to VSIX"
+    },
+    {
+      "label": "package:dev",
+      "type": "shell",
+      "command": "./build.sh --dev",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Compile + package ALL extensions to VSIX (includes dev-only)"
     },
 
     // =========================================================================

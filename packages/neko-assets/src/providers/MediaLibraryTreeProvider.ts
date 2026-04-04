@@ -16,6 +16,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import {
   isMediaFile,
+  isDocumentFile,
   detectMediaType,
   ASSET_DRAG_MIME,
   type MediaFileMetadata,
@@ -103,38 +104,57 @@ class MediaFileItem extends vscode.TreeItem {
     this.resourceUri = vscode.Uri.file(filePath);
 
     const mediaType = detectMediaType(filePath);
+    const uri = vscode.Uri.file(filePath);
 
-    // Command: preview based on media type
+    // Command: open with the appropriate neko-preview custom editor when available,
+    // or fall back to VSCode's default handler for unsupported types.
     if (mediaType === 'video') {
       this.command = {
         command: 'vscode.openWith',
         title: t('command.previewVideo'),
-        arguments: [vscode.Uri.file(filePath), 'neko.videoPreview'],
+        arguments: [uri, 'neko.videoPreview'],
       };
     } else if (mediaType === 'audio') {
       this.command = {
         command: 'vscode.openWith',
         title: t('command.previewAudio'),
-        arguments: [vscode.Uri.file(filePath), 'neko.audioPreview'],
+        arguments: [uri, 'neko.audioPreview'],
       };
+    } else if (mediaType === 'document') {
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+      const documentViewTypes: Record<string, string> = {
+        epub: 'neko.epubPreview',
+        cbz: 'neko.cbzPreview',
+        cbr: 'neko.cbzPreview',
+        pdf: 'neko.pdfPreview',
+        docx: 'neko.docxPreview',
+        doc: 'neko.docxPreview',
+      };
+      const viewType = documentViewTypes[ext];
+      this.command = viewType
+        ? { command: 'vscode.openWith', title: t('command.openFile'), arguments: [uri, viewType] }
+        : { command: 'vscode.open', title: t('command.openFile'), arguments: [uri] };
     } else {
       this.command = {
         command: 'vscode.open',
         title: t('command.openFile'),
-        arguments: [vscode.Uri.file(filePath)],
+        arguments: [uri],
       };
     }
 
-    // Icon: thumbnail for video/image, ThemeIcon for audio
+    // Icon: thumbnail for video/image, ThemeIcon for audio/document
     if (thumbnailPath) {
       this.iconPath = vscode.Uri.file(thumbnailPath);
     } else if (mediaType === 'image') {
       // Images use original file as icon (VSCode auto-scales)
-      this.iconPath = vscode.Uri.file(filePath);
+      this.iconPath = uri;
     } else {
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
       const iconMap: Record<string, string> = {
         video: 'file-media',
         audio: 'unmute',
+        document: ['epub', 'cbz', 'cbr'].includes(ext) ? 'book' : 'file',
+        text: 'file-text',
       };
       this.iconPath = new vscode.ThemeIcon(iconMap[mediaType] ?? 'file');
     }
@@ -183,6 +203,16 @@ export class MediaLibraryTreeProvider
   private directoryWatchers = new Map<string, vscode.FileSystemWatcher>();
   // Disposables for directory watchers — replaced on each refresh()
   private watcherDisposables: vscode.Disposable[] = [];
+
+  // Concurrency queues — prevent flooding the engine when a large directory is expanded.
+  // Metadata: up to 3 parallel probes; thumbnails: up to 2 parallel ffmpeg invocations.
+  private metadataQueue: Array<() => Promise<void>> = [];
+  private metadataRunning = 0;
+  private readonly metadataConcurrency = 3;
+
+  private thumbnailTaskQueue: Array<() => Promise<void>> = [];
+  private thumbnailRunning = 0;
+  private readonly thumbnailConcurrency = 2;
 
   private readonly settingsService: MediaLibrarySettingsService;
   private readonly thumbnailService: ThumbnailService;
@@ -277,7 +307,7 @@ export class MediaLibraryTreeProvider
         .sort((a, b) => a.name.localeCompare(b.name));
 
       const files = entries
-        .filter((e) => e.isFile() && isMediaFile(e.name))
+        .filter((e) => e.isFile() && (isMediaFile(e.name) || isDocumentFile(e.name)))
         .sort((a, b) => a.name.localeCompare(b.name));
 
       const mediaFileCount = files.length;
@@ -292,12 +322,12 @@ export class MediaLibraryTreeProvider
 
         const metadata = this.metadataCache.get(filePath);
         if (!metadata) {
-          this.extractMetadata(filePath);
+          this.enqueueMetadata(filePath);
         }
 
         let thumbnailPath: string | null | undefined = this.thumbnailCache.get(filePath);
         if (thumbnailPath === undefined && mediaType === 'video') {
-          this.generateThumbnail(filePath);
+          this.enqueueThumbnail(filePath);
           thumbnailPath = null;
         }
 
@@ -359,13 +389,49 @@ export class MediaLibraryTreeProvider
     }
   }
 
-  private debouncedRefresh(filePath: string): void {
+  private enqueueMetadata(filePath: string): void {
+    this.metadataQueue.push(() => this.extractMetadata(filePath));
+    this.drainMetadataQueue();
+  }
+
+  private drainMetadataQueue(): void {
+    while (this.metadataRunning < this.metadataConcurrency && this.metadataQueue.length > 0) {
+      const task = this.metadataQueue.shift()!;
+      this.metadataRunning++;
+      void task().finally(() => {
+        this.metadataRunning--;
+        this.drainMetadataQueue();
+      });
+    }
+  }
+
+  private enqueueThumbnail(filePath: string): void {
+    if (this.pendingThumbnails.has(filePath)) return;
+    this.thumbnailTaskQueue.push(() => this.generateThumbnail(filePath));
+    this.drainThumbnailQueue();
+  }
+
+  private drainThumbnailQueue(): void {
+    while (
+      this.thumbnailRunning < this.thumbnailConcurrency &&
+      this.thumbnailTaskQueue.length > 0
+    ) {
+      const task = this.thumbnailTaskQueue.shift()!;
+      this.thumbnailRunning++;
+      void task().finally(() => {
+        this.thumbnailRunning--;
+        this.drainThumbnailQueue();
+      });
+    }
+  }
+
+  private debouncedRefresh(_filePath: string): void {
     if (this.refreshDebounceTimer) {
       clearTimeout(this.refreshDebounceTimer);
     }
     this.refreshDebounceTimer = setTimeout(() => {
       this._onDidChangeTreeData.fire(undefined);
-    }, 100);
+    }, 500);
   }
 
   private watchDirectory(dirPath: string): void {

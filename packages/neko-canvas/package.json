@@ -202,19 +202,15 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "neko.canvas.new",
-          "group": "navigation@10",
-          "when": "explorerResourceIsFolder"
-        },
-        {
           "command": "neko.addToAssetLibrary",
           "group": "neko@3",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|m4a|aac|flac|png|jpg|jpeg|gif|webp|bmp|svg|txt|md|json|srt|vtt|ass|ssa)$/i"
-        },
+        }
+      ],
+      "neko.explorer.newProject": [
         {
-          "command": "neko.canvas.previewMedia",
-          "group": "neko@2",
-          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i"
+          "command": "neko.canvas.new",
+          "group": "1@3"
         }
       ]
     }

@@ -34,6 +34,12 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "submenus": [
+      {
+        "id": "neko.explorer.newProject",
+        "label": "Neko: 新建项目"
+      }
+    ],
     "customEditors": [
       {
         "viewType": "neko.videoEditor",
@@ -302,24 +308,20 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "neko.newProject",
-          "group": "neko@1",
+          "submenu": "neko.explorer.newProject",
+          "group": "navigation@10",
           "when": "explorerResourceIsFolder"
         },
         {
-          "command": "neko.addToTimeline",
-          "group": "neko@2",
-          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|m4a|aac|flac|png|jpg|jpeg|gif|webp|bmp|svg)$/i"
-        },
-        {
-          "command": "neko.cut.previewMedia",
-          "group": "neko@2",
-          "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i"
-        },
-        {
           "command": "neko.openInEditor",
-          "group": "neko@3",
+          "group": "neko@1",
           "when": "resourceExtname == .nkv"
+        }
+      ],
+      "neko.explorer.newProject": [
+        {
+          "command": "neko.newProject",
+          "group": "1@1"
         }
       ]
     }

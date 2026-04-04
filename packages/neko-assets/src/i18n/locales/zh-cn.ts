@@ -9,7 +9,7 @@ export const zhCn: AssetTranslations = {
   'mediaLibrary.add.title': '选择媒体库目录',
   'mediaLibrary.add.namePrompt': '输入媒体库名称',
   'mediaLibrary.add.namePlaceholder': '例如：团队素材',
-  'mediaLibrary.add.variablePrompt': '输入变量名（在路径中使用 ${变量名}）',
+  'mediaLibrary.add.variablePrompt': '确认或修改路径变量名（已根据库名自动生成）',
   'mediaLibrary.add.variablePlaceholder': '例如：TEAM_FOOTAGE',
   'mediaLibrary.add.variableError': '变量名必须是大写下划线格式',
   'mediaLibrary.add.success': '媒体库 "{name}" 已添加',

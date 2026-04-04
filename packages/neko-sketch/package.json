@@ -251,11 +251,11 @@
       }
     ],
     "menus": {
-      "explorer/context": [
+      "explorer/context": [],
+      "neko.explorer.newProject": [
         {
           "command": "neko.sketch.new",
-          "group": "navigation@10",
-          "when": "explorerResourceIsFolder"
+          "group": "1@4"
         }
       ]
     },

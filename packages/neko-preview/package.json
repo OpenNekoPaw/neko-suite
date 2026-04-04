@@ -38,6 +38,12 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "epub",
+        "extensions": [".epub"]
+      }
+    ],
     "customEditors": [
       {
         "viewType": "neko.videoPreview",
@@ -67,7 +73,7 @@
             "filenamePattern": "*.pdf"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       },
       {
         "viewType": "neko.cbzPreview",
@@ -77,7 +83,7 @@
             "filenamePattern": "*.cbz"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       },
       {
         "viewType": "neko.epubPreview",
@@ -87,7 +93,7 @@
             "filenamePattern": "*.epub"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       },
       {
         "viewType": "neko.docxPreview",
@@ -97,7 +103,7 @@
             "filenamePattern": "*.{docx,doc}"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       }
     ],
     "commands": [
@@ -129,6 +135,11 @@
       {
         "command": "neko.preview.openDocx",
         "title": "Open DOCX Preview",
+        "category": "Neko Preview"
+      },
+      {
+        "command": "neko.epub.goToChapter",
+        "title": "Go to Chapter…",
         "category": "Neko Preview"
       }
     ],

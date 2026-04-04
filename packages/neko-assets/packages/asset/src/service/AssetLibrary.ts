@@ -356,11 +356,46 @@ export class AssetLibrary {
   // =========================================================================
 
   /**
+   * Find the entity/variant/file that already holds a given stored path.
+   * Used by importFile to prevent duplicate imports of the same file.
+   */
+  private async findByStoredPath(
+    storedPath: string,
+  ): Promise<{ entity: AssetEntity; variant: AssetVariant; file: AssetFile } | null> {
+    const entities = await this.getAllEntities();
+    for (const entity of entities) {
+      for (const variant of entity.variants) {
+        const file = variant.files.find((f) => f.path === storedPath);
+        if (file) {
+          return { entity, variant, file };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Import a file into the library
    */
   async importFile(filePath: string, options?: ImportOptions): Promise<ImportResult> {
     // Contract path to use variables if possible
     const storedPath = this.pathResolver.contract(filePath);
+
+    // Deduplicate: if this exact path is already in the library and the caller
+    // did not request a specific entity/variant, return the existing record.
+    if (!options?.entityId && !options?.variantId) {
+      const existing = await this.findByStoredPath(storedPath);
+      if (existing) {
+        return {
+          entity: existing.entity,
+          variant: existing.variant,
+          file: existing.file,
+          isNewEntity: false,
+          isNewVariant: false,
+          classification: undefined,
+        };
+      }
+    }
 
     let entity: AssetEntity;
     let variant: AssetVariant;

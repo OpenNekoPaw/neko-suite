@@ -57,6 +57,11 @@
     ],
     "commands": [
       {
+        "command": "neko.model.new",
+        "title": "%neko.model.new.title%",
+        "category": "NekoModel"
+      },
+      {
         "command": "neko.model.deleteSelected",
         "title": "Delete Selected",
         "category": "NekoModel"
@@ -87,6 +92,14 @@
         "category": "NekoModel"
       }
     ],
+    "menus": {
+      "neko.explorer.newProject": [
+        {
+          "command": "neko.model.new",
+          "group": "1@7"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "neko.model.deleteSelected",

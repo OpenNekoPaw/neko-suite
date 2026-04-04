@@ -398,7 +398,7 @@ export class JsonFileStorage implements IAssetStorageWithEvents {
       entities: Array.from(this.entities.values()),
     };
 
-    const content = JSON.stringify(data, null, 2);
+    const content = JSON.stringify(data);
     await this.config.fs.writeFile(this.config.filePath, content);
     this.dirty = false;
 
@@ -471,13 +471,14 @@ export class JsonFileStorage implements IAssetStorageWithEvents {
       return;
     }
 
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
+    // Only start a new timer if one is not already running.
+    // Resetting the timer on every change would defer persistence indefinitely
+    // during batch imports, causing data loss on crash or quick shutdown.
+    if (!this.saveTimer) {
+      this.saveTimer = setTimeout(() => {
+        void this.flush();
+      }, this.config.autoSaveDelay);
     }
-
-    this.saveTimer = setTimeout(() => {
-      void this.flush();
-    }, this.config.autoSaveDelay);
   }
 
   /**

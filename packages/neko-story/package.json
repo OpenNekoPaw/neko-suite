@@ -125,11 +125,11 @@
           "group": "neko@1"
         }
       ],
-      "explorer/context": [
+      "explorer/context": [],
+      "neko.explorer.newProject": [
         {
           "command": "neko.story.newFile",
-          "when": "explorerResourceIsFolder",
-          "group": "navigation@10"
+          "group": "1@6"
         }
       ]
     }

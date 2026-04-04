@@ -58,6 +58,8 @@ const nodeFileSystem: IFileSystem = {
     return fs.readFile(filePath, 'utf-8');
   },
   async writeFile(filePath: string, content: string): Promise<void> {
+    // Ensure parent directory exists (e.g. .neko/assets/ on first run)
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, 'utf-8');
   },
   async exists(filePath: string): Promise<boolean> {
@@ -289,6 +291,7 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
 
       try {
         const result = await library.importFile(uri.fsPath);
+        await library.flush();
         vscode.window.showInformationMessage(
           `Imported: ${result.entity.name} (${result.isNewEntity ? 'new entity' : 'existing entity'})`,
         );
@@ -302,6 +305,21 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
 // =============================================================================
 // Media Library Commands (P1)
 // =============================================================================
+
+/**
+ * Derive a UPPER_SNAKE_CASE variable name from a human-readable library name.
+ * Strips non-ASCII characters, normalizes spaces, uppercases, and snake-cases.
+ * Falls back to "MEDIA_LIB" if the result would be empty.
+ */
+function suggestVariableName(name: string): string {
+  const snake = name
+    .replace(/[^a-zA-Z0-9\s]/g, ' ') // remove non-ASCII / special chars
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_') // collapse spaces to underscore
+    .replace(/^[0-9]/, 'LIB_$&'); // must start with a letter
+  return snake || 'MEDIA_LIB';
+}
 
 function registerMediaLibraryCommands(
   context: vscode.ExtensionContext,
@@ -323,12 +341,17 @@ function registerMediaLibraryCommands(
       const name = await vscode.window.showInputBox({
         prompt: t('mediaLibrary.add.namePrompt'),
         placeHolder: t('mediaLibrary.add.namePlaceholder'),
+        title: t('mediaLibrary.add.title'),
       });
       if (!name) return;
 
+      const suggestedVar = suggestVariableName(name);
       const variable = await vscode.window.showInputBox({
         prompt: t('mediaLibrary.add.variablePrompt'),
         placeHolder: t('mediaLibrary.add.variablePlaceholder'),
+        title: t('mediaLibrary.add.title'),
+        value: suggestedVar,
+        valueSelection: [0, suggestedVar.length],
         validateInput: (v) => {
           if (!/^[A-Z_][A-Z0-9_]*$/.test(v)) {
             return t('mediaLibrary.add.variableError');
@@ -430,6 +453,7 @@ function registerMediaLibraryCommands(
             const result = await library.importFile(fileItem.filePath, { autoClassify: true });
             results.push(result.entity.name);
           }
+          await library.flush();
 
           if (results.length === 1) {
             vscode.window.showInformationMessage(

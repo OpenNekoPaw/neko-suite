@@ -42,8 +42,11 @@ interface NekoAuthAPI {
   onDidChangeSession: (listener: (session: IAuthSession | null) => void) => { dispose(): void };
 }
 
-function getNekoAuthAPI(): NekoAuthAPI | undefined {
-  return vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth')?.exports;
+async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
+  const ext = vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth');
+  if (!ext) return undefined;
+  if (!ext.isActive) await ext.activate();
+  return ext.exports;
 }
 
 /** Neko home directory paths */
@@ -114,12 +117,14 @@ export class MarketplaceService implements vscode.Disposable {
       this._onDidEnable,
       this._onDidDisable,
     );
-    this.initAuth();
+    this.initAuth().catch((err) => {
+      this._logger.warn('Auth initialization failed', toBaseError(err));
+    });
   }
 
   /** Subscribe to neko-auth session changes and inject Bearer token into MarketClient. */
-  private initAuth(): void {
-    const auth = getNekoAuthAPI();
+  private async initAuth(): Promise<void> {
+    const auth = await getNekoAuthAPI();
     if (!auth) {
       this._logger.debug('neko-auth not available, proceeding unauthenticated');
       return;

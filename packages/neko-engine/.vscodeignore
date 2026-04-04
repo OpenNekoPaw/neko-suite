@@ -43,6 +43,7 @@ Cargo.lock
 Cargo.toml
 .cargo/**
 target/**
+vendor/**
 
 # Sub-packages — exclude all, then re-include runtime files
 packages/**

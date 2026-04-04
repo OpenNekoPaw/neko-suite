@@ -281,22 +281,22 @@
         {
           "command": "neko.assets.previewMedia",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|ts|flv|wmv|mp3|wav|ogg|flac|aac|m4a|wma|opus)$/i",
-          "group": "neko@1"
+          "group": "3_nekoOps@1"
         },
         {
           "command": "neko.assets.addToTimeline",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|flac|aac|m4a|png|jpg|jpeg|gif|webp)$/i",
-          "group": "neko@2"
+          "group": "3_nekoOps@2"
         },
         {
           "command": "neko.assets.addToCanvas",
           "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|svg|bmp|mp4|mov|webm)$/i",
-          "group": "neko@3"
+          "group": "3_nekoOps@3"
         },
         {
           "command": "neko.assets.importFile",
           "when": "resourceExtname =~ /\\.(mp4|mov|avi|mkv|webm|m4v|mp3|wav|ogg|flac|aac|m4a|png|jpg|jpeg|gif|webp|svg|bmp|tiff)$/i",
-          "group": "neko@4"
+          "group": "3_nekoOps@4"
         }
       ]
     },

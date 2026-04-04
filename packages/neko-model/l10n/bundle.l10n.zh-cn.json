@@ -1,4 +1,5 @@
 {
   "neko.model.editor.title": "3D 模型编辑器",
-  "neko.model.resetView.title": "重置视图"
+  "neko.model.resetView.title": "重置视图",
+  "neko.model.new.title": "新建 3D 模型项目"
 }

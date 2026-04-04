@@ -7,7 +7,8 @@ export const en = {
   'mediaLibrary.add.title': 'Select media library directory',
   'mediaLibrary.add.namePrompt': 'Enter a name for this media library',
   'mediaLibrary.add.namePlaceholder': 'e.g., Team Footage',
-  'mediaLibrary.add.variablePrompt': 'Enter a variable name (used as ${VARIABLE} in paths)',
+  'mediaLibrary.add.variablePrompt':
+    'Confirm or edit the path variable name (auto-generated from library name)',
   'mediaLibrary.add.variablePlaceholder': 'e.g., TEAM_FOOTAGE',
   'mediaLibrary.add.variableError': 'Variable must be UPPER_SNAKE_CASE',
   'mediaLibrary.add.success': 'Media library "{name}" added',
