@@ -142,7 +142,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       });
 
       await library.initialize();
-      logger.info(`AssetLibrary initialized at ${storagePath}`);
+      logger.info(`AssetLibrary initialized at ${layout.project.assetLibrary}`);
 
       // Initialize AssetDiffService with Git integration
       const gitService = new VscodeGitService();
