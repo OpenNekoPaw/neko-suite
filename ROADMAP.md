@@ -16,7 +16,7 @@
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
 | **neko-preview** | Alpha | 92% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接）— [ADR](./docs/architecture/document-preview.md) |
 | **neko-story** | Alpha | 90% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同（[架构](./docs/architecture/2d-capability-analysis.md)） |
-| **neko-assets** | Alpha | 92% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 |
+| **neko-assets** | Alpha | 93% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 + IStorageLayout 三级布局 |
 | **neko-market** | Alpha | 97% | **客户端完全完成** ✅（Phase 6.5.1-6.5.6）；Registry Server 在 neko-hub |
 | **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO（auth-core 43 tests + SecretStorage）；后端待接入 |
 | **neko-tools** | WIP | 68% | 媒体 Diff + 静音检测 UI（琥珀色叠加层）+ 并行优化 + 协议增强 |
@@ -201,6 +201,39 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - 6.5.6：neko-agent 消费端打通 + 本地模型部署 Phase M1-M2 ✅
 </details>
 
+### Phase 6.5.7 ✅ 本地存储策略
+> [ADR](./docs/architecture/local-storage-strategy.md)
+- ✅ `IStorageLayout` + `resolveStorageLayout()` + `resolveGlobalStorageLayout()`（三级布局：L0 全局 / L1 项目 / L2 缓存）
+- ✅ `migrateStorageLayout()` 一次性迁移（proxies/generated/thumbnails → `.neko/.cache/`）
+- ✅ 消费者迁移（neko-assets / neko-cut / neko-agent / neko-market 共 6 个文件）
+- ✅ `neko.engine.extractThumbnail` 命令注册（打通 Rust GPU 缩略图管线）
+- ✅ ThumbnailService preheat + onDidGenerateThumbnail 事件机制
+- ✅ 三个 TreeProvider 缩略图 Tooltip 基础设施（MarkdownString + `<img>`）
+
+### Phase 6.5.8（延后）：本地存储增强
+> 以下功能已有 ADR 设计，暂无用户场景驱动，延后实施：
+- [ ] 缩略图实际生效：epub 封面提取（纯 TS，zip 解包 cover）+ 图片缩放 — 当前素材全是 epub，VSCode Explorer 不支持自定义 tooltip，媒体库面板缩略图无触发场景
+- [ ] `LibraryDescriptor`（`.neko-library.json`）+ AssetRegistry 多源合并 — 等多项目共享需求出现
+- [ ] `IAssetGraph` 资产关系图 + 被动写入 — 等项目文件变多需要"谁在用这个文件"时
+- [ ] `IVectorStore` 向量持久化 — 等用户反馈"搜索剧本太慢"时
+- [ ] `ICacheStats` 缓存监控 — 等性能问题出现时
+- [ ] 历史面板升级为"使用轨迹" — 依赖 IAssetGraph
+
+### Phase 6.5.9 ✅ 文档预览增强 + 路径体系
+- ✅ PDF/CBZ/EPUB 瀑布流（IntersectionObserver 虚拟滚动，默认连续滚动模式）
+- ✅ EPUB 真瀑布流（绕过 epubjs rendition，自行管理 DOM + section.url 资源 URL 改写）
+- ✅ 文档预览直连 neko-engine HTTP（移除 postMessage base64 中继，消除 33% 数据膨胀）
+- ✅ CSP 全格式放行 `http://127.0.0.1:*`（connect/img/style/font）
+- ✅ PathResolver 提取到 @neko/shared（L0 零依赖，支持 `${VAR}/path` + 相对路径 + URL）
+- ✅ Rust ProjectContext（resolve/validate + 9 个单元测试）
+- ✅ EngineClient.dispatch 自动展开路径变量
+- ✅ PreviewFileServer 自动调 `neko.assets.resolvePath` 展开变量
+- ✅ 未解析路径变量友好错误页面（显示缺失的变量名 + 修复步骤）
+- ✅ 素材库健康检查修复（health check 在路径变量注入后运行）
+- ✅ 统一右键菜单（所有格式 "发送到 AI"）
+- ✅ 文档状态栏（格式图标 | 文件名 | 页数 | 文件大小）
+- ✅ PathResolver regex 兼容 macOS fsPath 前导 `/`
+
 ### Phase 6.6（待开发）：远程存储客户端集成
 > 服务端在 [neko-hub](../neko-hub)。[ADR](./docs/architecture/remote-storage.md)
 - 6.6.1：`neko://` 协议 + MediaResolver（代理/原始自动切换）+ `AssetFile.proxy` + `IFileTransport`
@@ -274,4 +307,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-03（角色编辑 Rust 引擎 Phase 2 全部完成：关键帧 CRUD + 动画混合 + Scene 侧 + 项目 v2；91 个 Rust 测试通过）*
+*最后更新: 2026-04-05（Phase 6.5.7 本地存储策略：IStorageLayout 三级布局 + 缩略图管线基础设施；延后项记录于 6.5.8）*
