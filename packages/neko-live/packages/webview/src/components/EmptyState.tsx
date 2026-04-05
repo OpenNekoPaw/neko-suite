@@ -4,14 +4,14 @@ import { t } from '../i18n';
 
 /**
  * Empty state shown when no avatar is loaded.
- * Displays:
- * - Guidance text for getting started
- * - Live tracking data visualization (blend shape bars + head dot)
- *   so users can verify VMC connection before loading a model
+ * Always displays startup guide. When tracking data is flowing,
+ * also shows a live data preview (blend shape bars + head indicator)
+ * so users can verify VMC connection before loading a model.
  */
 export function EmptyState() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
   // Resize canvas
   useEffect(() => {
     const container = containerRef.current;
@@ -33,7 +33,7 @@ export function EmptyState() {
     return () => observer.disconnect();
   }, []);
 
-  // Render tracking preview
+  // Render loop
   useEffect(() => {
     let rafId: number;
 
@@ -51,20 +51,12 @@ export function EmptyState() {
       const data = useLiveStore.getState().currentTrackingData;
       const tracking = useLiveStore.getState().isTracking;
 
-      // Draw guidance text
-      ctx.textAlign = 'center';
+      // Always show guide in the center area
+      drawGuide(ctx, w, h, dpr, tracking);
 
-      if (!tracking && !data) {
-        // No tracking, no data — show full guide
-        drawGuide(ctx, w, h, dpr);
-      } else if (data) {
-        // Tracking active with data — show live visualization
+      // If tracking data is flowing, show live preview in lower area
+      if (data) {
         drawTrackingPreview(ctx, w, h, dpr, data.blendShapes, data.headRotation);
-      } else {
-        // Tracking started but no data yet
-        ctx.fillStyle = 'var(--vscode-descriptionForeground, #888)';
-        ctx.font = `${13 * dpr}px system-ui`;
-        ctx.fillText(t('empty.waitingData'), w / 2, h / 2);
       }
 
       rafId = requestAnimationFrame(render);
@@ -88,32 +80,49 @@ export function EmptyState() {
   );
 }
 
-/** Draw startup guidance */
-function drawGuide(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number) {
+/** Draw startup guidance (always visible) */
+function drawGuide(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  dpr: number,
+  isTracking: boolean,
+) {
   const cx = w / 2;
-  const cy = h / 2;
-  const lineH = 22 * dpr;
+  const topY = h * 0.2;
+  const lineH = 20 * dpr;
 
-  // Icon: broadcast symbol
-  ctx.fillStyle = 'var(--vscode-descriptionForeground, #666)';
-  ctx.font = `${32 * dpr}px system-ui`;
-  ctx.fillText('📡', cx, cy - lineH * 2);
+  ctx.textAlign = 'center';
 
   // Title
-  ctx.fillStyle = 'var(--vscode-foreground, #ccc)';
+  ctx.fillStyle = '#aaa';
   ctx.font = `bold ${14 * dpr}px system-ui`;
-  ctx.fillText(t('empty.title'), cx, cy - lineH * 0.3);
+  ctx.fillText('Neko Live', cx, topY);
 
   // Steps
-  ctx.fillStyle = 'var(--vscode-descriptionForeground, #888)';
+  ctx.fillStyle = '#888';
   ctx.font = `${11 * dpr}px system-ui`;
   const steps = [t('empty.step1'), t('empty.step2'), t('empty.step3')];
   steps.forEach((step, i) => {
-    ctx.fillText(step, cx, cy + lineH * (i + 0.8));
+    // Highlight completed steps
+    const isStep1Done = isTracking;
+    if (i === 0 && isStep1Done) {
+      ctx.fillStyle = '#4ade80';
+    } else {
+      ctx.fillStyle = '#888';
+    }
+    ctx.fillText(step, cx, topY + lineH * (i + 1.5));
   });
+
+  // Tracking status indicator
+  if (isTracking) {
+    ctx.fillStyle = '#4ade80';
+    ctx.font = `${10 * dpr}px system-ui`;
+    ctx.fillText('✓ VMC ' + t('controls.start'), cx, topY + lineH * 5);
+  }
 }
 
-/** Draw live tracking data visualization */
+/** Draw live tracking data visualization (lower portion) */
 function drawTrackingPreview(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -126,16 +135,17 @@ function drawTrackingPreview(
   const barH = 8 * dpr;
   const gap = 14 * dpr;
   const startX = 16 * dpr;
-  let y = 20 * dpr;
+  const startY = _h * 0.55;
+  let y = startY;
 
   // Title
-  ctx.fillStyle = 'var(--vscode-foreground, #ccc)';
-  ctx.font = `bold ${11 * dpr}px system-ui`;
+  ctx.fillStyle = '#aaa';
+  ctx.font = `bold ${10 * dpr}px system-ui`;
   ctx.textAlign = 'left';
   ctx.fillText(t('empty.trackingPreview'), startX, y);
-  y += gap * 1.5;
+  y += gap * 1.2;
 
-  // Key blend shapes to show
+  // Key blend shapes
   const keys = [
     'eyeBlinkLeft',
     'eyeBlinkRight',
@@ -146,13 +156,13 @@ function drawTrackingPreview(
     'browInnerUp',
   ];
 
-  const labelW = 70 * dpr;
+  const labelW = 65 * dpr;
 
   for (const key of keys) {
     const val = blendShapes[key] ?? 0;
 
     // Label
-    ctx.fillStyle = 'var(--vscode-descriptionForeground, #888)';
+    ctx.fillStyle = '#888';
     ctx.font = `${9 * dpr}px system-ui`;
     ctx.textAlign = 'right';
     const shortLabel = key
@@ -175,19 +185,19 @@ function drawTrackingPreview(
     y += gap;
   }
 
-  // Head rotation indicator (circle with directional dot)
+  // Head rotation indicator
   if (headRotation) {
     const [qx, qy, , qw] = headRotation;
     const yaw = Math.atan2(2 * (qw * qy), 1 - 2 * (qy * qy)) * (180 / Math.PI);
     const pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (qw * qx)))) * (180 / Math.PI);
 
-    const circleR = 30 * dpr;
+    const circleR = 25 * dpr;
     const cx = w - circleR - 20 * dpr;
-    const cy = 60 * dpr;
+    const cy = startY + 40 * dpr;
 
     // Circle outline
     ctx.strokeStyle = 'rgba(128,128,128,0.3)';
-    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineWidth = 1 * dpr;
     ctx.beginPath();
     ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
     ctx.stroke();
@@ -201,7 +211,7 @@ function drawTrackingPreview(
     ctx.lineTo(cx, cy + circleR);
     ctx.stroke();
 
-    // Head direction dot
+    // Direction dot
     const dotX = cx + (yaw / 30) * circleR;
     const dotY = cy + (pitch / 30) * circleR;
     ctx.fillStyle = '#4ade80';
@@ -210,9 +220,9 @@ function drawTrackingPreview(
     ctx.fill();
 
     // Label
-    ctx.fillStyle = 'var(--vscode-descriptionForeground, #888)';
+    ctx.fillStyle = '#888';
     ctx.font = `${9 * dpr}px system-ui`;
     ctx.textAlign = 'center';
-    ctx.fillText(t('empty.headRotation'), cx, cy + circleR + 14 * dpr);
+    ctx.fillText(t('empty.headRotation'), cx, cy + circleR + 12 * dpr);
   }
 }
