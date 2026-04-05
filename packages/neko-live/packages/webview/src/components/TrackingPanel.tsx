@@ -3,8 +3,7 @@ import type { TrackingMode } from '../types/tracking';
 import { vscode } from '../vscode-api';
 
 /**
- * Compact control panel for tracking settings and status.
- * Designed for sidebar layout (vertical, narrow).
+ * Compact control panel for tracking, avatar selection, and recording.
  * Uses inline styles — no Tailwind dependency.
  */
 export function TrackingPanel() {
@@ -12,10 +11,12 @@ export function TrackingPanel() {
     trackingMode,
     isTracking,
     trackingFps,
+    avatarType,
     isAvatarLoaded,
-    showSkeletonOverlay,
+    recordingState,
+    recordingElapsedMs,
+    lastRecordingPath,
     setTrackingMode,
-    toggleSkeletonOverlay,
   } = useLiveStore();
 
   const handleModeChange = (mode: TrackingMode) => {
@@ -24,16 +25,29 @@ export function TrackingPanel() {
   };
 
   const handleToggleTracking = () => {
-    if (isTracking) {
-      vscode.postMessage({ type: 'stopVmcReceiver' });
-    } else {
-      vscode.postMessage({ type: 'startVmcReceiver' });
-    }
+    vscode.postMessage({ type: isTracking ? 'stopVmcReceiver' : 'startVmcReceiver' });
   };
 
   const handleSelectAvatar = () => {
     vscode.postMessage({ type: 'selectAvatar' });
   };
+
+  const handleToggleRecording = () => {
+    if (recordingState === 'recording') {
+      vscode.postMessage({ type: 'stopRecording' });
+    } else {
+      vscode.postMessage({ type: 'startRecording', includeAudio: true });
+    }
+  };
+
+  const formatTime = (ms: number): string => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const isRecording = recordingState === 'recording';
 
   return (
     <div
@@ -62,14 +76,31 @@ export function TrackingPanel() {
         </span>
 
         {isAvatarLoaded && (
-          <span style={{ marginLeft: 'auto', color: 'var(--vscode-descriptionForeground)' }}>
-            Avatar loaded
+          <span style={{ color: 'var(--vscode-descriptionForeground)', marginLeft: 4 }}>
+            {avatarType === 'puppet' ? '2D' : '3D'}
+          </span>
+        )}
+
+        {isRecording && (
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: '#ef4444',
+                animation: 'blink 1s infinite',
+              }}
+            />
+            <span style={{ color: '#ef4444', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+              {formatTime(recordingElapsedMs)}
+            </span>
           </span>
         )}
       </div>
 
       {/* Controls row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
         {/* Tracking mode */}
         <select
           value={trackingMode}
@@ -85,22 +116,18 @@ export function TrackingPanel() {
         >
           <option value="vmc">VMC</option>
           <option value="mediapipe" disabled>
-            MediaPipe (P5.1.3)
+            MediaPipe
           </option>
           <option value="hybrid" disabled>
-            Hybrid (P5.1.3)
+            Hybrid
           </option>
         </select>
 
-        {/* Start/Stop */}
+        {/* Start/Stop tracking */}
         <button
           onClick={handleToggleTracking}
           style={{
-            padding: '2px 8px',
-            fontSize: 11,
-            borderRadius: 3,
-            border: 'none',
-            cursor: 'pointer',
+            ...btnStyle,
             background: isTracking
               ? 'var(--vscode-statusBarItem-errorBackground, #c53030)'
               : 'var(--vscode-button-background)',
@@ -116,11 +143,7 @@ export function TrackingPanel() {
         <button
           onClick={handleSelectAvatar}
           style={{
-            padding: '2px 8px',
-            fontSize: 11,
-            borderRadius: 3,
-            border: 'none',
-            cursor: 'pointer',
+            ...btnStyle,
             background: 'var(--vscode-button-secondaryBackground)',
             color: 'var(--vscode-button-secondaryForeground)',
           }}
@@ -128,27 +151,44 @@ export function TrackingPanel() {
           Avatar
         </button>
 
-        {/* Skeleton overlay toggle */}
-        <label
+        {/* Record */}
+        <button
+          onClick={handleToggleRecording}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            marginLeft: 'auto',
-            fontSize: 11,
-            cursor: 'pointer',
-            color: 'var(--vscode-descriptionForeground)',
+            ...btnStyle,
+            background: isRecording ? '#dc2626' : 'var(--vscode-button-secondaryBackground)',
+            color: isRecording ? '#fff' : 'var(--vscode-button-secondaryForeground)',
           }}
         >
-          <input
-            type="checkbox"
-            checked={showSkeletonOverlay}
-            onChange={toggleSkeletonOverlay}
-            style={{ width: 12, height: 12 }}
-          />
-          Bones
-        </label>
+          {isRecording ? 'Stop Rec' : 'Rec'}
+        </button>
       </div>
+
+      {/* Last recording path */}
+      {lastRecordingPath && !isRecording && (
+        <div
+          style={{
+            fontSize: 10,
+            color: 'var(--vscode-descriptionForeground)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Saved: {lastRecordingPath.split('/').pop()}
+        </div>
+      )}
+
+      {/* Blink animation for recording indicator */}
+      <style>{`@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style>
     </div>
   );
 }
+
+const btnStyle: React.CSSProperties = {
+  padding: '2px 8px',
+  fontSize: 11,
+  borderRadius: 3,
+  border: 'none',
+  cursor: 'pointer',
+};

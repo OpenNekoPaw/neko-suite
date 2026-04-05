@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { TrackingData, TrackingMode } from '../types/tracking';
+import type {
+  TrackingData,
+  TrackingMode,
+  AvatarType,
+  PuppetDelta,
+  PuppetParameter,
+  RecordingState,
+} from '../types/tracking';
 
 export interface LiveState {
   // ─── Tracking ─────────────────────────────────────────────────────────
@@ -10,7 +17,17 @@ export interface LiveState {
 
   // ─── Avatar ───────────────────────────────────────────────────────────
   avatarUrl: string | null;
+  avatarType: AvatarType;
   isAvatarLoaded: boolean;
+
+  // ─── Puppet ───────────────────────────────────────────────────────────
+  puppetParameters: PuppetParameter[];
+  currentPuppetDelta: PuppetDelta | null;
+
+  // ─── Recording ────────────────────────────────────────────────────────
+  recordingState: RecordingState;
+  recordingElapsedMs: number;
+  lastRecordingPath: string | null;
 
   // ─── UI ───────────────────────────────────────────────────────────────
   showSkeletonOverlay: boolean;
@@ -19,8 +36,13 @@ export interface LiveState {
   setTrackingMode: (mode: TrackingMode) => void;
   setIsTracking: (active: boolean) => void;
   applyTrackingData: (data: TrackingData) => void;
-  setAvatarUrl: (url: string | null) => void;
+  setAvatarUrl: (url: string | null, type: AvatarType) => void;
   setAvatarLoaded: (loaded: boolean) => void;
+  setPuppetParameters: (params: PuppetParameter[]) => void;
+  applyPuppetDelta: (delta: PuppetDelta) => void;
+  setRecordingState: (state: RecordingState) => void;
+  setRecordingElapsed: (ms: number) => void;
+  setLastRecordingPath: (path: string | null) => void;
   toggleSkeletonOverlay: () => void;
 }
 
@@ -35,7 +57,15 @@ export const useLiveStore = create<LiveState>((set) => ({
   currentTrackingData: null,
 
   avatarUrl: null,
+  avatarType: 'vrm',
   isAvatarLoaded: false,
+
+  puppetParameters: [],
+  currentPuppetDelta: null,
+
+  recordingState: 'idle',
+  recordingElapsedMs: 0,
+  lastRecordingPath: null,
 
   showSkeletonOverlay: false,
 
@@ -44,14 +74,13 @@ export const useLiveStore = create<LiveState>((set) => ({
     if (!active) {
       frameTimestamps = [];
     }
-    set({ isTracking: active, trackingFps: active ? 0 : 0 });
+    set({ isTracking: active, trackingFps: 0 });
   },
 
   applyTrackingData: (data) => {
     const now = performance.now();
     frameTimestamps.push(now);
 
-    // Remove timestamps older than the window
     const cutoff = now - FPS_WINDOW_MS;
     while (frameTimestamps.length > 0 && frameTimestamps[0]! < cutoff) {
       frameTimestamps.shift();
@@ -63,7 +92,12 @@ export const useLiveStore = create<LiveState>((set) => ({
     });
   },
 
-  setAvatarUrl: (url) => set({ avatarUrl: url, isAvatarLoaded: false }),
+  setAvatarUrl: (url, type) => set({ avatarUrl: url, avatarType: type, isAvatarLoaded: false }),
   setAvatarLoaded: (loaded) => set({ isAvatarLoaded: loaded }),
+  setPuppetParameters: (params) => set({ puppetParameters: params }),
+  applyPuppetDelta: (delta) => set({ currentPuppetDelta: delta }),
+  setRecordingState: (state) => set({ recordingState: state }),
+  setRecordingElapsed: (ms) => set({ recordingElapsedMs: ms }),
+  setLastRecordingPath: (path) => set({ lastRecordingPath: path }),
   toggleSkeletonOverlay: () => set((s) => ({ showSkeletonOverlay: !s.showSkeletonOverlay })),
 }));

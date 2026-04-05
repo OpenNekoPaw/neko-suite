@@ -23,9 +23,41 @@ export interface BoneTransform {
 
 export type TrackingMode = 'mediapipe' | 'vmc' | 'hybrid';
 
+/** Avatar model type — determines renderer */
+export type AvatarType = 'vrm' | 'puppet';
+
 /** Camera device descriptor (for future P5.1.2) */
 export interface CameraDevice {
   id: string;
   name: string;
   isDefault: boolean;
 }
+
+/** Puppet mesh data for 2D rendering */
+export interface PuppetMesh {
+  node_id: string;
+  vertices: [number, number][];
+  blend_mode: string;
+  opacity: number;
+  z_order: number;
+  texture_index?: number;
+}
+
+/** Puppet delta (frame update from engine stream) */
+export interface PuppetDelta {
+  deformed_meshes: PuppetMesh[];
+  animation_time_ms?: number;
+  animation_playing?: boolean;
+}
+
+/** Puppet parameter info */
+export interface PuppetParameter {
+  name: string;
+  min: number;
+  max: number;
+  default: number;
+  current: number;
+}
+
+/** Recording state */
+export type RecordingState = 'idle' | 'recording' | 'stopping';

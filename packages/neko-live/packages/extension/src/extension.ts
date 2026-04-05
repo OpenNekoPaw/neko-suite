@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
       webviewOptions: { retainContextWhenHidden: true },
     }),
 
-    // Commands
+    // Tracking commands
     vscode.commands.registerCommand('neko.live.start', () => {
       provider.startVmc();
     }),
@@ -29,9 +29,10 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage('Calibrating tracking...');
       // TODO(P1): implement calibration system
     }),
+
+    // Recording commands
     vscode.commands.registerCommand('neko.live.startRecording', () => {
-      vscode.window.showInformationMessage('Recording started');
-      // TODO(P1): implement recording pipeline (Phase 5.2)
+      provider.startRecording(true);
     }),
     vscode.commands.registerCommand('neko.live.startStreaming', () => {
       vscode.window.showInformationMessage('Streaming started');
