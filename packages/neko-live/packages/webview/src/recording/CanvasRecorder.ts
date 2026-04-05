@@ -2,7 +2,7 @@
  * CanvasRecorder — captures the viewport canvas as WebM video.
  *
  * Uses canvas.captureStream() + MediaRecorder API, available in
- * VSCode's Electron/Chromium webview without restrictions.
+ * VSCode's Electron/Chromium webview.
  *
  * The recorded blob is sent back to the extension host as a data URL
  * for saving to disk (webview has no fs access).
@@ -24,26 +24,44 @@ export class CanvasRecorder {
 
   /**
    * Start recording the given canvas element.
-   * Finds the canvas in the viewport container automatically.
+   * Returns an error message on failure, or undefined on success.
    */
-  start(canvas: HTMLCanvasElement, options: CanvasRecorderOptions = {}): boolean {
-    if (this._isRecording) return false;
+  start(canvas: HTMLCanvasElement, options: CanvasRecorderOptions = {}): string | undefined {
+    if (this._isRecording) return 'Already recording';
 
     const fps = options.fps ?? 30;
-    const stream = canvas.captureStream(fps);
 
-    // Check for supported codec
+    // Check API availability
+    if (typeof canvas.captureStream !== 'function') {
+      return 'canvas.captureStream not available in this environment';
+    }
+
+    let stream: MediaStream;
+    try {
+      stream = canvas.captureStream(fps);
+    } catch (err) {
+      return `captureStream failed: ${(err as Error).message}`;
+    }
+
+    if (!stream.getVideoTracks().length) {
+      return 'captureStream returned no video tracks';
+    }
+
     const mimeType = getSupportedMimeType();
     if (!mimeType) {
-      console.error('[CanvasRecorder] No supported video MIME type');
-      return false;
+      return 'No supported video MIME type (need WebM VP8/VP9)';
     }
 
     this.chunks = [];
-    this.mediaRecorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: options.videoBitsPerSecond ?? 2_500_000,
-    });
+
+    try {
+      this.mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: options.videoBitsPerSecond ?? 2_500_000,
+      });
+    } catch (err) {
+      return `MediaRecorder creation failed: ${(err as Error).message}`;
+    }
 
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -51,9 +69,9 @@ export class CanvasRecorder {
       }
     };
 
-    this.mediaRecorder.start(1000); // Request data every 1s
+    this.mediaRecorder.start(1000);
     this._isRecording = true;
-    return true;
+    return undefined;
   }
 
   /**

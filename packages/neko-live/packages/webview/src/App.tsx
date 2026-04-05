@@ -45,12 +45,15 @@ export function App() {
   const startCanvasRecording = useCallback(() => {
     const canvas = findCanvas();
     if (!canvas) {
-      console.warn('[App] No canvas found for recording');
+      console.warn('[CanvasRecorder] No canvas element found in viewport');
       return;
     }
-    const started = canvasRecorder.start(canvas);
-    if (!started) {
-      console.error('[App] Failed to start canvas recording');
+    console.info(
+      `[CanvasRecorder] Found canvas ${canvas.width}x${canvas.height}, starting capture...`,
+    );
+    const error = canvasRecorder.start(canvas);
+    if (error) {
+      console.error(`[CanvasRecorder] ${error}`);
     }
   }, [findCanvas]);
 
