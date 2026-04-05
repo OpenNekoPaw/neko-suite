@@ -12,6 +12,7 @@ import {
   getUnresolvedVariableHtml,
 } from './documentProviderHelper';
 import { previewFileServer, UnresolvedPathVariableError } from './PreviewFileServer';
+import type { StatusBarManager } from '../../ui/StatusBarManager';
 
 export class PdfPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.pdfPreview';
@@ -19,7 +20,10 @@ export class PdfPreviewProvider implements vscode.CustomReadonlyEditorProvider, 
   /** fsPath → registered token (for cleanup on panel dispose) */
   private readonly tokens = new Map<string, string>();
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _statusBar?: StatusBarManager,
+  ) {}
 
   async openCustomDocument(
     uri: vscode.Uri,
@@ -45,6 +49,7 @@ export class PdfPreviewProvider implements vscode.CustomReadonlyEditorProvider, 
     });
 
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'pdf', {
+      statusBar: this._statusBar,
       onReady: async () => {
         try {
           const { url, token } = await previewFileServer.registerFile(filePath);

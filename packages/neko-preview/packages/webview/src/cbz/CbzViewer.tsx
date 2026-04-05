@@ -13,6 +13,7 @@ import { type Entry, BlobReader, BlobWriter, ZipReader, HttpReader } from '@zip.
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
+import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
 import { useTranslation } from '../i18n/I18nContext';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
@@ -410,6 +411,12 @@ export const CbzViewer: FC = () => {
     }
   }, []);
 
+  const contextActions = useDocumentContextActions({
+    hasSelection: !!selectionRect && !isSelecting,
+    onSendSelectionToAi: selectionRect ? captureRegion : undefined,
+    onSendPageToAi: sendFullPage,
+  });
+
   if (error) {
     return (
       <div
@@ -443,200 +450,202 @@ export const CbzViewer: FC = () => {
     : null;
 
   return (
-    <div
-      className="flex h-screen flex-col"
-      style={{ background: 'var(--vscode-editor-background)' }}
-    >
-      {/* Toolbar */}
+    <DocumentContextMenu actions={contextActions}>
       <div
-        className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
-        style={{
-          borderColor: 'var(--vscode-panel-border)',
-          color: 'var(--vscode-foreground)',
-          background: 'var(--vscode-sideBar-background)',
-        }}
+        className="flex h-screen flex-col"
+        style={{ background: 'var(--vscode-editor-background)' }}
       >
-        {!scrollMode && (
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage <= 0}
-            className="px-2 py-0.5 disabled:opacity-30"
-          >
-            &lt;
-          </button>
-        )}
-        <span>
-          {t('preview.document.pageOf', {
-            current: String(currentPage + 1),
-            total: String(totalPages),
-          })}
-        </span>
-        {!scrollMode && (
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= totalPages - 1}
-            className="px-2 py-0.5 disabled:opacity-30"
-          >
-            &gt;
-          </button>
-        )}
-        <span className="mx-2">|</span>
-        <button
-          onClick={sendFullPage}
-          className="rounded px-2 py-0.5"
-          style={{
-            background: 'var(--vscode-button-secondaryBackground)',
-            color: 'var(--vscode-button-secondaryForeground)',
-          }}
-          title={t('preview.document.sendPageToAi')}
-        >
-          {t('preview.document.sendPageToAi')}
-        </button>
-        <span className="mx-1 opacity-20">|</span>
-        {/* Scroll / page mode toggle */}
-        <button
-          onClick={toggleScrollMode}
-          className="rounded px-2 py-0.5"
-          title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
-          style={{
-            background: scrollMode
-              ? 'var(--vscode-button-background)'
-              : 'var(--vscode-button-secondaryBackground)',
-            color: scrollMode
-              ? 'var(--vscode-button-foreground)'
-              : 'var(--vscode-button-secondaryForeground)',
-          }}
-        >
-          {scrollMode ? '≡' : '⊡'}
-        </button>
-      </div>
-
-      {scrollMode ? (
-        /* Waterfall mode */
+        {/* Toolbar */}
         <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-auto"
-          style={{ background: 'var(--vscode-editor-background)' }}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
+          style={{
+            borderColor: 'var(--vscode-panel-border)',
+            color: 'var(--vscode-foreground)',
+            background: 'var(--vscode-sideBar-background)',
+          }}
         >
-          {imageEntries.map((_, idx) => {
-            const blobUrl = pageCache.get(idx);
-            const height = imageHeights.get(idx) ?? DEFAULT_PAGE_HEIGHT;
-            return (
-              <div
-                key={idx}
-                ref={(el) => setPageRef(idx, el)}
-                data-idx={idx}
-                className="relative mx-auto select-none"
-                style={{
-                  cursor: 'crosshair',
-                  minHeight: blobUrl ? undefined : `${height}px`,
-                  maxWidth: '100%',
-                  marginBottom: '4px',
-                }}
-                onMouseDown={(e) => handleMouseDown(e, idx)}
-              >
-                {blobUrl ? (
-                  <img
-                    ref={(el) => setWaterfallImgRef(idx, el)}
-                    src={blobUrl}
-                    alt={`Page ${idx + 1}`}
-                    className="mx-auto block max-w-full"
-                    draggable={false}
-                    onLoad={(e) => handleImageLoad(idx, e)}
-                  />
-                ) : (
-                  <div
-                    className="flex items-center justify-center text-sm"
-                    style={{
-                      height: `${height}px`,
-                      color: 'var(--vscode-descriptionForeground)',
-                    }}
-                  >
-                    {t('preview.cbz.loading')}
-                  </div>
-                )}
-                {/* Selection overlay for this page */}
-                {selRectStyle && selectionPageIdx === idx && (
-                  <div
-                    className="pointer-events-none absolute border-2 border-dashed"
-                    style={{
-                      ...selRectStyle,
-                      borderColor: 'var(--vscode-focusBorder)',
-                      backgroundColor: 'rgba(0, 120, 215, 0.15)',
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* Single-page mode */
-        <div className="flex flex-1 items-center justify-center overflow-auto p-4">
-          <div
-            className="relative select-none"
-            onMouseDown={(e) => handleMouseDown(e)}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            style={{ cursor: 'crosshair' }}
-          >
-            {currentUrl ? (
-              <img
-                ref={imgRef}
-                src={currentUrl}
-                alt={`Page ${currentPage + 1}`}
-                className="max-h-full max-w-full object-contain"
-                draggable={false}
-              />
-            ) : (
-              <div
-                className="flex h-48 w-48 items-center justify-center text-sm"
-                style={{ color: 'var(--vscode-descriptionForeground)' }}
-              >
-                {t('preview.cbz.loading')}
-              </div>
-            )}
-            {/* Selection overlay */}
-            {selRectStyle && !scrollMode && (
-              <div
-                className="pointer-events-none absolute border-2 border-dashed"
-                style={{
-                  ...selRectStyle,
-                  borderColor: 'var(--vscode-focusBorder)',
-                  backgroundColor: 'rgba(0, 120, 215, 0.15)',
-                }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Region capture FAB */}
-      {selectionRect &&
-        !isSelecting &&
-        Math.abs(selectionRect.endX - selectionRect.startX) > 10 && (
+          {!scrollMode && (
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage <= 0}
+              className="px-2 py-0.5 disabled:opacity-30"
+            >
+              &lt;
+            </button>
+          )}
+          <span>
+            {t('preview.document.pageOf', {
+              current: String(currentPage + 1),
+              total: String(totalPages),
+            })}
+          </span>
+          {!scrollMode && (
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+              className="px-2 py-0.5 disabled:opacity-30"
+            >
+              &gt;
+            </button>
+          )}
+          <span className="mx-2">|</span>
           <button
-            onClick={captureRegion}
-            className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg"
+            onClick={sendFullPage}
+            className="rounded px-2 py-0.5"
             style={{
-              backgroundColor: 'var(--vscode-button-background)',
-              color: 'var(--vscode-button-foreground)',
+              background: 'var(--vscode-button-secondaryBackground)',
+              color: 'var(--vscode-button-secondaryForeground)',
+            }}
+            title={t('preview.document.sendPageToAi')}
+          >
+            {t('preview.document.sendPageToAi')}
+          </button>
+          <span className="mx-1 opacity-20">|</span>
+          {/* Scroll / page mode toggle */}
+          <button
+            onClick={toggleScrollMode}
+            className="rounded px-2 py-0.5"
+            title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+            style={{
+              background: scrollMode
+                ? 'var(--vscode-button-background)'
+                : 'var(--vscode-button-secondaryBackground)',
+              color: scrollMode
+                ? 'var(--vscode-button-foreground)'
+                : 'var(--vscode-button-secondaryForeground)',
             }}
           >
-            {t('preview.document.sendToAi')}
+            {scrollMode ? '≡' : '⊡'}
           </button>
+        </div>
+
+        {scrollMode ? (
+          /* Waterfall mode */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto"
+            style={{ background: 'var(--vscode-editor-background)' }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+          >
+            {imageEntries.map((_, idx) => {
+              const blobUrl = pageCache.get(idx);
+              const height = imageHeights.get(idx) ?? DEFAULT_PAGE_HEIGHT;
+              return (
+                <div
+                  key={idx}
+                  ref={(el) => setPageRef(idx, el)}
+                  data-idx={idx}
+                  className="relative mx-auto select-none"
+                  style={{
+                    cursor: 'crosshair',
+                    minHeight: blobUrl ? undefined : `${height}px`,
+                    maxWidth: '100%',
+                    marginBottom: '4px',
+                  }}
+                  onMouseDown={(e) => handleMouseDown(e, idx)}
+                >
+                  {blobUrl ? (
+                    <img
+                      ref={(el) => setWaterfallImgRef(idx, el)}
+                      src={blobUrl}
+                      alt={`Page ${idx + 1}`}
+                      className="mx-auto block max-w-full"
+                      draggable={false}
+                      onLoad={(e) => handleImageLoad(idx, e)}
+                    />
+                  ) : (
+                    <div
+                      className="flex items-center justify-center text-sm"
+                      style={{
+                        height: `${height}px`,
+                        color: 'var(--vscode-descriptionForeground)',
+                      }}
+                    >
+                      {t('preview.cbz.loading')}
+                    </div>
+                  )}
+                  {/* Selection overlay for this page */}
+                  {selRectStyle && selectionPageIdx === idx && (
+                    <div
+                      className="pointer-events-none absolute border-2 border-dashed"
+                      style={{
+                        ...selRectStyle,
+                        borderColor: 'var(--vscode-focusBorder)',
+                        backgroundColor: 'rgba(0, 120, 215, 0.15)',
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Single-page mode */
+          <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+            <div
+              className="relative select-none"
+              onMouseDown={(e) => handleMouseDown(e)}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              style={{ cursor: 'crosshair' }}
+            >
+              {currentUrl ? (
+                <img
+                  ref={imgRef}
+                  src={currentUrl}
+                  alt={`Page ${currentPage + 1}`}
+                  className="max-h-full max-w-full object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <div
+                  className="flex h-48 w-48 items-center justify-center text-sm"
+                  style={{ color: 'var(--vscode-descriptionForeground)' }}
+                >
+                  {t('preview.cbz.loading')}
+                </div>
+              )}
+              {/* Selection overlay */}
+              {selRectStyle && !scrollMode && (
+                <div
+                  className="pointer-events-none absolute border-2 border-dashed"
+                  style={{
+                    ...selRectStyle,
+                    borderColor: 'var(--vscode-focusBorder)',
+                    backgroundColor: 'rgba(0, 120, 215, 0.15)',
+                  }}
+                />
+              )}
+            </div>
+          </div>
         )}
 
-      {/* Text selection FAB (future: OCR on CBZ) */}
-      <DocumentSelectionFab
-        selection={selection}
-        onSendToAi={sendToAi}
-        label={t('preview.document.sendToAi')}
-      />
-      {/* Hidden canvas for region capture */}
-      <canvas ref={canvasRef} className="hidden" />
-    </div>
+        {/* Region capture FAB */}
+        {selectionRect &&
+          !isSelecting &&
+          Math.abs(selectionRect.endX - selectionRect.startX) > 10 && (
+            <button
+              onClick={captureRegion}
+              className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-2 text-sm font-medium shadow-lg"
+              style={{
+                backgroundColor: 'var(--vscode-button-background)',
+                color: 'var(--vscode-button-foreground)',
+              }}
+            >
+              {t('preview.document.sendToAi')}
+            </button>
+          )}
+
+        {/* Text selection FAB (future: OCR on CBZ) */}
+        <DocumentSelectionFab
+          selection={selection}
+          onSendToAi={sendToAi}
+          label={t('preview.document.sendToAi')}
+        />
+        {/* Hidden canvas for region capture */}
+        <canvas ref={canvasRef} className="hidden" />
+      </div>
+    </DocumentContextMenu>
   );
 };

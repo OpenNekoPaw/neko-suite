@@ -9,6 +9,7 @@ import { renderAsync } from 'docx-preview';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
+import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
 import { useTranslation } from '../i18n/I18nContext';
 
 export const DocxViewer: FC = () => {
@@ -92,6 +93,11 @@ export const DocxViewer: FC = () => {
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.1, 3)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.1, 0.5)), []);
 
+  const contextActions = useDocumentContextActions({
+    hasSelection: !!selection,
+    onSendSelectionToAi: selection ? sendToAi : undefined,
+  });
+
   if (error) {
     return (
       <div
@@ -104,58 +110,60 @@ export const DocxViewer: FC = () => {
   }
 
   return (
-    <div
-      className="flex h-screen flex-col"
-      style={{ background: 'var(--vscode-editor-background)' }}
-    >
-      {/* Toolbar */}
+    <DocumentContextMenu actions={contextActions}>
       <div
-        className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
-        style={{
-          borderColor: 'var(--vscode-panel-border)',
-          color: 'var(--vscode-foreground)',
-          background: 'var(--vscode-sideBar-background)',
-        }}
+        className="flex h-screen flex-col"
+        style={{ background: 'var(--vscode-editor-background)' }}
       >
-        <button onClick={zoomOut} className="px-2 py-0.5" title={t('preview.document.zoomOut')}>
-          -
-        </button>
-        <span>{Math.round(scale * 100)}%</span>
-        <button onClick={zoomIn} className="px-2 py-0.5" title={t('preview.document.zoomIn')}>
-          +
-        </button>
-      </div>
-
-      {/* Loading overlay */}
-      {loading && (
+        {/* Toolbar */}
         <div
-          className="flex flex-1 items-center justify-center"
-          style={{ color: 'var(--vscode-foreground)' }}
+          className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
+          style={{
+            borderColor: 'var(--vscode-panel-border)',
+            color: 'var(--vscode-foreground)',
+            background: 'var(--vscode-sideBar-background)',
+          }}
         >
-          {t('preview.docx.loading')}
+          <button onClick={zoomOut} className="px-2 py-0.5" title={t('preview.document.zoomOut')}>
+            -
+          </button>
+          <span>{Math.round(scale * 100)}%</span>
+          <button onClick={zoomIn} className="px-2 py-0.5" title={t('preview.document.zoomIn')}>
+            +
+          </button>
         </div>
-      )}
 
-      {/* Style container (docx-preview injects styles here) */}
-      <div ref={styleContainerRef} style={{ display: 'none' }} />
+        {/* Loading overlay */}
+        {loading && (
+          <div
+            className="flex flex-1 items-center justify-center"
+            style={{ color: 'var(--vscode-foreground)' }}
+          >
+            {t('preview.docx.loading')}
+          </div>
+        )}
 
-      {/* DOCX content */}
-      <div
-        className="flex-1 overflow-auto"
-        style={{
-          display: loading ? 'none' : 'block',
-          transform: `scale(${scale})`,
-          transformOrigin: 'top center',
-        }}
-      >
-        <div ref={containerRef} className="mx-auto" />
+        {/* Style container (docx-preview injects styles here) */}
+        <div ref={styleContainerRef} style={{ display: 'none' }} />
+
+        {/* DOCX content */}
+        <div
+          className="flex-1 overflow-auto"
+          style={{
+            display: loading ? 'none' : 'block',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top center',
+          }}
+        >
+          <div ref={containerRef} className="mx-auto" />
+        </div>
+
+        <DocumentSelectionFab
+          selection={selection}
+          onSendToAi={sendToAi}
+          label={t('preview.document.sendToAi')}
+        />
       </div>
-
-      <DocumentSelectionFab
-        selection={selection}
-        onSendToAi={sendToAi}
-        label={t('preview.document.sendToAi')}
-      />
-    </div>
+    </DocumentContextMenu>
   );
 };

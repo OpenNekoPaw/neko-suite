@@ -9,6 +9,7 @@ import { TextLayer } from 'pdfjs-dist';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
+import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
 import { useTranslation } from '../i18n/I18nContext';
 import { getLogger } from '../utils/logger';
 
@@ -87,6 +88,10 @@ export const PdfViewer: FC = () => {
         setCurrentPage(1);
         await computeViewports(pdf, scale);
         setLoading(false);
+        postMessage({
+          type: 'document:statusUpdate',
+          payload: { pageCount: pdf.numPages, currentPage: 1 },
+        } as never);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
@@ -386,6 +391,11 @@ export const PdfViewer: FC = () => {
     }
   }, []);
 
+  const contextActions = useDocumentContextActions({
+    hasSelection: !!selection,
+    onSendSelectionToAi: selection ? sendToAi : undefined,
+  });
+
   if (error) {
     return (
       <div
@@ -409,108 +419,113 @@ export const PdfViewer: FC = () => {
   }
 
   return (
-    <div
-      className="flex h-screen flex-col"
-      style={{ background: 'var(--vscode-editor-background)' }}
-    >
-      {/* Toolbar */}
+    <DocumentContextMenu actions={contextActions}>
       <div
-        className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
-        style={{
-          borderColor: 'var(--vscode-panel-border)',
-          color: 'var(--vscode-foreground)',
-          background: 'var(--vscode-sideBar-background)',
-        }}
+        className="flex h-screen flex-col"
+        style={{ background: 'var(--vscode-editor-background)' }}
       >
-        {!scrollMode && (
-          <>
-            <button
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1}
-              className="px-2 py-0.5 disabled:opacity-30"
-            >
-              &lt;
-            </button>
-          </>
-        )}
-        <span>
-          {t('preview.document.pageOf', { current: String(currentPage), total: String(numPages) })}
-        </span>
-        {!scrollMode && (
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage >= numPages}
-            className="px-2 py-0.5 disabled:opacity-30"
-          >
-            &gt;
-          </button>
-        )}
-        <span className="mx-2">|</span>
-        <button onClick={zoomOut} className="px-2 py-0.5" title={t('preview.document.zoomOut')}>
-          -
-        </button>
-        <span>{Math.round(scale * 100)}%</span>
-        <button onClick={zoomIn} className="px-2 py-0.5" title={t('preview.document.zoomIn')}>
-          +
-        </button>
-        <span className="mx-1 opacity-20">|</span>
-        {/* Scroll / page mode toggle */}
-        <button
-          onClick={toggleScrollMode}
-          className="rounded px-2 py-0.5"
-          title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+        {/* Toolbar */}
+        <div
+          className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
           style={{
-            background: scrollMode
-              ? 'var(--vscode-button-background)'
-              : 'var(--vscode-button-secondaryBackground)',
-            color: scrollMode
-              ? 'var(--vscode-button-foreground)'
-              : 'var(--vscode-button-secondaryForeground)',
+            borderColor: 'var(--vscode-panel-border)',
+            color: 'var(--vscode-foreground)',
+            background: 'var(--vscode-sideBar-background)',
           }}
         >
-          {scrollMode ? '≡' : '⊡'}
-        </button>
+          {!scrollMode && (
+            <>
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="px-2 py-0.5 disabled:opacity-30"
+              >
+                &lt;
+              </button>
+            </>
+          )}
+          <span>
+            {t('preview.document.pageOf', {
+              current: String(currentPage),
+              total: String(numPages),
+            })}
+          </span>
+          {!scrollMode && (
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= numPages}
+              className="px-2 py-0.5 disabled:opacity-30"
+            >
+              &gt;
+            </button>
+          )}
+          <span className="mx-2">|</span>
+          <button onClick={zoomOut} className="px-2 py-0.5" title={t('preview.document.zoomOut')}>
+            -
+          </button>
+          <span>{Math.round(scale * 100)}%</span>
+          <button onClick={zoomIn} className="px-2 py-0.5" title={t('preview.document.zoomIn')}>
+            +
+          </button>
+          <span className="mx-1 opacity-20">|</span>
+          {/* Scroll / page mode toggle */}
+          <button
+            onClick={toggleScrollMode}
+            className="rounded px-2 py-0.5"
+            title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+            style={{
+              background: scrollMode
+                ? 'var(--vscode-button-background)'
+                : 'var(--vscode-button-secondaryBackground)',
+              color: scrollMode
+                ? 'var(--vscode-button-foreground)'
+                : 'var(--vscode-button-secondaryForeground)',
+            }}
+          >
+            {scrollMode ? '≡' : '⊡'}
+          </button>
+        </div>
+
+        {/* PDF content */}
+        {scrollMode ? (
+          /* Waterfall mode */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto p-4"
+            style={{ background: 'var(--vscode-editor-background)' }}
+          >
+            {pageViewports.map((vp, i) => (
+              <div
+                key={i}
+                ref={(el) => setPageRef(i + 1, el)}
+                data-page={i + 1}
+                style={{
+                  width: `${vp.width}px`,
+                  height: `${vp.height}px`,
+                  margin: '8px auto',
+                  background: 'var(--vscode-editor-background)',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          /* Single-page mode */
+          <div
+            className="flex-1 overflow-auto p-4"
+            style={{ background: 'var(--vscode-editor-background)' }}
+          >
+            <div ref={singlePageContainerRef} />
+          </div>
+        )}
+
+        {/* Selection FAB */}
+        <DocumentSelectionFab
+          selection={selection}
+          onSendToAi={sendToAi}
+          label={t('preview.document.sendToAi')}
+        />
       </div>
-
-      {/* PDF content */}
-      {scrollMode ? (
-        /* Waterfall mode */
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-auto p-4"
-          style={{ background: 'var(--vscode-editor-background)' }}
-        >
-          {pageViewports.map((vp, i) => (
-            <div
-              key={i}
-              ref={(el) => setPageRef(i + 1, el)}
-              data-page={i + 1}
-              style={{
-                width: `${vp.width}px`,
-                height: `${vp.height}px`,
-                margin: '8px auto',
-                background: 'var(--vscode-editor-background)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        /* Single-page mode */
-        <div
-          className="flex-1 overflow-auto p-4"
-          style={{ background: 'var(--vscode-editor-background)' }}
-        >
-          <div ref={singlePageContainerRef} />
-        </div>
-      )}
-
-      {/* Selection FAB */}
-      <DocumentSelectionFab
-        selection={selection}
-        onSendToAi={sendToAi}
-        label={t('preview.document.sendToAi')}
-      />
-    </div>
+    </DocumentContextMenu>
   );
 };

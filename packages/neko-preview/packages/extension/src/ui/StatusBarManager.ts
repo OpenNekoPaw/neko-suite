@@ -19,11 +19,25 @@ export interface StatusBarMediaInfo {
   duration: number;
 }
 
+export interface StatusBarDocumentInfo {
+  fileName: string;
+  format: string;
+  /** Total pages (PDF/CBZ) or chapter count (EPUB) */
+  pageCount?: number;
+  /** Current page number */
+  currentPage?: number;
+  /** File size in bytes */
+  fileSize?: number;
+  /** Zoom percentage */
+  zoom?: number;
+}
+
 type PlaybackState = 'playing' | 'paused' | 'stopped';
 
 export class StatusBarManager implements vscode.Disposable {
   private readonly _statusItem: vscode.StatusBarItem;
   private _mediaInfo: StatusBarMediaInfo | null = null;
+  private _documentInfo: StatusBarDocumentInfo | null = null;
   private _playbackState: PlaybackState = 'stopped';
   private _currentTime = 0;
 
@@ -37,15 +51,38 @@ export class StatusBarManager implements vscode.Disposable {
 
   show(info: StatusBarMediaInfo): void {
     this._mediaInfo = info;
+    this._documentInfo = null;
     this._playbackState = 'stopped';
     this._currentTime = 0;
     this.render();
     this._statusItem.show();
   }
 
+  showDocument(info: StatusBarDocumentInfo): void {
+    this._documentInfo = info;
+    this._mediaInfo = null;
+    this.renderDocument();
+    this._statusItem.show();
+  }
+
+  updateDocumentPage(currentPage: number): void {
+    if (this._documentInfo) {
+      this._documentInfo.currentPage = currentPage;
+      this.renderDocument();
+    }
+  }
+
+  updateDocumentZoom(zoom: number): void {
+    if (this._documentInfo) {
+      this._documentInfo.zoom = zoom;
+      this.renderDocument();
+    }
+  }
+
   hide(): void {
     this._statusItem.hide();
     this._mediaInfo = null;
+    this._documentInfo = null;
   }
 
   updatePlayback(state: PlaybackState, currentTime: number): void {
@@ -81,7 +118,8 @@ export class StatusBarManager implements vscode.Disposable {
   }
 
   private buildDetails(): string {
-    const info = this._mediaInfo!;
+    const info = this._mediaInfo;
+    if (!info) return 'Media';
     const parts: string[] = [];
 
     // Video info
@@ -117,6 +155,52 @@ export class StatusBarManager implements vscode.Disposable {
       return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
     return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  private renderDocument(): void {
+    if (!this._documentInfo) return;
+    const { fileName, format, pageCount, currentPage, fileSize, zoom } = this._documentInfo;
+
+    const icon = this.getDocumentIcon(format);
+    const parts: string[] = [format.toUpperCase()];
+
+    if (currentPage != null && pageCount != null) {
+      parts.push(`${currentPage} / ${pageCount}`);
+    } else if (pageCount != null) {
+      parts.push(`${pageCount} pages`);
+    }
+
+    if (fileSize != null) {
+      parts.push(this.formatFileSize(fileSize));
+    }
+
+    if (zoom != null) {
+      parts.push(`${Math.round(zoom)}%`);
+    }
+
+    this._statusItem.text = `${icon} ${fileName} | ${parts.join(' | ')}`;
+    this._statusItem.tooltip = `Neko Preview: ${fileName}`;
+  }
+
+  private getDocumentIcon(format: string): string {
+    switch (format.toLowerCase()) {
+      case 'pdf':
+        return '$(file-pdf)';
+      case 'epub':
+        return '$(book)';
+      case 'cbz':
+        return '$(file-media)';
+      case 'docx':
+        return '$(file-text)';
+      default:
+        return '$(file)';
+    }
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   // =========================================================================

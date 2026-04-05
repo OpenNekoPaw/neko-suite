@@ -18,6 +18,7 @@ import ePub, { type Book, type Rendition } from 'epubjs';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
+import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
 import type { DocumentSelection } from '../shared/useDocumentSelection';
 
 /** Minimal section interface — epubjs doesn't export Section from its main entry.
@@ -129,7 +130,7 @@ export const EpubViewer: FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('waterfall');
   const [epubSelection, setEpubSelection] = useState<DocumentSelection | null>(null);
   const [capturing, setCapturing] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  // Context menu is now handled by shared DocumentContextMenu component
 
   // Rendition mode refs (paginated / scrolled-doc)
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -280,22 +281,6 @@ export const EpubViewer: FC = () => {
       setEpubSelection(null);
       selectionImagesRef.current = [];
     });
-
-    type ContentHooks = { content: { register: (fn: (c: EpubContents) => void) => void } };
-    (rendition as unknown as { hooks: ContentHooks }).hooks?.content?.register(
-      (contents: EpubContents) => {
-        contents.document.addEventListener('contextmenu', (e: Event) => {
-          const me = e as MouseEvent;
-          me.preventDefault();
-          const iframeEl = viewerRef.current?.querySelector('iframe');
-          const iframeRect = iframeEl?.getBoundingClientRect();
-          if (!iframeRect) return;
-          const x = Math.min(iframeRect.left + me.clientX, window.innerWidth - 180);
-          const y = Math.min(iframeRect.top + me.clientY, window.innerHeight - 80);
-          setContextMenu({ x, y });
-        });
-      },
-    );
   }, []);
 
   // =========================================================================
@@ -870,6 +855,19 @@ export const EpubViewer: FC = () => {
   // Render
   // =========================================================================
 
+  const contextActions = useDocumentContextActions({
+    hasSelection: !!(viewMode === 'waterfall' ? waterfallSelection : epubSelection),
+    onSendSelectionToAi:
+      viewMode === 'waterfall'
+        ? waterfallSelection
+          ? waterfallSendToAi
+          : undefined
+        : epubSelection
+          ? sendSelectionToAi
+          : undefined,
+    onSendPageToAi: sendPageToAi,
+  });
+
   if (error) {
     return (
       <div
@@ -882,159 +880,121 @@ export const EpubViewer: FC = () => {
   }
 
   return (
-    <div
-      className="flex h-screen flex-col"
-      style={{ background: 'var(--vscode-editor-background)' }}
-      onClick={() => setContextMenu(null)}
-    >
-      {/* Toolbar */}
+    <DocumentContextMenu actions={contextActions}>
       <div
-        className="flex items-center gap-1 border-b px-3 py-1.5 text-xs"
-        style={{
-          borderColor: 'var(--vscode-panel-border)',
-          color: 'var(--vscode-foreground)',
-          background: 'var(--vscode-sideBar-background)',
-        }}
+        className="flex h-screen flex-col"
+        style={{ background: 'var(--vscode-editor-background)' }}
       >
-        <button onClick={goToPrev} className="px-2 py-0.5 hover:opacity-70">
-          &lt;
-        </button>
-        <span className="flex-1 truncate text-center opacity-70">{currentChapter}</span>
-        <button onClick={goToNext} className="px-2 py-0.5 hover:opacity-70">
-          &gt;
-        </button>
-
-        <span className="mx-1 opacity-20">|</span>
-
-        {/* Send current page to AI */}
-        <button
-          onClick={sendPageToAi}
-          disabled={loading || capturing}
-          className="rounded px-2 py-0.5 hover:opacity-80 disabled:opacity-40"
-          style={{
-            background: 'var(--vscode-button-secondaryBackground)',
-            color: 'var(--vscode-button-secondaryForeground)',
-          }}
-          title={t('preview.epub.sendPage')}
-        >
-          {capturing ? '…' : '⌅'}
-        </button>
-
-        {/* View mode cycle button */}
-        <button
-          onClick={cycleViewMode}
-          className="rounded px-2 py-0.5"
-          title={viewModeTitle}
-          style={{
-            background:
-              viewMode !== 'paginated'
-                ? 'var(--vscode-button-background)'
-                : 'var(--vscode-button-secondaryBackground)',
-            color:
-              viewMode !== 'paginated'
-                ? 'var(--vscode-button-foreground)'
-                : 'var(--vscode-button-secondaryForeground)',
-          }}
-        >
-          {viewModeIcon}
-        </button>
-      </div>
-
-      <div className="relative flex flex-1 overflow-hidden">
-        {/* Loading overlay */}
-        {loading && (
-          <div
-            className="absolute inset-0 z-10 flex items-center justify-center"
-            style={{
-              background: 'var(--vscode-editor-background)',
-              color: 'var(--vscode-foreground)',
-            }}
-          >
-            {t('preview.epub.loading')}
-          </div>
-        )}
-
-        {/* Waterfall mode: custom DOM container */}
-        {viewMode === 'waterfall' && (
-          <div
-            ref={waterfallContainerRef}
-            className="flex-1 overflow-y-auto"
-            style={{ display: loading ? 'none' : 'block' }}
-          >
-            <style>{WATERFALL_THEME_CSS}</style>
-            {spineEntriesRef.current.map((entry) => (
-              <article
-                key={entry.index}
-                ref={(el) => setChapterRef(entry.index, el)}
-                data-spine-index={entry.index}
-                data-href={entry.href}
-                className="epub-chapter-content mx-auto"
-                style={{
-                  maxWidth: '800px',
-                  padding: '20px',
-                  minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
-                  borderBottom: '1px solid var(--vscode-panel-border)',
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Rendition modes: epubjs viewer container */}
-        {viewMode !== 'waterfall' && (
-          <div
-            ref={viewerRef}
-            className={`flex-1 ${viewMode === 'scrolled' ? 'overflow-y-auto' : 'overflow-hidden'}`}
-            style={{ display: loading ? 'none' : undefined }}
-          />
-        )}
-      </div>
-
-      {/* FAB: appears on text selection */}
-      <DocumentSelectionFab
-        selection={activeSelection}
-        onSendToAi={activeSendToAi}
-        label={t('preview.document.sendToAi')}
-      />
-
-      {/* Context menu — right-click (rendition modes only) */}
-      {contextMenu && viewMode !== 'waterfall' && (
+        {/* Toolbar */}
         <div
-          className="fixed z-50 rounded py-1 text-xs shadow-lg"
+          className="flex items-center gap-1 border-b px-3 py-1.5 text-xs"
           style={{
-            left: contextMenu.x,
-            top: contextMenu.y,
-            minWidth: '160px',
-            background: 'var(--vscode-menu-background, var(--vscode-sideBar-background))',
-            border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-            color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
+            borderColor: 'var(--vscode-panel-border)',
+            color: 'var(--vscode-foreground)',
+            background: 'var(--vscode-sideBar-background)',
           }}
-          onClick={(e) => e.stopPropagation()}
         >
-          {epubSelection && (
-            <button
-              className="block w-full px-3 py-1.5 text-left hover:opacity-80"
-              style={{ background: 'transparent', color: 'inherit' }}
-              onClick={() => {
-                sendSelectionToAi();
-                setContextMenu(null);
-              }}
-            >
-              {t('preview.document.sendToAi')}
-            </button>
-          )}
+          <button onClick={goToPrev} className="px-2 py-0.5 hover:opacity-70">
+            &lt;
+          </button>
+          <span className="flex-1 truncate text-center opacity-70">{currentChapter}</span>
+          <button onClick={goToNext} className="px-2 py-0.5 hover:opacity-70">
+            &gt;
+          </button>
+
+          <span className="mx-1 opacity-20">|</span>
+
+          {/* Send current page to AI */}
           <button
-            className="block w-full px-3 py-1.5 text-left hover:opacity-80"
-            style={{ background: 'transparent', color: 'inherit' }}
-            onClick={() => {
-              void sendPageToAi();
-              setContextMenu(null);
+            onClick={sendPageToAi}
+            disabled={loading || capturing}
+            className="rounded px-2 py-0.5 hover:opacity-80 disabled:opacity-40"
+            style={{
+              background: 'var(--vscode-button-secondaryBackground)',
+              color: 'var(--vscode-button-secondaryForeground)',
+            }}
+            title={t('preview.epub.sendPage')}
+          >
+            {capturing ? '…' : '⌅'}
+          </button>
+
+          {/* View mode cycle button */}
+          <button
+            onClick={cycleViewMode}
+            className="rounded px-2 py-0.5"
+            title={viewModeTitle}
+            style={{
+              background:
+                viewMode !== 'paginated'
+                  ? 'var(--vscode-button-background)'
+                  : 'var(--vscode-button-secondaryBackground)',
+              color:
+                viewMode !== 'paginated'
+                  ? 'var(--vscode-button-foreground)'
+                  : 'var(--vscode-button-secondaryForeground)',
             }}
           >
-            {t('preview.epub.sendPage')}
+            {viewModeIcon}
           </button>
         </div>
-      )}
-    </div>
+
+        <div className="relative flex flex-1 overflow-hidden">
+          {/* Loading overlay */}
+          {loading && (
+            <div
+              className="absolute inset-0 z-10 flex items-center justify-center"
+              style={{
+                background: 'var(--vscode-editor-background)',
+                color: 'var(--vscode-foreground)',
+              }}
+            >
+              {t('preview.epub.loading')}
+            </div>
+          )}
+
+          {/* Waterfall mode: custom DOM container */}
+          {viewMode === 'waterfall' && (
+            <div
+              ref={waterfallContainerRef}
+              className="flex-1 overflow-y-auto"
+              style={{ display: loading ? 'none' : 'block' }}
+            >
+              <style>{WATERFALL_THEME_CSS}</style>
+              {spineEntriesRef.current.map((entry) => (
+                <article
+                  key={entry.index}
+                  ref={(el) => setChapterRef(entry.index, el)}
+                  data-spine-index={entry.index}
+                  data-href={entry.href}
+                  className="epub-chapter-content mx-auto"
+                  style={{
+                    maxWidth: '800px',
+                    padding: '20px',
+                    minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
+                    borderBottom: '1px solid var(--vscode-panel-border)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Rendition modes: epubjs viewer container */}
+          {viewMode !== 'waterfall' && (
+            <div
+              ref={viewerRef}
+              className={`flex-1 ${viewMode === 'scrolled' ? 'overflow-y-auto' : 'overflow-hidden'}`}
+              style={{ display: loading ? 'none' : undefined }}
+            />
+          )}
+        </div>
+
+        {/* FAB: appears on text selection */}
+        <DocumentSelectionFab
+          selection={activeSelection}
+          onSendToAi={activeSendToAi}
+          label={t('preview.document.sendToAi')}
+        />
+      </div>
+    </DocumentContextMenu>
   );
 };

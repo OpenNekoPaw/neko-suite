@@ -12,6 +12,7 @@ import {
   getUnresolvedVariableHtml,
 } from './documentProviderHelper';
 import { previewFileServer, UnresolvedPathVariableError } from './PreviewFileServer';
+import type { StatusBarManager } from '../../ui/StatusBarManager';
 
 export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.epubPreview';
@@ -22,7 +23,10 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
   private readonly tokens = new Map<string, string>();
   private _activeUri: vscode.Uri | null = null;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _statusBar?: StatusBarManager,
+  ) {}
 
   async openCustomDocument(
     uri: vscode.Uri,
@@ -57,6 +61,7 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
     });
 
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'epub', {
+      statusBar: this._statusBar,
       onReady: async () => {
         try {
           const { url, token } = await previewFileServer.registerEpub(filePath);

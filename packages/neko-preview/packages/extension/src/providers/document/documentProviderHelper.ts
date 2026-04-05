@@ -18,6 +18,7 @@ import type { AgentContextPayload } from '@neko/shared';
 import type { PreviewEntry } from '../../utils/html';
 import { getWebviewHtml } from '../../utils/html';
 import { getLogger } from '../../utils/logger';
+import type { StatusBarManager } from '../../ui/StatusBarManager';
 import type { DocumentWebviewMessage } from '../../types/document-messages';
 
 const logger = getLogger('DocumentProvider');
@@ -58,6 +59,8 @@ export async function setupDocumentWebview(
     onReady?: () => Promise<void>;
     /** Handle additional webview messages not covered by the default switch. */
     onMessage?: (msg: { type: string; payload: Record<string, unknown> }) => void;
+    /** StatusBarManager for document info display. */
+    statusBar?: StatusBarManager;
   },
 ): Promise<void> {
   const filePath = document.uri.fsPath;
@@ -88,6 +91,30 @@ export async function setupDocumentWebview(
         case 'ready': {
           if (options?.onReady) {
             await options.onReady();
+          }
+          break;
+        }
+
+        // ── Status bar update from webview ─────────────────────────────
+        case 'document:statusUpdate': {
+          const payload = (msg as { payload: Record<string, unknown> }).payload;
+          if (options?.statusBar) {
+            const format =
+              entry === 'epub'
+                ? 'epub'
+                : entry === 'cbz'
+                  ? 'cbz'
+                  : entry === 'docx'
+                    ? 'docx'
+                    : 'pdf';
+            options.statusBar.showDocument({
+              fileName,
+              format,
+              pageCount: payload.pageCount as number | undefined,
+              currentPage: payload.currentPage as number | undefined,
+              fileSize: payload.fileSize as number | undefined,
+              zoom: payload.zoom as number | undefined,
+            });
           }
           break;
         }
@@ -139,6 +166,7 @@ export async function setupDocumentWebview(
   // Cleanup
   webviewPanel.onDidDispose(() => {
     messageDisposable.dispose();
+    options?.statusBar?.hide();
   });
 }
 
