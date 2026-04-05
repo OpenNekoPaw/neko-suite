@@ -386,25 +386,39 @@ impl PuppetWorld for BevyPuppetWorld {
     }
 
     fn get_deformed_meshes(&mut self) -> Vec<DeformedMesh> {
+        // Ensure transforms are up-to-date
+        crate::systems::transform_propagation_2d(&mut self.world);
+
         let mut meshes = Vec::new();
 
         let mut query = self.world.query::<(
             &PuppetNodeId,
             &MeshData,
+            &GlobalTransform2D,
             &ZOrder,
             &Opacity,
             &BlendMode,
             Option<&DeformedVertices>,
         )>();
 
-        for (node_id, mesh_data, z_order, opacity, blend_mode, deformed) in query.iter(&self.world)
+        for (node_id, mesh_data, global_transform, z_order, opacity, blend_mode, deformed) in
+            query.iter(&self.world)
         {
-            let vertices: Vec<[f32; 2]> = if let Some(dv) = deformed {
-                dv.0.iter().map(|v| v.to_array()).collect()
+            let raw_verts = if let Some(dv) = deformed {
+                &dv.0
             } else {
-                // Fall back to base vertices if no deformation yet
-                mesh_data.vertices.iter().map(|v| v.to_array()).collect()
+                &mesh_data.vertices
             };
+
+            // Apply global transform to convert local vertices → world space
+            let mat = &global_transform.0;
+            let vertices: Vec<[f32; 2]> = raw_verts
+                .iter()
+                .map(|v| {
+                    let world = *mat * glam::Vec3::new(v.x, v.y, 1.0);
+                    [world.x, world.y]
+                })
+                .collect();
 
             let blend_str = match blend_mode {
                 BlendMode::Normal => "normal",
