@@ -24,6 +24,10 @@ export interface PuppetStore {
   isPlayingPhysics: boolean;
   /** Whether the .nkp has no puppet.src linked (shows import UI) */
   noPuppetSource: boolean;
+  /** Decoded texture images from INP TEX_SECT */
+  textures: ImageBitmap[];
+  /** Canvas viewport (zoom + pan) */
+  viewport: { zoom: number; panX: number; panY: number };
 
   // ── Animation clip state ─────────────────────────────────────────────────
   /** All available animation clips from the loaded puppet */
@@ -53,6 +57,8 @@ export interface PuppetStore {
   updateParameterValue: (name: string, value: number) => void;
   setPlayingPhysics: (playing: boolean) => void;
   setNoPuppetSource: (noPuppetSource: boolean) => void;
+  setTextures: (textures: ImageBitmap[]) => void;
+  setViewport: (viewport: { zoom: number; panX: number; panY: number }) => void;
 
   setAnimations: (clips: AnimationClipInfo[]) => void;
   setCurrentAnimation: (name: string | null) => void;
@@ -75,6 +81,8 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   deformedMeshes: [],
   isPlayingPhysics: false,
   noPuppetSource: false,
+  textures: [],
+  viewport: { zoom: 1, panX: 0, panY: 0 },
 
   // ── Animation clip state ─────────────────────────────────────────────────
   animations: [],
@@ -103,6 +111,8 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
 
   setPlayingPhysics: (playing) => set({ isPlayingPhysics: playing }),
   setNoPuppetSource: (noPuppetSource) => set({ noPuppetSource }),
+  setTextures: (textures) => set({ textures }),
+  setViewport: (viewport) => set({ viewport }),
 
   setAnimations: (clips) => set({ animations: clips }),
   setCurrentAnimation: (name) => set({ currentAnimation: name }),
@@ -121,6 +131,8 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
       puppetSnapshot: null,
       puppetParameters: [],
       deformedMeshes: [],
+      textures: [],
+      viewport: { zoom: 1, panX: 0, panY: 0 },
       isPlayingPhysics: false,
       animations: [],
       currentAnimation: null,

@@ -11,6 +11,8 @@ import { AnimationPanel } from './components/AnimationPanel';
 import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
+import { PuppetCanvas } from './components/PuppetCanvas';
+import { parseInpTextures } from './utils/inp-parser';
 import { Inochi2DController } from './animation';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
@@ -44,11 +46,6 @@ function saveParametersToExtension(): void {
 function debouncedSaveParameters(): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(saveParametersToExtension, 300);
-}
-
-function PuppetLoadedPlaceholder() {
-  const { t } = useTranslation();
-  return <span>{t('puppet.status.loaded')}</span>;
 }
 
 function PuppetWaitingPlaceholder() {
@@ -172,11 +169,20 @@ export function PuppetApp() {
           bytes[i] = binaryStr.charCodeAt(i);
         }
 
+        // Parse textures from INP binary (before engine load)
+        void parseInpTextures(bytes).then((textures) => {
+          usePuppetStore.getState().setTextures(textures);
+        });
+
         void ctrl.load(bytes.buffer).then(async (snapshot) => {
           const store = usePuppetStore.getState();
           store.setPuppetSnapshot(snapshot);
           store.setPuppetLoaded(true);
           store.setNoPuppetSource(false);
+
+          // Get initial deformed meshes for rendering
+          const meshes = await ctrl.getMeshes();
+          store.setDeformedMeshes(meshes);
 
           // Load parameters and animations
           const params = await ctrl.getParameters();
@@ -266,7 +272,7 @@ export function PuppetApp() {
             {noPuppetSource ? (
               <PuppetEmptyState />
             ) : puppetLoaded ? (
-              <PuppetLoadedPlaceholder />
+              <PuppetCanvas />
             ) : (
               <PuppetWaitingPlaceholder />
             )}
