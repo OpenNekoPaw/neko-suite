@@ -2,13 +2,12 @@
  * EPUB Viewer — renders EPUB using epub.js with chapter navigation and text selection.
  *
  * Three view modes:
- * - Paginated: traditional page-by-page (epubjs rendition)
- * - Scrolled-doc: single-chapter scroll with auto-advance (epubjs rendition)
  * - Waterfall: true continuous scroll across all chapters (custom DOM, bypasses rendition)
+ * - Spread: two-page side-by-side spread (epubjs rendition)
+ * - Paginated: traditional page-by-page (epubjs rendition)
  *
  * Features:
- * - Text selection → FAB → send text (+ nearby inline figures) to AI
- * - "Send page" toolbar button → captures images/text → send to AI
+ * - Right-click context menu → send selection / page to AI
  * - Chapter navigation via toolbar and epub:navigate message from extension
  * - TOC via VSCode Outline (DocumentSymbolProvider in extension host)
  */
@@ -16,10 +15,9 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import ePub, { type Book, type Rendition } from 'epubjs';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
-import { useDocumentSelection } from '../shared/useDocumentSelection';
-import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
+import { useDocumentSelection, type DocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
-import type { DocumentSelection } from '../shared/useDocumentSelection';
+import { usePersistedState } from '../shared/usePersistedState';
 
 /** Minimal section interface — epubjs doesn't export Section from its main entry.
  *  The actual runtime returns Promises despite the .d.ts saying otherwise. */
@@ -59,7 +57,7 @@ interface SpineEntry {
 /** Max characters forwarded to agent — stays within message size budget */
 const MAX_SELECTION_CHARS = 4000;
 
-type ViewMode = 'paginated' | 'scrolled' | 'waterfall' | 'spread';
+type ViewMode = 'waterfall' | 'spread' | 'paginated';
 
 /**
  * Custom request function for epub.js that uses fetch() instead of XMLHttpRequest.
@@ -120,19 +118,22 @@ export const EpubViewer: FC = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentChapter, setCurrentChapter] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('waterfall');
+  const [currentChapter, setCurrentChapter] = usePersistedState('currentChapter', '');
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>('viewMode', 'waterfall');
   const [epubSelection, setEpubSelection] = useState<DocumentSelection | null>(null);
   const [capturing, setCapturing] = useState(false);
-  // Context menu is now handled by shared DocumentContextMenu component
+  const [iframeMenuPos, setIframeMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const clearIframeMenuPos = useCallback(() => setIframeMenuPos(null), []);
 
-  // Rendition mode refs (paginated / scrolled-doc)
+  const persistedChapterRef = useRef(currentChapter);
+  persistedChapterRef.current = currentChapter;
+
+  // Rendition mode refs (paginated / spread)
   const viewerRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const tocRef = useRef<TocItem[]>([]);
   const loadingRef = useRef(false);
-  const scrollCooldownRef = useRef(false);
 
   // Waterfall mode refs
   const waterfallContainerRef = useRef<HTMLDivElement>(null);
@@ -195,7 +196,7 @@ export const EpubViewer: FC = () => {
   }, []);
 
   // =========================================================================
-  // Rendition helpers (paginated + scrolled-doc modes)
+  // Rendition helpers (paginated + spread modes)
   // =========================================================================
 
   const getContents = (): EpubContents | null => {
@@ -205,88 +206,92 @@ export const EpubViewer: FC = () => {
     return list?.[0] ?? null;
   };
 
-  const setupRendition = useCallback(
-    (rendition: Rendition, tocItems: TocItem[], _isSpread = false) => {
-      rendition.themes.register('vscode', {
-        body: {
-          background: 'var(--vscode-editor-background) !important',
-          color: 'var(--vscode-editor-foreground) !important',
-          'font-family': 'var(--vscode-font-family) !important',
-          'line-height': '1.6',
-          padding: '20px !important',
-        },
-        'a, a:visited': { color: 'var(--vscode-textLink-foreground) !important' },
-        'img, image': {
-          'max-width': '100% !important',
-          height: 'auto !important',
-          display: 'block !important',
-          margin: '0 auto !important',
-        },
-      });
-      rendition.themes.select('vscode');
+  const setupRendition = useCallback((rendition: Rendition, tocItems: TocItem[]) => {
+    rendition.themes.register('vscode', {
+      body: {
+        background: 'var(--vscode-editor-background) !important',
+        color: 'var(--vscode-editor-foreground) !important',
+        'font-family': 'var(--vscode-font-family) !important',
+        'line-height': '1.6',
+        padding: '20px !important',
+      },
+      'a, a:visited': { color: 'var(--vscode-textLink-foreground) !important' },
+      'img, image': {
+        'max-width': '100% !important',
+        height: 'auto !important',
+        display: 'block !important',
+        margin: '0 auto !important',
+      },
+    });
+    rendition.themes.select('vscode');
 
-      rendition.on('relocated', (location: { start: { href: string } }) => {
-        const chapter = tocItems.find((item) => location.start.href.includes(item.href));
-        if (chapter) setCurrentChapter(chapter.label);
+    rendition.on('relocated', (location: { start: { href: string } }) => {
+      const chapter = tocItems.find((item) => location.start.href.includes(item.href));
+      if (chapter) setCurrentChapter(chapter.label);
+      setEpubSelection(null);
+    });
+
+    rendition.on('selected', async (_cfi: string, contents: EpubContents) => {
+      const sel = contents.window.getSelection();
+      const raw = sel?.toString().trim() ?? '';
+      if (!raw) {
         setEpubSelection(null);
-      });
+        return;
+      }
+      const text = raw.length > MAX_SELECTION_CHARS ? raw.slice(0, MAX_SELECTION_CHARS) : raw;
 
-      rendition.on('selected', async (_cfi: string, contents: EpubContents) => {
-        const sel = contents.window.getSelection();
-        const raw = sel?.toString().trim() ?? '';
-        if (!raw) {
-          setEpubSelection(null);
-          return;
-        }
-        const text = raw.length > MAX_SELECTION_CHARS ? raw.slice(0, MAX_SELECTION_CHARS) : raw;
+      const iframeEl = viewerRef.current?.querySelector('iframe');
+      const iframeRect = iframeEl?.getBoundingClientRect();
+      const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+      const rangeRect = range?.getBoundingClientRect();
+      const rect =
+        iframeRect && rangeRect
+          ? new DOMRect(
+              iframeRect.left + rangeRect.left,
+              iframeRect.top + rangeRect.top,
+              rangeRect.width,
+              rangeRect.height,
+            )
+          : null;
 
+      setEpubSelection({ text, rect });
+    });
+
+    rendition.on('click', () => {
+      setEpubSelection(null);
+    });
+
+    // Forward contextmenu from iframe to parent menu
+    rendition.hooks.content.register((contents: EpubContents) => {
+      contents.document.addEventListener('contextmenu', (e: MouseEvent) => {
+        e.preventDefault();
         const iframeEl = viewerRef.current?.querySelector('iframe');
         const iframeRect = iframeEl?.getBoundingClientRect();
-        const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
-        const rangeRect = range?.getBoundingClientRect();
-        const rect =
-          iframeRect && rangeRect
-            ? new DOMRect(
-                iframeRect.left + rangeRect.left,
-                iframeRect.top + rangeRect.top,
-                rangeRect.width,
-                rangeRect.height,
-              )
-            : null;
-
-        setEpubSelection({ text, rect });
+        if (iframeRect) {
+          const x = Math.min(iframeRect.left + e.clientX, window.innerWidth - 180);
+          const y = Math.min(iframeRect.top + e.clientY, window.innerHeight - 120);
+          setIframeMenuPos({ x, y });
+        }
       });
-
-      rendition.on('click', () => {
-        setEpubSelection(null);
-      });
-    },
-    [],
-  );
+    });
+  }, []);
 
   // =========================================================================
   // Book loading / re-rendering
   // =========================================================================
 
   const renderBook = useCallback(
-    async (
-      book: Book,
-      tocItems: TocItem[],
-      flow: 'paginated' | 'scrolled-doc',
-      cfi?: string,
-      spreadMode: 'none' | 'auto' = 'none',
-    ) => {
+    async (book: Book, tocItems: TocItem[], spreadMode: 'none' | 'auto' = 'none', cfi?: string) => {
       if (!viewerRef.current) return;
       renditionRef.current?.destroy();
-      const isScrolled = flow === 'scrolled-doc';
       const rendition = book.renderTo(viewerRef.current, {
         width: '100%',
-        ...(isScrolled ? {} : { height: '100%' }),
+        height: '100%',
         spread: spreadMode,
-        flow,
+        flow: 'paginated',
       });
       renditionRef.current = rendition;
-      setupRendition(rendition, tocItems, spreadMode === 'auto');
+      setupRendition(rendition, tocItems);
       await rendition.display(cfi);
     },
     [setupRendition],
@@ -363,15 +368,8 @@ export const EpubViewer: FC = () => {
         chapterHeightsRef.current.clear();
         setWaterfallReady(true);
       } else {
-        const flow = viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated';
         const spreadMode = viewMode === 'spread' ? 'auto' : 'none';
-        await renderBook(
-          book,
-          tocItems,
-          flow as 'paginated' | 'scrolled-doc',
-          undefined,
-          spreadMode as 'none' | 'auto',
-        );
+        await renderBook(book, tocItems, spreadMode as 'none' | 'auto');
       }
     },
     [viewMode, extractBookMetadata, renderBook],
@@ -380,6 +378,27 @@ export const EpubViewer: FC = () => {
   // =========================================================================
   // Book loaders
   // =========================================================================
+
+  /** Navigate to persisted chapter after load */
+  const restoreChapter = useCallback(() => {
+    const saved = persistedChapterRef.current;
+    if (!saved) return;
+    const toc = tocRef.current.find((item) => item.label === saved);
+    if (!toc) return;
+    // Delay to let waterfall observer or rendition settle
+    requestAnimationFrame(() => {
+      // Waterfall: scroll to chapter element directly
+      const entry = spineEntriesRef.current.find(
+        (e) => e.href === toc.href || e.href.includes(toc.href) || toc.href.includes(e.href),
+      );
+      if (entry) {
+        const el = chapterRefsMap.current.get(entry.index);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        renditionRef.current?.display(toc.href);
+      }
+    });
+  }, []);
 
   /** Load EPUB from a localhost URL served by neko-engine. */
   const loadEpubFromUrl = useCallback(
@@ -401,6 +420,8 @@ export const EpubViewer: FC = () => {
           type: 'document:statusUpdate',
           payload: { pageCount: chapterCount },
         } as never);
+        // Restore persisted chapter position
+        restoreChapter();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
@@ -427,6 +448,7 @@ export const EpubViewer: FC = () => {
         await initBook(book);
         setLoading(false);
         loadingRef.current = false;
+        restoreChapter();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
@@ -647,63 +669,6 @@ export const EpubViewer: FC = () => {
   }, [goToPrev, goToNext]);
 
   // =========================================================================
-  // Cross-chapter scrolling (scrolled-doc mode only)
-  // =========================================================================
-
-  useEffect(() => {
-    if (viewMode !== 'scrolled') return;
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
-    const THRESHOLD = 40;
-    const COOLDOWN_MS = 600;
-
-    const advance = (direction: 'next' | 'prev') => {
-      if (scrollCooldownRef.current) return;
-      scrollCooldownRef.current = true;
-      const action =
-        direction === 'next' ? renditionRef.current?.next() : renditionRef.current?.prev();
-      void action
-        ?.then(() => {
-          if (direction === 'next') {
-            viewer.scrollTop = 0;
-          } else {
-            requestAnimationFrame(() => {
-              viewer.scrollTop = viewer.scrollHeight;
-            });
-          }
-        })
-        .finally(() => {
-          setTimeout(() => {
-            scrollCooldownRef.current = false;
-          }, COOLDOWN_MS);
-        });
-    };
-
-    const onScroll = () => {
-      if (scrollCooldownRef.current) return;
-      const { scrollTop, scrollHeight, clientHeight } = viewer;
-      if (scrollTop + clientHeight >= scrollHeight - THRESHOLD) {
-        advance('next');
-      }
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      if (scrollCooldownRef.current) return;
-      if (e.deltaY < 0 && viewer.scrollTop <= 0) {
-        advance('prev');
-      }
-    };
-
-    viewer.addEventListener('scroll', onScroll, { passive: true });
-    viewer.addEventListener('wheel', onWheel, { passive: true });
-    return () => {
-      viewer.removeEventListener('scroll', onScroll);
-      viewer.removeEventListener('wheel', onWheel);
-    };
-  }, [viewMode]);
-
-  // =========================================================================
   // Mode switching
   // =========================================================================
 
@@ -711,7 +676,7 @@ export const EpubViewer: FC = () => {
     const book = bookRef.current;
     if (!book) return;
 
-    const modes: ViewMode[] = ['waterfall', 'paginated', 'spread', 'scrolled'];
+    const modes: ViewMode[] = ['waterfall', 'spread', 'paginated'];
     const currentIdx = modes.indexOf(viewMode);
     const nextMode = modes[(currentIdx + 1) % modes.length]!;
 
@@ -730,15 +695,11 @@ export const EpubViewer: FC = () => {
       renditionRef.current = null;
       setWaterfallReady(true);
     } else {
-      const flow = nextMode === 'scrolled' ? 'scrolled-doc' : 'paginated';
+      // Wait for React to update display so the viewer container is visible
+      // and epubjs can measure its dimensions correctly.
+      await new Promise((r) => requestAnimationFrame(r));
       const spreadMode = nextMode === 'spread' ? 'auto' : 'none';
-      await renderBook(
-        book,
-        tocRef.current,
-        flow as 'paginated' | 'scrolled-doc',
-        location?.start?.cfi,
-        spreadMode as 'none' | 'auto',
-      );
+      await renderBook(book, tocRef.current, spreadMode as 'none' | 'auto', location?.start?.cfi);
     }
   }, [viewMode, renderBook]);
 
@@ -827,24 +788,20 @@ export const EpubViewer: FC = () => {
 
   const viewModeIconMap: Record<ViewMode, string> = {
     waterfall: '⇕',
-    paginated: '⊡',
     spread: '⊞',
-    scrolled: '≡',
+    paginated: '⊡',
   };
   const viewModeIcon = viewModeIconMap[viewMode];
 
   // Title shows what the NEXT mode will be
   const nextModeMap: Record<ViewMode, string> = {
-    waterfall: t('preview.epub.modePaginated'),
-    paginated: t('preview.epub.modeSpread'),
-    spread: t('preview.epub.modeScrolled'),
-    scrolled: t('preview.epub.modeWaterfall'),
+    waterfall: t('preview.epub.modeSpread'),
+    spread: t('preview.epub.modePaginated'),
+    paginated: t('preview.epub.modeWaterfall'),
   };
   const viewModeTitle = nextModeMap[viewMode];
 
   const isWaterfall = viewMode === 'waterfall';
-  const activeSelection = isWaterfall ? waterfallSelection : epubSelection;
-  const activeSendToAi = isWaterfall ? waterfallSendToAi : sendSelectionToAi;
 
   // =========================================================================
   // Render
@@ -874,7 +831,11 @@ export const EpubViewer: FC = () => {
   }
 
   return (
-    <DocumentContextMenu actions={contextActions}>
+    <DocumentContextMenu
+      actions={contextActions}
+      externalMenuPosition={iframeMenuPos}
+      onExternalMenuConsumed={clearIframeMenuPos}
+    >
       <div
         className="flex h-screen flex-col"
         style={{ background: 'var(--vscode-editor-background)' }}
@@ -897,20 +858,6 @@ export const EpubViewer: FC = () => {
           </button>
 
           <span className="mx-1 opacity-20">|</span>
-
-          {/* Send current page to AI */}
-          <button
-            onClick={sendPageToAi}
-            disabled={loading || capturing}
-            className="rounded px-2 py-0.5 hover:opacity-80 disabled:opacity-40"
-            style={{
-              background: 'var(--vscode-button-secondaryBackground)',
-              color: 'var(--vscode-button-secondaryForeground)',
-            }}
-            title={t('preview.epub.sendPage')}
-          >
-            {capturing ? '…' : '⌅'}
-          </button>
 
           {/* View mode cycle button */}
           <button
@@ -947,55 +894,45 @@ export const EpubViewer: FC = () => {
           )}
 
           {/* Waterfall mode: custom DOM container */}
-          {viewMode === 'waterfall' && (
-            <div
-              ref={waterfallContainerRef}
-              className="flex-1 overflow-y-auto"
-              style={{ display: loading ? 'none' : 'block' }}
-            >
-              <style>{WATERFALL_THEME_CSS}</style>
-              {spineEntriesRef.current.map((entry) => (
-                <article
-                  key={entry.index}
-                  ref={(el) => setChapterRef(entry.index, el)}
-                  data-spine-index={entry.index}
-                  data-href={entry.href}
-                  className="epub-chapter-content mx-auto"
-                  style={{
-                    maxWidth: '800px',
-                    padding: '20px',
-                    minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
-                    borderBottom: '1px solid var(--vscode-panel-border)',
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Rendition modes: epubjs viewer container */}
-          {viewMode !== 'waterfall' && (
-            <div
-              className={`flex-1 flex justify-center ${viewMode === 'scrolled' ? 'overflow-y-auto' : 'overflow-hidden'}`}
-              style={{ display: loading ? 'none' : undefined }}
-            >
-              <div
-                ref={viewerRef}
-                className="h-full"
+          {/* Waterfall mode: custom DOM container */}
+          <div
+            ref={waterfallContainerRef}
+            className="flex-1 overflow-y-auto"
+            style={{ display: viewMode === 'waterfall' && !loading ? 'block' : 'none' }}
+          >
+            <style>{WATERFALL_THEME_CSS}</style>
+            {spineEntriesRef.current.map((entry) => (
+              <article
+                key={entry.index}
+                ref={(el) => setChapterRef(entry.index, el)}
+                data-spine-index={entry.index}
+                data-href={entry.href}
+                className="epub-chapter-content mx-auto"
                 style={{
-                  width: '100%',
-                  maxWidth: viewMode === 'spread' ? undefined : '800px',
+                  maxWidth: '800px',
+                  padding: '20px',
+                  minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
+                  borderBottom: '1px solid var(--vscode-panel-border)',
                 }}
               />
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
 
-        {/* FAB: appears on text selection */}
-        <DocumentSelectionFab
-          selection={activeSelection}
-          onSendToAi={activeSendToAi}
-          label={t('preview.document.sendToAi')}
-        />
+          {/* Rendition modes: epubjs viewer container */}
+          <div
+            className="flex-1 flex justify-center overflow-hidden"
+            style={{ display: viewMode !== 'waterfall' && !loading ? undefined : 'none' }}
+          >
+            <div
+              ref={viewerRef}
+              className="h-full"
+              style={{
+                width: '100%',
+                maxWidth: viewMode === 'spread' ? undefined : '800px',
+              }}
+            />
+          </div>
+        </div>
       </div>
     </DocumentContextMenu>
   );

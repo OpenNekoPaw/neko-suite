@@ -12,8 +12,8 @@ import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { type Entry, BlobReader, BlobWriter, ZipReader, HttpReader } from '@zip.js/zip.js';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
-import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
+import { usePersistedState } from '../shared/usePersistedState';
 import { useTranslation } from '../i18n/I18nContext';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
@@ -36,10 +36,15 @@ export const CbzViewer: FC = () => {
   const [imageEntries, setImageEntries] = useState<Entry[]>([]);
   // Sparse cache of decoded pages: index → Blob URL
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
-  const [currentPage, setCurrentPage] = useState(0);
-  const [viewMode, setViewMode] = useState<'scroll' | 'dual' | 'single'>('scroll');
+  const [currentPage, setCurrentPage] = usePersistedState('currentPage', 0);
+  const [viewMode, setViewMode] = usePersistedState<'scroll' | 'dual' | 'single'>(
+    'viewMode',
+    'scroll',
+  );
   // Track natural image heights after load (for stable scroll)
   const [imageHeights, setImageHeights] = useState<Map<number, number>>(new Map());
+  const persistedPageRef = useRef(currentPage);
+  persistedPageRef.current = currentPage;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Track which pages are currently being decoded to avoid duplicate work
@@ -98,12 +103,14 @@ export const CbzViewer: FC = () => {
       setImageEntries(filtered);
       setPageCache(new Map());
       setImageHeights(new Map());
-      setCurrentPage(0);
+      const saved = persistedPageRef.current;
+      const restoredPage = saved >= 0 && saved < filtered.length ? saved : 0;
+      setCurrentPage(restoredPage);
       decodingRef.current.clear();
       setLoading(false);
       postMessage({
         type: 'document:statusUpdate',
-        payload: { pageCount: filtered.length, currentPage: 1 },
+        payload: { pageCount: filtered.length, currentPage: restoredPage + 1 },
       } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -135,7 +142,9 @@ export const CbzViewer: FC = () => {
       setImageEntries(filtered);
       setPageCache(new Map());
       setImageHeights(new Map());
-      setCurrentPage(0);
+      const saved = persistedPageRef.current;
+      const restoredPage = saved >= 0 && saved < filtered.length ? saved : 0;
+      setCurrentPage(restoredPage);
       decodingRef.current.clear();
       setLoading(false);
     } catch (err) {
@@ -271,6 +280,19 @@ export const CbzViewer: FC = () => {
       observerRef.current = null;
     };
   }, [viewMode === 'scroll', imageEntries, decodePage]); // pageCache intentionally omitted
+
+  // Scroll to restored page after initial load in scroll mode
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (loading || hasRestoredRef.current || imageEntries.length === 0) return;
+    if (viewMode === 'scroll' && currentPage > 0) {
+      requestAnimationFrame(() => {
+        const el = pageRefsMap.current.get(currentPage);
+        el?.scrollIntoView({ block: 'start' });
+      });
+    }
+    hasRestoredRef.current = true;
+  }, [loading, imageEntries.length > 0]);
 
   // Revoke all Blob URLs on unmount
   useEffect(() => {
@@ -477,18 +499,6 @@ export const CbzViewer: FC = () => {
             </button>
           )}
           <span className="mx-2">|</span>
-          <button
-            onClick={sendFullPage}
-            className="rounded px-2 py-0.5"
-            style={{
-              background: 'var(--vscode-button-secondaryBackground)',
-              color: 'var(--vscode-button-secondaryForeground)',
-            }}
-            title={t('preview.document.sendPageToAi')}
-          >
-            {t('preview.document.sendPageToAi')}
-          </button>
-          <span className="mx-1 opacity-20">|</span>
           {/* View mode cycle */}
           <button
             onClick={cycleViewMode}
@@ -627,12 +637,6 @@ export const CbzViewer: FC = () => {
             </button>
           )}
 
-        {/* Text selection FAB (future: OCR on CBZ) */}
-        <DocumentSelectionFab
-          selection={selection}
-          onSendToAi={sendToAi}
-          label={t('preview.document.sendToAi')}
-        />
         {/* Hidden canvas for region capture */}
         <canvas ref={canvasRef} className="hidden" />
       </div>

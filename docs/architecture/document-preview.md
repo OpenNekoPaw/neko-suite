@@ -609,3 +609,46 @@ explorer/context 右键
 **缩略图缓存路径**：`.neko/thumbnails/` 目录，按 `<文件路径哈希>_<修改时间>.png` 命名。
 
 **策略 D 提示去重**：同一会话内用户已选「取消」的格式，不再重复弹出通知（`Set<string>` 内存标记）。
+
+---
+
+## 八、Tab 管理与状态持久化
+
+### 8.1 Tab Pin 策略
+
+仅对有后台播放的媒体类型（Video / Audio）自动 Pin 编辑器 Tab，文档类（PDF / EPUB / CBZ / DOCX）不 Pin，遵循 VSCode 默认的 preview mode（单击预览可替换，双击固定）。
+
+| 类型 | 自动 Pin | 理由 |
+|------|---------|------|
+| Video | Yes | H.264 流连接昂贵，误关断流 |
+| Audio | Yes | 用户期望后台播放不中断 |
+| PDF / EPUB / CBZ / DOCX | No | 无后台任务，Pin 导致 Tab 栏拥挤 |
+
+实现位置：
+- Video: `VideoPreviewProvider.resolveCustomEditor()` 内调用 `workbench.action.pinEditor`
+- Audio: `AudioPreviewProvider.resolveCustomEditor()` 内调用 `workbench.action.pinEditor`
+- 文档类: `documentProviderHelper.setupDocumentWebview()` 不再调用 Pin
+
+### 8.2 阅读进度持久化
+
+利用 VSCode webview 内置的 `getState()` / `setState()` API，在 Tab 隐藏/恢复周期内自动保持文档阅读进度。
+
+**持久化 Hook**: `usePersistedState<T>(key, defaultValue)` — 替代 `useState`，状态变更时 debounce 300ms 写入 webview state。
+
+**各文档持久化字段**：
+
+| 类型 | 持久化字段 | 恢复行为 |
+|------|-----------|---------|
+| PDF | `currentPage`, `scale`, `viewMode` | 加载后滚动到保存页码 |
+| EPUB | `currentChapter`, `viewMode` | 加载后导航到保存章节 |
+| CBZ | `currentPage`, `viewMode` | 加载后滚动到保存页码 |
+| DOCX | 无 | 快速预览场景，不持久化 |
+
+**生命周期**：
+- `retainContextWhenHidden: true` — Tab 切走时 React 状态保持在内存
+- `setState()` — 状态写入 VSCode 管理的 webview state，Tab 关闭重开后可恢复
+- Extension reload / VSCode 重启后 state 丢失（非 workspaceState）
+
+**共享基础设施**：
+- `vscodeApi.ts` — `acquireVsCodeApi()` 单例，`useVscodeMessage` 和 `usePersistedState` 共享
+- `usePersistedState.ts` — 支持直接值和 updater 函数（`setScale(prev => prev + 0.25)`）

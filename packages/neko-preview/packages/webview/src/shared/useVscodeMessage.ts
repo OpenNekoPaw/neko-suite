@@ -6,40 +6,13 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import type { WebviewMessage, ExtensionMessage } from './types';
-import { getLogger } from '../utils/logger';
-
-const logger = getLogger('useVscodeMessage');
-
-// Acquire VSCode API (available in webview context)
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-let vscodeApi: VsCodeApi | null = null;
-
-function getVsCodeApi(): VsCodeApi {
-  if (!vscodeApi) {
-    vscodeApi = window.acquireVsCodeApi?.() ?? null;
-    if (!vscodeApi) {
-      // Fallback for dev mode (outside VSCode)
-      logger.warn('acquireVsCodeApi not available, using mock');
-      vscodeApi = {
-        postMessage: (msg) => logger.info(`[mock postMessage] ${JSON.stringify(msg)}`),
-        getState: () => null,
-        setState: () => {},
-      };
-    }
-  }
-  return vscodeApi;
-}
+import { getVscodeApi } from './vscodeApi';
 
 /**
  * Send a message to the Extension Host
  */
 export function postMessage(message: WebviewMessage): void {
-  getVsCodeApi().postMessage(message);
+  getVscodeApi().postMessage(message);
 }
 
 /**

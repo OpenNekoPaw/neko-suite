@@ -12,8 +12,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
-import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
+import { usePersistedState } from '../shared/usePersistedState';
 import { useTranslation } from '../i18n/I18nContext';
 import { getLogger } from '../utils/logger';
 
@@ -38,11 +38,15 @@ export const PdfViewer: FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(1.5);
-  const [viewMode, setViewMode] = useState<ViewMode>('scroll');
+  const [currentPage, setCurrentPage] = usePersistedState('currentPage', 1);
+  const [scale, setScale] = usePersistedState('scale', 1.5);
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>('viewMode', 'scroll');
 
   const [pageViewports, setPageViewports] = useState<PageViewport[]>([]);
+
+  // Ref to capture persisted page for use in load callbacks without dep churn
+  const persistedPageRef = useRef(currentPage);
+  persistedPageRef.current = currentPage;
 
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -77,12 +81,15 @@ export const PdfViewer: FC = () => {
         const pdf = await pdfjsLib.getDocument({ url }).promise;
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
-        setCurrentPage(1);
+        // Restore persisted page or start at 1
+        const saved = persistedPageRef.current;
+        const restoredPage = saved >= 1 && saved <= pdf.numPages ? saved : 1;
+        setCurrentPage(restoredPage);
         await computeViewports(pdf, scale);
         setLoading(false);
         postMessage({
           type: 'document:statusUpdate',
-          payload: { pageCount: pdf.numPages, currentPage: 1 },
+          payload: { pageCount: pdf.numPages, currentPage: restoredPage },
         } as never);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -105,7 +112,9 @@ export const PdfViewer: FC = () => {
         const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
-        setCurrentPage(1);
+        const saved = persistedPageRef.current;
+        const restoredPage = saved >= 1 && saved <= pdf.numPages ? saved : 1;
+        setCurrentPage(restoredPage);
         await computeViewports(pdf, scale);
         setLoading(false);
       } catch (err) {
@@ -135,6 +144,19 @@ export const PdfViewer: FC = () => {
     if (!pdf) return;
     void computeViewports(pdf, scale);
   }, [scale, computeViewports]);
+
+  // Scroll to restored page after initial load in scroll mode
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (loading || hasRestoredRef.current || pageViewports.length === 0) return;
+    if (viewMode === 'scroll' && currentPage > 1) {
+      requestAnimationFrame(() => {
+        const el = pageRefsMap.current.get(currentPage);
+        el?.scrollIntoView({ block: 'start' });
+      });
+    }
+    hasRestoredRef.current = true;
+  }, [loading, pageViewports.length > 0]);
 
   // =========================================================================
   // Shared page renderer
@@ -528,12 +550,6 @@ export const PdfViewer: FC = () => {
             )}
           </div>
         )}
-
-        <DocumentSelectionFab
-          selection={selection}
-          onSendToAi={sendToAi}
-          label={t('preview.document.sendToAi')}
-        />
       </div>
     </DocumentContextMenu>
   );

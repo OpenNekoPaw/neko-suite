@@ -72,9 +72,6 @@ export async function setupDocumentWebview(
     localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
   };
 
-  // Pin the editor tab
-  vscode.commands.executeCommand('workbench.action.pinEditor');
-
   // Set HTML early
   webviewPanel.webview.html = getWebviewHtml({
     webview: webviewPanel.webview,
