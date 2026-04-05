@@ -1,8 +1,6 @@
 import { useLiveStore } from '../stores/liveStore';
 import type { TrackingMode } from '../types/tracking';
-
-declare function acquireVsCodeApi(): { postMessage: (msg: unknown) => void };
-const vscode = acquireVsCodeApi();
+import { vscode } from '../vscode-api';
 
 /**
  * Compact control panel for tracking settings and status.

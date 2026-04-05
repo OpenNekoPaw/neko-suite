@@ -36,7 +36,7 @@
   "main": "./dist/extension/extension.js",
   "contributes": {
     "viewsContainers": {
-      "panel": [
+      "activitybar": [
         {
           "id": "neko-live",
           "title": "Neko Live",

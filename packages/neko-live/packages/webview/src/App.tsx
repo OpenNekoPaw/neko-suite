@@ -3,9 +3,7 @@ import { Viewport3D } from './components/Viewport3D';
 import { TrackingPanel } from './components/TrackingPanel';
 import { useLiveStore } from './stores/liveStore';
 import type { LiveExtensionMessage } from './types/messages';
-
-declare function acquireVsCodeApi(): { postMessage: (msg: unknown) => void };
-const vscode = acquireVsCodeApi();
+import { vscode } from './vscode-api';
 
 /**
  * Root app component for neko-live webview.
