@@ -1,7 +1,7 @@
 {
   "name": "neko-live",
-  "displayName": "Neko Live",
-  "description": "Virtual production with camera-driven 3D avatars, motion capture, and AR streaming",
+  "displayName": "%neko.live.displayName%",
+  "description": "%neko.live.description%",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -39,7 +39,7 @@
       "activitybar": [
         {
           "id": "neko-live",
-          "title": "Neko Live",
+          "title": "%neko.live.viewContainer.title%",
           "icon": "$(broadcast)"
         }
       ]
@@ -49,55 +49,55 @@
         {
           "type": "webview",
           "id": "neko.livePreview",
-          "name": "Live Preview",
-          "contextualTitle": "Virtual Production"
+          "name": "%neko.live.view.name%",
+          "contextualTitle": "%neko.live.view.contextualTitle%"
         }
       ]
     },
     "commands": [
       {
         "command": "neko.live.start",
-        "title": "Start Live Session",
+        "title": "%neko.live.cmd.start%",
         "category": "Neko Live"
       },
       {
         "command": "neko.live.stop",
-        "title": "Stop Live Session",
+        "title": "%neko.live.cmd.stop%",
         "category": "Neko Live"
       },
       {
         "command": "neko.live.selectAvatar",
-        "title": "Select Avatar",
+        "title": "%neko.live.cmd.selectAvatar%",
         "category": "Neko Live"
       },
       {
         "command": "neko.live.calibrate",
-        "title": "Calibrate Tracking",
+        "title": "%neko.live.cmd.calibrate%",
         "category": "Neko Live"
       },
       {
         "command": "neko.live.startRecording",
-        "title": "Start Recording",
+        "title": "%neko.live.cmd.startRecording%",
         "category": "Neko Live"
       },
       {
         "command": "neko.live.startStreaming",
-        "title": "Start Streaming",
+        "title": "%neko.live.cmd.startStreaming%",
         "category": "Neko Live"
       }
     ],
     "configuration": {
-      "title": "Neko Live",
+      "title": "%neko.live.config.title%",
       "properties": {
         "neko.live.camera": {
           "type": "string",
           "default": "",
-          "description": "Preferred camera device"
+          "description": "%neko.live.config.camera%"
         },
         "neko.live.vmcPort": {
           "type": "number",
           "default": 39539,
-          "description": "VMC protocol port for external tracking"
+          "description": "%neko.live.config.vmcPort%"
         },
         "neko.live.trackingMode": {
           "type": "string",
@@ -107,7 +107,7 @@
             "hybrid"
           ],
           "default": "vmc",
-          "description": "Motion tracking mode"
+          "description": "%neko.live.config.trackingMode%"
         }
       }
     }

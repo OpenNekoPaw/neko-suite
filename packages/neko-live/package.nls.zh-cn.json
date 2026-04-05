@@ -1,0 +1,17 @@
+{
+  "neko.live.displayName": "Neko Live",
+  "neko.live.description": "摄像头驱动 3D 虚拟形象、动作捕捉与 AR 直播的虚拟制片工具",
+  "neko.live.viewContainer.title": "Neko Live",
+  "neko.live.view.name": "实时预览",
+  "neko.live.view.contextualTitle": "虚拟制片",
+  "neko.live.cmd.start": "开始 Live 会话",
+  "neko.live.cmd.stop": "停止 Live 会话",
+  "neko.live.cmd.selectAvatar": "选择头像",
+  "neko.live.cmd.calibrate": "校准追踪",
+  "neko.live.cmd.startRecording": "开始录制",
+  "neko.live.cmd.startStreaming": "开始推流",
+  "neko.live.config.title": "Neko Live",
+  "neko.live.config.camera": "首选摄像头设备",
+  "neko.live.config.vmcPort": "VMC 协议端口（外部追踪软件）",
+  "neko.live.config.trackingMode": "动作追踪模式"
+}

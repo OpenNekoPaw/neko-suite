@@ -1,0 +1,17 @@
+{
+  "neko.live.displayName": "Neko Live",
+  "neko.live.description": "Virtual production with camera-driven 3D avatars, motion capture, and AR streaming",
+  "neko.live.viewContainer.title": "Neko Live",
+  "neko.live.view.name": "Live Preview",
+  "neko.live.view.contextualTitle": "Virtual Production",
+  "neko.live.cmd.start": "Start Live Session",
+  "neko.live.cmd.stop": "Stop Live Session",
+  "neko.live.cmd.selectAvatar": "Select Avatar",
+  "neko.live.cmd.calibrate": "Calibrate Tracking",
+  "neko.live.cmd.startRecording": "Start Recording",
+  "neko.live.cmd.startStreaming": "Start Streaming",
+  "neko.live.config.title": "Neko Live",
+  "neko.live.config.camera": "Preferred camera device",
+  "neko.live.config.vmcPort": "VMC protocol port for external tracking",
+  "neko.live.config.trackingMode": "Motion tracking mode"
+}
