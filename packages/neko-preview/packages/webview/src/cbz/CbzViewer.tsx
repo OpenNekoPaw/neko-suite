@@ -13,7 +13,11 @@ import { type Entry, BlobReader, BlobWriter, ZipReader, HttpReader } from '@zip.
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
-import { usePersistedState } from '../shared/usePersistedState';
+import {
+  usePersistedState,
+  initPersistedStore,
+  notifySubscribers,
+} from '../shared/usePersistedState';
 import { useTranslation } from '../i18n/I18nContext';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif)$/i;
@@ -73,7 +77,11 @@ export const CbzViewer: FC = () => {
   const [selectionPageIdx, setSelectionPageIdx] = useState(0);
 
   useExtensionMessage((msg) => {
-    if (msg.type === 'document:data') {
+    const m = msg as unknown as { type: string; payload: Record<string, unknown> };
+    if (m.type === 'document:restoreState') {
+      initPersistedStore(m.payload as Record<string, unknown>);
+      notifySubscribers();
+    } else if (msg.type === 'document:data') {
       if ('url' in msg.payload && msg.payload.url) {
         void loadCbzFromUrl(msg.payload.url as string);
       } else if (msg.payload.data) {

@@ -61,6 +61,8 @@ export async function setupDocumentWebview(
     onMessage?: (msg: { type: string; payload: Record<string, unknown> }) => void;
     /** StatusBarManager for document info display. */
     statusBar?: StatusBarManager;
+    /** ExtensionContext for workspaceState persistence (reading progress). */
+    context?: vscode.ExtensionContext;
   },
 ): Promise<void> {
   const filePath = document.uri.fsPath;
@@ -71,6 +73,9 @@ export async function setupDocumentWebview(
     enableScripts: true,
     localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
   };
+
+  // workspaceState key for this file's reading progress
+  const stateKey = `preview:state:${document.uri.toString()}`;
 
   // Set HTML early
   webviewPanel.webview.html = getWebviewHtml({
@@ -86,8 +91,27 @@ export async function setupDocumentWebview(
 
       switch (msgType) {
         case 'ready': {
+          // Restore saved reading progress before loading document data
+          if (options?.context) {
+            const saved = options.context.workspaceState.get<Record<string, unknown>>(stateKey);
+            if (saved) {
+              await webviewPanel.webview.postMessage({
+                type: 'document:restoreState',
+                payload: saved,
+              });
+            }
+          }
           if (options?.onReady) {
             await options.onReady();
+          }
+          break;
+        }
+
+        // ── Save reading progress from webview ────────────────────────────
+        case 'document:saveState': {
+          if (options?.context) {
+            const payload = (msg as { payload: Record<string, unknown> }).payload;
+            void options.context.workspaceState.update(stateKey, payload);
           }
           break;
         }

@@ -631,9 +631,25 @@ explorer/context 右键
 
 ### 8.2 阅读进度持久化
 
-利用 VSCode webview 内置的 `getState()` / `setState()` API，在 Tab 隐藏/恢复周期内自动保持文档阅读进度。
+通过 Extension 侧 `workspaceState` 持久化文档阅读进度，跨 Tab 关闭/重开和 VSCode 重启均有效。
 
-**持久化 Hook**: `usePersistedState<T>(key, defaultValue)` — 替代 `useState`，状态变更时 debounce 300ms 写入 webview state。
+> **为何不用 webview `getState()`/`setState()`**：CustomEditorProvider 每次 `resolveCustomEditor()` 创建全新 webview，`getState()` 返回 null。webview state 只在 `retainContextWhenHidden` 场景下有效（此时 React 状态已在内存中），对 Tab 关闭重开无用。
+
+**消息协议**：
+
+```
+Tab 打开 → resolveCustomEditor()
+  → webview sends 'ready'
+  → Extension reads workspaceState[preview:state:{uri}]
+  → Extension sends 'document:restoreState' { state }   ← 恢复
+  → Extension sends 'document:data' { url }              ← 加载
+
+用户翻页/缩放
+  → Webview sends 'document:saveState' { state }         ← 保存（debounce 500ms）
+  → Extension writes workspaceState[preview:state:{uri}]
+```
+
+**持久化 Hook**: `usePersistedState<T>(key, defaultValue)` — 替代 `useState`，状态变更时 debounce 500ms 通过 postMessage 发给 Extension 存储。
 
 **各文档持久化字段**：
 
@@ -644,11 +660,7 @@ explorer/context 右键
 | CBZ | `currentPage`, `viewMode` | 加载后滚动到保存页码 |
 | DOCX | 无 | 快速预览场景，不持久化 |
 
-**生命周期**：
-- `retainContextWhenHidden: true` — Tab 切走时 React 状态保持在内存
-- `setState()` — 状态写入 VSCode 管理的 webview state，Tab 关闭重开后可恢复
-- Extension reload / VSCode 重启后 state 丢失（非 workspaceState）
-
 **共享基础设施**：
 - `vscodeApi.ts` — `acquireVsCodeApi()` 单例，`useVscodeMessage` 和 `usePersistedState` 共享
 - `usePersistedState.ts` — 支持直接值和 updater 函数（`setScale(prev => prev + 0.25)`）
+- `documentProviderHelper.ts` — 统一处理 `document:saveState` / `document:restoreState`，各 Provider 只需传入 `context`

@@ -17,7 +17,11 @@ import ePub, { type Book, type Rendition } from 'epubjs';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection, type DocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
-import { usePersistedState } from '../shared/usePersistedState';
+import {
+  usePersistedState,
+  initPersistedStore,
+  notifySubscribers,
+} from '../shared/usePersistedState';
 
 /** Minimal section interface — epubjs doesn't export Section from its main entry.
  *  The actual runtime returns Promises despite the .d.ts saying otherwise. */
@@ -155,7 +159,11 @@ export const EpubViewer: FC = () => {
   // =========================================================================
 
   useExtensionMessage((msg) => {
-    if (msg.type === 'document:data') {
+    const m = msg as unknown as { type: string; payload: Record<string, unknown> };
+    if (m.type === 'document:restoreState') {
+      initPersistedStore(m.payload as Record<string, unknown>);
+      notifySubscribers();
+    } else if (msg.type === 'document:data') {
       if ('url' in msg.payload && msg.payload.url) {
         void loadEpubFromUrl(msg.payload.url);
       } else if (msg.payload.data) {

@@ -141,10 +141,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   // Document Preview Providers (no engine dependency)
   // =========================================================================
 
-  pdfProvider = new PdfPreviewProvider(context.extensionUri, statusBarManager);
-  cbzProvider = new CbzPreviewProvider(context.extensionUri, statusBarManager);
-  epubProvider = new EpubPreviewProvider(context.extensionUri, statusBarManager);
-  docxProvider = new DocxPreviewProvider(context.extensionUri, statusBarManager);
+  pdfProvider = new PdfPreviewProvider(context.extensionUri, statusBarManager, context);
+  cbzProvider = new CbzPreviewProvider(context.extensionUri, statusBarManager, context);
+  epubProvider = new EpubPreviewProvider(context.extensionUri, statusBarManager, context);
+  docxProvider = new DocxPreviewProvider(context.extensionUri, statusBarManager, context);
 
   // Register document custom editors
   context.subscriptions.push(

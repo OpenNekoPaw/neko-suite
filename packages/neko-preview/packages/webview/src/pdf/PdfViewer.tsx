@@ -13,7 +13,11 @@ import { TextLayer } from 'pdfjs-dist';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
-import { usePersistedState } from '../shared/usePersistedState';
+import {
+  usePersistedState,
+  initPersistedStore,
+  notifySubscribers,
+} from '../shared/usePersistedState';
 import { useTranslation } from '../i18n/I18nContext';
 import { getLogger } from '../utils/logger';
 
@@ -60,7 +64,11 @@ export const PdfViewer: FC = () => {
   const { selection, sendToAi } = useDocumentSelection({ pageNumber: currentPage });
 
   useExtensionMessage((msg) => {
-    if (msg.type === 'document:data') {
+    const m = msg as unknown as { type: string; payload: Record<string, unknown> };
+    if (m.type === 'document:restoreState') {
+      initPersistedStore(m.payload as Record<string, unknown>);
+      notifySubscribers();
+    } else if (msg.type === 'document:data') {
       if ('url' in msg.payload && msg.payload.url) {
         void loadPdfFromUrl(msg.payload.url as string);
       } else if (msg.payload.data) {

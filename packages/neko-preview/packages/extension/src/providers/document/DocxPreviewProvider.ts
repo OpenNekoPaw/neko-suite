@@ -23,6 +23,7 @@ export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider,
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _statusBar?: StatusBarManager,
+    private readonly _context?: vscode.ExtensionContext,
   ) {}
 
   async openCustomDocument(
@@ -50,6 +51,7 @@ export class DocxPreviewProvider implements vscode.CustomReadonlyEditorProvider,
 
     await setupDocumentWebview(document, webviewPanel, this._extensionUri, 'docx', {
       statusBar: this._statusBar,
+      context: this._context,
       onReady: async () => {
         try {
           const { url, token } = await previewFileServer.registerFile(filePath);
