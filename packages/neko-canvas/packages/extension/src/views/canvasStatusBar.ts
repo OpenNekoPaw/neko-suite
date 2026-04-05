@@ -5,6 +5,7 @@
  * Items are only visible when a canvas editor is active.
  */
 import * as vscode from 'vscode';
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
 
 // =============================================================================
 // Types
@@ -18,85 +19,83 @@ export interface CanvasStatusInfo {
 }
 
 // =============================================================================
+// IDs
+// =============================================================================
+
+const ID = {
+  nodeCount: 'neko.canvas.nodeCount',
+  connectionCount: 'neko.canvas.connectionCount',
+  zoom: 'neko.canvas.zoom',
+  selection: 'neko.canvas.selection',
+} as const;
+
+// =============================================================================
 // Manager
 // =============================================================================
 
 export class CanvasStatusBar implements vscode.Disposable {
-  private nodeCountItem: vscode.StatusBarItem;
-  private connectionCountItem: vscode.StatusBarItem;
-  private zoomItem: vscode.StatusBarItem;
-  private selectionItem: vscode.StatusBarItem;
+  private readonly group: StatusBarGroup;
 
   constructor() {
-    // Create status bar items (right-aligned, lower priority = further right)
-    this.nodeCountItem = vscode.window.createStatusBarItem(
-      'neko.canvas.nodeCount',
-      vscode.StatusBarAlignment.Left,
-      100,
-    );
-    this.nodeCountItem.name = 'Canvas Nodes';
-    this.nodeCountItem.tooltip = 'Number of nodes on canvas';
-
-    this.connectionCountItem = vscode.window.createStatusBarItem(
-      'neko.canvas.connectionCount',
-      vscode.StatusBarAlignment.Left,
-      99,
-    );
-    this.connectionCountItem.name = 'Canvas Connections';
-    this.connectionCountItem.tooltip = 'Number of connections';
-
-    this.zoomItem = vscode.window.createStatusBarItem(
-      'neko.canvas.zoom',
-      vscode.StatusBarAlignment.Right,
-      101,
-    );
-    this.zoomItem.name = 'Canvas Zoom';
-    this.zoomItem.tooltip = 'Canvas zoom level (click to reset)';
-    this.zoomItem.command = 'neko.canvas.resetZoom';
-
-    this.selectionItem = vscode.window.createStatusBarItem(
-      'neko.canvas.selection',
-      vscode.StatusBarAlignment.Left,
-      98,
-    );
-    this.selectionItem.name = 'Canvas Selection';
-    this.selectionItem.tooltip = 'Selected items';
+    this.group = new StatusBarGroup([
+      {
+        id: ID.nodeCount,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 100,
+        name: 'Canvas Nodes',
+        tooltip: 'Number of nodes on canvas',
+      },
+      {
+        id: ID.connectionCount,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 99,
+        name: 'Canvas Connections',
+        tooltip: 'Number of connections',
+      },
+      {
+        id: ID.zoom,
+        alignment: vscode.StatusBarAlignment.Right,
+        priority: 101,
+        name: 'Canvas Zoom',
+        tooltip: 'Canvas zoom level (click to reset)',
+        command: 'neko.canvas.resetZoom',
+      },
+      {
+        id: ID.selection,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 98,
+        name: 'Canvas Selection',
+        tooltip: 'Selected items',
+        visible: 'conditional',
+      },
+    ]);
   }
 
   /** Update all status bar items with current canvas info */
   update(info: CanvasStatusInfo): void {
-    this.nodeCountItem.text = `$(symbol-class) ${info.nodeCount} nodes`;
-    this.connectionCountItem.text = `$(git-merge) ${info.connectionCount}`;
-    this.zoomItem.text = `$(zoom-in) ${Math.round(info.zoom * 100)}%`;
+    this.group.update(ID.nodeCount, `$(symbol-class) ${info.nodeCount} nodes`);
+    this.group.update(ID.connectionCount, `$(git-merge) ${info.connectionCount}`);
+    this.group.update(ID.zoom, `$(zoom-in) ${Math.round(info.zoom * 100)}%`);
 
     if (info.selectedCount > 0) {
-      this.selectionItem.text = `$(check) ${info.selectedCount} selected`;
-      this.selectionItem.show();
+      this.group.update(ID.selection, `$(check) ${info.selectedCount} selected`);
+      this.group.setVisible(ID.selection, true);
     } else {
-      this.selectionItem.hide();
+      this.group.setVisible(ID.selection, false);
     }
   }
 
   /** Show all status bar items (when canvas editor is active) */
   show(): void {
-    this.nodeCountItem.show();
-    this.connectionCountItem.show();
-    this.zoomItem.show();
-    // selectionItem shown conditionally in update()
+    this.group.show();
   }
 
   /** Hide all status bar items (when canvas editor is not active) */
   hide(): void {
-    this.nodeCountItem.hide();
-    this.connectionCountItem.hide();
-    this.zoomItem.hide();
-    this.selectionItem.hide();
+    this.group.hide();
   }
 
   dispose(): void {
-    this.nodeCountItem.dispose();
-    this.connectionCountItem.dispose();
-    this.zoomItem.dispose();
-    this.selectionItem.dispose();
+    this.group.dispose();
   }
 }

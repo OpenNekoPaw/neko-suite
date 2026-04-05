@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
 import { createServiceId } from '../base';
 
 // =============================================================================
@@ -45,45 +46,63 @@ export interface IStatusBar extends vscode.Disposable {
 }
 
 // =============================================================================
+// IDs
+// =============================================================================
+
+const ID = {
+  playState: 'neko.cut.playState',
+  time: 'neko.cut.time',
+  info: 'neko.cut.info',
+  export: 'neko.cut.export',
+} as const;
+
+// =============================================================================
 // 实现
 // =============================================================================
 
 export class StatusBar implements IStatusBar {
-  private timeItem: vscode.StatusBarItem;
-  private infoItem: vscode.StatusBarItem;
-  private playStateItem: vscode.StatusBarItem;
-  private exportItem: vscode.StatusBarItem;
+  private readonly group: StatusBarGroup;
   private isActive: boolean = false;
 
   constructor() {
-    // Create status bar items with decreasing priority (left to right)
-    this.playStateItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    this.playStateItem.name = 'Neko Suite Play State';
-
-    this.timeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-    this.timeItem.name = 'Neko Suite Timeline';
-
-    this.infoItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
-    this.infoItem.name = 'Neko Suite Info';
-
-    // Export progress item - right aligned for visibility
-    this.exportItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1000);
-    this.exportItem.name = 'Neko Suite Export';
-    this.exportItem.command = 'neko.showExportPanel';
+    this.group = new StatusBarGroup([
+      {
+        id: ID.playState,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 100,
+        name: 'Neko Suite Play State',
+      },
+      {
+        id: ID.time,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 99,
+        name: 'Neko Suite Timeline',
+      },
+      {
+        id: ID.info,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 98,
+        name: 'Neko Suite Info',
+      },
+      {
+        id: ID.export,
+        alignment: vscode.StatusBarAlignment.Right,
+        priority: 1000,
+        name: 'Neko Suite Export',
+        command: 'neko.showExportPanel',
+        visible: 'conditional',
+      },
+    ]);
   }
 
   public show(): void {
     this.isActive = true;
-    this.playStateItem.show();
-    this.timeItem.show();
-    this.infoItem.show();
+    this.group.show();
   }
 
   public hide(): void {
     this.isActive = false;
-    this.playStateItem.hide();
-    this.timeItem.hide();
-    this.infoItem.hide();
+    this.group.hide();
   }
 
   public update(info: StatusInfo): void {
@@ -99,40 +118,49 @@ export class StatusBar implements IStatusBar {
 
     // Play state
     if (info.isPlaying) {
-      this.playStateItem.text = '$(debug-pause) Playing';
-      this.playStateItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      this.group.update(ID.playState, '$(debug-pause) Playing');
+      const playItem = this.group.get(ID.playState);
+      if (playItem) {
+        playItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        playItem.tooltip = 'Video is playing';
+      }
     } else {
-      this.playStateItem.text = '$(play) Paused';
-      this.playStateItem.backgroundColor = undefined;
+      this.group.update(ID.playState, '$(play) Paused');
+      const playItem = this.group.get(ID.playState);
+      if (playItem) {
+        playItem.backgroundColor = undefined;
+        playItem.tooltip = 'Video is paused';
+      }
     }
-    this.playStateItem.tooltip = info.isPlaying ? 'Video is playing' : 'Video is paused';
 
     // Time display
-    this.timeItem.text = `$(clock) ${formatTime(info.currentTime)} / ${formatTime(info.totalDuration)}`;
-    this.timeItem.tooltip = `Current: ${formatTime(info.currentTime)}\nTotal: ${formatTime(info.totalDuration)}\nFPS: ${info.fps}`;
+    this.group.update(
+      ID.time,
+      `$(clock) ${formatTime(info.currentTime)} / ${formatTime(info.totalDuration)}`,
+      `Current: ${formatTime(info.currentTime)}\nTotal: ${formatTime(info.totalDuration)}\nFPS: ${info.fps}`,
+    );
 
     // Track and element info
-    this.infoItem.text = `$(layers) ${info.trackCount} tracks $(file-media) ${info.elementCount} elements`;
-    this.infoItem.tooltip = `Tracks: ${info.trackCount}\nElements: ${info.elementCount}`;
+    this.group.update(
+      ID.info,
+      `$(layers) ${info.trackCount} tracks $(file-media) ${info.elementCount} elements`,
+      `Tracks: ${info.trackCount}\nElements: ${info.elementCount}`,
+    );
   }
 
   public updateExportProgress(info: ExportStatusInfo): void {
     if (!info.isExporting) {
-      this.exportItem.hide();
+      this.group.setVisible(ID.export, false);
       return;
     }
 
-    // Show export progress
-    this.exportItem.show();
+    this.group.setVisible(ID.export, true);
 
     const percent = Math.round(info.percent);
 
     // Build progress bar (10 chars)
     const filled = Math.floor(percent / 10);
     const progressBar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-
-    // Build text
-    this.exportItem.text = `$(sync~spin) 导出中 ${progressBar} ${percent}%`;
 
     // Build tooltip with detailed info
     const tooltipLines = [info.message];
@@ -158,14 +186,19 @@ export class StatusBar implements IStatusBar {
 
     tooltipLines.push('', '点击查看详情');
 
-    this.exportItem.tooltip = tooltipLines.join('\n');
-    this.exportItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    this.group.update(
+      ID.export,
+      `$(sync~spin) 导出中 ${progressBar} ${percent}%`,
+      tooltipLines.join('\n'),
+    );
+
+    const exportItem = this.group.get(ID.export);
+    if (exportItem) {
+      exportItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    }
   }
 
   public dispose(): void {
-    this.playStateItem.dispose();
-    this.timeItem.dispose();
-    this.infoItem.dispose();
-    this.exportItem.dispose();
+    this.group.dispose();
   }
 }

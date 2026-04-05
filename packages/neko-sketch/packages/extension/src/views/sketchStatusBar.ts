@@ -2,54 +2,68 @@
  * Sketch Status Bar - shows canvas info and workflow buttons in VSCode status bar
  */
 import * as vscode from 'vscode';
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
 import type { SketchStatusInfo } from '../types';
 import type { SketchImportContext } from '@neko/shared';
 
+// =============================================================================
+// IDs
+// =============================================================================
+
+const ID = {
+  zoom: 'neko.sketch.zoom',
+  size: 'neko.sketch.size',
+  tool: 'neko.sketch.tool',
+  layer: 'neko.sketch.layer',
+  backToSource: 'neko.sketch.backToSource',
+  sendToTimeline: 'neko.sketch.sendToTimeline',
+} as const;
+
+// =============================================================================
+// Manager
+// =============================================================================
+
 export class SketchStatusBar implements vscode.Disposable {
-  private readonly items: vscode.StatusBarItem[] = [];
-
-  // Canvas info items (always visible while editor is open)
-  private readonly zoomItem: vscode.StatusBarItem;
-  private readonly sizeItem: vscode.StatusBarItem;
-  private readonly toolItem: vscode.StatusBarItem;
-  private readonly layerItem: vscode.StatusBarItem;
-
-  // Phase 2: workflow items (only visible when import context is set)
-  private readonly backToSourceItem: vscode.StatusBarItem;
-  private readonly sendToTimelineItem: vscode.StatusBarItem;
+  private readonly group: StatusBarGroup;
 
   constructor() {
-    this.zoomItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 200);
-    this.zoomItem.command = 'neko.sketch.resetZoom';
-    this.zoomItem.tooltip = 'Click to reset zoom';
-    this.items.push(this.zoomItem);
-
-    this.sizeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 199);
-    this.items.push(this.sizeItem);
-
-    this.toolItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 198);
-    this.items.push(this.toolItem);
-
-    this.layerItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 197);
-    this.items.push(this.layerItem);
-
-    // Workflow buttons (Left side so they stand out)
-    this.backToSourceItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    this.backToSourceItem.command = 'neko.sketch.sendToCanvas';
-    this.items.push(this.backToSourceItem);
-
-    this.sendToTimelineItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-    this.sendToTimelineItem.text = '$(arrow-right) Send to Timeline';
-    this.sendToTimelineItem.tooltip = 'Export canvas and add to Cut timeline';
-    this.sendToTimelineItem.command = 'neko.sketch.sendToTimeline';
-    this.items.push(this.sendToTimelineItem);
+    this.group = new StatusBarGroup([
+      // Canvas info items (always visible while editor is open)
+      {
+        id: ID.zoom,
+        alignment: vscode.StatusBarAlignment.Right,
+        priority: 200,
+        command: 'neko.sketch.resetZoom',
+        tooltip: 'Click to reset zoom',
+      },
+      { id: ID.size, alignment: vscode.StatusBarAlignment.Right, priority: 199 },
+      { id: ID.tool, alignment: vscode.StatusBarAlignment.Right, priority: 198 },
+      { id: ID.layer, alignment: vscode.StatusBarAlignment.Right, priority: 197 },
+      // Workflow items (only visible when import context is set)
+      {
+        id: ID.backToSource,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 100,
+        command: 'neko.sketch.sendToCanvas',
+        visible: 'conditional',
+      },
+      {
+        id: ID.sendToTimeline,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 99,
+        command: 'neko.sketch.sendToTimeline',
+        tooltip: 'Export canvas and add to Cut timeline',
+        visible: 'conditional',
+      },
+    ]);
+    this.group.update(ID.sendToTimeline, '$(arrow-right) Send to Timeline');
   }
 
   update(info: SketchStatusInfo): void {
-    this.zoomItem.text = `$(zoom-in) ${Math.round(info.zoom * 100)}%`;
-    this.sizeItem.text = `$(screen-full) ${info.canvasSize}`;
-    this.toolItem.text = `$(paintcan) ${info.activeTool}`;
-    this.layerItem.text = `$(layers) ${info.layerCount} layers`;
+    this.group.update(ID.zoom, `$(zoom-in) ${Math.round(info.zoom * 100)}%`);
+    this.group.update(ID.size, `$(screen-full) ${info.canvasSize}`);
+    this.group.update(ID.tool, `$(paintcan) ${info.activeTool}`);
+    this.group.update(ID.layer, `$(layers) ${info.layerCount} layers`);
   }
 
   /** Show/update the context-aware workflow buttons */
@@ -61,25 +75,23 @@ export class SketchStatusBar implements vscode.Disposable {
           ? 'Cut Clip'
           : context.source;
 
-    this.backToSourceItem.text = `$(arrow-left) Back to ${sourceLabel}`;
-    this.backToSourceItem.tooltip = `Send edited image back to ${sourceLabel}`;
-    this.backToSourceItem.show();
-    this.sendToTimelineItem.show();
+    this.group.update(ID.backToSource, `$(arrow-left) Back to ${sourceLabel}`);
+    const backItem = this.group.get(ID.backToSource);
+    if (backItem) backItem.tooltip = `Send edited image back to ${sourceLabel}`;
+    this.group.setVisible(ID.backToSource, true);
+    this.group.setVisible(ID.sendToTimeline, true);
   }
 
   show(): void {
-    this.zoomItem.show();
-    this.sizeItem.show();
-    this.toolItem.show();
-    this.layerItem.show();
+    this.group.show();
     // Workflow buttons are shown only when updateContext() is called
   }
 
   hide(): void {
-    this.items.forEach((item) => item.hide());
+    this.group.hide();
   }
 
   dispose(): void {
-    this.items.forEach((item) => item.dispose());
+    this.group.dispose();
   }
 }

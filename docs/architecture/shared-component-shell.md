@@ -1,7 +1,7 @@
 # 通用组件 Shell 架构
 
-> 日期: 2026-03-22
-> 状态: 设计完成，待实现
+> 日期: 2026-03-22（更新: 2026-04-05）
+> 状态: P1 macOS primitives 已完成；P4 StatusBarGroup/useFileDrop/useDrag 已完成
 
 ---
 
@@ -21,7 +21,25 @@ packages/neko-types/src/components/
 ├── CollapsibleSection                                                   ✅ 已共享
 ├── Panel + PanelSection                                                 ✅ 已共享
 ├── ContextMenu（含子菜单、毛玻璃风格）                                   ✅ 已共享
-└── TimelineRuler（Canvas 刻度尺）                                       ✅ 已共享（adapter 模式范本）
+├── TimelineRuler（Canvas 刻度尺）                                       ✅ 已共享（adapter 模式范本）
+├── KeyframeTimeline + KeyframeDiamond                                   ✅ 已共享（puppet/model adapter）
+├── ProgressBar（seek-safe 进度条）                                       ✅ 已共享
+├── MacButton / MacIconButton / MacSlider / MacTabs                      ✅ 已共享
+├── buildAIMenuSection（AI 右键菜单构建器）                                ✅ 已共享
+├── useFileDrop（HTML5 文件拖入）                                         ✅ 已共享（2026-04-05）
+└── useDrag<T>（鼠标拖拽 Shell）                                         ✅ 已共享（2026-04-05）
+```
+
+### @neko/shared/vscode/extension（Extension Host 工具类）
+
+```
+packages/neko-types/src/vscode/extension/
+├── StatusBarGroup（状态栏批量管理）                                       ✅ 已共享（2026-04-05）
+├── BaseOutlineProvider                                                  ✅ 已共享
+├── OutputChannelTransport + createVSCodeLogger                          ✅ 已共享
+├── VSCodeErrorHandler                                                   ✅ 已共享
+├── getVSCodeLocale + injectLocaleAttribute                              ✅ 已共享
+└── createNewFile + templates                                            ✅ 已共享
 ```
 
 ### neko-preview/shared（应成为 Shell 一部分，当前被孤立）
@@ -55,9 +73,11 @@ packages/neko-preview/packages/webview/src/shared/
 | 类别 | 现有 | 缺失 |
 |------|------|------|
 | **结构型**（布局/容器） | Panel, CollapsibleSection, Toolbar | — |
-| **交互型**（原子控件） | 无 | Button, Slider, Tabs, Input |
-| **叠加型**（浮层/菜单） | ContextMenu | Dialog |
-| **媒体专用** | TimelineRuler | ProgressBar |
+| **交互型**（原子控件） | MacButton, MacIconButton, MacSlider, MacTabs | Input, Select |
+| **叠加型**（浮层/菜单） | ContextMenu, buildAIMenuSection | Dialog |
+| **媒体专用** | TimelineRuler, ProgressBar, KeyframeTimeline | — |
+| **行为 Hook** | useFileDrop, useDrag\<T\> | — |
+| **Extension 工具类** | StatusBarGroup, BaseOutlineProvider, Logger | — |
 
 ---
 
@@ -307,6 +327,69 @@ Step 4（持续）：规范
 | Phase 1 | macOS Token 体系 | 为 primitives 组件提供设计 Token |
 | Phase 4.5 | neko-audio Tailwind 迁移 | 迁移完成后删除 MacButton/MacIconButton 副本 |
 | **本文档** | 组件 Shell 架构 | 先建好 Shell，再推进各包迁移 |
+
+---
+
+## P4 — 行为抽象（2026-04-05，已完成）
+
+### StatusBarGroup（Extension Host 工具类）
+
+统一 VSCode StatusBarItem 的批量生命周期管理。
+
+```typescript
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
+
+const bar = new StatusBarGroup([
+  { id: 'neko.audio.duration', alignment: Left, priority: 100, name: 'Duration' },
+  { id: 'neko.audio.codec',    alignment: Left, priority: 99,  name: 'Codec' },
+  { id: 'neko.audio.selection', alignment: Left, priority: 98,  visible: 'conditional' },
+]);
+bar.show();                                     // show all 'always' items
+bar.update('neko.audio.duration', '$(clock) 3:45');
+bar.setVisible('neko.audio.selection', true);    // show/hide conditional items
+bar.dispose();                                   // clean up all items
+```
+
+**已迁移**: neko-audio, neko-canvas, neko-sketch, neko-cut
+**不迁移**: neko-preview（单 item + 复杂双模式渲染）、neko-agent（工厂函数 + watcher，单 item）
+
+### useFileDrop（Webview Hook）
+
+统一 HTML5 DnD 文件拖入逻辑，处理三种来源：`text/uri-list`（VSCode explorer）、`application/json`（Asset Library）、`File`（原生文件）。
+
+```typescript
+import { useFileDrop } from '@neko/shared/components';
+
+const { isDragOver, dropProps } = useFileDrop((result) => {
+  if (result.type === 'uri-list') postMessage({ type: 'drop', uris: result.uris });
+  if (result.type === 'native-file') handleFiles(result.files!);
+}, { accept: ['mp3', 'wav'], maxSize: 50 * 1024 * 1024 });
+
+return <div {...dropProps} className={isDragOver ? 'highlight' : ''} />;
+```
+
+**已迁移**: neko-audio/useDragDrop, neko-canvas/useDragDrop, neko-agent/DropZone
+**不迁移**: neko-cut/useAssetDragDrop（内部排序协议，语义不同）
+
+### useDrag\<T\>（Webview Hook）
+
+鼠标拖拽骨架 hook，封装 mousedown → document mousemove/mouseup → cleanup 生命周期。泛型 `T` 在 onStart 捕获初始状态，自动传递给 onMove/onEnd。
+
+```typescript
+import { useDrag } from '@neko/shared/components';
+
+interface Ctx { startX: number; startY: number; zoom: number; }
+const { isDragging, bindDrag } = useDrag<Ctx>({
+  onStart: (e) => ({ startX: e.clientX, startY: e.clientY, zoom: viewport.zoom }),
+  onMove:  (e, ctx) => { /* delta calc using ctx */ },
+  onEnd:   (e, ctx) => { /* commit final position */ },
+}, { threshold: 5 });
+
+return <div {...bindDrag} />;
+```
+
+**已迁移**: useNodeDrag, useNodeResize, useNodeRotate, Playhead
+**不迁移**: useMarqueeSelect（React-level 事件 + 中间 marqueeRect 状态）、useTimelineSelection（复杂 getElementsInSelectionBox 回调）、useMinimapInteraction（双入口不匹配）
 
 ---
 

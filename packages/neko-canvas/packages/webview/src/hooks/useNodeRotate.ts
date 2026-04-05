@@ -4,7 +4,8 @@
  * Calculates angle from mouse position relative to node center.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useDrag } from '@neko/shared/components';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -55,10 +56,7 @@ function screenToCanvas(
 }
 
 /** Calculate angle in degrees from center to point (0° = up, clockwise) */
-function angleBetween(
-  center: { x: number; y: number },
-  point: { x: number; y: number },
-): number {
+function angleBetween(center: { x: number; y: number }, point: { x: number; y: number }): number {
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   // atan2 returns -π..π with 0 pointing right; convert to 0° = up, clockwise
@@ -70,6 +68,16 @@ function angleBetween(
 /** Snap angle to nearest step */
 function snapAngle(angle: number, step: number): number {
   return Math.round(angle / step) * step;
+}
+
+// =============================================================================
+// Context
+// =============================================================================
+
+interface RotateCtx {
+  startAngle: number;
+  startRotation: number;
+  nodeCenter: { x: number; y: number };
 }
 
 // =============================================================================
@@ -87,61 +95,37 @@ export function useNodeRotate({
   disabled = false,
 }: UseNodeRotateOptions): UseNodeRotateReturn {
   const [rotation, setRotation] = useState(initialRotation);
-  const [isRotating, setIsRotating] = useState(false);
 
-  const startAngleRef = useRef(0);
-  const startRotationRef = useRef(0);
-  const nodeCenterRef = useRef(nodeCenter);
-
-  // Sync from external updates when not rotating
-  useEffect(() => {
-    if (!isRotating) {
-      setRotation(initialRotation);
-    }
-  }, [initialRotation, isRotating]);
-
-  // Keep nodeCenter ref in sync
-  useEffect(() => {
-    nodeCenterRef.current = nodeCenter;
-  }, [nodeCenter]);
-
-  const startRotate = useCallback(
-    (e: React.MouseEvent) => {
-      if (disabled) return;
-      e.stopPropagation();
-      e.preventDefault();
-
+  const { isDragging: isRotating, bindDrag } = useDrag<RotateCtx>({
+    onStart: (e) => {
+      if (disabled) return undefined;
       const container = containerRef.current;
-      if (!container) return;
+      if (!container) return undefined;
 
       const rect = container.getBoundingClientRect();
       const mouseCanvas = screenToCanvas(e.clientX, e.clientY, rect, viewport);
-      const mouseAngle = angleBetween(nodeCenterRef.current, mouseCanvas);
+      const mouseAngle = angleBetween(nodeCenter, mouseCanvas);
 
-      startAngleRef.current = mouseAngle;
-      startRotationRef.current = rotation;
-      setIsRotating(true);
+      return {
+        startAngle: mouseAngle,
+        startRotation: rotation,
+        nodeCenter: { ...nodeCenter },
+      };
     },
-    [disabled, viewport, containerRef, rotation],
-  );
-
-  useEffect(() => {
-    if (!isRotating) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
+    onMove: (e, ctx) => {
       const container = containerRef.current;
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
       const mouseCanvas = screenToCanvas(e.clientX, e.clientY, rect, viewport);
-      const currentAngle = angleBetween(nodeCenterRef.current, mouseCanvas);
+      const currentAngle = angleBetween(ctx.nodeCenter, mouseCanvas);
 
-      let delta = currentAngle - startAngleRef.current;
+      let delta = currentAngle - ctx.startAngle;
       // Normalize delta to -180..180
       if (delta > 180) delta -= 360;
       if (delta < -180) delta += 360;
 
-      let newRotation = startRotationRef.current + delta;
+      let newRotation = ctx.startRotation + delta;
 
       // Shift key: snap to 15° increments
       if (e.shiftKey) {
@@ -153,20 +137,22 @@ export function useNodeRotate({
 
       setRotation(newRotation);
       onRotate?.(nodeId, newRotation);
-    };
-
-    const handleMouseUp = () => {
-      setIsRotating(false);
+    },
+    onEnd: () => {
       onRotateEnd?.(nodeId, rotation);
-    };
+    },
+  });
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isRotating, viewport, containerRef, nodeId, onRotate, onRotateEnd, rotation]);
+  // Sync from external updates when not rotating
+  useEffect(() => {
+    if (!isRotating) {
+      setRotation(initialRotation);
+    }
+  }, [initialRotation, isRotating]);
 
-  return { rotation, isRotating, startRotate };
+  return {
+    rotation,
+    isRotating,
+    startRotate: bindDrag.onMouseDown,
+  };
 }

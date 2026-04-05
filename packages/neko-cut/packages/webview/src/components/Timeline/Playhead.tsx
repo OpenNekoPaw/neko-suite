@@ -1,4 +1,5 @@
-import { useCallback, useState, memo } from 'react';
+import { memo } from 'react';
+import { useDrag } from '@neko/shared/components';
 import { useEditorStore } from '../../stores/editor-store';
 
 interface PlayheadProps {
@@ -8,6 +9,12 @@ interface PlayheadProps {
   height: number;
 }
 
+interface PlayheadCtx {
+  startX: number;
+  startLeft: number;
+  totalDuration: number;
+}
+
 export const Playhead = memo(function Playhead({
   currentTime,
   zoomLevel,
@@ -15,43 +22,29 @@ export const Playhead = memo(function Playhead({
   height,
 }: PlayheadProps) {
   const { seek, getTotalDuration, pause } = useEditorStore();
-  const [isDragging, setIsDragging] = useState(false);
 
   const left = currentTime * pixelsPerSecond * zoomLevel;
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
+  const { isDragging, bindDrag } = useDrag<PlayheadCtx>({
+    onStart: (e) => {
       pause(); // Pause playback when dragging
-      setIsDragging(true);
-
-      const startX = e.clientX;
-      const startLeft = left;
-      const totalDuration = getTotalDuration() || 60;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const newLeft = startLeft + deltaX;
-        const newTime = Math.max(
-          0,
-          Math.min(totalDuration, newLeft / (pixelsPerSecond * zoomLevel)),
-        );
-        seek(newTime);
+      return {
+        startX: e.clientX,
+        startLeft: left,
+        totalDuration: getTotalDuration() || 60,
       };
-
-      const handleMouseUp = () => {
-        setIsDragging(false);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
     },
-    [left, seek, pixelsPerSecond, zoomLevel, getTotalDuration, pause],
-  );
+    onMove: (e, ctx) => {
+      const deltaX = e.clientX - ctx.startX;
+      const newLeft = ctx.startLeft + deltaX;
+      const newTime = Math.max(
+        0,
+        Math.min(ctx.totalDuration, newLeft / (pixelsPerSecond * zoomLevel)),
+      );
+      seek(newTime);
+    },
+    onEnd: () => {},
+  });
 
   return (
     <div className="absolute top-0 z-20 pointer-events-none" style={{ left, height }}>
@@ -67,7 +60,7 @@ export const Playhead = memo(function Playhead({
           clipPath: 'polygon(0 0, 100% 0, 100% 50%, 50% 100%, 0 50%)',
           backgroundColor: isDragging ? '#f87171' : '#ef4444',
         }}
-        onMouseDown={handleMouseDown}
+        {...bindDrag}
       />
     </div>
   );

@@ -3,7 +3,8 @@
  * Handles mouse-based node dragging with canvas coordinate conversion
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useDrag } from '@neko/shared/components';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -29,6 +30,18 @@ export interface UseNodeDragReturn {
 }
 
 // =============================================================================
+// Context
+// =============================================================================
+
+interface NodeDragCtx {
+  startX: number;
+  startY: number;
+  posX: number;
+  posY: number;
+  zoom: number;
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
 
@@ -42,10 +55,36 @@ export function useNodeDrag({
   disabled = false,
 }: UseNodeDragOptions): UseNodeDragReturn {
   const [position, setPosition] = useState(initialPosition);
-  const [isDragging, setIsDragging] = useState(false);
 
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const positionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const { isDragging, bindDrag } = useDrag<NodeDragCtx>({
+    onStart: (e) => {
+      if (disabled || e.button !== 0) return undefined;
+      onDragStart?.(nodeId);
+      return {
+        startX: e.clientX,
+        startY: e.clientY,
+        posX: position.x,
+        posY: position.y,
+        zoom: viewport.zoom,
+      };
+    },
+    onMove: (e, ctx) => {
+      const newPosition = {
+        x: ctx.posX + (e.clientX - ctx.startX) / ctx.zoom,
+        y: ctx.posY + (e.clientY - ctx.startY) / ctx.zoom,
+      };
+      setPosition(newPosition);
+      onDrag?.(nodeId, newPosition);
+    },
+    onEnd: (e, ctx) => {
+      const finalPosition = {
+        x: ctx.posX + (e.clientX - ctx.startX) / ctx.zoom,
+        y: ctx.posY + (e.clientY - ctx.startY) / ctx.zoom,
+      };
+      setPosition(finalPosition);
+      onDragEnd?.(nodeId, finalPosition);
+    },
+  });
 
   // Update position when initialPosition changes (external update)
   useEffect(() => {
@@ -54,73 +93,9 @@ export function useNodeDrag({
     }
   }, [initialPosition, isDragging]);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (disabled) return;
-      if (e.button !== 0) return; // Only left click
-
-      e.stopPropagation();
-      e.preventDefault();
-
-      dragStartRef.current = { x: e.clientX, y: e.clientY };
-      positionStartRef.current = { ...position };
-      setIsDragging(true);
-      onDragStart?.(nodeId);
-    },
-    [disabled, position, nodeId, onDragStart],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragStartRef.current || !positionStartRef.current) return;
-
-      // Calculate delta in screen space, then convert to canvas space
-      const deltaX = (e.clientX - dragStartRef.current.x) / viewport.zoom;
-      const deltaY = (e.clientY - dragStartRef.current.y) / viewport.zoom;
-
-      const newPosition = {
-        x: positionStartRef.current.x + deltaX,
-        y: positionStartRef.current.y + deltaY,
-      };
-
-      setPosition(newPosition);
-      onDrag?.(nodeId, newPosition);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (!dragStartRef.current || !positionStartRef.current) return;
-
-      const deltaX = (e.clientX - dragStartRef.current.x) / viewport.zoom;
-      const deltaY = (e.clientY - dragStartRef.current.y) / viewport.zoom;
-
-      const finalPosition = {
-        x: positionStartRef.current.x + deltaX,
-        y: positionStartRef.current.y + deltaY,
-      };
-
-      setPosition(finalPosition);
-      setIsDragging(false);
-      dragStartRef.current = null;
-      positionStartRef.current = null;
-      onDragEnd?.(nodeId, finalPosition);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, viewport.zoom, nodeId, onDrag, onDragEnd]);
-
   return {
     position,
     isDragging,
-    handlers: {
-      onMouseDown: handleMouseDown,
-    },
+    handlers: bindDrag,
   };
 }

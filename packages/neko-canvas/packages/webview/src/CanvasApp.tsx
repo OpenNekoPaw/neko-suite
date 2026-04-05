@@ -210,7 +210,14 @@ export function CanvasApp() {
   // Drag & Drop
   // =========================================================================
 
-  const { isDragOver, dropPositionRef, handleDragOver, handleDragLeave, handleDrop } = useDragDrop({
+  const {
+    isDragOver,
+    dropPositionRef,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = useDragDrop({
     vscode,
     canvasContainerRef,
     screenToCanvas,
@@ -802,6 +809,7 @@ export function CanvasApp() {
           className="flex-1 relative overflow-hidden"
           style={{ backgroundColor: 'var(--canvas-bg)' }}
           onContextMenu={handleContextMenu}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}

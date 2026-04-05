@@ -3,7 +3,9 @@
  * P2: 支持文件/图片拖拽到聊天区域
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
+import { useFileDrop } from '@neko/shared/components';
+import type { FileDropResult } from '@neko/shared/components';
 import type { MessageAttachment } from './InputArea/types';
 import { getLogger } from '../../utils/logger';
 
@@ -33,6 +35,16 @@ function getFileType(mimeType: string): 'image' | 'video' | 'audio' | 'file' {
   return 'file';
 }
 
+// Read file as data URL
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export function DropZone({
   children,
   onFilesDropped,
@@ -40,147 +52,62 @@ export function DropZone({
   acceptedTypes = ['image/*', 'video/*', 'audio/*'],
   maxSize = 50 * 1024 * 1024, // 50MB default
 }: DropZoneProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounterRef = useRef(0);
+  // Process dropped files into MessageAttachment objects
+  const processFiles = useCallback(async (fileList: File[]): Promise<MessageAttachment[]> => {
+    const files: MessageAttachment[] = [];
 
-  // Check if file type is accepted
-  const isAcceptedType = useCallback(
-    (file: File): boolean => {
-      return acceptedTypes.some((type) => {
-        if (type.endsWith('/*')) {
-          const prefix = type.slice(0, -1);
-          return file.type.startsWith(prefix);
+    for (const file of fileList) {
+      const fileType = getFileType(file.type);
+      const attachedFile: MessageAttachment = {
+        id: `drop-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        type: fileType,
+        size: file.size,
+      };
+
+      // Create preview for media files
+      if (fileType === 'image' || fileType === 'video' || fileType === 'audio') {
+        try {
+          const preview = await readFileAsDataURL(file);
+          attachedFile.preview = preview;
+        } catch (err) {
+          logger.error('Failed to read file preview:', err);
         }
-        return file.type === type;
-      });
-    },
-    [acceptedTypes],
-  );
-
-  // Process dropped files
-  const processFiles = useCallback(
-    async (fileList: FileList): Promise<MessageAttachment[]> => {
-      const files: MessageAttachment[] = [];
-      const validFiles = Array.from(fileList).filter((file) => {
-        if (!isAcceptedType(file)) {
-          logger.warn(`File type not accepted: ${file.type}`);
-          return false;
-        }
-        if (file.size > maxSize) {
-          logger.warn(`File too large: ${file.name} (${file.size} bytes)`);
-          return false;
-        }
-        return true;
-      });
-
-      for (const file of validFiles) {
-        const fileType = getFileType(file.type);
-        const attachedFile: MessageAttachment = {
-          id: `drop-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          type: fileType,
-          size: file.size,
-        };
-
-        // Create preview for media files
-        if (fileType === 'image' || fileType === 'video' || fileType === 'audio') {
-          try {
-            const preview = await readFileAsDataURL(file);
-            attachedFile.preview = preview;
-          } catch (err) {
-            logger.error('Failed to read file preview:', err);
-          }
-        }
-
-        files.push(attachedFile);
       }
 
-      return files;
-    },
-    [isAcceptedType, maxSize],
-  );
-
-  // Read file as data URL
-  const readFileAsDataURL = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle drag enter
-  const handleDragEnter = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (disabled) return;
-
-      dragCounterRef.current++;
-      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-        setIsDragging(true);
-      }
-    },
-    [disabled],
-  );
-
-  // Handle drag leave
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false);
+      files.push(attachedFile);
     }
+
+    return files;
   }, []);
 
-  // Handle drag over
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  // Handle drop
   const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      setIsDragging(false);
-      dragCounterRef.current = 0;
-
+    async (result: FileDropResult) => {
       if (disabled) return;
-
-      const files = e.dataTransfer.files;
-      if (files && files.length > 0) {
-        const processedFiles = await processFiles(files);
-        if (processedFiles.length > 0) {
-          onFilesDropped(processedFiles);
+      if (result.type === 'native-file' && result.files) {
+        const processed = await processFiles(result.files);
+        if (processed.length > 0) {
+          onFilesDropped(processed);
         }
       }
     },
     [disabled, processFiles, onFilesDropped],
   );
 
-  // Reset drag counter on mount
-  useEffect(() => {
-    dragCounterRef.current = 0;
-  }, []);
+  const { isDragOver, dropProps } = useFileDrop(handleDrop, {
+    // Convert 'image/*' → 'image/' for useFileDrop accept format
+    accept: acceptedTypes.map((t) => (t.endsWith('/*') ? t.slice(0, -1) : t)),
+    maxSize,
+    parseUriList: false,
+    parseAssetJson: false,
+  });
 
   return (
-    <div
-      className="relative w-full h-full"
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
+    <div className="relative w-full h-full" {...dropProps}>
       {children}
 
       {/* Drop overlay */}
-      {isDragging && (
+      {isDragOver && !disabled && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--vscode-editor-background)] bg-opacity-90 border-2 border-dashed border-[var(--vscode-focusBorder)] rounded-lg">
           <div className="text-center">
             <UploadIcon className="w-12 h-12 mx-auto mb-3 text-[var(--vscode-focusBorder)]" />

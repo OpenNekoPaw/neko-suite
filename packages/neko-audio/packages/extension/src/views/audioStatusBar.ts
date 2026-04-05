@@ -5,6 +5,7 @@
  * Items are only visible when an audio editor is active.
  */
 import * as vscode from 'vscode';
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
 
 // ===========
 // Types
@@ -19,82 +20,83 @@ export interface AudioStatusInfo {
 }
 
 // ===========
+// IDs
+// ===========
+
+const ID = {
+  duration: 'neko.audio.duration',
+  sampleRate: 'neko.audio.sampleRate',
+  channels: 'neko.audio.channels',
+  codec: 'neko.audio.codec',
+} as const;
+
+// ===========
 // Manager
 // ===========
 
 export class AudioStatusBar implements vscode.Disposable {
-  private durationItem: vscode.StatusBarItem;
-  private sampleRateItem: vscode.StatusBarItem;
-  private channelsItem: vscode.StatusBarItem;
-  private codecItem: vscode.StatusBarItem;
+  private readonly group: StatusBarGroup;
 
   constructor() {
-    this.durationItem = vscode.window.createStatusBarItem(
-      'neko.audio.duration',
-      vscode.StatusBarAlignment.Left,
-      100,
-    );
-    this.durationItem.name = 'Audio Duration';
-    this.durationItem.tooltip = 'Audio duration';
-
-    this.sampleRateItem = vscode.window.createStatusBarItem(
-      'neko.audio.sampleRate',
-      vscode.StatusBarAlignment.Left,
-      99,
-    );
-    this.sampleRateItem.name = 'Sample Rate';
-    this.sampleRateItem.tooltip = 'Audio sample rate';
-
-    this.channelsItem = vscode.window.createStatusBarItem(
-      'neko.audio.channels',
-      vscode.StatusBarAlignment.Left,
-      98,
-    );
-    this.channelsItem.name = 'Audio Channels';
-    this.channelsItem.tooltip = 'Audio channels';
-
-    this.codecItem = vscode.window.createStatusBarItem(
-      'neko.audio.codec',
-      vscode.StatusBarAlignment.Left,
-      97,
-    );
-    this.codecItem.name = 'Audio Codec';
-    this.codecItem.tooltip = 'Audio codec and bitrate';
+    this.group = new StatusBarGroup([
+      {
+        id: ID.duration,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 100,
+        name: 'Audio Duration',
+        tooltip: 'Audio duration',
+      },
+      {
+        id: ID.sampleRate,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 99,
+        name: 'Sample Rate',
+        tooltip: 'Audio sample rate',
+      },
+      {
+        id: ID.channels,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 98,
+        name: 'Audio Channels',
+        tooltip: 'Audio channels',
+      },
+      {
+        id: ID.codec,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 97,
+        name: 'Audio Codec',
+        tooltip: 'Audio codec and bitrate',
+      },
+    ]);
   }
 
   /** Update all status bar items with current audio info */
   update(info: AudioStatusInfo): void {
-    this.durationItem.text = `$(clock) ${this.formatDuration(info.duration)}`;
-    this.sampleRateItem.text = `$(pulse) ${(info.sampleRate / 1000).toFixed(1)} kHz`;
-    this.channelsItem.text = `$(unmute) ${info.channels === 1 ? 'Mono' : info.channels === 2 ? 'Stereo' : `${info.channels}ch`}`;
+    this.group.update(ID.duration, `$(clock) ${this.formatDuration(info.duration)}`);
+    this.group.update(ID.sampleRate, `$(pulse) ${(info.sampleRate / 1000).toFixed(1)} kHz`);
+    this.group.update(
+      ID.channels,
+      `$(unmute) ${info.channels === 1 ? 'Mono' : info.channels === 2 ? 'Stereo' : `${info.channels}ch`}`,
+    );
 
     const bitrateStr = info.bitrate
       ? ` · ${info.bitrate >= 1000000 ? `${(info.bitrate / 1000000).toFixed(1)} Mbps` : `${(info.bitrate / 1000).toFixed(0)} kbps`}`
       : '';
-    this.codecItem.text = `$(file-binary) ${info.codec}${bitrateStr}`;
+    this.group.update(ID.codec, `$(file-binary) ${info.codec}${bitrateStr}`);
   }
 
   /** Show all status bar items */
   show(): void {
-    this.durationItem.show();
-    this.sampleRateItem.show();
-    this.channelsItem.show();
-    this.codecItem.show();
+    this.group.show();
   }
 
   /** Hide all status bar items */
   hide(): void {
-    this.durationItem.hide();
-    this.sampleRateItem.hide();
-    this.channelsItem.hide();
-    this.codecItem.hide();
+    this.group.hide();
   }
 
   dispose(): void {
-    this.durationItem.dispose();
-    this.sampleRateItem.dispose();
-    this.channelsItem.dispose();
-    this.codecItem.dispose();
+    this.group.dispose();
   }
 
   private formatDuration(seconds: number): string {

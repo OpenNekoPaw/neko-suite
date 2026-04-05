@@ -5,7 +5,9 @@
  * or native file system into the audio editor.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback } from 'react';
+import { useFileDrop } from '@neko/shared/components';
+import type { FileDropResult } from '@neko/shared/components';
 import { postMessage } from '../shared/useVscodeMessage';
 
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']);
@@ -22,99 +24,45 @@ export interface UseDragDropReturn {
   handleDrop: (e: React.DragEvent) => void;
 }
 
-export function useDragDrop(containerRef: React.RefObject<HTMLElement | null>): UseDragDropReturn {
-  const [isDragOver, setIsDragOver] = useState(false);
-  const dragCounterRef = useRef(0);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-  }, []);
-
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const { clientX, clientY } = e;
-        if (
-          clientX < rect.left ||
-          clientX > rect.right ||
-          clientY < rect.top ||
-          clientY > rect.bottom
-        ) {
-          setIsDragOver(false);
-          dragCounterRef.current = 0;
-        }
+export function useDragDrop(_containerRef: React.RefObject<HTMLElement | null>): UseDragDropReturn {
+  const handleFileDrop = useCallback((result: FileDropResult) => {
+    if (result.type === 'uri-list' && result.uris) {
+      // URI list already filtered by accept option, but double-check audio
+      const audioUris = result.uris.filter((u) => isAudioUri(u));
+      if (audioUris.length > 0) {
+        postMessage({ type: 'project:dropImportSource', uris: audioUris });
       }
-    },
-    [containerRef],
-  );
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    dragCounterRef.current = 0;
-
-    // Try URI list first (VSCode explorer drag)
-    const uriList = e.dataTransfer.getData('text/uri-list');
-    const textData = e.dataTransfer.getData('text/plain');
-
-    const uris = (uriList || textData || '')
-      .split('\n')
-      .map((u) => u.trim())
-      .filter((u) => u && !u.startsWith('#') && isAudioUri(u));
-
-    if (uris.length > 0) {
-      postMessage({ type: 'project:dropImportSource', uris });
-      return;
-    }
-
-    // Try JSON data (asset library)
-    const jsonData = e.dataTransfer.getData('application/json');
-    if (jsonData) {
-      try {
-        const data = JSON.parse(jsonData);
-        const files: string[] = (data.files ?? [])
-          .map((f: { path?: string }) => f.path)
-          .filter((p: string | undefined): p is string => !!p && isAudioUri(p));
-        if (files.length > 0) {
-          postMessage({
-            type: 'project:dropImportSource',
-            uris: files.map((f) => `file://${f}`),
-          });
-          return;
-        }
-      } catch {
-        // Not valid JSON, ignore
+    } else if (result.type === 'asset-json' && result.assetData) {
+      const data = result.assetData as { files?: { path?: string }[] };
+      const files: string[] = (data.files ?? [])
+        .map((f) => f.path)
+        .filter((p): p is string => !!p && isAudioUri(p));
+      if (files.length > 0) {
+        postMessage({
+          type: 'project:dropImportSource',
+          uris: files.map((f) => `file://${f}`),
+        });
       }
     }
   }, []);
 
-  // Use dragenter to track drag state (more reliable than dragover for visual feedback)
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current++;
-    if (dragCounterRef.current === 1) {
-      setIsDragOver(true);
-    }
-  }, []);
+  const { isDragOver, dropProps } = useFileDrop(handleFileDrop, {
+    accept: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'],
+  });
 
-  // Combine dragenter into dragover for simplicity
+  // Adapt to original interface: original hook merged dragenter into handleDragOver
   const combinedDragOver = useCallback(
     (e: React.DragEvent) => {
-      handleDragEnter(e);
-      handleDragOver(e);
+      dropProps.onDragEnter(e);
+      dropProps.onDragOver(e);
     },
-    [handleDragEnter, handleDragOver],
+    [dropProps],
   );
 
   return {
     isDragOver,
     handleDragOver: combinedDragOver,
-    handleDragLeave,
-    handleDrop,
+    handleDragLeave: dropProps.onDragLeave,
+    handleDrop: dropProps.onDrop,
   };
 }

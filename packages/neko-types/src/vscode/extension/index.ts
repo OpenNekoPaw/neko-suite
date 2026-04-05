@@ -35,3 +35,7 @@ export {
   generateMinimalGlb,
   generateHumanoidGlb,
 } from './templates';
+
+// StatusBar group lifecycle manager
+export { StatusBarGroup } from './StatusBarGroup';
+export type { StatusBarItemConfig } from './StatusBarGroup';

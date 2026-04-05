@@ -56,3 +56,16 @@ export type { MacSliderProps } from './MacSlider';
 
 export { MacTabs } from './MacTabs';
 export type { MacTabsProps, MacTab } from './MacTabs';
+
+// ── Hooks ────────────────────────────────────────────────────────────────────
+
+export { useFileDrop } from './useFileDrop';
+export type {
+  FileDropOptions,
+  FileDropResult,
+  FileDropResultType,
+  FileDropBindings,
+} from './useFileDrop';
+
+export { useDrag } from './useDrag';
+export type { DragCallbacks, DragOptions, DragBindings } from './useDrag';

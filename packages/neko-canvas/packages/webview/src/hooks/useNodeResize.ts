@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useDrag } from '@neko/shared/components';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -41,6 +42,21 @@ export interface UseNodeResizeReturn {
 }
 
 // =============================================================================
+// Context
+// =============================================================================
+
+interface ResizeCtx {
+  handle: ResizeHandle;
+  startX: number;
+  startY: number;
+  startW: number;
+  startH: number;
+  startPosX: number;
+  startPosY: number;
+  zoom: number;
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
 
@@ -57,12 +73,61 @@ export function useNodeResize({
 }: UseNodeResizeOptions): UseNodeResizeReturn {
   const [size, setSize] = useState(initialSize);
   const [position, setPosition] = useState(initialPosition);
-  const [isResizing, setIsResizing] = useState(false);
 
-  const handleRef = useRef<ResizeHandle | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const sizeStartRef = useRef<{ width: number; height: number } | null>(null);
-  const posStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingHandleRef = useRef<ResizeHandle | null>(null);
+
+  const { isDragging: isResizing, bindDrag } = useDrag<ResizeCtx>({
+    onStart: (e) => {
+      if (disabled || !pendingHandleRef.current) return undefined;
+      return {
+        handle: pendingHandleRef.current,
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: size.width,
+        startH: size.height,
+        startPosX: position.x,
+        startPosY: position.y,
+        zoom: viewport.zoom,
+      };
+    },
+    onMove: (e, ctx) => {
+      const dx = (e.clientX - ctx.startX) / ctx.zoom;
+      const dy = (e.clientY - ctx.startY) / ctx.zoom;
+
+      let newW = ctx.startW;
+      let newH = ctx.startH;
+      let newX = ctx.startPosX;
+      let newY = ctx.startPosY;
+
+      // Horizontal
+      if (ctx.handle.includes('e')) {
+        newW = Math.max(minWidth, ctx.startW + dx);
+      } else if (ctx.handle.includes('w')) {
+        const dw = Math.min(dx, ctx.startW - minWidth);
+        newW = ctx.startW - dw;
+        newX = ctx.startPosX + dw;
+      }
+
+      // Vertical
+      if (ctx.handle.includes('s')) {
+        newH = Math.max(minHeight, ctx.startH + dy);
+      } else if (ctx.handle.includes('n')) {
+        const dh = Math.min(dy, ctx.startH - minHeight);
+        newH = ctx.startH - dh;
+        newY = ctx.startPosY + dh;
+      }
+
+      const newSize = { width: newW, height: newH };
+      const newPos = { x: newX, y: newY };
+      setSize(newSize);
+      setPosition(newPos);
+      onResize?.(nodeId, newSize, newPos);
+    },
+    onEnd: () => {
+      pendingHandleRef.current = null;
+      onResizeEnd?.(nodeId, size, position);
+    },
+  });
 
   // Sync from external updates when not resizing
   useEffect(() => {
@@ -75,89 +140,11 @@ export function useNodeResize({
   const startResize = useCallback(
     (handle: ResizeHandle, e: React.MouseEvent) => {
       if (disabled) return;
-      e.stopPropagation();
-      e.preventDefault();
-
-      handleRef.current = handle;
-      dragStartRef.current = { x: e.clientX, y: e.clientY };
-      sizeStartRef.current = { ...size };
-      posStartRef.current = { ...position };
-      setIsResizing(true);
+      pendingHandleRef.current = handle;
+      bindDrag.onMouseDown(e);
     },
-    [disabled, size, position],
+    [disabled, bindDrag],
   );
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const handle = handleRef.current;
-      const start = dragStartRef.current;
-      const startSize = sizeStartRef.current;
-      const startPos = posStartRef.current;
-      if (!handle || !start || !startSize || !startPos) return;
-
-      const dx = (e.clientX - start.x) / viewport.zoom;
-      const dy = (e.clientY - start.y) / viewport.zoom;
-
-      let newW = startSize.width;
-      let newH = startSize.height;
-      let newX = startPos.x;
-      let newY = startPos.y;
-
-      // Horizontal
-      if (handle.includes('e')) {
-        newW = Math.max(minWidth, startSize.width + dx);
-      } else if (handle.includes('w')) {
-        const dw = Math.min(dx, startSize.width - minWidth);
-        newW = startSize.width - dw;
-        newX = startPos.x + dw;
-      }
-
-      // Vertical
-      if (handle.includes('s')) {
-        newH = Math.max(minHeight, startSize.height + dy);
-      } else if (handle.includes('n')) {
-        const dh = Math.min(dy, startSize.height - minHeight);
-        newH = startSize.height - dh;
-        newY = startPos.y + dh;
-      }
-
-      const newSize = { width: newW, height: newH };
-      const newPos = { x: newX, y: newY };
-      setSize(newSize);
-      setPosition(newPos);
-      onResize?.(nodeId, newSize, newPos);
-    };
-
-    const handleMouseUp = () => {
-      const newSize = { ...size };
-      const newPos = { ...position };
-      setIsResizing(false);
-      handleRef.current = null;
-      dragStartRef.current = null;
-      sizeStartRef.current = null;
-      posStartRef.current = null;
-      onResizeEnd?.(nodeId, newSize, newPos);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [
-    isResizing,
-    viewport.zoom,
-    nodeId,
-    minWidth,
-    minHeight,
-    onResize,
-    onResizeEnd,
-    size,
-    position,
-  ]);
 
   return { size, position, isResizing, startResize };
 }
