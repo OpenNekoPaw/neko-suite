@@ -25,7 +25,7 @@
 | **neko-model** | Alpha | 78% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情）+ **关键帧编辑 Rust 后端 ✅** + **模板创建 + 角色编辑 P0/P1 API ✅** |
 | **neko-sketch** | Alpha | 95% | S.1-S.4 全部完成（绘画 + 骨骼动画 + 高级 2D + Inpaint/StyleTransfer/AutoLayer + sketch.generate + 跨模块工作流 Timeline/Canvas）|
 | **neko-audio** | Alpha | 95% | 完整音频工作站 + 12 种效果链 + Engine 麦克风 + 78 测试 |
-| **neko-live** | WIP | 25% | Phase 5.1.1 VMC + VRM 实时预览 MVP ✅（OSC 解析 + VmcReceiver + Three.js/VRM 驱动 + TrackingPanel UI） |
+| **neko-live** | Alpha | 55% | Phase 5.1 ✅（VMC+VRM 预览 + 2D Puppet 联动 + Canvas 录制 + 麦克风音频 + i18n） |
 | **neko-suite** | Stable | 90% | Extension Pack + Release workflow |
 
 ---
@@ -179,7 +179,7 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 
 ---
 
-## Phase 5: 虚拟制片 (~25%)
+## Phase 5: 虚拟制片 (~55%)
 
 > 前置：Phase 4 ✅
 
@@ -194,21 +194,29 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - ✅ LivePanelProvider（WebviewViewProvider + CSP + WASM-ready）
 - ✅ Three.js + @pixiv/three-vrm VRM 加载与实时驱动
 - ✅ ARKit 52 blend shapes → VRM 17 表情映射（vmcMapping）
-- ✅ Zustand 状态管理 + Tailwind UI（TrackingPanel 控制面板）
+- ✅ Zustand 状态管理 + inline styles 控制面板
 - ✅ postMessage 双向桥接（Extension Host ↔ Webview）
 
-### Phase 5.1.2（待做）：Rust 摄像头采集
-- [ ] `ICameraService` 实现（nokhwa/FFmpeg avdevice → H.264 → WebSocket）
-- [ ] CameraPreview 组件（H264StreamClient 解码 + Canvas 渲染）
+### Phase 5.1.2 ✅ 2D Puppet 联动 + 录制 + i18n
+- ✅ PuppetViewer（Canvas 2D 渲染 inochi2d 变形网格 + z_order 排序 + 自动缩放）
+- ✅ puppetMapping（ARKit → inochi2d 参数：眼/口/眉/头部角度四元数→欧拉角）
+- ✅ LivePanelProvider puppet 管理（fs → loadPuppet → openPuppetStream → PuppetDelta 转发）
+- ✅ Avatar 选择器支持 .vrm/.glb/.gltf + .inp/.inx，自动切换 3D/2D 视口
+- ✅ CanvasRecorder（canvas.captureStream + MediaRecorder → WebM VP9 → base64 → 磁盘保存）
+- ✅ 麦克风录制（EngineClient.recordStart → cpal → WAV）
+- ✅ 录制 UI（红色边框 + REC 闪烁徽章 + 计时器 + 保存路径显示）
+- ✅ i18n（vscode.l10n.t 中英双语 18 条 + ILogger 结构化日志）
 
-### Phase 5.1.3（待做）：MediaPipe 集成
+### Phase 5.1.3（待做）：摄像头 + MediaPipe
+- [ ] Rust `ICameraService` 实现（nokhwa/FFmpeg avdevice → H.264 → WebSocket）
+- [ ] CameraPreview 组件（H264StreamClient 解码 + Canvas 渲染）
 - [ ] @mediapipe/tasks-vision WASM（FaceLandmarker + PoseLandmarker）
 - [ ] ITrackingProvider 抽象（MediaPipe / VMC / Hybrid 切换）
 
 **里程碑**：
-- ~~5.1：核心追踪（MediaPipe + VMC + VRM 预览）— 3-4 周~~
-- 5.2：录制与输出（标定 + MP4 导出 → neko-cut）— 2-3 周
-- 5.3：直播推流（RTMP/SRT → OBS + 2D puppet 联动）— 2-3 周
+- ~~5.1：核心追踪 + 2D/3D 联动 + 录制~~  ✅
+- 5.2：标定系统 + 音视频合并 + 导入 neko-cut 时间线 — 2-3 周
+- 5.3：直播推流（RTMP/SRT → OBS）— 2-3 周
 
 ---
 
@@ -340,4 +348,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-05（Phase 5.1.1 neko-live VMC + VRM 实时预览 MVP）*
+*最后更新: 2026-04-05（Phase 5.1 neko-live：VMC/VRM + 2D Puppet 联动 + Canvas 录制 + i18n）*
