@@ -2,5 +2,12 @@
   "neko.model.editor.title": "3D Model Editor",
   "neko.model.resetView.title": "Reset View",
   "neko.model.new.title": "New 3D Model Project",
-  "neko.model.new.noFolder": "No workspace folder is open."
+  "neko.model.new.noFolder": "No workspace folder is open.",
+  "neko.model.new.pickTemplate": "Select a template",
+  "neko.model.template.blank": "Blank Scene",
+  "neko.model.template.blank.desc": "Empty 3D scene",
+  "neko.model.template.humanoid": "Simple Humanoid",
+  "neko.model.template.humanoid.desc": "Pre-built bone hierarchy (spine, limbs)",
+  "neko.model.template.import": "Import Existing File",
+  "neko.model.template.import.desc": "Import a .gltf / .glb / .vrm file from disk"
 }

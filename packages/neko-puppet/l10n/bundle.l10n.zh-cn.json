@@ -1,5 +1,12 @@
 {
   "neko.puppet.new.title": "新建 Puppet",
   "neko.puppet.new.noFolder": "未打开工作区文件夹",
+  "neko.puppet.new.pickTemplate": "选择模板",
+  "neko.puppet.template.blank": "空白画布",
+  "neko.puppet.template.blank.desc": "仅包含 Root 节点",
+  "neko.puppet.template.humanoid": "简单人形",
+  "neko.puppet.template.humanoid.desc": "预制人形骨架（头/身体/四肢）",
+  "neko.puppet.template.import": "导入现有文件",
+  "neko.puppet.template.import.desc": "从磁盘导入 .inp 文件",
   "neko.puppet.import.filter": "Inochi2D Puppet"
 }

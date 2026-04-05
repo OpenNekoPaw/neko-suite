@@ -234,6 +234,17 @@ impl IPuppetService for PuppetService {
 
         Ok(world.get_blend_state())
     }
+
+    fn set_node_opacity(&self, node_id: &str, opacity: f32) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world
+            .set_node_opacity(node_id, opacity)
+            .map_err(Error::Other)
+    }
 }
 
 #[cfg(test)]

@@ -150,6 +150,10 @@ pub mod actions {
         "ik_target",
         "ik_enable",
         "ik_list",
+        "set_visible",
+        "morph_weights",
+        "update_material",
+        "delete_node",
     ];
 
     pub const PUPPETS: &[&str] = &[
@@ -171,6 +175,7 @@ pub mod actions {
         "anim_crossfade",
         "blend_weight",
         "blend_state",
+        "set_opacity",
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];

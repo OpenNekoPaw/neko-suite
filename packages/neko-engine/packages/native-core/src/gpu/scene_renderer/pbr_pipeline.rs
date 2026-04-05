@@ -606,12 +606,18 @@ impl PbrRenderer {
         };
 
         let mut calls = Vec::new();
-        let mut query =
-            world.query::<(Entity, &GlobalTransform, &MeshRef, Option<&MaterialRef>)>();
+        let mut query = world.query::<(
+            Entity,
+            &GlobalTransform,
+            &MeshRef,
+            Option<&MaterialRef>,
+            Option<&Visible>,
+        )>();
 
         let draw_data: Vec<(Entity, Mat4, String, usize, Option<(String, usize)>)> = query
             .iter(world)
-            .map(|(entity, gt, mesh_ref, mat_ref)| {
+            .filter(|(_, _, _, _, visible)| visible.map_or(true, |v| v.0))
+            .map(|(entity, gt, mesh_ref, mat_ref, _)| {
                 (
                     entity,
                     gt.0,

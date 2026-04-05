@@ -161,6 +161,9 @@ pub trait PuppetWorld: Send + Sync {
 
     /// Get the current blend state (all active layers)
     fn get_blend_state(&mut self) -> Vec<BlendLayerInfo>;
+
+    /// Set opacity for a specific puppet node
+    fn set_node_opacity(&mut self, node_id: &str, opacity: f32) -> Result<(), String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -723,6 +726,27 @@ impl PuppetWorld for BevyPuppetWorld {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn set_node_opacity(&mut self, node_id: &str, opacity: f32) -> Result<(), String> {
+        let mut found = None;
+        let mut query = self.world.query::<(Entity, &PuppetNodeId)>();
+        for (entity, id) in query.iter(&self.world) {
+            if id.0 == node_id {
+                found = Some(entity);
+                break;
+            }
+        }
+        let entity = found.ok_or_else(|| format!("Node '{}' not found", node_id))?;
+
+        if let Some(mut op) = self.world.get_mut::<Opacity>(entity) {
+            op.0 = opacity.clamp(0.0, 1.0);
+        } else {
+            self.world
+                .entity_mut(entity)
+                .insert(Opacity(opacity.clamp(0.0, 1.0)));
+        }
+        Ok(())
     }
 }
 

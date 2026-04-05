@@ -88,4 +88,7 @@ pub trait IPuppetService: Send + Sync {
 
     /// Get the current blend state (all active layers)
     fn get_blend_state(&self) -> crate::error::Result<Vec<BlendLayerInfo>>;
+
+    /// Set opacity for a specific puppet node (0.0 = transparent, 1.0 = opaque)
+    fn set_node_opacity(&self, node_id: &str, opacity: f32) -> crate::error::Result<()>;
 }

@@ -642,6 +642,65 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
         Ok(world.get_ik_chains())
     }
+
+    fn set_visible(&self, node_id: &str, visible: bool) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world.set_visible(node_id, visible).map_err(Error::Other)
+    }
+
+    fn set_morph_weights(&self, node_id: &str, weights: Vec<f32>) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world
+            .set_morph_weights(node_id, weights)
+            .map_err(Error::Other)
+    }
+
+    fn update_material(
+        &self,
+        node_id: &str,
+        base_color: Option<[f32; 4]>,
+        metallic: Option<f32>,
+        roughness: Option<f32>,
+    ) -> Result<()> {
+        // Read the material reference from the scene world
+        let mat_ref = {
+            let mut world = self
+                .world
+                .lock()
+                .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+            world.get_material_ref(node_id).map_err(Error::Other)?
+        };
+
+        let (uri, mat_idx) = mat_ref
+            .ok_or_else(|| Error::Other(format!("Node '{}' has no material", node_id)))?;
+
+        // Update the GPU material buffer
+        let cache_mutex = self
+            .asset_cache
+            .as_ref()
+            .ok_or_else(|| Error::Other("GPU not available".into()))?;
+        let cache = cache_mutex
+            .lock()
+            .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
+
+        cache
+            .update_material_uniforms(&uri, mat_idx, base_color, metallic, roughness)
+            .map_err(Error::Other)
+    }
+
+    fn delete_node(&self, node_id: &str) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        world.delete_node(node_id).map_err(Error::Other)
+    }
 }
 
 /// Spawn a new ECS entity for a procedural mesh with a unique node ID.

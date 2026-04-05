@@ -154,4 +154,22 @@ pub trait ISceneService: Send + Sync {
 
     /// Get all IK chains
     fn get_ik_chains(&self) -> crate::error::Result<Vec<IkChainInfo>>;
+
+    /// Set visibility of a scene node
+    fn set_visible(&self, node_id: &str, visible: bool) -> crate::error::Result<()>;
+
+    /// Set morph target weights on a mesh node
+    fn set_morph_weights(&self, node_id: &str, weights: Vec<f32>) -> crate::error::Result<()>;
+
+    /// Update material parameters on a node. Only provided fields are changed.
+    fn update_material(
+        &self,
+        node_id: &str,
+        base_color: Option<[f32; 4]>,
+        metallic: Option<f32>,
+        roughness: Option<f32>,
+    ) -> crate::error::Result<()>;
+
+    /// Delete a node and all its descendants from the scene
+    fn delete_node(&self, node_id: &str) -> crate::error::Result<()>;
 }

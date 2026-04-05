@@ -26,4 +26,12 @@ export { toWebviewAsset } from './webview-asset';
 
 // New-file UX (unique name → write → reveal → rename)
 export { createNewFile } from './create-new-file';
-export type { CreateNewFileOptions } from './create-new-file';
+export type { CreateNewFileOptions, TemplateChoice } from './create-new-file';
+
+// Binary template generators for new-file templates
+export {
+  generateMinimalInp,
+  generateHumanoidInp,
+  generateMinimalGlb,
+  generateHumanoidGlb,
+} from './templates';

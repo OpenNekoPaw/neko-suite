@@ -1,5 +1,12 @@
 {
   "neko.puppet.new.title": "New Puppet",
   "neko.puppet.new.noFolder": "No workspace folder open",
+  "neko.puppet.new.pickTemplate": "Select a template",
+  "neko.puppet.template.blank": "Blank Canvas",
+  "neko.puppet.template.blank.desc": "Root node only",
+  "neko.puppet.template.humanoid": "Simple Humanoid",
+  "neko.puppet.template.humanoid.desc": "Pre-built skeleton (head, body, limbs)",
+  "neko.puppet.template.import": "Import Existing File",
+  "neko.puppet.template.import.desc": "Import an .inp file from disk",
   "neko.puppet.import.filter": "Inochi2D Puppet"
 }

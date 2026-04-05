@@ -366,6 +366,23 @@ impl Controller for PuppetsController {
                 ))
             }
 
+            "set_opacity" => {
+                #[derive(Debug, Deserialize)]
+                struct SetOpacityOptions {
+                    node_id: String,
+                    opacity: f32,
+                }
+                let opts: SetOpacityOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_node_opacity(&opts.node_id, opts.opacity)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

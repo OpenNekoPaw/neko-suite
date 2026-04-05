@@ -16,6 +16,24 @@
  */
 import * as vscode from 'vscode';
 
+/** A single template option shown in the quick-pick when creating a new file. */
+export interface TemplateChoice {
+  /** Unique identifier for this template. */
+  id: string;
+  /** Display label in the quick-pick (may include codicon, e.g. `'$(file) Blank'`). */
+  label: string;
+  /** Secondary description shown in the quick-pick. */
+  description?: string;
+  /** Returns the initial file content given the file stem. */
+  template: (title: string) => string | Uint8Array;
+  /**
+   * Optional asset files to write alongside the project file.
+   * Each entry's `name` may contain the literal `'template'` which will be
+   * replaced with the actual file stem (title).
+   */
+  assets?: (title: string) => Promise<Array<{ name: string; data: Uint8Array }>>;
+}
+
 export interface CreateNewFileOptions {
   /** Target folder URI. Falls back to the first workspace folder when omitted. */
   targetFolder?: vscode.Uri;
@@ -34,6 +52,14 @@ export interface CreateNewFileOptions {
    * when the user renames the file.
    */
   onCreated?: (uri: vscode.Uri) => void | Promise<void>;
+  /**
+   * When provided with more than one entry, a quick-pick is shown before
+   * file creation so the user can choose a starting template.
+   * A single entry is used directly without showing a picker.
+   */
+  templates?: TemplateChoice[];
+  /** Title for the template quick-pick dialog. */
+  templatePickTitle?: string;
 }
 
 /**
@@ -50,10 +76,38 @@ export interface CreateNewFileOptions {
 export async function createNewFile(
   options: CreateNewFileOptions,
 ): Promise<vscode.Uri | undefined> {
-  const { ext, template, onCreated } = options;
+  const { ext, onCreated } = options;
   const baseName = options.baseName ?? 'Untitled';
 
-  // Resolve target folder
+  // --- Template selection ---------------------------------------------------
+  let templateFn = options.template;
+  let assetsFn: TemplateChoice['assets'] | undefined;
+
+  if (options.templates && options.templates.length > 0) {
+    if (options.templates.length === 1) {
+      // Single template — use directly
+      templateFn = options.templates[0]!.template;
+      assetsFn = options.templates[0]!.assets;
+    } else {
+      // Multiple templates — show quick-pick
+      const items = options.templates.map((t) => ({
+        label: t.label,
+        description: t.description,
+        _choice: t,
+      }));
+
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: options.templatePickTitle,
+        title: options.templatePickTitle,
+      });
+
+      if (!picked) return undefined; // user cancelled
+      templateFn = picked._choice.template;
+      assetsFn = picked._choice.assets;
+    }
+  }
+
+  // --- Resolve target folder ------------------------------------------------
   let targetFolder = options.targetFolder;
   if (!targetFolder) {
     targetFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
@@ -80,9 +134,18 @@ export async function createNewFile(
 
   // Write template content
   const title = fileName.slice(0, fileName.length - ext.length);
-  const content = template(title);
+  const content = templateFn(title);
   const bytes = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
   await vscode.workspace.fs.writeFile(fileUri, bytes);
+
+  // Write asset files alongside the project file
+  if (assetsFn) {
+    const assets = await assetsFn(title);
+    for (const asset of assets) {
+      const assetUri = vscode.Uri.joinPath(targetFolder, asset.name);
+      await vscode.workspace.fs.writeFile(assetUri, asset.data);
+    }
+  }
 
   // Open in editor before rename so the tab is ready; VSCode updates the tab
   // title automatically when the user renames the file in Explorer.

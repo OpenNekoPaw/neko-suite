@@ -149,6 +149,39 @@ impl AssetCache {
         self.materials.get(&(uri.to_string(), usize::MAX))
     }
 
+    /// Update material uniform parameters at runtime.
+    /// Only provided fields are changed; others keep their current values.
+    pub fn update_material_uniforms(
+        &self,
+        uri: &str,
+        material_index: usize,
+        base_color: Option<[f32; 4]>,
+        metallic: Option<f32>,
+        roughness: Option<f32>,
+    ) -> Result<(), String> {
+        let key = (uri.to_string(), material_index);
+        let gpu_mat = self
+            .materials
+            .get(&key)
+            .ok_or_else(|| format!("Material ({}, {}) not found", uri, material_index))?;
+
+        let mut uniforms = gpu_mat.uniforms;
+        if let Some(color) = base_color {
+            uniforms.base_color_factor = color;
+        }
+        if let Some(m) = metallic {
+            uniforms.metallic_factor = m;
+        }
+        if let Some(r) = roughness {
+            uniforms.roughness_factor = r;
+        }
+
+        self.ctx
+            .queue()
+            .write_buffer(&gpu_mat.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+        Ok(())
+    }
+
     /// Register a programmatically-generated mesh into the GPU cache.
     ///
     /// Uses a synthetic URI (e.g. "procedural://shape_001") to avoid

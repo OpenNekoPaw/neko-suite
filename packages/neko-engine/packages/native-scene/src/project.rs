@@ -132,6 +132,7 @@ mod tests {
                     rotation: [0.0, 0.0, 0.0, 1.0],
                     scale: [1.0, 1.0, 1.0],
                     parent_id: None,
+                    visible: true,
                     has_mesh: true,
                     has_light: false,
                     has_camera: false,

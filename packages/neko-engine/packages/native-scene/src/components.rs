@@ -114,6 +114,16 @@ impl Default for Camera {
     }
 }
 
+/// Controls whether a node is rendered. Defaults to visible.
+#[derive(Component, Clone, Debug)]
+pub struct Visible(pub bool);
+
+impl Default for Visible {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
 /// Morph target (blend shape) weights applied to a mesh
 #[derive(Component, Clone, Debug, Default)]
 pub struct MorphWeights {

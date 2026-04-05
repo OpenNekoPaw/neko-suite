@@ -114,6 +114,32 @@
 - [x] **DocumentNode P2**：文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open）✅
 - [x] **ModelNode P2**：AI 模型节点（reference/workflow 双模式，checkModelInstalled → neko-market）✅
 - [ ] **CanvasEmbedNode P3**：嵌套画布引用节点（.nkc 缩略图 + 双击打开）
+- [ ] **搜索系统增强**（当前仅文件名匹配 `MediaLibrarySearchService`，缺少深度搜索 + 缓存 + Engine 委托）：
+  - **现状问题**：首次搜索全量 walkDirectory（万级文件 5-15s）；索引不感知文件变化（新增文件搜不到）；每次搜索 N 次 `fs.stat` 验证 mtime；Extension Host 读大文件阻塞主线程
+  - **四层缓存架构**（核心改进）：
+    - [ ] **L0 文件索引**（增量维护）：FileSystemWatcher 联动搜索索引（TreeProvider 已有 watcher 但未联动）；持久化到 `.neko/.cache/search-index.json`；增量 add/remove/rename，不再全量 walk
+    - [ ] **L1 元数据缓存**（惰性验证）：搜索阶段 `getUnchecked()` 零 I/O 直返缓存；展示阶段 QuickPick `onDidChangeActive` 仅验证可见项 mtime；后台补充未缓存文件 metadata
+    - [ ] **L2 倒排索引**（文档全文）：Engine `documents:text-extract` 提取纯文本 → 分词 → `Map<token, Set<filePath>>` 倒排索引；持久化到磁盘；FileSystemWatcher 增量更新
+    - [ ] **L3 向量索引**（语义搜索，P2）：图片 Engine `models:clip-embed` → float32[512]；文档 Platform `embed()` → float32[1536]；持久化到 `.neko/.cache/vector-index.bin`；<1000 条暴力 cosine top-K 即够
+  - **Engine 委托**（避免 Extension Host 阻塞）：
+    - [ ] Engine 新增 `documents:text-extract` action（文件路径 → 纯文本 + 页数 + 字数，Rust mmap 流式解析）
+    - [ ] Engine 新增 `models:clip-embed` action（文件路径 → 向量，复用现有 ONNX CLIP）
+    - [ ] Engine 新增 `text:stats` action（文件路径 → 字数/行数/字符数，替代 TS 全量 `fs.readFile` 统计）
+    - [ ] 现有阻塞修复：`puppetFaceTools.ts:270` `readFileSync` → async；`qualityCheckTools.ts:331` 大文件 base64 → 限制尺寸或 file URI；`messageHandler.ts:700` 同步 Range 读 → async
+  - **Engine 并发保护**（防止搜索批量请求导致不稳定）：
+    - [ ] Rust 侧：FFmpeg probe `Semaphore(4)` + GPU ops `Semaphore(2)` + ONNX `tokio::sync::Mutex` 替代 `std::Mutex`（防 executor stall）
+    - [ ] Rust 侧：HTTP 中间件全局准入 `Semaphore(8)` + 请求超时 30s + Buffer Pool 16→32
+    - [ ] TS 侧：SearchPipeline 分级限流（probe=4, thumbnail=2, embed=1）；渐进式加载（即时→快速→懒加载→按需）
+  - **搜索功能**：
+    - [ ] P0：类型筛选（QuickPick 增加文件类型过滤，复用 `detectMediaType()`）+ 高级过滤（大小/日期/排序）+ 突破 50 条上限
+    - [ ] P0：项目目录资源搜索（当前 `.neko` 项目内媒体/文档，区别于 VSCode 文本搜索）
+    - [ ] P1：文档全文搜索（依赖 L2 倒排索引 + Engine text-extract）
+    - [ ] P1：拼音/模糊搜索（中文拼音首字母匹配，提升中文文件名体验）
+    - [ ] P1：元数据搜索（分辨率/时长/编码检索，依赖 L1 元数据缓存）
+    - [ ] P2：图片语义搜索（"悲伤的女孩" → CLIP 图文匹配，依赖 L3 + Engine clip-embed）
+    - [ ] P2：相似素材查找（图图相似度，依赖 L3 向量索引）
+    - [ ] P2：素材库 `AssetQuery` 查询落地验证（接口已完善：keyword/category/tags/sourceType/dateRange/variantFilter）
+    - [ ] P3：音频语义搜索（"适合打斗的 BGM" → CLAP/AudioCLIP 模型，需 Engine 新增）
 - [ ] `neko://` 协议 + MediaResolver 代理/原始自动切换（Phase 6.6 客户端，依赖服务端）
 - [x] ONNX 跨平台打包：随扩展分发 onnxruntime 动态库（download-ort.js + OrtInitializer.ts + bin/ bundling）
 - [ ] neko-live 虚拟制片（MediaPipe + VMC + VRM + 录制 + 推流）
@@ -202,4 +228,28 @@
 
 ---
 
-*最后更新：2026-04-05（文档预览增强：瀑布流 + 直连 engine + PathResolver + 双栏模式 + 路径变量解析 + 右键菜单 + 状态栏）*
+## ✅ P2.5f — 角色编辑 模板创建 + P0/P1 引擎 API（已完成）
+
+> [能力差距分析](./docs/architecture/character-editing-gaps.md)
+
+### 模板创建功能
+- [x] `createNewFile` 扩展 `TemplateChoice` 接口 + QuickPick 模板选择 + `assets` 资源写入
+- [x] `inp-template.ts` / `glb-template.ts` 二进制生成器（TypeScript 直接生成最小/人形模板）
+- [x] neko-puppet / neko-model 三模板（空白 / 简单人形 / 导入现有文件）+ i18n
+- [x] 13 个单元测试（INP + GLB 格式验证）
+
+### P0: 显隐控制
+- [x] 3D `Visible` 组件 + `scenes:set_visible` API + GPU 渲染过滤
+- [x] 2D `puppets:set_opacity` API
+
+### P1: 角色编辑 API
+- [x] `scenes:morph_weights` — Morph Target 权重设置
+- [x] `scenes:update_material` — PBR 材质参数运行时编辑
+- [x] `scenes:delete_node` — 节点递归删除
+- [x] `AssetCache.update_material_uniforms()` — GPU 材质 buffer 热更新
+
+**测试结果**：native-scene 49 + native-puppet 51 + native-api 131 全部通过
+
+---
+
+*最后更新：2026-04-05（角色编辑 P0/P1：模板创建 + Visible/Opacity/MorphWeights/Material/DeleteNode 引擎 API）*

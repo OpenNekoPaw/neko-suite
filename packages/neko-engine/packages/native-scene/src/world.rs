@@ -33,6 +33,7 @@ pub struct SceneNodeSnapshot {
     pub rotation: [f32; 4],
     pub scale: [f32; 3],
     pub parent_id: Option<String>,
+    pub visible: bool,
     pub has_mesh: bool,
     pub has_light: bool,
     pub has_camera: bool,
@@ -157,6 +158,18 @@ pub trait SceneWorld: Send + Sync {
 
     /// Get all IK chains
     fn get_ik_chains(&mut self) -> Vec<IkChainInfo>;
+
+    /// Set visibility of a scene node
+    fn set_visible(&mut self, node_id: &str, visible: bool) -> Result<(), String>;
+
+    /// Set morph target weights on a mesh node
+    fn set_morph_weights(&mut self, node_id: &str, weights: Vec<f32>) -> Result<(), String>;
+
+    /// Get material reference for a node (returns uri + material_index)
+    fn get_material_ref(&mut self, node_id: &str) -> Result<Option<(String, usize)>, String>;
+
+    /// Delete a node and all its descendants from the scene
+    fn delete_node(&mut self, node_id: &str) -> Result<(), String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -221,6 +234,7 @@ impl SceneWorld for BevySceneWorld {
             &NodeName,
             &Transform,
             Option<&hierarchy::Parent>,
+            Option<&Visible>,
             Option<&MeshRef>,
             Option<&Light>,
             Option<&Camera>,
@@ -233,6 +247,7 @@ impl SceneWorld for BevySceneWorld {
             name,
             transform,
             parent,
+            visible,
             mesh,
             light,
             camera,
@@ -252,6 +267,7 @@ impl SceneWorld for BevySceneWorld {
                 rotation: transform.rotation.to_array(),
                 scale: transform.scale.to_array(),
                 parent_id,
+                visible: visible.map_or(true, |v| v.0),
                 has_mesh: mesh.is_some(),
                 has_light: light.is_some(),
                 has_camera: camera.is_some(),
@@ -364,6 +380,7 @@ impl SceneWorld for BevySceneWorld {
                         scale: Vec3::from(node.scale),
                     },
                     GlobalTransform::identity(),
+                    Visible(node.visible),
                 ))
                 .id();
 
@@ -727,6 +744,66 @@ impl SceneWorld for BevySceneWorld {
             });
         }
         chains
+    }
+
+    fn set_visible(&mut self, node_id: &str, visible: bool) -> Result<(), String> {
+        let entity = self.find_node_entity(node_id)?;
+        if let Some(mut vis) = self.world.get_mut::<Visible>(entity) {
+            vis.0 = visible;
+        } else {
+            self.world.entity_mut(entity).insert(Visible(visible));
+        }
+        Ok(())
+    }
+
+    fn set_morph_weights(&mut self, node_id: &str, weights: Vec<f32>) -> Result<(), String> {
+        let entity = self.find_node_entity(node_id)?;
+        if let Some(mut mw) = self.world.get_mut::<MorphWeights>(entity) {
+            mw.weights = weights;
+        } else {
+            self.world
+                .entity_mut(entity)
+                .insert(MorphWeights { weights });
+        }
+        Ok(())
+    }
+
+    fn get_material_ref(&mut self, node_id: &str) -> Result<Option<(String, usize)>, String> {
+        let entity = self.find_node_entity(node_id)?;
+        Ok(self
+            .world
+            .get::<MaterialRef>(entity)
+            .map(|m| (m.uri.clone(), m.material_index)))
+    }
+
+    fn delete_node(&mut self, node_id: &str) -> Result<(), String> {
+        let entity = self.find_node_entity(node_id)?;
+
+        // Collect all descendant entities via BFS
+        let mut to_despawn = vec![entity];
+        let mut queue = vec![entity];
+        while let Some(current) = queue.pop() {
+            if let Some(children) = self.world.get::<hierarchy::Children>(current) {
+                for &child in &children.0 {
+                    to_despawn.push(child);
+                    queue.push(child);
+                }
+            }
+        }
+
+        // Remove from parent's children list
+        if let Some(parent) = self.world.get::<hierarchy::Parent>(entity).map(|p| p.0) {
+            if let Some(mut children) = self.world.get_mut::<hierarchy::Children>(parent) {
+                children.0.retain(|&e| e != entity);
+            }
+        }
+
+        // Despawn all collected entities (children first to avoid dangling refs)
+        for e in to_despawn.into_iter().rev() {
+            self.world.despawn(e);
+        }
+
+        Ok(())
     }
 }
 

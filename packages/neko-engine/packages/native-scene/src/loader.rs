@@ -47,6 +47,7 @@ pub fn load_gltf(world: &mut World, path: &Path) -> Result<LoadResult, LoadError
             SceneNodeId(format!("scene_{}", scene.index())),
             Transform::default(),
             GlobalTransform::identity(),
+            Visible::default(),
             Children::default(),
         ))
         .id();
@@ -114,6 +115,7 @@ fn spawn_node(
             NodeName(name),
             transform,
             GlobalTransform::identity(),
+            Visible::default(),
         ))
         .id();
     *count += 1;

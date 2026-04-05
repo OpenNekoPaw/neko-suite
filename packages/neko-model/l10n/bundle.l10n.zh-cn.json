@@ -2,5 +2,12 @@
   "neko.model.editor.title": "3D 模型编辑器",
   "neko.model.resetView.title": "重置视图",
   "neko.model.new.title": "新建 3D 模型项目",
-  "neko.model.new.noFolder": "未打开任何工作区文件夹。"
+  "neko.model.new.noFolder": "未打开任何工作区文件夹。",
+  "neko.model.new.pickTemplate": "选择模板",
+  "neko.model.template.blank": "空白场景",
+  "neko.model.template.blank.desc": "空的 3D 场景",
+  "neko.model.template.humanoid": "简单人形",
+  "neko.model.template.humanoid.desc": "预制骨骼层级（脊柱/四肢）",
+  "neko.model.template.import": "导入现有文件",
+  "neko.model.template.import.desc": "从磁盘导入 .gltf / .glb / .vrm 文件"
 }

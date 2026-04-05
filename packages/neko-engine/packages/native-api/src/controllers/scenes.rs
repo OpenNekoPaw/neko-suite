@@ -597,6 +597,80 @@ impl Controller for ScenesController {
                 ))
             }
 
+            "set_visible" => {
+                #[derive(Debug, Deserialize)]
+                struct SetVisibleOptions {
+                    node_id: String,
+                    visible: bool,
+                }
+                let opts: SetVisibleOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_visible(&opts.node_id, opts.visible)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "morph_weights" => {
+                #[derive(Debug, Deserialize)]
+                struct MorphWeightsOptions {
+                    node_id: String,
+                    weights: Vec<f32>,
+                }
+                let opts: MorphWeightsOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_morph_weights(&opts.node_id, opts.weights)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "update_material" => {
+                #[derive(Debug, Deserialize)]
+                struct UpdateMaterialOptions {
+                    node_id: String,
+                    base_color: Option<[f32; 4]>,
+                    metallic: Option<f32>,
+                    roughness: Option<f32>,
+                }
+                let opts: UpdateMaterialOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .update_material(
+                        &opts.node_id,
+                        opts.base_color,
+                        opts.metallic,
+                        opts.roughness,
+                    )
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "delete_node" => {
+                #[derive(Debug, Deserialize)]
+                struct DeleteNodeOptions {
+                    node_id: String,
+                }
+                let opts: DeleteNodeOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .delete_node(&opts.node_id)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
