@@ -182,9 +182,18 @@ export function PuppetApp() {
 
           // Get initial deformed meshes for rendering
           const meshes = await ctrl.getMeshes();
-          console.log('[PuppetApp] meshes:', meshes.length, meshes);
-          console.log('[PuppetApp] snapshot.meshes:', snapshot.meshes?.length, snapshot.meshes);
-          console.log('[PuppetApp] textures:', store.textures.length);
+          console.log('[PuppetApp] deformedMesh[0] vertices:', JSON.stringify(meshes[0]?.vertices));
+          console.log(
+            '[PuppetApp] snapshot[0] indices:',
+            JSON.stringify(snapshot.meshes?.[0]?.indices),
+          );
+          console.log('[PuppetApp] snapshot[0] uvs:', JSON.stringify(snapshot.meshes?.[0]?.uvs));
+          console.log(
+            '[PuppetApp] textures:',
+            store.textures.length,
+            store.textures[0]?.width,
+            store.textures[0]?.height,
+          );
           store.setDeformedMeshes(meshes);
 
           // Load parameters and animations
@@ -271,15 +280,17 @@ export function PuppetApp() {
       <div className="flex flex-col h-screen w-screen overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
           {/* Main content area */}
-          <div className="flex-1 flex items-center justify-center text-sm opacity-50">
-            {noPuppetSource ? (
+          {noPuppetSource ? (
+            <div className="flex-1 flex items-center justify-center text-sm opacity-50">
               <PuppetEmptyState />
-            ) : puppetLoaded ? (
-              <PuppetCanvas />
-            ) : (
+            </div>
+          ) : puppetLoaded ? (
+            <PuppetCanvas />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-sm opacity-50">
               <PuppetWaitingPlaceholder />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Right side panels */}
           <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">

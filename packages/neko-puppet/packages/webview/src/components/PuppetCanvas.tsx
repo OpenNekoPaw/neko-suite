@@ -115,6 +115,15 @@ function renderPuppet(
   const cssW = canvas.width / dpr;
   const cssH = canvas.height / dpr;
 
+  console.log('[PuppetCanvas] render', {
+    cssW,
+    cssH,
+    meshSnapshots: meshSnapshots.length,
+    deformedMeshes: deformedMeshes.length,
+    textures: textures.length,
+    zoom: viewport.zoom,
+  });
+
   // Reset transform to identity then apply DPR
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
@@ -133,10 +142,25 @@ function renderPuppet(
   ctx.translate(cx + viewport.panX, cy + viewport.panY);
   ctx.scale(viewport.zoom, viewport.zoom);
 
+  // Debug: draw crosshair at origin to verify canvas works
+  ctx.strokeStyle = 'red';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-20, 0);
+  ctx.lineTo(20, 0);
+  ctx.moveTo(0, -20);
+  ctx.lineTo(0, 20);
+  ctx.stroke();
+
+  let drawnTriangles = 0;
+
   // Draw each mesh (already sorted by z_order from engine)
   for (const dm of deformedMeshes) {
     const snapshot = snapshotMap.get(dm.node_id);
-    if (!snapshot) continue;
+    if (!snapshot) {
+      console.log('[PuppetCanvas] no snapshot for', dm.node_id);
+      continue;
+    }
 
     const { indices, uvs, texture_index } = snapshot;
     const verts = dm.vertices;
@@ -178,13 +202,16 @@ function renderPuppet(
           uv2[0],
           uv2[1],
         );
+        drawnTriangles++;
       } else {
         // No texture — draw solid with skin-tone fallback
         drawSolidTriangle(ctx, v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], 'rgba(217, 190, 163, 1)');
+        drawnTriangles++;
       }
     }
   }
 
+  console.log('[PuppetCanvas] drawn triangles:', drawnTriangles);
   ctx.restore();
 }
 
