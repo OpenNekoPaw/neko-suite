@@ -619,9 +619,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'none';
              style-src ${webview.cspSource} 'unsafe-inline';
-             script-src 'nonce-${nonce}';
+             script-src 'nonce-${nonce}' 'wasm-unsafe-eval';
              img-src ${webview.cspSource} data: blob: https:;
-             connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
+             font-src ${webview.cspSource};
+             connect-src ${webview.cspSource} ws://127.0.0.1:* http://127.0.0.1:*;">
   <link rel="stylesheet" href="${webviewDistUri}/assets/index.css">
   <title>3D Model Editor</title>
 </head>
