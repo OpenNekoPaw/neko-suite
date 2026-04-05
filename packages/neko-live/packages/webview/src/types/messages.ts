@@ -21,7 +21,8 @@ export type LiveExtensionMessage =
   | { type: 'recordingProgress'; elapsedMs: number }
   | { type: 'cameraDevices'; devices: CameraDevice[] }
   | { type: 'cameraStreamStarted'; streamId: string; wsUrl: string }
-  | { type: 'cameraStreamStopped' };
+  | { type: 'cameraStreamStopped' }
+  | { type: 'stopCanvasCapture' };
 
 // ─── Webview → Extension ────────────────────────────────────────────────────
 

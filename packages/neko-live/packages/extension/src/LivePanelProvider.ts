@@ -301,9 +301,15 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   public async stopRecording(): Promise<void> {
     if (!this.recordingService) return;
 
-    await this.recordingService.stop();
-    // Video blob will arrive separately via 'videoRecordingBlob' message from webview
+    const result = await this.recordingService.stop();
     this.recordingService = undefined;
+
+    // Notify webview to stop canvas capture (if active) and send blob
+    this.postMessage({ type: 'stopCanvasCapture' });
+
+    // Report audio result immediately — don't wait for video blob
+    const filePath = result.audioPath ?? '';
+    this.postMessage({ type: 'recordingStopped', filePath });
   }
 
   // ─── Video Blob Save ─────────────────────────────────────────────────────

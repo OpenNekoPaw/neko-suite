@@ -11,12 +11,6 @@ import { t } from './i18n';
 
 const canvasRecorder = new CanvasRecorder();
 
-/**
- * Root app component for neko-live webview.
- * Layout: avatar viewport fills available space, tracking panel at bottom.
- * Switches between 3D (VRM) and 2D (puppet) viewports based on avatarType.
- * Manages canvas video recording lifecycle.
- */
 export function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const {
@@ -41,28 +35,33 @@ export function App() {
     return viewportRef.current?.querySelector('canvas') ?? null;
   }, []);
 
-  // Start canvas video recording
-  const startCanvasRecording = useCallback(() => {
+  // Try to start canvas capture (best-effort, recording works without it)
+  const tryStartCanvasCapture = useCallback(() => {
     const canvas = findCanvas();
     if (!canvas) {
-      console.warn('[CanvasRecorder] No canvas element found in viewport');
+      console.info('[CanvasRecorder] No canvas in viewport — audio-only recording');
       return;
     }
-    console.info(
-      `[CanvasRecorder] Found canvas ${canvas.width}x${canvas.height}, starting capture...`,
-    );
+    console.info(`[CanvasRecorder] Found canvas ${canvas.width}x${canvas.height}`);
     const error = canvasRecorder.start(canvas);
     if (error) {
-      console.error(`[CanvasRecorder] ${error}`);
+      console.warn(`[CanvasRecorder] Canvas capture unavailable: ${error} — audio-only recording`);
+    } else {
+      console.info('[CanvasRecorder] Canvas capture started');
     }
   }, [findCanvas]);
 
-  // Stop canvas recording and send blob to extension host
-  const stopCanvasRecording = useCallback(async () => {
+  // Stop canvas capture and send blob to extension (if capture was active)
+  const stopCanvasCapture = useCallback(async () => {
+    if (!canvasRecorder.isRecording) return;
     const blob = await canvasRecorder.stop();
     if (blob && blob.size > 0) {
-      const dataUrl = await CanvasRecorder.blobToDataUrl(blob);
-      vscode.postMessage({ type: 'videoRecordingBlob', dataUrl, mimeType: blob.type });
+      try {
+        const dataUrl = await CanvasRecorder.blobToDataUrl(blob);
+        vscode.postMessage({ type: 'videoRecordingBlob', dataUrl, mimeType: blob.type });
+      } catch (err) {
+        console.error('[CanvasRecorder] Failed to convert blob:', err);
+      }
     }
   }, []);
 
@@ -98,15 +97,16 @@ export function App() {
         case 'recordingStarted':
           setRecordingState('recording');
           setRecordingElapsed(0);
-          // Start capturing the canvas
-          startCanvasRecording();
+          tryStartCanvasCapture();
           break;
 
         case 'recordingStopped':
           setRecordingState('idle');
           setLastRecordingPath(msg.filePath);
-          // Stop canvas capture and send blob
-          stopCanvasRecording();
+          break;
+
+        case 'stopCanvasCapture' as string:
+          stopCanvasCapture();
           break;
 
         case 'recordingProgress':
@@ -135,8 +135,8 @@ export function App() {
     setRecordingElapsed,
     setLastRecordingPath,
     setAvatarLoaded,
-    startCanvasRecording,
-    stopCanvasRecording,
+    tryStartCanvasCapture,
+    stopCanvasCapture,
   ]);
 
   return (
