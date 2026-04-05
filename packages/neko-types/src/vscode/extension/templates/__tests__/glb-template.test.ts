@@ -53,7 +53,7 @@ describe('generateMinimalGlb', () => {
     expect(json.scenes[0].nodes).toEqual([0]);
   });
 
-  it('has no meshes or materials', () => {
+  it('has no meshes, materials, or buffers', () => {
     const result = generateMinimalGlb('Test');
     const { json } = parseGlb(result);
 
@@ -103,14 +103,16 @@ describe('generateHumanoidGlb', () => {
     expect(json.nodes[2].children).toEqual([3, 4, 6]);
   });
 
-  it('has translations for all bones', () => {
+  it('has mesh and material data', () => {
     const result = generateHumanoidGlb('Test');
     const { json } = parseGlb(result);
 
-    for (const node of json.nodes) {
-      expect(node.translation).toBeDefined();
-      expect(node.translation).toHaveLength(3);
-    }
+    expect(json.meshes).toBeDefined();
+    expect(json.meshes.length).toBeGreaterThan(0);
+    expect(json.materials).toBeDefined();
+    expect(json.buffers).toBeDefined();
+    // Hips has mesh reference
+    expect(json.nodes[0].mesh).toBe(0);
   });
 
   it('leaf nodes have no children', () => {

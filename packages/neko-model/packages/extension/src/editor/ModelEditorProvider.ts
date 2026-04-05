@@ -491,13 +491,30 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   }
 
   /**
-   * Import a model file into the project: send to webview + load in engine.
+   * Import a model file into the project: update .nkm, send to webview, load in engine.
    */
   private async importModelFile(
     modelPath: string,
     document: vscode.CustomDocument,
     webviewPanel: vscode.WebviewPanel,
   ): Promise<void> {
+    // Update model.src in the .nkm project file
+    if (document.uri.fsPath.endsWith('.nkm')) {
+      try {
+        const nkmData = await vscode.workspace.fs.readFile(document.uri);
+        const project = JSON.parse(new TextDecoder().decode(nkmData)) as Record<string, unknown>;
+        const nkmDir = path.dirname(document.uri.fsPath);
+        const relativePath = path.relative(nkmDir, modelPath).replace(/\\/g, '/');
+        (project as { model?: { src?: string } }).model = { src: `./${relativePath}` };
+        await vscode.workspace.fs.writeFile(
+          document.uri,
+          new TextEncoder().encode(JSON.stringify(project, null, 2)),
+        );
+      } catch (err) {
+        this.logError('updateNkmModelSrc', err);
+      }
+    }
+
     // Send model URI to webview for R3F loading
     const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(modelPath));
     webviewPanel.webview.postMessage({
