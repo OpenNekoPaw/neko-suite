@@ -1066,3 +1066,135 @@ RichContentRegistry.get(kind).component 渲染
 - ADR-4: agentStreamProcessor 构造 GeneratedAsset JSON 并写入 index.json
 - ADR-6 §6.2: RichContentBlock 注册表模式（kind 扩展点）
 - 磁盘空间管理：`.neko/generated/` 清理策略（TTL / LRU / 手动）
+
+---
+
+## ADR-7：Send-to-Agent 统一协议与媒体预处理
+
+**日期**: 2026-04-05  
+**状态**: 已实施
+
+### 问题
+
+发送内容到 agent 存在 4 条路径（A/B/C/D），机制各异：
+- A (Preview ⌅ / FAB): 走 context chip，但 `data` 在 InputArea 拼接时被丢弃，LLM 只收到 summary 摘要
+- B (Explorer 右键 Summarize/Chat): DocumentReaderService 读全文注入 prompt
+- C (Explorer 右键 Add to Agent): 走 chip，只有路径字符串
+- D (Explorer 右键 Analyze Image/Video): 直接发文件路径字符串作为 prompt
+
+此外 webview 端（CBZ/EPUB）将图片压缩为 base64 发送，但经过 chip 流程后同样被丢弃。
+
+### 决策
+
+**统一为两种模式：文件级 + 内容级。零 base64 跨进程传输。**
+
+| 模式 | 语义 | 发送什么 | LLM 收到 | 入口 |
+|------|------|---------|----------|------|
+| **文件级** | "这个文件给你参考" | filePath + 定位元数据 | `[File: label]\nfilePath` | Explorer 右键全部命令 |
+| **内容级** | "分析这段内容" | selectedText + 定位信息 | `[Content: label]\n完整文本` | Preview ⌅ / 选中文本 FAB |
+
+### 7.1 Context Chip 消费修复
+
+**文件**: `neko-agent/.../InputArea.tsx`
+
+```typescript
+// 修复前：丢弃 data，只用 label + summary
+chips.map(c => `[Context: ${c.label}]\n${c.summary}`)
+
+// 修复后：按模式区分
+chips.map(c => {
+  const d = c.data as Record<string, unknown>;
+  if (d?.selectedText) return `[Content: ${c.label}]\n${d.selectedText}`;  // 内容级
+  if (d?.filePath ?? d?.path) return `[File: ${c.label}]\n${d.filePath}`;  // 文件级
+  return `[Context: ${c.label}]\n${c.summary}`;                            // 其他
+})
+```
+
+### 7.2 二进制数据处理：源文件路径 + 定位元数据
+
+**Webview 不再发送 base64。** 所有二进制引用转为路径 + 元数据，agent 通过 engine/DocumentReaderService 按需提取。
+
+| 场景 | payload.data 结构 | agent 处理方式 |
+|------|-------------------|---------------|
+| CBZ 整页 | `{ filePath, pageNumber }` | readCbz → imagePaths[page] |
+| CBZ 框选 | `{ filePath, pageNumber, region: {x,y,w,h} }` | 解压 → engine 裁剪 |
+| EPUB 文本 | `{ filePath, selectedText, chapterTitle }` | 直接分析文本 |
+| neko-cut clip | `{ filePath, segment: {in, out} }` | engine 抽帧 |
+| 独立图片/视频 | `{ filePath }` | MediaPreprocessor 自动处理 |
+
+### 7.3 媒体预处理（自动判断）
+
+**文件**: `neko-agent/.../mediaPreprocessor.ts`（新建）
+
+messageHandler 解析 `[File:]` 引用后，自动判断是否需要预处理：
+
+```
+[File:] 引用 → getMimeType →
+  图片 → sharp 检查尺寸
+    长边 > 1568px 或 > 4MB → resize(1568, inside) → JPEG 85% → vision 输入
+    否则 → 转 JPEG 原样发
+  视频 → engine probe → getKeyframes
+    engine 可用 → 抽帧（keyframe 优先，最多 8 帧）+ resize → vision 输入
+    engine 不可用 → 跳过
+  其他 → 不处理
+```
+
+**常量**:
+- `VISION_MAX_LONG_EDGE = 1568`（Claude 最佳 vision 尺寸）
+- `VISION_MAX_BYTES = 4MB`（API 限制 5MB 的安全边界）
+- `VIDEO_SAMPLE_FRAMES = 4`（默认抽帧数）
+- `VIDEO_KEYFRAME_MAX = 8`（关键帧上限）
+
+**依赖**:
+- 图片缩放：`sharp`（monorepo 已有，新增到 @neko-agent/extension）
+- 视频抽帧：`EngineClient.extractFrame(width, height)` + `getKeyframes()`
+- 降级：engine 不可用时图片仍可用 sharp 处理，视频返回 unsupported
+
+### 7.4 EngineClient 扩展
+
+```typescript
+// extractFrame 新增 width/height 选项（engine 原生支持，此前未暴露）
+extractFrame(source, time, { quality?, format?, width?, height? })
+
+// 新增 getKeyframes 方法
+getKeyframes(source: string): Promise<number[]>  // videos:keyframes action
+```
+
+### 7.5 Explorer 右键命令统一
+
+原 4 种实现方式（sendDocumentPrompt / sendMessageToAssistant / sendContextPayload）统一为 `sendFileChip()`：
+
+```typescript
+async function sendFileChip(uri, intent, typeOverride?) {
+  // 统一构建文件级 chip → agent panel
+  chatViewProvider.sendContextPayload({
+    type: typeOverride ?? (isImage(ext) ? 'image' : 'file'),
+    data: { filePath, relativePath },
+    intent,
+  });
+}
+```
+
+| 命令 | 修改前 | 修改后 |
+|------|--------|--------|
+| Summarize Document | DocumentReaderService 读全文 → sendMessageToAssistant | sendFileChip + intent |
+| Chat with Document | 同上 | sendFileChip + intent |
+| Analyze Image | sendMessageToAssistant(路径字符串) | sendFileChip(type: image) |
+| Analyze Video | sendMessageToAssistant(路径字符串) | sendFileChip(type: file) |
+| Generate Subtitles | sendMessageToAssistant(路径字符串) | sendFileChip + intent |
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `neko-agent/.../InputArea.tsx` | chip 消费区分文件级/内容级 |
+| `neko-agent/.../index.ts` | sendFileChip 统一；删除 sendDocumentPrompt/truncateDocText |
+| `neko-agent/.../mediaPreprocessor.ts` | 新建：图片缩放 + 视频抽帧 |
+| `neko-agent/.../messageHandler.ts` | 解析 [File:] 引用 → MediaPreprocessor |
+| `neko-agent/.../attachmentProcessor.ts` | readFileAsBase64 条件缩放 |
+| `neko-client/src/EngineClient.ts` | extractFrame +width/height；新增 getKeyframes |
+| `neko-preview/.../documentProviderHelper.ts` | 移除 base64 传递 |
+| `neko-preview/.../document-messages.ts` | 移除 CapturedImagePayload；新增 DocumentRegion |
+| `neko-preview/.../CbzViewer.tsx` | base64 → pageNumber + region |
+| `neko-preview/.../EpubViewer.tsx` | 移除 inline 图片采集 + 新增双栏模式 |
+| `neko-preview/.../useDocumentSelection.ts` | sendImageToAi → sendRegionToAi + sendPageRefToAi |
