@@ -13,5 +13,6 @@
   "neko.live.config.title": "Neko Live",
   "neko.live.config.camera": "首选摄像头设备",
   "neko.live.config.vmcPort": "VMC 协议端口（外部追踪软件）",
-  "neko.live.config.trackingMode": "动作追踪模式"
+  "neko.live.config.trackingMode": "动作追踪模式",
+  "neko.live.avatar.filterProject": "项目文件"
 }

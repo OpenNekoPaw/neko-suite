@@ -13,8 +13,12 @@
   "neko.live.recording.videoSaveFailed": "Failed to save video recording",
   "neko.live.avatar.selectTitle": "Select Avatar Model",
   "neko.live.avatar.filterAll": "All Avatars",
+  "neko.live.avatar.filterProject": "Project Files",
   "neko.live.avatar.filterVrm": "VRM Models",
   "neko.live.avatar.filterPuppet": "Puppet Models",
+  "neko.live.avatar.noModelSrc": "This .nkm project has no model linked. Open it in Neko Model first.",
+  "neko.live.avatar.noPuppetSrc": "This .nkp project has no puppet linked. Open it in Neko Puppet first.",
+  "neko.live.avatar.projectReadFailed": "Failed to read project file: {0}",
   "neko.live.calibrating": "Calibrating tracking...",
   "neko.live.streamingStarted": "Streaming started"
 }

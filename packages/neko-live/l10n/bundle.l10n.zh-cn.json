@@ -13,8 +13,12 @@
   "neko.live.recording.videoSaveFailed": "无法保存录制视频",
   "neko.live.avatar.selectTitle": "选择头像模型",
   "neko.live.avatar.filterAll": "所有头像",
+  "neko.live.avatar.filterProject": "项目文件",
   "neko.live.avatar.filterVrm": "VRM 模型",
   "neko.live.avatar.filterPuppet": "Puppet 模型",
+  "neko.live.avatar.noModelSrc": "此 .nkm 项目未关联模型，请先在 Neko Model 中打开。",
+  "neko.live.avatar.noPuppetSrc": "此 .nkp 项目未关联 Puppet，请先在 Neko Puppet 中打开。",
+  "neko.live.avatar.projectReadFailed": "读取项目文件失败：{0}",
   "neko.live.calibrating": "正在校准追踪...",
   "neko.live.streamingStarted": "推流已开始"
 }

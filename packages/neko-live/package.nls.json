@@ -13,5 +13,6 @@
   "neko.live.config.title": "Neko Live",
   "neko.live.config.camera": "Preferred camera device",
   "neko.live.config.vmcPort": "VMC protocol port for external tracking",
-  "neko.live.config.trackingMode": "Motion tracking mode"
+  "neko.live.config.trackingMode": "Motion tracking mode",
+  "neko.live.avatar.filterProject": "Project Files"
 }

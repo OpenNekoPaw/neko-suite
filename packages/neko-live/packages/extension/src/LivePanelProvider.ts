@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { ILogger } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 import { VmcReceiver } from './vmc/VmcReceiver';
@@ -70,7 +71,16 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       canSelectFiles: true,
       canSelectMany: false,
       filters: {
-        [vscode.l10n.t('neko.live.avatar.filterAll')]: ['vrm', 'glb', 'gltf', 'inp', 'inx'],
+        [vscode.l10n.t('neko.live.avatar.filterAll')]: [
+          'nkm',
+          'nkp',
+          'vrm',
+          'glb',
+          'gltf',
+          'inp',
+          'inx',
+        ],
+        [vscode.l10n.t('neko.live.avatar.filterProject')]: ['nkm', 'nkp'],
         [vscode.l10n.t('neko.live.avatar.filterVrm')]: ['vrm', 'glb', 'gltf'],
         [vscode.l10n.t('neko.live.avatar.filterPuppet')]: ['inp', 'inx'],
       },
@@ -78,18 +88,90 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     });
 
     if (!result?.[0]) return;
+    await this.loadAvatarFromFile(result[0].fsPath);
+  }
 
-    const filePath = result[0].fsPath;
+  /** Resolve project files (.nkm/.nkp) to actual model paths, then load */
+  private async loadAvatarFromFile(filePath: string): Promise<void> {
     const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-    const isPuppet = ext === 'inp' || ext === 'inx';
 
-    if (isPuppet) {
-      await this.loadPuppet(filePath);
-    } else {
-      const webviewUri = this.view?.webview.asWebviewUri(result[0]);
-      if (webviewUri) {
-        this.postMessage({ type: 'avatarSelected', uri: webviewUri.toString(), avatarType: 'vrm' });
+    switch (ext) {
+      case 'nkm': {
+        // .nkm project → read model.src relative path
+        const modelPath = await this.resolveNkmModelPath(filePath);
+        if (modelPath) {
+          this.loadVrmAvatar(modelPath);
+        }
+        break;
       }
+      case 'nkp': {
+        // .nkp project → read puppet.src relative path
+        const puppetPath = await this.resolveNkpPuppetPath(filePath);
+        if (puppetPath) {
+          await this.loadPuppet(puppetPath);
+        }
+        break;
+      }
+      case 'inp':
+      case 'inx':
+        await this.loadPuppet(filePath);
+        break;
+      default:
+        // .vrm, .glb, .gltf — load directly as VRM
+        this.loadVrmAvatar(filePath);
+        break;
+    }
+  }
+
+  private loadVrmAvatar(filePath: string): void {
+    const uri = vscode.Uri.file(filePath);
+    const webviewUri = this.view?.webview.asWebviewUri(uri);
+    if (webviewUri) {
+      this.postMessage({ type: 'avatarSelected', uri: webviewUri.toString(), avatarType: 'vrm' });
+    }
+  }
+
+  /** Read .nkm JSON and resolve model.src to absolute path */
+  private async resolveNkmModelPath(nkmPath: string): Promise<string | undefined> {
+    try {
+      const data = await vscode.workspace.fs.readFile(vscode.Uri.file(nkmPath));
+      const json = JSON.parse(Buffer.from(data).toString('utf-8')) as {
+        model?: { src?: string | null };
+      };
+      const src = json.model?.src;
+      if (!src) {
+        vscode.window.showWarningMessage(vscode.l10n.t('neko.live.avatar.noModelSrc'));
+        return undefined;
+      }
+      return path.resolve(path.dirname(nkmPath), src);
+    } catch (err) {
+      this.logger.error('Failed to read .nkm project', err);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('neko.live.avatar.projectReadFailed', (err as Error).message),
+      );
+      return undefined;
+    }
+  }
+
+  /** Read .nkp JSON and resolve puppet.src to absolute path */
+  private async resolveNkpPuppetPath(nkpPath: string): Promise<string | undefined> {
+    try {
+      const data = await vscode.workspace.fs.readFile(vscode.Uri.file(nkpPath));
+      const json = JSON.parse(Buffer.from(data).toString('utf-8')) as {
+        puppet?: { src?: string | null };
+      };
+      const src = json.puppet?.src;
+      if (!src) {
+        vscode.window.showWarningMessage(vscode.l10n.t('neko.live.avatar.noPuppetSrc'));
+        return undefined;
+      }
+      return path.resolve(path.dirname(nkpPath), src);
+    } catch (err) {
+      this.logger.error('Failed to read .nkp project', err);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('neko.live.avatar.projectReadFailed', (err as Error).message),
+      );
+      return undefined;
     }
   }
 
