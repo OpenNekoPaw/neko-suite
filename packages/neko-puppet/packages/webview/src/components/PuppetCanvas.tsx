@@ -166,6 +166,20 @@ function renderPuppet(
     const verts = dm.vertices;
     const tex = texture_index != null ? textures[texture_index] : undefined;
 
+    // For small solid-color textures, sample center pixel as fill color
+    let solidColor: string | undefined;
+    if (tex && tex.width <= 16 && tex.height <= 16) {
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = tex.width;
+      sampleCanvas.height = tex.height;
+      const sCtx = sampleCanvas.getContext('2d');
+      if (sCtx) {
+        sCtx.drawImage(tex, 0, 0);
+        const pixel = sCtx.getImageData(tex.width >> 1, tex.height >> 1, 1, 1).data;
+        solidColor = `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${(pixel[3] ?? 255) / 255})`;
+      }
+    }
+
     ctx.globalAlpha = dm.opacity;
     ctx.globalCompositeOperation = BLEND_MODE_MAP[dm.blend_mode] ?? 'source-over';
 
@@ -180,7 +194,11 @@ function renderPuppet(
       const v2 = verts[i2];
       if (!v0 || !v1 || !v2) continue;
 
-      if (tex) {
+      if (solidColor) {
+        // Small texture → use sampled solid color
+        drawSolidTriangle(ctx, v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], solidColor);
+        drawnTriangles++;
+      } else if (tex) {
         const uv0 = uvs[i0];
         const uv1 = uvs[i1];
         const uv2 = uvs[i2];
