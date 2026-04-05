@@ -80,7 +80,9 @@
 ## 🔵 P3 — 长期功能
 
 - [x] neko-preview 文档预览 P0 ✅（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接；策略见 [ADR](./docs/architecture/document-preview.md)）
+- [x] neko-preview 文档预览 P0.5 ✅（瀑布流 + 直连 engine HTTP + PathResolver + 双栏模式 + 右键菜单 + 状态栏）
 - [ ] neko-preview 文档预览 P1：XLSX（x-data-spreadsheet）/ PPTX（LibreOffice headless）/ FDX（XML 解析）/ 缩略图缓存
+- [ ] neko-preview 文档大纲：EPUB TOC → TreeDataProvider（VSCode Custom Editor 不支持 DocumentSymbolProvider）
 - [x] Diff/LSP AI 增强 L1：ScriptIndex（neko-story WorkspaceIndexService.getScriptIndex + GetScriptIndex agent tool）✅
 - [x] Diff/LSP AI 增强 L3：SearchScriptIndex 语义搜索（ScriptEmbeddingIndex 余弦相似度 + platform.embed() 注入 + EmbedFn 懒加载）✅
 - [ ] Diff/LSP AI 增强 L3 扩展：Whisper ASR Diff + Demucs 音源分离（按需推进）— [ADR](./docs/architecture/lsp.md)
@@ -200,4 +202,4 @@
 
 ---
 
-*最后更新：2026-04-03（角色编辑 Rust 引擎 Phase 2 全部完成：关键帧 CRUD + 动画混合 + Scene 侧 + 项目 v2）*
+*最后更新：2026-04-05（文档预览增强：瀑布流 + 直连 engine + PathResolver + 双栏模式 + 路径变量解析 + 右键菜单 + 状态栏）*

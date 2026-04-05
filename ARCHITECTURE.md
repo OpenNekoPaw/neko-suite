@@ -267,6 +267,8 @@ Extension Host
 | 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
 | Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性（无 canvas 可独立运行）；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递 |
+| 文档预览 | [architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ/DOCX 自建预览器；瀑布流虚拟滚动 + 双栏模式；Webview 直连 neko-engine HTTP（无 postMessage 中继）；epub.js fetchForEpub 替代 XHR |
+| 路径体系 | *已内化* | 项目文件只存相对路径 + `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；Rust ProjectContext(resolve/validate)；EngineClient/PreviewFileServer 自动展开变量；变量来源: .neko/settings.json + settings.local.json |
 
 ---
 
