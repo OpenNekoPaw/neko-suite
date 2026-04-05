@@ -25,10 +25,13 @@ pub struct GpuMesh {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialUniforms {
-    pub base_color_factor: [f32; 4],
-    pub metallic_factor: f32,
-    pub roughness_factor: f32,
-    pub _padding: [f32; 2],
+    pub base_color_factor: [f32; 4],    // 16 bytes
+    pub metallic_factor: f32,            // 4
+    pub roughness_factor: f32,           // 4
+    pub occlusion_strength: f32,         // 4
+    pub _pad0: f32,                      // 4 (align to 16)
+    pub emissive_factor: [f32; 3],       // 12
+    pub _pad1: f32,                      // 4 (align to 16)
 }
 
 /// GPU-ready PBR material
@@ -38,6 +41,8 @@ pub struct GpuMaterial {
     pub base_color_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
     pub metallic_roughness_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
     pub normal_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
+    pub emissive_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
+    pub occlusion_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
     pub bind_group: wgpu::BindGroup,
 }
 
@@ -158,6 +163,8 @@ impl AssetCache {
         base_color: Option<[f32; 4]>,
         metallic: Option<f32>,
         roughness: Option<f32>,
+        emissive: Option<[f32; 3]>,
+        occlusion_strength: Option<f32>,
     ) -> Result<(), String> {
         let key = (uri.to_string(), material_index);
         let gpu_mat = self
@@ -174,6 +181,12 @@ impl AssetCache {
         }
         if let Some(r) = roughness {
             uniforms.roughness_factor = r;
+        }
+        if let Some(e) = emissive {
+            uniforms.emissive_factor = e;
+        }
+        if let Some(o) = occlusion_strength {
+            uniforms.occlusion_strength = o;
         }
 
         self.ctx
@@ -393,11 +406,20 @@ impl AssetCache {
     ) -> GpuMaterial {
         let pbr = material.pbr_metallic_roughness();
 
+        let emissive = material.emissive_factor();
+        let occlusion_strength = material
+            .occlusion_texture()
+            .map(|t| t.strength())
+            .unwrap_or(1.0);
+
         let uniforms = MaterialUniforms {
             base_color_factor: pbr.base_color_factor(),
             metallic_factor: pbr.metallic_factor(),
             roughness_factor: pbr.roughness_factor(),
-            _padding: [0.0; 2],
+            occlusion_strength,
+            _pad0: 0.0,
+            emissive_factor: emissive,
+            _pad1: 0.0,
         };
 
         let uniform_buffer =
@@ -422,12 +444,22 @@ impl AssetCache {
             .normal_texture()
             .and_then(|info| self.load_texture(info.texture(), images));
 
+        let emissive_texture = material
+            .emissive_texture()
+            .and_then(|info| self.load_texture(info.texture(), images));
+
+        let occlusion_texture = material
+            .occlusion_texture()
+            .and_then(|info| self.load_texture(info.texture(), images));
+
         // Create bind group
         let bind_group = self.create_material_bind_group(
             &uniform_buffer,
             base_color_texture.as_ref().map(|(_, v)| v),
             metallic_roughness_texture.as_ref().map(|(_, v)| v),
             normal_texture.as_ref().map(|(_, v)| v),
+            emissive_texture.as_ref().map(|(_, v)| v),
+            occlusion_texture.as_ref().map(|(_, v)| v),
         );
 
         GpuMaterial {
@@ -436,6 +468,8 @@ impl AssetCache {
             base_color_texture,
             metallic_roughness_texture,
             normal_texture,
+            emissive_texture,
+            occlusion_texture,
             bind_group,
         }
     }
@@ -446,7 +480,10 @@ impl AssetCache {
             base_color_factor: [1.0, 1.0, 1.0, 1.0],
             metallic_factor: 0.0,
             roughness_factor: 0.5,
-            _padding: [0.0; 2],
+            occlusion_strength: 1.0,
+            _pad0: 0.0,
+            emissive_factor: [0.0, 0.0, 0.0],
+            _pad1: 0.0,
         };
 
         let uniform_buffer =
@@ -459,7 +496,7 @@ impl AssetCache {
                 });
 
         let bind_group =
-            self.create_material_bind_group(&uniform_buffer, None, None, None);
+            self.create_material_bind_group(&uniform_buffer, None, None, None, None, None);
 
         GpuMaterial {
             uniforms,
@@ -467,6 +504,8 @@ impl AssetCache {
             base_color_texture: None,
             metallic_roughness_texture: None,
             normal_texture: None,
+            emissive_texture: None,
+            occlusion_texture: None,
             bind_group,
         }
     }
@@ -598,11 +637,15 @@ impl AssetCache {
         base_color_view: Option<&wgpu::TextureView>,
         metallic_roughness_view: Option<&wgpu::TextureView>,
         normal_view: Option<&wgpu::TextureView>,
+        emissive_view: Option<&wgpu::TextureView>,
+        occlusion_view: Option<&wgpu::TextureView>,
     ) -> wgpu::BindGroup {
         let placeholder = self.placeholder_texture_view();
         let bc_view = base_color_view.unwrap_or(&placeholder);
         let mr_view = metallic_roughness_view.unwrap_or(&placeholder);
         let nm_view = normal_view.unwrap_or(&placeholder);
+        let em_view = emissive_view.unwrap_or(&placeholder);
+        let ao_view = occlusion_view.unwrap_or(&placeholder);
 
         self.ctx
             .device()
@@ -634,6 +677,16 @@ impl AssetCache {
                     wgpu::BindGroupEntry {
                         binding: 4,
                         resource: wgpu::BindingResource::Sampler(&self.default_sampler),
+                    },
+                    // binding 5: emissive texture
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(em_view),
+                    },
+                    // binding 6: occlusion/AO texture
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(ao_view),
                     },
                 ],
             })

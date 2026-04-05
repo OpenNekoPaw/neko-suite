@@ -37,13 +37,18 @@ struct MaterialUniforms {
     base_color_factor: vec4<f32>,
     metallic_factor: f32,
     roughness_factor: f32,
-    _padding: vec2<f32>,
+    occlusion_strength: f32,
+    _pad0: f32,
+    emissive_factor: vec3<f32>,
+    _pad1: f32,
 }
 @group(2) @binding(0) var<uniform> material: MaterialUniforms;
 @group(2) @binding(1) var base_color_tex: texture_2d<f32>;
 @group(2) @binding(2) var metallic_roughness_tex: texture_2d<f32>;
 @group(2) @binding(3) var normal_tex: texture_2d<f32>;
 @group(2) @binding(4) var material_sampler: sampler;
+@group(2) @binding(5) var emissive_tex: texture_2d<f32>;
+@group(2) @binding(6) var occlusion_tex: texture_2d<f32>;
 
 // ============================================================
 // Lights
@@ -225,8 +230,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         lo = lo + (kd * base_color.rgb / PI + specular) * radiance * n_dot_l;
     }
 
-    let ambient = vec3<f32>(0.03) * base_color.rgb;
-    let color = ambient + lo;
+    // Ambient occlusion
+    let ao = textureSample(occlusion_tex, material_sampler, in.uv).r;
+    let ao_factor = 1.0 + material.occlusion_strength * (ao - 1.0);
+
+    // Emissive
+    let emissive = textureSample(emissive_tex, material_sampler, in.uv).rgb * material.emissive_factor;
+
+    let ambient = vec3<f32>(0.03) * base_color.rgb * ao_factor;
+    let color = ambient + lo + emissive;
 
     return vec4<f32>(color, base_color.a);
 }

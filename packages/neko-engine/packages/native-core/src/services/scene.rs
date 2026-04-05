@@ -168,6 +168,8 @@ pub trait ISceneService: Send + Sync {
         base_color: Option<[f32; 4]>,
         metallic: Option<f32>,
         roughness: Option<f32>,
+        emissive: Option<[f32; 3]>,
+        occlusion_strength: Option<f32>,
     ) -> crate::error::Result<()>;
 
     /// Delete a node and all its descendants from the scene

@@ -195,6 +195,52 @@ fn extract_mesh(node: &Value) -> Option<MeshData> {
     })
 }
 
+/// Extract SimplePhysics component from a `"SimplePhysics"` node's JSON.
+fn extract_simple_physics(
+    node: &Value,
+    param_uuid_to_name: &std::collections::HashMap<u64, String>,
+) -> Option<SimplePhysics> {
+    // The param field is a UUID referencing a parameter
+    let param_uuid = node.get("param").and_then(|v| v.as_u64())?;
+    let param_name = param_uuid_to_name.get(&param_uuid)?.clone();
+
+    let model = match node.get("model_type").and_then(|v| v.as_str()).unwrap_or("Pendulum") {
+        "SpringPendulum" => PhysicsModel::SpringPendulum,
+        _ => PhysicsModel::RigidPendulum,
+    };
+
+    let map_mode = match node.get("map_mode").and_then(|v| v.as_str()).unwrap_or("AngleLength") {
+        "LengthAngle" => PhysicsMapMode::LengthAngle,
+        "XY" => PhysicsMapMode::XY,
+        "YX" => PhysicsMapMode::YX,
+        _ => PhysicsMapMode::AngleLength,
+    };
+
+    let output_scale_x = node
+        .get("output_scale")
+        .and_then(|v| v.get(0))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0) as f32;
+    let output_scale_y = node
+        .get("output_scale")
+        .and_then(|v| v.get(1))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0) as f32;
+
+    Some(SimplePhysics {
+        param_name,
+        model,
+        map_mode,
+        gravity: json_f32(node, "gravity"),
+        length: json_f32(node, "length"),
+        frequency: json_f32(node, "frequency"),
+        angle_damping: json_f32(node, "angle_damping"),
+        length_damping: json_f32(node, "length_damping"),
+        output_scale: [output_scale_x, output_scale_y],
+        local_only: json_bool(node, "local_only"),
+    })
+}
+
 // ─── Animation parsing ───────────────────────────────────────────────────────
 
 /// Parse animation clips from the `puppet.anim` JSON array.
@@ -286,11 +332,21 @@ pub fn load_inp(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError>
         .ok_or_else(|| LoadError::InvalidData("Missing 'puppet' key in INP JSON".to_string()))?;
 
     // 3. Extract parameter definitions from `puppet.param[]`
+    // Also build UUID → name map for SimplePhysics param reference resolution
     let empty_arr: Vec<Value> = Vec::new();
     let params_arr = puppet_json
         .get("param")
         .and_then(|p| p.as_array())
         .unwrap_or(&empty_arr);
+
+    let param_uuid_to_name: std::collections::HashMap<u64, String> = params_arr
+        .iter()
+        .filter_map(|p| {
+            let uuid = p.get("uuid").and_then(|v| v.as_u64())?;
+            let name = json_str(p, "name").to_string();
+            Some((uuid, name))
+        })
+        .collect();
 
     let param_defs: Vec<ParameterDef> = params_arr
         .iter()
@@ -403,6 +459,17 @@ pub fn load_inp(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError>
                     world
                         .entity_mut(entity)
                         .insert(TextureRef { texture_index: idx });
+                }
+            }
+
+            // Attach SimplePhysics for physics nodes
+            if ty_str == "SimplePhysics" {
+                if let Some(physics) =
+                    extract_simple_physics(node_json, &param_uuid_to_name)
+                {
+                    world
+                        .entity_mut(entity)
+                        .insert((physics, PhysicsState::default()));
                 }
             }
 

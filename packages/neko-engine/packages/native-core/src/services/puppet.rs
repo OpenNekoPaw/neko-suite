@@ -91,4 +91,7 @@ pub trait IPuppetService: Send + Sync {
 
     /// Set opacity for a specific puppet node (0.0 = transparent, 1.0 = opaque)
     fn set_node_opacity(&self, node_id: &str, opacity: f32) -> crate::error::Result<()>;
+
+    /// Set texture index for a specific puppet node (hot-swap textures)
+    fn set_texture(&self, node_id: &str, texture_index: usize) -> crate::error::Result<()>;
 }

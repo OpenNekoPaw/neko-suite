@@ -164,6 +164,9 @@ pub trait PuppetWorld: Send + Sync {
 
     /// Set opacity for a specific puppet node
     fn set_node_opacity(&mut self, node_id: &str, opacity: f32) -> Result<(), String>;
+
+    /// Set texture index for a specific puppet node (hot-swap textures)
+    fn set_texture(&mut self, node_id: &str, texture_index: usize) -> Result<(), String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -745,6 +748,27 @@ impl PuppetWorld for BevyPuppetWorld {
             self.world
                 .entity_mut(entity)
                 .insert(Opacity(opacity.clamp(0.0, 1.0)));
+        }
+        Ok(())
+    }
+
+    fn set_texture(&mut self, node_id: &str, texture_index: usize) -> Result<(), String> {
+        let mut found = None;
+        let mut query = self.world.query::<(Entity, &PuppetNodeId)>();
+        for (entity, id) in query.iter(&self.world) {
+            if id.0 == node_id {
+                found = Some(entity);
+                break;
+            }
+        }
+        let entity = found.ok_or_else(|| format!("Node '{}' not found", node_id))?;
+
+        if let Some(mut tex) = self.world.get_mut::<TextureRef>(entity) {
+            tex.texture_index = texture_index;
+        } else {
+            self.world
+                .entity_mut(entity)
+                .insert(TextureRef { texture_index });
         }
         Ok(())
     }

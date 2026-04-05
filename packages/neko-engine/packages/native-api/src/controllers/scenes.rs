@@ -638,6 +638,8 @@ impl Controller for ScenesController {
                     base_color: Option<[f32; 4]>,
                     metallic: Option<f32>,
                     roughness: Option<f32>,
+                    emissive: Option<[f32; 3]>,
+                    occlusion_strength: Option<f32>,
                 }
                 let opts: UpdateMaterialOptions = serde_json::from_value(options)
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
@@ -649,6 +651,8 @@ impl Controller for ScenesController {
                         opts.base_color,
                         opts.metallic,
                         opts.roughness,
+                        opts.emissive,
+                        opts.occlusion_strength,
                     )
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 

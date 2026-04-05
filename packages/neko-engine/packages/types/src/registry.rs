@@ -176,6 +176,7 @@ pub mod actions {
         "blend_weight",
         "blend_state",
         "set_opacity",
+        "set_texture",
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];

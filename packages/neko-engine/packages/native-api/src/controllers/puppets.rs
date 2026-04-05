@@ -383,6 +383,23 @@ impl Controller for PuppetsController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "set_texture" => {
+                #[derive(Debug, Deserialize)]
+                struct SetTextureOptions {
+                    node_id: String,
+                    texture_index: usize,
+                }
+                let opts: SetTextureOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_texture(&opts.node_id, opts.texture_index)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

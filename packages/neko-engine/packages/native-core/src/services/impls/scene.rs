@@ -667,6 +667,8 @@ impl ISceneService for SceneService {
         base_color: Option<[f32; 4]>,
         metallic: Option<f32>,
         roughness: Option<f32>,
+        emissive: Option<[f32; 3]>,
+        occlusion_strength: Option<f32>,
     ) -> Result<()> {
         // Read the material reference from the scene world
         let mat_ref = {
@@ -690,7 +692,7 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
 
         cache
-            .update_material_uniforms(&uri, mat_idx, base_color, metallic, roughness)
+            .update_material_uniforms(&uri, mat_idx, base_color, metallic, roughness, emissive, occlusion_strength)
             .map_err(Error::Other)
     }
 

@@ -469,11 +469,130 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
 
 /// Run a single physics simulation step.
 ///
-/// Currently a no-op placeholder. When inox2d physics simulation is available
-/// upstream, this will drive spring/pendulum physics for hair, accessories, etc.
-pub fn physics_tick(world: &mut World, _delta_ms: f32) {
-    // TODO(P2): implement spring/pendulum physics from inox2d
-    // For now, just ensure transforms are propagated
+/// Simulates spring/pendulum physics for hair, accessories, etc.
+/// Ported from inox2d SimplePhysics (rigid pendulum + spring pendulum).
+pub fn physics_tick(world: &mut World, delta_ms: f32) {
+    let dt = (delta_ms / 1000.0).min(10.0);
+    if dt <= 0.0 {
+        transform_propagation_2d(world);
+        return;
+    }
+
+    // Collect physics nodes with their data
+    let physics_nodes: Vec<(Entity, SimplePhysics, PhysicsState, Vec2)> = {
+        let mut query = world.query::<(
+            Entity,
+            &SimplePhysics,
+            &PhysicsState,
+            &GlobalTransform2D,
+        )>();
+        query
+            .iter(world)
+            .map(|(e, sp, ps, gt)| {
+                // Anchor is the node's world position (parent drives the "hook")
+                let anchor = Vec2::new(gt.0.col(2).x, gt.0.col(2).y);
+                (e, sp.clone(), ps.clone(), anchor)
+            })
+            .collect()
+    };
+
+    // Simulate each physics node
+    let mut param_updates: Vec<(String, f32)> = Vec::new();
+
+    for (entity, sp, mut state, anchor) in physics_nodes {
+        let gravity = sp.gravity * 9.81 * 100.0; // pixels/s²
+        let rest_length = sp.length.max(1.0);
+        let freq = sp.frequency.max(0.01);
+        let omega = freq * std::f32::consts::TAU; // angular frequency
+
+        match sp.model {
+            PhysicsModel::RigidPendulum => {
+                // Rigid pendulum: θ'' = -(g/L)*sin(θ) - damping*θ'
+                let mut remaining = dt;
+                while remaining > 0.0 {
+                    let step = remaining.min(0.01);
+                    let accel = -(gravity / rest_length) * state.angle.sin()
+                        - sp.angle_damping * omega * state.angular_velocity;
+                    state.angular_velocity += accel * step;
+                    state.angle += state.angular_velocity * step;
+                    remaining -= 0.01;
+                }
+                // Convert angle + length to parameter output
+                let output = match sp.map_mode {
+                    PhysicsMapMode::AngleLength => {
+                        state.angle * sp.output_scale[0]
+                    }
+                    PhysicsMapMode::LengthAngle => {
+                        state.angle * sp.output_scale[1]
+                    }
+                    PhysicsMapMode::XY => {
+                        state.angle.sin() * rest_length * sp.output_scale[0]
+                    }
+                    PhysicsMapMode::YX => {
+                        state.angle.sin() * rest_length * sp.output_scale[1]
+                    }
+                };
+                param_updates.push((sp.param_name.clone(), output));
+            }
+            PhysicsModel::SpringPendulum => {
+                // Spring pendulum: F = -k*x - damping*v + gravity
+                let mut remaining = dt;
+                while remaining > 0.0 {
+                    let step = remaining.min(0.01);
+                    // Spring restoring force toward rest position below anchor
+                    let rest_pos = Vec2::new(anchor.x, anchor.y + rest_length);
+                    let displacement = state.bob - rest_pos;
+                    let spring_force = -omega * omega * displacement;
+                    let damping_force = Vec2::new(
+                        -sp.angle_damping * omega * state.velocity.x,
+                        -sp.length_damping * omega * state.velocity.y,
+                    );
+                    let gravity_force = Vec2::new(0.0, gravity);
+                    let accel = spring_force + damping_force + gravity_force;
+                    state.velocity += accel * step;
+                    state.bob += state.velocity * step;
+                    remaining -= 0.01;
+                }
+                // Convert bob position to parameter output
+                let delta = state.bob - anchor;
+                let output = match sp.map_mode {
+                    PhysicsMapMode::AngleLength => {
+                        delta.x.atan2(delta.y) * sp.output_scale[0]
+                    }
+                    PhysicsMapMode::LengthAngle => {
+                        delta.length() * sp.output_scale[0]
+                    }
+                    PhysicsMapMode::XY => {
+                        delta.x * sp.output_scale[0]
+                    }
+                    PhysicsMapMode::YX => {
+                        delta.y * sp.output_scale[1]
+                    }
+                };
+                param_updates.push((sp.param_name.clone(), output));
+            }
+        }
+
+        // Write back updated state
+        if let Some(mut ps) = world.get_mut::<PhysicsState>(entity) {
+            *ps = state;
+        }
+    }
+
+    // Apply physics-driven parameter values
+    if !param_updates.is_empty() {
+        let mut query = world.query::<&mut PuppetParameters>();
+        for mut params in query.iter_mut(world) {
+            for (name, value) in &param_updates {
+                if let Some(p) = params.params.iter_mut().find(|p| p.name == *name) {
+                    p.current = value.clamp(p.min, p.max);
+                }
+            }
+        }
+        // Re-apply parameter-driven deformation
+        parameter_update(world);
+    }
+
     transform_propagation_2d(world);
 }
 

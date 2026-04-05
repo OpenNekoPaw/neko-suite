@@ -245,6 +245,17 @@ impl IPuppetService for PuppetService {
             .set_node_opacity(node_id, opacity)
             .map_err(Error::Other)
     }
+
+    fn set_texture(&self, node_id: &str, texture_index: usize) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world
+            .set_texture(node_id, texture_index)
+            .map_err(Error::Other)
+    }
 }
 
 #[cfg(test)]

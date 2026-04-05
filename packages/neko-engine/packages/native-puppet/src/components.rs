@@ -141,6 +141,60 @@ pub struct ParameterDef {
     pub current: f32,
 }
 
+/// Physics simulation model type
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum PhysicsModel {
+    /// Gravity-driven rigid pendulum (2 state variables: angle + angular velocity)
+    RigidPendulum,
+    /// Spring pendulum with elastic restoring force (4 state variables: position + velocity)
+    SpringPendulum,
+}
+
+/// How physics simulation output maps to parameter values
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum PhysicsMapMode {
+    AngleLength,
+    LengthAngle,
+    XY,
+    YX,
+}
+
+/// SimplePhysics node — drives a parameter via spring/pendulum simulation
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
+pub struct SimplePhysics {
+    /// Name of the parameter this physics node drives
+    pub param_name: String,
+    pub model: PhysicsModel,
+    pub map_mode: PhysicsMapMode,
+    /// Gravity scale (1.0 = puppet gravity)
+    pub gravity: f32,
+    /// Pendulum/spring rest length (pixels)
+    pub length: f32,
+    /// Resonant frequency (Hz)
+    pub frequency: f32,
+    /// Angular damping ratio [0..1]
+    pub angle_damping: f32,
+    /// Length damping ratio [0..1]
+    pub length_damping: f32,
+    /// Output scale (x, y)
+    pub output_scale: [f32; 2],
+    /// Whether to use local transform only
+    pub local_only: bool,
+}
+
+/// Runtime physics simulation state (not serialized to project)
+#[derive(Component, Clone, Debug, Default)]
+pub struct PhysicsState {
+    /// Bob position relative to anchor
+    pub bob: Vec2,
+    /// Velocity
+    pub velocity: Vec2,
+    /// Angle (radians, for rigid pendulum)
+    pub angle: f32,
+    /// Angular velocity (for rigid pendulum)
+    pub angular_velocity: f32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
