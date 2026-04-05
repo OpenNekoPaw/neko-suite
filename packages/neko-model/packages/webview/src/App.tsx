@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from './i18n/I18nContext';
 import { Toolbar } from './components/Toolbar';
 import { Viewport3D } from './components/Viewport3D';
 import { ModelLoader, type ModelLoaderHandle } from './components/ModelLoader';
@@ -265,6 +266,7 @@ export function App(): React.JSX.Element {
 
 /** Empty state UI — import, template, or drag-drop */
 function ModelEmptyState() {
+  const { t } = useTranslation();
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleImport = useCallback(() => {
@@ -323,18 +325,18 @@ function ModelEmptyState() {
       }`}
     >
       <div className="opacity-40 text-center text-[var(--vscode-editor-foreground)]">
-        Drop .gltf, .glb, or .vrm file here, or choose an option below
+        {t('empty.dropHint')}
       </div>
 
       <div className="flex gap-3">
         <button type="button" onClick={handleImport} className={primaryBtnClass}>
-          Import File
+          {t('empty.import')}
         </button>
         <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
-          Blank Scene
+          {t('empty.templateBlank')}
         </button>
         <button type="button" onClick={() => handleTemplate('humanoid')} className={btnClass}>
-          Simple Humanoid
+          {t('empty.templateHumanoid')}
         </button>
       </div>
     </div>

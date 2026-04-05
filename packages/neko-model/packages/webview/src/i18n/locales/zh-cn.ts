@@ -12,8 +12,15 @@ export const zhCN = {
   'toolbar.exportGlb': '导出 GLB',
   'toolbar.saveProject': '保存项目',
 
+  // Toolbar (continued)
+  'toolbar.keyframes': '关键帧',
+
   // Empty state
   'empty.hint': '打开 .gltf、.glb 或 .vrm 文件进行查看',
+  'empty.dropHint': '拖入 .gltf、.glb 或 .vrm 文件，或选择以下方式开始',
+  'empty.import': '导入文件',
+  'empty.templateBlank': '空白场景',
+  'empty.templateHumanoid': '简单人形',
 
   // Scene tree
   'sceneTree.title': '场景',

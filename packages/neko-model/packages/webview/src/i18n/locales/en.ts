@@ -12,8 +12,15 @@ export const en = {
   'toolbar.exportGlb': 'Export GLB',
   'toolbar.saveProject': 'Save Project',
 
+  // Toolbar (continued)
+  'toolbar.keyframes': 'Keyframes',
+
   // Empty state
   'empty.hint': 'Open a .gltf, .glb, or .vrm file to view',
+  'empty.dropHint': 'Drop .gltf, .glb, or .vrm file here, or choose an option below',
+  'empty.import': 'Import File',
+  'empty.templateBlank': 'Blank Scene',
+  'empty.templateHumanoid': 'Simple Humanoid',
 
   // Scene tree
   'sceneTree.title': 'Scene',

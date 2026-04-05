@@ -11,18 +11,19 @@ import {
   ToolbarSpacer,
 } from '@neko/shared/components';
 import { useModelStore } from '../stores/modelStore';
+import { useTranslation } from '../i18n/I18nContext';
 import { postMessage } from '@neko/shared/vscode';
 
 type ToolItem =
   | {
       key: string;
       icon: React.ReactNode;
-      title: string;
+      titleKey: string;
       stateKey: string;
       toggle: string;
       needsVRM?: boolean;
     }
-  | { key: string; icon: React.ReactNode; title: string; action: () => void }
+  | { key: string; icon: React.ReactNode; titleKey: string; action: () => void }
   | 'separator'
   | 'spacer';
 
@@ -30,21 +31,21 @@ const TOOLS: ToolItem[] = [
   {
     key: 'face',
     icon: <FaceIcon />,
-    title: '面部编辑器',
+    titleKey: 'toolbar.faceEditor',
     stateKey: 'isFaceEditorOpen',
     toggle: 'toggleFaceEditor',
   },
   {
     key: 'latency',
     icon: <LatencyIcon />,
-    title: '延迟测试',
+    titleKey: 'toolbar.latencyTest',
     stateKey: 'isLatencyTesterOpen',
     toggle: 'toggleLatencyTester',
   },
   {
     key: 'vrm',
     icon: <VrmIcon />,
-    title: 'VRM 表情',
+    titleKey: 'toolbar.vrmExpression',
     stateKey: 'isExpressionPresetOpen',
     toggle: 'toggleExpressionPreset',
     needsVRM: true,
@@ -53,35 +54,35 @@ const TOOLS: ToolItem[] = [
   {
     key: 'bone',
     icon: <BoneIcon />,
-    title: '骨骼表情',
+    titleKey: 'toolbar.boneExpression',
     stateKey: 'isBoneExpressionOpen',
     toggle: 'toggleBoneExpression',
   },
   {
     key: 'shape',
     icon: <ShapeIcon />,
-    title: '几何体',
+    titleKey: 'toolbar.geometry',
     stateKey: 'isShapeCreatorOpen',
     toggle: 'toggleShapeCreator',
   },
   {
     key: 'text',
     icon: <TextIcon />,
-    title: '3D 文字',
+    titleKey: 'toolbar.text3d',
     stateKey: 'isTextEditorOpen',
     toggle: 'toggleTextEditor',
   },
   {
     key: 'csg',
     icon: <CsgIcon />,
-    title: 'CSG',
+    titleKey: 'toolbar.csg',
     stateKey: 'isCsgPanelOpen',
     toggle: 'toggleCsgPanel',
   },
   {
     key: 'keyframe',
     icon: <KeyframeIcon />,
-    title: 'Keyframes',
+    titleKey: 'toolbar.keyframes',
     stateKey: 'isKeyframeEditorOpen',
     toggle: 'toggleKeyframeEditor',
   },
@@ -90,13 +91,13 @@ const TOOLS: ToolItem[] = [
   {
     key: 'export',
     icon: <ExportIcon />,
-    title: '导出 GLB',
+    titleKey: 'toolbar.exportGlb',
     action: () => postMessage({ type: 'exportGlb' }),
   },
   {
     key: 'save',
     icon: <SaveIcon />,
-    title: '保存项目',
+    titleKey: 'toolbar.saveProject',
     action: () => {
       const editorState = useModelStore.getState().getEditorState();
       postMessage({ type: 'saveProject', editorState });
@@ -106,6 +107,7 @@ const TOOLS: ToolItem[] = [
 
 export function Toolbar() {
   const store = useModelStore();
+  const { t } = useTranslation();
   let sepIdx = 0;
   let spacerIdx = 0;
 
@@ -120,7 +122,7 @@ export function Toolbar() {
             <ToolbarButton
               key={item.key}
               icon={item.icon}
-              title={item.title}
+              title={t(item.titleKey)}
               onClick={item.action}
             />
           );
@@ -134,7 +136,7 @@ export function Toolbar() {
           <ToolbarButton
             key={item.key}
             icon={item.icon}
-            title={item.title}
+            title={t(item.titleKey)}
             active={isActive}
             disabled={disabled}
             onClick={toggleFn}
