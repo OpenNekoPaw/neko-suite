@@ -1,1 +1,20 @@
-{}
+{
+  "neko.live.vmcStarted": "VMC listening on UDP port {0}",
+  "neko.live.vmcStopped": "VMC receiver stopped",
+  "neko.live.vmcError": "VMC receiver error: {0}",
+  "neko.live.vmcStartFailed": "Failed to start VMC on port {0}: {1}",
+  "neko.live.engineNotAvailable": "Engine not available. Cannot load puppet.",
+  "neko.live.puppetLoadFailed": "Failed to load puppet: {0}",
+  "neko.live.puppetLoaded": "Puppet loaded: {0}",
+  "neko.live.recording.started": "Recording started",
+  "neko.live.recording.stopped": "Recording stopped",
+  "neko.live.recording.audioFailed": "Failed to start audio recording",
+  "neko.live.recording.videoSaved": "Video saved: {0} ({1} MB)",
+  "neko.live.recording.videoSaveFailed": "Failed to save video recording",
+  "neko.live.avatar.selectTitle": "Select Avatar Model",
+  "neko.live.avatar.filterAll": "All Avatars",
+  "neko.live.avatar.filterVrm": "VRM Models",
+  "neko.live.avatar.filterPuppet": "Puppet Models",
+  "neko.live.calibrating": "Calibrating tracking...",
+  "neko.live.streamingStarted": "Streaming started"
+}

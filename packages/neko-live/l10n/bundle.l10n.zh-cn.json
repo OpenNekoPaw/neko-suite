@@ -1,1 +1,20 @@
-{}
+{
+  "neko.live.vmcStarted": "VMC 正在监听 UDP 端口 {0}",
+  "neko.live.vmcStopped": "VMC 接收器已停止",
+  "neko.live.vmcError": "VMC 接收器错误：{0}",
+  "neko.live.vmcStartFailed": "无法在端口 {0} 启动 VMC：{1}",
+  "neko.live.engineNotAvailable": "引擎不可用，无法加载 Puppet 模型。",
+  "neko.live.puppetLoadFailed": "加载 Puppet 失败：{0}",
+  "neko.live.puppetLoaded": "Puppet 已加载：{0}",
+  "neko.live.recording.started": "录制已开始",
+  "neko.live.recording.stopped": "录制已停止",
+  "neko.live.recording.audioFailed": "无法启动音频录制",
+  "neko.live.recording.videoSaved": "视频已保存：{0}（{1} MB）",
+  "neko.live.recording.videoSaveFailed": "无法保存录制视频",
+  "neko.live.avatar.selectTitle": "选择头像模型",
+  "neko.live.avatar.filterAll": "所有头像",
+  "neko.live.avatar.filterVrm": "VRM 模型",
+  "neko.live.avatar.filterPuppet": "Puppet 模型",
+  "neko.live.calibrating": "正在校准追踪...",
+  "neko.live.streamingStarted": "推流已开始"
+}

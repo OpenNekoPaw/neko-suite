@@ -37,4 +37,5 @@ export type LiveWebviewMessage =
   | { type: 'stopRecording' }
   | { type: 'listCameraDevices' }
   | { type: 'startCameraCapture'; deviceId?: string }
-  | { type: 'stopCameraCapture' };
+  | { type: 'stopCameraCapture' }
+  | { type: 'videoRecordingBlob'; dataUrl: string; mimeType: string };

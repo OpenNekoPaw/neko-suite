@@ -63,18 +63,18 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     this.logger.debug('Webview resolved');
   }
 
-  // ─── Public API (for commands) ──────────────────────────────────────────
+  // ─── Avatar Selection ───────────────────────────────────────────────────
 
   public async selectAvatar(): Promise<void> {
     const result = await vscode.window.showOpenDialog({
       canSelectFiles: true,
       canSelectMany: false,
       filters: {
-        'All Avatars': ['vrm', 'glb', 'gltf', 'inp', 'inx'],
-        'VRM Models': ['vrm', 'glb', 'gltf'],
-        'Puppet Models': ['inp', 'inx'],
+        [vscode.l10n.t('neko.live.avatar.filterAll')]: ['vrm', 'glb', 'gltf', 'inp', 'inx'],
+        [vscode.l10n.t('neko.live.avatar.filterVrm')]: ['vrm', 'glb', 'gltf'],
+        [vscode.l10n.t('neko.live.avatar.filterPuppet')]: ['inp', 'inx'],
       },
-      title: 'Select Avatar Model',
+      title: vscode.l10n.t('neko.live.avatar.selectTitle'),
     });
 
     if (!result?.[0]) return;
@@ -82,17 +82,18 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     const filePath = result[0].fsPath;
     const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
     const isPuppet = ext === 'inp' || ext === 'inx';
-    const avatarType = isPuppet ? 'puppet' : 'vrm';
 
     if (isPuppet) {
       await this.loadPuppet(filePath);
     } else {
       const webviewUri = this.view?.webview.asWebviewUri(result[0]);
       if (webviewUri) {
-        this.postMessage({ type: 'avatarSelected', uri: webviewUri.toString(), avatarType });
+        this.postMessage({ type: 'avatarSelected', uri: webviewUri.toString(), avatarType: 'vrm' });
       }
     }
   }
+
+  // ─── VMC Tracking ───────────────────────────────────────────────────────
 
   public startVmc(): void {
     const port = vscode.workspace.getConfiguration('neko.live').get<number>('vmcPort', 39539);
@@ -105,7 +106,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     });
 
     this.vmcReceiver.on('error', (err) => {
-      vscode.window.showErrorMessage(`VMC receiver error: ${err.message}`);
+      vscode.window.showErrorMessage(vscode.l10n.t('neko.live.vmcError', err.message));
     });
 
     this.vmcReceiver.on('started', () => {
@@ -118,7 +119,9 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
     this.vmcReceiver.start().catch((err: Error) => {
       this.logger.error('Failed to start VMC receiver', err);
-      vscode.window.showErrorMessage(`Failed to start VMC on port ${port}: ${err.message}`);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('neko.live.vmcStartFailed', String(port), err.message),
+      );
     });
   }
 
@@ -134,7 +137,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   private async loadPuppet(filePath: string): Promise<void> {
     const client = await this.ensureEngineClient();
     if (!client) {
-      vscode.window.showErrorMessage('Engine not available. Cannot load puppet.');
+      vscode.window.showErrorMessage(vscode.l10n.t('neko.live.engineNotAvailable'));
       return;
     }
 
@@ -142,7 +145,6 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       const data = fs.readFileSync(filePath);
       await client.loadPuppet(data.buffer as ArrayBuffer);
 
-      // Get puppet parameters for webview
       const params = await client.getPuppetParameters();
       this.postMessage({
         type: 'puppetLoaded',
@@ -155,20 +157,14 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
         }[],
       });
 
-      // Notify webview of puppet avatar
-      this.postMessage({
-        type: 'avatarSelected',
-        uri: filePath,
-        avatarType: 'puppet',
-      });
-
-      // Start puppet stream
+      this.postMessage({ type: 'avatarSelected', uri: filePath, avatarType: 'puppet' });
       this.startPuppetStream(client);
-
-      this.logger.info(`Puppet loaded: ${filePath}`);
+      this.logger.info(vscode.l10n.t('neko.live.puppetLoaded', filePath));
     } catch (err) {
       this.logger.error('Failed to load puppet', err);
-      vscode.window.showErrorMessage(`Failed to load puppet: ${(err as Error).message}`);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('neko.live.puppetLoadFailed', (err as Error).message),
+      );
     }
   }
 
@@ -223,10 +219,45 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   public async stopRecording(): Promise<void> {
     if (!this.recordingService) return;
 
-    const result = await this.recordingService.stop();
-    const filePath = result.audioPath ?? result.videoPath ?? '';
-    this.postMessage({ type: 'recordingStopped', filePath });
+    await this.recordingService.stop();
+    // Video blob will arrive separately via 'videoRecordingBlob' message from webview
     this.recordingService = undefined;
+  }
+
+  // ─── Video Blob Save ─────────────────────────────────────────────────────
+
+  private async saveVideoBlob(dataUrl: string, mimeType: string): Promise<void> {
+    try {
+      const ext = mimeType.includes('webm') ? 'webm' : 'mp4';
+      const dir = await this.getRecordingDir();
+      const filePath = vscode.Uri.joinPath(
+        vscode.Uri.file(dir),
+        `live-video-${Date.now()}.${ext}`,
+      ).fsPath;
+
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) return;
+
+      const buffer = Buffer.from(base64, 'base64');
+      fs.writeFileSync(filePath, buffer);
+
+      const sizeMB = (buffer.length / 1024 / 1024).toFixed(1);
+      this.logger.info(vscode.l10n.t('neko.live.recording.videoSaved', filePath, sizeMB));
+      this.postMessage({ type: 'recordingStopped', filePath });
+    } catch (err) {
+      this.logger.error(vscode.l10n.t('neko.live.recording.videoSaveFailed'), err);
+    }
+  }
+
+  private async getRecordingDir(): Promise<string> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders?.[0]) {
+      const dir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'recordings');
+      await vscode.workspace.fs.createDirectory(dir);
+      return dir.fsPath;
+    }
+    const os = await import('os');
+    return os.tmpdir();
   }
 
   // ─── Engine Client ──────────────────────────────────────────────────────
@@ -290,6 +321,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
           case 'stopRecording':
             await this.stopRecording();
+            break;
+
+          case 'videoRecordingBlob':
+            await this.saveVideoBlob(message.dataUrl as string, message.mimeType as string);
             break;
 
           default:
