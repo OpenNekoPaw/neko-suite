@@ -51,12 +51,12 @@ describe('generateMinimalInp', () => {
 });
 
 describe('generateHumanoidInp', () => {
-  it('produces valid INP binary with humanoid skeleton', () => {
+  it('produces valid INP binary with humanoid body parts', () => {
     const result = generateHumanoidInp('Humanoid');
     const { json, texCount } = parseInp(result);
 
     expect(json.puppet.meta.name).toBe('Humanoid');
-    expect(texCount).toBe(0);
+    expect(texCount).toBe(2); // skin + head textures
 
     // Root → Body → children
     const root = json.puppet.nodes;
@@ -65,14 +65,18 @@ describe('generateHumanoidInp', () => {
 
     const body = root.children[0];
     expect(body.name).toBe('Body');
-    expect(body.children).toHaveLength(5);
+    expect(body.type).toBe('Part');
+    expect(body.mesh).toBeDefined();
+    expect(body.textures).toEqual([0]);
 
+    // Body has 5 direct children: Head + 2 arms + 2 legs
+    expect(body.children).toHaveLength(5);
     const childNames = body.children.map((c: { name: string }) => c.name);
     expect(childNames).toContain('Head');
-    expect(childNames).toContain('LeftArm');
-    expect(childNames).toContain('RightArm');
-    expect(childNames).toContain('LeftLeg');
-    expect(childNames).toContain('RightLeg');
+    expect(childNames).toContain('LeftUpperArm');
+    expect(childNames).toContain('RightUpperArm');
+    expect(childNames).toContain('LeftUpperLeg');
+    expect(childNames).toContain('RightUpperLeg');
   });
 
   it('has unique uuids for all nodes', () => {
@@ -91,7 +95,7 @@ describe('generateHumanoidInp', () => {
     }
     collectUuids(json.puppet.nodes);
 
-    // 7 nodes total: Root, Body, Head, LeftArm, RightArm, LeftLeg, RightLeg
-    expect(uuids.size).toBe(7);
+    // 11 nodes: Root + Body + Head + 4 arm parts + 4 leg parts
+    expect(uuids.size).toBe(11);
   });
 });
