@@ -285,6 +285,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   // ─── Recording ──────────────────────────────────────────────────────────
 
+  /**
+   * Start audio recording (called after webview confirms canvas capture is active).
+   * Video capture runs in webview; audio capture runs via engine.
+   */
   public async startRecording(includeAudio: boolean): Promise<void> {
     const client = await this.ensureEngineClient();
 
@@ -295,19 +299,19 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     );
 
     await this.recordingService.start({ includeAudio });
-    this.postMessage({ type: 'recordingStarted' });
+    // Note: webview already set recording state before sending this message
   }
 
+  /**
+   * Stop audio recording (called after webview has stopped canvas capture and sent blob).
+   */
   public async stopRecording(): Promise<void> {
     if (!this.recordingService) return;
 
     const result = await this.recordingService.stop();
     this.recordingService = undefined;
 
-    // Notify webview to stop canvas capture (if active) and send blob
-    this.postMessage({ type: 'stopCanvasCapture' });
-
-    // Report audio result immediately — don't wait for video blob
+    // Report audio path — video blob arrives separately via videoRecordingBlob
     const filePath = result.audioPath ?? '';
     this.postMessage({ type: 'recordingStopped', filePath });
   }
@@ -413,6 +417,14 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
           case 'videoRecordingBlob':
             await this.saveVideoBlob(message.dataUrl as string, message.mimeType as string);
+            break;
+
+          case 'showWarning':
+            vscode.window.showWarningMessage(message.message as string);
+            break;
+
+          case 'showError':
+            vscode.window.showErrorMessage(message.message as string);
             break;
 
           default:

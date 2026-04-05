@@ -34,10 +34,11 @@ export function TrackingPanel() {
   };
 
   const handleToggleRecording = () => {
+    const { onStartRecording, onStopRecording } = useLiveStore.getState();
     if (recordingState === 'recording') {
-      vscode.postMessage({ type: 'stopRecording' });
+      onStopRecording?.();
     } else {
-      vscode.postMessage({ type: 'startRecording', includeAudio: true });
+      onStartRecording?.(true);
     }
   };
 

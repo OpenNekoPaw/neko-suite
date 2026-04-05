@@ -24,6 +24,9 @@ export const en = {
   // Recording
   'recording.rec': 'REC',
   'recording.saved': 'Saved: {filename}',
+  'recording.noAvatar': 'Load an avatar before recording',
+  'recording.noCanvas': 'No rendering canvas available',
+  'recording.captureFailed': 'Canvas capture failed',
 
   // Puppet viewer
   'puppet.waiting': 'Waiting for tracking data...',

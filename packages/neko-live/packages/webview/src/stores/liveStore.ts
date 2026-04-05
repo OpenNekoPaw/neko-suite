@@ -44,6 +44,10 @@ export interface LiveState {
   setRecordingElapsed: (ms: number) => void;
   setLastRecordingPath: (path: string | null) => void;
   toggleSkeletonOverlay: () => void;
+
+  // Recording handlers (set by App, called by TrackingPanel)
+  onStartRecording?: (includeAudio: boolean) => void;
+  onStopRecording?: () => void;
 }
 
 // Sliding window for FPS calculation

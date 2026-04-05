@@ -24,6 +24,9 @@ export const zhCN = {
   // Recording
   'recording.rec': '录制中',
   'recording.saved': '已保存：{filename}',
+  'recording.noAvatar': '请先加载头像模型再录制',
+  'recording.noCanvas': '无可用的渲染画布',
+  'recording.captureFailed': '画布捕获失败',
 
   // Puppet viewer
   'puppet.waiting': '等待追踪数据...',

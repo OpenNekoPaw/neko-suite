@@ -30,42 +30,75 @@ export function App() {
 
   const isRecording = recordingState === 'recording';
 
-  // Find the canvas element inside the viewport container
-  const findCanvas = useCallback((): HTMLCanvasElement | null => {
-    return viewportRef.current?.querySelector('canvas') ?? null;
-  }, []);
+  // ─── Recording: webview-driven (canvas must exist here) ─────────────
 
-  // Try to start canvas capture (best-effort, recording works without it)
-  const tryStartCanvasCapture = useCallback(() => {
-    const canvas = findCanvas();
-    if (!canvas) {
-      console.info('[CanvasRecorder] No canvas in viewport — audio-only recording');
-      return;
-    }
-    console.info(`[CanvasRecorder] Found canvas ${canvas.width}x${canvas.height}`);
-    const error = canvasRecorder.start(canvas);
-    if (error) {
-      console.warn(`[CanvasRecorder] Canvas capture unavailable: ${error} — audio-only recording`);
-    } else {
-      console.info('[CanvasRecorder] Canvas capture started');
-    }
-  }, [findCanvas]);
+  /** Called by TrackingPanel "Rec" button. Checks preconditions before starting. */
+  const handleStartRecording = useCallback(
+    (includeAudio: boolean) => {
+      const { avatarUrl: url, isAvatarLoaded: loaded } = useLiveStore.getState();
 
-  // Stop canvas capture and send blob to extension (if capture was active)
-  const stopCanvasCapture = useCallback(async () => {
-    if (!canvasRecorder.isRecording) return;
+      // Check 1: avatar must be loaded
+      if (!url || !loaded) {
+        vscode.postMessage({ type: 'showWarning', message: t('recording.noAvatar') });
+        return;
+      }
+
+      // Check 2: canvas must exist in viewport
+      const canvas = viewportRef.current?.querySelector('canvas');
+      if (!canvas) {
+        vscode.postMessage({ type: 'showWarning', message: t('recording.noCanvas') });
+        return;
+      }
+
+      // Check 3: try to start canvas capture
+      const error = canvasRecorder.start(canvas);
+      if (error) {
+        vscode.postMessage({
+          type: 'showError',
+          message: `${t('recording.captureFailed')}: ${error}`,
+        });
+        return;
+      }
+
+      // Canvas capture started — tell extension host to start audio + progress timer
+      setRecordingState('recording');
+      setRecordingElapsed(0);
+      vscode.postMessage({ type: 'startRecording', includeAudio });
+    },
+    [setRecordingState, setRecordingElapsed],
+  );
+
+  /** Stop recording: stop canvas capture, send blob, notify extension host */
+  const handleStopRecording = useCallback(async () => {
+    setRecordingState('stopping');
+
+    // Stop canvas capture
     const blob = await canvasRecorder.stop();
+
+    // Send video blob to extension host for disk save
     if (blob && blob.size > 0) {
       try {
         const dataUrl = await CanvasRecorder.blobToDataUrl(blob);
         vscode.postMessage({ type: 'videoRecordingBlob', dataUrl, mimeType: blob.type });
       } catch (err) {
-        console.error('[CanvasRecorder] Failed to convert blob:', err);
+        console.error('[CanvasRecorder] Failed to encode blob:', err);
       }
     }
-  }, []);
 
-  // Message bridge: Extension Host → Webview
+    // Tell extension host to stop audio recording
+    vscode.postMessage({ type: 'stopRecording' });
+  }, [setRecordingState]);
+
+  // Expose handlers to TrackingPanel via store
+  useEffect(() => {
+    useLiveStore.setState({
+      onStartRecording: handleStartRecording,
+      onStopRecording: handleStopRecording,
+    });
+  }, [handleStartRecording, handleStopRecording]);
+
+  // ─── Message bridge: Extension Host → Webview ───────────────────────
+
   useEffect(() => {
     const handler = (event: MessageEvent<LiveExtensionMessage>) => {
       const msg = event.data;
@@ -94,19 +127,9 @@ export function App() {
           setIsTracking(msg.active);
           break;
 
-        case 'recordingStarted':
-          setRecordingState('recording');
-          setRecordingElapsed(0);
-          tryStartCanvasCapture();
-          break;
-
         case 'recordingStopped':
           setRecordingState('idle');
           setLastRecordingPath(msg.filePath);
-          break;
-
-        case 'stopCanvasCapture' as string:
-          stopCanvasCapture();
           break;
 
         case 'recordingProgress':
@@ -135,8 +158,6 @@ export function App() {
     setRecordingElapsed,
     setLastRecordingPath,
     setAvatarLoaded,
-    tryStartCanvasCapture,
-    stopCanvasCapture,
   ]);
 
   return (
@@ -180,7 +201,6 @@ export function App() {
         )}
       </div>
 
-      {/* Control panel at bottom */}
       <TrackingPanel />
 
       <style>{`@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.4 } }`}</style>
