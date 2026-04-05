@@ -2,7 +2,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
-import { generateMinimalGlb, generateHumanoidGlb } from '@neko/shared/vscode/extension';
+import {
+  generateMinimalGlb,
+  generateHumanoidGlb,
+  injectLocaleAttribute,
+} from '@neko/shared/vscode/extension';
 import { ModelDocument } from './ModelDocument';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
@@ -629,7 +633,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     const nonce = this.getNonce();
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html ${injectLocaleAttribute()}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
