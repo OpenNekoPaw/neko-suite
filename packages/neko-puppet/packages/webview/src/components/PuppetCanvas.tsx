@@ -105,14 +105,19 @@ function drawSolidTriangle(
 
 function renderPuppet(
   ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
+  canvas: HTMLCanvasElement,
   meshSnapshots: MeshSnapshot[],
   deformedMeshes: DeformedMesh[],
   textures: ImageBitmap[],
   viewport: { zoom: number; panX: number; panY: number },
 ): void {
-  ctx.clearRect(0, 0, width, height);
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+
+  // Reset transform to identity then apply DPR
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
 
   // Build lookup: node_id → mesh snapshot (for indices + uvs + texture_index)
   const snapshotMap = new Map<string, MeshSnapshot>();
@@ -122,9 +127,9 @@ function renderPuppet(
 
   ctx.save();
 
-  // Apply viewport transform: center + zoom + pan
-  const cx = width / 2;
-  const cy = height / 2;
+  // Apply viewport transform: center of CSS canvas + zoom + pan
+  const cx = cssW / 2;
+  const cy = cssH / 2;
   ctx.translate(cx + viewport.panX, cy + viewport.panY);
   ctx.scale(viewport.zoom, viewport.zoom);
 
@@ -214,15 +219,7 @@ export function PuppetCanvas() {
       if (!running) return;
       if (needsRenderRef.current) {
         needsRenderRef.current = false;
-        renderPuppet(
-          ctx,
-          canvas.width,
-          canvas.height,
-          meshSnapshots,
-          deformedMeshes,
-          textures,
-          viewport,
-        );
+        renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, viewport);
       }
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -247,8 +244,6 @@ export function PuppetCanvas() {
         canvas.height = Math.round(height * dpr);
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
-        const ctx = canvas.getContext('2d');
-        if (ctx) ctx.scale(dpr, dpr);
         needsRenderRef.current = true;
       }
     });

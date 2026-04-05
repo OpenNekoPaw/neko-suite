@@ -82,7 +82,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   isPlayingPhysics: false,
   noPuppetSource: false,
   textures: [],
-  viewport: { zoom: 1, panX: 0, panY: 0 },
+  viewport: { zoom: 2, panX: 0, panY: 0 },
 
   // ── Animation clip state ─────────────────────────────────────────────────
   animations: [],
@@ -132,7 +132,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
       puppetParameters: [],
       deformedMeshes: [],
       textures: [],
-      viewport: { zoom: 1, panX: 0, panY: 0 },
+      viewport: { zoom: 2, panX: 0, panY: 0 },
       isPlayingPhysics: false,
       animations: [],
       currentAnimation: null,
