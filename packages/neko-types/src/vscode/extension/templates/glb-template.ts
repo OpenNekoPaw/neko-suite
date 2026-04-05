@@ -115,158 +115,232 @@ function writeU16(buf: DataView, offset: number, value: number): void {
   buf.setUint16(offset, value, true);
 }
 
-/**
- * Build a unit cube mesh binary data (positions + normals + indices).
- * Returns { binData, accessors, bufferViews, meshes } for glTF JSON.
- *
- * 24 vertices (4 per face × 6 faces), 36 indices (2 triangles per face).
- */
-function buildCubeMesh() {
-  // 6 faces, each with 4 vertices and flat normal
-  const faces: { normal: [number, number, number]; verts: [number, number, number][] }[] = [
-    {
-      normal: [0, 0, 1],
-      verts: [
-        [-0.5, -0.5, 0.5],
-        [0.5, -0.5, 0.5],
-        [0.5, 0.5, 0.5],
-        [-0.5, 0.5, 0.5],
-      ],
-    },
-    {
-      normal: [0, 0, -1],
-      verts: [
-        [0.5, -0.5, -0.5],
-        [-0.5, -0.5, -0.5],
-        [-0.5, 0.5, -0.5],
-        [0.5, 0.5, -0.5],
-      ],
-    },
-    {
-      normal: [0, 1, 0],
-      verts: [
-        [-0.5, 0.5, 0.5],
-        [0.5, 0.5, 0.5],
-        [0.5, 0.5, -0.5],
-        [-0.5, 0.5, -0.5],
-      ],
-    },
-    {
-      normal: [0, -1, 0],
-      verts: [
-        [-0.5, -0.5, -0.5],
-        [0.5, -0.5, -0.5],
-        [0.5, -0.5, 0.5],
-        [-0.5, -0.5, 0.5],
-      ],
-    },
-    {
-      normal: [1, 0, 0],
-      verts: [
-        [0.5, -0.5, 0.5],
-        [0.5, -0.5, -0.5],
-        [0.5, 0.5, -0.5],
-        [0.5, 0.5, 0.5],
-      ],
-    },
-    {
-      normal: [-1, 0, 0],
-      verts: [
-        [-0.5, -0.5, -0.5],
-        [-0.5, -0.5, 0.5],
-        [-0.5, 0.5, 0.5],
-        [-0.5, 0.5, -0.5],
-      ],
-    },
-  ];
+// ── Procedural geometry generators ──────────────────────────────────────────
 
-  const vertCount = 24;
-  const idxCount = 36;
-  const posBytes = vertCount * 3 * 4; // 288
-  const normBytes = vertCount * 3 * 4; // 288
-  const idxBytes = idxCount * 2; // 72 → pad to 576+72=648
+/** Generate a UV sphere (positions + normals + indices) centered at origin. */
+function generateSphere(
+  radius: number,
+  rings: number,
+  segments: number,
+): { positions: number[]; normals: number[]; indices: number[] } {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+
+  for (let r = 0; r <= rings; r++) {
+    const phi = (r / rings) * Math.PI;
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+    for (let s = 0; s <= segments; s++) {
+      const theta = (s / segments) * Math.PI * 2;
+      const x = sinPhi * Math.cos(theta);
+      const y = cosPhi;
+      const z = sinPhi * Math.sin(theta);
+      positions.push(x * radius, y * radius, z * radius);
+      normals.push(x, y, z);
+    }
+  }
+  const stride = segments + 1;
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const a = r * stride + s;
+      const b = a + stride;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  return { positions, normals, indices };
+}
+
+/** Generate a cylinder along Y axis (bottom at y=0, top at y=height). */
+function generateCylinder(
+  radiusTop: number,
+  radiusBottom: number,
+  height: number,
+  segments: number,
+): { positions: number[]; normals: number[]; indices: number[] } {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+
+  // Side vertices: 2 rings
+  for (let ring = 0; ring <= 1; ring++) {
+    const y = ring * height;
+    const r = ring === 0 ? radiusBottom : radiusTop;
+    for (let s = 0; s <= segments; s++) {
+      const theta = (s / segments) * Math.PI * 2;
+      const x = Math.cos(theta);
+      const z = Math.sin(theta);
+      positions.push(x * r, y, z * r);
+      // Approximate normal (ignoring slope for simplicity)
+      normals.push(x, 0, z);
+    }
+  }
+  const stride = segments + 1;
+  for (let s = 0; s < segments; s++) {
+    const a = s;
+    const b = a + stride;
+    indices.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+
+  // Top cap
+  const topCenter = positions.length / 3;
+  positions.push(0, height, 0);
+  normals.push(0, 1, 0);
+  for (let s = 0; s <= segments; s++) {
+    const theta = (s / segments) * Math.PI * 2;
+    positions.push(Math.cos(theta) * radiusTop, height, Math.sin(theta) * radiusTop);
+    normals.push(0, 1, 0);
+  }
+  for (let s = 0; s < segments; s++) {
+    indices.push(topCenter, topCenter + 1 + s + 1, topCenter + 1 + s);
+  }
+
+  // Bottom cap
+  const botCenter = positions.length / 3;
+  positions.push(0, 0, 0);
+  normals.push(0, -1, 0);
+  for (let s = 0; s <= segments; s++) {
+    const theta = (s / segments) * Math.PI * 2;
+    positions.push(Math.cos(theta) * radiusBottom, 0, Math.sin(theta) * radiusBottom);
+    normals.push(0, -1, 0);
+  }
+  for (let s = 0; s < segments; s++) {
+    indices.push(botCenter, botCenter + 1 + s, botCenter + 1 + s + 1);
+  }
+
+  return { positions, normals, indices };
+}
+
+/** Pack multiple meshes into a single binary buffer + glTF descriptor arrays. */
+function packMeshes(
+  geometries: { positions: number[]; normals: number[]; indices: number[] }[],
+  color: [number, number, number, number],
+) {
+  // Compute total binary size
+  let totalPosFloats = 0;
+  let totalNormFloats = 0;
+  let totalIdxCount = 0;
+  for (const g of geometries) {
+    totalPosFloats += g.positions.length;
+    totalNormFloats += g.normals.length;
+    totalIdxCount += g.indices.length;
+  }
+  const posBytes = totalPosFloats * 4;
+  const normBytes = totalNormFloats * 4;
+  const idxBytes = totalIdxCount * 2;
   const totalBin = posBytes + normBytes + idxBytes;
 
-  const binBuf = new ArrayBuffer(totalBin);
-  const view = new DataView(binBuf);
+  const buf = new ArrayBuffer(totalBin);
+  const view = new DataView(buf);
 
+  // Write all positions, then all normals, then all indices
   let posOff = 0;
   let normOff = posBytes;
   let idxOff = posBytes + normBytes;
-  let vertIdx = 0;
 
-  for (const face of faces) {
-    for (const v of face.verts) {
-      writeF32(view, posOff, v[0]);
+  const meshes: {
+    primitives: {
+      attributes: { POSITION: number; NORMAL: number };
+      indices: number;
+      material: number;
+    }[];
+  }[] = [];
+  const accessors: Record<string, unknown>[] = [];
+  const bufferViews: Record<string, unknown>[] = [];
+  let accessorIdx = 0;
+
+  for (const g of geometries) {
+    const vertCount = g.positions.length / 3;
+    const idxCount = g.indices.length;
+
+    // Position buffer view + accessor
+    const posBvIdx = bufferViews.length;
+    bufferViews.push({
+      buffer: 0,
+      byteOffset: posOff,
+      byteLength: g.positions.length * 4,
+      target: 34962,
+    });
+    const posAccIdx = accessorIdx++;
+    // Compute AABB
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
+    for (let i = 0; i < g.positions.length; i += 3) {
+      const x = g.positions[i]!,
+        y = g.positions[i + 1]!,
+        z = g.positions[i + 2]!;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+    accessors.push({
+      bufferView: posBvIdx,
+      componentType: 5126,
+      count: vertCount,
+      type: 'VEC3',
+      min: [minX, minY, minZ],
+      max: [maxX, maxY, maxZ],
+    });
+
+    // Write position data
+    for (const v of g.positions) {
+      writeF32(view, posOff, v);
       posOff += 4;
-      writeF32(view, posOff, v[1]);
-      posOff += 4;
-      writeF32(view, posOff, v[2]);
-      posOff += 4;
-      writeF32(view, normOff, face.normal[0]);
-      normOff += 4;
-      writeF32(view, normOff, face.normal[1]);
-      normOff += 4;
-      writeF32(view, normOff, face.normal[2]);
+    }
+
+    // Normal buffer view + accessor
+    const normBvIdx = bufferViews.length;
+    bufferViews.push({
+      buffer: 0,
+      byteOffset: normOff,
+      byteLength: g.normals.length * 4,
+      target: 34962,
+    });
+    const normAccIdx = accessorIdx++;
+    accessors.push({ bufferView: normBvIdx, componentType: 5126, count: vertCount, type: 'VEC3' });
+    for (const v of g.normals) {
+      writeF32(view, normOff, v);
       normOff += 4;
     }
-    // Two triangles: 0,1,2 and 0,2,3
-    writeU16(view, idxOff, vertIdx);
-    idxOff += 2;
-    writeU16(view, idxOff, vertIdx + 1);
-    idxOff += 2;
-    writeU16(view, idxOff, vertIdx + 2);
-    idxOff += 2;
-    writeU16(view, idxOff, vertIdx);
-    idxOff += 2;
-    writeU16(view, idxOff, vertIdx + 2);
-    idxOff += 2;
-    writeU16(view, idxOff, vertIdx + 3);
-    idxOff += 2;
-    vertIdx += 4;
+
+    // Index buffer view + accessor
+    const idxBvIdx = bufferViews.length;
+    bufferViews.push({ buffer: 0, byteOffset: idxOff, byteLength: idxCount * 2, target: 34963 });
+    const idxAccIdx = accessorIdx++;
+    accessors.push({ bufferView: idxBvIdx, componentType: 5123, count: idxCount, type: 'SCALAR' });
+    for (const v of g.indices) {
+      writeU16(view, idxOff, v);
+      idxOff += 2;
+    }
+
+    meshes.push({
+      primitives: [
+        {
+          attributes: { POSITION: posAccIdx, NORMAL: normAccIdx },
+          indices: idxAccIdx,
+          material: 0,
+        },
+      ],
+    });
   }
 
-  const binData = new Uint8Array(binBuf);
-
   return {
-    binData,
+    binData: new Uint8Array(buf),
     buffers: [{ byteLength: totalBin }],
-    bufferViews: [
-      { buffer: 0, byteOffset: 0, byteLength: posBytes, target: 34962 },
-      { buffer: 0, byteOffset: posBytes, byteLength: normBytes, target: 34962 },
-      { buffer: 0, byteOffset: posBytes + normBytes, byteLength: idxBytes, target: 34963 },
-    ],
-    accessors: [
-      {
-        bufferView: 0,
-        componentType: 5126,
-        count: vertCount,
-        type: 'VEC3',
-        min: [-0.5, -0.5, -0.5],
-        max: [0.5, 0.5, 0.5],
-      },
-      { bufferView: 1, componentType: 5126, count: vertCount, type: 'VEC3' },
-      { bufferView: 2, componentType: 5123, count: idxCount, type: 'SCALAR' },
-    ],
-    meshes: [
-      {
-        primitives: [
-          {
-            attributes: { POSITION: 0, NORMAL: 1 },
-            indices: 2,
-            material: 0,
-          },
-        ],
-      },
-    ],
+    bufferViews,
+    accessors,
+    meshes,
     materials: [
       {
-        name: 'Default',
-        pbrMetallicRoughness: {
-          baseColorFactor: [0.7, 0.7, 0.7, 1.0],
-          metallicFactor: 0.0,
-          roughnessFactor: 0.5,
-        },
+        name: 'Skin',
+        pbrMetallicRoughness: { baseColorFactor: color, metallicFactor: 0.0, roughnessFactor: 0.8 },
       },
     ],
   };
@@ -302,31 +376,58 @@ export function generateMinimalGlb(name: string): Uint8Array {
  *      └─ 11: RightLowerLeg (0, -0.4, 0)
  */
 export function generateHumanoidGlb(name: string): Uint8Array {
-  const cube = buildCubeMesh();
+  const SEG = 8; // Low-poly segment count
+
+  // Generate body part meshes (local space, origin at joint)
+  const geometries = [
+    generateSphere(0.12, SEG, SEG), // 0: Head
+    generateCylinder(0.1, 0.12, 0.4, SEG), // 1: Torso (Spine+Chest combined)
+    generateCylinder(0.04, 0.05, 0.28, SEG), // 2: UpperArm
+    generateCylinder(0.035, 0.04, 0.25, SEG), // 3: LowerArm
+    generateCylinder(0.055, 0.06, 0.35, SEG), // 4: UpperLeg
+    generateCylinder(0.04, 0.055, 0.35, SEG), // 5: LowerLeg
+  ];
+
+  const skinColor: [number, number, number, number] = [0.85, 0.75, 0.65, 1.0];
+  const packed = packMeshes(geometries, skinColor);
+
+  // Node indices:
+  //  0: Hips         mesh: 1 (torso)
+  //  1: Spine         —
+  //  2: Chest         —
+  //  3: Head          mesh: 0 (sphere)
+  //  4: LeftUpperArm  mesh: 2
+  //  5: LeftLowerArm  mesh: 3
+  //  6: RightUpperArm mesh: 2
+  //  7: RightLowerArm mesh: 3
+  //  8: LeftUpperLeg  mesh: 4
+  //  9: LeftLowerLeg  mesh: 5
+  // 10: RightUpperLeg mesh: 4
+  // 11: RightLowerLeg mesh: 5
 
   const nodes: GltfNode[] = [
-    { name: 'Hips', translation: [0, 1.0, 0], children: [1, 8, 10], mesh: 0 },
+    { name: 'Hips', translation: [0, 1.0, 0], children: [1, 8, 10], mesh: 1 },
     { name: 'Spine', translation: [0, 0.2, 0], children: [2] },
     { name: 'Chest', translation: [0, 0.2, 0], children: [3, 4, 6] },
-    { name: 'Head', translation: [0, 0.3, 0], scale: [0.3, 0.3, 0.3], mesh: 0 },
-    { name: 'LeftUpperArm', translation: [-0.2, 0.15, 0], children: [5] },
-    { name: 'LeftLowerArm', translation: [0, -0.3, 0] },
-    { name: 'RightUpperArm', translation: [0.2, 0.15, 0], children: [7] },
-    { name: 'RightLowerArm', translation: [0, -0.3, 0] },
-    { name: 'LeftUpperLeg', translation: [-0.1, -0.05, 0], children: [9] },
-    { name: 'LeftLowerLeg', translation: [0, -0.4, 0] },
-    { name: 'RightUpperLeg', translation: [0.1, -0.05, 0], children: [11] },
-    { name: 'RightLowerLeg', translation: [0, -0.4, 0] },
+    { name: 'Head', translation: [0, 0.3, 0], mesh: 0 },
+    { name: 'LeftUpperArm', translation: [-0.18, 0.12, 0], children: [5], mesh: 2 },
+    { name: 'LeftLowerArm', translation: [0, -0.28, 0], mesh: 3 },
+    { name: 'RightUpperArm', translation: [0.18, 0.12, 0], children: [7], mesh: 2 },
+    { name: 'RightLowerArm', translation: [0, -0.28, 0], mesh: 3 },
+    { name: 'LeftUpperLeg', translation: [-0.08, -0.05, 0], children: [9], mesh: 4 },
+    { name: 'LeftLowerLeg', translation: [0, -0.35, 0], mesh: 5 },
+    { name: 'RightUpperLeg', translation: [0.08, -0.05, 0], children: [11], mesh: 4 },
+    { name: 'RightLowerLeg', translation: [0, -0.35, 0], mesh: 5 },
   ];
 
   const json = {
     ...buildGltfJson(name, nodes, [0]),
-    ...(cube.buffers && { buffers: cube.buffers }),
-    bufferViews: cube.bufferViews,
-    accessors: cube.accessors,
-    meshes: cube.meshes,
-    materials: cube.materials,
+    buffers: packed.buffers,
+    bufferViews: packed.bufferViews,
+    accessors: packed.accessors,
+    meshes: packed.meshes,
+    materials: packed.materials,
   };
 
-  return packGlb(json, cube.binData);
+  return packGlb(json, packed.binData);
 }

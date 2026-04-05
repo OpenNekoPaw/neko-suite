@@ -111,8 +111,8 @@ describe('generateHumanoidGlb', () => {
     expect(json.meshes.length).toBeGreaterThan(0);
     expect(json.materials).toBeDefined();
     expect(json.buffers).toBeDefined();
-    // Hips has mesh reference
-    expect(json.nodes[0].mesh).toBe(0);
+    // Hips has torso mesh reference
+    expect(json.nodes[0].mesh).toBe(1);
   });
 
   it('leaf nodes have no children', () => {
