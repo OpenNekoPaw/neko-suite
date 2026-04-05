@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useLiveStore } from '../stores/liveStore';
+import { t } from '../i18n';
 
 /**
  * 2D puppet renderer using Canvas 2D.
@@ -50,11 +51,7 @@ export function PuppetViewer() {
       ctx.fillStyle = 'var(--vscode-descriptionForeground, #888)';
       ctx.font = `${14 * dpr}px system-ui`;
       ctx.textAlign = 'center';
-      ctx.fillText(
-        isAvatarLoaded ? 'Waiting for tracking data...' : 'No puppet loaded',
-        w / 2,
-        h / 2,
-      );
+      ctx.fillText(isAvatarLoaded ? t('puppet.waiting') : t('puppet.noModel'), w / 2, h / 2);
       return;
     }
 

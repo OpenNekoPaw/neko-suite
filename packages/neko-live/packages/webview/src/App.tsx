@@ -6,6 +6,7 @@ import { useLiveStore } from './stores/liveStore';
 import type { LiveExtensionMessage } from './types/messages';
 import { vscode } from './vscode-api';
 import { CanvasRecorder } from './recording/CanvasRecorder';
+import { t } from './i18n';
 
 const canvasRecorder = new CanvasRecorder();
 
@@ -169,7 +170,7 @@ export function App() {
             }}
           >
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
-            REC
+            {t('recording.rec')}
           </div>
         )}
       </div>

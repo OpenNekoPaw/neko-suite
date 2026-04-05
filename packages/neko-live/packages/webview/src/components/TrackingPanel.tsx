@@ -1,6 +1,7 @@
 import { useLiveStore } from '../stores/liveStore';
 import type { TrackingMode } from '../types/tracking';
 import { vscode } from '../vscode-api';
+import { t } from '../i18n';
 
 /**
  * Compact control panel for tracking, avatar selection, and recording.
@@ -72,12 +73,12 @@ export function TrackingPanel() {
           }}
         />
         <span style={{ color: 'var(--vscode-descriptionForeground)' }}>
-          {isTracking ? `VMC ${trackingFps} fps` : 'Disconnected'}
+          {isTracking ? t('status.vmcFps', { fps: trackingFps }) : t('status.disconnected')}
         </span>
 
         {isAvatarLoaded && (
           <span style={{ color: 'var(--vscode-descriptionForeground)', marginLeft: 4 }}>
-            {avatarType === 'puppet' ? '2D' : '3D'}
+            {avatarType === 'puppet' ? t('status.2d') : t('status.3d')}
           </span>
         )}
 
@@ -101,7 +102,6 @@ export function TrackingPanel() {
 
       {/* Controls row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-        {/* Tracking mode */}
         <select
           value={trackingMode}
           onChange={(e) => handleModeChange(e.target.value as TrackingMode)}
@@ -114,16 +114,15 @@ export function TrackingPanel() {
             border: '1px solid var(--vscode-dropdown-border)',
           }}
         >
-          <option value="vmc">VMC</option>
+          <option value="vmc">{t('mode.vmc')}</option>
           <option value="mediapipe" disabled>
-            MediaPipe
+            {t('mode.mediapipe')}
           </option>
           <option value="hybrid" disabled>
-            Hybrid
+            {t('mode.hybrid')}
           </option>
         </select>
 
-        {/* Start/Stop tracking */}
         <button
           onClick={handleToggleTracking}
           style={{
@@ -136,10 +135,9 @@ export function TrackingPanel() {
               : 'var(--vscode-button-foreground)',
           }}
         >
-          {isTracking ? 'Stop' : 'Start'}
+          {isTracking ? t('controls.stop') : t('controls.start')}
         </button>
 
-        {/* Select Avatar */}
         <button
           onClick={handleSelectAvatar}
           style={{
@@ -148,10 +146,9 @@ export function TrackingPanel() {
             color: 'var(--vscode-button-secondaryForeground)',
           }}
         >
-          Avatar
+          {t('controls.avatar')}
         </button>
 
-        {/* Record */}
         <button
           onClick={handleToggleRecording}
           style={{
@@ -160,7 +157,7 @@ export function TrackingPanel() {
             color: isRecording ? '#fff' : 'var(--vscode-button-secondaryForeground)',
           }}
         >
-          {isRecording ? 'Stop Rec' : 'Rec'}
+          {isRecording ? t('controls.stopRec') : t('controls.rec')}
         </button>
       </div>
 
@@ -175,12 +172,11 @@ export function TrackingPanel() {
             whiteSpace: 'nowrap',
           }}
         >
-          Saved: {lastRecordingPath.split('/').pop()}
+          {t('recording.saved', { filename: lastRecordingPath.split('/').pop() ?? '' })}
         </div>
       )}
 
-      {/* Blink animation for recording indicator */}
-      <style>{`@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style>
+      <style>{`@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.4 } }`}</style>
     </div>
   );
 }
