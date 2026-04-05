@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { ModelDocument } from './ModelDocument';
@@ -109,7 +110,12 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
         if (isProject) {
           // Load .nkm project file via engine backend
-          await this.loadProjectInEngine(filePath, webviewPanel);
+          const loaded = await this.loadProjectInEngine(filePath, webviewPanel);
+
+          // If project has model.src but empty scene, auto-load the referenced model
+          if (loaded && loaded.snapshot?.nodes?.length === 0) {
+            await this.tryLoadModelFromProject(filePath, webviewPanel);
+          }
         } else {
           // Send model file URI to webview for R3F direct loading
           const modelUri = webviewPanel.webview.asWebviewUri(document.uri);
@@ -463,13 +469,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
   /**
    * Load a .nkm project file via the engine backend and send snapshot + editor state to webview.
+   * Returns the result so callers can inspect the snapshot.
    */
   private async loadProjectInEngine(
     filePath: string,
     webviewPanel: vscode.WebviewPanel,
-  ): Promise<void> {
+  ): Promise<{ snapshot: { nodes: unknown[] }; editorState: unknown } | undefined> {
     const client = await this.ensureEngineClient();
-    if (!client) return;
+    if (!client) return undefined;
 
     try {
       const result = await client.loadProject(filePath);
@@ -478,8 +485,54 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         snapshot: result.snapshot,
         editorState: result.editorState,
       });
+      return result as { snapshot: { nodes: unknown[] }; editorState: unknown };
     } catch (err) {
       this.logError('loadProject', err);
+      return undefined;
+    }
+  }
+
+  /**
+   * Read model.src from .nkm JSON and load the referenced model file.
+   * Used when a template-created project has an empty scene snapshot.
+   */
+  private async tryLoadModelFromProject(
+    nkmPath: string,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    try {
+      const nkmUri = vscode.Uri.file(nkmPath);
+      const data = await vscode.workspace.fs.readFile(nkmUri);
+      const project = JSON.parse(new TextDecoder().decode(data)) as {
+        model?: { src?: string | null };
+      };
+
+      const modelSrc = project.model?.src;
+      if (!modelSrc) return;
+
+      // Resolve relative path from .nkm directory
+      const nkmDir = path.dirname(nkmPath);
+      const modelPath = path.resolve(nkmDir, modelSrc);
+
+      // Check file exists
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(modelPath));
+      } catch {
+        return; // Model file doesn't exist
+      }
+
+      // Send model URI to webview for R3F loading
+      const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(modelPath));
+      webviewPanel.webview.postMessage({
+        type: 'loadModel',
+        uri: modelUri.toString(),
+        filePath: modelPath,
+      });
+
+      // Also load in engine backend
+      await this.loadModelInEngine(modelPath, webviewPanel);
+    } catch (err) {
+      this.logError('tryLoadModelFromProject', err);
     }
   }
 
