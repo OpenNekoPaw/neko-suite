@@ -39,12 +39,12 @@ export interface DocumentReadyMessage {
   type: 'ready';
 }
 
-/** A single captured image attached to a sendToAi payload. */
-export interface CapturedImagePayload {
-  /** Semantic role of the image in the document */
-  role: 'page' | 'figure' | 'region';
-  /** Base64 JPEG data URL, compressed to ≤280 KB */
-  dataUrl: string;
+/** Region selection for CBZ image-based documents */
+export interface DocumentRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface DocumentSendToAiMessage {
@@ -56,10 +56,8 @@ export interface DocumentSendToAiMessage {
     pageNumber?: number;
     /** Chapter title (EPUB) */
     chapterTitle?: string;
-    /** Single image — legacy field for CBZ region selection */
-    imageDataUrl?: string;
-    /** Multiple images — EPUB page/figure capture, CBZ multi-page */
-    images?: CapturedImagePayload[];
+    /** CBZ region selection (coordinates on the page image) */
+    region?: DocumentRegion;
     /**
      * Characterises the content being sent so the agent helper can
      * choose the right intent prompt.

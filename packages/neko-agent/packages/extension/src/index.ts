@@ -44,7 +44,6 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
-import { createDocumentReaderService } from './services/DocumentReaderService';
 
 /**
  * Activate the extension
@@ -797,30 +796,16 @@ function registerPipelineCommands(
   );
 }
 
-/** Max characters of document text forwarded to the AI chat. */
-const DOC_CONTEXT_CHAR_LIMIT = 8000;
-
-function truncateDocText(text: string): string {
-  if (text.length <= DOC_CONTEXT_CHAR_LIMIT) return text;
-  const remaining = Math.ceil((text.length - DOC_CONTEXT_CHAR_LIMIT) / 1000);
-  return (
-    text.slice(0, DOC_CONTEXT_CHAR_LIMIT) + `\n\n[... ~${remaining}k more characters truncated]`
-  );
-}
-
 /**
  * Register AI commands surfaced in the Explorer context menu.
  *
- * Document commands (summarize / chat) use DocumentReaderService to extract
- * text in the Extension Host, then forward a prompt to the Agent chat panel.
- * Image / video commands send the file path as intent so Agent tools can handle them.
+ * All commands send file-level chips to the agent panel.
+ * The agent reads document/image/video content on demand via its tools.
  */
 function registerDocumentContextCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
 ): void {
-  const logger = getRootLogger();
-
   /** Resolve file path from context-menu URI or fall back to active editor. */
   function resolveFilePath(uri: vscode.Uri | undefined): string | undefined {
     return uri?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
@@ -849,116 +834,75 @@ function registerDocumentContextCommands(
             id: fileUri.toString(),
             label: fileName,
             summary: `File: ${relPath}`,
-            data: { path: fileUri.fsPath, relativePath: relPath },
+            data: { filePath: fileUri.fsPath, relativePath: relPath },
           });
         }
       },
     ),
   );
 
-  /** Extract document text and send a prompt to the Agent chat. */
-  async function sendDocumentPrompt(
+  /** Send a file-level chip to agent with an intent hint. */
+  async function sendFileChip(
     uri: vscode.Uri | undefined,
-    buildPrompt: (fileName: string, text: string, pageCount: number | undefined) => string,
+    intent: string,
+    typeOverride?: import('@neko/shared').AgentContextType,
   ): Promise<void> {
-    const filePath = resolveFilePath(uri);
-    if (!filePath) {
-      vscode.window.showErrorMessage('No file selected');
-      return;
-    }
-
-    const docReader = createDocumentReaderService();
-    if (!docReader.supports(filePath)) {
-      vscode.window.showErrorMessage(`Unsupported format: ${path.extname(filePath)}`);
-      return;
-    }
-
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Reading document…',
-        cancellable: false,
-      },
-      async () => {
-        try {
-          const content = await docReader.read(filePath);
-          const fileName = path.basename(filePath);
-          const prompt = buildPrompt(fileName, truncateDocText(content.text), content.pageCount);
-          await chatViewProvider.sendMessageToAssistant(prompt, true);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          vscode.window.showErrorMessage(`Failed to read document: ${msg}`);
-          logger.error('Document context command failed', { error: err, filePath });
-        }
-      },
-    );
+    const fp = resolveFilePath(uri);
+    if (!fp) return;
+    const fileName = path.basename(fp);
+    const relPath = vscode.workspace.asRelativePath(fp);
+    const ext = path.extname(fp).toLowerCase();
+    const type =
+      typeOverride ?? (/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(ext) ? 'image' : 'file');
+    await chatViewProvider.sendContextPayload({
+      type,
+      id: `file:${fp}:${Date.now()}`,
+      label: fileName,
+      summary: `File: ${relPath}`,
+      data: { filePath: fp, relativePath: relPath },
+      intent,
+    });
   }
 
-  // Summarize document — extract text → AI summary
+  // Summarize document — file-level chip, agent reads on demand
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.summarizeDocument', async (uri?: vscode.Uri) => {
-      await sendDocumentPrompt(uri, (fileName, text, pageCount) => {
-        const meta = pageCount !== undefined ? ` (${pageCount} pages)` : '';
-        return `Please summarize the key points of this document "${fileName}"${meta}:\n\n${text}`;
-      });
+      await sendFileChip(uri, '请总结这个文档的要点：');
     }),
   );
 
-  // Chat with document — inject full text as context, open conversation
+  // Chat with document — file-level chip
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.chatWithDocument', async (uri?: vscode.Uri) => {
-      await sendDocumentPrompt(uri, (fileName, text, pageCount) => {
-        const meta = pageCount !== undefined ? ` (${pageCount} pages)` : '';
-        return `I'd like to discuss the document "${fileName}"${meta}. Here's the content:\n\n${text}\n\nWhat would you like to know about this document?`;
-      });
+      await sendFileChip(uri, '我想讨论一下这个文档：');
     }),
   );
 
-  // Analyze image — send file path to Agent (multimodal tool handles it)
+  // Analyze image — file-level chip
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.analyzeImage', async (uri?: vscode.Uri) => {
-      const filePath = resolveFilePath(uri);
-      if (!filePath) return;
-      await chatViewProvider.sendMessageToAssistant(
-        `Please analyze this image and describe what you see: ${filePath}`,
-        true,
-      );
+      await sendFileChip(uri, '请分析这张图片：', 'image');
     }),
   );
 
   // Extract image text — OCR intent
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.extractImageText', async (uri?: vscode.Uri) => {
-      const filePath = resolveFilePath(uri);
-      if (!filePath) return;
-      await chatViewProvider.sendMessageToAssistant(
-        `Please extract all text from this image (OCR): ${filePath}`,
-        true,
-      );
+      await sendFileChip(uri, '请提取这张图片中的文字（OCR）：', 'image');
     }),
   );
 
-  // Analyze video — send file path to Agent
+  // Analyze video — file-level chip
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.analyzeVideo', async (uri?: vscode.Uri) => {
-      const filePath = resolveFilePath(uri);
-      if (!filePath) return;
-      await chatViewProvider.sendMessageToAssistant(
-        `Please analyze this video and provide a summary of its content: ${filePath}`,
-        true,
-      );
+      await sendFileChip(uri, '请分析这个视频：');
     }),
   );
 
-  // Generate subtitles — send file path to Agent
+  // Generate subtitles — file-level chip
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.ai.generateSubtitles', async (uri?: vscode.Uri) => {
-      const filePath = resolveFilePath(uri);
-      if (!filePath) return;
-      await chatViewProvider.sendMessageToAssistant(
-        `Please generate subtitles for this video: ${filePath}`,
-        true,
-      );
+      await sendFileChip(uri, '请为这个视频生成字幕：');
     }),
   );
 }

@@ -338,7 +338,17 @@ export function InputArea({
     // use onTriggerSend to bypass the inputValue closure in useChatActions.
     if (contextChips.length > 0 && onTriggerSend) {
       const contextBlock = contextChips
-        .map((c) => `[Context: ${c.label}]\n${c.summary}`)
+        .map((c) => {
+          const d = c.data as Record<string, unknown> | undefined;
+          // Content-level: inject full selected text
+          const text = d?.selectedText as string | undefined;
+          if (text) return `[Content: ${c.label}]\n${text}`;
+          // File-level: inject file path for agent to read on demand
+          const fp = (d?.filePath ?? d?.path) as string | undefined;
+          if (fp) return `[File: ${c.label}]\n${fp}`;
+          // Other (canvas-node, etc.): keep original behavior
+          return `[Context: ${c.label}]\n${c.summary}`;
+        })
         .join('\n\n');
       const combined = contextBlock + '\n\n' + inputValue.trim();
       contextChips.forEach((c) => onRemoveContextChip(c.id));

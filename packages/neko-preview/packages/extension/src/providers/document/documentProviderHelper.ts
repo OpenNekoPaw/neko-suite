@@ -121,12 +121,12 @@ export async function setupDocumentWebview(
 
         // ── Send selection to AI agent ──────────────────────────────────
         case 'document:sendToAi': {
-          const { selectedText, pageNumber, chapterTitle, imageDataUrl, images, contentKind } = (
+          const { selectedText, pageNumber, chapterTitle, region, contentKind } = (
             msg as DocumentWebviewMessage & { type: 'document:sendToAi' }
           ).payload;
           const label = buildLabel(fileName, pageNumber, chapterTitle);
           const intent = buildIntent(contentKind, selectedText);
-          const summary = buildSummary(contentKind, selectedText, images?.length);
+          const summary = buildSummary(contentKind, selectedText);
           const payload: AgentContextPayload = {
             type: 'document-selection',
             id: `doc:${filePath}:${pageNumber ?? 0}:${Date.now()}`,
@@ -137,8 +137,7 @@ export async function setupDocumentWebview(
               selectedText,
               pageNumber,
               chapterTitle,
-              imageDataUrl,
-              images,
+              region,
               contentKind,
             },
             intent,
@@ -196,26 +195,13 @@ export function registerOpenCommand(
 }
 
 function buildIntent(contentKind: string | undefined, selectedText: string | undefined): string {
-  if (contentKind === 'mixed') return '请分析以下图文内容：';
-  if (contentKind === 'image') return '请分析这些图片：';
-  if (contentKind === 'text' || selectedText) return '请分析这段内容：';
-  return '请分析这张图片：';
+  if (contentKind === 'image') return '请分析这个区域：';
+  if (selectedText) return '请分析这段内容：';
+  return '请分析这个文档：';
 }
 
-function buildSummary(
-  contentKind: string | undefined,
-  selectedText: string | undefined,
-  imageCount: number | undefined,
-): string {
-  if (contentKind === 'mixed' && selectedText) {
-    const textSnippet = selectedText.slice(0, 300);
-    return imageCount
-      ? `${textSnippet}… (+${imageCount} image${imageCount > 1 ? 's' : ''})`
-      : textSnippet;
-  }
-  if (contentKind === 'image' || (!selectedText && imageCount)) {
-    return `${imageCount ?? 0} image${(imageCount ?? 0) > 1 ? 's' : ''} from document`;
-  }
+function buildSummary(contentKind: string | undefined, selectedText: string | undefined): string {
+  if (contentKind === 'image') return 'Image region from document';
   return selectedText?.slice(0, 400) ?? 'Document selection';
 }
 

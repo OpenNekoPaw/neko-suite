@@ -51,7 +51,7 @@ export const CbzViewer: FC = () => {
   // Track active waterfall images for region selection
   const waterfallImgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
 
-  const { selection, sendToAi, sendImageToAi } = useDocumentSelection({
+  const { selection, sendToAi, sendRegionToAi, sendPageRefToAi } = useDocumentSelection({
     pageNumber: currentPage + 1,
     enabled: false, // CBZ uses region selection, not text
   });
@@ -337,7 +337,6 @@ export const CbzViewer: FC = () => {
       viewMode === 'scroll' ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
     if (!img) return;
 
-    const canvas = document.createElement('canvas');
     const x = Math.min(selectionRect.startX, selectionRect.endX);
     const y = Math.min(selectionRect.startY, selectionRect.endY);
     const w = Math.abs(selectionRect.endX - selectionRect.startX);
@@ -348,43 +347,24 @@ export const CbzViewer: FC = () => {
       return;
     }
 
+    // Scale to natural image coordinates
     const scaleX = img.naturalWidth / img.clientWidth;
     const scaleY = img.naturalHeight / img.clientHeight;
+    const region = {
+      x: Math.round(x * scaleX),
+      y: Math.round(y * scaleY),
+      width: Math.round(w * scaleX),
+      height: Math.round(h * scaleY),
+    };
 
-    canvas.width = w * scaleX;
-    canvas.height = h * scaleY;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(
-      img,
-      x * scaleX,
-      y * scaleY,
-      canvas.width,
-      canvas.height,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     const pageNum = viewMode === 'scroll' ? selectionPageIdx + 1 : currentPage + 1;
-    sendImageToAi(dataUrl, pageNum);
+    sendRegionToAi(region, pageNum);
     setSelectionRect(null);
-  }, [selectionRect, viewMode === 'scroll', selectionPageIdx, currentPage, sendImageToAi]);
+  }, [selectionRect, viewMode === 'scroll', selectionPageIdx, currentPage, sendRegionToAi]);
 
   const sendFullPage = useCallback(() => {
-    const img = viewMode === 'scroll' ? waterfallImgRefs.current.get(currentPage) : imgRef.current;
-    if (!img) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(img, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    sendImageToAi(dataUrl, currentPage + 1);
-  }, [viewMode === 'scroll', currentPage, sendImageToAi]);
+    sendPageRefToAi(currentPage + 1);
+  }, [currentPage, sendPageRefToAi]);
 
   const cycleViewMode = useCallback(() => {
     const modes: Array<'scroll' | 'dual' | 'single'> = ['scroll', 'dual', 'single'];

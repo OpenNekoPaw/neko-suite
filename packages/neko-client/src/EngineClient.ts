@@ -274,7 +274,7 @@ export class EngineClient {
   async extractFrame(
     source: string,
     time: number,
-    opts?: { quality?: number; format?: string },
+    opts?: { quality?: number; format?: string; width?: number; height?: number },
   ): Promise<ArrayBuffer | null> {
     const resp = await this.dispatch({
       group: 'videos',
@@ -284,6 +284,8 @@ export class EngineClient {
         time,
         quality: opts?.quality ?? 85,
         format: opts?.format ?? 'jpeg',
+        ...(opts?.width != null && { width: opts.width }),
+        ...(opts?.height != null && { height: opts.height }),
       },
     });
 
@@ -295,6 +297,24 @@ export class EngineClient {
     if (!b64 || typeof b64 !== 'string') return null;
 
     return base64ToArrayBuffer(b64);
+  }
+
+  /**
+   * Get keyframe timestamps from a video file.
+   * Dispatches `videos:keyframes`.
+   * Returns sorted array of keyframe timestamps in seconds.
+   */
+  async getKeyframes(source: string): Promise<number[]> {
+    const resp = await this.dispatch({
+      group: 'videos',
+      action: 'keyframes',
+      options: { source },
+    });
+
+    if (resp.status === 'error') return [];
+
+    const data = resp.data as { keyframes?: Array<{ time: number }> } | undefined;
+    return (data?.keyframes ?? []).map((k) => k.time).sort((a, b) => a - b);
   }
 
   // =========================================================================

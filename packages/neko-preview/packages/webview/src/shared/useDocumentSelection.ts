@@ -71,18 +71,40 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions = {}) 
     setSelection(null);
   }, [selection, pageNumber, chapterTitle]);
 
-  const sendImageToAi = useCallback(
-    (imageDataUrl: string, page?: number) => {
+  /** Send a page region (CBZ frame selection) — file-level with coordinates */
+  const sendRegionToAi = useCallback(
+    (region: { x: number; y: number; width: number; height: number }, page?: number) => {
       postMessage({
         type: 'document:sendToAi',
         payload: {
-          imageDataUrl,
           pageNumber: page ?? pageNumber,
+          region,
+          contentKind: 'image',
         },
       } as never);
     },
     [pageNumber],
   );
 
-  return { selection, sendToAi, sendImageToAi, clearSelection: () => setSelection(null) };
+  /** Send a full page reference — file-level with page number */
+  const sendPageRefToAi = useCallback(
+    (page?: number) => {
+      postMessage({
+        type: 'document:sendToAi',
+        payload: {
+          pageNumber: page ?? pageNumber,
+          contentKind: 'image',
+        },
+      } as never);
+    },
+    [pageNumber],
+  );
+
+  return {
+    selection,
+    sendToAi,
+    sendRegionToAi,
+    sendPageRefToAi,
+    clearSelection: () => setSelection(null),
+  };
 }

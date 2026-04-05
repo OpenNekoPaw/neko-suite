@@ -73,17 +73,18 @@ export type DocumentExtensionMessage =
   | EpubNavigateMessage;
 
 // Webview → Extension
-export interface CapturedImagePayload {
-  role: 'page' | 'figure' | 'region';
-  dataUrl: string;
+export interface DocumentRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface DocumentSendToAiPayload {
   selectedText?: string;
   pageNumber?: number;
   chapterTitle?: string;
-  imageDataUrl?: string;
-  images?: CapturedImagePayload[];
+  region?: DocumentRegion;
   contentKind?: 'text' | 'image' | 'mixed';
 }
 

@@ -68,6 +68,7 @@ const preview: MessageBundle = {
   'preview.epub.fontSize': 'Font size',
   'preview.epub.modeScrolled': 'Switch to scroll mode',
   'preview.epub.modePaginated': 'Switch to page mode',
+  'preview.epub.modeSpread': 'Switch to spread mode',
   'preview.epub.modeWaterfall': 'Switch to waterfall mode',
   'preview.epub.sendPage': 'Send page to AI',
   // DOCX

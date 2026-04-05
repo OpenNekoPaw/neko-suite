@@ -20,6 +20,8 @@ import { ConversationHandler } from './conversationHandler';
 import { FileReference, MessageAttachment } from './types';
 import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
+import { MediaPreprocessor, isImageMime, isVideoMime } from './message/mediaPreprocessor';
+import { getMimeType } from '@neko/shared';
 import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
 import { EngineClient } from '@neko/neko-client';
 import type { AgentPhase } from '@neko-agent/types';
@@ -267,6 +269,9 @@ export class MessageHandler {
     const { textContent: attachmentText, imageAttachments } =
       await this._attachmentProcessor.processAttachments(attachments);
 
+    // Auto-preprocess media files referenced via [File: ...] chips
+    const mediaImages = await this._preprocessFileReferences(parsedMessage, imageAttachments);
+
     // Build enhanced message with file contents and attachment text
     let enhancedMessage = parsedMessage;
     if (fileContents.length > 0) {
@@ -311,7 +316,7 @@ export class MessageHandler {
         enhancedMessage,
         providerId,
         modelId,
-        imageAttachments,
+        mediaImages,
         promptId,
         mediaProviderId,
         mediaModelId,
@@ -605,6 +610,49 @@ export class MessageHandler {
       toolName,
       startedAt,
     });
+  }
+
+  /**
+   * Extract [File: ...] references from chip-injected messages and
+   * auto-preprocess images/videos into vision-ready attachments.
+   */
+  private async _preprocessFileReferences(
+    message: string,
+    existingImages: Array<{ type: 'base64'; media_type: string; data: string }>,
+  ): Promise<Array<{ type: 'base64'; media_type: string; data: string }>> {
+    // Match [File: label]\nfilePath pattern injected by InputArea chip consumption
+    const FILE_REF_RE = /\[File: [^\]]+\]\n(.+)/g;
+    const paths: string[] = [];
+    let match;
+    while ((match = FILE_REF_RE.exec(message)) !== null) {
+      const fp = match[1]?.trim();
+      if (fp) paths.push(fp);
+    }
+
+    if (paths.length === 0) return existingImages;
+
+    const engineClient = await getEngineClient();
+    const preprocessor = new MediaPreprocessor(engineClient);
+    const result = [...existingImages];
+
+    for (const fp of paths) {
+      const mime = getMimeType(fp);
+      if (!isImageMime(mime) && !isVideoMime(mime)) continue;
+
+      try {
+        const processed = await preprocessor.process(fp);
+        for (const img of processed.images) {
+          result.push({ type: 'base64', media_type: img.media_type, data: img.data });
+        }
+        if (processed.metadata) {
+          logger.info(`Preprocessed ${fp}: ${processed.type}`, processed.metadata);
+        }
+      } catch (err) {
+        logger.warn(`Failed to preprocess media: ${fp}`, err);
+      }
+    }
+
+    return result;
   }
 
   /**

@@ -68,6 +68,7 @@ const preview: MessageBundle = {
   'preview.epub.fontSize': '字号',
   'preview.epub.modeScrolled': '切换为滚动模式',
   'preview.epub.modePaginated': '切换为分页模式',
+  'preview.epub.modeSpread': '切换为双栏模式',
   'preview.epub.modeWaterfall': '切换为瀑布流模式',
   'preview.epub.sendPage': '发送页面到 AI',
   // DOCX
