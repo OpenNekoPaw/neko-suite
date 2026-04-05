@@ -39,7 +39,7 @@ export function createThumbnailTooltip(
   const md = new vscode.MarkdownString(undefined, true);
   md.isTrusted = true;
   md.supportHtml = true;
-  md.appendMarkdown(`<img src="${vscode.Uri.file(thumbnailPath)}" width="200" />\n\n`);
+  md.appendMarkdown(`<img src="${vscode.Uri.file(thumbnailPath).toString()}" width="200" />\n\n`);
   if (text) {
     md.appendText(text);
   }

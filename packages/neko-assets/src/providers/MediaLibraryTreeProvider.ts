@@ -221,6 +221,9 @@ export class MediaLibraryTreeProvider
     this.persistentCache = deps.metadataCache;
 
     this.disposables.push(deps.settingsService.onDidChange(() => this.refresh()));
+    this.disposables.push(
+      deps.thumbnailService.onDidGenerateThumbnail((fp) => this.debouncedRefresh(fp)),
+    );
   }
 
   refresh(): void {
