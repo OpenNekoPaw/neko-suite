@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { generateMinimalGlb, generateHumanoidGlb } from '@neko/shared/vscode/extension';
 import { ModelDocument } from './ModelDocument';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
@@ -441,9 +442,72 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'model:import': {
+        // Open file dialog to select .glb/.gltf/.vrm
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: { '3D Models': ['glb', 'gltf', 'vrm'] },
+        });
+        if (uris?.[0]) {
+          await this.importModelFile(uris[0].fsPath, document, webviewPanel);
+        }
+        break;
+      }
+
+      case 'model:template': {
+        const templateId = message.templateId as string;
+        const name = path.basename(document.uri.fsPath, '.nkm');
+        const glbData =
+          templateId === 'humanoid' ? generateHumanoidGlb(name) : generateMinimalGlb(name);
+
+        // Write .glb alongside .nkm
+        const nkmDir = path.dirname(document.uri.fsPath);
+        const glbName = `${name}.glb`;
+        const glbPath = path.join(nkmDir, glbName);
+        await vscode.workspace.fs.writeFile(vscode.Uri.file(glbPath), glbData);
+
+        await this.importModelFile(glbPath, document, webviewPanel);
+        break;
+      }
+
+      case 'model:dropFile': {
+        const fileName = message.name as string;
+        const base64Data = message.data as string;
+        const fileData = Buffer.from(base64Data, 'base64');
+
+        const nkmDir2 = path.dirname(document.uri.fsPath);
+        const dropPath = path.join(nkmDir2, fileName);
+        await vscode.workspace.fs.writeFile(vscode.Uri.file(dropPath), fileData);
+
+        await this.importModelFile(dropPath, document, webviewPanel);
+        break;
+      }
+
       default:
         break;
     }
+  }
+
+  /**
+   * Import a model file into the project: send to webview + load in engine.
+   */
+  private async importModelFile(
+    modelPath: string,
+    document: vscode.CustomDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    // Send model URI to webview for R3F loading
+    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(modelPath));
+    webviewPanel.webview.postMessage({
+      type: 'loadModel',
+      uri: modelUri.toString(),
+      filePath: modelPath,
+    });
+
+    // Also load in engine backend
+    await this.loadModelInEngine(modelPath, webviewPanel);
   }
 
   /**

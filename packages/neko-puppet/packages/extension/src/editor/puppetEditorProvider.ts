@@ -9,7 +9,11 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  injectLocaleAttribute,
+  generateMinimalInp,
+  generateHumanoidInp,
+} from '@neko/shared/vscode/extension';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PuppetEditorProvider');
@@ -295,6 +299,57 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
             name: path.basename(uris[0].fsPath, '.inp'),
           });
         }
+        break;
+      }
+
+      case 'puppet:template': {
+        // Generate .inp from template and load it
+        if (document.isInpFile || !document.projectData) break;
+        const templateId = message.templateId as string;
+        const name = path.basename(document.uri.fsPath, '.nkp');
+        const inpData =
+          templateId === 'humanoid' ? generateHumanoidInp(name) : generateMinimalInp(name);
+
+        // Write .inp alongside .nkp
+        const nkpDir = path.dirname(document.uri.fsPath);
+        const inpName = `${name}.inp`;
+        const inpUri = vscode.Uri.file(path.join(nkpDir, inpName));
+        await vscode.workspace.fs.writeFile(inpUri, inpData);
+
+        // Update project reference
+        document.projectData.puppet.src = `./${inpName}`;
+        document.dirty = true;
+        this._onDidChangeCustomDocument.fire({ document });
+
+        // Load and notify
+        await this.loadInpFromProject(document, webviewPanel);
+        webviewPanel.webview.postMessage({ type: 'puppetImported', name });
+        break;
+      }
+
+      case 'puppet:dropFile': {
+        // Save dropped .inp file and load it
+        if (document.isInpFile || !document.projectData) break;
+        const fileName = message.name as string;
+        const base64Data = message.data as string;
+        const fileData = Buffer.from(base64Data, 'base64');
+
+        // Write dropped file alongside .nkp
+        const nkpDir2 = path.dirname(document.uri.fsPath);
+        const dropUri = vscode.Uri.file(path.join(nkpDir2, fileName));
+        await vscode.workspace.fs.writeFile(dropUri, fileData);
+
+        // Update project reference
+        document.projectData.puppet.src = `./${fileName}`;
+        document.dirty = true;
+        this._onDidChangeCustomDocument.fire({ document });
+
+        // Load and notify
+        await this.loadInpFromProject(document, webviewPanel);
+        webviewPanel.webview.postMessage({
+          type: 'puppetImported',
+          name: path.basename(fileName, '.inp'),
+        });
         break;
       }
 

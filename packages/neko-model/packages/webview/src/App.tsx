@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { Viewport3D } from './components/Viewport3D';
 import { ModelLoader, type ModelLoaderHandle } from './components/ModelLoader';
@@ -211,9 +211,7 @@ export function App(): React.JSX.Element {
               />
             </Viewport3D>
           ) : (
-            <div className="h-full flex items-center justify-center bg-[var(--vscode-editor-background)] text-[var(--vscode-editor-foreground)] opacity-40">
-              <p className="text-sm">Open a .gltf, .glb, or .vrm file to view</p>
-            </div>
+            <ModelEmptyState />
           )}
 
           {/* Animation Player (bottom overlay) */}
@@ -261,6 +259,84 @@ export function App(): React.JSX.Element {
           <ModelKeyframeTimeline />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Empty state UI — import, template, or drag-drop */
+function ModelEmptyState() {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleImport = useCallback(() => {
+    postMessage({ type: 'model:import' });
+  }, []);
+
+  const handleTemplate = useCallback((templateId: string) => {
+    postMessage({ type: 'model:template', templateId });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && /\.(glb|gltf|vrm)$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1] ?? '';
+        postMessage({ type: 'model:dropFile', name: file.name, data: base64 });
+      };
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
+  const btnClass =
+    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
+    'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] ' +
+    'hover:bg-[var(--vscode-button-secondaryHoverBackground)]';
+  const primaryBtnClass =
+    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
+    'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] ' +
+    'hover:bg-[var(--vscode-button-hoverBackground)]';
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`h-full flex flex-col items-center justify-center gap-5 text-sm transition-colors ${
+        isDragOver
+          ? 'bg-[var(--vscode-list-hoverBackground)]'
+          : 'bg-[var(--vscode-editor-background)]'
+      }`}
+    >
+      <div className="opacity-40 text-center text-[var(--vscode-editor-foreground)]">
+        Drop .gltf, .glb, or .vrm file here, or choose an option below
+      </div>
+
+      <div className="flex gap-3">
+        <button type="button" onClick={handleImport} className={primaryBtnClass}>
+          Import File
+        </button>
+        <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
+          Blank Scene
+        </button>
+        <button type="button" onClick={() => handleTemplate('humanoid')} className={btnClass}>
+          Simple Humanoid
+        </button>
+      </div>
     </div>
   );
 }

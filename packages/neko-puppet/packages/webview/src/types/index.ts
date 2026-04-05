@@ -18,4 +18,6 @@ export type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'requestEnginePort' }
   | { type: 'state:save'; parameters: Record<string, number> }
-  | { type: 'puppet:import' };
+  | { type: 'puppet:import' }
+  | { type: 'puppet:template'; templateId: string }
+  | { type: 'puppet:dropFile'; name: string; data: string };

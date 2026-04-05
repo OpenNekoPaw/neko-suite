@@ -32,6 +32,12 @@ export const zhCN: MessageBundle = {
   'puppet.import.title': '导入 Puppet (.inp)',
   'puppet.import.dropHint': '拖入 .inp 文件或点击导入',
 
+  // Empty state
+  'puppet.empty.hint': '拖入 .inp 文件，或选择以下方式开始',
+  'puppet.empty.import': '导入文件',
+  'puppet.empty.templateBlank': '空白骨架',
+  'puppet.empty.templateHumanoid': '简单人形',
+
   // Status
   'puppet.status.ready': '就绪',
   'puppet.status.loading': '正在加载 Puppet...',

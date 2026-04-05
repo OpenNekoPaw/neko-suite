@@ -32,6 +32,12 @@ export const en: MessageBundle = {
   'puppet.import.title': 'Import Puppet (.inp)',
   'puppet.import.dropHint': 'Drop .inp file or click to import',
 
+  // Empty state
+  'puppet.empty.hint': 'Drop .inp file here or choose an option below',
+  'puppet.empty.import': 'Import File',
+  'puppet.empty.templateBlank': 'Blank Skeleton',
+  'puppet.empty.templateHumanoid': 'Simple Humanoid',
+
   // Status
   'puppet.status.ready': 'Ready',
   'puppet.status.loading': 'Loading puppet...',

@@ -77,6 +77,9 @@ export type WebviewMessage =
   | { type: 'stopAnimation' }
   | { type: 'latency:test'; timestamp: number }
   | { type: 'createShape'; shapeType: string; params: Record<string, number> }
+  | { type: 'model:import' }
+  | { type: 'model:template'; templateId: string }
+  | { type: 'model:dropFile'; name: string; data: string }
   | { type: 'createTextMesh'; text: string; fontSize: number; extrusionDepth: number }
   | {
       type: 'csgBoolean';

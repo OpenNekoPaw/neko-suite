@@ -4,7 +4,7 @@
  * Manages Inochi2D puppet loading, parameter control, and animation playback.
  * Communicates with the extension host via postMessage protocol.
  */
-import { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import type { ExtensionToWebviewMessage } from './types';
 import { usePuppetStore } from './stores/puppet-store';
 import { AnimationPanel } from './components/AnimationPanel';
@@ -56,24 +56,77 @@ function PuppetWaitingPlaceholder() {
   return <span>{t('puppet.status.loading')}</span>;
 }
 
-/** Import UI shown when .nkp has no puppet.src linked */
-function PuppetImportUI() {
+/** Empty state UI — import, template, or drag-drop */
+function PuppetEmptyState() {
   const { t } = useTranslation();
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleImport = useCallback(() => {
     vscode.postMessage({ type: 'puppet:import' });
   }, []);
 
+  const handleTemplate = useCallback((templateId: string) => {
+    vscode.postMessage({ type: 'puppet:template', templateId });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.inp')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1] ?? '';
+        vscode.postMessage({ type: 'puppet:dropFile', name: file.name, data: base64 });
+      };
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
+  const btnClass =
+    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
+    'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] ' +
+    'hover:bg-[var(--vscode-button-secondaryHoverBackground)]';
+  const primaryBtnClass =
+    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
+    'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] ' +
+    'hover:bg-[var(--vscode-button-hoverBackground)]';
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm">
-      <div className="opacity-50">{t('puppet.import.dropHint')}</div>
-      <button
-        type="button"
-        onClick={handleImport}
-        className="px-4 py-2 rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer"
-      >
-        {t('puppet.import.title')}
-      </button>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex-1 flex flex-col items-center justify-center gap-5 text-sm transition-colors ${
+        isDragOver ? 'bg-[var(--vscode-list-hoverBackground)]' : ''
+      }`}
+    >
+      <div className="opacity-40 text-center">{t('puppet.empty.hint')}</div>
+
+      <div className="flex gap-3">
+        <button type="button" onClick={handleImport} className={primaryBtnClass}>
+          {t('puppet.empty.import')}
+        </button>
+        <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
+          {t('puppet.empty.templateBlank')}
+        </button>
+        <button type="button" onClick={() => handleTemplate('humanoid')} className={btnClass}>
+          {t('puppet.empty.templateHumanoid')}
+        </button>
+      </div>
     </div>
   );
 }
@@ -211,7 +264,7 @@ export function PuppetApp() {
           {/* Main content area */}
           <div className="flex-1 flex items-center justify-center text-sm opacity-50">
             {noPuppetSource ? (
-              <PuppetImportUI />
+              <PuppetEmptyState />
             ) : puppetLoaded ? (
               <PuppetLoadedPlaceholder />
             ) : (
