@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Viewport3D } from './components/Viewport3D';
 import { PuppetViewer } from './components/PuppetViewer';
+import { EmptyState } from './components/EmptyState';
 import { TrackingPanel } from './components/TrackingPanel';
 import { useLiveStore } from './stores/liveStore';
 import type { LiveExtensionMessage } from './types/messages';
@@ -19,6 +20,7 @@ const canvasRecorder = new CanvasRecorder();
 export function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const {
+    avatarUrl,
     avatarType,
     recordingState,
     applyTrackingData,
@@ -147,7 +149,7 @@ export function App() {
           transition: 'border-color 0.2s',
         }}
       >
-        {avatarType === 'puppet' ? <PuppetViewer /> : <Viewport3D />}
+        {!avatarUrl ? <EmptyState /> : avatarType === 'puppet' ? <PuppetViewer /> : <Viewport3D />}
 
         {/* REC badge overlay */}
         {isRecording && (

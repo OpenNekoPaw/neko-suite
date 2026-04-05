@@ -28,4 +28,13 @@ export const en = {
   // Puppet viewer
   'puppet.waiting': 'Waiting for tracking data...',
   'puppet.noModel': 'No puppet loaded',
+
+  // Empty state (no avatar loaded)
+  'empty.title': 'Neko Live',
+  'empty.step1': '1. Click "Start" to connect VMC tracking',
+  'empty.step2': '2. Click "Avatar" to load a VRM or Puppet model',
+  'empty.step3': '3. Tracking data will drive the avatar in real-time',
+  'empty.waitingData': 'Waiting for tracking data...',
+  'empty.trackingPreview': 'Tracking Data Preview',
+  'empty.headRotation': 'Head',
 } satisfies MessageBundle;

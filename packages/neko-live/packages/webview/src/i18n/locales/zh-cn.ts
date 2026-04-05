@@ -28,4 +28,13 @@ export const zhCN = {
   // Puppet viewer
   'puppet.waiting': '等待追踪数据...',
   'puppet.noModel': '未加载 Puppet 模型',
+
+  // Empty state (no avatar loaded)
+  'empty.title': 'Neko Live',
+  'empty.step1': '1. 点击「开始」连接 VMC 追踪',
+  'empty.step2': '2. 点击「头像」加载 VRM 或 Puppet 模型',
+  'empty.step3': '3. 追踪数据将实时驱动虚拟形象',
+  'empty.waitingData': '等待追踪数据...',
+  'empty.trackingPreview': '追踪数据预览',
+  'empty.headRotation': '头部',
 } satisfies MessageBundle;
