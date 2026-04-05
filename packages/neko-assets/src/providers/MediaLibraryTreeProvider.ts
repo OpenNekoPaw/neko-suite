@@ -145,22 +145,16 @@ class MediaFileItem extends vscode.TreeItem {
       };
     }
 
-    // Icon: thumbnail for video/image, ThemeIcon for audio/document
+    // Icon: thumbnail or image preview when available; otherwise let
+    // resourceUri + active file icon theme resolve the correct icon.
     if (thumbnailPath) {
       this.iconPath = vscode.Uri.file(thumbnailPath);
     } else if (mediaType === 'image') {
       // Images use original file as icon (VSCode auto-scales)
       this.iconPath = uri;
-    } else {
-      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-      const iconMap: Record<string, string> = {
-        video: 'file-media',
-        audio: 'unmute',
-        document: ['epub', 'cbz', 'cbr'].includes(ext) ? 'book' : 'file',
-        text: 'file-text',
-      };
-      this.iconPath = new vscode.ThemeIcon(iconMap[mediaType] ?? 'file');
     }
+    // For other types (video/audio/document/text), no explicit iconPath —
+    // VSCode uses resourceUri to match the active file icon theme.
 
     // Tooltip: thumbnail + metadata
     const metaLines = metadata ? [fileName, ...buildMetadataTooltipLines(metadata)] : [fileName];

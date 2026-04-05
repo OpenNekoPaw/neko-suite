@@ -37,6 +37,7 @@ out/**
 *.map
 *.tsbuildinfo
 
-# Include compiled output and localization
+# Include compiled output, localization, and icons
 !dist/**
 !l10n/**
+!icons/**

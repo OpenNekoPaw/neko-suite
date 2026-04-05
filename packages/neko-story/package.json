@@ -45,6 +45,10 @@
         "extensions": [
           ".fountain"
         ],
+        "icon": {
+          "light": "./icons/file-story.svg",
+          "dark": "./icons/file-story.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
