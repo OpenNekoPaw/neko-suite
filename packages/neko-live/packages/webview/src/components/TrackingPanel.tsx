@@ -4,7 +4,8 @@ import { vscode } from '../vscode-api';
 
 /**
  * Compact control panel for tracking settings and status.
- * Designed for the bottom panel layout (horizontal, narrow).
+ * Designed for sidebar layout (vertical, narrow).
+ * Uses inline styles — no Tailwind dependency.
  */
 export function TrackingPanel() {
   const {
@@ -36,34 +37,47 @@ export function TrackingPanel() {
 
   return (
     <div
-      className="flex flex-col gap-2 p-2 border-t border-[var(--vscode-panel-border)]"
-      style={{ background: 'var(--vscode-sideBar-background)' }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: 8,
+        borderTop: '1px solid var(--vscode-panel-border)',
+        background: 'var(--vscode-sideBar-background)',
+      }}
     >
       {/* Status bar */}
-      <div className="flex items-center gap-2 text-xs">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
         <span
-          className="inline-block w-2 h-2 rounded-full"
-          style={{ backgroundColor: isTracking ? '#4ade80' : '#6b7280' }}
+          style={{
+            display: 'inline-block',
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            backgroundColor: isTracking ? '#4ade80' : '#6b7280',
+          }}
         />
         <span style={{ color: 'var(--vscode-descriptionForeground)' }}>
           {isTracking ? `VMC ${trackingFps} fps` : 'Disconnected'}
         </span>
 
         {isAvatarLoaded && (
-          <span className="ml-auto" style={{ color: 'var(--vscode-descriptionForeground)' }}>
+          <span style={{ marginLeft: 'auto', color: 'var(--vscode-descriptionForeground)' }}>
             Avatar loaded
           </span>
         )}
       </div>
 
       {/* Controls row */}
-      <div className="flex items-center gap-2">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {/* Tracking mode */}
         <select
           value={trackingMode}
           onChange={(e) => handleModeChange(e.target.value as TrackingMode)}
-          className="px-1 py-0.5 text-xs rounded"
           style={{
+            padding: '2px 4px',
+            fontSize: 11,
+            borderRadius: 3,
             background: 'var(--vscode-dropdown-background)',
             color: 'var(--vscode-dropdown-foreground)',
             border: '1px solid var(--vscode-dropdown-border)',
@@ -81,8 +95,12 @@ export function TrackingPanel() {
         {/* Start/Stop */}
         <button
           onClick={handleToggleTracking}
-          className="px-2 py-0.5 text-xs rounded"
           style={{
+            padding: '2px 8px',
+            fontSize: 11,
+            borderRadius: 3,
+            border: 'none',
+            cursor: 'pointer',
             background: isTracking
               ? 'var(--vscode-statusBarItem-errorBackground, #c53030)'
               : 'var(--vscode-button-background)',
@@ -97,8 +115,12 @@ export function TrackingPanel() {
         {/* Select Avatar */}
         <button
           onClick={handleSelectAvatar}
-          className="px-2 py-0.5 text-xs rounded"
           style={{
+            padding: '2px 8px',
+            fontSize: 11,
+            borderRadius: 3,
+            border: 'none',
+            cursor: 'pointer',
             background: 'var(--vscode-button-secondaryBackground)',
             color: 'var(--vscode-button-secondaryForeground)',
           }}
@@ -108,14 +130,21 @@ export function TrackingPanel() {
 
         {/* Skeleton overlay toggle */}
         <label
-          className="flex items-center gap-1 ml-auto text-xs cursor-pointer"
-          style={{ color: 'var(--vscode-descriptionForeground)' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            marginLeft: 'auto',
+            fontSize: 11,
+            cursor: 'pointer',
+            color: 'var(--vscode-descriptionForeground)',
+          }}
         >
           <input
             type="checkbox"
             checked={showSkeletonOverlay}
             onChange={toggleSkeletonOverlay}
-            className="w-3 h-3"
+            style={{ width: 12, height: 12 }}
           />
           Bones
         </label>

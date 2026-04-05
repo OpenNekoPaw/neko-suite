@@ -48,9 +48,9 @@ export function App() {
   }, [applyTrackingData, setAvatarUrl, setIsTracking]);
 
   return (
-    <div className="flex flex-col w-full h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {/* 3D viewport takes remaining space */}
-      <div className="flex-1 min-h-0">
+      <div style={{ flex: 1, minHeight: 0 }}>
         <Viewport3D />
       </div>
 
