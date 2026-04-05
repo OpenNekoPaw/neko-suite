@@ -25,7 +25,7 @@
 | **neko-model** | Alpha | 78% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情）+ **关键帧编辑 Rust 后端 ✅** + **模板创建 + 角色编辑 P0/P1 API ✅** |
 | **neko-sketch** | Alpha | 95% | S.1-S.4 全部完成（绘画 + 骨骼动画 + 高级 2D + Inpaint/StyleTransfer/AutoLayer + sketch.generate + 跨模块工作流 Timeline/Canvas）|
 | **neko-audio** | Alpha | 95% | 完整音频工作站 + 12 种效果链 + Engine 麦克风 + 78 测试 |
-| **neko-live** | Planned | 5% | 仅扩展入口骨架 |
+| **neko-live** | WIP | 25% | Phase 5.1.1 VMC + VRM 实时预览 MVP ✅（OSC 解析 + VmcReceiver + Three.js/VRM 驱动 + TrackingPanel UI） |
 | **neko-suite** | Stable | 90% | Extension Pack + Release workflow |
 
 ---
@@ -145,6 +145,10 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
   - 3D `update_material` API（PBR 材质参数运行时编辑）
   - 3D `delete_node` API（节点及子孙递归删除）
   - SCENES +4 actions / PUPPETS +1 action
+- **Phase 2.5 角色编辑 P2 ✅**：
+  - 2D 纹理热替换（`puppets:set_texture` API）
+  - 2D 物理模拟（SimplePhysics + PhysicsState 组件 + INP 解析 + rigid/spring pendulum 求解器）
+  - 3D 材质扩展（emissive_factor + occlusion_strength + emissive/AO 纹理 + WGSL shader 更新）
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
@@ -175,16 +179,34 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 
 ---
 
-## Phase 5: 虚拟制片 (~5%)
+## Phase 5: 虚拟制片 (~25%)
 
 > 前置：Phase 4 ✅
 
 **可复用基础** (~80%)：VRM 17 表情 + 口型同步（neko-model）、2D 骨骼 ECS 60fps（neko-sketch）、H.264 硬件编码（neko-engine）
 
-**需新建**：VMC 协议（~200 行 TS）+ MediaPipe（~300 行 TS）+ RTMP/SRT 推流（~500 行 Rust）
+**需新建**：~~VMC 协议（~200 行 TS）~~ ✅ + MediaPipe（~300 行 TS）+ RTMP/SRT 推流（~500 行 Rust）
+
+### Phase 5.1.1 ✅ VMC + VRM 实时预览 MVP
+- ✅ 项目重组为 `packages/extension/` + `packages/webview/` 双包结构
+- ✅ OSC 二进制解析器（内联实现，零外部依赖）
+- ✅ VmcReceiver（Node.js `dgram` UDP 监听 + 帧累积 + FPS 测量）
+- ✅ LivePanelProvider（WebviewViewProvider + CSP + WASM-ready）
+- ✅ Three.js + @pixiv/three-vrm VRM 加载与实时驱动
+- ✅ ARKit 52 blend shapes → VRM 17 表情映射（vmcMapping）
+- ✅ Zustand 状态管理 + Tailwind UI（TrackingPanel 控制面板）
+- ✅ postMessage 双向桥接（Extension Host ↔ Webview）
+
+### Phase 5.1.2（待做）：Rust 摄像头采集
+- [ ] `ICameraService` 实现（nokhwa/FFmpeg avdevice → H.264 → WebSocket）
+- [ ] CameraPreview 组件（H264StreamClient 解码 + Canvas 渲染）
+
+### Phase 5.1.3（待做）：MediaPipe 集成
+- [ ] @mediapipe/tasks-vision WASM（FaceLandmarker + PoseLandmarker）
+- [ ] ITrackingProvider 抽象（MediaPipe / VMC / Hybrid 切换）
 
 **里程碑**：
-- 5.1：核心追踪（MediaPipe + VMC + VRM 预览）— 3-4 周
+- ~~5.1：核心追踪（MediaPipe + VMC + VRM 预览）— 3-4 周~~
 - 5.2：录制与输出（标定 + MP4 导出 → neko-cut）— 2-3 周
 - 5.3：直播推流（RTMP/SRT → OBS + 2D puppet 联动）— 2-3 周
 
@@ -318,4 +340,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-05（角色编辑 P0/P1：模板创建 + Visible/Opacity/MorphWeights/Material/DeleteNode 引擎 API）*
+*最后更新: 2026-04-05（Phase 5.1.1 neko-live VMC + VRM 实时预览 MVP）*

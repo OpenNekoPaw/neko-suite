@@ -179,27 +179,28 @@ Opacity 组件已存在（加载时从 INP `enabled` 映射），只需暴露修
 ## 3. 推荐实施路线图
 
 ```
-Phase 1 (P0 基础能力) ─────────────────────────────────
-├─ 3D Visibility 组件 + set_visible API     (~1d)
-├─ 2D set_node_opacity API                   (~0.5d)
+Phase 1 (P0 基础能力) ✅ ──────────────────────────────
+├─ 3D Visibility 组件 + set_visible API     ✅
+├─ 2D set_node_opacity API                   ✅
 └─ 验证：发型/服饰层显隐切换
 
-Phase 2 (P1 表情 + 体态) ─────────────────────────────
-├─ 3D set_morph_weights API (CPU-only)       (~0.5d)
-├─ glTF morph target 顶点数据加载            (~1d)
-├─ GPU morph rendering (compute shader)      (~3d)
-└─ 验证：表情滑块 + 体态调整
+Phase 2 (P1 表情 + 体态) ✅ ──────────────────────────
+├─ 3D set_morph_weights API (CPU-only)       ✅
+├─ 3D update_material API                    ✅
+├─ 3D delete_node API                        ✅
+├─ glTF morph target 顶点数据加载            — 待做（GPU morph 渲染前置）
+└─ GPU morph rendering (compute shader)      — 待做
 
-Phase 3 (P1 换装) ────────────────────────────────────
-├─ 材质参数编辑 API                          (~1d)
-├─ 纹理热替换                                (~2d)
-├─ 节点删除 API                              (~1d)
+Phase 3 (P1 换装) ✅ ─────────────────────────────────
+├─ 材质参数编辑 API                          ✅
+├─ 节点删除 API                              ✅
 └─ 验证：换装（颜色/纹理/显隐组合）
 
-Phase 4 (P2 增强) ────────────────────────────────────
-├─ 2D 物理模拟（弹簧/钟摆）
-├─ 材质扩展属性（emissive/AO）
-└─ 2D 纹理热替换
+Phase 4 (P2 增强) ✅ ─────────────────────────────────
+├─ 2D 物理模拟（弹簧/钟摆）                  ✅
+├─ 材质扩展属性（emissive/AO）               ✅
+├─ 2D 纹理热替换                             ✅
+└─ 验证：物理摆动 + 发光/遮蔽 + 换肤
 ```
 
 ## 4. TS 层对应变更（每个 Rust API 新增后）
@@ -211,5 +212,6 @@ Phase 4 (P2 增强) ────────────────────
 | `set_visible` | `setNodeVisible(nodeId, visible)` | SceneTree 节点眼睛图标 |
 | `set_opacity` (2D) | `setNodeOpacity(nodeId, opacity)` | 节点面板滑块 |
 | `morph_weights` | `setMorphWeights(nodeId, weights)` | 表情/体态滑块面板 |
-| `material_update` | `updateMaterial(nodeId, params)` | 材质属性面板 |
+| `update_material` | `updateMaterial(nodeId, params)` | 材质属性面板（含 emissive/AO） |
 | `delete_node` | `deleteNode(nodeId)` | SceneTree 右键菜单 |
+| `set_texture` (2D) | `setTexture(nodeId, textureIndex)` | 纹理选择器 |

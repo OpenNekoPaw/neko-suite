@@ -126,7 +126,7 @@
     - [ ] Engine 新增 `models:clip-embed` action（文件路径 → 向量，复用现有 ONNX CLIP）
     - [ ] Engine 新增 `text:stats` action（文件路径 → 字数/行数/字符数，替代 TS 全量 `fs.readFile` 统计）
     - [ ] 现有阻塞修复：`puppetFaceTools.ts:270` `readFileSync` → async；`qualityCheckTools.ts:331` 大文件 base64 → 限制尺寸或 file URI；`messageHandler.ts:700` 同步 Range 读 → async
-  - **Engine 并发保护**（防止搜索批量请求导致不稳定）：
+  - **Engine 并发保护**（防止搜索批量请求导致不稳定，同时惠及 Media LSP 诊断的并行 probe）：
     - [ ] Rust 侧：FFmpeg probe `Semaphore(4)` + GPU ops `Semaphore(2)` + ONNX `tokio::sync::Mutex` 替代 `std::Mutex`（防 executor stall）
     - [ ] Rust 侧：HTTP 中间件全局准入 `Semaphore(8)` + 请求超时 30s + Buffer Pool 16→32
     - [ ] TS 侧：SearchPipeline 分级限流（probe=4, thumbnail=2, embed=1）；渐进式加载（即时→快速→懒加载→按需）
@@ -140,6 +140,17 @@
     - [ ] P2：相似素材查找（图图相似度，依赖 L3 向量索引）
     - [ ] P2：素材库 `AssetQuery` 查询落地验证（接口已完善：keyword/category/tags/sourceType/dateRange/variantFilter）
     - [ ] P3：音频语义搜索（"适合打斗的 BGM" → CLAP/AudioCLIP 模型，需 Engine 新增）
+  - **LSP 依赖分析**（结论：LSP 与搜索系统独立，仅三处可复用）：
+    - Fountain LSP（neko-story）：自有 WorkspaceIndex（`**/*.fountain`），不需要搜索/缓存/Engine 能力
+    - Media LSP（neko-tools）：自有 MediaWorkspaceIndex（`**/*.nkv`）+ MediaProbeCache（60s TTL），已依赖 Engine probe
+    - SearchScriptIndex（neko-agent）：自有 ScriptEmbeddingIndex + TF-IDF 降级，不依赖搜索系统
+    - 交叉点 1：Engine Semaphore → Media LSP 的 `checkReferences()` 并行 probe 间接受益（无需改 TS）
+    - 交叉点 2：probe 缓存可合并（见技术债务）
+    - 交叉点 3：ScriptEmbeddingIndex 的 `EmbedFn` 注入模式可复用到 L3 向量索引
+- [ ] **跨域链接**（LSP 与搜索系统之间的未覆盖区域，独立于两者）：
+  - [ ] 剧本→媒体引用：Fountain `[[clip.mp4]]` 路径解析 + 跳转到实际文件（需文件索引 L0 做路径补全）
+  - [ ] 资产路径补全：编辑 .nkv 时自动补全媒体文件路径（可用 TreeView 文件列表或搜索索引）
+  - [ ] Whisper ASR 对白匹配：音频文件→自动字幕→与剧本对白诊断比对（需 Engine transcript 能力，P3）
 - [ ] `neko://` 协议 + MediaResolver 代理/原始自动切换（Phase 6.6 客户端，依赖服务端）
 - [x] ONNX 跨平台打包：随扩展分发 onnxruntime 动态库（download-ort.js + OrtInitializer.ts + bin/ bundling）
 - [ ] neko-live 虚拟制片（MediaPipe + VMC + VRM + 录制 + 推流）
@@ -160,6 +171,8 @@
 - [x] 国际化扩展 ✅（neko-model/neko-story webview i18n + neko-market/neko-auth L10N 补齐）
 - [x] neko-agent 类型去重 ✅（新建 `@neko-agent/types` 共享包，消除 9 处重复类型定义；`ToolParameters` 类型约束防止工具 schema 错误）
 - [x] neko-agent Logger 去重 ✅（`createLoggerRegistry()` 工厂函数，4 份 ~20 LOC 样板 → 各 1 行）
+
+- [ ] Probe 缓存合并：MediaProbeCache（neko-tools, 60s 内存 TTL）+ MediaMetadataCache（neko-assets, mtime 磁盘持久化）→ 统一持久化缓存，消除同一文件被 probe 两次
 
 **扫描基线**：`pnpm build` ✅ | `pnpm test` ✅ | `pnpm lint` 0 error ✅ | **0 循环依赖** ✅
 
@@ -250,6 +263,11 @@
 
 **测试结果**：native-scene 49 + native-puppet 51 + native-api 131 全部通过
 
+### P2: 增强能力
+- [x] 2D 纹理热替换（`puppets:set_texture` — 运行时修改 TextureRef.texture_index）
+- [x] 2D 物理模拟（SimplePhysics + PhysicsState ECS 组件 + INP SimplePhysics 节点解析 + rigid/spring pendulum 求解器移植）
+- [x] 3D 材质扩展（MaterialUniforms +emissive_factor +occlusion_strength + glTF 加载 + bind group +2 + WGSL AO/emissive）
+
 ---
 
-*最后更新：2026-04-05（角色编辑 P0/P1：模板创建 + Visible/Opacity/MorphWeights/Material/DeleteNode 引擎 API）*
+*最后更新：2026-04-05（角色编辑 P0-P2 全部完成：模板创建 + 引擎 API + 物理模拟 + 材质扩展）*

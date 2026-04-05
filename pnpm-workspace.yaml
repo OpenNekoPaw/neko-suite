@@ -6,6 +6,7 @@ packages:
   - packages/neko-canvas/packages/*
   - packages/neko-cut/packages/*
   - packages/neko-engine/packages/*
+  - packages/neko-live/packages/*
   - packages/neko-model/packages/*
   - packages/neko-preview/packages/*
   - packages/neko-sketch/packages/*
