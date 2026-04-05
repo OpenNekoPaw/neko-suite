@@ -37,7 +37,7 @@ export const CbzViewer: FC = () => {
   // Sparse cache of decoded pages: index → Blob URL
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
   const [currentPage, setCurrentPage] = useState(0);
-  const [scrollMode, setScrollMode] = useState(true);
+  const [viewMode, setViewMode] = useState<'scroll' | 'dual' | 'single'>('scroll');
   // Track natural image heights after load (for stable scroll)
   const [imageHeights, setImageHeights] = useState<Map<number, number>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -165,7 +165,7 @@ export const CbzViewer: FC = () => {
   // =========================================================================
 
   useEffect(() => {
-    if (scrollMode) return;
+    if (viewMode === 'scroll') return;
     if (imageEntries.length === 0) return;
 
     const keep = new Set<number>();
@@ -189,14 +189,14 @@ export const CbzViewer: FC = () => {
       }
       return next;
     });
-  }, [scrollMode, currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [viewMode === 'scroll', currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
 
   // =========================================================================
   // Waterfall mode: IntersectionObserver
   // =========================================================================
 
   useEffect(() => {
-    if (!scrollMode || imageEntries.length === 0) return;
+    if (!viewMode === 'scroll' || imageEntries.length === 0) return;
 
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -270,7 +270,7 @@ export const CbzViewer: FC = () => {
       observer.disconnect();
       observerRef.current = null;
     };
-  }, [scrollMode, imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [viewMode === 'scroll', imageEntries, decodePage]); // pageCache intentionally omitted
 
   // Revoke all Blob URLs on unmount
   useEffect(() => {
@@ -286,13 +286,13 @@ export const CbzViewer: FC = () => {
       if (page >= 0 && page < totalPages) {
         setCurrentPage(page);
         setSelectionRect(null);
-        if (scrollMode) {
+        if (viewMode === 'scroll') {
           const el = pageRefsMap.current.get(page);
           el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
     },
-    [totalPages, scrollMode],
+    [totalPages, viewMode === 'scroll'],
   );
 
   // =========================================================================
@@ -316,14 +316,15 @@ export const CbzViewer: FC = () => {
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!isSelecting || !selectionRect) return;
-      const img = scrollMode ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
+      const img =
+        viewMode === 'scroll' ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
       if (!img) return;
       const rect = img.getBoundingClientRect();
       setSelectionRect((prev) =>
         prev ? { ...prev, endX: e.clientX - rect.left, endY: e.clientY - rect.top } : null,
       );
     },
-    [isSelecting, selectionRect, scrollMode, selectionPageIdx],
+    [isSelecting, selectionRect, viewMode === 'scroll', selectionPageIdx],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -332,7 +333,8 @@ export const CbzViewer: FC = () => {
 
   const captureRegion = useCallback(() => {
     if (!selectionRect) return;
-    const img = scrollMode ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
+    const img =
+      viewMode === 'scroll' ? waterfallImgRefs.current.get(selectionPageIdx) : imgRef.current;
     if (!img) return;
 
     const canvas = document.createElement('canvas');
@@ -366,13 +368,13 @@ export const CbzViewer: FC = () => {
       canvas.height,
     );
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    const pageNum = scrollMode ? selectionPageIdx + 1 : currentPage + 1;
+    const pageNum = viewMode === 'scroll' ? selectionPageIdx + 1 : currentPage + 1;
     sendImageToAi(dataUrl, pageNum);
     setSelectionRect(null);
-  }, [selectionRect, scrollMode, selectionPageIdx, currentPage, sendImageToAi]);
+  }, [selectionRect, viewMode === 'scroll', selectionPageIdx, currentPage, sendImageToAi]);
 
   const sendFullPage = useCallback(() => {
-    const img = scrollMode ? waterfallImgRefs.current.get(currentPage) : imgRef.current;
+    const img = viewMode === 'scroll' ? waterfallImgRefs.current.get(currentPage) : imgRef.current;
     if (!img) return;
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
@@ -382,12 +384,14 @@ export const CbzViewer: FC = () => {
     ctx.drawImage(img, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     sendImageToAi(dataUrl, currentPage + 1);
-  }, [scrollMode, currentPage, sendImageToAi]);
+  }, [viewMode === 'scroll', currentPage, sendImageToAi]);
 
-  const toggleScrollMode = useCallback(() => {
-    setScrollMode((prev) => !prev);
+  const cycleViewMode = useCallback(() => {
+    const modes: Array<'scroll' | 'dual' | 'single'> = ['scroll', 'dual', 'single'];
+    const idx = modes.indexOf(viewMode);
+    setViewMode(modes[(idx + 1) % modes.length]!);
     setSelectionRect(null);
-  }, []);
+  }, [viewMode]);
 
   const handleImageLoad = useCallback((idx: number, e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -468,7 +472,7 @@ export const CbzViewer: FC = () => {
             background: 'var(--vscode-sideBar-background)',
           }}
         >
-          {!scrollMode && (
+          {!viewMode === 'scroll' && (
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage <= 0}
@@ -483,7 +487,7 @@ export const CbzViewer: FC = () => {
               total: String(totalPages),
             })}
           </span>
-          {!scrollMode && (
+          {!viewMode === 'scroll' && (
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage >= totalPages - 1}
@@ -505,25 +509,27 @@ export const CbzViewer: FC = () => {
             {t('preview.document.sendPageToAi')}
           </button>
           <span className="mx-1 opacity-20">|</span>
-          {/* Scroll / page mode toggle */}
+          {/* View mode cycle */}
           <button
-            onClick={toggleScrollMode}
+            onClick={cycleViewMode}
             className="rounded px-2 py-0.5"
-            title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+            title={t('preview.document.modeScroll')}
             style={{
-              background: scrollMode
-                ? 'var(--vscode-button-background)'
-                : 'var(--vscode-button-secondaryBackground)',
-              color: scrollMode
-                ? 'var(--vscode-button-foreground)'
-                : 'var(--vscode-button-secondaryForeground)',
+              background:
+                viewMode !== 'single'
+                  ? 'var(--vscode-button-background)'
+                  : 'var(--vscode-button-secondaryBackground)',
+              color:
+                viewMode !== 'single'
+                  ? 'var(--vscode-button-foreground)'
+                  : 'var(--vscode-button-secondaryForeground)',
             }}
           >
-            {scrollMode ? '≡' : '⊡'}
+            {viewMode === 'scroll' ? '≡' : viewMode === 'dual' ? '⊞' : '⊡'}
           </button>
         </div>
 
-        {scrollMode ? (
+        {viewMode === 'scroll' ? (
           /* Waterfall mode */
           <div
             ref={scrollContainerRef}
@@ -611,7 +617,7 @@ export const CbzViewer: FC = () => {
                 </div>
               )}
               {/* Selection overlay */}
-              {selRectStyle && !scrollMode && (
+              {selRectStyle && !viewMode === 'scroll' && (
                 <div
                   className="pointer-events-none absolute border-2 border-dashed"
                   style={{

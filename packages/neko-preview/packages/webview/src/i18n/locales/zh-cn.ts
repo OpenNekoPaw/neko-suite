@@ -51,6 +51,7 @@ const preview: MessageBundle = {
   'preview.document.zoomOut': '缩小',
   'preview.document.fitWidth': '适应宽度',
   'preview.document.fitPage': '适应页面',
+  'preview.document.modeDual': '切换为双栏模式',
   // PDF
   'preview.pdf.loading': '正在加载 PDF...',
   // CBZ

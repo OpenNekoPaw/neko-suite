@@ -51,6 +51,7 @@ const preview: MessageBundle = {
   'preview.document.zoomOut': 'Zoom out',
   'preview.document.fitWidth': 'Fit width',
   'preview.document.fitPage': 'Fit page',
+  'preview.document.modeDual': 'Switch to dual-page mode',
   // PDF
   'preview.pdf.loading': 'Loading PDF...',
   // CBZ

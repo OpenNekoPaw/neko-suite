@@ -1,6 +1,10 @@
 /**
  * PDF Viewer — renders PDF using pdfjs-dist with TextLayer for text selection.
- * Supports waterfall (continuous scroll) and single-page modes.
+ *
+ * View modes:
+ * - scroll:  Waterfall continuous scroll (default)
+ * - dual:    Two-page side-by-side spread
+ * - single:  Single page with prev/next navigation
  */
 
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
@@ -15,20 +19,19 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PdfViewer');
 
-// Configure pdfjs worker — loaded from the same assets directory
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
 
-/** Viewport dimensions for a single page at a given scale */
 interface PageViewport {
   width: number;
   height: number;
 }
 
-/** Pages to keep rendered on each side of the visible area */
-const BUFFER_PAGES = 2;
+type ViewMode = 'scroll' | 'dual' | 'single';
+const VIEW_MODES: ViewMode[] = ['scroll', 'dual', 'single'];
+const VIEW_MODE_ICONS: Record<ViewMode, string> = { scroll: '≡', dual: '⊞', single: '⊡' };
 
 export const PdfViewer: FC = () => {
   const { t } = useTranslation();
@@ -37,30 +40,21 @@ export const PdfViewer: FC = () => {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.5);
-  const [scrollMode, setScrollMode] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('scroll');
 
-  // Page viewport dimensions (indexed from 0)
   const [pageViewports, setPageViewports] = useState<PageViewport[]>([]);
 
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
-  // Single-page mode container
-  const singlePageContainerRef = useRef<HTMLDivElement>(null);
-  // Waterfall mode scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // Waterfall mode page element refs
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
-  // Track which pages are currently being rendered
   const renderingPagesRef = useRef<Set<number>>(new Set());
-  // Track which pages have been rendered (to avoid re-render)
   const renderedPagesRef = useRef<Set<number>>(new Set());
-  // IntersectionObserver ref
   const observerRef = useRef<IntersectionObserver | null>(null);
-  // Single-page mode rendering guard
-  const singleRenderingRef = useRef(false);
+  // Monotonic counter to invalidate stale renders after mode switch
+  const modeEpochRef = useRef(0);
 
   const { selection, sendToAi } = useDocumentSelection({ pageNumber: currentPage });
 
-  // Listen for messages from extension
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
       if ('url' in msg.payload && msg.payload.url) {
@@ -71,12 +65,10 @@ export const PdfViewer: FC = () => {
     }
   });
 
-  // Send ready on mount
   useEffect(() => {
     postMessage({ type: 'ready' } as never);
   }, []);
 
-  /** Load PDF from a localhost URL — pdfjs uses Range requests for per-page lazy loading. */
   const loadPdfFromUrl = useCallback(
     async (url: string) => {
       try {
@@ -100,7 +92,6 @@ export const PdfViewer: FC = () => {
     [scale],
   );
 
-  /** Load PDF from base64 data (legacy fallback). */
   const loadPdf = useCallback(
     async (base64Data: string) => {
       try {
@@ -125,7 +116,6 @@ export const PdfViewer: FC = () => {
     [scale],
   );
 
-  /** Pre-compute viewport dimensions for all pages */
   const computeViewports = useCallback(
     async (pdf: pdfjsLib.PDFDocumentProxy, pageScale: number) => {
       const viewports: PageViewport[] = [];
@@ -135,13 +125,11 @@ export const PdfViewer: FC = () => {
         viewports.push({ width: vp.width, height: vp.height });
       }
       setPageViewports(viewports);
-      // Clear rendered pages cache when viewports change
       renderedPagesRef.current.clear();
     },
     [],
   );
 
-  // Recompute viewports when scale changes
   useEffect(() => {
     const pdf = pdfDocRef.current;
     if (!pdf) return;
@@ -149,58 +137,13 @@ export const PdfViewer: FC = () => {
   }, [scale, computeViewports]);
 
   // =========================================================================
-  // Waterfall mode: IntersectionObserver
+  // Shared page renderer
   // =========================================================================
 
-  useEffect(() => {
-    if (!scrollMode || pageViewports.length === 0) return;
-
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
-
-    // Cleanup previous observer
-    observerRef.current?.disconnect();
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const pageNum = Number((entry.target as HTMLElement).dataset['page']);
-          if (!pageNum) continue;
-
-          if (entry.isIntersecting) {
-            void renderPageInPlace(pageNum);
-          } else {
-            clearPageInPlace(pageNum);
-          }
-        }
-        // Update currentPage to the first visible page
-        updateCurrentPageFromScroll();
-      },
-      {
-        root: scrollContainer,
-        rootMargin: '200% 0px',
-      },
-    );
-
-    observerRef.current = observer;
-
-    // Observe all page placeholders
-    for (const [, el] of pageRefsMap.current) {
-      observer.observe(el);
-    }
-
-    return () => {
-      observer.disconnect();
-      observerRef.current = null;
-    };
-  }, [scrollMode, pageViewports]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /** Render a page into its placeholder div (waterfall mode) */
-  const renderPageInPlace = useCallback(
-    async (pageNum: number) => {
+  const renderPageIntoEl = useCallback(
+    async (pageNum: number, el: HTMLElement, epoch: number) => {
       const pdf = pdfDocRef.current;
-      const el = pageRefsMap.current.get(pageNum);
-      if (!pdf || !el) return;
+      if (!pdf) return;
       if (renderingPagesRef.current.has(pageNum) || renderedPagesRef.current.has(pageNum)) return;
 
       renderingPagesRef.current.add(pageNum);
@@ -208,19 +151,16 @@ export const PdfViewer: FC = () => {
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale });
 
-        // Check if still mounted and not already rendered by another call
-        if (renderedPagesRef.current.has(pageNum)) return;
+        // Stale check: mode changed or already rendered
+        if (modeEpochRef.current !== epoch || renderedPagesRef.current.has(pageNum)) return;
 
-        // Clear placeholder content
         el.innerHTML = '';
 
-        // Create page wrapper
         const pageDiv = document.createElement('div');
         pageDiv.style.position = 'relative';
         pageDiv.style.width = `${viewport.width}px`;
         pageDiv.style.height = `${viewport.height}px`;
 
-        // Canvas layer
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -231,7 +171,6 @@ export const PdfViewer: FC = () => {
           await page.render({ canvasContext: ctx, viewport }).promise;
         }
 
-        // Text layer for selection
         const textDiv = document.createElement('div');
         textDiv.style.position = 'absolute';
         textDiv.style.top = '0';
@@ -249,6 +188,10 @@ export const PdfViewer: FC = () => {
         });
         await textLayer.render();
 
+        // Final stale check before DOM mutation
+        if (modeEpochRef.current !== epoch) return;
+
+        el.innerHTML = '';
         el.appendChild(pageDiv);
         renderedPagesRef.current.add(pageNum);
       } catch (err) {
@@ -260,18 +203,85 @@ export const PdfViewer: FC = () => {
     [scale],
   );
 
-  /** Clear a rendered page to save memory (waterfall mode) */
-  const clearPageInPlace = useCallback((pageNum: number) => {
-    const el = pageRefsMap.current.get(pageNum);
-    if (!el) return;
-    // Keep the placeholder dimensions, just clear rendered content
-    if (renderedPagesRef.current.has(pageNum)) {
-      el.innerHTML = '';
-      renderedPagesRef.current.delete(pageNum);
-    }
-  }, []);
+  // =========================================================================
+  // Scroll mode: IntersectionObserver
+  // =========================================================================
 
-  /** Determine which page is currently visible at the top of the scroll area */
+  useEffect(() => {
+    if (viewMode !== 'scroll' || pageViewports.length === 0) return;
+
+    // Wait one frame for refs to mount after mode switch
+    const rafId = requestAnimationFrame(() => {
+      const scrollContainer = scrollContainerRef.current;
+      if (!scrollContainer) return;
+
+      observerRef.current?.disconnect();
+      const epoch = modeEpochRef.current;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const pageNum = Number((entry.target as HTMLElement).dataset['page']);
+            if (!pageNum) continue;
+
+            if (entry.isIntersecting) {
+              void renderPageIntoEl(pageNum, entry.target as HTMLElement, epoch);
+            } else {
+              // Clear off-screen pages
+              if (renderedPagesRef.current.has(pageNum)) {
+                (entry.target as HTMLElement).innerHTML = '';
+                renderedPagesRef.current.delete(pageNum);
+              }
+            }
+          }
+          updateCurrentPageFromScroll();
+        },
+        { root: scrollContainer, rootMargin: '200% 0px' },
+      );
+
+      observerRef.current = observer;
+      for (const [, el] of pageRefsMap.current) {
+        observer.observe(el);
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    };
+  }, [viewMode, pageViewports, renderPageIntoEl]);
+
+  // =========================================================================
+  // Single/Dual mode: render on page change
+  // =========================================================================
+
+  useEffect(() => {
+    if (viewMode === 'scroll' || pageViewports.length === 0) return;
+    const epoch = modeEpochRef.current;
+
+    // Wait one frame for refs to mount
+    const rafId = requestAnimationFrame(() => {
+      renderedPagesRef.current.clear();
+
+      if (viewMode === 'single') {
+        const el = pageRefsMap.current.get(currentPage);
+        if (el) void renderPageIntoEl(currentPage, el, epoch);
+      } else if (viewMode === 'dual') {
+        // Render current page + next page
+        const el1 = pageRefsMap.current.get(currentPage);
+        if (el1) void renderPageIntoEl(currentPage, el1, epoch);
+        const nextPage = currentPage + 1;
+        if (nextPage <= numPages) {
+          const el2 = pageRefsMap.current.get(nextPage);
+          if (el2) void renderPageIntoEl(nextPage, el2, epoch);
+        }
+      }
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [viewMode, currentPage, scale, pageViewports, numPages, renderPageIntoEl]);
+
   const updateCurrentPageFromScroll = useCallback(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -289,100 +299,46 @@ export const PdfViewer: FC = () => {
   }, []);
 
   // =========================================================================
-  // Single-page mode rendering
-  // =========================================================================
-
-  useEffect(() => {
-    if (scrollMode) return;
-    if (!pdfDocRef.current || singleRenderingRef.current) return;
-    void renderSinglePage(currentPage, scale);
-  }, [currentPage, scale, scrollMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const renderSinglePage = useCallback(async (pageNum: number, pageScale: number) => {
-    const pdf = pdfDocRef.current;
-    const container = singlePageContainerRef.current;
-    if (!pdf || !container) return;
-    if (singleRenderingRef.current) return;
-    singleRenderingRef.current = true;
-
-    try {
-      const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale: pageScale });
-
-      container.innerHTML = '';
-
-      const pageDiv = document.createElement('div');
-      pageDiv.style.position = 'relative';
-      pageDiv.style.width = `${viewport.width}px`;
-      pageDiv.style.height = `${viewport.height}px`;
-      pageDiv.style.margin = '0 auto';
-
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      pageDiv.appendChild(canvas);
-
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        await page.render({ canvasContext: ctx, viewport }).promise;
-      }
-
-      const textDiv = document.createElement('div');
-      textDiv.style.position = 'absolute';
-      textDiv.style.top = '0';
-      textDiv.style.left = '0';
-      textDiv.style.width = `${viewport.width}px`;
-      textDiv.style.height = `${viewport.height}px`;
-      textDiv.classList.add('textLayer');
-      pageDiv.appendChild(textDiv);
-
-      const textContent = await page.getTextContent();
-      const textLayer = new TextLayer({
-        textContentSource: textContent,
-        container: textDiv,
-        viewport,
-      });
-      await textLayer.render();
-
-      container.appendChild(pageDiv);
-    } catch (err) {
-      logger.error('Failed to render page:', err);
-    } finally {
-      singleRenderingRef.current = false;
-    }
-  }, []);
-
-  // =========================================================================
-  // Navigation
+  // Navigation + mode switch
   // =========================================================================
 
   const goToPage = useCallback(
     (page: number) => {
       if (page >= 1 && page <= numPages) {
         setCurrentPage(page);
-        if (scrollMode) {
-          // Scroll to the target page in waterfall mode
+        if (viewMode === 'scroll') {
           const el = pageRefsMap.current.get(page);
           el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
     },
-    [numPages, scrollMode],
+    [numPages, viewMode],
   );
+
+  const goToPrevPage = useCallback(() => {
+    const step = viewMode === 'dual' ? 2 : 1;
+    goToPage(Math.max(1, currentPage - step));
+  }, [viewMode, currentPage, goToPage]);
+
+  const goToNextPage = useCallback(() => {
+    const step = viewMode === 'dual' ? 2 : 1;
+    goToPage(Math.min(numPages, currentPage + step));
+  }, [viewMode, currentPage, numPages, goToPage]);
 
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.25, 5)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.25, 0.5)), []);
 
-  const toggleScrollMode = useCallback(() => {
-    setScrollMode((prev) => {
-      const next = !prev;
-      // Clear rendered cache when switching modes
-      renderedPagesRef.current.clear();
-      return next;
-    });
-  }, []);
+  const cycleViewMode = useCallback(() => {
+    const idx = VIEW_MODES.indexOf(viewMode);
+    const next = VIEW_MODES[(idx + 1) % VIEW_MODES.length]!;
+    // Bump epoch to invalidate any in-flight renders from old mode
+    modeEpochRef.current++;
+    renderedPagesRef.current.clear();
+    renderingPagesRef.current.clear();
+    observerRef.current?.disconnect();
+    setViewMode(next);
+  }, [viewMode]);
 
-  // Store page ref callback
   const setPageRef = useCallback((pageNum: number, el: HTMLDivElement | null) => {
     if (el) {
       pageRefsMap.current.set(pageNum, el);
@@ -391,10 +347,21 @@ export const PdfViewer: FC = () => {
     }
   }, []);
 
+  // =========================================================================
+  // Render
+  // =========================================================================
+
   const contextActions = useDocumentContextActions({
     hasSelection: !!selection,
     onSendSelectionToAi: selection ? sendToAi : undefined,
   });
+
+  const viewModeTitle =
+    viewMode === 'scroll'
+      ? t('preview.document.modePage')
+      : viewMode === 'dual'
+        ? t('preview.document.modePage')
+        : t('preview.document.modeScroll');
 
   if (error) {
     return (
@@ -433,16 +400,14 @@ export const PdfViewer: FC = () => {
             background: 'var(--vscode-sideBar-background)',
           }}
         >
-          {!scrollMode && (
-            <>
-              <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage <= 1}
-                className="px-2 py-0.5 disabled:opacity-30"
-              >
-                &lt;
-              </button>
-            </>
+          {viewMode !== 'scroll' && (
+            <button
+              onClick={goToPrevPage}
+              disabled={currentPage <= 1}
+              className="px-2 py-0.5 disabled:opacity-30"
+            >
+              &lt;
+            </button>
           )}
           <span>
             {t('preview.document.pageOf', {
@@ -450,9 +415,9 @@ export const PdfViewer: FC = () => {
               total: String(numPages),
             })}
           </span>
-          {!scrollMode && (
+          {viewMode !== 'scroll' && (
             <button
-              onClick={() => goToPage(currentPage + 1)}
+              onClick={goToNextPage}
               disabled={currentPage >= numPages}
               className="px-2 py-0.5 disabled:opacity-30"
             >
@@ -468,27 +433,28 @@ export const PdfViewer: FC = () => {
             +
           </button>
           <span className="mx-1 opacity-20">|</span>
-          {/* Scroll / page mode toggle */}
           <button
-            onClick={toggleScrollMode}
+            onClick={cycleViewMode}
             className="rounded px-2 py-0.5"
-            title={scrollMode ? t('preview.document.modePage') : t('preview.document.modeScroll')}
+            title={viewModeTitle}
             style={{
-              background: scrollMode
-                ? 'var(--vscode-button-background)'
-                : 'var(--vscode-button-secondaryBackground)',
-              color: scrollMode
-                ? 'var(--vscode-button-foreground)'
-                : 'var(--vscode-button-secondaryForeground)',
+              background:
+                viewMode !== 'single'
+                  ? 'var(--vscode-button-background)'
+                  : 'var(--vscode-button-secondaryBackground)',
+              color:
+                viewMode !== 'single'
+                  ? 'var(--vscode-button-foreground)'
+                  : 'var(--vscode-button-secondaryForeground)',
             }}
           >
-            {scrollMode ? '≡' : '⊡'}
+            {VIEW_MODE_ICONS[viewMode]}
           </button>
         </div>
 
         {/* PDF content */}
-        {scrollMode ? (
-          /* Waterfall mode */
+        {viewMode === 'scroll' ? (
+          /* Waterfall mode — all pages stacked vertically */
           <div
             ref={scrollContainerRef}
             className="flex-1 overflow-auto p-4"
@@ -509,17 +475,60 @@ export const PdfViewer: FC = () => {
               />
             ))}
           </div>
-        ) : (
-          /* Single-page mode */
+        ) : viewMode === 'dual' ? (
+          /* Dual mode — two pages side by side, centered */
           <div
-            className="flex-1 overflow-auto p-4"
+            className="flex flex-1 items-start justify-center gap-4 overflow-auto p-4"
             style={{ background: 'var(--vscode-editor-background)' }}
           >
-            <div ref={singlePageContainerRef} />
+            {/* Left page */}
+            {pageViewports[currentPage - 1] && (
+              <div
+                ref={(el) => setPageRef(currentPage, el)}
+                data-page={currentPage}
+                style={{
+                  width: `${pageViewports[currentPage - 1]!.width}px`,
+                  height: `${pageViewports[currentPage - 1]!.height}px`,
+                  flexShrink: 0,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                }}
+              />
+            )}
+            {/* Right page */}
+            {currentPage < numPages && pageViewports[currentPage] && (
+              <div
+                ref={(el) => setPageRef(currentPage + 1, el)}
+                data-page={currentPage + 1}
+                style={{
+                  width: `${pageViewports[currentPage]!.width}px`,
+                  height: `${pageViewports[currentPage]!.height}px`,
+                  flexShrink: 0,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          /* Single page mode — centered */
+          <div
+            className="flex flex-1 items-start justify-center overflow-auto p-4"
+            style={{ background: 'var(--vscode-editor-background)' }}
+          >
+            {pageViewports[currentPage - 1] && (
+              <div
+                ref={(el) => setPageRef(currentPage, el)}
+                data-page={currentPage}
+                style={{
+                  width: `${pageViewports[currentPage - 1]!.width}px`,
+                  height: `${pageViewports[currentPage - 1]!.height}px`,
+                  flexShrink: 0,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                }}
+              />
+            )}
           </div>
         )}
 
-        {/* Selection FAB */}
         <DocumentSelectionFab
           selection={selection}
           onSendToAi={sendToAi}
