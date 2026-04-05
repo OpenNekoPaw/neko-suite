@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import { Toolbar } from './components/Toolbar';
 import { Viewport3D } from './components/Viewport3D';
 import { ModelLoader, type ModelLoaderHandle } from './components/ModelLoader';
 import { AnimationPlayer } from './components/AnimationPlayer';
@@ -32,24 +33,15 @@ export function App(): React.JSX.Element {
   const activeAnimation = useModelStore((s) => s.activeAnimation);
   const playbackState = useModelStore((s) => s.playbackState);
   const transformMode = useModelStore((s) => s.transformMode);
-  const isFaceEditorOpen = useModelStore((s) => s.isFaceEditorOpen);
-  const isLatencyTesterOpen = useModelStore((s) => s.isLatencyTesterOpen);
-  const isExpressionPresetOpen = useModelStore((s) => s.isExpressionPresetOpen);
   const isVRMLoaded = useModelStore((s) => s.isVRMLoaded);
-  const toggleFaceEditor = useModelStore((s) => s.toggleFaceEditor);
-  const toggleLatencyTester = useModelStore((s) => s.toggleLatencyTester);
-  const toggleExpressionPreset = useModelStore((s) => s.toggleExpressionPreset);
-  const setVRMLoaded = useModelStore((s) => s.setVRMLoaded);
+  const isExpressionPresetOpen = useModelStore((s) => s.isExpressionPresetOpen);
+  const isLatencyTesterOpen = useModelStore((s) => s.isLatencyTesterOpen);
+  const isFaceEditorOpen = useModelStore((s) => s.isFaceEditorOpen);
   const isBoneExpressionOpen = useModelStore((s) => s.isBoneExpressionOpen);
-  const isCsgPanelOpen = useModelStore((s) => s.isCsgPanelOpen);
-  const isTextEditorOpen = useModelStore((s) => s.isTextEditorOpen);
   const isShapeCreatorOpen = useModelStore((s) => s.isShapeCreatorOpen);
-  const toggleBoneExpression = useModelStore((s) => s.toggleBoneExpression);
-  const toggleCsgPanel = useModelStore((s) => s.toggleCsgPanel);
-  const toggleTextEditor = useModelStore((s) => s.toggleTextEditor);
-  const toggleShapeCreator = useModelStore((s) => s.toggleShapeCreator);
+  const isTextEditorOpen = useModelStore((s) => s.isTextEditorOpen);
+  const isCsgPanelOpen = useModelStore((s) => s.isCsgPanelOpen);
   const isKeyframeEditorOpen = useModelStore((s) => s.isKeyframeEditorOpen);
-  const toggleKeyframeEditor = useModelStore((s) => s.toggleKeyframeEditor);
 
   const setModelUrl = useModelStore((s) => s.setModelUrl);
   const selectNode = useModelStore((s) => s.selectNode);
@@ -59,6 +51,7 @@ export function App(): React.JSX.Element {
   const pause = useModelStore((s) => s.pause);
   const stop = useModelStore((s) => s.stop);
   const setTransformMode = useModelStore((s) => s.setTransformMode);
+  const setVRMLoaded = useModelStore((s) => s.setVRMLoaded);
 
   // Listen for messages from extension host
   useEffect(() => {
@@ -195,110 +188,11 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {/* Toolbar */}
-      <div className="h-8 bg-[var(--vscode-titleBar-activeBackground)] border-b border-[var(--vscode-panel-border)] flex items-center px-2 gap-2">
-        <button
-          onClick={toggleFaceEditor}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isFaceEditorOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          面部编辑器
-        </button>
-        <button
-          onClick={toggleLatencyTester}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isLatencyTesterOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          延迟测试
-        </button>
-        <button
-          onClick={toggleExpressionPreset}
-          disabled={!isVRMLoaded}
-          className={`px-2 py-1 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-            isExpressionPresetOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          VRM 表情
-        </button>
-        <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
-        <button
-          onClick={toggleBoneExpression}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isBoneExpressionOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          骨骼表情
-        </button>
-        <button
-          onClick={toggleShapeCreator}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isShapeCreatorOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          几何体
-        </button>
-        <button
-          onClick={toggleTextEditor}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isTextEditorOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          3D 文字
-        </button>
-        <button
-          onClick={toggleCsgPanel}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isCsgPanelOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          CSG
-        </button>
-        <button
-          onClick={toggleKeyframeEditor}
-          className={`px-2 py-1 text-xs rounded transition-colors ${
-            isKeyframeEditorOpen
-              ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-              : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]'
-          }`}
-        >
-          Keyframes
-        </button>
-        <div className="w-px h-4 bg-[var(--vscode-panel-border)]" />
-        <button
-          onClick={() => postMessage({ type: 'exportGlb' })}
-          className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
-        >
-          导出 GLB
-        </button>
-        <button
-          onClick={() => {
-            const editorState = useModelStore.getState().getEditorState();
-            postMessage({ type: 'saveProject', editorState });
-          }}
-          className="px-2 py-1 text-xs rounded transition-colors bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)]"
-        >
-          保存项目
-        </button>
-      </div>
-
       <div className="flex-1 flex overflow-hidden">
-        {/* Scene Tree (left sidebar) */}
+        {/* Left Toolbar */}
+        <Toolbar />
+
+        {/* Scene Tree */}
         {sceneNodes.length > 0 && (
           <SceneTree nodes={sceneNodes} selectedNodeId={selectedNodeId} onSelectNode={selectNode} />
         )}
