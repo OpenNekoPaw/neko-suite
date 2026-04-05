@@ -233,6 +233,9 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - ✅ 统一右键菜单（所有格式 "发送到 AI"）
 - ✅ 文档状态栏（格式图标 | 文件名 | 页数 | 文件大小）
 - ✅ PathResolver regex 兼容 macOS fsPath 前导 `/`
+- ✅ 三态模式切换（scroll/dual/single）+ modeEpoch 防竞态 + rAF 等 DOM 挂载
+- ✅ 双栏并排预览（PDF/CBZ 双页展开）
+- ✅ 单栏/双栏内容居中显示
 
 ### Phase 6.6（待开发）：远程存储客户端集成
 > 服务端在 [neko-hub](../neko-hub)。[ADR](./docs/architecture/remote-storage.md)
