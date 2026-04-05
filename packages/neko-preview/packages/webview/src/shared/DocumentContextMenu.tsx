@@ -20,6 +20,10 @@ interface DocumentContextMenuProps {
   actions?: ContextMenuAction[];
   /** Wrap children — context menu attaches to this area */
   children: ReactNode;
+  /** Externally controlled menu position (e.g. from iframe events) */
+  externalMenuPosition?: { x: number; y: number } | null;
+  /** Called when external menu is consumed */
+  onExternalMenuConsumed?: () => void;
 }
 
 interface MenuState {
@@ -27,8 +31,21 @@ interface MenuState {
   y: number;
 }
 
-export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({ actions, children }) => {
+export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
+  actions,
+  children,
+  externalMenuPosition,
+  onExternalMenuConsumed,
+}) => {
   const [menu, setMenu] = useState<MenuState | null>(null);
+
+  // Handle externally triggered menu (e.g. from iframe contextmenu)
+  useEffect(() => {
+    if (externalMenuPosition) {
+      setMenu(externalMenuPosition);
+      onExternalMenuConsumed?.();
+    }
+  }, [externalMenuPosition, onExternalMenuConsumed]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

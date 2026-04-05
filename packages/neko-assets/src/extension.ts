@@ -23,6 +23,7 @@ import {
 } from '@neko/asset';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
+import * as os from 'os';
 import { detectMediaType, resolveStorageLayout, migrateStorageLayout } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
@@ -101,7 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (workspaceRoot) {
     try {
-      const layout = resolveStorageLayout(workspaceRoot);
+      const layout = resolveStorageLayout(workspaceRoot, os.homedir());
 
       // One-time migration from legacy paths
       try {
@@ -225,7 +226,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // Initialize persistent metadata cache
     const metadataCache = new MediaMetadataCache(
-      resolveStorageLayout(workspaceRoot).project.cache.mediaMetadata,
+      resolveStorageLayout(workspaceRoot, os.homedir()).project.cache.mediaMetadata,
       cachePathResolver,
     );
     await metadataCache.load();

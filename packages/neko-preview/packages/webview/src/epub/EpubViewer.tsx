@@ -688,10 +688,15 @@ export const EpubViewer: FC = () => {
     const currentIdx = modes.indexOf(viewMode);
     const nextMode = modes[(currentIdx + 1) % modes.length]!;
 
+    // Capture position: CFI from rendition, or chapter href from waterfall
     const location = renditionRef.current?.currentLocation() as
       | { start: { cfi: string } }
       | null
       | undefined;
+    const currentCfi = location?.start?.cfi;
+
+    // Find the TOC href for the current chapter (bridge between modes)
+    const chapterHref = tocRef.current.find((item) => item.label === currentChapter)?.href;
 
     setViewMode(nextMode);
     setWaterfallReady(false);
@@ -702,14 +707,20 @@ export const EpubViewer: FC = () => {
       renditionRef.current?.destroy();
       renditionRef.current = null;
       setWaterfallReady(true);
+      // Scroll waterfall to the chapter we were reading
+      if (chapterHref) {
+        requestAnimationFrame(() => navigateWaterfallToHref(chapterHref));
+      }
     } else {
       // Wait for React to update display so the viewer container is visible
       // and epubjs can measure its dimensions correctly.
       await new Promise((r) => requestAnimationFrame(r));
       const spreadMode = nextMode === 'spread' ? 'auto' : 'none';
-      await renderBook(book, tocRef.current, spreadMode as 'none' | 'auto', location?.start?.cfi);
+      // Use CFI if available (rendition→rendition), otherwise use chapter href
+      const displayTarget = currentCfi ?? chapterHref;
+      await renderBook(book, tocRef.current, spreadMode as 'none' | 'auto', displayTarget);
     }
-  }, [viewMode, renderBook]);
+  }, [viewMode, renderBook, currentChapter, navigateWaterfallToHref]);
 
   // =========================================================================
   // Send page to AI

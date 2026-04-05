@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { StatusBarGroup } from '@neko/shared/vscode/extension';
 
 export interface StatusBarMediaInfo {
   fileName: string;
@@ -34,15 +35,19 @@ export interface StatusBarDocumentInfo {
 
 type PlaybackState = 'playing' | 'paused' | 'stopped';
 
+const ID = 'neko.preview.status';
+
 export class StatusBarManager implements vscode.Disposable {
-  private readonly _statusItem: vscode.StatusBarItem;
+  private readonly group: StatusBarGroup;
   private _mediaInfo: StatusBarMediaInfo | null = null;
   private _documentInfo: StatusBarDocumentInfo | null = null;
   private _playbackState: PlaybackState = 'stopped';
   private _currentTime = 0;
 
   constructor() {
-    this._statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    this.group = new StatusBarGroup([
+      { id: ID, alignment: vscode.StatusBarAlignment.Left, priority: 100 },
+    ]);
   }
 
   // =========================================================================
@@ -55,14 +60,14 @@ export class StatusBarManager implements vscode.Disposable {
     this._playbackState = 'stopped';
     this._currentTime = 0;
     this.render();
-    this._statusItem.show();
+    this.group.show();
   }
 
   showDocument(info: StatusBarDocumentInfo): void {
     this._documentInfo = info;
     this._mediaInfo = null;
     this.renderDocument();
-    this._statusItem.show();
+    this.group.show();
   }
 
   updateDocumentPage(currentPage: number): void {
@@ -80,7 +85,7 @@ export class StatusBarManager implements vscode.Disposable {
   }
 
   hide(): void {
-    this._statusItem.hide();
+    this.group.hide();
     this._mediaInfo = null;
     this._documentInfo = null;
   }
@@ -102,8 +107,11 @@ export class StatusBarManager implements vscode.Disposable {
     const details = this.buildDetails();
     const time = `${this.formatTime(this._currentTime)} / ${this.formatTime(this._mediaInfo.duration)}`;
 
-    this._statusItem.text = `${icon} ${this._mediaInfo.fileName} | ${details} | ${time}`;
-    this._statusItem.tooltip = `Neko Preview: ${this._mediaInfo.fileName}`;
+    this.group.update(
+      ID,
+      `${icon} ${this._mediaInfo.fileName} | ${details} | ${time}`,
+      `Neko Preview: ${this._mediaInfo.fileName}`,
+    );
   }
 
   private getIcon(): string {
@@ -178,8 +186,11 @@ export class StatusBarManager implements vscode.Disposable {
       parts.push(`${Math.round(zoom)}%`);
     }
 
-    this._statusItem.text = `${icon} ${fileName} | ${parts.join(' | ')}`;
-    this._statusItem.tooltip = `Neko Preview: ${fileName}`;
+    this.group.update(
+      ID,
+      `${icon} ${fileName} | ${parts.join(' | ')}`,
+      `Neko Preview: ${fileName}`,
+    );
   }
 
   private getDocumentIcon(format: string): string {
@@ -208,6 +219,6 @@ export class StatusBarManager implements vscode.Disposable {
   // =========================================================================
 
   dispose(): void {
-    this._statusItem.dispose();
+    this.group.dispose();
   }
 }

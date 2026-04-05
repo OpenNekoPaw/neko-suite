@@ -182,6 +182,9 @@ export function PuppetApp() {
 
           // Get initial deformed meshes for rendering
           const meshes = await ctrl.getMeshes();
+          console.log('[PuppetApp] meshes:', meshes.length, meshes);
+          console.log('[PuppetApp] snapshot.meshes:', snapshot.meshes?.length, snapshot.meshes);
+          console.log('[PuppetApp] textures:', store.textures.length);
           store.setDeformedMeshes(meshes);
 
           // Load parameters and animations

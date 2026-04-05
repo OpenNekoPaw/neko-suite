@@ -7,11 +7,18 @@
 //   L1  <project>/.neko/      Project (git-tracked source data)
 //   L2  <project>/.neko/.cache/  Cache (not tracked, all derived data)
 //
-// All resolve* functions are pure — no I/O, only path.join.
+// All resolve* functions are pure — no I/O, only join.
 // =============================================================================
 
-import * as path from 'path';
-import * as os from 'os';
+// Pure join — no Node.js dependency so this module works in browser/webview bundles.
+function join(...segments: string[]): string {
+  return segments.join('/').replace(/\/+/g, '/');
+}
+
+function dirname(p: string): string {
+  const idx = p.lastIndexOf('/');
+  return idx <= 0 ? '/' : p.substring(0, idx);
+}
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -61,43 +68,43 @@ export interface IStorageLayout {
 // Resolve functions (pure, no I/O)
 // ---------------------------------------------------------------------------
 
-/** Resolve global storage layout (no workspace needed) */
-export function resolveGlobalStorageLayout(): IGlobalStorageLayout {
-  const root = path.join(os.homedir(), '.neko');
+/** Resolve global storage layout. Pass homedir explicitly (e.g. os.homedir()). */
+export function resolveGlobalStorageLayout(homedir: string): IGlobalStorageLayout {
+  const root = join(homedir, '.neko');
   return {
     root,
-    config: path.join(root, 'config.json'),
-    marketCache: path.join(root, 'market-cache'),
-    marketInstalled: path.join(root, 'market-installed.json'),
-    conversations: path.join(root, 'conversations'),
-    globalMemory: path.join(root, 'global-memory.md'),
+    config: join(root, 'config.json'),
+    marketCache: join(root, 'market-cache'),
+    marketInstalled: join(root, 'market-installed.json'),
+    conversations: join(root, 'conversations'),
+    globalMemory: join(root, 'global-memory.md'),
   };
 }
 
-/** Resolve full storage layout for a workspace */
-export function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
-  const projectRoot = path.join(workspaceRoot, '.neko');
-  const cacheRoot = path.join(projectRoot, '.cache');
+/** Resolve full storage layout for a workspace. Pass homedir explicitly (e.g. os.homedir()). */
+export function resolveStorageLayout(workspaceRoot: string, homedir: string): IStorageLayout {
+  const projectRoot = join(workspaceRoot, '.neko');
+  const cacheRoot = join(projectRoot, '.cache');
 
   return {
-    global: resolveGlobalStorageLayout(),
+    global: resolveGlobalStorageLayout(homedir),
     project: {
       root: projectRoot,
-      assetLibrary: path.join(projectRoot, 'assets', 'library.json'),
-      memory: path.join(projectRoot, 'memory.md'),
-      settings: path.join(projectRoot, 'settings.json'),
-      settingsLocal: path.join(projectRoot, 'settings.local.json'),
-      config: path.join(projectRoot, 'config.json'),
+      assetLibrary: join(projectRoot, 'assets', 'library.json'),
+      memory: join(projectRoot, 'memory.md'),
+      settings: join(projectRoot, 'settings.json'),
+      settingsLocal: join(projectRoot, 'settings.local.json'),
+      config: join(projectRoot, 'config.json'),
       cache: {
         root: cacheRoot,
-        mediaMetadata: path.join(cacheRoot, 'media-metadata.json'),
-        thumbnails: path.join(cacheRoot, 'thumbnails'),
-        proxies: path.join(cacheRoot, 'proxies'),
-        proxyManifest: path.join(cacheRoot, 'proxies', 'manifest.json'),
-        generated: path.join(cacheRoot, 'generated'),
-        generatedIndex: path.join(cacheRoot, 'generated', 'index.json'),
-        vectors: path.join(cacheRoot, 'vectors'),
-        assetGraph: path.join(cacheRoot, 'asset-graph.json'),
+        mediaMetadata: join(cacheRoot, 'media-metadata.json'),
+        thumbnails: join(cacheRoot, 'thumbnails'),
+        proxies: join(cacheRoot, 'proxies'),
+        proxyManifest: join(cacheRoot, 'proxies', 'manifest.json'),
+        generated: join(cacheRoot, 'generated'),
+        generatedIndex: join(cacheRoot, 'generated', 'index.json'),
+        vectors: join(cacheRoot, 'vectors'),
+        assetGraph: join(cacheRoot, 'asset-graph.json'),
       },
     },
   };
@@ -123,20 +130,16 @@ export async function migrateStorageLayout(
   workspaceRoot: string,
   fsOps: MigrateFsOps,
 ): Promise<string[]> {
-  const projectRoot = path.join(workspaceRoot, '.neko');
-  const cacheRoot = path.join(projectRoot, '.cache');
+  const projectRoot = join(workspaceRoot, '.neko');
+  const cacheRoot = join(projectRoot, '.cache');
 
   // Order matters: specific paths before the general .neko/cache/ directory
   const migrations: Array<[string, string, string]> = [
-    [path.join(projectRoot, 'proxies'), path.join(cacheRoot, 'proxies'), 'proxies'],
-    [path.join(projectRoot, 'generated'), path.join(cacheRoot, 'generated'), 'generated'],
-    [
-      path.join(projectRoot, 'assets', 'thumbnails'),
-      path.join(cacheRoot, 'thumbnails'),
-      'thumbnails',
-    ],
+    [join(projectRoot, 'proxies'), join(cacheRoot, 'proxies'), 'proxies'],
+    [join(projectRoot, 'generated'), join(cacheRoot, 'generated'), 'generated'],
+    [join(projectRoot, 'assets', 'thumbnails'), join(cacheRoot, 'thumbnails'), 'thumbnails'],
     // General cache dir last — may contain media-metadata.json etc.
-    [path.join(projectRoot, 'cache'), cacheRoot, 'cache'],
+    [join(projectRoot, 'cache'), cacheRoot, 'cache'],
   ];
 
   const actions: string[] = [];
@@ -146,7 +149,7 @@ export async function migrateStorageLayout(
     const newExists = await fsOps.exists(newPath);
 
     if (oldExists && !newExists) {
-      await fsOps.mkdir(path.dirname(newPath), { recursive: true });
+      await fsOps.mkdir(dirname(newPath), { recursive: true });
       await fsOps.rename(oldPath, newPath);
       actions.push(`migrated ${label}: ${oldPath} → ${newPath}`);
     }

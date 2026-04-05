@@ -8,7 +8,6 @@ import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { renderAsync } from 'docx-preview';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
-import { DocumentSelectionFab } from '../shared/DocumentSelectionFab';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
 import { useTranslation } from '../i18n/I18nContext';
 
@@ -158,12 +157,6 @@ export const DocxViewer: FC = () => {
         >
           <div ref={containerRef} className="mx-auto" />
         </div>
-
-        <DocumentSelectionFab
-          selection={selection}
-          onSendToAi={sendToAi}
-          label={t('preview.document.sendToAi')}
-        />
       </div>
     </DocumentContextMenu>
   );

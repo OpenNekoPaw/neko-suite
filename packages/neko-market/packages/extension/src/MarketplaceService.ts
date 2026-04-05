@@ -50,8 +50,9 @@ async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
 }
 
 /** Neko home directory paths — resolved via global storage layout */
+import * as os from 'os';
 import { resolveGlobalStorageLayout } from '@neko/shared';
-const _globalLayout = resolveGlobalStorageLayout();
+const _globalLayout = resolveGlobalStorageLayout(os.homedir());
 const NEKO_HOME = _globalLayout.root;
 const CACHE_DIR = _globalLayout.marketCache;
 const INSTALLED_FILE = _globalLayout.marketInstalled;

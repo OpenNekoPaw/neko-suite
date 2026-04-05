@@ -350,8 +350,8 @@ bar.setVisible('neko.audio.selection', true);    // show/hide conditional items
 bar.dispose();                                   // clean up all items
 ```
 
-**已迁移**: neko-audio, neko-canvas, neko-sketch, neko-cut
-**不迁移**: neko-preview（单 item + 复杂双模式渲染）、neko-agent（工厂函数 + watcher，单 item）
+**已迁移**: neko-audio, neko-canvas, neko-sketch, neko-cut, neko-preview
+**不迁移**: neko-agent（工厂函数 + watcher，单 item）
 
 ### useFileDrop（Webview Hook）
 
