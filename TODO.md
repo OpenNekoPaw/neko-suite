@@ -268,6 +268,12 @@
 - [x] 2D 物理模拟（SimplePhysics + PhysicsState ECS 组件 + INP SimplePhysics 节点解析 + rigid/spring pendulum 求解器移植）
 - [x] 3D 材质扩展（MaterialUniforms +emissive_factor +occlusion_strength + glTF 加载 + bind group +2 + WGSL AO/emissive）
 
+### 编辑器 UI
+- [x] neko-model：VerticalToolbar 共享组件 + Tailwind content 修复 + i18n 接入 + CSP 修复 + locale 注入
+- [x] neko-puppet：Canvas 2D 渲染器（PuppetCanvas + inp-parser 纹理提取 + affine 纹理三角形 + zoom/pan）
+- [x] 统一空白状态 UI（导入按钮 + 模板按钮 + 拖拽区，替代 QuickPick）
+- [x] 程序化人形模板（INP: Part 节点 + mesh + 嵌入 PNG 纹理；GLB: 球+圆柱多 mesh 骨骼人形）
+
 ---
 
-*最后更新：2026-04-05（角色编辑 P0-P2 全部完成：模板创建 + 引擎 API + 物理模拟 + 材质扩展）*
+*最后更新：2026-04-05（角色编辑 P0-P2 + 编辑器 UI：Canvas 渲染器 + 共享组件 + i18n + 模板）*

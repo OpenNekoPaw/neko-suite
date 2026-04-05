@@ -138,7 +138,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
   - native-puppet: 51 tests（Keyframe CRUD + blend_tick + 8 API actions）
   - native-scene: 49 tests（SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2）
 - **Phase 2.5 角色编辑能力 P0+P1 ✅**：
-  - 模板创建功能（`createNewFile` + TemplateChoice QuickPick + INP/GLB 二进制生成器）
+  - 模板创建功能（编辑器内空白状态 UI：导入/模板/拖拽 + INP/GLB 程序化人形模板）
   - 3D `Visible` 组件 + `set_visible` API + GPU 渲染过滤
   - 2D `set_node_opacity` API（Opacity 运行时修改）
   - 3D `set_morph_weights` API（Morph Target 交互式设置）
@@ -149,6 +149,10 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
   - 2D 纹理热替换（`puppets:set_texture` API）
   - 2D 物理模拟（SimplePhysics + PhysicsState 组件 + INP 解析 + rigid/spring pendulum 求解器）
   - 3D 材质扩展（emissive_factor + occlusion_strength + emissive/AO 纹理 + WGSL shader 更新）
+- **Phase 2.5 编辑器 UI ✅**：
+  - neko-model：左侧 VerticalToolbar（共享组件）+ i18n 接入 + CSP 修复 + locale 注入
+  - neko-puppet：Canvas 2D 渲染器（纹理三角形 affine mapping + blend modes + zoom/pan）
+  - INP TEX_SECT 纹理解析（webview 端 PNG 提取 → ImageBitmap）
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
