@@ -101,6 +101,10 @@ export const CbzViewer: FC = () => {
       setCurrentPage(0);
       decodingRef.current.clear();
       setLoading(false);
+      postMessage({
+        type: 'document:statusUpdate',
+        payload: { pageCount: filtered.length, currentPage: 1 },
+      } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);

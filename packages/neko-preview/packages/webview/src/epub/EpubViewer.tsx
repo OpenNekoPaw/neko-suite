@@ -401,6 +401,12 @@ export const EpubViewer: FC = () => {
         await initBook(book);
         setLoading(false);
         loadingRef.current = false;
+        // Send status with chapter count
+        const chapterCount = spineEntriesRef.current.length || tocRef.current.length;
+        postMessage({
+          type: 'document:statusUpdate',
+          payload: { pageCount: chapterCount },
+        } as never);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);

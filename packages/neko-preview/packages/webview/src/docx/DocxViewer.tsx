@@ -65,6 +65,7 @@ export const DocxViewer: FC = () => {
         });
       }
       setLoading(false);
+      postMessage({ type: 'document:statusUpdate', payload: {} } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
