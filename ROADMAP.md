@@ -197,15 +197,16 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - ✅ Zustand 状态管理 + inline styles 控制面板
 - ✅ postMessage 双向桥接（Extension Host ↔ Webview）
 
-### Phase 5.1.2 ✅ 2D Puppet 联动 + 录制 + i18n
+### Phase 5.1.2 ✅ 2D Puppet 联动 + 录制 + i18n + 项目文件
 - ✅ PuppetViewer（Canvas 2D 渲染 inochi2d 变形网格 + z_order 排序 + 自动缩放）
 - ✅ puppetMapping（ARKit → inochi2d 参数：眼/口/眉/头部角度四元数→欧拉角）
 - ✅ LivePanelProvider puppet 管理（fs → loadPuppet → openPuppetStream → PuppetDelta 转发）
-- ✅ Avatar 选择器支持 .vrm/.glb/.gltf + .inp/.inx，自动切换 3D/2D 视口
+- ✅ Avatar 选择器支持 7 种格式：`.nkm`/`.nkp`（项目文件自动解析 `model.src`/`puppet.src`）+ `.vrm`/`.glb`/`.gltf` + `.inp`/`.inx`
 - ✅ CanvasRecorder（canvas.captureStream + MediaRecorder → WebM VP9 → base64 → 磁盘保存）
 - ✅ 麦克风录制（EngineClient.recordStart → cpal → WAV）
 - ✅ 录制 UI（红色边框 + REC 闪烁徽章 + 计时器 + 保存路径显示）
-- ✅ i18n（vscode.l10n.t 中英双语 18 条 + ILogger 结构化日志）
+- ✅ EmptyState 引导页（三步引导 + VMC 连接后打勾 + 实时追踪数据可视化：blend shape 柱状图 + 头部方向圆盘）
+- ✅ 三层 i18n：`package.nls.json`（16 条）+ `vscode.l10n.t`（21 条）+ `I18nService`（20 条 webview）
 
 ### Phase 5.1.3（待做）：摄像头 + MediaPipe
 - [ ] Rust `ICameraService` 实现（nokhwa/FFmpeg avdevice → H.264 → WebSocket）
@@ -348,4 +349,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-05（Phase 5.1 neko-live：VMC/VRM + 2D Puppet 联动 + Canvas 录制 + i18n）*
+*最后更新: 2026-04-05（Phase 5.1 neko-live：VMC/VRM + 2D Puppet + 录制 + .nkm/.nkp 项目文件 + 三层 i18n + EmptyState 引导）*
