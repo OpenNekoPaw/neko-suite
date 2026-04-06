@@ -45,6 +45,7 @@ export interface ICacheLayout {
   readonly generatedIndex: string;
   readonly vectors: string;
   readonly assetGraph: string;
+  readonly searchIndex: string;
 }
 
 /** L1: project-level source data (.neko/) — git-tracked */
@@ -105,6 +106,7 @@ export function resolveStorageLayout(workspaceRoot: string, homedir: string): IS
         generatedIndex: join(cacheRoot, 'generated', 'index.json'),
         vectors: join(cacheRoot, 'vectors'),
         assetGraph: join(cacheRoot, 'asset-graph.json'),
+        searchIndex: join(cacheRoot, 'search-index.json'),
       },
     },
   };

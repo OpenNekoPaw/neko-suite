@@ -530,6 +530,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
 
       // =================================================================
+      // Cross-extension drag-and-drop (ADR-5 P1)
+      // =================================================================
+
+      case 'dnd:drop': {
+        try {
+          const payload = await vscode.commands.executeCommand<{
+            path: string;
+            mediaType: 'image' | 'video' | 'audio';
+            name: string;
+          } | null>('neko.agent.getDndPayload');
+
+          if (payload) {
+            this.postImportAsset({ path: payload.path, type: payload.mediaType });
+            await vscode.commands.executeCommand('neko.agent.clearDndPayload');
+            logger.info(`DnD drop accepted: ${payload.name}`);
+          }
+        } catch (error) {
+          logger.warn(`DnD drop failed (agent extension may not be installed): ${error}`);
+        }
+        break;
+      }
+
+      // =================================================================
       // Media playback via shared neko-preview API
       // =================================================================
 

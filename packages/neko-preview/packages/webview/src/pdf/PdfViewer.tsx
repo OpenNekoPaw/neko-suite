@@ -3,7 +3,6 @@
  *
  * View modes:
  * - scroll:  Waterfall continuous scroll (default)
- * - dual:    Two-page side-by-side spread
  * - single:  Single page with prev/next navigation
  */
 
@@ -33,9 +32,9 @@ interface PageViewport {
   height: number;
 }
 
-type ViewMode = 'scroll' | 'dual' | 'single';
-const VIEW_MODES: ViewMode[] = ['scroll', 'dual', 'single'];
-const VIEW_MODE_ICONS: Record<ViewMode, string> = { scroll: '≡', dual: '⊞', single: '⊡' };
+type ViewMode = 'scroll' | 'single';
+const VIEW_MODES: ViewMode[] = ['scroll', 'single'];
+const VIEW_MODE_ICONS: Record<ViewMode, string> = { scroll: '⇕', single: '⊡' };
 
 export const PdfViewer: FC = () => {
   const { t } = useTranslation();
@@ -61,7 +60,9 @@ export const PdfViewer: FC = () => {
   // Monotonic counter to invalidate stale renders after mode switch
   const modeEpochRef = useRef(0);
 
-  const { selection, sendToAi } = useDocumentSelection({ pageNumber: currentPage });
+  const { selection, sendTextToAgent, sendFileToAgent } = useDocumentSelection({
+    pageNumber: currentPage,
+  });
 
   useExtensionMessage((msg) => {
     const m = msg as unknown as { type: string; payload: Record<string, unknown> };
@@ -283,7 +284,7 @@ export const PdfViewer: FC = () => {
   }, [viewMode, pageViewports, renderPageIntoEl]);
 
   // =========================================================================
-  // Single/Dual mode: render on page change
+  // Single page mode: render on page change
   // =========================================================================
 
   useEffect(() => {
@@ -293,24 +294,12 @@ export const PdfViewer: FC = () => {
     // Wait one frame for refs to mount
     const rafId = requestAnimationFrame(() => {
       renderedPagesRef.current.clear();
-
-      if (viewMode === 'single') {
-        const el = pageRefsMap.current.get(currentPage);
-        if (el) void renderPageIntoEl(currentPage, el, epoch);
-      } else if (viewMode === 'dual') {
-        // Render current page + next page
-        const el1 = pageRefsMap.current.get(currentPage);
-        if (el1) void renderPageIntoEl(currentPage, el1, epoch);
-        const nextPage = currentPage + 1;
-        if (nextPage <= numPages) {
-          const el2 = pageRefsMap.current.get(nextPage);
-          if (el2) void renderPageIntoEl(nextPage, el2, epoch);
-        }
-      }
+      const el = pageRefsMap.current.get(currentPage);
+      if (el) void renderPageIntoEl(currentPage, el, epoch);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [viewMode, currentPage, scale, pageViewports, numPages, renderPageIntoEl]);
+  }, [viewMode, currentPage, scale, pageViewports, renderPageIntoEl]);
 
   const updateCurrentPageFromScroll = useCallback(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -346,14 +335,12 @@ export const PdfViewer: FC = () => {
   );
 
   const goToPrevPage = useCallback(() => {
-    const step = viewMode === 'dual' ? 2 : 1;
-    goToPage(Math.max(1, currentPage - step));
-  }, [viewMode, currentPage, goToPage]);
+    goToPage(Math.max(1, currentPage - 1));
+  }, [currentPage, goToPage]);
 
   const goToNextPage = useCallback(() => {
-    const step = viewMode === 'dual' ? 2 : 1;
-    goToPage(Math.min(numPages, currentPage + step));
-  }, [viewMode, currentPage, numPages, goToPage]);
+    goToPage(Math.min(numPages, currentPage + 1));
+  }, [currentPage, numPages, goToPage]);
 
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.25, 5)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.25, 0.5)), []);
@@ -382,16 +369,13 @@ export const PdfViewer: FC = () => {
   // =========================================================================
 
   const contextActions = useDocumentContextActions({
-    hasSelection: !!selection,
-    onSendSelectionToAi: selection ? sendToAi : undefined,
+    hasContent: !!selection,
+    onSendContentToAgent: selection ? sendTextToAgent : undefined,
+    onSendFileToAgent: () => sendFileToAgent(currentPage),
   });
 
   const viewModeTitle =
-    viewMode === 'scroll'
-      ? t('preview.document.modePage')
-      : viewMode === 'dual'
-        ? t('preview.document.modePage')
-        : t('preview.document.modeScroll');
+    viewMode === 'scroll' ? t('preview.document.modePage') : t('preview.document.modeScroll');
 
   if (error) {
     return (
@@ -504,39 +488,6 @@ export const PdfViewer: FC = () => {
                 }}
               />
             ))}
-          </div>
-        ) : viewMode === 'dual' ? (
-          /* Dual mode — two pages side by side, centered */
-          <div
-            className="flex flex-1 items-start justify-center gap-4 overflow-auto p-4"
-            style={{ background: 'var(--vscode-editor-background)' }}
-          >
-            {/* Left page */}
-            {pageViewports[currentPage - 1] && (
-              <div
-                ref={(el) => setPageRef(currentPage, el)}
-                data-page={currentPage}
-                style={{
-                  width: `${pageViewports[currentPage - 1]!.width}px`,
-                  height: `${pageViewports[currentPage - 1]!.height}px`,
-                  flexShrink: 0,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-                }}
-              />
-            )}
-            {/* Right page */}
-            {currentPage < numPages && pageViewports[currentPage] && (
-              <div
-                ref={(el) => setPageRef(currentPage + 1, el)}
-                data-page={currentPage + 1}
-                style={{
-                  width: `${pageViewports[currentPage]!.width}px`,
-                  height: `${pageViewports[currentPage]!.height}px`,
-                  flexShrink: 0,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-                }}
-              />
-            )}
           </div>
         ) : (
           /* Single page mode — centered */

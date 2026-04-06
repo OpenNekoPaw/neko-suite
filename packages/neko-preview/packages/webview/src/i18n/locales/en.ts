@@ -42,8 +42,8 @@ const preview: MessageBundle = {
   'preview.audio.viewWaveform': 'Waveform',
   'preview.audio.viewSpectrum': 'Spectrum',
   // Document shared
-  'preview.document.sendToAi': 'Send to AI',
-  'preview.document.sendPageToAi': 'Analyze Page',
+  'preview.document.sendContentToAgent': 'Send Content to Agent',
+  'preview.document.sendFileToAgent': 'Send File to Agent',
   'preview.document.loading': 'Loading...',
   'preview.document.error': 'Error: {error}',
   'preview.document.pageOf': 'Page {current} of {total}',
@@ -51,13 +51,11 @@ const preview: MessageBundle = {
   'preview.document.zoomOut': 'Zoom out',
   'preview.document.fitWidth': 'Fit width',
   'preview.document.fitPage': 'Fit page',
-  'preview.document.modeDual': 'Switch to dual-page mode',
   // PDF
   'preview.pdf.loading': 'Loading PDF...',
   // CBZ
   'preview.cbz.loading': 'Loading comic...',
-  'preview.cbz.spreadMode': 'Two-page spread',
-  'preview.cbz.selectRegion': 'Select region for AI',
+  'preview.cbz.pageAlt': 'Page {number}',
   // Document mode toggle (PDF / CBZ)
   'preview.document.modeScroll': 'Switch to scroll mode',
   'preview.document.modePage': 'Switch to page mode',
@@ -66,7 +64,6 @@ const preview: MessageBundle = {
   'preview.epub.toc': 'Table of Contents',
   'preview.epub.theme': 'Reading theme',
   'preview.epub.fontSize': 'Font size',
-  'preview.epub.modeSpread': 'Switch to spread mode',
   'preview.epub.modePaginated': 'Switch to page mode',
   'preview.epub.modeWaterfall': 'Switch to waterfall mode',
   // DOCX

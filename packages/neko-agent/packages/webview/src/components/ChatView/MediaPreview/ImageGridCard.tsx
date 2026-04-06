@@ -37,6 +37,20 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
     [localPaths, urls],
   );
 
+  /** Notify Extension Host that a drag operation started (ADR-5 P1 DnD). */
+  const handleDragStart = useCallback(
+    (index: number) => {
+      const localPath = localPaths?.[index];
+      if (!localPath) return;
+      const fileName = localPath.split(/[\\/]/).pop() ?? 'image';
+      vscode?.postMessage({
+        type: 'dnd:start',
+        asset: { path: localPath, mediaType: 'image' as const, name: fileName },
+      });
+    },
+    [localPaths],
+  );
+
   if (urls.length === 0) return null;
 
   // Single image — delegate to simple view
@@ -49,6 +63,8 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
           src={src}
           alt={name ?? 'Generated image'}
           className="w-full max-h-[200px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
+          draggable={!!localPaths?.[0]}
+          onDragStart={() => handleDragStart(0)}
           onClick={() => handleOpen(0)}
           loading="lazy"
         />
@@ -75,6 +91,8 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
               className={`relative cursor-pointer group overflow-hidden rounded
                 ${isSelected ? 'ring-2 ring-[var(--vscode-focusBorder)]' : ''}
               `}
+              draggable={!!localPaths?.[index]}
+              onDragStart={() => handleDragStart(index)}
               onClick={() => {
                 setSelectedIndex(index);
                 handleOpen(index);

@@ -56,44 +56,56 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions = {}) 
     };
   }, [enabled]);
 
-  const sendToAi = useCallback(() => {
+  /** Send selected text to agent */
+  const sendTextToAgent = useCallback(() => {
     if (!selection) return;
     postMessage({
       type: 'document:sendToAi',
       payload: {
-        selectedText: selection.text,
-        pageNumber,
-        chapterTitle,
+        text: selection.text,
+        contentKind: 'text',
+        context: {
+          page: pageNumber,
+          chapter: chapterTitle,
+        },
       },
-    } as never); // Cast needed: WebviewMessage union doesn't include document messages yet
-    // Clear selection after sending
+    } as never);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }, [selection, pageNumber, chapterTitle]);
 
-  /** Send a page region (CBZ frame selection) — file-level with coordinates */
-  const sendRegionToAi = useCallback(
-    (region: { x: number; y: number; width: number; height: number }, page?: number) => {
+  /** Send a page region as image (CBZ frame selection) */
+  const sendRegionToAgent = useCallback(
+    (
+      imageData: string,
+      region: { x: number; y: number; width: number; height: number },
+      page?: number,
+    ) => {
       postMessage({
         type: 'document:sendToAi',
         payload: {
-          pageNumber: page ?? pageNumber,
-          region,
+          imageData,
           contentKind: 'image',
+          context: {
+            page: page ?? pageNumber,
+            region,
+          },
         },
       } as never);
     },
     [pageNumber],
   );
 
-  /** Send a full page reference — file-level with page number */
-  const sendPageRefToAi = useCallback(
+  /** Send a full page reference — agent reads on demand */
+  const sendFileToAgent = useCallback(
     (page?: number) => {
       postMessage({
         type: 'document:sendToAi',
         payload: {
-          pageNumber: page ?? pageNumber,
           contentKind: 'image',
+          context: {
+            page: page ?? pageNumber,
+          },
         },
       } as never);
     },
@@ -102,9 +114,9 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions = {}) 
 
   return {
     selection,
-    sendToAi,
-    sendRegionToAi,
-    sendPageRefToAi,
+    sendTextToAgent,
+    sendRegionToAgent,
+    sendFileToAgent,
     clearSelection: () => setSelection(null),
   };
 }

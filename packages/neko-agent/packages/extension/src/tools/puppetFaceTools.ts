@@ -11,7 +11,7 @@
  */
 
 import * as vscode from 'vscode';
-import * as fs from 'node:fs';
+import { promises as fsp } from 'node:fs';
 import type { NekoPuppetAPI, ToolParameters, PuppetFaceParameter } from '@neko/shared';
 import {
   PUPPET_FACE_PARAMETERS,
@@ -267,10 +267,12 @@ export function createPuppetFaceTools(): Tool[] {
         let imageBase64: string;
         let mimeType: string;
         try {
-          if (!fs.existsSync(imagePath)) {
+          try {
+            await fsp.access(imagePath);
+          } catch {
             return { error: `Image file not found: ${imagePath}` };
           }
-          const imageBuffer = fs.readFileSync(imagePath);
+          const imageBuffer = await fsp.readFile(imagePath);
           imageBase64 = imageBuffer.toString('base64');
 
           const ext = imagePath.split('.').pop()?.toLowerCase();

@@ -232,8 +232,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await metadataCache.load();
     context.subscriptions.push(metadataCache);
 
-    // Initialize search service
-    const searchService = new MediaLibrarySearchService(settingsService, metadataCache);
+    // Initialize search service with persistent index
+    const storageLayout = resolveStorageLayout(workspaceRoot, os.homedir());
+    const searchService = new MediaLibrarySearchService(
+      settingsService,
+      metadataCache,
+      storageLayout.project.cache.searchIndex,
+    );
+    context.subscriptions.push(searchService);
 
     // Register Media Library TreeView
     const mediaLibraryProvider = new MediaLibraryTreeProvider({
@@ -872,6 +878,15 @@ function registerSearchCommand(
 ): void {
   const { t } = require('./i18n');
 
+  // Type filter labels and their AssetMediaType values
+  const TYPE_FILTERS: Array<{ label: string; types: import('@neko/shared').AssetMediaType[] }> = [
+    { label: '$(filter) All', types: [] },
+    { label: '$(file-media) Video', types: ['video'] },
+    { label: '$(unmute) Audio', types: ['audio'] },
+    { label: '$(file) Image', types: ['image'] },
+    { label: '$(file-text) Document', types: ['document', 'text'] },
+  ];
+
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.searchMediaLibrary', () => {
       const quickPick = vscode.window.createQuickPick<MediaSearchQuickPickItem>();
@@ -879,74 +894,109 @@ function registerSearchCommand(
       quickPick.matchOnDescription = true;
       quickPick.matchOnDetail = true;
 
-      let searchTimer: ReturnType<typeof setTimeout> | undefined;
+      // Type filter state — buttons in the QuickPick title bar
+      let activeFilterIndex = 0;
+      quickPick.buttons = TYPE_FILTERS.map((f, i) => ({
+        iconPath:
+          i === activeFilterIndex
+            ? new vscode.ThemeIcon('check')
+            : new vscode.ThemeIcon('circle-outline'),
+        tooltip: f.label,
+      }));
 
-      quickPick.onDidChangeValue((value) => {
-        if (searchTimer) clearTimeout(searchTimer);
+      const getActiveTypes = () => TYPE_FILTERS[activeFilterIndex]?.types ?? [];
+
+      let searchTimer: ReturnType<typeof setTimeout> | undefined;
+      let lastQuery = '';
+
+      const doSearch = async (value: string) => {
         if (value.length < 2) {
           quickPick.items = [];
           return;
         }
-        // Debounce search
-        searchTimer = setTimeout(async () => {
-          quickPick.busy = true;
-          try {
-            const results = await searchService.search(value);
-            quickPick.items = results.map((r) => {
-              const iconMap: Record<string, string> = {
-                video: 'file-media',
-                audio: 'unmute',
-                image: 'file',
-                document: 'file-text',
-              };
-              const icon = iconMap[r.mediaType] ?? 'file';
+        quickPick.busy = true;
+        try {
+          const activeTypes = getActiveTypes();
+          const results = await searchService.search(value, {
+            types: activeTypes.length > 0 ? activeTypes : undefined,
+          });
 
-              let detail: string | undefined;
-              if (r.metadata) {
-                const parts: string[] = [];
-                if (r.metadata.width && r.metadata.height) {
-                  parts.push(`${r.metadata.width}×${r.metadata.height}`);
-                }
-                if (r.metadata.duration) {
-                  const d = r.metadata.duration;
-                  const m = Math.floor(d / 60);
-                  const s = Math.round(d % 60);
-                  parts.push(`${m}:${s.toString().padStart(2, '0')}`);
-                }
-                if (r.metadata.fileSize > 0) {
-                  const mb = r.metadata.fileSize / (1024 * 1024);
-                  parts.push(
-                    mb >= 1
-                      ? `${mb.toFixed(1)} MB`
-                      : `${(r.metadata.fileSize / 1024).toFixed(0)} KB`,
-                  );
-                }
-                if (parts.length > 0) detail = parts.join('  ·  ');
+          quickPick.items = results.map((r) => {
+            const iconMap: Record<string, string> = {
+              video: 'file-media',
+              audio: 'unmute',
+              image: 'file',
+              document: 'file-text',
+            };
+            const icon = iconMap[r.mediaType] ?? 'file';
+
+            let detail: string | undefined;
+            if (r.metadata) {
+              const parts: string[] = [];
+              if (r.metadata.width && r.metadata.height) {
+                parts.push(`${r.metadata.width}×${r.metadata.height}`);
               }
-
-              return {
-                label: `$(${icon}) ${r.fileName}`,
-                description: r.libraryName,
-                detail,
-                filePath: r.filePath,
-                mediaType: r.mediaType,
-              };
-            });
-            if (results.length === 0) {
-              quickPick.items = [
-                {
-                  label: t('mediaLibrary.search.noResults'),
-                  filePath: '',
-                  mediaType: '',
-                },
-              ];
+              if (r.metadata.duration) {
+                const d = r.metadata.duration;
+                const m = Math.floor(d / 60);
+                const s = Math.round(d % 60);
+                parts.push(`${m}:${s.toString().padStart(2, '0')}`);
+              }
+              if (r.metadata.fileSize > 0) {
+                const mb = r.metadata.fileSize / (1024 * 1024);
+                parts.push(
+                  mb >= 1 ? `${mb.toFixed(1)} MB` : `${(r.metadata.fileSize / 1024).toFixed(0)} KB`,
+                );
+              }
+              if (parts.length > 0) detail = parts.join('  ·  ');
             }
-          } catch {
-            // Search failed silently
-          } finally {
-            quickPick.busy = false;
+
+            return {
+              label: `$(${icon}) ${r.fileName}`,
+              description: r.libraryName,
+              detail,
+              filePath: r.filePath,
+              mediaType: r.mediaType,
+            };
+          });
+          if (results.length === 0) {
+            quickPick.items = [
+              {
+                label: t('mediaLibrary.search.noResults'),
+                filePath: '',
+                mediaType: '',
+              },
+            ];
           }
-        }, 200);
+        } catch {
+          // Search failed silently
+        } finally {
+          quickPick.busy = false;
+        }
+      };
+
+      quickPick.onDidChangeValue((value) => {
+        lastQuery = value;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => void doSearch(value), 200);
+      });
+
+      quickPick.onDidTriggerButton((button) => {
+        const idx = quickPick.buttons.indexOf(button);
+        if (idx >= 0 && idx !== activeFilterIndex) {
+          activeFilterIndex = idx;
+          quickPick.buttons = TYPE_FILTERS.map((f, i) => ({
+            iconPath:
+              i === activeFilterIndex
+                ? new vscode.ThemeIcon('check')
+                : new vscode.ThemeIcon('circle-outline'),
+            tooltip: f.label,
+          }));
+          // Re-search with new filter
+          if (lastQuery.length >= 2) {
+            void doSearch(lastQuery);
+          }
+        }
       });
 
       quickPick.onDidAccept(() => {

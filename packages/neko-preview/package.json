@@ -143,6 +143,15 @@
         "category": "Neko Preview"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "neko.epubOutline",
+          "name": "EPUB Outline",
+          "when": "neko.epubEditorActive"
+        }
+      ]
+    },
     "configuration": {
       "title": "Neko Preview",
       "properties": {

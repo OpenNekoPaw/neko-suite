@@ -549,6 +549,20 @@ function registerCommands(
     ),
   );
 
+  // ── P1: Cross-extension drag-and-drop payload commands ─────────────────────
+  // Target extensions (canvas, cut) call these to query the dragged asset on drop.
+  const dndBroker = chatViewProvider.dndBroker;
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.agent.getDndPayload', () => {
+      return dndBroker.getPayload();
+    }),
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.agent.clearDndPayload', () => {
+      dndBroker.clearPayload();
+    }),
+  );
+
   // ── P1: Image generation for canvas nodes ──────────────────────────────────
   // Called by neko-canvas BatchGenerationScheduler (callAgent).
   // Executes a text-to-image generation via the configured platform media service

@@ -113,11 +113,17 @@ export class AIActionHandler implements vscode.Disposable {
           await this.handleRemoveSilence(ctx);
           break;
 
-        // P2: Stub (future implementation)
+        // P1: Cloud AI via neko-agent
         case 'ai-background-remove':
+          await this.handleBackgroundRemove(ctx);
+          break;
+        case 'ai-smart-crop':
+          await this.handleSmartCrop(ctx);
+          break;
+
+        // P2: Stub (future implementation)
         case 'ai-auto-edit':
         case 'ai-match-music':
-        case 'ai-smart-crop':
           this.sendResult(ctx, false, undefined, `${actionId} is not yet available. Coming soon.`);
           break;
 
@@ -358,6 +364,82 @@ export class AIActionHandler implements vscode.Disposable {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.sendResult(ctx, false, undefined, `Color grading failed: ${message}`);
+    }
+  }
+
+  private async handleBackgroundRemove(ctx: AIActionContext): Promise<void> {
+    this.sendProgress(ctx, 10, 'Requesting background removal...');
+
+    try {
+      const result = await vscode.commands.executeCommand<{ dataUrl: string } | undefined>(
+        'neko.agent.generateForNode',
+        {
+          nodeId: ctx.elementIds[0] ?? 'cut-bg-remove',
+          prompt:
+            'Remove the background from this image, keeping only the main subject with a transparent background',
+          count: 1,
+        },
+      );
+
+      if (!result?.dataUrl) {
+        return this.sendResult(
+          ctx,
+          false,
+          undefined,
+          'Background removal returned no result. Is neko-agent installed?',
+        );
+      }
+
+      this.sendProgress(ctx, 90, 'Background removal complete');
+      this.sendResult(ctx, true, { dataUrl: result.dataUrl });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.sendResult(ctx, false, undefined, `Background removal failed: ${message}`);
+    }
+  }
+
+  private async handleSmartCrop(ctx: AIActionContext): Promise<void> {
+    const aspectRatio = (ctx.params?.['aspectRatio'] as string) ?? '16:9';
+    const focus = (ctx.params?.['focus'] as string) ?? '';
+
+    this.sendProgress(ctx, 10, 'Analyzing composition for smart crop...');
+
+    try {
+      const promptParts = [
+        `Analyze the image and determine the best crop region for a ${aspectRatio} aspect ratio.`,
+        'Focus on the main subject and apply rule-of-thirds composition.',
+      ];
+      if (focus) {
+        promptParts.push(`Priority focus area: ${focus}.`);
+      }
+      promptParts.push(
+        'Return the crop region as JSON: { "x": number, "y": number, "width": number, "height": number } where values are normalized 0-1.',
+      );
+
+      const result = await vscode.commands.executeCommand<{ dataUrl: string } | undefined>(
+        'neko.agent.generateForNode',
+        {
+          nodeId: ctx.elementIds[0] ?? 'cut-smart-crop',
+          prompt: promptParts.join(' '),
+          aspectRatio,
+          count: 1,
+        },
+      );
+
+      if (!result?.dataUrl) {
+        return this.sendResult(
+          ctx,
+          false,
+          undefined,
+          'Smart crop returned no result. Is neko-agent installed?',
+        );
+      }
+
+      this.sendProgress(ctx, 90, 'Smart crop complete');
+      this.sendResult(ctx, true, { dataUrl: result.dataUrl, aspectRatio });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.sendResult(ctx, false, undefined, `Smart crop failed: ${message}`);
     }
   }
 

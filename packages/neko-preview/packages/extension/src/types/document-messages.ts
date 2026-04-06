@@ -50,19 +50,18 @@ export interface DocumentRegion {
 export interface DocumentSendToAiMessage {
   type: 'document:sendToAi';
   payload: {
-    /** Selected text content (PDF/EPUB/DOCX) */
-    selectedText?: string;
-    /** Page number where selection occurred */
-    pageNumber?: number;
-    /** Chapter title (EPUB) */
-    chapterTitle?: string;
-    /** CBZ region selection (coordinates on the page image) */
-    region?: DocumentRegion;
-    /**
-     * Characterises the content being sent so the agent helper can
-     * choose the right intent prompt.
-     */
-    contentKind?: 'text' | 'image' | 'mixed';
+    /** Selected text content (inline) */
+    text?: string;
+    /** Image base64 data (inline) */
+    imageData?: string;
+    /** Content type — drives agent intent prompt */
+    contentKind: 'text' | 'image' | 'mixed';
+    /** Location context within the document */
+    context?: {
+      page?: number;
+      chapter?: string;
+      region?: DocumentRegion;
+    };
   };
 }
 

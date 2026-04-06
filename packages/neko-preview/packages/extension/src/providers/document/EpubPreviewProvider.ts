@@ -23,6 +23,10 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
   private readonly tokens = new Map<string, string>();
   private _activeUri: vscode.Uri | null = null;
 
+  private readonly _onDidChangeActiveEpub = new vscode.EventEmitter<vscode.Uri | null>();
+  /** Fires when the active EPUB editor changes (or becomes null). */
+  readonly onDidChangeActiveEpub = this._onDidChangeActiveEpub.event;
+
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _statusBar?: StatusBarManager,
@@ -46,14 +50,20 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
     this.panels.set(key, webviewPanel);
 
     webviewPanel.onDidChangeViewState((e) => {
-      if (e.webviewPanel.active) this._activeUri = document.uri;
+      if (e.webviewPanel.active) {
+        this._activeUri = document.uri;
+        this._onDidChangeActiveEpub.fire(document.uri);
+      }
     });
 
     const filePath = document.uri.fsPath;
 
     webviewPanel.onDidDispose(() => {
       this.panels.delete(key);
-      if (this._activeUri?.fsPath === key) this._activeUri = null;
+      if (this._activeUri?.fsPath === key) {
+        this._activeUri = null;
+        this._onDidChangeActiveEpub.fire(null);
+      }
       const token = this.tokens.get(key);
       if (token) {
         this.tokens.delete(key);
@@ -106,5 +116,6 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
   dispose(): void {
     this.panels.clear();
     this.tokens.clear();
+    this._onDidChangeActiveEpub.dispose();
   }
 }

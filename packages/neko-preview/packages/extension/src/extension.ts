@@ -22,6 +22,8 @@ import { EpubPreviewProvider } from './providers/document/EpubPreviewProvider';
 import { DocxPreviewProvider } from './providers/document/DocxPreviewProvider';
 import { registerOpenCommand } from './providers/document/documentProviderHelper';
 import { EpubSymbolProvider } from './epub/EpubSymbolProvider';
+import { EpubOutlineProvider } from './providers/EpubOutlineProvider';
+import { readEpubToc } from './epub/EpubParser';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
@@ -208,17 +210,69 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   context.subscriptions.push(pdfProvider, cbzProvider, epubProvider, docxProvider);
 
   // =========================================================================
-  // EPUB Outline (DocumentSymbolProvider) + goToChapter command
+  // EPUB Outline (DocumentSymbolProvider + TreeView) + goToChapter command
   // =========================================================================
 
   const epubSymbolProvider = new EpubSymbolProvider();
+  const epubOutlineProvider = new EpubOutlineProvider();
 
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider({ pattern: '**/*.epub' }, epubSymbolProvider),
   );
 
+  // Register TreeView in Explorer sidebar
+  const epubOutlineView = vscode.window.createTreeView('neko.epubOutline', {
+    treeDataProvider: epubOutlineProvider,
+    showCollapseAll: true,
+  });
+  context.subscriptions.push(epubOutlineView, epubOutlineProvider);
+
+  // Track active EPUB editor and refresh outline
+  const refreshEpubOutline = async (uri: vscode.Uri | null): Promise<void> => {
+    if (uri && uri.fsPath.endsWith('.epub')) {
+      await vscode.commands.executeCommand('setContext', 'neko.epubEditorActive', true);
+      try {
+        const toc = await readEpubToc(uri.fsPath);
+        epubOutlineProvider.update(toc);
+      } catch (err) {
+        logger.warn(
+          `Failed to parse EPUB TOC: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        epubOutlineProvider.clear();
+      }
+    } else {
+      await vscode.commands.executeCommand('setContext', 'neko.epubEditorActive', false);
+      epubOutlineProvider.clear();
+    }
+  };
+
+  // Listen for active text editor changes — clear outline when a non-EPUB editor gains focus
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.epub.goToChapter', async () => {
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      void refreshEpubOutline(null);
+    }),
+  );
+
+  // Listen for EPUB custom editor activation/deactivation
+  context.subscriptions.push(
+    epubProvider.onDidChangeActiveEpub((uri) => {
+      void refreshEpubOutline(uri);
+    }),
+  );
+
+  // Initial outline state: check if an EPUB is already open
+  void refreshEpubOutline(epubProvider.getActiveUri());
+
+  // goToChapter command — accepts optional href arg (from TreeView command)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.epub.goToChapter', async (href?: string) => {
+      // When invoked from TreeView, href is provided directly
+      if (typeof href === 'string') {
+        epubProvider.navigateToChapter(href);
+        return;
+      }
+
+      // When invoked from command palette, show QuickPick
       const activeUri = epubProvider.getActiveUri();
       if (!activeUri) {
         vscode.window.showInformationMessage('No EPUB file is currently open.');
@@ -235,7 +289,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
         href: entry.href,
       }));
       const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: 'Go to chapter…',
+        placeHolder: 'Go to chapter\u2026',
         matchOnDescription: true,
       });
       if (picked) {

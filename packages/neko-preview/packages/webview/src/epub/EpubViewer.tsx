@@ -1,9 +1,8 @@
 /**
  * EPUB Viewer — renders EPUB using epub.js with chapter navigation and text selection.
  *
- * Three view modes:
+ * Two view modes:
  * - Waterfall: true continuous scroll across all chapters (custom DOM, bypasses rendition)
- * - Spread: two-page side-by-side spread (epubjs rendition)
  * - Paginated: traditional page-by-page (epubjs rendition)
  *
  * Features:
@@ -17,6 +16,7 @@ import ePub, { type Book, type Rendition } from 'epubjs';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection, type DocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
+import { imgSrcToBase64 } from '../shared/imageToBase64';
 import {
   usePersistedState,
   initPersistedStore,
@@ -61,7 +61,7 @@ interface SpineEntry {
 /** Max characters forwarded to agent — stays within message size budget */
 const MAX_SELECTION_CHARS = 4000;
 
-type ViewMode = 'waterfall' | 'spread' | 'paginated';
+type ViewMode = 'waterfall' | 'paginated';
 
 /**
  * Custom request function for epub.js that uses fetch() instead of XMLHttpRequest.
@@ -128,11 +128,12 @@ export const EpubViewer: FC = () => {
   const [capturing, setCapturing] = useState(false);
   const [iframeMenuPos, setIframeMenuPos] = useState<{ x: number; y: number } | null>(null);
   const clearIframeMenuPos = useCallback(() => setIframeMenuPos(null), []);
+  const [rightClickedImageSrc, setRightClickedImageSrc] = useState<string | null>(null);
 
   const persistedChapterRef = useRef(currentChapter);
   persistedChapterRef.current = currentChapter;
 
-  // Rendition mode refs (paginated / spread)
+  // Rendition mode refs (paginated)
   const viewerRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
@@ -150,9 +151,10 @@ export const EpubViewer: FC = () => {
   const chapterHeightsRef = useRef<Map<number, number>>(new Map());
 
   // Waterfall text selection via native document selection
-  const { selection: waterfallSelection, sendToAi: waterfallSendToAi } = useDocumentSelection({
-    chapterTitle: currentChapter,
-  });
+  const { selection: waterfallSelection, sendTextToAgent: waterfallSendTextToAgent } =
+    useDocumentSelection({
+      chapterTitle: currentChapter,
+    });
 
   // =========================================================================
   // Extension ↔ Webview messaging
@@ -204,7 +206,7 @@ export const EpubViewer: FC = () => {
   }, []);
 
   // =========================================================================
-  // Rendition helpers (paginated + spread modes)
+  // Rendition helpers (paginated mode)
   // =========================================================================
 
   const getContents = (): EpubContents | null => {
@@ -273,6 +275,11 @@ export const EpubViewer: FC = () => {
     rendition.hooks.content.register((contents: EpubContents) => {
       contents.document.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault();
+        // Detect right-click on image
+        const target = e.target as HTMLElement;
+        const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
+        setRightClickedImageSrc(imgEl?.src ?? null);
+
         const iframeEl = viewerRef.current?.querySelector('iframe');
         const iframeRect = iframeEl?.getBoundingClientRect();
         if (iframeRect) {
@@ -289,13 +296,13 @@ export const EpubViewer: FC = () => {
   // =========================================================================
 
   const renderBook = useCallback(
-    async (book: Book, tocItems: TocItem[], spreadMode: 'none' | 'auto' = 'none', cfi?: string) => {
+    async (book: Book, tocItems: TocItem[], cfi?: string) => {
       if (!viewerRef.current) return;
       renditionRef.current?.destroy();
       const rendition = book.renderTo(viewerRef.current, {
         width: '100%',
         height: '100%',
-        spread: spreadMode,
+        spread: 'none',
         flow: 'paginated',
       });
       renditionRef.current = rendition;
@@ -376,8 +383,7 @@ export const EpubViewer: FC = () => {
         chapterHeightsRef.current.clear();
         setWaterfallReady(true);
       } else {
-        const spreadMode = viewMode === 'spread' ? 'auto' : 'none';
-        await renderBook(book, tocItems, spreadMode as 'none' | 'auto');
+        await renderBook(book, tocItems);
       }
     },
     [viewMode, extractBookMetadata, renderBook],
@@ -684,7 +690,7 @@ export const EpubViewer: FC = () => {
     const book = bookRef.current;
     if (!book) return;
 
-    const modes: ViewMode[] = ['waterfall', 'spread', 'paginated'];
+    const modes: ViewMode[] = ['waterfall', 'paginated'];
     const currentIdx = modes.indexOf(viewMode);
     const nextMode = modes[(currentIdx + 1) % modes.length]!;
 
@@ -715,10 +721,9 @@ export const EpubViewer: FC = () => {
       // Wait for React to update display so the viewer container is visible
       // and epubjs can measure its dimensions correctly.
       await new Promise((r) => requestAnimationFrame(r));
-      const spreadMode = nextMode === 'spread' ? 'auto' : 'none';
       // Use CFI if available (rendition→rendition), otherwise use chapter href
       const displayTarget = currentCfi ?? chapterHref;
-      await renderBook(book, tocRef.current, spreadMode as 'none' | 'auto', displayTarget);
+      await renderBook(book, tocRef.current, displayTarget);
     }
   }, [viewMode, renderBook, currentChapter, navigateWaterfallToHref]);
 
@@ -726,7 +731,7 @@ export const EpubViewer: FC = () => {
   // Send page to AI
   // =========================================================================
 
-  const sendPageToAi = useCallback(async () => {
+  const sendFileToAgent = useCallback(async () => {
     if (capturing) return;
 
     if (viewMode === 'waterfall') {
@@ -746,9 +751,9 @@ export const EpubViewer: FC = () => {
               postMessage({
                 type: 'document:sendToAi',
                 payload: {
-                  selectedText: bodyText,
-                  chapterTitle: currentChapter || undefined,
+                  text: bodyText,
                   contentKind: 'text',
+                  context: { chapter: currentChapter || undefined },
                 },
               } as never);
             }
@@ -766,15 +771,13 @@ export const EpubViewer: FC = () => {
 
     setCapturing(true);
     try {
-      // Send visible text content (not binary image data) — the extension
-      // already attaches the file path so the agent can locate the source.
       const bodyText = contents.document.body?.innerText?.trim().slice(0, MAX_SELECTION_CHARS);
       postMessage({
         type: 'document:sendToAi',
         payload: {
-          selectedText: bodyText || undefined,
-          chapterTitle: currentChapter || undefined,
+          text: bodyText || undefined,
           contentKind: 'text',
+          context: { chapter: currentChapter || undefined },
         },
       } as never);
     } finally {
@@ -786,20 +789,25 @@ export const EpubViewer: FC = () => {
   // Send text selection to AI (rendition modes)
   // =========================================================================
 
-  const sendSelectionToAi = useCallback(() => {
+  const sendSelectionToAgent = useCallback(() => {
     if (!epubSelection) return;
 
     postMessage({
       type: 'document:sendToAi',
       payload: {
-        selectedText: epubSelection.text,
-        chapterTitle: currentChapter || undefined,
+        text: epubSelection.text,
         contentKind: 'text',
+        context: { chapter: currentChapter || undefined },
       },
     } as never);
 
     setEpubSelection(null);
   }, [epubSelection, currentChapter]);
+
+  const handleContextMenuTarget = useCallback((target: HTMLElement) => {
+    const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
+    setRightClickedImageSrc(imgEl?.src ?? null);
+  }, []);
 
   // =========================================================================
   // View mode label & icon
@@ -807,15 +815,13 @@ export const EpubViewer: FC = () => {
 
   const viewModeIconMap: Record<ViewMode, string> = {
     waterfall: '⇕',
-    spread: '⊞',
     paginated: '⊡',
   };
   const viewModeIcon = viewModeIconMap[viewMode];
 
   // Title shows what the NEXT mode will be
   const nextModeMap: Record<ViewMode, string> = {
-    waterfall: t('preview.epub.modeSpread'),
-    spread: t('preview.epub.modePaginated'),
+    waterfall: t('preview.epub.modePaginated'),
     paginated: t('preview.epub.modeWaterfall'),
   };
   const viewModeTitle = nextModeMap[viewMode];
@@ -826,16 +832,44 @@ export const EpubViewer: FC = () => {
   // Render
   // =========================================================================
 
+  const hasTextSelection = !!(isWaterfall ? waterfallSelection : epubSelection);
+  const sendContentToAgent = useCallback(async () => {
+    const text = isWaterfall ? waterfallSelection?.text : epubSelection?.text;
+    const hasText = !!text;
+    const hasImage = !!rightClickedImageSrc;
+    if (!hasText && !hasImage) return;
+
+    let imageData: string | undefined;
+    if (hasImage) {
+      try {
+        imageData = await imgSrcToBase64(rightClickedImageSrc!);
+      } catch {
+        // Fallback: skip image if conversion fails (CORS etc.)
+      }
+    }
+
+    const contentKind = hasText && imageData ? 'mixed' : hasText ? 'text' : 'image';
+    postMessage({
+      type: 'document:sendToAi',
+      payload: {
+        text: text || undefined,
+        imageData,
+        contentKind,
+        context: { chapter: currentChapter || undefined },
+      },
+    } as never);
+
+    if (isWaterfall) {
+      window.getSelection()?.removeAllRanges();
+    }
+    setEpubSelection(null);
+    setRightClickedImageSrc(null);
+  }, [isWaterfall, waterfallSelection, epubSelection, rightClickedImageSrc, currentChapter]);
+
   const contextActions = useDocumentContextActions({
-    hasSelection: !!(isWaterfall ? waterfallSelection : epubSelection),
-    onSendSelectionToAi: isWaterfall
-      ? waterfallSelection
-        ? waterfallSendToAi
-        : undefined
-      : epubSelection
-        ? sendSelectionToAi
-        : undefined,
-    onSendPageToAi: sendPageToAi,
+    hasContent: hasTextSelection || !!rightClickedImageSrc,
+    onSendContentToAgent: sendContentToAgent,
+    onSendFileToAgent: sendFileToAgent,
   });
 
   if (error) {
@@ -854,6 +888,7 @@ export const EpubViewer: FC = () => {
       actions={contextActions}
       externalMenuPosition={iframeMenuPos}
       onExternalMenuConsumed={clearIframeMenuPos}
+      onContextMenuTarget={handleContextMenuTarget}
     >
       <div
         className="flex h-screen flex-col"
@@ -947,7 +982,7 @@ export const EpubViewer: FC = () => {
               className="h-full"
               style={{
                 width: '100%',
-                maxWidth: viewMode === 'spread' ? undefined : '800px',
+                maxWidth: '800px',
               }}
             />
           </div>

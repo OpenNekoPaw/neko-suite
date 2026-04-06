@@ -41,10 +41,7 @@ export const CbzViewer: FC = () => {
   // Sparse cache of decoded pages: index → Blob URL
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
   const [currentPage, setCurrentPage] = usePersistedState('currentPage', 0);
-  const [viewMode, setViewMode] = usePersistedState<'scroll' | 'dual' | 'single'>(
-    'viewMode',
-    'scroll',
-  );
+  const [viewMode, setViewMode] = usePersistedState<'scroll' | 'single'>('viewMode', 'scroll');
   // Track natural image heights after load (for stable scroll)
   const [imageHeights, setImageHeights] = useState<Map<number, number>>(new Map());
   const persistedPageRef = useRef(currentPage);
@@ -60,7 +57,7 @@ export const CbzViewer: FC = () => {
   // Track active waterfall images for region selection
   const waterfallImgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
 
-  const { selection, sendToAi, sendRegionToAi, sendPageRefToAi } = useDocumentSelection({
+  const { selection, sendTextToAgent, sendRegionToAgent, sendFileToAgent } = useDocumentSelection({
     pageNumber: currentPage + 1,
     enabled: false, // CBZ uses region selection, not text
   });
@@ -206,14 +203,14 @@ export const CbzViewer: FC = () => {
       }
       return next;
     });
-  }, [viewMode === 'scroll', currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [viewMode, currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
 
   // =========================================================================
   // Waterfall mode: IntersectionObserver
   // =========================================================================
 
   useEffect(() => {
-    if (!viewMode === 'scroll' || imageEntries.length === 0) return;
+    if (viewMode !== 'scroll' || imageEntries.length === 0) return;
 
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -287,7 +284,7 @@ export const CbzViewer: FC = () => {
       observer.disconnect();
       observerRef.current = null;
     };
-  }, [viewMode === 'scroll', imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [viewMode, imageEntries, decodePage]); // pageCache intentionally omitted
 
   // Scroll to restored page after initial load in scroll mode
   const hasRestoredRef = useRef(false);
@@ -322,7 +319,7 @@ export const CbzViewer: FC = () => {
         }
       }
     },
-    [totalPages, viewMode === 'scroll'],
+    [totalPages, viewMode],
   );
 
   // =========================================================================
@@ -354,7 +351,7 @@ export const CbzViewer: FC = () => {
         prev ? { ...prev, endX: e.clientX - rect.left, endY: e.clientY - rect.top } : null,
       );
     },
-    [isSelecting, selectionRect, viewMode === 'scroll', selectionPageIdx],
+    [isSelecting, selectionRect, viewMode, selectionPageIdx],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -387,19 +384,38 @@ export const CbzViewer: FC = () => {
       height: Math.round(h * scaleY),
     };
 
-    const pageNum = viewMode === 'scroll' ? selectionPageIdx + 1 : currentPage + 1;
-    sendRegionToAi(region, pageNum);
+    // Capture region as base64
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.width = region.width;
+      canvas.height = region.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(
+          img,
+          region.x,
+          region.y,
+          region.width,
+          region.height,
+          0,
+          0,
+          region.width,
+          region.height,
+        );
+        const imageData = canvas.toDataURL('image/png');
+        const pageNum = viewMode === 'scroll' ? selectionPageIdx + 1 : currentPage + 1;
+        sendRegionToAgent(imageData, region, pageNum);
+      }
+    }
     setSelectionRect(null);
-  }, [selectionRect, viewMode === 'scroll', selectionPageIdx, currentPage, sendRegionToAi]);
+  }, [selectionRect, viewMode, selectionPageIdx, currentPage, sendRegionToAgent]);
 
   const sendFullPage = useCallback(() => {
-    sendPageRefToAi(currentPage + 1);
-  }, [currentPage, sendPageRefToAi]);
+    sendFileToAgent(currentPage + 1);
+  }, [currentPage, sendFileToAgent]);
 
   const cycleViewMode = useCallback(() => {
-    const modes: Array<'scroll' | 'dual' | 'single'> = ['scroll', 'dual', 'single'];
-    const idx = modes.indexOf(viewMode);
-    setViewMode(modes[(idx + 1) % modes.length]!);
+    setViewMode(viewMode === 'scroll' ? 'single' : 'scroll');
     setSelectionRect(null);
   }, [viewMode]);
 
@@ -430,9 +446,9 @@ export const CbzViewer: FC = () => {
   }, []);
 
   const contextActions = useDocumentContextActions({
-    hasSelection: !!selectionRect && !isSelecting,
-    onSendSelectionToAi: selectionRect ? captureRegion : undefined,
-    onSendPageToAi: sendFullPage,
+    hasContent: !!selectionRect && !isSelecting,
+    onSendContentToAgent: selectionRect ? captureRegion : undefined,
+    onSendFileToAgent: sendFullPage,
   });
 
   if (error) {
@@ -482,7 +498,7 @@ export const CbzViewer: FC = () => {
             background: 'var(--vscode-sideBar-background)',
           }}
         >
-          {!viewMode === 'scroll' && (
+          {viewMode !== 'scroll' && (
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage <= 0}
@@ -497,7 +513,7 @@ export const CbzViewer: FC = () => {
               total: String(totalPages),
             })}
           </span>
-          {!viewMode === 'scroll' && (
+          {viewMode !== 'scroll' && (
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage >= totalPages - 1}
@@ -511,19 +527,23 @@ export const CbzViewer: FC = () => {
           <button
             onClick={cycleViewMode}
             className="rounded px-2 py-0.5"
-            title={t('preview.document.modeScroll')}
+            title={
+              viewMode === 'scroll'
+                ? t('preview.document.modePage')
+                : t('preview.document.modeScroll')
+            }
             style={{
               background:
-                viewMode !== 'single'
+                viewMode === 'scroll'
                   ? 'var(--vscode-button-background)'
                   : 'var(--vscode-button-secondaryBackground)',
               color:
-                viewMode !== 'single'
+                viewMode === 'scroll'
                   ? 'var(--vscode-button-foreground)'
                   : 'var(--vscode-button-secondaryForeground)',
             }}
           >
-            {viewMode === 'scroll' ? '≡' : viewMode === 'dual' ? '⊞' : '⊡'}
+            {viewMode === 'scroll' ? '⇕' : '⊡'}
           </button>
         </div>
 
@@ -557,7 +577,7 @@ export const CbzViewer: FC = () => {
                     <img
                       ref={(el) => setWaterfallImgRef(idx, el)}
                       src={blobUrl}
-                      alt={`Page ${idx + 1}`}
+                      alt={t('preview.cbz.pageAlt', { number: String(idx + 1) })}
                       className="mx-auto block max-w-full"
                       draggable={false}
                       onLoad={(e) => handleImageLoad(idx, e)}
@@ -602,7 +622,7 @@ export const CbzViewer: FC = () => {
                 <img
                   ref={imgRef}
                   src={currentUrl}
-                  alt={`Page ${currentPage + 1}`}
+                  alt={t('preview.cbz.pageAlt', { number: String(currentPage + 1) })}
                   className="max-h-full max-w-full object-contain"
                   draggable={false}
                 />
@@ -615,7 +635,7 @@ export const CbzViewer: FC = () => {
                 </div>
               )}
               {/* Selection overlay */}
-              {selRectStyle && !viewMode === 'scroll' && (
+              {selRectStyle && (
                 <div
                   className="pointer-events-none absolute border-2 border-dashed"
                   style={{
@@ -641,7 +661,7 @@ export const CbzViewer: FC = () => {
                 color: 'var(--vscode-button-foreground)',
               }}
             >
-              {t('preview.document.sendToAi')}
+              {t('preview.document.sendContentToAgent')}
             </button>
           )}
 

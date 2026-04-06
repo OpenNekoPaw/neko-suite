@@ -340,9 +340,14 @@ export function InputArea({
       const contextBlock = contextChips
         .map((c) => {
           const d = c.data as Record<string, unknown> | undefined;
-          // Content-level: inject full selected text
-          const text = d?.selectedText as string | undefined;
+          // Content-level: inject text and/or image reference
+          const text = (d?.text ?? d?.selectedText) as string | undefined;
+          const imageData = d?.imageData as string | undefined;
+          if (text && imageData) {
+            return `[Content: ${c.label}]\n${text}\n[Image attached]`;
+          }
           if (text) return `[Content: ${c.label}]\n${text}`;
+          if (imageData) return `[Image: ${c.label}]\n[Image attached]`;
           // File-level: inject file path for agent to read on demand
           const fp = (d?.filePath ?? d?.path) as string | undefined;
           if (fp) return `[File: ${c.label}]\n${fp}`;

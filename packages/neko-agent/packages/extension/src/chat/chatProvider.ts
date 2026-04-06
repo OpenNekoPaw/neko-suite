@@ -29,6 +29,7 @@ import { MessageHandler } from './messageHandler';
 import { SystemPromptManager } from './systemPromptManager';
 import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { ConfigBridge } from '../services/configBridge';
+import { DragDropBroker } from '../services/DragDropBroker';
 import {
   TaskHandler,
   SkillHandler,
@@ -94,6 +95,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _platform?: Platform;
   private _taskManager?: TaskManager;
   private _configBridge?: ConfigBridge;
+  private readonly _dndBroker = new DragDropBroker();
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -469,6 +471,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage(message);
   }
 
+  /** Expose the DnD broker so index.ts can register query/clear commands. */
+  get dndBroker(): DragDropBroker {
+    return this._dndBroker;
+  }
+
   /**
    * Attach an agent context payload to the chat panel.
    * Focuses the panel and injects the chip + optional intent prefill.
@@ -813,6 +820,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           const assetPath = message.assetPath as string;
           if (target && assetPath) {
             void this._handleSendToPlugin(target, assetPath);
+          }
+          break;
+        }
+
+        // Cross-plugin drag-and-drop start (ADR-5 P1)
+        case 'dnd:start': {
+          const asset = message.asset as
+            | { path: string; mediaType: 'image' | 'video' | 'audio'; name: string }
+            | undefined;
+          if (asset?.path && asset.mediaType && asset.name) {
+            this._dndBroker.setPayload(asset);
           }
           break;
         }

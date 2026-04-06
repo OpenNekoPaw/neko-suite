@@ -215,13 +215,18 @@ export type AgentContextType =
 
 #### 文档消息协议
 
-新建 `packages/neko-preview/packages/extension/src/types/document-messages.ts`：
+`packages/neko-preview/packages/extension/src/types/document-messages.ts`：
 
 ```typescript
 // Extension → Webview
 interface DocumentDataMessage {
   type: 'document:data';
-  payload: { data: string; fileName: string; fileSize: number };  // base64
+  payload: {
+    data?: string;    // base64 (legacy fallback)
+    url?: string;     // Direct webview URI (preferred for large files)
+    fileName: string;
+    fileSize: number;
+  };
 }
 
 // Webview → Extension
@@ -229,41 +234,56 @@ interface DocumentReadyMessage { type: 'ready' }
 interface DocumentSendToAiMessage {
   type: 'document:sendToAi';
   payload: {
-    selectedText?: string;
-    pageNumber?: number;
-    chapterTitle?: string;
-    imageDataUrl?: string;  // CBZ 区域截图
+    text?: string;              // 选中文本（直接发送）
+    imageData?: string;         // 图片 base64（直接发送）
+    contentKind: 'text' | 'image' | 'mixed';
+    context?: {                 // 文档内位置
+      page?: number;
+      chapter?: string;
+      region?: DocumentRegion;  // CBZ 区域坐标
+    };
   };
 }
 ```
 
-#### Selection → AI 桥接（统一模式）
+**两种发送方式**（按场景自动选择）：
 
-所有 Provider 共享同一处理逻辑（参考 `neko-story.sendToAgent` 模式）：
+| 方式 | 右键菜单 | 场景 | Agent 处理 |
+|------|---------|------|-----------|
+| 直接发送内容 | 发送内容到 Agent | 选中文本/右键图片/混合 | 内联到 LLM prompt |
+| 发送定位引用 | 发送文件到 Agent | 整页/大文件 | Agent 按需读取 |
+
+文本和图片可同时发送（`contentKind: 'mixed'`），Agent 端分别处理文本注入和图片附件。
+
+#### Content → Agent 桥接（统一模式）
+
+所有 Provider 共享 `documentProviderHelper.setupDocumentWebview()` 处理逻辑：
 
 ```typescript
 // Extension 侧 onMessage handler（每个 Provider 共用）
 case 'document:sendToAi': {
-  const { selectedText, pageNumber, chapterTitle, imageDataUrl } = msg.payload;
-  const label = `${fileName}${pageNumber ? ` p.${pageNumber}` : ''}${chapterTitle ? ` · ${chapterTitle}` : ''}`;
+  const { text, imageData, contentKind, context } = msg.payload;
+  const label = buildLabel(fileName, context?.page, context?.chapter);
   const payload: AgentContextPayload = {
     type: 'document-selection',
-    id: `doc:${filePath}:${pageNumber ?? 0}:${Date.now()}`,
+    id: `doc:${filePath}:${context?.page ?? 0}:${Date.now()}`,
     label,
-    summary: selectedText?.slice(0, 400) ?? 'Image selection',
-    data: { filePath, selectedText, pageNumber, chapterTitle, imageDataUrl },
-    intent: selectedText ? '请分析这段内容：' : '请分析这张图片：',
+    summary: buildSummary(contentKind, text, !!imageData),
+    data: { filePath, text, imageData, contentKind, context },
+    intent: buildIntent(contentKind, text),
   };
   await vscode.commands.executeCommand('neko.agent.sendContext', payload);
 }
 ```
 
-Webview 侧共享 `useDocumentSelection` hook：
+Webview 侧交互：
 
-1. 监听 `selectionchange` 事件，300ms 防抖
-2. 非空选区 → 显示 `DocumentSelectionFab`（定位在选区附近）
-3. 点击 FAB → `postMessage({ type: 'document:sendToAi', payload })`
-4. 选区清空 → 隐藏 FAB
+1. **右键菜单**（`DocumentContextMenu` + `useDocumentContextActions`）：
+   - 「发送内容到 Agent」— 有选中文本或右键图片时显示，支持 text+image 混合发送
+   - 「发送文件到 Agent」— 始终显示，发送页面/文件定位引用
+2. `useDocumentSelection` hook — 监听 `selectionchange` 事件，300ms 防抖
+3. EPUB/DOCX 右键图片 → `imgSrcToBase64()` 转 base64 → 与选中文本合并发送
+4. Agent 端 `InputArea.handleSend()` 格式化 chip：text → `[Content:]`，imageData → `[Image:]`，mixed → 两者拼接
 
 #### 构建配置变更
 
@@ -653,12 +673,12 @@ Tab 打开 → resolveCustomEditor()
 
 **各文档持久化字段**：
 
-| 类型 | 持久化字段 | 恢复行为 |
-|------|-----------|---------|
-| PDF | `currentPage`, `scale`, `viewMode` | 加载后滚动到保存页码 |
-| EPUB | `currentChapter`, `viewMode` | 加载后导航到保存章节 |
-| CBZ | `currentPage`, `viewMode` | 加载后滚动到保存页码 |
-| DOCX | 无 | 快速预览场景，不持久化 |
+| 类型 | 持久化字段 | viewMode 值 | 恢复行为 |
+|------|-----------|------------|---------|
+| PDF | `currentPage`, `scale`, `viewMode` | `'scroll'` \| `'single'` | 加载后滚动到保存页码 |
+| EPUB | `currentChapter`, `viewMode` | `'waterfall'` \| `'paginated'` | 加载后导航到保存章节 |
+| CBZ | `currentPage`, `viewMode` | `'scroll'` \| `'single'` | 加载后滚动到保存页码 |
+| DOCX | 无 | — | 快速预览场景，不持久化 |
 
 **共享基础设施**：
 - `vscodeApi.ts` — `acquireVsCodeApi()` 单例，`useVscodeMessage` 和 `usePersistedState` 共享

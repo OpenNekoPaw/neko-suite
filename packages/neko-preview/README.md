@@ -1,17 +1,17 @@
 # Neko Preview
 
-> 轻量媒体预览器，替代 VSCode 内置音视频播放器
+> 轻量媒体预览器，支持音视频播放和文档预览
 
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Extension Host (PreviewService → NativeEngine NAPI) + Webview (React)
-- 依赖：neko-engine 提供硬件加速解码
+- 架构：Extension Host (PreviewService + DocumentProvider) + Webview (React)
+- 依赖：neko-engine 提供硬件加速解码和文件服务
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 
-- **职责**：视频/音频文件的轻量预览播放（替代 VSCode 内置播放器）
+- **职责**：视频/音频文件的轻量预览播放 + 文档预览（PDF/EPUB/CBZ/DOCX）
 - **入口**：`packages/extension/src/extension.ts`
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/shared`、`@neko/neko-client`
@@ -25,7 +25,11 @@
   ▼
 CustomReadonlyEditorProvider
   ├── VideoPreviewProvider  (*.mp4, mov, mkv, webm, avi...)
-  └── AudioPreviewProvider  (*.mp3, wav, flac, aac, ogg...)
+  ├── AudioPreviewProvider  (*.mp3, wav, flac, aac, ogg...)
+  ├── PdfPreviewProvider    (*.pdf)
+  ├── EpubPreviewProvider   (*.epub)
+  ├── CbzPreviewProvider    (*.cbz)
+  └── DocxPreviewProvider   (*.docx)
         │
         ▼
 PreviewService (封装 NativeEngine NAPI)
@@ -40,12 +44,39 @@ Webview (React + Vite)
   ├── VideoPlayer
   │   ├── H264StreamClient (WebSocket → WebCodecs → Canvas)
   │   └── VideoControls (播放/暂停/进度/速度/音量)
-  └── AudioPlayer
-      ├── Web Audio API (AudioContext → AudioBufferSourceNode)
-      ├── WaveformCanvas (Canvas 波形可视化，CSS 变量主题适配)
-      ├── CoverView (封面艺术 / 占位首字母 + 渐变)
-      ├── LyricsView (歌词视图，Phase 3 接入滚动歌词)
-      └── AudioControls (播放/暂停/跳转/进度/速度/音量/视图切换)
+  ├── AudioPlayer
+  │   ├── Web Audio API (AudioContext → AudioBufferSourceNode)
+  │   ├── WaveformCanvas (Canvas 波形可视化，CSS 变量主题适配)
+  │   ├── CoverView (封面艺术 / 占位首字母 + 渐变)
+  │   ├── LyricsView (歌词视图，Phase 3 接入滚动歌词)
+  │   └── AudioControls (播放/暂停/跳转/进度/速度/音量/视图切换)
+  └── Document Viewers
+      ├── PdfViewer (pdfjs-dist, 瀑布流/分页, TextLayer 文本选中)
+      ├── EpubViewer (epub.js, 瀑布流/分页, 章节导航)
+      ├── CbzViewer (zip.js, 瀑布流/分页, 区域框选)
+      └── DocxViewer (docx-preview, 缩放)
+```
+
+### 文档预览数据流
+
+```
+用户双击 .pdf / .epub / .cbz / .docx 文件
+  │
+  ▼
+DocumentProvider (setupDocumentWebview 统一消息处理)
+  ├── Webview sends 'ready'
+  ├── Extension restores persisted state → 'document:restoreState'
+  ├── Extension sends file URL → 'document:data' { url }
+  └── Webview loads & renders document
+        │
+        ├── 右键菜单 → 「发送内容到 Agent」
+        │   → 'document:sendToAi' { text?, imageData?, contentKind, context? }
+        │   → Extension builds AgentContextPayload
+        │   → neko.agent.sendContext command
+        │
+        └── 右键菜单 → 「发送文件到 Agent」
+            → 'document:sendToAi' { contentKind: 'image', context: { page } }
+            → Agent reads file on demand via filePath
 ```
 
 ### 数据流
@@ -56,7 +87,7 @@ Webview (React + Vite)
 
 ### 横切关注点
 
-- **i18n**：Webview 使用 `@neko/shared` 的 `I18nService` + `I18nProvider`。翻译文件位于 `webview/src/i18n/locales/`（en + zh-cn），命名空间 `preview`（含 video/audio 前缀）。
+- **i18n**：Webview 使用 `@neko/shared` 的 `I18nService` + `I18nProvider`。翻译文件位于 `webview/src/i18n/locales/`（en + zh-cn），命名空间 `preview`（含 video/audio/document/pdf/epub/cbz/docx 前缀）。
 - **错误边界**：Webview 入口已包裹 `ErrorBoundary`。
 
 ### 音频播放器现代化（Phase 1 ✅）

@@ -24,6 +24,8 @@ interface DocumentContextMenuProps {
   externalMenuPosition?: { x: number; y: number } | null;
   /** Called when external menu is consumed */
   onExternalMenuConsumed?: () => void;
+  /** Called with the native contextmenu event target (for image detection etc.) */
+  onContextMenuTarget?: (target: HTMLElement) => void;
 }
 
 interface MenuState {
@@ -36,6 +38,7 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
   children,
   externalMenuPosition,
   onExternalMenuConsumed,
+  onContextMenuTarget,
 }) => {
   const [menu, setMenu] = useState<MenuState | null>(null);
 
@@ -47,12 +50,16 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
     }
   }, [externalMenuPosition, onExternalMenuConsumed]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 180);
-    const y = Math.min(e.clientY, window.innerHeight - 120);
-    setMenu({ x, y });
-  }, []);
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      onContextMenuTarget?.(e.target as HTMLElement);
+      const x = Math.min(e.clientX, window.innerWidth - 180);
+      const y = Math.min(e.clientY, window.innerHeight - 120);
+      setMenu({ x, y });
+    },
+    [onContextMenuTarget],
+  );
 
   const close = useCallback(() => setMenu(null), []);
 
@@ -116,25 +123,28 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
  * Hook to create standard document context menu actions.
  */
 export function useDocumentContextActions(opts: {
-  hasSelection: boolean;
-  onSendSelectionToAi?: () => void;
-  onSendPageToAi?: () => void;
+  /** Whether there is content to send (text selection or image) */
+  hasContent: boolean;
+  /** Send content (selected text or right-clicked image) to agent */
+  onSendContentToAgent?: () => void;
+  /** Send entire file/page to agent */
+  onSendFileToAgent?: () => void;
 }): ContextMenuAction[] {
   const { t } = useTranslation();
   const actions: ContextMenuAction[] = [];
 
-  if (opts.onSendSelectionToAi) {
+  if (opts.onSendContentToAgent) {
     actions.push({
-      label: t('preview.document.sendToAi'),
-      onClick: opts.onSendSelectionToAi,
-      when: opts.hasSelection,
+      label: t('preview.document.sendContentToAgent'),
+      onClick: opts.onSendContentToAgent,
+      when: opts.hasContent,
     });
   }
 
-  if (opts.onSendPageToAi) {
+  if (opts.onSendFileToAgent) {
     actions.push({
-      label: t('preview.document.sendPageToAi'),
-      onClick: opts.onSendPageToAi,
+      label: t('preview.document.sendFileToAgent'),
+      onClick: opts.onSendFileToAgent,
     });
   }
 

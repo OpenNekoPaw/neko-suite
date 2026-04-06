@@ -9,6 +9,7 @@ import { renderAsync } from 'docx-preview';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
+import { imgSrcToBase64 } from '../shared/imageToBase64';
 import { useTranslation } from '../i18n/I18nContext';
 
 export const DocxViewer: FC = () => {
@@ -19,7 +20,7 @@ export const DocxViewer: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const styleContainerRef = useRef<HTMLDivElement>(null);
 
-  const { selection, sendToAi } = useDocumentSelection({});
+  const { selection, sendFileToAgent } = useDocumentSelection({});
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
@@ -93,9 +94,45 @@ export const DocxViewer: FC = () => {
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.1, 3)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.1, 0.5)), []);
 
+  const [rightClickedImageSrc, setRightClickedImageSrc] = useState<string | null>(null);
+
+  const handleContextMenuTarget = useCallback((target: HTMLElement) => {
+    const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
+    setRightClickedImageSrc(imgEl?.src ?? null);
+  }, []);
+
+  const sendContentToAgent = useCallback(async () => {
+    const hasText = !!selection;
+    const hasImage = !!rightClickedImageSrc;
+    if (!hasText && !hasImage) return;
+
+    let imageData: string | undefined;
+    if (hasImage) {
+      try {
+        imageData = await imgSrcToBase64(rightClickedImageSrc!);
+      } catch {
+        // Skip image if conversion fails
+      }
+    }
+
+    const contentKind = hasText && imageData ? 'mixed' : hasText ? 'text' : 'image';
+    postMessage({
+      type: 'document:sendToAi',
+      payload: {
+        text: selection?.text || undefined,
+        imageData,
+        contentKind,
+      },
+    } as never);
+
+    window.getSelection()?.removeAllRanges();
+    setRightClickedImageSrc(null);
+  }, [selection, rightClickedImageSrc]);
+
   const contextActions = useDocumentContextActions({
-    hasSelection: !!selection,
-    onSendSelectionToAi: selection ? sendToAi : undefined,
+    hasContent: !!selection || !!rightClickedImageSrc,
+    onSendContentToAgent: sendContentToAgent,
+    onSendFileToAgent: () => sendFileToAgent(),
   });
 
   if (error) {
@@ -110,7 +147,7 @@ export const DocxViewer: FC = () => {
   }
 
   return (
-    <DocumentContextMenu actions={contextActions}>
+    <DocumentContextMenu actions={contextActions} onContextMenuTarget={handleContextMenuTarget}>
       <div
         className="flex h-screen flex-col"
         style={{ background: 'var(--vscode-editor-background)' }}

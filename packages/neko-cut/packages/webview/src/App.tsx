@@ -59,6 +59,18 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
 
+  // Cross-extension drag-and-drop: allow dropping generated assets from agent (ADR-5 P1)
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      sendMessage({ type: 'dnd:drop' });
+    },
+    [sendMessage],
+  );
+
   // Sync lastSeekTimeRef when manually seeking while paused
   useEffect(() => {
     if (!isPlaying) {
@@ -230,7 +242,12 @@ function App() {
   }
 
   return (
-    <div ref={rootRef} className="flex h-full bg-vscode-bg">
+    <div
+      ref={rootRef}
+      className="flex h-full bg-vscode-bg"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Left: Preview + Timeline (vertical split) */}
       <div ref={containerRef} className="flex flex-col flex-1 min-w-0">
         {/* Preview Panel with Controls */}
@@ -295,7 +312,9 @@ function App() {
             onPointerMove={handleHResizeMove}
             onPointerUp={handleHResizeEnd}
             className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
-              isHResizing ? 'bg-[var(--neko-accent)]' : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
+              isHResizing
+                ? 'bg-[var(--neko-accent)]'
+                : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
             }`}
             style={{ touchAction: 'none' }}
           />

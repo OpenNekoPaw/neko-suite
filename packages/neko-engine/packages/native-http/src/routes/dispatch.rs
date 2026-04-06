@@ -7,9 +7,34 @@
 use axum::extract::{Path, State};
 use axum::Json;
 use neko_native_api::EngineApi;
-use neko_types::{ActionRequest, ActionResponse};
+use neko_types::{ActionRequest, ActionResponse, ApiError, ErrorCode};
 use serde_json::Value;
 use std::sync::Arc;
+
+/// Acquire the global admission semaphore and dispatch.
+/// Returns 503 Service Unavailable if all permits are held.
+async fn dispatch_with_admission(
+    engine: &Arc<EngineApi>,
+    request: ActionRequest,
+) -> ActionResponse {
+    let permit = match engine.admission_semaphore().try_acquire() {
+        Ok(permit) => permit,
+        Err(_) => {
+            tracing::warn!(
+                "Admission semaphore full, rejecting {}:{}",
+                request.group,
+                request.action,
+            );
+            return ActionResponse::from_error(
+                request.id,
+                ApiError::new(ErrorCode::ServiceOverloaded, "Server is busy, please retry later"),
+            );
+        }
+    };
+    let response = engine.dispatch(request).await;
+    drop(permit);
+    response
+}
 
 /// POST /v1/dispatch
 ///
@@ -18,7 +43,7 @@ pub async fn handle_dispatch(
     State(engine): State<Arc<EngineApi>>,
     Json(request): Json<ActionRequest>,
 ) -> Json<ActionResponse> {
-    Json(engine.dispatch(request).await)
+    Json(dispatch_with_admission(&engine, request).await)
 }
 
 /// POST /v1/:group
@@ -30,7 +55,7 @@ pub async fn handle_group_dispatch(
     Json(mut request): Json<ActionRequest>,
 ) -> Json<ActionResponse> {
     request.group = group;
-    Json(engine.dispatch(request).await)
+    Json(dispatch_with_admission(&engine, request).await)
 }
 
 /// Request body for resource-level dispatch (options + body only)
@@ -70,7 +95,7 @@ pub async fn handle_resource_dispatch(
         body: body.body,
     };
 
-    Json(engine.dispatch(request).await)
+    Json(dispatch_with_admission(&engine, request).await)
 }
 
 #[cfg(test)]

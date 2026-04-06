@@ -49,6 +49,9 @@ pub enum ErrorCode {
     MissingParameter,
     ValidationError,
 
+    // Capacity errors (8xx)
+    ServiceOverloaded,
+
     // Internal errors (9xx)
     InternalError,
     NotImplemented,
@@ -91,6 +94,8 @@ impl ErrorCode {
             | Self::Unknown => 500,
 
             Self::StreamTimeout => 504,
+
+            Self::ServiceOverloaded => 503,
 
             Self::TaskAlreadyCancelled | Self::TaskAlreadyCompleted => 409,
         }

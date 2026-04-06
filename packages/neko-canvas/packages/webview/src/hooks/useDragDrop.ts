@@ -125,12 +125,28 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
 
   const { isDragOver, dropProps } = useFileDrop(handleFileDrop);
 
+  // Wrap the drop handler to also check for cross-extension DnD payload (ADR-5 P1).
+  // When a drag originates from another VSCode webview iframe, the dataTransfer is
+  // empty — so we always notify the extension host to check for a pending DnD payload.
+  const handleDropWithCrossExtension = useCallback(
+    (e: React.DragEvent) => {
+      // Let useFileDrop handle file/URI/asset drops first
+      dropProps.onDrop(e);
+
+      // Also ask the extension host if there is a cross-extension DnD payload
+      if (vscode) {
+        vscode.postMessage({ type: 'dnd:drop' });
+      }
+    },
+    [dropProps, vscode],
+  );
+
   return {
     isDragOver,
     dropPositionRef,
     handleDragEnter: dropProps.onDragEnter,
     handleDragOver: dropProps.onDragOver,
     handleDragLeave: dropProps.onDragLeave,
-    handleDrop: dropProps.onDrop,
+    handleDrop: handleDropWithCrossExtension,
   };
 }

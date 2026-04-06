@@ -678,6 +678,27 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
 
+        // Cross-extension drag-and-drop (ADR-5 P1)
+        if (message.type === 'dnd:drop') {
+          try {
+            const payload = await vscode.commands.executeCommand<{
+              path: string;
+              mediaType: 'image' | 'video' | 'audio';
+              name: string;
+            } | null>('neko.agent.getDndPayload');
+            if (payload) {
+              await vscode.commands.executeCommand('neko.cut.importGeneratedClip', {
+                assetPath: payload.path,
+              });
+              await vscode.commands.executeCommand('neko.agent.clearDndPayload');
+              logger.info(`DnD drop accepted: ${payload.name}`);
+            }
+          } catch (error) {
+            logger.warn(`DnD drop failed (agent extension may not be installed): ${error}`);
+          }
+          return;
+        }
+
         messageHandler.handleMessage(message);
 
         // Update FrameServer and outline on incremental sync

@@ -140,26 +140,25 @@ export async function setupDocumentWebview(
           break;
         }
 
-        // ── Send selection to AI agent ──────────────────────────────────
+        // ── Send content to AI agent ──────────────────────────────────
         case 'document:sendToAi': {
-          const { selectedText, pageNumber, chapterTitle, region, contentKind } = (
+          const { text, imageData, contentKind, context } = (
             msg as DocumentWebviewMessage & { type: 'document:sendToAi' }
           ).payload;
-          const label = buildLabel(fileName, pageNumber, chapterTitle);
-          const intent = buildIntent(contentKind, selectedText);
-          const summary = buildSummary(contentKind, selectedText);
+          const label = buildLabel(fileName, context?.page, context?.chapter);
+          const intent = buildIntent(contentKind, text);
+          const summary = buildSummary(contentKind, text, !!imageData);
           const payload: AgentContextPayload = {
             type: 'document-selection',
-            id: `doc:${filePath}:${pageNumber ?? 0}:${Date.now()}`,
+            id: `doc:${filePath}:${context?.page ?? 0}:${Date.now()}`,
             label,
             summary,
             data: {
               filePath,
-              selectedText,
-              pageNumber,
-              chapterTitle,
-              region,
+              text,
+              imageData,
               contentKind,
+              context,
             },
             intent,
           };
@@ -215,15 +214,18 @@ export function registerOpenCommand(
   );
 }
 
-function buildIntent(contentKind: string | undefined, selectedText: string | undefined): string {
-  if (contentKind === 'image') return '请分析这个区域：';
-  if (selectedText) return '请分析这段内容：';
+function buildIntent(contentKind: string, text: string | undefined): string {
+  if (contentKind === 'mixed') return '请分析这段内容和图片：';
+  if (contentKind === 'image') return '请分析这个图片：';
+  if (text) return '请分析这段内容：';
   return '请分析这个文档：';
 }
 
-function buildSummary(contentKind: string | undefined, selectedText: string | undefined): string {
-  if (contentKind === 'image') return 'Image region from document';
-  return selectedText?.slice(0, 400) ?? 'Document selection';
+function buildSummary(contentKind: string, text: string | undefined, hasImage: boolean): string {
+  const parts: string[] = [];
+  if (text) parts.push(text.slice(0, 400));
+  if (hasImage) parts.push('[Image attached]');
+  return parts.join(' · ') || 'Document selection';
 }
 
 function buildLabel(fileName: string, pageNumber?: number, chapterTitle?: string): string {

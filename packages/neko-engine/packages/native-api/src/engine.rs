@@ -17,6 +17,7 @@ use neko_native_core::{
 };
 use neko_types::{ActionRequest, ActionResponse};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 /// Main facade for the Neko Engine API
 ///
@@ -41,6 +42,12 @@ pub struct EngineApi {
     midi_service: Arc<MidiService>,
     /// Gamepad service — exposed for WS event stream endpoint
     gamepad_service: Arc<GamepadService>,
+    /// Global HTTP admission semaphore — limits total concurrent requests
+    admission_semaphore: Arc<Semaphore>,
+    /// FFmpeg codec semaphore — limits concurrent probe/encode/decode
+    codec_semaphore: Arc<Semaphore>,
+    /// GPU operation semaphore — limits concurrent GPU submissions
+    gpu_semaphore: Arc<Semaphore>,
 }
 
 impl EngineApi {
@@ -157,6 +164,9 @@ impl EngineApi {
             audio_service: audio_service_ref,
             midi_service: midi_service_ref,
             gamepad_service: gamepad_service_ref,
+            admission_semaphore: Arc::new(Semaphore::new(8)),
+            codec_semaphore: Arc::new(Semaphore::new(4)),
+            gpu_semaphore: Arc::new(Semaphore::new(2)),
         })
     }
 
@@ -236,6 +246,21 @@ impl EngineApi {
     /// Get the gamepad service (for WS event stream endpoint)
     pub fn gamepad_service(&self) -> &Arc<GamepadService> {
         &self.gamepad_service
+    }
+
+    /// Get the global HTTP admission semaphore
+    pub fn admission_semaphore(&self) -> &Arc<Semaphore> {
+        &self.admission_semaphore
+    }
+
+    /// Get the FFmpeg codec semaphore
+    pub fn codec_semaphore(&self) -> &Arc<Semaphore> {
+        &self.codec_semaphore
+    }
+
+    /// Get the GPU operation semaphore
+    pub fn gpu_semaphore(&self) -> &Arc<Semaphore> {
+        &self.gpu_semaphore
     }
 
     /// Check if GPU is available

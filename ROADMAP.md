@@ -7,25 +7,51 @@
 
 ## 开发状态总览
 
+> **开发分期策略**：一期聚焦核心功能 + 基础设施，确保 AIGC 视频创作主路径可用；二期补全创作工具；三期扩展专业编辑能力。
+
+### 一期：核心功能 + 基础设施（当前重点）
+
+> 目标：AIGC 视频创作完整闭环（剧本→分镜→剪辑→导出）+ AI 驱动 + 资产管理 + 市场生态
+
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
+| **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
+| **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估；剩余：MCP 重连退避 |
+| **neko-cut** | Alpha | 92% | **~62.9K LOC**，50+ 命令；AI Handler 14/16 action 实现（+background-remove +smart-crop）；剩余：ai-auto-edit / ai-match-music |
+| **neko-story** | Alpha | 92% | **0 TODO**，145 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + 时间线转换 + 分镜系统；剩余：故事板图片生成 |
+| **neko-canvas** | Alpha | 80% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**缺失**：模板系统（0%）、导出（20%）、形状绘制 |
+| **neko-preview** | Alpha | 86% | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅**；一期剩余：FDX；二期：XLSX/PPTX |
+| **neko-assets** | Alpha | 88% | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：L1-L3 缓存（依赖 Engine 新 action） |
+| **neko-market** | Alpha | 88% | **~4.4K LOC**；React Webview 完整实现（Browse/Installed/Updates + Zustand + i18n）+ market-core 58 tests；剩余：Registry Server 对接（neko-hub） |
+| **neko-auth** | Alpha | 90% | OAuth 2.0 + PKCE 全链路实现（OAuthClient + TokenManager + NekoAuthService + VscodeTokenStorage），0 TODO，43 tests；剩余：后端对接端到端验证 |
+| **neko-tools** | Alpha | 72% | **~15K LOC**；图片/视频/音频 Diff + 静音检测 + 元数据查看；剩余：细节打磨 |
 | **neko-types** | Alpha | 92% | 共享类型 + 横切关注点统一 + Operations 类型安全 |
-| **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理（macOS CoreML）+ 完整色彩校正管线（Curves/ColorWheels/HSL/LUT/Sharpen）+ 完整抠像管线（ChromaKey/LumaKey）+ Shape 元素渲染（tiny-skia 6 种形状）+ **关键帧 CRUD + 动画混合**（puppet/scene 双端）+ **角色编辑 API**（Visible/Opacity/MorphWeights/Material/DeleteNode）|
-| **neko-cut** | Alpha | 89% | 时间线 + 预览 + 导出预设 + EditOperation 29 操作 + 色彩校正全功能贯通 + AI Action Handler（12 action 含 remove-silence） |
-| **neko-agent** | Alpha | 99% | Agent 引擎 + LLM 平台 + CLI + 媒体工具 + Pipeline + AI 字幕 + 自动配乐 + **fal.ai/DashScope/Kling 适配器** + **Coordinator 多阶段编排** + **6 种创作专家 SubAgent**（含 quality-checker）+ **JSONL Session 持久化** + **Creative Memory** + **媒体质量评估系统**（VisionEvaluator/VideoFrameEvaluator/AudioEvaluator/ConsistencyEvaluator + RemediationPlanner 15 category + qualityGate 管线）；剩余：MCP 重连 |
 | **neko-client** | Alpha | 80% | H264/fMP4/PCM 流客户端 + EngineClient HTTP dispatch |
-| **neko-preview** | Alpha | 92% | Video/Audio Provider + WebCodecs + Apple Music 风格音频 + UI 现代化；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接）— [ADR](./docs/architecture/document-preview.md) |
-| **neko-story** | Alpha | 90% | Fountain 解析器 + LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同（[架构](./docs/architecture/2d-capability-analysis.md)） |
-| **neko-assets** | Alpha | 93% | 本地资产管理 + 外部媒体库 + Document + PathVariable 全格式 + IStorageLayout 三级布局 |
-| **neko-market** | Alpha | 97% | **客户端完全完成** ✅（Phase 6.5.1-6.5.6）；Registry Server 在 neko-hub |
-| **neko-auth** | Alpha | 80% | OAuth 2.0 + PKCE SSO（auth-core 43 tests + SecretStorage）；后端待接入 |
-| **neko-tools** | WIP | 68% | 媒体 Diff + 静音检测 UI（琥珀色叠加层）+ 并行优化 + 协议增强 |
-| **neko-canvas** | Alpha | 93% | 无限画布 + 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中 |
 | **neko-proto** | Stable | 100% | timeline.proto + diff.proto 完整 IDL |
-| **neko-model** | Alpha | 78% | Phase 3.1-3.3 ✅（PBR + 粒子 + CSG + 骨骼表情）+ **关键帧编辑 Rust 后端 ✅** + **模板创建 + 角色编辑 P0/P1 API ✅** |
-| **neko-sketch** | Alpha | 95% | S.1-S.4 全部完成（绘画 + 骨骼动画 + 高级 2D + Inpaint/StyleTransfer/AutoLayer + sketch.generate + 跨模块工作流 Timeline/Canvas）|
-| **neko-audio** | Alpha | 95% | 完整音频工作站 + 12 种效果链 + Engine 麦克风 + 78 测试 |
-| **neko-live** | Alpha | 55% | Phase 5.1 ✅（VMC+VRM 预览 + 2D Puppet 联动 + Canvas 录制 + 麦克风音频 + i18n） |
+
+### 二期：创作工具补全
+
+> 目标：音频工作站 + 2D 绘画能力完善，扩展创作场景覆盖
+
+| 模块 | 状态 | 进度 | 说明 |
+|------|------|------|------|
+| **neko-audio** | Alpha | 92% | **0 TODO**，~9.1K LOC，78 测试；波形 + 频谱 + 12 种效果链 + 多轨 + 麦克风；基本完成 |
+| **neko-sketch** | Alpha | 78% | **~13.5K LOC**，7 测试；笔刷引擎 + 压感 + 图层 + 选区 + AI 工具 + 跨模块工作流；**缺失**：变换工具（旋转/缩放） |
+
+### 三期：专业编辑能力
+
+> 目标：3D/2D 角色编辑 + VTuber 直播，面向专业用户扩展
+
+| 模块 | 状态 | 进度 | 说明 |
+|------|------|------|------|
+| **neko-puppet** | Alpha | 82% | **6.5K LOC** + 38 Rust tests；INP 加载 + 参数变形 + 动画混合 + 60fps 流 + Canvas 渲染；剩余：导出 / 高级物理 |
+| **neko-model** | Alpha | 85% | **12.6K LOC** + 49 Rust tests；glTF/VRM + PBR/IBL + CSG + 捏脸 + 粒子 + 关键帧；剩余：IK UI / Undo / Blender 桥接 |
+| **neko-live** | Alpha | 55% | **2.6K LOC** + 0 tests；VMC+VRM + Puppet 联动 + 录制；**阻塞**：nokhwa crate / MediaPipe / 推流 |
+
+### 元包
+
+| 模块 | 状态 | 进度 | 说明 |
+|------|------|------|------|
 | **neko-suite** | Stable | 90% | Extension Pack + Release workflow |
 
 ---
@@ -223,6 +249,124 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - 5.2：标定系统 + 音视频合并 + 导入 neko-cut 时间线 — 2-3 周
 - 5.3：直播推流（RTMP/SRT → OBS）— 2-3 周
 
+### neko-model 长期路线图（Phase 3.4+）
+> [3D ADR](./docs/architecture/3d-capability-analysis.md) | [能力差距分析](./docs/architecture/character-editing-gaps.md)
+
+**当前状态**：Phase 1-3 完成，12,615 行生产代码（4,490 TS + 8,125 Rust），49 Rust 测试。
+
+| 已完成能力 | 代码量 | 质量 |
+|-----------|--------|------|
+| glTF/VRM 加载器（双 pass 骨骼解析） | 385 行 Rust | 生产级 |
+| bevy_ecs 场景图（20+ 组件） | 922+388 行 Rust | 生产级 |
+| 动画播放 + 混合 + 关键帧 CRUD | 814+85 行 Rust | 生产级 |
+| CSG 布尔运算（BSP 树） | 798 行 Rust | 生产级 |
+| 程序化几何（6 种基元） | 602 行 Rust | 生产级 |
+| PBR 渲染（Cook-Torrance + IBL + 后处理） | 2,917 行 Rust GPU | 生产级 |
+| GPU 粒子系统（Compute Shader） | 449 行 Rust | 生产级 |
+| 参数化捏脸（22 参数 + 骨骼表情 + VRM 17 表情） | 632 行 TS | 生产级 |
+| IK 求解器（FABRIK，12 测试） | 482 行 Rust | 后端完成，无 UI |
+
+**Phase 3.4：AI 辅助 3D（长期）**
+- [ ] AI MCP Tools：`face.generate_params` / `face.from_image` / `face.adjust`（基础设施已就绪，需连接 neko-agent）
+- [ ] IK UI 暴露：将后端 482 行 IK 求解器接入前端（TransformGizmo 拖拽 → IK 链反向解算）
+- [ ] 面部直接拖拽编辑（Raycasting → Morph Target 映射，高工作量）
+- [ ] Undo/Redo 状态机（命令已注册，Zustand store 就绪，需实现历史栈）
+
+**Phase 3.5：高级 3D（长期）**
+- [ ] MCP Blender 桥接（复杂建模/修改器/UV 展开 → 外部专业工具）
+- [ ] MCP ComfyUI 集成（AI 图像管线 + ControlNet → 纹理生成）
+- [ ] 3DGS 高斯泼溅（Compute Shader 骨架已有，需加载器/UI）
+- [ ] rapier3d 物理引擎（碰撞/布料/刚体）
+- [ ] neko-live 集成（面部捕捉 → 骨骼映射，跨模块）
+
+**TS 前端测试缺口**：0 测试文件（vitest 已配置，框架就绪）。
+
+---
+
+### neko-puppet 长期路线图
+> [2D ADR](./docs/architecture/2d-capability-analysis.md) | [角色编辑 ADR](./docs/architecture/character-editing-analysis.md)
+
+**当前状态**：核心功能完整，6,534 行生产代码（570 extension + 2,771 webview + 3,193 Rust），38 Rust 测试。
+
+| 已完成能力 | 代码量 | 质量 |
+|-----------|--------|------|
+| INP 二进制解析（JSON + TEX_SECT 纹理提取） | 704 行 Rust + 65 行 TS | 生产级 |
+| bevy_ecs 骨骼世界（参数驱动变形） | 840+226 行 Rust | 生产级 |
+| 动画系统（11 种缓动 + 混合 + 关键帧 CRUD） | 401+84 行 Rust | 生产级 |
+| 物理模拟（spring/rigid pendulum） | 系统 815 行含物理 tick | 生产级 |
+| WebSocket 60fps 流推送 | Controller 层 | 生产级 |
+| Canvas 2D 纹理渲染（affine UV + blend modes + zoom/pan） | 346 行 TS | 生产级 |
+| 参数面板 + 面部参数分类 + 动画面板 + 节点树 + 关键帧时间线 | ~800 行 TS | 生产级 |
+
+**Phase P.1：增强编辑（中期）**
+- [ ] Puppet 导出（INP 写入器 → 允许保存修改后的 puppet，当前只读）
+- [ ] Puppet 从零创建（绘图工具 → 网格 → 参数绑定，高工作量，可委托 neko-sketch 协作）
+- [ ] 高级物理（布料约束 + 碰撞检测，当前仅 spring/pendulum）
+- [ ] 视频导出（当前仅 WebSocket 流，缺少 H.264 录制到文件）
+- [ ] inox2d MeshGroup 支持（特定模型可能崩溃，需 load-time 检测 + skip）
+
+**Phase P.2：跨模块集成（长期）**
+- [ ] neko-live 深度集成（Puppet 作为 VTuber 虚拟形象，追踪数据 → 参数实时映射）
+- [ ] neko-cut 时间线集成（Puppet 动画片段 → 视频元素）
+- [ ] Spine/Live2D 格式支持评估（当前 ADR-2D-004 仅 inox2d，Spine 许可证受限）
+
+**TS 前端测试缺口**：0 测试文件。
+
+**已知设计约束**：
+- inox2d 上游不支持动画加载 → bevy_animation ParameterCurve 桥接（已完成）
+- Composite-as-mask 特定模型 panic → load-time 检测 + skip warning
+- 无 wgpu renderer → 前端 Canvas 2D 渲染 + Rust 数据（当前方案）
+
+---
+
+### neko-live 长期路线图
+> [设备代理 ADR](./docs/architecture/device-access.md)
+
+**当前状态**：Phase 5.1.1-5.1.2 完成，2,600 行生产代码（1,032 extension + 1,580 webview），0 测试。
+
+| 已完成能力 | 代码量 | 质量 |
+|-----------|--------|------|
+| VMC/OSC 协议接收器（UDP 帧累积 + FPS 测量） | 375 行 TS | 生产级，零外部依赖 |
+| VRM 实时驱动（Three.js + @pixiv/three-vrm） | 108 行 TS | 生产级 |
+| ARKit 52 → VRM 17 表情映射 | 106 行 TS | 生产级 |
+| ARKit → Inochi2D 参数映射 | 118 行 TS | 80%（头部转换待完善） |
+| 2D Puppet 渲染器 | 132 行 TS | 80%（缺纹理渲染） |
+| Canvas 视频录制（WebM VP9 → base64 → 磁盘） | 111 行 TS | 生产级 |
+| 麦克风录制（EngineClient → cpal → WAV） | 131 行 TS | 生产级 |
+| Avatar 选择器（7 种格式 + 项目文件解析） | LivePanelProvider 485 行 | 生产级 |
+
+**Phase 5.1.3：摄像头 + MediaPipe（近期，阻塞项）**
+- [ ] Rust `ICameraService`（nokhwa/FFmpeg avdevice → H.264 → WebSocket）— **需先在 Cargo.toml 添加 nokhwa**
+- [ ] CameraPreview 组件（H264StreamClient 解码 + Canvas 渲染）
+- [ ] @mediapipe/tasks-vision WASM（FaceLandmarker + PoseLandmarker ~10MB）
+- [ ] ITrackingProvider 抽象层（MediaPipe / VMC / Hybrid 统一切换）
+- [ ] PuppetViewer 纹理渲染补全（texture_index → image data 映射）
+- [ ] Puppet 头部骨骼旋转补全（Quaternion → Euler angle 转换）
+
+**Phase 5.2：标定 + 音视频合并（中期，2-3 周）**
+- [ ] 标定系统 UI（当前 `calibrate` 命令仅显示硬编码消息）
+- [ ] 音视频合并（Canvas WebM + EngineClient WAV → MP4 mux）
+- [ ] 录制导入 neko-cut 时间线（`neko.cut.importGeneratedClip` 已就绪）
+- [ ] 录制回放/预览
+
+**Phase 5.3：直播推流（长期，2-3 周）**
+- [ ] RTMP/SRT 推流（~500 行 Rust，OS 特定：macOS ReplayKit / Win DirectShow / Linux v4l2loopback）
+- [ ] 虚拟摄像头输出（OBS 集成）
+- [ ] 直播控制面板（场景切换 / 特效触发 / 弹幕显示）
+
+**Phase 5.4：高级功能（远期）**
+- [ ] 多角色同台（多 Avatar 实例 + 独立追踪源）
+- [ ] 场景/背景系统（虚拟场景 + 绿幕抠像）
+- [ ] 动作录制重放（pose → keyframe 序列化 → 可编辑时间线）
+- [ ] MIDI 控制器映射（表情/动作快捷触发，需 midir crate）
+- [ ] Gamepad 控制（角色移动/表情，需 gilrs crate）
+
+**关键阻塞项**：`nokhwa` crate 未在 Cargo.toml 中，需添加后才能实现摄像头捕获。
+
+**测试缺口**：0 测试文件（vitest 已配置但未使用）。优先补充 VmcReceiver + osc-parser 单测。
+
+---
+
 ---
 
 ## Phase 6: 资产管理与协作 (客户端 ~90%)
@@ -325,21 +469,28 @@ B 站互动视频 / YouTube 交互内容。复用 neko-cut 时间线 + neko-canv
 ## Extension Pack 分层安装
 > [ADR](./docs/architecture/extension-pack-strategy.md)
 
-14 个扩展按场景拆分为可叠加的子包，降低用户安装和认知负担：
+14 个扩展按场景拆分为可叠加的子包，**构建顺序与开发分期对齐**：
 
-| 子包 | 包含扩展 | 目标用户 |
-|------|---------|---------|
-| **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | 基础设施 + AI（自动依赖） |
-| **neko-suite-video** | core + cut + canvas + story | AIGC 视频制作者 |
-| **neko-suite-2d** | core + sketch | 2D 插画/动画创作者 |
-| **neko-suite-audio** | core + audio | 音频创作者 |
-| **neko-suite** | 全部 14 个 | 全栈创作者 |
+| 构建期 | 子包 | 包含扩展 | 目标用户 |
+|--------|------|---------|---------|
+| **一期** | **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | 基础设施 + AI（自动依赖） |
+| **一期** | **neko-suite-video** | core + cut + canvas + story | AIGC 视频制作者 |
+| **二期** | **neko-suite-audio** | core + audio | 音频创作者 |
+| **二期** | **neko-suite-2d** | core + sketch | 2D 插画/动画创作者 |
+| **三期** | **neko-suite** | 全部 14 个（含 puppet + model + live） | 全栈创作者 |
+
+```
+构建优先级：
+一期 → neko-suite-core + neko-suite-video  （核心创作闭环）
+二期 → neko-suite-audio + neko-suite-2d    （创作工具扩展）
+三期 → neko-suite 全包                     （专业编辑 + VTuber）
+```
 
 agent/market 已包含在 core 中，场景子包叠加时零重复：
 ```bash
-./install.sh --pack video            # AIGC 视频全流程
-./install.sh --pack video --pack 2d  # 视频 + 2D（agent/market 共享）
-./install.sh --all                   # 全部 release-ready
+./install.sh --pack video            # 一期：AIGC 视频全流程
+./install.sh --pack video --pack 2d  # 二期：视频 + 2D
+./install.sh --all                   # 三期：全部 release-ready
 ```
 
 ---
@@ -353,4 +504,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新: 2026-04-05（Phase 5.1 neko-live：VMC/VRM + 2D Puppet + 录制 + .nkm/.nkp 项目文件 + 三层 i18n + EmptyState 引导）*
+*最后更新: 2026-04-06（Sprint 1 完成：Engine Semaphore + Assets 搜索 L0 + EPUB TreeView + Cut AI actions + DragDropBroker）*
