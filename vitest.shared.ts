@@ -18,6 +18,7 @@ export function sharedCoverage(overrides?: Record<string, unknown>): Record<stri
       '**/__mocks__/**',
       '**/generated/**',
     ],
+    processingConcurrency: 1,
     thresholds: {
       lines: 30,
       branches: 20,

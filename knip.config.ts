@@ -1,6 +1,10 @@
 import type { KnipConfig } from 'knip';
 
 const config: KnipConfig = {
+  ignore: [
+    // Skills are runtime CLI scripts, not imported modules
+    'skills/**',
+  ],
   ignoreDependencies: [
     '@types/vscode', // Provided by VSCode runtime
     'esbuild', // Used as CLI bundler, not imported
@@ -47,7 +51,6 @@ const config: KnipConfig = {
       ignore: [
         // Phase 2 features (v2.0) - planned but not yet implemented
         'src/assetLibrary.tsx',
-        'src/propertyPanel.tsx',
         'src/components/AssetLibrary/**',
         'src/components/ColorCorrection/**',
         'src/components/Subtitles/**',
@@ -60,10 +63,7 @@ const config: KnipConfig = {
         'src/components/ShapeRenderer.tsx',
         'src/components/Toolbar.tsx',
         'src/tools/**',
-        'src/utils/colorCorrection.ts',
-        'src/utils/shapeAnimation.ts',
         'src/utils/subtitleParser.ts',
-        'src/utils/timelineCalculations.ts',
         'src/types/audioEffects.ts',
       ],
     },
@@ -77,17 +77,26 @@ const config: KnipConfig = {
     },
     'packages/neko-agent/packages/platform': {},
     'packages/neko-agent/packages/agent': {},
+    'packages/neko-agent/test-utils': {},
     'packages/neko-canvas/packages/extension': {},
     'packages/neko-canvas/packages/webview': {
       ignore: [
         // Barrel exports
         'src/types/index.ts',
         'src/utils/index.ts',
+        // Used via barrel exports in panels/
+        'src/components/panels/PortEditor.tsx',
+        'src/components/panels/PropertyPanel.tsx',
       ],
     },
     'packages/neko-story/packages/extension': {},
     'packages/neko-story/packages/parser': {},
-    'packages/neko-story/packages/webview': {},
+    'packages/neko-story/packages/webview': {
+      ignore: [
+        // i18n module loaded at runtime
+        'src/i18n/**',
+      ],
+    },
     'packages/neko-tools/packages/extension': {},
     'packages/neko-tools/packages/webview': {
       entry: ['src/mediaDiff.tsx'],
@@ -98,7 +107,14 @@ const config: KnipConfig = {
       ],
     },
     'packages/neko-preview/packages/webview': {
-      entry: ['src/audio/main.tsx', 'src/video/main.tsx'],
+      entry: [
+        'src/audio/main.tsx',
+        'src/video/main.tsx',
+        'src/cbz/main.tsx',
+        'src/docx/main.tsx',
+        'src/epub/main.tsx',
+        'src/pdf/main.tsx',
+      ],
     },
     'packages/neko-preview/packages/extension': {},
     'packages/neko-assets/packages/asset': {},
@@ -119,7 +135,14 @@ const config: KnipConfig = {
     'packages/neko-live': { ignore: ['**/*'] },
     'packages/neko-sketch': {},
     'packages/neko-sketch/packages/extension': {},
-    'packages/neko-sketch/packages/webview': {},
+    'packages/neko-sketch/packages/webview': {
+      ignore: [
+        // Barrel exports used by tool system
+        'src/tools/index.ts',
+        'src/tools/tool-manager.ts',
+        'src/selection/selection-manager.ts',
+      ],
+    },
     'packages/neko-puppet': {},
     'packages/neko-puppet/packages/extension': {},
     'packages/neko-puppet/packages/webview': {},
