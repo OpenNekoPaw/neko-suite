@@ -185,9 +185,10 @@ export declare class NativeEngine {
   /**
    * Create a new NativeEngine instance
    *
-   * This initializes the engine with GPU support if available.
+   * @param config_path - Optional path to engine.toml config file.
+   *   If omitted, loads from ~/.neko/engine.toml and .neko/engine.toml.
    */
-  static create(): Promise<NativeEngine>
+  static create(configPath?: string | undefined | null): Promise<NativeEngine>
   /**
    * Dispatch an action request
    *
