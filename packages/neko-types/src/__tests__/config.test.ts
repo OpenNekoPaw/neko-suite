@@ -366,6 +366,201 @@ describe('processConfig', () => {
 });
 
 // =============================================================================
+// Auth & Credentials Merge Tests
+// =============================================================================
+
+describe('mergeConfigs — auth & credentials', () => {
+  it('should merge auth config field-by-field', () => {
+    const base: UnifiedConfig = {
+      auth: {
+        clientId: 'neko',
+        authUrl: 'https://auth.example.com/authorize',
+      },
+    };
+
+    const override: UnifiedConfig = {
+      auth: {
+        tokenUrl: 'https://auth.example.com/token',
+        redirectPort: 7000,
+      },
+    };
+
+    const merged = mergeConfigs(base, override);
+
+    expect(merged.auth?.clientId).toBe('neko');
+    expect(merged.auth?.authUrl).toBe('https://auth.example.com/authorize');
+    expect(merged.auth?.tokenUrl).toBe('https://auth.example.com/token');
+    expect(merged.auth?.redirectPort).toBe(7000);
+  });
+
+  it('should override auth fields when workspace provides them', () => {
+    const base: UnifiedConfig = {
+      auth: {
+        clientId: 'neko-user',
+        authUrl: 'https://user.example.com/authorize',
+      },
+    };
+
+    const override: UnifiedConfig = {
+      auth: {
+        clientId: 'neko-workspace',
+      },
+    };
+
+    const merged = mergeConfigs(base, override);
+
+    expect(merged.auth?.clientId).toBe('neko-workspace');
+    expect(merged.auth?.authUrl).toBe('https://user.example.com/authorize');
+  });
+
+  it('should deep-merge credentials.apiKeys', () => {
+    const base: UnifiedConfig = {
+      credentials: {
+        apiKeys: {
+          anthropic: 'sk-ant-user',
+          openai: 'sk-openai-user',
+        },
+      },
+    };
+
+    const override: UnifiedConfig = {
+      credentials: {
+        apiKeys: {
+          anthropic: 'sk-ant-workspace',
+          google: 'google-key',
+        },
+      },
+    };
+
+    const merged = mergeConfigs(base, override);
+
+    expect(merged.credentials?.apiKeys?.anthropic).toBe('sk-ant-workspace');
+    expect(merged.credentials?.apiKeys?.openai).toBe('sk-openai-user');
+    expect(merged.credentials?.apiKeys?.google).toBe('google-key');
+  });
+
+  it('should merge market config', () => {
+    const base: UnifiedConfig = {
+      market: {
+        registryUrl: 'https://market.example.com/api/v1',
+      },
+    };
+
+    const override: UnifiedConfig = {};
+
+    const merged = mergeConfigs(base, override);
+
+    expect(merged.market?.registryUrl).toBe('https://market.example.com/api/v1');
+  });
+
+  it('should handle missing auth/credentials gracefully', () => {
+    const merged = mergeConfigs({}, {});
+
+    expect(merged.auth).toBeUndefined();
+    expect(merged.credentials).toBeUndefined();
+    expect(merged.market).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// Credential Resolver Tests
+// =============================================================================
+
+import { resolveApiKey, getEnvKeyName, getEnvKeyMap } from '../config/credential-resolver';
+
+describe('resolveApiKey', () => {
+  it('should return env var as highest priority', () => {
+    const config: UnifiedConfig = {
+      credentials: { apiKeys: { anthropic: 'cred-key' } },
+      providers: [
+        {
+          id: 'anthropic',
+          name: 'anthropic',
+          displayName: 'Anthropic',
+          type: 'anthropic',
+          apiUrl: '',
+          apiKey: 'provider-key',
+          enabled: true,
+        },
+      ],
+    };
+
+    const envGetter = (key: string) => (key === 'ANTHROPIC_API_KEY' ? 'env-key' : undefined);
+
+    expect(resolveApiKey('anthropic', config, envGetter)).toBe('env-key');
+  });
+
+  it('should fall back to credentials.apiKeys', () => {
+    const config: UnifiedConfig = {
+      credentials: { apiKeys: { anthropic: 'cred-key' } },
+      providers: [
+        {
+          id: 'anthropic',
+          name: 'anthropic',
+          displayName: 'Anthropic',
+          type: 'anthropic',
+          apiUrl: '',
+          apiKey: 'provider-key',
+          enabled: true,
+        },
+      ],
+    };
+
+    expect(resolveApiKey('anthropic', config)).toBe('cred-key');
+  });
+
+  it('should fall back to providers[].apiKey', () => {
+    const config: UnifiedConfig = {
+      providers: [
+        {
+          id: 'anthropic',
+          name: 'anthropic',
+          displayName: 'Anthropic',
+          type: 'anthropic',
+          apiUrl: '',
+          apiKey: 'provider-key',
+          enabled: true,
+        },
+      ],
+    };
+
+    expect(resolveApiKey('anthropic', config)).toBe('provider-key');
+  });
+
+  it('should use generic fallback env vars', () => {
+    const envGetter = (key: string) => (key === 'NEKO_API_KEY' ? 'neko-key' : undefined);
+
+    expect(resolveApiKey('unknown-provider', {}, envGetter)).toBe('neko-key');
+  });
+
+  it('should return null when nothing is configured', () => {
+    expect(resolveApiKey('anthropic', {})).toBeNull();
+  });
+});
+
+describe('getEnvKeyName', () => {
+  it('should return known provider env var name', () => {
+    expect(getEnvKeyName('anthropic')).toBe('ANTHROPIC_API_KEY');
+    expect(getEnvKeyName('openai')).toBe('OPENAI_API_KEY');
+  });
+
+  it('should return undefined for unknown provider', () => {
+    expect(getEnvKeyName('unknown')).toBeUndefined();
+  });
+});
+
+describe('getEnvKeyMap', () => {
+  it('should return all known mappings', () => {
+    const map = getEnvKeyMap();
+    expect(map.anthropic).toBe('ANTHROPIC_API_KEY');
+    expect(map.openai).toBe('OPENAI_API_KEY');
+    expect(map.google).toBe('GOOGLE_API_KEY');
+    expect(map.deepseek).toBe('DEEPSEEK_API_KEY');
+    expect(map.azure).toBe('AZURE_OPENAI_API_KEY');
+  });
+});
+
+// =============================================================================
 // Constants Tests
 // =============================================================================
 

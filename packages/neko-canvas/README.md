@@ -17,7 +17,7 @@
 - **依赖**：`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
 - **节点类型（现有）**：Media / Storyboard / Annotation / Text / Artboard / Group（6 种）
-- **节点类型（规划）**：Shot / Scene / Gallery / Script / Document / Model / CanvasEmbed（+7 种，[ADR §12-13](../../docs/architecture/2d-capability-analysis.md)）
+- **节点类型（规划）**：Shot / Scene / Gallery / Script / Document / Model / CanvasEmbed（+7 种）
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴
 - **规划功能**：GenerationPromptPanel（内嵌 AI 生图，ADR-2D-007）、GalleryNode 角色多视图（三视图/九宫格）、分镜批量生图（BatchScheduler）、ScriptNode TOC 模式
 
@@ -75,8 +75,6 @@ Webview 端通过 `canvasOperationStore` 桥接层记录编辑操作，与现有
 | 文档类型（ScriptNode 等）| 📋 规划 | 新增节点类型，委托专用扩展预览 |
 
 ### 分镜系统（规划）
-
-见 [2d-capability-analysis.md §12-13](../../docs/architecture/2d-capability-analysis.md)
 
 - **ShotNode**：单镜节点（景别/运镜/多角色/情绪/生图状态）
 - **SceneGroupNode**：场景容器，shots 横向排列

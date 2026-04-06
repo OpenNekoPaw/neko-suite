@@ -1,0 +1,76 @@
+/**
+ * Auth Config Loader
+ *
+ * Loads OAuth configuration from config.json files.
+ * Node.js only — uses config-reader (fs, path, os).
+ *
+ * Import via: '@neko/shared/config/auth-config-loader'
+ */
+
+import type { AuthConfig } from '../types/auth';
+import type { AuthConfigJson } from './types';
+import { readUserConfig, readWorkspaceConfig } from './config-reader';
+
+// =============================================================================
+// Defaults
+// =============================================================================
+
+const DEFAULT_SCOPES = ['openid', 'profile', 'email'];
+const DEFAULT_REDIRECT_PORT = 6419;
+
+// =============================================================================
+// Public API
+// =============================================================================
+
+/**
+ * Load AuthConfig from config.json files (user + workspace merge).
+ *
+ * @param workspaceDir - Workspace directory for .neko/config.json lookup
+ * @returns AuthConfig with defaults applied. Empty authUrl/tokenUrl means not configured.
+ */
+export function loadAuthConfigFromJson(workspaceDir?: string): AuthConfig {
+  const userConfig = readUserConfig();
+  const wsConfig = workspaceDir ? readWorkspaceConfig(workspaceDir) : null;
+
+  // Workspace auth overrides user auth (field-level merge)
+  const userAuth = userConfig?.auth;
+  const wsAuth = wsConfig?.auth;
+  const merged = mergeAuthConfig(userAuth, wsAuth);
+
+  return {
+    clientId: merged.clientId ?? '',
+    authUrl: merged.authUrl ?? '',
+    tokenUrl: merged.tokenUrl ?? '',
+    scopes: merged.scopes ?? DEFAULT_SCOPES,
+    redirectPort: merged.redirectPort ?? DEFAULT_REDIRECT_PORT,
+  };
+}
+
+/**
+ * Check whether the loaded auth config is actually configured
+ * (i.e. has non-empty authUrl and tokenUrl).
+ */
+export function isAuthConfigured(config: AuthConfig): boolean {
+  return !!config.authUrl && !!config.tokenUrl;
+}
+
+// =============================================================================
+// Internal
+// =============================================================================
+
+/**
+ * Merge two AuthConfigJson objects (later takes precedence per-field).
+ */
+function mergeAuthConfig(base?: AuthConfigJson, override?: AuthConfigJson): AuthConfigJson {
+  if (!base && !override) return {};
+  if (!base) return override ?? {};
+  if (!override) return base;
+
+  return {
+    clientId: override.clientId ?? base.clientId,
+    authUrl: override.authUrl ?? base.authUrl,
+    tokenUrl: override.tokenUrl ?? base.tokenUrl,
+    scopes: override.scopes ?? base.scopes,
+    redirectPort: override.redirectPort ?? base.redirectPort,
+  };
+}

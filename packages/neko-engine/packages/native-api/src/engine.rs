@@ -15,7 +15,7 @@ use neko_native_core::{
     ml::onnx_runtime::DeviceSelection,
     services::{IMlService, MlService},
 };
-use neko_types::{ActionRequest, ActionResponse};
+use neko_types::{ActionRequest, ActionResponse, EngineConfig};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -51,8 +51,13 @@ pub struct EngineApi {
 }
 
 impl EngineApi {
-    /// Create a new EngineApi with GPU support
+    /// Create a new EngineApi with GPU support and default config
     pub async fn new() -> ApiResult<Self> {
+        Self::with_config(EngineConfig::default()).await
+    }
+
+    /// Create EngineApi with explicit configuration
+    pub async fn with_config(config: EngineConfig) -> ApiResult<Self> {
         // Initialize GPU context
         let gpu_ctx = match GpuContext::new().await {
             Ok(ctx) => Some(Arc::new(ctx)),
@@ -62,11 +67,16 @@ impl EngineApi {
             }
         };
 
-        Self::with_gpu(gpu_ctx)
+        Self::with_gpu_and_config(gpu_ctx, config)
     }
 
-    /// Create EngineApi with optional GPU context
+    /// Create EngineApi with optional GPU context (uses default config)
     pub fn with_gpu(gpu_ctx: Option<Arc<GpuContext>>) -> ApiResult<Self> {
+        Self::with_gpu_and_config(gpu_ctx, EngineConfig::default())
+    }
+
+    /// Create EngineApi with optional GPU context and explicit config
+    pub fn with_gpu_and_config(gpu_ctx: Option<Arc<GpuContext>>, config: EngineConfig) -> ApiResult<Self> {
         // Create services
         let task_service = Arc::new(TaskService::new());
         let mut node_service = NodeService::new(gpu_ctx.clone());
@@ -149,8 +159,8 @@ impl EngineApi {
             stream_registry.clone(),
             #[cfg(feature = "onnx")]
             Some(std::sync::Arc::new(MlService::new(
-                3,                    // max_loaded: keep at most 3 sessions resident
-                DeviceSelection::Auto, // macOS → CoreML EP; others → CPU
+                config.ml.max_loaded,
+                Self::parse_device_selection(&config.ml.device),
             )) as std::sync::Arc<dyn IMlService>),
         );
 
@@ -164,15 +174,26 @@ impl EngineApi {
             audio_service: audio_service_ref,
             midi_service: midi_service_ref,
             gamepad_service: gamepad_service_ref,
-            admission_semaphore: Arc::new(Semaphore::new(8)),
-            codec_semaphore: Arc::new(Semaphore::new(4)),
-            gpu_semaphore: Arc::new(Semaphore::new(2)),
+            admission_semaphore: Arc::new(Semaphore::new(config.concurrency.admission)),
+            codec_semaphore: Arc::new(Semaphore::new(config.concurrency.codec)),
+            gpu_semaphore: Arc::new(Semaphore::new(config.concurrency.gpu)),
         })
     }
 
     /// Create EngineApi without GPU (for testing)
     pub fn without_gpu() -> ApiResult<Self> {
         Self::with_gpu(None)
+    }
+
+    /// Parse device selection string from config
+    #[cfg(feature = "onnx")]
+    fn parse_device_selection(device: &str) -> DeviceSelection {
+        match device.to_lowercase().as_str() {
+            "cpu" => DeviceSelection::Cpu,
+            "coreml" => DeviceSelection::CoreMl,
+            "cuda" => DeviceSelection::Cuda,
+            _ => DeviceSelection::Auto,
+        }
     }
 
     /// Dispatch an action request

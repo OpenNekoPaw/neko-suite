@@ -7,7 +7,6 @@
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host（CustomEditorProvider .nkp/.inp）+ Webview（React 18）+ neko-engine（native-puppet sidecar）
 - 规范：[CLAUDE.md](../../CLAUDE.md)
-- 能力分析：[docs/architecture/2d-capability-analysis.md](../../docs/architecture/2d-capability-analysis.md)
 - 2D 绘画：独立子插件 [neko-sketch](../neko-sketch/)
 
 ## Quick Reference

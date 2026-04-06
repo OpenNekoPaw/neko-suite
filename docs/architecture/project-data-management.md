@@ -1,6 +1,6 @@
 # 项目数据管理策略
 
-> 关联：[format-strategy.md](./format-strategy.md) · [diff.md](./diff.md) · [lsp.md](./lsp.md) · [ai-capabilities-roadmap.md](./ai-capabilities-roadmap.md)
+> 关联：[format-strategy.md](./format-strategy.md) · [diff.md](./diff.md) · [lsp.md](./lsp.md)
 
 ---
 

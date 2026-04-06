@@ -460,6 +460,18 @@ export class ConfigManager {
     this.mergeArrayToMap(this.providers, userConfig?.providers);
     this.applyOverrides(this.providers, userConfig?.providerOverrides);
 
+    // Apply credentials.apiKeys to providers missing an apiKey
+    const rawConfig = this.userConfigManager?.loadRaw();
+    const credentialKeys = rawConfig?.credentials?.apiKeys;
+    if (credentialKeys) {
+      for (const [providerId, apiKey] of Object.entries(credentialKeys)) {
+        const provider = this.providers.get(providerId);
+        if (provider && !provider.apiKey) {
+          this.providers.set(providerId, { ...provider, apiKey });
+        }
+      }
+    }
+
     // --- Models (user only) ---
     this.models.clear();
     this.mergeArrayToMap(this.models, userConfig?.models);

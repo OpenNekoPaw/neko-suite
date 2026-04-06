@@ -81,7 +81,10 @@ export class MarketplaceService implements vscode.Disposable {
   readonly onDidDisable = this._onDidDisable.event;
 
   constructor(private readonly _logger: ILogger) {
-    this._client = new MarketClient();
+    // Read registry URL from config: VSCode settings > config.json > default
+    const registryUrl =
+      vscode.workspace.getConfiguration('neko.market').get<string>('registryUrl') || undefined;
+    this._client = new MarketClient(registryUrl ? { registryUrl } : undefined);
     const cache = new CacheManager(CACHE_DIR);
     const versionResolver = new VersionResolver();
     const license = new LicenseManager();

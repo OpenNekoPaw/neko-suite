@@ -2,7 +2,7 @@
 
 > 全能内容创作 IDE - 深度集成于 VS Code 的视频编辑工作站
 
-[English](./README_EN.md) | [猫娘版](./README_NYA.md)
+[English](./README.md) | [猫娘版](./README_NYA.md)
 
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 [![License](https://img.shields.io/badge/License-MIT-blue)]()
@@ -92,18 +92,18 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 18 �
 | 模块             | 职能                                                                                                                                                                                                                                                               | 状态      | 规模                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | -------------------------------- |
 | **neko-preview** | 媒体预览 - Video/Audio Provider + WebCodecs 播放器 + Apple Music 风格波形；**文档预览 P0 ✅**（PDF/CBZ/EPUB/DOCX 自建预览器 + 选区→AI 桥接）                                                                                                                       | Alpha 92% | 7.2K TS/TSX (42 files), 5 tests  |
-| **neko-story**   | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同（[架构](./docs/architecture/2d-capability-analysis.md)）                                                       | Alpha 90% | 5.9K TS/TSX (41 files), 3 tests  |
+| **neko-story**   | 剧本编辑器 - Fountain LSP + 预览 + 时间线生成；**分镜系统 ✅**：ScriptTableView + CreativeGridView + ShotNode 数据类型 + 分镜→Cut 导出 + Agent 协同                                                       | Alpha 90% | 5.9K TS/TSX (41 files), 3 tests  |
 | **neko-market**  | 资产市场 - Skills/着色器/模型/预设搜索 + 安装 + 版本管理 + 本地模型部署                                                                                                                                                                                            | Alpha 97% | 4.4K TS/TSX (47 files), 9 tests  |
 | **neko-assets**  | 资产管理 - 注册表 + 缩略图 + 外部媒体库 + Document + PathVariable 全格式                                                                                                                                                                                           | Alpha 92% | 9.2K TS (47 files), 7 tests      |
 | **neko-tools**   | 媒体工具 - Diff 比较 + 并行优化 + 协议增强                                                                                                                                                                                                                         | WIP 62%   | 14.9K TS (69 files), 6 tests     |
-| **neko-canvas**  | 无限画布 - 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 93% | 14.1K TS/TSX (79 files), 4 tests |
+| **neko-canvas**  | 无限画布 - 9 种节点（ShotNode/SceneGroupNode/GalleryNode/ScriptNode/DocumentNode/ModelNode）+ 分组 + 画板导出 + GenerationPromptPanel + BatchGenerationScheduler + 7 MCP Tools；CanvasEmbedNode P3 规划中 | Alpha 93% | 14.1K TS/TSX (79 files), 4 tests |
 
 ### 创作模块
 
 | 模块            | 职能                                                                                                                                                                                      | 状态      | 规模                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------- |
-| **neko-model**  | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成（[架构](./docs/architecture/3d-capability-analysis.md)）                                        | Alpha 65% | 3.5K TS/TSX (39 files)            |
-| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + AI 生图/Inpaint/风格迁移/自动分层 + 跨模块工作流（[架构](./docs/architecture/2d-capability-analysis.md)） | Alpha 95% | 13.9K TS/TSX (126 files), 7 tests |
+| **neko-model**  | 3D 创作 - glTF/VRM 视口 + PBR/IBL + 粒子/后处理 + CSG/文字/几何体 + 骨骼表情 + 时间线集成                                        | Alpha 65% | 3.5K TS/TSX (39 files)            |
+| **neko-sketch** | 2D 创作 - 压感手绘 7 笔刷 + 滤镜/粒子/场景/像素/矢量 + 逐帧/骨骼动画 + 精灵表 + AI 生图/Inpaint/风格迁移/自动分层 + 跨模块工作流 | Alpha 95% | 13.9K TS/TSX (126 files), 7 tests |
 | **neko-audio**  | 音频工作站 - 波形编辑 + 12 种效果链 + 频谱分析 + AI 降噪 + 麦克风录音 + 导出                                                                                                              | Alpha 95% | 9.2K TS/TSX (54 files), 3 tests   |
 
 ### 规划中
@@ -312,16 +312,14 @@ ext install neko.neko-suite
 
 ## 文档
 
-- [ROADMAP.md](./ROADMAP.md) - 开发路线图和功能规划
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - 系统架构总览
-- [CLAUDE.md](./CLAUDE.md) - 开发规范和架构指南
+- [ROADMAP_CN.md](./ROADMAP_CN.md) - 开发路线图和功能规划
+- [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) - 系统架构总览
+- [CLAUDE_CN.md](./CLAUDE_CN.md) - 开发规范和架构指南
 - [docs/engine.md](./docs/engine.md) - 媒体引擎文档
 - [docs/shaders.md](./docs/shaders.md) - GPU Shader 文档
 - [docs/timeline-alignment.md](./docs/timeline-alignment.md) - 时间线对齐文档
 - [docs/editoperation.md](./docs/editoperation.md) - 编辑操作设计
 - [docs/architecture/](./docs/architecture/) - 架构设计文档
-  - [3D 能力集成分析](./docs/architecture/3d-capability-analysis.md) - neko-model + native-scene 架构决策
-  - [2D 能力集成分析](./docs/architecture/2d-capability-analysis.md) - neko-sketch + neko-puppet + native-puppet 架构决策
   - [面板放置策略](./docs/architecture/panel-placement.md) - 编辑器面板架构
   - [设备访问策略](./docs/architecture/device-access.md) - 硬件设备代理方案
   - [格式策略](./docs/architecture/format-strategy.md) - nk\* 文件格式设计
@@ -341,7 +339,7 @@ ext install neko.neko-suite
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 创建 Pull Request
 
-详细开发规范请参考 [CLAUDE.md](./CLAUDE.md)。
+详细开发规范请参考 [CLAUDE_CN.md](./CLAUDE_CN.md)。
 
 ---
 

@@ -28,9 +28,20 @@
  */
 
 // Types (browser-safe)
-export type { UnifiedConfig, NormalizedConfig } from './types';
+export type {
+  UnifiedConfig,
+  NormalizedConfig,
+  AuthConfigJson,
+  CredentialsConfig,
+  MarketConfig,
+} from './types';
 
-export { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
+export {
+  DEFAULT_CONFIG,
+  DEFAULT_EXTENSION_CONFIG,
+  CONFIG_DIR_NAME,
+  CONFIG_FILE_NAME,
+} from './types';
 
 // Normalizer (browser-safe - pure functions, no Node.js dependencies)
 export {
@@ -54,5 +65,12 @@ export type {
 
 export { BaseConfigAdapter } from './config-adapter';
 
+// Credential resolver (browser-safe — pure functions)
+export { resolveApiKey, getEnvKeyName, getEnvKeyMap } from './credential-resolver';
+export type { EnvGetter } from './credential-resolver';
+
 // NOTE: config-reader.ts is NOT exported here because it uses Node.js APIs.
 // Import directly from '@neko/shared/config/config-reader' in Node.js environments.
+
+// NOTE: auth-config-loader.ts is NOT exported here because it uses Node.js APIs.
+// Import directly from '@neko/shared/config/auth-config-loader' in Node.js environments.

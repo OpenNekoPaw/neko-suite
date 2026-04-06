@@ -16,14 +16,10 @@ import {
 } from '@neko/platform';
 import { TaskManager, createFileTaskStorage } from '@neko/agent';
 import type { IService, IToolRegistry } from '@neko/shared';
+import { getEnvKeyMap } from '@neko/shared';
 
-// Well-known env var names per provider
-const ENV_KEY_MAP: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  google: 'GOOGLE_API_KEY',
-  deepseek: 'DEEPSEEK_API_KEY',
-};
+// Shared env var mapping from @neko/shared/config/credential-resolver
+const ENV_KEY_MAP = getEnvKeyMap();
 
 export interface CLIPlatformOptions {
   workspacePath?: string;

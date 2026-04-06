@@ -92,8 +92,8 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 18 packag
 
 | Module          | Role                                                                                                                                                                                                           | Status    | Scale                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------- |
-| **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + particles/post-processing + CSG/text/geometry + skeletal expressions + timeline integration ([arch](./docs/architecture/3d-capability-analysis.md))                | Alpha 65% | 3.5K TS/TSX (39 files)            |
-| **neko-sketch** | 2D creation - pressure-sensitive drawing (7 brushes) + filters/particles/scene/pixel/vector + frame-by-frame/skeletal animation + sprite sheets + i18n ([arch](./docs/architecture/2d-capability-analysis.md)) | Alpha 87% | 13.9K TS/TSX (126 files), 7 tests |
+| **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + particles/post-processing + CSG/text/geometry + skeletal expressions + timeline integration                | Alpha 65% | 3.5K TS/TSX (39 files)            |
+| **neko-sketch** | 2D creation - pressure-sensitive drawing (7 brushes) + filters/particles/scene/pixel/vector + frame-by-frame/skeletal animation + sprite sheets + i18n | Alpha 87% | 13.9K TS/TSX (126 files), 7 tests |
 | **neko-audio**  | Audio workstation - waveform editing + 12 effect chains + spectrum analysis + AI denoising + microphone recording + export                                                                                     | Alpha 95% | 9.2K TS/TSX (54 files), 3 tests   |
 
 ### Planned
@@ -314,8 +314,6 @@ Install sub-extensions based on your needs:
 - [docs/timeline-alignment.md](./docs/timeline-alignment.md) - Timeline alignment documentation
 - [docs/editoperation.md](./docs/editoperation.md) - Edit operation design
 - [docs/architecture/](./docs/architecture/) - Architecture design documents
-  - [3D Capability Analysis](./docs/architecture/3d-capability-analysis.md) - neko-model + native-scene architecture decisions
-  - [2D Capability Analysis](./docs/architecture/2d-capability-analysis.md) - neko-sketch + neko-puppet + native-puppet architecture decisions
   - [Panel Placement Strategy](./docs/architecture/panel-placement.md) - Editor panel architecture
   - [Device Access Strategy](./docs/architecture/device-access.md) - Hardware device proxy solution
   - [Format Strategy](./docs/architecture/format-strategy.md) - nk\* file format design

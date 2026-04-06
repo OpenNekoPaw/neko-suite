@@ -119,6 +119,33 @@ export interface UnifiedConfig {
   mcpServerOverrides?: Record<string, Partial<MCPServerConfig>>;
 
   // ==========================================================================
+  // Auth & Credentials
+  // ==========================================================================
+
+  /**
+   * OAuth 2.0 configuration.
+   * Fallback for neko-auth when VSCode settings (`neko.auth.*`) are empty.
+   * Also used by CLI where VSCode settings are unavailable.
+   */
+  auth?: AuthConfigJson;
+
+  /**
+   * API key credentials.
+   *
+   * WARNING: Stored in PLAINTEXT in config.json.
+   * Prefer environment variables for sensitive keys.
+   *
+   * Priority: env vars > credentials.apiKeys > providers[].apiKey
+   */
+  credentials?: CredentialsConfig;
+
+  /**
+   * Marketplace configuration.
+   * Registry URL override for private deployments.
+   */
+  market?: MarketConfig;
+
+  // ==========================================================================
   // Legacy Fields (for backward compatibility)
   // ==========================================================================
 
@@ -227,3 +254,39 @@ export const CONFIG_DIR_NAME = '.neko';
 
 /** Config file name */
 export const CONFIG_FILE_NAME = 'config.json';
+
+// =============================================================================
+// Auth & Credentials Types
+// =============================================================================
+
+/**
+ * OAuth 2.0 configuration stored in config.json.
+ * Mirrors AuthConfig from types/auth.ts but all fields optional for partial config.
+ */
+export interface AuthConfigJson {
+  clientId?: string;
+  /** Authorization endpoint. Empty string = not configured. */
+  authUrl?: string;
+  /** Token endpoint. */
+  tokenUrl?: string;
+  scopes?: string[];
+  /** Localhost redirect port for OAuth callback. Default: 6419 */
+  redirectPort?: number;
+}
+
+/**
+ * API key credentials section.
+ * Maps provider ID to API key string.
+ */
+export interface CredentialsConfig {
+  /** Provider ID -> API key mapping (e.g. { "anthropic": "sk-ant-xxx" }) */
+  apiKeys?: Record<string, string>;
+}
+
+/**
+ * Marketplace configuration.
+ */
+export interface MarketConfig {
+  /** Registry API base URL (default: https://market.neko.dev/api/v1) */
+  registryUrl?: string;
+}

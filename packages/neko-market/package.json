@@ -37,6 +37,16 @@
         }
       ]
     },
+    "configuration": {
+      "title": "Neko Marketplace",
+      "properties": {
+        "neko.market.registryUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom marketplace registry URL. Leave empty to use the official registry (https://market.neko.dev/api/v1)."
+        }
+      }
+    },
     "commands": [
       {
         "command": "neko.market.open",

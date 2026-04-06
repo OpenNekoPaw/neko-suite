@@ -27,6 +27,7 @@ import {
   readWorkspaceConfig,
   writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
+import { getEnvKeyMap } from '@neko/shared';
 
 // Re-export path utilities for backward compatibility
 export {
@@ -46,14 +47,8 @@ export const getProjectConfigPath = getWorkspaceConfigPath;
 // Environment Variable Handling
 // =============================================================================
 
-/** Well-known env var names per provider type */
-const ENV_KEY_MAP: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  deepseek: 'DEEPSEEK_API_KEY',
-  google: 'GOOGLE_API_KEY',
-  azure: 'AZURE_OPENAI_API_KEY',
-};
+/** Shared env var mapping from @neko/shared/config/credential-resolver */
+const ENV_KEY_MAP = getEnvKeyMap();
 
 /**
  * Get API key from environment for a given provider ID or type.

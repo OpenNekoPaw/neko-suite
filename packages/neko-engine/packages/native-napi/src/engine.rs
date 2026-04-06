@@ -13,18 +13,27 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 
 use neko_native_api::EngineApi;
-use neko_types::ActionRequest;
+use neko_types::{ActionRequest, EngineConfig};
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
 
-/// Get or initialize the global engine instance
-async fn get_engine() -> napi::Result<Arc<EngineApi>> {
+/// Get or initialize the global engine instance with optional config path
+async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc<EngineApi>> {
     ENGINE
         .get_or_try_init(|| async {
-            EngineApi::new().await.map(Arc::new).map_err(|e| {
-                napi::Error::from_reason(format!("Failed to initialize engine: {}", e))
-            })
+            let config = EngineConfig::load(
+                config_path.as_ref().map(|s| std::path::Path::new(s.as_str())),
+                None,
+            )
+            .map_err(|e| napi::Error::from_reason(format!("Config error: {}", e)))?;
+
+            EngineApi::with_config(config)
+                .await
+                .map(Arc::new)
+                .map_err(|e| {
+                    napi::Error::from_reason(format!("Failed to initialize engine: {}", e))
+                })
         })
         .await
         .cloned()
@@ -53,9 +62,10 @@ pub struct NativeEngine {
 impl NativeEngine {
     /// Create a new NativeEngine instance
     ///
-    /// This initializes the engine with GPU support if available.
+    /// @param config_path - Optional path to engine.toml config file.
+    ///   If omitted, loads from ~/.neko/engine.toml and .neko/engine.toml.
     #[napi(factory)]
-    pub async fn create() -> napi::Result<Self> {
+    pub async fn create(config_path: Option<String>) -> napi::Result<Self> {
         // Initialize tracing (only once)
         let _ = tracing_subscriber::fmt()
             .with_env_filter(
@@ -66,7 +76,7 @@ impl NativeEngine {
 
         tracing::info!("Creating NativeEngine...");
 
-        let engine = get_engine().await?;
+        let engine = get_engine_with_config(config_path).await?;
 
         tracing::info!(
             "NativeEngine created (GPU: {})",

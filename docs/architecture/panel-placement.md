@@ -177,5 +177,3 @@ neko-canvas、neko-model 如需属性面板，直接采用内嵌方案，不重�
 ## 参考
 
 - [ARCHITECTURE.md](../../ARCHITECTURE.md) — 系统架构总览
-- [2d-capability-analysis.md](./2d-capability-analysis.md) — neko-sketch 2D 能力分析
-- [3d-capability-analysis.md](./3d-capability-analysis.md) — neko-model 3D 能力分析

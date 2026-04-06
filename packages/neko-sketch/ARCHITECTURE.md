@@ -6,8 +6,6 @@ neko-sketch is the 2D drawing module of neko-suite, providing painting and frame
 
 Puppet skeletal animation has been split into a separate extension: [neko-puppet](../neko-puppet/).
 
-Detailed capability analysis: [docs/architecture/2d-capability-analysis.md](../../docs/architecture/2d-capability-analysis.md)
-
 ## Package Structure
 
 ```

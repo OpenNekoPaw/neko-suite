@@ -1,6 +1,6 @@
 # UI 现代化优化 — 设计方案
 
-> 基于 [ui-modernization.md](./ui-modernization.md) 分析结论
+> Based on UI modernization analysis
 
 ---
 

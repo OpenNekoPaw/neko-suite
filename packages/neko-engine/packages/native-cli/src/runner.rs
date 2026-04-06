@@ -12,7 +12,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use neko_native_api::{
     EngineApi, ExportHwEncoder, ExportJobConfig, ExportPreset, ExportVideoCodec, JviLoader,
 };
-use neko_types::ActionRequest;
+use neko_types::{ActionRequest, EngineConfig};
 
 /// CLI runner for executing commands
 pub struct Runner {
@@ -24,12 +24,13 @@ impl Runner {
         Self { engine: None }
     }
 
-    /// Initialize the engine (lazy initialization)
+    /// Initialize the engine with optional config (lazy initialization)
     async fn get_engine(
         &mut self,
     ) -> Result<Arc<EngineApi>, Box<dyn std::error::Error + Send + Sync>> {
         if self.engine.is_none() {
-            let engine = EngineApi::new().await.map_err(|e| {
+            let config = EngineConfig::load(None, None)?;
+            let engine = EngineApi::with_config(config).await.map_err(|e| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Failed to initialize engine: {}", e),
@@ -115,12 +116,22 @@ impl Runner {
     async fn run_server(
         &mut self,
         port: u16,
-        _config: Option<PathBuf>,
+        config: Option<PathBuf>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        tracing::info!("Starting Neko Suite Server on port {}", port);
+        let engine_config = EngineConfig::load(config.as_deref(), None)?;
+        // CLI --port flag overrides config file
+        let effective_port = if port != 8765 { port } else { engine_config.server.port };
 
-        let engine = self.get_engine().await?;
-        neko_native_http::start_server(engine, port).await?;
+        tracing::info!("Starting Neko Suite Server on port {}", effective_port);
+
+        let engine = Arc::new(EngineApi::with_config(engine_config).await.map_err(|e| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to initialize engine: {}", e),
+            )) as Box<dyn std::error::Error + Send + Sync>
+        })?);
+        self.engine = Some(engine.clone());
+        neko_native_http::start_server(engine, effective_port).await?;
 
         Ok(())
     }
