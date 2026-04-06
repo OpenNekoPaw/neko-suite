@@ -13,7 +13,11 @@ interface CollapsiblePanelProps {
   defaultExpanded?: boolean;
 }
 
-export function CollapsiblePanel({ titleKey, children, defaultExpanded = true }: CollapsiblePanelProps) {
+export function CollapsiblePanel({
+  titleKey,
+  children,
+  defaultExpanded = true,
+}: CollapsiblePanelProps) {
   const { t } = useTranslation();
   return (
     <CollapsibleSection title={t(titleKey)} defaultExpanded={defaultExpanded}>

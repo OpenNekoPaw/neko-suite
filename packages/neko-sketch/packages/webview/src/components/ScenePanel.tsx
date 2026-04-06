@@ -225,12 +225,12 @@ export function ScenePanel() {
 /* ── Atmosphere sub-section (previously a standalone panel) ─────────── */
 
 const ATMOSPHERE_PRESETS: { value: AtmospherePreset; key: string }[] = [
-  { value: 'none',       key: 'sketch.atmosphere.preset.none' },
-  { value: 'fog',        key: 'sketch.atmosphere.preset.fog' },
-  { value: 'rain',       key: 'sketch.atmosphere.preset.rain' },
-  { value: 'snow',       key: 'sketch.atmosphere.preset.snow' },
-  { value: 'fireflies',  key: 'sketch.atmosphere.preset.fireflies' },
-  { value: 'dust',       key: 'sketch.atmosphere.preset.dust' },
+  { value: 'none', key: 'sketch.atmosphere.preset.none' },
+  { value: 'fog', key: 'sketch.atmosphere.preset.fog' },
+  { value: 'rain', key: 'sketch.atmosphere.preset.rain' },
+  { value: 'snow', key: 'sketch.atmosphere.preset.snow' },
+  { value: 'fireflies', key: 'sketch.atmosphere.preset.fireflies' },
+  { value: 'dust', key: 'sketch.atmosphere.preset.dust' },
 ];
 
 function AtmosphereSection(props: {

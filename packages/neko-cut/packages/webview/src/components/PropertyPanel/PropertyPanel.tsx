@@ -260,11 +260,7 @@ const PropertyGroup = memo(function PropertyGroup({
 }: PropertyGroupProps) {
   const { t } = useTranslation();
   return (
-    <CollapsibleSection
-      title={t(titleKey)}
-      defaultExpanded={defaultExpanded}
-      disabled={disabled}
-    >
+    <CollapsibleSection title={t(titleKey)} defaultExpanded={defaultExpanded} disabled={disabled}>
       {/* Preserve horizontal padding matching the original .nk-prop-group-body */}
       <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {children}

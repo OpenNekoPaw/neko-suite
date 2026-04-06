@@ -35,12 +35,8 @@ export function Panel({ title, width, border = 'left', children, className, styl
       className={`neko-panel${className ? ` ${className}` : ''}`}
       style={{ width, ...borderStyle, ...style }}
     >
-      {title !== undefined && (
-        <div className="neko-panel-header">{title}</div>
-      )}
-      <div className="neko-panel-body">
-        {children}
-      </div>
+      {title !== undefined && <div className="neko-panel-header">{title}</div>}
+      <div className="neko-panel-body">{children}</div>
     </div>
   );
 }

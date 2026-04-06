@@ -21,10 +21,7 @@ export interface VerticalToolbarProps {
 
 export function VerticalToolbar({ width = 48, children, className }: VerticalToolbarProps) {
   return (
-    <div
-      className={`neko-vtoolbar${className ? ` ${className}` : ''}`}
-      style={{ width }}
-    >
+    <div className={`neko-vtoolbar${className ? ` ${className}` : ''}`} style={{ width }}>
       {children}
     </div>
   );
@@ -41,12 +38,17 @@ export interface ToolbarButtonProps {
   className?: string;
 }
 
-export function ToolbarButton({ icon, title, active, disabled, onClick, className }: ToolbarButtonProps) {
-  const cls = [
-    'neko-toolbar-btn',
-    active ? 'active' : '',
-    className ?? '',
-  ].filter(Boolean).join(' ');
+export function ToolbarButton({
+  icon,
+  title,
+  active,
+  disabled,
+  onClick,
+  className,
+}: ToolbarButtonProps) {
+  const cls = ['neko-toolbar-btn', active ? 'active' : '', className ?? '']
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <button

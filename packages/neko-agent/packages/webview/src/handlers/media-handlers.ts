@@ -175,9 +175,7 @@ const handleMediaTaskProgress: MessageHandler = (message, context) => {
 
   const updated = mediaTaskToBackgroundTask(rawTask);
 
-  context.setBackgroundTasks((prev) =>
-    prev.map((t) => (t.id === updated.id ? updated : t)),
-  );
+  context.setBackgroundTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
 };
 
 // ---------------------------------------------------------------------------

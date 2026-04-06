@@ -106,7 +106,7 @@ export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProp
           <div key={i} className="neko-menu-sep" role="separator" />
         ) : (
           <MenuItemRow key={i} item={item} onClose={onClose} />
-        )
+        ),
       )}
     </div>
   );
@@ -153,10 +153,7 @@ function MenuItemRow({ item, onClose }: MenuItemRowProps) {
     }
   }, [item, hasSubmenu, onClose]);
 
-  const cls = [
-    'neko-menu-item',
-    item.danger ? 'danger' : '',
-  ].filter(Boolean).join(' ');
+  const cls = ['neko-menu-item', item.danger ? 'danger' : ''].filter(Boolean).join(' ');
 
   // Calculate sub-menu position relative to the row
   const getSubmenuPos = () => {
@@ -181,29 +178,20 @@ function MenuItemRow({ item, onClose }: MenuItemRowProps) {
         disabled={item.disabled}
         role="menuitem"
       >
-        {item.icon !== undefined && (
-          <span className="neko-menu-item-icon">{item.icon}</span>
-        )}
+        {item.icon !== undefined && <span className="neko-menu-item-icon">{item.icon}</span>}
         <span className="neko-menu-item-label">{item.label}</span>
         {item.shortcut !== undefined && (
           <span className="neko-menu-item-shortcut">{item.shortcut}</span>
         )}
-        {hasSubmenu && (
-          <span className="neko-menu-item-arrow">›</span>
-        )}
+        {hasSubmenu && <span className="neko-menu-item-arrow">›</span>}
       </button>
 
-      {submenuOpen && hasSubmenu && (() => {
-        const { x, y } = getSubmenuPos();
-        return (
-          <ContextMenu
-            items={item.submenu!}
-            x={x}
-            y={y}
-            onClose={onClose}
-          />
-        );
-      })()}
+      {submenuOpen &&
+        hasSubmenu &&
+        (() => {
+          const { x, y } = getSubmenuPos();
+          return <ContextMenu items={item.submenu!} x={x} y={y} onClose={onClose} />;
+        })()}
     </div>
   );
 }

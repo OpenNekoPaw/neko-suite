@@ -23,13 +23,7 @@ export interface CollapsibleSectionProps {
 }
 
 const ChevronIcon = () => (
-  <svg
-    viewBox="0 0 16 16"
-    width="12"
-    height="12"
-    fill="currentColor"
-    aria-hidden="true"
-  >
+  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
     <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L9.19 8 6.22 5.03a.75.75 0 0 1 0-1.06z" />
   </svg>
 );
@@ -46,7 +40,7 @@ export function CollapsibleSection({
   const isExpanded = expanded && !disabled;
 
   const handleToggle = () => {
-    if (!disabled) setExpanded(prev => !prev);
+    if (!disabled) setExpanded((prev) => !prev);
   };
 
   return (
@@ -58,18 +52,12 @@ export function CollapsibleSection({
         aria-expanded={isExpanded}
         style={disabled ? { pointerEvents: 'none', opacity: 0.4 } : undefined}
       >
-        <span
-          className={`neko-collapsible-chevron${isExpanded ? ' expanded' : ''}`}
-        >
+        <span className={`neko-collapsible-chevron${isExpanded ? ' expanded' : ''}`}>
           <ChevronIcon />
         </span>
         {title}
       </button>
-      {isExpanded && (
-        <div className="neko-collapsible-body">
-          {children}
-        </div>
-      )}
+      {isExpanded && <div className="neko-collapsible-body">{children}</div>}
     </div>
   );
 }

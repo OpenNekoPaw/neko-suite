@@ -14,30 +14,34 @@ import type { BrushType } from '../types';
 
 /** Brush types available when the brush tool is active (eraser handled by toolbar) */
 const BRUSH_TYPES: { type: BrushType; key: string }[] = [
-  { type: 'pencil',     key: 'sketch.brush.pencil' },
-  { type: 'pen',        key: 'sketch.brush.pen' },
+  { type: 'pencil', key: 'sketch.brush.pencil' },
+  { type: 'pen', key: 'sketch.brush.pen' },
   { type: 'watercolor', key: 'sketch.brush.watercolor' },
-  { type: 'airbrush',   key: 'sketch.brush.airbrush' },
-  { type: 'marker',     key: 'sketch.brush.marker' },
-  { type: 'pixel',      key: 'sketch.brush.pixel' },
+  { type: 'airbrush', key: 'sketch.brush.airbrush' },
+  { type: 'marker', key: 'sketch.brush.marker' },
+  { type: 'pixel', key: 'sketch.brush.pixel' },
 ];
 
 export function BrushPanel() {
   const { t } = useTranslation();
-  const activeTool     = useSketchStore((s) => s.activeTool);
-  const brushSettings  = useSketchStore((s) => s.brushSettings);
-  const setBrushType   = useSketchStore((s) => s.setBrushType);
-  const setBrushSize   = useSketchStore((s) => s.setBrushSize);
+  const activeTool = useSketchStore((s) => s.activeTool);
+  const brushSettings = useSketchStore((s) => s.brushSettings);
+  const setBrushType = useSketchStore((s) => s.setBrushType);
+  const setBrushSize = useSketchStore((s) => s.setBrushSize);
   const setBrushOpacity = useSketchStore((s) => s.setBrushOpacity);
-  const setBrushColor  = useSketchStore((s) => s.setBrushColor);
-  const show           = useSketchStore((s) => s.showBrushPanel);
+  const setBrushColor = useSketchStore((s) => s.setBrushColor);
+  const show = useSketchStore((s) => s.showBrushPanel);
 
   if (!show) return null;
 
   const isEraser = activeTool === 'eraser';
 
   return (
-    <div className="sketch-panel" role="region" aria-label={isEraser ? t('sketch.tool.eraser') : t('sketch.panel.brush')}>
+    <div
+      className="sketch-panel"
+      role="region"
+      aria-label={isEraser ? t('sketch.tool.eraser') : t('sketch.panel.brush')}
+    >
       <h3 className="sketch-panel-title">
         {isEraser ? t('sketch.tool.eraser') : t('sketch.panel.brush')}
       </h3>
@@ -63,9 +67,7 @@ export function BrushPanel() {
 
       {/* Size */}
       <div className="sketch-panel-row">
-        <label htmlFor="brush-size">
-          {t('sketch.brush.size', { size: brushSettings.size })}
-        </label>
+        <label htmlFor="brush-size">{t('sketch.brush.size', { size: brushSettings.size })}</label>
         <input
           id="brush-size"
           type="range"

@@ -57,7 +57,11 @@ export { PromptManager } from './service/prompt-manager';
 // =============================================================================
 
 export { MediaGenerationService } from './media/media-generation-service';
-export { downloadMediaOutputs, detectMediaExtension, type DownloadMediaOptions } from './media/media-file-downloader';
+export {
+  downloadMediaOutputs,
+  detectMediaExtension,
+  type DownloadMediaOptions,
+} from './media/media-file-downloader';
 export type {
   MediaGenerationType,
   MediaTaskStatus,

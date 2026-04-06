@@ -52,12 +52,5 @@ interface ContextMenuProps {
 }
 
 export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
-  return (
-    <SharedContextMenu
-      x={x}
-      y={y}
-      items={toSharedItems(items)}
-      onClose={onClose}
-    />
-  );
+  return <SharedContextMenu x={x} y={y} items={toSharedItems(items)} onClose={onClose} />;
 });

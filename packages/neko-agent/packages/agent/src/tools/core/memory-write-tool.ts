@@ -29,7 +29,8 @@ export class MemoryWriteTool extends BuiltinTool {
       },
       key: {
         type: 'string',
-        description: 'Section heading (e.g. "User Preferences"). Used as the ## heading in memory.md.',
+        description:
+          'Section heading (e.g. "User Preferences"). Used as the ## heading in memory.md.',
       },
       content: {
         type: 'string',
@@ -68,10 +69,18 @@ export class MemoryWriteTool extends BuiltinTool {
           return this.error('`content` is required for action `upsert`');
         }
         await this._memory.upsertEntry(key, content);
-        return this.success({ action: 'upsert', key, message: `Section "${key}" saved to project memory.` });
+        return this.success({
+          action: 'upsert',
+          key,
+          message: `Section "${key}" saved to project memory.`,
+        });
       } else {
         await this._memory.removeEntry(key);
-        return this.success({ action: 'remove', key, message: `Section "${key}" removed from project memory.` });
+        return this.success({
+          action: 'remove',
+          key,
+          message: `Section "${key}" removed from project memory.`,
+        });
       }
     } catch (err) {
       return this.error(

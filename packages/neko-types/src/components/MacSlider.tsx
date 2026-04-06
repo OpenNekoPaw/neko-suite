@@ -7,7 +7,10 @@
 
 import { type InputHTMLAttributes } from 'react';
 
-export interface MacSliderProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
+export interface MacSliderProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'type' | 'onChange'
+> {
   value: number;
   min?: number;
   max?: number;

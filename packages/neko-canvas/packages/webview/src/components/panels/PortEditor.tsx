@@ -140,10 +140,7 @@ export function PortEditor({ node, onUpdatePorts }: PortEditorProps) {
 
       {/* Default ports indicator */}
       {!hasCustomPorts && (
-        <div
-          className="text-[10px] italic mb-1.5"
-          style={{ color: 'var(--panel-fg-secondary)' }}
-        >
+        <div className="text-[10px] italic mb-1.5" style={{ color: 'var(--panel-fg-secondary)' }}>
           {t('panel.defaultPorts')}
         </div>
       )}

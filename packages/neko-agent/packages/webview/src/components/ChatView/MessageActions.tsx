@@ -165,4 +165,3 @@ function ThumbDownIcon({ filled }: { filled?: boolean }) {
     </svg>
   );
 }
-

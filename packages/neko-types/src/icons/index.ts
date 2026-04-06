@@ -34,13 +34,7 @@ export {
   CloseIcon,
 } from './action';
 
-export {
-  ErrorIcon,
-  WarningIcon,
-  SuccessIcon,
-  LoadingIcon,
-  InfoIcon,
-} from './status';
+export { ErrorIcon, WarningIcon, SuccessIcon, LoadingIcon, InfoIcon } from './status';
 
 export {
   CodeIcon,

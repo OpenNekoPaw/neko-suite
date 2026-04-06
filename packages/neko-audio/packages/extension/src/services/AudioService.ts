@@ -359,9 +359,7 @@ export class AudioService implements vscode.Disposable {
     return this._client.recordStart(options);
   }
 
-  async recordStop(
-    streamId: string,
-  ): Promise<{
+  async recordStop(streamId: string): Promise<{
     path: string;
     durationSeconds: number;
     format: string;

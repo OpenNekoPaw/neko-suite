@@ -12,6 +12,8 @@ import {
 
 export type ProgressBarProps = SharedProgressBarProps;
 
-export function ProgressBar(props: Omit<SharedProgressBarProps, 'formatTooltip'> & { formatTooltip?: (t: number) => string }) {
+export function ProgressBar(
+  props: Omit<SharedProgressBarProps, 'formatTooltip'> & { formatTooltip?: (t: number) => string },
+) {
   return <SharedProgressBar formatTooltip={formatTime} {...props} />;
 }

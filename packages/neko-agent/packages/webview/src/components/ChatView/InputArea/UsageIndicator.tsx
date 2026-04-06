@@ -76,7 +76,9 @@ export function UsageIndicator({
           /* Spinning ring while compressing */
           <svg width="14" height="14" viewBox="0 0 14 14" className="animate-spin">
             <circle
-              cx="7" cy="7" r={RADIUS}
+              cx="7"
+              cy="7"
+              r={RADIUS}
               fill="none"
               stroke="var(--vscode-descriptionForeground)"
               strokeWidth="2"
@@ -86,22 +88,21 @@ export function UsageIndicator({
           </svg>
         ) : (
           /* Pie chart */
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            style={{ transform: 'rotate(-90deg)' }}
-          >
+          <svg width="14" height="14" viewBox="0 0 14 14" style={{ transform: 'rotate(-90deg)' }}>
             {/* Track (background circle) */}
             <circle
-              cx="7" cy="7" r={RADIUS}
+              cx="7"
+              cy="7"
+              r={RADIUS}
               fill="none"
               stroke="var(--vscode-input-background)"
               strokeWidth="10"
             />
             {/* Filled arc */}
             <circle
-              cx="7" cy="7" r={RADIUS}
+              cx="7"
+              cy="7"
+              r={RADIUS}
               fill="none"
               stroke={color}
               strokeWidth="10"
@@ -111,7 +112,9 @@ export function UsageIndicator({
             />
             {/* Border ring */}
             <circle
-              cx="7" cy="7" r={RADIUS}
+              cx="7"
+              cy="7"
+              r={RADIUS}
               fill="none"
               stroke={color}
               strokeWidth="0.5"

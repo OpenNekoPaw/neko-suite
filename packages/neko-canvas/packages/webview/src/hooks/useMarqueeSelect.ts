@@ -132,29 +132,26 @@ export function useMarqueeSelect({
     [enabled],
   );
 
-  const onMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!startRef.current) return;
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!startRef.current) return;
 
-      const dx = e.clientX - startRef.current.x;
-      const dy = e.clientY - startRef.current.y;
+    const dx = e.clientX - startRef.current.x;
+    const dy = e.clientY - startRef.current.y;
 
-      // Don't activate until minimum drag distance
-      if (!activatedRef.current) {
-        if (Math.sqrt(dx * dx + dy * dy) < MIN_DRAG_DISTANCE) return;
-        activatedRef.current = true;
-        setIsSelecting(true);
-      }
+    // Don't activate until minimum drag distance
+    if (!activatedRef.current) {
+      if (Math.sqrt(dx * dx + dy * dy) < MIN_DRAG_DISTANCE) return;
+      activatedRef.current = true;
+      setIsSelecting(true);
+    }
 
-      const x = Math.min(startRef.current.x, e.clientX);
-      const y = Math.min(startRef.current.y, e.clientY);
-      const width = Math.abs(dx);
-      const height = Math.abs(dy);
+    const x = Math.min(startRef.current.x, e.clientX);
+    const y = Math.min(startRef.current.y, e.clientY);
+    const width = Math.abs(dx);
+    const height = Math.abs(dy);
 
-      setMarqueeRect({ x, y, width, height });
-    },
-    [],
-  );
+    setMarqueeRect({ x, y, width, height });
+  }, []);
 
   const onMouseUp = useCallback(
     (e: React.MouseEvent) => {

@@ -31,22 +31,22 @@ export interface TimelineRulerProps {
 // ── Tick interval calculation ─────────────────────────────────────────────────
 
 interface TickConfig {
-  interval: number;    // seconds between micro ticks (finest unit)
-  minorEvery: number;  // every Nth micro tick is a minor tick (medium height)
-  majorEvery: number;  // every Nth micro tick is a major tick (tallest, labeled)
-                       // majorEvery should be a multiple of minorEvery
+  interval: number; // seconds between micro ticks (finest unit)
+  minorEvery: number; // every Nth micro tick is a minor tick (medium height)
+  majorEvery: number; // every Nth micro tick is a major tick (tallest, labeled)
+  // majorEvery should be a multiple of minorEvery
 }
 
 function calcTickConfig(pps: number): TickConfig {
   // Three-tier tick hierarchy: micro (shortest) → minor (medium) → major (tallest, labeled).
   // Minimum tick interval is 1 s (no sub-second ticks).
   // Keep micro ticks at least ~20 px apart; major labels at least ~200 px apart.
-  if (pps >= 50)  return { interval: 1,  minorEvery: 5,  majorEvery: 10 }; // micro@1s minor@5s major@10s
-  if (pps >= 20)  return { interval: 2,  minorEvery: 5,  majorEvery: 5  }; // micro@2s major@10s
-  if (pps >= 10)  return { interval: 5,  minorEvery: 2,  majorEvery: 6  }; // micro@5s minor@10s major@30s
-  if (pps >= 4)   return { interval: 10, minorEvery: 3,  majorEvery: 6  }; // micro@10s minor@30s major@60s
-  if (pps >= 2)   return { interval: 30, minorEvery: 2,  majorEvery: 4  }; // micro@30s minor@60s major@2min
-  return               { interval: 60, minorEvery: 1,  majorEvery: 5  }; // minor@60s major@5min
+  if (pps >= 50) return { interval: 1, minorEvery: 5, majorEvery: 10 }; // micro@1s minor@5s major@10s
+  if (pps >= 20) return { interval: 2, minorEvery: 5, majorEvery: 5 }; // micro@2s major@10s
+  if (pps >= 10) return { interval: 5, minorEvery: 2, majorEvery: 6 }; // micro@5s minor@10s major@30s
+  if (pps >= 4) return { interval: 10, minorEvery: 3, majorEvery: 6 }; // micro@10s minor@30s major@60s
+  if (pps >= 2) return { interval: 30, minorEvery: 2, majorEvery: 4 }; // micro@30s minor@60s major@2min
+  return { interval: 60, minorEvery: 1, majorEvery: 5 }; // minor@60s major@5min
 }
 
 /** Consistent M:SS format (e.g. "0:00", "0:30", "1:05", "10:00") */
@@ -102,9 +102,9 @@ export function TimelineRuler({
 
     // Read CSS variables for theming
     const style = getComputedStyle(document.documentElement);
-    const fg      = style.getPropertyValue('--neko-fg-secondary').trim()  || '#8e8e93';
-    const divider = style.getPropertyValue('--neko-divider').trim()       || 'rgba(255,255,255,0.06)';
-    const surface = style.getPropertyValue('--neko-surface').trim()       || '#242426';
+    const fg = style.getPropertyValue('--neko-fg-secondary').trim() || '#8e8e93';
+    const divider = style.getPropertyValue('--neko-divider').trim() || 'rgba(255,255,255,0.06)';
+    const surface = style.getPropertyValue('--neko-surface').trim() || '#242426';
 
     // Reset transform absolutely to avoid cumulative scaling across redraws
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -121,7 +121,7 @@ export function TimelineRuler({
     // Compute visible time range
     const { interval, minorEvery, majorEvery } = calcTickConfig(pixelsPerSecond);
     const visibleStart = scrollLeft / pixelsPerSecond;
-    const visibleEnd   = (scrollLeft + w) / pixelsPerSecond;
+    const visibleEnd = (scrollLeft + w) / pixelsPerSecond;
 
     // Snap to the first tick index at or before visibleStart
     const firstTickIdx = Math.floor(visibleStart / interval);
@@ -158,7 +158,9 @@ export function TimelineRuler({
   }, [duration, pixelsPerSecond, height, scrollRef]);
 
   // Redraw when props change
-  useEffect(() => { draw(); }, [draw]);
+  useEffect(() => {
+    draw();
+  }, [draw]);
 
   // Redraw on container resize
   useEffect(() => {
@@ -196,11 +198,7 @@ export function TimelineRuler({
       className={`neko-ruler${className ? ` ${className}` : ''}`}
       style={{ height }}
     >
-      <canvas
-        ref={canvasRef}
-        style={{ display: 'block' }}
-        onPointerDown={handlePointerDown}
-      />
+      <canvas ref={canvasRef} style={{ display: 'block' }} onPointerDown={handlePointerDown} />
     </div>
   );
 }
