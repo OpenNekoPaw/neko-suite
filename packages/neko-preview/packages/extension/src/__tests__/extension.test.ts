@@ -22,8 +22,21 @@ vi.mock('vscode', () => {
     },
   };
 
+  class MockEventEmitter {
+    private listeners: Array<(...args: unknown[]) => void> = [];
+    event = (listener: (...args: unknown[]) => void) => {
+      this.listeners.push(listener);
+      return { dispose: vi.fn() };
+    };
+    fire = (...args: unknown[]) => {
+      for (const l of this.listeners) l(...args);
+    };
+    dispose = vi.fn();
+  }
+
   return {
     Uri,
+    EventEmitter: MockEventEmitter,
     window: {
       registerCustomEditorProvider: vi.fn(() => ({ dispose: vi.fn() })),
       showOpenDialog: vi.fn(),
@@ -34,6 +47,8 @@ vi.mock('vscode', () => {
         hide: vi.fn(),
         dispose: vi.fn(),
       })),
+      createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() })),
       createOutputChannel: vi.fn(() => ({
         append: vi.fn(),
         appendLine: vi.fn(),
@@ -48,6 +63,9 @@ vi.mock('vscode', () => {
         return { dispose: vi.fn(), handler };
       }),
       executeCommand: vi.fn(),
+    },
+    languages: {
+      registerDocumentSymbolProvider: vi.fn(() => ({ dispose: vi.fn() })),
     },
     StatusBarAlignment: { Left: 1, Right: 2 },
   };

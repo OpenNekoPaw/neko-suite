@@ -1,3 +1,9 @@
+// TODO: Duplicated hook — neko-cut has a much larger useVSCodeMessaging (462 lines)
+// with domain-specific logic (timeline, export, context menu, AI actions).
+// This version is a thin wrapper (56 lines) over acquireVsCodeApi + message listener.
+// The thin wrapper pattern could be extracted to @neko/shared/hooks/useVSCodeMessaging
+// as a generic base, with domain hooks composing on top of it.
+
 import { useEffect, useCallback, useRef } from 'react';
 import type { MessageToWebview, MessageToExtension } from '../types';
 

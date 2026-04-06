@@ -1,3 +1,9 @@
+// TODO: Duplicated hook — neko-audio has a similar useDragDrop (69 lines) with
+// incompatible API (audio-specific: postMessage only, no position tracking).
+// Both use @neko/shared useFileDrop internally but wrap it differently.
+// Consider extracting a shared base hook to @neko/shared/hooks/useDragDrop that
+// provides common DnD lifecycle (isDragOver, dropProps) with a pluggable onDrop strategy.
+
 /**
  * useDragDrop - Drag & drop handling for canvas
  *

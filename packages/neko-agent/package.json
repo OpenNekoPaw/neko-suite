@@ -218,6 +218,16 @@
           "command": "neko.pipeline.startFromFile",
           "group": "neko@5",
           "when": "editorLangId =~ /markdown|plaintext|txt|nekostory/"
+        },
+        {
+          "command": "neko.ai.summarizeDocument",
+          "group": "neko@6",
+          "when": "editorLangId == nekostory"
+        },
+        {
+          "command": "neko.ai.chatWithDocument",
+          "group": "neko@7",
+          "when": "editorLangId == nekostory"
         }
       ],
       "explorer/context": [

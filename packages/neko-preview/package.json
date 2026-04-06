@@ -1,7 +1,7 @@
 {
   "name": "neko-preview",
-  "displayName": "Neko Preview",
-  "description": "Lightweight media and document preview for video, audio, PDF, EPUB, CBZ and DOCX files",
+  "displayName": "%neko.preview.displayName%",
+  "description": "%neko.preview.description%",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -47,7 +47,7 @@
     "customEditors": [
       {
         "viewType": "neko.videoPreview",
-        "displayName": "Video Preview",
+        "displayName": "%neko.preview.videoPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.{mp4,mov,avi,mkv,webm,m4v,ts,flv,wmv}"
@@ -57,7 +57,7 @@
       },
       {
         "viewType": "neko.audioPreview",
-        "displayName": "Audio Preview",
+        "displayName": "%neko.preview.audioPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.{mp3,wav,ogg,flac,aac,m4a,wma,opus}"
@@ -67,7 +67,7 @@
       },
       {
         "viewType": "neko.pdfPreview",
-        "displayName": "Neko PDF Preview",
+        "displayName": "%neko.preview.pdfPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.pdf"
@@ -77,7 +77,7 @@
       },
       {
         "viewType": "neko.cbzPreview",
-        "displayName": "Neko CBZ Preview",
+        "displayName": "%neko.preview.cbzPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.cbz"
@@ -87,7 +87,7 @@
       },
       {
         "viewType": "neko.epubPreview",
-        "displayName": "Neko EPUB Preview",
+        "displayName": "%neko.preview.epubPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.epub"
@@ -97,7 +97,7 @@
       },
       {
         "viewType": "neko.docxPreview",
-        "displayName": "Neko DOCX Preview",
+        "displayName": "%neko.preview.docxPreview.displayName%",
         "selector": [
           {
             "filenamePattern": "*.{docx,doc}"
@@ -109,37 +109,37 @@
     "commands": [
       {
         "command": "neko.preview.openVideo",
-        "title": "Open Video Preview",
+        "title": "%neko.preview.openVideo.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.preview.openAudio",
-        "title": "Open Audio Preview",
+        "title": "%neko.preview.openAudio.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.preview.openPdf",
-        "title": "Open PDF Preview",
+        "title": "%neko.preview.openPdf.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.preview.openCbz",
-        "title": "Open CBZ Preview",
+        "title": "%neko.preview.openCbz.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.preview.openEpub",
-        "title": "Open EPUB Preview",
+        "title": "%neko.preview.openEpub.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.preview.openDocx",
-        "title": "Open DOCX Preview",
+        "title": "%neko.preview.openDocx.title%",
         "category": "Neko Preview"
       },
       {
         "command": "neko.epub.goToChapter",
-        "title": "Go to Chapter…",
+        "title": "%neko.preview.goToChapter.title%",
         "category": "Neko Preview"
       }
     ],
@@ -147,13 +147,13 @@
       "explorer": [
         {
           "id": "neko.epubOutline",
-          "name": "EPUB Outline",
+          "name": "%neko.preview.epubOutline.name%",
           "when": "neko.epubEditorActive"
         }
       ]
     },
     "configuration": {
-      "title": "Neko Preview",
+      "title": "%neko.preview.config.title%",
       "properties": {
         "neko.preview.videoQuality": {
           "type": "string",
@@ -163,12 +163,12 @@
             "high"
           ],
           "default": "medium",
-          "description": "Preview video quality (affects bandwidth and CPU usage)"
+          "description": "%neko.preview.videoQuality.description%"
         },
         "neko.preview.autoPlay": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically start playback when opening media files"
+          "description": "%neko.preview.autoPlay.description%"
         }
       }
     }

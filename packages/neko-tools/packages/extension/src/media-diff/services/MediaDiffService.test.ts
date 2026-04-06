@@ -20,6 +20,9 @@ vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(),
   },
+  extensions: {
+    getExtension: vi.fn(),
+  },
 }));
 
 import { MediaDiffService, getMediaDiffService, disposeMediaDiffService } from './MediaDiffService';

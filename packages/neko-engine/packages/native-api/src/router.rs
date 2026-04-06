@@ -382,7 +382,13 @@ mod tests {
         let router = create_test_router();
 
         let models_actions = router.actions("models").unwrap();
-        assert_eq!(models_actions, &["probe", "capture", "stream", "diff"]);
+        assert_eq!(
+            models_actions,
+            &[
+                "probe", "capture", "stream", "diff", "register", "unregister", "list", "upscale",
+                "denoise", "clip", "transcribe",
+            ]
+        );
 
         let canvas_actions = router.actions("canvas").unwrap();
         assert_eq!(canvas_actions, &["composite", "capture", "export", "diff"]);

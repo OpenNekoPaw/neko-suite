@@ -1,0 +1,8 @@
+{
+  "neko.auth.config.title": "Neko Auth",
+  "neko.auth.clientId.description": "OAuth 2.0 client ID for Neko Suite authentication",
+  "neko.auth.authUrl.description": "OAuth 2.0 authorization endpoint URL",
+  "neko.auth.tokenUrl.description": "OAuth 2.0 token endpoint URL",
+  "neko.auth.scopes.description": "OAuth 2.0 scopes to request during authentication",
+  "neko.auth.redirectPort.description": "Local port for OAuth redirect callback"
+}

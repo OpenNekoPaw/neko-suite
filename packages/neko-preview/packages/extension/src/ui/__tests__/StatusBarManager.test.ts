@@ -58,6 +58,7 @@ describe('StatusBarManager', () => {
 
   it('should create a status bar item on construction', () => {
     expect(vscode.window.createStatusBarItem).toHaveBeenCalledWith(
+      'neko.preview.status',
       vscode.StatusBarAlignment.Left,
       100,
     );

@@ -7,6 +7,7 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
+import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import AdmZip from 'adm-zip';
 import type {
@@ -768,7 +769,7 @@ export function createNekoCanvasTools(
         }
 
         const zipBuffer = zip.toBuffer();
-        fs.writeFileSync(saveUri.fsPath, zipBuffer);
+        await fsp.writeFile(saveUri.fsPath, zipBuffer);
 
         logger.info(
           `export_storyboard: wrote ZIP to ${saveUri.fsPath} (${manifestShots.length} shots, ${imagesAdded} images)`,

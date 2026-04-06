@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
-import { createVSCodeLogger, createNewFile } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  createNewFile,
+  VSCodeErrorHandler,
+} from '@neko/shared/vscode/extension';
+import { setErrorHandler } from './utils/errorHandler';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
 import { FountainDefinitionProvider, FountainReferenceProvider } from './providers/definition';
@@ -22,6 +27,7 @@ const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
 export function activate(context: vscode.ExtensionContext) {
   const rootLogger = createVSCodeLogger('Neko Story', 'NekoStory', context);
   setRootLogger(rootLogger);
+  setErrorHandler(new VSCodeErrorHandler(rootLogger));
   const logger = getRootLogger();
 
   logger.info('Extension activated');

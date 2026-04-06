@@ -23,6 +23,9 @@ import type { TimelineTrack, TimelineElement } from '@neko/shared';
 import type { WaveformData } from '../shared/types';
 import { syncOperationToExtension } from './utils/extension-sync';
 import { createMeta } from './utils/operation-helpers';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AudioProjectStore');
 
 const MAX_OP_HISTORY_SIZE = 200;
 
@@ -111,7 +114,7 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
       });
       syncOperationToExtension(op);
     } catch (e) {
-      console.error('[AudioProject] dispatch failed:', e, op);
+      logger.error('dispatch failed', e);
     }
   },
 
@@ -137,7 +140,7 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
       });
       syncOperationToExtension(batchOp);
     } catch (e) {
-      console.error('[AudioProject] batch failed:', e, ops);
+      logger.error('batch failed', e);
     }
   },
 
@@ -158,7 +161,7 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
       });
       syncOperationToExtension(inv);
     } catch (e) {
-      console.error('[AudioProject] opUndo failed:', e);
+      logger.error('opUndo failed', e);
     }
   },
 
@@ -178,7 +181,7 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
       });
       syncOperationToExtension(op);
     } catch (e) {
-      console.error('[AudioProject] opRedo failed:', e);
+      logger.error('opRedo failed', e);
     }
   },
 

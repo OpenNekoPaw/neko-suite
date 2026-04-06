@@ -10,6 +10,7 @@
 // =============================================================================
 
 import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
 import type { GeneratedAsset, GeneratedAssetType, GENERATED_ASSET_DIRS } from '@neko/shared';
 
@@ -52,10 +53,10 @@ export class GeneratedAssetIndex {
   // ---------------------------------------------------------------------------
 
   /** Load index from disk. Safe to call multiple times (idempotent). */
-  load(): void {
+  async load(): Promise<void> {
     this.assets.clear();
     try {
-      const raw = fs.readFileSync(this.indexPath, 'utf-8');
+      const raw = await fsp.readFile(this.indexPath, 'utf-8');
       const data = JSON.parse(raw) as IndexFile;
       if (data.version === 1 && Array.isArray(data.assets)) {
         for (const asset of data.assets) {
@@ -148,11 +149,32 @@ export class GeneratedAssetIndex {
       clearTimeout(this.flushTimer);
     }
     this.flushTimer = setTimeout(() => {
-      this.flushSync();
+      void this.flushAsync();
     }, FLUSH_DELAY_MS);
   }
 
-  /** Atomic write: .tmp → rename */
+  /** Async atomic write: .tmp → rename (used by debounced timer) */
+  private async flushAsync(): Promise<void> {
+    if (!this.dirty) return;
+    try {
+      await fsp.mkdir(this.generatedDir, { recursive: true });
+
+      const data: IndexFile = {
+        version: 1,
+        assets: Array.from(this.assets.values()),
+      };
+      const json = JSON.stringify(data, null, 2);
+      const tmpPath = `${this.indexPath}.tmp`;
+
+      await fsp.writeFile(tmpPath, json, 'utf-8');
+      await fsp.rename(tmpPath, this.indexPath);
+      this.dirty = false;
+    } catch {
+      // Swallow write errors — index is reconstructible from disk files
+    }
+  }
+
+  /** Sync atomic write (used only by dispose — VSCode lifecycle requires sync) */
   private flushSync(): void {
     if (!this.dirty) return;
     try {

@@ -17,8 +17,13 @@ import { AudioService } from './services/AudioService';
 import { AudioOutlineProvider } from './views/audioOutlineProvider';
 import { AudioStatusBar } from './views/audioStatusBar';
 import type { NekoAudioAPI } from './types/api';
-import { createVSCodeLogger, createNewFile } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  createNewFile,
+  VSCodeErrorHandler,
+} from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
+import { setErrorHandler } from './utils/errorHandler';
 
 const logger = getLogger('Extension');
 
@@ -57,6 +62,7 @@ let statusBar: AudioStatusBar | null = null;
 export async function activate(context: vscode.ExtensionContext): Promise<NekoAudioAPI> {
   const rootLogger = createVSCodeLogger('Neko Audio', 'NekoAudio', context);
   setRootLogger(rootLogger);
+  setErrorHandler(new VSCodeErrorHandler(rootLogger));
 
   logger.info('Activating extension...');
 

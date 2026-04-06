@@ -157,7 +157,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     // TODO(P0): resolve element source path from elementIds via VideoEditorModel
     // For now we use a placeholder path approach
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -180,7 +180,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing denoise...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -200,7 +200,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing enhance (upscale + denoise)...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -227,7 +227,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing transcription...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -247,7 +247,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing subtitle generation...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -275,7 +275,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing silence detection...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0]);
+    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -519,12 +519,24 @@ export class AIActionHandler implements vscode.Disposable {
 
   /**
    * Resolve the source file path for a timeline element.
-   * TODO(P0): integrate with VideoEditorModel to look up element.source
-   * For now returns the params.sourcePath if provided.
+   *
+   * Priority:
+   *   1. Explicit sourcePath from action params (webview passes it)
+   *   2. Project directory fallback (from _documentUri)
    */
-  private resolveElementSourcePath(_elementId: string | undefined): string | null {
-    // Callers can pass explicit sourcePath via params
-    // This will be replaced with model lookup when integration is deeper
+  private resolveElementSourcePath(
+    _elementId: string | undefined,
+    params?: Record<string, unknown>,
+  ): string | null {
+    // 1. Explicit sourcePath from caller
+    const explicit = params?.['sourcePath'];
+    if (typeof explicit === 'string' && explicit.length > 0) {
+      return explicit;
+    }
+    // 2. Fallback: project file directory (for relative path resolution)
+    if (this._documentUri) {
+      return path.dirname(this._documentUri.fsPath);
+    }
     return null;
   }
 

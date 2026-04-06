@@ -1,3 +1,9 @@
+// TODO: Duplicated hook — neko-canvas has a similar useDragDrop (152 lines) with
+// incompatible API (canvas-specific: screenToCanvas, addMediaAt, cross-extension DnD).
+// Both use @neko/shared useFileDrop internally but wrap it differently.
+// Consider extracting a shared base hook to @neko/shared/hooks/useDragDrop that
+// provides common DnD lifecycle (isDragOver, dropProps) with a pluggable onDrop strategy.
+
 /**
  * useDragDrop - Drag & drop handling for audio project editor
  *

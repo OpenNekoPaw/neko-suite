@@ -118,7 +118,7 @@ export class MessageHandler {
       try {
         const generatedDir = resolveGeneratedDir(workspaceFolders[0].uri.fsPath);
         this._assetIndex = new GeneratedAssetIndex(generatedDir);
-        this._assetIndex.load();
+        void this._assetIndex.load();
       } catch {
         // Directory may not be writable (e.g. tests, readonly workspace)
         logger.warn('Failed to initialize GeneratedAssetIndex — asset tracking disabled');

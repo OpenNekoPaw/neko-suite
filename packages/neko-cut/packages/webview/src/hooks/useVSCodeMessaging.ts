@@ -1,3 +1,10 @@
+// TODO: Duplicated hook — neko-story has a thin useVSCodeMessaging (56 lines)
+// that wraps acquireVsCodeApi + message listener. This version (462 lines) adds
+// heavy domain logic (timeline, export, context menu, AI actions).
+// The thin wrapper pattern from neko-story could be extracted to
+// @neko/shared/hooks/useVSCodeMessaging as a generic base, with this hook
+// composing domain-specific handlers on top of it.
+
 import { useEffect, useCallback, useRef } from 'react';
 import { useEditorStore } from '../stores/editor-store';
 import type { ProjectData } from '../types';

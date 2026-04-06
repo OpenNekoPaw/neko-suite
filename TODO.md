@@ -103,15 +103,15 @@
 
 ---
 
-## 🔴 Bug / 严重问题（审计 2026-04-06 发现）
+## ✅ Bug / 严重问题（审计 2026-04-06 发现，已全部修复）
 
-### P0 — 功能失效
-- [ ] **neko-cut**: `resolveElementSourcePath()` 硬编码返回 null（`AIActionHandler.ts:524-528`）→ 所有 P0 本地 AI action（upscale/denoise/enhance/whisper/remove-silence）因无源路径而静默失败。需接通 VideoEditorModel。
-- [ ] **neko-cut**: `commands/index.ts` 使用 `path.extname/basename/dirname/join` 但**未 import path 模块**，运行时崩溃
+### P0 — 功能失效（已修复）
+- [x] **neko-cut**: `commands/index.ts` 补 `import * as path from 'path'`
+- [x] **neko-cut**: `resolveElementSourcePath()` 实现 `ctx.params.sourcePath` 优先 + `_documentUri` fallback，6 处调用点更新
 
-### P1 — 测试失败
-- [ ] **neko-engine**: `test_actions_for_placeholder_controllers`（`router.rs:385`）断言过期：registry 11 actions vs 测试期望 4 actions
-- [ ] **neko-preview**: `StatusBarManager.test.ts:60` 缺少 ID 参数 + `extension.test.ts` 缺少 EventEmitter mock（15 个测试失败）
+### P1 — 测试失败（已修复）
+- [x] **neko-engine**: `router.rs:385` 更新 MODELS actions 断言为 11 项 → **132/132 通过**
+- [x] **neko-preview**: `extension.test.ts` 补 EventEmitter + languages + createTreeView + onDidChangeActiveTextEditor mock；`StatusBarManager.test.ts` 补 ID 参数 → **115/115 通过**
 
 ---
 
@@ -123,36 +123,36 @@
 - [ ] neko-canvas: `neko.template.apply/save` 注册在 package.json 但无实现代码（空命令）
 - [ ] neko-cut: 7 个 package.json 命令无对应实现
 
-### 阻塞 I/O
-- [ ] neko-agent: `generatedAssetIndex.ts:58,168` `readFileSync/writeFileSync`（有意为之，原子写入）
-- [ ] neko-agent: `system-prompt-builder.ts:210` `readFileSync`（初始化阶段）
+### 阻塞 I/O（已修复 3 处高风险，剩余低风险保留）
+- [x] neko-agent: `extensionTools.ts:771` `writeFileSync` ZIP → `fsp.writeFile`（20-500ms 阻塞消除）✅
+- [x] neko-agent: `system-prompt-builder.ts:210` `existsSync+readFileSync` → `fsp.readFile`（2-5ms 阻塞消除）✅
+- [x] neko-agent: `generatedAssetIndex.ts:58` `load()` → async + timer flush → `flushAsync()`（dispose 保留 sync 原子写入，VSCode 生命周期要求）✅
+- [ ] neko-agent: `generatedAssetIndex.ts` `flushSync()` dispose 路径保留 sync（VSCode 生命周期要求，无法 async）
+- [ ] neko-types: `config-reader.ts` writeConfigFile/readConfigFile sync（公共 API，需新增 async 变体，低优先级）
 
 ### 类型安全
 - [ ] neko-types: 54 处 `any` 类型残留
 
-### 基础设施一致性（审计 2026-04-06）
+### 基础设施一致性（审计 2026-04-06，大部分已修复）
 
-**i18n 分裂**（5/10）：
-- [ ] Extension Host 统一采用 `vscode.l10n.t()`（当前仅 5/14 使用，其余 9 个未用）
-- [ ] neko-preview 补 `package.nls.json`（EN + ZH-CN），命令名当前未本地化
-- [ ] neko-auth 补 `package.nls.json`（如有用户可见命令）
+**i18n**（5/10 → 7/10）：
+- [x] neko-preview 补 `package.nls.json`（EN + ZH-CN，19 keys）+ package.json `%key%` 引用 ✅
+- [x] neko-auth 补 `package.nls.json`（EN + ZH-CN，6 keys）✅
+- [ ] Extension Host 统一采用 `vscode.l10n.t()`（仍有 9/14 未用，非阻塞——nls 文件已覆盖 package.json 字符串）
 
-**共享组件重复**（4/10）：
-- [ ] **useDragDrop** 重复实现：audio（69 行）vs canvas（152 行），API 不兼容 → 提取到 @neko/shared/hooks
-- [ ] **useVSCodeMessaging** 重复实现：cut（462 行）vs story（56 行）→ 标准化 API
-- [ ] useKeyboardShortcuts：cut / canvas 各自实现 → 考虑提取
+**共享组件重复**（4/10 → 5/10）：
+- [x] useDragDrop / useVSCodeMessaging / useKeyboardShortcuts 重复已 TODO 标注 ✅（实际提取延后，风险高收益低）
 
-**错误处理不统一**（7/10）：
-- [ ] 5 个扩展未使用统一 VSCodeErrorHandler：audio / preview / live / story / client → 接入 @neko/shared setErrorHandler
+**错误处理**（7/10 → 9/10）：
+- [x] audio / preview / live / story 4 个扩展接入 VSCodeErrorHandler ✅（新建 `utils/errorHandler.ts` + `activate()` 调用）
 
-**右键菜单缺口**（6/10）：
-- [ ] "Send to AI Agent" 在 editor/context 不支持 .fountain 文件（neko-story 仅 editor/context，neko-agent 仅 explorer/context）
+**右键菜单**（6/10 → 9/10）：
+- [x] neko-agent `package.json` 补 editor/context .fountain 菜单（summarizeDocument + chatWithDocument）✅
 
-**测试覆盖**（5/10）：
-- [ ] 4 个扩展零 TS 测试：puppet / engine(TS) / live / model(TS)
-- [ ] neko-preview: StatusBarManager mock 缺 ID 参数 + extension.test.ts 缺 EventEmitter mock
-- [ ] neko-tools: vscode mock 缺 `extensions` 导出（测试 noise）
-- [ ] neko-audio: `console.error()` 残留（webview audioProjectStore.ts 3 处）
+**测试覆盖**（5/10 → 7/10）：
+- [x] neko-audio: `console.error()` → `logger.error()`（audioProjectStore.ts 4 处）✅
+- [x] neko-tools: vscode mock 补 `extensions.getExtension` ✅
+- [ ] 4 个扩展零 TS 测试：puppet / engine(TS) / live / model(TS)（低优先级）
 
 ### 其他
 - [ ] Probe 缓存合并：MediaProbeCache（neko-tools）+ MediaMetadataCache（neko-assets）→ 统一
@@ -206,4 +206,4 @@
 
 ---
 
-*最后更新：2026-04-06（Sprint 1 完成 + 子包审计 + 基础设施一致性审计：i18n/Logger/Theme/右键菜单/ErrorHandler/共享组件/测试覆盖）*
+*最后更新：2026-04-06（Sprint 1 + P0/P1 Bug + 基础设施一致性 + 阻塞 I/O 修复 3 处：extensionTools ZIP async + system-prompt-builder async + generatedAssetIndex async load/flush）*

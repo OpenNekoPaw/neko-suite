@@ -21,6 +21,7 @@
  */
 
 import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
 
 import type {
@@ -204,10 +205,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
     source: 'project' | 'personal',
   ): Promise<AgentsLoadResult | null> {
     try {
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = await fsp.readFile(filePath, 'utf-8');
       return { content, source, path: filePath };
     } catch {
       return null;

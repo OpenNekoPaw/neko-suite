@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { createDefaultProject } from '@neko/shared';
 import { createNewFile } from '@neko/shared/vscode/extension';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';

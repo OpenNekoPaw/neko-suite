@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { LivePanelProvider } from './LivePanelProvider';
-
-const logger = new ConsoleLogger('NekoLive', LogLevel.Info);
+import { setErrorHandler } from './utils/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
+  const logger = createVSCodeLogger('Neko Live', 'NekoLive', context);
+  setErrorHandler(new VSCodeErrorHandler(logger));
+
   logger.info('Extension activated');
 
   const provider = new LivePanelProvider(context.extensionUri, logger);
