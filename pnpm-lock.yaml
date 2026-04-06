@@ -238,6 +238,9 @@ importers:
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
+      sharp:
+        specifier: ^0.34.0
+        version: 0.34.5
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
