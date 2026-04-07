@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SkillRegistry } from '../skill-registry';
-import type { Skill, SlashCommand } from '@neko/shared';
+import type { Skill } from '@neko/shared';
 
 // Mock skill factory
 function createMockSkill(overrides: Partial<Skill> = {}): Skill {
@@ -18,18 +18,6 @@ function createMockSkill(overrides: Partial<Skill> = {}): Skill {
     source: 'project',
     ...overrides,
   } as Skill;
-}
-
-// Mock command factory
-function createMockCommand(overrides: Partial<SlashCommand> = {}): SlashCommand {
-  return {
-    command: 'test',
-    description: 'Test command',
-    content: 'Test content',
-    enabled: true,
-    source: 'project',
-    ...overrides,
-  } as SlashCommand;
 }
 
 describe('SkillRegistry', () => {
@@ -166,115 +154,62 @@ describe('SkillRegistry', () => {
     });
   });
 
-  describe('registerCommand', () => {
-    it('should register a slash command', () => {
-      const command = createMockCommand({ command: 'test' });
-      registry.registerCommand(command);
+  describe('getSkillByCommand', () => {
+    it('should find skill by command name', () => {
+      const skill = createMockSkill({ name: 'commit-skill', command: 'commit' });
+      registry.registerSkill(skill);
 
-      const retrieved = registry.getCommand('test');
-      expect(retrieved).toEqual(command);
+      const found = registry.getSkillByCommand('commit');
+      expect(found).toBeDefined();
+      expect(found?.name).toBe('commit-skill');
     });
 
     it('should strip leading slash from command name', () => {
-      const command = createMockCommand({ command: '/test' });
-      registry.registerCommand(command);
+      const skill = createMockSkill({ name: 'test-skill', command: 'test' });
+      registry.registerSkill(skill);
 
-      const retrieved = registry.getCommand('test');
-      expect(retrieved).toBeDefined();
-      expect(retrieved?.command).toBe('test');
-    });
-
-    it('should throw error if command has no name', () => {
-      const command = createMockCommand({ command: '' });
-      expect(() => registry.registerCommand(command)).toThrow(
-        'SlashCommand must have a command name',
-      );
-    });
-
-    it('should overwrite existing command with same name', () => {
-      const cmd1 = createMockCommand({ command: 'test', description: 'First' });
-      const cmd2 = createMockCommand({ command: 'test', description: 'Second' });
-
-      registry.registerCommand(cmd1);
-      registry.registerCommand(cmd2);
-
-      const retrieved = registry.getCommand('test');
-      expect(retrieved?.description).toBe('Second');
-    });
-  });
-
-  describe('unregisterCommand', () => {
-    it('should remove a command', () => {
-      const command = createMockCommand({ command: 'test' });
-      registry.registerCommand(command);
-      registry.unregisterCommand('test');
-
-      const retrieved = registry.getCommand('test');
-      expect(retrieved).toBeUndefined();
-    });
-
-    it('should not throw if command does not exist', () => {
-      expect(() => registry.unregisterCommand('non-existent')).not.toThrow();
-    });
-  });
-
-  describe('getCommand', () => {
-    it('should return command by name', () => {
-      const command = createMockCommand({ command: 'test' });
-      registry.registerCommand(command);
-
-      const retrieved = registry.getCommand('test');
-      expect(retrieved).toEqual(command);
+      const found = registry.getSkillByCommand('/test');
+      expect(found).toBeDefined();
     });
 
     it('should return undefined for non-existent command', () => {
-      const retrieved = registry.getCommand('non-existent');
-      expect(retrieved).toBeUndefined();
-    });
-  });
-
-  describe('listCommands', () => {
-    it('should return all enabled commands', () => {
-      registry.registerCommand(createMockCommand({ command: 'cmd1', enabled: true }));
-      registry.registerCommand(createMockCommand({ command: 'cmd2', enabled: true }));
-      registry.registerCommand(createMockCommand({ command: 'cmd3', enabled: false }));
-
-      const commands = registry.listCommands();
-      expect(commands).toHaveLength(2);
-      expect(commands.map((c) => c.command)).toEqual(['cmd1', 'cmd2']);
+      const found = registry.getSkillByCommand('nonexistent');
+      expect(found).toBeUndefined();
     });
 
-    it('should return empty array if no commands', () => {
-      const commands = registry.listCommands();
-      expect(commands).toEqual([]);
+    it('should not return disabled skills', () => {
+      const skill = createMockSkill({ name: 'disabled', command: 'disabled', enabled: false });
+      registry.registerSkill(skill);
+
+      const found = registry.getSkillByCommand('disabled');
+      expect(found).toBeUndefined();
     });
   });
 
   describe('clear', () => {
-    it('should remove all skills and commands', () => {
+    it('should remove all skills', () => {
       registry.registerSkill(createMockSkill({ name: 'skill1' }));
-      registry.registerCommand(createMockCommand({ command: 'cmd1' }));
+      registry.registerSkill(createMockSkill({ name: 'skill2' }));
 
       registry.clear();
 
       expect(registry.listAllSkills()).toEqual([]);
-      expect(registry.listCommands()).toEqual([]);
     });
   });
 
-  describe('skill and command counts', () => {
+  describe('skill counts', () => {
+    it('should track skill count via skillCount', () => {
+      registry.registerSkill(createMockSkill({ name: 'skill1' }));
+      registry.registerSkill(createMockSkill({ name: 'skill2' }));
+
+      expect(registry.skillCount).toBe(2);
+    });
+
     it('should track skill count via listAllSkills', () => {
       registry.registerSkill(createMockSkill({ name: 'skill1' }));
       registry.registerSkill(createMockSkill({ name: 'skill2' }));
 
       expect(registry.listAllSkills()).toHaveLength(2);
-    });
-
-    it('should track command count via listCommands', () => {
-      registry.registerCommand(createMockCommand({ command: 'cmd1' }));
-      registry.registerCommand(createMockCommand({ command: 'cmd2' }));
-
-      expect(registry.listCommands()).toHaveLength(2);
     });
   });
 });

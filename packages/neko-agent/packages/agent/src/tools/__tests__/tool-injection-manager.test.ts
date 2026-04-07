@@ -267,8 +267,8 @@ describe('ToolInjectionManager', () => {
 
     it('getTotalTokenBudget returns sum of layer budgets', () => {
       const budget = manager.getTotalTokenBudget();
-      // Default: always=10000, dynamic=12000
-      expect(budget).toBe(22000);
+      // Default: always=500000, dynamic=500000
+      expect(budget).toBe(1000000);
     });
   });
 

@@ -176,32 +176,32 @@ describe('executeSlashCommand', () => {
 
   it('should try user-defined command if builtin not found', async () => {
     const mockSkillService = {
-      getCommand: vi.fn().mockReturnValue({ name: 'custom' }),
-      applyCommand: vi.fn().mockReturnValue({ applied: true, injection: 'test' }),
+      getSkillByCommand: vi.fn().mockReturnValue({ name: 'custom' }),
+      apply: vi.fn().mockResolvedValue('test'),
     };
 
     const result = await executeSlashCommand('/custom arg', context, mockSkillService);
-    expect(mockSkillService.getCommand).toHaveBeenCalledWith('custom');
-    expect(mockSkillService.applyCommand).toHaveBeenCalledWith({ name: 'custom' }, 'arg');
+    expect(mockSkillService.getSkillByCommand).toHaveBeenCalledWith('custom');
+    expect(mockSkillService.apply).toHaveBeenCalledWith({ name: 'custom' }, 'arg');
     expect(result.handled).toBe(true);
     expect(result.data?.injection).toBe('test');
   });
 
   it('should return error if user-defined command fails', async () => {
     const mockSkillService = {
-      getCommand: vi.fn().mockReturnValue({ name: 'custom' }),
-      applyCommand: vi.fn().mockReturnValue({ applied: false, error: 'Failed' }),
+      getSkillByCommand: vi.fn().mockReturnValue({ name: 'custom' }),
+      apply: vi.fn().mockRejectedValue(new Error('Failed')),
     };
 
     const result = await executeSlashCommand('/custom', context, mockSkillService);
     expect(result.handled).toBe(true);
-    expect(result.error).toBe('Failed');
+    expect(result.error).toContain('Failed');
   });
 
   it('should return error if command not found anywhere', async () => {
     const mockSkillService = {
-      getCommand: vi.fn().mockReturnValue(undefined),
-      applyCommand: vi.fn(),
+      getSkillByCommand: vi.fn().mockReturnValue(undefined),
+      apply: vi.fn(),
     };
 
     const result = await executeSlashCommand('/unknown', context, mockSkillService);

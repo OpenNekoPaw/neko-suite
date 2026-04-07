@@ -10,13 +10,14 @@ import { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from '..
 // =============================================================================
 
 describe('CREATIVE_PRESETS', () => {
-  it('should have all 5 creative agent types', () => {
-    expect(Object.keys(CREATIVE_PRESETS)).toHaveLength(5);
+  it('should have all 6 creative agent types', () => {
+    expect(Object.keys(CREATIVE_PRESETS)).toHaveLength(6);
     expect(CREATIVE_PRESETS['creative-director']).toBeDefined();
     expect(CREATIVE_PRESETS.cinematographer).toBeDefined();
     expect(CREATIVE_PRESETS.composer).toBeDefined();
     expect(CREATIVE_PRESETS.editor).toBeDefined();
     expect(CREATIVE_PRESETS['vfx-artist']).toBeDefined();
+    expect(CREATIVE_PRESETS['quality-checker']).toBeDefined();
   });
 
   it('should have valid preset configurations', () => {
@@ -50,8 +51,9 @@ describe('CREATIVE_PRESETS', () => {
     expect(composerTools).toContain('SynthesizeSpeech');
   });
 
-  it('all presets should include GetContext tool', () => {
+  it('all presets except quality-checker should include GetContext tool', () => {
     for (const [type, preset] of Object.entries(CREATIVE_PRESETS)) {
+      if (type === 'quality-checker') continue;
       expect(preset.allowedTools, `${type} missing GetContext`).toContain('GetContext');
     }
   });
@@ -74,10 +76,11 @@ describe('isCreativeAgentType', () => {
 });
 
 describe('getCreativeAgentTypes', () => {
-  it('should return all 5 types', () => {
+  it('should return all 6 types', () => {
     const types = getCreativeAgentTypes();
-    expect(types).toHaveLength(5);
+    expect(types).toHaveLength(6);
     expect(types).toContain('creative-director');
     expect(types).toContain('vfx-artist');
+    expect(types).toContain('quality-checker');
   });
 });

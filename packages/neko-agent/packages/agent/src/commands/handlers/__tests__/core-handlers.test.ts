@@ -152,7 +152,6 @@ describe('generateCliStatusText', () => {
     const statusText = generateCliStatusText(context);
 
     expect(statusText).toContain('Skills:       5');
-    expect(statusText).toContain('Commands:     3');
     expect(statusText).toContain('Tools:        12');
   });
 

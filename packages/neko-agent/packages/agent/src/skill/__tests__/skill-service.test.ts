@@ -10,7 +10,6 @@ import { SkillService, createSkillService } from '../skill-service';
 import { SkillInjector } from '../skill-injector';
 import type {
   Skill,
-  SlashCommand,
   SkillMatch,
   ISkillRegistry,
   ISkillMatcher,
@@ -34,21 +33,8 @@ function makeSkill(overrides?: Partial<Skill>): Skill {
   } as Skill;
 }
 
-function makeCommand(overrides?: Partial<SlashCommand>): SlashCommand {
-  return {
-    command: '/test',
-    description: 'A test command',
-    content: 'Review PR $1 with priority $2',
-    allowedTools: ['Bash'],
-    enabled: true,
-    source: 'test',
-    ...overrides,
-  } as SlashCommand;
-}
-
 function makeMockRegistry(): ISkillRegistry {
   const skills: Skill[] = [];
-  const commands: SlashCommand[] = [];
   return {
     registerSkill: vi.fn((s: Skill) => {
       skills.push(s);
@@ -60,23 +46,14 @@ function makeMockRegistry(): ISkillRegistry {
     getSkill: vi.fn((name: string) => skills.find((s) => s.name === name)),
     listSkills: vi.fn(() => skills.filter((s) => s.enabled)),
     listAllSkills: vi.fn(() => [...skills]),
-    registerCommand: vi.fn((c: SlashCommand) => {
-      commands.push(c);
-    }),
-    unregisterCommand: vi.fn(),
-    getCommand: vi.fn((name: string) => commands.find((c) => c.command === name)),
-    listCommands: vi.fn(() => commands.filter((c) => c.enabled)),
-    hasCommand: vi.fn((name: string) => commands.some((c) => c.command === name)),
+    getSkillByCommand: vi.fn(() => undefined),
     searchSkills: vi.fn(() => []),
+    ensureLoaded: vi.fn(async (name: string) => skills.find((s) => s.name === name)),
     get skillCount() {
       return skills.length;
     },
-    get commandCount() {
-      return commands.length;
-    },
     clear: vi.fn(() => {
       skills.length = 0;
-      commands.length = 0;
     }),
   } as unknown as ISkillRegistry;
 }
@@ -100,89 +77,95 @@ describe('SkillInjector', () => {
 
   // --- injectSkill ---
 
-  it('injectSkill returns injection with skill content', () => {
+  it('injectSkill returns injection with skill content', async () => {
     const skill = makeSkill({ content: '# My Skill\nDo the thing' });
-    const injection = injector.injectSkill(skill);
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.systemPrompt).toBe('# My Skill\nDo the thing');
   });
 
-  it('injectSkill adds support files hint when directoryPath and supportFileRefs exist', () => {
+  it('injectSkill adds support files hint when directoryPath and supportFileRefs exist', async () => {
     const skill = makeSkill({
       directoryPath: '/path/to/skill',
       supportFileRefs: ['ref.md'],
       content: '# Skill with refs',
     });
-    const injection = injector.injectSkill(skill);
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.systemPrompt).toContain('Support files available in');
     expect(injection.systemPrompt).toContain('/path/to/skill');
   });
 
-  it('injectSkill does not add hint when no supportFileRefs', () => {
+  it('injectSkill does not add hint when no supportFileRefs', async () => {
     const skill = makeSkill({
       directoryPath: '/path/to/skill',
       supportFileRefs: undefined,
       content: '# No refs',
     });
-    const injection = injector.injectSkill(skill);
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.systemPrompt).toBe('# No refs');
     expect(injection.systemPrompt).not.toContain('Support files');
   });
 
-  it('injectSkill returns correct allowedTools and name', () => {
+  it('injectSkill returns correct allowedTools and name', async () => {
     const skill = makeSkill({
       name: 'my-skill',
       allowedTools: ['Read', 'Grep'],
     });
-    const injection = injector.injectSkill(skill);
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.allowedTools).toEqual(['Read', 'Grep']);
     expect(injection.name).toBe('my-skill');
     expect(injection.type).toBe('skill');
   });
 
-  it('injectSkill passes model from skill', () => {
+  it('injectSkill passes model from skill', async () => {
     const skill = makeSkill({ model: 'claude-3' });
-    const injection = injector.injectSkill(skill);
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.model).toBe('claude-3');
   });
 
-  // --- injectCommand ---
+  // --- argument interpolation via supportsArguments ---
 
-  it('injectCommand interpolates $ARGUMENTS', () => {
-    const command = makeCommand({ content: 'Run with $ARGUMENTS' });
-    const injection = injector.injectCommand(command, 'foo bar');
+  it('injectSkill interpolates $ARGUMENTS when supportsArguments is true', async () => {
+    const skill = makeSkill({ content: 'Run with $ARGUMENTS', supportsArguments: true });
+    const injection = await injector.injectSkill(skill, 'foo bar');
 
     expect(injection.systemPrompt).toBe('Run with foo bar');
   });
 
-  it('injectCommand interpolates positional $1 $2', () => {
-    const command = makeCommand({ content: 'Review PR $1 with priority $2' });
-    const injection = injector.injectCommand(command, '123 high');
+  it('injectSkill interpolates positional $1 $2 when supportsArguments is true', async () => {
+    const skill = makeSkill({
+      content: 'Review PR $1 with priority $2',
+      supportsArguments: true,
+    });
+    const injection = await injector.injectSkill(skill, '123 high');
 
     expect(injection.systemPrompt).toBe('Review PR 123 with priority high');
   });
 
-  it('injectCommand handles quoted arguments', () => {
-    const command = makeCommand({ content: 'A=$1 B=$2 C=$3' });
-    const injection = injector.injectCommand(command, 'foo "bar baz" qux');
+  it('injectSkill handles quoted arguments', async () => {
+    const skill = makeSkill({ content: 'A=$1 B=$2 C=$3', supportsArguments: true });
+    const injection = await injector.injectSkill(skill, 'foo "bar baz" qux');
 
     expect(injection.systemPrompt).toBe('A=foo B=bar baz C=qux');
   });
 
-  it('injectCommand cleans placeholders when no args', () => {
-    const command = makeCommand({ content: 'Review PR $1 with priority $2' });
-    const injection = injector.injectCommand(command);
+  it('injectSkill cleans placeholders when no args and supportsArguments', async () => {
+    const skill = makeSkill({
+      content: 'Review PR $1 with priority $2',
+      supportsArguments: true,
+    });
+    const injection = await injector.injectSkill(skill);
 
     expect(injection.systemPrompt).toBe('Review PR  with priority ');
   });
 
-  it('injectCommand returns type slash-command', () => {
-    const command = makeCommand();
-    const injection = injector.injectCommand(command, '123 high');
+  it('injectSkill returns type slash-command when skill has command field', async () => {
+    const skill = makeSkill({ command: 'test', supportsArguments: true });
+    const injection = await injector.injectSkill(skill, '123 high');
 
     expect(injection.type).toBe('slash-command');
   });
@@ -221,21 +204,21 @@ describe('SkillService', () => {
 
   // --- apply ---
 
-  it('apply returns injection payload (stateless)', () => {
+  it('apply returns injection payload', async () => {
     const service = createSkillService();
     const skill = makeSkill({ name: 'active-skill' });
 
-    const injection = service.apply(skill);
+    const injection = await service.apply(skill);
 
     expect(injection).toBeDefined();
     expect(injection.name).toBe('active-skill');
   });
 
-  it('apply returns injection with allowedTools', () => {
+  it('apply returns injection with allowedTools', async () => {
     const service = createSkillService();
     const skill = makeSkill({ allowedTools: ['Read', 'Write'] });
 
-    const injection = service.apply(skill);
+    const injection = await service.apply(skill);
 
     expect(injection.allowedTools).toEqual(['Read', 'Write']);
   });
@@ -319,34 +302,5 @@ describe('SkillService', () => {
 
     expect(result?.applied).toBe(false);
     expect(result?.error).toContain('declined');
-  });
-
-  // --- applyCommand ---
-
-  it('applyCommand returns SkillApplicationResult with injection', () => {
-    const service = createSkillService();
-    const command = makeCommand({ content: 'Run with $ARGUMENTS' });
-
-    const result = service.applyCommand(command, 'foo bar');
-
-    expect(result.applied).toBe(true);
-    expect(result.injection).toBeDefined();
-    expect(result.injection?.systemPrompt).toBe('Run with foo bar');
-  });
-
-  it('applyCommand returns applied:false on error', () => {
-    const badInjector: ISkillInjector = {
-      injectSkill: vi.fn(),
-      injectCommand: vi.fn(() => {
-        throw new Error('injection failed');
-      }),
-    };
-    const service = new SkillService({ injector: badInjector });
-    const command = makeCommand();
-
-    const result = service.applyCommand(command);
-
-    expect(result.applied).toBe(false);
-    expect(result.error).toContain('injection failed');
   });
 });

@@ -181,7 +181,11 @@ describe('AgentExecutor', () => {
       expect(result.success).toBe(true);
       expect(result.response).toBe('Done reading file.');
       expect(result.iterations).toBe(2);
-      expect(toolRegistry.execute).toHaveBeenCalledWith('read_file', { path: '/a.ts' });
+      expect(toolRegistry.execute).toHaveBeenCalledWith(
+        'read_file',
+        { path: '/a.ts' },
+        expect.anything(),
+      );
     });
   });
 

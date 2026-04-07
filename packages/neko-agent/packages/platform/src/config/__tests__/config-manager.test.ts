@@ -79,6 +79,13 @@ function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfig
         mcpServerOverrides: {},
       };
     },
+    loadRaw: () => ({
+      providers: config.providers,
+      models: config.models,
+      mcpServers: config.mcpServers,
+    }),
+    updateScalar: async () => {},
+    updateScalars: async () => {},
   };
 }
 

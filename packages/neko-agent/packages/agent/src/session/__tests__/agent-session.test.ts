@@ -39,6 +39,7 @@ function createMockExecutorModule(steps: AgentStep[]) {
     getHook: vi.fn(),
     createCheckpoint: vi.fn(),
     setToolInjectionManager: vi.fn(),
+    updateServiceOptions: vi.fn(),
   };
 }
 

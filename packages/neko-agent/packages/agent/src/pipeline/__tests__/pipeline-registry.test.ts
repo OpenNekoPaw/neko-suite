@@ -69,6 +69,7 @@ describe('PipelineRegistry', () => {
       'generatePrompts',
       'generatePilot',
       'batchGenerate',
+      'qualityGate',
       'arrangeOnTimeline',
     ]);
   });
@@ -84,6 +85,7 @@ describe('PipelineRegistry', () => {
       'generatePrompts',
       'generatePilot',
       'batchGenerate',
+      'qualityGate',
       'arrangeOnTimeline',
     ]);
   });

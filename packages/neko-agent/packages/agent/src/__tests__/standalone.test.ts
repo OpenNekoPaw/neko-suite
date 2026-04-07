@@ -23,7 +23,6 @@ import {
   SkillService,
   createSkillService,
   builtinSkills,
-  builtinCommands,
   MarkdownParser,
 
   // Tools
@@ -87,7 +86,6 @@ describe('Standalone Mode', () => {
       expect(SkillService).toBeDefined();
       expect(createSkillService).toBeDefined();
       expect(builtinSkills).toBeDefined();
-      expect(builtinCommands).toBeDefined();
       expect(MarkdownParser).toBeDefined();
     });
 
@@ -156,24 +154,24 @@ describe('Standalone Mode', () => {
       expect(registry.listSkills().length).toBe(1);
     });
 
-    it('should register and list commands', () => {
+    it('should register and list commands via command field', () => {
       const registry = new SkillRegistry();
 
-      // Register a command
-      registry.registerCommand({
-        command: 'test-command',
-        name: 'Test Command',
-        description: 'A test command',
+      // Register a skill with a command field (unified model)
+      registry.registerSkill({
+        name: 'test-command-skill',
+        description: 'A test command skill',
         content: 'Test content',
         source: 'project',
-        filePath: '/test/command.md',
         enabled: true,
+        command: 'test-command',
       });
 
-      // Verify command is registered
-      expect(registry.hasCommand('test-command')).toBe(true);
-      expect(registry.getCommand('test-command')?.command).toBe('test-command');
-      expect(registry.listCommands().length).toBe(1);
+      // Verify skill is registered and accessible by command
+      const found = registry.getSkillByCommand('test-command');
+      expect(found).toBeDefined();
+      expect(found?.command).toBe('test-command');
+      expect(registry.listSkills().length).toBe(1);
     });
   });
 
