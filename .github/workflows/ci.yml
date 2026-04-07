@@ -63,15 +63,6 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/neko-engine
-
-      - name: Install FFmpeg dev libraries
-        run: sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev libva-dev pkg-config
-
       - uses: actions/cache@v4
         with:
           path: .turbo
@@ -364,7 +355,7 @@ jobs:
   # per platform, producing a platform-specific VSIX for each target.
   package-engine-vsix:
     name: Package neko-engine VSIX (${{ matrix.target }})
-    needs: [build, test-ts]
+    needs: [build, test-ts, test-rust]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
