@@ -24,31 +24,3 @@ function registerAll(allBundles: Record<string, MessageBundle>, locale: Supporte
 
 registerAll(enBundles, 'en');
 registerAll(zhCnBundles, 'zh-cn');
-
-/**
- * Translate a message key with optional named parameters
- */
-export function t(key: string, params?: Record<string, string | number>): string {
-  return i18nService.t(key, params);
-}
-
-/**
- * Change locale at runtime
- */
-export function setLocale(locale: SupportedLocale): void {
-  i18nService.setLocale(locale);
-}
-
-/**
- * Get current locale
- */
-export function getLocale(): SupportedLocale {
-  return i18nService.locale;
-}
-
-/**
- * Detect locale from webview DOM attribute
- */
-export function detectLocale(): SupportedLocale {
-  return detectWebviewLocale();
-}

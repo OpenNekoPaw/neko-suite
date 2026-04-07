@@ -231,7 +231,7 @@ class RequestQueue {
 // Implementation
 // =============================================================================
 
-export class ThumbnailService implements IThumbnailService {
+class ThumbnailService implements IThumbnailService {
   private _cache: LRUCache<string, ThumbnailData[]>;
   private _pending = new Map<string, Promise<ThumbnailData[]>>();
   private _requestQueue: RequestQueue;
@@ -657,7 +657,7 @@ export class ThumbnailService implements IThumbnailService {
 
 let instance: ThumbnailService | null = null;
 
-export function getThumbnailService(): ThumbnailService {
+export function getThumbnailService(): IThumbnailService {
   if (!instance) {
     instance = new ThumbnailService();
   }

@@ -11,7 +11,7 @@
 import { getVSCodeAPI, postMessage, type VSCodeAPI } from '@neko/shared/vscode';
 
 // Re-export for backward compatibility
-export { getVSCodeAPI, postMessage, type VSCodeAPI };
+export { postMessage, type VSCodeAPI };
 
 /**
  * VSCode API instance, or null if running outside VS Code

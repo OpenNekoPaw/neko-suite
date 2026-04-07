@@ -13,11 +13,11 @@ export {
 
 export type { Bounds, ViewportBounds, CullingResult } from './viewportCulling';
 
-export { SnapEngine, snapEngine, DEFAULT_SNAP_CONFIG } from './snapEngine';
+export { SnapEngine } from './snapEngine';
 
 export type { Point, SnapConfig, SnapResult, SnapInfo, Guide } from './snapEngine';
 
-export { MEDIA_EXTENSIONS, detectMediaType } from './mediaType';
+export { detectMediaType } from './mediaType';
 
 export { screenToCanvas, getViewportCenter } from './viewportMath';
 export type { Point as ViewportPoint } from './viewportMath';

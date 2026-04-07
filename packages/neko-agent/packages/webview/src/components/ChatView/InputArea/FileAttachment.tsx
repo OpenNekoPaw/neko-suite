@@ -51,7 +51,7 @@ interface AttachmentButtonProps {
   onFilesAdd: (files: MessageAttachment[]) => void;
 }
 
-export function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
+function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 

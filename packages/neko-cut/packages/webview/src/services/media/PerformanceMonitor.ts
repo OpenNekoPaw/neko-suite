@@ -63,7 +63,7 @@ export interface MediaBitrateInfo {
 /**
  * Type guard for stream stats response
  */
-export function isStreamStatsResponse(message: unknown): boolean {
+function isStreamStatsResponse(message: unknown): boolean {
   if (typeof message !== 'object' || message === null) {
     return false;
   }
@@ -74,7 +74,7 @@ export function isStreamStatsResponse(message: unknown): boolean {
 /**
  * Type guard for media bitrate response
  */
-export function isMediaBitrateResponse(message: unknown): boolean {
+function isMediaBitrateResponse(message: unknown): boolean {
   if (typeof message !== 'object' || message === null) {
     return false;
   }

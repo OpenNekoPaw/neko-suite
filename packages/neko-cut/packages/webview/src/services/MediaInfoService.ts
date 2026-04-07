@@ -43,7 +43,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 // Implementation
 // =============================================================================
 
-export class MediaInfoService implements IMediaInfoService {
+class MediaInfoService implements IMediaInfoService {
   private _cache = new Map<string, MediaInfo>();
   private _pending = new Map<string, Promise<MediaInfo>>();
 
@@ -135,16 +135,9 @@ export class MediaInfoService implements IMediaInfoService {
 
 let instance: MediaInfoService | null = null;
 
-export function getMediaInfoService(): MediaInfoService {
+export function getMediaInfoService(): IMediaInfoService {
   if (!instance) {
     instance = new MediaInfoService();
   }
   return instance;
-}
-
-/**
- * Convenience function to get duration
- */
-export async function getMediaDuration(filePath: string): Promise<number> {
-  return getMediaInfoService().getDuration(filePath);
 }

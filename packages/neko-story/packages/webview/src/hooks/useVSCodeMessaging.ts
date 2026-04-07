@@ -56,6 +56,6 @@ export function navigateToLine(line: number, character = 0) {
 /**
  * Report scroll position to extension
  */
-export function reportScroll(line: number) {
+function reportScroll(line: number) {
   vscode.postMessage({ type: 'scroll', line });
 }

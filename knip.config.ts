@@ -1,6 +1,11 @@
 import type { KnipConfig } from 'knip';
 
 const config: KnipConfig = {
+  exclude: [
+    // Type-only exports in app code create too much noise for this monorepo.
+    // We keep knip focused on runtime dead code and dependency drift.
+    'types',
+  ],
   ignore: [
     // Skills are runtime CLI scripts, not imported modules
     'skills/**',
@@ -22,12 +27,31 @@ const config: KnipConfig = {
     'clsx',
     'devlop',
   ],
+  ignoreIssues: {
+    // Internal editor API surfaces: intentionally exported for feature modules
+    'packages/neko-cut/packages/webview/src/types.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/types/**/*.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/constants.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/index.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/vscodeApi.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/speed.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/waveform.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/pyramidThumbnail.ts': ['exports'],
+    // Barrel entrypoints for sketch subsystems
+    'packages/neko-sketch/packages/webview/src/engine/index.ts': ['exports'],
+    'packages/neko-sketch/packages/webview/src/brush/index.ts': ['exports'],
+    'packages/neko-sketch/packages/webview/src/layer/index.ts': ['exports'],
+    // Shared contract files consumed as package-level type surfaces
+    'packages/neko-canvas/packages/webview/src/types/extendedCanvas.ts': ['exports'],
+    'packages/neko-preview/packages/extension/src/types/document-messages.ts': ['exports'],
+    'packages/neko-preview/packages/webview/src/shared/document-types.ts': ['exports'],
+  },
 
   workspaces: {
     // ── Layer 0: Library packages ──────────────────────
     'packages/neko-types': {
       // Knip auto-detects entries from package.json exports
-      ignoreDependencies: ['react'], // Optional peer dependency
+      ignoreDependencies: ['react', 'react-dom', 'tailwindcss'], // Optional peer dependencies
     },
     'packages/neko-client': {},
 
@@ -67,7 +91,14 @@ const config: KnipConfig = {
         'src/types/audioEffects.ts',
       ],
     },
-    'packages/neko-agent/packages/extension': {},
+    'packages/neko-agent/packages/extension': {
+      ignoreDependencies: [
+        // Loaded via runtime import() in DocumentReaderService
+        'mammoth',
+        'officeparser',
+        'pdf-parse',
+      ],
+    },
     'packages/neko-agent/packages/webview': {
       ignore: [
         // Barrel exports
@@ -149,6 +180,10 @@ const config: KnipConfig = {
     'packages/neko-suite': {
       // Meta package with only documentation
       entry: ['package.json'],
+    },
+    'packages/neko-auth': {
+      // VSCode wrapper package; workspace deps are consumed via nested extension/core packages
+      ignoreDependencies: ['@neko/auth-core', '@neko/auth-extension', '@neko/shared'],
     },
     'packages/neko-engine/packages/native-napi': { ignore: ['**/*'] },
     'packages/neko-engine/packages/native-cli': {

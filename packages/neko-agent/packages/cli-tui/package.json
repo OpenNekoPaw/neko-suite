@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@neko/agent": "workspace:*",
+    "@neko/market-core": "workspace:*",
     "@neko/platform": "workspace:*",
     "@neko/shared": "workspace:*",
     "ink": "^5.0.1",

@@ -122,7 +122,7 @@ function DefaultErrorFallback({ error, onReset }: DefaultErrorFallbackProps) {
 // HOC for functional components
 // =============================================================================
 
-export function withErrorBoundary<P extends object>(
+function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
   errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>,
 ): React.FC<P> {

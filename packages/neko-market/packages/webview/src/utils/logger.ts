@@ -13,5 +13,3 @@ const rootLogger: ILogger = new ConsoleLogger('NekoMarket', LogLevel.Debug);
 export function getLogger(source: string): ILogger {
   return rootLogger.child(source);
 }
-
-export { rootLogger };

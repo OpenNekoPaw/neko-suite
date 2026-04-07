@@ -17,7 +17,7 @@ export interface AssetExportPayload {
 /**
  * Send an asset export request to the Extension Host via postMessage.
  */
-export function requestAssetExport(
+function requestAssetExport(
   vscode: { postMessage: (msg: unknown) => void },
   payload: AssetExportPayload,
 ): void {

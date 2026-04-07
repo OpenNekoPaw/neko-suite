@@ -30,7 +30,7 @@ const logger = getLogger('DocumentProvider');
  * which need to be expanded to absolute paths before passing to neko-engine.
  * Always attempts resolution — the command is a no-op for plain absolute paths.
  */
-export async function resolveDocumentPath(fsPath: string): Promise<string> {
+async function resolveDocumentPath(fsPath: string): Promise<string> {
   try {
     const resolved = await vscode.commands.executeCommand<string>(
       'neko.assets.resolvePath',

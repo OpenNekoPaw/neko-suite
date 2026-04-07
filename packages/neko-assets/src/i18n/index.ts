@@ -28,7 +28,7 @@ export function initI18n(locale: SupportedLocale): I18nService {
 /**
  * Get the global i18n service instance
  */
-export function getI18n(): I18nService {
+function getI18n(): I18nService {
   if (!i18nService) {
     throw new Error('i18n service not initialized. Call initI18n() first.');
   }

@@ -16,7 +16,7 @@ export type ResolutionPreset =
   | '4k@30fps'
   | '4k@60fps';
 
-export const RESOLUTION_PRESETS: Record<
+const RESOLUTION_PRESETS: Record<
   ResolutionPreset,
   { width: number; height: number; fps: number; label: string }
 > = {

@@ -484,7 +484,7 @@ const COLOR_CORRECTION_EFFECT_ID = '__color-correction__';
  * This allows color correction to flow through the streaming path (element.update → engine).
  * Returns null if correction is disabled or at identity.
  */
-export function colorCorrectionToEffectInstance(cc: ColorCorrection): EffectInstance | null {
+function colorCorrectionToEffectInstance(cc: ColorCorrection): EffectInstance | null {
   const composite = colorCorrectionToCompositeEffect(cc);
   if (!composite) return null;
 

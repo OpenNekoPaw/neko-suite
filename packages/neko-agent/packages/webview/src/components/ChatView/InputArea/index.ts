@@ -5,10 +5,9 @@
 export { InputArea } from './InputArea';
 export { ModelSelector } from './ModelSelector';
 export { ModeSelector } from './ModeSelector';
-export { AttachmentPreview, AttachmentButton } from './FileAttachment';
+export { AttachmentPreview } from './FileAttachment';
 export { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
-export { FileReferenceMenu, getFilteredFiles } from './FileReferenceMenu';
 export { MentionMenu, getFilteredMentionItems } from './MentionMenu';
-export { DropdownMenu, ChevronDownIcon } from './DropdownMenu';
-export { useClickOutside, useClickOutsideSingle } from './useClickOutside';
+export { ChevronDownIcon } from './DropdownMenu';
+export { useClickOutsideSingle } from './useClickOutside';
 export * from './types';

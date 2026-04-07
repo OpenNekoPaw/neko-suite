@@ -23,5 +23,3 @@ const rootLogger: ILogger = new ConsoleLogger('NekoCut', LogLevel.Debug);
 export function getLogger(source: string): ILogger {
   return rootLogger.child(source);
 }
-
-export { rootLogger };

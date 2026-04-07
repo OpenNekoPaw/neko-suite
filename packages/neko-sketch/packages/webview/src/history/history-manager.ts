@@ -77,7 +77,7 @@ export class HistoryManager implements IHistoryManager {
 }
 
 /** Capture a region snapshot from texture pixels */
-export function captureRegionSnapshot(
+function captureRegionSnapshot(
   layerId: string,
   x: number,
   y: number,

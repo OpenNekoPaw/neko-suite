@@ -7,7 +7,7 @@
 
 // Primary exports (new names per ADR-6)
 export { ImagePreview } from './ImagePreview';
-export { AudioCard, AudioPlayer } from './AudioCard';
-export { VideoCard, VideoPlayer } from './VideoCard';
+export { AudioCard } from './AudioCard';
+export { VideoCard } from './VideoCard';
 export { ImageGridCard } from './ImageGridCard';
 export { StoryboardMessage, type StoryboardScene } from './StoryboardMessage';

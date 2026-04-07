@@ -189,16 +189,6 @@ export interface MediaDiffState {
   playingVersion: 'current' | 'previous' | 'both';
 }
 
-export const DEFAULT_DIFF_STATE: MediaDiffState = {
-  viewMode: 'side-by-side',
-  sliderPosition: 0.5,
-  overlayOpacity: 0.5,
-  zoom: 1,
-  currentTime: 0,
-  isPlaying: false,
-  playingVersion: 'current',
-};
-
 // =============================================================================
 // Initial State (injected by Extension via window.initialState)
 // =============================================================================

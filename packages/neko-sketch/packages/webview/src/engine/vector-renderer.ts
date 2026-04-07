@@ -8,7 +8,7 @@ import type { VectorPath, PathSegment } from '../types/vector';
 /**
  * Render a vector path to a 2D canvas context.
  */
-export function renderPath(ctx: CanvasRenderingContext2D, path: VectorPath): void {
+function renderPath(ctx: CanvasRenderingContext2D, path: VectorPath): void {
   const path2d = buildPath2D(path.segments);
 
   if (path.fill) {
@@ -37,7 +37,7 @@ export function renderPaths(ctx: CanvasRenderingContext2D, paths: readonly Vecto
 /**
  * Export vector paths to SVG string.
  */
-export function exportSVG(paths: readonly VectorPath[], width: number, height: number): string {
+function exportSVG(paths: readonly VectorPath[], width: number, height: number): string {
   const pathElements = paths.map((p) => {
     const d = segmentsToSVGPath(p.segments);
     const attrs: string[] = [`d="${d}"`];

@@ -41,7 +41,7 @@ export function createLayer(
 }
 
 /** Find a layer by ID in a nested tree */
-export function findLayer(layers: ReadonlyArray<LayerData>, id: string): LayerData | undefined {
+function findLayer(layers: ReadonlyArray<LayerData>, id: string): LayerData | undefined {
   for (const layer of layers) {
     if (layer.id === id) return layer;
     const found = findLayer(layer.children, id);
@@ -51,7 +51,7 @@ export function findLayer(layers: ReadonlyArray<LayerData>, id: string): LayerDa
 }
 
 /** Find the parent of a layer and its index */
-export function findLayerParent(
+function findLayerParent(
   layers: LayerData[],
   id: string,
 ): { parent: LayerData[] | null; index: number } | null {
@@ -174,7 +174,7 @@ export function groupLayers(
 }
 
 /** Flatten all visible layers into one */
-export function flattenLayerList(layers: ReadonlyArray<LayerData>): LayerData[] {
+function flattenLayerList(layers: ReadonlyArray<LayerData>): LayerData[] {
   const result: LayerData[] = [];
   for (const layer of layers) {
     if (layer.type === 'group') {

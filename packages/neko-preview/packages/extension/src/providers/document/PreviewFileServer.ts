@@ -41,7 +41,7 @@ export class UnresolvedPathVariableError extends Error {
   }
 }
 
-export class PreviewFileServer {
+class PreviewFileServer {
   private _port: number | null = null;
 
   /**

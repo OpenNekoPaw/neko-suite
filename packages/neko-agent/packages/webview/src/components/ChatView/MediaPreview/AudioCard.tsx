@@ -271,9 +271,6 @@ function AudioPlayerComponent({
 
 export const AudioCard = memo(AudioPlayerComponent);
 
-/** @deprecated Use AudioCard instead */
-export const AudioPlayer = AudioCard;
-
 // Icons
 function AudioIcon({ className }: { className?: string }) {
   return (

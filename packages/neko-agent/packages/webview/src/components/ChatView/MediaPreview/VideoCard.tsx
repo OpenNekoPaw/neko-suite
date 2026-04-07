@@ -240,9 +240,6 @@ function VideoPlayerComponent({
 
 export const VideoCard = memo(VideoPlayerComponent);
 
-/** @deprecated Use VideoCard instead */
-export const VideoPlayer = VideoCard;
-
 // Icons
 function VideoIcon({ className }: { className?: string }) {
   return (

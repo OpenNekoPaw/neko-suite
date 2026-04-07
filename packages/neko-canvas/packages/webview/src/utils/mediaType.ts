@@ -7,7 +7,7 @@
 // =============================================================================
 
 /** Map of file extensions to media type categories */
-export const MEDIA_EXTENSIONS: Record<string, 'image' | 'video' | 'audio'> = {
+const MEDIA_EXTENSIONS: Record<string, 'image' | 'video' | 'audio'> = {
   png: 'image',
   jpg: 'image',
   jpeg: 'image',

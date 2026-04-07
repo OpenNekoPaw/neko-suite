@@ -56,14 +56,3 @@ export class MessageHandlerRegistry {
     return Array.from(this.handlers.keys());
   }
 }
-
-/**
- * Create a new registry with all handlers registered
- */
-export function createMessageHandlerRegistry(): MessageHandlerRegistry {
-  const registry = new MessageHandlerRegistry();
-
-  // Import and register all handlers
-  // These will be registered in the hook that creates the registry
-  return registry;
-}

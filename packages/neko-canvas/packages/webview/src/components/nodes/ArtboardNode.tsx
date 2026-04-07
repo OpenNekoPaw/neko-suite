@@ -184,30 +184,3 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
     </BaseNode>
   );
 }
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * 创建画板节点的默认数据
- */
-export function createArtboardData(
-  preset: ArtboardCanvasNode['data']['preset'] = 'custom',
-  name?: string,
-): { data: ArtboardCanvasNode['data']; size: { width: number; height: number } } {
-  const presetInfo = ARTBOARD_PRESETS[preset];
-
-  return {
-    data: {
-      name: name || `Artboard - ${presetInfo.label}`,
-      preset,
-      showBorder: true,
-      backgroundColor: '#1a1a1a',
-    },
-    size: {
-      width: presetInfo.width / 4, // 缩放显示
-      height: presetInfo.height / 4,
-    },
-  };
-}

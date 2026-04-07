@@ -12,6 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@neko/agent": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",

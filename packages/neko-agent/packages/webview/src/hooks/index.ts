@@ -17,7 +17,6 @@ export {
 
 export {
   useConfigState,
-  DEFAULT_SETTINGS,
   type ProjectFileInfo,
   type ConfigState,
   type ConfigStateActions,

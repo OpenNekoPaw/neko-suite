@@ -5,10 +5,10 @@
  * Builtin prompts are loaded from platform via ConfigManager.
  */
 
-import type { PromptPresetConfig, PromptPresetType, PromptSource } from '@neko/shared';
+import type { PromptPresetType } from '@neko/shared';
 
 // Re-export types from shared package
-export type { PromptPresetConfig, PromptPresetType, PromptSource };
+export type { PromptPresetConfig, PromptPresetType, PromptSource } from '@neko/shared';
 
 /**
  * Get prompt type display name
@@ -44,31 +44,4 @@ export function getPromptTypeIcon(type: PromptPresetType): string {
     custom: '🔧',
   };
   return icons[type] || '🔧';
-}
-
-/**
- * Get prompt source display name
- */
-export function getPromptSourceName(source: PromptSource | undefined): string {
-  switch (source) {
-    case 'builtin':
-      return 'Built-in';
-    case 'personal':
-      return 'User';
-    case 'project':
-      return 'Workspace';
-    default:
-      return 'Unknown';
-  }
-}
-
-/**
- * Determine prompt source from its properties
- */
-export function getPromptSource(prompt: PromptPresetConfig): PromptSource {
-  if (prompt.source) {
-    return prompt.source;
-  }
-  // Fallback based on builtin flag
-  return prompt.builtin ? 'builtin' : 'personal';
 }

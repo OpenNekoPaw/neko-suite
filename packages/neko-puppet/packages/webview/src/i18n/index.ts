@@ -18,11 +18,6 @@ export const i18nService = new I18nService(detectWebviewLocale());
 i18nService.registerBundle('puppet', 'en', en);
 i18nService.registerBundle('puppet', 'zh-cn', zhCN);
 
-/** Translate a message key with optional named parameters */
-export function t(key: string, params?: Record<string, string | number>): string {
-  return i18nService.t(key, params);
-}
-
 /** Change locale at runtime */
 export function setLocale(locale: SupportedLocale): void {
   i18nService.setLocale(locale);

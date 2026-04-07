@@ -22,7 +22,7 @@ const PRESSURE_CURVES: Record<PressureCurveType, (p: number) => number> = {
 };
 
 /** Map raw pressure to output value using a curve */
-export function mapPressure(
+function mapPressure(
   rawPressure: number,
   curve: PressureCurveType = 'linear',
   minOutput = 0.0,

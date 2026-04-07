@@ -162,7 +162,7 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
   );
 }
 
-export function AgentMediaBar({ selection, availableModels, onSelect }: AgentMediaBarProps) {
+function AgentMediaBar({ selection, availableModels, onSelect }: AgentMediaBarProps) {
   const getModels = useCallback(
     (cat: MediaCategory) => availableModels.filter((m) => m.category === cat),
     [availableModels],

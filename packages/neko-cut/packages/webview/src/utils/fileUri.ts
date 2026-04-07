@@ -101,7 +101,7 @@ export function getFileUri(path: string): Promise<string> {
 /**
  * Check if a file URI is already cached
  */
-export function hasFileUri(path: string): boolean {
+function hasFileUri(path: string): boolean {
   return fileUriCache.has(path);
 }
 
@@ -117,7 +117,7 @@ export function requestFileUri(path: string): void {
 /**
  * Subscribe to cache update notifications
  */
-export function subscribeCacheUpdates(listener: () => void): () => void {
+function subscribeCacheUpdates(listener: () => void): () => void {
   cacheUpdateListeners.push(listener);
   return () => {
     const idx = cacheUpdateListeners.indexOf(listener);

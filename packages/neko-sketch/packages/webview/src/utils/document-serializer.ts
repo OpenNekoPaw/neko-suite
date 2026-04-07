@@ -79,7 +79,7 @@ function toBlendMode(raw: string): BlendMode {
 }
 
 /** Convert serialized NksLayerData[] to in-memory LayerData[] */
-export function deserializeLayers(raw: NksLayerData[]): LayerData[] {
+function deserializeLayers(raw: NksLayerData[]): LayerData[] {
   return raw.map((l) => ({
     id: l.id,
     name: l.name,

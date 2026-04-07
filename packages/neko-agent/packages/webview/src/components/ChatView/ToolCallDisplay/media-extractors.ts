@@ -23,22 +23,22 @@ function isValidMediaUrl(url: string, extensions: string[]): boolean {
   return false;
 }
 
-export function isValidImageUrl(url: string): boolean {
+function isValidImageUrl(url: string): boolean {
   return isValidMediaUrl(url, IMAGE_EXTENSIONS);
 }
 
-export function isValidVideoUrl(url: string): boolean {
+function isValidVideoUrl(url: string): boolean {
   return isValidMediaUrl(url, VIDEO_EXTENSIONS);
 }
 
-export function isValidAudioUrl(url: string): boolean {
+function isValidAudioUrl(url: string): boolean {
   return isValidMediaUrl(url, AUDIO_EXTENSIONS);
 }
 
 /**
  * Check if a string is a valid file path
  */
-export function isFilePath(str: string): boolean {
+function isFilePath(str: string): boolean {
   if (!str || typeof str !== 'string') return false;
   if (str.startsWith('/') || /^[A-Za-z]:\\/.test(str)) return true;
   if (/\.\w{1,10}$/.test(str) && !str.includes('://')) return true;

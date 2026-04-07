@@ -63,7 +63,7 @@ export function formatResolution(width: number, height: number): string {
  * formatFileSize(2621440)    // "2.5 MB"
  * formatFileSize(1073741824) // "1.0 GB"
  */
-export function formatFileSize(bytes: number): string {
+function formatFileSize(bytes: number): string {
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;

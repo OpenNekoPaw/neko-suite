@@ -7,10 +7,6 @@ export function setRootLogger(logger: ILogger): void {
   rootLogger = logger;
 }
 
-export function getRootLogger(): ILogger {
-  return rootLogger;
-}
-
 export function getLogger(source: string): ILogger {
   return rootLogger.child(source);
 }

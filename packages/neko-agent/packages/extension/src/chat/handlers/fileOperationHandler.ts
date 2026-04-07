@@ -130,7 +130,7 @@ export class FileOperationHandler {
 
   async handleOpenAgentsFile(source: 'personal' | 'project'): Promise<void> {
     try {
-      const { getPromptFileService } = await import('../services/PromptFileService');
+      const { getPromptFileService } = await import('../../services/PromptFileService');
       const promptFileService = getPromptFileService();
       await promptFileService.openAgentsFile(source);
     } catch (error) {

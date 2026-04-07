@@ -7,7 +7,6 @@
  *   <RichContentRenderer kind="video" data={{ src, poster, title, localPath }} inline />
  */
 
-export { richContentRegistry } from './RichContentRegistry';
 export { RichContentRenderer } from './RichContentRenderer';
 export { registerDefaultRenderers } from './defaultRenderers';
 export type { RichContentKind, RichContentProps, RichContentRendererEntry } from './types';

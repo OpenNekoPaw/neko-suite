@@ -163,7 +163,7 @@ export const COMMON_SHORTCUTS = {
 /**
  * Format shortcut for display
  */
-export function formatShortcut(shortcut: KeyboardShortcut): string {
+function formatShortcut(shortcut: KeyboardShortcut): string {
   const mac = isMac();
   const parts: string[] = [];
 

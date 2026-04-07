@@ -197,21 +197,3 @@ export class FountainDocumentSymbolProvider implements vscode.DocumentSymbolProv
     }
   }
 }
-
-/**
- * Collects all unique character names from a document
- */
-export function collectCharacters(document: vscode.TextDocument): string[] {
-  const text = document.getText();
-  const fountainDoc = parse(text);
-  const characters = new Set<string>();
-
-  for (const element of fountainDoc.elements) {
-    if (element.type === 'character') {
-      const char = element as Character;
-      characters.add(char.name);
-    }
-  }
-
-  return Array.from(characters).sort();
-}

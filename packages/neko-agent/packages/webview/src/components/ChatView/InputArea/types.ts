@@ -37,7 +37,7 @@ export interface PluginSlashCommandDef {
 
 // Predefined slash commands - descriptions use i18n keys
 // Aligned with Claude Code CLI built-in commands
-export const SLASH_COMMANDS: SlashCommand[] = [
+const SLASH_COMMANDS: SlashCommand[] = [
   // Core commands
   {
     id: 'clear',
@@ -158,7 +158,7 @@ export interface SkillSummary {
 /**
  * Convert skill summary to slash command
  */
-export function skillToSlashCommand(skill: SkillSummary): SlashCommand | null {
+function skillToSlashCommand(skill: SkillSummary): SlashCommand | null {
   if (!skill.slashCommand || !skill.enabled) {
     return null;
   }
@@ -175,7 +175,7 @@ export function skillToSlashCommand(skill: SkillSummary): SlashCommand | null {
 /**
  * Convert a plugin slash command def to a SlashCommand
  */
-export function pluginToSlashCommand(def: PluginSlashCommandDef): SlashCommand {
+function pluginToSlashCommand(def: PluginSlashCommandDef): SlashCommand {
   return {
     id: `plugin:${def.extensionId}:${def.id}`,
     name: def.name.startsWith('/') ? def.name : `/${def.name}`,
@@ -267,12 +267,4 @@ export function getFileTypeFromMime(mimeType: string): AttachmentType {
   if (mimeType.startsWith('video/')) return 'video';
   if (mimeType.startsWith('audio/')) return 'audio';
   return 'file';
-}
-
-// Format file size
-export function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

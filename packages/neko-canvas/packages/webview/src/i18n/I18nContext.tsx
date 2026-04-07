@@ -1,6 +1,4 @@
 /**
- * React i18n bindings for neko-canvas
- *
- * Re-exports shared Provider/hooks from @neko/shared.
+ * React i18n bindings for neko-canvas.
  */
-export { I18nProvider, useI18n, useTranslation } from '@neko/shared/i18n/react';
+export { I18nProvider } from '@neko/shared/i18n/react';

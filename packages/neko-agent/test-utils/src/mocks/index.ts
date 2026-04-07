@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest';
-import type { AgentSession, CommandContext, ILLMClient } from '@neko-agent/agent';
+import type { AgentSession, CommandContext, ILLMClient } from '@neko/agent';
 
 /**
  * Create mock AgentSession

@@ -21,7 +21,7 @@ interface DropdownMenuProps<T> {
   direction?: DropdownDirection;
 }
 
-export function DropdownMenu<T>({
+function DropdownMenu<T>({
   isOpen,
   onClose,
   items,

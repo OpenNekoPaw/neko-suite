@@ -16,6 +16,7 @@
     "@tanstack/react-virtual": "^3.13.14",
     "@neko/shared": "workspace:*",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "devlop": "^1.1.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "html-url-attributes": "^3.0.1",

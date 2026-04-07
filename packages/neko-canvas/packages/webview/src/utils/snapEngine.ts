@@ -64,7 +64,7 @@ export interface Guide {
 // Constants
 // =============================================================================
 
-export const DEFAULT_SNAP_CONFIG: SnapConfig = {
+const DEFAULT_SNAP_CONFIG: SnapConfig = {
   gridEnabled: true,
   gridSize: 20,
   nodeEnabled: true,
@@ -305,4 +305,4 @@ export class SnapEngine {
 // Singleton Instance
 // =============================================================================
 
-export const snapEngine = new SnapEngine();
+const snapEngine = new SnapEngine();

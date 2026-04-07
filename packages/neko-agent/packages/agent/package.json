@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@neko-agent/types": "workspace:*",
-    "@neko/shared": "workspace:*"
+    "@neko/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "mermaid": "^11.12.2"
   },
   "peerDependencies": {
     "@neko/platform": "workspace:*"

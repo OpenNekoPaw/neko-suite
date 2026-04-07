@@ -11,6 +11,9 @@
     "@neko/shared": "workspace:*",
     "ai": "^6.0.134"
   },
+  "devDependencies": {
+    "@neko/agent": "workspace:*"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*"

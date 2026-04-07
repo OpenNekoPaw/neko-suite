@@ -21,7 +21,7 @@ export interface ProjectFileInfo {
 /**
  * Default settings state
  */
-export const DEFAULT_SETTINGS: SettingsState = {
+const DEFAULT_SETTINGS: SettingsState = {
   providers: [],
   configuredProviders: [],
   selectedProviderId: null,

@@ -11,5 +11,9 @@
     "./media-lsp": "./src/media-lsp/index.ts",
     "./*": "./src/*"
   },
+  "dependencies": {
+    "@neko/neko-client": "workspace:*",
+    "@neko/shared": "workspace:*"
+  },
   "license": "MIT"
 }

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MediaGenerationService } from '../media-generation-service';
 import { MediaRoutingManager } from '../routing/media-routing-manager';
 import { MediaTaskExecutor } from '../media-task-executor';
-import { TaskManager } from '../../task/task-manager';
+import { TaskManager } from '@neko/agent/task';
 import { ProviderRegistry } from '../../provider/provider-registry';
 import { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';

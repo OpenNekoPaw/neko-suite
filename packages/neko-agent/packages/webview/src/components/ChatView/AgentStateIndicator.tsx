@@ -54,7 +54,7 @@ function formatElapsedTime(startedAt: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export function AgentStateIndicator({ agentState, className = '' }: AgentStateIndicatorProps) {
+function AgentStateIndicator({ agentState, className = '' }: AgentStateIndicatorProps) {
   // Don't render when idle
   if (!agentState) {
     return null;

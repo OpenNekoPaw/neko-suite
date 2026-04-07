@@ -1,1 +1,1 @@
-export { HistoryManager, captureRegionSnapshot, type IHistoryManager } from './history-manager';
+export { HistoryManager, type IHistoryManager } from './history-manager';

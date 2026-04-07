@@ -62,7 +62,7 @@ export function useShallowStore<T>(selector: (state: EditorStore) => T): T {
  * Pre-built selectors for common use cases
  * These can be used directly with useEditorStore or as building blocks
  */
-export const selectors = {
+const selectors = {
   // Playback state
   playback: (state: EditorStore) => ({
     isPlaying: state.isPlaying,

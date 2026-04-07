@@ -26,9 +26,6 @@ const vscode = getVSCodeAPI();
 // Pending context menu callbacks
 const pendingContextMenuCallbacks = new Map<string, (selectedId?: string) => void>();
 
-// Re-export getFileUri from shared module for backward compatibility
-export { getFileUri } from '../utils/fileUri';
-
 export function useVSCodeMessaging() {
   const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } =
     useEditorStore();
@@ -471,7 +468,7 @@ export function useVSCodeMessaging() {
  * Show VSCode native context menu (module-level function)
  * Returns a promise that resolves to the selected item's id, or undefined if cancelled
  */
-export function showVSCodeContextMenu(
+function showVSCodeContextMenu(
   items: Array<{
     id: string;
     label: string;

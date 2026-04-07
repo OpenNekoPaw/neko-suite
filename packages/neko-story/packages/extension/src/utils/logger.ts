@@ -20,13 +20,6 @@ export function setRootLogger(logger: ILogger): void {
 }
 
 /**
- * Get a child logger for a module/service.
- */
-export function getLogger(source: string): ILogger {
-  return _rootLogger.child(source);
-}
-
-/**
  * Get the root logger directly (for extension.ts top-level logs)
  */
 export function getRootLogger(): ILogger {
