@@ -202,6 +202,8 @@ define_actions!(NodeAction {
     Metric => "metric",
     /// Get GPU information
     Gpu => "gpu",
+    /// Get hardware capabilities
+    HwCapabilities => "hw_capabilities",
 });
 
 define_actions!(TaskAction {
@@ -283,6 +285,8 @@ define_actions!(AudioAction {
     RecordStart => "record_start",
     /// Stop an active recording
     RecordStop => "record_stop",
+    /// Mix down multi-track audio into a single output
+    Mixdown => "mixdown",
 });
 
 define_actions!(ImageAction {
@@ -309,6 +313,22 @@ define_actions!(StreamAction {
     Destroy => "destroy",
     /// List all streams
     List => "list",
+    /// Stop a stream
+    Stop => "stop",
+    /// Seek within a stream
+    Seek => "seek",
+    /// Set stream playback speed
+    Speed => "speed",
+    /// Set stream loop region
+    Loop => "loop",
+    /// Get stream statistics
+    Stats => "stats",
+    /// Update stream configuration
+    Update => "update",
+    /// Set stream quality
+    Quality => "quality",
+    /// Apply an operation to a stream
+    ApplyOperation => "applyOperation",
 });
 
 define_actions!(ModelAction {
@@ -320,6 +340,20 @@ define_actions!(ModelAction {
     Stream => "stream",
     /// Compare two 3D model files (metadata + content)
     Diff => "diff",
+    /// Register a model asset or backend
+    Register => "register",
+    /// Unregister a model asset or backend
+    Unregister => "unregister",
+    /// List available models
+    List => "list",
+    /// Upscale model-related output
+    Upscale => "upscale",
+    /// Denoise model-related output
+    Denoise => "denoise",
+    /// Run CLIP embedding or matching
+    Clip => "clip",
+    /// Run transcription against model pipeline
+    Transcribe => "transcribe",
 });
 
 define_actions!(CanvasAction {
@@ -366,6 +400,40 @@ define_actions!(SceneAction {
     SaveProject => "save_project",
     /// Load .nkm project file
     LoadProject => "load_project",
+    /// List keyframe tracks for a node
+    KeyframeTracks => "keyframe_tracks",
+    /// Add a keyframe to a track
+    KeyframeAdd => "keyframe_add",
+    /// Remove a keyframe from a track
+    KeyframeRemove => "keyframe_remove",
+    /// Update a keyframe on a track
+    KeyframeUpdate => "keyframe_update",
+    /// Create an animation clip
+    ClipCreate => "clip_create",
+    /// Crossfade between animation clips
+    AnimCrossfade => "anim_crossfade",
+    /// Set animation blend weight
+    BlendWeight => "blend_weight",
+    /// Query animation blend state
+    BlendState => "blend_state",
+    /// Create an IK chain
+    IkCreate => "ik_create",
+    /// Remove an IK chain
+    IkRemove => "ik_remove",
+    /// Set an IK target
+    IkTarget => "ik_target",
+    /// Enable or disable IK
+    IkEnable => "ik_enable",
+    /// List IK chains
+    IkList => "ik_list",
+    /// Set node visibility
+    SetVisible => "set_visible",
+    /// Update morph target weights
+    MorphWeights => "morph_weights",
+    /// Update material properties
+    UpdateMaterial => "update_material",
+    /// Delete a scene node
+    DeleteNode => "delete_node",
 });
 
 // ---------------------------------------------------------------------------
