@@ -173,6 +173,13 @@ export class JviProjectLoader {
   }
 
   /**
+   * Backward-compatible alias used by the extension entrypoint.
+   */
+  toLayers(): TrackLayer[] {
+    return this.toTrackLayers();
+  }
+
+  /**
    * Convert a JVI element to a TrackLayer
    */
   private elementToTrackLayer(
@@ -300,6 +307,13 @@ export class JviProjectLoader {
       }
     }
     return maxEndTime;
+  }
+
+  /**
+   * Backward-compatible alias used by the export command.
+   */
+  calculateDuration(): number {
+    return this.getProjectDuration();
   }
 
   /**

@@ -5,7 +5,7 @@
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Rust Sidecar 进程（native-core）+ N-API 桥接 + TypeScript Extension
+- 架构：Rust 媒体引擎（当前主路径为进程内 N-API 单例）+ 可选嵌入式 HTTP 服务 + TypeScript Extension
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
@@ -21,7 +21,7 @@
 ```
 TypeScript Extension Host
   └── @neko-engine/extension
-        ├── MediaEngineManager  → 生命周期管理（启动/停止 sidecar）
+        ├── MediaEngineManager  → Extension 会话生命周期管理（连接/断开引擎包装层）
         ├── NativeMediaEngine   → N-API 调用封装
         └── ExportService       → 导出任务管理
               │ N-API
@@ -62,6 +62,13 @@ packages/
 ├── types/          # 共享 Rust 类型
 └── extension/      # VSCode 扩展集成
 ```
+
+### 当前生命周期语义
+
+- `native-napi` 通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- `neko.engine.start` / `neko.engine.stop` 当前语义应理解为“连接 / 断开 Extension 会话中的引擎包装层”。
+- `stop` 会释放 TypeScript 包装层和嵌入式 frame server，不会真正销毁底层 Rust 单例。
+- 若后续需要真实 `shutdown/reset`，应先在 Rust 侧补明确能力，再恢复“启动/停止引擎”的产品语义。
 
 ## Deep Dive
 

@@ -7,7 +7,7 @@
  * extension.ts → MediaEngineManager → NativeMediaEngine → NativeEngine (NAPI) → EngineApi (Rust)
  *
  * Responsibilities:
- * - Engine lifecycle management (start/stop)
+ * - Engine session lifecycle management (connect/disconnect)
  * - VSCode command registration
  * - Status bar integration
  * - Export pipeline orchestration
@@ -33,7 +33,7 @@ let manager: MediaEngineManager | null = null;
 let exportService: ExportService | null = null;
 let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
-/** Cached frame server port (null = not started) */
+/** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
 
 // =============================================================================
@@ -83,10 +83,10 @@ export function activate(context: vscode.ExtensionContext): void {
 // =============================================================================
 
 function registerCommands(context: vscode.ExtensionContext): void {
-  // Start Engine
+  // Connect Engine Session
   context.subscriptions.push(vscode.commands.registerCommand('neko.engine.start', cmdStartEngine));
 
-  // Stop Engine
+  // Disconnect Engine Session
   context.subscriptions.push(vscode.commands.registerCommand('neko.engine.stop', cmdStopEngine));
 
   // Engine Status
@@ -262,10 +262,22 @@ function registerCommands(context: vscode.ExtensionContext): void {
           const engine = await getOrStartEngine();
           if (!engine?.engine) return null;
 
-          // Check if already running
-          const existingPort = frameServerPort;
+          // Reuse a healthy embedded server when possible, but self-heal stale cache state.
+          const existingPort = frameServerPort ?? engine.engine.getFrameServerPort();
           if (existingPort !== null) {
-            return { port: existingPort };
+            if (await isFrameServerHealthy(existingPort)) {
+              frameServerPort = existingPort;
+              return { port: existingPort };
+            }
+
+            log(`Frame server port ${existingPort} is stale, restarting`, 'error');
+            frameServerPort = null;
+
+            try {
+              await engine.engine.stopFrameServer();
+            } catch {
+              // Ignore — the wrapper may already be out of sync with the real server state.
+            }
           }
 
           // Start frame server with auto-assigned port
@@ -274,6 +286,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
           log(`Frame server started on port ${port}`);
           return { port };
         } catch (error) {
+          frameServerPort = null;
           log(`ensureFrameServer failed: ${error}`, 'error');
           return null;
         }
@@ -329,7 +342,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
 // =============================================================================
 
 /**
- * Start the engine — initializes NativeEngine via MediaEngineManager
+ * Connect the extension session to the process-wide engine singleton.
  */
 async function cmdStartEngine(): Promise<void> {
   if (!manager) {
@@ -347,7 +360,7 @@ async function cmdStartEngine(): Promise<void> {
       exportService.initializeWithEngine(engine.engine);
     }
 
-    log(`Engine started (GPU: ${engine.engine?.hasGpu() ? 'enabled' : 'disabled'})`);
+    log(`Engine session connected (GPU: ${engine.engine?.hasGpu() ? 'enabled' : 'disabled'})`);
 
     // Log available groups
     const groups = engine.engine?.groups();
@@ -356,10 +369,10 @@ async function cmdStartEngine(): Promise<void> {
     }
 
     updateStatusBar('ready');
-    vscode.window.showInformationMessage('Neko Engine started');
+    vscode.window.showInformationMessage('Neko Engine connected');
   } catch (error) {
     log(
-      `Failed to start engine: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to connect engine session: ${error instanceof Error ? error.message : String(error)}`,
       'error',
     );
     updateStatusBar('error');
@@ -368,7 +381,11 @@ async function cmdStartEngine(): Promise<void> {
 }
 
 /**
- * Stop the engine — disposes NativeEngine and cleans up resources
+ * Disconnect the extension session from the engine wrapper.
+ *
+ * Note: the Rust EngineApi currently lives behind a process-wide singleton in
+ * native-napi, so this command only disposes the TypeScript-side wrapper and
+ * embedded frame server state for the current extension session.
  */
 async function cmdStopEngine(): Promise<void> {
   if (!manager) {
@@ -383,13 +400,15 @@ async function cmdStopEngine(): Promise<void> {
 
     // Dispose engines
     await manager.disposeEngines();
+    frameServerPort = null;
 
-    log('Engine stopped');
+    log('Engine session disconnected');
     updateStatusBar('idle');
-    vscode.window.showInformationMessage('Neko Engine stopped');
+    vscode.window.showInformationMessage('Neko Engine disconnected');
   } catch (error) {
+    frameServerPort = null;
     log(
-      `Failed to stop engine: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to disconnect engine session: ${error instanceof Error ? error.message : String(error)}`,
       'error',
     );
     handleError(error, { showToUser: true, severity: 'error' });
@@ -408,7 +427,7 @@ async function cmdShowStatus(): Promise<void> {
   try {
     const engine = await getOrStartEngine();
     if (!engine?.engine) {
-      vscode.window.showInformationMessage('Neko Engine: Not running');
+      vscode.window.showInformationMessage('Neko Engine: Not connected');
       return;
     }
 
@@ -682,6 +701,22 @@ async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
   }
 }
 
+async function isFrameServerHealthy(port: number): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1000);
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Update status bar based on engine state
  */
@@ -689,17 +724,17 @@ function updateStatusBar(state: 'idle' | 'starting' | 'ready' | 'error'): void {
   switch (state) {
     case 'idle':
       statusBarItem.text = '$(circle-outline) Neko Engine';
-      statusBarItem.tooltip = 'Neko Engine: Idle — Click to view status';
+      statusBarItem.tooltip = 'Neko Engine: Disconnected — Click to view status';
       statusBarItem.backgroundColor = undefined;
       break;
     case 'starting':
       statusBarItem.text = '$(loading~spin) Neko Engine';
-      statusBarItem.tooltip = 'Neko Engine: Starting...';
+      statusBarItem.tooltip = 'Neko Engine: Connecting...';
       statusBarItem.backgroundColor = undefined;
       break;
     case 'ready':
       statusBarItem.text = '$(check) Neko Engine';
-      statusBarItem.tooltip = 'Neko Engine: Ready — Click to view status';
+      statusBarItem.tooltip = 'Neko Engine: Connected — Click to view status';
       statusBarItem.backgroundColor = undefined;
       break;
     case 'error':

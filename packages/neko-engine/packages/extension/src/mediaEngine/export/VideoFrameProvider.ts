@@ -5,8 +5,10 @@
  */
 
 import type { TrackLayer, FrameProvider } from './ExportService';
-import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
+import type { NativeEngine as NativeEngineType } from '@neko-engine/native-napi';
 import { getLogger } from '../../base/logger';
+
+type NativeEngineModule = typeof import('@neko-engine/native-napi');
 
 const logger = getLogger('VideoFrameProvider');
 

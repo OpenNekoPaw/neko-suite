@@ -35,7 +35,7 @@ export interface MediaEngineManagerConfig {
  * Manages the compatible mode media engine instance
  *
  * Responsibilities:
- * - Engine lifecycle management (create, dispose)
+ * - Extension-session lifecycle management for the NativeMediaEngine wrapper
  * - Provide access to NativeMediaEngine (FFmpeg + wgpu via N-API)
  */
 export class MediaEngineManager implements vscode.Disposable {
@@ -95,7 +95,10 @@ export class MediaEngineManager implements vscode.Disposable {
   // =========================================================================
 
   /**
-   * Dispose current engines
+   * Dispose current engine wrappers for this extension session.
+   *
+   * The underlying Rust EngineApi remains process-scoped today because
+   * native-napi owns it behind a global singleton.
    */
   async disposeEngines(): Promise<void> {
     if (this._compatibleEngine) {

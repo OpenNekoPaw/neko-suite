@@ -1,12 +1,12 @@
 # neko-engine 架构
 
-> Rust 媒体引擎 Sidecar，提供 GPU 渲染、FFmpeg 编解码、H.264/PCM 流式传输等计算密集型能力。
+> Rust 媒体引擎，当前主路径以进程内 N-API 单例形式提供 GPU 渲染、FFmpeg 编解码、H.264/PCM 流式传输等计算密集型能力。
 
 ---
 
 ## 系统定位
 
-neko-engine 是 Neko Suite 的计算核心。作为独立 Sidecar 进程运行，通过 HTTP/WebSocket 暴露服务，所有扩展通过统一的 EngineClient 消费。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
+neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extension Host 内通过 `native-napi` 访问 Rust `EngineApi` 单例，并按需启动嵌入式 HTTP/WebSocket 服务。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
 
 ---
 
@@ -23,7 +23,7 @@ packages/neko-engine/
 │   ├── native-napi/    # Rust: Node.js N-API 绑定（napi-rs）
 │   ├── native-cli/     # Rust: 独立 CLI 二进制
 │   ├── types/          # Rust: 共享 DTO（跨 crate 契约）
-│   └── extension/      # TypeScript: VSCode 扩展（进程生命周期管理）
+│   └── extension/      # TypeScript: VSCode 扩展（Extension 会话生命周期管理）
 ├── Cargo.toml          # Rust workspace 配置
 └── package.json        # VSCode 扩展元数据
 ```
@@ -46,7 +46,7 @@ packages/neko-engine/
 └─────────┬─────────────────────────────────────────────┘
           │
 ┌─────────▼─────────────────────────────────────────────┐
-│              Rust Sidecar Process                      │
+│      Rust Engine Runtime (embedded in Extension Host) │
 │                                                       │
 │  ┌─ View Layer ──────────────────────────────────┐    │
 │  │  native-http (axum)                           │    │
@@ -140,7 +140,14 @@ EngineClient（@neko/neko-client）
   └─ GET  /v1/streams/  →  WebSocket  →  H.264 NAL / PCM Float32
 ```
 
-适用于长连接流式数据和跨进程调用。所有扩展（neko-cut、neko-preview、neko-tools 等）通过 EngineClient HTTP dispatch 统一访问。
+适用于长连接流式数据和跨扩展调用。所有扩展（neko-cut、neko-preview、neko-tools 等）通过 EngineClient HTTP dispatch 统一访问。
+
+### 生命周期说明
+
+- `native-napi` 当前通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- `MediaEngineManager.disposeEngines()` 仅释放 TypeScript 包装层，不会真正销毁 Rust 引擎单例。
+- `stopFrameServer()` 只影响嵌入式 HTTP/WebSocket 服务，不代表底层引擎已重建或退出。
+- 若后续需要真正的 `stop/start/restart`，必须先在 Rust 侧提供显式 `shutdown/reset` 契约。
 
 ### 3. WebSocket 直连（Webview → Rust）
 

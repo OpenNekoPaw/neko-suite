@@ -2,7 +2,8 @@
  * Base module exports
  */
 
-export { ServiceIdentifier, createServiceId } from './serviceCollection';
+export { createServiceId } from './serviceCollection';
+export type { ServiceIdentifier } from './serviceCollection';
 
 export { setRootLogger, getRootLogger, getLogger } from './logger';
 

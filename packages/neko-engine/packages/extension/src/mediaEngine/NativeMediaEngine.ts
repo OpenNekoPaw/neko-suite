@@ -7,6 +7,7 @@
  * Runs in Extension Host (Node.js), supports all formats.
  */
 
+import type { NativeEngine as NativeEngineType } from '@neko-engine/native-napi';
 import type {
   IMediaEngine,
   IDecoder,
@@ -26,49 +27,14 @@ import type {
   EffectProcessorGpuInfo,
   GpuEffectParams,
   EffectPipeline,
+  VideoFrame,
 } from '@neko/shared';
 import { COMPATIBLE_MODE_CAPABILITIES } from '@neko/shared';
 import { getLogger } from '../base/logger';
 
-// =============================================================================
-// NativeEngine Types (matching engine.rs NAPI interface)
-// =============================================================================
-
 type EventListener<T> = (data: T) => void;
 
-/**
- * NativeEngine instance type — matches the NAPI class in engine.rs
- */
-export interface NativeEngineType {
-  dispatch(requestJson: string): Promise<string>;
-  dispatchAction(
-    group: string,
-    action: string,
-    id: string | null,
-    options: string | null,
-  ): Promise<string>;
-  hasGpu(): boolean;
-  groups(): string[];
-  actions(group: string): string[] | null;
-  health(): Promise<string>;
-  metrics(): Promise<string>;
-  gpuInfo(): Promise<string>;
-  probeVideo(source: string): Promise<string>;
-  listTasks(): Promise<string>;
-  getTaskProgress(taskId: string): Promise<string>;
-  cancelTask(taskId: string): Promise<string>;
-  captureFrame(source: string, time: number, quality?: number, format?: string): Promise<string>;
-  startFrameServer(port?: number): Promise<number>;
-  stopFrameServer(): Promise<void>;
-  getFrameServerPort(): number | null;
-}
-
-/**
- * NativeEngine module type — the imported NAPI module
- */
-export interface NativeEngineModule {
-  NativeEngine: { create(): Promise<NativeEngineType> };
-}
+type NativeEngineModule = typeof import('@neko-engine/native-napi');
 
 // =============================================================================
 // Native Media Engine
@@ -155,7 +121,9 @@ export class NativeMediaEngine implements IMediaEngine {
 
   async dispose(): Promise<void> {
     if (this._engine) {
-      // Stop frame server if running
+      // Stop the embedded HTTP server owned by this wrapper instance.
+      // The Rust EngineApi itself currently remains alive behind the global
+      // native-napi singleton and is not torn down here.
       try {
         await this._engine.stopFrameServer();
       } catch {

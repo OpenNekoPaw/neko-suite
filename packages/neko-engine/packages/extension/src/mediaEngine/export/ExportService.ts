@@ -5,8 +5,10 @@
  * The Rust ExportService handles GPU compositing, encoding, and muxing internally.
  */
 
-import type { NativeEngineType, NativeEngineModule } from '../NativeMediaEngine';
+import type { NativeEngine as NativeEngineType } from '@neko-engine/native-napi';
 import { getLogger } from '../../base/logger';
+
+type NativeEngineModule = typeof import('@neko-engine/native-napi');
 
 const logger = getLogger('ExportService');
 
