@@ -171,11 +171,29 @@ describe('DocumentReaderService', () => {
     it('should read web pages', async () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
 
+      // Mock node-fetch to avoid real network requests in CI
+      const mockHtml =
+        '<html><head><title>Example Domain</title></head><body><p>Example Domain content</p></body></html>';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.spyOn(service as any, 'tryImport').mockImplementation(async (pkg: any) => {
+        if (pkg === 'node-fetch') {
+          const mockFetch = async () => ({
+            ok: true,
+            text: async () => mockHtml,
+          });
+          return { default: mockFetch };
+        }
+        if (pkg === 'cheerio') {
+          return await import('cheerio');
+        }
+        return undefined;
+      });
+
       const result = await service.read('https://example.com');
 
       expect(result.text).toContain('Example Domain');
       expect(result.metadata?.url).toBe('https://example.com');
-      expect(result.metadata?.title).toBeTruthy();
+      expect(result.metadata?.title).toBe('Example Domain');
     });
   });
 

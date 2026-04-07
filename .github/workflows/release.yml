@@ -93,11 +93,11 @@ jobs:
           - target: darwin-arm64
             os: macos-14
             rust-target: aarch64-apple-darwin
-            ffmpeg-install: brew install ffmpeg pkg-config
+            ffmpeg-install: brew install ffmpeg@7 pkg-config && brew link ffmpeg@7
           - target: darwin-x64
             os: macos-13
             rust-target: x86_64-apple-darwin
-            ffmpeg-install: brew install ffmpeg pkg-config
+            ffmpeg-install: brew install ffmpeg@7 pkg-config && brew link ffmpeg@7
           - target: linux-x64
             os: ubuntu-latest
             rust-target: x86_64-unknown-linux-gnu

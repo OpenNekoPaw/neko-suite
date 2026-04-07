@@ -7,3 +7,13 @@ ignore = [
     # paste — unmaintained, no replacement available yet
     "RUSTSEC-2024-0436",
 ]
+
+[sources]
+# Allow inox2d git dependency (no crates.io release available)
+allow-git = ["https://github.com/Inochi2D/inox2d"]
+
+[bans]
+# base64 v0.13 (gltf) + v0.22 (ours) — transitive, can't unify
+skip = [
+    { crate = "base64@0.13.1" },
+]
