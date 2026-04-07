@@ -3,7 +3,7 @@
 //! Renders a bevy_ecs World's visible meshes using metallic-roughness PBR.
 //! Outputs to Rgba16Float texture (matching TextureCompositor format).
 
-use crate::gpu::scene_renderer::asset_cache::{AssetCache, GpuMaterial, GpuMesh};
+use crate::gpu::scene_renderer::asset_cache::AssetCache;
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
 use crate::gpu::GpuContext;
 use bevy_ecs::prelude::*;
@@ -523,7 +523,7 @@ impl PbrRenderer {
                 }
 
                 render_pass.set_bind_group(1, &call.model_bind_group, &[]);
-                render_pass.set_bind_group(2, &call.material_bind_group, &[]);
+                render_pass.set_bind_group(2, call.material_bind_group, &[]);
 
                 if call.is_skinned {
                     if let Some(ref jbg) = call.joint_bind_group {
@@ -558,7 +558,7 @@ impl PbrRenderer {
 
         let mut query = world.query::<(&Light, &GlobalTransform, &Transform)>();
         let mut idx = 0usize;
-        for (light, global_transform, transform) in query.iter(world) {
+        for (light, global_transform, _transform) in query.iter(world) {
             if idx >= MAX_LIGHTS {
                 break;
             }
@@ -637,9 +637,10 @@ impl PbrRenderer {
             Option<&Visible>,
         )>();
 
+        #[allow(clippy::type_complexity)]
         let draw_data: Vec<(Entity, Mat4, String, usize, Option<(String, usize)>)> = query
             .iter(world)
-            .filter(|(_, _, _, _, visible)| visible.map_or(true, |v| v.0))
+            .filter(|(_, _, _, _, visible)| visible.is_none_or(|v| v.0))
             .map(|(entity, gt, mesh_ref, mat_ref, _)| {
                 (
                     entity,
@@ -763,6 +764,7 @@ impl PbrRenderer {
 
 /// Pre-collected draw call data (owns model buffers, borrows mesh/material from cache)
 struct DrawCall<'a> {
+    #[allow(dead_code)]
     model_buffer: wgpu::Buffer,
     model_bind_group: wgpu::BindGroup,
     material_bind_group: &'a wgpu::BindGroup,

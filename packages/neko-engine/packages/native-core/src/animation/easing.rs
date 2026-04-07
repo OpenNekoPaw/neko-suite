@@ -25,13 +25,13 @@ mod tests {
 
     #[test]
     fn test_easing_from_str() {
-        assert_eq!(EasingType::from_str("linear"), EasingType::Linear);
-        assert_eq!(EasingType::from_str("easeInQuad"), EasingType::EaseInQuad);
+        assert_eq!(EasingType::from_name("linear"), EasingType::Linear);
+        assert_eq!(EasingType::from_name("easeInQuad"), EasingType::EaseInQuad);
         assert_eq!(
-            EasingType::from_str("ease_out_cubic"),
+            EasingType::from_name("ease_out_cubic"),
             EasingType::EaseOutCubic
         );
-        assert_eq!(EasingType::from_str("unknown"), EasingType::Linear);
+        assert_eq!(EasingType::from_name("unknown"), EasingType::Linear);
     }
 
     #[test]

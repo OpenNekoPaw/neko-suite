@@ -156,6 +156,7 @@ impl AssetCache {
 
     /// Update material uniform parameters at runtime.
     /// Only provided fields are changed; others keep their current values.
+    #[allow(clippy::too_many_arguments)]
     pub fn update_material_uniforms(
         &self,
         uri: &str,

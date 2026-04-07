@@ -1,5 +1,7 @@
 //! Codec types — video and audio codec enumerations
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 /// Video codec
@@ -24,15 +26,19 @@ impl VideoCodec {
             Self::ProRes => "prores",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for VideoCodec {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "h264" | "avc" => Some(Self::H264),
-            "h265" | "hevc" => Some(Self::H265),
-            "vp9" => Some(Self::Vp9),
-            "av1" => Some(Self::Av1),
-            "prores" => Some(Self::ProRes),
-            _ => None,
+            "h264" | "avc" => Ok(Self::H264),
+            "h265" | "hevc" => Ok(Self::H265),
+            "vp9" => Ok(Self::Vp9),
+            "av1" => Ok(Self::Av1),
+            "prores" => Ok(Self::ProRes),
+            _ => Err(format!("unknown video codec: {s}")),
         }
     }
 }
@@ -61,16 +67,20 @@ impl AudioCodec {
             Self::Vorbis => "vorbis",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for AudioCodec {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "aac" => Some(Self::Aac),
-            "mp3" => Some(Self::Mp3),
-            "opus" => Some(Self::Opus),
-            "flac" => Some(Self::Flac),
-            "pcm" | "pcm_s16le" | "pcm_s24le" | "pcm_f32le" => Some(Self::Pcm),
-            "vorbis" => Some(Self::Vorbis),
-            _ => None,
+            "aac" => Ok(Self::Aac),
+            "mp3" => Ok(Self::Mp3),
+            "opus" => Ok(Self::Opus),
+            "flac" => Ok(Self::Flac),
+            "pcm" | "pcm_s16le" | "pcm_s24le" | "pcm_f32le" => Ok(Self::Pcm),
+            "vorbis" => Ok(Self::Vorbis),
+            _ => Err(format!("unknown audio codec: {s}")),
         }
     }
 }
@@ -275,7 +285,7 @@ mod tests {
             let s = codec.as_str();
             assert_eq!(
                 VideoCodec::from_str(s),
-                Some(codec),
+                Ok(codec),
                 "roundtrip failed for {s}"
             );
         }
@@ -283,10 +293,10 @@ mod tests {
 
     #[test]
     fn test_video_codec_aliases() {
-        assert_eq!(VideoCodec::from_str("avc"), Some(VideoCodec::H264));
-        assert_eq!(VideoCodec::from_str("hevc"), Some(VideoCodec::H265));
-        assert_eq!(VideoCodec::from_str("H264"), Some(VideoCodec::H264));
-        assert_eq!(VideoCodec::from_str("unknown"), None);
+        assert_eq!(VideoCodec::from_str("avc"), Ok(VideoCodec::H264));
+        assert_eq!(VideoCodec::from_str("hevc"), Ok(VideoCodec::H265));
+        assert_eq!(VideoCodec::from_str("H264"), Ok(VideoCodec::H264));
+        assert!(VideoCodec::from_str("unknown").is_err());
     }
 
     #[test]
@@ -317,7 +327,7 @@ mod tests {
             let s = codec.as_str();
             assert_eq!(
                 AudioCodec::from_str(s),
-                Some(codec),
+                Ok(codec),
                 "roundtrip failed for {s}"
             );
         }
@@ -325,9 +335,9 @@ mod tests {
 
     #[test]
     fn test_audio_codec_pcm_aliases() {
-        assert_eq!(AudioCodec::from_str("pcm_s16le"), Some(AudioCodec::Pcm));
-        assert_eq!(AudioCodec::from_str("pcm_s24le"), Some(AudioCodec::Pcm));
-        assert_eq!(AudioCodec::from_str("pcm_f32le"), Some(AudioCodec::Pcm));
+        assert_eq!(AudioCodec::from_str("pcm_s16le"), Ok(AudioCodec::Pcm));
+        assert_eq!(AudioCodec::from_str("pcm_s24le"), Ok(AudioCodec::Pcm));
+        assert_eq!(AudioCodec::from_str("pcm_f32le"), Ok(AudioCodec::Pcm));
     }
 
     // ---- EncoderPreset ----

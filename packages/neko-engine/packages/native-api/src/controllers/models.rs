@@ -7,10 +7,11 @@ use neko_types::registry;
 use neko_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::Arc;
 
 #[cfg(feature = "onnx")]
 use neko_native_core::services::IMlService;
+#[cfg(feature = "onnx")]
+use std::sync::Arc;
 
 /// Controller for model-related actions: diff, register, unregister, list, upscale, denoise, clip, transcribe.
 pub struct ModelsController {
@@ -37,6 +38,13 @@ impl ModelsController {
     }
 }
 
+#[cfg(not(feature = "onnx"))]
+impl Default for ModelsController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // =============================================================================
 // Request option structs
 // =============================================================================
@@ -48,6 +56,7 @@ struct DiffOptions {
     source_b: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RegisterOptions {
@@ -57,12 +66,14 @@ struct RegisterOptions {
     task: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct UnregisterOptions {
     name: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct UpscaleOptions {
@@ -72,6 +83,7 @@ struct UpscaleOptions {
     scale: Option<u32>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct DenoiseOptions {
@@ -81,6 +93,7 @@ struct DenoiseOptions {
     strength: Option<f32>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct ClipOptions {
@@ -89,6 +102,7 @@ struct ClipOptions {
     text: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct TranscribeOptions {

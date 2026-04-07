@@ -59,6 +59,7 @@ impl TextRenderer {
     /// Rasterize text to an RGBA buffer
     ///
     /// Returns the pixel data and dimensions, or None if the text is empty.
+    #[allow(clippy::too_many_arguments)]
     pub fn rasterize(
         &mut self,
         text: &str,
@@ -84,6 +85,7 @@ impl TextRenderer {
     /// Rasterize text with full styling (Phase 2 fields).
     ///
     /// Supports line_height, stroke, shadow, background_color, and text_decoration.
+    #[allow(clippy::too_many_arguments)]
     pub fn rasterize_styled(
         &mut self,
         text: &str,
@@ -124,7 +126,7 @@ impl TextRenderer {
             "monospace" | "mono" => Family::Monospace,
             "cursive" => Family::Cursive,
             "fantasy" => Family::Fantasy,
-            name if name.is_empty() => Family::SansSerif,
+            "" => Family::SansSerif,
             name => Family::Name(name),
         };
 
@@ -281,6 +283,7 @@ impl TextRenderer {
     }
 
     /// Draw text from a cosmic-text buffer into an RGBA pixel buffer at the given offset.
+    #[allow(clippy::too_many_arguments)]
     fn draw_text_to_buffer(
         &mut self,
         buffer: &mut CosmicBuffer,

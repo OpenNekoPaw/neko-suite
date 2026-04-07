@@ -148,7 +148,7 @@ impl IAudioService for AudioService {
 
             // Configure encoder with options
             let sample_rate = options.sample_rate.unwrap_or(audio_info.sample_rate);
-            let channels = options.channels.unwrap_or(audio_info.channels as u16);
+            let channels = options.channels.unwrap_or(audio_info.channels);
 
             let mut config = AudioEncoderConfig::new(sample_rate, channels, codec);
             if let Some(bitrate) = options.bitrate {

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Top-level engine configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EngineConfig {
     /// HTTP server settings.
@@ -31,15 +31,6 @@ pub struct ConcurrencyConfig {
     pub codec: usize,
     /// Max concurrent GPU tasks.
     pub gpu: usize,
-}
-
-impl Default for EngineConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            concurrency: ConcurrencyConfig::default(),
-        }
-    }
 }
 
 impl Default for ServerConfig {

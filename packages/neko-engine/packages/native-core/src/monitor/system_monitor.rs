@@ -192,7 +192,7 @@ impl SystemMonitor {
         let device = metal::Device::system_default();
         match device {
             Some(dev) => {
-                let allocated = dev.current_allocated_size() as u64;
+                let allocated = dev.current_allocated_size();
                 // GPU utilization not available via public Metal API
                 (None, Some(allocated))
             }

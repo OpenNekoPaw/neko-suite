@@ -16,6 +16,12 @@ use uuid::Uuid;
 /// Controller for 3D LUT color correction actions
 pub struct ColorCorrectionController;
 
+impl Default for ColorCorrectionController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColorCorrectionController {
     pub fn new() -> Self {
         Self

@@ -56,18 +56,17 @@ pub fn export_glb(
     glb.extend_from_slice(&(json_padded_len as u32).to_le_bytes());
     glb.extend_from_slice(&0x4E4F534Au32.to_le_bytes()); // "JSON"
     glb.extend_from_slice(json_bytes);
-    for _ in 0..(json_padded_len - json_bytes.len()) {
-        glb.push(0x20); // pad with spaces
-    }
+    glb.extend(std::iter::repeat_n(
+        0x20,
+        json_padded_len - json_bytes.len(),
+    ));
 
     // BIN chunk: length + type + data + padding
     if !bin_data.is_empty() {
         glb.extend_from_slice(&(bin_padded_len as u32).to_le_bytes());
         glb.extend_from_slice(&0x004E4942u32.to_le_bytes()); // "BIN\0"
         glb.extend_from_slice(&bin_data);
-        for _ in 0..(bin_padded_len - bin_data.len()) {
-            glb.push(0x00);
-        }
+        glb.extend(std::iter::repeat_n(0x00, bin_padded_len - bin_data.len()));
     }
 
     Ok(glb)

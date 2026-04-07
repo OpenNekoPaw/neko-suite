@@ -123,7 +123,7 @@ impl AudioMixdown {
                 .with_output_format(SampleFormat::F32)
                 .with_output_sample_rate(self.sample_rate)
                 .with_output_channels(self.channels);
-            if let Ok(_) = decoder.open(&src) {
+            if decoder.open(&src).is_ok() {
                 self.sources.insert(
                     src,
                     MixdownSource {

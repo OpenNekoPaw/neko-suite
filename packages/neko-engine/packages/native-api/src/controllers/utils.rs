@@ -154,6 +154,7 @@ pub async fn resolve_resource(
 /// When `context` is provided, paths are resolved through it (variable expansion,
 /// relative path resolution, etc.). When absent, the source is treated as an
 /// absolute path (backward compatible with existing callers).
+#[allow(dead_code)]
 pub fn resolve_source_with_context(
     source: &str,
     context: Option<&ProjectContext>,

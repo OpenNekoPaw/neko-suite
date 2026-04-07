@@ -8,10 +8,12 @@ use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::{Error, Result};
 use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
+#[allow(deprecated)]
+use crate::gpu::GpuTransitionProcessor;
 use crate::gpu::{
     BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    GpuTransitionProcessor, LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter,
-    TransitionParams, TransitionType,
+    LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter, TransitionParams,
+    TransitionType,
 };
 use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
@@ -59,7 +61,7 @@ fn f16_to_f32(bits: u16) -> f32 {
         f32::from_bits((sign << 31) | (0xFF << 23) | f32_mantissa)
     } else {
         // Normalized: rebias exponent from f16 bias (15) to f32 bias (127)
-        let f32_exp = (exponent + 127 - 15) as u32;
+        let f32_exp = exponent + 127 - 15;
         let f32_mantissa = mantissa << 13;
         f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
     }
@@ -879,18 +881,20 @@ impl ITimelineService for TimelineService {
                         }
                         let send_ns = send_start.elapsed().as_nanos() as u64;
 
-                        let mut timing = FrameTiming::default();
-                        timing.hw_decode_ns = gpu_timing.hw_decode_ns;
-                        timing.nv12_import_ns = gpu_timing.nv12_import_ns;
-                        timing.nv12_to_rgba_ns = gpu_timing.nv12_to_rgba_ns;
-                        timing.composite_ns = gpu_timing.composite_ns;
-                        timing.rgba_to_nv12_ns = gpu_timing.rgba_to_nv12_ns;
-                        timing.cpu_readback_ns = gpu_timing.cpu_readback_ns;
-                        timing.decode_ns = gpu_timing.hw_decode_ns;
-                        timing.gpu_ns = gpu_timing.total_ns();
-                        timing.encode_submit_ns = send_ns;
-                        timing.encode_ns = encode_ns;
-                        timing.total_ns = frame_start.elapsed().as_nanos() as u64;
+                        let timing = FrameTiming {
+                            hw_decode_ns: gpu_timing.hw_decode_ns,
+                            nv12_import_ns: gpu_timing.nv12_import_ns,
+                            nv12_to_rgba_ns: gpu_timing.nv12_to_rgba_ns,
+                            composite_ns: gpu_timing.composite_ns,
+                            rgba_to_nv12_ns: gpu_timing.rgba_to_nv12_ns,
+                            cpu_readback_ns: gpu_timing.cpu_readback_ns,
+                            decode_ns: gpu_timing.hw_decode_ns,
+                            gpu_ns: gpu_timing.total_ns(),
+                            encode_submit_ns: send_ns,
+                            encode_ns,
+                            total_ns: frame_start.elapsed().as_nanos() as u64,
+                            ..Default::default()
+                        };
                         stats.record_frame(timing);
                     }
                     Err(e) => {
@@ -904,7 +908,7 @@ impl ITimelineService for TimelineService {
 
                 // Sample system resources and push stats periodically (every 30 frames ≈ 1s at 30fps)
                 video_frame_idx += 1;
-                if video_frame_idx % 30 == 0 {
+                if video_frame_idx.is_multiple_of(30) {
                     system_monitor.sample();
 
                     let avg_timing = stats.avg_timing();

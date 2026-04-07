@@ -290,7 +290,7 @@ impl DecoderPool {
         state
             .available
             .entry(video_path.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry);
 
         // Update LRU
@@ -449,9 +449,7 @@ static GLOBAL_POOL: std::sync::OnceLock<Arc<DecoderPool>> = std::sync::OnceLock:
 
 /// Get the global decoder pool
 pub fn global_pool() -> Arc<DecoderPool> {
-    GLOBAL_POOL
-        .get_or_init(|| DecoderPool::with_defaults())
-        .clone()
+    GLOBAL_POOL.get_or_init(DecoderPool::with_defaults).clone()
 }
 
 /// Initialize the global pool with custom configuration

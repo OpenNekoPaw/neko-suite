@@ -419,7 +419,7 @@ impl Controller for ScenesController {
 
                 let easing = opts
                     .easing
-                    .map(|s| neko_types::easing::EasingType::from_str(&s));
+                    .map(|s| neko_types::easing::EasingType::from_name(&s));
 
                 let service = self.service()?;
                 service

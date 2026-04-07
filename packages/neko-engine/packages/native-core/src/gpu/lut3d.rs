@@ -117,7 +117,7 @@ impl Lut3DData {
                     .trim()
                     .parse()
                     .map_err(|_| format!("Invalid LUT_3D_SIZE value: {}", rest.trim()))?;
-                if n < 2 || n > 256 {
+                if !(2..=256).contains(&n) {
                     return Err(format!("LUT_3D_SIZE {n} out of valid range [2, 256]"));
                 }
                 size = Some(n);

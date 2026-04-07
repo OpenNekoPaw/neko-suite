@@ -201,7 +201,7 @@ impl Default for CompositeOptions {
 }
 
 /// Options for audio transcoding (audios:transcode)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AudioTranscodeOptions {
     /// Time range (None = full duration)
     pub time_range: Option<(f64, f64)>,
@@ -213,18 +213,6 @@ pub struct AudioTranscodeOptions {
     pub format: Option<AudioOutputFormat>,
     /// Target bitrate in bps (None = codec default)
     pub bitrate: Option<u64>,
-}
-
-impl Default for AudioTranscodeOptions {
-    fn default() -> Self {
-        Self {
-            time_range: None,
-            sample_rate: None,
-            channels: None,
-            format: None,
-            bitrate: None,
-        }
-    }
 }
 
 /// Audio output format

@@ -821,10 +821,10 @@ impl ExportService {
                 cpu_readback_ms: avg_timing.cpu_readback_ns as f64 / 1_000_000.0,
                 encode_submit_ms: avg_timing.encode_submit_ns as f64 / 1_000_000.0,
                 // Aggregate timing (backward compatible)
-                decode_time_ms: (avg_timing.decode_ns / 1_000_000) as u64,
-                composite_time_ms: (avg_timing.gpu_ns / 1_000_000) as u64,
+                decode_time_ms: avg_timing.decode_ns / 1_000_000,
+                composite_time_ms: avg_timing.gpu_ns / 1_000_000,
                 encode_time_ms: avg_timing.encode_ns as f64 / 1_000_000.0,
-                mux_time_ms: (avg_timing.mux_ns / 1_000_000) as u64,
+                mux_time_ms: avg_timing.mux_ns / 1_000_000,
                 // Performance metrics from SystemMonitor
                 avg_fps: stats_collector.current_fps(),
                 peak_memory_bytes: system_monitor.peak_memory(),

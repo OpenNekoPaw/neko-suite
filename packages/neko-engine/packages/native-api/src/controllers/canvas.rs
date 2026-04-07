@@ -11,6 +11,12 @@ use serde_json::Value;
 /// Controller for canvas-related actions (placeholder for future implementation)
 pub struct CanvasController;
 
+impl Default for CanvasController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CanvasController {
     pub fn new() -> Self {
         Self

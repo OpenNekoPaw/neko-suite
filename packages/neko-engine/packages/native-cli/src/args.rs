@@ -101,6 +101,7 @@ macro_rules! define_actions {
             }
 
             /// Return all action name strings (for registry alignment tests)
+            #[allow(dead_code)]
             pub fn all_action_names() -> &'static [&'static str] {
                 &[$( $action_str, )+]
             }
@@ -485,6 +486,7 @@ pub enum TimelineAction {
 
 impl TimelineAction {
     /// Return all action name strings (for registry alignment tests)
+    #[allow(dead_code)]
     pub fn all_action_names() -> &'static [&'static str] {
         &[
             "probe",

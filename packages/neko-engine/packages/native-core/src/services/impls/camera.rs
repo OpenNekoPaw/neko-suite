@@ -9,6 +9,12 @@ use neko_types::StreamId;
 
 pub struct CameraService;
 
+impl Default for CameraService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CameraService {
     pub fn new() -> Self {
         Self

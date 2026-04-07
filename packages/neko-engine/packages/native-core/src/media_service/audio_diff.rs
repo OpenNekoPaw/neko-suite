@@ -17,7 +17,7 @@ const SEGMENT_DURATION: f64 = 0.1;
 const DIFF_SNR_THRESHOLD: f64 = 20.0;
 
 /// Options for audio content diff
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioDiffOptions {
     /// Start time in seconds for range-based diff (None = from beginning)
@@ -27,15 +27,6 @@ pub struct AudioDiffOptions {
     /// End time in seconds for range-based diff (None = to end)
     #[serde(default)]
     pub end_time: Option<f64>,
-}
-
-impl Default for AudioDiffOptions {
-    fn default() -> Self {
-        Self {
-            start_time: None,
-            end_time: None,
-        }
-    }
 }
 
 /// Audio content diff result
@@ -121,7 +112,7 @@ pub fn diff_audio_content_with_options(
 
     // Compute per-segment differences
     let segment_samples = (SEGMENT_DURATION * COMPARE_SAMPLE_RATE as f64) as usize;
-    let total_segments = (compare_len + segment_samples - 1) / segment_samples;
+    let total_segments = compare_len.div_ceil(segment_samples);
     let mut diff_regions = Vec::new();
 
     for seg_idx in 0..total_segments {

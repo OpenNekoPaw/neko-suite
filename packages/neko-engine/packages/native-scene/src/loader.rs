@@ -287,14 +287,12 @@ fn load_animations(
 
             let values: Vec<f32> = match reader.read_outputs() {
                 Some(gltf::animation::util::ReadOutputs::Translations(iter)) => {
-                    iter.flat_map(|v| v).collect()
+                    iter.flatten().collect()
                 }
                 Some(gltf::animation::util::ReadOutputs::Rotations(rotations)) => {
-                    rotations.into_f32().flat_map(|v| v).collect()
+                    rotations.into_f32().flatten().collect()
                 }
-                Some(gltf::animation::util::ReadOutputs::Scales(iter)) => {
-                    iter.flat_map(|v| v).collect()
-                }
+                Some(gltf::animation::util::ReadOutputs::Scales(iter)) => iter.flatten().collect(),
                 Some(gltf::animation::util::ReadOutputs::MorphTargetWeights(weights)) => {
                     weights.into_f32().collect()
                 }

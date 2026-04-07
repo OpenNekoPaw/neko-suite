@@ -4,7 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::services::gamepad::{GamepadEvent, GamepadInfo, IGamepadService};
-use gilrs::{Button, Gilrs};
+use gilrs::Gilrs;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::broadcast;
@@ -16,6 +16,12 @@ struct ActiveGamepadStream {
 pub struct GamepadService {
     streams: Mutex<HashMap<String, ActiveGamepadStream>>,
     senders: Mutex<HashMap<String, broadcast::Sender<GamepadEvent>>>,
+}
+
+impl Default for GamepadService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GamepadService {

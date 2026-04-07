@@ -3,13 +3,22 @@
 //! Called manually (not via a scheduler) — mirrors native-scene pattern.
 //! Systems operate on bevy_ecs::World directly.
 
-use crate::animation::{AnimationClip, AnimationLibrary, AnimationPlayback};
+use crate::animation::{AnimationLibrary, AnimationPlayback};
 use crate::animation_blend::{AnimationBlendState, BlendLayer, CrossfadeRequest};
 use crate::components::*;
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
 use neko_types::easing::{Easing, EasingType};
+
+/// Deformation entity data: (entity, vertices, binding_param, binding_strength, control_points)
+type DeformEntityData = (Entity, Vec<Vec2>, String, f32, Vec<[f32; 2]>);
+
+/// Animation curve data: (param_name, keyframes as (time_ms, value, easing))
+type AnimCurveData = (String, Vec<(f32, f32, EasingType)>);
+
+/// Clip data for blend: (duration, curves)
+type ClipBlendData = (f32, Vec<AnimCurveData>);
 
 /// Propagate local Transform2D through the hierarchy to compute GlobalTransform2D.
 ///
@@ -99,7 +108,7 @@ pub fn parameter_update(world: &mut World) {
     };
 
     // Collect entities that need deformation
-    let entities: Vec<(Entity, Vec<Vec2>, String, f32, Vec<[f32; 2]>)> = {
+    let entities: Vec<DeformEntityData> = {
         let mut query = world.query::<(Entity, &MeshData, &ParameterBinding)>();
         query
             .iter(world)
@@ -218,7 +227,7 @@ pub fn animation_tick(world: &mut World, delta_ms: f32) {
 
     // 3. Read animation curves (cloned so we can mutate world later)
     //    Format: Vec<(param_name, Vec<(time_ms, value, easing)>)>
-    let (duration, raw_curves): (f32, Vec<(String, Vec<(f32, f32, EasingType)>)>) = {
+    let (duration, raw_curves): (f32, Vec<AnimCurveData>) = {
         match world.get::<AnimationLibrary>(root_entity) {
             Some(lib) => match lib.clips.get(clip_index) {
                 Some(clip) => {
@@ -305,15 +314,6 @@ fn sample_eased(keyframes: &[(f32, f32, EasingType)], time_ms: f32) -> f32 {
     last.1
 }
 
-/// Sample all parameter curves in a clip at the given time.
-/// Returns a list of (param_name, value) pairs.
-fn sample_clip_params(clip: &AnimationClip, time_ms: f32) -> Vec<(&str, f32)> {
-    clip.curves
-        .iter()
-        .map(|c| (c.param_name.as_str(), c.sample(time_ms)))
-        .collect()
-}
-
 /// Advance multi-layer animation blending and write weighted parameter values.
 ///
 /// Must be called instead of animation_tick when AnimationBlendState has layers.
@@ -345,7 +345,7 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
     }
 
     // Read clip data (durations + curves) from AnimationLibrary
-    let clip_data: Vec<(f32, Vec<(String, Vec<(f32, f32, EasingType)>)>)> = {
+    let clip_data: Vec<ClipBlendData> = {
         match world.get::<AnimationLibrary>(root_entity) {
             Some(lib) => lib
                 .clips

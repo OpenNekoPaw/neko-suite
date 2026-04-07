@@ -13,7 +13,7 @@
 //! ```
 
 use crate::encoder::{Encoder, EncoderConfig, HwAccelEncoder, VideoCodec};
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -50,6 +50,7 @@ impl EncoderSignature {
 struct PooledEncoder {
     encoder: HwAccelEncoder,
     signature: EncoderSignature,
+    #[allow(dead_code)]
     config: EncoderConfig,
     last_used: Instant,
 }

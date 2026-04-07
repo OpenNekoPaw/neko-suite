@@ -43,7 +43,7 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             // Basic
             "normal" => Self::Normal,
@@ -198,9 +198,10 @@ pub struct ElementEffect {
 }
 
 /// Transition type for clips
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransitionType {
+    #[default]
     None,
     Fade,
     Dissolve,
@@ -212,12 +213,6 @@ pub enum TransitionType {
     Reveal,
     #[serde(untagged)]
     Custom(String),
-}
-
-impl Default for TransitionType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Transition parameters

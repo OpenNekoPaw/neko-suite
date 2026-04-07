@@ -127,10 +127,10 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
     let input = ffmpeg::format::input(&path)
         .map_err(|e| Error::Ffmpeg(format!("Failed to open file: {}", e)))?;
 
-    let mut info = MediaInfo::default();
-
-    // Get format info
-    info.format = input.format().name().to_string();
+    let mut info = MediaInfo {
+        format: input.format().name().to_string(),
+        ..Default::default()
+    };
 
     // Container-level duration (AVFormatContext): can be wrong for improperly
     // finalized recordings, MPEG-TS live captures, or files with edit lists.

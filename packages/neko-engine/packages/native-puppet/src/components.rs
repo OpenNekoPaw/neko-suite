@@ -96,19 +96,14 @@ pub enum PuppetNodeType {
 pub struct ZOrder(pub f32);
 
 /// Blend mode for compositing
-#[derive(Component, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Component, Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum BlendMode {
+    #[default]
     Normal,
     Multiply,
     Screen,
     Overlay,
     Add,
-}
-
-impl Default for BlendMode {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Opacity value (0.0 = fully transparent, 1.0 = fully opaque)

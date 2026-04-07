@@ -74,7 +74,7 @@ async fn puppet_stream_loop(mut socket: WebSocket, engine: Arc<EngineApi>) {
                     }
                 };
 
-                if socket.send(Message::Text(json.into())).await.is_err() {
+                if socket.send(Message::Text(json)).await.is_err() {
                     tracing::debug!("Puppet stream client disconnected");
                     break;
                 }

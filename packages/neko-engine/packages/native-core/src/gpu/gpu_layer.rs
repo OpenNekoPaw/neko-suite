@@ -98,7 +98,7 @@ impl GpuLayer {
 
     /// Get mask inverted status
     pub fn is_mask_inverted(&self) -> bool {
-        self.mask.as_ref().map_or(false, |m| m.inverted)
+        self.mask.as_ref().is_some_and(|m| m.inverted)
     }
 }
 

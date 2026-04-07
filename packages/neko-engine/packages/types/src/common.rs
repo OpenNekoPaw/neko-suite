@@ -35,9 +35,10 @@ impl Default for Resolution {
 }
 
 /// Frame/pixel format
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FrameFormat {
+    #[default]
     Rgba,
     Nv12,
     Jpeg,
@@ -51,16 +52,11 @@ pub enum FrameFormat {
     Opus,
 }
 
-impl Default for FrameFormat {
-    fn default() -> Self {
-        Self::Rgba
-    }
-}
-
 /// Track type classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TrackType {
+    #[default]
     Video,
     Audio,
     Text,
@@ -72,12 +68,6 @@ pub enum TrackType {
     /// Alias for Video (used in JVI files)
     #[serde(alias = "media")]
     Media,
-}
-
-impl Default for TrackType {
-    fn default() -> Self {
-        Self::Video
-    }
 }
 
 /// Proxy file generation result

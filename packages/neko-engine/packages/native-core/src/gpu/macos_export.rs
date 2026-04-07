@@ -34,6 +34,7 @@ pub type IOSurfaceRef = *mut Object;
 // External C functions for IOSurface
 #[link(name = "IOSurface", kind = "framework")]
 #[allow(dead_code)]
+#[allow(clashing_extern_declarations)]
 extern "C" {
     fn IOSurfaceCreate(properties: *const Object) -> IOSurfaceRef;
     fn IOSurfaceGetWidth(surface: IOSurfaceRef) -> usize;
@@ -458,7 +459,7 @@ impl MacOsTextureExporter {
     /// Create NV12 IOSurface with proper plane layout
     unsafe fn create_nv12_iosurface(&self, width: u32, height: u32) -> Result<IOSurfaceRef> {
         // Calculate plane sizes
-        let y_bytes_per_row = ((width + 63) / 64) * 64; // 64-byte aligned
+        let y_bytes_per_row = width.div_ceil(64) * 64; // 64-byte aligned
         let uv_bytes_per_row = y_bytes_per_row; // Same alignment for UV
         let y_plane_size = y_bytes_per_row * height;
         let uv_plane_size = uv_bytes_per_row * (height / 2);

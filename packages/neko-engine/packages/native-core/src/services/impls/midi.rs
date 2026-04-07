@@ -23,6 +23,12 @@ pub struct MidiService {
     senders: Mutex<HashMap<String, broadcast::Sender<MidiEvent>>>,
 }
 
+impl Default for MidiService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MidiService {
     pub fn new() -> Self {
         Self {

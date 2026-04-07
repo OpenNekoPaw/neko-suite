@@ -43,6 +43,7 @@ pub struct ActionRouter {
 
 impl ActionRouter {
     /// Create a new ActionRouter with all controllers
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         task_service: Arc<TaskService>,
         node_service: Arc<NodeService>,

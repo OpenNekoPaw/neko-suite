@@ -10,6 +10,12 @@ use serde_json::Value;
 /// Controller for document-related actions.
 pub struct DocumentsController;
 
+impl Default for DocumentsController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DocumentsController {
     pub fn new() -> Self {
         Self

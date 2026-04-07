@@ -428,8 +428,8 @@ impl GpuBlurProcessor {
             });
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-            let wx = (width + 15) / 16;
-            let wy = (height + 15) / 16;
+            let wx = width.div_ceil(16);
+            let wy = height.div_ceil(16);
             pass.dispatch_workgroups(wx, wy, 1);
         }
         queue.submit(Some(encoder.finish()));

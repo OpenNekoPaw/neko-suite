@@ -3,7 +3,6 @@
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
-use crate::gpu::PbrRenderError;
 use neko_native_scene::animation_blend::SceneBlendLayerInfo;
 use neko_native_scene::components::AnimationChannelInfo;
 use neko_native_scene::ik::IkChainInfo;

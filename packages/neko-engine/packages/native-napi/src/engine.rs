@@ -111,6 +111,7 @@ impl NativeEngine {
     /// Convenience method that takes individual parameters instead of JSON.
     /// All ActionRequest fields are supported for full parity with `dispatch()`.
     #[napi]
+    #[allow(clippy::too_many_arguments)]
     pub async fn dispatch_action(
         &self,
         group: String,

@@ -216,7 +216,7 @@ pub fn generate_text_mesh_with(
         }
 
         // --- Side walls ---
-        let wall_base = mesh.vertices.len() as u32;
+        let _wall_base = mesh.vertices.len() as u32;
         let len = contour.len();
         for i in 0..len {
             let j = (i + 1) % len;

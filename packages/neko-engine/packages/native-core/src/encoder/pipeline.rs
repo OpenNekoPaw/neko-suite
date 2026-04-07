@@ -740,6 +740,7 @@ impl AsyncExportPipeline {
     }
 
     /// Mux worker - writes encoded video and audio packets to output file
+    #[allow(clippy::too_many_arguments)]
     fn mux_worker(
         video_rx: Receiver<MuxPacket>,
         audio_rx: Receiver<MuxPacket>,

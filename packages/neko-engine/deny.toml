@@ -1,4 +1,9 @@
 [advisories]
-# json crate (RUSTSEC-2022-0081) is unmaintained but pulled in transitively
-# by inox2d (2D puppet library). No alternative available upstream.
-ignore = ["RUSTSEC-2022-0081"]
+ignore = [
+    # json crate — unmaintained, transitive dep from inox2d (2D puppet library)
+    "RUSTSEC-2022-0081",
+    # number_prefix — unmaintained, transitive dep from indicatif (progress bars)
+    "RUSTSEC-2025-0119",
+    # paste — unmaintained, no replacement available yet
+    "RUSTSEC-2024-0436",
+]

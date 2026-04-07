@@ -43,6 +43,7 @@ extern "C" {
 }
 
 // External C functions for CoreVideo
+#[allow(clashing_extern_declarations)]
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
     fn CVPixelBufferGetIOSurface(pixelBuffer: *mut Object) -> IOSurfaceRef;
@@ -139,6 +140,7 @@ impl MacOsTextureImporter {
     ///
     /// Note: The caller must ensure GPU synchronization before calling this function.
     /// Use CVPixelBufferLockBaseAddress to wait for VideoToolbox GPU operations.
+    #[allow(clippy::too_many_arguments)]
     #[allow(unused_variables)]
     unsafe fn create_metal_textures_from_iosurface(
         &self,
@@ -377,6 +379,7 @@ pub unsafe fn read_iosurface_plane(
     let bytes_per_row = IOSurfaceGetBytesPerRowOfPlane(io_surface_ref, plane);
 
     // Lock the IOSurface for reading
+    #[allow(clashing_extern_declarations)]
     #[link(name = "IOSurface", kind = "framework")]
     extern "C" {
         fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;

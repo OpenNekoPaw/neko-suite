@@ -26,7 +26,7 @@ use xxhash_rust::xxh64::xxh64;
 /// let id = ResourceId::from_path(Path::new("/path/to/video.mp4"), ResourceType::Video);
 /// assert!(id.as_str().starts_with("vid_"));
 /// ```
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct ResourceId(String);
 
 impl ResourceId {
@@ -81,12 +81,6 @@ impl ResourceId {
 impl std::fmt::Display for ResourceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl Default for ResourceId {
-    fn default() -> Self {
-        Self(String::new())
     }
 }
 
@@ -149,7 +143,7 @@ impl ResourceType {
 /// - Generated at stream creation, not persisted
 /// - Unique within a process lifetime (atomic counter)
 /// - Human-readable for logging and debugging
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct StreamId(String);
 
 static STREAM_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -179,12 +173,6 @@ impl std::fmt::Display for StreamId {
     }
 }
 
-impl Default for StreamId {
-    fn default() -> Self {
-        Self(String::new())
-    }
-}
-
 // ─── Stream State ────────────────────────────────────────────────────────────
 
 /// Stream lifecycle state machine
@@ -193,10 +181,11 @@ impl Default for StreamId {
 /// Created → Active → Paused → Active (resume)
 ///                  → Destroyed (stop/error/timeout)
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamState {
     /// Stream allocated, not yet pushing frames
+    #[default]
     Created,
     /// Actively pushing frames
     Active,
@@ -218,12 +207,6 @@ impl StreamState {
                 | (StreamState::Paused, StreamState::Paused)   // idempotent pause
                 | (_, StreamState::Destroyed) // any state can be destroyed
         )
-    }
-}
-
-impl Default for StreamState {
-    fn default() -> Self {
-        Self::Created
     }
 }
 

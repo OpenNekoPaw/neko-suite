@@ -20,11 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // These come from VideoToolbox/Metal frameworks and are harmless
     #[cfg(target_os = "macos")]
     unsafe {
-        libc::setenv(
-            b"OS_ACTIVITY_MODE\0".as_ptr() as *const i8,
-            b"disable\0".as_ptr() as *const i8,
-            1,
-        );
+        libc::setenv(c"OS_ACTIVITY_MODE".as_ptr(), c"disable".as_ptr(), 1);
     }
 
     // Parse command line arguments

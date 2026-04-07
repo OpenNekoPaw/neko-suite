@@ -14,22 +14,17 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 /// Tone mapping algorithm
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ToneMapping {
     /// No tone mapping (linear HDR -> LDR clamp)
     None,
     /// Reinhard global operator
     Reinhard,
     /// ACES filmic approximation (Narkowicz 2015)
+    #[default]
     AcesFilmic,
     /// Uncharted 2 filmic curve
     Uncharted2,
-}
-
-impl Default for ToneMapping {
-    fn default() -> Self {
-        Self::AcesFilmic
-    }
 }
 
 /// Post-processing settings

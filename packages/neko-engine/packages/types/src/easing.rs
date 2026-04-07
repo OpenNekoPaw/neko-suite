@@ -58,8 +58,8 @@ pub enum EasingType {
 }
 
 impl EasingType {
-    /// Parse easing type from string
-    pub fn from_str(s: &str) -> Self {
+    /// Parse easing type from string name
+    pub fn from_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "linear" => EasingType::Linear,
             "easeinquad" | "ease_in_quad" | "ease-in-quad" => EasingType::EaseInQuad,
@@ -415,17 +415,17 @@ mod tests {
 
     #[test]
     fn test_easing_from_str() {
-        assert_eq!(EasingType::from_str("linear"), EasingType::Linear);
-        assert_eq!(EasingType::from_str("easeInQuad"), EasingType::EaseInQuad);
+        assert_eq!(EasingType::from_name("linear"), EasingType::Linear);
+        assert_eq!(EasingType::from_name("easeInQuad"), EasingType::EaseInQuad);
         assert_eq!(
-            EasingType::from_str("ease_out_cubic"),
+            EasingType::from_name("ease_out_cubic"),
             EasingType::EaseOutCubic
         );
         assert_eq!(
-            EasingType::from_str("ease-in-out-cubic"),
+            EasingType::from_name("ease-in-out-cubic"),
             EasingType::EaseInOutCubic
         );
-        assert_eq!(EasingType::from_str("unknown"), EasingType::Linear);
+        assert_eq!(EasingType::from_name("unknown"), EasingType::Linear);
     }
 
     #[test]

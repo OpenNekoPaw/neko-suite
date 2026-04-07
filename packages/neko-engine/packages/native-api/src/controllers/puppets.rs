@@ -283,7 +283,7 @@ impl Controller for PuppetsController {
                 // Parse easing string to EasingType
                 let easing = opts
                     .easing
-                    .map(|s| neko_types::easing::EasingType::from_str(&s));
+                    .map(|s| neko_types::easing::EasingType::from_name(&s));
 
                 let service = self.service()?;
                 service

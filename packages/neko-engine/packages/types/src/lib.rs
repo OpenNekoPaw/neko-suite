@@ -31,7 +31,7 @@ pub mod waveform;
 // Re-export commonly used types
 pub use codec::*;
 pub use common::*;
-pub use easing::*;
+pub use easing::Easing;
 pub use effects::*;
 pub use engine_config::EngineConfig;
 pub use error::*;

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Health check result (nodes:health response)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthStatus {
     /// Whether GPU is available
@@ -26,21 +26,6 @@ pub struct HealthStatus {
     /// Engine version
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-}
-
-impl Default for HealthStatus {
-    fn default() -> Self {
-        Self {
-            gpu_available: false,
-            gpu_backend: String::new(),
-            gpu_name: String::new(),
-            hw_decoders: Vec::new(),
-            hw_encoders: Vec::new(),
-            supported_codecs: Vec::new(),
-            zero_copy_supported: false,
-            version: None,
-        }
-    }
 }
 
 /// Hardware acceleration info

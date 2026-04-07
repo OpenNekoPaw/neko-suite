@@ -485,7 +485,7 @@ impl Timeline {
             self.fps = v;
         }
         if let Some(ref r) = payload.updates.resolution {
-            self.resolution = r.clone();
+            self.resolution = *r;
         }
         Ok(())
     }

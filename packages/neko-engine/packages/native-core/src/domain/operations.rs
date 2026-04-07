@@ -7,7 +7,7 @@
 //! - P0: element.update, track.toggle, element.toggle
 //! - P1: track.update, element.splitKeepLeft, element.splitKeepRight, project.update
 //! - P2: element.add/remove/move, track.add/remove/reorder,
-//!        element.splitAt, element.linkAudio, element.unlinkAudio, batch
+//!   element.splitAt, element.linkAudio, element.unlinkAudio, batch
 //!
 //! Unsupported operations fall back to full `streams:update` via Extension.
 

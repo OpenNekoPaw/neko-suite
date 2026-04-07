@@ -15,7 +15,7 @@
 //! n:2 mse_avg:1.56 mse_y:1.78 mse_u:0.92 mse_v:0.71 psnr_avg:46.20 psnr_y:45.63 psnr_u:48.49 psnr_v:49.62
 //! ```
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// Parsed SSIM entry for a single frame
 #[derive(Debug, Clone)]

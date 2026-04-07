@@ -255,7 +255,7 @@ impl SceneWorld for BevySceneWorld {
                 rotation: transform.rotation.to_array(),
                 scale: transform.scale.to_array(),
                 parent_id,
-                visible: visible.map_or(true, |v| v.0),
+                visible: visible.is_none_or(|v| v.0),
                 has_mesh: mesh.is_some(),
                 has_light: light.is_some(),
                 has_camera: camera.is_some(),
@@ -692,8 +692,8 @@ impl SceneWorld for BevySceneWorld {
 
         if let Some(mut chain) = self.world.get_mut::<IkChain>(entity) {
             chain.target_position = glam::Vec3::from(position);
-            chain.target_rotation = rotation.map(|r| glam::Quat::from_array(r));
-            chain.pole_target = pole.map(|p| glam::Vec3::from(p));
+            chain.target_rotation = rotation.map(glam::Quat::from_array);
+            chain.pole_target = pole.map(glam::Vec3::from);
         }
 
         // Solve IK immediately and propagate

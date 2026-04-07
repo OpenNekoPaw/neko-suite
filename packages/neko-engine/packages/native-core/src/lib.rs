@@ -14,6 +14,7 @@
 //! ```
 
 #![deny(clippy::all)]
+#![allow(unexpected_cfgs)]
 
 pub mod animation;
 pub mod audio;

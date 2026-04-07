@@ -239,7 +239,7 @@ impl CustomShaderProcessor {
                     name: "angle".into(),
                     default: 0.0,
                     min: 0.0,
-                    max: 6.28318,
+                    max: std::f32::consts::TAU,
                 },
             ],
         )?;
@@ -602,8 +602,8 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
 
-            let workgroups_x = (width + 15) / 16;
-            let workgroups_y = (height + 15) / 16;
+            let workgroups_x = width.div_ceil(16);
+            let workgroups_y = height.div_ceil(16);
             pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 

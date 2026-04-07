@@ -73,6 +73,7 @@ pub use style_processor::{
 };
 pub use texture::{TextureFormat, TextureHandle, TexturePool};
 pub use texture_transition_processor::TextureTransitionProcessor;
+#[allow(deprecated)]
 pub use transition_processor::{GpuTransitionProcessor, TransitionParams, TransitionType};
 
 // Platform-specific exports

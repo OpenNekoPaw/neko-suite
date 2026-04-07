@@ -76,6 +76,7 @@ impl TransitionType {
     }
 
     /// Create from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "fade" | "crossfade" => TransitionType::Fade,
@@ -218,6 +219,7 @@ pub struct GpuTransitionProcessor {
     buffer_pool: BufferPool,
 }
 
+#[allow(deprecated)]
 impl GpuTransitionProcessor {
     /// Create a new GPU transition processor
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
@@ -416,8 +418,8 @@ impl GpuTransitionProcessor {
             pass.set_bind_group(0, &bind_group, &[]);
 
             // Workgroup size is 16x16
-            let workgroups_x = (width + 15) / 16;
-            let workgroups_y = (height + 15) / 16;
+            let workgroups_x = width.div_ceil(16);
+            let workgroups_y = height.div_ceil(16);
             pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 

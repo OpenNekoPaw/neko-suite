@@ -211,6 +211,7 @@ fn compute_ssim_channel(a: &RgbaImage, b: &RgbaImage, channel: usize) -> f64 {
 
 /// Convert RGBA pixel to luminance (BT.601)
 #[inline]
+#[allow(dead_code)]
 fn luminance(p: &Rgba<u8>) -> f64 {
     0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64
 }
@@ -230,9 +231,9 @@ fn generate_heatmap(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
             let pb = b.get_pixel(x, y);
 
             // Compute per-pixel difference magnitude (0-255)
-            let dr = (pa[0] as i16 - pb[0] as i16).unsigned_abs() as u16;
-            let dg = (pa[1] as i16 - pb[1] as i16).unsigned_abs() as u16;
-            let db = (pa[2] as i16 - pb[2] as i16).unsigned_abs() as u16;
+            let dr = (pa[0] as i16 - pb[0] as i16).unsigned_abs();
+            let dg = (pa[1] as i16 - pb[1] as i16).unsigned_abs();
+            let db = (pa[2] as i16 - pb[2] as i16).unsigned_abs();
             let diff = ((dr + dg + db) / 3).min(255) as u8;
 
             // Map to heatmap color

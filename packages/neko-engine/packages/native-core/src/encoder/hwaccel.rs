@@ -993,6 +993,7 @@ impl HwAccelEncoder {
 
         type IOSurfaceRef = *mut Object;
 
+        #[allow(clashing_extern_declarations)]
         #[link(name = "IOSurface", kind = "framework")]
         extern "C" {
             fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;

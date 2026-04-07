@@ -440,8 +440,8 @@ impl MaskRasterizer {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
 
-            let wg_x = (width + 15) / 16;
-            let wg_y = (height + 15) / 16;
+            let wg_x = width.div_ceil(16);
+            let wg_y = height.div_ceil(16);
             pass.dispatch_workgroups(wg_x, wg_y, 1);
         }
 
@@ -467,6 +467,7 @@ impl MaskRasterizer {
     }
 
     /// Extract shape parameters into uniform-compatible form
+    #[allow(clippy::type_complexity)]
     fn extract_shape_params(
         shape: &MaskShapeData,
         width: u32,

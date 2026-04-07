@@ -169,7 +169,7 @@ impl PreviewPipeline {
                 );
                 old_config.gop_size = Some(self.config.gop_size);
                 old_config.max_b_frames = Some(0);
-                let encoder = std::mem::replace(&mut self.encoder, HwAccelEncoder::new());
+                let encoder = std::mem::take(&mut self.encoder);
                 global_encoder_pool().release(encoder, old_config);
             }
             self.encoder_initialized = false;
@@ -365,7 +365,7 @@ impl PreviewPipeline {
             encoder_config.max_b_frames = Some(0);
 
             // Swap out the encoder and release to pool
-            let encoder = std::mem::replace(&mut self.encoder, HwAccelEncoder::new());
+            let encoder = std::mem::take(&mut self.encoder);
             global_encoder_pool().release(encoder, encoder_config);
             self.encoder_initialized = false;
         }

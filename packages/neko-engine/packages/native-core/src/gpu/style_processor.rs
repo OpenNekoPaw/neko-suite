@@ -898,7 +898,6 @@ impl GpuStyleProcessor {
             temp_curves_buf = Some(buf);
             temp_curves_buf.as_ref().unwrap()
         } else {
-            temp_curves_buf = None;
             &self.identity_curves_buf
         };
 
@@ -965,7 +964,7 @@ impl GpuStyleProcessor {
             });
             pass.set_pipeline(&self.color_correction_pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-            pass.dispatch_workgroups((w + 15) / 16, (h + 15) / 16, 1);
+            pass.dispatch_workgroups(w.div_ceil(16), h.div_ceil(16), 1);
         }
         self.ctx.queue().submit(Some(encoder.finish()));
 
@@ -1035,7 +1034,7 @@ impl GpuStyleProcessor {
             });
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-            pass.dispatch_workgroups((w + 15) / 16, (h + 15) / 16, 1);
+            pass.dispatch_workgroups(w.div_ceil(16), h.div_ceil(16), 1);
         }
         self.ctx.queue().submit(Some(encoder.finish()));
         Ok(())

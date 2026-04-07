@@ -206,7 +206,7 @@ fn build_ellipse(p: &serde_json::Value, fw: f32, fh: f32) -> Option<Path> {
     let rotation = get_f32(p, "rotation", 0.0);
 
     // Approximate ellipse with 4 cubic Béziers (κ ≈ 0.5523)
-    const K: f32 = 0.552_284_75;
+    const K: f32 = 0.552_284_8;
     let mut pb = PathBuilder::new();
     pb.move_to(cx + rx, cy);
     pb.cubic_to(cx + rx, cy - K * ry, cx + K * rx, cy - ry, cx, cy - ry);
@@ -341,8 +341,10 @@ fn render_shadow(pixmap: &mut Pixmap, path: &Path, shadow: &ShapeShadowData) {
 }
 
 fn render_fill(pixmap: &mut Pixmap, path: &Path, fill: &ShapeFillData, w: u32, h: u32) {
-    let mut paint = Paint::default();
-    paint.anti_alias = true;
+    let mut paint = Paint {
+        anti_alias: true,
+        ..Default::default()
+    };
 
     match fill.fill_type.as_str() {
         "solid" => {
@@ -387,8 +389,10 @@ fn render_gradient_fill(
 
     let fw = w as f32;
     let fh = h as f32;
-    let mut paint = Paint::default();
-    paint.anti_alias = true;
+    let mut paint = Paint {
+        anti_alias: true,
+        ..Default::default()
+    };
 
     let shader = match gradient.gradient_type.as_str() {
         "radial" => {

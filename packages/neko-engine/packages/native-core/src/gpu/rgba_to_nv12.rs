@@ -406,8 +406,8 @@ impl RgbaToNv12Converter {
             pass.set_bind_group(0, &bind_group, &[]);
 
             // Width is divided by 4 because each thread processes 4 pixels
-            let workgroups_x = ((output.width + 3) / 4 + 15) / 16;
-            let workgroups_y = (output.height + 15) / 16;
+            let workgroups_x = output.width.div_ceil(4).div_ceil(16);
+            let workgroups_y = output.height.div_ceil(16);
             pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 
@@ -422,8 +422,8 @@ impl RgbaToNv12Converter {
             pass.set_bind_group(0, &bind_group, &[]);
 
             // UV width is width/2, and each thread processes 2 UV pairs
-            let workgroups_x = (((output.width / 2) + 1) / 2 + 15) / 16;
-            let workgroups_y = ((output.height / 2) + 15) / 16;
+            let workgroups_x = (output.width / 2).div_ceil(2).div_ceil(16);
+            let workgroups_y = (output.height / 2).div_ceil(16);
             pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 

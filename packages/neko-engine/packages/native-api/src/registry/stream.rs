@@ -222,7 +222,7 @@ impl StreamRegistry {
                         match result {
                             Ok(frame) => {
                                 frame_count += 1;
-                                if frame_count <= 3 || frame_count % 100 == 0 {
+                                if frame_count <= 3 || frame_count.is_multiple_of(100) {
                                     tracing::debug!("Forwarding frame {} for stream {} ({} bytes)", frame_count, forward_id, frame.data.len());
                                 }
                                 let _ = registry_tx.send(frame);

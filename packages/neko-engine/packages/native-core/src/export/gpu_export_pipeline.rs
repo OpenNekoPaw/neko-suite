@@ -21,10 +21,10 @@ use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
     BlurParams, BlurType, ChromaKeyParams, ChromaticAberrationParams, ColorCorrectionTexParams,
     CustomShaderProcessor, FilmGrainParams, GlowParams, GpuBlurProcessor, GpuContext, GpuLayer,
-    GpuLayerBuilder, GpuStyleProcessor, LumaKeyParams, LutRegistry, Nv12OutputBuffers,
-    Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer, SharpenParams,
-    TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
-    TransitionParams, TransitionType, VignetteParams,
+    GpuLayerBuilder, GpuStyleProcessor, LumaKeyParams, Nv12OutputBuffers, Nv12RenderCache,
+    Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer, SharpenParams, TextRenderer,
+    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
+    TransitionType, VignetteParams,
 };
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
@@ -290,8 +290,8 @@ impl EffectDispatcher {
                 let hsl_count = Self::get_f32(params, "hsl_count", 0.0);
                 let mut hsl_data = [[0.0f32; 4]; 8];
                 let count = (hsl_count as usize).min(8);
-                for i in 0..count {
-                    hsl_data[i] = [
+                for (i, item) in hsl_data.iter_mut().enumerate().take(count) {
+                    *item = [
                         Self::get_f32(params, &format!("hsl_{}_target", i), 0.0),
                         Self::get_f32(params, &format!("hsl_{}_hue", i), 0.0),
                         Self::get_f32(params, &format!("hsl_{}_sat", i), 0.0),

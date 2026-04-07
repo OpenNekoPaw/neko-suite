@@ -70,6 +70,7 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             // Basic
@@ -596,8 +597,8 @@ impl GpuCompositor {
             pass.set_bind_group(0, &bind_group, &[]);
 
             // Workgroup size is 16x16
-            let workgroups_x = (output_width + 15) / 16;
-            let workgroups_y = (output_height + 15) / 16;
+            let workgroups_x = output_width.div_ceil(16);
+            let workgroups_y = output_height.div_ceil(16);
             pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 
@@ -635,50 +636,50 @@ mod tests {
     #[test]
     fn test_blend_mode_from_str() {
         // Basic
-        assert_eq!(BlendMode::from_str("normal"), BlendMode::Normal);
-        assert_eq!(BlendMode::from_str("dissolve"), BlendMode::Dissolve);
+        assert_eq!(BlendMode::from_name("normal"), BlendMode::Normal);
+        assert_eq!(BlendMode::from_name("dissolve"), BlendMode::Dissolve);
 
         // Darken Group
-        assert_eq!(BlendMode::from_str("darken"), BlendMode::Darken);
-        assert_eq!(BlendMode::from_str("multiply"), BlendMode::Multiply);
-        assert_eq!(BlendMode::from_str("color_burn"), BlendMode::ColorBurn);
-        assert_eq!(BlendMode::from_str("linear_burn"), BlendMode::LinearBurn);
-        assert_eq!(BlendMode::from_str("darker_color"), BlendMode::DarkerColor);
+        assert_eq!(BlendMode::from_name("darken"), BlendMode::Darken);
+        assert_eq!(BlendMode::from_name("multiply"), BlendMode::Multiply);
+        assert_eq!(BlendMode::from_name("color_burn"), BlendMode::ColorBurn);
+        assert_eq!(BlendMode::from_name("linear_burn"), BlendMode::LinearBurn);
+        assert_eq!(BlendMode::from_name("darker_color"), BlendMode::DarkerColor);
 
         // Lighten Group
-        assert_eq!(BlendMode::from_str("lighten"), BlendMode::Lighten);
-        assert_eq!(BlendMode::from_str("screen"), BlendMode::Screen);
-        assert_eq!(BlendMode::from_str("color_dodge"), BlendMode::ColorDodge);
-        assert_eq!(BlendMode::from_str("linear_dodge"), BlendMode::LinearDodge);
-        assert_eq!(BlendMode::from_str("add"), BlendMode::LinearDodge); // alias
+        assert_eq!(BlendMode::from_name("lighten"), BlendMode::Lighten);
+        assert_eq!(BlendMode::from_name("screen"), BlendMode::Screen);
+        assert_eq!(BlendMode::from_name("color_dodge"), BlendMode::ColorDodge);
+        assert_eq!(BlendMode::from_name("linear_dodge"), BlendMode::LinearDodge);
+        assert_eq!(BlendMode::from_name("add"), BlendMode::LinearDodge); // alias
         assert_eq!(
-            BlendMode::from_str("lighter_color"),
+            BlendMode::from_name("lighter_color"),
             BlendMode::LighterColor
         );
 
         // Contrast Group
-        assert_eq!(BlendMode::from_str("overlay"), BlendMode::Overlay);
-        assert_eq!(BlendMode::from_str("soft_light"), BlendMode::SoftLight);
-        assert_eq!(BlendMode::from_str("hard_light"), BlendMode::HardLight);
-        assert_eq!(BlendMode::from_str("vivid_light"), BlendMode::VividLight);
-        assert_eq!(BlendMode::from_str("linear_light"), BlendMode::LinearLight);
-        assert_eq!(BlendMode::from_str("pin_light"), BlendMode::PinLight);
-        assert_eq!(BlendMode::from_str("hard_mix"), BlendMode::HardMix);
+        assert_eq!(BlendMode::from_name("overlay"), BlendMode::Overlay);
+        assert_eq!(BlendMode::from_name("soft_light"), BlendMode::SoftLight);
+        assert_eq!(BlendMode::from_name("hard_light"), BlendMode::HardLight);
+        assert_eq!(BlendMode::from_name("vivid_light"), BlendMode::VividLight);
+        assert_eq!(BlendMode::from_name("linear_light"), BlendMode::LinearLight);
+        assert_eq!(BlendMode::from_name("pin_light"), BlendMode::PinLight);
+        assert_eq!(BlendMode::from_name("hard_mix"), BlendMode::HardMix);
 
         // Difference Group
-        assert_eq!(BlendMode::from_str("difference"), BlendMode::Difference);
-        assert_eq!(BlendMode::from_str("exclusion"), BlendMode::Exclusion);
-        assert_eq!(BlendMode::from_str("subtract"), BlendMode::Subtract);
-        assert_eq!(BlendMode::from_str("divide"), BlendMode::Divide);
+        assert_eq!(BlendMode::from_name("difference"), BlendMode::Difference);
+        assert_eq!(BlendMode::from_name("exclusion"), BlendMode::Exclusion);
+        assert_eq!(BlendMode::from_name("subtract"), BlendMode::Subtract);
+        assert_eq!(BlendMode::from_name("divide"), BlendMode::Divide);
 
         // HSL Group
-        assert_eq!(BlendMode::from_str("hue"), BlendMode::Hue);
-        assert_eq!(BlendMode::from_str("saturation"), BlendMode::Saturation);
-        assert_eq!(BlendMode::from_str("color"), BlendMode::Color);
-        assert_eq!(BlendMode::from_str("luminosity"), BlendMode::Luminosity);
+        assert_eq!(BlendMode::from_name("hue"), BlendMode::Hue);
+        assert_eq!(BlendMode::from_name("saturation"), BlendMode::Saturation);
+        assert_eq!(BlendMode::from_name("color"), BlendMode::Color);
+        assert_eq!(BlendMode::from_name("luminosity"), BlendMode::Luminosity);
 
         // Unknown defaults to Normal
-        assert_eq!(BlendMode::from_str("unknown"), BlendMode::Normal);
+        assert_eq!(BlendMode::from_name("unknown"), BlendMode::Normal);
     }
 
     #[test]

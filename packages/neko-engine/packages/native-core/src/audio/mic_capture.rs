@@ -10,13 +10,12 @@
 //! - Monitor data stored in AtomicU32 (reinterpreted as f32) for zero-lock reads
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use crossbeam_channel::{bounded, Sender};
+use crossbeam_channel::bounded;
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
 use neko_types::StreamId;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -80,7 +79,7 @@ impl Default for RecordCaptureConfig {
 /// Wrapper to hold cpal::Stream across thread boundaries.
 /// Safety: We only hold the stream to keep it alive; we never call methods
 /// on it from a different thread. Dropping it stops the capture.
-struct SendStream(cpal::Stream);
+struct SendStream(#[allow(dead_code)] cpal::Stream);
 // SAFETY: cpal::Stream is safe to hold across threads — the callback runs
 // on its own RT thread regardless. We only store it for RAII lifetime.
 unsafe impl Send for SendStream {}
@@ -106,6 +105,12 @@ struct ActiveRecording {
 
 pub struct MicCaptureService {
     recordings: Mutex<HashMap<String, ActiveRecording>>,
+}
+
+impl Default for MicCaptureService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MicCaptureService {

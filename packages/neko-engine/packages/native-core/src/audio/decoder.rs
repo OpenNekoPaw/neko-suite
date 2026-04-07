@@ -148,18 +148,14 @@ impl FfmpegAudioDecoder {
         self.current_position = timestamp;
 
         // Resample if needed, handling input format changes (common with AAC)
-        let output_frame = if self.resampler.is_some() {
+        let output_frame = if let Some(resampler) = self.resampler.as_mut() {
             let mut output = AudioFrame::empty();
-            let result = self
-                .resampler
-                .as_mut()
-                .unwrap()
-                .run(&decoded_frame, &mut output);
+            let result = resampler.run(&decoded_frame, &mut output);
 
             if result.is_ok() {
                 output
             } else {
-                let frame_channels = decoded_frame.channels() as u16;
+                let frame_channels = decoded_frame.channels();
                 let output_channels = self.output_channels.unwrap_or(audio_info.channels);
                 let output_rate = self.output_sample_rate.unwrap_or(audio_info.sample_rate);
 
@@ -205,19 +201,20 @@ impl FfmpegAudioDecoder {
                     output_rate
                 );
 
-                self.resampler = Some(ResamplerContext::get(
+                let new_resampler = ResamplerContext::get(
                     decoded_frame.format(),
                     frame_layout,
                     decoded_frame.rate(),
                     Self::to_ffmpeg_sample_format(self.output_format),
                     Self::channel_layout_for_channels(output_channels),
                     output_rate,
-                )?);
+                )?;
+                self.resampler = Some(new_resampler);
 
                 let mut output = AudioFrame::empty();
                 self.resampler
                     .as_mut()
-                    .unwrap()
+                    .expect("resampler just assigned")
                     .run(&decoded_frame, &mut output)?;
                 output
             }

@@ -50,7 +50,7 @@ async fn gamepad_stream_loop(mut socket: WebSocket, engine: Arc<EngineApi>, stre
                                 break;
                             }
                         };
-                        if socket.send(Message::Text(json.into())).await.is_err() {
+                        if socket.send(Message::Text(json)).await.is_err() {
                             break;
                         }
                     }

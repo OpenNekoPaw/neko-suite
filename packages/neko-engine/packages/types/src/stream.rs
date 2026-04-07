@@ -54,17 +54,12 @@ impl LoopRegion {
 }
 
 /// Loop count
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LoopCount {
     Finite(u32),
+    #[default]
     Infinite,
-}
-
-impl Default for LoopCount {
-    fn default() -> Self {
-        Self::Infinite
-    }
 }
 
 /// Stream codec type

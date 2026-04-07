@@ -137,7 +137,7 @@ impl ProjectConverter {
                     .unwrap_or_default();
 
                 let volume = if let Some(ref audio) = media.audio {
-                    audio.volume as f32
+                    audio.volume
                 } else {
                     1.0
                 };
@@ -145,7 +145,7 @@ impl ProjectConverter {
                 let blend_mode = media
                     .blend_mode
                     .as_deref()
-                    .map(BlendMode::from_str)
+                    .map(BlendMode::from_name)
                     .unwrap_or(BlendMode::Normal);
 
                 let audio_props = media.audio.map(|a| AudioProperties {
@@ -190,12 +190,7 @@ impl ProjectConverter {
                 let src = self.resolve_path(&audio.src);
 
                 let (volume, pan, fade_in, fade_out) = if let Some(ref props) = audio.audio {
-                    (
-                        props.volume as f32,
-                        props.pan as f32,
-                        props.fade_in,
-                        props.fade_out,
-                    )
+                    (props.volume, props.pan, props.fade_in, props.fade_out)
                 } else {
                     (1.0, 0.0, 0.0, 0.0)
                 };

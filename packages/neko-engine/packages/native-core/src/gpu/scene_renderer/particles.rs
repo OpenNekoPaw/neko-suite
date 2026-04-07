@@ -420,7 +420,7 @@ impl GpuParticleSystem {
             });
             pass.set_pipeline(&self.update_pipeline);
             pass.set_bind_group(0, &self.compute_bind_group, &[]);
-            let workgroups = (self.particle_count + 63) / 64;
+            let workgroups = self.particle_count.div_ceil(64);
             pass.dispatch_workgroups(workgroups, 1, 1);
         }
 

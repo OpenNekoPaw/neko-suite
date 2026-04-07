@@ -31,10 +31,10 @@ impl Runner {
         if self.engine.is_none() {
             let config = EngineConfig::load(None, None)?;
             let engine = EngineApi::with_config(config).await.map_err(|e| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to initialize engine: {}", e),
-                )) as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to initialize engine: {}",
+                    e
+                ))) as Box<dyn std::error::Error + Send + Sync>
             })?;
             self.engine = Some(Arc::new(engine));
         }
@@ -129,10 +129,10 @@ impl Runner {
         tracing::info!("Starting Neko Suite Server on port {}", effective_port);
 
         let engine = Arc::new(EngineApi::with_config(engine_config).await.map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to initialize engine: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
+            Box::new(std::io::Error::other(format!(
+                "Failed to initialize engine: {}",
+                e
+            ))) as Box<dyn std::error::Error + Send + Sync>
         })?);
         self.engine = Some(engine.clone());
         neko_native_http::start_server(engine, effective_port).await?;
@@ -141,6 +141,7 @@ impl Runner {
     }
 
     /// Run direct export mode with progress bar (via EngineApi)
+    #[allow(clippy::too_many_arguments)]
     async fn run_export(
         &mut self,
         jvi_file: PathBuf,
@@ -199,10 +200,10 @@ impl Runner {
         let engine = self.get_engine().await?;
 
         let config_json = serde_json::to_value(&config).map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to serialize export config: {}", e),
-            )) as Box<dyn std::error::Error + Send + Sync>
+            Box::new(std::io::Error::other(format!(
+                "Failed to serialize export config: {}",
+                e
+            ))) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
         let request = ActionRequest::new("timelines", "export").with_body(config_json);
@@ -215,28 +216,24 @@ impl Runner {
                 .map(|e| e.message)
                 .unwrap_or_else(|| "Unknown error".to_string());
             pb.finish_with_message(format!("Error: {}", error_msg));
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to start export: {}", error_msg),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to start export: {}",
+                error_msg
+            ))));
         }
 
         // Extract job_id from response
         let data = response.data.ok_or_else(|| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "No data in export start response",
-            )) as Box<dyn std::error::Error + Send + Sync>
+            Box::new(std::io::Error::other("No data in export start response"))
+                as Box<dyn std::error::Error + Send + Sync>
         })?;
 
         let job_id = data["job_id"]
             .as_str()
             .or_else(|| data["jobId"].as_str())
             .ok_or_else(|| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "No job_id in export start response",
-                )) as Box<dyn std::error::Error + Send + Sync>
+                Box::new(std::io::Error::other("No job_id in export start response"))
+                    as Box<dyn std::error::Error + Send + Sync>
             })?
             .to_string();
 
@@ -324,10 +321,10 @@ impl Runner {
                     "error" => {
                         let error_msg = data["error"].as_str().unwrap_or("Unknown error");
                         pb.finish_with_message(format!("Error: {}", error_msg));
-                        return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Export failed: {}", error_msg),
-                        )));
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "Export failed: {}",
+                            error_msg
+                        ))));
                     }
                     "cancelled" => {
                         pb.finish_with_message("Cancelled");
@@ -418,19 +415,19 @@ impl Runner {
             "json" => println!(
                 "{}",
                 serde_json::to_string(&response).map_err(|e| {
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to serialize response: {}", e),
-                    )) as Box<dyn std::error::Error + Send + Sync>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to serialize response: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send + Sync>
                 })?
             ),
             _ => println!(
                 "{}",
                 serde_json::to_string_pretty(&response).map_err(|e| {
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to serialize response: {}", e),
-                    )) as Box<dyn std::error::Error + Send + Sync>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to serialize response: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send + Sync>
                 })?
             ),
         }
