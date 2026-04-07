@@ -164,6 +164,14 @@
 - [ ] Quality assessment enhancements: VMAF / FFT / long-video segmentation / semantic audio
 - [ ] neko-types: 54 remaining `any` type occurrences
 
+### Content Provenance (C2PA) — Deferred
+> Analyzed 2026-04-07: not needed now; revisit when regulations or users demand it.
+- [ ] Export pipeline post-processing hook (muxer 后置签名切入点)
+- [ ] `GeneratedAsset.provenance` field (AI generation tool/model/params traceability)
+- [ ] `c2pa-rs` integration + `ExportConfig.sign` option + certificate/key management
+- **Why deferred**: product is local creative tool (not distribution platform); C2PA is voluntary standard; core features still in active development; no legal mandate yet
+- **Trigger to re-evaluate**: EU AI Act enforcement requiring AI content labeling, or user/partner explicit request
+
 **Scan baseline**: `pnpm build` ✅ 28/28 | `pnpm test` pre-existing failures | `pnpm lint` 0 error ✅ | **0 circular dependencies** ✅
 
 ---
@@ -208,4 +216,4 @@
 
 ---
 
-*Last updated: 2026-04-06 (Sprint 1 + P0/P1 bug fixes + infrastructure consistency + blocking I/O fixes for 3 items: extensionTools ZIP async + system-prompt-builder async + generatedAssetIndex async load/flush)*
+*Last updated: 2026-04-07 (+ C2PA analysis: deferred, pre-reserved integration points documented)*

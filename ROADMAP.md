@@ -436,6 +436,31 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 ---
 
+## Content Provenance (C2PA) — Deferred
+
+> Analyzed 2026-04-07. C2PA (Coalition for Content Provenance and Authenticity) embeds cryptographic provenance metadata in exported media, enabling AI content labeling and authenticity verification.
+
+**Current state**: No C2PA support. Export pipeline has no metadata embedding, EXIF/XMP writing, or content signing.
+
+**Why deferred**: Product is a local creative workspace, not a distribution platform. C2PA is currently a voluntary standard with no legal mandate. Core features (editing/rendering/AI) are still in active development. Engineering cost is non-trivial (c2pa-rs + X.509 certificate management + export pipeline changes).
+
+**Future value**: neko-agent generates AI media (images/video/audio) that could benefit from provenance labeling. Industry adoption growing (Adobe/Google/Microsoft). EU AI Act may require AI-generated content labeling.
+
+**Pre-reserved integration points**:
+1. Export pipeline: `FfmpegMuxer` post-write hook for C2PA signing (not yet implemented)
+2. AI asset metadata: `GeneratedAsset` type can be extended with `provenance` field
+
+**Implementation path (when triggered)**:
+- [ ] Add `c2pa-rs` crate dependency
+- [ ] `ExportConfig` add `sign: bool` + `certificate` options
+- [ ] Post-muxing C2PA manifest injection (sign after encode)
+- [ ] Certificate/key management service
+- [ ] `GeneratedAsset.provenance` field for AI generation traceability
+
+**Trigger to re-evaluate**: EU AI Act enforcement, partner/user explicit request, or competitive pressure.
+
+---
+
 ## Phase 7: VR/AR Immersive Creation (Long-term)
 
 > Prerequisites: Phase 3 + Phase 5
@@ -500,4 +525,4 @@ agent/market are included in core; scenario sub-packs stack with zero duplicatio
 
 ---
 
-*Last updated: 2026-04-06 (Sprint 1 complete: Engine Semaphore + Assets Search L0 + EPUB TreeView + Cut AI actions + DragDropBroker)*
+*Last updated: 2026-04-07 (+ C2PA content provenance analysis: deferred with pre-reserved integration points)*
