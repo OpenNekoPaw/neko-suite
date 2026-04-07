@@ -355,7 +355,9 @@ jobs:
   package-engine-vsix:
     name: Package neko-engine VSIX (${{ matrix.target }})
     needs: [build, test-ts, test-rust]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     strategy:
       fail-fast: false
       matrix:
