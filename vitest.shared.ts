@@ -1,7 +1,7 @@
 /**
  * Shared coverage configuration for all vitest packages.
  *
- * All packages use vitest v4.1+ — coverage ENOENT race fixed upstream.
+ * Keep vitest, @vitest/coverage-v8 and Vite peer resolution aligned across the workspace.
  */
 export function sharedCoverage(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
