@@ -1,7 +1,7 @@
 /**
  * Shared coverage configuration for all vitest packages.
  *
- * All packages use vitest v4 — thresholds are enabled.
+ * All packages use vitest v4.1+ — coverage ENOENT race fixed upstream.
  */
 export function sharedCoverage(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {

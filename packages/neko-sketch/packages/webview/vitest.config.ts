@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import * as path from 'path';
+import { sharedCoverage } from '../../../../vitest.shared';
 
 export default defineConfig({
   test: {
@@ -7,8 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    // Coverage disabled: Vitest v4 + jsdom triggers ENOENT race on coverage/.tmp in CI
-    coverage: { enabled: false },
+    coverage: sharedCoverage(),
   },
   resolve: {
     alias: {
