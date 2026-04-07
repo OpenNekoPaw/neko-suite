@@ -5,7 +5,6 @@
  */
 export function sharedCoverage(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
-    enabled: true,
     provider: 'v8',
     reporter: ['text', 'json-summary', 'html'],
     exclude: [

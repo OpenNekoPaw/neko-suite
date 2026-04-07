@@ -105,7 +105,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test -- --run
+      - run: pnpm test -- --run --coverage
 
       - uses: actions/upload-artifact@v4
         if: always()
