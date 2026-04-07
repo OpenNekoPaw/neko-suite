@@ -153,6 +153,10 @@ jobs:
       - name: Install FFmpeg (macOS)
         run: brew install ffmpeg pkg-config
 
+      # vendor/ is gitignored; remove the cargo config that forces vendored sources
+      - name: Remove vendor source override
+        run: rm -f packages/neko-engine/.cargo/config.toml
+
       - name: Check formatting
         run: cargo fmt --all -- --check
         working-directory: packages/neko-engine
@@ -208,6 +212,8 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is gitignored; remove the cargo config that forces vendored sources
+      - run: rm -f packages/neko-engine/.cargo/config.toml
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: packages/neko-engine/Cargo.toml
@@ -407,6 +413,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # vendor/ is gitignored; remove the cargo config that forces vendored sources
+      - name: Remove vendor source override
+        run: rm -f packages/neko-engine/.cargo/config.toml
+
       # Build the native .node for this platform
       - name: Build native-napi
         working-directory: packages/neko-engine/packages/native-napi
@@ -425,48 +435,3 @@ jobs:
           path: packages/neko-engine/*.vsix
           retention-days: 30
 
-  # ── Docker: Build & Push neko-engine image ──
-  # Runs on push to main only. Builds the standalone HTTP server image
-  # and pushes to GitHub Container Registry.
-  # Consumed by neko-hub docker-compose.prod.yml as NEKO_ENGINE_IMAGE.
-  docker-engine:
-    name: Docker Build & Push (neko-engine)
-    runs-on: ubuntu-latest
-    needs: [build, test-ts]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/neko-engine
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=true
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: packages/neko-engine
-          file: packages/neko-engine/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
