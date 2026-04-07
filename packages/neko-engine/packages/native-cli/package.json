@@ -4,7 +4,7 @@
   "private": true,
   "description": "Command-line tool for neko media processing",
   "scripts": {
-    "build": "cargo build --release",
+    "build:native": "cargo build --release",
     "build:debug": "cargo build"
   },
   "engines": {

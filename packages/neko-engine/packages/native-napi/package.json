@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "build": "npm run build:napi",
+    "build:native": "npm run build:napi",
     "build:napi": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform --release",
     "build:debug": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform",
     "build:ffmpeg-env": "node scripts/setup-ffmpeg-env.js",

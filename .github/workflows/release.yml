@@ -136,6 +136,7 @@ jobs:
       # vendor/ is gitignored; remove the cargo config that forces vendored sources
       - name: Remove vendor source override
         run: rm -f packages/neko-engine/.cargo/config.toml
+        shell: bash
 
       # Build native addon
       - name: Build native-napi

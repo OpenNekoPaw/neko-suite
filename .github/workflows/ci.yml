@@ -75,9 +75,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
 
-      # Skip Rust packages (vendor/ is gitignored; Rust is tested
-      # separately in test-rust and built in package-engine-vsix).
-      - run: pnpm build --filter='!@neko-engine/native-cli' --filter='!@neko-engine/native-napi'
+      - run: pnpm build
 
   # ── TypeScript: Tests ──────────────────────
   test-ts:
@@ -407,6 +405,7 @@ jobs:
       # vendor/ is gitignored; remove the cargo config that forces vendored sources
       - name: Remove vendor source override
         run: rm -f packages/neko-engine/.cargo/config.toml
+        shell: bash
 
       # Build the native .node for this platform
       - name: Build native-napi
