@@ -10,8 +10,8 @@ elif command -v bun >/dev/null 2>&1; then
 elif [ -x "$HOME/.bun/bin/bun" ]; then
   BUN="$HOME/.bun/bin/bun"
 else
-  echo "error: bun not found. Install with: curl -fsSL https://bun.sh/install | bash" >&2
-  exit 1
+  echo "warn: bun not found, skipping CLI binary build. Install with: curl -fsSL https://bun.sh/install | bash" >&2
+  exit 0
 fi
 
 cd "$(dirname "$0")/.."

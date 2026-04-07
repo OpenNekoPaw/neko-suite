@@ -12,6 +12,7 @@ concurrency:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ──────────────────────────────────────────────
 # Reusable setup anchors (YAML anchors not supported in GHA,
