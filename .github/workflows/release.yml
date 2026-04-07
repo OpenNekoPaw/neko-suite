@@ -21,7 +21,6 @@ permissions:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ── TypeScript-only extensions (no native code) ──
@@ -29,16 +28,15 @@ jobs:
     name: Build & Package (TS extensions)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - run: pnpm install --frozen-lockfile
 
@@ -78,7 +76,7 @@ jobs:
           mkdir -p release-artifacts
           find packages -maxdepth 2 -name '*.vsix' -exec cp {} release-artifacts/ \;
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: vsix-ts-extensions
           path: release-artifacts/*.vsix
@@ -109,16 +107,15 @@ jobs:
             ffmpeg-install: choco install ffmpeg-shared
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -151,7 +148,7 @@ jobs:
         working-directory: packages/neko-engine
         run: bash scripts/package-platform.sh ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: vsix-neko-engine-${{ matrix.target }}
           path: packages/neko-engine/*.vsix
@@ -163,7 +160,7 @@ jobs:
     needs: [release-ts, release-engine]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release-artifacts
           merge-multiple: true

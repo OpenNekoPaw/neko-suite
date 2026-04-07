@@ -12,7 +12,6 @@ concurrency:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ──────────────────────────────────────────────
 # Reusable setup anchors (YAML anchors not supported in GHA,
@@ -32,19 +31,62 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       proto: ${{ steps.filter.outputs.proto }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - uses: actions/checkout@v5
         with:
-          filters: |
-            ts:
-              - 'packages/**/src/**/*.{ts,tsx}'
-              - 'packages/**/package.json'
-              - 'pnpm-lock.yaml'
-            rust:
-              - 'packages/neko-engine/**'
-            proto:
-              - 'packages/neko-proto/**'
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          changed_files="$(mktemp)"
+          event_name="${{ github.event_name }}"
+
+          if [[ "${event_name}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+            git diff --name-only "${base_sha}" "${head_sha}" > "${changed_files}"
+          else
+            before_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+
+            if [[ -z "${before_sha}" || "${before_sha}" =~ ^0+$ ]]; then
+              if git rev-parse "${head_sha}^" >/dev/null 2>&1; then
+                before_sha="$(git rev-parse "${head_sha}^")"
+                git diff --name-only "${before_sha}" "${head_sha}" > "${changed_files}"
+              else
+                git ls-files > "${changed_files}"
+              fi
+            else
+              git diff --name-only "${before_sha}" "${head_sha}" > "${changed_files}"
+            fi
+          fi
+
+          ts=false
+          rust=false
+          proto=false
+
+          while IFS= read -r file; do
+            [[ -z "${file}" ]] && continue
+
+            if [[ "${file}" =~ ^packages/.+/src/.+\.(ts|tsx)$ ]] || [[ "${file}" =~ ^packages/.+/package\.json$ ]] || [[ "${file}" == "pnpm-lock.yaml" ]]; then
+              ts=true
+            fi
+
+            if [[ "${file}" == packages/neko-engine/* ]]; then
+              rust=true
+            fi
+
+            if [[ "${file}" == packages/neko-proto/* ]]; then
+              proto=true
+            fi
+          done < "${changed_files}"
+
+          echo "ts=${ts}" >> "${GITHUB_OUTPUT}"
+          echo "rust=${rust}" >> "${GITHUB_OUTPUT}"
+          echo "proto=${proto}" >> "${GITHUB_OUTPUT}"
 
   # ── TypeScript: Build & Lint ───────────────
   build:
@@ -53,18 +95,17 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ts == 'true' || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
 
-      - uses: actions/cache@v4
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -85,18 +126,17 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ts == 'true' || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
 
-      - uses: actions/cache@v4
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -107,7 +147,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test -- --run --coverage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-reports
@@ -121,9 +161,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
     env:
-      ORT_VERSION: "1.20.1"
+      ORT_VERSION: '1.20.1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -134,7 +174,7 @@ jobs:
           workspaces: packages/neko-engine
 
       - name: Cache Homebrew packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/Homebrew
           key: homebrew-ffmpeg-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
@@ -201,7 +241,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # vendor/ is gitignored; remove the cargo config that forces vendored sources
       - run: rm -f packages/neko-engine/.cargo/config.toml
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -215,16 +255,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.proto == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - run: pnpm install --frozen-lockfile
       - name: Regenerate proto types
@@ -244,18 +283,17 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ts == 'true' || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
 
-      - uses: actions/cache@v4
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -280,7 +318,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/dependency-review-action@v4
         with:
           comment-summary-in-pr: on-failure
@@ -293,18 +331,17 @@ jobs:
     needs: [build, test-ts]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
 
-      - uses: actions/cache@v4
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -343,7 +380,7 @@ jobs:
             fi
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ts-extensions-vsix
           path: vsix-artifacts/*.vsix
@@ -380,16 +417,15 @@ jobs:
             ffmpeg-install: choco install ffmpeg-shared
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.29.2
-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -422,9 +458,8 @@ jobs:
         working-directory: packages/neko-engine
         run: bash scripts/package-platform.sh ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: neko-engine-vsix-${{ matrix.target }}
           path: packages/neko-engine/*.vsix
           retention-days: 30
-

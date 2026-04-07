@@ -623,3 +623,264 @@
 - 结果：仅发现手工运行型测试脚本，未接入标准 `vitest` 流程
 - 命令：`rg -o "unwrap\\(|expect\\(" packages --glob '!**/*.bak' | wc -l`
 - 结果：共 390 处（含测试代码；生产路径亦可见多处 `unwrap/expect`）
+
+---
+
+## 追加记录：2026-04-07（neko-assets）
+
+维护范围：`packages/neko-assets`（`extension + packages/asset`）
+
+### 问题总览（追加）
+
+| 编号 | 严重级别 | 状态 | 问题摘要 |
+|---|---|---|---|
+| NKAS-001 | P1 | open | 对外宣称 `cloud sync / CI/CD auto-rendering`，实际仍是占位命令 |
+| NKAS-002 | P1 | open | 已贡献 `neko.cloudSync` 视图，但 Extension 未注册对应 Provider |
+| NKAS-003 | P1 | open | 文档规划中的 `AssetRegistry` 多源合并未真正接入主链路 |
+| NKAS-004 | P1 | open | `AssetRegistry` 的非媒体资产当前仅驻留内存，缺少持久化与实际消费方 |
+| NKAS-005 | P2 | open | `extension.ts` 体量过大，初始化/命令/UI/集成强耦合 |
+| NKAS-006 | P2 | open | 多根工作区仅使用首个 workspace，路径与媒体库行为存在偏差风险 |
+| NKAS-007 | P1 | open | 测试覆盖集中在 core service，extension/provider/命令编排回归保护不足 |
+
+### 问题详情（追加）
+
+#### NKAS-001：云同步与 CI/CD 渲染能力仍为占位（P1）
+- 影响：用户会看到“可用功能”入口，但真实云同步、推送、拉取、远程渲染链路并未落地。
+- 定位：
+  - `packages/neko-assets/package.json`
+  - `packages/neko-assets/src/extension.ts`
+- 现状：
+  - `neko.assets.sync` / `push` / `pull` / `triggerRender` 仍以提示信息或临时终端调用为主；
+  - 与描述中的 `cloud sync`、`CI/CD auto-rendering` 不一致。
+- 建议：要么补齐真实服务编排与错误处理，要么先下调功能宣称，避免“可见不可用”。
+
+#### NKAS-002：`neko.cloudSync` 视图声明未接线（P1）
+- 影响：Activity Bar 中暴露了云同步视图位，但运行时没有对应数据源与交互能力。
+- 定位：
+  - `packages/neko-assets/package.json`
+  - `packages/neko-assets/src/extension.ts`
+- 建议：补齐 TreeDataProvider / WebviewProvider；若短期不做，先移除贡献项。
+
+#### NKAS-003：`AssetRegistry` 多源架构尚未真正落地（P1）
+- 影响：文档中“项目库 + 共享库 + marketplace”统一资产视图的目标尚未实现，当前仍主要停留在项目级 `AssetLibrary`。
+- 定位：
+  - 文档规划：`docs/architecture/local-storage-strategy.md`
+  - 核心实现：`packages/neko-assets/packages/asset/src/service/AssetRegistry.ts`
+  - 扩展入口：`packages/neko-assets/src/extension.ts`
+- 现状：扩展启动时直接实例化的是 `AssetLibrary`，未见 `AssetRegistry` 进入主查询、视图或命令链路。
+- 建议：先完成 `AssetRegistry` 接管主入口，再逐步接入 shared / marketplace source。
+
+#### NKAS-004：`AssetRegistry` 非媒体资产仅为内存态（P1）
+- 影响：即使未来接入 marketplace / handler 资产，当前实现也会在重启后丢失非媒体注册结果。
+- 定位：
+  - `packages/neko-assets/packages/asset/src/service/AssetRegistry.ts`
+- 现状：
+  - 非媒体 manifest 存储在内存 `Map`；
+  - 未见持久化、恢复或 Extension 主链路消费实现。
+- 建议：为 registry 引入持久化源，明确其与 `library.json`、共享库描述文件、market 安装记录的关系。
+
+#### NKAS-005：扩展入口文件过胖，职责耦合偏高（P2）
+- 影响：初始化、命令注册、媒体库、健康检查、Git/LFS、缩略图、搜索等职责堆叠在单文件中，后续迭代与测试成本持续上升。
+- 定位：
+  - `packages/neko-assets/src/extension.ts`
+- 建议：按“启动编排 / TreeView 注册 / 命令模块 / 外部集成”拆分子模块，保留薄入口。
+
+#### NKAS-006：多工作区支持偏弱（P2）
+- 影响：multi-root workspace 下，路径解析、缓存目录、媒体库设置和资产存储均可能只绑定到第一个工作区。
+- 定位：
+  - `packages/neko-assets/src/extension.ts`
+- 建议：将 workspace 选择显式化，或至少在多根场景下给出限制提示与一致策略。
+
+#### NKAS-007：测试覆盖偏向 core，扩展链路保护不足（P1）
+- 影响：TreeView、命令注册、媒体库设置、健康检查、云同步占位等 Extension 层回归难以及时暴露。
+- 定位：
+  - 已有测试：`packages/neko-assets/packages/asset/src/__tests__/service/*`
+  - 扩展入口：`packages/neko-assets/src/extension.ts`
+- 建议：补充 extension 侧最小集成测试，优先覆盖命令注册、Provider 初始化、路径变量同步和健康检查主链路。
+
+### 本批次验证信息（追加）
+
+- 命令：`wc -l packages/neko-assets/src/extension.ts`
+- 结果：入口文件 1243 行，已出现明显“巨型入口”信号
+- 命令：`rg -n "cloudSync|AssetRegistry|neko\\.assets\\.(sync|push|pull|triggerRender)" packages/neko-assets`
+- 结果：确认存在功能宣称、视图贡献与实际接线之间的不一致
+- 命令：`find packages/neko-assets -path '*/__tests__/*' -o -name '*.test.ts'`
+- 结果：测试主要集中于 `packages/asset` core 层，extension 覆盖较弱
+
+---
+
+## 追加记录：2026-04-07（neko-market）
+
+维护范围：`packages/neko-market`（`core + extension + webview`）
+
+### 问题总览（追加）
+
+| 编号 | 严重级别 | 状态 | 问题摘要 |
+|---|---|---|---|
+| NKM-001 | P0 | open | 安装链路未解包归档，InstallTarget 后置逻辑与实际产物形态不匹配 |
+| NKM-002 | P0 | open | Extension 与 Webview 的市场 DTO 未统一，大量强制断言掩盖运行时错配 |
+| NKM-003 | P1 | open | 类型筛选使用 `model/preset` 聚合值，偏离共享 `AssetType` 契约 |
+| NKM-004 | P1 | open | `InstalledRegistry.load()` 异步竞态可能导致首次打开状态不准 |
+| NKM-005 | P1 | open | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |
+| NKM-006 | P1 | open | 付费/私有资产许可校验仍是 stub，认证与商业能力未闭环 |
+| NKM-007 | P2 | open | `registryUrl` 配置与架构文档不一致，`nekoSuiteVersion` 仍为硬编码 |
+| NKM-008 | P1 | open | 测试覆盖偏 core unit，缺少安装编排与 webview 协议级回归 |
+
+### 问题详情（追加）
+
+#### NKM-001：安装成功但产物形态错误（P0）
+- 影响：技能、模型、预设等包即使“安装成功”，后置注册逻辑也可能因目录结构不符合预期而失效。
+- 定位：
+  - `packages/neko-market/packages/core/src/cache/cache-manager.ts`
+  - `packages/neko-market/packages/core/src/install/install-manager.ts`
+  - `packages/neko-market/packages/extension/src/SkillInstallTarget.ts`
+  - `packages/neko-market/packages/extension/src/ModelInstallTarget.ts`
+- 现状：
+  - 缓存命名明确使用 `.tar.gz`；
+  - `InstallManager` 安装阶段仅做 `cp(archivePath, installPath)`；
+  - `SkillInstallTarget` / `ModelInstallTarget` 却假设安装目录中直接存在 `SKILL.md`、`.gguf` 等展开后的文件。
+- 建议：在 core 层明确“下载归档 → 校验 → 解包 → 再交给 target hook”的安装契约。
+
+#### NKM-002：Host 与 Webview DTO 契约漂移（P0）
+- 影响：市场列表、安装状态、精选内容等 UI 容易出现字段错读、空白或静默异常。
+- 定位：
+  - 共享类型：`packages/neko-types/src/types/asset/market.ts`
+  - Webview store：`packages/neko-market/packages/webview/src/stores/marketplaceStore.ts`
+  - 消息处理：`packages/neko-market/packages/webview/src/components/MarketplaceApp.tsx`
+- 现状：
+  - 共享 `MarketPackage` 以 `manifest` 为核心；
+  - Webview `MarketItem` 为扁平结构；
+  - 当前通过 `as` 强转直接消费，缺少显式映射层。
+- 建议：在 Extension 或 Webview 边界新增 DTO adapter，禁止直接跨层强转。
+
+#### NKM-003：筛选类型与 `AssetType` 契约不一致（P1）
+- 影响：真实查询类型、图标展示和安装逻辑会逐渐漂移，后续新增类型时更容易失配。
+- 定位：
+  - 共享类型：`packages/neko-types/src/types/asset/manifest.ts`
+  - Webview filter：`packages/neko-market/packages/webview/src/stores/marketplaceStore.ts`
+  - 搜索栏：`packages/neko-market/packages/webview/src/components/SearchBar.tsx`
+  - 消息定义：`packages/neko-market/packages/webview/src/messages/index.ts`
+- 现状：UI 使用 `model` / `preset` 聚合值，但共享层实际是 `ai-model` / `template` / `lut` / `shader-preset` 等细粒度类型。
+- 建议：将“UI 聚合分类”和“后端查询类型”拆开建模，避免直接混用。
+
+#### NKM-004：安装注册表初始化存在竞态（P1）
+- 影响：扩展刚激活时，首次打开已安装列表或执行 `isInstalled()` 可能读到空状态。
+- 定位：
+  - `packages/neko-market/packages/extension/src/MarketplaceService.ts`
+  - `packages/neko-market/packages/core/src/registry/installed-registry.ts`
+- 建议：在对外提供查询能力前等待 registry load 完成，或引入显式 ready 阶段。
+
+#### NKM-005：`openSkills` 筛选消息可能丢失（P1）
+- 影响：命令 `neko.market.openSkills` 的用户体验不稳定，偶现打开市场但未自动过滤到技能页。
+- 定位：
+  - `packages/neko-market/packages/extension/src/index.ts`
+  - `packages/neko-market/packages/extension/src/MarketplaceProvider.ts`
+- 建议：为 Provider 增加待发送消息队列，待 webview resolve 后再 flush。
+
+#### NKM-006：许可与认证能力仍未闭环（P1）
+- 影响：`paid/private` 资产当前不可用，市场商业化和团队私有包能力尚未真正具备。
+- 定位：
+  - `packages/neko-market/packages/core/src/license/license-manager.ts`
+  - `packages/neko-market/packages/extension/src/MarketplaceService.ts`
+- 建议：补齐与 `neko-auth` 的 entitlement / token 校验流程，至少明确阶段性能力边界。
+
+#### NKM-007：实现与架构文档口径不一致（P2）
+- 影响：协作者会对 registry 来源、版本兼容策略产生误判。
+- 定位：
+  - 扩展配置：`packages/neko-market/package.json`
+  - 服务实现：`packages/neko-market/packages/extension/src/MarketplaceService.ts`
+  - 架构文档：`docs/architecture/registry-server.md`
+- 现状：
+  - 文档倾向固定官方 registry；
+  - 代码仍允许 `registryUrl` 自定义；
+  - `nekoSuiteVersion` 仍写死为 `0.0.1`。
+- 建议：统一“是否允许自定义 registry”的产品决策，并把 suite version 改为实际版本源注入。
+
+#### NKM-008：关键链路测试不足（P1）
+- 影响：安装编排、webview 协议、消息时序和 DTO 映射问题难以及时发现。
+- 定位：
+  - core tests：`packages/neko-market/packages/core/src/*.test.ts`
+  - extension tests：`packages/neko-market/packages/extension/src/__tests__/*`
+- 建议：增加最小集成测试，优先覆盖“下载/解包/后置注册”“Provider 与 Handler 消息流”“筛选命令时序”。
+
+### 本批次验证信息（追加）
+
+- 命令：`wc -l packages/neko-market/packages/extension/src/*.ts packages/neko-market/packages/webview/src/components/*.tsx | sort -nr`
+- 结果：`MarketplaceService.ts`、`MarketplaceHandler.ts`、`MarketplaceApp.tsx` 已形成关键编排热点
+- 命令：`nl -ba packages/neko-market/packages/core/src/install/install-manager.ts` + 相关 InstallTarget 实现静态审查
+- 结果：确认安装阶段仅复制归档文件，未见解包流程
+- 命令：`find packages/neko-market -path '*/__tests__/*' -o -name '*.test.ts' -o -name '*.test.tsx'`
+- 结果：当前测试偏 unit，webview 协议与安装编排集成覆盖不足
+
+---
+
+## 追加记录：2026-04-07（neko-auth）
+
+维护范围：`packages/neko-auth`（`core + extension`）
+
+### 问题总览（追加）
+
+| 编号 | 严重级别 | 状态 | 问题摘要 |
+|---|---|---|---|
+| NKAT-001 | P0 | open | 自动刷新 token 后不广播 session 变更，消费者可能长期持有过期凭证 |
+| NKAT-002 | P1 | open | VSCode 设置半配置会屏蔽 `config.json` 完整配置，导致登录配置判定异常 |
+| NKAT-003 | P1 | open | 刷新失败对所有异常一律清空会话，网络抖动也会误触发“被登出” |
+| NKAT-004 | P2 | open | 对外宣称文件存储/云厂商 token 能力，但扩展侧仍未落地 |
+| NKAT-005 | P2 | open | `AuthBridge` 与 extension 层测试覆盖不足，接线遗漏难以及时暴露 |
+
+### 问题详情（追加）
+
+#### NKAT-001：静默刷新不触发 session 变更事件（P0）
+- 影响：依赖 `onDidChangeSession` 的扩展（如市场、远程服务调用方）可能继续使用旧 access token。
+- 定位：
+  - `packages/neko-auth/packages/core/src/neko-auth-service.ts`
+  - `packages/neko-auth/packages/extension/src/auth-api.ts`
+- 现状：
+  - `getSession()` 内部可能触发 `refresh()`；
+  - 但 `NekoAuthAPIImpl` 只在 `login()` / `logout()` 时 `fire` 事件。
+- 建议：在刷新成功后补发 session change，或在 API 层包裹 `getSession()` 的状态变化检测。
+
+#### NKAT-002：配置优先级判定过宽（P1）
+- 影响：只要 VSCode 设置中填了部分字段，就可能覆盖掉 `config.json` 中完整可用的认证配置。
+- 定位：
+  - `packages/neko-auth/packages/extension/src/extension.ts`
+  - `packages/neko-types/src/config/auth-config-loader.ts`
+- 现状：
+  - 当前判断条件是“存在 `authUrl` 或 `clientId` 即优先用 VSCode 设置”；
+  - 但共享校验真正要求的是 `authUrl + tokenUrl` 同时存在。
+- 建议：改为基于 `isAuthConfigured()` 判定是否采用 VSCode 配置，避免半配置抢占。
+
+#### NKAT-003：刷新失败策略过于激进（P1）
+- 影响：临时网络错误、超时或服务端瞬时异常都会直接清空本地 session，用户体验接近“随机掉线”。
+- 定位：
+  - `packages/neko-auth/packages/core/src/neko-auth-service.ts`
+- 建议：区分“令牌无效/撤销”和“网络不可达/瞬时失败”，只对前者清理本地凭证。
+
+#### NKAT-004：能力宣称超前于实现（P2）
+- 影响：外部模块会误以为已有文件存储回退或云厂商 token 能力，实际集成时仍拿到空实现。
+- 定位：
+  - 文档：`README_CN.md`
+  - 共享契约：`packages/neko-types/src/types/auth.ts`
+  - 扩展实现：`packages/neko-auth/packages/extension/src/vscode-token-storage.ts`
+  - API stub：`packages/neko-auth/packages/extension/src/auth-api.ts`
+- 现状：
+  - 扩展内只有 `VscodeTokenStorage`；
+  - `getCloudToken()` 仍固定返回 `null`；
+  - 文件存储能力只停留在共享契约说明中。
+- 建议：明确区分“CLI 规划能力”和“VSCode 扩展已实现能力”，避免 README 过度承诺。
+
+#### NKAT-005：桥接层与 extension 测试覆盖不足（P2）
+- 影响：`AuthBridge` 这类桥接层即使未接入主链路，也不容易被现有测试发现。
+- 定位：
+  - `packages/neko-auth/packages/extension/src/auth-bridge.ts`
+  - 现有测试：`packages/neko-auth/packages/core/src/__tests__/*`
+- 建议：补 extension 层最小测试，覆盖配置加载、API 事件、bridge 消息与 SecretStorage 适配器。
+
+### 本批次验证信息（追加）
+
+- 命令：`find packages/neko-auth -path '*/__tests__/*' -type f`
+- 结果：现有测试全部集中在 core 层，未见 extension/bridge 级测试
+- 命令：`rg -n "AuthBridge|getCloudToken|SecretStorage|@ts-ignore" packages/neko-auth`
+- 结果：确认存在桥接层未接入、能力 stub 与构建层临时规避信号
+- 命令：`nl -ba packages/neko-auth/packages/core/src/neko-auth-service.ts` + `auth-api.ts` 静态审查
+- 结果：确认自动刷新后的 session 变更未向外广播
