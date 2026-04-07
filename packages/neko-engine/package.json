@@ -97,12 +97,14 @@
     "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
-    "test": "vitest --config vitest.config.ts --run",
+    "test:extension": "vitest --config vitest.config.ts --run",
+    "test:scripts": "node --test scripts/*.test.js",
+    "test": "pnpm run test:extension && pnpm run test:scripts",
     "bundle:ort": "node scripts/download-ort.js",
     "bundle:ort:all": "node scripts/download-ort.js --all",
     "bundle:ffmpeg": "node scripts/bundle-ffmpeg.js",
     "package": "vsce package --no-dependencies",
-    "package:platform": "bash scripts/package-platform.sh"
+    "package:platform": "node scripts/package-platform.js"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

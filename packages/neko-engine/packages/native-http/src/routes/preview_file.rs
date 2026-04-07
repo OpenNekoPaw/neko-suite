@@ -40,19 +40,32 @@ impl PreviewFileRegistry {
     }
 
     /// Register a path and return a fresh UUID token.
-    pub fn register(&self, path: PathBuf) -> String {
+    pub fn register(&self, path: PathBuf) -> Result<String, StatusCode> {
         let token = Uuid::new_v4().to_string();
-        self.inner.write().unwrap().insert(token.clone(), path);
-        token
+        let mut guard = self.inner.write().map_err(|error| {
+            tracing::error!("PreviewFileRegistry write lock poisoned: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        guard.insert(token.clone(), path);
+        Ok(token)
     }
 
     /// Remove a previously registered token. No-op if unknown.
-    pub fn unregister(&self, token: &str) {
-        self.inner.write().unwrap().remove(token);
+    pub fn unregister(&self, token: &str) -> Result<(), StatusCode> {
+        let mut guard = self.inner.write().map_err(|error| {
+            tracing::error!("PreviewFileRegistry write lock poisoned: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        guard.remove(token);
+        Ok(())
     }
 
-    fn lookup(&self, token: &str) -> Option<PathBuf> {
-        self.inner.read().unwrap().get(token).cloned()
+    fn lookup(&self, token: &str) -> Result<Option<PathBuf>, StatusCode> {
+        let guard = self.inner.read().map_err(|error| {
+            tracing::error!("PreviewFileRegistry read lock poisoned: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        Ok(guard.get(token).cloned())
     }
 }
 
@@ -75,18 +88,22 @@ pub struct RegisterResponse {
 pub async fn handle_register(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Json(body): Json<RegisterRequest>,
-) -> Json<RegisterResponse> {
-    let token = registry.register(PathBuf::from(body.file_path));
-    Json(RegisterResponse { token })
+) -> impl IntoResponse {
+    match registry.register(PathBuf::from(body.file_path)) {
+        Ok(token) => Json(RegisterResponse { token }).into_response(),
+        Err(status) => status.into_response(),
+    }
 }
 
 /// DELETE /v1/preview/unregister/:token
 pub async fn handle_unregister(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Path(token): Path<String>,
-) -> StatusCode {
-    registry.unregister(&token);
-    StatusCode::NO_CONTENT
+) -> impl IntoResponse {
+    match registry.unregister(&token) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(status) => status.into_response(),
+    }
 }
 
 /// GET /v1/preview/file/:token
@@ -102,7 +119,10 @@ pub async fn handle_file(
     Path(token): Path<String>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let Some(path) = registry.lookup(&token) else {
+    let Some(path) = (match registry.lookup(&token) {
+        Ok(path) => path,
+        Err(status) => return status.into_response(),
+    }) else {
         return (StatusCode::NOT_FOUND, "token not found").into_response();
     };
 
@@ -249,7 +269,10 @@ pub async fn handle_epub_entry(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Path((token, entry_path)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let Some(epub_path) = registry.lookup(&token) else {
+    let Some(epub_path) = (match registry.lookup(&token) {
+        Ok(path) => path,
+        Err(status) => return status.into_response(),
+    }) else {
         return (StatusCode::NOT_FOUND, "token not found").into_response();
     };
 
@@ -298,5 +321,38 @@ pub async fn handle_epub_entry(
         }
         Ok(Err(status)) => status.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_byte_range_accepts_open_ended_range() {
+        assert_eq!(parse_byte_range("bytes=10-", 100), Some((10, 99)));
+    }
+
+    #[test]
+    fn test_parse_byte_range_rejects_invalid_bounds() {
+        assert_eq!(parse_byte_range("bytes=20-10", 100), None);
+        assert_eq!(parse_byte_range("bytes=a-b", 100), None);
+    }
+
+    #[test]
+    fn test_preview_file_registry_register_lookup_unregister() {
+        let registry = PreviewFileRegistry::new();
+        let file_path = PathBuf::from("/tmp/preview.pdf");
+
+        let token = registry
+            .register(file_path.clone())
+            .expect("register token");
+        assert_eq!(
+            registry.lookup(&token).expect("lookup token"),
+            Some(file_path)
+        );
+
+        registry.unregister(&token).expect("unregister token");
+        assert_eq!(registry.lookup(&token).expect("lookup removed token"), None);
     }
 }

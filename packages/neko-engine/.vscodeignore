@@ -1,6 +1,7 @@
 # Source code
 src/**
 scripts/**
+!scripts/package-config.json
 
 # Config & tooling
 .vscode/**

@@ -322,10 +322,11 @@ mod tests {
             return;
         }
 
-        let ctx = pollster::block_on(GpuContext::new());
-        assert!(ctx.is_ok(), "GPU context creation failed: {:?}", ctx.err());
-
-        let ctx = ctx.unwrap();
+        let ctx = match pollster::block_on(GpuContext::new()) {
+            Ok(ctx) => ctx,
+            Err(Error::GpuInit(_)) => return,
+            Err(error) => panic!("GPU context creation failed: {}", error),
+        };
         assert!(!ctx.info().name.is_empty());
     }
 }

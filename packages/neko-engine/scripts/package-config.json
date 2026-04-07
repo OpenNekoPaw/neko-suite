@@ -1,0 +1,67 @@
+{
+  "ortVersion": "1.20.1",
+  "btbnTag": "latest",
+  "btbnVersion": "7.1",
+  "ffmpegLibs": [
+    "avcodec",
+    "avformat",
+    "avutil",
+    "swscale",
+    "swresample",
+    "avfilter"
+  ],
+  "targets": {
+    "darwin-arm64": {
+      "nodeFile": "neko-engine.darwin-arm64.node",
+      "ort": {
+        "archiveTemplate": "onnxruntime-osx-arm64-{ortVersion}.tgz",
+        "innerPathTemplate": "onnxruntime-osx-arm64-{ortVersion}/lib/libonnxruntime.{ortVersion}.dylib",
+        "destTemplate": "libonnxruntime-darwin-arm64.{ortVersion}.dylib",
+        "ext": "tgz"
+      },
+      "ffmpeg": {
+        "source": "homebrew",
+        "brewPrefix": "/opt/homebrew/opt/ffmpeg"
+      }
+    },
+    "darwin-x64": {
+      "nodeFile": "neko-engine.darwin-x64.node",
+      "ort": {
+        "archiveTemplate": "onnxruntime-osx-x86_64-{ortVersion}.tgz",
+        "innerPathTemplate": "onnxruntime-osx-x86_64-{ortVersion}/lib/libonnxruntime.{ortVersion}.dylib",
+        "destTemplate": "libonnxruntime-darwin-x64.{ortVersion}.dylib",
+        "ext": "tgz"
+      },
+      "ffmpeg": {
+        "source": "homebrew",
+        "brewPrefix": "/usr/local/opt/ffmpeg"
+      }
+    },
+    "linux-x64": {
+      "nodeFile": "neko-engine.linux-x64-gnu.node",
+      "ort": {
+        "archiveTemplate": "onnxruntime-linux-x64-{ortVersion}.tgz",
+        "innerPathTemplate": "onnxruntime-linux-x64-{ortVersion}/lib/libonnxruntime.so.{ortVersion}",
+        "destTemplate": "libonnxruntime-linux-x64.so.{ortVersion}",
+        "ext": "tgz"
+      },
+      "ffmpeg": {
+        "source": "btbn",
+        "archiveTemplate": "ffmpeg-n{btbnVersion}-{btbnTag}-linux64-gpl-shared-{btbnVersion}.tar.xz"
+      }
+    },
+    "win32-x64": {
+      "nodeFile": "neko-engine.win32-x64-msvc.node",
+      "ort": {
+        "archiveTemplate": "onnxruntime-win-x64-{ortVersion}.zip",
+        "innerPathTemplate": "onnxruntime-win-x64-{ortVersion}/lib/onnxruntime.dll",
+        "destTemplate": "onnxruntime-win-x64.dll",
+        "ext": "zip"
+      },
+      "ffmpeg": {
+        "source": "btbn",
+        "archiveTemplate": "ffmpeg-n{btbnVersion}-{btbnTag}-win64-gpl-shared-{btbnVersion}.zip"
+      }
+    }
+  }
+}

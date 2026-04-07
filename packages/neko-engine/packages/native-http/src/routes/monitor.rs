@@ -21,11 +21,32 @@ pub async fn handle_monitor(
     let audio_service = engine.audio_service();
 
     match audio_service.mic_capture().get_monitor_data(&stream_id) {
-        Some(data) => (StatusCode::OK, Json(serde_json::to_value(&data).unwrap())).into_response(),
+        Some(data) => match serde_json::to_value(&data) {
+            Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+            Err(error) => {
+                tracing::error!("Failed to serialize monitor data: {}", error);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
         None => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "Recording stream not found" })),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_handle_monitor_returns_not_found_for_unknown_stream() {
+        let engine = Arc::new(EngineApi::without_gpu().expect("create test engine"));
+        let response = handle_monitor(State(engine), Path("missing-stream".to_string()))
+            .await
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

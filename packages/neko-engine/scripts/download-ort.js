@@ -23,124 +23,158 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// Must match ort crate version in Cargo.toml
-const ORT_VERSION = '1.20.1';
-const BASE_URL = `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}`;
-const BIN_DIR = path.resolve(__dirname, '..', 'bin');
+const {
+  BIN_DIR,
+  config,
+  getCurrentPlatformKey,
+  getOrtBaseUrl,
+  getSupportedTargets,
+  getTargetConfig,
+} = require('./package-config');
 
-/** @type {Record<string, { archive: string; innerPath: string; dest: string; ext: 'tgz' | 'zip' }>} */
-const PLATFORMS = {
-  'darwin-arm64': {
-    archive: `onnxruntime-osx-arm64-${ORT_VERSION}.tgz`,
-    innerPath: `onnxruntime-osx-arm64-${ORT_VERSION}/lib/libonnxruntime.${ORT_VERSION}.dylib`,
-    dest: `libonnxruntime-darwin-arm64.${ORT_VERSION}.dylib`,
-    ext: 'tgz',
-  },
-  'darwin-x64': {
-    archive: `onnxruntime-osx-x86_64-${ORT_VERSION}.tgz`,
-    innerPath: `onnxruntime-osx-x86_64-${ORT_VERSION}/lib/libonnxruntime.${ORT_VERSION}.dylib`,
-    dest: `libonnxruntime-darwin-x64.${ORT_VERSION}.dylib`,
-    ext: 'tgz',
-  },
-  'linux-x64': {
-    archive: `onnxruntime-linux-x64-${ORT_VERSION}.tgz`,
-    innerPath: `onnxruntime-linux-x64-${ORT_VERSION}/lib/libonnxruntime.so.${ORT_VERSION}`,
-    dest: `libonnxruntime-linux-x64.so.${ORT_VERSION}`,
-    ext: 'tgz',
-  },
-  'win32-x64': {
-    archive: `onnxruntime-win-x64-${ORT_VERSION}.zip`,
-    innerPath: `onnxruntime-win-x64-${ORT_VERSION}/lib/onnxruntime.dll`,
-    dest: 'onnxruntime-win-x64.dll',
-    ext: 'zip',
-  },
-};
+const BASE_URL = getOrtBaseUrl();
 
 /**
  * @param {string} platformKey - e.g. 'darwin-arm64'
  */
 function downloadPlatform(platformKey) {
-  const cfg = PLATFORMS[platformKey];
-  const destPath = path.join(BIN_DIR, cfg.dest);
+  const cfg = getTargetConfig(platformKey);
+  if (!cfg) {
+    throw new Error(`Unknown platform: "${platformKey}". Valid: ${getSupportedTargets().join(', ')}`);
+  }
+
+  const destPath = path.join(BIN_DIR, cfg.ort.dest);
 
   if (fs.existsSync(destPath)) {
-    console.log(`  [skip]     ${cfg.dest}  (already present)`);
+    console.log(`  [skip]     ${cfg.ort.dest}  (already present)`);
     return;
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ort-'));
-  const archivePath = path.join(tmpDir, cfg.archive);
+  const archivePath = path.join(tmpDir, cfg.ort.archive);
 
   try {
-    // Download
-    console.log(`  [download] ${cfg.archive}`);
-    execFileSync('curl', ['-fsSL', '--retry', '3', '-o', archivePath, `${BASE_URL}/${cfg.archive}`], {
+    console.log(`  [download] ${cfg.ort.archive}`);
+    execFileSync('curl', ['-fsSL', '--retry', '3', '-o', archivePath, `${BASE_URL}/${cfg.ort.archive}`], {
       stdio: 'inherit',
     });
 
-    // Extract specific file
-    if (cfg.ext === 'tgz') {
-      execFileSync('tar', ['xzf', archivePath, '-C', tmpDir, cfg.innerPath], { stdio: 'inherit' });
-      fs.copyFileSync(path.join(tmpDir, cfg.innerPath), destPath);
+    if (cfg.ort.ext === 'tgz') {
+      execFileSync('tar', ['xzf', archivePath, '-C', tmpDir, cfg.ort.innerPath], { stdio: 'inherit' });
+      fs.copyFileSync(path.join(tmpDir, cfg.ort.innerPath), destPath);
     } else {
-      // zip — unzip -j strips directory structure, outputs directly to BIN_DIR
-      execFileSync('unzip', ['-j', '-o', archivePath, cfg.innerPath, '-d', BIN_DIR], {
+      execFileSync('unzip', ['-j', '-o', archivePath, cfg.ort.innerPath, '-d', BIN_DIR], {
         stdio: 'inherit',
       });
-      const extracted = path.join(BIN_DIR, path.basename(cfg.innerPath));
+      const extracted = path.join(BIN_DIR, path.basename(cfg.ort.innerPath));
       if (extracted !== destPath) {
         fs.renameSync(extracted, destPath);
       }
     }
 
-    console.log(`  [done]     ${cfg.dest}`);
+    console.log(`  [done]     ${cfg.ort.dest}`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
+/**
+ * @param {string[]} argv
+ * @returns {{ downloadAll: boolean; explicitPlatform: string | null; shouldClean: boolean }}
+ */
+function parseArgs(argv) {
+  const platformIdx = argv.indexOf('--platform');
+  return {
+    downloadAll: argv.includes('--all'),
+    explicitPlatform: platformIdx === -1 ? null : argv[platformIdx + 1] ?? null,
+    shouldClean: argv.includes('--clean'),
+  };
+}
 
-fs.mkdirSync(BIN_DIR, { recursive: true });
-
-const downloadAll = process.argv.includes('--all');
-const shouldClean = process.argv.includes('--clean');
-const platformIdx = process.argv.indexOf('--platform');
-const explicitPlatform = platformIdx !== -1 ? process.argv[platformIdx + 1] : null;
-const currentKey = `${process.platform}-${process.arch}`;
-
-let targets;
-if (downloadAll) {
-  targets = Object.keys(PLATFORMS);
-} else if (explicitPlatform) {
-  if (!(explicitPlatform in PLATFORMS)) {
-    console.error(`Unknown platform: "${explicitPlatform}". Valid: ${Object.keys(PLATFORMS).join(', ')}`);
-    process.exit(1);
+/**
+ * @param {{ downloadAll: boolean; explicitPlatform: string | null }} args
+ * @returns {string[]}
+ */
+function resolveTargets(args) {
+  if (args.downloadAll) {
+    return getSupportedTargets();
   }
-  targets = [explicitPlatform];
-} else {
-  targets = [currentKey].filter((k) => k in PLATFORMS);
+
+  if (args.explicitPlatform) {
+    if (!getTargetConfig(args.explicitPlatform)) {
+      throw new Error(`Unknown platform: "${args.explicitPlatform}". Valid: ${getSupportedTargets().join(', ')}`);
+    }
+    return [args.explicitPlatform];
+  }
+
+  const currentKey = getCurrentPlatformKey();
+  return getTargetConfig(currentKey) ? [currentKey] : [];
 }
 
-if (targets.length === 0) {
-  console.warn(`Warning: no ORT config for platform "${currentKey}". Skipping.`);
-  process.exit(0);
-}
+/**
+ * @param {string[]} targets
+ */
+function cleanOtherPlatforms(targets) {
+  const keepDests = new Set(
+    targets.map((target) => {
+      const cfg = getTargetConfig(target);
+      if (!cfg) {
+        throw new Error(`Unknown platform: "${target}"`);
+      }
+      return cfg.ort.dest;
+    }),
+  );
 
-// Clean other platforms' dylibs when --clean is specified
-if (shouldClean) {
-  const keepDests = new Set(targets.map((t) => PLATFORMS[t].dest));
-  for (const key of Object.keys(PLATFORMS)) {
-    const destPath = path.join(BIN_DIR, PLATFORMS[key].dest);
-    if (!keepDests.has(PLATFORMS[key].dest) && fs.existsSync(destPath)) {
+  for (const target of getSupportedTargets()) {
+    const cfg = getTargetConfig(target);
+    if (!cfg) {
+      continue;
+    }
+
+    const destPath = path.join(BIN_DIR, cfg.ort.dest);
+    if (!keepDests.has(cfg.ort.dest) && fs.existsSync(destPath)) {
       fs.unlinkSync(destPath);
-      console.log(`  [clean] ${PLATFORMS[key].dest}`);
+      console.log(`  [clean] ${cfg.ort.dest}`);
     }
   }
 }
 
-console.log(`Downloading ORT ${ORT_VERSION} for: ${targets.join(', ')}`);
-for (const t of targets) {
-  downloadPlatform(t);
+function main() {
+  fs.mkdirSync(BIN_DIR, { recursive: true });
+
+  const args = parseArgs(process.argv.slice(2));
+  const targets = resolveTargets(args);
+
+  if (targets.length === 0) {
+    console.warn(`Warning: no ORT config for platform "${getCurrentPlatformKey()}". Skipping.`);
+    return;
+  }
+
+  if (args.shouldClean) {
+    cleanOtherPlatforms(targets);
+  }
+
+  console.log(`Downloading ORT ${config.ortVersion} for: ${targets.join(', ')}`);
+  for (const target of targets) {
+    downloadPlatform(target);
+  }
+  console.log(`\nORT runtime libraries written to: ${BIN_DIR}`);
 }
-console.log(`\nORT dylibs written to: ${BIN_DIR}`);
+
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+  }
+}
+
+module.exports = {
+  cleanOtherPlatforms,
+  downloadPlatform,
+  main,
+  parseArgs,
+  resolveTargets,
+};

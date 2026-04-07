@@ -23,50 +23,17 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const ENGINE_DIR = path.resolve(__dirname, '..');
-const NAPI_DIR = path.join(ENGINE_DIR, 'packages', 'native-napi');
+const {
+  BTBN_BASE_URL,
+  NAPI_DIR,
+  config,
+  getCurrentPlatformKey,
+  getFfmpegLibs,
+  getSupportedTargets,
+  getTargetConfig,
+} = require('./package-config');
 
-// FFmpeg libraries to bundle (core set used by ffmpeg-next crate)
-const FFMPEG_LIBS = [
-  'avcodec',
-  'avformat',
-  'avutil',
-  'swscale',
-  'swresample',
-  'avfilter',
-];
-
-// BtbN FFmpeg version (must match what's used in Dockerfile / CI)
-const BTBN_TAG = 'latest';
-const BTBN_VERSION = '7.1';
-const BTBN_BASE = 'https://github.com/BtbN/FFmpeg-Builds/releases/download';
-
-// ── Platform configs ────────────────────────────────────────────────────────
-
-const PLATFORMS = {
-  'darwin-arm64': {
-    type: 'homebrew',
-    brewPrefix: '/opt/homebrew/opt/ffmpeg',
-    nodeFile: 'neko-engine.darwin-arm64.node',
-  },
-  'darwin-x64': {
-    type: 'homebrew',
-    brewPrefix: '/usr/local/opt/ffmpeg',
-    nodeFile: 'neko-engine.darwin-x64.node',
-  },
-  'linux-x64': {
-    type: 'btbn',
-    archive: `ffmpeg-n${BTBN_VERSION}-${BTBN_TAG}-linux64-gpl-shared-${BTBN_VERSION}.tar.xz`,
-    nodeFile: 'neko-engine.linux-x64-gnu.node',
-  },
-  'win32-x64': {
-    type: 'btbn',
-    archive: `ffmpeg-n${BTBN_VERSION}-${BTBN_TAG}-win64-gpl-shared-${BTBN_VERSION}.zip`,
-    nodeFile: 'neko-engine.win32-x64-msvc.node',
-  },
-};
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
+const FFMPEG_LIBS = getFfmpegLibs();
 
 function log(msg) {
   console.log(`  ${msg}`);
@@ -74,39 +41,36 @@ function log(msg) {
 
 /** Remove all bundled FFmpeg libs from NAPI_DIR */
 function cleanBundledLibs() {
-  const patterns = [/\.dylib$/, /\.so/, /avcodec.*\.dll$/, /avformat.*\.dll$/, /avutil.*\.dll$/, /swscale.*\.dll$/, /swresample.*\.dll$/, /avfilter.*\.dll$/];
-  for (const f of fs.readdirSync(NAPI_DIR)) {
-    if (patterns.some((p) => p.test(f))) {
-      fs.unlinkSync(path.join(NAPI_DIR, f));
-      log(`[clean] ${f}`);
+  const dllPatterns = FFMPEG_LIBS.map((lib) => new RegExp(`${lib}.*\\.dll$`));
+  const patterns = [/\.dylib$/, /\.so/, ...dllPatterns];
+
+  for (const entry of fs.readdirSync(NAPI_DIR)) {
+    if (patterns.some((pattern) => pattern.test(entry))) {
+      fs.unlinkSync(path.join(NAPI_DIR, entry));
+      log(`[clean] ${entry}`);
     }
   }
 }
 
-// ── macOS: copy from Homebrew + rewrite install names ───────────────────────
-
 function bundleMacOS(cfg) {
-  const libDir = path.join(cfg.brewPrefix, 'lib');
+  const libDir = path.join(cfg.ffmpeg.brewPrefix, 'lib');
 
   if (!fs.existsSync(libDir)) {
-    console.error(`ERROR: Homebrew FFmpeg not found at ${cfg.brewPrefix}`);
+    console.error(`ERROR: Homebrew FFmpeg not found at ${cfg.ffmpeg.brewPrefix}`);
     console.error('  Install: brew install ffmpeg');
     process.exit(1);
   }
 
   log(`[source] ${libDir}`);
 
-  // Find and copy versioned dylibs
   const copied = [];
   for (const lib of FFMPEG_LIBS) {
-    // Find the main versioned dylib (e.g. libavcodec.61.dylib)
-    const files = fs.readdirSync(libDir).filter((f) =>
-      f.startsWith(`lib${lib}.`) && f.endsWith('.dylib') && !f.endsWith('.dylib.dSYM')
-    );
+    const files = fs
+      .readdirSync(libDir)
+      .filter((entry) => entry.startsWith(`lib${lib}.`) && entry.endsWith('.dylib') && !entry.endsWith('.dylib.dSYM'));
 
-    // Pick the shortest versioned name (e.g. libavcodec.61.dylib over libavcodec.61.3.100.dylib)
-    const sorted = files.sort((a, b) => a.length - b.length);
-    const mainLib = sorted.find((f) => /^lib\w+\.\d+\.dylib$/.test(f)) || sorted[0];
+    const sorted = files.sort((left, right) => left.length - right.length);
+    const mainLib = sorted.find((entry) => /^lib\w+\.\d+\.dylib$/.test(entry)) || sorted[0];
 
     if (!mainLib) {
       console.error(`ERROR: lib${lib} not found in ${libDir}`);
@@ -120,7 +84,6 @@ function bundleMacOS(cfg) {
     log(`[copy]   ${mainLib}`);
   }
 
-  // Rewrite install names in the .node file
   const nodeFile = path.join(NAPI_DIR, cfg.nodeFile);
   if (fs.existsSync(nodeFile)) {
     log(`[patch]  ${cfg.nodeFile} — rewriting dylib paths to @loader_path/`);
@@ -130,7 +93,6 @@ function bundleMacOS(cfg) {
       try {
         execFileSync('install_name_tool', ['-change', oldPath, newPath, nodeFile], { stdio: 'pipe' });
       } catch {
-        // May fail if the old path doesn't match exactly; also try rpath form
         try {
           execFileSync('install_name_tool', ['-change', `@rpath/${lib}`, newPath, nodeFile], { stdio: 'pipe' });
         } catch {
@@ -140,15 +102,15 @@ function bundleMacOS(cfg) {
     }
   }
 
-  // Rewrite inter-library references in copied dylibs
   for (const lib of copied) {
     const libPath = path.join(NAPI_DIR, lib);
-    // Change the dylib's own id
     execFileSync('install_name_tool', ['-id', `@loader_path/${lib}`, libPath], { stdio: 'pipe' });
 
-    // Change references to other FFmpeg libs
     for (const otherLib of copied) {
-      if (otherLib === lib) continue;
+      if (otherLib === lib) {
+        continue;
+      }
+
       const oldRef = path.join(libDir, otherLib);
       const newRef = `@loader_path/${otherLib}`;
       try {
@@ -159,7 +121,6 @@ function bundleMacOS(cfg) {
     }
   }
 
-  // Ad-hoc codesign (required on macOS 11+)
   log('[sign]   ad-hoc codesigning modified files');
   if (fs.existsSync(nodeFile)) {
     execFileSync('codesign', ['--force', '--sign', '-', nodeFile], { stdio: 'pipe' });
@@ -171,43 +132,37 @@ function bundleMacOS(cfg) {
   return copied;
 }
 
-// ── Linux / Windows: download BtbN pre-built ────────────────────────────────
-
 function bundleBtbN(cfg, platform) {
-  const url = `${BTBN_BASE}/${BTBN_TAG}/${cfg.archive}`;
+  const archive = cfg.ffmpeg.archive;
+  const url = `${BTBN_BASE_URL}/${config.btbnTag}/${archive}`;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ffmpeg-'));
-  const archivePath = path.join(tmpDir, cfg.archive);
+  const archivePath = path.join(tmpDir, archive);
 
   try {
-    log(`[download] ${cfg.archive}`);
+    log(`[download] ${archive}`);
     execFileSync('curl', ['-fsSL', '--retry', '3', '-o', archivePath, url], { stdio: 'inherit' });
 
-    // Extract
     const extractDir = path.join(tmpDir, 'extracted');
     fs.mkdirSync(extractDir);
 
-    if (cfg.archive.endsWith('.tar.xz')) {
+    if (archive.endsWith('.tar.xz')) {
       execFileSync('tar', ['xJf', archivePath, '-C', extractDir, '--strip-components=1'], { stdio: 'inherit' });
     } else {
-      // zip (Windows)
       execFileSync('unzip', ['-o', archivePath, '-d', extractDir], { stdio: 'inherit' });
-      // zip may have a top-level directory
       const entries = fs.readdirSync(extractDir);
       if (entries.length === 1 && fs.statSync(path.join(extractDir, entries[0])).isDirectory()) {
         const inner = path.join(extractDir, entries[0]);
-        for (const f of fs.readdirSync(inner)) {
-          fs.renameSync(path.join(inner, f), path.join(extractDir, f));
+        for (const entry of fs.readdirSync(inner)) {
+          fs.renameSync(path.join(inner, entry), path.join(extractDir, entry));
         }
         fs.rmdirSync(inner);
       }
     }
 
-    // Find lib directory
     let libDir;
     if (fs.existsSync(path.join(extractDir, 'lib'))) {
       libDir = path.join(extractDir, 'lib');
     } else if (fs.existsSync(path.join(extractDir, 'bin'))) {
-      // Windows: DLLs are in bin/
       libDir = path.join(extractDir, 'bin');
     } else {
       console.error('ERROR: Cannot find lib/ or bin/ in extracted FFmpeg archive');
@@ -219,34 +174,25 @@ function bundleBtbN(cfg, platform) {
 
     for (const lib of FFMPEG_LIBS) {
       if (isWindows) {
-        // Windows: avcodec-61.dll pattern
-        const dll = fs.readdirSync(libDir).find((f) =>
-          f.startsWith(`${lib}-`) && f.endsWith('.dll')
-        );
+        const dll = fs.readdirSync(libDir).find((entry) => entry.startsWith(`${lib}-`) && entry.endsWith('.dll'));
         if (dll) {
           fs.copyFileSync(path.join(libDir, dll), path.join(NAPI_DIR, dll));
           copied.push(dll);
           log(`[copy]   ${dll}`);
         }
       } else {
-        // Linux: libavcodec.so.61 pattern
-        const soFiles = fs.readdirSync(libDir).filter((f) =>
-          f.startsWith(`lib${lib}.so`)
-        );
-        // Copy all symlink targets and symlinks
-        for (const so of soFiles) {
-          const src = path.join(libDir, so);
-          const dest = path.join(NAPI_DIR, so);
-          // Resolve symlinks — copy the actual file
+        const soFiles = fs.readdirSync(libDir).filter((entry) => entry.startsWith(`lib${lib}.so`));
+        for (const soFile of soFiles) {
+          const src = path.join(libDir, soFile);
+          const dest = path.join(NAPI_DIR, soFile);
           const realSrc = fs.realpathSync(src);
           fs.copyFileSync(realSrc, dest);
-          copied.push(so);
-          log(`[copy]   ${so}`);
+          copied.push(soFile);
+          log(`[copy]   ${soFile}`);
         }
       }
     }
 
-    // Linux: patch RPATH on .node file
     if (!isWindows) {
       const nodeFile = path.join(NAPI_DIR, cfg.nodeFile);
       if (fs.existsSync(nodeFile)) {
@@ -266,10 +212,7 @@ function bundleBtbN(cfg, platform) {
   }
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
-
 function main() {
-  // Parse args
   const args = process.argv.slice(2);
 
   if (args.includes('--clean')) {
@@ -279,29 +222,18 @@ function main() {
   }
 
   const platformIdx = args.indexOf('--platform');
-  const platformKey = platformIdx !== -1
-    ? args[platformIdx + 1]
-    : `${process.platform}-${process.arch}`;
-
-  const cfg = PLATFORMS[platformKey];
+  const platformKey = platformIdx !== -1 ? args[platformIdx + 1] ?? null : getCurrentPlatformKey();
+  const cfg = platformKey ? getTargetConfig(platformKey) : null;
   if (!cfg) {
     console.error(`Unknown platform: "${platformKey}"`);
-    console.error(`Valid platforms: ${Object.keys(PLATFORMS).join(', ')}`);
+    console.error(`Valid platforms: ${getSupportedTargets().join(', ')}`);
     process.exit(1);
   }
 
   console.log(`Bundling FFmpeg libs for: ${platformKey}`);
-
-  // Clean previous libs
   cleanBundledLibs();
 
-  let copied;
-  if (cfg.type === 'homebrew') {
-    copied = bundleMacOS(cfg);
-  } else {
-    copied = bundleBtbN(cfg, platformKey);
-  }
-
+  const copied = cfg.ffmpeg.source === 'homebrew' ? bundleMacOS(cfg) : bundleBtbN(cfg, platformKey);
   console.log(`\nBundled ${copied.length} FFmpeg libraries to: ${NAPI_DIR}`);
 }
 

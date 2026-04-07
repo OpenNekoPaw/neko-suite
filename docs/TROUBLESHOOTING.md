@@ -508,8 +508,8 @@
 | NKE-006 | P1 | fixed | 分层迁移未收口，`native-core` 仍保留历史 HTTP/FrameServer 残留 |
 | NKE-007 | P1 | fixed | 已暴露 `documents:probe` 能力，但实现仍为占位返回 |
 | NKE-008 | P1 | fixed | 测试体系未进入标准流水线，关键导出/协议链路缺少自动回归 |
-| NKE-009 | P1 | open | 发布链路依赖手工平台产物和外部动态库，跨平台打包稳定性偏弱 |
-| NKE-010 | P2 | open | 代码体量、残留文件与生产路径 `unwrap/expect` 偏多，维护风险累积 |
+| NKE-009 | P1 | fixed | 发布链路依赖手工平台产物和外部动态库，跨平台打包稳定性偏弱 |
+| NKE-010 | P2 | fixed | 代码体量、残留文件与生产路径 `unwrap/expect` 偏多，维护风险累积 |
 
 ### 问题详情（追加）
 
@@ -631,10 +631,18 @@
 #### NKE-009：发布链路可重复性不足（P1）
 - 影响：平台包依赖手工准备 `.node`、ORT 和 FFmpeg 动态库，跨平台发布容易出现“本地可打、CI/用户环境不可复现”。
 - 定位：
-  - `packages/neko-engine/scripts/package-platform.sh`
+  - `packages/neko-engine/scripts/package-platform.js`
   - `packages/neko-engine/scripts/bundle-ffmpeg.js`
-  - `packages/neko-engine/packages/native-napi/package.json`
+  - `packages/neko-engine/scripts/download-ort.js`
+  - `packages/neko-engine/packages/extension/src/mediaEngine/OrtInitializer.ts`
 - 建议：将“原生产物构建、动态库打包、平台裁剪、VSIX 产出”串成单一可重复流水线，并尽量减少人工前置条件。
+- 2026-04-08 处理结果：
+  - 已新增 `scripts/package-config.json` / `scripts/package-config.js`，统一平台 key、`.node` 文件名、ORT 产物命名与 FFmpeg 来源，消除 `download-ort.js`、`bundle-ffmpeg.js`、`OrtInitializer.ts` 之间的重复平台事实。
+  - 已新增 `scripts/package-platform.js` 作为单一 Node 打包入口，统一执行 native binary 校验、当前主机平台缺失时的自动 `build:napi`、平台裁剪、ORT 下载、FFmpeg 打包、compile 与 VSIX 产物校验。
+  - 已将 `package-platform.sh` 收敛为兼容转发层，`package.json` 的 `package:platform` 默认改走新的 Node 流水线。
+  - 已新增脚本级自动测试并接入 `pnpm --filter neko-engine test`，覆盖共享配置解析、native binary 自动构建决策与打包步骤编排顺序。
+  - 已完成一次真实主机平台打包验证，产出 `neko-engine-darwin-arm64-0.0.1.vsix`；VSIX 已包含 `bin/libonnxruntime-darwin-arm64.1.20.1.dylib`、`packages/native-napi/*.dylib`、`neko-engine.darwin-arm64.node` 与 `scripts/package-config.json`。
+  - 当前打包链路已具备单入口、可验证、可重复的收口路径；跨平台仅保留 native binary 预构建这一必要前置条件，本项调整为 `fixed`。
 
 #### NKE-010：维护性与健壮性信号偏弱（P2）
 - 影响：巨型文件、备份文件、临时调试文件和生产路径上的 `unwrap/expect` 会持续抬高维护成本与运行期崩溃风险。
@@ -652,6 +660,12 @@
   - 拆分巨型模块；
   - 清理 `.bak` 与临时测试文件；
   - 优先处理生产路径 `unwrap/expect`，避免单点 panic 影响整条引擎链路。
+- 2026-04-08 处理结果：
+  - 已删除 `timeline.rs.bak` 与 `test_stream.html` / `test_devices.html` / `test_diff.html` 等未被引用的历史调试文件。
+  - 已将 `timeline` 的增量操作应用逻辑拆到 `src/domain/timeline/apply.rs`，并把 `timeline`、`gpu_export_pipeline`、`services/impls/timeline` 的测试拆到各自子模块，三处核心文件总行数从 `5288` 降到 `4458`。
+  - 已移除 `preview_file.rs` 与 `monitor.rs` 生产请求路径上的显式 `unwrap`，注册表锁中毒或序列化失败时改为返回 `500`，不再直接 panic。
+  - 已补 `native-http` 最小单测，覆盖 `PreviewFileRegistry`、`parse_byte_range` 与 monitor 缺省路径。
+  - 本批次定位的维护性与健壮性信号已完成收口，本项调整为 `fixed`。
 
 ### 本批次验证信息（追加）
 
@@ -661,16 +675,24 @@
 - 结果：通过（`native-core` 已不再依赖 HTTP 栈转移的 `tokio` feature）
 - 命令：`cargo check -p neko-native-http --quiet`
 - 结果：通过（传输层边界收敛后仍可独立完成编译检查）
+- 命令：`cargo test -p neko-native-http --quiet`
+- 结果：通过（13 个测试通过，覆盖路由与注册表基础行为）
+- 命令：`cargo test -p neko-native-core --quiet`
+- 结果：通过（355 个测试通过；GPU 环境测试已改为无适配器时跳过）
+- 命令：`cd packages/neko-engine && cargo test --quiet`
+- 结果：通过（workspace 各 crate 测试通过，含 9 个忽略测试）
 - 命令：`pnpm --filter neko-engine typecheck`
 - 结果：通过（extension TypeScript 类型检查已纳入独立门禁）
 - 命令：`pnpm --filter neko-engine test`
-- 结果：通过（5 个测试文件 / 12 个用例）
+- 结果：通过（extension `vitest` 5 个测试文件 / 12 个用例 + 脚本 `node:test` 5 个用例）
+- 命令：`pnpm --filter neko-engine package:platform -- --target darwin-arm64 --skip-native-build`
+- 结果：通过（真实打包产出 `neko-engine-darwin-arm64-0.0.1.vsix`，大小 21.03 MB）
 - 命令：`find packages -type f \\( -name '*.rs' -o -name '*.ts' -o -name '*.js' \\) | xargs wc -l | sort -nr | head -n 25`
 - 结果：发现多个超大文件（`timeline.rs`、`gpu_export_pipeline.rs`、`timeline.rs` 实现层等）
 - 命令：`find packages/extension/src -type f \\( -iname '*test*' -o -iname '*spec*' \\)`
-- 结果：仅发现手工运行型测试脚本，未接入标准 `vitest` 流程
-- 命令：`rg -o "unwrap\\(|expect\\(" packages --glob '!**/*.bak' | wc -l`
-- 结果：共 390 处（含测试代码；生产路径亦可见多处 `unwrap/expect`）
+- 结果：共 7 个测试/脚本文件，其中 5 个 `.test.ts` 已纳入标准 `vitest` 流程，2 个手工脚本保留为补充验证入口
+- 命令：`rg -o "unwrap\\(|expect\\(" packages/neko-engine/packages/native-core packages/neko-engine/packages/native-http --glob '!**/*.bak' | wc -l`
+- 结果：共 253 处（含大量测试代码；本批次定位的 `native-http` 生产路由已完成收口）
 
 ---
 
@@ -1285,7 +1307,6 @@
 优先问题：
 
 - `neko-assets`：`NKAS-001`、`NKAS-002`、`NKAS-003`、`NKAS-004`、`NKAS-007`
-- `neko-engine`：`NKE-004`、`NKE-005`、`NKE-006`、`NKE-007`、`NKE-009`
 - `neko-market`：`NKM-006`、`NKM-007`
 - `neko-preview`：`NKP-004`、`NKP-005`
 
@@ -1315,13 +1336,7 @@
 
 #### `neko-engine`
 
-1. `NKE-001`
-2. `NKE-002`
-3. `NKE-003`
-4. `NKE-008`
-5. `NKE-004`、`NKE-005`、`NKE-006`
-6. `NKE-007`、`NKE-009`
-7. `NKE-010`
+本轮 `NKE-001` ~ `NKE-010` 已完成收口，后续以新增问题单为准。
 
 #### `neko-market`
 
@@ -1536,7 +1551,8 @@
 - [x] 修复 `NKE-005`：统一 N-API 单一引擎实例入口
 - [x] 修复 `NKE-006`：收敛 `native-core` 中历史 HTTP/FrameServer 残留
 - [x] 修复 `NKE-007`：移除或明确标注占位接口
-- [ ] 修复 `NKE-009`：串联可重复的原生产物与发布流水线
+- [x] 修复 `NKE-009`：串联可重复的原生产物与发布流水线
+- [x] 修复 `NKE-010`：清理死文件并收敛维护性/健壮性风险
 - [ ] 修复 `NKM-006`：补齐许可与认证闭环
 - [ ] 修复 `NKM-007`：统一 registry 与 suite version 口径
 - [ ] 修复 `NKP-004`：把配置项真正接线到 provider/webview
@@ -1568,7 +1584,7 @@
 - [ ] `pnpm build` 通过
 - [ ] `pnpm test` 通过
 - [ ] `pnpm check` 通过
-- [ ] `cd packages/neko-engine && cargo test` 通过
+- [x] `cd packages/neko-engine && cargo test` 通过
 - [ ] 所有 P0 问题状态更新为 `fixed` 或 `verified`
 - [ ] 阶段性修复对应测试已落库，而不是停留在手工验证
 - [ ] 文档中的能力宣称、架构描述、配置说明与当前实现一致

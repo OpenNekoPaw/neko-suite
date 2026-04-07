@@ -105,3 +105,14 @@ cargo build --release                    # 编译 Rust native-core
 cd packages/native-napi && pnpm build    # 编译 N-API 绑定
 pnpm build                               # 编译 TypeScript extension
 ```
+
+### 平台打包
+
+```bash
+pnpm package:platform -- --target darwin-arm64
+pnpm package:platform -- --target linux-x64 --skip-native-build
+```
+
+- `package:platform` 会统一执行目标平台 `.node` 校验、ORT 下载、FFmpeg 打包、平台裁剪、extension compile 与 VSIX 产物校验。
+- 当前主机平台若缺少对应 `.node`，脚本会自动调用 `packages/native-napi` 的 `build:napi`。
+- 非当前主机平台仍需要预先准备对应 `.node`，再配合 `--skip-native-build` 进入打包流水线。
