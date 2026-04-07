@@ -271,8 +271,11 @@ mod tests {
         svc.register_model("whisper", &model, "onnx", "whisper")
             .expect("register whisper model");
 
-        let text = svc.transcribe("whisper", &audio).expect("transcribe");
-        assert!(!text.is_empty(), "transcription must not be empty");
+        let result = svc.transcribe("whisper", &audio).expect("transcribe");
+        assert!(
+            !result.text.trim().is_empty(),
+            "transcription must not be empty"
+        );
     }
 
     /// Idle eviction wires through the service: after inference, a session

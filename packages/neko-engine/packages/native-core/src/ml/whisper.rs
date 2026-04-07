@@ -223,7 +223,7 @@ fn log_mel_spectrogram(audio: &[f32]) -> Array2<f32> {
             .iter()
             .zip(window.iter())
             .map(|(&s, &w)| Complex { re: s * w, im: 0.0 })
-            .chain(std::iter::repeat(Complex::default()).take(N_FFT - WIN_LENGTH))
+            .chain(std::iter::repeat_n(Complex::default(), N_FFT - WIN_LENGTH))
             .collect();
         fft.process(&mut buf);
         for k in 0..n_freqs {
@@ -317,7 +317,7 @@ fn run_encoder(
     // Reshape to [1, N_MELS, N_FRAMES].
     let mel3 = mel
         .view()
-        .into_shape((1, N_MELS, N_FRAMES))
+        .into_shape_with_order((1, N_MELS, N_FRAMES))
         .map_err(|e| Error::Other(format!("Mel reshape: {}", e)))?
         .into_dyn()
         .into_owned();
@@ -357,10 +357,9 @@ fn decode(
 
     for _ in 0..MAX_TOKENS {
         let seq_len = tokens.len();
-        let ids_arr =
-            Array2::from_shape_vec((1, seq_len), tokens.iter().map(|&t| t as i64).collect())
-                .map_err(|e| Error::Other(format!("Token array: {}", e)))?
-                .into_dyn();
+        let ids_arr = Array2::from_shape_vec((1, seq_len), tokens.clone())
+            .map_err(|e| Error::Other(format!("Token array: {}", e)))?
+            .into_dyn();
 
         let ids_tensor = OrtTensor::from_array(ids_arr)
             .map_err(|e| Error::Other(format!("Create ids tensor: {}", e)))?;
@@ -436,7 +435,7 @@ fn lang_to_token_id(lang: &str) -> i64 {
 /// Falls back to `WHISPER_DECODER_PATH` env var.
 fn find_decoder_model(encoder_session: &ort::session::Session) -> Result<String> {
     // ort 2.0 exposes model path via metadata.
-    if let Some(meta) = encoder_session.metadata().ok() {
+    if let Ok(meta) = encoder_session.metadata() {
         if let Some(model_path) = meta.description() {
             // description may contain "path:<absolute_path>" or just the path.
             let base = extract_model_dir(&model_path);
@@ -474,7 +473,7 @@ fn extract_model_dir(path: &str) -> String {
 ///
 /// vocab.json format: `{ "token_string": token_id, ... }` (HuggingFace convention).
 fn load_vocab_near(encoder_session: &ort::session::Session) -> Result<HashMap<i64, String>> {
-    let vocab_path = if let Some(meta) = encoder_session.metadata().ok() {
+    let vocab_path = if let Ok(meta) = encoder_session.metadata() {
         if let Some(model_path) = meta.description() {
             let base = extract_model_dir(&model_path);
             let p = format!("{}/vocab.json", base);
@@ -601,7 +600,7 @@ fn bytes_to_unicode() -> HashMap<char, u8> {
     let mut map = HashMap::new();
     let mut n = 0u32;
     for b in 0u8..=255 {
-        let ch = if (b >= b'!' && b <= b'~') || (b >= 0xA1 && b != 0xAD) {
+        let ch = if (b'!'..=b'~').contains(&b) || ((0xA1..=u8::MAX).contains(&b) && b != 0xAD) {
             b as char
         } else {
             // Map to high private-use unicode range starting at U+0100.

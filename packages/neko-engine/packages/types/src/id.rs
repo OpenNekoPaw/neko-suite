@@ -127,7 +127,7 @@ impl ResourceType {
             "mp4" | "mov" | "avi" | "mkv" | "webm" | "m4v" | "wmv" | "flv" => Self::Video,
             "mp3" | "wav" | "aac" | "flac" | "ogg" | "m4a" | "wma" => Self::Audio,
             "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tiff" | "psd" => Self::Image,
-            "jvi" => Self::Timeline,
+            "jvi" | "nkv" => Self::Timeline,
             _ => Self::Video, // Default to video
         }
     }

@@ -93,8 +93,8 @@ fn denoise_tiled(
     let (src_w, src_h) = (img.width(), img.height());
     let mut output = image::RgbImage::new(src_w, src_h);
     let step = TILE_SIZE - 2 * TILE_PAD;
-    let x_count = (src_w + step - 1) / step;
-    let y_count = (src_h + step - 1) / step;
+    let x_count = src_w.div_ceil(step);
+    let y_count = src_h.div_ceil(step);
 
     for ty in 0..y_count {
         for tx in 0..x_count {

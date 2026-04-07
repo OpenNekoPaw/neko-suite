@@ -4,8 +4,6 @@ use crate::error::Result;
 
 #[cfg(feature = "onnx")]
 use crate::ml;
-#[cfg(feature = "onnx")]
-use crate::ml::ModelInfo;
 
 /// ML service interface for model management and inference.
 ///

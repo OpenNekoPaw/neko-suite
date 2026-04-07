@@ -83,7 +83,7 @@ pub fn encode_text(session: &mut ort::session::Session, token_ids: &[i32]) -> Re
     }
     // Reshape to [1, seq_len] as most CLIP text encoders expect.
     let tokens_2d = tokens
-        .into_shape((1, seq_len))
+        .into_shape_with_order((1, seq_len))
         .map_err(|e| Error::Other(format!("Token reshape: {}", e)))?
         .into_dyn();
 
