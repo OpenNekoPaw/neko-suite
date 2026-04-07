@@ -48,14 +48,13 @@ impl Controller for DocumentsController {
         match action {
             "probe" => {
                 let opts: ProbeOptions = serde_json::from_value(options).unwrap_or_default();
-                let path = opts.path.ok_or_else(|| {
+                let _path = opts.path.ok_or_else(|| {
                     ApiError::InvalidRequest("path required for documents:probe".to_string())
                 })?;
 
-                // TODO(P1): implement document probing (format detection, metadata extraction)
-                Ok(ActionResponse::ok(
-                    "",
-                    serde_json::json!({ "path": path, "status": "not_implemented" }),
+                Err(ApiError::ServiceError(
+                    "documents:probe is not implemented yet; this action should be treated as experimental"
+                        .to_string(),
                 ))
             }
             _ => Err(ApiError::ServiceError(format!(
@@ -98,6 +97,27 @@ mod tests {
         let result = controller.handle("probe", None, Value::Null, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("path required"));
+    }
+
+    #[tokio::test]
+    async fn test_probe_returns_explicit_not_implemented_error() {
+        let controller = DocumentsController::new();
+        let result = controller
+            .handle(
+                "probe",
+                None,
+                serde_json::json!({ "path": "/tmp/demo.pdf" }),
+                None,
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("documents:probe is not implemented yet")
+        );
     }
 
     #[test]

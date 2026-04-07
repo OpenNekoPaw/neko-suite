@@ -5,7 +5,7 @@
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Rust 媒体引擎（当前主路径为进程内 N-API 单例）+ 可选嵌入式 HTTP 服务 + TypeScript Extension
+- 架构：Rust 全局单例引擎 + N-API 控制命令 + WebSocket/HTTP 数据传输 + TypeScript Extension
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
@@ -36,7 +36,7 @@ native-core (Rust)
   ├── encoder/       → 硬件编码器、异步导出管线
   ├── animation/     → 关键帧、缓动、时间轴插值
   ├── audio/         → 音频编解码、混音、响度分析（ITU-R BS.1770-4）
-  ├── frame_server/  → HTTP 帧服务、媒体探测
+  ├── preview/       → 预览流生成管线（供 HTTP/WebSocket 数据面传输）
   ├── export/        → GPU 导出管线、音视频混流
   └── jvi/           → JVI 项目格式解析
 
@@ -66,6 +66,8 @@ packages/
 ### 当前生命周期语义
 
 - `native-napi` 通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- 控制面走 N-API：命令分发、状态查询、任务控制等控制命令由 Extension Host 直接调用 Rust 单例。
+- 数据面走 HTTP/WebSocket：流媒体和 frame server 通过嵌入式 HTTP/WebSocket 服务向外提供数据传输能力。
 - `neko.engine.start` / `neko.engine.stop` 当前语义应理解为“连接 / 断开 Extension 会话中的引擎包装层”。
 - `stop` 会释放 TypeScript 包装层和嵌入式 frame server，不会真正销毁底层 Rust 单例。
 - 若后续需要真实 `shutdown/reset`，应先在 Rust 侧补明确能力，再恢复“启动/停止引擎”的产品语义。
@@ -87,7 +89,7 @@ packages/
 | `wgpu` | 跨平台 GPU 计算 |
 | `ffmpeg-next` | 编解码 |
 | `tokio` | 异步运行时 |
-| `axum` | HTTP/WebSocket |
+| `axum` | `native-http` 的 HTTP/WebSocket 服务 |
 | `napi-rs` | Node.js 绑定 |
 | `ebur128` | ITU-R BS.1770-4 响度测量 |
 | `bevy_ecs` | 3D/2D 场景 Entity-Component-System |

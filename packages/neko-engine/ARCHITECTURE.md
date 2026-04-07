@@ -6,7 +6,12 @@
 
 ## 系统定位
 
-neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extension Host 内通过 `native-napi` 访问 Rust `EngineApi` 单例，并按需启动嵌入式 HTTP/WebSocket 服务。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
+neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extension Host 内通过 `native-napi` 访问 Rust `EngineApi` 全局单例，并按需启动嵌入式 HTTP/WebSocket 服务。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
+
+控制面与数据面边界如下：
+
+- 控制面：N-API。命令分发、任务控制、状态查询等控制命令通过 `NativeEngine` 直接调用 Rust 单例。
+- 数据面：HTTP/WebSocket。流媒体、frame server、预览文件服务等数据传输通过嵌入式 HTTP/WebSocket 服务暴露。
 
 ---
 
@@ -87,7 +92,6 @@ packages/neko-engine/
 │  │    animation/ — 关键帧插值 + 缓动函数          │    │
 │  │    domain/    — 领域模型（Timeline/Transform/Loudness）│    │
 │  │    services/  — 服务 trait（IVideo/IAudio/IExport/IScene）│
-│  │    frame_server/ — HTTP 帧服务 + 媒体探测      │    │
 │  └───────────────────────────────────────────────┘    │
 │                                                       │
 │  ┌─ Shared Types ────────────────────────────────┐    │
@@ -110,7 +114,7 @@ native-cli ──→ native-http ──→ native-api ──→ native-core ─�
                                                   ▲
                                             native-puppet
 
-native-napi ──→ native-core + types
+native-napi ──→ native-api + native-http + native-core + types
 
 extension (TS) ──→ native-napi (N-API 绑定)
 ```
@@ -127,7 +131,7 @@ extension (TS) ──→ native-napi (N-API 绑定)
 Extension Host
   └─ NativeMediaEngine（TS wrapper）
        └─ native-napi（C FFI + napi-rs）
-            └─ native-core 函数
+            └─ EngineApi / embedded native-http
 ```
 
 适用于低延迟同步/异步操作：probe、extract frame、generate waveform。
@@ -145,6 +149,7 @@ EngineClient（@neko/neko-client）
 ### 生命周期说明
 
 - `native-napi` 当前通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- `NativeEngine` 与 bridge 函数都必须复用同一个全局单例入口，避免出现两套 `EngineApi` 状态。
 - `MediaEngineManager.disposeEngines()` 仅释放 TypeScript 包装层，不会真正销毁 Rust 引擎单例。
 - `stopFrameServer()` 只影响嵌入式 HTTP/WebSocket 服务，不代表底层引擎已重建或退出。
 - 若后续需要真正的 `stop/start/restart`，必须先在 Rust 侧提供显式 `shutdown/reset` 契约。

@@ -18,9 +18,22 @@ use neko_types::{ActionRequest, EngineConfig};
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
 
+pub(crate) fn init_tracing() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into()),
+        )
+        .try_init();
+}
+
+pub(crate) fn shared_engine_cell() -> &'static OnceCell<Arc<EngineApi>> {
+    &ENGINE
+}
+
 /// Get or initialize the global engine instance with optional config path
-async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc<EngineApi>> {
-    ENGINE
+pub(crate) async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc<EngineApi>> {
+    shared_engine_cell()
         .get_or_try_init(|| async {
             let config = EngineConfig::load(
                 config_path
@@ -39,6 +52,10 @@ async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc
         })
         .await
         .cloned()
+}
+
+pub(crate) async fn get_engine() -> napi::Result<Arc<EngineApi>> {
+    get_engine_with_config(None).await
 }
 
 /// Internal state for the embedded HTTP/WebSocket server
@@ -68,13 +85,7 @@ impl NativeEngine {
     ///   If omitted, loads from ~/.neko/engine.toml and .neko/engine.toml.
     #[napi(factory)]
     pub async fn create(config_path: Option<String>) -> napi::Result<Self> {
-        // Initialize tracing (only once)
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::from_default_env()
-                    .add_directive(tracing::Level::INFO.into()),
-            )
-            .try_init();
+        init_tracing();
 
         tracing::info!("Creating NativeEngine...");
 
@@ -398,8 +409,6 @@ impl NativeEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     async fn test_native_engine_creation() {
         // Note: This test requires GPU, may fail in CI

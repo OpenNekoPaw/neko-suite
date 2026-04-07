@@ -16,35 +16,17 @@
 
 use napi_derive::napi;
 use serde_json::json;
-use std::sync::Arc;
-use tokio::sync::OnceCell;
-
-use neko_native_api::EngineApi;
 use neko_types::ActionRequest;
 
-/// Global engine instance (shared with engine.rs)
-///
-/// Both NativeEngine and bridge functions share the same EngineApi singleton.
-static BRIDGE_ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
-
 /// Get or initialize the global engine instance for bridge functions
-async fn get_bridge_engine() -> napi::Result<Arc<EngineApi>> {
-    BRIDGE_ENGINE
-        .get_or_try_init(|| async {
-            // Initialize tracing (only once, safe to call multiple times)
-            let _ = tracing_subscriber::fmt()
-                .with_env_filter(
-                    tracing_subscriber::EnvFilter::from_default_env()
-                        .add_directive(tracing::Level::INFO.into()),
-                )
-                .try_init();
+async fn get_bridge_engine() -> napi::Result<std::sync::Arc<neko_native_api::EngineApi>> {
+    crate::engine::init_tracing();
+    crate::engine::get_engine().await
+}
 
-            EngineApi::new().await.map(Arc::new).map_err(|e| {
-                napi::Error::from_reason(format!("Failed to initialize bridge engine: {}", e))
-            })
-        })
-        .await
-        .cloned()
+#[cfg(test)]
+fn bridge_engine_cell() -> &'static tokio::sync::OnceCell<std::sync::Arc<neko_native_api::EngineApi>> {
+    crate::engine::shared_engine_cell()
 }
 
 /// Helper: dispatch an ActionRequest and return JSON string
@@ -274,4 +256,17 @@ pub async fn bridge_encode_jpeg(
     }));
 
     dispatch_to_json(request).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bridge_and_native_engine_share_the_same_singleton_cell() {
+        let native_ptr = crate::engine::shared_engine_cell() as *const _;
+        let bridge_ptr = bridge_engine_cell() as *const _;
+
+        assert_eq!(native_ptr, bridge_ptr);
+    }
 }

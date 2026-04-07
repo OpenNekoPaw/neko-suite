@@ -8,7 +8,8 @@ use super::FrameData;
 
 /// Per-stream entry — each stream has its own broadcast channel
 ///
-/// This replaces the global `broadcast::Sender<FrameData>` in frame_server
+/// This replaces the older shared broadcast channel used by the legacy
+/// in-core frame streaming path.
 #[derive(Debug)]
 pub struct StreamEntry {
     /// Unique stream ID

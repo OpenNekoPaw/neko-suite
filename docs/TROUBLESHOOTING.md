@@ -1,6 +1,6 @@
 # NekoCut 统一排错文档
 
-最后更新：2026-04-07
+最后更新：2026-04-08
 维护范围：`packages/neko-cut`（`extension + webview`）
 
 ## 使用说明
@@ -503,11 +503,11 @@
 | NKE-001 | P0 | fixed | 引擎生命周期语义不闭合，`stop/start` 与 Rust 单例模型冲突 |
 | NKE-002 | P0 | fixed | `frameServerPort` 停止引擎后未失效，存在陈旧端口返回风险 |
 | NKE-003 | P0 | fixed | TS 声明与 N-API 实际签名漂移，且主流程缺少类型校验门禁 |
-| NKE-004 | P1 | open | 架构文档宣称“独立 sidecar”，实现主路径实际是进程内 N-API |
-| NKE-005 | P1 | open | `native-napi` 同时维护两套全局引擎入口，存在双实例/双状态风险 |
-| NKE-006 | P1 | open | 分层迁移未收口，`native-core` 仍保留历史 HTTP/FrameServer 残留 |
-| NKE-007 | P1 | open | 已暴露 `documents:probe` 能力，但实现仍为占位返回 |
-| NKE-008 | P1 | open | 测试体系未进入标准流水线，关键导出/协议链路缺少自动回归 |
+| NKE-004 | P1 | fixed | 架构文档宣称“独立 sidecar”，实现主路径实际是进程内 N-API |
+| NKE-005 | P1 | fixed | `native-napi` 同时维护两套全局引擎入口，存在双实例/双状态风险 |
+| NKE-006 | P1 | fixed | 分层迁移未收口，`native-core` 仍保留历史 HTTP/FrameServer 残留 |
+| NKE-007 | P1 | fixed | 已暴露 `documents:probe` 能力，但实现仍为占位返回 |
+| NKE-008 | P1 | in_progress | 测试体系未进入标准流水线，关键导出/协议链路缺少自动回归 |
 | NKE-009 | P1 | open | 发布链路依赖手工平台产物和外部动态库，跨平台打包稳定性偏弱 |
 | NKE-010 | P2 | open | 代码体量、残留文件与生产路径 `unwrap/expect` 偏多，维护风险累积 |
 
@@ -565,6 +565,9 @@
 - 建议：统一文档口径，明确当前主路径到底是：
   - “进程内 N-API 引擎 + 可选嵌入式 HTTP 服务”；还是
   - “真正独立 sidecar 进程 + HTTP/WebSocket 主通道”。
+- 2026-04-08 处理结果：
+  - 已明确当前口径为“Rust 全局单例 + N-API 控制命令 + WebSocket/HTTP 数据传输”。
+  - 已在 `README.md` 与 `ARCHITECTURE.md` 中补充控制面 / 数据面边界说明。
 
 #### NKE-005：N-API 双入口状态模型不清晰（P1）
 - 影响：`NativeEngine` 与 bridge 函数看似共享同一引擎，实际各自维护独立 `OnceCell`，后续若 bridge 被消费，可能产生两套 `EngineApi` 状态。
@@ -572,6 +575,10 @@
   - `packages/neko-engine/packages/native-napi/src/engine.rs`
   - `packages/neko-engine/packages/native-napi/src/bridge.rs`
 - 建议：统一为单一引擎实例入口；若保留 bridge，需明确其与 `NativeEngine` 的共享/隔离策略并补回归测试。
+- 2026-04-08 当前进展：
+  - 已移除 bridge 侧独立全局入口，改为直接复用 `engine.rs` 的共享单例初始化函数。
+  - 已新增“不初始化 GPU 也能成立”的最小回归测试，验证 bridge 与 `NativeEngine` 复用同一 `OnceCell` 入口。
+  - Rust 侧 `cargo test -p neko-native-napi bridge_and_native_engine_share_the_same_singleton_cell` 与 `cargo check -p neko-native-napi` 已通过。
 
 #### NKE-006：分层迁移未收口（P1）
 - 影响：`native-core` 同时承载核心媒体能力和历史 HTTP/FrameServer 残留，边界模糊，增加编译依赖与理解成本。
@@ -580,6 +587,12 @@
   - `packages/neko-engine/packages/native-core/src/frame_server/mod.rs`
   - `packages/neko-engine/packages/native-core/Cargo.toml`
 - 建议：将 HTTP 责任明确收敛到 `native-http`，清理 `native-core` 中的壳模块与残留依赖，避免继续形成“核心层夹带传输层”的架构漂移。
+- 2026-04-08 处理结果：
+  - 已从 `native-core` 导出面移除仅剩说明文字的 `frame_server` 壳模块。
+  - 已从 `native-core/Cargo.toml` 删除未再被源码引用的 HTTP/WebSocket 依赖，传输层依赖收敛回 `native-http`。
+  - 已为 `native-core` 显式声明 `tokio` 的 `macros/time` 能力，避免继续依赖 HTTP 栈间接带来的运行时 feature。
+  - 已同步清理相关架构文档描述与遗留注释，避免继续把 `frame_server` 视为 `native-core` 模块。
+  - `cargo check -p neko-native-core --quiet` 与 `cargo check -p neko-native-http --quiet` 已通过。
 
 #### NKE-007：对外能力存在占位接口（P1）
 - 影响：接口已经暴露给上层，但实际只返回 `not_implemented`，容易形成“可见不可用”的集成错觉。
@@ -588,17 +601,29 @@
 - 建议：在功能未完成前：
   - 方案 A：从动作注册和文档中移除；
   - 方案 B：保留但标记为实验性，并返回明确错误码而非静态占位成功响应。
+- 2026-04-08 处理结果：
+  - 已改为返回明确 `ServiceError`，不再伪造成功响应。
+  - 已补最小单元测试，确保 `documents:probe` 在未实现阶段表现为显式失败。
 
 #### NKE-008：测试体系未覆盖关键主链路（P1）
 - 影响：导出、NativeEngine 协议、Extension 命令桥接等高风险路径难以及时发现回归。
 - 定位：
   - `packages/neko-engine/package.json`
+  - `packages/neko-engine/vitest.config.ts`
+  - `packages/neko-engine/packages/extension/src/extension.test.ts`
+  - `packages/neko-engine/packages/extension/src/mediaEngine/MediaEngineManager.test.ts`
+  - `packages/neko-engine/packages/extension/src/mediaEngine/export/JviProjectLoader.test.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/export/ExportIntegrationTest.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/export/simpleExportTest.js`
 - 建议：
   - 将现有手工测试脚本迁移到标准测试入口；
   - 区分 `unit` / `integration` / `manual`；
   - 禁止 `--passWithNoTests` 掩盖空测试状态。
+- 2026-04-08 当前进展：
+  - 已新增 `vitest.config.ts`，将 extension 侧测试接入标准 `pnpm --filter neko-engine test` 流水线。
+  - 已移除 `--passWithNoTests`，默认测试不再空跑。
+  - 已补 `extension`、`MediaEngineManager` 与 `JviProjectLoader` 三组 extension 测试，覆盖命令注册、会话级引擎包装层行为与导出命令依赖的别名链路。
+  - 导出主链路、NativeEngine 协议桥接等更高风险路径仍需继续补集成测试，因此本项暂为 `in_progress`。
 
 #### NKE-009：发布链路可重复性不足（P1）
 - 影响：平台包依赖手工准备 `.node`、ORT 和 FFmpeg 动态库，跨平台发布容易出现“本地可打、CI/用户环境不可复现”。
@@ -629,8 +654,14 @@
 
 - 命令：`cargo check --workspace --quiet`
 - 结果：通过（Rust workspace 可完成基础编译检查）
+- 命令：`cargo check -p neko-native-core --quiet`
+- 结果：通过（`native-core` 已不再依赖 HTTP 栈转移的 `tokio` feature）
+- 命令：`cargo check -p neko-native-http --quiet`
+- 结果：通过（传输层边界收敛后仍可独立完成编译检查）
 - 命令：`pnpm --filter neko-engine typecheck`
 - 结果：通过（extension TypeScript 类型检查已纳入独立门禁）
+- 命令：`pnpm --filter neko-engine test`
+- 结果：通过（3 个测试文件 / 6 个用例）
 - 命令：`find packages -type f \\( -name '*.rs' -o -name '*.ts' -o -name '*.js' \\) | xargs wc -l | sort -nr | head -n 25`
 - 结果：发现多个超大文件（`timeline.rs`、`gpu_export_pipeline.rs`、`timeline.rs` 实现层等）
 - 命令：`find packages/extension/src -type f \\( -iname '*test*' -o -iname '*spec*' \\)`
@@ -1498,10 +1529,10 @@
 
 其他 core 收口
 
-- [ ] 修复 `NKE-004`：统一 `neko-engine` 文档与实现口径
-- [ ] 修复 `NKE-005`：统一 N-API 单一引擎实例入口
-- [ ] 修复 `NKE-006`：收敛 `native-core` 中历史 HTTP/FrameServer 残留
-- [ ] 修复 `NKE-007`：移除或明确标注占位接口
+- [x] 修复 `NKE-004`：统一 `neko-engine` 文档与实现口径
+- [x] 修复 `NKE-005`：统一 N-API 单一引擎实例入口
+- [x] 修复 `NKE-006`：收敛 `native-core` 中历史 HTTP/FrameServer 残留
+- [x] 修复 `NKE-007`：移除或明确标注占位接口
 - [ ] 修复 `NKE-009`：串联可重复的原生产物与发布流水线
 - [ ] 修复 `NKM-006`：补齐许可与认证闭环
 - [ ] 修复 `NKM-007`：统一 registry 与 suite version 口径
