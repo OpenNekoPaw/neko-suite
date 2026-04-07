@@ -261,6 +261,7 @@ export class ExportService {
   private _isInitialized = false;
   private _currentJobId: string | null = null;
   private _pollTimer: ReturnType<typeof setInterval> | null = null;
+  private _pendingExportResolver: ((result: ExportResult) => void) | null = null;
 
   constructor() {}
 
@@ -369,28 +370,28 @@ export class ExportService {
    * Cancel ongoing export
    */
   async cancel(): Promise<void> {
-    this._stopPolling();
+    const currentJobId = this._currentJobId;
+    this._currentJobId = null;
+    this._finishPendingExport({ success: false, error: 'Export cancelled' });
 
-    if (this._currentJobId && this._engine) {
+    if (currentJobId && this._engine) {
       try {
-        await this._engine.cancelTask(this._currentJobId);
-        logger.info(`Cancelled job ${this._currentJobId}`);
+        await this._engine.cancelTask(currentJobId);
+        logger.info(`Cancelled job ${currentJobId}`);
       } catch (error) {
         logger.warn('Failed to cancel', error);
       }
     }
-
-    this._currentJobId = null;
   }
 
   /**
    * Dispose resources
    */
   dispose(): void {
-    this._stopPolling();
+    this._currentJobId = null;
+    this._finishPendingExport({ success: false, error: 'Export cancelled' });
     this._engine = null;
     this._isInitialized = false;
-    this._currentJobId = null;
   }
 
   // =========================================================================
@@ -468,10 +469,10 @@ export class ExportService {
     progressCallback?: ExportProgressCallback,
   ): Promise<ExportResult> {
     return new Promise((resolve) => {
+      this._pendingExportResolver = resolve;
       this._pollTimer = setInterval(async () => {
         if (!this._engine || !this._currentJobId) {
-          this._stopPolling();
-          resolve({ success: false, error: 'Export cancelled' });
+          this._finishPendingExport({ success: false, error: 'Export cancelled' });
           return;
         }
 
@@ -480,8 +481,10 @@ export class ExportService {
           const response = JSON.parse(responseJson);
 
           if (response.status !== 'ok') {
-            this._stopPolling();
-            resolve({ success: false, error: response.error?.message ?? 'Progress query failed' });
+            this._finishPendingExport({
+              success: false,
+              error: response.error?.message ?? 'Progress query failed',
+            });
             return;
           }
 
@@ -509,9 +512,8 @@ export class ExportService {
 
           // Check completion
           if (status === 'completed' || status === 'done' || progress >= 100) {
-            this._stopPolling();
             const totalTimeMs = Date.now() - startTime;
-            resolve({
+            this._finishPendingExport({
               success: true,
               outputPath: taskData?.outputPath ?? undefined,
               totalTimeMs,
@@ -523,8 +525,7 @@ export class ExportService {
 
           // Check failure
           if (status === 'failed' || status === 'error') {
-            this._stopPolling();
-            resolve({
+            this._finishPendingExport({
               success: false,
               error: taskData?.error || 'Export failed',
             });
@@ -533,8 +534,7 @@ export class ExportService {
 
           // Check cancellation
           if (status === 'cancelled') {
-            this._stopPolling();
-            resolve({ success: false, error: 'Export cancelled' });
+            this._finishPendingExport({ success: false, error: 'Export cancelled' });
             return;
           }
         } catch (error) {
@@ -553,6 +553,21 @@ export class ExportService {
       clearInterval(this._pollTimer);
       this._pollTimer = null;
     }
+  }
+
+  /**
+   * Resolve the active export promise exactly once.
+   */
+  private _finishPendingExport(result: ExportResult): void {
+    const resolve = this._pendingExportResolver;
+    if (!resolve) {
+      this._stopPolling();
+      return;
+    }
+
+    this._pendingExportResolver = null;
+    this._stopPolling();
+    resolve(result);
   }
 }
 

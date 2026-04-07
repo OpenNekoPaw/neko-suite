@@ -507,7 +507,7 @@
 | NKE-005 | P1 | fixed | `native-napi` 同时维护两套全局引擎入口，存在双实例/双状态风险 |
 | NKE-006 | P1 | fixed | 分层迁移未收口，`native-core` 仍保留历史 HTTP/FrameServer 残留 |
 | NKE-007 | P1 | fixed | 已暴露 `documents:probe` 能力，但实现仍为占位返回 |
-| NKE-008 | P1 | in_progress | 测试体系未进入标准流水线，关键导出/协议链路缺少自动回归 |
+| NKE-008 | P1 | fixed | 测试体系未进入标准流水线，关键导出/协议链路缺少自动回归 |
 | NKE-009 | P1 | open | 发布链路依赖手工平台产物和外部动态库，跨平台打包稳定性偏弱 |
 | NKE-010 | P2 | open | 代码体量、残留文件与生产路径 `unwrap/expect` 偏多，维护风险累积 |
 
@@ -613,17 +613,20 @@
   - `packages/neko-engine/packages/extension/src/extension.test.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/MediaEngineManager.test.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/export/JviProjectLoader.test.ts`
+  - `packages/neko-engine/packages/extension/src/mediaEngine/NativeMediaEngine.test.ts`
+  - `packages/neko-engine/packages/extension/src/mediaEngine/export/ExportService.test.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/export/ExportIntegrationTest.ts`
   - `packages/neko-engine/packages/extension/src/mediaEngine/export/simpleExportTest.js`
 - 建议：
   - 将现有手工测试脚本迁移到标准测试入口；
   - 区分 `unit` / `integration` / `manual`；
   - 禁止 `--passWithNoTests` 掩盖空测试状态。
-- 2026-04-08 当前进展：
+- 2026-04-08 处理结果：
   - 已新增 `vitest.config.ts`，将 extension 侧测试接入标准 `pnpm --filter neko-engine test` 流水线。
   - 已移除 `--passWithNoTests`，默认测试不再空跑。
-  - 已补 `extension`、`MediaEngineManager` 与 `JviProjectLoader` 三组 extension 测试，覆盖命令注册、会话级引擎包装层行为与导出命令依赖的别名链路。
-  - 导出主链路、NativeEngine 协议桥接等更高风险路径仍需继续补集成测试，因此本项暂为 `in_progress`。
+  - 已补 `extension`、`MediaEngineManager`、`JviProjectLoader`、`NativeMediaEngine`、`ExportService` 五组自动测试，覆盖命令注册、会话级包装层行为、`NativeEngine` 协议桥接、导出请求构造与任务轮询闭环。
+  - 已顺带修复 `ExportService.cancel()` / `dispose()` 停止轮询后未结算挂起导出 Promise 的问题，避免取消导出时调用方长期 pending。
+  - 关键主链路已进入标准测试入口，本项调整为 `fixed`；遗留的手工脚本可后续按需要继续收敛，但不再阻塞当前质量门禁。
 
 #### NKE-009：发布链路可重复性不足（P1）
 - 影响：平台包依赖手工准备 `.node`、ORT 和 FFmpeg 动态库，跨平台发布容易出现“本地可打、CI/用户环境不可复现”。
@@ -661,7 +664,7 @@
 - 命令：`pnpm --filter neko-engine typecheck`
 - 结果：通过（extension TypeScript 类型检查已纳入独立门禁）
 - 命令：`pnpm --filter neko-engine test`
-- 结果：通过（3 个测试文件 / 6 个用例）
+- 结果：通过（5 个测试文件 / 12 个用例）
 - 命令：`find packages -type f \\( -name '*.rs' -o -name '*.ts' -o -name '*.js' \\) | xargs wc -l | sort -nr | head -n 25`
 - 结果：发现多个超大文件（`timeline.rs`、`gpu_export_pipeline.rs`、`timeline.rs` 实现层等）
 - 命令：`find packages/extension/src -type f \\( -iname '*test*' -o -iname '*spec*' \\)`
@@ -1466,7 +1469,7 @@
 
 `neko-engine` / `neko-preview` / `neko-market`
 
-- [ ] 修复 `NKE-008`：把关键主链路测试纳入标准测试入口
+- [x] 修复 `NKE-008`：把关键主链路测试纳入标准测试入口
 - [ ] 修复 `NKP-006`：补文档预览与 EPUB 关键链路测试
 - [ ] 修复 `NKM-004`：InstalledRegistry 对外查询前等待 ready
 - [ ] 修复 `NKM-005`：Provider 增加待发送消息队列
