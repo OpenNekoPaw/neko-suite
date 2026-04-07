@@ -1,6 +1,8 @@
 //! Audio service trait
 
-use crate::audio::mic_capture::{AudioInputDevice, MonitorData, RecordCaptureConfig, RecordingResult};
+use crate::audio::mic_capture::{
+    AudioInputDevice, MonitorData, RecordCaptureConfig, RecordingResult,
+};
 use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;

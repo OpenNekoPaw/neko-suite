@@ -349,14 +349,17 @@ impl MaskRasterizer {
     /// Rasterize a single mask to grayscale pixel data
     ///
     /// Returns `Vec<u8>` of size `width * height` (one byte per pixel).
-    fn rasterize_single(
-        &self,
-        mask: &ElementMask,
-        width: u32,
-        height: u32,
-    ) -> Result<Vec<u8>> {
-        let (shape_type, center_x, center_y, half_w, half_h, rotation, corner_radius, polygon_verts) =
-            Self::extract_shape_params(&mask.shape, width, height)?;
+    fn rasterize_single(&self, mask: &ElementMask, width: u32, height: u32) -> Result<Vec<u8>> {
+        let (
+            shape_type,
+            center_x,
+            center_y,
+            half_w,
+            half_h,
+            rotation,
+            corner_radius,
+            polygon_verts,
+        ) = Self::extract_shape_params(&mask.shape, width, height)?;
 
         let uniforms = MaskUniforms {
             width,
@@ -391,10 +394,9 @@ impl MaskRasterizer {
         } else {
             polygon_verts
         };
-        let vertex_buffer = self.ctx.create_buffer_with_data(
-            bytemuck::cast_slice(&verts),
-            wgpu::BufferUsages::STORAGE,
-        );
+        let vertex_buffer = self
+            .ctx
+            .create_buffer_with_data(bytemuck::cast_slice(&verts), wgpu::BufferUsages::STORAGE);
 
         // Output buffer: one u32 per pixel (we only use the low byte)
         let output_size = (width * height) as u64 * 4; // u32 per pixel
@@ -636,7 +638,12 @@ mod tests {
     #[test]
     fn test_mask_uniforms_alignment() {
         let size = std::mem::size_of::<MaskUniforms>();
-        assert_eq!(size % 16, 0, "MaskUniforms must be 16-byte aligned, got {}", size);
+        assert_eq!(
+            size % 16,
+            0,
+            "MaskUniforms must be 16-byte aligned, got {}",
+            size
+        );
     }
 
     #[test]

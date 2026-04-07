@@ -122,12 +122,7 @@ fn build_gltf_json_and_bin(
             let pos_accessor = json_accessors.len();
 
             // Write position, normal, UV, and index data into binary buffer
-            write_mesh_to_buffer(
-                mesh,
-                &mut bin,
-                &mut json_accessors,
-                &mut json_buffer_views,
-            );
+            write_mesh_to_buffer(mesh, &mut bin, &mut json_accessors, &mut json_buffer_views);
 
             // Mesh primitive referencing the 4 accessors just created
             json_meshes.push(serde_json::json!({

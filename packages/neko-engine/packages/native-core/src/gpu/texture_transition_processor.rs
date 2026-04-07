@@ -562,6 +562,9 @@ mod tests {
         // Verify no duplicate PI definition — COMMON_WGSL defines it,
         // transitions.wgsl and dispatch shader should not
         let pi_count = shader.matches("const PI:").count();
-        assert_eq!(pi_count, 1, "PI should be defined exactly once (in common.wgsl)");
+        assert_eq!(
+            pi_count, 1,
+            "PI should be defined exactly once (in common.wgsl)"
+        );
     }
 }

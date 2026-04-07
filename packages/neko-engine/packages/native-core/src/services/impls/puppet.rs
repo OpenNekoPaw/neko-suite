@@ -59,9 +59,7 @@ impl IPuppetService for PuppetService {
             .lock()
             .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
 
-        world
-            .set_parameter(name, value)
-            .map_err(Error::Other)
+        world.set_parameter(name, value).map_err(Error::Other)
     }
 
     fn get_parameters(&self) -> Result<Vec<ParameterInfo>> {
@@ -155,12 +153,7 @@ impl IPuppetService for PuppetService {
             .map_err(Error::Other)
     }
 
-    fn remove_keyframe(
-        &self,
-        clip_name: &str,
-        param_name: &str,
-        keyframe_id: &str,
-    ) -> Result<()> {
+    fn remove_keyframe(&self, clip_name: &str, param_name: &str, keyframe_id: &str) -> Result<()> {
         let mut world = self
             .world
             .lock()

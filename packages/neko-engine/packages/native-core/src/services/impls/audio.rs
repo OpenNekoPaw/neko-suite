@@ -2,7 +2,9 @@
 //!
 //! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
-use crate::audio::mic_capture::{AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult};
+use crate::audio::mic_capture::{
+    AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
+};
 use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
     FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,

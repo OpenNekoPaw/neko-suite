@@ -27,8 +27,23 @@ pub mod groups {
     pub const DOCUMENTS: &str = "documents";
 
     pub const ALL: &[&str] = &[
-        NODES, TASKS, VIDEOS, AUDIOS, IMAGES, TIMELINES, STREAMS, MODELS, CANVAS, SCENES, PUPPETS,
-        EFFECTS, CAMERAS, MIDI, GAMEPAD, COLOR_CORRECTION, DOCUMENTS,
+        NODES,
+        TASKS,
+        VIDEOS,
+        AUDIOS,
+        IMAGES,
+        TIMELINES,
+        STREAMS,
+        MODELS,
+        CANVAS,
+        SCENES,
+        PUPPETS,
+        EFFECTS,
+        CAMERAS,
+        MIDI,
+        GAMEPAD,
+        COLOR_CORRECTION,
+        DOCUMENTS,
     ];
 }
 
@@ -113,9 +128,17 @@ pub mod actions {
     ];
 
     pub const MODELS: &[&str] = &[
-        "probe", "capture", "stream", "diff",
-        "register", "unregister", "list",
-        "upscale", "denoise", "clip", "transcribe",
+        "probe",
+        "capture",
+        "stream",
+        "diff",
+        "register",
+        "unregister",
+        "list",
+        "upscale",
+        "denoise",
+        "clip",
+        "transcribe",
     ];
 
     pub const CANVAS: &[&str] = &["composite", "capture", "export", "diff"];

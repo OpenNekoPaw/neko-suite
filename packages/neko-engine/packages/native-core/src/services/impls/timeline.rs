@@ -439,7 +439,12 @@ impl ITimelineService for TimelineService {
                 let original = rgba_data.clone();
                 rgba_data = match EffectDispatcher::new(gpu_ctx.clone()) {
                     Ok(mut dispatcher) => {
-                        match dispatcher.apply_effects_from_pixels(rgba_data, src_width, src_height, &element.effects) {
+                        match dispatcher.apply_effects_from_pixels(
+                            rgba_data,
+                            src_width,
+                            src_height,
+                            &element.effects,
+                        ) {
                             Ok(processed) => processed,
                             Err(e) => {
                                 tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
@@ -531,7 +536,8 @@ impl ITimelineService for TimelineService {
         // Transition info comes from the TS composite path (pre-calculated progress)
         // NOTE: This uses the legacy buffer-based path. The new texture-based pipeline
         // uses TextureTransitionProcessor in gpu_export_pipeline.rs instead.
-        let mut transition_skip: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut transition_skip: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
         {
             // Collect transition pairs: (from_layer_index, to_layer_index, transition_info)
             let mut transition_pairs: Vec<(usize, usize, String, f64)> = Vec::new();

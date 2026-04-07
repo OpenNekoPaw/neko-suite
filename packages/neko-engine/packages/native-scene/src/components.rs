@@ -234,16 +234,17 @@ impl AnimationChannel {
 
     /// Get flat values for interpolation (backwards compatibility)
     pub fn values(&self) -> Vec<f32> {
-        self.keyframes.iter().flat_map(|k| k.values.iter().copied()).collect()
+        self.keyframes
+            .iter()
+            .flat_map(|k| k.values.iter().copied())
+            .collect()
     }
 
     /// Add a keyframe, maintaining sorted order. Returns the new keyframe's ID.
     pub fn add_keyframe(&mut self, timestamp: f32, values: Vec<f32>) -> String {
         let kf = SceneKeyframe::new(timestamp, values);
         let id = kf.id.clone();
-        let pos = self
-            .keyframes
-            .partition_point(|k| k.timestamp < timestamp);
+        let pos = self.keyframes.partition_point(|k| k.timestamp < timestamp);
         self.keyframes.insert(pos, kf);
         id
     }
@@ -361,7 +362,8 @@ impl AnimationClipData {
         property: AnimationProperty,
     ) -> &mut AnimationChannel {
         let exists = self.channels.iter().position(|c| {
-            c.target_node == target_node && std::mem::discriminant(&c.property) == std::mem::discriminant(&property)
+            c.target_node == target_node
+                && std::mem::discriminant(&c.property) == std::mem::discriminant(&property)
         });
         match exists {
             Some(idx) => &mut self.channels[idx],

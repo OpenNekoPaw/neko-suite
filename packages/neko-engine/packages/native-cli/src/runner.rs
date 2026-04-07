@@ -120,7 +120,11 @@ impl Runner {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let engine_config = EngineConfig::load(config.as_deref(), None)?;
         // CLI --port flag overrides config file
-        let effective_port = if port != 8765 { port } else { engine_config.server.port };
+        let effective_port = if port != 8765 {
+            port
+        } else {
+            engine_config.server.port
+        };
 
         tracing::info!("Starting Neko Suite Server on port {}", effective_port);
 

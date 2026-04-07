@@ -135,7 +135,7 @@ impl ParticleEmitterConfig {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ParticleGpu {
     position: [f32; 3],
-    lifetime: f32,     // remaining lifetime (0 = dead)
+    lifetime: f32, // remaining lifetime (0 = dead)
     velocity: [f32; 3],
     max_lifetime: f32, // initial lifetime
     color: [f32; 4],

@@ -392,11 +392,7 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("GLB export failed: {}", e)))
     }
 
-    fn save_project(
-        &self,
-        path: &str,
-        editor_state: serde_json::Value,
-    ) -> Result<()> {
+    fn save_project(&self, path: &str, editor_state: serde_json::Value) -> Result<()> {
         let mut world = self
             .world
             .lock()
@@ -432,10 +428,7 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("Project save failed: {}", e)))
     }
 
-    fn load_project(
-        &self,
-        path: &str,
-    ) -> Result<(SceneSnapshot, serde_json::Value)> {
+    fn load_project(&self, path: &str) -> Result<(SceneSnapshot, serde_json::Value)> {
         let project = NkmProject::load(Path::new(path))
             .map_err(|e| Error::Other(format!("Project load failed: {}", e)))?;
 
@@ -679,8 +672,8 @@ impl ISceneService for SceneService {
             world.get_material_ref(node_id).map_err(Error::Other)?
         };
 
-        let (uri, mat_idx) = mat_ref
-            .ok_or_else(|| Error::Other(format!("Node '{}' has no material", node_id)))?;
+        let (uri, mat_idx) =
+            mat_ref.ok_or_else(|| Error::Other(format!("Node '{}' has no material", node_id)))?;
 
         // Update the GPU material buffer
         let cache_mutex = self
@@ -692,7 +685,15 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
 
         cache
-            .update_material_uniforms(&uri, mat_idx, base_color, metallic, roughness, emissive, occlusion_strength)
+            .update_material_uniforms(
+                &uri,
+                mat_idx,
+                base_color,
+                metallic,
+                roughness,
+                emissive,
+                occlusion_strength,
+            )
             .map_err(Error::Other)
     }
 
@@ -706,11 +707,7 @@ impl ISceneService for SceneService {
 }
 
 /// Spawn a new ECS entity for a procedural mesh with a unique node ID.
-fn spawn_procedural_entity(
-    ecs_world: &mut bevy_ecs::prelude::World,
-    uri: &str,
-    label: &str,
-) {
+fn spawn_procedural_entity(ecs_world: &mut bevy_ecs::prelude::World, uri: &str, label: &str) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let idx = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -732,8 +729,7 @@ fn spawn_procedural_entity(
 
 /// Look up the MeshRef URI for a given scene node ID.
 fn find_mesh_uri(ecs_world: &mut bevy_ecs::prelude::World, node_id: &str) -> Result<String> {
-    let mut query = ecs_world
-        .query::<(&SceneNodeId, &MeshRef)>();
+    let mut query = ecs_world.query::<(&SceneNodeId, &MeshRef)>();
 
     for (scene_id, mesh_ref) in query.iter(ecs_world) {
         if scene_id.0 == node_id {

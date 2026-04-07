@@ -385,8 +385,17 @@ mod tests {
         assert_eq!(
             models_actions,
             &[
-                "probe", "capture", "stream", "diff", "register", "unregister", "list", "upscale",
-                "denoise", "clip", "transcribe",
+                "probe",
+                "capture",
+                "stream",
+                "diff",
+                "register",
+                "unregister",
+                "list",
+                "upscale",
+                "denoise",
+                "clip",
+                "transcribe",
             ]
         );
 

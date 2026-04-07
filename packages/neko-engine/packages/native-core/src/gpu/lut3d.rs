@@ -228,9 +228,15 @@ impl Lut3DData {
             let [r_out, g_out, b_out] = self.apply(r_in, g_in, b_in);
 
             // Blend between original and LUT output
-            chunk[0] = ((r_in + (r_out - r_in) * intensity) * 255.0).round().clamp(0.0, 255.0) as u8;
-            chunk[1] = ((g_in + (g_out - g_in) * intensity) * 255.0).round().clamp(0.0, 255.0) as u8;
-            chunk[2] = ((b_in + (b_out - b_in) * intensity) * 255.0).round().clamp(0.0, 255.0) as u8;
+            chunk[0] = ((r_in + (r_out - r_in) * intensity) * 255.0)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+            chunk[1] = ((g_in + (g_out - g_in) * intensity) * 255.0)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+            chunk[2] = ((b_in + (b_out - b_in) * intensity) * 255.0)
+                .round()
+                .clamp(0.0, 255.0) as u8;
             // chunk[3] alpha unchanged
         }
     }
@@ -335,7 +341,10 @@ mod tests {
         lut.apply_to_pixels(&mut pixels, 1.0);
         // With identity LUT, pixels should be nearly unchanged (within rounding)
         for i in 0..pixels.len() {
-            assert!((pixels[i] as i32 - original[i] as i32).abs() <= 2, "pixel[{i}] changed too much");
+            assert!(
+                (pixels[i] as i32 - original[i] as i32).abs() <= 2,
+                "pixel[{i}] changed too much"
+            );
         }
     }
 
@@ -375,7 +384,7 @@ mod tests {
         let lut = Lut3DData::from_cube(&cube).expect("parse");
         let bytes = lut.to_texture_bytes();
         assert_eq!(bytes.len(), 4 * 4 * 4 * 4); // n^3 * 4 bytes
-        // All alpha bytes should be 255
+                                                // All alpha bytes should be 255
         for i in (3..bytes.len()).step_by(4) {
             assert_eq!(bytes[i], 255);
         }

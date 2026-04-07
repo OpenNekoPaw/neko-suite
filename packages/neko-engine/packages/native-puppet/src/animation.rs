@@ -110,9 +110,7 @@ impl ParameterCurve {
     pub fn add_keyframe(&mut self, time_ms: f32, value: f32) -> String {
         let kf = Keyframe::new(time_ms, value);
         let id = kf.id.clone();
-        let pos = self
-            .keyframes
-            .partition_point(|k| k.time_ms < time_ms);
+        let pos = self.keyframes.partition_point(|k| k.time_ms < time_ms);
         self.keyframes.insert(pos, kf);
         id
     }

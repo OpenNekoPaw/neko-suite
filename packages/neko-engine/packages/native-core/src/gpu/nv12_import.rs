@@ -13,10 +13,10 @@ use crate::decoder::{GpuTextureHandle, Nv12GpuTexture};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 
-#[cfg(target_os = "linux")]
-use super::linux_import::LinuxTextureImporter;
 #[cfg(all(target_os = "linux", feature = "cuda"))]
 use super::linux_import::CudaTextureImporter;
+#[cfg(target_os = "linux")]
+use super::linux_import::LinuxTextureImporter;
 #[cfg(target_os = "macos")]
 use super::macos_import::MacOsTextureImporter;
 #[cfg(target_os = "windows")]

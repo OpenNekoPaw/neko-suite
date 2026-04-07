@@ -72,20 +72,17 @@ pub trait ISceneService: Send + Sync {
     fn export_glb(&self) -> crate::error::Result<Vec<u8>>;
 
     /// Save the current scene as a .nkm project file
-    fn save_project(
-        &self,
-        path: &str,
-        editor_state: serde_json::Value,
-    ) -> crate::error::Result<()>;
+    fn save_project(&self, path: &str, editor_state: serde_json::Value)
+        -> crate::error::Result<()>;
 
     /// Load a .nkm project file and restore the scene
-    fn load_project(
-        &self,
-        path: &str,
-    ) -> crate::error::Result<(SceneSnapshot, serde_json::Value)>;
+    fn load_project(&self, path: &str) -> crate::error::Result<(SceneSnapshot, serde_json::Value)>;
 
     /// Get keyframe tracks for a named animation clip
-    fn get_keyframe_tracks(&self, clip_name: &str) -> crate::error::Result<Vec<AnimationChannelInfo>>;
+    fn get_keyframe_tracks(
+        &self,
+        clip_name: &str,
+    ) -> crate::error::Result<Vec<AnimationChannelInfo>>;
 
     /// Add a keyframe to a channel within a named clip
     fn add_keyframe(

@@ -671,9 +671,21 @@ mod tests {
     #[test]
     fn polygon_flip_negates_plane() {
         let verts = vec![
-            CsgVertex { pos: Vec3::ZERO, normal: Vec3::Z, uv: [0.0, 0.0] },
-            CsgVertex { pos: Vec3::X, normal: Vec3::Z, uv: [1.0, 0.0] },
-            CsgVertex { pos: Vec3::Y, normal: Vec3::Z, uv: [0.0, 1.0] },
+            CsgVertex {
+                pos: Vec3::ZERO,
+                normal: Vec3::Z,
+                uv: [0.0, 0.0],
+            },
+            CsgVertex {
+                pos: Vec3::X,
+                normal: Vec3::Z,
+                uv: [1.0, 0.0],
+            },
+            CsgVertex {
+                pos: Vec3::Y,
+                normal: Vec3::Z,
+                uv: [0.0, 1.0],
+            },
         ];
         let mut poly = CsgPolygon::new(verts).unwrap();
         let original_normal = poly.plane.normal;

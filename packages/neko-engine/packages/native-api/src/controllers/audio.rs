@@ -376,8 +376,7 @@ impl Controller for AudioController {
                     channels: Option<u16>,
                 }
 
-                let opts: RecordStartOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: RecordStartOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let output_path = opts.output_path.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -411,13 +410,10 @@ impl Controller for AudioController {
                     stream_id: Option<String>,
                 }
 
-                let opts: RecordStopOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: RecordStopOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "streamId required for audios:record_stop".to_string(),
-                    )
+                    ApiError::InvalidRequest("streamId required for audios:record_stop".to_string())
                 })?;
 
                 let result = self.audio_service.record_stop(&stream_id).await?;
@@ -435,8 +431,8 @@ impl Controller for AudioController {
                 let channels = opts.channels.unwrap_or(2);
                 let time = opts.time.unwrap_or(0.0);
 
-                use neko_native_core::services::audio_mixdown::{AudioMixdown, MixdownTrack};
                 use base64::Engine;
+                use neko_native_core::services::audio_mixdown::{AudioMixdown, MixdownTrack};
 
                 let mixdown_tracks: Vec<MixdownTrack> = serde_json::from_value(tracks)
                     .map_err(|e| ApiError::InvalidRequest(format!("invalid tracks: {}", e)))?;

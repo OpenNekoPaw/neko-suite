@@ -16,12 +16,14 @@
 use std::sync::Arc;
 
 use tiny_skia::{
-    Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point,
-    RadialGradient, SpreadMode, Stroke, StrokeDash, Transform,
-    LineCap as TinyLineCap, LineJoin as TinyLineJoin,
+    Color, FillRule, GradientStop, LineCap as TinyLineCap, LineJoin as TinyLineJoin,
+    LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, RadialGradient, SpreadMode, Stroke,
+    StrokeDash, Transform,
 };
 
-use crate::domain::timeline::{ShapeElementData, ShapeFillData, ShapeGradientData, ShapeShadowData, ShapeStrokeData};
+use crate::domain::timeline::{
+    ShapeElementData, ShapeFillData, ShapeGradientData, ShapeShadowData, ShapeStrokeData,
+};
 use crate::gpu::GpuContext;
 
 // =============================================================================
@@ -282,12 +284,8 @@ fn build_bezier(p: &serde_json::Value, fw: f32, fh: f32) -> Option<Path> {
     }
     let closed = p.get("closed").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let pt_x = |v: &serde_json::Value, k: &str, fb: f32| -> f32 {
-        get_f32(v, k, fb) / 100.0 * fw
-    };
-    let pt_y = |v: &serde_json::Value, k: &str, fb: f32| -> f32 {
-        get_f32(v, k, fb) / 100.0 * fh
-    };
+    let pt_x = |v: &serde_json::Value, k: &str, fb: f32| -> f32 { get_f32(v, k, fb) / 100.0 * fw };
+    let pt_y = |v: &serde_json::Value, k: &str, fb: f32| -> f32 { get_f32(v, k, fb) / 100.0 * fh };
 
     let mut pb = PathBuilder::new();
     let first_x = pt_x(&pts[0], "x", 0.0);
@@ -331,7 +329,9 @@ fn build_bezier(p: &serde_json::Value, fw: f32, fh: f32) -> Option<Path> {
 
 fn render_shadow(pixmap: &mut Pixmap, path: &Path, shadow: &ShapeShadowData) {
     let (r, g, b, a) = parse_color(&shadow.color);
-    let Some(color) = Color::from_rgba(r, g, b, a) else { return };
+    let Some(color) = Color::from_rgba(r, g, b, a) else {
+        return;
+    };
     let mut paint = Paint::default();
     paint.set_color(color);
     paint.anti_alias = true;
@@ -349,7 +349,9 @@ fn render_fill(pixmap: &mut Pixmap, path: &Path, fill: &ShapeFillData, w: u32, h
             let color_str = fill.color.as_deref().unwrap_or("#000000");
             let (r, g, b, _) = parse_color(color_str);
             let a = fill.opacity;
-            let Some(color) = Color::from_rgba(r, g, b, a) else { return };
+            let Some(color) = Color::from_rgba(r, g, b, a) else {
+                return;
+            };
             paint.set_color(color);
             pixmap.fill_path(path, &paint, FillRule::Winding, Transform::identity(), None);
         }
@@ -423,7 +425,9 @@ fn render_gradient_fill(
 fn render_stroke(pixmap: &mut Pixmap, path: &Path, stroke_data: &ShapeStrokeData) {
     let (r, g, b, _) = parse_color(&stroke_data.color);
     let a = stroke_data.opacity;
-    let Some(color) = Color::from_rgba(r, g, b, a) else { return };
+    let Some(color) = Color::from_rgba(r, g, b, a) else {
+        return;
+    };
 
     let mut paint = Paint::default();
     paint.set_color(color);
@@ -505,7 +509,11 @@ fn parse_hex_rgb(hex: &str) -> (f32, f32, f32) {
         let r = u8::from_str_radix(&s[0..1], 16).unwrap_or(0);
         let g = u8::from_str_radix(&s[1..2], 16).unwrap_or(0);
         let b = u8::from_str_radix(&s[2..3], 16).unwrap_or(0);
-        return (r as f32 * 17.0 / 255.0, g as f32 * 17.0 / 255.0, b as f32 * 17.0 / 255.0);
+        return (
+            r as f32 * 17.0 / 255.0,
+            g as f32 * 17.0 / 255.0,
+            b as f32 * 17.0 / 255.0,
+        );
     }
     (0.0, 0.0, 0.0)
 }

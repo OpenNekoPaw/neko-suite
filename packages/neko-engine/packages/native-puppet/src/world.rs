@@ -3,10 +3,10 @@
 //! Isolates bevy_ecs API details behind a stable interface.
 //! Mirrors native-scene's SceneWorld pattern.
 
-use crate::animation::{AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo};
-use crate::animation_blend::{
-    AnimationBlendState, BlendLayer, BlendLayerInfo, CrossfadeRequest,
+use crate::animation::{
+    AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo,
 };
+use crate::animation_blend::{AnimationBlendState, BlendLayer, BlendLayerInfo, CrossfadeRequest};
 use crate::components::*;
 use crate::hierarchy;
 use crate::loader::{self, LoadError};
@@ -206,9 +206,11 @@ impl PuppetWorld for BevyPuppetWorld {
             let lib = AnimationLibrary {
                 clips: load_result.animations,
             };
-            self.world
-                .entity_mut(load_result.root_entity)
-                .insert((lib, AnimationPlayback::default(), AnimationBlendState::default()));
+            self.world.entity_mut(load_result.root_entity).insert((
+                lib,
+                AnimationPlayback::default(),
+                AnimationBlendState::default(),
+            ));
         }
 
         // Run initial transform propagation
@@ -248,11 +250,8 @@ impl PuppetWorld for BevyPuppetWorld {
             texture_ref,
         ) in query.iter(&self.world)
         {
-            let parent_id = parent.and_then(|p| {
-                self.world
-                    .get::<PuppetNodeId>(p.0)
-                    .map(|id| id.0.clone())
-            });
+            let parent_id =
+                parent.and_then(|p| self.world.get::<PuppetNodeId>(p.0).map(|id| id.0.clone()));
 
             let node_type_str = match node_type {
                 PuppetNodeType::Root => "root",
@@ -370,9 +369,7 @@ impl PuppetWorld for BevyPuppetWorld {
                 .world
                 .query_filtered::<&AnimationPlayback, With<PuppetRoot>>();
             match q.iter(&self.world).next() {
-                Some(pb) if pb.clip_index.is_some() => {
-                    (Some(pb.elapsed_ms), Some(pb.playing))
-                }
+                Some(pb) if pb.clip_index.is_some() => (Some(pb.elapsed_ms), Some(pb.playing)),
                 _ => (None, None),
             }
         };
@@ -438,13 +435,19 @@ impl PuppetWorld for BevyPuppetWorld {
         }
 
         // Sort by z-order for correct rendering
-        meshes.sort_by(|a, b| a.z_order.partial_cmp(&b.z_order).unwrap_or(std::cmp::Ordering::Equal));
+        meshes.sort_by(|a, b| {
+            a.z_order
+                .partial_cmp(&b.z_order)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         meshes
     }
 
     fn get_animations(&mut self) -> Vec<AnimationClipInfo> {
-        let mut q = self.world.query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
+        let mut q = self
+            .world
+            .query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
         match q.iter(&self.world).next() {
             Some(lib) => lib.clips.iter().map(|c| c.info()).collect(),
             None => Vec::new(),
@@ -454,7 +457,9 @@ impl PuppetWorld for BevyPuppetWorld {
     fn play_animation(&mut self, name: &str, loop_anim: bool) -> Result<(), String> {
         // Find the clip index
         let clip_index = {
-            let mut q = self.world.query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
+            let mut q = self
+                .world
+                .query_filtered::<&AnimationLibrary, With<PuppetRoot>>();
             match q.iter(&self.world).next() {
                 Some(lib) => lib
                     .clips

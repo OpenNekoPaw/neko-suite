@@ -23,7 +23,9 @@ async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc
     ENGINE
         .get_or_try_init(|| async {
             let config = EngineConfig::load(
-                config_path.as_ref().map(|s| std::path::Path::new(s.as_str())),
+                config_path
+                    .as_ref()
+                    .map(|s| std::path::Path::new(s.as_str())),
                 None,
             )
             .map_err(|e| napi::Error::from_reason(format!("Config error: {}", e)))?;

@@ -23,22 +23,10 @@ pub trait IMlService: Send + Sync {
     fn list_models(&self) -> Vec<serde_json::Value>;
 
     /// Upscale an image using the specified model.
-    fn upscale(
-        &self,
-        model: &str,
-        input: &str,
-        output: &str,
-        scale: u32,
-    ) -> Result<()>;
+    fn upscale(&self, model: &str, input: &str, output: &str, scale: u32) -> Result<()>;
 
     /// Denoise an image using the specified model.
-    fn denoise(
-        &self,
-        model: &str,
-        input: &str,
-        output: &str,
-        strength: f32,
-    ) -> Result<()>;
+    fn denoise(&self, model: &str, input: &str, output: &str, strength: f32) -> Result<()>;
 
     /// Compute CLIP similarity score between an image and text.
     fn clip_score(&self, model: &str, image: &str, text: &str) -> Result<f32>;

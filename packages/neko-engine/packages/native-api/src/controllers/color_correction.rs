@@ -6,8 +6,8 @@
 use crate::controllers::utils::base64_decode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_native_core::gpu::LutRegistry;
 use neko_native_core::gpu::Lut3DData;
+use neko_native_core::gpu::LutRegistry;
 use neko_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
@@ -71,11 +71,9 @@ impl Controller for ColorCorrectionController {
     ) -> ApiResult<ActionResponse> {
         match action {
             "upload_lut" => {
-                let opts: UploadLutOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: UploadLutOptions = serde_json::from_value(options).unwrap_or_default();
                 let body_val = body.unwrap_or(Value::Null);
-                let body_opts: UploadLutBody =
-                    serde_json::from_value(body_val).unwrap_or_default();
+                let body_opts: UploadLutBody = serde_json::from_value(body_val).unwrap_or_default();
 
                 let data_b64 = body_opts.data.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -92,9 +90,8 @@ impl Controller for ColorCorrectionController {
                 })?;
 
                 // Parse .cube
-                let lut = Lut3DData::from_cube(&cube_text).map_err(|e| {
-                    ApiError::InvalidRequest(format!(".cube parse error: {e}"))
-                })?;
+                let lut = Lut3DData::from_cube(&cube_text)
+                    .map_err(|e| ApiError::InvalidRequest(format!(".cube parse error: {e}")))?;
 
                 // Generate ID and store in global registry
                 let lut_id = Uuid::new_v4().to_string();
@@ -113,8 +110,7 @@ impl Controller for ColorCorrectionController {
             }
 
             "remove_lut" => {
-                let opts: RemoveLutOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: RemoveLutOptions = serde_json::from_value(options).unwrap_or_default();
                 let lut_id = opts.lut_id.ok_or_else(|| {
                     ApiError::InvalidRequest(
                         "color-correction:remove_lut requires options.lutId".to_string(),

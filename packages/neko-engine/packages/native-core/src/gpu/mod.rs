@@ -14,24 +14,24 @@
 mod blur_processor;
 mod buffer_pool;
 mod compositor;
-pub mod lut3d;
 mod context;
 pub mod custom_shader_processor;
 mod encoder_bridge;
 mod gpu_layer;
-mod mask_rasterizer;
 mod hal_import;
+pub mod lut3d;
+mod mask_rasterizer;
 mod nv12_import;
 mod nv12_renderer;
 mod rgba_to_nv12;
 mod rgba_to_nv12_texture;
+pub mod scene_renderer;
 pub mod shaders;
 mod shape_rasterizer;
 mod style_processor;
 mod text_renderer;
 mod texture;
 mod texture_compositor;
-pub mod scene_renderer;
 mod texture_transition_processor;
 mod transition_processor;
 
@@ -50,7 +50,6 @@ mod windows_export;
 mod windows_import;
 
 pub use blur_processor::{BlurParams, BlurType, GpuBlurProcessor, SharpenParams};
-pub use lut3d::{Lut3DData, LutRegistry};
 pub use compositor::{
     BlendMode, CompositeLayer, CompositeResult, GpuCompositor, LayerPixelFormat, Transform2D,
 };
@@ -59,6 +58,7 @@ pub use custom_shader_processor::{
     CustomShaderProcessor, DynamicUniforms, ParamDef, PresetShaderMeta,
 };
 pub use encoder_bridge::{GpuBufferHandle, GpuBufferHandles, GpuEncoderFrame};
+pub use lut3d::{Lut3DData, LutRegistry};
 pub use nv12_import::{
     ColorSpace, ImportedNv12Texture, Nv12FrameData, Nv12TextureImporter, Nv12Uniforms,
     NV12_TO_RGB_SHADER,
@@ -95,7 +95,9 @@ pub use windows_import::WindowsTextureImporter;
 
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use mask_rasterizer::MaskRasterizer;
+pub use scene_renderer::{
+    AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput,
+};
 pub use shape_rasterizer::{RasterizedShape, ShapeRasterizer};
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
-pub use scene_renderer::{AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput};

@@ -142,7 +142,12 @@ pub fn generate_shape(params: &ShapeParams) -> ProceduralMesh {
             minor_radius,
             major_segments,
             minor_segments,
-        } => generate_torus(*major_radius, *minor_radius, *major_segments, *minor_segments),
+        } => generate_torus(
+            *major_radius,
+            *minor_radius,
+            *major_segments,
+            *minor_segments,
+        ),
         ShapeParams::Plane {
             width,
             depth,
@@ -317,7 +322,11 @@ fn build_cap(
     segments: u32,
     top: bool,
 ) {
-    let normal = if top { [0.0, 1.0, 0.0] } else { [0.0, -1.0, 0.0] };
+    let normal = if top {
+        [0.0, 1.0, 0.0]
+    } else {
+        [0.0, -1.0, 0.0]
+    };
 
     // Center vertex
     let center_idx = vertices.len() as u32;
@@ -409,12 +418,7 @@ fn generate_cone(radius: f32, height: f32, segments: u32) -> ProceduralMesh {
 // Torus — (major_segments) * (minor_segments) grid wrapped into a torus
 // ---------------------------------------------------------------------------
 
-fn generate_torus(
-    major_r: f32,
-    minor_r: f32,
-    major_seg: u32,
-    minor_seg: u32,
-) -> ProceduralMesh {
+fn generate_torus(major_r: f32, minor_r: f32, major_seg: u32, minor_seg: u32) -> ProceduralMesh {
     let maj = major_seg.max(3);
     let min = minor_seg.max(3);
 

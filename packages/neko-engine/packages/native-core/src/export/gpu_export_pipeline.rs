@@ -26,8 +26,8 @@ use crate::gpu::{
     TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
     TransitionParams, TransitionType, VignetteParams,
 };
-use crate::telemetry::spans::span;
 use crate::services::{ISceneService, SceneService};
+use crate::telemetry::spans::span;
 use neko_types::TrackType;
 
 use super::types::ExportSettings;
@@ -73,7 +73,10 @@ impl EffectDispatcher {
         sorted.sort_by_key(|e| e.order);
 
         // Caller guarantees sorted is non-empty (has_enabled_effects check in Step 3.5)
-        debug_assert!(!sorted.is_empty(), "apply_effects_gpu called with no enabled effects");
+        debug_assert!(
+            !sorted.is_empty(),
+            "apply_effects_gpu called with no enabled effects"
+        );
 
         // Allocate two ping-pong textures
         let ping = Self::create_effect_texture(&self.ctx, width, height);
@@ -106,7 +109,9 @@ impl EffectDispatcher {
                         amount: 0.0001,
                         ..Default::default()
                     };
-                    let _ = self.style_processor.apply_film_grain_tex(src, dst, &identity_grain);
+                    let _ = self
+                        .style_processor
+                        .apply_film_grain_tex(src, dst, &identity_grain);
                 }
             }
 
@@ -258,7 +263,11 @@ impl EffectDispatcher {
                 let whites = Self::get_f32(params, "whites", 0.0);
                 let blacks = Self::get_f32(params, "blacks", 0.0);
 
-                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) { 1.0 } else { 0.0 };
+                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) {
+                    1.0
+                } else {
+                    0.0
+                };
                 let cw_shadows = [
                     Self::get_f32(params, "cw_shadows_r", 0.5),
                     Self::get_f32(params, "cw_shadows_g", 0.5),
@@ -290,7 +299,11 @@ impl EffectDispatcher {
                     ];
                 }
 
-                let has_curves = if Self::get_bool(params, "curves_enabled", false) { 1.0 } else { 0.0 };
+                let has_curves = if Self::get_bool(params, "curves_enabled", false) {
+                    1.0
+                } else {
+                    0.0
+                };
                 let lut_id = Self::get_str(params, "lut_id").map(|s| s.to_string());
                 let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
                 let lut_enabled = if lut_id.is_some() { 1.0 } else { 0.0 };
@@ -358,7 +371,9 @@ impl EffectDispatcher {
                 self.style_processor.apply_chroma_key_tex(
                     input,
                     output,
-                    &ChromaKeyParams::with_options(key_r, key_g, key_b, similarity, smoothness, spill),
+                    &ChromaKeyParams::with_options(
+                        key_r, key_g, key_b, similarity, smoothness, spill,
+                    ),
                 )
             }
 
@@ -383,9 +398,9 @@ impl EffectDispatcher {
 
         let shader_id = fx.effect_type.replace('-', "_");
         let json_params = serde_json::Value::Object(params.clone());
-        let processed = self
-            .custom_shader
-            .apply(&pixels, width, height, &shader_id, &json_params)?;
+        let processed =
+            self.custom_shader
+                .apply(&pixels, width, height, &shader_id, &json_params)?;
 
         self.ctx.queue().write_texture(
             wgpu::ImageCopyTexture {
@@ -400,7 +415,11 @@ impl EffectDispatcher {
                 bytes_per_row: Some(width * 4),
                 rows_per_image: Some(height),
             },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
 
         Ok(())
@@ -414,7 +433,11 @@ impl EffectDispatcher {
     fn create_effect_texture(ctx: &GpuContext, w: u32, h: u32) -> wgpu::Texture {
         ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("EffectTex"),
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -522,7 +545,11 @@ impl EffectDispatcher {
         // Upload pixels to an Rgba8Unorm input texture
         let input_tex = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("EffectsFromPixels Input"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -543,7 +570,11 @@ impl EffectDispatcher {
                 bytes_per_row: Some(width * 4),
                 rows_per_image: Some(height),
             },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
 
         // Run GPU effects
@@ -1195,10 +1226,7 @@ impl GpuExportPipeline {
             return Ok(());
         }
 
-        tracing::debug!(
-            "Processing {} transition pair(s)",
-            transition_pairs.len()
-        );
+        tracing::debug!("Processing {} transition pair(s)", transition_pairs.len());
 
         let mut removal_indices: Vec<usize> = Vec::new();
 
@@ -1221,10 +1249,8 @@ impl GpuExportPipeline {
             )?;
 
             // Apply GPU transition
-            let params = TransitionParams::new(
-                TransitionType::from_str(transition_type),
-                *progress as f32,
-            );
+            let params =
+                TransitionParams::new(TransitionType::from_str(transition_type), *progress as f32);
 
             let (blended_texture, _blended_view) = self.transition_processor.apply_transition(
                 &from_result.view,
@@ -1382,8 +1408,7 @@ impl GpuExportPipeline {
         }
         let rasterizer = self.shape_rasterizer.as_ref().unwrap();
 
-        let rasterized =
-            rasterizer.rasterize(shape_data, self.output_width, self.output_height)?;
+        let rasterized = rasterizer.rasterize(shape_data, self.output_width, self.output_height)?;
 
         let width = rasterized.width;
         let height = rasterized.height;
@@ -1727,7 +1752,11 @@ impl GpuExportPipeline {
                         origin: wgpu::Origin3d::ZERO,
                         aspect: wgpu::TextureAspect::All,
                     },
-                    wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
                 );
                 self.ctx.queue().submit(std::iter::once(encoder.finish()));
             }
@@ -1834,7 +1863,8 @@ mod tests {
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
         timeline.duration = 10.0;
 
-        let mut pipeline = GpuExportPipeline::new(timeline, create_test_settings(), ctx, None).unwrap();
+        let mut pipeline =
+            GpuExportPipeline::new(timeline, create_test_settings(), ctx, None).unwrap();
         pipeline.initialize().unwrap();
 
         let result = pipeline.process_frame(5.0, [0.0, 0.0, 0.0, 1.0]).unwrap();

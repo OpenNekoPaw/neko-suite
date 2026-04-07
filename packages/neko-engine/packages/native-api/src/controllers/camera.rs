@@ -2,8 +2,8 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_native_core::services::{CameraService, ICameraService};
 use neko_native_core::services::camera::CameraCaptureConfig;
+use neko_native_core::services::{CameraService, ICameraService};
 use neko_types::registry;
 use neko_types::ActionResponse;
 use serde::Deserialize;
@@ -44,8 +44,7 @@ impl Controller for CameraController {
                     fps: Option<f64>,
                 }
 
-                let opts: CaptureStartOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: CaptureStartOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let config = CameraCaptureConfig {
                     resolution_width: opts.resolution_width.unwrap_or(1280),
@@ -70,15 +69,17 @@ impl Controller for CameraController {
                     stream_id: Option<String>,
                 }
 
-                let opts: CaptureStopOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: CaptureStopOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("streamId required".to_string())
-                })?;
+                let stream_id = opts
+                    .stream_id
+                    .ok_or_else(|| ApiError::InvalidRequest("streamId required".to_string()))?;
 
                 self.camera_service.capture_stop(&stream_id).await?;
-                Ok(ActionResponse::ok("", serde_json::json!({ "success": true })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "success": true }),
+                ))
             }
             _ => Err(ApiError::UnknownAction {
                 group: "cameras".to_string(),

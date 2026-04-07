@@ -8,7 +8,6 @@ description = "Shared DTO types for neko-engine"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-toml = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

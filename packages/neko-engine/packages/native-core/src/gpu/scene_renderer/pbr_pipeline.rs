@@ -311,57 +311,58 @@ impl PbrRenderer {
                 multiview: None,
             });
 
-        let material_bgl_clone = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("pbr_material_bgl_for_cache"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let material_bgl_clone =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("pbr_material_bgl_for_cache"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         (
             Self {
@@ -702,12 +703,9 @@ impl PbrRenderer {
                     .or_else(|| skeleton_data.first());
 
                 if let Some((_, joint_entities, ibms)) = skel {
-                    let mut joint_matrices =
-                        vec![Mat4::IDENTITY; MAX_JOINTS];
+                    let mut joint_matrices = vec![Mat4::IDENTITY; MAX_JOINTS];
 
-                    for (i, joint_entity) in
-                        joint_entities.iter().enumerate().take(MAX_JOINTS)
-                    {
+                    for (i, joint_entity) in joint_entities.iter().enumerate().take(MAX_JOINTS) {
                         let joint_global = world
                             .get::<GlobalTransform>(*joint_entity)
                             .map(|gt| gt.0)
@@ -722,13 +720,11 @@ impl PbrRenderer {
                         .flat_map(|m| m.to_cols_array())
                         .collect();
 
-                    let jbuf = device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("joint_matrices_buffer"),
-                            contents: bytemuck::cast_slice(&flat),
-                            usage: wgpu::BufferUsages::STORAGE,
-                        },
-                    );
+                    let jbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("joint_matrices_buffer"),
+                        contents: bytemuck::cast_slice(&flat),
+                        usage: wgpu::BufferUsages::STORAGE,
+                    });
 
                     let jbg = device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("joint_matrices_bg"),

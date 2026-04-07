@@ -50,9 +50,9 @@ impl Controller for ScenesController {
                     source: Option<String>,
                 }
                 let opts: LoadOptions = serde_json::from_value(options).unwrap_or_default();
-                let source = opts.source.ok_or_else(|| {
-                    ApiError::InvalidRequest("source path required".to_string())
-                })?;
+                let source = opts
+                    .source
+                    .ok_or_else(|| ApiError::InvalidRequest("source path required".to_string()))?;
 
                 let service = self.service()?;
                 let snapshot = service
@@ -118,9 +118,9 @@ impl Controller for ScenesController {
                     time: Option<f32>,
                 }
                 let opts: TickOptions = serde_json::from_value(options).unwrap_or_default();
-                let clip_name = opts.clip_name.ok_or_else(|| {
-                    ApiError::InvalidRequest("clip_name required".to_string())
-                })?;
+                let clip_name = opts
+                    .clip_name
+                    .ok_or_else(|| ApiError::InvalidRequest("clip_name required".to_string()))?;
                 let time = opts.time.unwrap_or(0.0);
 
                 let service = self.service()?;
@@ -162,11 +162,14 @@ impl Controller for ScenesController {
                     #[serde(default = "default_fov")]
                     fov_y: f32,
                 }
-                fn default_up() -> [f32; 3] { [0.0, 1.0, 0.0] }
-                fn default_fov() -> f32 { 45.0_f32.to_radians() }
+                fn default_up() -> [f32; 3] {
+                    [0.0, 1.0, 0.0]
+                }
+                fn default_fov() -> f32 {
+                    45.0_f32.to_radians()
+                }
 
-                let opts: CaptureOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: CaptureOptions = serde_json::from_value(options).unwrap_or_default();
                 let width = opts.width.unwrap_or(1920);
                 let height = opts.height.unwrap_or(1080);
                 let time = opts.time.unwrap_or(0.0);
@@ -521,10 +524,7 @@ impl Controller for ScenesController {
                     )
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 
-                Ok(ActionResponse::ok(
-                    "",
-                    serde_json::json!({ "id": id }),
-                ))
+                Ok(ActionResponse::ok("", serde_json::json!({ "id": id })))
             }
 
             "ik_remove" => {
@@ -556,12 +556,7 @@ impl Controller for ScenesController {
 
                 let service = self.service()?;
                 service
-                    .set_ik_target(
-                        &opts.chain_id,
-                        opts.position,
-                        opts.rotation,
-                        opts.pole,
-                    )
+                    .set_ik_target(&opts.chain_id, opts.position, opts.rotation, opts.pole)
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 
                 Ok(ActionResponse::ok("", Value::Null))
@@ -755,9 +750,7 @@ mod tests {
     #[tokio::test]
     async fn test_snapshot_empty_scene() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("snapshot", None, Value::Null, None)
-            .await;
+        let result = controller.handle("snapshot", None, Value::Null, None).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.is_ok());
@@ -766,18 +759,14 @@ mod tests {
     #[tokio::test]
     async fn test_animate_empty_scene() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("animate", None, Value::Null, None)
-            .await;
+        let result = controller.handle("animate", None, Value::Null, None).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_no_service_returns_error() {
         let controller = create_controller_without_service();
-        let result = controller
-            .handle("snapshot", None, Value::Null, None)
-            .await;
+        let result = controller.handle("snapshot", None, Value::Null, None).await;
         assert!(result.is_err());
     }
 
@@ -785,9 +774,7 @@ mod tests {
     async fn test_capture_empty_scene() {
         // Without GPU, render_frame returns error
         let controller = create_test_controller();
-        let result = controller
-            .handle("capture", None, Value::Null, None)
-            .await;
+        let result = controller.handle("capture", None, Value::Null, None).await;
         assert!(result.is_err());
     }
 

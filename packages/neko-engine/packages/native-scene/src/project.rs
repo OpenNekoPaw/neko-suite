@@ -45,7 +45,6 @@ pub struct NkmProject {
     pub editor_state: serde_json::Value,
 
     // ── v2 fields (all #[serde(default)] for backwards compat with v1) ──
-
     /// Saved face parameter templates (32-param standard set)
     #[serde(default)]
     pub face_params: HashMap<String, f32>,

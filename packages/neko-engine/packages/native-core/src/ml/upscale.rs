@@ -124,15 +124,18 @@ fn upscale_tiled(
     for ty in 0..y_count {
         for tx in 0..x_count {
             // Source tile region (with padding, clamped to image bounds).
-            let tile_x0 = (tx * step).saturating_sub(TILE_PAD).min(src_w.saturating_sub(1));
-            let tile_y0 = (ty * step).saturating_sub(TILE_PAD).min(src_h.saturating_sub(1));
+            let tile_x0 = (tx * step)
+                .saturating_sub(TILE_PAD)
+                .min(src_w.saturating_sub(1));
+            let tile_y0 = (ty * step)
+                .saturating_sub(TILE_PAD)
+                .min(src_h.saturating_sub(1));
             let tile_x1 = (tile_x0 + TILE_SIZE).min(src_w);
             let tile_y1 = (tile_y0 + TILE_SIZE).min(src_h);
             let tile_w = tile_x1 - tile_x0;
             let tile_h = tile_y1 - tile_y0;
 
-            let tile =
-                image::imageops::crop_imm(img, tile_x0, tile_y0, tile_w, tile_h).to_image();
+            let tile = image::imageops::crop_imm(img, tile_x0, tile_y0, tile_w, tile_h).to_image();
             let out_tile = run_session(session, image_to_nchw(&tile), scale)?;
 
             // Destination region in the output image (strip padding contribution).

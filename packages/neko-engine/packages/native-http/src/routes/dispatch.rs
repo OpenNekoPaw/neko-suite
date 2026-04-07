@@ -27,7 +27,10 @@ async fn dispatch_with_admission(
             );
             return ActionResponse::from_error(
                 request.id,
-                ApiError::new(ErrorCode::ServiceOverloaded, "Server is busy, please retry later"),
+                ApiError::new(
+                    ErrorCode::ServiceOverloaded,
+                    "Server is busy, please retry later",
+                ),
             );
         }
     };

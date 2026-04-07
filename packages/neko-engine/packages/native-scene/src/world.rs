@@ -88,7 +88,8 @@ pub trait SceneWorld: Send + Sync {
     fn restore_snapshot(&mut self, snapshot: &SceneSnapshot);
 
     /// Get keyframe tracks for a named animation clip
-    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>, String>;
+    fn get_keyframe_tracks(&mut self, clip_name: &str)
+        -> Result<Vec<AnimationChannelInfo>, String>;
 
     /// Add a keyframe to a channel within a named clip.
     /// `node_id` + `property` identify the channel; creates channel if needed.
@@ -241,24 +242,11 @@ impl SceneWorld for BevySceneWorld {
             Option<&Skeleton>,
         )>();
 
-        for (
-            _entity,
-            node_id,
-            name,
-            transform,
-            parent,
-            visible,
-            mesh,
-            light,
-            camera,
-            skeleton,
-        ) in query.iter(&self.world)
+        for (_entity, node_id, name, transform, parent, visible, mesh, light, camera, skeleton) in
+            query.iter(&self.world)
         {
-            let parent_id = parent.and_then(|p| {
-                self.world
-                    .get::<SceneNodeId>(p.0)
-                    .map(|id| id.0.clone())
-            });
+            let parent_id =
+                parent.and_then(|p| self.world.get::<SceneNodeId>(p.0).map(|id| id.0.clone()));
 
             nodes.push(SceneNodeSnapshot {
                 id: node_id.0.clone(),
@@ -404,9 +392,15 @@ impl SceneWorld for BevySceneWorld {
         systems::transform_propagation(&mut self.world);
     }
 
-    fn get_keyframe_tracks(&mut self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>, String> {
+    fn get_keyframe_tracks(
+        &mut self,
+        clip_name: &str,
+    ) -> Result<Vec<AnimationChannelInfo>, String> {
         let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
-        let target = self.world.get::<AnimationTarget>(entity).ok_or("No animation target")?;
+        let target = self
+            .world
+            .get::<AnimationTarget>(entity)
+            .ok_or("No animation target")?;
         Ok(target.clips[clip_idx].get_tracks())
     }
 
@@ -420,21 +414,30 @@ impl SceneWorld for BevySceneWorld {
     ) -> Result<String, String> {
         let prop = parse_animation_property(property)?;
         let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
-        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        let mut target = self
+            .world
+            .get_mut::<AnimationTarget>(entity)
+            .ok_or("No animation target")?;
         let channel = target.clips[clip_idx].get_or_create_channel(node_id, prop);
         Ok(channel.add_keyframe(timestamp, values))
     }
 
     fn remove_keyframe(&mut self, clip_name: &str, keyframe_id: &str) -> Result<(), String> {
         let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
-        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        let mut target = self
+            .world
+            .get_mut::<AnimationTarget>(entity)
+            .ok_or("No animation target")?;
         // Search all channels for the keyframe
         for channel in &mut target.clips[clip_idx].channels {
             if channel.keyframes.iter().any(|k| k.id == keyframe_id) {
                 return channel.remove_keyframe(keyframe_id);
             }
         }
-        Err(format!("Keyframe '{}' not found in clip '{}'", keyframe_id, clip_name))
+        Err(format!(
+            "Keyframe '{}' not found in clip '{}'",
+            keyframe_id, clip_name
+        ))
     }
 
     fn update_keyframe(
@@ -446,13 +449,19 @@ impl SceneWorld for BevySceneWorld {
         easing: Option<EasingType>,
     ) -> Result<(), String> {
         let (entity, clip_idx) = self.find_clip_mut(clip_name)?;
-        let mut target = self.world.get_mut::<AnimationTarget>(entity).ok_or("No animation target")?;
+        let mut target = self
+            .world
+            .get_mut::<AnimationTarget>(entity)
+            .ok_or("No animation target")?;
         for channel in &mut target.clips[clip_idx].channels {
             if channel.keyframes.iter().any(|k| k.id == keyframe_id) {
                 return channel.update_keyframe(keyframe_id, timestamp, values, easing);
             }
         }
-        Err(format!("Keyframe '{}' not found in clip '{}'", keyframe_id, clip_name))
+        Err(format!(
+            "Keyframe '{}' not found in clip '{}'",
+            keyframe_id, clip_name
+        ))
     }
 
     fn create_clip(&mut self, name: &str, duration: f32) -> Result<(), String> {
@@ -522,9 +531,11 @@ impl SceneWorld for BevySceneWorld {
         if !has_blend {
             // Start with an empty blend state (or single layer at weight 1.0 if something is playing)
             let initial_layers = Vec::new();
-            self.world.entity_mut(root).insert(SceneAnimationBlendState {
-                layers: initial_layers,
-            });
+            self.world
+                .entity_mut(root)
+                .insert(SceneAnimationBlendState {
+                    layers: initial_layers,
+                });
         }
 
         // Add target clip as new layer with weight 0
@@ -580,10 +591,7 @@ impl SceneWorld for BevySceneWorld {
             }
         }
 
-        Err(format!(
-            "Clip '{}' not found in blend layers",
-            clip_name
-        ))
+        Err(format!("Clip '{}' not found in blend layers", clip_name))
     }
 
     fn get_blend_state(&mut self) -> Vec<SceneBlendLayerInfo> {
@@ -609,10 +617,7 @@ impl SceneWorld for BevySceneWorld {
                     .layers
                     .iter()
                     .map(|l| SceneBlendLayerInfo {
-                        clip_name: clip_names
-                            .get(l.clip_index)
-                            .cloned()
-                            .unwrap_or_default(),
+                        clip_name: clip_names.get(l.clip_index).cloned().unwrap_or_default(),
                         elapsed: l.elapsed,
                         weight: l.weight,
                         looping: l.looping,
@@ -687,8 +692,7 @@ impl SceneWorld for BevySceneWorld {
 
         if let Some(mut chain) = self.world.get_mut::<IkChain>(entity) {
             chain.target_position = glam::Vec3::from(position);
-            chain.target_rotation =
-                rotation.map(|r| glam::Quat::from_array(r));
+            chain.target_rotation = rotation.map(|r| glam::Quat::from_array(r));
             chain.pole_target = pole.map(|p| glam::Vec3::from(p));
         }
 
@@ -721,16 +725,8 @@ impl SceneWorld for BevySceneWorld {
         for chain in q.iter(&self.world) {
             chains.push(IkChainInfo {
                 id: chain.id.clone(),
-                root_joint: chain
-                    .joint_node_ids
-                    .first()
-                    .cloned()
-                    .unwrap_or_default(),
-                end_effector: chain
-                    .joint_node_ids
-                    .last()
-                    .cloned()
-                    .unwrap_or_default(),
+                root_joint: chain.joint_node_ids.first().cloned().unwrap_or_default(),
+                end_effector: chain.joint_node_ids.last().cloned().unwrap_or_default(),
                 joint_count: chain.joint_node_ids.len(),
                 solver: match &chain.solver {
                     IkSolverType::Fabrik { .. } => "fabrik".to_string(),
@@ -843,10 +839,7 @@ impl BevySceneWorld {
 
             // Find parent
             let entity = self.find_node_entity(&current_id)?;
-            let parent = self
-                .world
-                .get::<hierarchy::Parent>(entity)
-                .map(|p| p.0);
+            let parent = self.world.get::<hierarchy::Parent>(entity).map(|p| p.0);
 
             match parent {
                 Some(parent_entity) => {

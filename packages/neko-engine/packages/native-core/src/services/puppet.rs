@@ -42,7 +42,8 @@ pub trait IPuppetService: Send + Sync {
     fn seek_animation(&self, time_ms: f32) -> crate::error::Result<()>;
 
     /// Get all keyframe tracks for a named animation clip
-    fn get_keyframe_tracks(&self, clip_name: &str) -> crate::error::Result<Vec<ParameterCurveInfo>>;
+    fn get_keyframe_tracks(&self, clip_name: &str)
+        -> crate::error::Result<Vec<ParameterCurveInfo>>;
 
     /// Add a keyframe to a parameter curve within a clip
     fn add_keyframe(

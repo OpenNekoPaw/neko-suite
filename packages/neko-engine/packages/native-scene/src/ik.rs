@@ -11,19 +11,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IkSolverType {
     /// Forward And Backward Reaching Inverse Kinematics
-    Fabrik {
-        iterations: u32,
-        tolerance: f32,
-    },
+    Fabrik { iterations: u32, tolerance: f32 },
     /// Cyclic Coordinate Descent
-    Ccd {
-        iterations: u32,
-        damping: f32,
-    },
+    Ccd { iterations: u32, damping: f32 },
     /// Analytical two-bone solver (for arms/legs)
-    TwoBone {
-        pole_vector: [f32; 3],
-    },
+    TwoBone { pole_vector: [f32; 3] },
 }
 
 impl Default for IkSolverType {
@@ -69,12 +61,7 @@ pub struct IkChainInfo {
 }
 
 /// FABRIK solver: iteratively reaches target via forward/backward passes
-pub fn solve_fabrik(
-    positions: &mut [Vec3],
-    target: Vec3,
-    iterations: u32,
-    tolerance: f32,
-) {
+pub fn solve_fabrik(positions: &mut [Vec3], target: Vec3, iterations: u32, tolerance: f32) {
     let n = positions.len();
     if n < 2 {
         return;
@@ -126,12 +113,7 @@ pub fn solve_fabrik(
 }
 
 /// CCD solver: rotate each joint from end to root to minimize distance
-pub fn solve_ccd(
-    positions: &mut [Vec3],
-    target: Vec3,
-    iterations: u32,
-    damping: f32,
-) {
+pub fn solve_ccd(positions: &mut [Vec3], target: Vec3, iterations: u32, damping: f32) {
     let n = positions.len();
     if n < 2 {
         return;
@@ -166,11 +148,7 @@ pub fn solve_ccd(
 }
 
 /// Analytical two-bone solver (upper arm + lower arm, or thigh + shin)
-pub fn solve_two_bone(
-    positions: &mut [Vec3],
-    target: Vec3,
-    pole_vector: Vec3,
-) {
+pub fn solve_two_bone(positions: &mut [Vec3], target: Vec3, pole_vector: Vec3) {
     if positions.len() != 3 {
         return;
     }
@@ -187,12 +165,12 @@ pub fn solve_two_bone(
     }
 
     // Use law of cosines to find the angle at the middle joint
-    let _cos_angle = ((len_a * len_a + len_b * len_b - dist * dist) / (2.0 * len_a * len_b))
-        .clamp(-1.0, 1.0);
+    let _cos_angle =
+        ((len_a * len_a + len_b * len_b - dist * dist) / (2.0 * len_a * len_b)).clamp(-1.0, 1.0);
 
     // Angle at root joint
-    let cos_root_angle = ((len_a * len_a + dist * dist - len_b * len_b) / (2.0 * len_a * dist))
-        .clamp(-1.0, 1.0);
+    let cos_root_angle =
+        ((len_a * len_a + dist * dist - len_b * len_b) / (2.0 * len_a * dist)).clamp(-1.0, 1.0);
     let root_angle = cos_root_angle.acos();
 
     // Build coordinate frame
@@ -216,10 +194,7 @@ pub fn solve_two_bone(
 ///
 /// Given old and new world-space joint positions, compute the rotation
 /// needed at each joint to achieve the new positions.
-pub fn positions_to_rotations(
-    old_positions: &[Vec3],
-    new_positions: &[Vec3],
-) -> Vec<Quat> {
+pub fn positions_to_rotations(old_positions: &[Vec3], new_positions: &[Vec3]) -> Vec<Quat> {
     let n = old_positions.len();
     let mut rotations = Vec::with_capacity(n);
 
@@ -250,15 +225,17 @@ pub fn ik_solve(world: &mut World) {
     // Collect all IK chains
     let chains: Vec<IkChain> = {
         let mut q = world.query::<&IkChain>();
-        q.iter(world).map(|c| IkChain {
-            id: c.id.clone(),
-            joint_node_ids: c.joint_node_ids.clone(),
-            target_position: c.target_position,
-            target_rotation: c.target_rotation,
-            pole_target: c.pole_target,
-            solver: c.solver.clone(),
-            enabled: c.enabled,
-        }).collect()
+        q.iter(world)
+            .map(|c| IkChain {
+                id: c.id.clone(),
+                joint_node_ids: c.joint_node_ids.clone(),
+                target_position: c.target_position,
+                target_rotation: c.target_rotation,
+                pole_target: c.pole_target,
+                solver: c.solver.clone(),
+                enabled: c.enabled,
+            })
+            .collect()
     };
 
     for chain in &chains {
@@ -322,9 +299,7 @@ pub fn ik_solve(world: &mut World) {
                 );
             }
             IkSolverType::TwoBone { pole_vector } => {
-                let pole = chain
-                    .pole_target
-                    .unwrap_or(Vec3::from_array(*pole_vector));
+                let pole = chain.pole_target.unwrap_or(Vec3::from_array(*pole_vector));
                 solve_two_bone(&mut new_positions, chain.target_position, pole);
             }
         }
@@ -379,7 +354,11 @@ mod tests {
         let target = Vec3::new(1.5, 1.0, 0.0);
         solve_fabrik(&mut positions, target, 20, 0.001);
         let end_dist = (positions[2] - target).length();
-        assert!(end_dist < 0.01, "FABRIK should reach target, dist={}", end_dist);
+        assert!(
+            end_dist < 0.01,
+            "FABRIK should reach target, dist={}",
+            end_dist
+        );
         // Root should stay at origin
         assert!(
             (positions[0] - Vec3::ZERO).length() < 0.01,
@@ -411,7 +390,11 @@ mod tests {
         let target = Vec3::new(1.5, 1.0, 0.0);
         solve_ccd(&mut positions, target, 50, 0.5);
         let end_dist = (positions[2] - target).length();
-        assert!(end_dist < 0.1, "CCD should approach target, dist={}", end_dist);
+        assert!(
+            end_dist < 0.1,
+            "CCD should approach target, dist={}",
+            end_dist
+        );
     }
 
     #[test]
@@ -461,14 +444,20 @@ mod tests {
     #[test]
     fn test_parse_solver_type() {
         match parse_solver_type("fabrik", 10, 0.001) {
-            IkSolverType::Fabrik { iterations, tolerance } => {
+            IkSolverType::Fabrik {
+                iterations,
+                tolerance,
+            } => {
                 assert_eq!(iterations, 10);
                 assert!((tolerance - 0.001).abs() < f32::EPSILON);
             }
             _ => panic!("Expected FABRIK"),
         }
         match parse_solver_type("ccd", 20, 0.5) {
-            IkSolverType::Ccd { iterations, damping } => {
+            IkSolverType::Ccd {
+                iterations,
+                damping,
+            } => {
                 assert_eq!(iterations, 20);
                 assert!((damping - 0.5).abs() < f32::EPSILON);
             }

@@ -467,9 +467,7 @@ mod tests {
     #[tokio::test]
     async fn test_snapshot_empty_puppet() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("snapshot", None, Value::Null, None)
-            .await;
+        let result = controller.handle("snapshot", None, Value::Null, None).await;
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.is_ok());
@@ -478,36 +476,28 @@ mod tests {
     #[tokio::test]
     async fn test_params_empty_puppet() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("params", None, Value::Null, None)
-            .await;
+        let result = controller.handle("params", None, Value::Null, None).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_tick_empty_puppet() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("tick", None, Value::Null, None)
-            .await;
+        let result = controller.handle("tick", None, Value::Null, None).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_no_service_returns_error() {
         let controller = create_controller_without_service();
-        let result = controller
-            .handle("snapshot", None, Value::Null, None)
-            .await;
+        let result = controller.handle("snapshot", None, Value::Null, None).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_load_requires_body() {
         let controller = create_test_controller();
-        let result = controller
-            .handle("load", None, Value::Null, None)
-            .await;
+        let result = controller.handle("load", None, Value::Null, None).await;
         assert!(result.is_err());
     }
 }

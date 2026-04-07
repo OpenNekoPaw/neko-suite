@@ -204,12 +204,20 @@ fn extract_simple_physics(
     let param_uuid = node.get("param").and_then(|v| v.as_u64())?;
     let param_name = param_uuid_to_name.get(&param_uuid)?.clone();
 
-    let model = match node.get("model_type").and_then(|v| v.as_str()).unwrap_or("Pendulum") {
+    let model = match node
+        .get("model_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Pendulum")
+    {
         "SpringPendulum" => PhysicsModel::SpringPendulum,
         _ => PhysicsModel::RigidPendulum,
     };
 
-    let map_mode = match node.get("map_mode").and_then(|v| v.as_str()).unwrap_or("AngleLength") {
+    let map_mode = match node
+        .get("map_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("AngleLength")
+    {
         "LengthAngle" => PhysicsMapMode::LengthAngle,
         "XY" => PhysicsMapMode::XY,
         "YX" => PhysicsMapMode::YX,
@@ -295,10 +303,7 @@ fn parse_animation_curves(anim_obj: &Value) -> Vec<ParameterCurve> {
                 .and_then(|v| v.as_array())
                 .map(|kfs| {
                     kfs.iter()
-                        .map(|kf| Keyframe::new(
-                            json_f32(kf, "time"),
-                            json_f32(kf, "value"),
-                        ))
+                        .map(|kf| Keyframe::new(json_f32(kf, "time"), json_f32(kf, "value")))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -353,18 +358,9 @@ pub fn load_inp(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError>
         .map(|p| {
             let name = json_str(p, "name").to_string();
             // min/max/defaults are Vec2 arrays; use the X component for scalar parameters
-            let min = p
-                .get("min")
-                .map(|a| json_f32_at(a, 0))
-                .unwrap_or(0.0);
-            let max = p
-                .get("max")
-                .map(|a| json_f32_at(a, 0))
-                .unwrap_or(1.0);
-            let default = p
-                .get("defaults")
-                .map(|a| json_f32_at(a, 0))
-                .unwrap_or(0.0);
+            let min = p.get("min").map(|a| json_f32_at(a, 0)).unwrap_or(0.0);
+            let max = p.get("max").map(|a| json_f32_at(a, 0)).unwrap_or(1.0);
+            let default = p.get("defaults").map(|a| json_f32_at(a, 0)).unwrap_or(0.0);
             ParameterDef {
                 name,
                 min,
@@ -464,9 +460,7 @@ pub fn load_inp(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError>
 
             // Attach SimplePhysics for physics nodes
             if ty_str == "SimplePhysics" {
-                if let Some(physics) =
-                    extract_simple_physics(node_json, &param_uuid_to_name)
-                {
+                if let Some(physics) = extract_simple_physics(node_json, &param_uuid_to_name) {
                     world
                         .entity_mut(entity)
                         .insert((physics, PhysicsState::default()));

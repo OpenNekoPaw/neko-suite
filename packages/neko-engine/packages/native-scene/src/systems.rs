@@ -58,7 +58,9 @@ fn propagate_children(world: &mut World, parent: Entity) {
         if let Some(mut global) = world.get_mut::<GlobalTransform>(child) {
             global.0 = child_global;
         } else {
-            world.entity_mut(child).insert(GlobalTransform(child_global));
+            world
+                .entity_mut(child)
+                .insert(GlobalTransform(child_global));
         }
         propagate_children(world, child);
     }
@@ -91,11 +93,7 @@ pub fn animation_tick(world: &mut World, clip_name: &str, time: f32) {
     }
 }
 
-fn apply_clip_at_time(
-    world: &mut World,
-    clip: &crate::components::AnimationClipData,
-    time: f32,
-) {
+fn apply_clip_at_time(world: &mut World, clip: &crate::components::AnimationClipData, time: f32) {
     for channel in &clip.channels {
         // Find target entity by SceneNodeId
         let target_entity = {
@@ -129,11 +127,7 @@ fn apply_clip_at_time(
             AnimationProperty::Translation => {
                 if values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
-                    let a = glam::Vec3::new(
-                        values[base],
-                        values[base + 1],
-                        values[base + 2],
-                    );
+                    let a = glam::Vec3::new(values[base], values[base + 1], values[base + 2]);
                     let pos = if has_next && values.len() >= (idx + 2) * 3 {
                         let next_base = (idx + 1) * 3;
                         let b = glam::Vec3::new(
@@ -179,11 +173,7 @@ fn apply_clip_at_time(
             AnimationProperty::Scale => {
                 if values.len() >= (idx + 1) * 3 {
                     let base = idx * 3;
-                    let a = glam::Vec3::new(
-                        values[base],
-                        values[base + 1],
-                        values[base + 2],
-                    );
+                    let a = glam::Vec3::new(values[base], values[base + 1], values[base + 2]);
                     let scl = if has_next && values.len() >= (idx + 2) * 3 {
                         let next_base = (idx + 1) * 3;
                         let b = glam::Vec3::new(
@@ -229,7 +219,9 @@ fn apply_clip_at_time(
                 if let Some(mut mw) = world.get_mut::<MorphWeights>(target_entity) {
                     mw.weights = weights;
                 } else {
-                    world.entity_mut(target_entity).insert(MorphWeights { weights });
+                    world
+                        .entity_mut(target_entity)
+                        .insert(MorphWeights { weights });
                 }
             }
         }
@@ -342,7 +334,9 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
                 }
             }
         }
-        world.entity_mut(root_entity).remove::<SceneCrossfadeRequest>();
+        world
+            .entity_mut(root_entity)
+            .remove::<SceneCrossfadeRequest>();
     }
 
     // Clone layers for iteration
@@ -456,8 +450,7 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
                             entry.0 = val;
                         } else {
                             // SLERP blend between accumulated and new
-                            let blend_t =
-                                layer.weight / (entry.1 + layer.weight);
+                            let blend_t = layer.weight / (entry.1 + layer.weight);
                             entry.0 = entry.0.slerp(val, blend_t);
                         }
                         entry.1 += layer.weight;
@@ -552,9 +545,9 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
             if let Some(mut mw) = world.get_mut::<MorphWeights>(entity) {
                 mw.weights = normalized;
             } else {
-                world
-                    .entity_mut(entity)
-                    .insert(MorphWeights { weights: normalized });
+                world.entity_mut(entity).insert(MorphWeights {
+                    weights: normalized,
+                });
             }
         }
     }
@@ -699,13 +692,13 @@ mod tests {
             )],
         };
 
-        let root = world
-            .spawn(AnimationTarget { clips: vec![clip] })
-            .id();
+        let root = world.spawn(AnimationTarget { clips: vec![clip] }).id();
 
         // t=0.0 → idx=0, weights=[0.0, 1.0]
         animation_tick(&mut world, "morph_test", 0.0);
-        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        let mw = world
+            .get::<MorphWeights>(target)
+            .expect("MorphWeights should be set");
         assert_eq!(mw.weights.len(), 2);
         assert!((mw.weights[0] - 0.0).abs() < f32::EPSILON);
         assert!((mw.weights[1] - 1.0).abs() < f32::EPSILON);
@@ -714,13 +707,17 @@ mod tests {
         // frame1=[0.5, 0.5], frame2=[1.0, 0.0]
         // lerp: [0.5 + 0.5*0.4, 0.5 + (-0.5)*0.4] = [0.7, 0.3]
         animation_tick(&mut world, "morph_test", 0.7);
-        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        let mw = world
+            .get::<MorphWeights>(target)
+            .expect("MorphWeights should be set");
         assert!((mw.weights[0] - 0.7).abs() < 0.01);
         assert!((mw.weights[1] - 0.3).abs() < 0.01);
 
         // t=1.0 → idx=2 (last frame, all timestamps exhausted), weights=[1.0, 0.0]
         animation_tick(&mut world, "morph_test", 1.0);
-        let mw = world.get::<MorphWeights>(target).expect("MorphWeights should be set");
+        let mw = world
+            .get::<MorphWeights>(target)
+            .expect("MorphWeights should be set");
         assert!((mw.weights[0] - 1.0).abs() < f32::EPSILON);
         assert!((mw.weights[1] - 0.0).abs() < f32::EPSILON);
 

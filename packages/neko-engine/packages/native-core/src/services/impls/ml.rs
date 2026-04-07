@@ -52,9 +52,9 @@ impl IMlService for MlService {
 
     fn upscale(&self, model: &str, input: &str, output: &str, scale: u32) -> Result<()> {
         self.registry.get_or_load(model, &self.device)?;
-        let result = self
-            .registry
-            .with_session(model, |session| ml::upscale::upscale(session, input, output, scale));
+        let result = self.registry.with_session(model, |session| {
+            ml::upscale::upscale(session, input, output, scale)
+        });
         self.registry.evict_idle(IDLE_EVICT_SECS).ok();
         result
     }
@@ -87,11 +87,9 @@ impl IMlService for MlService {
             .registry
             .with_session(model, |session| ml::clip::encode_image(session, image))?;
 
-        let txt_embed = self
-            .registry
-            .with_session(&text_model, |session| {
-                ml::clip::encode_text(session, &token_ids)
-            })?;
+        let txt_embed = self.registry.with_session(&text_model, |session| {
+            ml::clip::encode_text(session, &token_ids)
+        })?;
 
         let score = ml::clip::cosine_similarity(&img_embed, &txt_embed);
         self.registry.evict_idle(IDLE_EVICT_SECS).ok();
@@ -147,7 +145,8 @@ mod tests {
         std::fs::write(&tmp, b"").unwrap();
         let path = tmp.to_str().unwrap();
 
-        svc.register_model("clip-vis", path, "onnx", "clip").unwrap();
+        svc.register_model("clip-vis", path, "onnx", "clip")
+            .unwrap();
         let models = svc.list_models();
         assert_eq!(models.len(), 1);
 
@@ -186,8 +185,7 @@ mod tests {
     #[test]
     #[ignore = "requires ORT_DYLIB_PATH + ML_TEST_UPSCALE_MODEL + ML_TEST_IMAGE"]
     fn test_e2e_upscale() {
-        let model =
-            std::env::var("ML_TEST_UPSCALE_MODEL").expect("set ML_TEST_UPSCALE_MODEL");
+        let model = std::env::var("ML_TEST_UPSCALE_MODEL").expect("set ML_TEST_UPSCALE_MODEL");
         let image = std::env::var("ML_TEST_IMAGE").expect("set ML_TEST_IMAGE");
         let out = std::env::temp_dir().join("e2e_upscale_out.png");
 
@@ -210,8 +208,7 @@ mod tests {
     #[test]
     #[ignore = "requires ORT_DYLIB_PATH + ML_TEST_DENOISE_MODEL + ML_TEST_IMAGE"]
     fn test_e2e_denoise() {
-        let model =
-            std::env::var("ML_TEST_DENOISE_MODEL").expect("set ML_TEST_DENOISE_MODEL");
+        let model = std::env::var("ML_TEST_DENOISE_MODEL").expect("set ML_TEST_DENOISE_MODEL");
         let image = std::env::var("ML_TEST_IMAGE").expect("set ML_TEST_IMAGE");
         let out = std::env::temp_dir().join("e2e_denoise_out.png");
 
@@ -235,10 +232,10 @@ mod tests {
     #[test]
     #[ignore = "requires ORT_DYLIB_PATH + ML_TEST_CLIP_IMAGE_MODEL + ML_TEST_CLIP_TEXT_MODEL + ML_TEST_IMAGE"]
     fn test_e2e_clip_score() {
-        let image_model = std::env::var("ML_TEST_CLIP_IMAGE_MODEL")
-            .expect("set ML_TEST_CLIP_IMAGE_MODEL");
-        let text_model = std::env::var("ML_TEST_CLIP_TEXT_MODEL")
-            .expect("set ML_TEST_CLIP_TEXT_MODEL");
+        let image_model =
+            std::env::var("ML_TEST_CLIP_IMAGE_MODEL").expect("set ML_TEST_CLIP_IMAGE_MODEL");
+        let text_model =
+            std::env::var("ML_TEST_CLIP_TEXT_MODEL").expect("set ML_TEST_CLIP_TEXT_MODEL");
         let image = std::env::var("ML_TEST_IMAGE").expect("set ML_TEST_IMAGE");
 
         let svc = MlService::new(3, DeviceSelection::Auto);
@@ -267,8 +264,7 @@ mod tests {
     #[test]
     #[ignore = "requires ORT_DYLIB_PATH + ML_TEST_WHISPER_MODEL + ML_TEST_AUDIO"]
     fn test_e2e_transcribe() {
-        let model =
-            std::env::var("ML_TEST_WHISPER_MODEL").expect("set ML_TEST_WHISPER_MODEL");
+        let model = std::env::var("ML_TEST_WHISPER_MODEL").expect("set ML_TEST_WHISPER_MODEL");
         let audio = std::env::var("ML_TEST_AUDIO").expect("set ML_TEST_AUDIO");
 
         let svc = MlService::new(2, DeviceSelection::Auto);
@@ -287,8 +283,7 @@ mod tests {
     fn test_idle_eviction_via_service() {
         use std::time::{Duration, Instant};
 
-        let model =
-            std::env::var("ML_TEST_UPSCALE_MODEL").expect("set ML_TEST_UPSCALE_MODEL");
+        let model = std::env::var("ML_TEST_UPSCALE_MODEL").expect("set ML_TEST_UPSCALE_MODEL");
         let image = std::env::var("ML_TEST_IMAGE").expect("set ML_TEST_IMAGE");
         let out = std::env::temp_dir().join("e2e_evict_out.png");
 

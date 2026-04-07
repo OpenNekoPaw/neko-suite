@@ -45,12 +45,11 @@ impl Controller for GamepadController {
                     gamepad_id: Option<String>,
                 }
 
-                let opts: ConnectOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: ConnectOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let gamepad_id = opts.gamepad_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("gamepadId required".to_string())
-                })?;
+                let gamepad_id = opts
+                    .gamepad_id
+                    .ok_or_else(|| ApiError::InvalidRequest("gamepadId required".to_string()))?;
 
                 let stream_id = self.gamepad_service.connect(&gamepad_id).await?;
 
@@ -67,15 +66,17 @@ impl Controller for GamepadController {
                     stream_id: Option<String>,
                 }
 
-                let opts: DisconnectOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: DisconnectOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("streamId required".to_string())
-                })?;
+                let stream_id = opts
+                    .stream_id
+                    .ok_or_else(|| ApiError::InvalidRequest("streamId required".to_string()))?;
 
                 self.gamepad_service.disconnect(&stream_id).await?;
-                Ok(ActionResponse::ok("", serde_json::json!({ "success": true })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "success": true }),
+                ))
             }
             _ => Err(ApiError::UnknownAction {
                 group: "gamepad".to_string(),

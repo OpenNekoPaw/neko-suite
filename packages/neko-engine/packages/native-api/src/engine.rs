@@ -6,8 +6,8 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_native_core::gpu::GpuContext;
 use neko_native_core::services::{
-    AudioService, CameraService, EffectsService, ExportService, GamepadService, ImageService,
-    IPuppetService, MidiService, NodeService, PuppetService, SceneService, TaskService,
+    AudioService, CameraService, EffectsService, ExportService, GamepadService, IPuppetService,
+    ImageService, MidiService, NodeService, PuppetService, SceneService, TaskService,
     TimelineService, VideoService,
 };
 #[cfg(feature = "onnx")]
@@ -76,7 +76,10 @@ impl EngineApi {
     }
 
     /// Create EngineApi with optional GPU context and explicit config
-    pub fn with_gpu_and_config(gpu_ctx: Option<Arc<GpuContext>>, config: EngineConfig) -> ApiResult<Self> {
+    pub fn with_gpu_and_config(
+        gpu_ctx: Option<Arc<GpuContext>>,
+        config: EngineConfig,
+    ) -> ApiResult<Self> {
         // Create services
         let task_service = Arc::new(TaskService::new());
         let mut node_service = NodeService::new(gpu_ctx.clone());

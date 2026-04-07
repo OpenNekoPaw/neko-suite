@@ -98,8 +98,12 @@ fn denoise_tiled(
 
     for ty in 0..y_count {
         for tx in 0..x_count {
-            let tile_x0 = (tx * step).saturating_sub(TILE_PAD).min(src_w.saturating_sub(1));
-            let tile_y0 = (ty * step).saturating_sub(TILE_PAD).min(src_h.saturating_sub(1));
+            let tile_x0 = (tx * step)
+                .saturating_sub(TILE_PAD)
+                .min(src_w.saturating_sub(1));
+            let tile_y0 = (ty * step)
+                .saturating_sub(TILE_PAD)
+                .min(src_h.saturating_sub(1));
             let tile_x1 = (tile_x0 + TILE_SIZE).min(src_w);
             let tile_y1 = (tile_y0 + TILE_SIZE).min(src_h);
 

@@ -144,12 +144,12 @@ impl Controller for ModelsController {
             #[cfg(feature = "onnx")]
             "register" => {
                 let opts: RegisterOptions = serde_json::from_value(options).unwrap_or_default();
-                let name = opts.name.ok_or_else(|| {
-                    ApiError::InvalidRequest("name required".to_string())
-                })?;
-                let path = opts.path.ok_or_else(|| {
-                    ApiError::InvalidRequest("path required".to_string())
-                })?;
+                let name = opts
+                    .name
+                    .ok_or_else(|| ApiError::InvalidRequest("name required".to_string()))?;
+                let path = opts
+                    .path
+                    .ok_or_else(|| ApiError::InvalidRequest("path required".to_string()))?;
                 let framework = opts.framework.unwrap_or_else(|| "onnx".to_string());
                 let task = opts.task.unwrap_or_else(|| "unknown".to_string());
 
@@ -157,21 +157,27 @@ impl Controller for ModelsController {
                 ml.register_model(&name, &path, &framework, &task)
                     .map_err(|e| ApiError::ServiceError(format!("Register failed: {}", e)))?;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "registered": name })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "registered": name }),
+                ))
             }
 
             #[cfg(feature = "onnx")]
             "unregister" => {
                 let opts: UnregisterOptions = serde_json::from_value(options).unwrap_or_default();
-                let name = opts.name.ok_or_else(|| {
-                    ApiError::InvalidRequest("name required".to_string())
-                })?;
+                let name = opts
+                    .name
+                    .ok_or_else(|| ApiError::InvalidRequest("name required".to_string()))?;
 
                 let ml = self.require_ml()?;
                 ml.unregister_model(&name)
                     .map_err(|e| ApiError::ServiceError(format!("Unregister failed: {}", e)))?;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "unregistered": name })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "unregistered": name }),
+                ))
             }
 
             #[cfg(feature = "onnx")]
@@ -187,9 +193,15 @@ impl Controller for ModelsController {
             #[cfg(feature = "onnx")]
             "upscale" => {
                 let opts: UpscaleOptions = serde_json::from_value(options).unwrap_or_default();
-                let model = opts.model.ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
-                let input = opts.input.ok_or_else(|| ApiError::InvalidRequest("input required".to_string()))?;
-                let output = opts.output.ok_or_else(|| ApiError::InvalidRequest("output required".to_string()))?;
+                let model = opts
+                    .model
+                    .ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
+                let input = opts
+                    .input
+                    .ok_or_else(|| ApiError::InvalidRequest("input required".to_string()))?;
+                let output = opts
+                    .output
+                    .ok_or_else(|| ApiError::InvalidRequest("output required".to_string()))?;
                 let scale = opts.scale.unwrap_or(4);
                 let output_path = output.clone();
 
@@ -202,15 +214,24 @@ impl Controller for ModelsController {
                 .await
                 .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "output": output_path })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "output": output_path }),
+                ))
             }
 
             #[cfg(feature = "onnx")]
             "denoise" => {
                 let opts: DenoiseOptions = serde_json::from_value(options).unwrap_or_default();
-                let model = opts.model.ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
-                let input = opts.input.ok_or_else(|| ApiError::InvalidRequest("input required".to_string()))?;
-                let output = opts.output.ok_or_else(|| ApiError::InvalidRequest("output required".to_string()))?;
+                let model = opts
+                    .model
+                    .ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
+                let input = opts
+                    .input
+                    .ok_or_else(|| ApiError::InvalidRequest("input required".to_string()))?;
+                let output = opts
+                    .output
+                    .ok_or_else(|| ApiError::InvalidRequest("output required".to_string()))?;
                 let strength = opts.strength.unwrap_or(0.5);
                 let output_path = output.clone();
 
@@ -223,15 +244,24 @@ impl Controller for ModelsController {
                 .await
                 .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "output": output_path })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "output": output_path }),
+                ))
             }
 
             #[cfg(feature = "onnx")]
             "clip" => {
                 let opts: ClipOptions = serde_json::from_value(options).unwrap_or_default();
-                let model = opts.model.ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
-                let image = opts.image.ok_or_else(|| ApiError::InvalidRequest("image required".to_string()))?;
-                let text = opts.text.ok_or_else(|| ApiError::InvalidRequest("text required".to_string()))?;
+                let model = opts
+                    .model
+                    .ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
+                let image = opts
+                    .image
+                    .ok_or_else(|| ApiError::InvalidRequest("image required".to_string()))?;
+                let text = opts
+                    .text
+                    .ok_or_else(|| ApiError::InvalidRequest("text required".to_string()))?;
 
                 let ml: Arc<dyn IMlService> = self.ml_service.as_ref().unwrap().clone();
                 let score = tokio::task::spawn_blocking(move || {
@@ -241,14 +271,21 @@ impl Controller for ModelsController {
                 .await
                 .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
 
-                Ok(ActionResponse::ok("", serde_json::json!({ "score": score })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "score": score }),
+                ))
             }
 
             #[cfg(feature = "onnx")]
             "transcribe" => {
                 let opts: TranscribeOptions = serde_json::from_value(options).unwrap_or_default();
-                let model = opts.model.ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
-                let audio = opts.audio.ok_or_else(|| ApiError::InvalidRequest("audio required".to_string()))?;
+                let model = opts
+                    .model
+                    .ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
+                let audio = opts
+                    .audio
+                    .ok_or_else(|| ApiError::InvalidRequest("audio required".to_string()))?;
 
                 let ml: Arc<dyn IMlService> = self.ml_service.as_ref().unwrap().clone();
                 let result = tokio::task::spawn_blocking(move || {
@@ -286,9 +323,13 @@ mod tests {
 
     fn make_controller() -> ModelsController {
         #[cfg(feature = "onnx")]
-        { ModelsController::new(None) }
+        {
+            ModelsController::new(None)
+        }
         #[cfg(not(feature = "onnx"))]
-        { ModelsController::new() }
+        {
+            ModelsController::new()
+        }
     }
 
     #[tokio::test]
@@ -335,6 +376,9 @@ mod tests {
         let opts = serde_json::json!({ "name": "test", "path": "." });
         let result = controller.handle("register", None, opts, None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("ML service not available"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ML service not available"));
     }
 }

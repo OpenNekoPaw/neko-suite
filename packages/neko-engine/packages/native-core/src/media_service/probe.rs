@@ -271,7 +271,10 @@ pub fn probe_media_info<P: AsRef<Path>>(path: P) -> Result<MediaInfo> {
                         "image/jpeg"
                     } else if data.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
                         "image/png"
-                    } else if data.starts_with(b"RIFF") && data.len() > 12 && &data[8..12] == b"WEBP" {
+                    } else if data.starts_with(b"RIFF")
+                        && data.len() > 12
+                        && &data[8..12] == b"WEBP"
+                    {
                         "image/webp"
                     } else {
                         "image/jpeg" // fallback

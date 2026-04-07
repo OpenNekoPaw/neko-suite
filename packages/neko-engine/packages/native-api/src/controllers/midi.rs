@@ -45,8 +45,7 @@ impl Controller for MidiController {
                     port_id: Option<String>,
                 }
 
-                let opts: ConnectOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: ConnectOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let port_id = opts.port_id.ok_or_else(|| {
                     ApiError::InvalidRequest("portId required for midi:connect".to_string())
@@ -67,15 +66,17 @@ impl Controller for MidiController {
                     stream_id: Option<String>,
                 }
 
-                let opts: DisconnectOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: DisconnectOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let stream_id = opts.stream_id.ok_or_else(|| {
-                    ApiError::InvalidRequest("streamId required".to_string())
-                })?;
+                let stream_id = opts
+                    .stream_id
+                    .ok_or_else(|| ApiError::InvalidRequest("streamId required".to_string()))?;
 
                 self.midi_service.disconnect(&stream_id).await?;
-                Ok(ActionResponse::ok("", serde_json::json!({ "success": true })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "success": true }),
+                ))
             }
             _ => Err(ApiError::UnknownAction {
                 group: "midi".to_string(),

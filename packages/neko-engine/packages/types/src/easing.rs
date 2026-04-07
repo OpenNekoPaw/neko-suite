@@ -82,24 +82,16 @@ impl EasingType {
             }
             "easeinsine" | "ease_in_sine" | "ease-in-sine" => EasingType::EaseInSine,
             "easeoutsine" | "ease_out_sine" | "ease-out-sine" => EasingType::EaseOutSine,
-            "easeinoutsine" | "ease_in_out_sine" | "ease-in-out-sine" => {
-                EasingType::EaseInOutSine
-            }
+            "easeinoutsine" | "ease_in_out_sine" | "ease-in-out-sine" => EasingType::EaseInOutSine,
             "easeinexpo" | "ease_in_expo" | "ease-in-expo" => EasingType::EaseInExpo,
             "easeoutexpo" | "ease_out_expo" | "ease-out-expo" => EasingType::EaseOutExpo,
-            "easeinoutexpo" | "ease_in_out_expo" | "ease-in-out-expo" => {
-                EasingType::EaseInOutExpo
-            }
+            "easeinoutexpo" | "ease_in_out_expo" | "ease-in-out-expo" => EasingType::EaseInOutExpo,
             "easeincirc" | "ease_in_circ" | "ease-in-circ" => EasingType::EaseInCirc,
             "easeoutcirc" | "ease_out_circ" | "ease-out-circ" => EasingType::EaseOutCirc,
-            "easeinoutcirc" | "ease_in_out_circ" | "ease-in-out-circ" => {
-                EasingType::EaseInOutCirc
-            }
+            "easeinoutcirc" | "ease_in_out_circ" | "ease-in-out-circ" => EasingType::EaseInOutCirc,
             "easeinback" | "ease_in_back" | "ease-in-back" => EasingType::EaseInBack,
             "easeoutback" | "ease_out_back" | "ease-out-back" => EasingType::EaseOutBack,
-            "easeinoutback" | "ease_in_out_back" | "ease-in-out-back" => {
-                EasingType::EaseInOutBack
-            }
+            "easeinoutback" | "ease_in_out_back" | "ease-in-out-back" => EasingType::EaseInOutBack,
             "easeinelastic" | "ease_in_elastic" | "ease-in-elastic" => EasingType::EaseInElastic,
             "easeoutelastic" | "ease_out_elastic" | "ease-out-elastic" => {
                 EasingType::EaseOutElastic
@@ -319,8 +311,7 @@ impl Easing {
                 } else if t < 0.5 {
                     -(2.0_f64).powf(20.0 * t - 10.0) * ((20.0 * t - 11.125) * c5).sin() / 2.0
                 } else {
-                    (2.0_f64).powf(-20.0 * t + 10.0) * ((20.0 * t - 11.125) * c5).sin() / 2.0
-                        + 1.0
+                    (2.0_f64).powf(-20.0 * t + 10.0) * ((20.0 * t - 11.125) * c5).sin() / 2.0 + 1.0
                 }
             }
 

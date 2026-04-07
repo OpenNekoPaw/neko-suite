@@ -18,7 +18,8 @@ use neko_types::easing::{Easing, EasingType};
 pub fn transform_propagation_2d(world: &mut World) {
     // Phase 1: find roots
     let roots: Vec<Entity> = {
-        let mut query = world.query_filtered::<Entity, (With<Transform2D>, Without<hierarchy::Parent>)>();
+        let mut query =
+            world.query_filtered::<Entity, (With<Transform2D>, Without<hierarchy::Parent>)>();
         query.iter(world).collect()
     };
 
@@ -164,14 +165,13 @@ pub fn apply_global_transforms(world: &mut World) {
         query
             .iter(world)
             .map(|(e, dv, gt)| {
-                let transformed: Vec<Vec2> = dv
-                    .0
-                    .iter()
-                    .map(|v| {
-                        let p = gt.0 * glam::Vec3::new(v.x, v.y, 1.0);
-                        Vec2::new(p.x, p.y)
-                    })
-                    .collect();
+                let transformed: Vec<Vec2> =
+                    dv.0.iter()
+                        .map(|v| {
+                            let p = gt.0 * glam::Vec3::new(v.x, v.y, 1.0);
+                            Vec2::new(p.x, p.y)
+                        })
+                        .collect();
                 (e, transformed)
             })
             .collect()
@@ -480,12 +480,8 @@ pub fn physics_tick(world: &mut World, delta_ms: f32) {
 
     // Collect physics nodes with their data
     let physics_nodes: Vec<(Entity, SimplePhysics, PhysicsState, Vec2)> = {
-        let mut query = world.query::<(
-            Entity,
-            &SimplePhysics,
-            &PhysicsState,
-            &GlobalTransform2D,
-        )>();
+        let mut query =
+            world.query::<(Entity, &SimplePhysics, &PhysicsState, &GlobalTransform2D)>();
         query
             .iter(world)
             .map(|(e, sp, ps, gt)| {
@@ -519,18 +515,10 @@ pub fn physics_tick(world: &mut World, delta_ms: f32) {
                 }
                 // Convert angle + length to parameter output
                 let output = match sp.map_mode {
-                    PhysicsMapMode::AngleLength => {
-                        state.angle * sp.output_scale[0]
-                    }
-                    PhysicsMapMode::LengthAngle => {
-                        state.angle * sp.output_scale[1]
-                    }
-                    PhysicsMapMode::XY => {
-                        state.angle.sin() * rest_length * sp.output_scale[0]
-                    }
-                    PhysicsMapMode::YX => {
-                        state.angle.sin() * rest_length * sp.output_scale[1]
-                    }
+                    PhysicsMapMode::AngleLength => state.angle * sp.output_scale[0],
+                    PhysicsMapMode::LengthAngle => state.angle * sp.output_scale[1],
+                    PhysicsMapMode::XY => state.angle.sin() * rest_length * sp.output_scale[0],
+                    PhysicsMapMode::YX => state.angle.sin() * rest_length * sp.output_scale[1],
                 };
                 param_updates.push((sp.param_name.clone(), output));
             }
@@ -556,18 +544,10 @@ pub fn physics_tick(world: &mut World, delta_ms: f32) {
                 // Convert bob position to parameter output
                 let delta = state.bob - anchor;
                 let output = match sp.map_mode {
-                    PhysicsMapMode::AngleLength => {
-                        delta.x.atan2(delta.y) * sp.output_scale[0]
-                    }
-                    PhysicsMapMode::LengthAngle => {
-                        delta.length() * sp.output_scale[0]
-                    }
-                    PhysicsMapMode::XY => {
-                        delta.x * sp.output_scale[0]
-                    }
-                    PhysicsMapMode::YX => {
-                        delta.y * sp.output_scale[1]
-                    }
+                    PhysicsMapMode::AngleLength => delta.x.atan2(delta.y) * sp.output_scale[0],
+                    PhysicsMapMode::LengthAngle => delta.length() * sp.output_scale[0],
+                    PhysicsMapMode::XY => delta.x * sp.output_scale[0],
+                    PhysicsMapMode::YX => delta.y * sp.output_scale[1],
                 };
                 param_updates.push((sp.param_name.clone(), output));
             }

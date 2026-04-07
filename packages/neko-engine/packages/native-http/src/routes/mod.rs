@@ -46,10 +46,7 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
             get(puppet_stream::handle_puppet_stream),
         )
         // WebSocket MIDI event stream (JSON push per MIDI message)
-        .route(
-            "/v1/midi/:stream_id",
-            get(midi_stream::handle_midi_stream),
-        )
+        .route("/v1/midi/:stream_id", get(midi_stream::handle_midi_stream))
         // WebSocket Gamepad event stream (JSON push per button/axis change)
         .route(
             "/v1/gamepad/:stream_id",

@@ -15,8 +15,7 @@ use neko_native_scene::procedural_mesh::{ProceduralMesh, ProceduralVertex};
 use serde::{Deserialize, Serialize};
 
 use cosmic_text::{
-    Attrs, Buffer as CosmicBuffer, CacheKeyFlags, Family, FontSystem, Metrics, Shaping,
-    SwashCache,
+    Attrs, Buffer as CosmicBuffer, CacheKeyFlags, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 
 // ---------------------------------------------------------------------------
@@ -144,9 +143,7 @@ pub fn generate_text_mesh_with(
                 cached.clone()
             } else {
                 let contours = match swash_cache.get_outline_commands(font_system, ck) {
-                    Some(commands) => {
-                        commands_to_contours(commands, params.tolerance)
-                    }
+                    Some(commands) => commands_to_contours(commands, params.tolerance),
                     None => Vec::new(),
                 };
                 outline_cache.insert(ck, contours.clone());
@@ -664,7 +661,11 @@ mod tests {
             })
             .collect();
         let indices = ear_clip_triangulate(&pentagon).unwrap();
-        assert_eq!(indices.len(), 9, "pentagon should produce 9 indices (3 tris)");
+        assert_eq!(
+            indices.len(),
+            9,
+            "pentagon should produce 9 indices (3 tris)"
+        );
     }
 
     #[test]
@@ -747,7 +748,10 @@ mod tests {
             Vec2::new(0.0, 1.0),
         ];
         let area = signed_area(&square);
-        assert!((area - 1.0).abs() < 1e-6, "CCW unit square area should be 1.0");
+        assert!(
+            (area - 1.0).abs() < 1e-6,
+            "CCW unit square area should be 1.0"
+        );
     }
 
     #[test]

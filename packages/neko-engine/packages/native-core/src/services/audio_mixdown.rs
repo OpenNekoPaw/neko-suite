@@ -89,13 +89,19 @@ impl AudioMixdown {
                 Ok(info) => {
                     tracing::info!(
                         "Mixdown: opened {} — {} Hz, {} ch, {:.2}s",
-                        src, info.sample_rate, info.channels, info.duration
+                        src,
+                        info.sample_rate,
+                        info.channels,
+                        info.duration
                     );
-                    self.sources.insert(src, MixdownSource {
-                        decoder,
-                        current_position: -1.0,
-                        residual: Vec::new(),
-                    });
+                    self.sources.insert(
+                        src,
+                        MixdownSource {
+                            decoder,
+                            current_position: -1.0,
+                            residual: Vec::new(),
+                        },
+                    );
                 }
                 Err(e) => {
                     tracing::error!("Mixdown: failed to open {}: {}", src, e);
@@ -118,11 +124,14 @@ impl AudioMixdown {
                 .with_output_sample_rate(self.sample_rate)
                 .with_output_channels(self.channels);
             if let Ok(_) = decoder.open(&src) {
-                self.sources.insert(src, MixdownSource {
-                    decoder,
-                    current_position: -1.0,
-                    residual: Vec::new(),
-                });
+                self.sources.insert(
+                    src,
+                    MixdownSource {
+                        decoder,
+                        current_position: -1.0,
+                        residual: Vec::new(),
+                    },
+                );
             }
         }
     }

@@ -41,10 +41,7 @@ pub fn clip_score(
 }
 
 /// Encode an image file into a CLIP embedding vector.
-pub fn encode_image(
-    session: &mut ort::session::Session,
-    image_path: &str,
-) -> Result<Vec<f32>> {
+pub fn encode_image(session: &mut ort::session::Session, image_path: &str) -> Result<Vec<f32>> {
     let img = image::open(image_path)
         .map_err(|e| Error::Other(format!("Open '{}': {}", image_path, e)))?
         .to_rgb8();
@@ -58,7 +55,8 @@ pub fn encode_image(
     );
 
     // Convert to NCHW f32, apply ImageNet normalisation.
-    let mut tensor = Array4::<f32>::zeros((1, 3, CLIP_INPUT_SIZE as usize, CLIP_INPUT_SIZE as usize));
+    let mut tensor =
+        Array4::<f32>::zeros((1, 3, CLIP_INPUT_SIZE as usize, CLIP_INPUT_SIZE as usize));
     for (x, y, p) in resized.enumerate_pixels() {
         for c in 0..3usize {
             let v = p[c] as f32 / 255.0;
@@ -77,10 +75,7 @@ pub fn encode_image(
 }
 
 /// Encode pre-tokenised text into a CLIP embedding vector.
-pub fn encode_text(
-    session: &mut ort::session::Session,
-    token_ids: &[i32],
-) -> Result<Vec<f32>> {
+pub fn encode_text(session: &mut ort::session::Session, token_ids: &[i32]) -> Result<Vec<f32>> {
     let seq_len = token_ids.len().max(1);
     let mut tokens = Array3::<i64>::zeros((1, 1, seq_len));
     for (i, &id) in token_ids.iter().enumerate() {

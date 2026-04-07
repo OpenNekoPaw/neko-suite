@@ -2718,7 +2718,10 @@ mod tests {
 
     #[test]
     fn test_tex_variant_shaders_present() {
-        assert!(BLUR_TEX_SHADER.contains("texture_storage_2d"), "BLUR_TEX_SHADER not texture-based");
+        assert!(
+            BLUR_TEX_SHADER.contains("texture_storage_2d"),
+            "BLUR_TEX_SHADER not texture-based"
+        );
         assert!(SHARPEN_TEX_SHADER.contains("texture_storage_2d"));
         assert!(VIGNETTE_TEX_SHADER.contains("texture_storage_2d"));
         assert!(FILM_GRAIN_TEX_SHADER.contains("texture_storage_2d"));

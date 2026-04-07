@@ -4,8 +4,8 @@
 //! keyed by (uri, primitive_index) / (uri, material_index).
 //! Independent of native-scene (preserves its zero-GPU-dependency).
 
-use crate::gpu::GpuContext;
 use super::vertex::{PbrVertex, SkinnedPbrVertex};
+use crate::gpu::GpuContext;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -25,13 +25,13 @@ pub struct GpuMesh {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialUniforms {
-    pub base_color_factor: [f32; 4],    // 16 bytes
-    pub metallic_factor: f32,            // 4
-    pub roughness_factor: f32,           // 4
-    pub occlusion_strength: f32,         // 4
-    pub _pad0: f32,                      // 4 (align to 16)
-    pub emissive_factor: [f32; 3],       // 12
-    pub _pad1: f32,                      // 4 (align to 16)
+    pub base_color_factor: [f32; 4], // 16 bytes
+    pub metallic_factor: f32,        // 4
+    pub roughness_factor: f32,       // 4
+    pub occlusion_strength: f32,     // 4
+    pub _pad0: f32,                  // 4 (align to 16)
+    pub emissive_factor: [f32; 3],   // 12
+    pub _pad1: f32,                  // 4 (align to 16)
 }
 
 /// GPU-ready PBR material
@@ -86,8 +86,8 @@ impl AssetCache {
     pub fn load_gltf(&mut self, path: &Path) -> Result<(), AssetCacheError> {
         let uri = path.to_string_lossy().to_string();
 
-        let (document, buffers, images) = gltf::import(path)
-            .map_err(|e| AssetCacheError::GltfLoad(format!("{}: {}", uri, e)))?;
+        let (document, buffers, images) =
+            gltf::import(path).map_err(|e| AssetCacheError::GltfLoad(format!("{}: {}", uri, e)))?;
 
         // Load meshes
         for mesh in document.meshes() {
@@ -303,13 +303,11 @@ impl AssetCache {
             .unwrap_or_else(|| vec![[1.0, 0.0, 0.0, 1.0]; positions.len()]);
 
         // Read joint indices and weights (optional — for skinned meshes)
-        let joints: Option<Vec<[u16; 4]>> = reader
-            .read_joints(0)
-            .map(|iter| iter.into_u16().collect());
+        let joints: Option<Vec<[u16; 4]>> =
+            reader.read_joints(0).map(|iter| iter.into_u16().collect());
 
-        let weights: Option<Vec<[f32; 4]>> = reader
-            .read_weights(0)
-            .map(|iter| iter.into_f32().collect());
+        let weights: Option<Vec<[f32; 4]>> =
+            reader.read_weights(0).map(|iter| iter.into_f32().collect());
 
         let is_skinned = joints.is_some() && weights.is_some();
         let vertex_count = positions.len();
@@ -321,7 +319,11 @@ impl AssetCache {
             let mut vertices = Vec::with_capacity(vertex_count);
             for i in 0..vertex_count {
                 let j = if i < joints.len() { joints[i] } else { [0; 4] };
-                let w = if i < weights.len() { weights[i] } else { [0.0; 4] };
+                let w = if i < weights.len() {
+                    weights[i]
+                } else {
+                    [0.0; 4]
+                };
                 vertices.push(SkinnedPbrVertex {
                     position: positions[i],
                     normal: normals[i],

@@ -175,7 +175,9 @@ impl MicCaptureService {
         // Find device
         let device = if let Some(id) = device_id {
             host.input_devices()
-                .map_err(|e| crate::error::Error::Other(format!("Failed to enumerate devices: {e}")))?
+                .map_err(|e| {
+                    crate::error::Error::Other(format!("Failed to enumerate devices: {e}"))
+                })?
                 .find(|d| d.name().map(|n| n == id).unwrap_or(false))
                 .ok_or_else(|| crate::error::Error::Other(format!("Device not found: {id}")))?
         } else {
@@ -216,7 +218,9 @@ impl MicCaptureService {
                 },
                 None,
             )
-            .map_err(|e| crate::error::Error::Other(format!("Failed to build input stream: {e}")))?;
+            .map_err(|e| {
+                crate::error::Error::Other(format!("Failed to build input stream: {e}"))
+            })?;
 
         stream
             .play()

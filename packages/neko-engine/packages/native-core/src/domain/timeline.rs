@@ -1724,9 +1724,7 @@ pub enum MaskShapeData {
         rotation: f32,
     },
     #[serde(rename = "polygon")]
-    Polygon {
-        points: Vec<[f32; 2]>,
-    },
+    Polygon { points: Vec<[f32; 2]> },
     #[serde(rename = "bezier")]
     Bezier {
         control_points: Vec<BezierControlPoint>,
@@ -1751,7 +1749,9 @@ pub struct ElementMask {
     pub blend_mode: String,
 }
 
-fn default_mask_opacity() -> f32 { 1.0 }
+fn default_mask_opacity() -> f32 {
+    1.0
+}
 
 /// Audio properties within an element
 #[derive(Debug, Clone, Serialize, Deserialize)]

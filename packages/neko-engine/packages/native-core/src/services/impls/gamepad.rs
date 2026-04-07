@@ -74,7 +74,10 @@ impl IGamepadService for GamepadService {
             tracing::info!("Gamepad event loop started for {target_id}");
 
             while !cancel_clone.is_cancelled() {
-                while let Some(gilrs::Event { id, event, time, .. }) = gilrs.next_event() {
+                while let Some(gilrs::Event {
+                    id, event, time, ..
+                }) = gilrs.next_event()
+                {
                     let gp_id = format!("{id}");
                     if gp_id != target_id {
                         continue;

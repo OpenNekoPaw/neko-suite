@@ -124,10 +124,7 @@ pub async fn handle_file(
             // 416 Range Not Satisfiable
             return (
                 StatusCode::RANGE_NOT_SATISFIABLE,
-                [(
-                    header::CONTENT_RANGE,
-                    format!("bytes */{file_size}"),
-                )],
+                [(header::CONTENT_RANGE, format!("bytes */{file_size}"))],
                 Body::empty(),
             )
                 .into_response();
@@ -157,10 +154,7 @@ pub async fn handle_file(
                     format!("bytes {start}-{end}/{file_size}"),
                 ),
                 (header::CONTENT_LENGTH, length.to_string()),
-                (
-                    header::CACHE_CONTROL,
-                    "public, max-age=3600".to_string(),
-                ),
+                (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
             ],
             body,
         )
@@ -180,10 +174,7 @@ pub async fn handle_file(
                 (header::CONTENT_TYPE, mime),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
                 (header::CONTENT_LENGTH, file_size.to_string()),
-                (
-                    header::CACHE_CONTROL,
-                    "public, max-age=3600".to_string(),
-                ),
+                (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
             ],
             body,
         )
@@ -202,7 +193,10 @@ fn parse_byte_range(range: &str, file_size: u64) -> Option<(u64, u64)> {
     let end: u64 = if end_str.is_empty() {
         file_size.saturating_sub(1)
     } else {
-        end_str.parse::<u64>().ok()?.min(file_size.saturating_sub(1))
+        end_str
+            .parse::<u64>()
+            .ok()?
+            .min(file_size.saturating_sub(1))
     };
     if start > end {
         return None;

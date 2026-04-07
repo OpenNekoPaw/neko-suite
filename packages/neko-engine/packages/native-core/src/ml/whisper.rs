@@ -27,17 +27,17 @@ use std::path::Path;
 
 const SAMPLE_RATE: usize = 16_000;
 const N_FFT: usize = 512;
-const HOP_LENGTH: usize = 160;   // 10 ms
-const WIN_LENGTH: usize = 400;   // 25 ms
+const HOP_LENGTH: usize = 160; // 10 ms
+const WIN_LENGTH: usize = 400; // 25 ms
 const N_MELS: usize = 80;
 const N_SAMPLES: usize = 480_000; // 30 s × 16 kHz
-const N_FRAMES: usize = 3_000;    // (N_SAMPLES - N_FFT) / HOP_LENGTH + 1 ≈ 3000
+const N_FRAMES: usize = 3_000; // (N_SAMPLES - N_FFT) / HOP_LENGTH + 1 ≈ 3000
 const MAX_TOKENS: usize = 448;
 
 // Special token IDs (multilingual Whisper vocabulary).
-const SOT: i64 = 50258;           // <|startoftranscript|>
-const EOT: i64 = 50257;           // <|endoftext|>
-const TRANSCRIBE: i64 = 50359;    // <|transcribe|>
+const SOT: i64 = 50258; // <|startoftranscript|>
+const EOT: i64 = 50257; // <|endoftext|>
+const TRANSCRIBE: i64 = 50359; // <|transcribe|>
 const TIMESTAMP_BEGIN: i64 = 50364; // <|0.00|> — first timestamp token
 
 /// A timestamped segment produced by the decoder.
@@ -187,10 +187,7 @@ fn push_f32_frames(frame: &ffmpeg_next::frame::Audio, out: &mut Vec<f32>) {
         return;
     }
     let data: &[f32] = unsafe {
-        std::slice::from_raw_parts(
-            frame.data(0).as_ptr() as *const f32,
-            frame.samples(),
-        )
+        std::slice::from_raw_parts(frame.data(0).as_ptr() as *const f32, frame.samples())
     };
     out.extend_from_slice(data);
 }
@@ -256,9 +253,7 @@ fn log_mel_spectrogram(audio: &[f32]) -> Array2<f32> {
 
 fn hann_window(size: usize) -> Vec<f32> {
     (0..size)
-        .map(|i| {
-            0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / size as f32).cos())
-        })
+        .map(|i| 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / size as f32).cos()))
         .collect()
 }
 
@@ -362,12 +357,10 @@ fn decode(
 
     for _ in 0..MAX_TOKENS {
         let seq_len = tokens.len();
-        let ids_arr = Array2::from_shape_vec(
-            (1, seq_len),
-            tokens.iter().map(|&t| t as i64).collect(),
-        )
-        .map_err(|e| Error::Other(format!("Token array: {}", e)))?
-        .into_dyn();
+        let ids_arr =
+            Array2::from_shape_vec((1, seq_len), tokens.iter().map(|&t| t as i64).collect())
+                .map_err(|e| Error::Other(format!("Token array: {}", e)))?
+                .into_dyn();
 
         let ids_tensor = OrtTensor::from_array(ids_arr)
             .map_err(|e| Error::Other(format!("Create ids tensor: {}", e)))?;
@@ -388,9 +381,9 @@ fn decode(
         let vocab_size = lshape[2];
         let last_offset = (lshape[1] - 1) * vocab_size;
 
-        let logits_slice = logits_view.as_slice().ok_or_else(|| {
-            Error::Other("Logits not contiguous".to_string())
-        })?;
+        let logits_slice = logits_view
+            .as_slice()
+            .ok_or_else(|| Error::Other("Logits not contiguous".to_string()))?;
         let last_logits = &logits_slice[last_offset..last_offset + vocab_size];
 
         // Argmax (greedy).
@@ -508,8 +501,8 @@ fn load_vocab_near(encoder_session: &ort::session::Session) -> Result<HashMap<i6
 
     let raw = std::fs::read_to_string(&path)
         .map_err(|e| Error::Other(format!("Read vocab '{}': {}", path, e)))?;
-    let map: HashMap<String, serde_json::Value> = serde_json::from_str(&raw)
-        .map_err(|e| Error::Other(format!("Parse vocab: {}", e)))?;
+    let map: HashMap<String, serde_json::Value> =
+        serde_json::from_str(&raw).map_err(|e| Error::Other(format!("Parse vocab: {}", e)))?;
 
     let mut vocab: HashMap<i64, String> = HashMap::with_capacity(map.len());
     for (token, id_val) in map {
@@ -538,9 +531,8 @@ fn detokenise_with_timestamps(
     let mut seg_start: Option<f64> = None;
     let mut seg_bytes: Vec<u8> = Vec::new();
 
-    let decode_bytes = |byte_buf: &[u8]| -> String {
-        String::from_utf8_lossy(byte_buf).trim().to_string()
-    };
+    let decode_bytes =
+        |byte_buf: &[u8]| -> String { String::from_utf8_lossy(byte_buf).trim().to_string() };
 
     for &id in token_ids {
         if id >= TIMESTAMP_BEGIN {

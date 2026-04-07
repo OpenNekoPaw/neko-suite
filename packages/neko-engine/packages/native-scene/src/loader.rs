@@ -86,7 +86,9 @@ pub fn load_gltf(world: &mut World, path: &Path) -> Result<LoadResult, LoadError
 
     // Attach animations to root
     if !clips.is_empty() {
-        world.entity_mut(root_entity).insert(AnimationTarget { clips });
+        world
+            .entity_mut(root_entity)
+            .insert(AnimationTarget { clips });
     }
 
     Ok(LoadResult {
@@ -272,8 +274,7 @@ fn load_animations(
                 gltf::animation::Property::MorphTargetWeights => AnimationProperty::MorphWeights,
             };
 
-            let reader =
-                channel.reader(|buf| buffers.get(buf.index()).map(|d| d.0.as_slice()));
+            let reader = channel.reader(|buf| buffers.get(buf.index()).map(|d| d.0.as_slice()));
 
             let timestamps: Vec<f32> = reader
                 .read_inputs()
