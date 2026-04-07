@@ -19,8 +19,8 @@ dist/
 out/
 build/
 *.vsix
-neko
-neko-engine
+/neko
+/neko-engine
 
 # 锁文件（pnpm-lock.yaml 必须提交，CI 依赖它）
 bun.lock
