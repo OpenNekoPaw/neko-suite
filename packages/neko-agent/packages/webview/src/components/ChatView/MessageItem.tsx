@@ -7,7 +7,7 @@ import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { MessageActions } from '@/components/ChatView/MessageActions';
 import { BackgroundTask } from '@/components/TaskListView';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
-import { ImagePreview, AudioPlayer, VideoPlayer } from '@/components/ChatView/MediaPreview';
+import { ImagePreview, AudioCard, VideoCard } from '@/components/ChatView/MediaPreview';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 
 interface MessageItemProps {
@@ -73,7 +73,7 @@ function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
   // Audio player
   if (attachment.type === 'audio' && attachment.preview) {
     return (
-      <AudioPlayer
+      <AudioCard
         src={attachment.preview}
         title={attachment.name}
         className="mt-1 w-full max-w-[400px]"
@@ -84,7 +84,7 @@ function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
   // Video player
   if (attachment.type === 'video' && attachment.preview) {
     return (
-      <VideoPlayer
+      <VideoCard
         src={attachment.preview}
         title={attachment.name}
         className="mt-1 w-full max-w-[500px]"

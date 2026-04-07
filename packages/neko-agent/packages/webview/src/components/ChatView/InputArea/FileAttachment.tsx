@@ -3,9 +3,7 @@
  * Split into AttachmentPreview and AttachmentButton for proper layout
  */
 
-import { useRef, useCallback } from 'react';
-import { type MessageAttachment, getFileTypeFromMime, FILE_TYPE_ICONS } from './types';
-import { useTranslation } from '@/i18n/I18nContext';
+import { type MessageAttachment, FILE_TYPE_ICONS } from './types';
 
 /**
  * AttachmentPreview - Shows attached files as inline tags (inside input box)
@@ -41,88 +39,5 @@ export function AttachmentPreview({ attachedFiles, onRemove }: AttachmentPreview
       ))}
       <span className="text-[var(--vscode-descriptionForeground)] text-[11px]">+</span>
     </div>
-  );
-}
-
-/**
- * AttachmentButton - Upload button for toolbar
- */
-interface AttachmentButtonProps {
-  onFilesAdd: (files: MessageAttachment[]) => void;
-}
-
-function AttachmentButton({ onFilesAdd }: AttachmentButtonProps) {
-  const { t } = useTranslation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files) return;
-
-      const newFiles: MessageAttachment[] = [];
-
-      Array.from(files).forEach((file) => {
-        const fileType = getFileTypeFromMime(file.type);
-        const newFile: MessageAttachment = {
-          id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: file.name,
-          type: fileType,
-          size: file.size,
-        };
-
-        if (fileType === 'image') {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            newFile.preview = e.target?.result as string;
-            onFilesAdd([newFile]);
-          };
-          reader.readAsDataURL(file);
-        } else {
-          newFiles.push(newFile);
-        }
-      });
-
-      if (newFiles.length > 0) {
-        onFilesAdd(newFiles);
-      }
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    },
-    [onFilesAdd],
-  );
-
-  const openFileDialog = () => {
-    fileInputRef.current?.click();
-  };
-
-  return (
-    <>
-      <button
-        onClick={openFileDialog}
-        className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
-        title={t('chat.input.attachFile')}
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-          />
-        </svg>
-      </button>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleFileSelect}
-        accept="*/*"
-      />
-    </>
   );
 }

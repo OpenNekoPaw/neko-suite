@@ -463,28 +463,3 @@ export function useVSCodeMessaging() {
     showContextMenu,
   };
 }
-
-/**
- * Show VSCode native context menu (module-level function)
- * Returns a promise that resolves to the selected item's id, or undefined if cancelled
- */
-function showVSCodeContextMenu(
-  items: Array<{
-    id: string;
-    label: string;
-    disabled?: boolean;
-    separator?: boolean;
-    shortcut?: string;
-  }>,
-): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    if (!vscode) {
-      // In dev mode, just resolve undefined
-      resolve(undefined);
-      return;
-    }
-    const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    pendingContextMenuCallbacks.set(menuId, resolve);
-    vscode.postMessage({ type: 'showContextMenu', menuId, items });
-  });
-}

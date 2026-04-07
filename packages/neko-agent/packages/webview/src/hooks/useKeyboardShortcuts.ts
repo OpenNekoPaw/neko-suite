@@ -159,35 +159,3 @@ export const COMMON_SHORTCUTS = {
     description: 'Copy last response',
   }),
 };
-
-/**
- * Format shortcut for display
- */
-function formatShortcut(shortcut: KeyboardShortcut): string {
-  const mac = isMac();
-  const parts: string[] = [];
-
-  if (shortcut.meta || shortcut.ctrl) {
-    parts.push(mac ? '⌘' : 'Ctrl');
-  }
-  if (shortcut.shift) {
-    parts.push(mac ? '⇧' : 'Shift');
-  }
-  if (shortcut.alt) {
-    parts.push(mac ? '⌥' : 'Alt');
-  }
-
-  // Format special keys
-  let key = shortcut.key;
-  if (key === 'Escape') key = 'Esc';
-  if (key === 'Enter') key = '↵';
-  if (key === ' ') key = 'Space';
-  if (key === 'ArrowUp') key = '↑';
-  if (key === 'ArrowDown') key = '↓';
-  if (key === 'ArrowLeft') key = '←';
-  if (key === 'ArrowRight') key = '→';
-
-  parts.push(key.toUpperCase());
-
-  return parts.join(mac ? '' : '+');
-}

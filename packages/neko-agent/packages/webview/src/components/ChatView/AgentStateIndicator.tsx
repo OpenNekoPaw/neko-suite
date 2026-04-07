@@ -8,13 +8,6 @@
 import { useState, useEffect } from 'react';
 import type { AgentState, AgentPhase } from '@/components/types';
 
-interface AgentStateIndicatorProps {
-  /** Current agent state (null when idle) */
-  agentState: AgentState | null;
-  /** Optional className for styling */
-  className?: string;
-}
-
 /**
  * Phase configuration for display
  */
@@ -52,52 +45,6 @@ function formatElapsedTime(startedAt: number): string {
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   return `${minutes}m ${seconds}s`;
-}
-
-function AgentStateIndicator({ agentState, className = '' }: AgentStateIndicatorProps) {
-  // Don't render when idle
-  if (!agentState) {
-    return null;
-  }
-
-  const { phase, toolName, startedAt } = agentState;
-  const config = phaseConfig[phase];
-
-  // Real-time elapsed time update
-  const [elapsedTime, setElapsedTime] = useState(() => formatElapsedTime(startedAt));
-
-  useEffect(() => {
-    // Update immediately when startedAt changes
-    setElapsedTime(formatElapsedTime(startedAt));
-
-    // Update every second
-    const timer = setInterval(() => {
-      setElapsedTime(formatElapsedTime(startedAt));
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [startedAt]);
-
-  // Generate display text
-  const displayText =
-    phase === 'acting' && toolName ? `${config.label}: ${toolName}` : config.label;
-
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] ${className}`}
-    >
-      {/* Animated indicator */}
-      <span className={`animate-pulse ${config.color}`}>{config.icon}</span>
-
-      {/* Status text */}
-      <span className="text-xs text-[var(--vscode-foreground)] opacity-80">{displayText}</span>
-
-      {/* Elapsed time */}
-      <span className="text-xs text-[var(--vscode-descriptionForeground)] opacity-60">
-        {elapsedTime}
-      </span>
-    </div>
-  );
 }
 
 /**

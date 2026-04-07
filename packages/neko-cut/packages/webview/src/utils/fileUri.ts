@@ -99,28 +99,10 @@ export function getFileUri(path: string): Promise<string> {
 }
 
 /**
- * Check if a file URI is already cached
- */
-function hasFileUri(path: string): boolean {
-  return fileUriCache.has(path);
-}
-
-/**
  * Request a webview URI from the extension host (fire-and-forget)
  */
 export function requestFileUri(path: string): void {
   if (!fileUriCache.has(path)) {
     vscode?.postMessage({ type: 'requestFile', path });
   }
-}
-
-/**
- * Subscribe to cache update notifications
- */
-function subscribeCacheUpdates(listener: () => void): () => void {
-  cacheUpdateListeners.push(listener);
-  return () => {
-    const idx = cacheUpdateListeners.indexOf(listener);
-    if (idx >= 0) cacheUpdateListeners.splice(idx, 1);
-  };
 }

@@ -50,35 +50,6 @@ function findLayer(layers: ReadonlyArray<LayerData>, id: string): LayerData | un
   return undefined;
 }
 
-/** Find the parent of a layer and its index */
-function findLayerParent(
-  layers: LayerData[],
-  id: string,
-): { parent: LayerData[] | null; index: number } | null {
-  for (let i = 0; i < layers.length; i++) {
-    if (layers[i]?.id === id) {
-      return { parent: null, index: i }; // top-level
-    }
-    const result = findLayerParentInChildren(layers[i]!.children, id);
-    if (result) return result;
-  }
-  return null;
-}
-
-function findLayerParentInChildren(
-  children: LayerData[],
-  id: string,
-): { parent: LayerData[]; index: number } | null {
-  for (let i = 0; i < children.length; i++) {
-    if (children[i]?.id === id) {
-      return { parent: children, index: i };
-    }
-    const result = findLayerParentInChildren(children[i]!.children, id);
-    if (result) return result;
-  }
-  return null;
-}
-
 /** Add a layer at the top of the list */
 export function addLayer(layers: LayerData[], newLayer: LayerData): LayerData[] {
   return [...layers, newLayer];
@@ -170,18 +141,5 @@ export function groupLayers(
 
   const result = [...remaining];
   result.splice(Math.max(0, insertIndex), 0, groupWithChildren);
-  return result;
-}
-
-/** Flatten all visible layers into one */
-function flattenLayerList(layers: ReadonlyArray<LayerData>): LayerData[] {
-  const result: LayerData[] = [];
-  for (const layer of layers) {
-    if (layer.type === 'group') {
-      result.push(...flattenLayerList(layer.children));
-    } else {
-      result.push(layer);
-    }
-  }
   return result;
 }

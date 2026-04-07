@@ -15,25 +15,6 @@ export interface AssetExportPayload {
 }
 
 /**
- * Send an asset export request to the Extension Host via postMessage.
- */
-function requestAssetExport(
-  vscode: { postMessage: (msg: unknown) => void },
-  payload: AssetExportPayload,
-): void {
-  vscode.postMessage({
-    type: 'file:export',
-    data: {
-      format: payload.format,
-      data: payload.data,
-      assetType: payload.type,
-      name: payload.name,
-      metadata: payload.metadata,
-    },
-  });
-}
-
-/**
  * Convert a Blob to a base64 data URL.
  */
 export async function blobToBase64(blob: Blob): Promise<string> {

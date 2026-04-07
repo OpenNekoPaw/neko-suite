@@ -52,10 +52,3 @@ export function useVSCodeMessaging(onMessage: MessageHandler) {
 export function navigateToLine(line: number, character = 0) {
   vscode.postMessage({ type: 'navigate', line, character });
 }
-
-/**
- * Report scroll position to extension
- */
-function reportScroll(line: number) {
-  vscode.postMessage({ type: 'scroll', line });
-}

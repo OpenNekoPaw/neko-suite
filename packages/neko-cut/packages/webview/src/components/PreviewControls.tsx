@@ -8,24 +8,12 @@ import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';
 
-// Resolution presets
 export type ResolutionPreset =
   | '720p@60fps'
   | '1080p@30fps'
   | '1080p@60fps'
   | '4k@30fps'
   | '4k@60fps';
-
-const RESOLUTION_PRESETS: Record<
-  ResolutionPreset,
-  { width: number; height: number; fps: number; label: string }
-> = {
-  '720p@60fps': { width: 1280, height: 720, fps: 60, label: '720P 60FPS' },
-  '1080p@30fps': { width: 1920, height: 1080, fps: 30, label: '1080P 30FPS' },
-  '1080p@60fps': { width: 1920, height: 1080, fps: 60, label: '1080P 60FPS' },
-  '4k@30fps': { width: 3840, height: 2160, fps: 30, label: '4K 30FPS' },
-  '4k@60fps': { width: 3840, height: 2160, fps: 60, label: '4K 60FPS' },
-};
 
 export interface PreviewControlsProps {
   // Playback state

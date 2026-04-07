@@ -4,7 +4,7 @@
  * Manages undo/redo stack using region-based snapshots.
  * Captures only the affected region of a layer before modification.
  */
-import type { HistoryEntry, RegionSnapshot } from '../types';
+import type { HistoryEntry } from '../types';
 
 export interface IHistoryManager {
   push(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void;
@@ -74,23 +74,4 @@ export class HistoryManager implements IHistoryManager {
   getRedoStack(): ReadonlyArray<HistoryEntry> {
     return this.redoStack;
   }
-}
-
-/** Capture a region snapshot from texture pixels */
-function captureRegionSnapshot(
-  layerId: string,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  readPixels: (x: number, y: number, w: number, h: number) => Uint8Array,
-): RegionSnapshot {
-  return {
-    layerId,
-    x,
-    y,
-    width,
-    height,
-    data: readPixels(x, y, width, height),
-  };
 }

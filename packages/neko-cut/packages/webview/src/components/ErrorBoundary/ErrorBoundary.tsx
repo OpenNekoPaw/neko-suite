@@ -3,7 +3,7 @@
  * React 错误边界 - 捕获子组件渲染错误，防止整个应用崩溃
  */
 
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('ErrorBoundary');
@@ -116,23 +116,4 @@ function DefaultErrorFallback({ error, onReset }: DefaultErrorFallbackProps) {
       </div>
     </div>
   );
-}
-
-// =============================================================================
-// HOC for functional components
-// =============================================================================
-
-function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
-  errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>,
-): React.FC<P> {
-  const WrappedComponent: React.FC<P> = (props) => (
-    <ErrorBoundary {...errorBoundaryProps}>
-      <Component {...props} />
-    </ErrorBoundary>
-  );
-
-  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name || 'Component'})`;
-
-  return WrappedComponent;
 }

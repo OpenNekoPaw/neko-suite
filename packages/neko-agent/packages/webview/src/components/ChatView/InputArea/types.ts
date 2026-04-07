@@ -260,11 +260,3 @@ export const FILE_TYPE_ICONS: Record<AttachmentType, string> = {
   video: '🎥',
   audio: '🎵',
 };
-
-// Get file type from MIME type
-export function getFileTypeFromMime(mimeType: string): AttachmentType {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType.startsWith('audio/')) return 'audio';
-  return 'file';
-}
