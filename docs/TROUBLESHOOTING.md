@@ -884,3 +884,228 @@
 - 结果：确认存在桥接层未接入、能力 stub 与构建层临时规避信号
 - 命令：`nl -ba packages/neko-auth/packages/core/src/neko-auth-service.ts` + `auth-api.ts` 静态审查
 - 结果：确认自动刷新后的 session 变更未向外广播
+
+---
+
+## 追加记录：2026-04-07（统一能力接入审查）
+
+维护范围：monorepo 横切能力接入状态（`@neko/shared` / `neko-agent` / 各业务子包）
+
+### 结论总览（追加）
+
+结论不是“没有统一”，而是“共享抽象已统一，但各子包接入还不统一”。
+
+- 统一出口已经集中在 `packages/neko-types/src/index.ts`
+- VSCode Extension 侧统一入口已经集中在 `packages/neko-types/src/vscode/extension/index.ts`
+- 公共组件与 AI 右键菜单 builder 已集中在 `packages/neko-types/src/components/index.ts`
+- 但各子包在主题、日志、报错、国际化、AI 菜单、Shell、公共组件等方面的接入深度不一致
+
+| 编号 | 严重级别 | 状态 | 问题摘要 |
+|---|---|---|---|
+| NKUN-001 | P1 | open | 共享抽象层已统一，但子包接入完整度差异明显，尚未形成统一落地基线 |
+| NKUN-002 | P1 | open | Webview 标准入口未统一，部分包缺少 `I18nProvider` 或 `ErrorBoundary` |
+| NKUN-003 | P1 | open | Extension 标准入口未统一，`neko-model` / `neko-auth` 未接统一 logger + error handler |
+| NKUN-004 | P2 | open | 主题体系未完全统一，`neko-tools`、`neko-live`、`neko-story` 仍以手写 token 映射为主 |
+| NKUN-005 | P1 | open | 国际化接入分层不一致，部分包只有 `t()`/bundle，未统一到 React Provider 模式 |
+| NKUN-006 | P2 | open | AI 菜单与 AI 接口接入碎片化，统一 builder 仅在少数包真正落地 |
+| NKUN-007 | P2 | open | `tools` / Shell 能力名义上在共享层存在，但实际仍主要是 `neko-agent` 专属能力 |
+| NKUN-008 | P2 | open | 文档与实现存在偏差，`neko-tools` README 声称接入错误边界，但实际入口未包裹 |
+
+### 接入完整度分层（追加）
+
+#### 第一梯队：接入最完整
+- `neko-agent`
+- `neko-cut`
+- `neko-canvas`
+- `neko-preview`
+
+这些包普遍已经接入：
+- `@neko/shared` 类型与公共抽象
+- `createVSCodeLogger` / `VSCodeErrorHandler`
+- Webview `I18nProvider`
+- 部分共享组件
+- 与 `neko-agent` 的 AI 上下文或 AI 菜单桥接
+
+#### 第二梯队：部分接入
+- `neko-audio`
+- `neko-sketch`
+- `neko-puppet`
+- `neko-assets`
+- `neko-market`
+
+这些包通常已经接了部分共享能力，但仍保留局部自定义实现或存在接线缺口。
+
+#### 第三梯队：明显不一致或偏底层
+- `neko-tools`
+- `neko-model`
+- `neko-story`
+- `neko-live`
+- `neko-auth`
+- `neko-engine`
+- `neko-client`
+- `neko-proto`
+
+其中一部分是“底层包本就不需要完整 UI 横切能力”，另一部分则是“业务层确实还没接齐”。
+
+### 问题详情（追加）
+
+#### NKUN-001：共享抽象已统一，但接入基线未统一（P1）
+- 影响：项目已经有统一主题、日志、错误、i18n、组件、tools 抽象，但各包落地方式不一，维护成本和迁移成本持续上升。
+- 定位：
+  - `packages/neko-types/src/index.ts`
+  - `packages/neko-types/src/vscode/extension/index.ts`
+  - `packages/neko-types/src/components/index.ts`
+- 现状：
+  - `@neko/shared` 已统一导出 `types / errors / tools / logger / i18n / theme / path`
+  - 但业务包仍混合使用“共享实现 + 包内局部实现 + 历史遗留自定义”
+- 建议：建立“Extension 入口模板”和“Webview 入口模板”，把共享抽象升级为共享接入规范。
+
+#### NKUN-002：Webview 标准入口未统一（P1）
+- 影响：部分 webview 有 `I18nProvider + ErrorBoundary + theme preset`，部分只有其中一部分，导致 UX、稳定性和排错路径不一致。
+- 定位：
+  - 完整接入示例：
+    - `packages/neko-agent/packages/webview/src/main.tsx`
+    - `packages/neko-cut/packages/webview/src/main.tsx`
+    - `packages/neko-canvas/packages/webview/src/main.tsx`
+  - 缺口示例：
+    - `packages/neko-audio/packages/webview/src/editor/main.tsx`
+    - `packages/neko-live/packages/webview/src/main.tsx`
+    - `packages/neko-story/packages/webview/src/main.tsx`
+    - `packages/neko-tools/packages/webview/src/mediaDiff.tsx`
+- 现状：
+  - `neko-audio` 只做了 i18n 初始化 side-effect，入口未包 `I18nProvider`
+  - `neko-live` 入口未包 `I18nProvider`、未包 `ErrorBoundary`
+  - `neko-story` 入口有 `ErrorBoundary`，但未包 `I18nProvider`
+  - `neko-tools` 入口有 `I18nProvider`，但未包 `ErrorBoundary`
+- 建议：统一规定 webview 根入口最少包含：
+  - `React.StrictMode`
+  - `I18nProvider`
+  - `ErrorBoundary`
+  - 共享 logger / shared theme preset
+
+#### NKUN-003：Extension 标准入口未统一（P1）
+- 影响：大多数扩展包已经统一走 `createVSCodeLogger + VSCodeErrorHandler`，但仍有少数包未接入，排查问题时日志与错误上报体验不一致。
+- 定位：
+  - 已接入示例：
+    - `packages/neko-cut/packages/extension/src/extension.ts`
+    - `packages/neko-preview/packages/extension/src/extension.ts`
+    - `packages/neko-live/packages/extension/src/extension.ts`
+  - 未接入示例：
+    - `packages/neko-model/packages/extension/src/extension.ts`
+    - `packages/neko-auth/packages/extension/src/extension.ts`
+- 现状：
+  - `neko-model` 主要只用了 `createNewFile`
+  - `neko-auth` 直接初始化 service/API，未接统一 logger/error handler
+- 建议：补一个共享的 `activate()` 初始化模板，至少统一：
+  - root logger 初始化
+  - root error handler 初始化
+  - 统一 OutputChannel 命名
+  - 统一 activation/deactivation 日志
+
+#### NKUN-004：主题接入不完全统一（P2）
+- 影响：视觉 token 虽然都围绕 VSCode CSS 变量，但不同包的主题维护方式不同，后续改设计 token 时会出现重复修改。
+- 定位：
+  - 统一 preset 接入示例：
+    - `packages/neko-agent/packages/webview/tailwind.config.js`
+    - `packages/neko-cut/packages/webview/tailwind.config.js`
+    - `packages/neko-market/packages/webview/tailwind.config.ts`
+  - 非统一 preset 示例：
+    - `packages/neko-tools/packages/webview/tailwind.config.js`
+    - `packages/neko-live/packages/webview/src/index.css`
+    - `packages/neko-story/packages/webview/src/styles/screenplay.css`
+- 现状：
+  - `neko-tools` 仍手工维护一套 VSCode Tailwind 映射
+  - `neko-live` / `neko-story` 主要通过手写 CSS 变量消费 token
+- 建议：逐步统一到 `nekoTailwindPreset`，至少先消除重复维护的 Tailwind token 映射。
+
+#### NKUN-005：国际化接入模式不统一（P1）
+- 影响：部分包已经是共享 React i18n 模式，部分包仍停留在 `t()` 函数模式，后续想统一运行时切换 locale、上下文注入和测试方式会比较痛苦。
+- 定位：
+  - 完整 Provider 模式：
+    - `packages/neko-agent/packages/webview/src/main.tsx`
+    - `packages/neko-market/packages/webview/src/main.tsx`
+    - `packages/neko-model/packages/webview/src/main.tsx`
+    - `packages/neko-tools/packages/webview/src/mediaDiff.tsx`
+    - `packages/neko-puppet/packages/webview/src/PuppetApp.tsx`
+  - 仅 service / `t()` 模式：
+    - `packages/neko-audio/packages/webview/src/editor/main.tsx`
+    - `packages/neko-live/packages/webview/src/main.tsx`
+    - `packages/neko-story/packages/webview/src/main.tsx`
+- 现状：
+  - `neko-audio` / `neko-live` / `neko-story` 已建立 bundle 与 `i18nService`
+  - 但没有统一在 React 根树上注入共享 `I18nProvider`
+- 建议：统一采用 `@neko/shared/i18n/react` 模式，减少包内重复的 `t()` 管线。
+
+#### NKUN-006：AI 菜单与 AI 接口接入碎片化（P2）
+- 影响：AI 入口已经存在统一抽象，但实际落地仍分为“VSCode 命令接入”“internalChat 借道”“webview 右键菜单 builder”“AgentContextPayload 传上下文”几套并行方式。
+- 定位：
+  - 统一 AI 菜单 builder：
+    - `packages/neko-types/src/components/contextMenuAI.ts`
+  - builder 已落地：
+    - `packages/neko-cut/packages/webview/src/hooks/useTimelineContextMenu.ts`
+    - `packages/neko-canvas/packages/webview/src/components/common/ContextMenu.tsx`
+  - `internalChat` 借道：
+    - `packages/neko-assets/src/services/LLMClassifier.ts`
+    - `packages/neko-story/packages/extension/src/providers/inlineCompletion.ts`
+  - 上下文桥接：
+    - `packages/neko-preview/packages/extension/src/providers/document/documentProviderHelper.ts`
+- 现状：
+  - 真正统一的 AI 中枢在 `neko-agent`
+  - 其他包大多只是部分借用 agent 能力
+  - 统一 AI 菜单 builder 目前只在 cut/canvas 真正落地
+- 建议：后续限制为两种标准接入路径：
+  - `AgentContextPayload`
+  - `buildAIMenuSection` / `neko.agent.internalChat`
+
+#### NKUN-007：共享 tools / Shell 能力仍主要是 agent 专属（P2）
+- 影响：从抽象层看 `@neko/shared/tools` 已经存在，但在业务层的真实消费面仍几乎只在 agent 生态中，尚不能算“全套件统一能力”。
+- 定位：
+  - 共享出口：`packages/neko-types/src/tools/index.ts`
+  - 实际消费：
+    - `packages/neko-agent/packages/agent/src/tools/index.ts`
+    - `packages/neko-agent/packages/agent/src/tools/core/bash-tool.ts`
+- 现状：
+  - `BuiltinTool/createTool`、`BashTool`、skill shell replacement 等能力都集中在 `neko-agent`
+  - 其他业务包基本不消费共享 tools 抽象
+- 建议：如果目标是“全套件统一 tools”，需要明确哪些包也需要接入；否则应在文档中标注它属于 agent 域能力，而不是全局通用能力。
+
+#### NKUN-008：文档与实现存在偏差（P2）
+- 影响：开发者会误以为统一能力已经全部落地，实际排查问题时会因为“文档说有、代码里没有”而浪费时间。
+- 定位：
+  - 文档：`packages/neko-tools/README.md`
+  - 实现：`packages/neko-tools/packages/webview/src/mediaDiff.tsx`
+- 现状：
+  - README 写明“Webview 入口已包裹 `ErrorBoundary`”
+  - 但实际入口只包了 `I18nProvider`，未见 `ErrorBoundary`
+- 建议：文档与实际实现要二选一：
+  - 要么补 `ErrorBoundary`
+  - 要么回写 README，避免误导
+
+### 代表性证据点（追加）
+
+- 共享出口：
+  - `packages/neko-types/src/index.ts`
+  - `packages/neko-types/src/vscode/extension/index.ts`
+  - `packages/neko-types/src/components/index.ts`
+- 统一 AI 菜单 builder：
+  - `packages/neko-types/src/components/contextMenuAI.ts`
+- 统一 logger registry：
+  - `packages/neko-types/src/logger/index.ts`
+  - `packages/neko-agent/packages/webview/src/utils/logger.ts`
+  - `packages/neko-agent/packages/extension/src/base/logger.ts`
+- 统一 Shell/tool 基类主要由 agent 消费：
+  - `packages/neko-agent/packages/agent/src/tools/index.ts`
+  - `packages/neko-agent/packages/agent/src/tools/core/bash-tool.ts`
+
+### 本批次验证信息（追加）
+
+- 命令：`find packages -path '*/tailwind.config.*' | sort`
+- 结果：大部分 React webview 已接 `nekoTailwindPreset`，但 `neko-tools` 仍是手写 token 映射
+- 命令：`find packages -path '*/src/i18n/index.ts' | sort`
+- 结果：多数 webview 都已建立 i18n 目录与 bundle，但根入口是否接 `I18nProvider` 仍不一致
+- 命令：`rg -n "createVSCodeLogger|VSCodeErrorHandler" packages -g '!**/dist/**' -g '!**/out/**'`
+- 结果：大多数扩展包已接统一日志/报错入口，但 `neko-model` / `neko-auth` 仍未统一
+- 命令：`rg -n "buildAIMenuSection|neko\\.agent\\.internalChat|AgentContextPayload" packages -g '!**/dist/**' -g '!**/out/**'`
+- 结果：AI 统一抽象已存在，但实际落地集中在 `neko-agent`、`neko-cut`、`neko-canvas`、`neko-preview`、`neko-story`、`neko-assets`
+- 命令：`rg -n "BuiltinTool|BashTool|createTool\\(" packages -g '!**/dist/**' -g '!**/out/**'`
+- 结果：共享 tool 抽象的实际消费基本仍集中在 `neko-agent`
