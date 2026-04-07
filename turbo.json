@@ -112,6 +112,30 @@
       "outputs": ["coverage/**"],
       "cache": false
     },
+    "neko-assets#test": {
+      "dependsOn": ["@neko/asset#test"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "neko-canvas#test": {
+      "dependsOn": ["@neko-canvas/webview#test"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "neko-sketch#test": {
+      "dependsOn": ["@neko-sketch/webview#test"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "neko-story#test": {
+      "dependsOn": [
+        "@neko-story/parser#test",
+        "@neko-story/extension#test",
+        "@neko-story/webview#test"
+      ],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
     "package": {
       "dependsOn": ["compile"],
       "outputs": ["*.vsix"],

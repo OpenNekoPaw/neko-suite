@@ -271,6 +271,38 @@ pnpm test -- --run --coverage
 
 ---
 
+## 测试任务编排补充
+
+本轮 Vitest 升级后，还暴露了一个 monorepo 任务编排问题：**根聚合包和子包如果同时执行同一批测试，会导致覆盖率目录互相踩写。**
+
+典型症状：
+
+- CI 日志出现 `coverage/.tmp/coverage-*.json` 的 `ENOENT`
+- 不是断言失败，而是多个任务并发写入同一 coverage 临时目录
+- 常见于根包 `test` 脚本再次调用子包 `test`，同时 Turbo 又把子包 `test` 当成独立任务调度
+
+当前约束：
+
+- 根包 `test` 只负责根包自身测试范围，或在纯聚合场景下作为空入口
+- 子包测试通过 `turbo.json` 的 `dependsOn` 显式声明
+- 手动需要聚合执行时，使用独立脚本，例如 `test:packages`
+
+本仓库当前按该策略收敛的包包括：
+
+- `neko-story`
+- `neko-sketch`
+- `neko-canvas`
+- `neko-assets`
+
+这样做的好处：
+
+- 避免同一测试集被执行两次
+- 消除 coverage 临时目录并发写冲突
+- 让 Turbo 的任务图可见且可追踪
+- 保留手动聚合执行入口，而不影响 CI 的稳定性
+
+---
+
 ## 维护约束
 
 后续新增或修改依赖时，应遵守以下规则：

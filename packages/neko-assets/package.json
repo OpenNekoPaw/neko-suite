@@ -480,7 +480,8 @@
     "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
     "lint": "eslint src --ext ts,tsx",
-    "test": "vitest",
+    "test": "pnpm exec vitest --dir src --passWithNoTests",
+    "test:packages": "pnpm turbo run test --filter=@neko/asset",
     "package": "vsce package --no-dependencies"
   },
   "dependencies": {

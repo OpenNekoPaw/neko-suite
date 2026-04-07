@@ -148,7 +148,8 @@
     "build:webview": "pnpm --filter @neko-story/webview run build",
     "watch": "pnpm --filter @neko-story/extension run watch",
     "lint": "pnpm --filter @neko-story/extension run lint",
-    "test": "pnpm --filter @neko-story/extension run test && pnpm --filter @neko-story/webview run test",
+    "test": "sh -c 'echo \"Delegated to Turbo dependsOn. Run pnpm run test:packages for manual aggregation.\"' --",
+    "test:packages": "pnpm turbo run test --filter=@neko-story/parser --filter=@neko-story/extension --filter=@neko-story/webview",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {

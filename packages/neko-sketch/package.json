@@ -293,7 +293,8 @@
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "npm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",
-    "test": "cd packages/webview && pnpm test",
+    "test": "pnpm exec vitest --dir packages/extension --passWithNoTests",
+    "test:packages": "pnpm turbo run test --filter=@neko-sketch/webview",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
