@@ -3,6 +3,16 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../../utils/logger', () => ({
+  getLogger: vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  })),
+}));
+
 import { createPermissionBridge } from '../permission-bridge';
 import type { ToolCallInfo } from '@neko/shared';
 

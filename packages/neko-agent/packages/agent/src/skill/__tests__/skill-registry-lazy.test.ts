@@ -3,6 +3,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../utils/logger', () => ({
+  getLogger: vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  })),
+}));
+
 import { SkillRegistry } from '../skill-registry';
 import type { LazySkill } from '../lazy-loader';
 import type { Skill } from '@neko/shared';
