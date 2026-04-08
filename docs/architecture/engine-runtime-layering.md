@@ -1,6 +1,6 @@
 # ADR: neko-engine Runtime 分层与宿主模型
 
-> 状态：Active（R0-R3 + P1 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
+> 状态：Active（R0-R3 + P1 + R4 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
 > 关联：[engine-plugin-rfc.md](./engine-plugin-rfc.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md)
 
 ---
@@ -175,7 +175,7 @@ packages/neko-engine/packages/
 | R1 | `runtime-device` | Camera/Midi/Gamepad service + cpal/midir/gilrs 依赖 | 低 |
 | R2 | `runtime-ml` | ml/ 模块 + MlService + ort/ndarray 依赖 | 低 |
 | R3 | `runtime-media` | media_service/ 域逻辑（probe/diff/subtitle/jpeg_encoder）+ common.rs（waveform/loudness/silence）—— 不含 GPU pipeline | 中 |
-| R4 | RuntimeDescriptor trait | 统一 runtime 发现机制 | 低 |
+| R4 | RuntimeDescriptor trait | 统一 runtime 发现机制（✅ 已实现 RuntimeRegistry） | 低 |
 
 engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemetry/Service Traits + 与 GPU 强耦合的 service impls
 

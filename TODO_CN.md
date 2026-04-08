@@ -163,14 +163,14 @@
 **已解决**：
 - [x] **P0: video_diff.rs ffmpeg CLI** — 重写为 ffmpeg-next filter graph API（filter::Graph + buffer/buffersink 实现 ssim/psnr）。无外部二进制依赖。
 - [x] **P1: media_service 循环依赖** — runtime-media 完全自包含（自定义 MediaError + ffmpeg-next 直接解码音频），engine-kernel 单向依赖 runtime-media
+- [x] **PluginManager semver** — semver crate VersionReq 匹配（^, ~, >=, =, 范围）
+- [x] **PluginManager activation handler** — PluginActivationHandler trait，enable/disable 生命周期回调
+- [x] **RuntimeDescriptor trait** — RuntimeRegistry 动态 runtime 发现
+- [x] **ServiceContainer 删除** — EngineApi 已接管服务装配
 
 **剩余技术债**：
-- [ ] media_service/ 在 engine-kernel 和 runtime-media 中仍有副本（engine-kernel 内部 service 引用；后续可委托给 runtime-media）
+- [ ] media_service/ 在 engine-kernel 和 runtime-media 中仍有副本（后续可委托给 runtime-media）
 - [ ] generate_diff_video (blend) 为 stub（需 encode+mux pipeline，使用频率低）
-- [ ] P2: PluginManager 纳入 effects:register / models:register 统一生命周期
-- [ ] P2: semver crate 替换当前 PluginManager 的简单 major 版本比较
-- [ ] R4: RuntimeDescriptor trait — host-api 动态发现 runtime（当前 ActionRouter 硬编码 18 个 controller）
-- [ ] ServiceContainer 可考虑删除（host-api EngineApi 已接管服务装配）
 
 ### 其他
 - [ ] Probe 缓存合并：MediaProbeCache（neko-tools）+ MediaMetadataCache（neko-assets）→ 统一
