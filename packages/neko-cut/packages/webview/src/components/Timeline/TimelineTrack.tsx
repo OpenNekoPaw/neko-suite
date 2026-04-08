@@ -71,6 +71,7 @@ export const TimelineTrack = memo(function TimelineTrack({
     currentTime,
     separateVideoAudio,
     unseparateVideoAudio,
+    rippleEditingEnabled,
   } = useEditorStore();
 
   // Get snappingEnabled via getState() to avoid re-render on toggle
@@ -508,7 +509,77 @@ export const TimelineTrack = memo(function TimelineTrack({
                 before: { updates: beforeUpdates },
               };
 
-              pushOperation(op);
+              const latestProject = useEditorStore.getState().project;
+              const latestTrack = latestProject?.tracks.find(
+                (candidate) => candidate.id === track.id,
+              );
+
+              const shouldRipple =
+                rippleEditingEnabled && originalPositions.size === 1 && !resizeDir;
+
+              const isRightResizeRipple = rippleEditingEnabled && resizeDir === 'right';
+
+              if (shouldRipple || isRightResizeRipple) {
+                const originalEffectiveDuration =
+                  originalElement.duration - originalElement.trimStart - originalElement.trimEnd;
+                const currentEffectiveDuration =
+                  currentElement.duration - currentElement.trimStart - currentElement.trimEnd;
+                const originalEnd = originalElement.startTime + originalEffectiveDuration;
+                const delta = !resizeDir
+                  ? currentElement.startTime - originalElement.startTime
+                  : currentEffectiveDuration - originalEffectiveDuration;
+
+                const rippleOps: EditOperation[] =
+                  latestTrack?.elements
+                    .filter(
+                      (candidate) =>
+                        candidate.id !== element.id && candidate.startTime >= originalEnd,
+                    )
+                    .map((candidate) => {
+                      const nextStartTime = Math.max(0, candidate.startTime + delta);
+
+                      if (nextStartTime === candidate.startTime) {
+                        return null;
+                      }
+
+                      updateElement(track.id, candidate.id, {
+                        startTime: nextStartTime,
+                      });
+
+                      const rippleOp: EditOperation = {
+                        type: 'element.update' as const,
+                        meta: createMeta('user', 'Ripple edit'),
+                        payload: {
+                          trackId: track.id,
+                          elementId: candidate.id,
+                          updates: {
+                            startTime: nextStartTime,
+                          },
+                        },
+                        before: {
+                          updates: {
+                            startTime: candidate.startTime,
+                          },
+                        },
+                      };
+                      return rippleOp;
+                    })
+                    .filter((candidate) => candidate !== null) ?? [];
+
+                if (rippleOps.length > 0) {
+                  pushOperation({
+                    type: 'batch',
+                    meta: createMeta('user', 'Ripple edit'),
+                    payload: {
+                      operations: [op, ...rippleOps],
+                    },
+                  });
+                } else {
+                  pushOperation(op);
+                }
+              } else {
+                pushOperation(op);
+              }
             }
           }
         }
@@ -549,6 +620,7 @@ export const TimelineTrack = memo(function TimelineTrack({
       tracksContainerRef,
       sortedTracks,
       project,
+      rippleEditingEnabled,
     ],
   );
 

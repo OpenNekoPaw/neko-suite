@@ -28,6 +28,11 @@ interface PlaybackDependency {
 
 interface DispatchDependency {
   dispatch: (op: EditOperation) => void;
+  dispatchBatch: (ops: EditOperation[]) => void;
+}
+
+interface UIStateDependency {
+  rippleEditingEnabled: boolean;
 }
 
 // =============================================================================
@@ -88,13 +93,17 @@ function calculateSplitPoint(currentTime: number, elementStart: number, trimStar
 // =============================================================================
 
 export const createElementSplitSlice: StateCreator<
-  ElementSplitSlice & ProjectDependency & PlaybackDependency & DispatchDependency,
+  ElementSplitSlice &
+    ProjectDependency &
+    PlaybackDependency &
+    DispatchDependency &
+    UIStateDependency,
   [],
   [],
   ElementSplitSlice
 > = (_set, get) => ({
   splitAtPlayhead: (trackId, elementId) => {
-    const { project, currentTime, dispatch } = get();
+    const { project, currentTime, dispatch, dispatchBatch, rippleEditingEnabled } = get();
     if (!project) return;
 
     const result = findElementWithDuration(project, trackId, elementId);
@@ -118,7 +127,7 @@ export const createElementSplitSlice: StateCreator<
       name: `${element.name} (split)`,
     };
 
-    dispatch({
+    const splitOp: EditOperation = {
       type: 'element.splitAt',
       meta: createMeta('user', `Split ${element.name}`),
       payload: {
@@ -128,7 +137,38 @@ export const createElementSplitSlice: StateCreator<
         rightElement,
       },
       before: { trimEnd: element.trimEnd },
-    });
+    };
+
+    if (rippleEditingEnabled) {
+      const track = project.tracks.find((candidate) => candidate.id === trackId);
+      const rippleDelta = rightElement.duration - rightElement.trimStart - rightElement.trimEnd;
+      const rippleOps: EditOperation[] =
+        track?.elements
+          .filter((candidate) => candidate.id !== elementId && candidate.startTime >= currentTime)
+          .map((candidate) => ({
+            type: 'element.update' as const,
+            meta: createMeta('system', 'Ripple shift after split'),
+            payload: {
+              trackId,
+              elementId: candidate.id,
+              updates: {
+                startTime: candidate.startTime + rippleDelta,
+              },
+            },
+            before: {
+              updates: {
+                startTime: candidate.startTime,
+              },
+            },
+          })) ?? [];
+
+      if (rippleOps.length > 0) {
+        dispatchBatch([splitOp, ...rippleOps]);
+        return;
+      }
+    }
+
+    dispatch(splitOp);
   },
 
   splitAndKeepLeft: (trackId, elementId) => {

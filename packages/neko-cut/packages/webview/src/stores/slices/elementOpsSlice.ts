@@ -34,6 +34,39 @@ import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('ElementOpsSlice');
 
+function getEffectiveDuration(element: TimelineElement): number {
+  return Math.max(0, element.duration - element.trimStart - element.trimEnd);
+}
+
+function collectRippleShiftOps(
+  track: TimelineTrack,
+  startTime: number,
+  delta: number,
+  excludeElementIds: string[] = [],
+): EditOperation[] {
+  if (delta === 0) return [];
+
+  const excludeIds = new Set(excludeElementIds);
+  return track.elements
+    .filter((element) => !excludeIds.has(element.id) && element.startTime >= startTime)
+    .map((element) => ({
+      type: 'element.update',
+      meta: createMeta('system', 'Ripple shift'),
+      payload: {
+        trackId: track.id,
+        elementId: element.id,
+        updates: {
+          startTime: Math.max(0, element.startTime + delta),
+        },
+      },
+      before: {
+        updates: {
+          startTime: element.startTime,
+        },
+      },
+    }));
+}
+
 /**
  * Detect if video file has audio track via Extension FFmpeg probe
  */
@@ -192,23 +225,34 @@ export const createElementOpsSlice: StateCreator<
   ElementOpsSlice
 > = (set, get) => ({
   addElement: (trackId, elementData) => {
-    const { project, dispatch } = get();
+    const { project, dispatch, dispatchBatch, rippleEditingEnabled } = get();
     if (!project) return '';
 
     const elementId = generateId();
     const newElement = { ...elementData, id: elementId } as TimelineElement;
-
-    dispatch({
+    const targetTrack = project.tracks.find((track) => track.id === trackId);
+    const addOp: EditOperation = {
       type: 'element.add',
       meta: createMeta('user', `Add ${newElement.name || 'element'}`),
       payload: { trackId, element: newElement },
-    });
+    };
+
+    if (rippleEditingEnabled && targetTrack) {
+      const rippleOps = collectRippleShiftOps(
+        targetTrack,
+        newElement.startTime,
+        getEffectiveDuration(newElement),
+      );
+      dispatchBatch([...rippleOps, addOp]);
+    } else {
+      dispatch(addOp);
+    }
 
     return elementId;
   },
 
   addMediaElement: (trackId, src, name, duration, startTime = 0) => {
-    const { project, dispatch, dispatchBatch } = get();
+    const { project, dispatch, dispatchBatch, rippleEditingEnabled } = get();
     if (!project) return '';
 
     const ops: EditOperation[] = [];
@@ -240,6 +284,8 @@ export const createElementOpsSlice: StateCreator<
       }
     }
 
+    const targetTrack = project.tracks.find((track) => track.id === targetTrackId);
+
     // Create element
     const elementId = generateId();
     const newElement = {
@@ -266,6 +312,15 @@ export const createElementOpsSlice: StateCreator<
       payload: { trackId: targetTrackId, element: newElement },
     });
 
+    if (rippleEditingEnabled && targetTrack) {
+      const rippleOps = collectRippleShiftOps(
+        targetTrack,
+        startTime,
+        getEffectiveDuration(newElement),
+      );
+      ops.unshift(...rippleOps);
+    }
+
     if (ops.length === 1) {
       dispatch(ops[0]!);
     } else {
@@ -276,7 +331,7 @@ export const createElementOpsSlice: StateCreator<
   },
 
   addMediaElementWithAudio: async (trackId, src, name, duration, startTime = 0) => {
-    const { project, dispatch, dispatchBatch } = get();
+    const { project, dispatch, dispatchBatch, rippleEditingEnabled } = get();
     if (!project) return { videoElementId: '' };
 
     const syncOps: EditOperation[] = [];
@@ -312,6 +367,8 @@ export const createElementOpsSlice: StateCreator<
       videoTrackIndex = project.tracks.findIndex((t) => t.id === videoTrackId);
     }
 
+    const targetVideoTrack = project.tracks.find((track) => track.id === videoTrackId);
+
     // 2. Create video element
     const videoElementId = generateId();
     const videoElement = {
@@ -337,6 +394,15 @@ export const createElementOpsSlice: StateCreator<
       meta: createMeta('user', `Add ${name}`),
       payload: { trackId: videoTrackId, element: videoElement },
     });
+
+    if (rippleEditingEnabled && targetVideoTrack) {
+      const rippleOps = collectRippleShiftOps(
+        targetVideoTrack,
+        startTime,
+        getEffectiveDuration(videoElement),
+      );
+      syncOps.unshift(...rippleOps);
+    }
 
     // Dispatch sync operations immediately
     if (syncOps.length === 1) {
