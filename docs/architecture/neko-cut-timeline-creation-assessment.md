@@ -216,22 +216,25 @@
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
 - `packages/neko-cut/packages/extension/src/services/MediaService.ts`
 
-### 4.3 波纹编辑只覆盖删除场景
+### 4.3 波纹编辑已进入可用态，但还不是完整专业语义
 
-当前 `rippleEditingEnabled` 只在 `removeElement()` 中使用。
+当前 `rippleEditingEnabled` 已不再只覆盖删除场景。
 
 已覆盖：
 
 - 删除元素后，后续元素整体前移
+- 插入素材时推开后续元素
+- 单元素同轨拖动时带动后续元素
+- 右侧 trim 改变有效时长时推动后续元素
+- `splitAtPlayhead()` 后将右侧片段与后续元素整体后移
 
 未见完整覆盖：
 
-- 插入素材
-- 拖动素材
-- 裁切长度变化
-- 分割后的自动错位修正
+- 跨多选组合的复杂 ripple 语义
+- 更精细的 insert / overwrite 模式切换
+- 左 trim、跨轨拖动等场景下的专业级边界规则
 
-所以它现在更像“局部波纹删除”，而不是完整的 ripple edit 系统。
+所以它已经形成“基础 ripple edit 闭环”，但还不是完整 NLE 级实现。
 
 对应实现：
 
@@ -310,14 +313,18 @@
 
 - `packages/neko-cut/packages/extension/src/services/AIActionHandler.ts`
 
-### 4.7 若干创作操作仍停留在占位实现
+### 4.7 若干创作操作仍停留在半完成状态
 
 例如时间线上下文菜单中的：
 
-- Reverse playback 仍是 TODO
-- 速度菜单部分动作只是直接改 duration，没有完整速度语义闭环
+- speed 预设已改为写入元素 `speed` 契约并按源时长重算 timeline duration
+- reverse 已改为切换元素 `speed.reverse`
 
-这类功能在演示层足够，但在真实创作里还不够。
+但仍缺少：
+
+- 可视化 speed curve / time remap 编辑
+- slip / slide / roll edit
+- 更完整的速度斜坡与倒放交互
 
 对应实现：
 
@@ -342,7 +349,6 @@
 
 - 全量波纹编辑
 - 完整 slip / slide / roll 语义
-- 播放态全局倍率与元素速度模型的明确分层
 - 更强的多选编组与批量编辑
 - 复杂时间重映射
 - 更可靠的字幕时间线编辑入口
@@ -419,8 +425,9 @@
 
 - 完整波纹编辑
 - 更丰富的时间编辑语义
+  - 已完成一部分：时间线右键菜单 speed / reverse 已切到正式元素速度契约
 - 自动剪辑与自动配乐闭环
-- 反向播放与更完整的速度系统
+- 更完整的速度系统（speed ramp / time remap UI / slip-slide-roll）
 
 ## 9. 最终结论
 

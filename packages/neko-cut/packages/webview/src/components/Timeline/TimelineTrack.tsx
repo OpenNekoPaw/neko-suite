@@ -10,6 +10,7 @@ import type { TimelineTrack as TrackType, TimelineElement, AIQuickAction } from 
 import type { EditOperation } from '@neko/shared';
 import { createMeta } from '../../stores/utils/operation-helpers';
 import { getLogger } from '../../utils/logger';
+import { buildTimelineReverseUpdates, buildTimelineSpeedUpdates } from './timelineSpeedActions';
 
 const logger = getLogger('TimelineTrack');
 
@@ -57,6 +58,7 @@ export const TimelineTrack = memo(function TimelineTrack({
   const {
     selectElement,
     updateElement,
+    dispatch,
     pushOperation,
     showClipThumbnails,
     project,
@@ -645,6 +647,42 @@ export const TimelineTrack = memo(function TimelineTrack({
     [track.id, selectedElements, selectElement],
   );
 
+  const commitElementUpdate = useCallback(
+    (element: TimelineElement, updates: Partial<TimelineElement>, description: string) => {
+      const beforeUpdates: Record<string, unknown> = {};
+      const changedUpdates: Record<string, unknown> = {};
+      const elementRecord = element as unknown as Record<string, unknown>;
+      const updatesRecord = updates as Record<string, unknown>;
+
+      for (const [key, value] of Object.entries(updatesRecord)) {
+        const previousValue = elementRecord[key];
+        if (JSON.stringify(previousValue) === JSON.stringify(value)) {
+          continue;
+        }
+        beforeUpdates[key] = previousValue;
+        changedUpdates[key] = value;
+      }
+
+      if (Object.keys(changedUpdates).length === 0) {
+        return;
+      }
+
+      dispatch({
+        type: 'element.update',
+        meta: createMeta('user', description),
+        payload: {
+          trackId: track.id,
+          elementId: element.id,
+          updates: changedUpdates as Partial<TimelineElement>,
+        },
+        before: {
+          updates: beforeUpdates as Partial<TimelineElement>,
+        },
+      });
+    },
+    [dispatch, track.id],
+  );
+
   // Generate context menu items for an element
   const getElementContextMenuItems = useCallback(
     (element: TimelineElement): MenuItem[] => {
@@ -705,30 +743,41 @@ export const TimelineTrack = memo(function TimelineTrack({
             {
               label: t('timeline.contextMenu.speed05x'),
               onClick: () => {
-                // Slow down to 0.5x
-                const newDuration = element.duration * 2;
-                updateElement(track.id, element.id, { duration: newDuration });
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 0.5),
+                  'Set timeline speed to 0.5x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.speed1x'),
               onClick: () => {
-                // Reset to 1x - restore original duration
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 1),
+                  'Set timeline speed to 1x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.speed2x'),
               onClick: () => {
-                // Speed up to 2x
-                const newDuration = element.duration / 2;
-                updateElement(track.id, element.id, { duration: Math.max(0.1, newDuration) });
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 2),
+                  'Set timeline speed to 2x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.reverse'),
               onClick: () => {
-                // TODO: Implement reverse playback
-                logger.info('Reverse playback');
+                commitElementUpdate(
+                  element,
+                  buildTimelineReverseUpdates(element),
+                  'Toggle reverse playback',
+                );
               },
             },
           ],
@@ -864,6 +913,7 @@ export const TimelineTrack = memo(function TimelineTrack({
       updateElement,
       t,
       onExecuteAIAction,
+      commitElementUpdate,
     ],
   );
 
