@@ -17,6 +17,8 @@ import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
+import { buildCanvasNode } from './utils/nodeFactory';
+import { setGlobalVSCodeApi } from './utils/vscode';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
@@ -46,7 +48,7 @@ const vscode: VSCodeAPI = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCod
 
 // Expose on window so child components (e.g. MediaNode) can postMessage
 if (vscode) {
-  (window as unknown as Record<string, unknown>).vscode = vscode;
+  setGlobalVSCodeApi(vscode);
 }
 
 // =============================================================================
@@ -328,8 +330,17 @@ export function CanvasApp() {
       return type ? allNodes.filter((n) => n.type === type) : allNodes;
     },
     getNode: (id) => useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === id),
-    updateNode: (id, updates) => useCanvasStore.getState().updateNode(id, updates),
-    createNode: (node) => useCanvasStore.getState().addNode(node),
+    updateNode: (id, data) => useCanvasStore.getState().updateNodeData(id, data),
+    createNode: (nodeSpec) => {
+      const currentNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+      const node = buildCanvasNode({
+        type: nodeSpec.type,
+        position: nodeSpec.position,
+        data: nodeSpec.data,
+        zIndex: currentNodes.length,
+      });
+      return useCanvasStore.getState().addNode(node);
+    },
   });
 
   // =========================================================================
@@ -455,6 +466,25 @@ export function CanvasApp() {
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
+
+  const handleSelectShotCandidate = useCallback(
+    (nodeId: string, candidateId: string) => {
+      const target = nodes.find((node) => node.id === nodeId);
+      if (!target || target.type !== 'shot') return;
+
+      const nextHistory = target.data.generationHistory.map((candidate) => ({
+        ...candidate,
+        selected: candidate.id === candidateId,
+      }));
+      const selected = nextHistory.find((candidate) => candidate.selected);
+
+      updateNodeData(nodeId, {
+        generationHistory: nextHistory,
+        generatedImage: selected?.dataUrl,
+      });
+    },
+    [nodes, updateNodeData],
+  );
 
   // =========================================================================
   // Generation panel
@@ -849,6 +879,7 @@ export function CanvasApp() {
             onScriptNavigateToScene={handleScriptNavigateToScene}
             onDocumentOpen={handleDocumentOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
+            onSelectShotCandidate={handleSelectShotCandidate}
             isPanMode={isPanMode}
           />
 

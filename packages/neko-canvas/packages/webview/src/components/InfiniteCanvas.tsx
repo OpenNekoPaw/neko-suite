@@ -107,6 +107,8 @@ export interface InfiniteCanvasProps {
   // ── ModelNode callbacks ────────────────────────────────────────────────────
   /** Called to check if a model is installed */
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
+  /** Called when a ShotNode candidate is selected */
+  onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
 }
 
 // =============================================================================
@@ -141,6 +143,7 @@ export function InfiniteCanvas({
   onScriptNavigateToScene,
   onDocumentOpen,
   onModelCheckInstalled,
+  onSelectShotCandidate,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -291,6 +294,7 @@ export function InfiniteCanvas({
             onScriptNavigateToScene,
             onDocumentOpen,
             onModelCheckInstalled,
+            onSelectShotCandidate,
           );
         })}
       </CanvasViewport>
@@ -359,6 +363,7 @@ function renderNode(
   onScriptNavigateToScene?: (linkedSceneGroupId: string) => void,
   onDocumentOpen?: (docPath: string) => void,
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void,
+  onSelectShotCandidate?: (nodeId: string, candidateId: string) => void,
 ): React.ReactNode {
   const commonProps = {
     viewport,
@@ -407,7 +412,14 @@ function renderNode(
         />
       );
     case 'shot':
-      return <ShotNode key={node.id} node={node as ShotCanvasNode} {...commonProps} />;
+      return (
+        <ShotNode
+          key={node.id}
+          node={node as ShotCanvasNode}
+          {...commonProps}
+          onSelectCandidate={onSelectShotCandidate}
+        />
+      );
     case 'scene':
       return <SceneGroupNode key={node.id} node={node as SceneGroupCanvasNode} {...commonProps} />;
     case 'gallery':

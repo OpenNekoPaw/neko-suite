@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { CanvasData, CanvasNode } from '@neko/shared';
+import type { CanvasData, CanvasNode, CanvasNodeType } from '@neko/shared';
 import { setLocale } from '../i18n';
 
 // =============================================================================
@@ -46,9 +46,13 @@ export interface UseVSCodeMessagesOptions {
   /** Return a single node by id — used to respond to nodes.get requests */
   getNode?: (id: string) => CanvasNode | undefined;
   /** Update a node — used to respond to nodes.update requests */
-  updateNode?: (id: string, updates: Partial<CanvasNode>) => void;
-  /** Create a node — used to respond to nodes.create requests */
-  createNode?: (node: Omit<CanvasNode, 'id'>) => string;
+  updateNode?: (id: string, data: Record<string, unknown>) => void;
+  /** Create a node from the contract DTO — used to respond to nodes.create requests */
+  createNode?: (node: {
+    type: CanvasNodeType;
+    position: { x: number; y: number };
+    data: Record<string, unknown>;
+  }) => string;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
 }
@@ -161,7 +165,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
 
           // ----------------------------------------------------------------
           // nodes.* — request/response API for MCP Canvas tools
-          // The extension sends { type, _requestId, ...payload } and expects
+          // The extension sends { type, _requestId, ...dto } and expects
           // { type: '_response', _requestId, ...result } back.
           // ----------------------------------------------------------------
           case 'nodes.list': {
@@ -182,17 +186,24 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'nodes.update': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            updateNodeRef.current?.(
-              message.nodeId as string,
-              message.updates as Partial<CanvasNode>,
-            );
+            updateNodeRef.current?.(message.nodeId as string, (message.data as Record<string, unknown>) ?? {});
             vscode.postMessage({ type: '_response', _requestId: requestId, success: true });
             break;
           }
           case 'nodes.create': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            const id = createNodeRef.current?.(message.node as Omit<CanvasNode, 'id'>) ?? '';
+            const payload = (message.payload as {
+              type?: CanvasNodeType;
+              position?: { x: number; y: number };
+              data?: Record<string, unknown>;
+            } | undefined) ?? { data: {} };
+            const id =
+              createNodeRef.current?.({
+                type: payload.type ?? 'annotation',
+                position: payload.position ?? { x: 0, y: 0 },
+                data: payload.data ?? {},
+              }) ?? '';
             vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
             break;
           }

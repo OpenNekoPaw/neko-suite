@@ -285,9 +285,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<string> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
     const result = await this.sendRequest<{ nodeId: string }>('nodes.create', {
-      type,
-      position,
-      data,
+      payload: { type, position, data },
     });
     this._onDidChangeCanvas.fire({ type: 'add' });
     return result.nodeId;

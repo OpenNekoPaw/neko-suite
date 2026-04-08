@@ -6,8 +6,12 @@
  *
  * Tested contracts (post-fix):
  *   NKV-001: nodes.list uses nodeType (not bare "type")
+ *   NKV-001B: nodes.update uses data field
+ *   NKV-001C: nodes.create uses payload { type, position, data }
  *   NKV-002: scriptIndexResult uses scenes (not "index")
  *   NKV-003: modelInstalledResult uses installedVersion (not "installed")
+ *   NKV-004: webview consumes the same nodes.update / nodes.create DTO
+ *   NKV-005: operation bridge uses shared VSCode gateway
  */
 
 import { describe, it, expect } from 'vitest';
@@ -16,12 +20,43 @@ import { join } from 'path';
 
 // Read the production source file for contract verification
 const providerSource = readFileSync(join(__dirname, '../editor/canvasEditorProvider.ts'), 'utf-8');
+const webviewSource = readFileSync(
+  join(__dirname, '../../../webview/src/hooks/useVSCodeMessages.ts'),
+  'utf-8',
+);
+const operationStoreSource = readFileSync(
+  join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
+  'utf-8',
+);
 
 describe('canvasEditorProvider message contracts', () => {
   describe('NKV-001: nodes.list nodeType parameter', () => {
     it('sends nodeType field, not bare type', () => {
       // After NKV-001 fix: the provider must send nodeType: type
       expect(providerSource).toContain('nodeType: type');
+    });
+  });
+
+  describe('NKV-001B: nodes.update data parameter', () => {
+    it('sends data field from extension', () => {
+      expect(providerSource).toContain("sendRequest('nodes.update', { nodeId, data })");
+    });
+
+    it('consumes data field in webview', () => {
+      expect(webviewSource).toContain('message.data as Record<string, unknown>');
+    });
+  });
+
+  describe('NKV-001C: nodes.create payload contract', () => {
+    it('sends payload wrapper from extension', () => {
+      expect(providerSource).toContain('payload: { type, position, data }');
+    });
+
+    it('consumes payload wrapper in webview', () => {
+      expect(webviewSource).toContain('const payload = (message.payload as {');
+      expect(webviewSource).toContain('type: payload.type ??');
+      expect(webviewSource).toContain('position: payload.position ??');
+      expect(webviewSource).toContain('data: payload.data ?? {}');
     });
   });
 
@@ -57,6 +92,17 @@ describe('canvasEditorProvider message contracts', () => {
       const lines = providerSource.split('\n');
       const badPattern = lines.some((l) => /^\s+installed:\s+installed/.test(l));
       expect(badPattern).toBe(false);
+    });
+  });
+
+  describe('NKV-005: operation bridge gateway', () => {
+    it('uses shared VSCode gateway helper', () => {
+      expect(operationStoreSource).toContain("import { getGlobalVSCodeApi } from '../utils/vscode';");
+      expect(operationStoreSource).toContain('const vscode = getGlobalVSCodeApi();');
+    });
+
+    it('does not directly read window.__vscode_api__', () => {
+      expect(operationStoreSource).not.toContain('__vscode_api__');
     });
   });
 
