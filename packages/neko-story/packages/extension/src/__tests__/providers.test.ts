@@ -9,7 +9,12 @@ import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
 import type { IWorkspaceIndex, SymbolLocation } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
-import type { AssetEntity, OccurrenceIndexEntry } from '@neko/shared';
+import type {
+  AssetEntity,
+  CharacterRecord,
+  CreativeEntityMatchSuggestion,
+  OccurrenceIndexEntry,
+} from '@neko/shared';
 
 // Mock vscode module
 vi.mock('vscode', () => ({
@@ -319,6 +324,17 @@ function createMockCharacterIndex(): ICharacterWorkspaceIndex {
       name === 'JOHN'
         ? { characterId: 'char_john', matchedBy: 'canonicalName' as const, record }
         : undefined,
+    suggestCharacters: (name: string) =>
+      name === 'JOHNNY'
+        ? [
+            {
+              entity: record,
+              confidence: 0.94,
+              reason: ['exact-alias'],
+              source: 'alias',
+            } satisfies CreativeEntityMatchSuggestion<CharacterRecord>,
+          ]
+        : [],
     getDefinitionLocation: (id: string) =>
       id === 'char_john' ? (definitionLocation as any) : undefined,
     dispose: () => {},
@@ -334,6 +350,7 @@ function createMockOccurrenceLookup(entries: OccurrenceIndexEntry[] = []) {
 
 function createMockAssetLookup(): {
   resolveObject: (name: string) => Promise<AssetEntity | null>;
+  suggestObjects: (name: string) => Promise<CreativeEntityMatchSuggestion<AssetEntity>[]>;
   getDefinitionLocation: (id: string) => Promise<any>;
 } {
   const entity: AssetEntity = {
@@ -353,6 +370,17 @@ function createMockAssetLookup(): {
   return {
     resolveObject: async (name: string) =>
       name === 'RING' || name === 'WEDDING RING' ? entity : null,
+    suggestObjects: async (name: string) =>
+      name === 'RING PROP'
+        ? [
+            {
+              entity,
+              confidence: 0.94,
+              reason: ['exact-alias'],
+              source: 'alias',
+            },
+          ]
+        : [],
     getDefinitionLocation: async (id: string) =>
       id === 'obj_ring'
         ? {
@@ -857,6 +885,28 @@ describe('DefinitionProvider — Cross-file', () => {
     expect(result).toBeDefined();
     expect(result.uri.fsPath).toBe('/project/.neko/assets/library.json');
   });
+
+  it('should resolve character definitions through high-confidence match suggestions', async () => {
+    const index = createMockIndex({ '/test.fountain': 'JOHNNY' });
+    const provider = new FountainDefinitionProvider(index, createMockCharacterIndex());
+    const doc = createMockDocument('JOHNNY', '/test.fountain');
+
+    const result = await provider.provideDefinition(doc, { line: 0, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    expect(result.uri.fsPath).toBe('/project/characters.json');
+  });
+
+  it('should resolve object definitions through high-confidence match suggestions', async () => {
+    const index = createMockIndex({ '/test.fountain': 'RING PROP' });
+    const provider = new FountainDefinitionProvider(index, undefined, createMockAssetLookup());
+    const doc = createMockDocument('RING PROP', '/test.fountain');
+
+    const result = await provider.provideDefinition(doc, { line: 0, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    expect(result.uri.fsPath).toBe('/project/.neko/assets/library.json');
+  });
 });
 
 describe('ReferenceProvider — Cross-file', () => {
@@ -1001,6 +1051,34 @@ describe('ReferenceProvider — Cross-file', () => {
     expect(results.some((r: any) => r.uri.fsPath === '/project/.neko/assets/library.json')).toBe(
       true,
     );
+  });
+
+  it('should include character references from high-confidence match suggestions', async () => {
+    const index = createMockIndex({ '/test.fountain': 'JOHNNY' });
+    const occurrenceLookup = createMockOccurrenceLookup([
+      {
+        entity: { kind: 'character', id: 'char_john' },
+        source: 'generated-asset',
+        sourceId: 'asset_1',
+        locator: { uri: '/project/.neko/.cache/generated/john.png' },
+      },
+    ]);
+    const provider = new FountainReferenceProvider(
+      index,
+      createMockCharacterIndex(),
+      occurrenceLookup,
+    );
+    const doc = createMockDocument('JOHNNY', '/test.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 0, character: 0 },
+      {} as any,
+      {} as any,
+    );
+
+    expect(occurrenceLookup.findCharacterOccurrences).toHaveBeenCalledWith('char_john');
+    expect(results.some((r: any) => r.uri.fsPath === '/project/characters.json')).toBe(true);
   });
 });
 
@@ -1160,6 +1238,38 @@ describe('HoverProvider — Cross-file stats', () => {
     expect(md.value).toContain('Object ID');
     expect(md.value).toContain('obj_ring');
     expect(md.value).toContain('jewelry');
+  });
+
+  it('should show suggested character metadata when registry binding is inferred by rules', async () => {
+    const text = `INT. TEST - DAY
+
+JOHNNY
+Hello!`;
+    const index = createMockIndex({ '/test.fountain': text });
+    const provider = new FountainHoverProvider(index, createMockCharacterIndex());
+    const doc = createMockDocument(text, '/test.fountain');
+
+    const result = await provider.provideHover(doc, { line: 2, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    const md = result.contents;
+    expect(md.value).toContain('Suggested Character');
+    expect(md.value).toContain('94%');
+    expect(md.value).toContain('exact-alias');
+  });
+
+  it('should show suggested object metadata when asset lookup returns a rule match', async () => {
+    const index = createMockIndex({ '/test.fountain': 'RING PROP' });
+    const provider = new FountainHoverProvider(index, undefined, createMockAssetLookup());
+    const doc = createMockDocument('RING PROP', '/test.fountain');
+
+    const result = await provider.provideHover(doc, { line: 0, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    const md = result.contents;
+    expect(md.value).toContain('Suggested Match');
+    expect(md.value).toContain('94%');
+    expect(md.value).toContain('obj_ring');
   });
 });
 

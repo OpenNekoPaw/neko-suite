@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type {
   AgentContextPayload,
   AssetEntity,
+  CreativeEntityMatchSuggestion,
   NekoAgentAPI,
   NekoAssetsAPI,
   NekoStoryAPI,
@@ -406,6 +407,26 @@ function createAssetsEntityLookup() {
         return api.entities.resolveEntityByName(name, { categories: ['object', 'vehicle'] });
       } catch {
         return null;
+      }
+    },
+
+    async suggestObjects(name: string): Promise<CreativeEntityMatchSuggestion<AssetEntity>[]> {
+      const extension = vscode.extensions.getExtension<NekoAssetsAPI>(
+        NEKO_EXTENSION_IDS.NEKO_ASSETS,
+      );
+      if (!extension) {
+        return [];
+      }
+
+      try {
+        const api = extension.isActive
+          ? extension.exports
+          : ((await extension.activate()) as NekoAssetsAPI);
+        return api.entities.suggestEntityMatches(name, {
+          categories: ['object', 'vehicle'],
+        });
+      } catch {
+        return [];
       }
     },
 

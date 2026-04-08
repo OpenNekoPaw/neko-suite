@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { isTrustedOccurrenceEntry } from '@neko/shared';
-import type { OccurrenceIndexEntry } from '@neko/shared';
+import type { CreativeEntityMatchSuggestion, OccurrenceIndexEntry } from '@neko/shared';
 import type { IWorkspaceIndex } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
-import type { AssetEntity, CreativeEntityRef } from '@neko/shared';
+import type { AssetEntity, CharacterRecord, CreativeEntityRef } from '@neko/shared';
 
 export interface IEntityOccurrenceLookup {
   findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
@@ -12,8 +12,11 @@ export interface IEntityOccurrenceLookup {
 
 export interface IAssetEntityLookup {
   resolveObject(name: string): Promise<AssetEntity | null>;
+  suggestObjects(name: string): Promise<CreativeEntityMatchSuggestion<AssetEntity>[]>;
   getDefinitionLocation(id: string): Promise<vscode.Location | null>;
 }
+
+const NAVIGATION_SUGGESTION_THRESHOLD = 0.9;
 
 /**
  * Provides go-to-definition for Fountain files.
@@ -48,9 +51,27 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
       }
     }
 
+    const characterSuggestion = this.pickSuggestedCharacter(
+      this.characterIndex?.suggestCharacters(word),
+    );
+    if (characterSuggestion) {
+      const definition = this.characterIndex?.getDefinitionLocation(characterSuggestion.entity.id);
+      if (definition) {
+        return definition;
+      }
+    }
+
     const objectEntity = await this.assetLookup?.resolveObject(word);
     if (objectEntity) {
       const definition = await this.assetLookup?.getDefinitionLocation(objectEntity.id);
+      if (definition) {
+        return definition;
+      }
+    }
+
+    const objectSuggestion = this.pickSuggestedAsset(await this.assetLookup?.suggestObjects(word));
+    if (objectSuggestion) {
+      const definition = await this.assetLookup?.getDefinitionLocation(objectSuggestion.entity.id);
       if (definition) {
         return definition;
       }
@@ -77,6 +98,22 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
     }
 
     return null;
+  }
+
+  private pickSuggestedCharacter(
+    suggestions: CreativeEntityMatchSuggestion<CharacterRecord>[] | undefined,
+  ): CreativeEntityMatchSuggestion<CharacterRecord> | undefined {
+    return suggestions?.find(
+      (suggestion) => suggestion.confidence >= NAVIGATION_SUGGESTION_THRESHOLD,
+    );
+  }
+
+  private pickSuggestedAsset(
+    suggestions: CreativeEntityMatchSuggestion<AssetEntity>[] | undefined,
+  ): CreativeEntityMatchSuggestion<AssetEntity> | undefined {
+    return suggestions?.find(
+      (suggestion) => suggestion.confidence >= NAVIGATION_SUGGESTION_THRESHOLD,
+    );
   }
 }
 
@@ -115,17 +152,18 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     };
 
     const characterResolution = this.characterIndex?.resolveCharacter(word);
-    if (characterResolution) {
-      const definition = this.characterIndex?.getDefinitionLocation(
-        characterResolution.characterId,
-      );
+    const characterMatch =
+      characterResolution ??
+      this.pickSuggestedCharacter(this.characterIndex?.suggestCharacters(word));
+    if (characterMatch) {
+      const characterId =
+        'characterId' in characterMatch ? characterMatch.characterId : characterMatch.entity.id;
+      const definition = this.characterIndex?.getDefinitionLocation(characterId);
       if (definition) {
         pushLocation(definition);
       }
 
-      const occurrences = await this.occurrenceLookup?.findCharacterOccurrences(
-        characterResolution.characterId,
-      );
+      const occurrences = await this.occurrenceLookup?.findCharacterOccurrences(characterId);
       for (const occurrence of occurrences ?? []) {
         if (!isTrustedOccurrenceEntry(occurrence)) {
           continue;
@@ -137,7 +175,9 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
       }
     }
 
-    const objectEntity = await this.assetLookup?.resolveObject(word);
+    const objectEntity =
+      (await this.assetLookup?.resolveObject(word)) ??
+      this.pickSuggestedAsset(await this.assetLookup?.suggestObjects(word))?.entity;
     if (objectEntity) {
       const definition = await this.assetLookup?.getDefinitionLocation(objectEntity.id);
       if (definition) {
@@ -192,6 +232,22 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     }
 
     return results;
+  }
+
+  private pickSuggestedCharacter(
+    suggestions: CreativeEntityMatchSuggestion<CharacterRecord>[] | undefined,
+  ): CreativeEntityMatchSuggestion<CharacterRecord> | undefined {
+    return suggestions?.find(
+      (suggestion) => suggestion.confidence >= NAVIGATION_SUGGESTION_THRESHOLD,
+    );
+  }
+
+  private pickSuggestedAsset(
+    suggestions: CreativeEntityMatchSuggestion<AssetEntity>[] | undefined,
+  ): CreativeEntityMatchSuggestion<AssetEntity> | undefined {
+    return suggestions?.find(
+      (suggestion) => suggestion.confidence >= NAVIGATION_SUGGESTION_THRESHOLD,
+    );
   }
 }
 

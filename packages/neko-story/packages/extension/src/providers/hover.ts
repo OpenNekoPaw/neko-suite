@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
 import type { IWorkspaceIndex } from '../services/types';
-import type { AssetEntity, CharacterRecord } from '@neko/shared';
+import type { AssetEntity, CharacterRecord, CreativeEntityMatchSuggestion } from '@neko/shared';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
 import type { IAssetEntityLookup } from './definition';
 
@@ -41,14 +41,28 @@ export class FountainHoverProvider implements vscode.HoverProvider {
         const crossFileStats = this.getCrossFileCharacterStats(charName);
         if (localStats) {
           const registryRecord = this.characterIndex?.resolveCharacter(charName)?.record;
+          const suggestedCharacter = registryRecord
+            ? undefined
+            : this.characterIndex?.suggestCharacters(charName)[0];
           return new vscode.Hover(
-            this.formatCharacterStats(charName, localStats, crossFileStats, registryRecord),
+            this.formatCharacterStats(
+              charName,
+              localStats,
+              crossFileStats,
+              registryRecord,
+              suggestedCharacter,
+            ),
           );
         }
 
         const objectEntity = await this.assetLookup?.resolveObject(charName);
         if (objectEntity) {
           return new vscode.Hover(this.formatObjectStats(objectEntity));
+        }
+
+        const suggestedObject = (await this.assetLookup?.suggestObjects(charName))?.[0];
+        if (suggestedObject) {
+          return new vscode.Hover(this.formatObjectStats(suggestedObject.entity, suggestedObject));
         }
       }
     }
@@ -161,6 +175,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     local: LocalCharacterStats,
     crossFile: CrossFileCharacterStats,
     registryRecord?: CharacterRecord,
+    suggestedCharacter?: CreativeEntityMatchSuggestion<CharacterRecord>,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
@@ -178,6 +193,13 @@ export class FountainHoverProvider implements vscode.HoverProvider {
       if (registryRecord.metadata?.notes) {
         md.appendMarkdown(`**Notes:** ${registryRecord.metadata.notes}\n\n`);
       }
+    } else if (suggestedCharacter) {
+      md.appendMarkdown(
+        `**Suggested Character:** \`${suggestedCharacter.entity.id}\` (${Math.round(
+          suggestedCharacter.confidence * 100,
+        )}%)\n\n`,
+      );
+      md.appendMarkdown(`**Matched By:** ${suggestedCharacter.reason.join(', ')}\n\n`);
     }
     md.appendMarkdown(`| Stat | Value |\n|------|-------|\n`);
     md.appendMarkdown(`| Appearances (this file) | ${local.appearances} |\n`);
@@ -206,10 +228,18 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     return md;
   }
 
-  private formatObjectStats(entity: AssetEntity): vscode.MarkdownString {
+  private formatObjectStats(
+    entity: AssetEntity,
+    suggestion?: CreativeEntityMatchSuggestion<AssetEntity>,
+  ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${entity.name}\n\n`);
     md.appendMarkdown(`**Object ID:** \`${entity.id}\`\n\n`);
+    if (suggestion) {
+      md.appendMarkdown(
+        `**Suggested Match:** ${Math.round(suggestion.confidence * 100)}% via ${suggestion.reason.join(', ')}\n\n`,
+      );
+    }
     md.appendMarkdown(`**Category:** ${entity.category}\n\n`);
     if (entity.aliases && entity.aliases.length > 0) {
       md.appendMarkdown(`**Aliases:** ${entity.aliases.join(', ')}\n\n`);
