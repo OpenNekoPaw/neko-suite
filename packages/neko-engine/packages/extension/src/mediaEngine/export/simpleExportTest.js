@@ -33,7 +33,7 @@ async function main() {
 	try {
 		// Load native module
 		console.log('Step 1: Loading native module...');
-		const nativeModule = require('@neko-engine/native-napi');
+		const nativeModule = require('@neko-engine/host-napi');
 		console.log('  ✓ Module loaded');
 
 		// Create NativeEngine

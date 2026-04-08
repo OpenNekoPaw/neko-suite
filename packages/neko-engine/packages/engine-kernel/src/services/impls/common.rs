@@ -6,15 +6,15 @@ use crate::error::{Error, Result};
 use crate::media_service::MediaInfo as InternalMediaInfo;
 use base64::Engine as _;
 use ebur128::{EbuR128, Mode};
-use neko_types::{CoverArtInfo, MediaInfo, WaveformData};
+use neko_engine_types::{CoverArtInfo, MediaInfo, WaveformData};
 
-/// Convert internal probe MediaInfo to neko_types::MediaInfo
+/// Convert internal probe MediaInfo to neko_engine_types::MediaInfo
 ///
 /// Correctly handles audio-only files by returning empty video_streams
 /// when the probe reports no video dimensions.
 pub fn convert_media_info(info: InternalMediaInfo) -> MediaInfo {
     let video_streams = if info.width > 0 && info.height > 0 {
-        vec![neko_types::VideoStreamInfo {
+        vec![neko_engine_types::VideoStreamInfo {
             index: 0,
             codec: info.codec,
             width: info.width,
@@ -37,7 +37,7 @@ pub fn convert_media_info(info: InternalMediaInfo) -> MediaInfo {
         file_size: 0,
         video_streams,
         audio_streams: if info.has_audio {
-            vec![neko_types::AudioStreamInfo {
+            vec![neko_engine_types::AudioStreamInfo {
                 index: 0,
                 codec: info.audio_codec.unwrap_or_default(),
                 sample_rate: info.audio_sample_rate.unwrap_or(0),
@@ -52,7 +52,7 @@ pub fn convert_media_info(info: InternalMediaInfo) -> MediaInfo {
         subtitle_streams: info
             .subtitle_streams
             .into_iter()
-            .map(|s| neko_types::SubtitleStreamInfo {
+            .map(|s| neko_engine_types::SubtitleStreamInfo {
                 index: s.index,
                 codec: s.codec,
                 language: s.language,

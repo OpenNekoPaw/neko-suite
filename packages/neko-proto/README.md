@@ -24,7 +24,7 @@ neko-proto（IDL 唯一来源）
   └── diff.proto       → 媒体 Diff 比较结果数据结构
         │
         ├── → neko-engine (Rust)
-        │     native-core/src/domain/timeline.rs 等（手动保持一致）
+        │     engine-kernel/src/domain/timeline.rs 等（手动保持一致）
         │
         └── → @neko/shared/src/generated/ (TypeScript)
               pnpm generate:types → scripts/proto-gen-ts.mjs 自动生成

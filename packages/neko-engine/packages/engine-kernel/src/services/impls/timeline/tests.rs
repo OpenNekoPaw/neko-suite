@@ -1,6 +1,6 @@
 use super::*;
 use crate::services::TaskService;
-use neko_types::Resolution;
+use neko_engine_types::Resolution;
 
 fn create_test_service() -> TimelineService {
     let task_service = Arc::new(TaskService::new());

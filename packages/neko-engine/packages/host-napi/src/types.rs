@@ -9,7 +9,7 @@ use napi_derive::napi;
 // GPU Info
 // ============================================================================
 
-use neko_native_core::gpu::GpuInfo as RustGpuInfo;
+use neko_engine_kernel::gpu::GpuInfo as RustGpuInfo;
 
 /// GPU information for JavaScript
 #[napi(object)]
@@ -155,8 +155,8 @@ pub struct JsAudioInfo {
     pub total_samples: i64,
 }
 
-impl From<&neko_native_core::audio::AudioInfo> for JsAudioInfo {
-    fn from(info: &neko_native_core::audio::AudioInfo) -> Self {
+impl From<&neko_engine_kernel::audio::AudioInfo> for JsAudioInfo {
+    fn from(info: &neko_engine_kernel::audio::AudioInfo) -> Self {
         Self {
             sample_rate: info.sample_rate,
             channels: info.channels as u32,
@@ -172,7 +172,7 @@ impl From<&neko_native_core::audio::AudioInfo> for JsAudioInfo {
 // Media Service Types (probe, subtitles)
 // ============================================================================
 
-use neko_native_core::media_service::{
+use neko_engine_kernel::media_service::{
     ExtractedSubtitleTrack as RustExtractedSubtitleTrack, MediaInfo as RustProbeMediaInfo,
     SubtitleCue as RustSubtitleCue, SubtitleStream as RustSubtitleStream,
 };

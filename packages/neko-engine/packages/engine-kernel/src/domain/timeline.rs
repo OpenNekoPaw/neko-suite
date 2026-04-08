@@ -3,7 +3,7 @@
 //! The single source of truth for timeline data structures.
 //! Used by all modules: export, jvi, preview, services.
 
-use neko_types::{BlendMode, ElementEffect, Resolution, TrackType};
+use neko_engine_types::{BlendMode, ElementEffect, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;

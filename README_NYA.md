@@ -146,8 +146,8 @@ VS Code 主人 ←─ HTTP/NAPI ─→ neko-engine（猫娘的 Rust 铠甲）
                                     ├─ FFmpeg 炼金术（硬件加速 VideoToolbox/NVENC）
                                     ├─ 关键帧记忆宝库 + 预加载优化
                                     ├─ 导出魔法通道（GPU 高速导出 + 响度标准化）
-                                    ├─ native-scene 3D 幻境（bevy_ecs + glTF/VRM + 物理）
-                                    ├─ native-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps 流）
+                                    ├─ runtime-scene 3D 幻境（bevy_ecs + glTF/VRM + 物理）
+                                    ├─ runtime-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps 流）
                                     └─ ONNX 推理水晶球（macOS CoreML 加速）
 ```
 
@@ -278,11 +278,11 @@ neko-suite/（猫娘的大别墅 🏠）
 │   ├── neko-suite/        # 猫窝大门（Extension Pack）
 │   ├── neko-engine/       # 引擎猫娘的 Rust 工坊
 │   │   └── packages/
-│   │       ├── native-core/   # GPU 炼金炉 + 编解码房间 + ONNX 水晶球
-│   │       ├── native-api/    # 接待前台
-│   │       ├── native-http/   # 通信小屋（Axum）
-│   │       ├── native-napi/   # TS↔Rust 翻译间
-│   │       └── native-cli/    # 命令行入口
+│   │       ├── engine-kernel/   # GPU 炼金炉 + 编解码房间 + ONNX 水晶球
+│   │       ├── host-api/    # 接待前台
+│   │       ├── host-http/   # 通信小屋（Axum）
+│   │       ├── host-napi/   # TS↔Rust 翻译间
+│   │       └── host-cli/    # 命令行入口
 │   ├── neko-cut/          # 剪辑猫娘的剪辑室 ✂️
 │   │   └── packages/
 │   │       ├── extension/     # 插件控制中心

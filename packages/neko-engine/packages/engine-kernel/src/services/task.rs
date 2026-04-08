@@ -2,7 +2,7 @@
 
 use crate::domain::{TaskConfig, TaskHandle};
 use crate::error::Result;
-use neko_types::TaskProgress;
+use neko_engine_types::TaskProgress;
 use tokio::sync::broadcast;
 
 /// Task service interface

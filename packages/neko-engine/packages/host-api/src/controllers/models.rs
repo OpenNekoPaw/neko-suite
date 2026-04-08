@@ -2,14 +2,14 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_native_core::media_service::{diff_media, DiffCategory};
-use neko_types::registry;
-use neko_types::ActionResponse;
+use neko_engine_kernel::media_service::{diff_media, DiffCategory};
+use neko_engine_types::registry;
+use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 
 #[cfg(feature = "onnx")]
-use neko_native_core::services::IMlService;
+use neko_engine_kernel::services::IMlService;
 #[cfg(feature = "onnx")]
 use std::sync::Arc;
 

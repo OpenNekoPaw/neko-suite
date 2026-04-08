@@ -1,6 +1,6 @@
 //! Stream entry types for StreamRegistry
 
-use neko_types::{Resolution, StreamId, StreamState};
+use neko_engine_types::{Resolution, StreamId, StreamState};
 use std::time::Instant;
 use tokio::sync::broadcast;
 

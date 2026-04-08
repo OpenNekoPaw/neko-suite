@@ -9,7 +9,7 @@ use crate::gpu::GpuContext;
 use bevy_ecs::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use neko_native_scene::components::*;
+use neko_runtime_scene::components::*;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 

@@ -9,7 +9,7 @@ use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::media_service::{encode_rgba_to_jpeg, global_probe_cache};
 use crate::services::impls::common::convert_media_info;
 use crate::services::IImageService;
-use neko_types::{FrameFormat, MediaInfo};
+use neko_engine_types::{FrameFormat, MediaInfo};
 use std::path::Path;
 use std::sync::Arc;
 

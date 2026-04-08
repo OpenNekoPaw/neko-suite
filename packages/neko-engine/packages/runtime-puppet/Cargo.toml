@@ -1,5 +1,5 @@
 [package]
-name = "neko-native-puppet"
+name = "neko-runtime-puppet"
 version.workspace = true
 edition.workspace = true
 description = "2D puppet management with ECS for Neko Engine (Inochi2D/inox2d)"
@@ -9,7 +9,7 @@ license.workspace = true
 crate-type = ["lib"]
 
 [dependencies]
-# ECS framework (standalone, not full Bevy — mirrors native-scene)
+# ECS framework (standalone, not full Bevy — mirrors runtime-scene)
 bevy_ecs = "0.15"
 
 # Math library
@@ -19,7 +19,7 @@ glam = { version = "0.29", features = ["serde"] }
 inox2d = { git = "https://github.com/Inochi2D/inox2d" }
 
 # Shared types (EasingType, etc.)
-neko-types = { path = "../types" }
+neko-engine-types = { path = "../engine-types" }
 
 # UUID for keyframe IDs
 uuid = { workspace = true }

@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::export::{
     ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
 };
-use neko_types::{BlendMode, Resolution, TrackType};
+use neko_engine_types::{BlendMode, Resolution, TrackType};
 
 use super::types::{JviElement, JviTrack, ProjectData};
 

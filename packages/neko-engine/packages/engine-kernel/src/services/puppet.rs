@@ -3,10 +3,10 @@
 //! Provides an interface for loading, querying, and manipulating 2D puppets.
 //! Mirrors the ISceneService pattern for 3D scenes.
 
-use neko_native_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
-use neko_native_puppet::animation_blend::BlendLayerInfo;
-use neko_native_puppet::world::{DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot};
-use neko_types::easing::EasingType;
+use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
+use neko_runtime_puppet::animation_blend::BlendLayerInfo;
+use neko_runtime_puppet::world::{DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot};
+use neko_engine_types::easing::EasingType;
 
 /// Service interface for 2D puppet management (Inochi2D/inox2d)
 #[allow(async_fn_in_trait)]

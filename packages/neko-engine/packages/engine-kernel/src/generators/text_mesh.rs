@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use glam::Vec2;
-use neko_native_scene::procedural_mesh::{ProceduralMesh, ProceduralVertex};
+use neko_runtime_scene::procedural_mesh::{ProceduralMesh, ProceduralVertex};
 use serde::{Deserialize, Serialize};
 
 use cosmic_text::{

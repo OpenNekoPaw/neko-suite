@@ -335,11 +335,11 @@ mod tests {
         manager.create("session1").await;
 
         // Create streams for this session
-        let config = neko_native_core::domain::StreamConfig {
-            resolution: neko_types::Resolution::new(1920, 1080),
+        let config = neko_engine_kernel::domain::StreamConfig {
+            resolution: neko_engine_types::Resolution::new(1920, 1080),
             fps: 30.0,
             start_time: 0.0,
-            codec: neko_native_core::domain::StreamCodec::H264,
+            codec: neko_engine_kernel::domain::StreamCodec::H264,
             initial_paused: false,
         };
         let (_id1, _) = stream_registry

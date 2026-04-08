@@ -5,7 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::services::camera::{CameraCaptureConfig, CameraDevice, ICameraService};
-use neko_types::StreamId;
+use neko_engine_types::StreamId;
 
 pub struct CameraService;
 

@@ -267,10 +267,10 @@ midir callback (<1ms) → JSON 序列化 (~0.1ms) → WebSocket (~2ms)
 
 | 设备 | 状态 | Rust crate | 关键文件 |
 |------|------|-----------|---------|
-| **麦克风** | ✅ 完整 | `cpal` + `hound` | `native-core/src/audio/mic_capture.rs` + `native-http/src/routes/monitor.rs` |
-| **摄像头** | ⚠️ 框架 | FFmpeg avdevice | `native-core/src/services/impls/camera.rs`（capture TODO） |
-| **MIDI** | ✅ 完整 | `midir` | `native-core/src/services/impls/midi.rs` |
-| **Gamepad** | ✅ 完整 | `gilrs` | `native-core/src/services/impls/gamepad.rs` |
+| **麦克风** | ✅ 完整 | `cpal` + `hound` | `engine-kernel/src/audio/mic_capture.rs` + `host-http/src/routes/monitor.rs` |
+| **摄像头** | ⚠️ 框架 | FFmpeg avdevice | `engine-kernel/src/services/impls/camera.rs`（capture TODO） |
+| **MIDI** | ✅ 完整 | `midir` | `engine-kernel/src/services/impls/midi.rs` |
+| **Gamepad** | ✅ 完整 | `gilrs` | `engine-kernel/src/services/impls/gamepad.rs` |
 | **手写板** | ✅ 无需代理 | — | webview `PointerEvent.pressure` |
 
 **TS 层**：`EngineClient` 新增 15 个方法（5 录制 + 3 camera + 3 MIDI + 3 gamepad + 1 monitor），类型定义在 `@neko/neko-client/engine/types.ts`。

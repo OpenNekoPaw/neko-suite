@@ -4,16 +4,16 @@ use crate::controllers::utils::{base64_encode, handle_stream_control};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_native_core::domain::{StreamConfig, Timeline};
-use neko_native_core::jvi::JviLoader;
-use neko_native_core::media_service::{
+use neko_engine_kernel::domain::{StreamConfig, Timeline};
+use neko_engine_kernel::jvi::JviLoader;
+use neko_engine_kernel::media_service::{
     diff_media, diff_timeline_content_with_options, DiffCategory, TimelineDiffOptions,
 };
-use neko_native_core::services::{
+use neko_engine_kernel::services::{
     ExportService, IExportService, ITimelineService, TimelineService,
 };
-use neko_types::registry;
-use neko_types::{ActionResponse, Resolution, StreamId};
+use neko_engine_types::registry;
+use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -284,7 +284,7 @@ impl Controller for TimelineController {
                         )
                     })?;
 
-                let config: neko_native_core::export::ExportJobConfig =
+                let config: neko_engine_kernel::export::ExportJobConfig =
                     serde_json::from_value(config_value).map_err(|e| {
                         ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
                     })?;
@@ -362,7 +362,7 @@ impl Controller for TimelineController {
                         )
                     })?;
 
-                let config: neko_native_core::export::ExportJobConfig =
+                let config: neko_engine_kernel::export::ExportJobConfig =
                     serde_json::from_value(config_value).map_err(|e| {
                         ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
                     })?;
@@ -449,7 +449,7 @@ impl Controller for TimelineController {
 mod tests {
     use super::*;
     use crate::registry::StreamRegistry;
-    use neko_native_core::services::TaskService;
+    use neko_engine_kernel::services::TaskService;
 
     fn create_test_controller() -> TimelineController {
         let task_service = Arc::new(TaskService::new());

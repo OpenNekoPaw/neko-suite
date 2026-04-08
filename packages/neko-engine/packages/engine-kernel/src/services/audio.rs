@@ -6,7 +6,7 @@ use crate::audio::mic_capture::{
 use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
-use neko_types::{MediaInfo, StreamId, WaveformData};
+use neko_engine_types::{MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use tokio::sync::broadcast;
 

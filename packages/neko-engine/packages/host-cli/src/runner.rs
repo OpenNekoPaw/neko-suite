@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use crate::args::{ActionOpts, Command, TimelineAction};
 use indicatif::{ProgressBar, ProgressStyle};
-use neko_native_api::{
+use neko_host_api::{
     EngineApi, ExportHwEncoder, ExportJobConfig, ExportPreset, ExportVideoCodec, JviLoader,
 };
-use neko_types::{ActionRequest, EngineConfig};
+use neko_engine_types::{ActionRequest, EngineConfig};
 
 /// CLI runner for executing commands
 pub struct Runner {
@@ -135,7 +135,7 @@ impl Runner {
             ))) as Box<dyn std::error::Error + Send + Sync>
         })?);
         self.engine = Some(engine.clone());
-        neko_native_http::start_server(engine, effective_port).await?;
+        neko_host_http::start_server(engine, effective_port).await?;
 
         Ok(())
     }

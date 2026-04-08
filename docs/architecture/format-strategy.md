@@ -358,7 +358,7 @@ if (RUST_FAST_PATH_OPS.has(operation.type)) {
 | 层 | 定义位置 | 数量 | 说明 |
 |----|----------|------|------|
 | TS 操作类型 | `neko-types/src/operations/types.ts` | 60+ | 完整操作体系（含 meta/before） |
-| Rust 操作类型 | `native-core/src/domain/operations.rs` | 20 | Timeline 子集（仅 type+payload） |
+| Rust 操作类型 | `engine-kernel/src/domain/operations.rs` | 20 | Timeline 子集（仅 type+payload） |
 | Proto | 无 | — | 不定义操作类型，JSON 即线格式 |
 
 **设计决策**：Rust 端使用 `EditOperationEnvelope { type: String, payload: serde_json::Value }` 作为信封，忽略 `meta` 和 `before` 字段（这些仅 TS 侧 undo/invert 使用）。Payload 通过 serde 按需反序列化为具体类型。

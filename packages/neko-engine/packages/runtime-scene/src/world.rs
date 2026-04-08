@@ -12,7 +12,7 @@ use crate::loader::{self, LoadError, LoadResult};
 use crate::systems;
 use bevy_ecs::prelude::*;
 use glam::Vec3;
-use neko_types::easing::EasingType;
+use neko_engine_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

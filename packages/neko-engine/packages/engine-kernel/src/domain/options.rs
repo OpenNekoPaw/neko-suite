@@ -3,7 +3,7 @@
 //! These types are parameters for Service trait methods.
 //! They are consumed only by the Service layer.
 
-use neko_types::{
+use neko_engine_types::{
     AudioCodec, EncoderPreset, FrameFormat, HwEncoderType, Resolution, VideoCodec, WaveformFormat,
 };
 

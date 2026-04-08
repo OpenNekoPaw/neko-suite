@@ -1,4 +1,4 @@
-//! native-scene — 3D scene management with ECS
+//! runtime-scene — 3D scene management with ECS
 //!
 //! Provides scene graph, glTF loading, transform hierarchy,
 //! and animation systems using bevy_ecs.

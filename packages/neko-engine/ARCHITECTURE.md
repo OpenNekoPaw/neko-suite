@@ -6,7 +6,7 @@
 
 ## 系统定位
 
-neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extension Host 内通过 `native-napi` 访问 Rust `EngineApi` 全局单例，并按需启动嵌入式 HTTP/WebSocket 服务。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
+neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extension Host 内通过 `host-napi` 访问 Rust `EngineApi` 全局单例，并按需启动嵌入式 HTTP/WebSocket 服务。Rust 引擎是数据模型和计算逻辑的唯一权威来源，TS 层不复制其逻辑。
 
 控制面与数据面边界如下：
 
@@ -20,13 +20,13 @@ neko-engine 是 Neko Suite 的计算核心。当前主路径是在 VSCode Extens
 ```
 packages/neko-engine/
 ├── packages/
-│   ├── native-core/    # Rust: GPU 渲染 + FFmpeg 编解码 + 音频处理
-│   ├── native-api/     # Rust: Controller 层 + ActionRouter + 资源管理
-│   ├── native-http/    # Rust: axum HTTP/WebSocket 服务
-│   ├── native-scene/   # Rust: 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-│   ├── native-puppet/  # Rust: 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
-│   ├── native-napi/    # Rust: Node.js N-API 绑定（napi-rs）
-│   ├── native-cli/     # Rust: 独立 CLI 二进制
+│   ├── engine-kernel/    # Rust: GPU 渲染 + FFmpeg 编解码 + 音频处理
+│   ├── host-api/     # Rust: Controller 层 + ActionRouter + 资源管理
+│   ├── host-http/    # Rust: axum HTTP/WebSocket 服务
+│   ├── runtime-scene/   # Rust: 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
+│   ├── runtime-puppet/  # Rust: 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+│   ├── host-napi/    # Rust: Node.js N-API 绑定（napi-rs）
+│   ├── host-cli/     # Rust: 独立 CLI 二进制
 │   ├── types/          # Rust: 共享 DTO（跨 crate 契约）
 │   └── extension/      # TypeScript: VSCode 扩展（Extension 会话生命周期管理）
 ├── Cargo.toml          # Rust workspace 配置
@@ -54,7 +54,7 @@ packages/neko-engine/
 │      Rust Engine Runtime (embedded in Extension Host) │
 │                                                       │
 │  ┌─ View Layer ──────────────────────────────────┐    │
-│  │  native-http (axum)                           │    │
+│  │  host-http (axum)                           │    │
 │  │    POST /v1/dispatch          — 通用 ActionRequest    │    │
 │  │    POST /v1/:group/:id        — RESTful 资源操作      │    │
 │  │    GET  /v1/streams/:id       — WebSocket 媒体流      │    │
@@ -70,7 +70,7 @@ packages/neko-engine/
 │  └──────────────┬────────────────────────────────┘    │
 │                 │                                     │
 │  ┌─ Controller Layer ────────────────────────────┐    │
-│  │  native-api                                   │    │
+│  │  host-api                                   │    │
 │  │    EngineApi        — 主 Facade               │    │
 │  │    ActionRouter     — 请求路由                 │    │
 │  │    ResourceRegistry — 资源管理（确定性 ID）     │    │
@@ -83,7 +83,7 @@ packages/neko-engine/
 │  └──────────────┬────────────────────────────────┘    │
 │                 │                                     │
 │  ┌─ Core Layer ──────────────────────────────────┐    │
-│  │  native-core                                  │    │
+│  │  engine-kernel                                  │    │
 │  │    gpu/       — wgpu 上下文 + 纹理合成 + 格式转换│    │
 │  │    decoder/   — 硬件解码（VideoToolbox/VAAPI）  │    │
 │  │    encoder/   — 硬件编码（H.264/VP9）          │    │
@@ -107,16 +107,16 @@ packages/neko-engine/
 ## 依赖方向
 
 ```
-native-cli ──→ native-http ──→ native-api ──→ native-core ──→ native-scene
+host-cli ──→ host-http ──→ host-api ──→ engine-kernel ──→ runtime-scene
                                     │              │              │
-                                    ├──→ native-puppet            │
+                                    ├──→ runtime-puppet            │
                                     └──→ types ◀───┘──────────────┘
                                                   ▲
-                                            native-puppet
+                                            runtime-puppet
 
-native-napi ──→ native-api + native-http + native-core + types
+host-napi ──→ host-api + host-http + engine-kernel + types
 
-extension (TS) ──→ native-napi (N-API 绑定)
+extension (TS) ──→ host-napi (N-API 绑定)
 ```
 
 所有 Rust crate 共享 `types/` 中的 DTO 定义，无循环依赖。
@@ -130,8 +130,8 @@ extension (TS) ──→ native-napi (N-API 绑定)
 ```
 Extension Host
   └─ NativeMediaEngine（TS wrapper）
-       └─ native-napi（C FFI + napi-rs）
-            └─ EngineApi / embedded native-http
+       └─ host-napi（C FFI + napi-rs）
+            └─ EngineApi / embedded host-http
 ```
 
 适用于低延迟同步/异步操作：probe、extract frame、generate waveform。
@@ -148,7 +148,7 @@ EngineClient（@neko/neko-client）
 
 ### 生命周期说明
 
-- `native-napi` 当前通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- `host-napi` 当前通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
 - `NativeEngine` 与 bridge 函数都必须复用同一个全局单例入口，避免出现两套 `EngineApi` 状态。
 - `MediaEngineManager.disposeEngines()` 仅释放 TypeScript 包装层，不会真正销毁 Rust 引擎单例。
 - `stopFrameServer()` 只影响嵌入式 HTTP/WebSocket 服务，不代表底层引擎已重建或退出。
@@ -160,7 +160,7 @@ EngineClient（@neko/neko-client）
 Webview H264StreamClient / AudioStreamClient
   └─ WebSocket 连接
        └─ neko-engine axum 端点
-            └─ native-core decoder → H.264 NAL / PCM
+            └─ engine-kernel decoder → H.264 NAL / PCM
 ```
 
 流媒体绕过 Extension Host，避免帧数据在 Node.js 层多次拷贝。
@@ -174,7 +174,7 @@ Webview H264StreamClient / AudioStreamClient
 ```
 播放请求 → EngineClient HTTP dispatch
   → ActionRouter → StreamController
-    → native-core decoder（硬件加速）
+    → engine-kernel decoder（硬件加速）
       → H.264 NAL 流 → WebSocket 推送
         → Webview WebCodecs VideoDecoder → Canvas
 ```
@@ -203,7 +203,7 @@ Webview H264StreamClient / AudioStreamClient
 
 | 模式 | 应用 |
 |------|------|
-| **分层 MVC** | native-core（Model）→ native-api（Controller）→ native-http（View） |
+| **分层 MVC** | engine-kernel（Model）→ host-api（Controller）→ host-http（View） |
 | **Trait Service** | IVideoService、IAudioService、IExportService、ISceneService — 面向 trait 编程 |
 | **Registry** | ResourceRegistry、StreamRegistry — 动态资源管理 |
 | **Facade** | EngineApi — 统一入口，隐藏内部复杂性 |

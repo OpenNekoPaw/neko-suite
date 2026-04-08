@@ -5,7 +5,7 @@
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Extension Host（CustomEditorProvider .nkp/.inp）+ Webview（React 18）+ neko-engine（native-puppet sidecar）
+- 架构：Extension Host（CustomEditorProvider .nkp/.inp）+ Webview（React 18）+ neko-engine（runtime-puppet sidecar）
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 - 2D 绘画：独立子插件 [neko-sketch](../neko-sketch/)
 
@@ -13,8 +13,8 @@
 
 - **职责**：Inochi2D 立绘预览、参数滑块驱动、骨骼动画回放、WebSocket 实时流（供 neko-live）
 - **入口**：`packages/extension/src/extension.ts`
-- **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 native-puppet）
-- **激活依赖**：`neko-engine`（extensionDependency，native-puppet sidecar）
+- **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 runtime-puppet）
+- **激活依赖**：`neko-engine`（extensionDependency，runtime-puppet sidecar）
 - **文件格式**：`.nkp`（JSON 项目）、`.inp`（Inochi2D 二进制）
 
 ## Architecture
@@ -32,7 +32,7 @@ Webview（React 18）
               ▼
 Extension Host（Node.js）
   └── PuppetEditorProvider（CustomEditorProvider .nkp/.inp）
-        └── EngineClient → neko-engine native-puppet
+        └── EngineClient → neko-engine runtime-puppet
               ├── 变形计算（bevy_ecs + inox2d）
               └── 动画曲线（bevy_animation ParameterCurve）
 ```
@@ -75,7 +75,7 @@ Webview → Extension:
 
 | Decision | Rationale |
 |----------|-----------|
-| native-puppet in neko-engine | Symmetric to native-scene; no WASM (size/threading limits); full bevy_ecs + bevy_animation |
+| runtime-puppet in neko-engine | Symmetric to runtime-scene; no WASM (size/threading limits); full bevy_ecs + bevy_animation |
 | bevy_animation over inox2d anim | inox2d animation not yet implemented upstream; bevy_animation ParameterCurve bridges the gap |
 | inox2d over Spine/Live2D | BSD 2-Clause license; Spine Runtimes License rejected (ADR-2D-004); Live2D rejected (ADR-2D-001) |
 | WS /v1/puppets/stream | Real-time face-tracking (neko-live) requires <2ms latency; HTTP round-trip not sufficient at 60fps |
@@ -87,5 +87,5 @@ Webview → Extension:
 |-------|-----------|
 | Frontend | React 18 + Zustand + Tailwind CSS |
 | Engine Communication | EngineClient HTTP + WebSocket（@neko/neko-client） |
-| Backend | neko-engine native-puppet（bevy_ecs + inox2d + bevy_animation） |
+| Backend | neko-engine runtime-puppet（bevy_ecs + inox2d + bevy_animation） |
 | Extension | VSCode Extension API + TypeScript + esbuild |

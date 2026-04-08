@@ -175,7 +175,7 @@ pub struct JviMediaElement {
     pub media_type: Option<String>,
     /// Visual effects applied to this element
     #[serde(default)]
-    pub effects: Vec<neko_types::ElementEffect>,
+    pub effects: Vec<neko_engine_types::ElementEffect>,
 }
 
 /// Audio element data
@@ -241,7 +241,7 @@ pub struct JviTextElement {
     pub opacity: f32,
     /// Visual effects applied to this element
     #[serde(default)]
-    pub effects: Vec<neko_types::ElementEffect>,
+    pub effects: Vec<neko_engine_types::ElementEffect>,
 }
 
 /// Shape element data
@@ -259,7 +259,7 @@ pub struct JviShapeElement {
     pub trim_end: f64,
     /// Visual effects applied to this element
     #[serde(default)]
-    pub effects: Vec<neko_types::ElementEffect>,
+    pub effects: Vec<neko_engine_types::ElementEffect>,
 }
 
 /// Subtitle element data

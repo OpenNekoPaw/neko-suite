@@ -1,11 +1,11 @@
-//! FFmpeg extension traits for neko_types codec enumerations
+//! FFmpeg extension traits for neko_engine_types codec enumerations
 //!
 //! These traits add FFmpeg-specific methods to the canonical enum definitions
-//! in `neko_types::codec`. The enums themselves live in `neko_types` (single
+//! in `neko_engine_types::codec`. The enums themselves live in `neko_engine_types` (single
 //! source of truth with Serialize/Deserialize); this module only provides
 //! the FFmpeg integration layer needed by the encoder pipeline.
 
-use neko_types::{AudioCodec, ContainerFormat, EncoderPreset, HwEncoderType, VideoCodec};
+use neko_engine_types::{AudioCodec, ContainerFormat, EncoderPreset, HwEncoderType, VideoCodec};
 
 // =============================================================================
 // VideoCodecExt

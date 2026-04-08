@@ -11,7 +11,7 @@
 //!
 //! Unsupported operations fall back to full `streams:update` via Extension.
 
-use neko_types::BlendMode;
+use neko_engine_types::BlendMode;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -81,7 +81,7 @@ pub struct ElementUpdates {
     pub blend_mode: Option<String>,
     /// Visual effects (replaces entire Vec when Some)
     #[serde(default)]
-    pub effects: Option<Vec<neko_types::ElementEffect>>,
+    pub effects: Option<Vec<neko_engine_types::ElementEffect>>,
 }
 
 /// Payload for `track.toggle` — mute/lock/hide a track
@@ -168,7 +168,7 @@ pub struct ProjectUpdates {
     #[serde(default)]
     pub fps: Option<f64>,
     #[serde(default)]
-    pub resolution: Option<neko_types::Resolution>,
+    pub resolution: Option<neko_engine_types::Resolution>,
 }
 
 // ==========================================================================

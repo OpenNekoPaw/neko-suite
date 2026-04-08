@@ -4,18 +4,18 @@ use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use crate::router::ActionRouter;
 use crate::session::SessionManager;
-use neko_native_core::gpu::GpuContext;
-use neko_native_core::services::{
+use neko_engine_kernel::gpu::GpuContext;
+use neko_engine_kernel::services::{
     AudioService, CameraService, EffectsService, ExportService, GamepadService, IPuppetService,
     ImageService, MidiService, NodeService, PuppetService, SceneService, TaskService,
     TimelineService, VideoService,
 };
 #[cfg(feature = "onnx")]
-use neko_native_core::{
+use neko_engine_kernel::{
     ml::onnx_runtime::DeviceSelection,
     services::{IMlService, MlService},
 };
-use neko_types::{ActionRequest, ActionResponse, EngineConfig};
+use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 

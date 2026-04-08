@@ -22,7 +22,7 @@ use crate::services::impls::stream_loop::{
     StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IStreamPlayback, ITaskService, IVideoService};
-use neko_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
+use neko_engine_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -256,16 +256,16 @@ impl IVideoService for VideoService {
                         Error::Other(format!("Subtitle extraction task failed: {}", e))
                     })??;
 
-                // Convert internal types to neko_types (which has Serialize)
-                let typed_tracks: Vec<neko_types::ExtractedSubtitleTrack> = tracks
+                // Convert internal types to neko_engine_types (which has Serialize)
+                let typed_tracks: Vec<neko_engine_types::ExtractedSubtitleTrack> = tracks
                     .into_iter()
-                    .map(|t| neko_types::ExtractedSubtitleTrack {
+                    .map(|t| neko_engine_types::ExtractedSubtitleTrack {
                         index: t.stream_index,
                         language: t.language,
                         cues: t
                             .cues
                             .into_iter()
-                            .map(|c| neko_types::SubtitleCue {
+                            .map(|c| neko_engine_types::SubtitleCue {
                                 start_time: c.start_time,
                                 end_time: c.end_time,
                                 text: c.text,
@@ -966,12 +966,12 @@ impl IVideoService for VideoService {
         let proxy_height = proxy_height & !1;
 
         let proxy_options = TranscodeOptions {
-            video_codec: neko_types::VideoCodec::H264,
-            resolution: Some(neko_types::Resolution::new(proxy_width, proxy_height)),
+            video_codec: neko_engine_types::VideoCodec::H264,
+            resolution: Some(neko_engine_types::Resolution::new(proxy_width, proxy_height)),
             bitrate: Some(1_000_000), // 1 Mbps
-            hw_encoder: neko_types::HwEncoderType::Auto,
-            preset: neko_types::EncoderPreset::Fast,
-            audio_codec: Some(neko_types::AudioCodec::Opus),
+            hw_encoder: neko_engine_types::HwEncoderType::Auto,
+            preset: neko_engine_types::EncoderPreset::Fast,
+            audio_codec: Some(neko_engine_types::AudioCodec::Opus),
             audio_bitrate: None,
         };
 

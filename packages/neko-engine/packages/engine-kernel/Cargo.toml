@@ -1,5 +1,5 @@
 [package]
-name = "neko-native-core"
+name = "neko-engine-kernel"
 version.workspace = true
 edition.workspace = true
 description = "Core media processing library with GPU acceleration for Neko Suite"
@@ -10,18 +10,18 @@ crate-type = ["lib"]
 
 [dependencies]
 # Shared types
-neko-types = { path = "../types" }
+neko-engine-types = { path = "../engine-types" }
 
 # 3D scene management
-neko-native-scene = { path = "../native-scene" }
+neko-runtime-scene = { path = "../runtime-scene" }
 
 # ECS (for querying scene World in PBR renderer)
 bevy_ecs.workspace = true
 
 # 2D puppet management (Inochi2D/inox2d)
-neko-native-puppet = { path = "../native-puppet" }
+neko-runtime-puppet = { path = "../runtime-puppet" }
 
-# Math (re-export from native-scene)
+# Math (re-export from runtime-scene)
 glam.workspace = true
 
 # glTF parsing (for AssetCache GPU resource loading)

@@ -1,6 +1,6 @@
 use super::*;
 use crate::export::types::{ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportVideoCodec};
-use neko_types::Resolution;
+use neko_engine_types::Resolution;
 
 fn create_test_settings() -> ExportSettings {
     ExportSettings {

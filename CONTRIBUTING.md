@@ -53,7 +53,7 @@ cargo build                    # debug mode
 cd ../..
 
 # 4. Build N-API bindings
-cd packages/neko-engine/packages/native-napi
+cd packages/neko-engine/packages/host-napi
 pnpm build
 cd ../../../..
 
@@ -123,7 +123,7 @@ See each package's `packages/*/README.md` for details.
 @neko/shared (neko-types)            <- Shared infrastructure (Logger/i18n/Theme/Errors, zero internal deps)
 @neko/neko-client                    <- EngineClient HTTP dispatch + streaming client (zero internal deps)
 
-@neko-engine/native-napi             <- Rust N-API bindings (independently compiled)
+@neko-engine/host-napi             <- Rust N-API bindings (independently compiled)
   ^
 neko-engine ext                      <- Single Sidecar process + unified HTTP/WS server
   ^ (communicates via EngineClient HTTP/WS)
@@ -486,7 +486,7 @@ Refer to [TODO.md](./TODO.md) for P0/P1 tasks. Below are the areas where help is
 - AI Agent architecture refactor (`docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md`): ToolSet/Skill/Hook subsystem rename cleanup, Shell hooks bridge, two-tier tool injection (`always`/`dynamic`)
 - Unified engine architecture (`docs/adr-unified-engine.md`)
 - Cross-cutting concerns unification (`docs/architecture/adr-cross-cutting-concerns.md`)
-- Shader/Effects full pipeline (`packages/neko-engine/packages/native-core/src/export/gpu_export_pipeline.rs`)
+- Shader/Effects full pipeline (`packages/neko-engine/packages/engine-kernel/src/export/gpu_export_pipeline.rs`)
 
 ---
 

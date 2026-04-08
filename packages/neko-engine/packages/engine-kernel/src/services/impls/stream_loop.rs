@@ -7,7 +7,7 @@ use crate::domain::{FrameData, Timeline};
 use crate::encoder::EncodedPacket;
 use crate::error::{Error, Result};
 use crate::preview::PreviewPipelineConfig;
-use neko_types::{FrameFormat, LoopRegion, StreamId};
+use neko_engine_types::{FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

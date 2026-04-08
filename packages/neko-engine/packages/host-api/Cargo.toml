@@ -1,5 +1,5 @@
 [package]
-name = "neko-native-api"
+name = "neko-host-api"
 version.workspace = true
 edition.workspace = true
 description = "Controller layer for Neko Engine - ActionRouter, Controllers, and Registries"
@@ -10,10 +10,10 @@ crate-type = ["lib"]
 
 [dependencies]
 # Shared types
-neko-types = { path = "../types" }
+neko-engine-types = { path = "../engine-types" }
 
 # Core services
-neko-native-core = { path = "../native-core", features = [] }
+neko-engine-kernel = { path = "../engine-kernel", features = [] }
 
 # Async runtime
 tokio.workspace = true
@@ -41,7 +41,7 @@ base64.workspace = true
 
 [features]
 default = []
-onnx = ["neko-native-core/onnx"]
+onnx = ["neko-engine-kernel/onnx"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }

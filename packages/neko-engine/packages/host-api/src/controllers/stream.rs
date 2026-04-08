@@ -23,12 +23,12 @@ use crate::controllers::utils::handle_stream_control;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_native_core::domain::operations::EditOperationEnvelope;
-use neko_native_core::domain::{StreamCodec, StreamConfig, Timeline};
-use neko_native_core::jvi::JviLoader;
-use neko_native_core::services::{IStreamPlayback, ITimelineService, TimelineService};
-use neko_types::registry;
-use neko_types::{ActionResponse, Resolution, StreamId};
+use neko_engine_kernel::domain::operations::EditOperationEnvelope;
+use neko_engine_kernel::domain::{StreamCodec, StreamConfig, Timeline};
+use neko_engine_kernel::jvi::JviLoader;
+use neko_engine_kernel::services::{IStreamPlayback, ITimelineService, TimelineService};
+use neko_engine_types::registry;
+use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -457,8 +457,8 @@ mod tests {
 
     fn create_test_controller() -> StreamController {
         let stream_registry = Arc::new(StreamRegistry::new());
-        let task_service = Arc::new(neko_native_core::services::TaskService::new());
-        let timeline_service = Arc::new(neko_native_core::services::TimelineService::new(
+        let task_service = Arc::new(neko_engine_kernel::services::TaskService::new());
+        let timeline_service = Arc::new(neko_engine_kernel::services::TimelineService::new(
             None,
             task_service,
         ));

@@ -1,6 +1,6 @@
 //! Frame data types
 
-use neko_types::FrameFormat;
+use neko_engine_types::FrameFormat;
 
 /// Decoded frame data — output of capture/extract/composite operations
 #[derive(Debug, Clone)]

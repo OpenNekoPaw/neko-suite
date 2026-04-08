@@ -6,8 +6,8 @@
 
 use axum::extract::{Path, State};
 use axum::Json;
-use neko_native_api::EngineApi;
-use neko_types::{ActionRequest, ActionResponse, ApiError, ErrorCode};
+use neko_host_api::EngineApi;
+use neko_engine_types::{ActionRequest, ActionResponse, ApiError, ErrorCode};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -104,7 +104,7 @@ pub async fn handle_resource_dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_types::ActionRequest;
+    use neko_engine_types::ActionRequest;
 
     fn test_engine() -> Arc<EngineApi> {
         Arc::new(EngineApi::without_gpu().unwrap())

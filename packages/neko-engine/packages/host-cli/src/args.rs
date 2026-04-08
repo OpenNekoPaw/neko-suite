@@ -578,7 +578,7 @@ impl TimelineAction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_types::registry;
+    use neko_engine_types::registry;
 
     #[test]
     fn test_node_actions_align_with_registry() {

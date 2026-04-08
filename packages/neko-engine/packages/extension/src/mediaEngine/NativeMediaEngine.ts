@@ -7,7 +7,7 @@
  * Runs in Extension Host (Node.js), supports all formats.
  */
 
-import type { NativeEngine as NativeEngineType } from '@neko-engine/native-napi';
+import type { NativeEngine as NativeEngineType } from '@neko-engine/host-napi';
 import type {
   IMediaEngine,
   IDecoder,
@@ -34,7 +34,7 @@ import { getLogger } from '../base/logger';
 
 type EventListener<T> = (data: T) => void;
 
-type NativeEngineModule = typeof import('@neko-engine/native-napi');
+type NativeEngineModule = typeof import('@neko-engine/host-napi');
 
 // =============================================================================
 // Native Media Engine
@@ -96,7 +96,7 @@ export class NativeMediaEngine implements IMediaEngine {
 
     try {
       // Load NativeEngine via dynamic import
-      const module = (await import('@neko-engine/native-napi')) as unknown as NativeEngineModule;
+      const module = (await import('@neko-engine/host-napi')) as unknown as NativeEngineModule;
       this._engine = await module.NativeEngine.create();
 
       // Log GPU info
@@ -123,7 +123,7 @@ export class NativeMediaEngine implements IMediaEngine {
     if (this._engine) {
       // Stop the embedded HTTP server owned by this wrapper instance.
       // The Rust EngineApi itself currently remains alive behind the global
-      // native-napi singleton and is not torn down here.
+      // host-napi singleton and is not torn down here.
       try {
         await this._engine.stopFrameServer();
       } catch {

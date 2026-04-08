@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use neko_native_core::telemetry::spans::span;
+//! use neko_engine_kernel::telemetry::spans::span;
 //!
 //! fn process_frame() {
 //!     let _span = tracing::info_span!(span::FRAME).entered();

@@ -1,7 +1,7 @@
 //! PuppetWorld — abstraction over bevy_ecs::World for puppet management
 //!
 //! Isolates bevy_ecs API details behind a stable interface.
-//! Mirrors native-scene's SceneWorld pattern.
+//! Mirrors runtime-scene's SceneWorld pattern.
 
 use crate::animation::{
     AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo,
@@ -12,7 +12,7 @@ use crate::hierarchy;
 use crate::loader::{self, LoadError};
 use crate::systems;
 use bevy_ecs::prelude::*;
-use neko_types::easing::EasingType;
+use neko_engine_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
 /// Full snapshot of a loaded puppet for serialization to the frontend

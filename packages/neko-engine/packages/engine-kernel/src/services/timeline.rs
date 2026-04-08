@@ -5,7 +5,7 @@ use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
 use crate::export::ExportStats;
 use crate::services::IStreamPlayback;
-use neko_types::StreamId;
+use neko_engine_types::StreamId;
 use serde::Serialize;
 use std::path::Path;
 use tokio::sync::{broadcast, watch};

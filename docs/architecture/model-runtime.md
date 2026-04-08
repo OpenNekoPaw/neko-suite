@@ -164,7 +164,7 @@ async transcribe(audio: string, opts?: { language?: string }): Promise<Transcrib
 ### 3.3 neko-engine Rust ML 模块（~700 行 Rust 新增）
 
 ```
-native-core/src/ml/
+engine-kernel/src/ml/
 ├── mod.rs              ML 模块入口 + OnnxModel 注册表
 ├── onnx_runtime.rs     ort Session 管理（lazy load + LRU unload）
 ├── upscale.rs          Real-ESRGAN / SwinIR 推理
@@ -172,7 +172,7 @@ native-core/src/ml/
 ├── clip.rs             CLIP 语义打分
 └── whisper.rs          Whisper STT 推理
 
-native-api/src/controllers/models.rs
+host-api/src/controllers/models.rs
 └── ModelsController 扩展：register / unregister / list / upscale / denoise / clip / transcribe
 ```
 
@@ -247,7 +247,7 @@ Phase M1 — 模型安装注册（~150 行 TS）
 └── 单元测试
 
 Phase M2 — neko-engine ONNX 原生（~700 行 Rust + ~60 行 TS）
-├── ort crate 集成到 native-core（CUDA / Metal / DirectML 后端）
+├── ort crate 集成到 engine-kernel（CUDA / Metal / DirectML 后端）
 ├── ML 模块：upscale / denoise / clip / whisper
 ├── ModelsController 扩展（register / list / unload + 推理 action）
 ├── EngineClient 模型方法
@@ -255,7 +255,7 @@ Phase M2 — neko-engine ONNX 原生（~700 行 Rust + ~60 行 TS）
 
 Phase M3 — Engine candle 图片生成（待评估，~1000 行 Rust）
 ├── 前置条件：candle 推理速度 < PyTorch 2x 且支持 Flux
-├── candle SD/SDXL 集成到 native-core
+├── candle SD/SDXL 集成到 engine-kernel
 ├── EngineClient.generateImage()
 ├── onPostInstall safetensors → Engine candle 注册
 └── neko-agent 本地图片生成路由（本地优先 + 云端回退）

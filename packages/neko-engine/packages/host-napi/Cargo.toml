@@ -1,18 +1,18 @@
 [package]
-name = "neko-native-napi"
+name = "neko-host-napi"
 version.workspace = true
 edition.workspace = true
-description = "Node.js N-API bindings for neko-native-core"
+description = "Node.js N-API bindings for neko-engine-kernel"
 license.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-neko-native-core = { path = "../native-core" }
-neko-native-api = { path = "../native-api" }
-neko-native-http = { path = "../native-http" }
-neko-types = { path = "../types" }
+neko-engine-kernel = { path = "../engine-kernel" }
+neko-host-api = { path = "../host-api" }
+neko-host-http = { path = "../host-http" }
+neko-engine-types = { path = "../engine-types" }
 napi = { version = "2", features = ["async", "napi8"] }
 napi-derive = "2"
 tokio.workspace = true

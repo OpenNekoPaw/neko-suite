@@ -1,6 +1,6 @@
 //! Task handle for progress reporting
 
-use neko_types::{TaskProgress, TaskState, TaskType};
+use neko_engine_types::{TaskProgress, TaskState, TaskType};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;

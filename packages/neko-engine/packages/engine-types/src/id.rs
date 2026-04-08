@@ -20,7 +20,7 @@ use xxhash_rust::xxh64::xxh64;
 ///
 /// # Example
 /// ```
-/// use neko_types::{ResourceId, ResourceType};
+/// use neko_engine_types::{ResourceId, ResourceType};
 /// use std::path::Path;
 ///
 /// let id = ResourceId::from_path(Path::new("/path/to/video.mp4"), ResourceType::Video);

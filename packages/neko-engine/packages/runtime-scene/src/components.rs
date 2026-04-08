@@ -2,7 +2,7 @@
 
 use bevy_ecs::prelude::*;
 use glam::{Mat4, Quat, Vec3};
-use neko_types::easing::EasingType;
+use neko_engine_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
 /// Unique stable identifier for serialization

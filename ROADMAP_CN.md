@@ -161,8 +161,8 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 
 - Phase 3.1-3.3 ✅（基础 3D + AI 捏脸 + CSG + PBR + 粒子 + 时间线集成）
 - Phase 2 Rust 引擎 ✅（关键帧 CRUD + 动画混合 + EasingType 30+ variants + 项目 v2）：
-  - native-puppet: 51 tests（Keyframe CRUD + blend_tick + 8 API actions）
-  - native-scene: 49 tests（SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2）
+  - runtime-puppet: 51 tests（Keyframe CRUD + blend_tick + 8 API actions）
+  - runtime-scene: 49 tests（SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2）
 - **Phase 2.5 角色编辑能力 P0+P1 ✅**：
   - 模板创建功能（编辑器内空白状态 UI：导入/模板/拖拽 + INP/GLB 程序化人形模板）
   - 3D `Visible` 组件 + `set_visible` API + GPU 渲染过滤

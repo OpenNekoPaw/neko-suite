@@ -1,11 +1,11 @@
-# native-scene
+# runtime-scene
 
 3D 场景管理 crate，使用 bevy_ecs 作为独立 ECS 库（不依赖 Bevy 全框架）。
 
 ## 架构
 
 ```
-native-scene
+runtime-scene
 ├─ components.rs    # ECS 组件（Transform/Mesh/Material/Light/Camera/Skeleton/MorphWeights）
 ├─ world.rs         # SceneWorld trait + BevySceneWorld 实现
 ├─ hierarchy.rs     # Parent/Children 层级索引
@@ -78,7 +78,7 @@ println!("Updated {} morph weights", delta.updated_morph_weights.len());
 ## 测试
 
 ```bash
-cargo test --package neko-native-scene
+cargo test --package neko-runtime-scene
 ```
 
 **覆盖率**：12 个单元测试，覆盖核心功能：

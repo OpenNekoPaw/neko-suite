@@ -22,7 +22,7 @@ use crate::services::impls::stream_loop::{
     StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
-use neko_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
+use neko_engine_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -529,7 +529,7 @@ mod tests {
                 frame = rx.recv() => {
                     match frame {
                         Ok(f) => {
-                            assert_eq!(f.format, neko_types::FrameFormat::PcmF32, "Frame should be PcmF32");
+                            assert_eq!(f.format, neko_engine_types::FrameFormat::PcmF32, "Frame should be PcmF32");
                             // Wire format: pts_us(8) + duration_us(8) + sample_rate(4) + channels(2) = 22 bytes
                             assert!(f.data.len() > 22, "Frame data should have 22-byte header + PCM data");
 
@@ -591,7 +591,7 @@ mod tests {
                 frame = rx.recv() => {
                     match frame {
                         Ok(f) => {
-                            assert_eq!(f.format, neko_types::FrameFormat::PcmF32);
+                            assert_eq!(f.format, neko_engine_types::FrameFormat::PcmF32);
                             assert!(f.data.len() > 22, "Frame should have 22-byte header + PCM data");
                             frames_received += 1;
                             if frames_received >= 5 { break; }

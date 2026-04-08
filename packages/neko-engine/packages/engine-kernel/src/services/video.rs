@@ -3,7 +3,7 @@
 use crate::domain::{CaptureOptions, ExtractOptions, FrameData, TaskHandle, TranscodeOptions};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
-use neko_types::{MediaInfo, StreamId};
+use neko_engine_types::{MediaInfo, StreamId};
 use std::path::Path;
 use tokio::sync::broadcast;
 
@@ -57,7 +57,7 @@ pub trait IVideoService: IStreamPlayback {
         &self,
         source: &Path,
         task_handle: Option<TaskHandle>,
-    ) -> Result<neko_types::WaveformData>;
+    ) -> Result<neko_engine_types::WaveformData>;
 
     /// Generate proxy (lower resolution) version
     async fn generate_proxy(

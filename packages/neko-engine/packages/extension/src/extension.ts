@@ -384,7 +384,7 @@ async function cmdStartEngine(): Promise<void> {
  * Disconnect the extension session from the engine wrapper.
  *
  * Note: the Rust EngineApi currently lives behind a process-wide singleton in
- * native-napi, so this command only disposes the TypeScript-side wrapper and
+ * host-napi, so this command only disposes the TypeScript-side wrapper and
  * embedded frame server state for the current extension session.
  */
 async function cmdStopEngine(): Promise<void> {

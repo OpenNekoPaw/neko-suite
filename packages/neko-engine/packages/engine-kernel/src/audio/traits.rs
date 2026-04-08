@@ -1,13 +1,13 @@
 //! Audio codec traits and types
 //!
-//! The canonical `AudioCodec` enum lives in `neko_types` and is re-exported
+//! The canonical `AudioCodec` enum lives in `neko_engine_types` and is re-exported
 //! here. FFmpeg-specific methods are provided via [`AudioCodecExt`] in
 //! `encoder::codec_ext`.
 
 use crate::error::Result;
 
-// Re-export canonical AudioCodec from neko_types (single source of truth)
-pub use neko_types::AudioCodec;
+// Re-export canonical AudioCodec from neko_engine_types (single source of truth)
+pub use neko_engine_types::AudioCodec;
 
 // Import extension trait so methods are available where AudioCodec is used
 use crate::encoder::codec_ext::AudioCodecExt;

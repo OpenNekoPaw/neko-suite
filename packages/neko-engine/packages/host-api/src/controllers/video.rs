@@ -4,13 +4,13 @@ use crate::controllers::utils::{base64_encode, handle_stream_control, resolve_re
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_native_core::domain::{CaptureOptions, ExtractOptions, ExtractType, StreamConfig};
-use neko_native_core::media_service::{
+use neko_engine_kernel::domain::{CaptureOptions, ExtractOptions, ExtractType, StreamConfig};
+use neko_engine_kernel::media_service::{
     diff_media, diff_video_content, DiffCategory, VideoDiffOptions,
 };
-use neko_native_core::services::{IVideoService, VideoService};
-use neko_types::registry;
-use neko_types::{ActionResponse, FrameFormat};
+use neko_engine_kernel::services::{IVideoService, VideoService};
+use neko_engine_types::registry;
+use neko_engine_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -137,7 +137,7 @@ struct TranscodeRequestOptions {
     /// Output file path
     output: Option<String>,
     /// Video codec
-    codec: Option<neko_types::VideoCodec>,
+    codec: Option<neko_engine_types::VideoCodec>,
     /// Target width
     width: Option<u32>,
     /// Target height
@@ -145,15 +145,15 @@ struct TranscodeRequestOptions {
     /// Target bitrate
     bitrate: Option<u64>,
     /// Hardware encoder type
-    hw_encoder: Option<neko_types::HwEncoderType>,
+    hw_encoder: Option<neko_engine_types::HwEncoderType>,
     /// Encoder preset
-    preset: Option<neko_types::EncoderPreset>,
+    preset: Option<neko_engine_types::EncoderPreset>,
 }
 
 impl TranscodeRequestOptions {
-    fn resolution(&self) -> Option<neko_types::Resolution> {
+    fn resolution(&self) -> Option<neko_engine_types::Resolution> {
         match (self.width, self.height) {
-            (Some(w), Some(h)) => Some(neko_types::Resolution::new(w, h)),
+            (Some(w), Some(h)) => Some(neko_engine_types::Resolution::new(w, h)),
             _ => None,
         }
     }
@@ -403,13 +403,13 @@ impl Controller for VideoController {
                     )
                 })?;
 
-                let transcode_opts = neko_native_core::domain::TranscodeOptions {
+                let transcode_opts = neko_engine_kernel::domain::TranscodeOptions {
                     video_codec: codec,
                     resolution,
                     bitrate,
                     hw_encoder,
                     preset,
-                    audio_codec: Some(neko_types::AudioCodec::Opus),
+                    audio_codec: Some(neko_engine_types::AudioCodec::Opus),
                     audio_bitrate: None,
                 };
 
@@ -435,10 +435,10 @@ impl Controller for VideoController {
 
                 let keyframes = self.video_service.get_keyframes(&file_path).await?;
 
-                // Convert internal KeyframeInfo to neko_types for serialization
-                let typed_keyframes: Vec<neko_types::KeyframeInfo> = keyframes
+                // Convert internal KeyframeInfo to neko_engine_types for serialization
+                let typed_keyframes: Vec<neko_engine_types::KeyframeInfo> = keyframes
                     .into_iter()
-                    .map(|kf| neko_types::KeyframeInfo {
+                    .map(|kf| neko_engine_types::KeyframeInfo {
                         frame_index: kf.frame_index,
                         timestamp: kf.timestamp,
                         pts: kf.pts,
@@ -533,7 +533,7 @@ impl Controller for VideoController {
                     match diff_video_content(&source_a, &source_b, &video_opts) {
                         Ok(video_diff) => {
                             result.content = Some(
-                                neko_native_core::media_service::ContentDiff::Video(video_diff),
+                                neko_engine_kernel::media_service::ContentDiff::Video(video_diff),
                             );
                         }
                         Err(e) => {
@@ -568,7 +568,7 @@ impl Controller for VideoController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_native_core::services::TaskService;
+    use neko_engine_kernel::services::TaskService;
 
     fn create_test_controller() -> VideoController {
         let task_service = Arc::new(TaskService::new());

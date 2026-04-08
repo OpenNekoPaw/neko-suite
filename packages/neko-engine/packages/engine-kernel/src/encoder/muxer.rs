@@ -4,7 +4,7 @@ use super::codec_ext::ContainerFormatExt;
 use super::traits::{ContainerFormat, EncodedPacket, EncoderConfig, VideoCodec};
 use crate::audio::AudioEncoderConfig;
 use crate::error::{Error, Result};
-use neko_types::AudioCodec;
+use neko_engine_types::AudioCodec;
 
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::Rational;

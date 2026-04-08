@@ -77,7 +77,7 @@ Two.js 和 wgpu **不互斥**，分别服务不同场景：
 
 > 实测 H.264 编码延迟 ~8-11ms（macOS Metal + IOSurface 零拷贝），总追踪→渲染延迟约 20-40ms，满足直播体感要求。
 
-**Rust 侧已有骨骼基础设施**（native-scene）：
+**Rust 侧已有骨骼基础设施**（runtime-scene）：
 - `Skeleton { joint_entities }` ECS 组件 + glTF 两遍解析
 - `MorphWeights { weights: Vec<f32> }` BlendShape 控制
 - Transform SLERP/LERP 动画系统
@@ -88,8 +88,8 @@ Three.js 层负责实时预览，wgpu 层负责高质量输出，无需在 Phase
 
 | 能力 | 状态 | 提供方 |
 |------|------|--------|
-| 60fps PuppetDelta WebSocket | ✅ 已有 | native-puppet（neko-sketch S.2） |
-| 3D PBR 渲染管线 | ✅ 已有 | native-scene（Phase 3） |
+| 60fps PuppetDelta WebSocket | ✅ 已有 | runtime-puppet（neko-sketch S.2） |
+| 3D PBR 渲染管线 | ✅ 已有 | runtime-scene（Phase 3） |
 | VRM 加载 + 骨骼/BlendShape | ✅ 已有 | neko-model（@pixiv/three-vrm） |
 | 录制队列（ExportService） | ✅ 已有 | neko-engine（neko-cut 已用） |
 | Extension Host UDP 接收 | ❌ 待实现 | Node.js dgram |

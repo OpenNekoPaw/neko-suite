@@ -1,5 +1,5 @@
 [package]
-name = "neko-native-http"
+name = "neko-host-http"
 version.workspace = true
 edition.workspace = true
 description = "HTTP/WebSocket server for Neko Engine - RESTful API and streaming"
@@ -10,8 +10,8 @@ crate-type = ["lib"]
 
 [dependencies]
 # Engine API
-neko-native-api = { path = "../native-api" }
-neko-types = { path = "../types" }
+neko-host-api = { path = "../host-api" }
+neko-engine-types = { path = "../engine-types" }
 
 # HTTP framework
 axum = { workspace = true, features = ["ws"] }

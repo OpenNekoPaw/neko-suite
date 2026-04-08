@@ -26,7 +26,7 @@ const mockState = vi.hoisted(() => {
   };
 });
 
-vi.mock('@neko-engine/native-napi', () => ({
+vi.mock('@neko-engine/host-napi', () => ({
   NativeEngine: {
     create: mockState.create,
   },

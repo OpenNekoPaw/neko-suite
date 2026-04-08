@@ -12,7 +12,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::bounded;
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
-use neko_types::StreamId;
+use neko_engine_types::StreamId;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;

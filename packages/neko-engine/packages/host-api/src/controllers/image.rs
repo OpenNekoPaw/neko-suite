@@ -4,11 +4,11 @@ use crate::controllers::utils::{base64_decode, base64_encode, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
-use neko_native_core::domain::CaptureOptions;
-use neko_native_core::media_service::{diff_media, DiffCategory};
-use neko_native_core::services::{IImageService, ImageService};
-use neko_types::registry;
-use neko_types::{ActionResponse, FrameFormat};
+use neko_engine_kernel::domain::CaptureOptions;
+use neko_engine_kernel::media_service::{diff_media, DiffCategory};
+use neko_engine_kernel::services::{IImageService, ImageService};
+use neko_engine_types::registry;
+use neko_engine_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -180,7 +180,7 @@ impl Controller for ImageController {
                     .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64 data: {}", e)))?;
 
                 // Encode RGBA to JPEG
-                use neko_native_core::media_service::encode_rgba_to_jpeg;
+                use neko_engine_kernel::media_service::encode_rgba_to_jpeg;
                 let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, opts.quality)
                     .map_err(|e| ApiError::ServiceError(format!("JPEG encoding failed: {}", e)))?;
 

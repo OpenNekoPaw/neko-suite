@@ -117,8 +117,8 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                                                 ├─ FFmpeg Codec (hardware-accelerated VideoToolbox/NVENC/VAAPI)
                                                 ├─ Keyframe Cache + Preloading Optimization
                                                 ├─ Export Pipeline (GPU export + audio mixer + loudness normalization)
-                                                ├─ native-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + physics)
-                                                ├─ native-puppet 2D Skeletal (bevy_ecs + inox2d + 60fps WS stream)
+                                                ├─ runtime-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + physics)
+                                                ├─ runtime-puppet 2D Skeletal (bevy_ecs + inox2d + 60fps WS stream)
                                                 └─ ONNX ML Inference (macOS CoreML acceleration)
 ```
 
@@ -174,13 +174,13 @@ neko-suite/
 │   ├── neko-suite/            # Extension Pack portal
 │   ├── neko-engine/           # Rust Sidecar media engine
 │   │   └── packages/
-│   │       ├── native-core/   # Rust core (wgpu/codec/export/ONNX ML)
-│   │       ├── native-api/    # HTTP API routing layer
-│   │       ├── native-http/   # Axum HTTP service
-│   │       ├── native-napi/   # Node.js NAPI bindings
-│   │       ├── native-cli/    # CLI entry point
-│   │       ├── native-scene/  # Rust 3D scene ECS (bevy_ecs + glTF)
-│   │       ├── native-puppet/ # Rust 2D skeletal ECS (bevy_ecs + inox2d + bevy_animation)
+│   │       ├── engine-kernel/   # Rust core (wgpu/codec/export/ONNX ML)
+│   │       ├── host-api/    # HTTP API routing layer
+│   │       ├── host-http/   # Axum HTTP service
+│   │       ├── host-napi/   # Node.js NAPI bindings
+│   │       ├── host-cli/    # CLI entry point
+│   │       ├── runtime-scene/  # Rust 3D scene ECS (bevy_ecs + glTF)
+│   │       ├── runtime-puppet/ # Rust 2D skeletal ECS (bevy_ecs + inox2d + bevy_animation)
 │   │       ├── types/         # Rust shared types
 │   │       └── extension/     # TS VSCode extension side
 │   ├── neko-cut/              # Video editor
@@ -316,6 +316,8 @@ Install sub-extensions based on your needs:
 - [docs/architecture/](./docs/architecture/) - Architecture design documents
   - [Panel Placement Strategy](./docs/architecture/panel-placement.md) - Editor panel architecture
   - [Device Access Strategy](./docs/architecture/device-access.md) - Hardware device proxy solution
+  - [Engine Pluginization RFC](./docs/architecture/engine-plugin-rfc.md) - Capability pluginization and marketplace/host responsibilities
+  - [Engine Runtime Layering](./docs/architecture/engine-runtime-layering.md) - Package-level runtimes with a single-host default
   - [Format Strategy](./docs/architecture/format-strategy.md) - nk\* file format design
   - [Marketplace](./docs/architecture/marketplace.md) - Asset marketplace architecture
   - [Local Model Deployment](./docs/architecture/model-runtime.md) - ONNX/GGUF runtime

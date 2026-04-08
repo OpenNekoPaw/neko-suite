@@ -1,6 +1,6 @@
 //! API error types
 
-use neko_types::ErrorCode;
+use neko_engine_types::ErrorCode;
 use thiserror::Error;
 
 /// API result type
@@ -53,8 +53,8 @@ impl ApiError {
     }
 
     /// Convert to API error response
-    pub fn to_response(&self) -> neko_types::ApiError {
-        neko_types::ApiError {
+    pub fn to_response(&self) -> neko_engine_types::ApiError {
+        neko_engine_types::ApiError {
             code: self.code(),
             message: self.to_string(),
             details: None,
@@ -62,8 +62,8 @@ impl ApiError {
     }
 }
 
-impl From<neko_native_core::error::Error> for ApiError {
-    fn from(e: neko_native_core::error::Error) -> Self {
+impl From<neko_engine_kernel::error::Error> for ApiError {
+    fn from(e: neko_engine_kernel::error::Error) -> Self {
         ApiError::ServiceError(e.to_string())
     }
 }

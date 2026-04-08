@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::Timeline;
 use crate::encoder::EncoderConfig;
-use neko_types::{AudioCodec, EncoderPreset, HwEncoderType, VideoCodec};
+use neko_engine_types::{AudioCodec, EncoderPreset, HwEncoderType, VideoCodec};
 
-// Re-export neko_types enums as the old names for backward compatibility
+// Re-export neko_engine_types enums as the old names for backward compatibility
 pub type ExportVideoCodec = VideoCodec;
 pub type ExportAudioCodec = AudioCodec;
 pub type ExportHwEncoder = HwEncoderType;
@@ -294,7 +294,7 @@ pub struct ExportErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_types::Resolution;
+    use neko_engine_types::Resolution;
 
     #[test]
     fn test_export_settings_to_encoder_config() {

@@ -8,7 +8,7 @@
 //! This is the bevy_animation ParameterCurve bridge described in ADR-2D-005.
 
 use bevy_ecs::prelude::*;
-use neko_types::easing::{Easing, EasingType};
+use neko_engine_types::easing::{Easing, EasingType};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

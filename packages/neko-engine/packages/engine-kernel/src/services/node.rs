@@ -1,7 +1,7 @@
 //! Node service trait
 
 use crate::error::Result;
-use neko_types::{HealthStatus, ResourceSnapshot};
+use neko_engine_types::{HealthStatus, ResourceSnapshot};
 use serde::Serialize;
 
 /// Node service interface

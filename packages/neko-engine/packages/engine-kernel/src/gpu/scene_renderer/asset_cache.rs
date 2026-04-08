@@ -2,7 +2,7 @@
 //!
 //! Loads glTF mesh geometry and PBR materials into GPU buffers,
 //! keyed by (uri, primitive_index) / (uri, material_index).
-//! Independent of native-scene (preserves its zero-GPU-dependency).
+//! Independent of runtime-scene (preserves its zero-GPU-dependency).
 
 use super::vertex::{PbrVertex, SkinnedPbrVertex};
 use crate::gpu::GpuContext;
@@ -205,7 +205,7 @@ impl AssetCache {
         &mut self,
         uri: &str,
         primitive_index: usize,
-        mesh: &neko_native_scene::procedural_mesh::ProceduralMesh,
+        mesh: &neko_runtime_scene::procedural_mesh::ProceduralMesh,
     ) -> Result<(), AssetCacheError> {
         let key = (uri.to_string(), primitive_index);
         if self.meshes.contains_key(&key) {

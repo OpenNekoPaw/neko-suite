@@ -1,4 +1,4 @@
-//! SceneService — implementation using native-scene crate
+//! SceneService — implementation using runtime-scene crate
 //!
 //! Wraps BevySceneWorld with Mutex for thread-safe access.
 //! Optionally holds PbrRenderer + AssetCache for GPU rendering.
@@ -7,18 +7,18 @@ use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::{AssetCache, CameraParams, PbrRenderer, SceneRenderOutput};
 use crate::gpu::GpuContext;
 use crate::services::scene::ISceneService;
-use neko_native_scene::animation_blend::SceneBlendLayerInfo;
-use neko_native_scene::components::{
+use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
+use neko_runtime_scene::components::{
     AnimationChannelInfo, GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
 };
-use neko_native_scene::exporter::{self, ExportNode};
-use neko_native_scene::ik::IkChainInfo;
-use neko_native_scene::procedural_mesh::ProceduralMesh;
-use neko_native_scene::project::NkmProject;
-use neko_native_scene::world::{
+use neko_runtime_scene::exporter::{self, ExportNode};
+use neko_runtime_scene::ik::IkChainInfo;
+use neko_runtime_scene::procedural_mesh::ProceduralMesh;
+use neko_runtime_scene::project::NkmProject;
+use neko_runtime_scene::world::{
     AnimationClipInfo, BevySceneWorld, SceneDelta, SceneSnapshot, SceneWorld,
 };
-use neko_types::easing::EasingType;
+use neko_engine_types::easing::EasingType;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -139,10 +139,10 @@ impl ISceneService for SceneService {
     }
 
     fn create_shape(&self, params: serde_json::Value) -> Result<SceneSnapshot> {
-        let shape_params: neko_native_scene::procedural::ShapeParams =
+        let shape_params: neko_runtime_scene::procedural::ShapeParams =
             serde_json::from_value(params)
                 .map_err(|e| Error::Other(format!("Invalid shape params: {}", e)))?;
-        let mesh = neko_native_scene::procedural::generate_shape(&shape_params);
+        let mesh = neko_runtime_scene::procedural::generate_shape(&shape_params);
         let uri = format!("procedural://shape_{}", uuid::Uuid::new_v4());
 
         // Register in GPU asset cache if available
@@ -219,10 +219,10 @@ impl ISceneService for SceneService {
         entity_b: &str,
         operation: &str,
     ) -> Result<SceneSnapshot> {
-        let op: neko_native_scene::csg::CsgOp = match operation {
-            "union" => neko_native_scene::csg::CsgOp::Union,
-            "difference" => neko_native_scene::csg::CsgOp::Difference,
-            "intersection" => neko_native_scene::csg::CsgOp::Intersection,
+        let op: neko_runtime_scene::csg::CsgOp = match operation {
+            "union" => neko_runtime_scene::csg::CsgOp::Union,
+            "difference" => neko_runtime_scene::csg::CsgOp::Difference,
+            "intersection" => neko_runtime_scene::csg::CsgOp::Intersection,
             _ => {
                 return Err(Error::Other(format!(
                     "Unknown CSG operation: {} (expected union/difference/intersection)",
@@ -270,7 +270,7 @@ impl ISceneService for SceneService {
             Error::Other(format!("No CPU mesh data for procedural URI '{}'", uri_b))
         })?;
 
-        let result_mesh = neko_native_scene::csg::boolean_op(mesh_a, mesh_b, op);
+        let result_mesh = neko_runtime_scene::csg::boolean_op(mesh_a, mesh_b, op);
         drop(pm);
 
         let uri = format!("procedural://csg_{}", uuid::Uuid::new_v4());

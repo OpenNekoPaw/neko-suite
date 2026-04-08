@@ -855,7 +855,7 @@ mod tests {
         use crate::export::types::{
             ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
         };
-        use neko_types::Resolution;
+        use neko_engine_types::Resolution;
 
         let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
         timeline.duration = 10.0;

@@ -1,4 +1,4 @@
-//! Neko Native NAPI - Node.js N-API bindings for neko-native-core
+//! Neko Native NAPI - Node.js N-API bindings for neko-engine-kernel
 
 mod bridge;
 mod engine;

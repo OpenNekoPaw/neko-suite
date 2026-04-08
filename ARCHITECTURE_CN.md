@@ -36,11 +36,11 @@ Neko Suite 是深度集成于 VS Code 的创意工作套件，核心挑战是在
 ┌──────────▼──────────────────────────────────────────────────────┐
 │                   neko-engine (Rust Sidecar)                    │
 │                                                                 │
-│  native-core:   wgpu GPU · FFmpeg 编解码 · 动画 · GPU Skinning · 导出 · 缓存 │
-│  native-scene:  3D 场景 ECS（bevy_ecs + glTF/VRM + IK + Blend）  │
-│  native-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Blend/Crossfade）│
-│  native-http:   axum HTTP/WebSocket 服务（统一端口）             │
-│  native-napi:   Node.js N-API 绑定                              │
+│  engine-kernel:   wgpu GPU · FFmpeg 编解码 · 动画 · GPU Skinning · 导出 · 缓存 │
+│  runtime-scene:  3D 场景 ECS（bevy_ecs + glTF/VRM + IK + Blend）  │
+│  runtime-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Blend/Crossfade）│
+│  host-http:   axum HTTP/WebSocket 服务（统一端口）             │
+│  host-napi:   Node.js N-API 绑定                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,10 +66,10 @@ Extension Host
      │
      └─ EngineClient (@neko/neko-client, 零 vscode 依赖)
           │
-          ├─ HTTP POST /v1/dispatch  →  native-http  →  native-core
+          ├─ HTTP POST /v1/dispatch  →  host-http  →  engine-kernel
           │  适用：同步命令（probe、waveform、diff、extractFrame、effects）
           │
-          └─ WebSocket /v1/streams/:id  →  native-http  →  native-core
+          └─ WebSocket /v1/streams/:id  →  host-http  →  engine-kernel
              适用：流式传输（H.264 推流、PCM 解码、控制命令）
 ```
 
@@ -88,7 +88,7 @@ Webview (H264StreamClient / AudioStreamClient)
 neko-engine axum WebSocket 端点
      │
      ▼
-native-core decoder → GPU 解码帧 → H.264 NAL / PCM Float32
+engine-kernel decoder → GPU 解码帧 → H.264 NAL / PCM Float32
 ```
 
 流媒体走 WebSocket 绕过 Extension Host，避免帧数据在 Node.js 层多次拷贝。
@@ -103,7 +103,7 @@ native-core decoder → GPU 解码帧 → H.264 NAL / PCM Float32
 @neko/shared (neko-types)    ←── 所有包依赖（Logger/i18n/Theme/Errors，零内部依赖）
 @neko/neko-client            ←── EngineClient + 流媒体客户端（零内部依赖）
      ↑
-neko-engine/native-napi      ←── N-API 绑定（独立编译）
+neko-engine/host-napi      ←── N-API 绑定（独立编译）
      ↑
 neko-engine/extension        ←── 唯一 Sidecar 管理 + 统一 HTTP/WS 服务器
      ↑ (通过 EngineClient HTTP/WS 通信)
@@ -261,11 +261,13 @@ Extension Host
 | 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | *已内化* | bevy_ecs 独立 crate + native-scene + R3F 前端；GPU Skinning（双管线 skinned/non-skinned）；FABRIK/CCD/TwoBone IK 求解器；动画混合/Crossfade |
-| 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；native-puppet（bevy_ecs + inox2d）；多层动画混合 + Crossfade；WS 实时流供 neko-live |
+| 3D 能力 | *已内化* | bevy_ecs 独立 crate + runtime-scene + R3F 前端；GPU Skinning（双管线 skinned/non-skinned）；FABRIK/CCD/TwoBone IK 求解器；动画混合/Crossfade |
+| 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；runtime-puppet（bevy_ecs + inox2d）；多层动画混合 + Crossfade；WS 实时流供 neko-live |
 | 角色编辑 | *已内化* | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑 |
 | 面板放置策略 | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突 |
 | 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |
+| Engine 插件化（RFC） | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md) | 能力插件化而非内核插件化；优先开放 shader/model/format/device/exporter/connector 等受控扩展点；市场负责分发，Engine Host 负责激活 |
+| Engine Runtime 分层 | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | runtime 按包拆分、默认共用一个 Host 应用；Video/2D/3D/Docs/Device/ML 维持单宿主；Game/Sim/XR 未来按需要升格独立 sidecar |
 | 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
 | Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧 |

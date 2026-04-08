@@ -1,8 +1,8 @@
 {
-  "name": "@neko-engine/native-napi",
+  "name": "@neko-engine/host-napi",
   "version": "0.1.0",
   "private": true,
-  "description": "Node.js N-API bindings for neko-native-core",
+  "description": "Node.js N-API bindings for neko-engine-kernel",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {

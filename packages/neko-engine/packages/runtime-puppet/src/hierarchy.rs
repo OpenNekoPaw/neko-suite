@@ -1,6 +1,6 @@
 //! Parent-child hierarchy for 2D puppet nodes
 //!
-//! Mirrors native-scene's hierarchy module — dual representation
+//! Mirrors runtime-scene's hierarchy module — dual representation
 //! with Parent (single parent) and Children (child list) components.
 
 use bevy_ecs::prelude::*;

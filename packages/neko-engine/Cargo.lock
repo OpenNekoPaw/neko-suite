@@ -2364,48 +2364,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-native-api"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "glam",
- "neko-native-core",
- "neko-types",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "neko-native-cli"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "clap",
- "indicatif",
- "libc",
- "neko-native-api",
- "neko-native-http",
- "neko-types",
- "pollster",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "tracing-tracy",
- "tracy-client 0.17.6",
- "uuid",
- "wgpu",
-]
-
-[[package]]
-name = "neko-native-core"
+name = "neko-engine-kernel"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2430,9 +2389,9 @@ dependencies = [
  "metal",
  "midir",
  "ndarray",
- "neko-native-puppet",
- "neko-native-scene",
- "neko-types",
+ "neko-engine-types",
+ "neko-runtime-puppet",
+ "neko-runtime-scene",
  "objc",
  "ort",
  "pollster",
@@ -2456,12 +2415,64 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-native-http"
+name = "neko-engine-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "neko-host-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "glam",
+ "neko-engine-kernel",
+ "neko-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "neko-host-cli"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "clap",
+ "indicatif",
+ "libc",
+ "neko-engine-types",
+ "neko-host-api",
+ "neko-host-http",
+ "pollster",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tracy",
+ "tracy-client 0.17.6",
+ "uuid",
+ "wgpu",
+]
+
+[[package]]
+name = "neko-host-http"
 version = "0.1.0"
 dependencies = [
  "axum",
- "neko-native-api",
- "neko-types",
+ "neko-engine-types",
+ "neko-host-api",
  "serde",
  "serde_json",
  "tokio",
@@ -2473,17 +2484,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-native-napi"
+name = "neko-host-napi"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "napi",
  "napi-build",
  "napi-derive",
- "neko-native-api",
- "neko-native-core",
- "neko-native-http",
- "neko-types",
+ "neko-engine-kernel",
+ "neko-engine-types",
+ "neko-host-api",
+ "neko-host-http",
  "pollster",
  "serde",
  "serde_json",
@@ -2494,14 +2505,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-native-puppet"
+name = "neko-runtime-puppet"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bevy_ecs",
  "glam",
  "inox2d",
- "neko-types",
+ "neko-engine-types",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2510,30 +2521,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-native-scene"
+name = "neko-runtime-scene"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
  "glam",
  "gltf",
- "neko-types",
+ "neko-engine-types",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "neko-types"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
- "xxhash-rust",
 ]
 
 [[package]]

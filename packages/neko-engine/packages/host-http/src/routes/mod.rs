@@ -11,7 +11,7 @@ pub mod streaming;
 
 use axum::routing::{delete, get, post};
 use axum::Router;
-use neko_native_api::EngineApi;
+use neko_host_api::EngineApi;
 use preview_file::PreviewFileRegistry;
 use std::sync::Arc;
 

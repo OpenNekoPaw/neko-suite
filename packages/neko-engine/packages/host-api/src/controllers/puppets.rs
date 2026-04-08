@@ -4,9 +4,9 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_native_core::services::{IPuppetService, PuppetService};
-use neko_types::registry;
-use neko_types::ActionResponse;
+use neko_engine_kernel::services::{IPuppetService, PuppetService};
+use neko_engine_types::registry;
+use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -283,7 +283,7 @@ impl Controller for PuppetsController {
                 // Parse easing string to EasingType
                 let easing = opts
                     .easing
-                    .map(|s| neko_types::easing::EasingType::from_name(&s));
+                    .map(|s| neko_engine_types::easing::EasingType::from_name(&s));
 
                 let service = self.service()?;
                 service

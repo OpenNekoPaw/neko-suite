@@ -5,10 +5,10 @@
  */
 
 import type { TrackLayer, FrameProvider } from './ExportService';
-import type { NativeEngine as NativeEngineType } from '@neko-engine/native-napi';
+import type { NativeEngine as NativeEngineType } from '@neko-engine/host-napi';
 import { getLogger } from '../../base/logger';
 
-type NativeEngineModule = typeof import('@neko-engine/native-napi');
+type NativeEngineModule = typeof import('@neko-engine/host-napi');
 
 const logger = getLogger('VideoFrameProvider');
 
@@ -78,7 +78,7 @@ export class VideoFrameProvider implements FrameProvider {
     if (this._initialized) return;
 
     try {
-      const module = (await import('@neko-engine/native-napi')) as unknown as NativeEngineModule;
+      const module = (await import('@neko-engine/host-napi')) as unknown as NativeEngineModule;
       this._engine = await module.NativeEngine.create();
       this._initialized = true;
       logger.info('Initialized with NativeEngine');

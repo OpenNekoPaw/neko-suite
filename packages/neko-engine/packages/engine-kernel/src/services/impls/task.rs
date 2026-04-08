@@ -5,7 +5,7 @@
 use crate::domain::{TaskConfig, TaskHandle};
 use crate::error::{Error, Result};
 use crate::services::ITaskService;
-use neko_types::TaskProgress;
+use neko_engine_types::TaskProgress;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -162,7 +162,7 @@ impl ITaskService for TaskService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_types::TaskType;
+    use neko_engine_types::TaskType;
 
     #[test]
     fn test_task_service_creation() {

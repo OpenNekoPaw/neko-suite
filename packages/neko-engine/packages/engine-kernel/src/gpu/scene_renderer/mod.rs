@@ -1,11 +1,11 @@
 //! 3D scene renderer module
 //!
 //! Provides PBR rendering of ECS scene data to GPU textures,
-//! bridging native-scene (ECS) with the 2D compositing pipeline (GpuLayer).
+//! bridging runtime-scene (ECS) with the 2D compositing pipeline (GpuLayer).
 //!
 //! Architecture:
 //! ```text
-//! native-scene (ECS World)
+//! runtime-scene (ECS World)
 //!     ↓ query Components
 //! AssetCache (glTF → GPU buffers)
 //!     ↓

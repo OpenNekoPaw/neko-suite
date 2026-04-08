@@ -1,6 +1,6 @@
 //! Resource handle types
 
-use neko_types::{ResourceId, ResourceType};
+use neko_engine_types::{ResourceId, ResourceType};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 

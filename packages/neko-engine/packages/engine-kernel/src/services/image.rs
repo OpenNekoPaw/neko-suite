@@ -2,7 +2,7 @@
 
 use crate::domain::{CaptureOptions, FrameData};
 use crate::error::Result;
-use neko_types::MediaInfo;
+use neko_engine_types::MediaInfo;
 use std::path::Path;
 
 /// Image service interface

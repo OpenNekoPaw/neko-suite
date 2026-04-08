@@ -18,7 +18,7 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use neko_native_core::decoder::{DecoderPool, DecoderPoolConfig};
+//! use neko_engine_kernel::decoder::{DecoderPool, DecoderPoolConfig};
 //!
 //! let pool = DecoderPool::new(DecoderPoolConfig::default());
 //!

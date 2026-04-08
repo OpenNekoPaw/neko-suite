@@ -1,5 +1,5 @@
 [package]
-name = "neko-native-scene"
+name = "neko-runtime-scene"
 version.workspace = true
 edition.workspace = true
 description = "3D scene management with ECS for Neko Engine"
@@ -19,7 +19,7 @@ glam = { version = "0.29", features = ["serde"] }
 gltf = { version = "1.4", features = ["KHR_lights_punctual"] }
 
 # Shared types (EasingType, etc.)
-neko-types = { path = "../types" }
+neko-engine-types = { path = "../engine-types" }
 
 # UUID for keyframe IDs
 uuid = { workspace = true }

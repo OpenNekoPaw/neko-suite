@@ -110,7 +110,7 @@ Before diving into any domain, consult the corresponding ADR document. For the f
 | Cross-Language Architecture | *internalized* | Rust engine is the authoritative source for data models; TS handles UI only |
 | Shared Package Design | *internalized* | @neko/shared uses exports subpath layering |
 | Asset Management | *internalized* | Unified AssetManifest + Handler registry pattern |
-| 3D Capabilities | *Internalized* | bevy_ecs standalone crate + native-scene; dual GPU Skinning pipeline; FABRIK/CCD/TwoBone IK; animation blend/crossfade; hybrid strategy (built-in lightweight + MCP bridge to Blender) |
+| 3D Capabilities | *Internalized* | bevy_ecs standalone crate + runtime-scene; dual GPU Skinning pipeline; FABRIK/CCD/TwoBone IK; animation blend/crossfade; hybrid strategy (built-in lightweight + MCP bridge to Blender) |
 | 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (skeletal animation); multi-layer animation blend + crossfade; hybrid strategy (built-in lightweight + MCP bridge to PS/ComfyUI) |
 | Panel Placement | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | Editor-bound panels use embedded Webview; global panels use native VSCode containers |
 | Device Access | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview sandbox restricts hardware APIs; proxied through engine Rust sidecar (cpal/nokhwa/midir/gilrs) |
@@ -132,14 +132,14 @@ neko-engine is a Rust sidecar process that communicates with the TS layer via N-
 **Quick Reference**:
 ```
 TypeScript Layer (Extension Host)
-  <-> N-API Bindings (@neko-engine/native-napi)
+  <-> N-API Bindings (@neko-engine/host-napi)
   <-> HTTP/WebSocket (axum)
 Rust Layer (neko-engine)
-  +-- native-core:  GPU rendering (wgpu + GPU Skinning), FFmpeg codec, audio/video processing
-  +-- native-scene: 3D scene ECS (bevy_ecs + glTF + IK + Animation Blend)
-  +-- native-puppet: 2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
-  +-- native-api:   ActionRouter, controller registration
-  +-- native-http:  REST API + WebSocket streaming
+  +-- engine-kernel:  GPU rendering (wgpu + GPU Skinning), FFmpeg codec, audio/video processing
+  +-- runtime-scene: 3D scene ECS (bevy_ecs + glTF + IK + Animation Blend)
+  +-- runtime-puppet: 2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
+  +-- host-api:   ActionRouter, controller registration
+  +-- host-http:  REST API + WebSocket streaming
   +-- types:        Shared Rust types
 ```
 

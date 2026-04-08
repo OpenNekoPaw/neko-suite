@@ -5,8 +5,8 @@
 //! - Lifecycle state machine (Created → Active → Paused → Destroyed)
 //! - Automatic cleanup of stale streams
 
-use neko_native_core::domain::{FrameData, StreamConfig, StreamEntry};
-use neko_types::{StreamId, StreamState};
+use neko_engine_kernel::domain::{FrameData, StreamConfig, StreamEntry};
+use neko_engine_types::{StreamId, StreamState};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -515,8 +515,8 @@ impl std::fmt::Display for StreamStateError {
 
 impl std::error::Error for StreamStateError {}
 
-impl From<neko_native_core::domain::StreamTransitionError> for StreamStateError {
-    fn from(e: neko_native_core::domain::StreamTransitionError) -> Self {
+impl From<neko_engine_kernel::domain::StreamTransitionError> for StreamStateError {
+    fn from(e: neko_engine_kernel::domain::StreamTransitionError) -> Self {
         Self::InvalidTransition(e.to_string())
     }
 }
@@ -524,14 +524,14 @@ impl From<neko_native_core::domain::StreamTransitionError> for StreamStateError 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_types::Resolution;
+    use neko_engine_types::Resolution;
 
     fn test_config() -> StreamConfig {
         StreamConfig {
             resolution: Resolution::new(1920, 1080),
             fps: 30.0,
             start_time: 0.0,
-            codec: neko_native_core::domain::StreamCodec::H264,
+            codec: neko_engine_kernel::domain::StreamCodec::H264,
             initial_paused: false,
         }
     }
@@ -695,7 +695,7 @@ mod tests {
 
         // Get sender and push a frame through it
         let tx = registry.get_sender(&stream_id).await.unwrap();
-        let frame = FrameData::new(vec![42u8; 100], 1920, 1080, neko_types::FrameFormat::Rgba);
+        let frame = FrameData::new(vec![42u8; 100], 1920, 1080, neko_engine_types::FrameFormat::Rgba);
         tx.send(frame).unwrap();
 
         let received = rx.try_recv().unwrap();

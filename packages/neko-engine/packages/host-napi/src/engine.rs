@@ -12,8 +12,8 @@ use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
-use neko_native_api::EngineApi;
-use neko_types::{ActionRequest, EngineConfig};
+use neko_host_api::EngineApi;
+use neko_engine_types::{ActionRequest, EngineConfig};
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
@@ -328,7 +328,7 @@ impl NativeEngine {
 
     // ========== Frame Server Management ==========
 
-    /// Start the embedded HTTP/WebSocket server (full neko-native-http router).
+    /// Start the embedded HTTP/WebSocket server (full neko-host-http router).
     ///
     /// The server provides:
     /// - `ws://127.0.0.1:{port}/v1/streams/{stream_id}` — per-stream WebSocket
@@ -356,7 +356,7 @@ impl NativeEngine {
         let bind_port = port.unwrap_or(0);
 
         let (addr, shutdown_tx) =
-            neko_native_http::start_server_with_shutdown(self.engine.clone(), bind_port)
+            neko_host_http::start_server_with_shutdown(self.engine.clone(), bind_port)
                 .await
                 .map_err(|e| {
                     napi::Error::from_reason(format!("Failed to start frame server: {}", e))

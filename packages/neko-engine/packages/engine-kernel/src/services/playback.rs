@@ -4,7 +4,7 @@
 //! duplicated stream control methods (stop/pause/resume/speed/seek/loop).
 
 use crate::error::Result;
-use neko_types::{LoopRegion, StreamId};
+use neko_engine_types::{LoopRegion, StreamId};
 
 /// Stream playback control interface
 ///

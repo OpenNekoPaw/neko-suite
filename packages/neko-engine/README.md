@@ -12,8 +12,8 @@
 
 - **职责**：GPU 渲染、硬件编解码、帧缓存、导出、3D/2D 场景 ECS——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`native-core`（Rust）、`native-scene`（3D ECS）、`native-puppet`（2D 骨骼 ECS）、`native-napi`（N-API 绑定）、`native-http`（axum）、`extension`（VSCode）
-- **依赖**：`@neko-engine/native-napi`、`@neko/shared`
+- **子包**：`engine-kernel`（Rust）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`host-napi`（N-API 绑定）、`host-http`（axum）、`extension`（VSCode）
+- **依赖**：`@neko-engine/host-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
 ## Architecture
@@ -26,10 +26,10 @@ TypeScript Extension Host
         └── ExportService       → 导出任务管理
               │ N-API
               ▼
-@neko-engine/native-napi  (Node.js ↔ Rust 桥接)
+@neko-engine/host-napi  (Node.js ↔ Rust 桥接)
               │
               ▼
-native-core (Rust)
+engine-kernel (Rust)
   ├── gpu/           → wgpu 上下文、纹理合成、NV12 渲染、自定义 Shader
   ├── shaders/       → WGSL 着色器（色彩校正、转场、特效、混合模式）
   ├── decoder/       → 硬件解码器、零拷贝管线
@@ -40,7 +40,7 @@ native-core (Rust)
   ├── export/        → GPU 导出管线、音视频混流
   └── jvi/           → JVI 项目格式解析
 
-native-puppet (Rust)  ← 2D 骨骼动画 ECS
+runtime-puppet (Rust)  ← 2D 骨骼动画 ECS
   ├── loader.rs      → INP 解析 → ECS World + AnimationClip 注册
   ├── components.rs  → PuppetNode, Transform2D, ParameterBinding, AnimationTarget
   ├── systems.rs     → parameter_update, physics_tick, animation_tick
@@ -52,20 +52,20 @@ native-puppet (Rust)  ← 2D 骨骼动画 ECS
 
 ```
 packages/
-├── native-core/    # Rust 核心（GPU/FFmpeg/服务层）
-├── native-api/     # Controller + ActionRouter
-├── native-scene/   # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-├── native-puppet/  # 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
-├── native-http/    # HTTP/WebSocket 服务（axum）
-├── native-napi/    # N-API 绑定（napi-rs 编译为 .node）
-├── native-cli/     # 独立 CLI 二进制
+├── engine-kernel/    # Rust 核心（GPU/FFmpeg/服务层）
+├── host-api/     # Controller + ActionRouter
+├── runtime-scene/   # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
+├── runtime-puppet/  # 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+├── host-http/    # HTTP/WebSocket 服务（axum）
+├── host-napi/    # N-API 绑定（napi-rs 编译为 .node）
+├── host-cli/     # 独立 CLI 二进制
 ├── types/          # 共享 Rust 类型
 └── extension/      # VSCode 扩展集成
 ```
 
 ### 当前生命周期语义
 
-- `native-napi` 通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
+- `host-napi` 通过全局 `OnceCell<Arc<EngineApi>>` 持有 Rust 引擎单例。
 - 控制面走 N-API：命令分发、状态查询、任务控制等控制命令由 Extension Host 直接调用 Rust 单例。
 - 数据面走 HTTP/WebSocket：流媒体和 frame server 通过嵌入式 HTTP/WebSocket 服务向外提供数据传输能力。
 - `neko.engine.start` / `neko.engine.stop` 当前语义应理解为“连接 / 断开 Extension 会话中的引擎包装层”。
@@ -89,7 +89,7 @@ packages/
 | `wgpu` | 跨平台 GPU 计算 |
 | `ffmpeg-next` | 编解码 |
 | `tokio` | 异步运行时 |
-| `axum` | `native-http` 的 HTTP/WebSocket 服务 |
+| `axum` | `host-http` 的 HTTP/WebSocket 服务 |
 | `napi-rs` | Node.js 绑定 |
 | `ebur128` | ITU-R BS.1770-4 响度测量 |
 | `bevy_ecs` | 3D/2D 场景 Entity-Component-System |
@@ -101,8 +101,8 @@ packages/
 ### 构建
 
 ```bash
-cargo build --release                    # 编译 Rust native-core
-cd packages/native-napi && pnpm build    # 编译 N-API 绑定
+cargo build --release                    # 编译 Rust engine-kernel
+cd packages/host-napi && pnpm build    # 编译 N-API 绑定
 pnpm build                               # 编译 TypeScript extension
 ```
 
@@ -114,5 +114,5 @@ pnpm package:platform -- --target linux-x64 --skip-native-build
 ```
 
 - `package:platform` 会统一执行目标平台 `.node` 校验、ORT 下载、FFmpeg 打包、平台裁剪、extension compile 与 VSIX 产物校验。
-- 当前主机平台若缺少对应 `.node`，脚本会自动调用 `packages/native-napi` 的 `build:napi`。
+- 当前主机平台若缺少对应 `.node`，脚本会自动调用 `packages/host-napi` 的 `build:napi`。
 - 非当前主机平台仍需要预先准备对应 `.node`，再配合 `--skip-native-build` 进入打包流水线。

@@ -3,11 +3,11 @@
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
-use neko_native_scene::animation_blend::SceneBlendLayerInfo;
-use neko_native_scene::components::AnimationChannelInfo;
-use neko_native_scene::ik::IkChainInfo;
-use neko_native_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
-use neko_types::easing::EasingType;
+use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
+use neko_runtime_scene::components::AnimationChannelInfo;
+use neko_runtime_scene::ik::IkChainInfo;
+use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
+use neko_engine_types::easing::EasingType;
 use std::path::Path;
 
 /// Service interface for 3D scene management
@@ -38,13 +38,13 @@ pub trait ISceneService: Send + Sync {
     fn create_shape(
         &self,
         params: serde_json::Value,
-    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+    ) -> crate::error::Result<neko_runtime_scene::world::SceneSnapshot>;
 
     /// Create extruded 3D text and add it to the scene
     fn create_text_mesh(
         &self,
         params: serde_json::Value,
-    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+    ) -> crate::error::Result<neko_runtime_scene::world::SceneSnapshot>;
 
     /// Perform CSG boolean operation on two scene entities
     fn csg_boolean(
@@ -52,7 +52,7 @@ pub trait ISceneService: Send + Sync {
         entity_a: &str,
         entity_b: &str,
         operation: &str,
-    ) -> crate::error::Result<neko_native_scene::world::SceneSnapshot>;
+    ) -> crate::error::Result<neko_runtime_scene::world::SceneSnapshot>;
 
     /// Render the current scene to a GPU texture.
     ///

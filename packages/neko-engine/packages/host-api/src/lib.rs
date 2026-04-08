@@ -10,7 +10,7 @@
 //! # Architecture
 //!
 //! ```text
-//! View Layer (native-napi, native-cli, native-http)
+//! View Layer (host-napi, host-cli, host-http)
 //!     │
 //!     ▼ ActionRequest / ActionResponse
 //! ┌─────────────────────────────────────────┐
@@ -20,7 +20,7 @@
 //! └─────────────────────────────────────────┘
 //!     │
 //!     ▼ Service trait calls
-//! Model Layer (native-core services)
+//! Model Layer (engine-kernel services)
 //! ```
 
 #![deny(clippy::all)]
@@ -40,14 +40,14 @@ pub use router::ActionRouter;
 pub use session::{Session, SessionConfig, SessionManager};
 
 // Re-export common types for convenience
-pub use neko_types::{ActionRequest, ActionResponse, ResourceId, StreamId};
+pub use neko_engine_types::{ActionRequest, ActionResponse, ResourceId, StreamId};
 
-// Re-export native-core types needed by CLI and other view adapters
-pub use neko_native_core::export::{
+// Re-export engine-kernel types needed by CLI and other view adapters
+pub use neko_engine_kernel::export::{
     ExportHwEncoder, ExportJobConfig, ExportPreset, ExportSettings, ExportVideoCodec,
 };
-pub use neko_native_core::jvi::JviLoader;
+pub use neko_engine_kernel::jvi::JviLoader;
 
-// Re-export puppet types needed by native-http for the WS stream endpoint
-pub use neko_native_core::services::IPuppetService;
-pub use neko_native_core::PuppetDelta;
+// Re-export puppet types needed by host-http for the WS stream endpoint
+pub use neko_engine_kernel::services::IPuppetService;
+pub use neko_engine_kernel::PuppetDelta;

@@ -110,7 +110,7 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' })
 | 跨语言架构 | *已内化* | Rust 引擎为数据模型权威来源，TS 仅负责 UI |
 | 共享包设计 | *已内化* | @neko/shared 通过 exports 子路径分层 |
 | 资产管理 | *已内化* | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | *已内化* | bevy_ecs 独立 crate + native-scene；GPU Skinning 双管线；FABRIK/CCD/TwoBone IK；动画混合/Crossfade；混合策略（内置轻量 + MCP 桥接 Blender） |
+| 3D 能力 | *已内化* | bevy_ecs 独立 crate + runtime-scene；GPU Skinning 双管线；FABRIK/CCD/TwoBone IK；动画混合/Crossfade；混合策略（内置轻量 + MCP 桥接 Blender） |
 | 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（骨骼动画）；多层动画混合 + Crossfade；混合策略（内置轻量 + MCP 桥接 PS/ComfyUI） |
 | 面板放置 | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器 |
 | 设备访问 | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 engine Rust sidecar 代理（cpal/nokhwa/midir/gilrs） |
@@ -132,14 +132,14 @@ neko-engine 是 Rust 实现的 Sidecar 进程，通过 N-API 和 HTTP/WebSocket 
 **快速参考**:
 ```
 TypeScript 层（Extension Host）
-  ↕ N-API 绑定 (@neko-engine/native-napi)
+  ↕ N-API 绑定 (@neko-engine/host-napi)
   ↕ HTTP/WebSocket (axum)
 Rust 层（neko-engine）
-  ├─ native-core:  GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
-  ├─ native-scene: 3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
-  ├─ native-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
-  ├─ native-api:   ActionRouter、控制器注册
-  ├─ native-http:  REST API + WebSocket 流
+  ├─ engine-kernel:  GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
+  ├─ runtime-scene: 3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
+  ├─ runtime-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
+  ├─ host-api:   ActionRouter、控制器注册
+  ├─ host-http:  REST API + WebSocket 流
   └─ types:        共享 Rust 类型
 ```
 

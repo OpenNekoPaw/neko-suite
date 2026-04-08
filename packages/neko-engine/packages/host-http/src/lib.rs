@@ -12,8 +12,8 @@
 //! # Usage
 //!
 //! ```rust,no_run
-//! use neko_native_api::EngineApi;
-//! use neko_native_http::start_server;
+//! use neko_host_api::EngineApi;
+//! use neko_host_http::start_server;
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
@@ -28,7 +28,7 @@
 mod middleware;
 pub mod routes;
 
-use neko_native_api::EngineApi;
+use neko_host_api::EngineApi;
 use std::sync::Arc;
 use tokio::sync::watch;
 

@@ -51,7 +51,7 @@ cargo build                    # debug 模式
 cd ../..
 
 # 4. 编译 N-API 绑定
-cd packages/neko-engine/packages/native-napi
+cd packages/neko-engine/packages/host-napi
 pnpm build
 cd ../../../..
 
@@ -121,7 +121,7 @@ neko-suite/
 @neko/shared (neko-types)            ← 共享基础设施（Logger/i18n/Theme/Errors，零内部依赖）
 @neko/neko-client                    ← EngineClient HTTP dispatch + 流媒体客户端（零内部依赖）
 
-@neko-engine/native-napi             ← Rust N-API 绑定（独立编译）
+@neko-engine/host-napi             ← Rust N-API 绑定（独立编译）
   ↑
 neko-engine ext                      ← 唯一 Sidecar 进程 + 统一 HTTP/WS 服务器
   ↑ (通过 EngineClient HTTP/WS 通信)
@@ -484,7 +484,7 @@ docs: update ARCHITECTURE.md with streaming flow
 - AI Agent 架构重构（`docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md`）：ToolSet/Skill/Hook 三子系统重命名清理、Shell hooks 桥接、两层工具注入（`always`/`dynamic`）
 - 统一引擎架构（`docs/adr-unified-engine.md`）
 - 横切关注点统一（`docs/architecture/adr-cross-cutting-concerns.md`）
-- Shader/Effects 全量打通（`packages/neko-engine/packages/native-core/src/export/gpu_export_pipeline.rs`）
+- Shader/Effects 全量打通（`packages/neko-engine/packages/engine-kernel/src/export/gpu_export_pipeline.rs`）
 
 ---
 

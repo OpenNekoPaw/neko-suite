@@ -4,13 +4,13 @@ use crate::controllers::utils::{handle_stream_control, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_native_core::domain::StreamConfig;
-use neko_native_core::media_service::{
+use neko_engine_kernel::domain::StreamConfig;
+use neko_engine_kernel::media_service::{
     diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
 };
-use neko_native_core::services::{AudioService, IAudioService};
-use neko_types::registry;
-use neko_types::ActionResponse;
+use neko_engine_kernel::services::{AudioService, IAudioService};
+use neko_engine_types::registry;
+use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -179,7 +179,7 @@ impl Controller for AudioController {
                 })?;
 
                 // Build AudioTranscodeOptions from request
-                use neko_native_core::domain::{AudioOutputFormat, AudioTranscodeOptions};
+                use neko_engine_kernel::domain::{AudioOutputFormat, AudioTranscodeOptions};
 
                 let format = opts
                     .codec
@@ -294,7 +294,7 @@ impl Controller for AudioController {
                     match diff_audio_content_with_options(&source_a, &source_b, &audio_opts) {
                         Ok(audio_diff) => {
                             result.content = Some(
-                                neko_native_core::media_service::ContentDiff::Audio(audio_diff),
+                                neko_engine_kernel::media_service::ContentDiff::Audio(audio_diff),
                             );
                         }
                         Err(e) => {
@@ -384,7 +384,7 @@ impl Controller for AudioController {
                     )
                 })?;
 
-                use neko_native_core::audio::mic_capture::RecordCaptureConfig;
+                use neko_engine_kernel::audio::mic_capture::RecordCaptureConfig;
 
                 let config = RecordCaptureConfig {
                     sample_rate: opts.sample_rate.unwrap_or(48000),
@@ -432,7 +432,7 @@ impl Controller for AudioController {
                 let time = opts.time.unwrap_or(0.0);
 
                 use base64::Engine;
-                use neko_native_core::services::audio_mixdown::{AudioMixdown, MixdownTrack};
+                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownTrack};
 
                 let mixdown_tracks: Vec<MixdownTrack> = serde_json::from_value(tracks)
                     .map_err(|e| ApiError::InvalidRequest(format!("invalid tracks: {}", e)))?;
@@ -473,7 +473,7 @@ impl Controller for AudioController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_native_core::services::TaskService;
+    use neko_engine_kernel::services::TaskService;
 
     fn create_test_controller() -> AudioController {
         let task_service = Arc::new(TaskService::new());

@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::gpu::GpuContext;
 use crate::monitor::SystemMonitor;
 use crate::services::{GpuInfo, INodeService, ITaskService};
-use neko_types::{HealthStatus, ResourceSnapshot};
+use neko_engine_types::{HealthStatus, ResourceSnapshot};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -160,12 +160,12 @@ impl NodeService {
     }
 
     /// Get hardware decoder info
-    fn get_hw_decoder_info(&self) -> Vec<neko_types::HwAccelInfo> {
+    fn get_hw_decoder_info(&self) -> Vec<neko_engine_types::HwAccelInfo> {
         let mut decoders = Vec::new();
 
         #[cfg(target_os = "macos")]
         {
-            decoders.push(neko_types::HwAccelInfo {
+            decoders.push(neko_engine_types::HwAccelInfo {
                 name: "VideoToolbox".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string(), "prores".to_string()],
@@ -174,7 +174,7 @@ impl NodeService {
 
         #[cfg(target_os = "linux")]
         {
-            decoders.push(neko_types::HwAccelInfo {
+            decoders.push(neko_engine_types::HwAccelInfo {
                 name: "VAAPI".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string()],
@@ -183,7 +183,7 @@ impl NodeService {
 
         #[cfg(target_os = "windows")]
         {
-            decoders.push(neko_types::HwAccelInfo {
+            decoders.push(neko_engine_types::HwAccelInfo {
                 name: "D3D11VA".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string()],
@@ -194,12 +194,12 @@ impl NodeService {
     }
 
     /// Get hardware encoder info
-    fn get_hw_encoder_info(&self) -> Vec<neko_types::HwAccelInfo> {
+    fn get_hw_encoder_info(&self) -> Vec<neko_engine_types::HwAccelInfo> {
         let mut encoders = Vec::new();
 
         #[cfg(target_os = "macos")]
         {
-            encoders.push(neko_types::HwAccelInfo {
+            encoders.push(neko_engine_types::HwAccelInfo {
                 name: "VideoToolbox".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string(), "prores".to_string()],
@@ -208,7 +208,7 @@ impl NodeService {
 
         #[cfg(target_os = "linux")]
         {
-            encoders.push(neko_types::HwAccelInfo {
+            encoders.push(neko_engine_types::HwAccelInfo {
                 name: "VAAPI".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string()],
@@ -217,7 +217,7 @@ impl NodeService {
 
         #[cfg(target_os = "windows")]
         {
-            encoders.push(neko_types::HwAccelInfo {
+            encoders.push(neko_engine_types::HwAccelInfo {
                 name: "NVENC".to_string(),
                 available: true,
                 codecs: vec!["h264".to_string(), "hevc".to_string()],

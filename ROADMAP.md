@@ -160,8 +160,8 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 ### neko-model (3D) + neko-puppet (2D) — Character Editing Rust Engine ✅
 - Phase 3.1-3.3 ✅ (basic 3D + AI face sculpting + CSG + PBR + particles + timeline integration)
 - Phase 2 Rust Engine ✅ (keyframe CRUD + animation blending + EasingType 30+ variants + project v2):
-  - native-puppet: 51 tests (Keyframe CRUD + blend_tick + 8 API actions)
-  - native-scene: 49 tests (SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2)
+  - runtime-puppet: 51 tests (Keyframe CRUD + blend_tick + 8 API actions)
+  - runtime-scene: 49 tests (SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2)
 - **Phase 2.5 Character Editing P0+P1 ✅**:
   - Template creation (in-editor empty state UI: import/template/drag-drop + INP/GLB procedural humanoid templates)
   - 3D `Visible` component + `set_visible` API + GPU render filtering

@@ -36,11 +36,11 @@ Neko Suite is a creative work suite deeply integrated into VS Code. The core cha
 ┌──────────▼──────────────────────────────────────────────────────┐
 │                   neko-engine (Rust Sidecar)                    │
 │                                                                 │
-│  native-core:   wgpu GPU · FFmpeg codec · Animation · GPU Skinning · Export · Cache │
-│  native-scene:  3D Scene ECS (bevy_ecs + glTF/VRM + IK + Blend)  │
-│  native-puppet: 2D Skeletal ECS (bevy_ecs + inox2d + Blend/Crossfade) │
-│  native-http:   axum HTTP/WebSocket server (unified port)        │
-│  native-napi:   Node.js N-API bindings                           │
+│  engine-kernel:   wgpu GPU · FFmpeg codec · Animation · GPU Skinning · Export · Cache │
+│  runtime-scene:  3D Scene ECS (bevy_ecs + glTF/VRM + IK + Blend)  │
+│  runtime-puppet: 2D Skeletal ECS (bevy_ecs + inox2d + Blend/Crossfade) │
+│  host-http:   axum HTTP/WebSocket server (unified port)        │
+│  host-napi:   Node.js N-API bindings                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,10 +66,10 @@ Extension Host
      │
      └─ EngineClient (@neko/neko-client, zero vscode dependency)
           │
-          ├─ HTTP POST /v1/dispatch  →  native-http  →  native-core
+          ├─ HTTP POST /v1/dispatch  →  host-http  →  engine-kernel
           │  For: synchronous commands (probe, waveform, diff, extractFrame, effects)
           │
-          └─ WebSocket /v1/streams/:id  →  native-http  →  native-core
+          └─ WebSocket /v1/streams/:id  →  host-http  →  engine-kernel
              For: streaming (H.264 push, PCM decode, control commands)
 ```
 
@@ -88,7 +88,7 @@ Webview (H264StreamClient / AudioStreamClient)
 neko-engine axum WebSocket endpoint
      │
      ▼
-native-core decoder → GPU decoded frames → H.264 NAL / PCM Float32
+engine-kernel decoder → GPU decoded frames → H.264 NAL / PCM Float32
 ```
 
 Streaming goes over WebSocket directly, bypassing the Extension Host to avoid redundant frame data copies through the Node.js layer.
@@ -103,7 +103,7 @@ Streaming goes over WebSocket directly, bypassing the Extension Host to avoid re
 @neko/shared (neko-types)    ←── all packages depend on this (Logger/i18n/Theme/Errors, zero internal deps)
 @neko/neko-client            ←── EngineClient + streaming client (zero internal deps)
      ↑
-neko-engine/native-napi      ←── N-API bindings (independently compiled)
+neko-engine/host-napi      ←── N-API bindings (independently compiled)
      ↑
 neko-engine/extension        ←── sole Sidecar manager + unified HTTP/WS server
      ↑ (communicates via EngineClient HTTP/WS)
@@ -261,11 +261,13 @@ Extension Host
 | Cross-Language Architecture | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust engine is the authoritative data model, TS handles UI only |
 | Shared Package Design | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared exports via subpath layers |
 | Asset Management | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | Unified AssetManifest + Handler registry pattern |
-| 3D Capabilities | *Internalized* | bevy_ecs standalone crate + native-scene + R3F frontend; GPU Skinning (dual pipeline: skinned/non-skinned); FABRIK/CCD/TwoBone IK solvers; animation blending/crossfade |
-| 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (skeletal animation, standalone sub-extension); native-puppet (bevy_ecs + inox2d); multi-layer animation blending + crossfade; WS real-time streaming for neko-live |
+| 3D Capabilities | *Internalized* | bevy_ecs standalone crate + runtime-scene + R3F frontend; GPU Skinning (dual pipeline: skinned/non-skinned); FABRIK/CCD/TwoBone IK solvers; animation blending/crossfade |
+| 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (skeletal animation, standalone sub-extension); runtime-puppet (bevy_ecs + inox2d); multi-layer animation blending + crossfade; WS real-time streaming for neko-live |
 | Character Editing | *Internalized* | 2D/3D face customization, motion adjustment, painting, modeling assessment; standardized facial parameter templates (3D: 22 params / 2D: 32 params); shared keyframe timeline; .nkm project format; IK skeletal interactive editing |
 | Panel Placement Strategy | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | Editor-bound panels use embedded Webview, global panels use native VSCode containers; eliminates sidebar ghost data conflicts |
 | External Device Access | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview sandbox restricts hardware APIs; device I/O proxied through neko-engine Rust sidecar (cpal/nokhwa/midir/gilrs) |
+| Engine Pluginization (RFC) | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md) | Capability pluginization instead of kernel pluginization; expose controlled shader/model/format/device/exporter/connector extension points; marketplace distributes, Engine Host activates |
+| Engine Runtime Layering | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | Split runtimes by package and keep one Host app by default; Video/2D/3D/Docs/Device/ML stay in one host; Game/Sim/XR may graduate to dedicated sidecars later |
 | Creative Context Compression | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7-level priority semantic classification: user messages permanently retained; creative decisions/version anchors/iteration chains/asset state/aesthetic preferences compressed in tiers |
 | Ablation Experiment Framework | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig mapping + MetricsHooks metric collection, zero intrusion on existing subsystems |
 | Agent Media Architecture | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story storyboard responsibility boundaries; Agent self-sufficiency; GeneratedAsset disk storage + JSON references; DragDropBroker cross-extension transfer; Send-to-Agent unified protocol (file-level + content-level, zero base64); MediaPreprocessor auto-scaling/frame-extraction |

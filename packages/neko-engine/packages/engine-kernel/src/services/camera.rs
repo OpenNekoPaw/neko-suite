@@ -1,7 +1,7 @@
 //! Camera service trait
 
 use crate::error::Result;
-use neko_types::StreamId;
+use neko_engine_types::StreamId;
 use serde::Serialize;
 
 /// Camera device info

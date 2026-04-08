@@ -127,8 +127,8 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                                                 ├─ FFmpeg 编解码（硬件加速 VideoToolbox/NVENC/VAAPI）
                                                 ├─ 关键帧缓存 + 预加载优化
                                                 ├─ 导出管线（GPU export + audio mixer + 响度标准化）
-                                                ├─ native-scene 3D 场景（bevy_ecs + glTF/VRM + PBR + 物理）
-                                                ├─ native-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps WS 流）
+                                                ├─ runtime-scene 3D 场景（bevy_ecs + glTF/VRM + PBR + 物理）
+                                                ├─ runtime-puppet 2D 骨骼（bevy_ecs + inox2d + 60fps WS 流）
                                                 └─ ONNX ML 推理（macOS CoreML 加速）
 ```
 
@@ -180,13 +180,13 @@ neko-suite/
 │   ├── neko-suite/            # Extension Pack 门户
 │   ├── neko-engine/           # Rust Sidecar 媒体引擎
 │   │   └── packages/
-│   │       ├── native-core/   # Rust 核心（wgpu/编解码/导出/ONNX ML）
-│   │       ├── native-api/    # HTTP API 路由层
-│   │       ├── native-http/   # Axum HTTP 服务
-│   │       ├── native-napi/   # Node.js NAPI 绑定
-│   │       ├── native-cli/    # CLI 入口
-│   │       ├── native-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
-│   │       ├── native-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+│   │       ├── engine-kernel/   # Rust 核心（wgpu/编解码/导出/ONNX ML）
+│   │       ├── host-api/    # HTTP API 路由层
+│   │       ├── host-http/   # Axum HTTP 服务
+│   │       ├── host-napi/   # Node.js NAPI 绑定
+│   │       ├── host-cli/    # CLI 入口
+│   │       ├── runtime-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
+│   │       ├── runtime-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
 │   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
@@ -322,6 +322,8 @@ ext install neko.neko-suite
 - [docs/architecture/](./docs/architecture/) - 架构设计文档
   - [面板放置策略](./docs/architecture/panel-placement.md) - 编辑器面板架构
   - [设备访问策略](./docs/architecture/device-access.md) - 硬件设备代理方案
+  - [Engine 插件化 RFC](./docs/architecture/engine-plugin-rfc.md) - 能力插件化与市场/宿主分工
+  - [Engine Runtime 分层](./docs/architecture/engine-runtime-layering.md) - runtime 按包拆分与单宿主策略
   - [格式策略](./docs/architecture/format-strategy.md) - nk\* 文件格式设计
   - [市场平台](./docs/architecture/marketplace.md) - 资产市场架构
   - [本地模型部署](./docs/architecture/model-runtime.md) - ONNX/GGUF 运行时

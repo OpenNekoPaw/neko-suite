@@ -172,7 +172,7 @@ mod tests {
     //   ORT_DYLIB_PATH=<path/to/libonnxruntime.dylib> \
     //   ML_TEST_UPSCALE_MODEL=<path/to/realesrgan.onnx> \
     //   ML_TEST_IMAGE=<path/to/input.png> \
-    //   cargo test --package neko-native-core --features onnx \
+    //   cargo test --package neko-engine-kernel --features onnx \
     //     -- ml_e2e --include-ignored
     // ------------------------------------------------------------------
 

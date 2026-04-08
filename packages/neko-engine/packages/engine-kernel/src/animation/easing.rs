@@ -1,9 +1,9 @@
 //! Easing Functions — re-exported from neko-types shared crate
 //!
-//! The canonical implementation lives in `neko_types::easing`.
+//! The canonical implementation lives in `neko_engine_types::easing`.
 //! This module re-exports for backward compatibility.
 
-pub use neko_types::easing::{Easing, EasingType};
+pub use neko_engine_types::easing::{Easing, EasingType};
 
 #[cfg(test)]
 mod tests {

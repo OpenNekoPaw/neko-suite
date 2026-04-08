@@ -2,8 +2,8 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_types::registry;
-use neko_types::ActionResponse;
+use neko_engine_types::registry;
+use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 

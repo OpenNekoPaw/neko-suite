@@ -16,16 +16,16 @@
 
 use napi_derive::napi;
 use serde_json::json;
-use neko_types::ActionRequest;
+use neko_engine_types::ActionRequest;
 
 /// Get or initialize the global engine instance for bridge functions
-async fn get_bridge_engine() -> napi::Result<std::sync::Arc<neko_native_api::EngineApi>> {
+async fn get_bridge_engine() -> napi::Result<std::sync::Arc<neko_host_api::EngineApi>> {
     crate::engine::init_tracing();
     crate::engine::get_engine().await
 }
 
 #[cfg(test)]
-fn bridge_engine_cell() -> &'static tokio::sync::OnceCell<std::sync::Arc<neko_native_api::EngineApi>> {
+fn bridge_engine_cell() -> &'static tokio::sync::OnceCell<std::sync::Arc<neko_host_api::EngineApi>> {
     crate::engine::shared_engine_cell()
 }
 

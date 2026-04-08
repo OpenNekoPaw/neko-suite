@@ -13,7 +13,7 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use neko_native_core::encoder::iframe::{IFrameEncoder, IFrameConfig};
+//! use neko_engine_kernel::encoder::iframe::{IFrameEncoder, IFrameConfig};
 //!
 //! let mut encoder = IFrameEncoder::new()?;
 //! let config = IFrameConfig::new(1920, 1080);

@@ -1,6 +1,6 @@
 //! ECS systems for 2D puppet deformation and physics
 //!
-//! Called manually (not via a scheduler) — mirrors native-scene pattern.
+//! Called manually (not via a scheduler) — mirrors runtime-scene pattern.
 //! Systems operate on bevy_ecs::World directly.
 
 use crate::animation::{AnimationLibrary, AnimationPlayback};
@@ -9,7 +9,7 @@ use crate::components::*;
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
-use neko_types::easing::{Easing, EasingType};
+use neko_engine_types::easing::{Easing, EasingType};
 
 /// Deformation entity data: (entity, vertices, binding_param, binding_strength, control_points)
 type DeformEntityData = (Entity, Vec<Vec2>, String, f32, Vec<[f32; 2]>);

@@ -6,7 +6,7 @@
 //! # Design Principles
 //! - Pure data structures with `Serialize`/`Deserialize`
 //! - No business logic or side effects
-//! - Shared by all crates: native-core, native-api, native-napi, native-cli, native-http
+//! - Shared by all crates: engine-kernel, host-api, host-napi, host-cli, host-http
 
 #![deny(clippy::all)]
 

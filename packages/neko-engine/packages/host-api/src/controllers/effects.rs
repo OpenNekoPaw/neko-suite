@@ -3,10 +3,10 @@
 use crate::controllers::utils::{base64_decode, base64_encode};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_native_core::gpu::custom_shader_processor::ParamDef;
-use neko_native_core::services::{EffectsService, IEffectsService};
-use neko_types::registry;
-use neko_types::ActionResponse;
+use neko_engine_kernel::gpu::custom_shader_processor::ParamDef;
+use neko_engine_kernel::services::{EffectsService, IEffectsService};
+use neko_engine_types::registry;
+use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;

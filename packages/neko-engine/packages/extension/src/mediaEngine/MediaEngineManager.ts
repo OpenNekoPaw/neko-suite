@@ -98,7 +98,7 @@ export class MediaEngineManager implements vscode.Disposable {
    * Dispose current engine wrappers for this extension session.
    *
    * The underlying Rust EngineApi remains process-scoped today because
-   * native-napi owns it behind a global singleton.
+   * host-napi owns it behind a global singleton.
    */
   async disposeEngines(): Promise<void> {
     if (this._compatibleEngine) {

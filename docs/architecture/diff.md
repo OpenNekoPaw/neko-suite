@@ -361,7 +361,7 @@ Rust Engine                    Webview
 - `neko-client/AudioStreamClient` — PCM f32le 播放 + 主时钟 (AudioContext.getOutputTimestamp)
 - `neko-client/FrameScheduler` — A/V 同步 (自适应阈值 + EMA 漂移修正)
 - Rust `VideoService.start_stream()` — decode→encode 管线 (All-Intra, GOP=1)
-- `native-http` WebSocket streaming endpoint + StreamRegistry broadcast channel
+- `host-http` WebSocket streaming endpoint + StreamRegistry broadcast channel
 
 #### WebGL Shader 集成
 

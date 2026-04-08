@@ -26,7 +26,7 @@ use crate::services::{
     IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult,
 };
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
-use neko_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
+use neko_engine_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -153,7 +153,7 @@ impl TimelineService {
     fn convert_blend_mode(mode: &BlendMode) -> GpuBlendMode {
         // Delegate to the canonical implementation on Element to avoid duplication.
         // This wrapper exists for use with &BlendMode references in the compositing path.
-        use neko_types::BlendMode as BM;
+        use neko_engine_types::BlendMode as BM;
         match mode {
             // Basic
             BM::Normal => GpuBlendMode::Normal,

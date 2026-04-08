@@ -13,7 +13,7 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
-use neko_native_api::EngineApi;
+use neko_host_api::EngineApi;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 

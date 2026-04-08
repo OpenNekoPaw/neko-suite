@@ -103,13 +103,13 @@ impl PreviewPipeline {
             width: config.width,
             height: config.height,
             fps: config.fps,
-            video_codec: neko_types::VideoCodec::H264,
+            video_codec: neko_engine_types::VideoCodec::H264,
             video_bitrate: Some(config.bitrate),
-            audio_codec: neko_types::AudioCodec::Aac,
+            audio_codec: neko_engine_types::AudioCodec::Aac,
             audio_bitrate: None,
-            hw_encoder: neko_types::HwEncoderType::Auto,
+            hw_encoder: neko_engine_types::HwEncoderType::Auto,
             time_range: None,
-            preset: neko_types::EncoderPreset::default(),
+            preset: neko_engine_types::EncoderPreset::default(),
             use_zero_copy_gpu: true, // Enable zero-copy for preview
         };
 

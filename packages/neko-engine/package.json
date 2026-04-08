@@ -94,7 +94,7 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "typecheck": "tsc --noEmit -p packages/extension/tsconfig.json",
-    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/native-napi --format=cjs --platform=node",
+    "compile": "esbuild ./packages/extension/src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:@neko-engine/host-napi --format=cjs --platform=node",
     "watch": "pnpm run compile -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test:extension": "vitest --config vitest.config.ts --run",

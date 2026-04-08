@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "packages/types",
-    "packages/native-core",
-    "packages/native-api",
-    "packages/native-http",
-    "packages/native-napi",
-    "packages/native-cli",
-    "packages/native-scene",
-    "packages/native-puppet",
+    "packages/engine-types",
+    "packages/engine-kernel",
+    "packages/host-api",
+    "packages/host-http",
+    "packages/host-napi",
+    "packages/host-cli",
+    "packages/runtime-scene",
+    "packages/runtime-puppet",
 ]
 
 [workspace.package]

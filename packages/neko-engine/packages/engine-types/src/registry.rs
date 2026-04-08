@@ -1,9 +1,9 @@
 //! Central registry of group and action names.
 //!
 //! This module is the **single source of truth** for all group/action string
-//! constants used across neko-engine crates (native-api controllers, router,
-//! native-cli args). Any rename or addition should happen here first; compile-
-//! time tests in `native-cli` verify that the CLI layer stays in sync.
+//! constants used across neko-engine crates (host-api controllers, router,
+//! host-cli args). Any rename or addition should happen here first; compile-
+//! time tests in `host-cli` verify that the CLI layer stays in sync.
 
 /// Group name constants — each maps to one API controller.
 pub mod groups {

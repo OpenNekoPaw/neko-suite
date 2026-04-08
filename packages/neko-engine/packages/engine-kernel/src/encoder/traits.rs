@@ -1,15 +1,15 @@
 //! Encoder trait and types
 //!
 //! Canonical enum definitions (`VideoCodec`, `HwEncoderType`, `EncoderPreset`,
-//! `ContainerFormat`) live in `neko_types` and are re-exported here for
+//! `ContainerFormat`) live in `neko_engine_types` and are re-exported here for
 //! backward compatibility. FFmpeg-specific methods are provided via extension
 //! traits in [`super::codec_ext`].
 
 use crate::decoder::PixelFormat;
 use crate::error::Result;
 
-// Re-export canonical types from neko_types (single source of truth)
-pub use neko_types::{ContainerFormat, EncoderPreset, HwEncoderType, VideoCodec};
+// Re-export canonical types from neko_engine_types (single source of truth)
+pub use neko_engine_types::{ContainerFormat, EncoderPreset, HwEncoderType, VideoCodec};
 
 // Import extension traits so methods are available where traits.rs types are used
 use super::codec_ext::VideoCodecExt;

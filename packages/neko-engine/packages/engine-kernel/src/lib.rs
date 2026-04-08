@@ -7,10 +7,10 @@
 //!
 //! # Usage
 //! ```rust
-//! use neko_native_core::prelude::*;
+//! use neko_engine_kernel::prelude::*;
 //! // or import from specific modules:
-//! use neko_native_core::gpu::GpuContext;
-//! use neko_native_core::services::VideoService;
+//! use neko_engine_kernel::gpu::GpuContext;
+//! use neko_engine_kernel::services::VideoService;
 //! ```
 
 #![deny(clippy::all)]
@@ -35,9 +35,9 @@ pub mod telemetry;
 #[cfg(feature = "onnx")]
 pub mod ml;
 
-// Re-export puppet world types so higher-level crates (native-api, native-http)
-// can access them without depending directly on neko-native-puppet
-pub use neko_native_puppet::world::PuppetDelta;
+// Re-export puppet world types so higher-level crates (host-api, host-http)
+// can access them without depending directly on neko-runtime-puppet
+pub use neko_runtime_puppet::world::PuppetDelta;
 
 /// Prelude — commonly used types for convenience
 pub mod prelude {

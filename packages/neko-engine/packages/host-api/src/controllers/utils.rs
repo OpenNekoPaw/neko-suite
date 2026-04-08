@@ -2,9 +2,9 @@
 
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
-use neko_native_core::services::IStreamPlayback;
-use neko_types::project_context::{ProjectContext, ResolvedPath};
-use neko_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
+use neko_engine_kernel::services::IStreamPlayback;
+use neko_engine_types::project_context::{ProjectContext, ResolvedPath};
+use neko_engine_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::Write;

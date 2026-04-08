@@ -28,7 +28,7 @@ use crate::gpu::{
 };
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
-use neko_types::TrackType;
+use neko_engine_types::TrackType;
 
 use super::types::ExportSettings;
 
@@ -69,9 +69,9 @@ impl EffectDispatcher {
         input: &wgpu::Texture,
         width: u32,
         height: u32,
-        effects: &[neko_types::ElementEffect],
+        effects: &[neko_engine_types::ElementEffect],
     ) -> Result<wgpu::Texture> {
-        let mut sorted: Vec<&neko_types::ElementEffect> =
+        let mut sorted: Vec<&neko_engine_types::ElementEffect> =
             effects.iter().filter(|e| e.enabled).collect();
         sorted.sort_by_key(|e| e.order);
 
@@ -144,7 +144,7 @@ impl EffectDispatcher {
         &mut self,
         input: &wgpu::Texture,
         output: &wgpu::Texture,
-        fx: &neko_types::ElementEffect,
+        fx: &neko_engine_types::ElementEffect,
     ) -> Result<()> {
         let params = &fx.parameters;
         match fx.effect_type.as_str() {
@@ -391,7 +391,7 @@ impl EffectDispatcher {
         &self,
         input: &wgpu::Texture,
         output: &wgpu::Texture,
-        fx: &neko_types::ElementEffect,
+        fx: &neko_engine_types::ElementEffect,
     ) -> Result<()> {
         let width = input.width();
         let height = input.height();
@@ -539,7 +539,7 @@ impl EffectDispatcher {
         pixels: Vec<u8>,
         width: u32,
         height: u32,
-        effects: &[neko_types::ElementEffect],
+        effects: &[neko_engine_types::ElementEffect],
     ) -> Result<Vec<u8>> {
         if !effects.iter().any(|e| e.enabled) {
             return Ok(pixels);
