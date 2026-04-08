@@ -12,6 +12,7 @@ export const preview = {
   'preview.qualityOptions.high': '高',
   'preview.qualityOptions.medium': '中',
   'preview.qualityOptions.low': '低',
+  'preview.playbackSpeed': '播放倍率',
 
   'preview.resolution.label': '分辨率',
   'preview.resolution.720p': '720P (1280×720)',

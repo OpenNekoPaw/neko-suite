@@ -20,17 +20,21 @@ import {
   DEFAULT_VIDEO_DURATION,
 } from '../constants';
 import { getFileType } from '../utils';
-import type { ProjectData, TimelineTrack, TextElement } from '../types';
+import type { ProjectData, TimelineTrack, TimelineElement } from '../types';
 import {
   CENTERED_TRANSFORM,
   ASSET_DRAG_MIME,
   getDragItems,
   type AssetDragData,
+  type SubtitleElement,
 } from '@neko/shared';
 import { getMediaInfoService } from '../services';
 import { getLogger } from '../utils/logger';
+import { importSubtitles } from '../utils/subtitleParser';
+import { postMessage } from '../utils/vscodeApi';
 
 const logger = getLogger('useTimelineDragDrop');
+const SUBTITLE_FILE_READ_END = 512 * 1024 - 1;
 
 export interface TimelineDragDropOptions {
   timelineRef: RefObject<HTMLDivElement>;
@@ -52,8 +56,8 @@ export interface TimelineDragDropOptions {
     duration: number,
     startTime: number,
   ) => Promise<{ videoElementId: string; audioElementId?: string }>;
-  addElement: (trackId: string, element: Omit<TextElement, 'id'>) => void;
-  addTrack: (type: 'media' | 'audio' | 'text', name?: string) => string;
+  addElement: (trackId: string, element: Omit<TimelineElement, 'id'>) => void;
+  addTrack: (type: 'media' | 'audio' | 'text' | 'subtitle', name?: string) => string;
   /**
    * Read current project tracks from the live store state.
    * Prevents stale-snapshot race: track resolution inside async drop processing
@@ -82,6 +86,108 @@ export function useTimelineDragDrop({
   // Serializes concurrent drops — each drop's async processing completes before
   // the next begins, preventing interleaved track-creation state reads.
   const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const decodeBase64Utf8 = useCallback((base64: string): string => {
+    const binary = window.atob(base64);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }, []);
+
+  const readSubtitleFileFromPath = useCallback(
+    (filePath: string): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const requestId = `subtitle-import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+        const handleMessage = (event: MessageEvent) => {
+          const message = event.data;
+          if (!message || message.type !== 'fileRangeResult' || message.requestId !== requestId) {
+            return;
+          }
+
+          window.removeEventListener('message', handleMessage);
+
+          if (!message.success || typeof message.data !== 'string') {
+            reject(new Error(message.error ?? `Failed to read subtitle file: ${filePath}`));
+            return;
+          }
+
+          try {
+            resolve(decodeBase64Utf8(message.data));
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error('Failed to decode subtitle file'));
+          }
+        };
+
+        window.addEventListener('message', handleMessage);
+        postMessage({
+          type: 'readFileRange',
+          requestId,
+          path: filePath,
+          start: 0,
+          end: SUBTITLE_FILE_READ_END,
+        });
+      }),
+    [decodeBase64Utf8],
+  );
+
+  const importSubtitleTrack = useCallback(
+    async (
+      filePath: string,
+      displayName: string,
+      startTime: number,
+      targetTrack: TimelineTrack | undefined,
+      file?: File,
+    ): Promise<boolean> => {
+      try {
+        const content = file ? await file.text() : await readSubtitleFileFromPath(filePath);
+        const importedTrack = importSubtitles(content);
+        if (!importedTrack || importedTrack.cues.length === 0) {
+          onError?.(`Failed to parse subtitle file: ${displayName}`);
+          return false;
+        }
+
+        let subtitleTrackId = targetTrack?.type === 'subtitle' ? targetTrack.id : '';
+        if (!subtitleTrackId) {
+          const trackName = displayName.replace(/\.[^.]+$/, '');
+          subtitleTrackId = addTrack('subtitle', trackName);
+        }
+
+        for (const cue of importedTrack.cues) {
+          const subtitleElement: Omit<SubtitleElement, 'id'> = {
+            type: 'subtitle',
+            name: `${cue.text.substring(0, 30)}${cue.text.length > 30 ? '...' : ''}`,
+            text: cue.text,
+            fontSize: importedTrack.style.fontSize,
+            color: importedTrack.style.color,
+            fontFamily: importedTrack.style.fontFamily,
+            backgroundColor: importedTrack.style.backgroundColor,
+            textAlign: importedTrack.style.alignment,
+            strokeColor: importedTrack.style.outlineColor,
+            strokeWidth: importedTrack.style.outlineWidth,
+            startTime: startTime + cue.startTime,
+            duration: Math.max(0, cue.endTime - cue.startTime),
+            trimStart: 0,
+            trimEnd: 0,
+            transform: CENTERED_TRANSFORM,
+            opacity: 1,
+            blendMode: 'normal',
+            effects: [],
+            muted: false,
+            hidden: false,
+            locked: false,
+          };
+          addElement(subtitleTrackId, subtitleElement);
+        }
+
+        return true;
+      } catch (error) {
+        logger.error('Subtitle import failed:', error);
+        onError?.(`Failed to import subtitle file: ${displayName}`);
+        return false;
+      }
+    },
+    [addElement, addTrack, onError, readSubtitleFileFromPath],
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -123,12 +229,13 @@ export function useTimelineDragDrop({
 
       const jsonData = e.dataTransfer.getData(ASSET_DRAG_MIME);
       const uriList = e.dataTransfer.getData('text/uri-list');
-      const filesSnapshot: Array<{ name: string; path: string }> = [];
+      const filesSnapshot: Array<{ name: string; path: string; file?: File }> = [];
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
         const file = e.dataTransfer.files[i]!;
         filesSnapshot.push({
           name: file.name,
           path: (file as File & { path?: string }).path ?? file.name,
+          file,
         });
       }
 
@@ -139,6 +246,7 @@ export function useTimelineDragDrop({
         filePath: string,
         displayName: string,
         startTime: number,
+        file?: File,
       ): Promise<boolean> => {
         const fileType = getFileType(displayName);
         if (!fileType) {
@@ -148,39 +256,7 @@ export function useTimelineDragDrop({
         }
 
         if (fileType === 'subtitle') {
-          let textTrackId = targetTrack?.type === 'text' ? targetTrack.id : '';
-          if (!textTrackId) {
-            // Use live state — previous file in the same batch may have created this track
-            const existing = getCurrentTracks().find((t) => t.type === 'text');
-            textTrackId = existing ? existing.id : addTrack('text');
-          }
-          addElement(textTrackId, {
-            type: 'text',
-            name: displayName,
-            content: displayName,
-            startTime,
-            duration: 5,
-            trimStart: 0,
-            trimEnd: 0,
-            fontSize: 24,
-            fontFamily: 'sans-serif',
-            color: '#ffffff',
-            backgroundColor: 'transparent',
-            textAlign: 'center',
-            fontWeight: 'normal',
-            fontStyle: 'normal',
-            textDecoration: 'none',
-            x: 0.5,
-            y: 0.85,
-            rotation: 0,
-            transform: CENTERED_TRANSFORM,
-            opacity: 1,
-            blendMode: 'normal',
-            effects: [],
-            muted: false,
-            hidden: false,
-            locked: false,
-          } as Omit<TextElement, 'id'>);
+          return importSubtitleTrack(filePath, displayName, startTime, targetTrack, file);
         } else if (fileType === 'audio') {
           let audioTrackId = targetTrack?.type === 'audio' ? targetTrack.id : '';
           if (!audioTrackId) {
@@ -273,7 +349,7 @@ export function useTimelineDragDrop({
         // Priority 3: OS file manager drop (files extracted synchronously above)
         for (let i = 0; i < filesSnapshot.length; i++) {
           const file = filesSnapshot[i]!;
-          await addFileToTrack(file.path, file.name, dropTime + i * 0.5);
+          await addFileToTrack(file.path, file.name, dropTime + i * 0.5, file.file);
         }
       };
 

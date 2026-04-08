@@ -58,9 +58,9 @@ export interface IAnimatable {
   /** 速度控制（变速/倒放/时间重映射） */
   speed?: SpeedProperties;
   /** 入场过渡效果 */
-  inTransition?: Transition;
+  transitionIn?: Transition;
   /** 出场过渡效果 */
-  outTransition?: Transition;
+  transitionOut?: Transition;
 }
 
 /**

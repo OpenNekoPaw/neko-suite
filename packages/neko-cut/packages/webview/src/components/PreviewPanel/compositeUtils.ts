@@ -3,16 +3,132 @@
  * Extracted from PreviewPanel.tsx.
  */
 
-import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shared';
+import type { ProjectData, MediaElement, CompositeLayerConfig, Transform } from '@neko/shared';
 import type { ElementTransform } from '../../types/animation';
-import type { EditorElement } from '../../types/editor-types';
+import type {
+  EditorElement,
+  EditorShapeElement,
+  EditorSubtitleElement,
+  EditorTextElement,
+} from '../../types/editor-types';
 import { getComputedTransform } from '../../utils/animation';
+import { getSourceTimeFromOutputTime } from '../../utils/speed';
 import { getEffectParametersAtTime } from '../../types/effects';
 import {
   buildCompositeMasks,
   applyTransitions,
   colorCorrectionToCompositeEffect,
 } from '../../utils/composite-helpers';
+
+export type PausedPreviewOverlayElement =
+  | {
+      type: 'text';
+      element: EditorTextElement;
+      transform: Transform;
+      opacity: number;
+      zIndex: number;
+    }
+  | {
+      type: 'subtitle';
+      element: EditorSubtitleElement;
+      transform: Transform;
+      opacity: number;
+      zIndex: number;
+    }
+  | {
+      type: 'shape';
+      element: EditorShapeElement;
+      opacity: number;
+      zIndex: number;
+    };
+
+function getLegacyCompatibleTransition(
+  element: EditorElement,
+  key: 'transitionIn' | 'transitionOut',
+): EditorElement['transitionIn'] | EditorElement['transitionOut'] | undefined {
+  if (key === 'transitionIn') {
+    return (
+      element.transitionIn ??
+      ((element as EditorElement & { inTransition?: EditorElement['transitionIn'] }).inTransition ??
+        undefined)
+    );
+  }
+
+  return (
+    element.transitionOut ??
+    ((element as EditorElement & { outTransition?: EditorElement['transitionOut'] }).outTransition ??
+      undefined)
+  );
+}
+
+function getCompositeSourceTime(element: EditorElement, time: number): number {
+  const localTimelineTime = Math.max(0, time - element.startTime);
+  const trimStart = element.trimStart ?? 0;
+  const trimEnd = element.trimEnd ?? 0;
+  const effectiveSourceDuration = Math.max(0, element.duration - trimStart - trimEnd);
+
+  if (effectiveSourceDuration <= 0) {
+    return trimStart;
+  }
+
+  const sourceOffset = getSourceTimeFromOutputTime(
+    localTimelineTime,
+    element.speed,
+    effectiveSourceDuration,
+  );
+
+  return trimStart + sourceOffset;
+}
+
+function isElementVisibleAtTime(element: EditorElement, time: number): boolean {
+  if (element.hidden) return false;
+  const elementEnd = element.startTime + element.duration;
+  return time >= element.startTime && time < elementEnd;
+}
+
+function getElementTransformState(
+  element: EditorElement,
+  time: number,
+): { transform: Transform; opacity: number } {
+  const sourceTime = getCompositeSourceTime(element, time);
+  const animTransform = (element as { animTransform?: ElementTransform }).animTransform;
+
+  if (animTransform) {
+    const computed = getComputedTransform(animTransform, sourceTime);
+    return {
+      transform: {
+        x: computed.x,
+        y: computed.y,
+        scaleX: computed.scaleX,
+        scaleY: computed.scaleY,
+        rotation: computed.rotation,
+        anchorX: computed.anchorX,
+        anchorY: computed.anchorY,
+      },
+      opacity: computed.opacity,
+    };
+  }
+
+  if (element.transform) {
+    return {
+      transform: element.transform,
+      opacity: element.opacity ?? 1,
+    };
+  }
+
+  return {
+    transform: {
+      x: 0.5,
+      y: 0.5,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: element.opacity ?? 1,
+  };
+}
 
 /**
  * Build CompositeLayerConfig[] from ProjectData at a given time.
@@ -33,7 +149,8 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
       if (time < element.startTime || time >= elementEnd) continue;
 
       const mediaElement = element as MediaElement;
-      const sourceTime = element.trimStart + (time - element.startTime);
+      const editorElement = element as EditorElement;
+      const sourceTime = getCompositeSourceTime(editorElement, time);
 
       // EditorElement may carry animTransform (UI keyframe animation layer)
       const animTransform = (element as { animTransform?: ElementTransform }).animTransform;
@@ -100,7 +217,6 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
       }
 
       // Flow colorCorrection to composite layer as a color-correction effect
-      const editorElement = element as EditorElement;
       if (editorElement.colorCorrection) {
         const ccEffect = colorCorrectionToCompositeEffect(editorElement.colorCorrection);
         if (ccEffect) {
@@ -124,27 +240,92 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
     elements: track.elements
       .filter((e) => e.type === 'media')
       .sort((a, b) => a.startTime - b.startTime)
-      .map((e) => ({
-        id: e.id,
-        startTime: e.startTime,
-        duration: e.duration,
-        transitionIn: e.transitionIn
-          ? {
-              type: e.transitionIn.type,
-              duration: e.transitionIn.duration,
-              easing: e.transitionIn.easing,
-            }
-          : undefined,
-        transitionOut: e.transitionOut
-          ? {
-              type: e.transitionOut.type,
-              duration: e.transitionOut.duration,
-              easing: e.transitionOut.easing,
-            }
-          : undefined,
-      })),
+      .map((e) => {
+        const editorElement = e as EditorElement;
+        const transitionIn = getLegacyCompatibleTransition(editorElement, 'transitionIn');
+        const transitionOut = getLegacyCompatibleTransition(editorElement, 'transitionOut');
+
+        return {
+          id: e.id,
+          startTime: e.startTime,
+          duration: e.duration,
+          transitionIn: transitionIn
+            ? {
+                type: transitionIn.type,
+                duration: transitionIn.duration,
+                easing: transitionIn.easing,
+              }
+            : undefined,
+          transitionOut: transitionOut
+            ? {
+                type: transitionOut.type,
+                duration: transitionOut.duration,
+                easing: transitionOut.easing,
+              }
+            : undefined,
+        };
+      }),
   }));
   applyTransitions(layers, trackElements, time);
 
   return layers;
+}
+
+export function buildPausedPreviewOverlayElements(
+  project: ProjectData,
+  time: number,
+): PausedPreviewOverlayElement[] {
+  const overlays: PausedPreviewOverlayElement[] = [];
+  let zIndex = 0;
+
+  for (const track of project.tracks) {
+    for (const rawElement of track.elements) {
+      const element = rawElement as EditorElement;
+      if (!isElementVisibleAtTime(element, time)) continue;
+
+      if (element.type === 'text') {
+        const { transform, opacity } = getElementTransformState(element, time);
+        overlays.push({
+          type: 'text',
+          element: element as EditorTextElement,
+          transform,
+          opacity,
+          zIndex: zIndex++,
+        });
+        continue;
+      }
+
+      if (element.type === 'subtitle') {
+        const { transform, opacity } = getElementTransformState(element, time);
+        overlays.push({
+          type: 'subtitle',
+          element: element as EditorSubtitleElement,
+          transform,
+          opacity,
+          zIndex: zIndex++,
+        });
+        continue;
+      }
+
+      if (element.type === 'shape') {
+        overlays.push({
+          type: 'shape',
+          element: element as EditorShapeElement,
+          opacity: element.opacity ?? 1,
+          zIndex: zIndex++,
+        });
+      }
+    }
+  }
+
+  return overlays;
+}
+
+export function hasVisibleScene3DAtTime(project: ProjectData, time: number): boolean {
+  return project.tracks.some((track) =>
+    track.elements.some((element) => {
+      const editorElement = element as EditorElement;
+      return editorElement.type === 'scene3d' && isElementVisibleAtTime(editorElement, time);
+    }),
+  );
 }

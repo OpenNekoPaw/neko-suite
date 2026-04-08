@@ -30,6 +30,8 @@ export const timeline = {
   'timeline.contextMenu.cut': 'Cut',
   'timeline.contextMenu.duplicate': 'Duplicate',
   'timeline.contextMenu.splitAtPlayhead': 'Split at Playhead',
+  'timeline.contextMenu.splitKeepLeft': 'Split and Keep Left',
+  'timeline.contextMenu.splitKeepRight': 'Split and Keep Right',
   'timeline.contextMenu.trimToPlayhead': 'Trim to Playhead',
   'timeline.contextMenu.show': 'Show',
   'timeline.contextMenu.hide': 'Hide',

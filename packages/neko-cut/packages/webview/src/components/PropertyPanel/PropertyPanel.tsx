@@ -163,6 +163,60 @@ const TEXT_PROPERTIES: PropertyDefinition[] = [
   },
 ];
 
+const SUBTITLE_PROPERTIES: PropertyDefinition[] = [
+  { key: 'text', labelKey: 'propertyPanel.text.content', type: 'string', animatable: false },
+  {
+    key: 'fontSize',
+    labelKey: 'propertyPanel.text.fontSize',
+    type: 'number',
+    animatable: false,
+    min: 8,
+    max: 200,
+    step: 1,
+    unit: 'px',
+  },
+  {
+    key: 'fontFamily',
+    labelKey: 'propertyPanel.text.fontFamily',
+    type: 'string',
+    animatable: false,
+  },
+  { key: 'color', labelKey: 'propertyPanel.text.color', type: 'color', animatable: false },
+  {
+    key: 'backgroundColor',
+    labelKey: 'propertyPanel.text.backgroundColor',
+    type: 'color',
+    animatable: false,
+  },
+  {
+    key: 'textAlign',
+    labelKey: 'propertyPanel.text.textAlign',
+    type: 'select',
+    animatable: false,
+    options: [
+      { value: 'left', labelKey: 'propertyPanel.text.alignLeft' },
+      { value: 'center', labelKey: 'propertyPanel.text.alignCenter' },
+      { value: 'right', labelKey: 'propertyPanel.text.alignRight' },
+    ],
+  },
+  {
+    key: 'strokeColor',
+    labelKey: 'propertyPanel.subtitle.strokeColor',
+    type: 'color',
+    animatable: false,
+  },
+  {
+    key: 'strokeWidth',
+    labelKey: 'propertyPanel.subtitle.strokeWidth',
+    type: 'number',
+    animatable: false,
+    min: 0,
+    max: 20,
+    step: 0.5,
+    unit: 'px',
+  },
+];
+
 const AUDIO_PROPERTIES: PropertyDefinition[] = [
   {
     key: 'volume',
@@ -290,6 +344,27 @@ interface PropertyPanelProps {
   ) => void;
   onRemoveKeyframe: (elementId: string, propertyPath: string) => void;
   onExecuteAIAction?: (actionId: string, elementIds: string[]) => void;
+}
+
+function getLegacyCompatibleTransition(
+  element: TimelineElement | null | undefined,
+  key: 'transitionIn' | 'transitionOut',
+): Transition | null {
+  if (!element) {
+    return null;
+  }
+
+  if (key === 'transitionIn') {
+    return (
+      element.transitionIn ??
+      ((element as TimelineElement & { inTransition?: Transition }).inTransition ?? null)
+    );
+  }
+
+  return (
+    element.transitionOut ??
+    ((element as TimelineElement & { outTransition?: Transition }).outTransition ?? null)
+  );
 }
 
 export const PropertyPanel = memo(function PropertyPanel({
@@ -589,7 +664,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   const handleInTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      const changes = { inTransition: transition ?? undefined } as Partial<TimelineElement>;
+      const changes = { transitionIn: transition ?? undefined } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -600,7 +675,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   const handleOutTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      const changes = { outTransition: transition ?? undefined } as Partial<TimelineElement>;
+      const changes = { transitionOut: transition ?? undefined } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -771,14 +846,27 @@ export const PropertyPanel = memo(function PropertyPanel({
         </div>
       </PropertyGroup>
 
-      {/* Text Properties - always show */}
-      <PropertyGroup
-        titleKey="propertyPanel.group.text"
-        disabled={isDisabled}
-        defaultExpanded={!isDisabled}
-      >
-        {renderPropertyRows(TEXT_PROPERTIES, 'text')}
-      </PropertyGroup>
+      {/* Text Properties */}
+      {(isEditingDefaults || element?.type === 'text') && (
+        <PropertyGroup
+          titleKey="propertyPanel.group.text"
+          disabled={isDisabled}
+          defaultExpanded={!isDisabled}
+        >
+          {renderPropertyRows(TEXT_PROPERTIES, isEditingDefaults ? 'text' : '')}
+        </PropertyGroup>
+      )}
+
+      {/* Subtitle Properties */}
+      {element?.type === 'subtitle' && (
+        <PropertyGroup
+          titleKey="propertyPanel.group.subtitle"
+          disabled={isDisabled}
+          defaultExpanded={!isDisabled}
+        >
+          {renderPropertyRows(SUBTITLE_PROPERTIES)}
+        </PropertyGroup>
+      )}
 
       {/* Audio Properties - always show */}
       <PropertyGroup
@@ -817,7 +905,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={element?.transitionIn ?? null}
+          transition={getLegacyCompatibleTransition(element, 'transitionIn')}
           onChange={handleInTransitionChange}
           showDuration={true}
           disabled={isDisabled}
@@ -831,7 +919,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={element?.transitionOut ?? null}
+          transition={getLegacyCompatibleTransition(element, 'transitionOut')}
           onChange={handleOutTransitionChange}
           showDuration={true}
           disabled={isDisabled}

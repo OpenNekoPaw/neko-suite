@@ -10,6 +10,9 @@ import type { TimelineTrack as TrackType, TimelineElement, AIQuickAction } from 
 import type { EditOperation } from '@neko/shared';
 import { createMeta } from '../../stores/utils/operation-helpers';
 import { getLogger } from '../../utils/logger';
+import { getDuplicateInsertTime } from './timelineDuplicateActions';
+import { buildTimelineReverseUpdates, buildTimelineSpeedUpdates } from './timelineSpeedActions';
+import { buildTrimToPlayheadUpdates, collectTimelineRippleOps } from './timelineTrimActions';
 
 const logger = getLogger('TimelineTrack');
 
@@ -57,6 +60,8 @@ export const TimelineTrack = memo(function TimelineTrack({
   const {
     selectElement,
     updateElement,
+    dispatch,
+    dispatchBatch,
     pushOperation,
     showClipThumbnails,
     project,
@@ -65,12 +70,16 @@ export const TimelineTrack = memo(function TimelineTrack({
     moveElement,
     removeElement,
     splitAtPlayhead,
+    splitAndKeepLeft,
+    splitAndKeepRight,
     toggleElementHidden,
     toggleElementMuted,
     copySelected,
+    pasteAtTime,
     currentTime,
     separateVideoAudio,
     unseparateVideoAudio,
+    rippleEditingEnabled,
   } = useEditorStore();
 
   // Get snappingEnabled via getState() to avoid re-render on toggle
@@ -508,7 +517,77 @@ export const TimelineTrack = memo(function TimelineTrack({
                 before: { updates: beforeUpdates },
               };
 
-              pushOperation(op);
+              const latestProject = useEditorStore.getState().project;
+              const latestTrack = latestProject?.tracks.find(
+                (candidate) => candidate.id === track.id,
+              );
+
+              const shouldRipple =
+                rippleEditingEnabled && originalPositions.size === 1 && !resizeDir;
+
+              const isRightResizeRipple = rippleEditingEnabled && resizeDir === 'right';
+
+              if (shouldRipple || isRightResizeRipple) {
+                const originalEffectiveDuration =
+                  originalElement.duration - originalElement.trimStart - originalElement.trimEnd;
+                const currentEffectiveDuration =
+                  currentElement.duration - currentElement.trimStart - currentElement.trimEnd;
+                const originalEnd = originalElement.startTime + originalEffectiveDuration;
+                const delta = !resizeDir
+                  ? currentElement.startTime - originalElement.startTime
+                  : currentEffectiveDuration - originalEffectiveDuration;
+
+                const rippleOps: EditOperation[] =
+                  latestTrack?.elements
+                    .filter(
+                      (candidate) =>
+                        candidate.id !== element.id && candidate.startTime >= originalEnd,
+                    )
+                    .map((candidate) => {
+                      const nextStartTime = Math.max(0, candidate.startTime + delta);
+
+                      if (nextStartTime === candidate.startTime) {
+                        return null;
+                      }
+
+                      updateElement(track.id, candidate.id, {
+                        startTime: nextStartTime,
+                      });
+
+                      const rippleOp: EditOperation = {
+                        type: 'element.update' as const,
+                        meta: createMeta('user', 'Ripple edit'),
+                        payload: {
+                          trackId: track.id,
+                          elementId: candidate.id,
+                          updates: {
+                            startTime: nextStartTime,
+                          },
+                        },
+                        before: {
+                          updates: {
+                            startTime: candidate.startTime,
+                          },
+                        },
+                      };
+                      return rippleOp;
+                    })
+                    .filter((candidate) => candidate !== null) ?? [];
+
+                if (rippleOps.length > 0) {
+                  pushOperation({
+                    type: 'batch',
+                    meta: createMeta('user', 'Ripple edit'),
+                    payload: {
+                      operations: [op, ...rippleOps],
+                    },
+                  });
+                } else {
+                  pushOperation(op);
+                }
+              } else {
+                pushOperation(op);
+              }
             }
           }
         }
@@ -549,6 +628,7 @@ export const TimelineTrack = memo(function TimelineTrack({
       tracksContainerRef,
       sortedTracks,
       project,
+      rippleEditingEnabled,
     ],
   );
 
@@ -571,6 +651,42 @@ export const TimelineTrack = memo(function TimelineTrack({
       });
     },
     [track.id, selectedElements, selectElement],
+  );
+
+  const commitElementUpdate = useCallback(
+    (element: TimelineElement, updates: Partial<TimelineElement>, description: string) => {
+      const beforeUpdates: Record<string, unknown> = {};
+      const changedUpdates: Record<string, unknown> = {};
+      const elementRecord = element as unknown as Record<string, unknown>;
+      const updatesRecord = updates as Record<string, unknown>;
+
+      for (const [key, value] of Object.entries(updatesRecord)) {
+        const previousValue = elementRecord[key];
+        if (JSON.stringify(previousValue) === JSON.stringify(value)) {
+          continue;
+        }
+        beforeUpdates[key] = previousValue;
+        changedUpdates[key] = value;
+      }
+
+      if (Object.keys(changedUpdates).length === 0) {
+        return;
+      }
+
+      dispatch({
+        type: 'element.update',
+        meta: createMeta('user', description),
+        payload: {
+          trackId: track.id,
+          elementId: element.id,
+          updates: changedUpdates as Partial<TimelineElement>,
+        },
+        before: {
+          updates: beforeUpdates as Partial<TimelineElement>,
+        },
+      });
+    },
+    [dispatch, track.id],
   );
 
   // Generate context menu items for an element
@@ -600,9 +716,8 @@ export const TimelineTrack = memo(function TimelineTrack({
           label: t('timeline.contextMenu.duplicate'),
           shortcut: '⌘D',
           onClick: () => {
-            // Duplicate element after current position
             copySelected();
-            // Note: paste will be at current time, ideally after the element
+            pasteAtTime(getDuplicateInsertTime(project, selectedElements, element));
           },
         },
         { label: '', separator: true, onClick: () => {} },
@@ -614,13 +729,64 @@ export const TimelineTrack = memo(function TimelineTrack({
           disabled: !canSplit,
         },
         {
+          label: t('timeline.contextMenu.splitKeepLeft'),
+          shortcut: 'Q',
+          onClick: () => splitAndKeepLeft(track.id, element.id),
+          disabled: !canSplit,
+        },
+        {
+          label: t('timeline.contextMenu.splitKeepRight'),
+          shortcut: 'W',
+          onClick: () => splitAndKeepRight(track.id, element.id),
+          disabled: !canSplit,
+        },
+        {
           label: t('timeline.contextMenu.trimToPlayhead'),
           onClick: () => {
-            if (currentTime > elementStart && currentTime < elementEnd) {
-              // Trim end to playhead
-              const newTrimEnd = element.trimEnd + (elementEnd - currentTime);
-              updateElement(track.id, element.id, { trimEnd: newTrimEnd });
+            const updates = buildTrimToPlayheadUpdates(element, currentTime);
+            if (!updates) {
+              return;
             }
+
+            const trimOp: EditOperation = {
+              type: 'element.update',
+              meta: createMeta('user', 'Trim to playhead'),
+              payload: {
+                trackId: track.id,
+                elementId: element.id,
+                updates,
+              },
+              before: {
+                updates: {
+                  trimEnd: element.trimEnd,
+                },
+              },
+            };
+
+            if (!rippleEditingEnabled) {
+              dispatch(trimOp);
+              return;
+            }
+
+            const updatedTrimEnd =
+              typeof updates.trimEnd === 'number' ? updates.trimEnd : element.trimEnd;
+            const originalEffectiveDuration =
+              element.duration - element.trimStart - element.trimEnd;
+            const updatedEffectiveDuration = element.duration - element.trimStart - updatedTrimEnd;
+            const rippleOps = collectTimelineRippleOps(
+              track.id,
+              track.elements,
+              element.id,
+              elementEnd,
+              updatedEffectiveDuration - originalEffectiveDuration,
+            );
+
+            if (rippleOps.length === 0) {
+              dispatch(trimOp);
+              return;
+            }
+
+            dispatchBatch([trimOp, ...rippleOps]);
           },
           disabled: currentTime <= elementStart || currentTime >= elementEnd,
         },
@@ -633,30 +799,41 @@ export const TimelineTrack = memo(function TimelineTrack({
             {
               label: t('timeline.contextMenu.speed05x'),
               onClick: () => {
-                // Slow down to 0.5x
-                const newDuration = element.duration * 2;
-                updateElement(track.id, element.id, { duration: newDuration });
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 0.5),
+                  'Set timeline speed to 0.5x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.speed1x'),
               onClick: () => {
-                // Reset to 1x - restore original duration
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 1),
+                  'Set timeline speed to 1x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.speed2x'),
               onClick: () => {
-                // Speed up to 2x
-                const newDuration = element.duration / 2;
-                updateElement(track.id, element.id, { duration: Math.max(0.1, newDuration) });
+                commitElementUpdate(
+                  element,
+                  buildTimelineSpeedUpdates(element, 2),
+                  'Set timeline speed to 2x',
+                );
               },
             },
             {
               label: t('timeline.contextMenu.reverse'),
               onClick: () => {
-                // TODO: Implement reverse playback
-                logger.info('Reverse playback');
+                commitElementUpdate(
+                  element,
+                  buildTimelineReverseUpdates(element),
+                  'Toggle reverse playback',
+                );
               },
             },
           ],
@@ -784,14 +961,23 @@ export const TimelineTrack = memo(function TimelineTrack({
       currentTime,
       copySelected,
       splitAtPlayhead,
+      splitAndKeepLeft,
+      splitAndKeepRight,
       toggleElementHidden,
       toggleElementMuted,
       separateVideoAudio,
       unseparateVideoAudio,
       removeElement,
-      updateElement,
+      pasteAtTime,
+      dispatch,
+      dispatchBatch,
       t,
       onExecuteAIAction,
+      commitElementUpdate,
+      rippleEditingEnabled,
+      project,
+      selectedElements,
+      track.elements,
     ],
   );
 

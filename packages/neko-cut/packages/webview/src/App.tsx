@@ -6,8 +6,11 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
 import { PropertyPanelInline } from './components/PropertyPanel/PropertyPanelInline';
+import { SubtitlePanelInline } from './components/Subtitles/SubtitlePanelInline';
+import { AssetPanel } from './components/AssetLibrary/AssetPanel';
 import { useEditorStore } from './stores/editor-store';
 import { getLogger } from './utils/logger';
+import { useTranslation } from './i18n/I18nContext';
 
 const logger = getLogger('App');
 
@@ -15,16 +18,24 @@ const logger = getLogger('App');
 const DEFAULT_PREVIEW_RATIO = 0.5; // 默认 Preview 占 50%
 const MIN_PREVIEW_RATIO = 0.2; // Preview 最小 20%
 const MAX_PREVIEW_RATIO = 0.8; // Preview 最大 80%
+const DEFAULT_WORKSPACE_PANEL_WIDTH = 320;
+const MIN_WORKSPACE_PANEL_WIDTH = 240;
+const MAX_WORKSPACE_PANEL_WIDTH = 520;
+
+type WorkspacePanelTab = 'assets' | 'subtitles';
 
 function App() {
+  const { t } = useTranslation();
   const {
     project,
     isPlaying,
     currentTime,
+    playbackSpeed,
     seek,
     pause,
     getTotalDuration,
     togglePlayback,
+    setPlaybackSpeed,
     previewQuality,
     setPreviewQuality,
     previewVolume,
@@ -35,10 +46,12 @@ function App() {
     project: state.project,
     isPlaying: state.isPlaying,
     currentTime: state.currentTime,
+    playbackSpeed: state.playbackSpeed,
     seek: state.seek,
     pause: state.pause,
     getTotalDuration: state.getTotalDuration,
     togglePlayback: state.togglePlayback,
+    setPlaybackSpeed: state.setPlaybackSpeed,
     previewQuality: state.previewQuality,
     setPreviewQuality: state.setPreviewQuality,
     previewVolume: state.previewVolume,
@@ -58,6 +71,10 @@ function App() {
   const [isResizing, setIsResizing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [workspacePanelVisible, setWorkspacePanelVisible] = useState(true);
+  const [workspacePanelTab, setWorkspacePanelTab] = useState<WorkspacePanelTab>('assets');
+  const [workspacePanelWidth, setWorkspacePanelWidth] = useState(DEFAULT_WORKSPACE_PANEL_WIDTH);
+  const [isWorkspaceResizing, setIsWorkspaceResizing] = useState(false);
 
   // Cross-extension drag-and-drop: allow dropping generated assets from agent (ADR-5 P1)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -170,6 +187,45 @@ function App() {
     setIsHResizing(false);
   }, []);
 
+  const handleWorkspaceResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsWorkspaceResizing(true);
+  }, []);
+
+  const handleWorkspaceResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isWorkspaceResizing || !rootRef.current) return;
+      const rootRect = rootRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - rootRect.left - 40;
+      setWorkspacePanelWidth(
+        Math.max(MIN_WORKSPACE_PANEL_WIDTH, Math.min(MAX_WORKSPACE_PANEL_WIDTH, newWidth)),
+      );
+    },
+    [isWorkspaceResizing],
+  );
+
+  const handleWorkspaceResizeEnd = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsWorkspaceResizing(false);
+  }, []);
+
+  const workspaceTabs: Array<{ id: WorkspacePanelTab; label: string }> = [
+    { id: 'assets', label: t('assetLibrary.title') || 'Asset Library' },
+    { id: 'subtitles', label: t('subtitles.title') || 'Subtitles' },
+  ];
+
+  const handleWorkspaceTabChange = useCallback((tab: WorkspacePanelTab) => {
+    setWorkspacePanelTab((currentTab) => {
+      if (currentTab === tab) {
+        setWorkspacePanelVisible((visible) => !visible);
+        return currentTab;
+      }
+      setWorkspacePanelVisible(true);
+      return tab;
+    });
+  }, []);
+
   // Playback loop with optimized timing (avoid excessive seek calls)
   // Use refs to avoid restarting the loop when currentTime changes
   const seekRef = useRef(seek);
@@ -195,7 +251,7 @@ function App() {
     const tick = (now: number) => {
       // Calculate elapsed time from playback start for more accurate timing
       const elapsed = (now - startWallTime) / 1000;
-      const newTime = startPlaybackTime + elapsed;
+      const newTime = startPlaybackTime + elapsed * playbackSpeed;
 
       const totalDuration = getTotalDurationRef.current();
 
@@ -223,7 +279,7 @@ function App() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying]); // Only restart loop when play state changes
+  }, [isPlaying, playbackSpeed]); // Restart when play state or preview speed changes
 
   useEffect(() => {
     // Notify VSCode that webview is ready
@@ -248,6 +304,64 @@ function App() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      <div className="w-10 shrink-0 border-r border-[var(--neko-border)] bg-[var(--neko-surface-elevated)] flex flex-col items-center py-2 gap-2">
+        {workspaceTabs.map((tab) => {
+          const isActive = workspacePanelVisible && workspacePanelTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`w-8 h-8 rounded text-[10px] font-medium transition-colors ${
+                isActive
+                  ? 'bg-[var(--neko-accent)] text-white'
+                  : 'text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-list-hoverBackground)] hover:text-[var(--vscode-foreground)]'
+              }`}
+              title={tab.label}
+              onClick={() => handleWorkspaceTabChange(tab.id)}
+            >
+              {tab.id === 'assets' ? 'A' : 'S'}
+            </button>
+          );
+        })}
+      </div>
+
+      {workspacePanelVisible && (
+        <>
+          <div
+            className="shrink-0 flex flex-col border-r border-[var(--neko-border)] bg-[var(--neko-surface)] min-w-0"
+            style={{ width: workspacePanelWidth }}
+          >
+            <div className="h-10 shrink-0 border-b border-[var(--neko-border)] px-3 flex items-center justify-between">
+              <span className="text-[12px] font-medium text-[var(--vscode-foreground)]">
+                {workspaceTabs.find((tab) => tab.id === workspacePanelTab)?.label}
+              </span>
+              <button
+                className="w-6 h-6 rounded text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-list-hoverBackground)] hover:text-[var(--vscode-foreground)]"
+                title="Hide panel"
+                onClick={() => setWorkspacePanelVisible(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {workspacePanelTab === 'assets' ? <AssetPanel /> : <SubtitlePanelInline />}
+            </div>
+          </div>
+
+          <div
+            onPointerDown={handleWorkspaceResizeStart}
+            onPointerMove={handleWorkspaceResizeMove}
+            onPointerUp={handleWorkspaceResizeEnd}
+            className={`w-1 shrink-0 cursor-ew-resize transition-colors ${
+              isWorkspaceResizing
+                ? 'bg-[var(--neko-accent)]'
+                : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
+            }`}
+            style={{ touchAction: 'none' }}
+          />
+        </>
+      )}
+
       {/* Left: Preview + Timeline (vertical split) */}
       <div ref={containerRef} className="flex flex-col flex-1 min-w-0">
         {/* Preview Panel with Controls */}
@@ -262,8 +376,10 @@ function App() {
             currentTime={currentTime}
             totalDuration={getTotalDuration()}
             isPlaying={isPlaying}
+            playbackSpeed={playbackSpeed}
             seek={seek}
             togglePlayback={togglePlayback}
+            setPlaybackSpeed={setPlaybackSpeed}
             previewQuality={previewQuality}
             setPreviewQuality={setPreviewQuality}
             previewVolume={previewVolume}

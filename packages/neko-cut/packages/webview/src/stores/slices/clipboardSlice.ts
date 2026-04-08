@@ -32,6 +32,11 @@ interface SelectionDependency {
 
 interface DispatchDependency {
   dispatch: (op: EditOperation) => void;
+  dispatchBatch: (ops: EditOperation[]) => void;
+}
+
+interface UIStateDependency {
+  rippleEditingEnabled: boolean;
 }
 
 // =============================================================================
@@ -97,12 +102,65 @@ function elementToTimeRange(element: TimelineElement): TimeRange {
   };
 }
 
+interface PasteTrackBlock {
+  startTime: number;
+  endTime: number;
+}
+
+function updatePasteTrackBlock(
+  blocks: Map<string, PasteTrackBlock>,
+  trackId: string,
+  startTime: number,
+  duration: number,
+): void {
+  const endTime = startTime + duration;
+  const current = blocks.get(trackId);
+
+  if (!current) {
+    blocks.set(trackId, { startTime, endTime });
+    return;
+  }
+
+  blocks.set(trackId, {
+    startTime: Math.min(current.startTime, startTime),
+    endTime: Math.max(current.endTime, endTime),
+  });
+}
+
+function collectPasteRippleOps(track: TimelineTrack, block: PasteTrackBlock): EditOperation[] {
+  const delta = block.endTime - block.startTime;
+  if (delta <= 0) return [];
+
+  return track.elements
+    .filter((element) => {
+      const elementRange = elementToTimeRange(element);
+      const elementEnd = elementRange.startTime + elementRange.duration;
+      return element.startTime >= block.startTime || elementEnd > block.startTime;
+    })
+    .map((element) => ({
+      type: 'element.update' as const,
+      meta: createMeta('system', 'Ripple paste shift'),
+      payload: {
+        trackId: track.id,
+        elementId: element.id,
+        updates: {
+          startTime: element.startTime + delta,
+        },
+      },
+      before: {
+        updates: {
+          startTime: element.startTime,
+        },
+      },
+    }));
+}
+
 // =============================================================================
 // Slice 创建器
 // =============================================================================
 
 export const createClipboardSlice: StateCreator<
-  ClipboardSlice & ProjectDependency & SelectionDependency & DispatchDependency,
+  ClipboardSlice & ProjectDependency & SelectionDependency & DispatchDependency & UIStateDependency,
   [],
   [],
   ClipboardSlice
@@ -128,7 +186,7 @@ export const createClipboardSlice: StateCreator<
   },
 
   pasteAtTime: (time) => {
-    const { clipboard, project, dispatch } = get();
+    const { clipboard, project, dispatch, dispatchBatch, rippleEditingEnabled } = get();
     if (!clipboard || clipboard.items.length === 0 || !project) return;
 
     const minStart = Math.min(...clipboard.items.map((x) => x.element.startTime));
@@ -145,6 +203,7 @@ export const createClipboardSlice: StateCreator<
 
     // Track pending elements per track (for collision detection across paste items)
     const pendingElements = new Map<string, TimeRange[]>();
+    const pasteTrackBlocks = new Map<string, PasteTrackBlock>();
 
     for (const item of clipboard.items) {
       let trackId: string;
@@ -192,13 +251,14 @@ export const createClipboardSlice: StateCreator<
       // Get pending elements already computed for this track
       const pending = pendingElements.get(trackId) || [];
 
-      // Find non-overlapping position
-      const actualStartTime = findNonOverlappingPositionOnTrack(
-        existingElements,
-        pending,
-        desiredStartTime,
-        elementDuration,
-      );
+      const actualStartTime = rippleEditingEnabled
+        ? desiredStartTime
+        : findNonOverlappingPositionOnTrack(
+            existingElements,
+            pending,
+            desiredStartTime,
+            elementDuration,
+          );
 
       // Record pending element for future collision checks
       if (!pendingElements.has(trackId)) {
@@ -208,6 +268,7 @@ export const createClipboardSlice: StateCreator<
         startTime: actualStartTime,
         duration: elementDuration,
       });
+      updatePasteTrackBlock(pasteTrackBlocks, trackId, actualStartTime, elementDuration);
 
       // Build element with new ID
       const elementId = generateId();
@@ -222,12 +283,28 @@ export const createClipboardSlice: StateCreator<
       });
     }
 
-    // Dispatch single clipboard.paste operation
-    dispatch({
+    const pasteOp: EditOperation = {
       type: 'clipboard.paste',
       meta: createMeta('user', `Paste ${pasteItems.length} element(s)`),
       payload: { items: pasteItems },
+    };
+
+    if (!rippleEditingEnabled) {
+      dispatch(pasteOp);
+      return;
+    }
+
+    const rippleOps = Array.from(pasteTrackBlocks.entries()).flatMap(([trackId, block]) => {
+      const track = project.tracks.find((candidate) => candidate.id === trackId);
+      return track ? collectPasteRippleOps(track, block) : [];
     });
+
+    if (rippleOps.length === 0) {
+      dispatch(pasteOp);
+      return;
+    }
+
+    dispatchBatch([...rippleOps, pasteOp]);
   },
 
   clearClipboard: () => set({ clipboard: null }),

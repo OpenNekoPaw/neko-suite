@@ -157,140 +157,143 @@
 
 ## 4. 当前不能完全满足创作需求的关键问题
 
-### 4.1 导出闭环没有完全打通
+### 4.1 编辑态 / 预览态 / 导出态的 P0 一致性已基本收敛
 
-这是当前最关键的问题。
+前几轮 P0 已经补上以下真实不一致：
 
-在导出构建阶段，元素上的 `effects` 被明确置为空：
+- `transitionIn/transitionOut` 已统一为主字段，预览与导出保留 legacy 兼容读取
+- `effects / colorCorrection / masks` 已补齐导出转换，不再在导出阶段清空
+- 暂停态高质量预览已按元素 `speed / reverse / timeRemap` 计算 `sourceTime`
 
-```ts
-effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
-```
+本轮又补齐了播放态预览的全局倍率契约：
 
-这意味着：
+- Webview store 新增全局 `playbackSpeed`
+- `PreviewControls` 暴露播放倍率入口
+- `App.tsx` 的本地播放时钟按 `playbackSpeed` 推进
+- `PreviewPanel` 在 `resume` 与运行中变更时，把同一倍率发送给 `projectPlayback:resume/speed`
 
-- 编辑态可见的特效，不一定能正确导出
-- 色彩校正虽然在预览态被合并进 effect 流，但导出未完整映射
-- mask 也没有在导出转换里显式映射
+这里需要明确一个重要分层：
+
+- `projectPlayback:*` 的 `speed` 表示预览流的全局播放倍率
+- 元素自身的 `speed / reverse / timeRemap` 仍然属于 clip 级时间映射
 
 结论：
 
-- “能调”不等于“能稳定导出”
-- 当前导出闭环尚未满足专业创作需求
+- 之前的 P0 “字段一致性”问题已基本完成
+- 当前更像是后续可继续优化的产品表达问题，而不再是阻塞闭环的模型缺口
 
 对应实现：
 
-- `packages/neko-cut/packages/extension/src/services/ExportService.ts`
+- `packages/neko-cut/packages/webview/src/App.tsx`
+- `packages/neko-cut/packages/webview/src/components/PreviewControls.tsx`
+- `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
+- `packages/neko-cut/packages/webview/src/stores/slices/playbackSlice.ts`
+- `packages/neko-cut/packages/extension/src/services/MediaService.ts`
+- `packages/neko-engine/packages/host-api/src/controllers/utils.rs`
+- `packages/neko-engine/packages/engine-kernel/src/services/impls/stream_loop.rs`
 
-### 4.2 转场字段存在命名不一致风险
+### 4.2 暂停态高质量预览仍有协议层限制，但已补齐前端显示闭环
 
-属性面板写入的是：
+暂停态高质量预览当前采用两层策略：
 
-- `inTransition`
-- `outTransition`
+- `media` 仍走 `renderCompositeFrame()` 的原生 composite
+- `text / subtitle / shape` 改为在 paused canvas 上方叠加 Webview overlay
+- `scene3d` 可见时，不再用 media-only composite 覆盖 canvas，而是保留引擎 seek 帧
 
-但预览和导出使用的是：
+因此，用户侧的暂停预览一致性已明显改善，但底层仍有一个客观限制：
 
-- `transitionIn`
-- `transitionOut`
+- Extension `buildTimelineForComposite()` 仍把 composite request 硬编码成 `type: 'media'`
+- Engine `timeline::composite()` 也仍跳过 non-media elements
 
-这说明当前存在模型字段不一致问题，容易导致：
+结论：
 
-- UI 改了但预览不生效
-- 预览生效但导出不一致
-- 存档后字段混乱
-
-这是一个结构性问题，不是单纯 UI Bug。
-
-对应实现：
-
-- `packages/neko-cut/packages/webview/src/components/PropertyPanel/PropertyPanel.tsx`
-- `packages/neko-cut/packages/webview/src/components/PreviewPanel/compositeUtils.ts`
-- `packages/neko-cut/packages/extension/src/services/ExportService.ts`
-
-### 4.3 暂停态高质量合成只覆盖 media 元素
-
-暂停时的高质量合成逻辑 `buildCompositeLayers()` 当前只处理：
-
-- `media`
-
-没有覆盖：
-
-- `text`
-- `subtitle`
-- `shape`
-- `scene3d`
-
-这意味着在“暂停检查画面细节”这个专业剪辑高频场景里，所见未必即所得。
+- 当前 paused preview 在显示层已经覆盖 `text / subtitle / shape / scene3d`
+- 但若后续要实现真正统一的“原生 HQ composite”，仍需要扩展 Extension/Engine 的 composite 协议
 
 对应实现：
 
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/compositeUtils.ts`
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
+- `packages/neko-cut/packages/extension/src/services/MediaService.ts`
 
-### 4.4 波纹编辑只覆盖删除场景
+### 4.3 波纹编辑已进入可用态，但还不是完整专业语义
 
-当前 `rippleEditingEnabled` 只在 `removeElement()` 中使用。
+当前 `rippleEditingEnabled` 已不再只覆盖删除场景。
 
 已覆盖：
 
 - 删除元素后，后续元素整体前移
+- 插入素材时推开后续元素
+- 粘贴素材时可按 ripple 语义整体推开后续元素
+- 单元素同轨拖动时带动后续元素
+- 右侧 trim 改变有效时长时推动后续元素
+- `trimToPlayhead()` 已接入 undo/redo，并可在 ripple 模式下前移后续元素
+- `splitAtPlayhead()` 后将右侧片段与后续元素整体后移
 
 未见完整覆盖：
 
-- 插入素材
-- 拖动素材
-- 裁切长度变化
-- 分割后的自动错位修正
+- 跨多选组合的复杂 ripple 语义
+- 更精细的 insert / overwrite 模式切换
+- 左 trim、跨轨拖动等场景下的专业级边界规则
 
-所以它现在更像“局部波纹删除”，而不是完整的 ripple edit 系统。
+所以它已经形成“基础 ripple edit 闭环”，但还不是完整 NLE 级实现。
 
 对应实现：
 
 - `packages/neko-cut/packages/webview/src/stores/slices/elementOpsSlice.ts`
 - `packages/neko-types/src/operations/apply-element.ts`
 
-### 4.5 素材库没有整合进主剪辑工作区
+### 4.4 素材库已嵌入主剪辑工作区，但仍可继续优化交互
 
 仓库中存在独立的素材库 Webview：
 
 - `packages/neko-cut/packages/webview/src/assetLibrary.tsx`
 
-但主编辑界面 `App.tsx` 并没有把素材库嵌入同一工作区。
+本轮已在主编辑界面 `App.tsx` 增加左侧 dock 工作区，并把素材库作为内嵌面板接入。
 
-这会导致创作流程出现割裂：
+因此，之前的创作流割裂点已明显缓解：
 
 - 浏览素材
 - 回到时间线
 - 再进行摆放
 
-对于视频创作工具来说，素材面板通常应成为主工作区组成部分，而不是独立入口。
+当前剩余问题更多偏产品交互层，例如：
 
-### 4.6 字幕能力存在“两套体系”
+- dock 显隐与默认布局策略
+- 与属性面板并存时的空间分配
+- 资产库与时间线之间更强的上下文联动
+
+### 4.5 字幕能力主链路已收敛，但历史双模型组件仍待清理
 
 当前代码同时存在：
 
 - `subtitle` 轨道元素体系
 - 独立 `SubtitlePanel` 组件体系
 
-但主编辑器没有接入 `SubtitlePanel`。
+当前主编辑器已经补上了两条基于时间线 `subtitle` 元素的编辑入口：
 
-同时，拖入字幕文件时走的是：
+- `PropertyPanel` 可直接编辑 `subtitle` 元素文本、字号、字体、颜色、背景、对齐、描边
+- 主工作区新增内嵌 `SubtitlePanel`，通过 adapter 直接读写 timeline `subtitle` 轨 / 元素
 
-- `text` 轨
-
-而不是：
+同时，拖入字幕文件已改为直接创建：
 
 - `subtitle` 轨
+- `subtitle` 元素
 
-这意味着字幕能力还没有统一到一个明确的数据模型和交互入口上。
+这意味着字幕主链路已经统一到 timeline subtitle model。
+
+结论：
+
+- “单一数据模型 + 主编辑入口”这一 P1 目标已基本完成
+- 剩余问题主要是历史 `SubtitlePanel` 抽象层仍保留旧类型适配痕迹，后续可继续内聚或裁剪
 
 对应实现：
 
+- `packages/neko-cut/packages/webview/src/components/PropertyPanel/PropertyPanel.tsx`
 - `packages/neko-cut/packages/webview/src/components/Subtitles/SubtitlePanel.tsx`
 - `packages/neko-cut/packages/webview/src/hooks/useTimelineDragDrop.ts`
 
-### 4.7 AI 创作仍以辅助为主，自动成片能力未完成
+### 4.6 AI 创作仍以辅助为主，自动成片能力未完成
 
 当前 AI 动作中，部分能力已经接通：
 
@@ -312,14 +315,21 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 - `packages/neko-cut/packages/extension/src/services/AIActionHandler.ts`
 
-### 4.8 若干创作操作仍停留在占位实现
+### 4.7 若干创作操作仍停留在半完成状态
 
 例如时间线上下文菜单中的：
 
-- Reverse playback 仍是 TODO
-- 速度菜单部分动作只是直接改 duration，没有完整速度语义闭环
+- speed 预设已改为写入元素 `speed` 契约并按源时长重算 timeline duration
+- reverse 已改为切换元素 `speed.reverse`
+- `split and keep left/right` 已从隐藏快捷键补到显式菜单入口
+- `duplicate` 已改为直接在当前选择末尾后插入副本，不再只是 copy
+- `trim to playhead` 已改为正式操作并具备 ripple 语义
 
-这类功能在演示层足够，但在真实创作里还不够。
+但仍缺少：
+
+- 可视化 speed curve / time remap 编辑
+- slip / slide / roll edit
+- 更完整的速度斜坡与倒放交互
 
 对应实现：
 
@@ -334,8 +344,9 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 - 拖拽定位
 - 裁切
 - 分割
+- 分割并保留左/右侧
 - 跨轨移动
-- 复制粘贴
+- 复制、粘贴、就地重复
 - 轨道管理
 - 吸附与时间线缩放
 - 撤销重做
@@ -344,7 +355,6 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 - 全量波纹编辑
 - 完整 slip / slide / roll 语义
-- 转场一致性
 - 更强的多选编组与批量编辑
 - 复杂时间重映射
 - 更可靠的字幕时间线编辑入口
@@ -367,7 +377,6 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 ### 6.2 尚未满足的核心部分
 
-- 编辑态、预览态、导出态的一致性
 - 高级视觉效果稳定导出
 - 字幕体系统一
 - 素材库与主编辑界面一体化
@@ -399,22 +408,34 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 ### P0
 
-- 统一 `transitionIn/transitionOut` 与 `inTransition/outTransition` 命名
-- 打通 `effects / colorCorrection / masks` 的导出链路
-- 保证编辑态、预览态、导出态字段一致
+- 已完成：统一 `transitionIn/transitionOut` 与 `inTransition/outTransition` 命名
+- 已完成：打通 `effects / colorCorrection / masks` 的导出链路
+- 已完成：暂停态高质量预览已按元素 `speed / reverse / timeRemap` 计算 `sourceTime`
+- 已完成：补齐播放态预览的全局播放倍率状态、UI 与消息契约
+  - 当前 `projectPlayback:resume.speed` / `projectPlayback:speed` 已明确为 stream playback speed
+  - 元素级 `speed` 与全局预览倍率已在实现层分离
 
 ### P1
 
-- 将暂停态高质量合成扩展到 `text / subtitle / shape`
-- 把字幕体系收敛到单一入口和单一模型
-- 将素材库嵌入主编辑工作区
+- 已部分完成：暂停态高质量预览已扩展到 `text / subtitle / shape / scene3d`
+  - `text / subtitle / shape` 通过 Webview overlay 补齐
+  - `scene3d` 通过保留引擎 seek 帧避免被 media-only composite 覆盖
+  - 底层原生 composite 协议仍待后续扩展
+- 已完成：字幕系统整合到 timeline `subtitle` model
+  - Property Panel 与主工作区字幕面板均直接读写 `subtitle` 轨 / 元素
+  - 字幕文件拖入已改为创建 `subtitle` 轨 / `subtitle` 元素
+- 已完成：将素材库嵌入主编辑工作区
+  - 主工作区左侧新增 dock 面板，内含 Assets / Subtitles 两个工作标签
 
 ### P2
 
 - 完整波纹编辑
 - 更丰富的时间编辑语义
+  - 已完成一部分：时间线右键菜单 speed / reverse 已切到正式元素速度契约
+  - 已完成一部分：`split keep left/right`、`duplicate`、`trim to playhead` 已接入显式菜单和正式操作链
+  - 已完成一部分：ripple 已覆盖 paste 与 trim-to-playhead
 - 自动剪辑与自动配乐闭环
-- 反向播放与更完整的速度系统
+- 更完整的速度系统（speed ramp / time remap UI / slip-slide-roll）
 
 ## 9. 最终结论
 

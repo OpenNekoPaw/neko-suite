@@ -9,6 +9,7 @@ export interface PlaybackSlice {
   // State
   isPlaying: boolean;
   currentTime: number;
+  playbackSpeed: number;
   frameAlignEnabled: boolean;
 
   // Audio State
@@ -19,6 +20,7 @@ export interface PlaybackSlice {
   play: () => void;
   pause: () => void;
   togglePlayback: () => void;
+  setPlaybackSpeed: (speed: number) => void;
   seek: (time: number, fps?: number) => void;
   seekToFrame: (time: number, fps?: number) => void;
   toggleFrameAlign: () => void;
@@ -35,6 +37,7 @@ export const createPlaybackSlice: StateCreator<PlaybackSlice, [], [], PlaybackSl
   // Initial state
   isPlaying: false,
   currentTime: 0,
+  playbackSpeed: 1,
   frameAlignEnabled: false,
 
   // Audio initial state
@@ -47,6 +50,11 @@ export const createPlaybackSlice: StateCreator<PlaybackSlice, [], [], PlaybackSl
   pause: () => set({ isPlaying: false }),
 
   togglePlayback: () => set((state) => ({ isPlaying: !state.isPlaying })),
+
+  setPlaybackSpeed: (speed) => {
+    const normalizedSpeed = Number.isFinite(speed) ? Math.max(0.1, Math.min(4, speed)) : 1;
+    set({ playbackSpeed: normalizedSpeed });
+  },
 
   seek: (time, fps = 30) => {
     const { frameAlignEnabled } = get();

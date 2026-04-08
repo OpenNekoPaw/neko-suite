@@ -449,7 +449,7 @@ export class ExportService implements vscode.Disposable {
    * from the JVI file format in several ways:
    * - Audio volume/pan must be plain numbers (not {baseValue: N} objects)
    * - Transition type maps to "transitionType" (not "type")
-   * - EffectParams schema differs from EffectInstance
+   * - Effects must be sanitized to JSON-serializable ElementEffect payloads
    */
   private async buildTimeline(
     project: ProjectData,
@@ -497,7 +497,8 @@ export class ExportService implements vscode.Disposable {
       trimEnd: this.asNumber(el.trimEnd, 0),
       opacity: this.asNumber(el.opacity, 1.0),
       blendMode: el.blendMode ?? 'normal',
-      effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
+      effects: this.sanitizeEffects(el.effects),
+      masks: this.sanitizeMasks(el.masks),
       muted: el.muted ?? false,
       hidden: el.hidden ?? false,
       locked: el.locked ?? false,
@@ -578,7 +579,7 @@ export class ExportService implements vscode.Disposable {
     }
 
     // Transitions — map "type" → "transitionType", easing to PascalCase
-    const transIn = el.transitionIn as Record<string, unknown> | undefined;
+    const transIn = this.getLegacyCompatibleTransition(el, 'transitionIn');
     if (transIn && typeof transIn === 'object') {
       result.transitionIn = {
         transitionType: transIn.type ?? '',
@@ -586,7 +587,7 @@ export class ExportService implements vscode.Disposable {
         easing: this.mapEasing(transIn.easing),
       };
     }
-    const transOut = el.transitionOut as Record<string, unknown> | undefined;
+    const transOut = this.getLegacyCompatibleTransition(el, 'transitionOut');
     if (transOut && typeof transOut === 'object') {
       result.transitionOut = {
         transitionType: transOut.type ?? '',
@@ -613,6 +614,226 @@ export class ExportService implements vscode.Disposable {
       fadeOutCurve: this.mapEasing(audio.fadeOutCurve),
       gain: this.asNumber(audio.gain, 0),
     };
+  }
+
+  private sanitizeEffects(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((effect): effect is Record<string, unknown> => !!effect && typeof effect === 'object')
+      .map((effect) => {
+        const parameters = this.sanitizeEffectParameters(
+          effect.parameters,
+          effect.animatedParameters,
+        );
+
+        return {
+          id: typeof effect.id === 'string' ? effect.id : '',
+          type: typeof effect.type === 'string' ? effect.type : 'custom',
+          enabled: effect.enabled !== false,
+          order: this.asNumber(effect.order, 0),
+          parameters,
+        };
+      })
+      .sort((a, b) => this.asNumber(a.order, 0) - this.asNumber(b.order, 0));
+  }
+
+  private sanitizeMasks(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((mask): mask is Record<string, unknown> => !!mask && typeof mask === 'object')
+      .filter((mask) => mask.enabled !== false)
+      .map((mask) => {
+        const shape = this.sanitizeMaskShape(mask.shape);
+        if (!shape) {
+          return null;
+        }
+
+        const animation =
+          mask.animation && typeof mask.animation === 'object' && !Array.isArray(mask.animation)
+            ? (mask.animation as Record<string, unknown>)
+            : undefined;
+
+        return {
+          shape,
+          inverted: mask.inverted === true,
+          feather: this.getAnimatedMaskBaseValue(animation?.feather, mask.feather, 0),
+          expansion: this.getAnimatedMaskBaseValue(animation?.expansion, mask.expansion, 0),
+          opacity: this.getAnimatedMaskBaseValue(animation?.opacity, mask.opacity, 100) / 100,
+          blendMode: typeof mask.blendMode === 'string' ? mask.blendMode : 'add',
+          order: this.asNumber(mask.order, 0),
+        };
+      })
+      .filter((mask): mask is Record<string, unknown> => mask !== null)
+      .sort((a, b) => this.asNumber(a.order, 0) - this.asNumber(b.order, 0))
+      .map(({ order: _order, ...mask }) => mask);
+  }
+
+  private sanitizeMaskShape(shape: unknown): Record<string, unknown> | undefined {
+    if (!shape || typeof shape !== 'object' || Array.isArray(shape)) {
+      return undefined;
+    }
+
+    const record = shape as Record<string, unknown>;
+    switch (record.type) {
+      case 'rectangle':
+        return {
+          type: 'rectangle',
+          centerX: this.asNumber(record.centerX, 50),
+          centerY: this.asNumber(record.centerY, 50),
+          width: this.asNumber(record.width, 50),
+          height: this.asNumber(record.height, 50),
+          rotation: this.asNumber(record.rotation, 0),
+          cornerRadius: this.asNumber(record.cornerRadius, 0),
+        };
+      case 'ellipse':
+        return {
+          type: 'ellipse',
+          centerX: this.asNumber(record.centerX, 50),
+          centerY: this.asNumber(record.centerY, 50),
+          width: this.asNumber(record.width, 50),
+          height: this.asNumber(record.height, 50),
+          rotation: this.asNumber(record.rotation, 0),
+        };
+      case 'polygon':
+        return {
+          type: 'polygon',
+          points: this.sanitizePointArray(record.points),
+        };
+      case 'bezier':
+        return {
+          type: 'bezier',
+          controlPoints: this.sanitizeBezierControlPoints(record.points),
+          closed: record.closed !== false,
+        };
+      default:
+        return undefined;
+    }
+  }
+
+  private sanitizePointArray(value: unknown): number[][] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((point): point is Record<string, unknown> => !!point && typeof point === 'object')
+      .map((point) => [this.asNumber(point.x, 0), this.asNumber(point.y, 0)]);
+  }
+
+  private sanitizeBezierControlPoints(value: unknown): Array<Record<string, number[]>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((point): point is Record<string, unknown> => !!point && typeof point === 'object')
+      .map((point) => {
+        const anchor =
+          point.anchor && typeof point.anchor === 'object' && !Array.isArray(point.anchor)
+            ? (point.anchor as Record<string, unknown>)
+            : {};
+        const handleIn =
+          point.handleIn && typeof point.handleIn === 'object' && !Array.isArray(point.handleIn)
+            ? (point.handleIn as Record<string, unknown>)
+            : {};
+        const handleOut =
+          point.handleOut && typeof point.handleOut === 'object' && !Array.isArray(point.handleOut)
+            ? (point.handleOut as Record<string, unknown>)
+            : {};
+
+        return {
+          position: [this.asNumber(anchor.x, 0), this.asNumber(anchor.y, 0)],
+          handleIn: [this.asNumber(handleIn.x, 0), this.asNumber(handleIn.y, 0)],
+          handleOut: [this.asNumber(handleOut.x, 0), this.asNumber(handleOut.y, 0)],
+        };
+      });
+  }
+
+  private getAnimatedMaskBaseValue(
+    animationProp: unknown,
+    fallback: unknown,
+    defaultValue: number,
+  ): number {
+    if (animationProp && typeof animationProp === 'object' && !Array.isArray(animationProp)) {
+      const baseValue = (animationProp as Record<string, unknown>).baseValue;
+      return this.asNumber(baseValue, this.asNumber(fallback, defaultValue));
+    }
+
+    return this.asNumber(fallback, defaultValue);
+  }
+
+  private sanitizeEffectParameters(
+    parameters: unknown,
+    animatedParameters: unknown,
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+
+    if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
+      for (const [key, value] of Object.entries(parameters as Record<string, unknown>)) {
+        const serialized = this.toSerializableEffectValue(value);
+        if (serialized !== undefined) {
+          result[key] = serialized;
+        }
+      }
+    }
+
+    if (
+      animatedParameters &&
+      typeof animatedParameters === 'object' &&
+      !Array.isArray(animatedParameters)
+    ) {
+      for (const [key, value] of Object.entries(animatedParameters as Record<string, unknown>)) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          continue;
+        }
+
+        // Export currently supports static effect params only. Use baseValue as
+        // the least-surprising fallback so animated effects still render.
+        const baseValue = this.toSerializableEffectValue(
+          (value as Record<string, unknown>).baseValue,
+        );
+        if (baseValue !== undefined) {
+          result[key] = baseValue;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private toSerializableEffectValue(value: unknown): unknown {
+    if (
+      typeof value === 'number' ||
+      typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      value === null
+    ) {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      const serialized = value.map((item) => this.toSerializableEffectValue(item));
+      return serialized.every((item) => item !== undefined) ? serialized : undefined;
+    }
+
+    return undefined;
+  }
+
+  private getLegacyCompatibleTransition(
+    element: Record<string, unknown>,
+    key: 'transitionIn' | 'transitionOut',
+  ): Record<string, unknown> | undefined {
+    const legacyKey = key === 'transitionIn' ? 'inTransition' : 'outTransition';
+    const transition = element[key] ?? element[legacyKey];
+    return transition && typeof transition === 'object'
+      ? (transition as Record<string, unknown>)
+      : undefined;
   }
 
   /**
