@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createReadDocumentStage } from '../stages/read-document';
 import { createParseStoryboardStage } from '../stages/parse-storyboard';
+import { createImportStoryboardToCanvasStage } from '../stages/import-storyboard-to-canvas';
 import { createGeneratePromptsStage } from '../stages/generate-prompts';
 import { createBatchGenerateStage } from '../stages/batch-generate';
 import { createArrangeOnTimelineStage } from '../stages/arrange-on-timeline';
@@ -231,6 +232,54 @@ describe('generatePrompts stage', () => {
       promptOptimizer: { optimizePrompt: async () => '' },
     });
     await expect(stage.execute({})).rejects.toThrow('No scenes available');
+  });
+});
+
+// =============================================================================
+// importStoryboardToCanvas
+// =============================================================================
+
+describe('importStoryboardToCanvas stage', () => {
+  it('should no-op when stage is disabled', async () => {
+    const importStoryboard = vi.fn();
+    const stage = createImportStoryboardToCanvasStage({
+      storyboardCanvasSink: { importStoryboard },
+    });
+
+    const ctx: PipelineContext = {
+      source: '/tmp/script.fountain',
+      sourceFormat: 'fountain',
+      scenePlans: [{ sceneId: 'scene-1' }],
+    };
+
+    const result = await stage.execute(ctx);
+    expect(result).toEqual(ctx);
+    expect(importStoryboard).not.toHaveBeenCalled();
+  });
+
+  it('should import semantic storyboard when enabled', async () => {
+    const canvasStoryboard = {
+      mode: 'semantic' as const,
+      scenesCreated: 1,
+      totalShots: 2,
+      scenes: [{ sourceSceneId: 'scene-1', sceneNodeId: 'node-1', shotIds: ['shot-1', 'shot-2'] }],
+    };
+    const importStoryboard = vi.fn().mockResolvedValue(canvasStoryboard);
+    const stage = createImportStoryboardToCanvasStage({
+      storyboardCanvasSink: { importStoryboard },
+    });
+
+    const result = await stage.execute({
+      source: '/tmp/script.fountain',
+      sourceFormat: 'fountain',
+      scenePlans: [{ sceneId: 'scene-1' }],
+      stageParams: {
+        importStoryboardToCanvas: { enabled: true },
+      },
+    });
+
+    expect(importStoryboard).toHaveBeenCalled();
+    expect(result.canvasStoryboard).toEqual(canvasStoryboard);
   });
 });
 

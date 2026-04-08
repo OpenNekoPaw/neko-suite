@@ -8,7 +8,7 @@
  *   L0 Atomic       → MediaGeneration / NekoCutAPI / Parser (existing)
  */
 
-import type { StoryScenePlan, StoryShotPlan } from '@neko/shared';
+import type { CreatedCanvasStoryboard, StoryScenePlan, StoryShotPlan } from '@neko/shared';
 
 // =============================================================================
 // Stage Types
@@ -150,6 +150,8 @@ export interface PipelineContext {
   scenes?: StoryboardScene[];
   /** Deterministic semantic scene plans (for downstream canvas import) */
   scenePlans?: readonly StoryScenePlan[];
+  /** Result of importing semantic storyboard into canvas */
+  canvasStoryboard?: CreatedCanvasStoryboard;
 
   // — Generation —
   /** Batch ID for tracking parallel generation */

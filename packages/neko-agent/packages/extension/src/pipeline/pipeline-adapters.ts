@@ -6,7 +6,14 @@
  */
 
 import * as vscode from 'vscode';
-import type { NekoCutAPI, NekoStoryAPI, StoryScenePlan } from '@neko/shared';
+import {
+  createStoryboardPayload,
+  type CreatedCanvasStoryboard,
+  type NekoCanvasAPI,
+  type NekoCutAPI,
+  type NekoStoryAPI,
+  type StoryScenePlan,
+} from '@neko/shared';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
@@ -43,6 +50,15 @@ export interface IStructuredStoryPlanner {
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     globalStyle?: string;
   }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined>;
+}
+
+export interface IStoryboardCanvasSink {
+  importStoryboard(ctx: {
+    source?: string;
+    sourceFormat?: 'fountain' | 'freeform' | 'document';
+    scenePlans?: readonly StoryScenePlan[];
+    stageParams?: Record<string, Record<string, unknown>>;
+  }): Promise<CreatedCanvasStoryboard | undefined>;
 }
 
 export interface ILLMAnalyzer {
@@ -294,6 +310,64 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
     });
 
     return { scenes, scenePlans };
+  }
+}
+
+export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
+  async importStoryboard(ctx: {
+    source?: string;
+    sourceFormat?: 'fountain' | 'freeform' | 'document';
+    scenePlans?: readonly StoryScenePlan[];
+    stageParams?: Record<string, Record<string, unknown>>;
+  }): Promise<CreatedCanvasStoryboard | undefined> {
+    if (
+      ctx.sourceFormat !== 'fountain' ||
+      !ctx.source ||
+      !ctx.scenePlans ||
+      ctx.scenePlans.length === 0
+    ) {
+      return undefined;
+    }
+
+    const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.nekostory');
+    if (!canvasExt || !storyExt) {
+      throw new Error(
+        'importStoryboardToCanvas: neko-story or neko-canvas extension is unavailable',
+      );
+    }
+
+    const canvasApi = canvasExt.isActive
+      ? canvasExt.exports
+      : ((await canvasExt.activate()) as NekoCanvasAPI);
+    const storyApi = storyExt.isActive
+      ? storyExt.exports
+      : ((await storyExt.activate()) as NekoStoryAPI);
+
+    const scriptIndex = storyApi.getScriptIndex(ctx.source);
+    if (!scriptIndex) {
+      throw new Error(
+        'importStoryboardToCanvas: ScriptIndex unavailable. Open the screenplay first.',
+      );
+    }
+
+    const sceneIds = new Set(ctx.scenePlans.map((plan) => plan.sceneId));
+    const filteredIndex = {
+      ...scriptIndex,
+      scenes: scriptIndex.scenes.filter((scene) => sceneIds.has(scene.sceneId)),
+    };
+
+    const stageParams = ctx.stageParams?.['importStoryboardToCanvas'] ?? {};
+    const payload = createStoryboardPayload(filteredIndex, {
+      mode: 'semantic',
+      scenesLimit: filteredIndex.scenes.length,
+      scenePlans: ctx.scenePlans,
+    });
+
+    return canvasApi.storyboard.import(payload, {
+      startX: stageParams['startX'] as number | undefined,
+      startY: stageParams['startY'] as number | undefined,
+    });
   }
 }
 

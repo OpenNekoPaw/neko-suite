@@ -16,6 +16,7 @@ interface PipelineContext {
   source?: string;
   sourceFormat?: 'fountain' | 'freeform' | 'document';
   globalStyle?: string;
+  stageParams?: Record<string, Record<string, unknown>>;
   [key: string]: unknown;
 }
 
@@ -79,6 +80,19 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
             type: 'string',
             description: 'Comma-separated stage names to skip (e.g., "generateMusic,addSubtitles")',
           },
+          importToCanvas: {
+            type: 'boolean',
+            description:
+              'When true and the source is a Fountain screenplay, import semantic ScenePlan/ShotPlan results into the active canvas before media generation.',
+          },
+          canvasStartX: {
+            type: 'number',
+            description: 'Optional initial canvas X position for storyboard import',
+          },
+          canvasStartY: {
+            type: 'number',
+            description: 'Optional initial canvas Y position for storyboard import',
+          },
         },
         required: ['flowId', 'source'],
       },
@@ -88,6 +102,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         const sourceFormat = args['sourceFormat'] as PipelineContext['sourceFormat'];
         const style = args['style'] as string | undefined;
         const skipStagesStr = args['skipStages'] as string | undefined;
+        const importToCanvas = args['importToCanvas'] === true;
 
         const skipStages = skipStagesStr
           ? skipStagesStr
@@ -100,6 +115,15 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
           source,
           sourceFormat,
           globalStyle: style,
+          stageParams: importToCanvas
+            ? {
+                importStoryboardToCanvas: {
+                  enabled: true,
+                  startX: args['canvasStartX'] as number | undefined,
+                  startY: args['canvasStartY'] as number | undefined,
+                },
+              }
+            : undefined,
         };
 
         const handle = deps.startPipeline(flowId, ctx, { skipStages, globalStyle: style });
@@ -210,7 +234,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         const newHandle = deps.startPipeline(
           (result['flowId'] as FlowId) ?? 'flowF',
           ctx as PipelineContext,
-          { skipStages: ['readDocument', 'parseStoryboard'] },
+          { skipStages: ['readDocument', 'parseStoryboard', 'importStoryboardToCanvas'] },
         );
         activePipelines.set(newHandle.id, newHandle);
 
