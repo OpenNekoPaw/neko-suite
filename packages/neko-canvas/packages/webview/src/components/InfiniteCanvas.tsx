@@ -89,6 +89,8 @@ export interface InfiniteCanvasProps {
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   /** Called to auto-layout the shots inside a scene */
   onAutoLayoutSceneShots?: (sceneId: string) => void;
+  /** Called to batch-generate all shots inside a scene */
+  onBatchGenerateSceneShots?: (sceneId: string) => void;
   /** Called to reorder the shots inside a scene */
   onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
 }
@@ -130,6 +132,7 @@ export function InfiniteCanvas({
   onSelectGalleryCellCandidate,
   onAssignSelectedShotsToScene,
   onAutoLayoutSceneShots,
+  onBatchGenerateSceneShots,
   onReorderSceneShots,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -287,6 +290,7 @@ export function InfiniteCanvas({
             onSelectGalleryCellCandidate,
             onAssignSelectedShotsToScene,
             onAutoLayoutSceneShots,
+            onBatchGenerateSceneShots,
             onReorderSceneShots,
             selectedNodeIds,
           });

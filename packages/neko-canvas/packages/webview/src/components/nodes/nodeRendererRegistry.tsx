@@ -69,6 +69,7 @@ export interface NodeRendererContext extends NodeRendererCommonProps {
   onSelectGalleryCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   onAutoLayoutSceneShots?: (sceneId: string) => void;
+  onBatchGenerateSceneShots?: (sceneId: string) => void;
   onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
 }
 
@@ -121,6 +122,7 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
       selectedNodeIds,
       onAssignSelectedShotsToScene,
       onAutoLayoutSceneShots,
+      onBatchGenerateSceneShots,
       onReorderSceneShots,
       ...commonProps
     }) => (
@@ -144,6 +146,7 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
           .map((shot) => ({ id: shot.id, shotNumber: shot.data.shotNumber }))}
         onAssignSelectedShots={onAssignSelectedShotsToScene}
         onAutoLayoutShots={onAutoLayoutSceneShots}
+        onBatchGenerateShots={onBatchGenerateSceneShots}
         onReorderShots={onReorderSceneShots}
       />
     ),

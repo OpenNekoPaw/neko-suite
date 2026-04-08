@@ -36,6 +36,7 @@ export interface SceneGroupNodeProps {
   selectedShotCount?: number;
   onAssignSelectedShots?: (sceneId: string) => void;
   onAutoLayoutShots?: (sceneId: string) => void;
+  onBatchGenerateShots?: (sceneId: string) => void;
   shots?: Array<{ id: string; shotNumber?: number }>;
   onReorderShots?: (sceneId: string, shotIds: string[]) => void;
 }
@@ -58,6 +59,7 @@ export function SceneGroupNode({
   selectedShotCount = 0,
   onAssignSelectedShots,
   onAutoLayoutShots,
+  onBatchGenerateShots,
   shots = [],
   onReorderShots,
 }: SceneGroupNodeProps) {
@@ -166,6 +168,25 @@ export function SceneGroupNode({
               }}
             >
               纳管 {selectedShotCount > 0 ? `(${selectedShotCount})` : ''}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onBatchGenerateShots?.(node.id);
+              }}
+              disabled={shotIds.length === 0}
+              style={{
+                fontSize: 9,
+                padding: '2px 6px',
+                borderRadius: 3,
+                border: '1px solid var(--node-border)',
+                backgroundColor: 'transparent',
+                color: shotIds.length > 0 ? 'var(--neko-fg)' : 'var(--node-fg-secondary)',
+                cursor: shotIds.length > 0 ? 'pointer' : 'not-allowed',
+                opacity: shotIds.length > 0 ? 1 : 0.5,
+              }}
+            >
+              批量生成
             </button>
             <button
               onClick={(e) => {

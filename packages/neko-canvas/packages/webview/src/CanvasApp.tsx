@@ -577,6 +577,19 @@ export function CanvasApp() {
     [autoLayoutSceneShots],
   );
 
+  const handleBatchGenerateSceneShots = useCallback(
+    (sceneId: string) => {
+      const target = nodes.find((node) => node.id === sceneId);
+      if (!target || target.type !== 'scene' || target.data.shotIds.length === 0) return;
+      vscode?.postMessage({
+        type: 'sendToAgent',
+        nodeIds: target.data.shotIds,
+        action: 'batch',
+      });
+    },
+    [nodes],
+  );
+
   const handleReorderSceneShots = useCallback(
     (sceneId: string, shotIds: string[]) => {
       reorderSceneShots(sceneId, shotIds, true);
@@ -1028,6 +1041,7 @@ export function CanvasApp() {
             onSelectGalleryCellCandidate={handleSelectGalleryCellCandidate}
             onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
+            onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
             onReorderSceneShots={handleReorderSceneShots}
             isPanMode={isPanMode}
           />
