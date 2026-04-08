@@ -231,7 +231,7 @@ export declare class NativeEngine {
    */
   captureFrame(source: string, time: number, quality?: number | undefined | null, format?: string | undefined | null): Promise<string>
   /**
-   * Start the embedded HTTP/WebSocket server (full neko-native-http router).
+   * Start the embedded HTTP/WebSocket server (full neko-host-http router).
    *
    * The server provides:
    * - `ws://127.0.0.1:{port}/v1/streams/{stream_id}` — per-stream WebSocket

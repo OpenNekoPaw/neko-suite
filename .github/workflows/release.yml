@@ -139,9 +139,7 @@ jobs:
       # Build native addon
       - name: Build host-napi
         working-directory: packages/neko-engine/packages/host-napi
-        run: |
-          npm run build:ffmpeg-env
-          npx @napi-rs/cli build --platform --release --target ${{ matrix.rust-target }}
+        run: npx napi build --platform --release --target ${{ matrix.rust-target }}
 
       # Package platform VSIX (ORT + FFmpeg bundling handled by script)
       - name: Package platform VSIX

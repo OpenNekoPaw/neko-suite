@@ -11,9 +11,28 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
+    "@neko-engine/host-napi#build:native": {
+      "dependsOn": [],
+      "outputs": ["neko-engine.*.node"],
+      "cache": true
+    },
+    "@neko-engine/host-cli#build:native": {
+      "dependsOn": [],
+      "outputs": [],
+      "cache": true
+    },
+    "neko-engine#build": {
+      "dependsOn": [
+        "@neko-engine/host-napi#build:native",
+        "@neko-engine/host-cli#build:native",
+        "^build"
+      ],
+      "outputs": ["dist/**"],
+      "cache": true
+    },
     "neko-engine#compile": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", "out/**"],
+      "dependsOn": ["@neko-engine/host-napi#build:native", "^build"],
+      "outputs": ["dist/**"],
       "cache": true
     },
     "neko-tools#compile": {
