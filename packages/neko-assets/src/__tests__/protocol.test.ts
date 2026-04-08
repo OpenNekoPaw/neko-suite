@@ -138,4 +138,11 @@ describe('extension activation (NKAS-007)', () => {
   it('sets up error handler during activation', () => {
     expect(extensionSource).toContain('setErrorHandler');
   });
+
+  it('returns a read-only assets extension api', () => {
+    expect(extensionSource).toContain('return createAssetsApi()');
+    expect(extensionSource).toContain('function createAssetsApi()');
+    expect(extensionSource).toContain('getEntityById');
+    expect(extensionSource).toContain('findOccurrences');
+  });
 });

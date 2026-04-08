@@ -15,6 +15,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import {
+  type AssetEntity,
+  type CreativeEntityRef,
+  type NekoAssetsAPI,
+  type OccurrenceIndexEntry,
   AssetLibrary,
   JsonFileStorage,
   RuleClassifier,
@@ -81,7 +85,7 @@ const nodeFileSystem: IFileSystem = {
 // Activation
 // =============================================================================
 
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<NekoAssetsAPI> {
   const rootLogger = createVSCodeLogger('Neko Assets', 'NekoAssets', context);
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
@@ -273,6 +277,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerInternalCommands(context);
 
   logger.info('Extension activated');
+  return createAssetsApi();
 }
 
 // =============================================================================
@@ -1197,6 +1202,81 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
       return library.resolvePath(storedPath);
     }),
   );
+}
+
+function createAssetsApi(): NekoAssetsAPI {
+  return {
+    entities: {
+      async getEntityById(id: string) {
+        if (!library) {
+          return null;
+        }
+
+        try {
+          return await library.getEntity(id);
+        } catch (error) {
+          logger.error('assets api getEntityById failed:', error);
+          return null;
+        }
+      },
+
+      async findOccurrences(entity: CreativeEntityRef) {
+        if (!library) {
+          return [];
+        }
+
+        try {
+          const assetEntity = await library.getEntity(entity.id);
+          if (!assetEntity || !matchesCreativeEntity(assetEntity, entity)) {
+            return [];
+          }
+
+          return [projectAssetEntityOccurrence(assetEntity, entity)];
+        } catch (error) {
+          logger.error('assets api findOccurrences failed:', error);
+          return [];
+        }
+      },
+    },
+  };
+}
+
+function matchesCreativeEntity(assetEntity: AssetEntity, entity: CreativeEntityRef): boolean {
+  if (entity.kind === 'object') {
+    return (
+      assetEntity.id === entity.id &&
+      (assetEntity.category === 'object' || assetEntity.category === 'vehicle')
+    );
+  }
+
+  if (entity.kind === 'character') {
+    return assetEntity.metadata.character?.registryId === entity.id;
+  }
+
+  return false;
+}
+
+function projectAssetEntityOccurrence(
+  assetEntity: AssetEntity,
+  entity: CreativeEntityRef,
+): OccurrenceIndexEntry {
+  const primaryFile = assetEntity.variants[0]?.files[0]?.path;
+  const resolvedPrimaryFile = primaryFile && library ? library.resolvePath(primaryFile) : undefined;
+
+  return {
+    entity: {
+      kind: entity.kind,
+      id: entity.id,
+      label: assetEntity.name,
+    },
+    source: 'asset-entity',
+    sourceId: assetEntity.id,
+    strength: 'confirmed',
+    provenance: 'user',
+    locator: {
+      uri: resolvedPrimaryFile,
+    },
+  };
 }
 
 // =============================================================================

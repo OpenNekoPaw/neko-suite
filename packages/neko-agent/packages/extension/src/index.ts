@@ -31,6 +31,7 @@ import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import type {
   CreativeEntityRef,
   NekoAgentAPI,
+  NekoAssetsAPI,
   NekoCanvasAPI,
   NekoStoryAPI,
   OccurrenceIndexEntry,
@@ -220,6 +221,11 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
 
     if (entity.kind === 'object') {
       const results: OccurrenceIndexEntry[] = [];
+      const assetsApi = await getAssetsApi();
+      if (assetsApi) {
+        results.push(...(await assetsApi.entities.findOccurrences(entity)));
+      }
+
       const canvasApi = await getCanvasApi();
       if (canvasApi) {
         const canvasDocumentUri = await canvasApi.canvas.getActiveDocumentUri();
@@ -271,6 +277,19 @@ async function getCanvasApi(): Promise<NekoCanvasAPI | undefined> {
 
   try {
     return canvasExt.isActive ? canvasExt.exports : ((await canvasExt.activate()) as NekoCanvasAPI);
+  } catch {
+    return undefined;
+  }
+}
+
+async function getAssetsApi(): Promise<NekoAssetsAPI | undefined> {
+  const assetsExt = vscode.extensions.getExtension<NekoAssetsAPI>(NEKO_EXTENSION_IDS.NEKO_ASSETS);
+  if (!assetsExt) {
+    return undefined;
+  }
+
+  try {
+    return assetsExt.isActive ? assetsExt.exports : ((await assetsExt.activate()) as NekoAssetsAPI);
   } catch {
     return undefined;
   }

@@ -18,6 +18,7 @@ import type {
   SceneGroupCanvasNode,
   GalleryCanvasNode,
 } from './canvas';
+import type { AssetEntity } from './asset';
 import type { CreativeEntityRef, OccurrenceIndexEntry } from './occurrence-index';
 import type { ProjectData } from './project';
 
@@ -427,6 +428,28 @@ export interface NekoAgentAPI {
 }
 
 // =============================================================================
+// NekoAssets API
+// =============================================================================
+
+/**
+ * NekoAssets Extension API
+ * Exported by neko-assets extension for read-only entity lookup.
+ */
+export interface NekoAssetsAPI {
+  entities: {
+    /**
+     * Resolve an asset entity by its stable ID.
+     */
+    getEntityById(id: string): Promise<AssetEntity | null>;
+
+    /**
+     * Find projected occurrences for a creative entity inside the asset library.
+     */
+    findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;
+  };
+}
+
+// =============================================================================
 // NekoSketch API
 // =============================================================================
 
@@ -547,6 +570,7 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_CANVAS: 'neko.nekocanvas',
   NEKO_AGENT: 'neko.nekoagent',
   NEKO_STORY: 'neko.neko-story',
+  NEKO_ASSETS: 'neko.neko-assets',
   NEKO_SKETCH: 'neko.neko-sketch',
   NEKO_PUPPET: 'neko.neko-puppet',
   NEKO_AUTH: 'neko.neko-auth',
