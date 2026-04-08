@@ -45,8 +45,15 @@ export const PreviewPanel = memo(function PreviewPanel({
   isCapturingScreenshot: _isCapturingScreenshot,
 }: PreviewPanelProps = {}) {
   const { t } = useTranslation();
-  const { project, currentTime, isPlaying, previewQuality, previewVolume, previewMuted } =
-    useEditorStore();
+  const {
+    project,
+    currentTime,
+    isPlaying,
+    playbackSpeed,
+    previewQuality,
+    previewVolume,
+    previewMuted,
+  } = useEditorStore();
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
   const currentFps = useEditorStore((state) => state.currentFps);
   const performanceStats = useEditorStore((state) => state.performanceStats);
@@ -276,7 +283,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         newTime = playStartTimeRef.current;
       } else {
         const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-        newTime = playStartTimeRef.current + elapsed;
+        newTime = playStartTimeRef.current + elapsed * playbackSpeed;
       }
     }
 
@@ -340,14 +347,14 @@ export const PreviewPanel = memo(function PreviewPanel({
       type: 'media:frameServer:projectPlayback:resume',
       payload: {
         startTime: currentTimeRef.current,
-        speed: 1.0,
+        speed: playbackSpeed,
       },
     });
 
     return () => {
       postMessage({ type: 'media:frameServer:projectPlayback:pause' });
     };
-  }, [frameServerPort, isPlaying]);
+  }, [frameServerPort, isPlaying, playbackSpeed]);
 
   // ==========================================================================
   // Scrubbing & Seek (paused or during playback)
@@ -392,7 +399,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         type: 'media:frameServer:projectPlayback:resume',
         payload: {
           startTime: currentTime,
-          speed: 1.0,
+          speed: playbackSpeed,
         },
       });
     } else {
@@ -405,7 +412,7 @@ export const PreviewPanel = memo(function PreviewPanel({
         },
       });
     }
-  }, [currentTime, isPlaying, isInitialized, project]);
+  }, [currentTime, isPlaying, isInitialized, project, playbackSpeed]);
 
   // ==========================================================================
   // Composite High-Quality Frame (when paused)
@@ -556,6 +563,18 @@ export const PreviewPanel = memo(function PreviewPanel({
       payload: { projectData: project },
     });
   }, [project, isPlaying, frameServerPort]);
+
+  useEffect(() => {
+    if (!frameServerPort || !isPlaying) return;
+
+    playStartTimeRef.current = currentTimeRef.current;
+    playWallTimeRef.current = performance.now();
+
+    postMessage({
+      type: 'media:frameServer:projectPlayback:speed',
+      payload: { speed: playbackSpeed },
+    });
+  }, [playbackSpeed, frameServerPort, isPlaying]);
 
   // ==========================================================================
   // Screenshot Capture

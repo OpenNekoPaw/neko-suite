@@ -21,10 +21,12 @@ function App() {
     project,
     isPlaying,
     currentTime,
+    playbackSpeed,
     seek,
     pause,
     getTotalDuration,
     togglePlayback,
+    setPlaybackSpeed,
     previewQuality,
     setPreviewQuality,
     previewVolume,
@@ -35,10 +37,12 @@ function App() {
     project: state.project,
     isPlaying: state.isPlaying,
     currentTime: state.currentTime,
+    playbackSpeed: state.playbackSpeed,
     seek: state.seek,
     pause: state.pause,
     getTotalDuration: state.getTotalDuration,
     togglePlayback: state.togglePlayback,
+    setPlaybackSpeed: state.setPlaybackSpeed,
     previewQuality: state.previewQuality,
     setPreviewQuality: state.setPreviewQuality,
     previewVolume: state.previewVolume,
@@ -195,7 +199,7 @@ function App() {
     const tick = (now: number) => {
       // Calculate elapsed time from playback start for more accurate timing
       const elapsed = (now - startWallTime) / 1000;
-      const newTime = startPlaybackTime + elapsed;
+      const newTime = startPlaybackTime + elapsed * playbackSpeed;
 
       const totalDuration = getTotalDurationRef.current();
 
@@ -223,7 +227,7 @@ function App() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying]); // Only restart loop when play state changes
+  }, [isPlaying, playbackSpeed]); // Restart when play state or preview speed changes
 
   useEffect(() => {
     // Notify VSCode that webview is ready
@@ -262,8 +266,10 @@ function App() {
             currentTime={currentTime}
             totalDuration={getTotalDuration()}
             isPlaying={isPlaying}
+            playbackSpeed={playbackSpeed}
             seek={seek}
             togglePlayback={togglePlayback}
+            setPlaybackSpeed={setPlaybackSpeed}
             previewQuality={previewQuality}
             setPreviewQuality={setPreviewQuality}
             previewVolume={previewVolume}

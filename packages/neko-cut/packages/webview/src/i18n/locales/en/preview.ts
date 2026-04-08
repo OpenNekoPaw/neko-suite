@@ -12,6 +12,7 @@ export const preview = {
   'preview.qualityOptions.high': 'High',
   'preview.qualityOptions.medium': 'Medium',
   'preview.qualityOptions.low': 'Low',
+  'preview.playbackSpeed': 'Playback Speed',
 
   'preview.resolution.label': 'Resolution',
   'preview.resolution.720p': '720P (1280×720)',

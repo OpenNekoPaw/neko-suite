@@ -157,58 +157,42 @@
 
 ## 4. 当前不能完全满足创作需求的关键问题
 
-### 4.1 导出闭环没有完全打通
+### 4.1 编辑态 / 预览态 / 导出态的 P0 一致性已基本收敛
 
-这是当前最关键的问题。
+前几轮 P0 已经补上以下真实不一致：
 
-在导出构建阶段，元素上的 `effects` 被明确置为空：
+- `transitionIn/transitionOut` 已统一为主字段，预览与导出保留 legacy 兼容读取
+- `effects / colorCorrection / masks` 已补齐导出转换，不再在导出阶段清空
+- 暂停态高质量预览已按元素 `speed / reverse / timeRemap` 计算 `sourceTime`
 
-```ts
-effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
-```
+本轮又补齐了播放态预览的全局倍率契约：
 
-这意味着：
+- Webview store 新增全局 `playbackSpeed`
+- `PreviewControls` 暴露播放倍率入口
+- `App.tsx` 的本地播放时钟按 `playbackSpeed` 推进
+- `PreviewPanel` 在 `resume` 与运行中变更时，把同一倍率发送给 `projectPlayback:resume/speed`
 
-- 编辑态可见的特效，不一定能正确导出
-- 色彩校正虽然在预览态被合并进 effect 流，但导出未完整映射
-- mask 也没有在导出转换里显式映射
+这里需要明确一个重要分层：
+
+- `projectPlayback:*` 的 `speed` 表示预览流的全局播放倍率
+- 元素自身的 `speed / reverse / timeRemap` 仍然属于 clip 级时间映射
 
 结论：
 
-- “能调”不等于“能稳定导出”
-- 当前导出闭环尚未满足专业创作需求
+- 之前的 P0 “字段一致性”问题已基本完成
+- 当前更像是后续可继续优化的产品表达问题，而不再是阻塞闭环的模型缺口
 
 对应实现：
 
-- `packages/neko-cut/packages/extension/src/services/ExportService.ts`
+- `packages/neko-cut/packages/webview/src/App.tsx`
+- `packages/neko-cut/packages/webview/src/components/PreviewControls.tsx`
+- `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
+- `packages/neko-cut/packages/webview/src/stores/slices/playbackSlice.ts`
+- `packages/neko-cut/packages/extension/src/services/MediaService.ts`
+- `packages/neko-engine/packages/host-api/src/controllers/utils.rs`
+- `packages/neko-engine/packages/engine-kernel/src/services/impls/stream_loop.rs`
 
-### 4.2 转场字段存在命名不一致风险
-
-属性面板写入的是：
-
-- `inTransition`
-- `outTransition`
-
-但预览和导出使用的是：
-
-- `transitionIn`
-- `transitionOut`
-
-这说明当前存在模型字段不一致问题，容易导致：
-
-- UI 改了但预览不生效
-- 预览生效但导出不一致
-- 存档后字段混乱
-
-这是一个结构性问题，不是单纯 UI Bug。
-
-对应实现：
-
-- `packages/neko-cut/packages/webview/src/components/PropertyPanel/PropertyPanel.tsx`
-- `packages/neko-cut/packages/webview/src/components/PreviewPanel/compositeUtils.ts`
-- `packages/neko-cut/packages/extension/src/services/ExportService.ts`
-
-### 4.3 暂停态高质量合成只覆盖 media 元素
+### 4.2 暂停态高质量合成只覆盖 media 元素
 
 暂停时的高质量合成逻辑 `buildCompositeLayers()` 当前只处理：
 
@@ -228,7 +212,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/compositeUtils.ts`
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
 
-### 4.4 波纹编辑只覆盖删除场景
+### 4.3 波纹编辑只覆盖删除场景
 
 当前 `rippleEditingEnabled` 只在 `removeElement()` 中使用。
 
@@ -250,7 +234,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 - `packages/neko-cut/packages/webview/src/stores/slices/elementOpsSlice.ts`
 - `packages/neko-types/src/operations/apply-element.ts`
 
-### 4.5 素材库没有整合进主剪辑工作区
+### 4.4 素材库没有整合进主剪辑工作区
 
 仓库中存在独立的素材库 Webview：
 
@@ -266,7 +250,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 对于视频创作工具来说，素材面板通常应成为主工作区组成部分，而不是独立入口。
 
-### 4.6 字幕能力存在“两套体系”
+### 4.5 字幕能力存在“两套体系”
 
 当前代码同时存在：
 
@@ -290,7 +274,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 - `packages/neko-cut/packages/webview/src/components/Subtitles/SubtitlePanel.tsx`
 - `packages/neko-cut/packages/webview/src/hooks/useTimelineDragDrop.ts`
 
-### 4.7 AI 创作仍以辅助为主，自动成片能力未完成
+### 4.6 AI 创作仍以辅助为主，自动成片能力未完成
 
 当前 AI 动作中，部分能力已经接通：
 
@@ -312,7 +296,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 - `packages/neko-cut/packages/extension/src/services/AIActionHandler.ts`
 
-### 4.8 若干创作操作仍停留在占位实现
+### 4.7 若干创作操作仍停留在占位实现
 
 例如时间线上下文菜单中的：
 
@@ -344,7 +328,7 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 - 全量波纹编辑
 - 完整 slip / slide / roll 语义
-- 转场一致性
+- 播放态全局倍率与元素速度模型的明确分层
 - 更强的多选编组与批量编辑
 - 复杂时间重映射
 - 更可靠的字幕时间线编辑入口
@@ -367,7 +351,6 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 ### 6.2 尚未满足的核心部分
 
-- 编辑态、预览态、导出态的一致性
 - 高级视觉效果稳定导出
 - 字幕体系统一
 - 素材库与主编辑界面一体化
@@ -401,12 +384,14 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 - 已完成：统一 `transitionIn/transitionOut` 与 `inTransition/outTransition` 命名
 - 已完成：打通 `effects / colorCorrection / masks` 的导出链路
-- 剩余：继续收敛编辑态、播放态预览、暂停态预览、导出态之间的字段一致性
-  - 当前主要残留在播放态预览的全局 speed 接口与元素 speed 模型之间
+- 已完成：暂停态高质量预览已按元素 `speed / reverse / timeRemap` 计算 `sourceTime`
+- 已完成：补齐播放态预览的全局播放倍率状态、UI 与消息契约
+  - 当前 `projectPlayback:resume.speed` / `projectPlayback:speed` 已明确为 stream playback speed
+  - 元素级 `speed` 与全局预览倍率已在实现层分离
 
 ### P1
 
-- 将暂停态高质量合成扩展到 `text / subtitle / shape`
+- 将暂停态高质量合成扩展到 `text / subtitle / shape / scene3d`
 - 把字幕体系收敛到单一入口和单一模型
 - 将素材库嵌入主编辑工作区
 

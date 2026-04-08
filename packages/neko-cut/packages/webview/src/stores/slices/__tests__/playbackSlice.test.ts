@@ -33,6 +33,10 @@ describe('playbackSlice', () => {
       expect(store.getState().currentTime).toBe(0);
     });
 
+    it('should start with playbackSpeed = 1', () => {
+      expect(store.getState().playbackSpeed).toBe(1);
+    });
+
     it('should start with frameAlignEnabled = false', () => {
       expect(store.getState().frameAlignEnabled).toBe(false);
     });
@@ -89,6 +93,28 @@ describe('playbackSlice', () => {
       store.getState().togglePlayback(); // false
       store.getState().togglePlayback(); // true
       expect(store.getState().isPlaying).toBe(true);
+    });
+  });
+
+  describe('setPlaybackSpeed', () => {
+    it('should update playbackSpeed within valid range', () => {
+      store.getState().setPlaybackSpeed(1.5);
+      expect(store.getState().playbackSpeed).toBe(1.5);
+    });
+
+    it('should clamp playbackSpeed to minimum 0.1', () => {
+      store.getState().setPlaybackSpeed(-2);
+      expect(store.getState().playbackSpeed).toBe(0.1);
+    });
+
+    it('should clamp playbackSpeed to maximum 4', () => {
+      store.getState().setPlaybackSpeed(8);
+      expect(store.getState().playbackSpeed).toBe(4);
+    });
+
+    it('should fall back to 1 for invalid values', () => {
+      store.getState().setPlaybackSpeed(Number.NaN);
+      expect(store.getState().playbackSpeed).toBe(1);
     });
   });
 

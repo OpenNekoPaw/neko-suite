@@ -20,10 +20,12 @@ export interface PreviewControlsProps {
   currentTime: number;
   totalDuration: number;
   isPlaying: boolean;
+  playbackSpeed: number;
 
   // Playback controls
   seek: (time: number) => void;
   togglePlayback: () => void;
+  setPlaybackSpeed: (speed: number) => void;
 
   // Preview quality
   previewQuality: 'full' | 'high' | 'medium' | 'low';
@@ -135,8 +137,10 @@ export const PreviewControls = memo(function PreviewControls({
   currentTime,
   totalDuration,
   isPlaying,
+  playbackSpeed,
   seek,
   togglePlayback,
+  setPlaybackSpeed,
   previewQuality,
   setPreviewQuality,
   previewVolume,
@@ -169,6 +173,14 @@ export const PreviewControls = memo(function PreviewControls({
     { value: 'high', label: `${t('preview.qualityOptions.high')}: 0.75` },
     { value: 'medium', label: `${t('preview.qualityOptions.medium')}: 0.5` },
     { value: 'low', label: `${t('preview.qualityOptions.low')}: 0.25` },
+  ];
+  const playbackSpeedOptions: { value: number; label: string }[] = [
+    { value: 0.5, label: '0.5x' },
+    { value: 0.75, label: '0.75x' },
+    { value: 1, label: '1x' },
+    { value: 1.25, label: '1.25x' },
+    { value: 1.5, label: '1.5x' },
+    { value: 2, label: '2x' },
   ];
 
   return (
@@ -244,6 +256,15 @@ export const PreviewControls = memo(function PreviewControls({
           {t('preview.quality')}
         </span>
         <Dropdown value={previewQuality} options={qualityOptions} onChange={setPreviewQuality} />
+
+        <span className="text-xs text-vscode-description whitespace-nowrap">
+          {t('preview.playbackSpeed')}
+        </span>
+        <Dropdown
+          value={playbackSpeed}
+          options={playbackSpeedOptions}
+          onChange={setPlaybackSpeed}
+        />
 
         {/* Volume Controls */}
         <div className="w-px h-4 bg-vscode-panel-border mx-1" />
