@@ -35,6 +35,7 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
+import { extractCharacterIdsFromCanvasNode } from './utils/entityBinding';
 
 /**
  * Activate the extension
@@ -532,10 +533,30 @@ function registerCommands(
           }
           if (input.style) parts.push(`Style: ${input.style}`);
 
+          let characterIds: string[] = [];
+          const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+          if (canvasExt) {
+            try {
+              const canvasApi = canvasExt.isActive
+                ? canvasExt.exports
+                : ((await canvasExt.activate()) as NekoCanvasAPI);
+              const sourceNode = await canvasApi.nodes.get(input.nodeId);
+              characterIds = extractCharacterIdsFromCanvasNode(sourceNode);
+            } catch (err) {
+              getRootLogger().warn('Failed to resolve canvas node generation bindings', {
+                error: err,
+              });
+            }
+          }
+
           const task = await platform.media.generateImage({
             prompt: parts.join(', '),
             ratio: (input.ratio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined) ?? '16:9',
             count: input.count ?? 1,
+            metadata: {
+              sourceNodeId: input.nodeId,
+              characterIds,
+            },
           });
 
           // Report generating status to the webview

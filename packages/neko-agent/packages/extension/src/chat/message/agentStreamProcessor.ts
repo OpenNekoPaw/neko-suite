@@ -27,6 +27,7 @@ import type { GeneratedAssetIndex } from '../../services/generatedAssetIndex';
 import { generateAssetId } from '../../services/generatedAssetIndex';
 import { toWebviewAsset } from '@neko/shared/vscode/extension';
 import { getLogger } from '../../base';
+import { parseGeneratedAssetBindingMetadata } from '../../utils/entityBinding';
 
 const logger = getLogger('AgentStreamProcessor');
 
@@ -434,6 +435,7 @@ export class AgentStreamProcessor {
               taskType,
               task.request?.prompt,
               task.modelId,
+              task.request?.metadata,
             );
 
             // Register assets in the index for cross-plugin discovery
@@ -643,9 +645,11 @@ function buildGeneratedAssets(
   taskType: 'image' | 'video' | 'audio',
   prompt?: string,
   model?: string,
+  metadata?: Record<string, unknown>,
 ): GeneratedAsset[] {
   const now = new Date().toISOString();
   const assets: GeneratedAsset[] = [];
+  const bindingMetadata = parseGeneratedAssetBindingMetadata(metadata);
 
   for (let i = 0; i < localPaths.length; i++) {
     const localPath = localPaths[i];
@@ -662,6 +666,8 @@ function buildGeneratedAssets(
       generatedAt: now,
       prompt,
       model,
+      sourceNodeId: bindingMetadata.sourceNodeId,
+      characterIds: bindingMetadata.characterIds,
     };
 
     switch (taskType) {

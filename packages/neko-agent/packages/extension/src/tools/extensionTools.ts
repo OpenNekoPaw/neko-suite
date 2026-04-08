@@ -23,6 +23,7 @@ import type { MediaGenerationService, ConfigManager } from '@neko/platform';
 import { EngineClient } from '@neko/neko-client';
 import type { EffectPresetInfo, ShaderParamDef, TranscribeResponse } from '@neko/neko-client';
 import { getLogger } from '../base';
+import { buildShotCharactersForScene } from '../utils/entityBinding';
 
 const logger = getLogger('ExtensionTools');
 
@@ -1506,6 +1507,7 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
           for (let sh = 0; sh < shotCount; sh++) {
             const shotX = sceneX + sh * (SHOT_WIDTH + SHOT_GAP);
             const shotY = startY + 240;
+            const sceneCharacters = buildShotCharactersForScene(index, scene.id);
             const shotNodeId = await canvasApi.nodes.create(
               'shot' as import('@neko/shared').CanvasNodeType,
               { x: shotX, y: shotY },
@@ -1515,7 +1517,7 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
                 duration: 3,
                 visualDescription: '',
                 shotScale: 'MS' as const,
-                characters: [] as unknown[],
+                characters: sceneCharacters,
                 emotion: [] as string[],
                 sceneTags: [] as string[],
                 generationStatus: 'idle' as const,

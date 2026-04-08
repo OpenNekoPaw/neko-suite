@@ -740,6 +740,12 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               for (let sh = 0; sh < shotCount; sh++) {
                 const shotX = sceneX + sh * (SHOT_WIDTH + SHOT_GAP);
                 const shotY = startY + 240;
+                const sceneCharacters = scriptIndex.characters
+                  .filter((character) => character.scene_ids.includes(scene.id))
+                  .map((character) => ({
+                    characterName: character.name,
+                    characterId: character.characterId,
+                  }));
                 const shotNodeId = await api.nodes.create(
                   'shot' as CanvasNodeType,
                   { x: shotX, y: shotY },
@@ -749,7 +755,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                     duration: 3,
                     visualDescription: '',
                     shotScale: 'MS' as const,
-                    characters: [] as unknown[],
+                    characters: sceneCharacters,
                     emotion: [] as string[],
                     sceneTags: [] as string[],
                     generationStatus: 'idle' as const,
