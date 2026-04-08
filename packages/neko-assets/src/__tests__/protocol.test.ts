@@ -143,6 +143,7 @@ describe('extension activation (NKAS-007)', () => {
     expect(extensionSource).toContain('return createAssetsApi()');
     expect(extensionSource).toContain('function createAssetsApi()');
     expect(extensionSource).toContain('getEntityById');
+    expect(extensionSource).toContain('suggestEntityMatches');
     expect(extensionSource).toContain('findOccurrences');
   });
 });

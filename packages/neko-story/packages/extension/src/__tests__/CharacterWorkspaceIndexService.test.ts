@@ -97,6 +97,26 @@ describe('CharacterWorkspaceIndexService', () => {
     service.dispose();
   });
 
+  it('returns deterministic character match suggestions with confidence', async () => {
+    const service = new CharacterWorkspaceIndexService();
+    await service.ensureInitialized();
+
+    const suggestions = service.suggestCharacters('艾丽丝');
+
+    expect(suggestions[0]).toMatchObject({
+      entity: expect.objectContaining({ id: 'char_alice' }),
+      confidence: 0.94,
+      source: 'alias',
+      reason: ['exact-alias'],
+    });
+
+    const scriptNameSuggestions = service.suggestCharacters('ALICE (V.O.)');
+    expect(scriptNameSuggestions[0]?.reason).toEqual(['exact-script-name']);
+    expect(scriptNameSuggestions[0]?.confidence).toBe(0.9);
+
+    service.dispose();
+  });
+
   it('writes a validated registry payload back to workspace', async () => {
     const service = new CharacterWorkspaceIndexService();
 

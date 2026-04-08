@@ -332,6 +332,11 @@ export function activate(context: vscode.ExtensionContext) {
         await indexService.ensureInitialized();
         return [...indexService.listOccurrencesByCharacterId(characterId)];
       },
+
+      async suggestCharacterMatches(name, options) {
+        await characterIndexService.ensureInitialized();
+        return characterIndexService.suggestCharacters(name, options);
+      },
     },
   };
 

@@ -190,6 +190,9 @@ export * from './generated-asset';
 // Character registry types (project-level identity contract)
 export * from './character-registry';
 
+// Creative entity match suggestion types (deterministic/inferred suggestion contract)
+export * from './creative-entity-match';
+
 // Creative entity graph types (structural relationship layer for unified identity)
 export * from './creative-entity-graph';
 

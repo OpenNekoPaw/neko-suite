@@ -3,10 +3,13 @@ import {
   createEmptyCharacterRegistry,
   isCharacterRegistryFile,
   normalizeCharacterLookupKey,
+  type CreativeEntityMatchOptions,
+  type CreativeEntityMatchSuggestion,
   type CharacterNameResolution,
   type CharacterRecord,
   type CharacterRegistryFile,
 } from '@neko/shared';
+import { suggestCharacterMatches } from './CharacterMatchSuggester';
 
 const CHARACTER_REGISTRY_FILE = 'characters.json';
 
@@ -18,6 +21,10 @@ export interface ICharacterWorkspaceIndex extends vscode.Disposable {
   save(registry: CharacterRegistryFile): Promise<void>;
   findById(id: string): CharacterRecord | undefined;
   resolveCharacter(name: string): CharacterNameResolution | undefined;
+  suggestCharacters(
+    name: string,
+    options?: Pick<CreativeEntityMatchOptions, 'limit' | 'minConfidence'>,
+  ): CreativeEntityMatchSuggestion<CharacterRecord>[];
   getDefinitionLocation(characterId: string): vscode.Location | undefined;
 }
 
@@ -94,6 +101,13 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
 
   resolveCharacter(name: string): CharacterNameResolution | undefined {
     return this.lookup.get(normalizeCharacterLookupKey(name));
+  }
+
+  suggestCharacters(
+    name: string,
+    options: Pick<CreativeEntityMatchOptions, 'limit' | 'minConfidence'> = {},
+  ): CreativeEntityMatchSuggestion<CharacterRecord>[] {
+    return suggestCharacterMatches(name, this.registry.characters, options);
   }
 
   getDefinitionLocation(characterId: string): vscode.Location | undefined {
@@ -187,12 +201,7 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
       const line = lines[lineIndex];
       const charIndex = line?.indexOf(pattern) ?? -1;
       if (charIndex >= 0) {
-        const range = new vscode.Range(
-          lineIndex,
-          charIndex,
-          lineIndex,
-          charIndex + pattern.length,
-        );
+        const range = new vscode.Range(lineIndex, charIndex, lineIndex, charIndex + pattern.length);
         this.definitionLocations.set(characterId, new vscode.Location(this.registryUri, range));
         return;
       }

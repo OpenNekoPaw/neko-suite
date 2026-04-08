@@ -15,16 +15,18 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import {
-  type AssetEntity,
-  type CreativeEntityRef,
-  type NekoAssetsAPI,
-  type OccurrenceIndexEntry,
   AssetLibrary,
   JsonFileStorage,
   RuleClassifier,
   AssetDiffService,
   PathResolver,
 } from '@neko/asset';
+import type {
+  AssetEntity,
+  CreativeEntityRef,
+  NekoAssetsAPI,
+  OccurrenceIndexEntry,
+} from '@neko/shared';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
 import * as os from 'os';
@@ -43,6 +45,7 @@ import { VscodeGitService } from './services/VscodeGitService';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
+import { resolveEntityMatch, suggestEntityMatches } from './services/EntityMatchSuggester';
 
 const logger = getLogger('Extension');
 
@@ -1228,31 +1231,25 @@ function createAssetsApi(): NekoAssetsAPI {
         }
 
         try {
-          const needle = normalizeEntityToken(name);
-          if (!needle) {
-            return null;
-          }
-
           const entities = await library.getAllEntities();
-          const categories = options?.categories;
-          const categorySet = categories ? new Set(categories) : undefined;
-
-          return (
-            entities.find((entity) => {
-              if (categorySet && !categorySet.has(entity.category as (typeof categories)[number])) {
-                return false;
-              }
-
-              const tokens = [entity.name, ...(entity.aliases ?? []), ...entity.tags].map(
-                normalizeEntityToken,
-              );
-
-              return tokens.includes(needle);
-            }) ?? null
-          );
+          return resolveEntityMatch(name, entities, options);
         } catch (error) {
           logger.error('assets api resolveEntityByName failed:', error);
           return null;
+        }
+      },
+
+      async suggestEntityMatches(name, options) {
+        if (!library) {
+          return [];
+        }
+
+        try {
+          const entities = await library.getAllEntities();
+          return suggestEntityMatches(name, entities, options);
+        } catch (error) {
+          logger.error('assets api suggestEntityMatches failed:', error);
+          return [];
         }
       },
 
@@ -1304,10 +1301,6 @@ function createAssetsApi(): NekoAssetsAPI {
       },
     },
   };
-}
-
-function normalizeEntityToken(value: string | undefined): string {
-  return value?.trim().toLowerCase() ?? '';
 }
 
 function matchesCreativeEntity(assetEntity: AssetEntity, entity: CreativeEntityRef): boolean {

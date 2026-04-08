@@ -19,6 +19,11 @@ import type {
   GalleryCanvasNode,
 } from './canvas';
 import type { AssetEntity } from './asset';
+import type { CharacterRecord } from './character-registry';
+import type {
+  CreativeEntityMatchOptions,
+  CreativeEntityMatchSuggestion,
+} from './creative-entity-match';
 import type { CreativeEntityRef, OccurrenceIndexEntry } from './occurrence-index';
 import type { ProjectData } from './project';
 
@@ -402,6 +407,14 @@ export interface NekoStoryAPI {
      * Convenience query for character identity occurrences inside scripts.
      */
     findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
+
+    /**
+     * Suggest deterministic character registry matches by canonical name, alias, or script name.
+     */
+    suggestCharacterMatches(
+      name: string,
+      options?: Pick<CreativeEntityMatchOptions, 'limit' | 'minConfidence'>,
+    ): Promise<CreativeEntityMatchSuggestion<CharacterRecord>[]>;
   };
 }
 
@@ -451,6 +464,14 @@ export interface NekoAssetsAPI {
         categories?: Array<'character' | 'object' | 'vehicle' | 'environment' | 'effect'>;
       },
     ): Promise<AssetEntity | null>;
+
+    /**
+     * Suggest deterministic entity matches by name, alias, or tag with confidence.
+     */
+    suggestEntityMatches(
+      name: string,
+      options?: CreativeEntityMatchOptions,
+    ): Promise<CreativeEntityMatchSuggestion<AssetEntity>[]>;
 
     /**
      * Return a definition-like location inside the project asset library JSON.
