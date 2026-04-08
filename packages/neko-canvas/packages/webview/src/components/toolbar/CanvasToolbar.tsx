@@ -29,6 +29,9 @@ export interface CanvasToolbarProps {
   onAddShot?: () => void;
   onAddSceneGroup?: () => void;
   onAddGallery?: () => void;
+  onAddScript?: () => void;
+  onAddDocument?: () => void;
+  onAddModel?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -48,6 +51,9 @@ export function CanvasToolbar({
   onAddShot,
   onAddSceneGroup,
   onAddGallery,
+  onAddScript,
+  onAddDocument,
+  onAddModel,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -163,6 +169,27 @@ export function CanvasToolbar({
               icon={<span className="text-[13px]">🖼</span>}
               label="角色画廊"
               onClick={() => handleAddAndClose(onAddGallery)}
+            />
+          )}
+          {onAddScript && (
+            <AddPanelItem
+              icon={<span className="text-[13px]">📄</span>}
+              label="剧本引用"
+              onClick={() => handleAddAndClose(onAddScript)}
+            />
+          )}
+          {onAddDocument && (
+            <AddPanelItem
+              icon={<span className="text-[13px]">📚</span>}
+              label="文档引用"
+              onClick={() => handleAddAndClose(onAddDocument)}
+            />
+          )}
+          {onAddModel && (
+            <AddPanelItem
+              icon={<span className="text-[13px]">🧠</span>}
+              label="模型引用"
+              onClick={() => handleAddAndClose(onAddModel)}
             />
           )}
 
