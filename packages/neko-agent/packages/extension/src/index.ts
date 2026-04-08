@@ -172,9 +172,12 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
 
     const canvasApi = await getCanvasApi();
     if (canvasApi) {
+      const canvasDocumentUri = await canvasApi.canvas.getActiveDocumentUri();
       const nodes = await canvasApi.nodes.list();
       for (const node of nodes) {
-        results.push(...projectCharacterOccurrencesFromCanvasNode(node, characterId));
+        results.push(
+          ...projectCharacterOccurrencesFromCanvasNode(node, characterId, canvasDocumentUri),
+        );
       }
     }
 

@@ -238,6 +238,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return result.id;
   }
 
+  getActiveDocumentUri(): string | undefined {
+    return this.activeDocument?.uri.toString();
+  }
+
   async updateShape(shapeId: string, updates: Partial<ShapeConfig>): Promise<void> {
     if (!this.activeWebviewPanel) {
       throw new Error('No active canvas editor');

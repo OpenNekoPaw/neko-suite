@@ -65,6 +65,7 @@ export function parseGeneratedAssetBindingMetadata(
 export function projectCharacterOccurrencesFromCanvasNode(
   node: CanvasNode,
   characterId: string,
+  canvasDocumentUri?: string,
 ): OccurrenceIndexEntry[] {
   const boundCharacterIds = extractCharacterIdsFromCanvasNode(node);
   if (!boundCharacterIds.includes(characterId)) {
@@ -82,6 +83,7 @@ export function projectCharacterOccurrencesFromCanvasNode(
       strength: 'confirmed',
       provenance: 'lineage',
       locator: {
+        uri: canvasDocumentUri,
         nodeId: node.id,
       },
     },

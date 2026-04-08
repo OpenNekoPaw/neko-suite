@@ -81,7 +81,13 @@ describe('entityBinding helpers', () => {
       },
     } as CanvasNode;
 
-    expect(projectCharacterOccurrencesFromCanvasNode(shotNode, 'char_alice')).toEqual([
+    expect(
+      projectCharacterOccurrencesFromCanvasNode(
+        shotNode,
+        'char_alice',
+        'file:///workspace/storyboard.nkc',
+      ),
+    ).toEqual([
       {
         entity: {
           kind: 'character',
@@ -92,6 +98,7 @@ describe('entityBinding helpers', () => {
         strength: 'confirmed',
         provenance: 'lineage',
         locator: {
+          uri: 'file:///workspace/storyboard.nkc',
           nodeId: 'shot-1',
         },
       },

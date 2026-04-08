@@ -232,6 +232,11 @@ export interface NekoCanvasAPI {
     create(config: CanvasConfig): Promise<string>;
 
     /**
+     * Returns the active canvas document URI string, if a canvas editor is open.
+     */
+    getActiveDocumentUri(): Promise<string | undefined>;
+
+    /**
      * Add a shape to a canvas
      * @returns The ID of the created shape
      */

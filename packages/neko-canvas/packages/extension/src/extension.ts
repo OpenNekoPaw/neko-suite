@@ -111,6 +111,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     },
     canvas: {
       create: (config) => createCanvas(config),
+      getActiveDocumentUri: async () => canvasEditorProvider.getActiveDocumentUri(),
       addShape: (canvasId, shape) => canvasEditorProvider.addShape(shape),
       updateShape: (canvasId, shapeId, updates) =>
         canvasEditorProvider.updateShape(shapeId, updates),
