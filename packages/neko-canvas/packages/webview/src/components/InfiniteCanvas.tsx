@@ -109,6 +109,10 @@ export interface InfiniteCanvasProps {
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
   /** Called when a ShotNode candidate is selected */
   onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
+  /** Called when selected shots should be attached to a scene */
+  onAssignSelectedShotsToScene?: (sceneId: string) => void;
+  /** Called to auto-layout the shots inside a scene */
+  onAutoLayoutSceneShots?: (sceneId: string) => void;
 }
 
 // =============================================================================
@@ -144,6 +148,8 @@ export function InfiniteCanvas({
   onDocumentOpen,
   onModelCheckInstalled,
   onSelectShotCandidate,
+  onAssignSelectedShotsToScene,
+  onAutoLayoutSceneShots,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -295,6 +301,9 @@ export function InfiniteCanvas({
             onDocumentOpen,
             onModelCheckInstalled,
             onSelectShotCandidate,
+            onAssignSelectedShotsToScene,
+            onAutoLayoutSceneShots,
+            selectedNodeIds,
           );
         })}
       </CanvasViewport>
@@ -364,6 +373,9 @@ function renderNode(
   onDocumentOpen?: (docPath: string) => void,
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void,
   onSelectShotCandidate?: (nodeId: string, candidateId: string) => void,
+  onAssignSelectedShotsToScene?: (sceneId: string) => void,
+  onAutoLayoutSceneShots?: (sceneId: string) => void,
+  selectedNodeIds: string[] = [],
 ): React.ReactNode {
   const commonProps = {
     viewport,
@@ -421,7 +433,16 @@ function renderNode(
         />
       );
     case 'scene':
-      return <SceneGroupNode key={node.id} node={node as SceneGroupCanvasNode} {...commonProps} />;
+      return (
+        <SceneGroupNode
+          key={node.id}
+          node={node as SceneGroupCanvasNode}
+          {...commonProps}
+          selectedShotCount={allNodes.filter((candidate) => selectedNodeIds.includes(candidate.id) && candidate.type === 'shot').length}
+          onAssignSelectedShots={onAssignSelectedShotsToScene}
+          onAutoLayoutShots={onAutoLayoutSceneShots}
+        />
+      );
     case 'gallery':
       return <GalleryNode key={node.id} node={node as GalleryCanvasNode} {...commonProps} />;
     case 'script':

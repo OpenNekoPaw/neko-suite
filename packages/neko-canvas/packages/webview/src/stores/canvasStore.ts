@@ -5,8 +5,15 @@ import type {
   CanvasConnection,
   CanvasViewport,
   PortDefinition,
+  SceneGroupCanvasNode,
+  ShotCanvasNode,
 } from '@neko/shared';
-import { getDefaultPorts, arePortTypesCompatible } from '@neko/shared';
+import {
+  getDefaultPorts,
+  arePortTypesCompatible,
+  isSceneGroupNode,
+  isShotNode,
+} from '@neko/shared';
 import { useHistoryStore } from './historyStore';
 import { useCanvasOperationStore } from './canvasOperationStore';
 
@@ -81,6 +88,10 @@ export interface CanvasStore {
   rotateNode: (id: string, rotation: number) => void;
   /** Record history + final rotation (call on rotate end) */
   rotateNodeEnd: (id: string, rotation: number) => void;
+  /** Assign existing ShotNodes into a SceneGroupNode and optionally auto-layout them */
+  assignShotsToScene: (sceneId: string, shotIds: string[], autoLayout?: boolean) => void;
+  /** Auto-layout all shots owned by a scene using the current shotIds order */
+  autoLayoutSceneShots: (sceneId: string) => void;
 
   /** Update node port definitions (records history) */
   updateNodePorts: (id: string, ports: PortDefinition[]) => void;
@@ -141,6 +152,115 @@ function generateId(): string {
 function recordHistory(canvasData: CanvasData | null): void {
   if (!canvasData) return;
   useHistoryStore.getState().pushState(canvasData);
+}
+
+const SCENE_LAYOUT_PADDING_X = 24;
+const SCENE_LAYOUT_PADDING_TOP = 64;
+const SCENE_LAYOUT_GAP_X = 24;
+const SCENE_LAYOUT_GAP_Y = 24;
+const SCENE_LAYOUT_MIN_COLUMN_WIDTH = 220;
+
+function isShotInsideScene(scene: SceneGroupCanvasNode, shot: ShotCanvasNode): boolean {
+  const centerX = shot.position.x + shot.size.width / 2;
+  const centerY = shot.position.y + shot.size.height / 2;
+
+  return (
+    centerX >= scene.position.x &&
+    centerX <= scene.position.x + scene.size.width &&
+    centerY >= scene.position.y + SCENE_LAYOUT_PADDING_TOP / 2 &&
+    centerY <= scene.position.y + scene.size.height
+  );
+}
+
+function getSceneOwnedShots(nodes: CanvasNode[], sceneId: string): ShotCanvasNode[] {
+  return nodes
+    .filter(isShotNode)
+    .filter((node) => node.data.sceneGroupId === sceneId);
+}
+
+function sortShotsByCanvasOrder(shots: ShotCanvasNode[]): ShotCanvasNode[] {
+  return [...shots].sort((a, b) => {
+    if (a.position.y !== b.position.y) {
+      return a.position.y - b.position.y;
+    }
+    return a.position.x - b.position.x;
+  });
+}
+
+function getSceneShotOrder(scene: SceneGroupCanvasNode, nodes: CanvasNode[]): string[] {
+  const ownedShots = getSceneOwnedShots(nodes, scene.id);
+  const orderById = new Map(ownedShots.map((shot) => [shot.id, shot]));
+  const explicitOrder = scene.data.shotIds.filter((shotId) => orderById.has(shotId));
+  const remainingShots = ownedShots.filter((shot) => !explicitOrder.includes(shot.id));
+  return [...explicitOrder, ...sortShotsByCanvasOrder(remainingShots).map((shot) => shot.id)];
+}
+
+function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
+  return nodes.map((node) => {
+    if (!isSceneGroupNode(node)) return node;
+    const nextShotIds = getSceneShotOrder(node, nodes);
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        shotIds: nextShotIds,
+      },
+    };
+  });
+}
+
+function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
+  const scene = nodes.find((node) => isSceneGroupNode(node) && node.id === sceneId);
+  if (!scene || !isSceneGroupNode(scene)) return nodes;
+
+  const orderedShotIds = getSceneShotOrder(scene, nodes);
+  if (orderedShotIds.length === 0) return nodes;
+
+  const sceneWidth = Math.max(scene.size.width - SCENE_LAYOUT_PADDING_X * 2, SCENE_LAYOUT_MIN_COLUMN_WIDTH);
+  const shots = orderedShotIds
+    .map((shotId) => nodes.find((node) => isShotNode(node) && node.id === shotId))
+    .filter((node): node is ShotCanvasNode => Boolean(node));
+  if (shots.length === 0) return nodes;
+  const maxShotWidth = Math.max(...shots.map((shot) => shot.size.width));
+  const columns = Math.max(1, Math.floor((sceneWidth + SCENE_LAYOUT_GAP_X) / (maxShotWidth + SCENE_LAYOUT_GAP_X)));
+
+  return nodes.map((node) => {
+    if (!isShotNode(node)) return node;
+    const shotIndex = orderedShotIds.indexOf(node.id);
+    if (shotIndex < 0) return node;
+
+    const col = shotIndex % columns;
+    const row = Math.floor(shotIndex / columns);
+    return {
+      ...node,
+      position: {
+        x: scene.position.x + SCENE_LAYOUT_PADDING_X + col * (node.size.width + SCENE_LAYOUT_GAP_X),
+        y: scene.position.y + SCENE_LAYOUT_PADDING_TOP + row * (node.size.height + SCENE_LAYOUT_GAP_Y),
+      },
+    };
+  });
+}
+
+function syncShotSceneMembership(nodes: CanvasNode[], shotId: string): CanvasNode[] {
+  const shot = nodes.find((node) => isShotNode(node) && node.id === shotId);
+  if (!shot || !isShotNode(shot)) return nodes;
+
+  const targetScene = nodes
+    .filter(isSceneGroupNode)
+    .find((scene) => isShotInsideScene(scene, shot));
+
+  const nextNodes = nodes.map((node) => {
+    if (!isShotNode(node) || node.id !== shotId) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        sceneGroupId: targetScene?.id,
+      },
+    };
+  });
+
+  return relinkSceneShotIds(nextNodes);
 }
 
 // =============================================================================
@@ -266,10 +386,26 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       (conn) => conn.sourceId === id || conn.targetId === id,
     );
 
+    const filteredNodes = canvasData.nodes.filter((node) => node.id !== id);
+    const nodesWithDetachedShots = removedNode && isSceneGroupNode(removedNode)
+      ? filteredNodes.map((node) =>
+          isShotNode(node) && node.data.sceneGroupId === id
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  sceneGroupId: undefined,
+                },
+              }
+            : node,
+        )
+      : filteredNodes;
+    const relinkedNodes = relinkSceneShotIds(nodesWithDetachedShots);
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.filter((node) => node.id !== id),
+        nodes: relinkedNodes,
         // Also remove connections involving this node
         connections: canvasData.connections.filter(
           (conn) => conn.sourceId !== id && conn.targetId !== id,
@@ -307,10 +443,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
+    const movedNodes = canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node));
+    const nextNodes =
+      oldNode && isShotNode(oldNode) ? syncShotSceneMembership(movedNodes, id) : movedNodes;
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
+        nodes: nextNodes,
       },
     });
 
@@ -395,6 +535,69 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         .getState()
         .recordNodeUpdate(id, { rotation } as any, { rotation: oldNode.rotation } as any);
     }
+  },
+
+  assignShotsToScene: (sceneId, shotIds, autoLayout = true) => {
+    const { canvasData } = get();
+    if (!canvasData || shotIds.length === 0) return;
+
+    const uniqueShotIds = [...new Set(shotIds)];
+    const scene = canvasData.nodes.find(
+      (node): node is SceneGroupCanvasNode => isSceneGroupNode(node) && node.id === sceneId,
+    );
+    if (!scene) return;
+
+    recordHistory(canvasData);
+
+    const assignedNodes = canvasData.nodes.map((node) => {
+      if (!isShotNode(node) || !uniqueShotIds.includes(node.id)) return node;
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          sceneGroupId: sceneId,
+        },
+      };
+    });
+
+    const relinkedNodes = relinkSceneShotIds(
+      assignedNodes.map((node) =>
+        isSceneGroupNode(node) && node.id === sceneId
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                shotIds: [...node.data.shotIds.filter((shotId) => !uniqueShotIds.includes(shotId)), ...uniqueShotIds],
+              },
+            }
+          : node,
+      ),
+    );
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: autoLayout ? layoutSceneShots(relinkedNodes, sceneId) : relinkedNodes,
+      },
+    });
+  },
+
+  autoLayoutSceneShots: (sceneId) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    const sceneExists = canvasData.nodes.some(
+      (node) => isSceneGroupNode(node) && node.id === sceneId,
+    );
+    if (!sceneExists) return;
+
+    recordHistory(canvasData);
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: layoutSceneShots(relinkSceneShotIds(canvasData.nodes), sceneId),
+      },
+    });
   },
 
   updateNodePorts: (id, ports) => {

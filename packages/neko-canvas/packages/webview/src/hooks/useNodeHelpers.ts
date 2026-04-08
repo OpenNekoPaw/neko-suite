@@ -35,6 +35,9 @@ export interface UseNodeHelpersReturn {
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
   /** Add a GalleryNode at the given canvas position */
   addGalleryAt: (pos: { x: number; y: number }) => void;
+  addScriptAt: (pos: { x: number; y: number }) => void;
+  addDocumentAt: (pos: { x: number; y: number }) => void;
+  addModelAt: (pos: { x: number; y: number }) => void;
 }
 
 // =============================================================================
@@ -177,5 +180,76 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     [addNode, nodeCount, reportAction],
   );
 
-  return { addTextAt, addSceneAt, addMediaAt, addShotAt, addSceneGroupAt, addGalleryAt };
+  const addScriptAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 280,
+        h = 220;
+      addNode({
+        type: 'script',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          scriptPath: '',
+          scriptTitle: 'Script',
+          scenes: [],
+        },
+      });
+      reportAction('addNode', 'Add script reference');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  const addDocumentAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 220,
+        h = 280;
+      addNode({
+        type: 'document',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          docPath: '',
+          docType: 'pdf',
+          title: 'Document',
+        },
+      });
+      reportAction('addNode', 'Add document reference');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  const addModelAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      const w = 240,
+        h = 160;
+      addNode({
+        type: 'model',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          modelPath: '',
+          modelName: 'Model',
+          modelType: 'lora',
+          role: 'reference',
+        },
+      });
+      reportAction('addNode', 'Add model reference');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
+  return {
+    addTextAt,
+    addSceneAt,
+    addMediaAt,
+    addShotAt,
+    addSceneGroupAt,
+    addGalleryAt,
+    addScriptAt,
+    addDocumentAt,
+    addModelAt,
+  };
 }

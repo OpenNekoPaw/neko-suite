@@ -95,6 +95,8 @@ export function CanvasApp() {
     resizeNodeEnd,
     rotateNode,
     rotateNodeEnd,
+    assignShotsToScene,
+    autoLayoutSceneShots,
     selectNodes,
     groupNodes,
     ungroupNodes,
@@ -152,12 +154,21 @@ export function CanvasApp() {
   // Node helpers
   // =========================================================================
 
-  const { addTextAt, addSceneAt, addMediaAt, addShotAt, addSceneGroupAt, addGalleryAt } =
-    useNodeHelpers({
-      addNode,
-      nodeCount: nodes.length,
-      reportAction,
-    });
+  const {
+    addTextAt,
+    addSceneAt,
+    addMediaAt,
+    addShotAt,
+    addSceneGroupAt,
+    addGalleryAt,
+    addScriptAt,
+    addDocumentAt,
+    addModelAt,
+  } = useNodeHelpers({
+    addNode,
+    nodeCount: nodes.length,
+    reportAction,
+  });
 
   // =========================================================================
   // Clipboard
@@ -189,6 +200,18 @@ export function CanvasApp() {
   const handleAddGallery = useCallback(() => {
     addGalleryAt(getViewportCenter());
   }, [addGalleryAt, getViewportCenter]);
+
+  const handleAddScript = useCallback(() => {
+    addScriptAt(getViewportCenter());
+  }, [addScriptAt, getViewportCenter]);
+
+  const handleAddDocument = useCallback(() => {
+    addDocumentAt(getViewportCenter());
+  }, [addDocumentAt, getViewportCenter]);
+
+  const handleAddModel = useCallback(() => {
+    addModelAt(getViewportCenter());
+  }, [addModelAt, getViewportCenter]);
 
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
@@ -466,6 +489,24 @@ export function CanvasApp() {
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
+
+  const handleAssignSelectedShotsToScene = useCallback(
+    (sceneId: string) => {
+      const shotIds = nodes
+        .filter((node) => selectedNodeIds.includes(node.id) && node.type === 'shot')
+        .map((node) => node.id);
+      if (shotIds.length === 0) return;
+      assignShotsToScene(sceneId, shotIds, true);
+    },
+    [assignShotsToScene, nodes, selectedNodeIds],
+  );
+
+  const handleAutoLayoutSceneShots = useCallback(
+    (sceneId: string) => {
+      autoLayoutSceneShots(sceneId);
+    },
+    [autoLayoutSceneShots],
+  );
 
   const handleSelectShotCandidate = useCallback(
     (nodeId: string, candidateId: string) => {
@@ -839,6 +880,9 @@ export function CanvasApp() {
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
+          onAddScript={handleAddScript}
+          onAddDocument={handleAddDocument}
+          onAddModel={handleAddModel}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />
@@ -880,6 +924,8 @@ export function CanvasApp() {
             onDocumentOpen={handleDocumentOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
             onSelectShotCandidate={handleSelectShotCandidate}
+            onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
+            onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
             isPanMode={isPanMode}
           />
 
