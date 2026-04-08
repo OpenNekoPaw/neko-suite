@@ -26,8 +26,9 @@ wgpu-hal = { version = "0.19", features = ["metal"] }
 wgpu-core = { version = "0.19" }
 pollster = "0.3"
 
-# FFmpeg bindings (build feature: auto-compile from source when no system FFmpeg)
+# FFmpeg bindings (build from source, no system FFmpeg required)
 ffmpeg-next = { version = "8.0", features = ["build"] }
+ffmpeg-sys-next = { version = "8.0", features = ["build-videotoolbox"] }
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "io-util", "fs", "signal"] }

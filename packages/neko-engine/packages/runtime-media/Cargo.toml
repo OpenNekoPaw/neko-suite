@@ -11,6 +11,7 @@ crate-type = ["lib"]
 [dependencies]
 # FFmpeg bindings (probe, subtitle, audio decode for diff)
 ffmpeg-next = { workspace = true }
+ffmpeg-sys-next = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
