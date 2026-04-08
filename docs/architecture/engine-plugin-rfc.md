@@ -1,6 +1,6 @@
 # RFC: neko-engine 插件化架构
 
-> 状态：Active（前置 Phase R0 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
+> 状态：Active（P1 MVP 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
 > 关联：[marketplace.md](./marketplace.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md) · [engine-runtime-layering.md](./engine-runtime-layering.md)
 
 ---
@@ -343,14 +343,14 @@ neko-engine Host
 - Shader / Model 已有运行时注册入口（`effects:register` / `models:register`）
 - 无统一 PluginManager / Manifest / 插件状态模型
 
-### Phase P1：Capability Plugin MVP（可与 Runtime 拆分 R1/R2 并行）
+### Phase P1：Capability Plugin MVP ✅ 已完成
 
-- 在 host-api 新增 `plugin/` 模块
-- 定义 `EnginePluginManifest` struct（对应第六节 manifest 草案）
-- 实现 `PluginManager`：扫描安装目录、校验 manifest、激活/停用
-- 新增 `plugins` action group（list/inspect/enable/disable）到 `engine-types/src/registry.rs`
-- 把 Shader / Model 注册纳入统一插件生命周期
-- 不依赖 runtime 拆分，可独立实施
+- `host-api/src/plugin/manifest.rs` — `EnginePluginManifest` struct（对应第六节 manifest 草案）
+- `host-api/src/plugin/manager.rs` — `PluginManager`：扫描 plugin.json、校验 engineVersion 兼容性、enable/disable/reload
+- `host-api/src/controllers/plugins.rs` — `PluginsController`：plugins:list/inspect/enable/disable/reload
+- `engine-types/src/registry.rs` — 新增 `PLUGINS` group + actions
+- 12 个测试覆盖发现、启停、版本兼容、kind 过滤
+- **待后续**：将 effects:register / models:register 纳入统一插件生命周期
 
 ### Phase P2：扩展到格式/设备/导出器
 

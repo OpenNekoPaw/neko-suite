@@ -135,12 +135,16 @@ TypeScript Layer (Extension Host)
   <-> N-API Bindings (@neko-engine/host-napi)
   <-> HTTP/WebSocket (axum)
 Rust Layer (neko-engine)
-  +-- engine-kernel:  GPU rendering (wgpu + GPU Skinning), FFmpeg codec, audio/video processing
-  +-- runtime-scene: 3D scene ECS (bevy_ecs + glTF + IK + Animation Blend)
-  +-- runtime-puppet: 2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
-  +-- host-api:   ActionRouter, controller registration
-  +-- host-http:  REST API + WebSocket streaming
-  +-- types:        Shared Rust types
+  +-- engine-kernel:   GPU rendering (wgpu + GPU Skinning), FFmpeg codec, audio/video processing
+  +-- engine-types:    Shared Rust DTO types
+  +-- runtime-scene:   3D scene ECS (bevy_ecs + glTF + IK + Animation Blend)
+  +-- runtime-puppet:  2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
+  +-- runtime-device:  Device I/O (camera/mic via cpal, MIDI via midir, gamepad via gilrs)
+  +-- runtime-ml:      ML inference (ONNX Runtime — upscale/denoise/CLIP/Whisper)
+  +-- host-api:        ActionRouter, controllers, PluginManager
+  +-- host-http:       REST API + WebSocket streaming
+  +-- host-napi:       N-API bindings (cdylib)
+  +-- host-cli:        CLI frontend
 ```
 
 **Principle**: The Rust engine is the single source of truth for computation and data models. The TS layer must not duplicate Rust's computation logic or data transformations.

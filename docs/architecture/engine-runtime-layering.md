@@ -1,6 +1,6 @@
 # ADR: neko-engine Runtime 分层与宿主模型
 
-> 状态：Active（Phase R0 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
+> 状态：Active（R0-R2 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
 > 关联：[engine-plugin-rfc.md](./engine-plugin-rfc.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md)
 
 ---
@@ -131,8 +131,8 @@ packages/neko-engine/packages/
 ├── runtime-puppet/       # 2D puppet / drawing (✅ Phase R0 已重命名)
 ├── runtime-video/        # 视频/音频/时间线/导出 (待从 engine-kernel 拆出)
 ├── runtime-format/       # 文件格式探测/文档预览/转换 (待从 engine-kernel 拆出)
-├── runtime-device/       # camera / audio input / midi / gamepad (待从 engine-kernel 拆出)
-├── runtime-ml/           # onnx/candle lightweight inference (待从 engine-kernel 拆出)
+├── runtime-device/       # camera / audio input / midi / gamepad (✅ Phase R1 已拆出)
+├── runtime-ml/           # onnx/candle lightweight inference (✅ Phase R2 已拆出)
 ├── runtime-game/         # future
 ├── runtime-sim/          # future
 └── runtime-xr/           # future
@@ -277,19 +277,19 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 - 全部 Rust/TS 源码路径、23 个文档同步更新
 - 674 tests passed, 0 failed
 
-### Phase R1：拆出 runtime-device
+### Phase R1：拆出 runtime-device ✅ 已完成
 
-- 创建 `runtime-device/` crate
-- 迁移 Camera/Midi/Gamepad service（trait + impl）
-- 将 cpal/midir/gilrs 硬件依赖从 engine-kernel 移到 runtime-device
-- host-api 新增依赖 `neko-runtime-device`
+- 创建 `runtime-device/` crate（Camera/Midi/Gamepad/MicCapture service impls）
+- 硬件依赖 cpal/midir/gilrs 已迁移到 runtime-device
+- host-api controllers 已切换为从 runtime-device 导入
+- engine-kernel 保留 service trait 定义
 
-### Phase R2：拆出 runtime-ml
+### Phase R2：拆出 runtime-ml ✅ 已完成
 
-- 创建 `runtime-ml/` crate（带 onnx feature）
-- 迁移 ml/ 模块 + MlService
-- 将 ort/ndarray/rustfft 依赖移到 runtime-ml
-- host-api 改为 optional 依赖
+- 创建 `runtime-ml/` crate（ModelRegistry/Upscale/Denoise/CLIP/Whisper + MlService）
+- ort/ndarray/rustfft/ffmpeg-next 依赖已迁移到 runtime-ml
+- host-api 通过 optional `onnx` feature 依赖 runtime-ml
+- engine-kernel 保留原 ml/ 模块（待后续清理）
 
 ### Phase R3：runtime-video 域逻辑（渐进）
 

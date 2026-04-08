@@ -12,7 +12,7 @@
 
 - **职责**：GPU 渲染、硬件编解码、帧缓存、导出、3D/2D 场景 ECS——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`engine-kernel`（Rust）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`host-napi`（N-API 绑定）、`host-http`（axum）、`extension`（VSCode）
+- **子包**：`engine-kernel`（Rust 核心）、`engine-types`（共享 DTO）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`runtime-device`（设备 I/O）、`runtime-ml`（ML 推理）、`host-api`（控制器 + PluginManager）、`host-napi`（N-API）、`host-http`（axum）、`host-cli`（CLI）、`extension`（VSCode）
 - **依赖**：`@neko-engine/host-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
@@ -52,15 +52,17 @@ runtime-puppet (Rust)  ← 2D 骨骼动画 ECS
 
 ```
 packages/
-├── engine-kernel/    # Rust 核心（GPU/FFmpeg/服务层）
-├── host-api/     # Controller + ActionRouter
-├── runtime-scene/   # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-├── runtime-puppet/  # 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
-├── host-http/    # HTTP/WebSocket 服务（axum）
-├── host-napi/    # N-API 绑定（napi-rs 编译为 .node）
-├── host-cli/     # 独立 CLI 二进制
-├── types/          # 共享 Rust 类型
-└── extension/      # VSCode 扩展集成
+├── engine-types/      # 共享 Rust DTO 类型
+├── engine-kernel/     # Rust 核心（GPU/FFmpeg/服务层）
+├── runtime-scene/     # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
+├── runtime-puppet/    # 2D 骨骼 ECS（bevy_ecs + inox2d）
+├── runtime-device/    # 设备 I/O（cpal/midir/gilrs）
+├── runtime-ml/        # ML 推理（ONNX Runtime）
+├── host-api/          # Controller + ActionRouter + PluginManager
+├── host-http/         # HTTP/WebSocket 服务（axum）
+├── host-napi/         # N-API 绑定（napi-rs 编译为 .node）
+├── host-cli/          # 独立 CLI 二进制
+└── extension/         # VSCode 扩展集成
 ```
 
 ### 当前生命周期语义

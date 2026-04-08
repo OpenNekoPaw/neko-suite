@@ -135,12 +135,16 @@ TypeScript 层（Extension Host）
   ↕ N-API 绑定 (@neko-engine/host-napi)
   ↕ HTTP/WebSocket (axum)
 Rust 层（neko-engine）
-  ├─ engine-kernel:  GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
-  ├─ runtime-scene: 3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
-  ├─ runtime-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
-  ├─ host-api:   ActionRouter、控制器注册
-  ├─ host-http:  REST API + WebSocket 流
-  └─ types:        共享 Rust 类型
+  ├─ engine-kernel:   GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
+  ├─ engine-types:    共享 Rust DTO 类型
+  ├─ runtime-scene:   3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
+  ├─ runtime-puppet:  2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
+  ├─ runtime-device:  设备 I/O（cpal 麦克风/nokhwa 摄像头、midir MIDI、gilrs 手柄）
+  ├─ runtime-ml:      ML 推理（ONNX Runtime — 超分/降噪/CLIP/Whisper）
+  ├─ host-api:        ActionRouter、控制器、PluginManager
+  ├─ host-http:       REST API + WebSocket 流
+  ├─ host-napi:       N-API 绑定 (cdylib)
+  └─ host-cli:        CLI 前端
 ```
 
 **原则**: Rust 引擎是计算和数据模型的唯一权威来源。TS 层不应复制 Rust 的计算逻辑或数据转换。
