@@ -128,7 +128,7 @@ export function CanvasToolbar({
             <path d="M2 10v7a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-7H2Zm5 2h10v2H7v-2Zm0 4h6v2H7v-2Z" />
           </svg>
         }
-        title="操作历史"
+        title={t('toolbar.operationHistory')}
         active={expandedPanel === 'ops'}
         onClick={() => togglePanel('ops')}
       />
@@ -172,49 +172,49 @@ export function CanvasToolbar({
           {onAddShot && (
             <AddPanelItem
               icon={<span className="text-[13px]">🎬</span>}
-              label="镜头"
+              label={t('toolbar.shot')}
               onClick={() => handleAddAndClose(onAddShot)}
             />
           )}
           {onAddSceneGroup && (
             <AddPanelItem
               icon={<span className="text-[13px]">🎞</span>}
-              label="场景"
+              label={t('toolbar.sceneGroup')}
               onClick={() => handleAddAndClose(onAddSceneGroup)}
             />
           )}
           {onAddGallery && (
             <AddPanelItem
               icon={<span className="text-[13px]">🖼</span>}
-              label="角色画廊"
+              label={t('toolbar.gallery')}
               onClick={() => handleAddAndClose(onAddGallery)}
             />
           )}
           {onAddScript && (
             <AddPanelItem
               icon={<span className="text-[13px]">📄</span>}
-              label="剧本引用"
+              label={t('toolbar.scriptReference')}
               onClick={() => handleAddAndClose(onAddScript)}
             />
           )}
           {onAddDocument && (
             <AddPanelItem
               icon={<span className="text-[13px]">📚</span>}
-              label="文档引用"
+              label={t('toolbar.documentReference')}
               onClick={() => handleAddAndClose(onAddDocument)}
             />
           )}
           {onAddModel && (
             <AddPanelItem
               icon={<span className="text-[13px]">🧠</span>}
-              label="模型引用"
+              label={t('toolbar.modelReference')}
               onClick={() => handleAddAndClose(onAddModel)}
             />
           )}
           {onAddCanvasEmbed && (
             <AddPanelItem
               icon={<span className="text-[13px]">🗂</span>}
-              label="嵌入画布"
+              label={t('toolbar.canvasEmbed')}
               onClick={() => handleAddAndClose(onAddCanvasEmbed)}
             />
           )}
@@ -236,7 +236,7 @@ export function CanvasToolbar({
                 <path d="M12 4v16" />
               </svg>
             }
-            label="备注"
+            label={t('toolbar.annotation')}
             onClick={() => handleAddAndClose(onAddText)}
           />
 
@@ -244,17 +244,17 @@ export function CanvasToolbar({
 
           <AddPanelItem
             icon={<span className="text-[13px]">🖼️</span>}
-            label="图片"
+            label={t('toolbar.image')}
             onClick={() => handleAddAndClose(() => onAddMedia('image'))}
           />
           <AddPanelItem
             icon={<span className="text-[13px]">🎥</span>}
-            label="视频"
+            label={t('toolbar.video')}
             onClick={() => handleAddAndClose(() => onAddMedia('video'))}
           />
           <AddPanelItem
             icon={<span className="text-[13px]">🎵</span>}
-            label="音频"
+            label={t('toolbar.audio')}
             onClick={() => handleAddAndClose(() => onAddMedia('audio'))}
           />
         </div>

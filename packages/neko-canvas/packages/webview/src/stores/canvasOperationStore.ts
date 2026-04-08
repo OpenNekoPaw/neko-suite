@@ -68,8 +68,8 @@ export interface CanvasOperationStore {
   recordNodeRemove: (nodeId: string, node: CanvasNode, connections: CanvasConnection[]) => void;
   recordNodeUpdate: (
     nodeId: string,
-    updates: Partial<CanvasNode>,
-    before: Partial<CanvasNode>,
+    updates: Record<string, unknown>,
+    before: Record<string, unknown>,
   ) => void;
   recordNodeReorder: (nodeId: string, newZIndex: number, oldZIndex: number) => void;
   recordNodeGroup: (groupNode: CanvasNode, childIds: string[]) => void;

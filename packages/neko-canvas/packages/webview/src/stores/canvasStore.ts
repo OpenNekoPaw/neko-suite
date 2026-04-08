@@ -272,6 +272,42 @@ function syncShotSceneMembership(nodes: CanvasNode[], shotId: string): CanvasNod
   return relinkSceneShotIds(nextNodes);
 }
 
+function createNodeIndex(nodes: CanvasNode[]): Map<string, CanvasNode> {
+  return new Map(nodes.map((node) => [node.id, node]));
+}
+
+function recordChangedNodesForAudit(previousNodes: CanvasNode[], nextNodes: CanvasNode[]): void {
+  const previousIndex = createNodeIndex(previousNodes);
+
+  for (const nextNode of nextNodes) {
+    const previousNode = previousIndex.get(nextNode.id);
+    if (!previousNode) continue;
+
+    const previousFingerprint = JSON.stringify({
+      position: previousNode.position,
+      data: previousNode.data,
+    });
+    const nextFingerprint = JSON.stringify({
+      position: nextNode.position,
+      data: nextNode.data,
+    });
+
+    if (previousFingerprint === nextFingerprint) continue;
+
+    useCanvasOperationStore.getState().recordNodeUpdate(
+      nextNode.id,
+      {
+        position: nextNode.position,
+        data: nextNode.data,
+      },
+      {
+        position: previousNode.position,
+        data: previousNode.data,
+      },
+    );
+  }
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -589,12 +625,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       ),
     );
 
+    const nextNodes = autoLayout ? layoutSceneShots(relinkedNodes, sceneId) : relinkedNodes;
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: autoLayout ? layoutSceneShots(relinkedNodes, sceneId) : relinkedNodes,
+        nodes: nextNodes,
       },
     });
+
+    recordChangedNodesForAudit(canvasData.nodes, nextNodes);
   },
 
   reorderSceneShots: (sceneId, shotIds, autoLayout = true) => {
@@ -624,7 +664,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
-    const before: Partial<CanvasNode> = { data: scene.data };
     const nextNodes = canvasData.nodes.map((node) =>
       isSceneGroupNode(node) && node.id === sceneId
         ? {
@@ -637,23 +676,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         : node,
     );
 
+    const resolvedNodes = autoLayout ? layoutSceneShots(nextNodes, sceneId) : nextNodes;
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: autoLayout ? layoutSceneShots(nextNodes, sceneId) : nextNodes,
+        nodes: resolvedNodes,
       },
     });
 
-    useCanvasOperationStore.getState().recordNodeUpdate(
-      sceneId,
-      {
-        data: {
-          ...scene.data,
-          shotIds: dedupedShotIds,
-        },
-      } as Partial<CanvasNode>,
-      before,
-    );
+    recordChangedNodesForAudit(canvasData.nodes, resolvedNodes);
   },
 
   autoLayoutSceneShots: (sceneId) => {
@@ -666,12 +698,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!sceneExists) return;
 
     recordHistory(canvasData);
+    const nextNodes = layoutSceneShots(relinkSceneShotIds(canvasData.nodes), sceneId);
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: layoutSceneShots(relinkSceneShotIds(canvasData.nodes), sceneId),
+        nodes: nextNodes,
       },
     });
+
+    recordChangedNodesForAudit(canvasData.nodes, nextNodes);
   },
 
   updateNodePorts: (id, ports) => {

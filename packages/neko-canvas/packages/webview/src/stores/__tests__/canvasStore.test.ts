@@ -57,6 +57,21 @@ function createCanvasData(nodes: CanvasData['nodes']): CanvasData {
   };
 }
 
+function getOperationNodeIds(): string[] {
+  return useCanvasOperationStore.getState().operationLog.flatMap((operation) => {
+    const { payload } = operation;
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      'nodeId' in payload &&
+      typeof payload.nodeId === 'string'
+    ) {
+      return [payload.nodeId];
+    }
+    return [];
+  });
+}
+
 describe('canvasStore scene container actions', () => {
   beforeEach(() => {
     useCanvasStore.setState({
@@ -100,6 +115,8 @@ describe('canvasStore scene container actions', () => {
     expect(shot2?.data.sceneGroupId).toBe('scene-1');
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
     expect(shot1?.position.y).toBe(shot2?.position.y);
+    expect(useCanvasOperationStore.getState().operationLog).toHaveLength(3);
+    expect(getOperationNodeIds()).toEqual(['scene-1', 'shot-1', 'shot-2']);
   });
 
   it('updates scene membership when a shot is dragged into and out of a scene', () => {
@@ -176,5 +193,41 @@ describe('canvasStore scene container actions', () => {
 
     expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
+    expect(useCanvasOperationStore.getState().operationLog).toHaveLength(3);
+    expect(getOperationNodeIds()).toEqual(['scene-1', 'shot-1', 'shot-2']);
+  });
+
+  it('records moved shot positions when auto-layout runs on an existing scene', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          ...createSceneNode(),
+          data: {
+            ...createSceneNode().data,
+            shotIds: ['shot-1', 'shot-2'],
+          },
+        },
+        {
+          ...createShotNode('shot-1', 120, 360),
+          data: {
+            ...createShotNode('shot-1', 120, 360).data,
+            sceneGroupId: 'scene-1',
+          },
+        },
+        {
+          ...createShotNode('shot-2', 140, 620),
+          data: {
+            ...createShotNode('shot-2', 140, 620).data,
+            sceneGroupId: 'scene-1',
+          },
+        },
+      ]),
+    );
+
+    useCanvasStore.getState().autoLayoutSceneShots('scene-1');
+
+    const ops = useCanvasOperationStore.getState().operationLog;
+    expect(ops).toHaveLength(2);
+    expect(getOperationNodeIds()).toEqual(['shot-1', 'shot-2']);
   });
 });

@@ -1,5 +1,6 @@
 import type { CanvasEmbedCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
+import { t } from '../../i18n';
 
 export interface CanvasEmbedNodeProps {
   node: CanvasEmbedCanvasNode;
@@ -87,7 +88,7 @@ export function CanvasEmbedNode({
           }}
         >
           <span className="flex-1 truncate font-medium" style={{ color: 'var(--node-fg)' }}>
-            {canvasTitle || fileName || 'Canvas'}
+            {canvasTitle || fileName || t('canvasEmbed.defaultTitle')}
           </span>
           <button
             onClick={(e) => {
@@ -105,7 +106,7 @@ export function CanvasEmbedNode({
               flexShrink: 0,
             }}
           >
-            打开
+            {t('canvasEmbed.open')}
           </button>
         </div>
 
@@ -116,7 +117,7 @@ export function CanvasEmbedNode({
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          <span style={{ color: 'var(--node-fg-secondary)' }}>CANVAS · EMBED</span>
+          <span style={{ color: 'var(--node-fg-secondary)' }}>{t('canvasEmbed.badge')}</span>
         </div>
       </div>
     </BaseNode>

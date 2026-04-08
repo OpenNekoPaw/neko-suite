@@ -18,6 +18,10 @@ import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
+import {
+  appendSelectedGenerationCandidate,
+  selectGenerationCandidate,
+} from './utils/generationHistory';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import {
   screenToCanvas as screenToCanvasMath,
@@ -316,16 +320,13 @@ export function CanvasApp() {
       if (node.type === 'shot') {
         if (status === 'done' && dataUrl) {
           const shotNode = node as import('@neko/shared').ShotCanvasNode;
-          const history = [
-            ...(shotNode.data.generationHistory ?? []),
-            {
-              id: `v-${Date.now()}`,
-              dataUrl,
-              prompt: '',
-              timestamp: Date.now(),
-              selected: true,
-            },
-          ];
+          const history = appendSelectedGenerationCandidate(shotNode.data.generationHistory ?? [], {
+            id: `v-${Date.now()}`,
+            dataUrl,
+            prompt: '',
+            timestamp: Date.now(),
+            selected: true,
+          });
           updateNodeData(nodeId, {
             generationStatus: 'done',
             generatedImage: dataUrl,
@@ -340,19 +341,13 @@ export function CanvasApp() {
           c.id === cellId
             ? (() => {
                 if (status === 'done' && dataUrl) {
-                  const history = [
-                    ...(c.generationHistory ?? []),
-                    {
-                      id: `gallery-${cellId}-${Date.now()}`,
-                      dataUrl,
-                      prompt: '',
-                      timestamp: Date.now(),
-                      selected: true,
-                    },
-                  ].map((candidate, index, list) => ({
-                    ...candidate,
-                    selected: index === list.length - 1,
-                  }));
+                  const history = appendSelectedGenerationCandidate(c.generationHistory ?? [], {
+                    id: `gallery-${cellId}-${Date.now()}`,
+                    dataUrl,
+                    prompt: '',
+                    timestamp: Date.now(),
+                    selected: true,
+                  });
                   return {
                     ...c,
                     generationStatus: 'done' as const,
@@ -393,16 +388,13 @@ export function CanvasApp() {
       if (!node) return;
       if (node.type === 'shot') {
         const shotNode = node as import('@neko/shared').ShotCanvasNode;
-        const history = [
-          ...(shotNode.data.generationHistory ?? []),
-          {
-            id: `sketch-${Date.now()}`,
-            dataUrl: imageData,
-            prompt: '',
-            timestamp: Date.now(),
-            selected: true,
-          },
-        ];
+        const history = appendSelectedGenerationCandidate(shotNode.data.generationHistory ?? [], {
+          id: `sketch-${Date.now()}`,
+          dataUrl: imageData,
+          prompt: '',
+          timestamp: Date.now(),
+          selected: true,
+        });
         updateNodeData(nodeId, {
           generatedImage: imageData,
           generationHistory: history,
@@ -414,19 +406,13 @@ export function CanvasApp() {
             ? {
                 ...c,
                 image: imageData,
-                generationHistory: [
-                  ...(c.generationHistory ?? []),
-                  {
-                    id: `gallery-sketch-${cellId}-${Date.now()}`,
-                    dataUrl: imageData,
-                    prompt: '',
-                    timestamp: Date.now(),
-                    selected: true,
-                  },
-                ].map((candidate, index, list) => ({
-                  ...candidate,
-                  selected: index === list.length - 1,
-                })),
+                generationHistory: appendSelectedGenerationCandidate(c.generationHistory ?? [], {
+                  id: `gallery-sketch-${cellId}-${Date.now()}`,
+                  dataUrl: imageData,
+                  prompt: '',
+                  timestamp: Date.now(),
+                  selected: true,
+                }),
               }
             : c,
         );
@@ -622,10 +608,7 @@ export function CanvasApp() {
       const target = nodes.find((node) => node.id === nodeId);
       if (!target || target.type !== 'shot') return;
 
-      const nextHistory = target.data.generationHistory.map((candidate) => ({
-        ...candidate,
-        selected: candidate.id === candidateId,
-      }));
+      const nextHistory = selectGenerationCandidate(target.data.generationHistory, candidateId);
       const selected = nextHistory.find((candidate) => candidate.selected);
 
       updateNodeData(nodeId, {
@@ -643,10 +626,7 @@ export function CanvasApp() {
 
       const cells = target.data.cells.map((cell) => {
         if (cell.id !== cellId) return cell;
-        const nextHistory = (cell.generationHistory ?? []).map((candidate) => ({
-          ...candidate,
-          selected: candidate.id === candidateId,
-        }));
+        const nextHistory = selectGenerationCandidate(cell.generationHistory ?? [], candidateId);
         const selected = nextHistory.find((candidate) => candidate.selected);
         return {
           ...cell,

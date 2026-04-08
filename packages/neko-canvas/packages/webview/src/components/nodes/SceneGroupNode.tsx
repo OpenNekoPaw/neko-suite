@@ -9,6 +9,7 @@ import type { SceneGroupCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
 import { InlineInput, InlineSelect, TIME_OF_DAY } from '../common/InlineControls';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -122,7 +123,7 @@ export function SceneGroupNode({
             <EditableText
               value={sceneTitle}
               onChange={(val) => onUpdateData?.(node.id, { sceneTitle: val })}
-              placeholder="场景标题"
+              placeholder={t('scene.titlePlaceholder')}
               className="font-medium flex-1 min-w-0 truncate"
               style={{ color: 'var(--node-fg)', fontSize: 12 }}
               disabled={node.locked}
@@ -130,9 +131,9 @@ export function SceneGroupNode({
             <div
               className="flex-shrink-0 text-xs"
               style={{ color: 'var(--node-fg-secondary)' }}
-              title={`${shotIds.length} 个镜头`}
+              title={t('scene.shotCountTitle', { count: shotIds.length })}
             >
-              {shotIds.length} 镜
+              {t('scene.shotCountCompact', { count: shotIds.length })}
             </div>
           </div>
           {/* Row 2: controls */}
@@ -140,7 +141,7 @@ export function SceneGroupNode({
             <InlineInput
               value={location ?? ''}
               onChange={(v) => onUpdateData?.(node.id, { location: v || undefined })}
-              placeholder="地点"
+              placeholder={t('scene.locationPlaceholder')}
               width={80}
             />
             <InlineSelect
@@ -167,7 +168,7 @@ export function SceneGroupNode({
                 opacity: selectedShotCount > 0 ? 1 : 0.5,
               }}
             >
-              纳管 {selectedShotCount > 0 ? `(${selectedShotCount})` : ''}
+              {t('scene.assignShots')} {selectedShotCount > 0 ? `(${selectedShotCount})` : ''}
             </button>
             <button
               onClick={(e) => {
@@ -186,7 +187,7 @@ export function SceneGroupNode({
                 opacity: shotIds.length > 0 ? 1 : 0.5,
               }}
             >
-              批量生成
+              {t('scene.batchGenerate')}
             </button>
             <button
               onClick={(e) => {
@@ -205,7 +206,7 @@ export function SceneGroupNode({
                 opacity: shotIds.length > 0 ? 1 : 0.5,
               }}
             >
-              整理布局
+              {t('scene.autoLayout')}
             </button>
           </div>
         </div>
@@ -216,7 +217,7 @@ export function SceneGroupNode({
           style={{ color: 'var(--node-fg-secondary)' }}
         >
           {shotIds.length === 0 ? (
-            <span style={{ opacity: 0.4 }}>拖入 ShotNode 到此场景</span>
+            <span style={{ opacity: 0.4 }}>{t('scene.emptyHint')}</span>
           ) : (
             <div className="flex flex-wrap gap-1.5 items-center justify-center">
               {orderedShots.map((shot, i) => (
@@ -249,7 +250,7 @@ export function SceneGroupNode({
                     opacity: 0.6 + (i / Math.max(shotIds.length, 1)) * 0.4,
                     cursor: node.locked ? 'default' : 'grab',
                   }}
-                  title={`镜头 ${shot.shotNumber ?? i + 1}`}
+                  title={t('scene.shotBadgeTitle', { number: shot.shotNumber ?? i + 1 })}
                 >
                   <span style={{ fontSize: 9, opacity: 0.6 }}>⋮⋮</span>
                   <span className="font-mono" style={{ fontSize: 10 }}>
