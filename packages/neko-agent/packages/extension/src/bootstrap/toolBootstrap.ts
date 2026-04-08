@@ -8,11 +8,13 @@
  * NOTE: This is a transitional module. As sub-packages adopt the
  * AgentCapabilityProvider protocol (P0-1), their factory functions will
  * migrate out of neko-agent into the sub-packages themselves.
+ * Sub-packages that have already registered via CapabilityProvider are
+ * automatically skipped (see `MIGRATED_PROVIDERS`).
  */
 
 import { getRootLogger } from '../base';
 import {
-  createNekoCutTools,
+  // NekoCut: REMOVED — migrated to AgentCapabilityProvider (neko-cut/agentCapabilityProvider.ts)
   createNekoCanvasTools,
   createNekoEngineEffectsTools,
   createTranscribeTools,
@@ -25,17 +27,20 @@ import { createPuppetFaceTools } from '../tools/puppetFaceTools';
 import type { Platform } from '@neko/platform';
 
 /**
- * Register tools from other Neko extensions (NekoCut, NekoCanvas, Engine Effects, NekoStory, etc.).
+ * Register tools from other Neko extensions via fallback factory functions.
  *
- * `platform` is used to build an embedFn for SearchScriptIndex (L3 semantic search).
- * If no embedding-capable provider is configured, SearchScriptIndex is omitted gracefully.
+ * Sub-packages that have migrated to AgentCapabilityProvider are NOT included here.
+ * They register their own tools via `neko.agent.registerCapabilities` command.
+ *
+ * Migrated sub-packages (remove from here as each migrates):
+ * - neko-cut ✅ (2026-04-08)
  */
 export function registerExtensionTools(
   toolRegistry: { register: (tool: unknown) => void },
   platform: Platform,
 ): void {
   const batches: Array<{ name: string; tools: unknown[] }> = [
-    { name: 'NekoCut', tools: createNekoCutTools() },
+    // NekoCut: migrated to AgentCapabilityProvider — tools registered by neko-cut on activation
     { name: 'NekoCanvas', tools: createNekoCanvasTools(platform.media, platform.config) },
     { name: 'EngineEffects', tools: createNekoEngineEffectsTools() },
     { name: 'Transcribe', tools: createTranscribeTools() },
@@ -54,7 +59,7 @@ export function registerExtensionTools(
     total += batch.tools.length;
   }
 
-  getRootLogger().info(`Registered ${total} extension tools`);
+  getRootLogger().info(`Registered ${total} extension tools (fallback)`);
 }
 
 /**

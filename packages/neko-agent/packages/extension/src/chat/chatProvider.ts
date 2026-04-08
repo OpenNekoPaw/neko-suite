@@ -19,6 +19,7 @@ import { IEditorRegistry } from '../editor/common/editorRegistry';
 import {
   IPlatform,
   ITaskManager,
+  IToolRegistry,
   IConnectionStateManager,
   IAgentManager as IAgentManagerId,
 } from '../bootstrap';
@@ -276,8 +277,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._initializeToolSkills();
 
         // Wire up SkillService: create instance, populate from disk, keep in sync.
+        // Inject toolRegistry so allowedTools validation warns on unregistered tool references.
         const skillFileService = getSkillFileService();
-        const skillService = createSkillService();
+        const toolRegistry = getService(IToolRegistry);
+        const skillService = createSkillService({ toolRegistry: toolRegistry ?? undefined });
 
         this._providers = new ProviderManager(this._context, this._platform);
         this._messages = new MessageHandler(
