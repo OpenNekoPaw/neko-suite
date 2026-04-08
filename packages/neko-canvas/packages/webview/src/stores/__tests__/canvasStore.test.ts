@@ -53,7 +53,7 @@ function createCanvasData(): CanvasData {
 
 describe('canvasStore deriveSuccessorNode', () => {
   beforeEach(() => {
-    useHistoryStore.setState({ past: [], future: [] });
+    useHistoryStore.setState({ undoStack: [], redoStack: [] });
     useCanvasStore.setState({
       canvasData: createCanvasData(),
       selection: { nodeIds: [], connectionIds: [] },
