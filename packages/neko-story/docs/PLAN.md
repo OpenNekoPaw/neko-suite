@@ -155,6 +155,7 @@ interface IStoryboardGenerator {
 - [x] 将 `neko.story.generateStoryboard` 升级为直接启动标准 pipeline，而不只是发送 context
 - [x] 为轻量分镜表接入 Agent / Canvas 真实状态回写
 - [x] 增加 `neko.story.startVideoCreation` 正式命令，作为从剧本场景启动 `flowF` 视频主流程入口
+- [x] 为 `StorySceneStateStore` 接入 `workspaceState` 持久化与恢复
 
 ---
 
@@ -184,7 +185,13 @@ extension → parser → types
    - 已具备 `ScenePlan / ShotPlan -> canvas semantic import` pipeline 主链
    - `story.generateStoryboard` 已直连标准 pipeline
    - 轻量分镜表已接入 extension 侧统一状态源与 pipeline 事件回写
+   - 轻量分镜表状态已通过 `workspaceState` 跨会话持久化
    - 已新增“从剧本开始视频创作”标准入口 `neko.story.startVideoCreation`
+
+### 当前剩余收口项
+
+- [ ] 将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
+- [ ] 对 `story + agent + canvas` 主链补更大范围回归验证（至少包级构建与关键命令链路）
 
 ## 构建与测试
 

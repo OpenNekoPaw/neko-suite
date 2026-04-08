@@ -55,12 +55,14 @@
 - `neko-agent` 的 `parseStoryboard` 已优先通过 `neko-story` 结构化 planning 生成 `scenePlans`
 - `neko-agent` pipeline 已新增 `importStoryboardToCanvas` stage，可将 semantic storyboard 正式导入 `canvas`
 - `StartPipeline` 已支持 `importToCanvas` / `canvasStartX` / `canvasStartY` 参数，用于开启 semantic canvas handoff
+- 轻量分镜表状态已升级为 extension 侧统一事实源，并通过 `workspaceState` 做跨会话持久化
+- `story` 已提供 `neko.story.startVideoCreation`，作为从当前场景启动 `flowF` 标准视频主流程的正式入口
 
 仍未完全落地：
 
-- 轻量分镜表状态当前为 extension 内存级统一事实源，尚未持久化到 workspaceState
 - `canvasStatus = opened` 仍主要由用户动作驱动，尚未接入 canvas 实时打开/聚焦事件
-- “从剧本开始视频创作”已具备命令入口，但整包级联验证仍需要更大范围回归
+- `StorySceneStateStore` 当前持久化的是 scene 级工作流状态，不包含更细粒度的 canvas 打开态映射
+- “从剧本开始视频创作”标准主流程已具备命令入口，但整包级联验证仍需要更大范围回归
 
 ---
 
@@ -350,6 +352,7 @@ canvas
 - `CreativeGridView` 只作为可选场景级展示，不作为正式 storyboard UI
 - `generateStoryboard` 命令重定向为 Agent 编排入口
 - 新增 `从剧本开始视频创作` 正式命令，走 `flowF` 标准主链
+- 轻量分镜表状态统一由 `StorySceneStateStore` 承担，并持久化到 `workspaceState`
 
 ### 10.2 agent
 
@@ -389,6 +392,7 @@ canvas
 - 1：已完成当前迭代目标
   - `story` 已具备场景级 `sendToCanvas`
   - `neko.story.startVideoCreation` 已作为正式标准流程入口落地
+  - 轻量分镜表状态已具备跨会话恢复能力
 - 2：已完成当前迭代目标
 - 3：已完成当前迭代目标
 - 4：已完成当前迭代目标
