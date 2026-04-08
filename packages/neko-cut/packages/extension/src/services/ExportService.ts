@@ -449,7 +449,7 @@ export class ExportService implements vscode.Disposable {
    * from the JVI file format in several ways:
    * - Audio volume/pan must be plain numbers (not {baseValue: N} objects)
    * - Transition type maps to "transitionType" (not "type")
-   * - EffectParams schema differs from EffectInstance
+   * - Effects must be sanitized to JSON-serializable ElementEffect payloads
    */
   private async buildTimeline(
     project: ProjectData,
@@ -497,7 +497,7 @@ export class ExportService implements vscode.Disposable {
       trimEnd: this.asNumber(el.trimEnd, 0),
       opacity: this.asNumber(el.opacity, 1.0),
       blendMode: el.blendMode ?? 'normal',
-      effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
+      effects: this.sanitizeEffects(el.effects),
       muted: el.muted ?? false,
       hidden: el.hidden ?? false,
       locked: el.locked ?? false,
@@ -613,6 +613,87 @@ export class ExportService implements vscode.Disposable {
       fadeOutCurve: this.mapEasing(audio.fadeOutCurve),
       gain: this.asNumber(audio.gain, 0),
     };
+  }
+
+  private sanitizeEffects(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((effect): effect is Record<string, unknown> => !!effect && typeof effect === 'object')
+      .map((effect) => {
+        const parameters = this.sanitizeEffectParameters(
+          effect.parameters,
+          effect.animatedParameters,
+        );
+
+        return {
+          id: typeof effect.id === 'string' ? effect.id : '',
+          type: typeof effect.type === 'string' ? effect.type : 'custom',
+          enabled: effect.enabled !== false,
+          order: this.asNumber(effect.order, 0),
+          parameters,
+        };
+      })
+      .sort((a, b) => this.asNumber(a.order, 0) - this.asNumber(b.order, 0));
+  }
+
+  private sanitizeEffectParameters(
+    parameters: unknown,
+    animatedParameters: unknown,
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+
+    if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
+      for (const [key, value] of Object.entries(parameters as Record<string, unknown>)) {
+        const serialized = this.toSerializableEffectValue(value);
+        if (serialized !== undefined) {
+          result[key] = serialized;
+        }
+      }
+    }
+
+    if (
+      animatedParameters &&
+      typeof animatedParameters === 'object' &&
+      !Array.isArray(animatedParameters)
+    ) {
+      for (const [key, value] of Object.entries(animatedParameters as Record<string, unknown>)) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          continue;
+        }
+
+        // Export currently supports static effect params only. Use baseValue as
+        // the least-surprising fallback so animated effects still render.
+        const baseValue = this.toSerializableEffectValue(
+          (value as Record<string, unknown>).baseValue,
+        );
+        if (baseValue !== undefined) {
+          result[key] = baseValue;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private toSerializableEffectValue(value: unknown): unknown {
+    if (
+      typeof value === 'number' ||
+      typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      value === null
+    ) {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      const serialized = value.map((item) => this.toSerializableEffectValue(item));
+      return serialized.every((item) => item !== undefined) ? serialized : undefined;
+    }
+
+    return undefined;
   }
 
   private getLegacyCompatibleTransition(
