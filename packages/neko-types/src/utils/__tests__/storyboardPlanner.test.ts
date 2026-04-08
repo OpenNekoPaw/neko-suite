@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  applyStoryboardPayloadToCanvas,
-  createStoryboardPayload,
-} from '../storyboardPlanner';
+import { applyStoryboardPayloadToCanvas, createStoryboardPayload } from '../storyboardPlanner';
 import type { NekoCanvasAPI, NekoStoryScriptIndex } from '../../types/extension-api';
 import type { StoryScenePlan } from '../../types/storyboard-planner';
 
@@ -81,7 +78,8 @@ describe('storyboardPlanner', () => {
     const create = vi
       .fn<NekoCanvasAPI['nodes']['create']>()
       .mockResolvedValueOnce('scene-node-1')
-      .mockResolvedValueOnce('shot-node-1');
+      .mockResolvedValueOnce('shot-node-1')
+      .mockResolvedValueOnce('shot-node-2');
     const update = vi.fn<NekoCanvasAPI['nodes']['update']>().mockResolvedValue(undefined);
 
     const result = await applyStoryboardPayloadToCanvas(
@@ -96,9 +94,11 @@ describe('storyboardPlanner', () => {
 
     expect(result).toMatchObject({
       scenesCreated: 1,
-      totalShots: 1,
+      totalShots: 2,
     });
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(update).toHaveBeenCalledWith('scene-node-1', { shotIds: ['shot-node-1'] });
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(update).toHaveBeenCalledWith('scene-node-1', {
+      shotIds: ['shot-node-1', 'shot-node-2'],
+    });
   });
 });
