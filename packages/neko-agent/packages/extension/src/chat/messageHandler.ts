@@ -490,13 +490,14 @@ export class MessageHandler {
       await agentRunner.configure({
         platform: this._platform,
         systemPrompt,
-        maxIterations: Infinity,
+        maxIterations: 200,
         autoExecuteTools: this._settings.autoExecuteTools,
         temperature: this._settings.temperature,
         maxTokens: this._settings.maxTokens,
         modelId: effectiveModelId,
         executionMode: this._settings.executionMode,
         thinkingBudget: this._settings.thinkingBudget,
+        workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
       });
 
       // Create agent context

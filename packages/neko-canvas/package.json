@@ -63,28 +63,8 @@
         "category": "NekoCanvas"
       },
       {
-        "command": "neko.canvas.addShape",
-        "title": "Add Shape",
-        "category": "NekoCanvas"
-      },
-      {
-        "command": "neko.canvas.updateShape",
-        "title": "Update Shape",
-        "category": "NekoCanvas"
-      },
-      {
         "command": "neko.asset.import",
         "title": "%neko.asset.import.title%",
-        "category": "NekoCanvas"
-      },
-      {
-        "command": "neko.asset.organize",
-        "title": "Organize Assets",
-        "category": "NekoCanvas"
-      },
-      {
-        "command": "neko.asset.search",
-        "title": "Search Assets",
         "category": "NekoCanvas"
       },
       {
@@ -95,16 +75,6 @@
       {
         "command": "neko.canvas.previewMedia",
         "title": "Preview Media",
-        "category": "NekoCanvas"
-      },
-      {
-        "command": "neko.template.apply",
-        "title": "Apply Template",
-        "category": "NekoCanvas"
-      },
-      {
-        "command": "neko.template.save",
-        "title": "Save as Template",
         "category": "NekoCanvas"
       },
       {

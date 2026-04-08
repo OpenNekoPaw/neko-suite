@@ -357,13 +357,15 @@ export class ExportService implements vscode.Disposable {
 
       // Handle terminal state
       if (TERMINAL_STATES.has(progress.state)) {
+        // Read outputPath from job config before deleting
+        const completedJob = this._activeJobs.get(jobId);
         this._activeJobs.delete(jobId);
         this._onDidQueueChange.fire(this.buildQueueStatus());
 
         if (progress.state === 'completed') {
           this._onDidComplete.fire({
             success: true,
-            outputPath: undefined,
+            outputPath: completedJob?.config?.outputPath,
             totalFrames: progress.totalFrames,
             elapsedMs: progress.elapsedMs,
           });

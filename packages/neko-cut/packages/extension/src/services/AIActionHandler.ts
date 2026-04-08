@@ -16,7 +16,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import type { EngineClient } from '@neko/neko-client';
-import { getLogger } from '../base';
+import type { TimelineElement } from '@neko/shared';
+import { getLogger, getService } from '../base';
+import { IEditorRegistry } from '../editor/common/editorRegistry';
+import type { VideoEditorModel } from '../editor/video/videoEditorModel';
 
 const logger = getLogger('AIActionHandler');
 
@@ -155,8 +158,6 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing upscale...');
 
-    // TODO(P0): resolve element source path from elementIds via VideoEditorModel
-    // For now we use a placeholder path approach
     const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
@@ -449,26 +450,36 @@ export class AIActionHandler implements vscode.Disposable {
 
   private sendStarted(ctx: AIActionContext): void {
     this.webview.postMessage({
-      type: 'aiActionStarted',
+      type: 'aiActionStatus',
       actionId: ctx.actionId,
-      elementIds: ctx.elementIds,
+      status: 'running',
+      progress: 0,
+      message: 'Started',
     });
   }
 
-  private sendProgress(ctx: AIActionContext, _progress: number, message: string): void {
+  private sendProgress(ctx: AIActionContext, progress: number, message: string): void {
     this.webview.postMessage({
-      type: 'aiActionProgress',
+      type: 'aiActionStatus',
       actionId: ctx.actionId,
-      content: message,
+      status: 'running',
+      progress,
+      message,
     });
   }
 
-  private sendResult(ctx: AIActionContext, success: boolean, data?: unknown, error?: string): void {
+  private sendResult(
+    ctx: AIActionContext,
+    success: boolean,
+    _data?: unknown,
+    error?: string,
+  ): void {
     this.webview.postMessage({
-      type: 'aiActionResult',
+      type: 'aiActionStatus',
       actionId: ctx.actionId,
-      success,
-      data,
+      status: success ? 'completed' : 'failed',
+      progress: success ? 100 : undefined,
+      message: success ? 'Completed' : undefined,
       error,
     });
   }
@@ -522,10 +533,11 @@ export class AIActionHandler implements vscode.Disposable {
    *
    * Priority:
    *   1. Explicit sourcePath from action params (webview passes it)
-   *   2. Project directory fallback (from _documentUri)
+   *   2. Lookup element by ID from the active VideoEditorModel
+   *   3. Project directory fallback (from _documentUri)
    */
   private resolveElementSourcePath(
-    _elementId: string | undefined,
+    elementId: string | undefined,
     params?: Record<string, unknown>,
   ): string | null {
     // 1. Explicit sourcePath from caller
@@ -533,9 +545,46 @@ export class AIActionHandler implements vscode.Disposable {
     if (typeof explicit === 'string' && explicit.length > 0) {
       return explicit;
     }
-    // 2. Fallback: project file directory (for relative path resolution)
+
+    // 2. Lookup element src from project data
+    if (elementId) {
+      const src = this.findElementSrc(elementId);
+      if (src) {
+        // Resolve relative paths against the project file directory
+        if (!path.isAbsolute(src) && this._documentUri) {
+          return path.resolve(path.dirname(this._documentUri.fsPath), src);
+        }
+        return src;
+      }
+    }
+
+    // 3. Fallback: project file directory
     if (this._documentUri) {
       return path.dirname(this._documentUri.fsPath);
+    }
+    return null;
+  }
+
+  /**
+   * Find element src from active VideoEditorModel's project data.
+   */
+  private findElementSrc(elementId: string): string | null {
+    const editorRegistry = getService(IEditorRegistry);
+    if (!editorRegistry) return null;
+
+    const editor = editorRegistry.getEditorByUri(this._documentUri);
+    if (!editor || editor.type !== 'video') return null;
+
+    const model = editor as unknown as VideoEditorModel;
+    const project = model.getProjectData();
+    if (!project?.tracks) return null;
+
+    for (const track of project.tracks) {
+      for (const element of track.elements) {
+        if (element.id === elementId && 'src' in element) {
+          return (element as TimelineElement & { src: string }).src;
+        }
+      }
     }
     return null;
   }

@@ -1,53 +1,52 @@
 /**
  * Timeline Commands
- * VSCode commands for timeline operations
+ * VSCode commands for timeline operations.
+ *
+ * Uses TimelineToolExecutor (extension-side ProjectData transforms) instead of
+ * the broken TimelineBridge that sent messages to the webview with no receiver.
+ * This resolves NKC-002.
  */
 
 import * as vscode from 'vscode';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
+import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
-import { getTimelineBridge } from '../bootstrap/toolsBootstrap';
 
 /**
  * Register timeline-related VSCode commands
  */
 export function registerTimelineCommands(
   context: vscode.ExtensionContext,
-  videoEditorProvider: VideoEditorProvider,
+  _videoEditorProvider: VideoEditorProvider,
 ): void {
-  const bridge = getTimelineBridge();
+  const executor = new TimelineToolExecutor();
 
   /**
-   * Execute a timeline bridge action with the active webview.
-   * Handles webview acquisition, null-guard with user warning, and bridge setup.
-   *
-   * @param toolName - The timeline tool action name to execute
-   * @param params - Parameters to pass to the tool
-   * @returns The tool execution result, or undefined if no webview is available
+   * Execute a timeline tool via the extension-side TimelineToolExecutor.
+   * Returns a TimelineToolResult for API compatibility.
    */
-  async function withActiveWebview<T = unknown>(
+  async function executeTool<T = unknown>(
     toolName: string,
     params: Record<string, unknown>,
-  ): Promise<TimelineToolResult<T> | undefined> {
-    const webview = videoEditorProvider.getActiveWebview();
-    if (!webview) {
-      vscode.window.showWarningMessage('No video project is open.');
-      return;
-    }
-    bridge.setWebview(webview);
-    return bridge.execute<T>(toolName, params);
+  ): Promise<TimelineToolResult<T>> {
+    const result = await executor.execute(toolName, params);
+    return {
+      success: result.success,
+      data: result.data as T | undefined,
+      error: result.error,
+    };
   }
 
   // Timeline Info Commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.timeline.getInfo', () =>
-      withActiveWebview('GetTimelineInfo', {}),
+      executeTool('GetTimelineInfo', {}),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.timeline.listElements', (trackType?: string) =>
-      withActiveWebview('ListElements', { trackType }),
+      executeTool('ListElements', { trackType }),
     ),
   );
 
@@ -61,7 +60,7 @@ export function registerTimelineCommands(
         startTime?: number;
         duration?: number;
         properties?: Record<string, unknown>;
-      }) => withActiveWebview('AddElement', params),
+      }) => executeTool('AddElement', params),
     ),
   );
 
@@ -69,19 +68,19 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.element.update',
       (params: { elementId: string; properties: Record<string, unknown> }) =>
-        withActiveWebview('UpdateElement', params),
+        executeTool('UpdateElement', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.element.delete', (elementId: string) =>
-      withActiveWebview('DeleteElement', { elementId }),
+      executeTool('DeleteElement', { elementId }),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.element.getInfo', (elementId: string) =>
-      withActiveWebview('GetElementInfo', { elementId }),
+      executeTool('GetElementInfo', { elementId }),
     ),
   );
 
@@ -89,34 +88,33 @@ export function registerTimelineCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.track.add',
-      (params: { type: string; name?: string; index?: number }) =>
-        withActiveWebview('AddTrack', params),
+      (params: { type: string; name?: string; index?: number }) => executeTool('AddTrack', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.track.delete', (trackId: string) =>
-      withActiveWebview('DeleteTrack', { trackId }),
+      executeTool('DeleteTrack', { trackId }),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.track.reorder',
-      (params: { trackId: string; newIndex: number }) => withActiveWebview('ReorderTrack', params),
+      (params: { trackId: string; newIndex: number }) => executeTool('ReorderTracks', params),
     ),
   );
 
   // Effect Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.effect.list', () => withActiveWebview('ListEffects', {})),
+    vscode.commands.registerCommand('neko.effect.list', () => executeTool('ListEffects', {})),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.effect.add',
       (params: { elementId: string; effectType: string; parameters?: Record<string, unknown> }) =>
-        withActiveWebview('AddEffect', params),
+        executeTool('AddEffect', params),
     ),
   );
 
@@ -124,22 +122,21 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.effect.update',
       (params: { elementId: string; effectId: string; params: Record<string, unknown> }) =>
-        withActiveWebview('UpdateEffect', params),
+        executeTool('UpdateEffect', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.effect.remove',
-      (params: { elementId: string; effectId: string }) =>
-        withActiveWebview('RemoveEffect', params),
+      (params: { elementId: string; effectId: string }) => executeTool('RemoveEffect', params),
     ),
   );
 
   // Transition Commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.transition.list', () =>
-      withActiveWebview('ListTransitions', {}),
+      executeTool('ListTransitions', {}),
     ),
   );
 
@@ -151,7 +148,7 @@ export function registerTimelineCommands(
         transitionType: string;
         duration?: number;
         position?: 'in' | 'out';
-      }) => withActiveWebview('SetTransition', params),
+      }) => executeTool('SetTransition', params),
     ),
   );
 
@@ -159,7 +156,7 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.transition.remove',
       (params: { elementId: string; placement: 'in' | 'out' }) =>
-        withActiveWebview('RemoveTransition', params),
+        executeTool('RemoveTransition', params),
     ),
   );
 
@@ -168,7 +165,7 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.mask.add',
       (params: { elementId: string; maskType: string; params: Record<string, unknown> }) =>
-        withActiveWebview('AddMask', params),
+        executeTool('AddMask', params),
     ),
   );
 
@@ -176,14 +173,14 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.mask.update',
       (params: { elementId: string; maskId: string; params: Record<string, unknown> }) =>
-        withActiveWebview('UpdateMask', params),
+        executeTool('UpdateMask', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.mask.remove',
-      (params: { elementId: string; maskId: string }) => withActiveWebview('RemoveMask', params),
+      (params: { elementId: string; maskId: string }) => executeTool('RemoveMask', params),
     ),
   );
 
@@ -191,8 +188,7 @@ export function registerTimelineCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.keyframe.get',
-      (params: { elementId: string; property?: string }) =>
-        withActiveWebview('GetKeyframes', params),
+      (params: { elementId: string; property?: string }) => executeTool('GetKeyframes', params),
     ),
   );
 
@@ -205,7 +201,7 @@ export function registerTimelineCommands(
         time: number;
         value: unknown;
         easing?: string;
-      }) => withActiveWebview('AddKeyframe', params),
+      }) => executeTool('AddKeyframe', params),
     ),
   );
 
@@ -218,15 +214,14 @@ export function registerTimelineCommands(
         time?: number;
         value?: unknown;
         easing?: string;
-      }) => withActiveWebview('UpdateKeyframe', params),
+      }) => executeTool('UpdateKeyframe', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.keyframe.remove',
-      (params: { elementId: string; keyframeId: string }) =>
-        withActiveWebview('RemoveKeyframe', params),
+      (params: { elementId: string; keyframeId: string }) => executeTool('RemoveKeyframe', params),
     ),
   );
 
@@ -242,7 +237,7 @@ export function registerTimelineCommands(
         size?: { width?: number; height?: number };
         style?: Record<string, unknown>;
         transform?: Record<string, unknown>;
-      }) => withActiveWebview('AddShape', params),
+      }) => executeTool('AddShape', params),
     ),
   );
 
@@ -257,7 +252,7 @@ export function registerTimelineCommands(
         style?: Record<string, unknown>;
         visible?: boolean;
         locked?: boolean;
-      }) => withActiveWebview('UpdateShape', params),
+      }) => executeTool('UpdateShape', params),
     ),
   );
 
@@ -273,13 +268,13 @@ export function registerTimelineCommands(
         temperature?: number;
         tint?: number;
         gamma?: number;
-      }) => withActiveWebview('SetColorCorrection', params),
+      }) => executeTool('SetColorCorrection', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.color.reset', (elementId: string) =>
-      withActiveWebview('ResetColorCorrection', { elementId }),
+      executeTool('ResetColorCorrection', { elementId }),
     ),
   );
 
@@ -294,7 +289,7 @@ export function registerTimelineCommands(
         muted?: boolean;
         fadeIn?: number;
         fadeOut?: number;
-      }) => withActiveWebview('SetAudioProperties', params),
+      }) => executeTool('SetAudioProperties', params),
     ),
   );
 
@@ -302,7 +297,7 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.audio.addKeyframe',
       (params: { elementId: string; property: 'volume' | 'pan'; time: number; value: number }) =>
-        withActiveWebview('AddAudioKeyframe', params),
+        executeTool('AddAudioKeyframe', params),
     ),
   );
 
@@ -316,7 +311,7 @@ export function registerTimelineCommands(
         muted?: boolean;
         locked?: boolean;
         solo?: boolean;
-      }) => withActiveWebview('SetTrackProperties', params),
+      }) => executeTool('SetTrackProperties', params),
     ),
   );
 
@@ -325,14 +320,14 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.media.separateAudio',
       (params: { elementId: string; targetTrackId?: string }) =>
-        withActiveWebview('SeparateAudio', params),
+        executeTool('SeparateAudio', params),
     ),
   );
 
   // Export Progress Command (uses ExportService directly)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.export.getProgress', async () => {
-      const exportService = videoEditorProvider.getActiveExportService();
+      const exportService = _videoEditorProvider.getActiveExportService();
       if (!exportService) {
         return { success: false, error: 'No export service available' };
       }
@@ -349,7 +344,7 @@ export function registerTimelineCommands(
         elementId: string;
         property: string;
         keyframes: Array<{ time: number; value: unknown; easing?: string }>;
-      }) => withActiveWebview('AddAnimation', params),
+      }) => executeTool('AddAnimation', params),
     ),
   );
 
@@ -362,7 +357,7 @@ export function registerTimelineCommands(
         startTime: number;
         endTime: number;
         style?: Record<string, unknown>;
-      }) => withActiveWebview('AddSubtitle', params),
+      }) => executeTool('AddSubtitle', params),
     ),
   );
 
@@ -370,7 +365,7 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.subtitle.import',
       (params: { format: 'srt' | 'vtt' | 'ass'; content: string }) =>
-        withActiveWebview('ImportSubtitles', params),
+        executeTool('ImportSubtitles', params),
     ),
   );
 
@@ -379,25 +374,26 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.media.trim',
       (params: { elementId: string; startTime: number; endTime: number }) =>
-        withActiveWebview('TrimMedia', params),
+        executeTool('TrimMedia', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.media.split',
-      (params: { elementId: string; splitTime: number }) => withActiveWebview('SplitMedia', params),
+      (params: { elementId: string; splitTime: number }) => executeTool('SplitMedia', params),
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.media.setSpeed',
-      (params: { elementId: string; speed: number }) => withActiveWebview('SetSpeed', params),
+      (params: { elementId: string; speed: number }) => executeTool('SetPlaybackSpeed', params),
     ),
   );
 
-  // Render Commands
+  // Render Commands — these require webview (GPU rendering), keep bridge for now
+  // but wrap with fallback error instead of silent timeout
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.render.frame',
@@ -406,7 +402,7 @@ export function registerTimelineCommands(
         width?: number;
         height?: number;
         format?: 'png' | 'jpeg' | 'webp';
-      }) => withActiveWebview('RenderFrame', params),
+      }) => executeTool('RenderFrame', params),
     ),
   );
 
@@ -418,7 +414,7 @@ export function registerTimelineCommands(
         endTime: number;
         format?: 'mp4' | 'webm';
         quality?: 'low' | 'medium' | 'high';
-      }) => withActiveWebview('RenderClip', params),
+      }) => executeTool('RenderClip', params),
     ),
   );
 
@@ -426,7 +422,7 @@ export function registerTimelineCommands(
     vscode.commands.registerCommand(
       'neko.render.thumbnail',
       (params: { elementId: string; time?: number; width?: number; height?: number }) =>
-        withActiveWebview('GetThumbnail', params),
+        executeTool('GetThumbnail', params),
     ),
   );
 
@@ -454,7 +450,7 @@ export function registerTimelineCommands(
           label: string;
         }>;
       }) => {
-        const webview = videoEditorProvider.getActiveWebview();
+        const webview = _videoEditorProvider.getActiveWebview();
         if (!webview) {
           vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
           return;

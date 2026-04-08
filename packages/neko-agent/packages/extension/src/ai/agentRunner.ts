@@ -396,13 +396,27 @@ export class AgentRunner implements IAgentRunner {
   async configure(config: IAgentConfig): Promise<void> {
     this._config = config;
 
+    // Split into initialization (heavy, once) and reconfiguration (lightweight, per turn)
+    const needsInit = !this._session;
+    if (needsInit) {
+      await this._initializeSession(config);
+    } else {
+      this._reconfigureSession(config);
+    }
+  }
+
+  /**
+   * Heavy one-time initialization: load AGENTS.md, register core tools,
+   * init project memory, and create the AgentSession.
+   */
+  private async _initializeSession(config: IAgentConfig): Promise<void> {
     // Create system prompt builder
     this._promptBuilder = createSystemPromptBuilder({
       locale: config.locale ?? 'en',
       mode: config.executionMode === 'plan' ? 'plan' : 'default',
     });
 
-    // Load AGENTS.md if workspace root is provided (await to ensure prompt resolution uses it)
+    // Load AGENTS.md if workspace root is provided
     if (config.workspaceRoot) {
       try {
         await this._promptBuilder.loadAgentsFile(config.workspaceRoot, getDefaultPersonalPath());
@@ -422,12 +436,10 @@ export class AgentRunner implements IAgentRunner {
     // Initialize project memory manager (cross-session fact persistence)
     if (config.workspaceRoot) {
       try {
-        const memoryFilePath = nodePath.join(config.workspaceRoot, '.neko', 'memory.md'); // L1 project source data
+        const memoryFilePath = nodePath.join(config.workspaceRoot, '.neko', 'memory.md');
         const memoryManager = createFileProjectMemoryManager(memoryFilePath);
         await memoryManager.load();
         this._projectMemoryManager = memoryManager;
-
-        // Register MemoryWrite tool into the platform's tool registry
         config.platform.tools.register(new MemoryWriteTool(memoryManager));
       } catch (err) {
         logger.warn('Failed to initialize project memory:', err);
@@ -442,9 +454,6 @@ export class AgentRunner implements IAgentRunner {
 
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
-
-    // Dispose previous session before creating new one
-    this._session?.dispose();
 
     // Create service from platform, adapted to @neko/shared IService
     const service = toSharedService(config.platform.createService());
@@ -478,6 +487,28 @@ export class AgentRunner implements IAgentRunner {
     if (this._skillProvider) {
       this._session.setSkillProvider(this._skillProvider);
     }
+  }
+
+  /**
+   * Lightweight per-turn reconfiguration: update system prompt, model, and
+   * temperature without rebuilding the session or reloading resources.
+   */
+  private _reconfigureSession(config: IAgentConfig): void {
+    if (!this._session) return;
+
+    // Rebuild system prompt with latest config (canvas context etc.)
+    const effectiveSystemPrompt = this._resolveSystemPrompt(config);
+
+    // Use AgentSession.configure() for partial updates
+    this._session.configure({
+      systemPrompt: effectiveSystemPrompt,
+      modelId: config.modelId,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget,
+      maxIterations: config.maxIterations,
+      executionMode: config.executionMode ?? 'auto',
+    });
   }
 
   getConfig(): IAgentConfig | undefined {

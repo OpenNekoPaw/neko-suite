@@ -11,6 +11,7 @@ import {
   AuthNotConfiguredError,
   AuthCancelledError,
   AuthTokenError,
+  AuthNetworkError,
   type PKCEChallenge,
   type RawTokenResponse,
   type CallbackResult,
@@ -111,15 +112,23 @@ export class OAuthClient {
   }
 
   private async postToken(tokenUrl: string, body: URLSearchParams): Promise<RawTokenResponse> {
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
+    let res: Response;
+    try {
+      res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+    } catch (err) {
+      // Network error (DNS failure, timeout, connection refused, etc.)
+      throw new AuthNetworkError(
+        `Network error during token request: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
-      throw new AuthTokenError(`Token request failed (${res.status}): ${text}`);
+      throw new AuthTokenError(`Token request failed (${res.status}): ${text}`, res.status);
     }
 
     return res.json() as Promise<RawTokenResponse>;

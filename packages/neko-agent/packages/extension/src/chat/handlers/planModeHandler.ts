@@ -197,7 +197,7 @@ export class PlanModeHandler {
     return {
       platform: this.deps.platform!,
       systemPrompt: this.deps.settings.customSystemPrompt || this.deps.systemPrompt.getPrompt(),
-      maxIterations: Infinity,
+      maxIterations: 200,
       autoExecuteTools: true,
       temperature: this.deps.settings.temperature,
       maxTokens: this.deps.settings.maxTokens,

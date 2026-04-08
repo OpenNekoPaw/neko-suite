@@ -9,14 +9,18 @@
 import type { IAuthSession, IAuthProvider, ITokenStorage, AuthConfig } from '@neko/shared';
 import { OAuthClient, generatePKCE } from './oauth-client';
 import { TokenManager } from './token-manager';
-import { AuthNotConfiguredError } from './types';
+import { AuthNotConfiguredError, AuthTokenError, AuthNetworkError } from './types';
 
 /** Callback to open a URL in the user's default browser */
 export type OpenUrlFn = (url: string) => Promise<void>;
 
+/** Callback invoked after a successful silent token refresh */
+export type OnDidRefreshFn = (session: IAuthSession) => void;
+
 export class NekoAuthService implements IAuthProvider {
   private readonly client: OAuthClient;
   private readonly tokenManager: TokenManager;
+  private _onDidRefresh?: OnDidRefreshFn;
 
   constructor(
     storage: ITokenStorage,
@@ -25,6 +29,11 @@ export class NekoAuthService implements IAuthProvider {
   ) {
     this.client = new OAuthClient();
     this.tokenManager = new TokenManager(storage);
+  }
+
+  /** Register a callback for silent refresh events (NKAT-001) */
+  set onDidRefresh(fn: OnDidRefreshFn | undefined) {
+    this._onDidRefresh = fn;
   }
 
   // ---------------------------------------------------------------------------
@@ -76,9 +85,23 @@ export class NekoAuthService implements IAuthProvider {
 
     try {
       const raw = await this.client.refreshAccessToken(this.config, refreshToken);
-      return this.tokenManager.saveSession(raw);
-    } catch {
-      // Refresh failed (token revoked, backend unreachable, etc.) — clear session
+      const session = await this.tokenManager.saveSession(raw);
+      // Notify consumers of silent refresh (NKAT-001)
+      this._onDidRefresh?.(session);
+      return session;
+    } catch (err) {
+      // Distinguish token rejection from network errors (NKAT-003)
+      if (err instanceof AuthNetworkError) {
+        // Network error — don't clear session, return stale session or null
+        // The user shouldn't be logged out due to transient network issues
+        return this.tokenManager.loadSession();
+      }
+      if (err instanceof AuthTokenError && err.isTokenInvalid) {
+        // Token definitively rejected (401/403) — clear session
+        await this.tokenManager.clearSession();
+        return null;
+      }
+      // Unknown error — clear session as a safety measure
       await this.tokenManager.clearSession();
       return null;
     }

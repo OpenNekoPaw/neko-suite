@@ -485,13 +485,22 @@ export function CanvasApp() {
   );
 
   const handlePanelAutoPrompt = useCallback(
-    async (target: GenerationPanelTarget): Promise<string> => {
+    (target: GenerationPanelTarget): Promise<string> => {
       const node = nodes.find((n) => n.id === target.nodeId);
-      if (!node) return '';
-      vscode?.postMessage({ type: 'buildPrompt', nodeId: target.nodeId, shotData: node.data });
-      // The result arrives via 'buildPromptResult' message — handled by useVSCodeMessages
-      // For now return empty; AutoPrompt is async via postMessage roundtrip
-      return '';
+      if (!node) return Promise.resolve('');
+      return new Promise<string>((resolve) => {
+        // Set resolver before sending request; the response handler in
+        // useVSCodeMessages will call it via buildPromptResolverRef
+        buildPromptResolverRef.current = resolve;
+        vscode?.postMessage({ type: 'buildPrompt', nodeId: target.nodeId, shotData: node.data });
+        // Timeout fallback: resolve with empty string after 15 seconds
+        setTimeout(() => {
+          if (buildPromptResolverRef.current === resolve) {
+            buildPromptResolverRef.current = null;
+            resolve('');
+          }
+        }, 15000);
+      });
     },
     [nodes],
   );

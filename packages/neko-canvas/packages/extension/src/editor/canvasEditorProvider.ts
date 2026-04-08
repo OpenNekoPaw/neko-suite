@@ -260,7 +260,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   async listNodes(type?: CanvasNodeType): Promise<CanvasNode[]> {
     if (!this.activeWebviewPanel) return [];
-    const result = await this.sendRequest<{ nodes: CanvasNode[] }>('nodes.list', { type });
+    const result = await this.sendRequest<{ nodes: CanvasNode[] }>('nodes.list', {
+      nodeType: type,
+    });
     return result.nodes;
   }
 
@@ -804,13 +806,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           webviewPanel.webview.postMessage({
             type: 'scriptIndexResult',
             nodeId: requestNodeId,
-            index,
+            scenes: index,
           });
         } catch {
           webviewPanel.webview.postMessage({
             type: 'scriptIndexResult',
             nodeId: requestNodeId,
-            index: null,
+            scenes: null,
             error: 'neko-story not available',
           });
         }
@@ -840,16 +842,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             'neko.market.isInstalled',
             modelPath,
           );
+          // Webview expects installedVersion: string | null
+          // neko.market.isInstalled returns boolean; convert to version string or null
           webviewPanel.webview.postMessage({
             type: 'modelInstalledResult',
             nodeId: modelNodeId,
-            installed: installed ?? false,
+            installedVersion: installed ? 'installed' : null,
           });
         } catch {
           webviewPanel.webview.postMessage({
             type: 'modelInstalledResult',
             nodeId: modelNodeId,
-            installed: false,
+            installedVersion: null,
           });
         }
         break;

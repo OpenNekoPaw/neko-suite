@@ -36,6 +36,11 @@ export class NekoAuthAPIImpl implements NekoAuthAPI, vscode.Disposable {
   ) {
     this.disposables.push(this._onDidChangeSession);
     context.subscriptions.push(this);
+
+    // Broadcast session changes on silent token refresh (NKAT-001)
+    this.service.onDidRefresh = (session) => {
+      this._onDidChangeSession.fire(session);
+    };
   }
 
   getSession(): Promise<IAuthSession | null> {

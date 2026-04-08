@@ -386,7 +386,7 @@ function registerAgentSlashCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.nekocanvas.slashCommand.batch', async (args?: string) => {
       // Trigger batch image generation for selected shots
-      const nodeIds = canvasEditorProvider.listNodes('shot').map((n) => n.id);
+      const nodeIds = (await canvasEditorProvider.listNodes('shot')).map((n) => n.id);
       if (nodeIds.length === 0) {
         vscode.window.showInformationMessage(
           'No shot nodes found. Add shot nodes to the canvas first.',

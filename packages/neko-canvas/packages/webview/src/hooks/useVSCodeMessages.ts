@@ -113,9 +113,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
         const message = event.data;
         switch (message.type) {
           case 'update':
-            if (message.data) {
-              setCanvasData(message.data as CanvasData);
-            }
+            setCanvasData(message.data ? (message.data as CanvasData) : defaultCanvasData);
             setIsReady(true);
             break;
           case 'keyboardAction':

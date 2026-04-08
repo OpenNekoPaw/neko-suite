@@ -92,13 +92,15 @@ export async function activate(
   // neko-cut doesn't take a direct dependency on @neko/platform.
   const api: NekoCutAPI & ISkillProvider = {
     timeline: {
-      getInfo: () => vscode.commands.executeCommand('neko.cut.timeline.getInfo'),
-      addElement: (config) =>
-        vscode.commands.executeCommand('neko.cut.timeline.addElement', config),
+      getInfo: () => vscode.commands.executeCommand('neko.timeline.getInfo'),
+      addElement: (config) => vscode.commands.executeCommand('neko.element.add', config),
       updateElement: (id, updates) =>
-        vscode.commands.executeCommand('neko.cut.timeline.updateElement', id, updates),
-      deleteElement: (id) => vscode.commands.executeCommand('neko.cut.timeline.deleteElement', id),
-      listElements: () => vscode.commands.executeCommand('neko.cut.timeline.listElements'),
+        vscode.commands.executeCommand('neko.element.update', {
+          elementId: id,
+          properties: updates,
+        }),
+      deleteElement: (id) => vscode.commands.executeCommand('neko.element.delete', id),
+      listElements: () => vscode.commands.executeCommand('neko.timeline.listElements'),
     },
 
     ai: {

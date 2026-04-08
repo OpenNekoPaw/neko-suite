@@ -13,6 +13,7 @@ import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
 import { ExportPresetService } from '../../services/ExportPresetService';
 import { getService, getLogger } from '../../base';
+import { isAssetMessage, handleAssetMessage } from '../../handlers/assetHandlers';
 
 const logger = getLogger('VideoEditorProvider');
 import { IStatusBar } from '../../views/statusBar';
@@ -699,6 +700,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
 
+        // Handle asset messages (asset:*)
+        if (isAssetMessage(message)) {
+          await handleAssetMessage(message, (response) => {
+            webviewPanel.webview.postMessage(response);
+          });
+          return;
+        }
+
         messageHandler.handleMessage(message);
 
         // Update FrameServer and outline on incremental sync
@@ -772,19 +781,28 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       this.context.subscriptions,
     );
 
-    // Show status bar when this editor is visible
+    // Show status bar only when THIS editor is the currently visible one.
+    // When multiple editors exist, only the most recently focused panel
+    // should drive the status bar and outline (fixes NKC-008 race).
     const updateStatusBarVisibility = () => {
       if (webviewPanel.visible) {
         statusBar?.show();
-        // Update outline with current project data
         const content = model!.getProjectData();
         outlineProvider?.updateProject(content);
-        // Request initial status from webview
         webviewPanel.webview.postMessage({ type: 'requestStatus' });
       } else {
-        statusBar?.hide();
-        // Clear outline when editor is not visible
-        outlineProvider?.updateProject(null);
+        // Only hide if no other panel is visible
+        let anyVisible = false;
+        for (const [, panel] of this.activeWebviewPanels) {
+          if (panel !== webviewPanel && panel.visible) {
+            anyVisible = true;
+            break;
+          }
+        }
+        if (!anyVisible) {
+          statusBar?.hide();
+          outlineProvider?.updateProject(null);
+        }
       }
     };
 

@@ -27,10 +27,27 @@ export class AuthCancelledError extends Error {
 
 export class AuthTokenError extends Error {
   readonly code = 'AUTH_TOKEN_ERROR' as const;
+  /** HTTP status code (e.g. 401, 403) — undefined for network errors */
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'AuthTokenError';
+    this.status = status;
+  }
+
+  /** True if this is a definitive token rejection (401/403), not a transient failure */
+  get isTokenInvalid(): boolean {
+    return this.status === 401 || this.status === 403;
+  }
+}
+
+export class AuthNetworkError extends Error {
+  readonly code = 'AUTH_NETWORK_ERROR' as const;
 
   constructor(message: string) {
     super(message);
-    this.name = 'AuthTokenError';
+    this.name = 'AuthNetworkError';
   }
 }
 
