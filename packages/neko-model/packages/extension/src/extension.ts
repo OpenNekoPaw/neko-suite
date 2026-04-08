@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { createNewFile } from '@neko/shared/vscode/extension';
+import { createNewFile, createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { setRootLogger, getRootLogger } from './logger';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
 
 /** Default .nkm document template */
@@ -19,6 +20,11 @@ function getModelTemplate(title: string): string {
 let modelEditorProvider: ModelEditorProvider;
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Initialize shared logger
+  const logger = createVSCodeLogger('Neko Model', 'NekoModel', context);
+  setRootLogger(logger);
+  getRootLogger().info('Activating extension...');
+
   modelEditorProvider = new ModelEditorProvider(context);
 
   // Register custom editor

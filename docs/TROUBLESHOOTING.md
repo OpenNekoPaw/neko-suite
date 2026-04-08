@@ -26,7 +26,7 @@
 | NKC-007 | P1 | fixed | 资源访问边界偏宽 + 同步 I/O，存在安全与性能风险 |
 | NKC-008 | P1 | fixed | 多编辑器场景下状态栏/大纲更新存在可见性竞态 |
 | NKC-009 | P2 | open | 扩展侧存在未接线/残留执行路径，增加维护成本与歧义 |
-| NKC-010 | P1 | open | 当前测试主要覆盖 webview slice，extension 协议链路覆盖不足 |
+| NKC-010 | P1 | fixed | 当前测试主要覆盖 webview slice，extension 协议链路覆盖不足 |
 
 ## 问题详情
 
@@ -219,7 +219,7 @@
 | NKP-003 | P1 | fixed | 文档预览文件服务端口缓存未失效重试，engine 重启后可能持续失败 |
 | NKP-004 | P1 | fixed | 对外声明配置项未落地（`videoQuality`/`autoPlay`） |
 | NKP-005 | P2 | fixed | 文档消息协议与实现漂移，类型约束与实际 payload 不一致 |
-| NKP-006 | P1 | open | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
+| NKP-006 | P1 | fixed | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
 | NKP-007 | P2 | open | `copy:webview` 构建脚本吞错，可能打包不完整产物 |
 | NKP-008 | P3 | open | `AudioPlayer` 存在重复卸载清理逻辑，增加维护复杂度 |
 
@@ -299,7 +299,7 @@
 | NKV-007 | P1 | fixed | 命令声明与注册实现不一致，部分命令”可见但不可用” |
 | NKV-008 | P1 | fixed | 质量门禁失效（lint/test/tsc），导致回归问题难以及时暴露 |
 | NKV-009 | P1 | fixed | 空文件加载默认值链路不完整，初始数据一致性存在风险 |
-| NKV-010 | P1 | open | 测试覆盖集中在 webview util/store，extension 协议链路覆盖不足 |
+| NKV-010 | P1 | fixed | 测试覆盖集中在 webview util/store，extension 协议链路覆盖不足 |
 
 ### 问题详情（追加）
 
@@ -405,7 +405,7 @@
 | NKS-006 | P1 | deferred | `generateStoryboard` 仍为占位命令，核心能力未落地 |
 | NKS-007 | P2 | open | 工作区索引采用全量重建，规模增大时性能退化风险高 |
 | NKS-008 | P2 | open | i18n 基础设施已搭建但大量 UI 文案硬编码，国际化一致性不足 |
-| NKS-009 | P1 | open | 测试覆盖偏向纯函数/渲染，关键协议链路（CSP/滚动/音频映射）缺乏回归保护 |
+| NKS-009 | P1 | fixed | 测试覆盖偏向纯函数/渲染，关键协议链路（CSP/滚动/音频映射）缺乏回归保护 |
 | NKS-010 | P2 | open | lint 存在非空断言告警，工程约束执行不彻底 |
 
 ### 问题详情（追加）
@@ -710,7 +710,7 @@
 | NKAS-004 | P1 | open | `AssetRegistry` 的非媒体资产当前仅驻留内存，缺少持久化与实际消费方 |
 | NKAS-005 | P2 | open | `extension.ts` 体量过大，初始化/命令/UI/集成强耦合 |
 | NKAS-006 | P2 | open | 多根工作区仅使用首个 workspace，路径与媒体库行为存在偏差风险 |
-| NKAS-007 | P1 | open | 测试覆盖集中在 core service，extension/provider/命令编排回归保护不足 |
+| NKAS-007 | P1 | fixed | 测试覆盖集中在 core service，extension/provider/命令编排回归保护不足 |
 
 ### 问题详情（追加）
 
@@ -794,7 +794,7 @@
 | NKM-005 | P1 | fixed | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |
 | NKM-006 | P1 | deferred | 付费/私有资产许可校验仍是 stub，认证与商业能力未闭环 |
 | NKM-007 | P2 | fixed | `registryUrl` 配置与架构文档不一致，`nekoSuiteVersion` 仍为硬编码 |
-| NKM-008 | P1 | open | 测试覆盖偏 core unit，缺少安装编排与 webview 协议级回归 |
+| NKM-008 | P1 | fixed | 测试覆盖偏 core unit，缺少安装编排与 webview 协议级回归 |
 
 ### 问题详情（追加）
 
@@ -896,7 +896,7 @@
 | NKAT-002 | P1 | verified | VSCode 设置半配置会屏蔽 `config.json` 完整配置，导致登录配置判定异常 |
 | NKAT-003 | P1 | fixed | 刷新失败对所有异常一律清空会话，网络抖动也会误触发”被登出” |
 | NKAT-004 | P2 | deferred | 对外宣称文件存储/云厂商 token 能力，但扩展侧仍未落地 |
-| NKAT-005 | P2 | open | `AuthBridge` 与 extension 层测试覆盖不足，接线遗漏难以及时暴露 |
+| NKAT-005 | P2 | fixed | `AuthBridge` 与 extension 层测试覆盖不足，接线遗漏难以及时暴露 |
 
 ### 问题详情（追加）
 
@@ -972,11 +972,11 @@
 
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
-| NKUN-001 | P1 | open | 共享抽象层已统一，但子包接入完整度差异明显，尚未形成统一落地基线 |
-| NKUN-002 | P1 | open | Webview 标准入口未统一，部分包缺少 `I18nProvider` 或 `ErrorBoundary` |
-| NKUN-003 | P1 | open | Extension 标准入口未统一，`neko-model` / `neko-auth` 未接统一 logger + error handler |
+| NKUN-001 | P1 | fixed | 共享抽象层已统一，但子包接入完整度差异明显，尚未形成统一落地基线 |
+| NKUN-002 | P1 | fixed | Webview 标准入口未统一，部分包缺少 `I18nProvider` 或 `ErrorBoundary` |
+| NKUN-003 | P1 | fixed | Extension 标准入口未统一，`neko-model` / `neko-auth` 未接统一 logger + error handler |
 | NKUN-004 | P2 | open | 主题体系未完全统一，`neko-tools`、`neko-live`、`neko-story` 仍以手写 token 映射为主 |
-| NKUN-005 | P1 | open | 国际化接入分层不一致，部分包只有 `t()`/bundle，未统一到 React Provider 模式 |
+| NKUN-005 | P1 | fixed | 国际化接入分层不一致，部分包只有 `t()`/bundle，未统一到 React Provider 模式 |
 | NKUN-006 | P2 | open | AI 菜单与 AI 接口接入碎片化，统一 builder 仅在少数包真正落地 |
 | NKUN-007 | P2 | open | `tools` / Shell 能力名义上在共享层存在，但实际仍主要是 `neko-agent` 专属能力 |
 | NKUN-008 | P2 | open | 文档与实现存在偏差，`neko-tools` README 声称接入错误边界，但实际入口未包裹 |

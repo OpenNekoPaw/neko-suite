@@ -5,6 +5,7 @@ export {
   AuthNotConfiguredError,
   AuthCancelledError,
   AuthTokenError,
+  AuthNetworkError,
   StorageKeys,
   type PKCEChallenge,
   type RawTokenResponse,
