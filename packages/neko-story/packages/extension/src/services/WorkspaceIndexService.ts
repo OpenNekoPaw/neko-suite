@@ -254,9 +254,50 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
     return results;
   }
 
+  listOccurrencesBySceneId(sceneId: string): readonly OccurrenceIndexEntry[] {
+    const results: OccurrenceIndexEntry[] = [];
+
+    for (const scriptIndex of this.fileCache.entries()) {
+      const [uriString] = scriptIndex;
+      const uri = vscode.Uri.parse(uriString);
+      const index = this.getScriptIndex(uri);
+      if (!index) {
+        continue;
+      }
+
+      const scene = index.scenes.find((entry) => entry.id === sceneId);
+      if (!scene) {
+        continue;
+      }
+
+      results.push({
+        entity: {
+          kind: 'scene',
+          id: scene.id,
+          label: scene.heading,
+        },
+        source: 'script',
+        sourceId: `${uriString}:${scene.line_start}:scene:${scene.id}`,
+        strength: 'confirmed',
+        provenance: 'rule',
+        locator: {
+          uri: uriString,
+          lineStart: scene.line_start,
+          lineEnd: scene.line_end,
+        },
+      });
+    }
+
+    return results;
+  }
+
   listOccurrences(entity: CreativeEntityRef): readonly OccurrenceIndexEntry[] {
     if (entity.kind === 'character') {
       return this.listOccurrencesByCharacterId(entity.id);
+    }
+
+    if (entity.kind === 'scene') {
+      return this.listOccurrencesBySceneId(entity.id);
     }
 
     return [];

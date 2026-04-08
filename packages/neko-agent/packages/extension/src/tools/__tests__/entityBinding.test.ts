@@ -3,8 +3,10 @@ import type { CanvasNode, NekoStoryScriptIndex } from '@neko/shared';
 import {
   buildShotCharactersForScene,
   extractCharacterIdsFromCanvasNode,
+  extractSceneIdsFromCanvasNode,
   parseGeneratedAssetBindingMetadata,
   projectCharacterOccurrencesFromCanvasNode,
+  projectSceneOccurrencesFromCanvasNode,
 } from '../../utils/entityBinding';
 
 describe('entityBinding helpers', () => {
@@ -60,6 +62,20 @@ describe('entityBinding helpers', () => {
     expect(extractCharacterIdsFromCanvasNode(galleryNode)).toEqual(['char_alice']);
   });
 
+  it('extracts bound scene ids from scene group nodes', () => {
+    const sceneNode = {
+      type: 'scene',
+      data: {
+        sceneId: 'S1',
+        sceneTitle: 'INT. ROOM - DAY',
+        sceneNumber: 1,
+        shotIds: [],
+      },
+    } as CanvasNode;
+
+    expect(extractSceneIdsFromCanvasNode(sceneNode)).toEqual(['S1']);
+  });
+
   it('parses generated asset binding metadata defensively', () => {
     expect(
       parseGeneratedAssetBindingMetadata({
@@ -100,6 +116,39 @@ describe('entityBinding helpers', () => {
         locator: {
           uri: 'file:///workspace/storyboard.nkc',
           nodeId: 'shot-1',
+        },
+      },
+    ]);
+  });
+
+  it('projects scene occurrences from bound scene nodes', () => {
+    const sceneNode = {
+      id: 'scene-1',
+      type: 'scene',
+      data: {
+        sceneId: 'S1',
+        sceneTitle: 'INT. ROOM - DAY',
+        sceneNumber: 1,
+        shotIds: [],
+      },
+    } as CanvasNode;
+
+    expect(
+      projectSceneOccurrencesFromCanvasNode(sceneNode, 'S1', 'file:///workspace/storyboard.nkc'),
+    ).toEqual([
+      {
+        entity: {
+          kind: 'scene',
+          id: 'S1',
+          label: 'INT. ROOM - DAY',
+        },
+        source: 'canvas-node',
+        sourceId: 'scene-1',
+        strength: 'confirmed',
+        provenance: 'import',
+        locator: {
+          uri: 'file:///workspace/storyboard.nkc',
+          nodeId: 'scene-1',
         },
       },
     ]);

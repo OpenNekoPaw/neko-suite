@@ -714,7 +714,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       };
       newSize = { width: 280, height: 320 };
     } else if (nodeType === 'scene') {
-      newData = { sceneTitle: '', subtitle: '', shotIds: [] };
+      const srcData =
+        sourceNode.type === 'scene' ? (sourceNode.data as Record<string, unknown>) : {};
+      newData = {
+        sceneId: typeof srcData.sceneId === 'string' ? srcData.sceneId : undefined,
+        sceneTitle: typeof srcData.sceneTitle === 'string' ? srcData.sceneTitle : '',
+        sceneNumber: typeof srcData.sceneNumber === 'number' ? srcData.sceneNumber : 1,
+        location: typeof srcData.location === 'string' ? srcData.location : undefined,
+        timeOfDay: typeof srcData.timeOfDay === 'string' ? srcData.timeOfDay : undefined,
+        shotIds: [],
+      };
       newSize = { width: 300, height: 200 };
     } else if (nodeType === 'gallery') {
       const srcData =

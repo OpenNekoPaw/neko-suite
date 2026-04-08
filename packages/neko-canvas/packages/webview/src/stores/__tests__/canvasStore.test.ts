@@ -9,6 +9,21 @@ function createCanvasData(): CanvasData {
     name: 'Test Canvas',
     nodes: [
       {
+        id: 'scene-1',
+        type: 'scene',
+        position: { x: 20, y: 40 },
+        size: { width: 300, height: 200 },
+        zIndex: 5,
+        data: {
+          sceneId: 'S1',
+          sceneTitle: 'INT. OFFICE - DAY',
+          sceneNumber: 1,
+          location: 'OFFICE',
+          timeOfDay: 'DAY',
+          shotIds: ['shot-1'],
+        },
+      },
+      {
         id: 'shot-1',
         type: 'shot',
         position: { x: 100, y: 120 },
@@ -53,6 +68,15 @@ function createCanvasData(): CanvasData {
 
 describe('canvasStore deriveSuccessorNode', () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        __vscode_api__: {
+          postMessage: () => {},
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
     useHistoryStore.setState({ undoStack: [], redoStack: [] });
     useCanvasStore.setState({
       canvasData: createCanvasData(),
@@ -95,6 +119,34 @@ describe('canvasStore deriveSuccessorNode', () => {
     ).toMatchObject({
       characterId: 'char_alice',
       characterName: 'ALICE',
+    });
+  });
+
+  it('preserves scene identity when deriving a successor scene', () => {
+    const newNodeId = useCanvasStore.getState().deriveSuccessorNode('scene-1', 'scene');
+    expect(newNodeId).toBeTruthy();
+
+    const newNode = useCanvasStore
+      .getState()
+      .canvasData?.nodes.find((node) => node.id === newNodeId && node.type === 'scene');
+
+    expect(newNode).toBeDefined();
+    expect(
+      newNode?.data as {
+        sceneId?: string;
+        sceneTitle?: string;
+        sceneNumber?: number;
+        location?: string;
+        timeOfDay?: string;
+        shotIds?: string[];
+      },
+    ).toMatchObject({
+      sceneId: 'S1',
+      sceneTitle: 'INT. OFFICE - DAY',
+      sceneNumber: 1,
+      location: 'OFFICE',
+      timeOfDay: 'DAY',
+      shotIds: [],
     });
   });
 });

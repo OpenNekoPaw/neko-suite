@@ -157,4 +157,41 @@ Back again.`,
 
     service.dispose();
   });
+
+  it('projects script occurrences for a resolved scene id', async () => {
+    const service = new WorkspaceIndexService({
+      ensureInitialized: async () => {},
+      getRegistry: () => ({ version: 1, characters: [] }),
+      getRegistryUri: () => undefined,
+      reload: async () => {},
+      save: async () => {},
+      findById: () => undefined,
+      getDefinitionLocation: () => undefined,
+      resolveCharacter: () => undefined,
+      dispose: () => {},
+    });
+
+    await service.ensureInitialized();
+
+    expect(service.listOccurrences({ kind: 'scene', id: 'S1' })).toEqual([
+      {
+        entity: {
+          kind: 'scene',
+          id: 'S1',
+          label: 'INT. OFFICE - DAY',
+        },
+        source: 'script',
+        sourceId: 'file:///workspace/test.fountain:0:scene:S1',
+        strength: 'confirmed',
+        provenance: 'rule',
+        locator: {
+          uri: 'file:///workspace/test.fountain',
+          lineStart: 0,
+          lineEnd: 9,
+        },
+      },
+    ]);
+
+    service.dispose();
+  });
 });

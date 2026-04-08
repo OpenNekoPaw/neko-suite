@@ -726,6 +726,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 'scene' as CanvasNodeType,
                 { x: sceneX, y: startY },
                 {
+                  sceneId: scene.id,
                   sceneTitle: scene.heading,
                   sceneNumber: si + 1,
                   shotIds: [] as string[],

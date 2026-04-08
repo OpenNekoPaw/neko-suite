@@ -45,6 +45,7 @@ import type { Platform } from '@neko/platform';
 import {
   extractCharacterIdsFromCanvasNode,
   projectCharacterOccurrencesFromCanvasNode,
+  projectSceneOccurrencesFromCanvasNode,
 } from './utils/entityBinding';
 import { GeneratedAssetIndex, resolveGeneratedDir } from './services/generatedAssetIndex';
 
@@ -192,6 +193,27 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
   const findOccurrences = async (entity: CreativeEntityRef) => {
     if (entity.kind === 'character') {
       return findCharacterOccurrences(entity.id);
+    }
+
+    if (entity.kind === 'scene') {
+      const results: OccurrenceIndexEntry[] = [];
+      const storyApi = await getStoryApi();
+      if (storyApi) {
+        results.push(...(await storyApi.entities.findOccurrences(entity)));
+      }
+
+      const canvasApi = await getCanvasApi();
+      if (canvasApi) {
+        const canvasDocumentUri = await canvasApi.canvas.getActiveDocumentUri();
+        const nodes = await canvasApi.nodes.list();
+        for (const node of nodes) {
+          results.push(
+            ...projectSceneOccurrencesFromCanvasNode(node, entity.id, canvasDocumentUri),
+          );
+        }
+      }
+
+      return dedupeOccurrences(results);
     }
 
     return [];

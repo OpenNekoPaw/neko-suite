@@ -1,4 +1,5 @@
 import {
+  isSceneGroupNode,
   isGalleryNode,
   isShotNode,
   type CanvasNode,
@@ -42,6 +43,14 @@ export function extractCharacterIdsFromCanvasNode(node: CanvasNode | undefined):
   return [];
 }
 
+export function extractSceneIdsFromCanvasNode(node: CanvasNode | undefined): string[] {
+  if (!node || !isSceneGroupNode(node)) {
+    return [];
+  }
+
+  return typeof node.data.sceneId === 'string' ? [node.data.sceneId] : [];
+}
+
 export function parseGeneratedAssetBindingMetadata(
   metadata: Record<string, unknown> | undefined,
 ): GeneratedAssetBindingMetadata {
@@ -82,6 +91,35 @@ export function projectCharacterOccurrencesFromCanvasNode(
       sourceId: node.id,
       strength: 'confirmed',
       provenance: 'lineage',
+      locator: {
+        uri: canvasDocumentUri,
+        nodeId: node.id,
+      },
+    },
+  ];
+}
+
+export function projectSceneOccurrencesFromCanvasNode(
+  node: CanvasNode,
+  sceneId: string,
+  canvasDocumentUri?: string,
+): OccurrenceIndexEntry[] {
+  const boundSceneIds = extractSceneIdsFromCanvasNode(node);
+  if (!boundSceneIds.includes(sceneId)) {
+    return [];
+  }
+
+  return [
+    {
+      entity: {
+        kind: 'scene',
+        id: sceneId,
+        label: isSceneGroupNode(node) ? node.data.sceneTitle : undefined,
+      },
+      source: 'canvas-node',
+      sourceId: node.id,
+      strength: 'confirmed',
+      provenance: 'import',
       locator: {
         uri: canvasDocumentUri,
         nodeId: node.id,

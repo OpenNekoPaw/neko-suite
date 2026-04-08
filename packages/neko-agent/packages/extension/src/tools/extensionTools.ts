@@ -1492,6 +1492,7 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
             'scene' as import('@neko/shared').CanvasNodeType,
             { x: sceneX, y: startY },
             {
+              sceneId: scene.id,
               sceneTitle: scene.heading,
               sceneNumber: si + 1,
               shotIds: [] as string[],
