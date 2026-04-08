@@ -146,7 +146,10 @@ interface IStoryboardGenerator {
 - [x] 实现 TimelineConverter（场景 → 时间线片段）✅
 - [x] 实现 neko.story.toTimeline 命令 ✅
 - [ ] 实现资产链接服务（查找关联资产）
-- [ ] 实现 neko.story.generateStoryboard 命令（AI 分镜）
+- [x] 实现 `neko.story.generateStoryboard` 命令入口（发送当前场景到 Agent）
+- [x] 实现 `PreviewPanel.sendToCanvas` 机械式场景导入（`neko.canvas.importStoryboard`）
+- [x] 提供 `GenerateScenePlan` / `GenerateShotPlan` Agent 工具
+- [ ] 将 `GenerateScenePlan` / `GenerateShotPlan` 接入 Agent 主流程与 semantic 导入闭环
 
 ---
 
@@ -172,7 +175,57 @@ extension → parser → types
 6. ✅ 预览面板渲染剧本（标准格式）
 7. ✅ 编辑器与预览双向同步
 8. ✅ 转换为 neko-cut 时间线（Fountain → ProjectData JSON 语义 Skill）
-9. ⬜ AI 生成分镜脚本
+9. ⬜ AI 生成分镜脚本与语义导入主流程
+
+## 构建与测试
+
+### 影响范围
+
+本轮 `story-agent-canvas` 收敛主要影响以下包：
+
+- `@neko-story/extension`
+- `@neko-canvas/extension`
+- `@neko-agent/extension`
+- `@neko/shared`
+
+### 建议构建顺序
+
+1. 根仓库验证共享层与依赖图：
+
+```bash
+pnpm build
+pnpm check
+```
+
+2. 聚焦 story / canvas / agent 相关扩展：
+
+```bash
+pnpm --filter @neko-story/extension build
+pnpm --filter @neko-canvas/extension build
+pnpm --filter @neko-agent/extension test:run
+```
+
+3. 若需要整包扩展产物，使用 monorepo 编译入口：
+
+```bash
+pnpm build:dev
+```
+
+### 建议测试范围
+
+针对当前改动，最小必要验证应包含：
+
+```bash
+pnpm --filter @neko-story/extension test
+pnpm --filter @neko-agent/extension test:run
+pnpm test
+```
+
+### 当前环境注意事项
+
+- 根仓库脚本依赖 `pnpm` workspace 正常安装的 devDependencies
+- 若本地未完成 `pnpm install`，`vitest` / `turbo` / `esbuild` 可能不可执行
+- 当前迭代新增了多组 source-contract tests，适合先跑包级测试，再扩大到仓库级测试
 
 ---
 
