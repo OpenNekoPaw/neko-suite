@@ -7,13 +7,13 @@ Source: `docs/TROUBLESHOOTING.md`
 
 | Status | Count | Percentage |
 |--------|-------|-----------|
-| fixed | 61 | 73% |
+| fixed | 62 | 74% |
 | verified | 4 | 5% |
 | deferred | 3 | 4% |
-| **open** | **16** | **18%** |
+| **open** | **15** | **18%** |
 | **Total** | **84** | |
 
-All P0 issues cleared. No user-visible functionality regressions remain.
+All P0 issues cleared. All P1 functional defects resolved. Remaining P1 items are test coverage gaps and architectural decisions.
 
 ---
 
@@ -21,41 +21,30 @@ All P0 issues cleared. No user-visible functionality regressions remain.
 
 ### NKC-010: neko-cut extension protocol test coverage (partial)
 
-**Status**: Has command registration + asset routing + AI handler tests. Missing: dirty event round-trip.
+**Current state**: Has command registration tests (vi.hoisted Map verifies 20+ commands), asset routing tests (real isAssetMessage + handleAssetMessage), AI handler tests (real AIActionHandler → aiActionStatus). Missing: operationApplied → dirty event round-trip.
 
-**What to do**: Add `operationApplied` → `_onDidChangeCustomDocument.fire()` integration test. Requires mock `CustomTextEditorProvider` lifecycle.
-
-**Files**: `packages/neko-cut/packages/extension/src/__tests__/protocol.test.ts`
+**What to do**: Mock CustomTextEditorProvider lifecycle, simulate operationApplied message, verify `_onDidChangeCustomDocument.fire()`.
 
 ### NKM-008: neko-market install orchestration test + existing test failures
 
-**Status**: Has DTO source contract + InstalledRegistry.ready() tests. Missing: InstallManager round-trip. Existing `market-api.test.ts` has 14 failures (vscode mock issue).
+**Current state**: Has DTO source contract + InstalledRegistry.ready() tests. Existing `market-api.test.ts` has failures (vscode mock issue). `ModelInstallTarget.test.ts` assertions outdated.
 
 **What to do**:
-1. Fix `market-api.test.ts` vscode mock (line 36 uses `require('vscode')` instead of `vi.mock`)
+1. Fix `market-api.test.ts` vscode mock (replace `require('vscode')` with `vi.mock`)
 2. Fix `ModelInstallTarget.test.ts` assertion mismatches
-3. Add InstallManager.install() test covering download → verify → extract → register flow
+3. Add InstallManager.install() test: download → verify → extract → register
 
-**Files**: `packages/neko-market/packages/extension/src/__tests__/`
+### NKAS-003: AssetRegistry multi-source merge (product decision: keep)
 
-### NKAS-003: AssetRegistry multi-source merge not connected
+**Decision**: Keep. AssetRegistry is production-ready code (307 lines, strategy pattern). Currently no consumers — awaiting Phase 2 asset management roadmap to determine integration path.
 
-**Status**: `AssetRegistry` class exists in `packages/neko-assets/packages/asset/src/service/` but is not imported or used by the main extension.
+### NKAS-004: Non-media asset persistence (product decision: keep)
 
-**Decision needed**: 
-- A) Connect AssetRegistry to main extension pipeline
-- B) Remove unused code and downscale documentation claims
-- C) Defer to Phase 2 asset management roadmap
-
-### NKAS-004: Non-media asset persistence
-
-**Status**: AssetRegistry only holds non-media assets in memory. No persistence to disk, no consumers.
-
-**Decision needed**: Same as NKAS-003 — coupled decision.
+**Decision**: Keep. Coupled with NKAS-003 — persistence strategy depends on whether AssetRegistry gets connected to the main pipeline.
 
 ---
 
-## P2 — Engineering Debt (10 items)
+## P2 — Engineering Debt (9 items)
 
 ### Code Cleanup
 
@@ -66,17 +55,11 @@ All P0 issues cleared. No user-visible functionality regressions remain.
 | NKAS-005 | neko-assets | Split 1200+ LOC `extension.ts` into modules | High |
 | NKAS-006 | neko-assets | Multi-root workspace: use selection strategy instead of always-first | Low |
 
-### i18n / Theme Unification
-
-| ID | Package | Task | Effort |
-|----|---------|------|--------|
-| NKS-008 | neko-story | Migrate hardcoded Chinese/English strings to i18n bundles | Medium |
-| NKUN-004 | neko-tools, neko-live, neko-story | Replace hand-written CSS token mapping with unified theme system | Medium |
-
 ### Cross-Package Architecture
 
 | ID | Scope | Task | Effort |
 |----|-------|------|--------|
+| NKUN-004 | neko-tools, neko-live, neko-story | Replace hand-written CSS token mapping with unified theme system | Medium |
 | NKUN-006 | 4+ packages | Unify AI menu/interface builder adoption across packages | Medium |
 | NKUN-007 | neko-agent, shared | Decide if Shell/tools capabilities should be promoted to shared layer | Architecture discussion |
 | NKUN-008 | neko-tools | Fix README claiming ErrorBoundary integration that doesn't exist | Low |
@@ -100,20 +83,18 @@ All P0 issues cleared. No user-visible functionality regressions remain.
 
 ## Deferred — Needs Product Decision (3 items)
 
-| ID | Package | Issue | Decision |
-|----|---------|-------|----------|
-| NKS-006 | neko-story | `generateStoryboard` is a "Coming soon" stub | Implement or remove |
-| NKM-006 | neko-market | Paid/private asset license verification is stub | Implement business logic or document limitation |
-| NKAT-004 | neko-auth | Cloud provider token API returns null (Phase 2) | Implement when cloud integration is prioritized |
+| ID | Package | Issue | Status |
+|----|---------|-------|--------|
+| NKS-006 | neko-story | `generateStoryboard` placeholder command | Keep — awaiting storyboard feature roadmap |
+| NKM-006 | neko-market | Paid/private asset license verification stub | Keep — intentional gate, blocks unsupported asset types |
+| NKAT-004 | neko-auth | Cloud token API (getCloudToken) | Redesign planned — SSO exchange + user custom tokens (see analysis) |
 
 ---
 
 ## Suggested Execution Order
 
-1. **Quick wins** (1-2h): NKS-010, NKUN-008, NKP-008
+1. **Quick wins** (1h): NKUN-008 (fix README), NKS-010 (non-null assertions)
 2. **NKM-008 test fixes** (2-3h): Fix existing market test failures, add install orchestration test
 3. **NKC-010 dirty event** (1h): Add operationApplied integration test
-4. **i18n migration** (half day): NKS-008 hardcoded strings
-5. **Architecture decisions**: NKAS-003/004 — schedule product discussion
-6. **Large refactors** (multi-day): NKAS-005 extension.ts split, NKS-007 incremental index
-7. **Cross-package unification**: NKUN-004/006/007 — plan as Sprint
+4. **Large refactors** (multi-day): NKAS-005 extension.ts split, NKS-007 incremental index
+5. **Cross-package unification**: NKUN-004/006/007 — plan as Sprint
