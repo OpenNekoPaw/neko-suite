@@ -7,6 +7,7 @@ import type { ProjectData, MediaElement, CompositeLayerConfig } from '@neko/shar
 import type { ElementTransform } from '../../types/animation';
 import type { EditorElement } from '../../types/editor-types';
 import { getComputedTransform } from '../../utils/animation';
+import { getSourceTimeFromOutputTime } from '../../utils/speed';
 import { getEffectParametersAtTime } from '../../types/effects';
 import {
   buildCompositeMasks,
@@ -33,6 +34,25 @@ function getLegacyCompatibleTransition(
   );
 }
 
+function getCompositeSourceTime(element: EditorElement, time: number): number {
+  const localTimelineTime = Math.max(0, time - element.startTime);
+  const trimStart = element.trimStart ?? 0;
+  const trimEnd = element.trimEnd ?? 0;
+  const effectiveSourceDuration = Math.max(0, element.duration - trimStart - trimEnd);
+
+  if (effectiveSourceDuration <= 0) {
+    return trimStart;
+  }
+
+  const sourceOffset = getSourceTimeFromOutputTime(
+    localTimelineTime,
+    element.speed,
+    effectiveSourceDuration,
+  );
+
+  return trimStart + sourceOffset;
+}
+
 /**
  * Build CompositeLayerConfig[] from ProjectData at a given time.
  * Extracts all visible media elements at the specified time point.
@@ -52,7 +72,8 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
       if (time < element.startTime || time >= elementEnd) continue;
 
       const mediaElement = element as MediaElement;
-      const sourceTime = element.trimStart + (time - element.startTime);
+      const editorElement = element as EditorElement;
+      const sourceTime = getCompositeSourceTime(editorElement, time);
 
       // EditorElement may carry animTransform (UI keyframe animation layer)
       const animTransform = (element as { animTransform?: ElementTransform }).animTransform;
@@ -119,7 +140,6 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
       }
 
       // Flow colorCorrection to composite layer as a color-correction effect
-      const editorElement = element as EditorElement;
       if (editorElement.colorCorrection) {
         const ccEffect = colorCorrectionToCompositeEffect(editorElement.colorCorrection);
         if (ccEffect) {
