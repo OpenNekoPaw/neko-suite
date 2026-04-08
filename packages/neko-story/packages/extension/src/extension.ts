@@ -162,9 +162,34 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+        const data = payload.data as {
+          scriptPath: string;
+          sceneId: string;
+        };
+        await vscode.commands.executeCommand('neko.agent.startPipeline', {
+          flowId: 'flowF',
+          source: data.scriptPath,
+          sourceFormat: 'fountain',
+          importToCanvas: true,
+          skipStages: [
+            'generatePrompts',
+            'generatePilot',
+            'batchGenerate',
+            'qualityGate',
+            'arrangeOnTimeline',
+          ],
+          stageParams: {
+            parseStoryboard: {
+              sceneIds: [data.sceneId],
+            },
+          },
+        });
       } catch {
-        // neko-agent extension not installed or not activated — silently ignore
+        try {
+          await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+        } catch {
+          // neko-agent extension not installed or not activated — silently ignore
+        }
       }
     }),
     vscode.commands.registerCommand(

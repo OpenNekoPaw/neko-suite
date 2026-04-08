@@ -140,19 +140,9 @@ export interface FountainDocument {
   elements: AnyFountainElement[];
 }
 
-export type StoryAgentStatus =
-  | 'not-requested'
-  | 'ready'
-  | 'review'
-  | 'sent'
-  | 'skipped';
+export type StoryAgentStatus = 'not-requested' | 'ready' | 'review' | 'sent' | 'skipped';
 
-export type StoryCanvasStatus =
-  | 'not-sent'
-  | 'queued'
-  | 'sent'
-  | 'opened'
-  | 'skipped';
+export type StoryCanvasStatus = 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
 
 export interface StorySceneState {
   readonly sceneId: string;
@@ -171,7 +161,12 @@ export type StorySceneAction =
 export type StoryViewMode = 'screenplay' | 'table' | 'grid';
 
 export type MessageToWebview =
-  | { type: 'update'; document: FountainDocument; scriptIndex: NekoStoryScriptIndex }
+  | {
+      type: 'update';
+      document: FountainDocument;
+      scriptIndex: NekoStoryScriptIndex;
+      sceneStates: Record<string, StorySceneState>;
+    }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: StoryViewMode };
 

@@ -6,8 +6,19 @@ import { createStoryboardPayload } from '@neko/shared';
 import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 
+type StorySceneState = {
+  readonly sceneId: string;
+  readonly agentStatus: 'not-requested' | 'ready' | 'review' | 'sent' | 'skipped';
+  readonly canvasStatus: 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
+};
+
 type MessageToWebview =
-  | { type: 'update'; document: FountainDocument; scriptIndex: NekoStoryScriptIndex }
+  | {
+      type: 'update';
+      document: FountainDocument;
+      scriptIndex: NekoStoryScriptIndex;
+      sceneStates: Record<string, StorySceneState>;
+    }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: 'screenplay' | 'table' | 'grid' };
 
@@ -30,6 +41,7 @@ export class PreviewPanel implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private updateTimeout: ReturnType<typeof setTimeout> | undefined;
+  private readonly sceneStatesByDocument = new Map<string, Record<string, StorySceneState>>();
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
@@ -159,8 +171,14 @@ export class PreviewPanel implements vscode.Disposable {
     const text = this.activeEditor.document.getText();
     const document = parse(text);
     const scriptIndex = buildScriptIndex(this.activeEditor.document.uri, document);
+    const sceneStates = this.syncSceneStates(this.activeEditor.document.uri, scriptIndex);
 
-    this.postMessage({ type: 'update', document: this.resolveAssets(document), scriptIndex });
+    this.postMessage({
+      type: 'update',
+      document: this.resolveAssets(document),
+      scriptIndex,
+      sceneStates,
+    });
   }
 
   private async handleSceneAction(
@@ -178,30 +196,59 @@ export class PreviewPanel implements vscode.Disposable {
     if (!scene) {
       return;
     }
+    const sceneStates = this.syncSceneStates(editor.document.uri, scriptIndex);
+    const existingState = sceneStates[sceneId];
+    if (!existingState) {
+      return;
+    }
 
     if (action === 'openCanvas') {
+      this.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        ...existingState,
+        canvasStatus: 'opened',
+      });
       await vscode.commands.executeCommand('neko.canvas.new');
       return;
     }
 
     if (action === 'toggleSkip') {
+      const skipped =
+        existingState.agentStatus !== 'skipped' || existingState.canvasStatus !== 'skipped';
+      this.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        sceneId,
+        agentStatus: skipped ? 'skipped' : 'not-requested',
+        canvasStatus: skipped ? 'skipped' : 'not-sent',
+      });
       return;
     }
 
     await this.selectSceneRange(scene.line_start, scene.line_end);
 
     if (action === 'analyze') {
+      this.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        ...existingState,
+        agentStatus: 'ready',
+      });
       await this.sendSceneToAgent(scene, '请分析这个场景并给出 scene-level 分镜建议：');
       return;
     }
 
     if (action === 'generateStoryboard') {
+      this.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        ...existingState,
+        agentStatus: 'review',
+        canvasStatus: 'queued',
+      });
       await this.sendSceneToAgent(scene, '请为这个场景生成 storyboard 计划，并准备发送到 canvas：');
       return;
     }
 
     if (action === 'sendToCanvas') {
       await this.sendSceneToCanvas(scriptIndex, scene);
+      this.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        ...existingState,
+        canvasStatus: 'sent',
+      });
     }
   }
 
@@ -248,7 +295,12 @@ export class PreviewPanel implements vscode.Disposable {
   ): Promise<void> {
     if (!this.activeEditor) return;
 
-    const selection = new vscode.Selection(scene.line_start, 0, scene.line_end, Number.MAX_SAFE_INTEGER);
+    const selection = new vscode.Selection(
+      scene.line_start,
+      0,
+      scene.line_end,
+      Number.MAX_SAFE_INTEGER,
+    );
     const selectedText = this.activeEditor.document.getText(selection);
     const scriptPath = this.activeEditor.document.uri.fsPath;
 
@@ -306,6 +358,46 @@ export class PreviewPanel implements vscode.Disposable {
 
   public postMessage(message: MessageToWebview) {
     this.panel.webview.postMessage(message);
+  }
+
+  private syncSceneStates(
+    documentUri: vscode.Uri,
+    scriptIndex: NekoStoryScriptIndex,
+  ): Record<string, StorySceneState> {
+    const key = documentUri.toString();
+    const current = this.sceneStatesByDocument.get(key) ?? {};
+    const next: Record<string, StorySceneState> = {};
+
+    for (const scene of scriptIndex.scenes) {
+      next[scene.sceneId] = current[scene.sceneId] ?? {
+        sceneId: scene.sceneId,
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      };
+    }
+
+    this.sceneStatesByDocument.set(key, next);
+    return next;
+  }
+
+  private updateSceneState(
+    documentUri: vscode.Uri,
+    scriptIndex: NekoStoryScriptIndex,
+    sceneId: string,
+    nextState: StorySceneState,
+  ): void {
+    const next = {
+      ...this.syncSceneStates(documentUri, scriptIndex),
+      [sceneId]: nextState,
+    };
+    this.sceneStatesByDocument.set(documentUri.toString(), next);
+    const document = parse(this.activeEditor?.document.getText() ?? '');
+    this.postMessage({
+      type: 'update',
+      document: this.resolveAssets(document),
+      scriptIndex,
+      sceneStates: next,
+    });
   }
 
   private getHtmlForWebview(): string {

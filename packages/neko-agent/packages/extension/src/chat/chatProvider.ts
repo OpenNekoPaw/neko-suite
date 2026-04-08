@@ -474,6 +474,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage(message);
   }
 
+  public get webview(): vscode.Webview | undefined {
+    return this._view?.webview;
+  }
+
   /** Expose the DnD broker so index.ts can register query/clear commands. */
   get dndBroker(): DragDropBroker {
     return this._dndBroker;

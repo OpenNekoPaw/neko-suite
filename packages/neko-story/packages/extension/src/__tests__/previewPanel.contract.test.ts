@@ -6,12 +6,18 @@ const panelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), '
 
 describe('PreviewPanel canvas handoff contracts', () => {
   it('routes sendToCanvas through storyboard payload import', () => {
-    expect(panelSource).toContain("await this.sendSceneToCanvas(scriptIndex, scene);");
-    expect(panelSource).toContain("createStoryboardPayload(sceneIndex, {");
+    expect(panelSource).toContain('await this.sendSceneToCanvas(scriptIndex, scene);');
+    expect(panelSource).toContain('createStoryboardPayload(sceneIndex, {');
     expect(panelSource).toContain("'neko.canvas.importStoryboard'");
   });
 
   it('shows a dedicated warning when no canvas editor is open', () => {
     expect(panelSource).toContain("message.includes('No active canvas editor')");
+  });
+
+  it('treats extension-side sceneStates as the review table source of truth', () => {
+    expect(panelSource).toContain('sceneStatesByDocument');
+    expect(panelSource).toContain('sceneStates: next');
+    expect(panelSource).toContain('sceneStates,');
   });
 });

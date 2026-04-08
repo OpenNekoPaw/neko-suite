@@ -146,7 +146,9 @@ describe('neko-story protocol', () => {
     it('routes generateStoryboard command through scene agent payload', () => {
       expect(extensionSource).toContain("'neko.story.generateStoryboard'");
       expect(extensionSource).toContain('const payload = buildSceneAgentPayload(');
-      expect(extensionSource).toContain('请为这个场景生成 storyboard 计划，并准备发送到 canvas：');
+      expect(extensionSource).toContain("'neko.agent.startPipeline'");
+      expect(extensionSource).toContain("flowId: 'flowF'");
+      expect(extensionSource).toContain('sceneIds: [data.sceneId]');
     });
 
     it('registers ScenePlan and ShotPlan agent tools in story capability provider', () => {
