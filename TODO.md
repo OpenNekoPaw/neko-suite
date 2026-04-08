@@ -64,6 +64,9 @@
 
 ### neko-agent
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)
+- [ ] **P1-1: Pipeline media landing unification** — `MediaGeneratorAdapter` returns remote URLs; chat main path saves locally + indexes assets. Need shared `MediaPersistenceService` or adapter-level alignment
+- [ ] **CapabilityProvider context extension** — extend `AgentCapabilityContext` to carry `platform` services, unblocking Canvas/Sketch/Story/CutVideo migration
+- [ ] **24 TODO(P1) Tools** — blocked on neko-cut API expansion (8 timeline + 7 effects + 2 color + 3 audio) and new model capabilities (4 generation)
 
 ### neko-tools
 - [ ] Whisper ASR Diff + Demucs source separation
@@ -228,8 +231,15 @@
 ### ✅ Phase 1 Sprint 1 (2026-04-06)
 - puppetFaceTools `readFileSync` → async + Engine Semaphore(8/4/2) + Assets search L0 persistent index + type filters + EPUB outline TreeView + Cut AI background-remove/smart-crop + DragDropBroker
 
+### ✅ P0+P1 Agent Architecture (2026-04-08)
+- **P0-1**: AgentCapabilityProvider protocol (interface + CapabilityDiscoveryService hybrid manifest/command discovery + neko-cut demo migration)
+- **P0-2**: TOOL_NAMES constants (44 tools, 11 categories) + Builtin Skill naming drift fix (31 unregistered tools removed) + SkillService runtime validation
+- **P0-3**: toolBootstrap.ts extraction + capabilityBootstrap.ts + index.ts simplified to orchestration
+- **P1-2**: Quality check audio/video dependency injection (EngineAudioAnalyzerAdapter + EngineFrameExtractorAdapter wired into pipeline-bootstrap)
+- **P1-3**: Default media models (DALL-E 3 / Sora / TTS-1 / Jukebox) + defaultMediaModels config for open-box media generation
+
 </details>
 
 ---
 
-*Last updated: 2026-04-07 (+ C2PA analysis: deferred, pre-reserved integration points documented)*
+*Last updated: 2026-04-08 (+ Agent P0/P1 architecture refactor completed)*
