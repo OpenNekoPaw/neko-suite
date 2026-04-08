@@ -707,8 +707,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         cameraMovement: srcData.cameraMovement,
         cameraAngle: srcData.cameraAngle,
         duration: srcData.duration ?? 3,
-        characters: [],
-        emotion: [],
+        characters: Array.isArray(srcData.characters) ? structuredClone(srcData.characters) : [],
+        emotion: Array.isArray(srcData.emotion) ? structuredClone(srcData.emotion) : [],
         generationStatus: 'idle',
         generationHistory: [],
       };
@@ -717,10 +717,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       newData = { sceneTitle: '', subtitle: '', shotIds: [] };
       newSize = { width: 300, height: 200 };
     } else if (nodeType === 'gallery') {
+      const srcData =
+        sourceNode.type === 'gallery' ? (sourceNode.data as Record<string, unknown>) : {};
       newData = {
         preset: 'character-3view',
         rows: 1,
         cols: 3,
+        characterId: typeof srcData.characterId === 'string' ? srcData.characterId : undefined,
+        characterName:
+          typeof srcData.characterName === 'string' ? srcData.characterName : undefined,
         cells: [
           { id: 'cell-0', label: '正面', generationStatus: 'idle' },
           { id: 'cell-1', label: '侧面', generationStatus: 'idle' },

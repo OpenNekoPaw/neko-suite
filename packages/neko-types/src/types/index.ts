@@ -190,6 +190,9 @@ export * from './generated-asset';
 // Character registry types (project-level identity contract)
 export * from './character-registry';
 
+// Occurrence index types (minimal cross-layer reference projection)
+export * from './occurrence-index';
+
 // Storage layout types (unified path management, three-level hierarchy)
 export * from './storage';
 

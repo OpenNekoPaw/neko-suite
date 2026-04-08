@@ -12,7 +12,12 @@
 import * as fs from 'fs';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
-import type { GeneratedAsset, GeneratedAssetType, GENERATED_ASSET_DIRS } from '@neko/shared';
+import type {
+  GeneratedAsset,
+  GeneratedAssetType,
+  GENERATED_ASSET_DIRS,
+  OccurrenceIndexEntry,
+} from '@neko/shared';
 
 /** Filter criteria for listing assets */
 export interface AssetFilter {
@@ -137,6 +142,31 @@ export class GeneratedAssetIndex {
   /** Total number of tracked assets */
   get size(): number {
     return this.assets.size;
+  }
+
+  /** List generated assets bound to a specific character. */
+  listByCharacterId(characterId: string): GeneratedAsset[] {
+    return this.list().filter((asset) => asset.characterIds?.includes(characterId));
+  }
+
+  /** List generated assets derived from a specific source node. */
+  listBySourceNodeId(sourceNodeId: string): GeneratedAsset[] {
+    return this.list().filter((asset) => asset.sourceNodeId === sourceNodeId);
+  }
+
+  /** Project generated assets into minimal occurrence entries for cross-layer references. */
+  listOccurrencesByCharacterId(characterId: string): OccurrenceIndexEntry[] {
+    return this.listByCharacterId(characterId).map((asset) => ({
+      entity: {
+        kind: 'character',
+        id: characterId,
+      },
+      source: 'generated-asset',
+      sourceId: asset.id,
+      locator: {
+        uri: asset.path,
+      },
+    }));
   }
 
   // ---------------------------------------------------------------------------
