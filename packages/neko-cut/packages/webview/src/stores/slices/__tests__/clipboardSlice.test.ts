@@ -120,7 +120,9 @@ function createProjectWithElements(): ProjectData {
 interface TestStore extends ClipboardSlice {
   project: ProjectData | null;
   selectedElements: Array<{ trackId: string; elementId: string }>;
+  rippleEditingEnabled: boolean;
   dispatch: (op: EditOperation) => void;
+  dispatchBatch: (ops: EditOperation[]) => void;
 }
 
 function createTestStore(
@@ -128,13 +130,16 @@ function createTestStore(
   selectedElements: Array<{ trackId: string; elementId: string }> = [],
 ) {
   const dispatchMock = vi.fn();
+  const dispatchBatchMock = vi.fn();
   const store = create<TestStore>()((set, get, storeApi) => ({
     project,
     selectedElements,
+    rippleEditingEnabled: false,
     dispatch: dispatchMock,
+    dispatchBatch: dispatchBatchMock,
     ...createClipboardSlice(set as any, get as any, storeApi as any),
   }));
-  return { store, dispatchMock };
+  return { store, dispatchMock, dispatchBatchMock };
 }
 
 // -- Tests -----------------------------------------------------------------
@@ -318,6 +323,38 @@ describe('clipboardSlice', () => {
       expect(items).toHaveLength(2);
       // Second element should be after first (relative offset preserved)
       expect(items[1].element.startTime).toBeGreaterThan(items[0].element.startTime);
+    });
+
+    it('should dispatch ripple shifts before paste when ripple editing is enabled', () => {
+      const { store, dispatchMock, dispatchBatchMock } = createTestStore(
+        createProjectWithElements(),
+        [{ trackId: 'video-track', elementId: 'elem-v1' }],
+      );
+
+      store.getState().copySelected();
+      store.setState({ rippleEditingEnabled: true });
+      store.getState().pasteAtTime(10);
+
+      expect(dispatchMock).not.toHaveBeenCalled();
+      expect(dispatchBatchMock).toHaveBeenCalledTimes(1);
+
+      const ops = dispatchBatchMock.mock.calls[0]![0] as EditOperation[];
+      expect(ops).toHaveLength(2);
+      expect(ops[0]!.type).toBe('element.update');
+      expect(ops[1]!.type).toBe('clipboard.paste');
+
+      const rippleOp = ops[0]!;
+      expect(rippleOp.payload).toMatchObject({
+        trackId: 'video-track',
+        elementId: 'elem-v2',
+        updates: {
+          startTime: 17,
+        },
+      });
+
+      const pasteOp = ops[1]!;
+      const items = (pasteOp.payload as { items: Array<{ element: { startTime: number } }> }).items;
+      expect(items[0]!.element.startTime).toBe(10);
     });
   });
 
