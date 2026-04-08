@@ -276,6 +276,8 @@ function registerCommands(
         importToCanvas?: boolean;
         canvasStartX?: number;
         canvasStartY?: number;
+        eventCommand?: string;
+        eventPayload?: Record<string, unknown>;
         skipStages?: string[];
         stageParams?: Record<string, Record<string, unknown>>;
       }) => {
@@ -304,9 +306,10 @@ function registerCommands(
           },
         );
 
-        if (chatViewProvider.webview) {
-          subscribePipelineProgress(chatViewProvider.webview, handle.id, handle);
-        }
+        subscribePipelineProgress(chatViewProvider.webview, handle.id, handle, {
+          eventCommand: params.eventCommand,
+          eventPayload: params.eventPayload,
+        });
 
         return { pipelineId: handle.id, flowId: handle.flowId };
       },
