@@ -20,6 +20,10 @@ import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
+import {
+  StorySceneStateStore,
+  type StoryPipelineEventPayload,
+} from './services/storySceneStateStore';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
@@ -38,6 +42,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Create shared workspace index service
   const indexService = new WorkspaceIndexService();
   context.subscriptions.push(indexService);
+  const sceneStateStore = new StorySceneStateStore();
+  context.subscriptions.push(sceneStateStore);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
 
@@ -94,7 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.story.preview', () => {
-      PreviewPanel.createOrShow(context.extensionUri);
+      PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
     }),
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
       const editor = vscode.window.activeTextEditor;
@@ -171,6 +177,11 @@ export function activate(context: vscode.ExtensionContext) {
           source: data.scriptPath,
           sourceFormat: 'fountain',
           importToCanvas: true,
+          eventCommand: 'neko.story.handlePipelineEvent',
+          eventPayload: {
+            scriptPath: data.scriptPath,
+            sceneId: data.sceneId,
+          },
           skipStages: [
             'generatePrompts',
             'generatePilot',
@@ -290,13 +301,33 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('neko.story.scriptTableView', () => {
-      const panel = PreviewPanel.createOrShow(context.extensionUri);
+      const panel = PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
       panel?.postMessage({ type: 'setView', view: 'table' });
     }),
     vscode.commands.registerCommand('neko.story.creativeGridView', () => {
-      const panel = PreviewPanel.createOrShow(context.extensionUri);
+      const panel = PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
       panel?.postMessage({ type: 'setView', view: 'grid' });
     }),
+    vscode.commands.registerCommand(
+      'neko.story.handlePipelineEvent',
+      async (params: {
+        pipelineId: string;
+        event: { type: string; [key: string]: unknown };
+        payload: StoryPipelineEventPayload;
+      }) => {
+        const uri = resolveUriOrPath(params.payload.scriptPath);
+        const scriptIndex = indexService.getScriptIndex(uri);
+        if (!scriptIndex) {
+          return;
+        }
+        sceneStateStore.handlePipelineEvent(
+          scriptIndex,
+          params.payload,
+          params.pipelineId,
+          params.event,
+        );
+      },
+    ),
     vscode.commands.registerCommand('neko.story.newFile', async (uri?: vscode.Uri) => {
       await createNewFile({
         targetFolder: uri,

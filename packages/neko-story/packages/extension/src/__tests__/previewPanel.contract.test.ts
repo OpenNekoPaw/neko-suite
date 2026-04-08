@@ -16,8 +16,15 @@ describe('PreviewPanel canvas handoff contracts', () => {
   });
 
   it('treats extension-side sceneStates as the review table source of truth', () => {
-    expect(panelSource).toContain('sceneStatesByDocument');
-    expect(panelSource).toContain('sceneStates: next');
+    expect(panelSource).toContain('private readonly sceneStateStore: StorySceneStateStore;');
+    expect(panelSource).toContain('this.sceneStateStore.getSceneStates(');
+    expect(panelSource).toContain('this.sceneStateStore.updateSceneState(');
     expect(panelSource).toContain('sceneStates,');
+  });
+
+  it('routes generateStoryboard actions through the extension command pipeline', () => {
+    expect(panelSource).toContain(
+      "await vscode.commands.executeCommand('neko.story.generateStoryboard');",
+    );
   });
 });

@@ -30,6 +30,11 @@ interface PipelineHandleFull {
   readonly events: AsyncIterable<PipelineEvent>;
 }
 
+interface PipelineProgressOptions {
+  readonly eventCommand?: string;
+  readonly eventPayload?: Record<string, unknown>;
+}
+
 const logger = getLogger('PipelineProgressBridge');
 
 // Pipeline event types sent to WebView
@@ -55,9 +60,10 @@ interface PipelineWebViewMessage {
  * Collects a PipelineRunReport and passes it to recordCompletedPipeline.
  */
 export function subscribePipelineProgress(
-  webview: vscode.Webview,
+  webview: vscode.Webview | undefined,
   pipelineId: string,
   handle: PipelineHandleFull,
+  options?: PipelineProgressOptions,
 ): void {
   // Send initial started message
   postToWebview(webview, {
@@ -75,6 +81,7 @@ export function subscribePipelineProgress(
       for await (const event of handle.events) {
         // Feed event to report collector
         collector.processEvent(event as AgentPipelineEvent);
+        await forwardPipelineEvent(pipelineId, event, options);
 
         switch (event.type) {
           case 'pipeline_start':
@@ -231,7 +238,35 @@ function buildGatePreview(
   };
 }
 
-function postToWebview(webview: vscode.Webview, message: PipelineWebViewMessage): void {
+async function forwardPipelineEvent(
+  pipelineId: string,
+  event: PipelineEvent,
+  options?: PipelineProgressOptions,
+): Promise<void> {
+  if (!options?.eventCommand) {
+    return;
+  }
+
+  try {
+    await vscode.commands.executeCommand(options.eventCommand, {
+      pipelineId,
+      event,
+      payload: options.eventPayload ?? {},
+    });
+  } catch (error) {
+    logger.warn('Failed to forward pipeline event to command', {
+      pipelineId,
+      eventType: event.type,
+      error,
+    });
+  }
+}
+
+function postToWebview(webview: vscode.Webview | undefined, message: PipelineWebViewMessage): void {
+  if (!webview) {
+    return;
+  }
+
   webview.postMessage(message).then(undefined, (err) => {
     logger.warn('Failed to post pipeline message to webview', { error: err });
   });
