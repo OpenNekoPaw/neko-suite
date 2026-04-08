@@ -28,6 +28,7 @@ const workspaceIndexSource = readFileSync(
 );
 const documentLinkSource = readFileSync(join(__dirname, '../providers/documentLink.ts'), 'utf-8');
 const previewPanelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), 'utf-8');
+const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../../../../package.json'), 'utf-8'));
 
 describe('neko-story protocol', () => {
@@ -134,6 +135,14 @@ describe('neko-story protocol', () => {
     it('includes script-src with nonce', () => {
       expect(previewPanelSource).toContain('script-src');
       expect(previewPanelSource).toContain('nonce-');
+    });
+  });
+
+  describe('storyboard command handoff', () => {
+    it('routes generateStoryboard command through scene agent payload', () => {
+      expect(extensionSource).toContain("'neko.story.generateStoryboard'");
+      expect(extensionSource).toContain('const payload = buildSceneAgentPayload(');
+      expect(extensionSource).toContain('请为这个场景生成 storyboard 计划，并准备发送到 canvas：');
     });
   });
 });
