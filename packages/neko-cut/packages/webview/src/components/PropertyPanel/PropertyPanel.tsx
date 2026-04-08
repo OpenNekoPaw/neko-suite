@@ -163,6 +163,60 @@ const TEXT_PROPERTIES: PropertyDefinition[] = [
   },
 ];
 
+const SUBTITLE_PROPERTIES: PropertyDefinition[] = [
+  { key: 'text', labelKey: 'propertyPanel.text.content', type: 'string', animatable: false },
+  {
+    key: 'fontSize',
+    labelKey: 'propertyPanel.text.fontSize',
+    type: 'number',
+    animatable: false,
+    min: 8,
+    max: 200,
+    step: 1,
+    unit: 'px',
+  },
+  {
+    key: 'fontFamily',
+    labelKey: 'propertyPanel.text.fontFamily',
+    type: 'string',
+    animatable: false,
+  },
+  { key: 'color', labelKey: 'propertyPanel.text.color', type: 'color', animatable: false },
+  {
+    key: 'backgroundColor',
+    labelKey: 'propertyPanel.text.backgroundColor',
+    type: 'color',
+    animatable: false,
+  },
+  {
+    key: 'textAlign',
+    labelKey: 'propertyPanel.text.textAlign',
+    type: 'select',
+    animatable: false,
+    options: [
+      { value: 'left', labelKey: 'propertyPanel.text.alignLeft' },
+      { value: 'center', labelKey: 'propertyPanel.text.alignCenter' },
+      { value: 'right', labelKey: 'propertyPanel.text.alignRight' },
+    ],
+  },
+  {
+    key: 'strokeColor',
+    labelKey: 'propertyPanel.subtitle.strokeColor',
+    type: 'color',
+    animatable: false,
+  },
+  {
+    key: 'strokeWidth',
+    labelKey: 'propertyPanel.subtitle.strokeWidth',
+    type: 'number',
+    animatable: false,
+    min: 0,
+    max: 20,
+    step: 0.5,
+    unit: 'px',
+  },
+];
+
 const AUDIO_PROPERTIES: PropertyDefinition[] = [
   {
     key: 'volume',
@@ -792,14 +846,27 @@ export const PropertyPanel = memo(function PropertyPanel({
         </div>
       </PropertyGroup>
 
-      {/* Text Properties - always show */}
-      <PropertyGroup
-        titleKey="propertyPanel.group.text"
-        disabled={isDisabled}
-        defaultExpanded={!isDisabled}
-      >
-        {renderPropertyRows(TEXT_PROPERTIES, 'text')}
-      </PropertyGroup>
+      {/* Text Properties */}
+      {(isEditingDefaults || element?.type === 'text') && (
+        <PropertyGroup
+          titleKey="propertyPanel.group.text"
+          disabled={isDisabled}
+          defaultExpanded={!isDisabled}
+        >
+          {renderPropertyRows(TEXT_PROPERTIES, isEditingDefaults ? 'text' : '')}
+        </PropertyGroup>
+      )}
+
+      {/* Subtitle Properties */}
+      {element?.type === 'subtitle' && (
+        <PropertyGroup
+          titleKey="propertyPanel.group.subtitle"
+          disabled={isDisabled}
+          defaultExpanded={!isDisabled}
+        >
+          {renderPropertyRows(SUBTITLE_PROPERTIES)}
+        </PropertyGroup>
+      )}
 
       {/* Audio Properties - always show */}
       <PropertyGroup

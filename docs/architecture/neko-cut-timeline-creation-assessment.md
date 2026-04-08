@@ -261,7 +261,11 @@
 - `subtitle` 轨道元素体系
 - 独立 `SubtitlePanel` 组件体系
 
-但主编辑器没有接入 `SubtitlePanel`。
+当前主编辑器已经补上了一条基于时间线 `subtitle` 元素的直接编辑入口：
+
+- `PropertyPanel` 可直接编辑 `subtitle` 元素文本、字号、字体、颜色、背景、对齐、描边
+
+但 `SubtitlePanel` 这套独立 `SubtitleTrack/SubtitleCue/SubtitleStyle` 模型仍未接入主编辑器，也尚未与 timeline `subtitle` 元素完全对齐。
 
 同时，拖入字幕文件时走的是：
 
@@ -273,8 +277,14 @@
 
 这意味着字幕能力还没有统一到一个明确的数据模型和交互入口上。
 
+结论：
+
+- “编辑入口缺失”已部分缓解
+- “双模型并存”仍是当前字幕系统整合的主要剩余问题
+
 对应实现：
 
+- `packages/neko-cut/packages/webview/src/components/PropertyPanel/PropertyPanel.tsx`
 - `packages/neko-cut/packages/webview/src/components/Subtitles/SubtitlePanel.tsx`
 - `packages/neko-cut/packages/webview/src/hooks/useTimelineDragDrop.ts`
 
@@ -399,7 +409,9 @@
   - `text / subtitle / shape` 通过 Webview overlay 补齐
   - `scene3d` 通过保留引擎 seek 帧避免被 media-only composite 覆盖
   - 底层原生 composite 协议仍待后续扩展
-- 把字幕体系收敛到单一入口和单一模型
+- 已部分完成：字幕元素已接入主编辑器 Property Panel
+  - timeline `subtitle` 元素已有直接编辑入口
+  - `SubtitlePanel` 独立模型与字幕文件拖入链路仍待继续收敛
 - 将素材库嵌入主编辑工作区
 
 ### P2
