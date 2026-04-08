@@ -556,27 +556,41 @@ interface AgentCapabilityProvider {
 - 能力发现初始化在 `packages/neko-agent/packages/extension/src/bootstrap/capabilityBootstrap.ts`
 - `index.ts` 简化为纯编排入口
 
-### P1
+### P1 (部分已实施 2026-04-08)
 
 #### 4. 统一 Pipeline 与聊天主链路的媒体落地流程
 
 目标：
 
-- Pipeline 输出统一走“保存到本地 + 资产索引 + 元数据对象”
+- Pipeline 输出统一走”保存到本地 + 资产索引 + 元数据对象”
 - 避免出现一套链路稳定、一套链路仅返回 URL 的问题
 
-#### 5. 补齐音频/视频质检依赖注入
+状态：**未实施** — `MediaGeneratorAdapter` 仍直接返回远程 URL，缺少本地保存 + 资产索引步骤
+
+#### 5. 补齐音频/视频质检依赖注入 ✅
 
 目标：
 
-- 让 `QualityCheck` 从“图片优先”升级为真正的音视频质检能力
+- 让 `QualityCheck` 从”图片优先”升级为真正的音视频质检能力
 
-#### 6. 提供默认媒体模型模板
+已实施：
+
+- `EngineAudioAnalyzerAdapter`（响度分析 + 静音检测）桥接 `EngineClient.analyzeLoudness/detectSilence`
+- `EngineFrameExtractorAdapter`（帧提取 + 视频探测）桥接 `EngineClient.extractFrame/probe`
+- `pipeline-bootstrap.ts` 注入 `audioAnalyzer` + `frameExtractor` 到 `createQualityCheckTools()`
+
+#### 6. 提供默认媒体模型模板 ✅
 
 目标：
 
 - 降低媒体创作开箱门槛
-- 减少“功能存在但默认不可用”的体验落差
+- 减少”功能存在但默认不可用”的体验落差
+
+已实施：
+
+- `DEFAULT_MODELS` 新增 4 个媒体模型：DALL-E 3（image）、Sora（video）、TTS-1（audio）、Jukebox（music，默认禁用）
+- `DEFAULT_USER_CONFIG.defaultMediaModels` 配置 image/video/audio 默认模型
+- `media-routing-manager` 现在无需手动配置即可路由到默认媒体模型
 
 ### P2
 
