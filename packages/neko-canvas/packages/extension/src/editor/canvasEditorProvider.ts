@@ -694,6 +694,36 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+
+      case 'pickCanvasDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            'Neko Canvas': ['nkc'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'canvas.nkc';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Canvas';
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'canvas',
+                path: contractedPath,
+                name: fileName,
+                title,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
       case 'canvasChanged':
         this._onDidChangeCanvas.fire({
           type: message.changeType as 'add' | 'update' | 'delete',

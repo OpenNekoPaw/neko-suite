@@ -34,6 +34,7 @@ export interface CanvasToolbarProps {
   onAddScript?: () => void;
   onAddDocument?: () => void;
   onAddModel?: () => void;
+  onAddCanvasEmbed?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -57,6 +58,7 @@ export function CanvasToolbar({
   onAddScript,
   onAddDocument,
   onAddModel,
+  onAddCanvasEmbed,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -207,6 +209,13 @@ export function CanvasToolbar({
               icon={<span className="text-[13px]">🧠</span>}
               label="模型引用"
               onClick={() => handleAddAndClose(onAddModel)}
+            />
+          )}
+          {onAddCanvasEmbed && (
+            <AddPanelItem
+              icon={<span className="text-[13px]">🗂</span>}
+              label="嵌入画布"
+              onClick={() => handleAddAndClose(onAddCanvasEmbed)}
             />
           )}
 

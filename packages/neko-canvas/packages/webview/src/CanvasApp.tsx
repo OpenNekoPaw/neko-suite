@@ -215,6 +215,14 @@ export function CanvasApp() {
     addModelAt(getViewportCenter());
   }, [addModelAt, getViewportCenter]);
 
+  const handleAddCanvasEmbed = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickCanvasDocument' });
+    } else {
+      addCanvasEmbedAt(getViewportCenter());
+    }
+  }, [addCanvasEmbedAt, getViewportCenter]);
+
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
       addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name);
@@ -996,6 +1004,7 @@ export function CanvasApp() {
           onAddScript={handleAddScript}
           onAddDocument={handleAddDocument}
           onAddModel={handleAddModel}
+          onAddCanvasEmbed={handleAddCanvasEmbed}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />

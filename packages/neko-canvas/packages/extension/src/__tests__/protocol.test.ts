@@ -15,6 +15,7 @@
  *   NKV-006: timeline import success round-trips shotIds/projectName/importedAt
  *   NKV-007: canvas ops sidecar persists to .nkc-ops
  *   NKV-008: operation log snapshot is restored into webview on ready
+ *   NKV-009: toolbar can pick .nkc files into canvas-embed nodes
  */
 
 import { describe, it, expect } from 'vitest';
@@ -145,6 +146,14 @@ describe('canvasEditorProvider message contracts', () => {
     it('webview hydrates operation log from snapshot', () => {
       expect(webviewSource).toContain("case 'operationLogSnapshot'");
       expect(webviewSource).toContain('hydrateOperationLog(');
+    });
+  });
+
+  describe('NKV-009: canvas embed picker', () => {
+    it('extension handles pickCanvasDocument and returns a canvas dropped asset', () => {
+      expect(providerSource).toContain("case 'pickCanvasDocument'");
+      expect(providerSource).toContain("kind: 'canvas'");
+      expect(providerSource).toContain("type: 'dropAssets'");
     });
   });
 
