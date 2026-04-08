@@ -8,8 +8,14 @@ import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
-import { loadNkc } from '@neko/shared';
-import type { CanvasNode, CanvasNodeType } from '@neko/shared';
+import {
+  inferCanvasDocumentType,
+  inferCanvasDroppedAssetKind,
+  inferCanvasMediaType,
+  inferCanvasModelType,
+  loadNkc,
+} from '@neko/shared';
+import type { CanvasDroppedAsset, CanvasNode, CanvasNodeType } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -710,23 +716,66 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'resolveDroppedFiles': {
-        // Webview dropped files from VSCode explorer - resolve URIs and detect media types
+        // Webview dropped files from VSCode explorer - resolve them into node-ready asset DTOs.
         const droppedUris = message.uris as string[];
-        const resolvedFiles: Array<{ uri: string; name: string; mediaType: string }> = [];
+        const resolvedAssets: CanvasDroppedAsset[] = [];
 
         for (const uriStr of droppedUris) {
           try {
             const fileUri = vscode.Uri.parse(uriStr);
             const fileName = fileUri.path.split('/').pop() || 'file';
-            const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-            const mediaType = this.detectMediaType(ext);
-            if (!mediaType) continue;
+            const assetKind = inferCanvasDroppedAssetKind(fileName);
+            if (!assetKind) continue;
 
-            const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
-            resolvedFiles.push({
-              uri: webviewUri.toString(),
+            if (assetKind === 'media') {
+              const mediaType = inferCanvasMediaType(fileName);
+              if (!mediaType) continue;
+
+              const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
+              resolvedAssets.push({
+                kind: 'media',
+                path: webviewUri.toString(),
+                name: fileName,
+                mediaType,
+              });
+              continue;
+            }
+
+            const contractedPath = await this.contractAssetPath(fileUri.fsPath, document.uri);
+            const baseName = fileName.replace(/\.[^.]+$/, '');
+
+            if (assetKind === 'script') {
+              resolvedAssets.push({
+                kind: 'script',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Script',
+              });
+              continue;
+            }
+
+            if (assetKind === 'document') {
+              const docType = inferCanvasDocumentType(fileName);
+              if (!docType) continue;
+              resolvedAssets.push({
+                kind: 'document',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Document',
+                docType,
+              });
+              continue;
+            }
+
+            const modelType = inferCanvasModelType(fileName);
+            if (!modelType) continue;
+            resolvedAssets.push({
+              kind: 'model',
+              path: contractedPath,
               name: fileName,
-              mediaType,
+              modelName: baseName || 'Model',
+              modelType,
+              role: 'reference',
             });
           } catch {
             // Skip invalid URIs
@@ -734,10 +783,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
         }
 
-        if (resolvedFiles.length > 0) {
+        if (resolvedAssets.length > 0) {
           webviewPanel.webview.postMessage({
-            type: 'dropMedia',
-            files: resolvedFiles,
+            type: 'dropAssets',
+            assets: resolvedAssets,
           });
         }
         break;
@@ -1019,32 +1068,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
-
-  private static readonly MEDIA_EXTENSIONS: Record<string, string> = {
-    png: 'image',
-    jpg: 'image',
-    jpeg: 'image',
-    gif: 'image',
-    webp: 'image',
-    bmp: 'image',
-    svg: 'image',
-    mp4: 'video',
-    mov: 'video',
-    avi: 'video',
-    mkv: 'video',
-    webm: 'video',
-    m4v: 'video',
-    mp3: 'audio',
-    wav: 'audio',
-    ogg: 'audio',
-    m4a: 'audio',
-    aac: 'audio',
-    flac: 'audio',
-  };
-
-  private detectMediaType(ext: string): string | null {
-    return CanvasEditorProvider.MEDIA_EXTENSIONS[ext] ?? null;
-  }
 
   /** Resolve asset path (PathVariable, webview URI, relative, or absolute) to absolute filesystem path */
   private async resolveAssetPath(assetPath: string, documentUri: vscode.Uri): Promise<string> {

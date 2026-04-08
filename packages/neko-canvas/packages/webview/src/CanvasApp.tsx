@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import type { CanvasData, CanvasViewport } from '@neko/shared';
+import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -258,16 +258,25 @@ export function CanvasApp() {
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
     onAddMediaFromExtension: handleAddMediaFromExtension,
-    onDropMedia: (files) => {
+    onDropAssets: (assets: CanvasDroppedAsset[]) => {
       const pos = dropPositionRef.current ?? getViewportCenter();
-      files.forEach((file, i) => {
+      assets.forEach((asset, i) => {
         const offset = i * 30;
-        addMediaAt(
-          { x: pos.x + offset, y: pos.y + offset },
-          file.mediaType as 'image' | 'video' | 'audio',
-          file.uri,
-          file.name,
-        );
+        const dropPos = { x: pos.x + offset, y: pos.y + offset };
+        switch (asset.kind) {
+          case 'media':
+            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name);
+            break;
+          case 'script':
+            addScriptAt(dropPos, asset.path, asset.title);
+            break;
+          case 'document':
+            addDocumentAt(dropPos, asset.path, asset.title, asset.docType);
+            break;
+          case 'model':
+            addModelAt(dropPos, asset.path, asset.modelName, asset.modelType, asset.role);
+            break;
+        }
       });
       dropPositionRef.current = null;
     },
