@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useCallback, useRef } from 'react';
-import type { CanvasNode, CanvasViewport } from '@neko/shared';
+import type { CanvasNode, CanvasNodeType, CanvasViewport } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -29,6 +29,14 @@ interface Bounds {
   height: number;
 }
 
+interface MiniMapNodeStyle {
+  fill: string;
+  opacity?: number;
+  radius?: number;
+}
+
+type MiniMapNodeStyleRegistry = Partial<Record<CanvasNodeType, MiniMapNodeStyle>>;
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -36,6 +44,11 @@ interface Bounds {
 const DEFAULT_WIDTH = 200;
 const DEFAULT_HEIGHT = 150;
 const PADDING = 20;
+const DEFAULT_NODE_STYLE: MiniMapNodeStyle = {
+  fill: '#4a4a4a',
+  opacity: 0.8,
+  radius: 1,
+};
 
 // =============================================================================
 // Helpers
@@ -80,6 +93,32 @@ function calculateBounds(nodes: CanvasNode[]): Bounds {
     height: maxY - minY,
   };
 }
+
+export function createBuiltInMiniMapNodeStyleRegistry(): MiniMapNodeStyleRegistry {
+  return {
+    media: { fill: '#4ec9b0' },
+    storyboard: { fill: '#ce9178' },
+    annotation: { fill: '#dcdcaa' },
+    text: { fill: '#c586c0' },
+    artboard: { fill: '#808080' },
+    group: { fill: '#569cd6' },
+    shot: { fill: '#f59e0b' },
+    scene: { fill: '#38bdf8' },
+    gallery: { fill: '#8b5cf6' },
+    script: { fill: '#10b981' },
+    document: { fill: '#ef4444' },
+    model: { fill: '#f97316' },
+  };
+}
+
+export function resolveMiniMapNodeStyle(
+  registry: MiniMapNodeStyleRegistry,
+  nodeType: CanvasNodeType,
+): MiniMapNodeStyle {
+  return registry[nodeType] ?? DEFAULT_NODE_STYLE;
+}
+
+const MINI_MAP_NODE_STYLE_REGISTRY = createBuiltInMiniMapNodeStyleRegistry();
 
 // =============================================================================
 // Component
@@ -174,23 +213,7 @@ export function MiniMap({
             const y = (node.position.y - bounds.minY) * scale;
             const w = node.size.width * scale;
             const h = node.size.height * scale;
-
-            // Color based on node type
-            let fill = '#4a4a4a';
-            switch (node.type) {
-              case 'media':
-                fill = '#4ec9b0';
-                break;
-              case 'storyboard':
-                fill = '#ce9178';
-                break;
-              case 'annotation':
-                fill = '#dcdcaa';
-                break;
-              case 'group':
-                fill = '#569cd6';
-                break;
-            }
+            const nodeStyle = resolveMiniMapNodeStyle(MINI_MAP_NODE_STYLE_REGISTRY, node.type);
 
             return (
               <rect
@@ -199,9 +222,9 @@ export function MiniMap({
                 y={y}
                 width={Math.max(w, 2)}
                 height={Math.max(h, 2)}
-                fill={fill}
-                opacity={0.8}
-                rx={1}
+                fill={nodeStyle.fill}
+                opacity={nodeStyle.opacity ?? DEFAULT_NODE_STYLE.opacity}
+                rx={nodeStyle.radius ?? DEFAULT_NODE_STYLE.radius}
               />
             );
           })}
