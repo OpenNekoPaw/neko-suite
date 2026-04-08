@@ -169,9 +169,9 @@ packages/neko-canvas/
 ```
 VSCode Explorer 拖放文件到 Webview
   → postMessage('resolveDroppedFiles', paths)
-    → Extension Host 解析文件类型 + probe
-      → postMessage('dropMedia', mediaInfo)
-        → canvasStore.addNode(MediaNode, dropPosition)
+    → Extension Host 解析文件类型
+      → postMessage('dropAssets', assetDtos)
+        → canvasStore.addNode(MediaNode | ScriptNode | DocumentNode | ModelNode, dropPosition)
 ```
 
 ---
@@ -209,7 +209,7 @@ exportArtboard(data)       — 导出画板配置
 update(canvasData)         — 加载画布数据
 keyboardAction(action)     — 转发快捷键
 addMedia(mediaInfo)        — 文件选择器结果
-dropMedia(mediaInfoList)   — 拖放文件解析结果
+dropAssets(assetDtoList)   — 拖放文件解析结果
 ```
 
 ---

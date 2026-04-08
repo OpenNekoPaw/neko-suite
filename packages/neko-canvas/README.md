@@ -69,10 +69,10 @@ Webview 端通过 `canvasOperationStore` 桥接层记录编辑操作，与现有
 
 | 方式 | 状态 | 说明 |
 |------|------|------|
-| Explorer 拖拽 | ✅ | `useDragDrop` → `resolveDroppedFiles` → `dropMedia` |
+| Explorer 拖拽 | ✅ | `useDragDrop` → `resolveDroppedFiles` → `dropAssets`（media/script/document/model） |
 | 素材库拖拽 | ✅ | `application/json` 协议，PathVariable 解析 |
-| 工具栏文件选择器 | ⚠️ | 差 `pickMedia` handler（5 行补全）|
-| 文档类型（ScriptNode 等）| 📋 规划 | 新增节点类型，委托专用扩展预览 |
+| 工具栏文件选择器 | ✅ | `pickMedia` 已接通，图片/视频/音频可直接选入 |
+| 文档类型（ScriptNode 等）| ✅ | Explorer 拖入可直接创建 `ScriptNode` / `DocumentNode` / `ModelNode` |
 
 ### 分镜系统（规划）
 

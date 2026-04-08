@@ -35,9 +35,20 @@ export interface UseNodeHelpersReturn {
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
   /** Add a GalleryNode at the given canvas position */
   addGalleryAt: (pos: { x: number; y: number }) => void;
-  addScriptAt: (pos: { x: number; y: number }) => void;
-  addDocumentAt: (pos: { x: number; y: number }) => void;
-  addModelAt: (pos: { x: number; y: number }) => void;
+  addScriptAt: (pos: { x: number; y: number }, scriptPath?: string, scriptTitle?: string) => void;
+  addDocumentAt: (
+    pos: { x: number; y: number },
+    docPath?: string,
+    title?: string,
+    docType?: 'pdf' | 'docx' | 'epub' | 'cbz',
+  ) => void;
+  addModelAt: (
+    pos: { x: number; y: number },
+    modelPath?: string,
+    modelName?: string,
+    modelType?: 'lora' | 'checkpoint' | 'controlnet' | 'vae',
+    role?: 'reference' | 'workflow',
+  ) => void;
 }
 
 // =============================================================================
@@ -181,7 +192,7 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
   );
 
   const addScriptAt = useCallback(
-    (pos: { x: number; y: number }) => {
+    (pos: { x: number; y: number }, scriptPath = '', scriptTitle = 'Script') => {
       const w = 280,
         h = 220;
       addNode({
@@ -190,18 +201,23 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
         size: { width: w, height: h },
         zIndex: nodeCount,
         data: {
-          scriptPath: '',
-          scriptTitle: 'Script',
+          scriptPath,
+          scriptTitle,
           scenes: [],
         },
       });
-      reportAction('addNode', 'Add script reference');
+      reportAction('addNode', 'Add script reference', scriptTitle || undefined);
     },
     [addNode, nodeCount, reportAction],
   );
 
   const addDocumentAt = useCallback(
-    (pos: { x: number; y: number }) => {
+    (
+      pos: { x: number; y: number },
+      docPath = '',
+      title = 'Document',
+      docType: 'pdf' | 'docx' | 'epub' | 'cbz' = 'pdf',
+    ) => {
       const w = 220,
         h = 280;
       addNode({
@@ -210,18 +226,24 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
         size: { width: w, height: h },
         zIndex: nodeCount,
         data: {
-          docPath: '',
-          docType: 'pdf',
-          title: 'Document',
+          docPath,
+          docType,
+          title,
         },
       });
-      reportAction('addNode', 'Add document reference');
+      reportAction('addNode', 'Add document reference', title || undefined);
     },
     [addNode, nodeCount, reportAction],
   );
 
   const addModelAt = useCallback(
-    (pos: { x: number; y: number }) => {
+    (
+      pos: { x: number; y: number },
+      modelPath = '',
+      modelName = 'Model',
+      modelType: 'lora' | 'checkpoint' | 'controlnet' | 'vae' = 'lora',
+      role: 'reference' | 'workflow' = 'reference',
+    ) => {
       const w = 240,
         h = 160;
       addNode({
@@ -230,13 +252,13 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
         size: { width: w, height: h },
         zIndex: nodeCount,
         data: {
-          modelPath: '',
-          modelName: 'Model',
-          modelType: 'lora',
-          role: 'reference',
+          modelPath,
+          modelName,
+          modelType,
+          role,
         },
       });
-      reportAction('addNode', 'Add model reference');
+      reportAction('addNode', 'Add model reference', modelName || undefined);
     },
     [addNode, nodeCount, reportAction],
   );

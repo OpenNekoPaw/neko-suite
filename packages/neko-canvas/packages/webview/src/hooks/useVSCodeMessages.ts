@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { CanvasData, CanvasNode, CanvasNodeType } from '@neko/shared';
+import type { CanvasData, CanvasDroppedAsset, CanvasNode, CanvasNodeType } from '@neko/shared';
 import { setLocale } from '../i18n';
 
 // =============================================================================
@@ -32,7 +32,7 @@ export interface UseVSCodeMessagesOptions {
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
   onAddMediaFromExtension: (mediaType: string, uri: string, name: string) => void;
-  onDropMedia: (files: Array<{ uri: string; name: string; mediaType: string }>) => void;
+  onDropAssets: (assets: CanvasDroppedAsset[]) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
   /** Called with the AI-built prompt string for AutoPrompt */
@@ -72,7 +72,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     defaultCanvasData,
     setCanvasData,
     onAddMediaFromExtension,
-    onDropMedia,
+    onDropAssets,
     onGenerationProgress,
     onBuildPromptResult,
     onScriptIndexResult,
@@ -90,8 +90,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   // Stable refs for callbacks to avoid re-registering listener
   const onAddMediaRef = useRef(onAddMediaFromExtension);
   onAddMediaRef.current = onAddMediaFromExtension;
-  const onDropMediaRef = useRef(onDropMedia);
-  onDropMediaRef.current = onDropMedia;
+  const onDropAssetsRef = useRef(onDropAssets);
+  onDropAssetsRef.current = onDropAssets;
   const onGenerationProgressRef = useRef(onGenerationProgress);
   onGenerationProgressRef.current = onGenerationProgress;
   const onBuildPromptResultRef = useRef(onBuildPromptResult);
@@ -133,13 +133,27 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               message.name as string,
             );
             break;
+          case 'dropAssets': {
+            const assets = (message.assets as CanvasDroppedAsset[] | undefined) ?? [];
+            onDropAssetsRef.current(assets);
+            break;
+          }
           case 'dropMedia': {
-            const files = message.files as Array<{
-              uri: string;
-              name: string;
-              mediaType: string;
-            }>;
-            onDropMediaRef.current(files);
+            const assets = (
+              (message.files as Array<{ uri: string; name: string; mediaType: string }> | undefined) ??
+              []
+            ).map((file) => ({
+              kind: 'media' as const,
+              path: file.uri,
+              name: file.name,
+              mediaType:
+                file.mediaType === 'video'
+                  ? 'video'
+                  : file.mediaType === 'audio'
+                    ? 'audio'
+                    : 'image',
+            }));
+            onDropAssetsRef.current(assets);
             break;
           }
           case 'generationProgress':
