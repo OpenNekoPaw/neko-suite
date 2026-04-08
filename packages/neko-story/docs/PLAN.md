@@ -149,7 +149,11 @@ interface IStoryboardGenerator {
 - [x] 实现 `neko.story.generateStoryboard` 命令入口（发送当前场景到 Agent）
 - [x] 实现 `PreviewPanel.sendToCanvas` 机械式场景导入（`neko.canvas.importStoryboard`）
 - [x] 提供 `GenerateScenePlan` / `GenerateShotPlan` Agent 工具
-- [ ] 将 `GenerateScenePlan` / `GenerateShotPlan` 接入 Agent 主流程与 semantic 导入闭环
+- [x] 将 `GenerateScenePlan` / `GenerateShotPlan` 接入 Agent 主流程与 semantic 导入闭环
+- [x] 为 `NekoStoryAPI` 暴露 `generateScenePlans()` / `generateShotPlan()`，供 Agent pipeline 直接消费
+- [x] 新增 `importStoryboardToCanvas` pipeline stage，将 semantic storyboard 正式导入 `canvas`
+- [ ] 将 `neko.story.generateStoryboard` 升级为直接启动标准 pipeline，而不只是发送 context
+- [ ] 为轻量分镜表接入 Agent / Canvas 真实状态回写
 
 ---
 
@@ -175,7 +179,9 @@ extension → parser → types
 6. ✅ 预览面板渲染剧本（标准格式）
 7. ✅ 编辑器与预览双向同步
 8. ✅ 转换为 neko-cut 时间线（Fountain → ProjectData JSON 语义 Skill）
-9. ⬜ AI 生成分镜脚本与语义导入主流程
+9. 🚧 AI 生成分镜脚本与语义导入主流程
+   - 已具备 `ScenePlan / ShotPlan -> canvas semantic import` pipeline 主链
+   - 剩余：`story` 命令直连标准流程、状态回写、完整“剧本开始视频创作”入口
 
 ## 构建与测试
 
@@ -218,6 +224,7 @@ pnpm build:dev
 ```bash
 pnpm --filter @neko-story/extension test
 pnpm --filter @neko-agent/extension test:run
+pnpm exec vitest run packages/neko-agent/packages/agent/src/pipeline/__tests__/stages.test.ts
 pnpm test
 ```
 
