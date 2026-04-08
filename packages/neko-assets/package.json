@@ -60,45 +60,10 @@
           "id": "neko.assetHistory",
           "name": "%neko.assetManager.history%",
           "contextualTitle": "%neko.assetManager.historyTitle%"
-        },
-        {
-          "id": "neko.cloudSync",
-          "name": "%neko.assetManager.cloudSync%",
-          "contextualTitle": "%neko.assetManager.cloudSyncTitle%"
         }
       ]
     },
     "commands": [
-      {
-        "command": "neko.assets.sync",
-        "title": "%neko.assets.sync%",
-        "category": "Neko Assets"
-      },
-      {
-        "command": "neko.assets.push",
-        "title": "%neko.assets.push%",
-        "category": "Neko Assets"
-      },
-      {
-        "command": "neko.assets.pull",
-        "title": "%neko.assets.pull%",
-        "category": "Neko Assets"
-      },
-      {
-        "command": "neko.assets.initLfs",
-        "title": "%neko.assets.initLfs%",
-        "category": "Neko Assets"
-      },
-      {
-        "command": "neko.assets.trackLfs",
-        "title": "%neko.assets.trackLfs%",
-        "category": "Neko Assets"
-      },
-      {
-        "command": "neko.assets.triggerRender",
-        "title": "%neko.assets.triggerRender%",
-        "category": "Neko Assets"
-      },
       {
         "command": "neko.assets.viewHistory",
         "title": "%neko.assets.viewHistory%",

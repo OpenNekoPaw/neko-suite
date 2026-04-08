@@ -187,7 +187,8 @@
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "pnpm run compile:extension -- --watch",
-    "lint": "eslint packages --ext ts,tsx",
+    "lint": "eslint packages/extension/src packages/webview/src",
+    "typecheck": "cd packages/extension && tsc --noEmit",
     "test": "pnpm exec vitest --dir packages/extension --passWithNoTests",
     "test:packages": "pnpm turbo run test --filter=@neko-canvas/webview",
     "package": "vsce package --no-dependencies"

@@ -297,7 +297,7 @@
 | NKV-005 | P0 | fixed | AutoPrompt 回路未闭环，面板”自动填写”稳定返回空字符串 |
 | NKV-006 | P0 | verified | `operationApplied` 脏标记链路断裂，扩展侧 dirty 事件可能丢失 |
 | NKV-007 | P1 | fixed | 命令声明与注册实现不一致，部分命令”可见但不可用” |
-| NKV-008 | P1 | open | 质量门禁失效（lint/test/tsc），导致回归问题难以及时暴露 |
+| NKV-008 | P1 | fixed | 质量门禁失效（lint/test/tsc），导致回归问题难以及时暴露 |
 | NKV-009 | P1 | fixed | 空文件加载默认值链路不完整，初始数据一致性存在风险 |
 | NKV-010 | P1 | open | 测试覆盖集中在 webview util/store，extension 协议链路覆盖不足 |
 
@@ -402,7 +402,7 @@
 | NKS-003 | P0 | fixed | `AUDIO` 资产被错误映射为 `mediaType: image`，音频转换语义失真 |
 | NKS-004 | P1 | fixed | 滚动同步链路未闭环（`scroll` 分支空实现 + 缺失 `data-line`） |
 | NKS-005 | P1 | fixed | 与 `neko-agent` 的命令依赖未在扩展依赖中声明 |
-| NKS-006 | P1 | open | `generateStoryboard` 仍为占位命令，核心能力未落地 |
+| NKS-006 | P1 | deferred | `generateStoryboard` 仍为占位命令，核心能力未落地 |
 | NKS-007 | P2 | open | 工作区索引采用全量重建，规模增大时性能退化风险高 |
 | NKS-008 | P2 | open | i18n 基础设施已搭建但大量 UI 文案硬编码，国际化一致性不足 |
 | NKS-009 | P1 | open | 测试覆盖偏向纯函数/渲染，关键协议链路（CSP/滚动/音频映射）缺乏回归保护 |
@@ -704,8 +704,8 @@
 
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
-| NKAS-001 | P1 | open | 对外宣称 `cloud sync / CI/CD auto-rendering`，实际仍是占位命令 |
-| NKAS-002 | P1 | open | 已贡献 `neko.cloudSync` 视图，但 Extension 未注册对应 Provider |
+| NKAS-001 | P1 | fixed | 对外宣称 `cloud sync / CI/CD auto-rendering`，实际仍是占位命令 |
+| NKAS-002 | P1 | fixed | 已贡献 `neko.cloudSync` 视图，但 Extension 未注册对应 Provider |
 | NKAS-003 | P1 | open | 文档规划中的 `AssetRegistry` 多源合并未真正接入主链路 |
 | NKAS-004 | P1 | open | `AssetRegistry` 的非媒体资产当前仅驻留内存，缺少持久化与实际消费方 |
 | NKAS-005 | P2 | open | `extension.ts` 体量过大，初始化/命令/UI/集成强耦合 |
@@ -792,7 +792,7 @@
 | NKM-003 | P1 | fixed | 类型筛选使用 `model/preset` 聚合值，偏离共享 `AssetType` 契约 |
 | NKM-004 | P1 | fixed | `InstalledRegistry.load()` 异步竞态可能导致首次打开状态不准 |
 | NKM-005 | P1 | fixed | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |
-| NKM-006 | P1 | open | 付费/私有资产许可校验仍是 stub，认证与商业能力未闭环 |
+| NKM-006 | P1 | deferred | 付费/私有资产许可校验仍是 stub，认证与商业能力未闭环 |
 | NKM-007 | P2 | fixed | `registryUrl` 配置与架构文档不一致，`nekoSuiteVersion` 仍为硬编码 |
 | NKM-008 | P1 | open | 测试覆盖偏 core unit，缺少安装编排与 webview 协议级回归 |
 
@@ -895,7 +895,7 @@
 | NKAT-001 | P0 | fixed | 自动刷新 token 后不广播 session 变更，消费者可能长期持有过期凭证 |
 | NKAT-002 | P1 | verified | VSCode 设置半配置会屏蔽 `config.json` 完整配置，导致登录配置判定异常 |
 | NKAT-003 | P1 | fixed | 刷新失败对所有异常一律清空会话，网络抖动也会误触发”被登出” |
-| NKAT-004 | P2 | open | 对外宣称文件存储/云厂商 token 能力，但扩展侧仍未落地 |
+| NKAT-004 | P2 | deferred | 对外宣称文件存储/云厂商 token 能力，但扩展侧仍未落地 |
 | NKAT-005 | P2 | open | `AuthBridge` 与 extension 层测试覆盖不足，接线遗漏难以及时暴露 |
 
 ### 问题详情（追加）
