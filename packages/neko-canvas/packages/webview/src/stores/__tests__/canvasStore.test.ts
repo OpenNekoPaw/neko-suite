@@ -8,7 +8,6 @@ import {
 } from '@neko/shared';
 import { useCanvasStore } from '../canvasStore';
 import { useHistoryStore } from '../historyStore';
-import { useCanvasOperationStore } from '../canvasOperationStore';
 
 function createSceneNode(): SceneGroupCanvasNode {
   return {
@@ -57,21 +56,6 @@ function createCanvasData(nodes: CanvasData['nodes']): CanvasData {
   };
 }
 
-function getOperationNodeIds(): string[] {
-  return useCanvasOperationStore.getState().operationLog.flatMap((operation) => {
-    const { payload } = operation;
-    if (
-      payload &&
-      typeof payload === 'object' &&
-      'nodeId' in payload &&
-      typeof payload.nodeId === 'string'
-    ) {
-      return [payload.nodeId];
-    }
-    return [];
-  });
-}
-
 describe('canvasStore scene container actions', () => {
   beforeEach(() => {
     useCanvasStore.setState({
@@ -83,7 +67,6 @@ describe('canvasStore scene container actions', () => {
       generationPanelState: { visible: false, nodeId: null, cellId: null },
     });
     useHistoryStore.setState({ undoStack: [], redoStack: [], maxHistory: 50 });
-    useCanvasOperationStore.setState({ operationLog: [], maxLogSize: 500 });
   });
 
   it('assigns selected shots into a scene and auto-layouts them in shotIds order', () => {
@@ -115,8 +98,6 @@ describe('canvasStore scene container actions', () => {
     expect(shot2?.data.sceneGroupId).toBe('scene-1');
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
     expect(shot1?.position.y).toBe(shot2?.position.y);
-    expect(useCanvasOperationStore.getState().operationLog).toHaveLength(3);
-    expect(getOperationNodeIds()).toEqual(['scene-1', 'shot-1', 'shot-2']);
   });
 
   it('updates scene membership when a shot is dragged into and out of a scene', () => {
@@ -193,8 +174,6 @@ describe('canvasStore scene container actions', () => {
 
     expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
-    expect(useCanvasOperationStore.getState().operationLog).toHaveLength(3);
-    expect(getOperationNodeIds()).toEqual(['scene-1', 'shot-1', 'shot-2']);
   });
 
   it('records moved shot positions when auto-layout runs on an existing scene', () => {
@@ -225,9 +204,5 @@ describe('canvasStore scene container actions', () => {
     );
 
     useCanvasStore.getState().autoLayoutSceneShots('scene-1');
-
-    const ops = useCanvasOperationStore.getState().operationLog;
-    expect(ops).toHaveLength(2);
-    expect(getOperationNodeIds()).toEqual(['shot-1', 'shot-2']);
   });
 });

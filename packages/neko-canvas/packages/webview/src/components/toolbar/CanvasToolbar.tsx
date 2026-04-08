@@ -13,10 +13,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ToolbarButton, ToolbarSeparator } from '@neko/shared/components';
 import { useHistoryStore } from '../../stores/historyStore';
-import { useCanvasOperationStore } from '../../stores/canvasOperationStore';
 import { t } from '../../i18n';
 import { PlusIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
-import type { OperationSource } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -40,8 +38,7 @@ export interface CanvasToolbarProps {
   onTogglePanMode?: () => void;
 }
 
-type ExpandedPanel = 'add' | 'ops' | null;
-type OperationFilter = 'all' | OperationSource;
+type ExpandedPanel = 'add' | null;
 
 // =============================================================================
 // Component
@@ -65,9 +62,7 @@ export function CanvasToolbar({
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const canUndo = useHistoryStore((s) => s.canUndo());
   const canRedo = useHistoryStore((s) => s.canRedo());
-  const operationLog = useCanvasOperationStore((s) => s.operationLog);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const [operationFilter, setOperationFilter] = useState<OperationFilter>('all');
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -120,18 +115,6 @@ export function CanvasToolbar({
       />
 
       <ToolbarSeparator />
-
-      <ToolbarButton
-        icon={
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 4a3 3 0 0 0-3 3v1h20V7a3 3 0 0 0-3-3H5Z" />
-            <path d="M2 10v7a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-7H2Zm5 2h10v2H7v-2Zm0 4h6v2H7v-2Z" />
-          </svg>
-        }
-        title={t('toolbar.operationHistory')}
-        active={expandedPanel === 'ops'}
-        onClick={() => togglePanel('ops')}
-      />
 
       {/* Undo */}
       <ToolbarButton
@@ -259,14 +242,6 @@ export function CanvasToolbar({
           />
         </div>
       )}
-
-      {expandedPanel === 'ops' && (
-        <OperationPanel
-          operationFilter={operationFilter}
-          operations={operationLog}
-          onFilterChange={setOperationFilter}
-        />
-      )}
     </div>
   );
 }
@@ -289,113 +264,5 @@ function AddPanelItem({ icon, label, shortcut, onClick }: AddPanelItemProps) {
       <span className="neko-menu-item-label">{label}</span>
       {shortcut !== undefined && <span className="neko-menu-item-shortcut">{shortcut}</span>}
     </button>
-  );
-}
-
-interface OperationPanelProps {
-  operations: ReturnType<typeof useCanvasOperationStore.getState>['operationLog'];
-  operationFilter: OperationFilter;
-  onFilterChange: (filter: OperationFilter) => void;
-}
-
-const OPERATION_FILTERS: ReadonlyArray<{ value: OperationFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'user', label: '用户' },
-  { value: 'ai', label: 'AI' },
-  { value: 'system', label: '系统' },
-];
-
-function OperationPanel({ operations, operationFilter, onFilterChange }: OperationPanelProps) {
-  const filtered = operations
-    .filter((operation) =>
-      operationFilter === 'all' ? true : operation.meta.source === operationFilter,
-    )
-    .slice(-12)
-    .reverse();
-
-  return (
-    <div
-      className="absolute left-full top-12 ml-1.5"
-      style={{
-        width: 280,
-        maxHeight: 360,
-        padding: '8px',
-        background: 'var(--neko-glass-bg)',
-        backdropFilter: 'var(--neko-glass-blur)',
-        WebkitBackdropFilter: 'var(--neko-glass-blur)',
-        border: '1px solid var(--neko-glass-border)',
-        borderRadius: 'var(--neko-radius-lg)',
-        boxShadow: 'var(--neko-glass-shadow)',
-        color: 'var(--neko-fg)',
-      }}
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-[11px] font-semibold tracking-[0.12em] text-[var(--neko-fg-secondary)]">
-          操作历史
-        </div>
-        <div className="text-[10px] text-[var(--neko-fg-tertiary)]">{operations.length} 条</div>
-      </div>
-
-      <div className="mb-2 flex flex-wrap gap-1">
-        {OPERATION_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            onClick={() => onFilterChange(filter.value)}
-            style={{
-              fontSize: 10,
-              padding: '3px 8px',
-              borderRadius: 999,
-              border:
-                operationFilter === filter.value
-                  ? '1px solid var(--neko-accent)'
-                  : '1px solid var(--node-border)',
-              background:
-                operationFilter === filter.value ? 'var(--neko-accent-soft)' : 'transparent',
-              color: 'var(--neko-fg)',
-            }}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="max-h-[280px] overflow-y-auto space-y-1.5 pr-1">
-        {filtered.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[var(--node-border)] px-3 py-4 text-[11px] text-[var(--neko-fg-secondary)]">
-            当前筛选条件下还没有操作记录。
-          </div>
-        ) : (
-          filtered.map((operation) => (
-            <div
-              key={operation.meta.id}
-              className="rounded-md px-2 py-1.5"
-              style={{
-                border: '1px solid var(--node-border)',
-                background: 'var(--node-surface)',
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="truncate text-[11px] font-medium">
-                  {operation.meta.description ?? operation.type}
-                </div>
-                <div className="text-[10px] uppercase text-[var(--neko-fg-secondary)]">
-                  {operation.meta.source}
-                </div>
-              </div>
-              <div className="mt-1 text-[10px] text-[var(--neko-fg-secondary)]">
-                {operation.type}
-              </div>
-              <div className="mt-1 text-[10px] text-[var(--neko-fg-tertiary)]">
-                {new Date(operation.meta.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
   );
 }

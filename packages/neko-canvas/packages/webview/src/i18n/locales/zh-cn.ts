@@ -14,7 +14,6 @@ export const zhCN = {
   'toolbar.redo': '重做',
   'toolbar.nodes': '{count} 个节点',
   'toolbar.handTool': '移动工具',
-  'toolbar.operationHistory': '操作历史',
   'toolbar.shot': '镜头',
   'toolbar.sceneGroup': '场景',
   'toolbar.gallery': '角色画廊',

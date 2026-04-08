@@ -1,8 +1,8 @@
 /**
  * Canvas Operation Bridge — 在 canvasStore 操作时生成 EditOperation
  *
- * 桥接层：监听 canvasStore 变化，生成对应的 EditOperation 并同步到 Extension。
- * 保持现有 historyStore 快照式 undo/redo 不变，同时提供操作级别的审计追踪和 AI 集成能力。
+ * 桥接层：在 canvasStore mutation 时生成 EditOperation 并同步到 Extension。
+ * 保持现有 historyStore 快照式 undo/redo 不变，同时为 dirty 标记和 AI/source 标注提供统一协议。
  */
 
 import { create } from 'zustand';
@@ -45,20 +45,12 @@ function createMeta(source: OperationSource = 'user', description?: string): Ope
 // =============================================================================
 
 export interface CanvasOperationStore {
-  /** 操作日志（用于审计/AI 分析） */
-  operationLog: EditOperation[];
-  maxLogSize: number;
   operationSourceOverride: OperationSource | null;
 
   /** 记录操作（由 canvasStore 的 action 调用） */
   recordOperation: (op: EditOperation) => void;
   /** Temporarily override operation source within a synchronous mutation boundary */
   withOperationSource: <T>(source: OperationSource, run: () => T) => T;
-  /** Replace operation log from persisted sidecar without re-emitting to extension */
-  hydrateOperationLog: (operations: EditOperation[]) => void;
-
-  /** 清空日志 */
-  clearLog: () => void;
 
   // =========================================================================
   // Convenience builders — 构建 CanvasOperation 并记录
@@ -79,29 +71,20 @@ export interface CanvasOperationStore {
 }
 
 export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) => ({
-  operationLog: [],
-  maxLogSize: 500,
   operationSourceOverride: null,
 
   recordOperation: (op) => {
-    const { operationLog, maxLogSize, operationSourceOverride } = get();
-    const newLog = [
-      ...operationLog,
-      operationSourceOverride
-        ? {
-            ...op,
-            meta: {
-              ...op.meta,
-              source: operationSourceOverride,
-            },
-          }
-        : op,
-    ];
-    if (newLog.length > maxLogSize) {
-      newLog.splice(0, newLog.length - maxLogSize);
-    }
-    set({ operationLog: newLog });
-    syncOperationToExtension(newLog[newLog.length - 1]!);
+    const { operationSourceOverride } = get();
+    const nextOperation = operationSourceOverride
+      ? {
+          ...op,
+          meta: {
+            ...op.meta,
+            source: operationSourceOverride,
+          },
+        }
+      : op;
+    syncOperationToExtension(nextOperation);
   },
 
   withOperationSource: (source, run) => {
@@ -113,14 +96,6 @@ export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) =
       set({ operationSourceOverride: previous });
     }
   },
-
-  hydrateOperationLog: (operations) => {
-    const { maxLogSize } = get();
-    const next = operations.slice(-maxLogSize);
-    set({ operationLog: next });
-  },
-
-  clearLog: () => set({ operationLog: [] }),
 
   recordNodeAdd: (node) => {
     get().recordOperation({

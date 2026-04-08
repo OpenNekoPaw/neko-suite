@@ -30,7 +30,7 @@ packages/neko-canvas/
 │                                                           │
 │  extension.ts                                             │
 │    ├─ CanvasEditorProvider (CustomEditorProvider)          │
-│    │    └─ 处理 .nkc / .nkc-ops 文件读写                   │
+│    │    └─ 处理 .nkc 文件读写                              │
 │    │    └─ 消息分发（save/pick*/dropFiles/media:*）        │
 │    │                                                     │
 │    ├─ Views                                              │
@@ -70,7 +70,7 @@ packages/neko-canvas/
 │  │  Zustand Stores                                 │      │
 │  │    ├─ canvasStore (节点/连接/选区/视口)           │      │
 │  │    ├─ historyStore (撤销/重做)                   │      │
-│  │    ├─ canvasOperationStore (.nkc-ops / AI 审计) │      │
+│  │    ├─ canvasOperationStore (EditOperation bridge) │    │
 │  │    └─ clipboardStore (复制/粘贴)                 │      │
 │  │                                                 │      │
 │  │  Interaction Hooks                              │      │
@@ -212,7 +212,7 @@ resolveDroppedFiles(paths)        — 解析拖放的文件
 media:probe(path)                 — 媒体探测
 media:play/seek/pause/stop        — 播放控制
 media:captureFrame                — 截取帧
-operationApplied                  — 操作审计桥接
+operationApplied                  — EditOperation 脏标记桥接
 exportArtboard(data)              — 导出画板配置
 ```
 
@@ -220,7 +220,6 @@ exportArtboard(data)              — 导出画板配置
 
 ```
 update(canvasData)               — 加载画布数据
-operationLogSnapshot(ops)        — 恢复 `.nkc-ops` 历史
 keyboardAction(action)           — 转发快捷键
 addMedia(mediaInfo)              — 文件选择器结果
 dropAssets(assetDtoList)         — 拖放/选择文件解析结果

@@ -12,7 +12,6 @@ import type {
   CanvasNode,
   CanvasNodeType,
   CanvasTimelineSyncPayload,
-  EditOperation,
   OperationSource,
 } from '@neko/shared';
 import { setLocale } from '../i18n';
@@ -185,13 +184,6 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               status: message.status as GenerationProgressPayload['status'],
               dataUrl: message.dataUrl as string | undefined,
             });
-            break;
-          case 'operationLogSnapshot':
-            useCanvasOperationStore
-              .getState()
-              .hydrateOperationLog(
-                Array.isArray(message.operations) ? (message.operations as EditOperation[]) : [],
-              );
             break;
           case 'buildPromptResult':
             onBuildPromptResultRef.current?.(message.prompt as string);

@@ -12,11 +12,9 @@
  *   NKV-003: modelInstalledResult uses installedVersion (not "installed")
  *   NKV-004: webview consumes the same nodes.update / nodes.create DTO
  *   NKV-005: operation bridge uses shared VSCode gateway
- *   NKV-006: timeline import success round-trips shotIds/projectName/importedAt
- *   NKV-007: canvas ops sidecar persists to .nkc-ops
- *   NKV-008: operation log snapshot is restored into webview on ready
- *   NKV-009: toolbar can pick .nkc files into canvas-embed nodes
- *   NKV-010: toolbar pickers cover script/document/model reference nodes
+ *   NKV-006: timeline import success round-trips through timelineSync
+ *   NKV-007: toolbar can pick .nkc files into canvas-embed nodes
+ *   NKV-008: toolbar pickers cover script/document/model reference nodes
  */
 
 import { describe, it, expect } from 'vitest';
@@ -128,27 +126,7 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
-  describe('NKV-007: operation sidecar path', () => {
-    it('persists operation logs beside the canvas document as .nkc-ops', () => {
-      expect(providerSource).toContain('documentUri.with({ path: `${documentUri.path}-ops` })');
-    });
-  });
-
-  describe('NKV-008: operation log snapshot restore', () => {
-    it('extension posts operationLogSnapshot during ready flow', () => {
-      expect(providerSource).toContain("type: 'operationLogSnapshot'");
-      expect(providerSource).toContain(
-        'operations: this.operationLogs.get(this.getDocumentKey(document.uri)) ?? []',
-      );
-    });
-
-    it('webview hydrates operation log from snapshot', () => {
-      expect(webviewSource).toContain("case 'operationLogSnapshot'");
-      expect(webviewSource).toContain('hydrateOperationLog(');
-    });
-  });
-
-  describe('NKV-009: canvas embed picker', () => {
+  describe('NKV-007: canvas embed picker', () => {
     it('extension handles pickCanvasDocument and returns a canvas dropped asset', () => {
       expect(providerSource).toContain("case 'pickCanvasDocument'");
       expect(providerSource).toContain("kind: 'canvas'");
@@ -156,7 +134,7 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
-  describe('NKV-010: reference picker entrypoints', () => {
+  describe('NKV-008: reference picker entrypoints', () => {
     it('extension handles script/document/model picker messages', () => {
       expect(providerSource).toContain("case 'pickScriptDocument'");
       expect(providerSource).toContain("case 'pickReferenceDocument'");

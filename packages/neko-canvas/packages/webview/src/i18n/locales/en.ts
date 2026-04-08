@@ -14,7 +14,6 @@ export const en = {
   'toolbar.redo': 'Redo',
   'toolbar.nodes': '{count} nodes',
   'toolbar.handTool': 'Hand Tool',
-  'toolbar.operationHistory': 'Operation History',
   'toolbar.shot': 'Shot',
   'toolbar.sceneGroup': 'Scene',
   'toolbar.gallery': 'Gallery',
