@@ -113,15 +113,15 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:dist",
-    "compile:extension": "cd packages/extension && npm run build",
-    "compile:webview": "cd packages/webview && npm run build",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run compile:extension && pnpm run compile:webview && pnpm run copy:dist",
+    "compile:extension": "cd packages/extension && pnpm run build",
+    "compile:webview": "cd packages/webview && pnpm run build",
     "copy:dist": "mkdir -p dist/extension dist/webview && cp packages/extension/dist/extension.js dist/extension/ && cp -r packages/webview/dist/* dist/webview/",
-    "watch": "cd packages/extension && npm run watch",
+    "watch": "cd packages/extension && pnpm run watch",
     "lint": "eslint packages --ext ts,tsx",
     "test": "vitest --passWithNoTests",
-    "package": "npm run compile && vsce package --no-dependencies"
+    "package": "pnpm run compile && vsce package --no-dependencies"
   },
   "devDependencies": {
     "vitest": "^4.1.2"

@@ -476,9 +476,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "pnpm run compile",
     "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "npm run compile -- --watch",
+    "watch": "pnpm run compile -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "pnpm exec vitest --dir src --passWithNoTests",
     "test:packages": "pnpm turbo run test --filter=@neko/asset",

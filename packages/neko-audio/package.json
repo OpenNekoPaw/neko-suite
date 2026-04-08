@@ -145,14 +145,14 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run compile:webview && npm run copy:extension && npm run copy:webview && npm run copy:l10n",
-    "compile:extension": "cd packages/extension && npm run build",
-    "compile:webview": "cd packages/webview && npm run build",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run compile:extension && pnpm run compile:webview && pnpm run copy:extension && pnpm run copy:webview && pnpm run copy:l10n",
+    "compile:extension": "cd packages/extension && pnpm run build",
+    "compile:webview": "cd packages/webview && pnpm run build",
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
     "copy:l10n": "mkdir -p dist/l10n && cp -R l10n/* dist/l10n/",
-    "watch": "npm run compile:extension -- --watch",
+    "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest --passWithNoTests",
     "package": "vsce package --no-dependencies"

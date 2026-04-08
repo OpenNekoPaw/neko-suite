@@ -359,12 +359,12 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run compile:extension && npm run compile:webview",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run compile:extension && pnpm run compile:webview",
     "compile:extension": "esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "compile:webview": "cd packages/webview && npm run build && cd ../.. && npm run copy:webview",
+    "compile:webview": "cd packages/webview && pnpm run build && cd ../.. && pnpm run copy:webview",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview && cp -r packages/webview/dist/* dist/webview/",
-    "watch": "npm run compile:extension -- --watch",
+    "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",
     "test": "vitest",
     "package": "vsce package --no-dependencies"

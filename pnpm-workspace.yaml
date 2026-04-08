@@ -16,6 +16,13 @@ packages:
   - packages/neko-market/packages/*
   - packages/neko-auth/packages/*
 
+shamefullyHoist: true
+publicHoistPattern:
+  - '*react-markdown*'
+  - '*remark*'
+  - '*unified*'
+  - '*prism*'
+
 ignoredBuiltDependencies:
   - esbuild
   - sharp

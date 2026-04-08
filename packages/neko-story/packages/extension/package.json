@@ -6,7 +6,7 @@
   "main": "../../dist/extension.js",
   "scripts": {
     "build": "esbuild ./src/extension.ts --bundle --outfile=../../dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "npm run build -- --watch",
+    "watch": "pnpm run build -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest"
   },

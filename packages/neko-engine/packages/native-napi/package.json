@@ -18,13 +18,13 @@
     }
   },
   "scripts": {
-    "build:native": "npm run build:napi",
-    "build:napi": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform --release",
-    "build:debug": "npm run build:ffmpeg-env && npx @napi-rs/cli build --platform",
+    "build:native": "pnpm run build:napi",
+    "build:napi": "pnpm run build:ffmpeg-env && pnpm exec @napi-rs/cli build --platform --release",
+    "build:debug": "pnpm run build:ffmpeg-env && pnpm exec @napi-rs/cli build --platform",
     "build:ffmpeg-env": "node scripts/setup-ffmpeg-env.js",
-    "artifacts": "npx @napi-rs/cli artifacts",
-    "prepublishOnly": "npx @napi-rs/cli prepublish -t npm",
-    "universal": "npx @napi-rs/cli universal"
+    "artifacts": "pnpm exec @napi-rs/cli artifacts",
+    "prepublishOnly": "pnpm exec @napi-rs/cli prepublish -t npm",
+    "universal": "pnpm exec @napi-rs/cli universal"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.0"

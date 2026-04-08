@@ -203,12 +203,12 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run build:webview && npm run compile:extension && npm run copy:webview",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run build:webview && pnpm run compile:extension && pnpm run copy:webview",
     "compile:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:sharp --format=cjs --platform=node --main-fields=module,main",
-    "build:webview": "cd packages/webview && npm run build",
+    "build:webview": "cd packages/webview && pnpm run build",
     "copy:webview": "rm -rf dist/webview && cp -R packages/webview/dist dist/webview",
-    "watch": "npm run compile:extension -- --watch",
+    "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest",
     "package": "vsce package --no-dependencies"
