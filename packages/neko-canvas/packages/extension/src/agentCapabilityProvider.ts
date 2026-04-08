@@ -20,7 +20,11 @@ import type {
   ICapabilityMediaService,
   ICapabilityConfigManager,
 } from '@neko/shared';
-import { TOOL_NAMES_CANVAS } from '@neko/shared';
+import {
+  TOOL_NAMES_CANVAS,
+  applyCanvasTimelineSyncToCanvas,
+  buildStoryboardImportTimelineSyncPayload,
+} from '@neko/shared';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -50,22 +54,6 @@ async function ensureProjectModel(
     await wsConfig.update(key, model.name, vscode.ConfigurationTarget.Workspace);
     getRootLogger().info(`Auto-resolved ${type} model from ConfigManager: ${model.name}`);
   }
-}
-
-async function syncTimelineImportMetadata(
-  api: NekoCanvasAPI,
-  shotIds: string[],
-  projectName: string,
-  importedAt: number,
-): Promise<void> {
-  await Promise.all(
-    shotIds.map((shotId) =>
-      api.nodes.update(shotId, {
-        lastImportedToTimelineAt: importedAt,
-        lastImportedToTimelineProject: projectName,
-      }),
-    ),
-  );
 }
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -561,11 +549,13 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 shots: timelineShots,
               });
               const importedAt = Date.now();
-              await syncTimelineImportMetadata(
+              await applyCanvasTimelineSyncToCanvas(
                 api,
-                timelineShots.map((shot) => shot.id),
-                projectName,
-                importedAt,
+                buildStoryboardImportTimelineSyncPayload(
+                  timelineShots.map((shot) => shot.id),
+                  projectName,
+                  importedAt,
+                ),
               );
 
               return {

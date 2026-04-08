@@ -82,4 +82,5 @@ Webview 端通过 `canvasOperationStore` 桥接层记录编辑操作，与现有
 - **GenerationPromptPanel**：点击节点弹出，委托 `neko-agent.generateForNode`（ADR-2D-007）
 - **BatchGenerationScheduler**：批量分镜生图队列（并发控制 + 进度回传）
 - **候选审阅闭环**：ShotNode / GalleryCell 均支持 N/M 切换，并把筛选结果写回节点状态
-- **cut 最小回流**：导入 `neko-cut` 成功后回写 `lastImportedToTimeline*`
+- **cut 最小回流**：通过共享 `timelineSync` 契约仅回写 `lastImportedToTimeline*` 等操作元数据
+- **asset 代理边界**：`NekoCanvasAPI.asset` 仅代理 `neko-assets` 的 `import/list/getById`，不作为资产事实源

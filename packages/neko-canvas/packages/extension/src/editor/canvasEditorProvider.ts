@@ -9,13 +9,20 @@ import * as fs from 'node:fs';
 import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import {
+  buildStoryboardImportTimelineSyncPayload,
   inferCanvasDocumentType,
   inferCanvasDroppedAssetKind,
   inferCanvasMediaType,
   inferCanvasModelType,
   loadNkc,
 } from '@neko/shared';
-import type { CanvasDroppedAsset, CanvasNode, CanvasNodeType, EditOperation } from '@neko/shared';
+import type {
+  CanvasDroppedAsset,
+  CanvasNode,
+  CanvasNodeType,
+  CanvasTimelineSyncPayload,
+  EditOperation,
+} from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -1246,11 +1253,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             )
             .filter((shotId): shotId is string => shotId !== null);
           const importedAt = Date.now();
-          webviewPanel.webview.postMessage({
-            type: 'timelineImportResult',
+          const payload: CanvasTimelineSyncPayload = buildStoryboardImportTimelineSyncPayload(
             shotIds,
             projectName,
             importedAt,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'timelineSync',
+            payload,
           });
           this._onDidChangeCanvas.fire({
             type: 'update',

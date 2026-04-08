@@ -372,13 +372,13 @@ export function CanvasApp() {
     onModelInstalledResult: (nodeId, installedVersion) => {
       updateNodeData(nodeId, { installedVersion: installedVersion ?? undefined });
     },
-    onTimelineImportResult: ({ shotIds, projectName, importedAt }) => {
-      shotIds.forEach((shotId) => {
+    onTimelineSync: (payload) => {
+      payload.shots.forEach(({ shotId, projectName, importedAt }) => {
         const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === shotId);
         if (node?.type !== 'shot') return;
         updateNodeData(shotId, {
-          lastImportedToTimelineAt: importedAt,
-          lastImportedToTimelineProject: projectName,
+          lastImportedToTimelineAt: importedAt ?? node.data.lastImportedToTimelineAt,
+          lastImportedToTimelineProject: projectName ?? node.data.lastImportedToTimelineProject,
         });
       });
     },

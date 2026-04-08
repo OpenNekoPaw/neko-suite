@@ -148,6 +148,7 @@ export * from './mediaEngine';
 // Canvas types (infinite canvas editor)
 export * from './canvas';
 export * from './canvas-drop';
+export * from './canvas-timeline-sync';
 
 // Sketch types (.nks document format)
 export * from './sketch';

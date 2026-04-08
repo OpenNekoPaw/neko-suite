@@ -17,6 +17,10 @@ import type {
   NekoSketchAPI,
   ToolParameters,
 } from '@neko/shared';
+import {
+  applyCanvasTimelineSyncToCanvas,
+  buildStoryboardImportTimelineSyncPayload,
+} from '@neko/shared';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
 import type { MediaGenerationService, ConfigManager } from '@neko/platform';
@@ -35,22 +39,6 @@ export interface Tool {
   description: string;
   parameters: ToolParameters;
   execute: (args: Record<string, unknown>) => Promise<unknown>;
-}
-
-async function syncTimelineImportMetadata(
-  api: NekoCanvasAPI,
-  shotIds: string[],
-  projectName: string,
-  importedAt: number,
-): Promise<void> {
-  await Promise.all(
-    shotIds.map((shotId) =>
-      api.nodes.update(shotId, {
-        lastImportedToTimelineAt: importedAt,
-        lastImportedToTimelineProject: projectName,
-      }),
-    ),
-  );
 }
 
 // =============================================================================
@@ -728,11 +716,13 @@ export function createNekoCanvasTools(
             shots: timelineShots,
           });
           const importedAt = Date.now();
-          await syncTimelineImportMetadata(
+          await applyCanvasTimelineSyncToCanvas(
             api,
-            timelineShots.map((shot) => shot.id),
-            projectName,
-            importedAt,
+            buildStoryboardImportTimelineSyncPayload(
+              timelineShots.map((shot) => shot.id),
+              projectName,
+              importedAt,
+            ),
           );
 
           return {

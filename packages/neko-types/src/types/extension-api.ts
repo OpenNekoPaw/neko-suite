@@ -212,17 +212,18 @@ export interface CanvasChangeEvent {
 export interface NekoCanvasAPI {
   asset: {
     /**
-     * Import an asset file into the library
+     * Import an asset into the project asset library.
+     * This namespace is a proxy to neko-assets; canvas is not the asset source of truth.
      */
     import(path: string): Promise<Asset>;
 
     /**
-     * List assets with optional filtering
+     * List assets through the neko-assets proxy.
      */
     list(filter?: AssetFilter): Promise<Asset[]>;
 
     /**
-     * Get an asset by ID
+     * Get an asset by ID through the neko-assets proxy.
      */
     getById(id: string): Promise<Asset | null>;
   };

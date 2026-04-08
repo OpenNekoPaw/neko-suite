@@ -225,7 +225,7 @@ keyboardAction(action)           — 转发快捷键
 addMedia(mediaInfo)              — 文件选择器结果
 dropAssets(assetDtoList)         — 拖放/选择文件解析结果
 generationProgress               — 批量生成进度
-timelineImportResult             — canvas → cut 最小回流
+timelineSync(payload)            — cut → canvas 最小回流（共享契约，仅操作元数据）
 ```
 
 ---

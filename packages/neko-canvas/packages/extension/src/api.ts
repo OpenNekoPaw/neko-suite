@@ -68,7 +68,8 @@ export interface CanvasChangeEvent {
  */
 export interface NekoCanvasAPI {
   /**
-   * Asset operations
+   * Asset operations.
+   * This namespace is a restricted proxy to neko-assets, not an asset fact source.
    */
   asset: {
     /**
@@ -85,16 +86,6 @@ export interface NekoCanvasAPI {
      * Get asset by ID
      */
     getById(id: string): Promise<Asset | undefined>;
-
-    /**
-     * Delete asset
-     */
-    delete(id: string): Promise<void>;
-
-    /**
-     * Update asset metadata
-     */
-    update(id: string, updates: Partial<Asset>): Promise<void>;
   };
 
   /**

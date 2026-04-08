@@ -11,6 +11,7 @@ import {
   VSCodeErrorHandler,
   createNewFile,
 } from '@neko/shared/vscode/extension';
+import type { AssetEntity, AssetFile } from '@neko/shared';
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
@@ -23,6 +24,88 @@ import { setErrorHandler, handleError } from './utils/errorHandler';
 let canvasEditorProvider: CanvasEditorProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
+
+async function getAssetEntities(): Promise<AssetEntity[]> {
+  try {
+    const entities = await vscode.commands.executeCommand<AssetEntity[]>(
+      'neko.assets.getAllEntities',
+    );
+    return Array.isArray(entities) ? entities : [];
+  } catch (error) {
+    throw new Error(`neko-assets proxy unavailable: ${String(error)}`);
+  }
+}
+
+function mapAssetMediaTypeToCanvasType(
+  mediaType: AssetFile['mediaType'],
+): import('./api').Asset['type'] {
+  switch (mediaType) {
+    case 'video':
+    case 'audio':
+    case 'image':
+      return mediaType;
+    case 'text':
+      return 'text';
+    default:
+      return 'other';
+  }
+}
+
+function pickPreferredAssetFile(entity: AssetEntity): AssetFile | undefined {
+  const variants = entity.defaultVariantId
+    ? [
+        entity.variants.find((variant) => variant.id === entity.defaultVariantId),
+        ...entity.variants.filter((variant) => variant.id !== entity.defaultVariantId),
+      ]
+    : entity.variants;
+
+  for (const variant of variants) {
+    if (!variant) continue;
+    const preferred =
+      variant.files.find((file) => file.purpose === 'main') ??
+      variant.files.find((file) => file.purpose === 'preview') ??
+      variant.files[0];
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  return undefined;
+}
+
+function mapAssetEntityToCanvasAsset(entity: AssetEntity): import('./api').Asset {
+  const file = pickPreferredAssetFile(entity);
+  return {
+    id: entity.id,
+    name: entity.name,
+    type: file ? mapAssetMediaTypeToCanvasType(file.mediaType) : 'other',
+    path: file?.path ?? '',
+    thumbnail:
+      entity.variants.find((variant) => variant.id === entity.defaultVariantId)?.thumbnailPath ??
+      entity.variants.find((variant) => typeof variant.thumbnailPath === 'string')?.thumbnailPath,
+    metadata: file?.metadata,
+    tags: entity.tags,
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
+  };
+}
+
+function matchesAssetFilter(
+  asset: import('./api').Asset,
+  filter: import('./api').AssetFilter | undefined,
+): boolean {
+  if (!filter) return true;
+  if (filter.type && asset.type !== filter.type) return false;
+  if (filter.tags && filter.tags.some((tag) => !asset.tags?.includes(tag))) return false;
+  if (filter.search) {
+    const query = filter.search.toLowerCase();
+    const haystacks = [asset.name, asset.path, ...(asset.tags ?? [])];
+    if (!haystacks.some((value) => value.toLowerCase().includes(query))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Activate the extension
@@ -93,21 +176,39 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   const api: NekoCanvasAPI & ISkillProvider = {
     asset: {
       import: async (filePath) => {
-        await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
-        const name = filePath.split('/').pop() || 'Unknown';
-        return {
-          id: '',
-          name,
-          type: 'other',
-          path: filePath,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
+        try {
+          await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(filePath));
+        } catch (error) {
+          throw new Error(`Failed to import asset via neko-assets: ${String(error)}`);
+        }
+
+        const importedPath = filePath.replace(/\\/g, '/');
+        const entities = await getAssetEntities();
+        const importedEntity = entities.find((entity) =>
+          entity.variants.some((variant) =>
+            variant.files.some((file) => file.path.replace(/\\/g, '/') === importedPath),
+          ),
+        );
+
+        if (!importedEntity) {
+          throw new Error(
+            'Asset imported via neko-assets, but imported entity could not be resolved.',
+          );
+        }
+
+        return mapAssetEntityToCanvasAsset(importedEntity);
       },
-      list: async () => [],
-      getById: async () => undefined,
-      delete: async () => {},
-      update: async () => {},
+      list: async (filter) => {
+        const entities = await getAssetEntities();
+        return entities
+          .map(mapAssetEntityToCanvasAsset)
+          .filter((asset) => matchesAssetFilter(asset, filter));
+      },
+      getById: async (id) => {
+        const entities = await getAssetEntities();
+        const entity = entities.find((candidate) => candidate.id === id);
+        return entity ? mapAssetEntityToCanvasAsset(entity) : undefined;
+      },
     },
     canvas: {
       create: (config) => createCanvas(config),

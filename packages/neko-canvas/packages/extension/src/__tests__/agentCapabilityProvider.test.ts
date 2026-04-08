@@ -6,11 +6,10 @@ const providerSource = readFileSync(join(__dirname, '../agentCapabilityProvider.
 
 describe('agentCapabilityProvider storyboard export contracts', () => {
   it('syncs shot timeline import metadata after neko-cut import', () => {
-    expect(providerSource).toContain('async function syncTimelineImportMetadata(');
+    expect(providerSource).toContain('applyCanvasTimelineSyncToCanvas');
     expect(providerSource).toContain(
       "await vscode.commands.executeCommand('neko.cut.importStoryboard'",
     );
-    expect(providerSource).toContain('lastImportedToTimelineAt: importedAt');
-    expect(providerSource).toContain('lastImportedToTimelineProject: projectName');
+    expect(providerSource).toContain('buildStoryboardImportTimelineSyncPayload(');
   });
 });

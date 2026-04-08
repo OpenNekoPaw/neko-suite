@@ -114,19 +114,17 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-006: timeline import round-trip', () => {
-    it('extension sends timelineImportResult with stable fields', () => {
-      expect(providerSource).toContain("type: 'timelineImportResult'");
-      expect(providerSource).toContain('shotIds,');
-      expect(providerSource).toContain('projectName,');
-      expect(providerSource).toContain('importedAt,');
+    it('extension sends shared timelineSync payload with minimal backflow fields', () => {
+      expect(providerSource).toContain("type: 'timelineSync'");
+      expect(providerSource).toContain('buildStoryboardImportTimelineSyncPayload(');
+      expect(providerSource).toContain('payload,');
     });
 
-    it('webview consumes timelineImportResult payload', () => {
-      expect(webviewSource).toContain("case 'timelineImportResult'");
+    it('webview consumes timelineSync payload', () => {
+      expect(webviewSource).toContain("case 'timelineSync'");
       expect(webviewSource).toContain(
-        'projectName: (message.projectName as string | undefined) ??',
+        'onTimelineSyncRef.current?.(message.payload as CanvasTimelineSyncPayload)',
       );
-      expect(webviewSource).toContain('importedAt: (message.importedAt as number | undefined) ??');
     });
   });
 

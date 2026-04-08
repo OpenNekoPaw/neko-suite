@@ -373,7 +373,7 @@ Agent 擅长理解的对象是：
 建议：
 
 - 明确声明 `asset` 只是便捷代理，事实源仍为 `neko-assets`
-- 或直接收缩接口，只保留与画布直接相关的桥接能力
+- 收缩代理面，只保留 `import/list/getById`
 
 ### P1-3 `canvas -> cut` 主要是单向导出
 
@@ -388,6 +388,8 @@ Agent 擅长理解的对象是：
 
 建议：
 
+- 用共享 `timelineSync` 契约固定 `cut -> canvas` 最小回流字段
+- 当前仅允许回流 `shotId`、`projectName`、`importedAt` 等操作元数据
 - 明确单向权威或补充最小必要回流机制
 - 例如只回流：时长变化、选中镜头、已产出视频缩略图
 
