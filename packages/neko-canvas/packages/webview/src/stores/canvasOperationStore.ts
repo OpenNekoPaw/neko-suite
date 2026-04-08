@@ -8,13 +8,14 @@
 import { create } from 'zustand';
 import type { CanvasNode, CanvasConnection } from '@neko/shared';
 import type { EditOperation, OperationMeta, OperationSource } from '@neko/shared';
+import { getGlobalVSCodeApi } from '../utils/vscode';
 
 // =============================================================================
 // Extension Sync
 // =============================================================================
 
 function postMessage(message: Record<string, unknown>): void {
-  const vscode = (window as any).__vscode_api__;
+  const vscode = getGlobalVSCodeApi();
   if (vscode) {
     vscode.postMessage(message);
   }

@@ -1,0 +1,339 @@
+import type {
+  CanvasNode,
+  CanvasNodeType,
+  GalleryPreset,
+  GeneratedImageVersion,
+  PortDefinition,
+  ScriptScene,
+  ShotCharacter,
+} from '@neko/shared';
+import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
+
+interface BuildCanvasNodeOptions {
+  type: CanvasNodeType;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+  zIndex: number;
+}
+
+const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
+const DEFAULT_EMPTY_CHARACTERS: ShotCharacter[] = [];
+const DEFAULT_EMPTY_SCENES: ScriptScene[] = [];
+const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function asObjectArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function inferDocumentType(
+  value: unknown,
+): 'pdf' | 'docx' | 'epub' | 'cbz' {
+  if (value === 'pdf' || value === 'docx' || value === 'epub' || value === 'cbz') {
+    return value;
+  }
+  return 'pdf';
+}
+
+function inferMediaType(value: unknown): 'image' | 'video' | 'audio' {
+  return value === 'video' || value === 'audio' ? value : 'image';
+}
+
+function inferModelType(value: unknown): 'lora' | 'checkpoint' | 'controlnet' | 'vae' {
+  if (value === 'lora' || value === 'checkpoint' || value === 'controlnet' || value === 'vae') {
+    return value;
+  }
+  return 'lora';
+}
+
+function inferModelRole(value: unknown): 'reference' | 'workflow' {
+  return value === 'workflow' ? 'workflow' : 'reference';
+}
+
+function inferGalleryPreset(value: unknown): GalleryPreset {
+  if (
+    value === 'character-3view' ||
+    value === 'character-4view' ||
+    value === 'expression-9' ||
+    value === 'turnaround-8' ||
+    value === 'scene-views' ||
+    value === 'custom'
+  ) {
+    return value;
+  }
+  return 'character-3view';
+}
+
+export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNode, 'id'> {
+  const { type, position, data, zIndex } = options;
+
+  switch (type) {
+    case 'annotation':
+      return {
+        type,
+        position,
+        size: { width: 200, height: 100 },
+        zIndex,
+        data: {
+          content: asString(data.content, ''),
+          style: typeof data.style === 'object' && data.style ? data.style : undefined,
+        },
+      };
+    case 'media':
+      return {
+        type,
+        position,
+        size: { width: 280, height: inferMediaType(data.mediaType) === 'audio' ? 80 : 200 },
+        zIndex,
+        data: {
+          assetPath: asString(data.assetPath, ''),
+          thumbnailPath: asString(data.thumbnailPath) || undefined,
+          mediaType: inferMediaType(data.mediaType),
+          duration: typeof data.duration === 'number' ? data.duration : undefined,
+        },
+      };
+    case 'storyboard':
+      return {
+        type,
+        position,
+        size: { width: 240, height: 160 },
+        zIndex,
+        data: {
+          title: asString(data.title, ''),
+          description: asString(data.description) || undefined,
+          duration: typeof data.duration === 'number' ? data.duration : undefined,
+          color: asString(data.color) || undefined,
+        },
+      };
+    case 'text':
+      return {
+        type,
+        position,
+        size: { width: 260, height: 120 },
+        zIndex,
+        data: {
+          content: asString(data.content, ''),
+          format: data.format === 'markdown' ? 'markdown' : 'plain',
+          style: typeof data.style === 'object' && data.style ? data.style : undefined,
+        },
+      };
+    case 'artboard':
+      return {
+        type,
+        position,
+        size: { width: 640, height: 360 },
+        zIndex,
+        data: {
+          name: asString(data.name, 'Artboard'),
+          description: asString(data.description) || undefined,
+          backgroundColor: asString(data.backgroundColor) || undefined,
+          showBorder: typeof data.showBorder === 'boolean' ? data.showBorder : true,
+          preset:
+            data.preset === '1080p' ||
+            data.preset === '4k' ||
+            data.preset === 'instagram' ||
+            data.preset === 'story' ||
+            data.preset === 'youtube'
+              ? data.preset
+              : 'custom',
+        },
+      };
+    case 'shot':
+      return {
+        type,
+        position,
+        size: { width: 220, height: 200 },
+        zIndex,
+        data: {
+          shotNumber: asNumber(data.shotNumber, zIndex + 1),
+          sceneGroupId: asString(data.sceneGroupId) || undefined,
+          duration: asNumber(data.duration, 3),
+          visualDescription: asString(data.visualDescription, ''),
+          characters: asObjectArray<ShotCharacter>(data.characters) ?? DEFAULT_EMPTY_CHARACTERS,
+          shotScale: data.shotScale === 'ECU' ||
+            data.shotScale === 'CU' ||
+            data.shotScale === 'MCU' ||
+            data.shotScale === 'MS' ||
+            data.shotScale === 'MLS' ||
+            data.shotScale === 'LS' ||
+            data.shotScale === 'VLS' ||
+            data.shotScale === 'ELS'
+            ? data.shotScale
+            : 'MS',
+          cameraMovement:
+            data.cameraMovement === 'static' ||
+            data.cameraMovement === 'pan' ||
+            data.cameraMovement === 'tilt' ||
+            data.cameraMovement === 'zoom-in' ||
+            data.cameraMovement === 'zoom-out' ||
+            data.cameraMovement === 'dolly' ||
+            data.cameraMovement === 'dolly-in' ||
+            data.cameraMovement === 'dolly-out' ||
+            data.cameraMovement === 'handheld' ||
+            data.cameraMovement === 'crane'
+              ? data.cameraMovement
+              : undefined,
+          cameraAngle:
+            data.cameraAngle === 'eye-level' ||
+            data.cameraAngle === 'high-angle' ||
+            data.cameraAngle === 'low-angle' ||
+            data.cameraAngle === 'bird-eye' ||
+            data.cameraAngle === 'dutch'
+              ? data.cameraAngle
+              : undefined,
+          characterAction: asString(data.characterAction, ''),
+          emotion: asStringArray(data.emotion),
+          sceneTags: asStringArray(data.sceneTags),
+          referenceNodeId: asString(data.referenceNodeId) || undefined,
+          generatedImage: asString(data.generatedImage) || undefined,
+          generatedVideo: asString(data.generatedVideo) || undefined,
+          generationStatus:
+            data.generationStatus === 'pending' ||
+            data.generationStatus === 'generating' ||
+            data.generationStatus === 'done' ||
+            data.generationStatus === 'error'
+              ? data.generationStatus
+              : 'idle',
+          generationHistory:
+            asObjectArray<GeneratedImageVersion>(data.generationHistory) ?? DEFAULT_EMPTY_HISTORY,
+          dialogue: asString(data.dialogue) || undefined,
+          voiceOver: asString(data.voiceOver) || undefined,
+          soundCue: asString(data.soundCue) || undefined,
+        },
+      };
+    case 'scene':
+      return {
+        type,
+        position,
+        size: { width: 600, height: 300 },
+        zIndex,
+        data: {
+          sceneTitle: asString(data.sceneTitle, 'Scene'),
+          sceneNumber: asNumber(data.sceneNumber, zIndex + 1),
+          location: asString(data.location) || undefined,
+          timeOfDay: asString(data.timeOfDay) || undefined,
+          shotIds: asStringArray(data.shotIds),
+        },
+      };
+    case 'gallery': {
+      const preset = inferGalleryPreset(data.preset);
+      const presetConfig = GALLERY_PRESET_CONFIGS[preset];
+      const defaultCells = presetConfig.labels.map((label, index) => ({
+        id: `cell-${Date.now()}-${index}`,
+        label,
+        generationStatus: 'idle' as const,
+      }));
+      return {
+        type,
+        position,
+        size: {
+          width: Math.max(240, presetConfig.cols * 90 + 20),
+          height: presetConfig.rows * 100 + 60,
+        },
+        zIndex,
+        data: {
+          preset,
+          rows: asNumber(data.rows, presetConfig.rows),
+          cols: asNumber(data.cols, presetConfig.cols),
+          cells: Array.isArray(data.cells) ? data.cells : defaultCells,
+          globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
+          characterName: asString(data.characterName) || undefined,
+        },
+      };
+    }
+    case 'script':
+      return {
+        type,
+        position,
+        size: { width: 280, height: 220 },
+        zIndex,
+        data: {
+          scriptPath: asString(data.scriptPath, ''),
+          scriptTitle: asString(data.scriptTitle, ''),
+          scenes: asObjectArray<ScriptScene>(data.scenes) ?? DEFAULT_EMPTY_SCENES,
+          linkedSceneGroupId: asString(data.linkedSceneGroupId) || undefined,
+        },
+      };
+    case 'document':
+      return {
+        type,
+        position,
+        size: { width: 220, height: 280 },
+        zIndex,
+        data: {
+          docPath: asString(data.docPath, ''),
+          docType: inferDocumentType(data.docType),
+          title: asString(data.title, ''),
+          thumbnailData: asString(data.thumbnailData) || undefined,
+        },
+      };
+    case 'model':
+      return {
+        type,
+        position,
+        size: { width: 240, height: 160 },
+        zIndex,
+        ports: inferModelRole(data.role) === 'workflow'
+          ? [
+              {
+                id: 'output',
+                type: 'output',
+                position: 'right',
+                dataType: 'any',
+                label: 'Model',
+              },
+            ]
+          : DEFAULT_EMPTY_PORTS,
+        data: {
+          modelPath: asString(data.modelPath, ''),
+          modelName: asString(data.modelName, ''),
+          modelType: inferModelType(data.modelType),
+          role: inferModelRole(data.role),
+          installedVersion: asString(data.installedVersion) || undefined,
+        },
+      };
+    case 'canvas-embed':
+      return {
+        type,
+        position,
+        size: { width: 220, height: 180 },
+        zIndex,
+        data: {
+          canvasPath: asString(data.canvasPath, ''),
+          canvasTitle: asString(data.canvasTitle, ''),
+          thumbnailData: asString(data.thumbnailData) || undefined,
+        },
+      };
+    case 'group':
+      return {
+        type,
+        position,
+        size: { width: 320, height: 220 },
+        zIndex,
+        data: {
+          childIds: asStringArray(data.childIds),
+          label: asString(data.label) || undefined,
+          color: asString(data.color) || undefined,
+        },
+      };
+    default:
+      return {
+        type: 'annotation',
+        position,
+        size: { width: 200, height: 100 },
+        zIndex,
+        data: { content: '' },
+      };
+  }
+}
