@@ -9,12 +9,24 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const cmdState = vi.hoisted(() => {
+  const commands = new Map<string, (...args: unknown[]) => unknown>();
+  return { commands };
+});
+
 vi.mock('vscode', () => ({
   Uri: { file: (p: string) => ({ scheme: 'file', fsPath: p, path: p }) },
-  commands: { executeCommand: vi.fn().mockResolvedValue(null) },
+  commands: {
+    registerCommand: vi.fn((id: string, handler: (...args: unknown[]) => unknown) => {
+      cmdState.commands.set(id, handler);
+      return { dispose: vi.fn() };
+    }),
+    executeCommand: vi.fn().mockResolvedValue(null),
+  },
   window: { showWarningMessage: vi.fn() },
   EventEmitter: vi.fn(),
   workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn() })) },
+  l10n: { t: vi.fn((key: string) => key) },
 }));
 
 vi.mock('../base', () => ({
@@ -36,8 +48,19 @@ vi.mock('../base', () => ({
   handleError: vi.fn(),
 }));
 
+vi.mock('../services/TimelineToolExecutor', () => ({
+  TimelineToolExecutor: vi.fn().mockImplementation(function () {
+    return {
+      execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    };
+  }),
+}));
+
+vi.mock('../bootstrap/toolsBootstrap', () => ({}));
+
 import { isAssetMessage, handleAssetMessage } from '../handlers/assetHandlers';
 import { AIActionHandler } from '../services/AIActionHandler';
+import { registerTimelineCommands } from '../commands/timeline-commands';
 
 describe('neko-cut protocol', () => {
   describe('isAssetMessage', () => {
@@ -128,5 +151,74 @@ describe('neko-cut protocol', () => {
       expect(lastCall.status).toBe('failed');
       expect(lastCall.error).toContain('not yet available');
     });
+  });
+});
+
+// ============================================================================
+// Tests: Timeline command registration (NKC-010)
+// ============================================================================
+
+describe('timeline command registration (NKC-010)', () => {
+  beforeEach(() => {
+    cmdState.commands.clear();
+  });
+
+  it('registers core timeline commands', () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = { getActiveWebview: vi.fn(), getActiveExportService: vi.fn() };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    expect(cmdState.commands.has('neko.timeline.getInfo')).toBe(true);
+    expect(cmdState.commands.has('neko.element.add')).toBe(true);
+    expect(cmdState.commands.has('neko.element.delete')).toBe(true);
+    expect(cmdState.commands.has('neko.timeline.listElements')).toBe(true);
+  });
+
+  it('registers element update command', () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = { getActiveWebview: vi.fn(), getActiveExportService: vi.fn() };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    expect(cmdState.commands.has('neko.element.update')).toBe(true);
+    expect(cmdState.commands.has('neko.element.getInfo')).toBe(true);
+  });
+
+  it('registers track management commands', () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = { getActiveWebview: vi.fn(), getActiveExportService: vi.fn() };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    expect(cmdState.commands.has('neko.track.add')).toBe(true);
+    expect(cmdState.commands.has('neko.track.delete')).toBe(true);
+    expect(cmdState.commands.has('neko.track.reorder')).toBe(true);
+  });
+
+  it('registers effect and transition commands', () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = { getActiveWebview: vi.fn(), getActiveExportService: vi.fn() };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    expect(cmdState.commands.has('neko.effect.list')).toBe(true);
+    expect(cmdState.commands.has('neko.effect.add')).toBe(true);
+    expect(cmdState.commands.has('neko.transition.add')).toBe(true);
+    expect(cmdState.commands.has('neko.transition.remove')).toBe(true);
+  });
+
+  it('pushes disposables into context.subscriptions', () => {
+    const mockContext = { subscriptions: [] as any[], extensionUri: { fsPath: '/test' } };
+    const mockProvider = { getActiveWebview: vi.fn(), getActiveExportService: vi.fn() };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    // Each registered command pushes a disposable
+    expect(mockContext.subscriptions.length).toBeGreaterThan(0);
+    // Every subscription should have a dispose method
+    for (const sub of mockContext.subscriptions) {
+      expect(sub).toHaveProperty('dispose');
+    }
   });
 });

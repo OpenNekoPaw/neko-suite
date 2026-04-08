@@ -24,6 +24,8 @@ export default defineConfig({
       'packages/platform/src/task/__test__/**',
       // media-generation-service depends on deprecated task-manager path
       'packages/platform/src/media/__tests__/media-generation-service.test.ts',
+      // Real API integration tests — require network + API keys, run via `test:integration`
+      'packages/platform/src/__tests__/integration.test.ts',
     ],
     coverage: {
       provider: 'v8',

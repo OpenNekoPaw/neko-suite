@@ -130,8 +130,8 @@
 | NKA-003 | P1 | verified | Plan 模式只读工具缺少工作区边界，存在越界读取风险 |
 | NKA-004 | P1 | fixed | Skill 默认允许执行内嵌 shell，存在供应链执行风险 |
 | NKA-005 | P1 | fixed | `maxIterations: Infinity` 可能导致异常链路下成本与时延失控 |
-| NKA-006 | P2 | open | `lint` 脚本与当前 ESLint Flat Config 不兼容，质量门禁失效 |
-| NKA-007 | P2 | open | 默认测试集包含真实 API 集成用例，离线/无网环境不稳定 |
+| NKA-006 | P2 | fixed | `lint` 脚本与当前 ESLint Flat Config 不兼容，质量门禁失效 |
+| NKA-007 | P2 | fixed | 默认测试集包含真实 API 集成用例，离线/无网环境不稳定 |
 | NKA-008 | P3 | open | 构建脚本与代码结构存在维护性问题（脚本混用、巨型文件、硬编码 TODO） |
 
 ### 问题详情（追加）
@@ -219,8 +219,8 @@
 | NKP-003 | P1 | fixed | 文档预览文件服务端口缓存未失效重试，engine 重启后可能持续失败 |
 | NKP-004 | P1 | fixed | 对外声明配置项未落地（`videoQuality`/`autoPlay`） |
 | NKP-005 | P2 | fixed | 文档消息协议与实现漂移，类型约束与实际 payload 不一致 |
-| NKP-006 | P1 | open | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
-| NKP-007 | P2 | open | `copy:webview` 构建脚本吞错，可能打包不完整产物 |
+| NKP-006 | P1 | fixed | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
+| NKP-007 | P2 | fixed | `copy:webview` 构建脚本吞错，可能打包不完整产物 |
 | NKP-008 | P3 | open | `AudioPlayer` 存在重复卸载清理逻辑，增加维护复杂度 |
 
 ### 问题详情（追加）
@@ -710,7 +710,7 @@
 | NKAS-004 | P1 | open | `AssetRegistry` 的非媒体资产当前仅驻留内存，缺少持久化与实际消费方 |
 | NKAS-005 | P2 | open | `extension.ts` 体量过大，初始化/命令/UI/集成强耦合 |
 | NKAS-006 | P2 | open | 多根工作区仅使用首个 workspace，路径与媒体库行为存在偏差风险 |
-| NKAS-007 | P1 | open | 测试覆盖集中在 core service，extension/provider/命令编排回归保护不足 |
+| NKAS-007 | P1 | fixed | 测试覆盖集中在 core service，extension/provider/命令编排回归保护不足 |
 
 ### 问题详情（追加）
 

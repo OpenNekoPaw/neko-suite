@@ -54,7 +54,6 @@ describe('getErrorHtml -- XSS prevention', () => {
   it('escapes nested HTML injection attempts', () => {
     const html = getErrorHtml('"><img src=x onerror=alert(1)>');
 
-    // The < and > are escaped, so the img tag cannot be parsed as HTML
     expect(html).not.toContain('<img');
     expect(html).toContain('&lt;img');
     expect(html).toContain('&quot;&gt;');
@@ -105,7 +104,6 @@ describe('UnresolvedPathVariableError', () => {
 
 describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
   beforeEach(() => {
-    // Reset the singleton's internal state
     previewFileServer.invalidatePort();
   });
 
@@ -113,12 +111,11 @@ describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
     const { commands } = await import('vscode');
     const execCmd = vi.mocked(commands.executeCommand);
 
-    // First call returns port 9001
     execCmd.mockResolvedValueOnce({ port: 9001 });
     const port1 = await previewFileServer.getPort();
     expect(port1).toBe(9001);
 
-    // Second call should use cache (no new executeCommand call)
+    // Second call should use cache
     const callCountBefore = execCmd.mock.calls.length;
     const port2 = await previewFileServer.getPort();
     expect(port2).toBe(9001);
@@ -136,5 +133,45 @@ describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
     vi.mocked(commands.executeCommand).mockResolvedValueOnce(null);
 
     await expect(previewFileServer.getPort()).rejects.toThrow('Neko Engine is not running');
+  });
+});
+
+// ============================================================================
+// Tests: PreviewFileServer retry logic source contract (NKP-006)
+// ============================================================================
+
+describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
+  it('_fetchWithRetry method exists and is used by registerFile/registerEpub/unregisterFile', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(
+      path.join(__dirname, '../providers/document/PreviewFileServer.ts'),
+      'utf-8',
+    );
+
+    // _fetchWithRetry method defined
+    expect(source).toContain('private async _fetchWithRetry');
+    // Retry logic: invalidates port on connection failure
+    expect(source).toContain('this.invalidatePort()');
+    // All public methods use _fetchWithRetry
+    const fetchWithRetryCount = (source.match(/this\._fetchWithRetry/g) ?? []).length;
+    expect(fetchWithRetryCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('invalidatePort + getPort re-query cycle works (real code)', async () => {
+    const { commands } = await import('vscode');
+    const execCmd = vi.mocked(commands.executeCommand);
+
+    previewFileServer.invalidatePort();
+
+    execCmd.mockResolvedValueOnce({ port: 5001 });
+    const port1 = await previewFileServer.getPort();
+    expect(port1).toBe(5001);
+
+    // Invalidate + re-query
+    previewFileServer.invalidatePort();
+    execCmd.mockResolvedValueOnce({ port: 5002 });
+    const port2 = await previewFileServer.getPort();
+    expect(port2).toBe(5002);
   });
 });

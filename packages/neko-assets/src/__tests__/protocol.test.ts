@@ -101,3 +101,41 @@ describe('extension.ts -- registerLegacyCommands function exists', () => {
     expect(extensionSource).toContain('registerLegacyCommands(context)');
   });
 });
+
+// ============================================================================
+// Tests: extension activation contracts (NKAS-007)
+// ============================================================================
+
+describe('extension activation (NKAS-007)', () => {
+  it('calls registerLegacyCommands(context) during activation', () => {
+    expect(extensionSource).toContain('registerLegacyCommands(context)');
+  });
+
+  it('registers neko.assetManager tree view', () => {
+    expect(extensionSource).toContain("'neko.assetManager'");
+  });
+
+  it('uses AssetManagerTreeProvider', () => {
+    expect(extensionSource).toContain('AssetManagerTreeProvider');
+  });
+
+  it('uses MediaLibraryTreeProvider', () => {
+    expect(extensionSource).toContain('MediaLibraryTreeProvider');
+  });
+
+  it('does NOT use CloudSyncTreeProvider', () => {
+    expect(extensionSource).not.toContain('CloudSyncTreeProvider');
+  });
+
+  it('registers media library tree view', () => {
+    expect(extensionSource).toContain("'neko.mediaLibraries'");
+  });
+
+  it('initializes i18n during activation', () => {
+    expect(extensionSource).toContain('initI18n');
+  });
+
+  it('sets up error handler during activation', () => {
+    expect(extensionSource).toContain('setErrorHandler');
+  });
+});

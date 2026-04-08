@@ -365,7 +365,7 @@
     "compile:webview": "cd packages/webview && pnpm run build && cd ../.. && pnpm run copy:webview",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview && cp -r packages/webview/dist/* dist/webview/",
     "watch": "pnpm run compile:extension -- --watch",
-    "lint": "eslint packages --ext ts,tsx",
+    "lint": "eslint packages/extension/src packages/agent/src packages/platform/src packages/webview/src",
     "test": "vitest",
     "package": "vsce package --no-dependencies"
   },
