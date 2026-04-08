@@ -152,8 +152,9 @@ interface IStoryboardGenerator {
 - [x] 将 `GenerateScenePlan` / `GenerateShotPlan` 接入 Agent 主流程与 semantic 导入闭环
 - [x] 为 `NekoStoryAPI` 暴露 `generateScenePlans()` / `generateShotPlan()`，供 Agent pipeline 直接消费
 - [x] 新增 `importStoryboardToCanvas` pipeline stage，将 semantic storyboard 正式导入 `canvas`
-- [ ] 将 `neko.story.generateStoryboard` 升级为直接启动标准 pipeline，而不只是发送 context
-- [ ] 为轻量分镜表接入 Agent / Canvas 真实状态回写
+- [x] 将 `neko.story.generateStoryboard` 升级为直接启动标准 pipeline，而不只是发送 context
+- [x] 为轻量分镜表接入 Agent / Canvas 真实状态回写
+- [x] 增加 `neko.story.startVideoCreation` 正式命令，作为从剧本场景启动 `flowF` 视频主流程入口
 
 ---
 
@@ -179,9 +180,11 @@ extension → parser → types
 6. ✅ 预览面板渲染剧本（标准格式）
 7. ✅ 编辑器与预览双向同步
 8. ✅ 转换为 neko-cut 时间线（Fountain → ProjectData JSON 语义 Skill）
-9. 🚧 AI 生成分镜脚本与语义导入主流程
+9. ✅ AI 生成分镜脚本与语义导入主流程
    - 已具备 `ScenePlan / ShotPlan -> canvas semantic import` pipeline 主链
-   - 剩余：`story` 命令直连标准流程、状态回写、完整“剧本开始视频创作”入口
+   - `story.generateStoryboard` 已直连标准 pipeline
+   - 轻量分镜表已接入 extension 侧统一状态源与 pipeline 事件回写
+   - 已新增“从剧本开始视频创作”标准入口 `neko.story.startVideoCreation`
 
 ## 构建与测试
 

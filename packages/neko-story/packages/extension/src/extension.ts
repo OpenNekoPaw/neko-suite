@@ -30,6 +30,7 @@ import { parse } from '@neko-story/parser';
 import { TimelineConverter, formatDuration } from './converters/TimelineConverter';
 
 const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
+type FlowId = 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
 
 export function activate(context: vscode.ExtensionContext) {
   const rootLogger = createVSCodeLogger('Neko Story', 'NekoStory', context);
@@ -168,33 +169,50 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        const data = payload.data as {
-          scriptPath: string;
-          sceneId: string;
-        };
-        await vscode.commands.executeCommand('neko.agent.startPipeline', {
-          flowId: 'flowF',
-          source: data.scriptPath,
-          sourceFormat: 'fountain',
-          importToCanvas: true,
-          eventCommand: 'neko.story.handlePipelineEvent',
-          eventPayload: {
-            scriptPath: data.scriptPath,
-            sceneId: data.sceneId,
-          },
-          skipStages: [
-            'generatePrompts',
-            'generatePilot',
-            'batchGenerate',
-            'qualityGate',
-            'arrangeOnTimeline',
-          ],
-          stageParams: {
-            parseStoryboard: {
-              sceneIds: [data.sceneId],
-            },
-          },
-        });
+        await vscode.commands.executeCommand(
+          'neko.agent.startPipeline',
+          createStoryPipelineParams(payload, {
+            flowId: 'flowF',
+            skipStages: [
+              'generatePrompts',
+              'generatePilot',
+              'batchGenerate',
+              'qualityGate',
+              'arrangeOnTimeline',
+            ],
+          }),
+        );
+      } catch {
+        try {
+          await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+        } catch {
+          // neko-agent extension not installed or not activated — silently ignore
+        }
+      }
+    }),
+    vscode.commands.registerCommand('neko.story.startVideoCreation', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'nekostory') {
+        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        return;
+      }
+
+      const payload = buildSceneAgentPayload(
+        editor,
+        '请基于当前场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
+      );
+      if (!payload) {
+        vscode.window.showWarningMessage('当前光标不在可识别的场景中');
+        return;
+      }
+
+      try {
+        await vscode.commands.executeCommand(
+          'neko.agent.startPipeline',
+          createStoryPipelineParams(payload, {
+            flowId: 'flowF',
+          }),
+        );
       } catch {
         try {
           await vscode.commands.executeCommand('neko.agent.sendContext', payload);
@@ -421,6 +439,37 @@ function resolveUriOrPath(uriOrPath: string): vscode.Uri {
   return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
     ? vscode.Uri.parse(uriOrPath)
     : vscode.Uri.file(uriOrPath);
+}
+
+function createStoryPipelineParams(
+  payload: AgentContextPayload,
+  options: {
+    flowId: FlowId;
+    skipStages?: readonly string[];
+  },
+) {
+  const data = payload.data as {
+    scriptPath: string;
+    sceneId: string;
+  };
+
+  return {
+    flowId: options.flowId,
+    source: data.scriptPath,
+    sourceFormat: 'fountain' as const,
+    importToCanvas: true,
+    eventCommand: 'neko.story.handlePipelineEvent',
+    eventPayload: {
+      scriptPath: data.scriptPath,
+      sceneId: data.sceneId,
+    },
+    skipStages: options.skipStages,
+    stageParams: {
+      parseStoryboard: {
+        sceneIds: [data.sceneId],
+      },
+    },
+  };
 }
 
 function buildSceneAgentPayload(
