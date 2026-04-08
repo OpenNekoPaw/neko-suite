@@ -8,7 +8,7 @@
  * - 无音频时降级到墙钟驱动
  */
 
-import { useRef, useEffect, useCallback, useState, memo } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo, memo, type CSSProperties } from 'react';
 import { useEditorStore } from '../../stores/editor-store';
 import { useTranslation } from '../../i18n/I18nContext';
 import { getLogger } from '../../utils/logger';
@@ -24,8 +24,15 @@ import {
   FrameScheduler,
   PlaybackPerformanceMonitor,
 } from '@neko/neko-client';
-import { buildCompositeLayers } from './compositeUtils';
+import type { ProjectData } from '@neko/shared';
+import {
+  buildCompositeLayers,
+  buildPausedPreviewOverlayElements,
+  hasVisibleScene3DAtTime,
+} from './compositeUtils';
 import { PerformanceOverlay } from './PerformanceOverlay';
+import { ShapeLayerRenderer } from '../ShapeRenderer';
+import type { ShapeInstance } from '../../types/shape';
 
 // =============================================================================
 // PreviewPanel Component
@@ -39,6 +46,178 @@ export interface PreviewPanelProps {
 export interface PreviewPanelRef {
   captureScreenshot: () => Promise<void>;
 }
+
+interface PreviewCanvasOverlayProps {
+  project: ProjectData;
+  currentTime: number;
+  visible: boolean;
+  displaySize: { width: number; height: number } | null;
+}
+
+function projectCoordToPixels(value: number, axisSize: number): number {
+  return value >= 0 && value <= 1 ? value * axisSize : value;
+}
+
+function buildElementTransformStyle(
+  transform: {
+    x: number;
+    y: number;
+    scaleX: number;
+    scaleY: number;
+    rotation: number;
+    anchorX: number;
+    anchorY: number;
+  },
+  projectWidth: number,
+  projectHeight: number,
+): CSSProperties {
+  const x = projectCoordToPixels(transform.x, projectWidth);
+  const y = projectCoordToPixels(transform.y, projectHeight);
+
+  return {
+    position: 'absolute',
+    left: `${x}px`,
+    top: `${y}px`,
+    transform: `translate(${-transform.anchorX * 100}%, ${-transform.anchorY * 100}%) rotate(${transform.rotation}deg) scale(${transform.scaleX}, ${transform.scaleY})`,
+    transformOrigin: `${transform.anchorX * 100}% ${transform.anchorY * 100}%`,
+  };
+}
+
+const PreviewCanvasOverlay = memo(function PreviewCanvasOverlay({
+  project,
+  currentTime,
+  visible,
+  displaySize,
+}: PreviewCanvasOverlayProps) {
+  const overlays = useMemo(
+    () => (visible ? buildPausedPreviewOverlayElements(project, currentTime) : []),
+    [visible, project, currentTime],
+  );
+
+  if (!visible || !displaySize || overlays.length === 0) {
+    return null;
+  }
+
+  const { width: projectWidth, height: projectHeight } = project.resolution;
+  const scaleX = displaySize.width / projectWidth;
+  const scaleY = displaySize.height / projectHeight;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: `${projectWidth}px`,
+          height: `${projectHeight}px`,
+          transform: `scale(${scaleX}, ${scaleY})`,
+          transformOrigin: 'top left',
+        }}
+      >
+        {overlays.map((overlay) => {
+          if (overlay.type === 'shape') {
+            const shapes = (
+              overlay.element as typeof overlay.element & {
+                shapes?: ShapeInstance[];
+              }
+            ).shapes;
+            if (!Array.isArray(shapes) || shapes.length === 0) return null;
+
+            return (
+              <div
+                key={overlay.element.id}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: overlay.opacity,
+                  zIndex: overlay.zIndex,
+                }}
+              >
+                <ShapeLayerRenderer shapes={shapes} width={projectWidth} height={projectHeight} />
+              </div>
+            );
+          }
+
+          if (overlay.type === 'subtitle') {
+            const shadow = overlay.element.shadow;
+
+            return (
+              <div
+                key={overlay.element.id}
+                style={{
+                  ...buildElementTransformStyle(overlay.transform, projectWidth, projectHeight),
+                  opacity: overlay.opacity,
+                  zIndex: overlay.zIndex,
+                  color: overlay.element.color,
+                  backgroundColor:
+                    overlay.element.backgroundColor === 'transparent'
+                      ? 'transparent'
+                      : overlay.element.backgroundColor,
+                  fontSize: `${overlay.element.fontSize}px`,
+                  fontFamily: overlay.element.fontFamily,
+                  textAlign: overlay.element.textAlign as CSSProperties['textAlign'],
+                  WebkitTextStroke:
+                    (overlay.element.strokeWidth ?? 0) > 0
+                      ? `${overlay.element.strokeWidth}px ${overlay.element.strokeColor}`
+                      : undefined,
+                  textShadow: shadow
+                    ? `${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px ${shadow.color}`
+                    : undefined,
+                  whiteSpace: 'pre-wrap',
+                  maxWidth: `${projectWidth * 0.9}px`,
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                }}
+              >
+                {overlay.element.text}
+              </div>
+            );
+          }
+
+          const shadow = overlay.element.shadow;
+
+          return (
+            <div
+              key={overlay.element.id}
+              style={{
+                ...buildElementTransformStyle(overlay.transform, projectWidth, projectHeight),
+                opacity: overlay.opacity,
+                zIndex: overlay.zIndex,
+                color: overlay.element.color,
+                backgroundColor:
+                  overlay.element.backgroundColor === 'transparent'
+                    ? 'transparent'
+                    : overlay.element.backgroundColor,
+                fontSize: `${overlay.element.fontSize}px`,
+                fontFamily: overlay.element.fontFamily,
+                fontWeight: overlay.element.fontWeight,
+                fontStyle: overlay.element.fontStyle,
+                textAlign: overlay.element.textAlign as CSSProperties['textAlign'],
+                lineHeight: overlay.element.lineHeight,
+                letterSpacing:
+                  overlay.element.letterSpacing !== undefined
+                    ? `${overlay.element.letterSpacing}px`
+                    : undefined,
+                WebkitTextStroke:
+                  (overlay.element.strokeWidth ?? 0) > 0
+                    ? `${overlay.element.strokeWidth}px ${overlay.element.strokeColor}`
+                    : undefined,
+                textDecoration: overlay.element.textDecoration ?? 'none',
+                textShadow: shadow
+                  ? `${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px ${shadow.color}`
+                  : undefined,
+                whiteSpace: 'pre-wrap',
+                maxWidth: `${projectWidth}px`,
+              }}
+            >
+              {overlay.element.content}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 export const PreviewPanel = memo(function PreviewPanel({
   onCaptureScreenshot,
@@ -86,6 +265,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   const [frameServerPort, setFrameServerPort] = useState<number | null>(null);
   const [streamWsUrl, setStreamWsUrl] = useState<string | null>(null);
   const [audioWsUrl, setAudioWsUrl] = useState<string | null>(null);
+  const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
 
   // State
   const [isInitialized, setIsInitialized] = useState(false);
@@ -102,6 +282,19 @@ export const PreviewPanel = memo(function PreviewPanel({
   // isPlaying ref for rAF closure
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
+
+  const pausedCompositeState = useMemo(() => {
+    if (!project || isPlaying) {
+      return { enabled: false, layers: [] as ReturnType<typeof buildCompositeLayers> };
+    }
+
+    if (hasVisibleScene3DAtTime(project, currentTime)) {
+      return { enabled: false, layers: [] as ReturnType<typeof buildCompositeLayers> };
+    }
+
+    const layers = buildCompositeLayers(project, currentTime);
+    return { enabled: layers.length > 0, layers };
+  }, [project, currentTime, isPlaying]);
 
   // ==========================================================================
   // Frame Server Port & Stream Configuration
@@ -419,13 +612,13 @@ export const PreviewPanel = memo(function PreviewPanel({
   // ==========================================================================
 
   useEffect(() => {
-    if (!project || isPlaying || !isInitialized) return;
+    if (!project || isPlaying || !isInitialized || !pausedCompositeState.enabled) return;
 
     const abortController = new AbortController();
 
     const fetchCompositeFrame = async () => {
       try {
-        const layers = buildCompositeLayers(project, currentTime);
+        const layers = pausedCompositeState.layers;
         if (layers.length === 0) return;
 
         const bitmap = await getMediaProxy().renderCompositeFrame(
@@ -467,7 +660,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     return () => {
       abortController.abort();
     };
-  }, [currentTime, isPlaying, isInitialized, project]);
+  }, [currentTime, isPlaying, isInitialized, project, pausedCompositeState]);
 
   // ==========================================================================
   // Canvas Resize
@@ -500,6 +693,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
       canvas.style.width = `${displayWidth}px`;
       canvas.style.height = `${displayHeight}px`;
+      setDisplaySize({ width: displayWidth, height: displayHeight });
     };
 
     const observer = new ResizeObserver(handleResize);
@@ -830,6 +1024,13 @@ export const PreviewPanel = memo(function PreviewPanel({
             ref={canvasRef}
             className="border border-vscode-panel-border shadow-lg bg-black"
             style={{ display: isInitialized ? 'block' : 'none' }}
+          />
+
+          <PreviewCanvasOverlay
+            project={project}
+            currentTime={currentTime}
+            visible={pausedCompositeState.enabled && !isPlaying && isInitialized}
+            displaySize={displaySize}
           />
 
           {/* FPS Counter */}

@@ -192,25 +192,29 @@
 - `packages/neko-engine/packages/host-api/src/controllers/utils.rs`
 - `packages/neko-engine/packages/engine-kernel/src/services/impls/stream_loop.rs`
 
-### 4.2 暂停态高质量合成只覆盖 media 元素
+### 4.2 暂停态高质量预览仍有协议层限制，但已补齐前端显示闭环
 
-暂停时的高质量合成逻辑 `buildCompositeLayers()` 当前只处理：
+暂停态高质量预览当前采用两层策略：
 
-- `media`
+- `media` 仍走 `renderCompositeFrame()` 的原生 composite
+- `text / subtitle / shape` 改为在 paused canvas 上方叠加 Webview overlay
+- `scene3d` 可见时，不再用 media-only composite 覆盖 canvas，而是保留引擎 seek 帧
 
-没有覆盖：
+因此，用户侧的暂停预览一致性已明显改善，但底层仍有一个客观限制：
 
-- `text`
-- `subtitle`
-- `shape`
-- `scene3d`
+- Extension `buildTimelineForComposite()` 仍把 composite request 硬编码成 `type: 'media'`
+- Engine `timeline::composite()` 也仍跳过 non-media elements
 
-这意味着在“暂停检查画面细节”这个专业剪辑高频场景里，所见未必即所得。
+结论：
+
+- 当前 paused preview 在显示层已经覆盖 `text / subtitle / shape / scene3d`
+- 但若后续要实现真正统一的“原生 HQ composite”，仍需要扩展 Extension/Engine 的 composite 协议
 
 对应实现：
 
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/compositeUtils.ts`
 - `packages/neko-cut/packages/webview/src/components/PreviewPanel/PreviewPanel.tsx`
+- `packages/neko-cut/packages/extension/src/services/MediaService.ts`
 
 ### 4.3 波纹编辑只覆盖删除场景
 
@@ -391,7 +395,10 @@
 
 ### P1
 
-- 将暂停态高质量合成扩展到 `text / subtitle / shape / scene3d`
+- 已部分完成：暂停态高质量预览已扩展到 `text / subtitle / shape / scene3d`
+  - `text / subtitle / shape` 通过 Webview overlay 补齐
+  - `scene3d` 通过保留引擎 seek 帧避免被 media-only composite 覆盖
+  - 底层原生 composite 协议仍待后续扩展
 - 把字幕体系收敛到单一入口和单一模型
 - 将素材库嵌入主编辑工作区
 
