@@ -49,7 +49,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 ];
 
 // =============================================================================
-// Default Models (10)
+// Default Models (10 LLM + 4 Media)
 // =============================================================================
 
 const DEFAULT_MODELS: ModelConfig[] = [
@@ -187,6 +187,49 @@ const DEFAULT_MODELS: ModelConfig[] = [
     outputCostPer1k: 0.00219,
     enabled: true,
   },
+  // =========================================================================
+  // Media Generation Models
+  // =========================================================================
+  // Image
+  {
+    id: 'openai-dall-e-3',
+    name: 'dall-e-3',
+    displayName: 'DALL-E 3',
+    providerId: 'openai',
+    type: 'image',
+    capabilities: ['image_generation'],
+    enabled: true,
+  },
+  // Video
+  {
+    id: 'openai-sora',
+    name: 'sora',
+    displayName: 'Sora',
+    providerId: 'openai',
+    type: 'video',
+    capabilities: ['video_generation'],
+    enabled: true,
+  },
+  // Audio (TTS)
+  {
+    id: 'openai-tts-1',
+    name: 'tts-1',
+    displayName: 'TTS-1',
+    providerId: 'openai',
+    type: 'audio',
+    capabilities: ['tts'],
+    enabled: true,
+  },
+  // Music (placeholder — enable when a provider supports it)
+  {
+    id: 'openai-jukebox',
+    name: 'jukebox',
+    displayName: 'Jukebox',
+    providerId: 'openai',
+    type: 'music',
+    capabilities: ['music_generation'],
+    enabled: false,
+  },
 ];
 
 // =============================================================================
@@ -199,6 +242,11 @@ const DEFAULT_MODELS: ModelConfig[] = [
 export const DEFAULT_USER_CONFIG: UnifiedConfig = {
   defaultProvider: 'anthropic',
   defaultModel: 'claude-sonnet-4-20250514',
+  defaultMediaModels: {
+    image: 'dall-e-3',
+    video: 'sora',
+    audio: 'tts-1',
+  },
   maxTokens: 8192,
   temperature: 0.7,
   providers: DEFAULT_PROVIDERS,

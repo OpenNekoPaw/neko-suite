@@ -8,6 +8,8 @@
 import * as vscode from 'vscode';
 import type { NekoCutAPI } from '@neko/shared';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
+import { EngineClient } from '@neko/neko-client';
+import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
 import { getLogger } from '../base';
 
 // Inline stage dependency interfaces to avoid cross-package import issues.
@@ -356,5 +358,71 @@ export class TimelineArrangerAdapter implements ITimelineArranger {
         duration: config.duration,
       },
     });
+  }
+}
+
+// =============================================================================
+// IAudioAnalyzer → EngineClient.analyzeLoudness
+// =============================================================================
+
+const ENGINE_EXTENSION_ID = 'neko.nekoengine';
+
+/** Lazy EngineClient singleton shared by quality check adapters */
+let _engineClient: EngineClient | null = null;
+async function getEngineClient(): Promise<EngineClient> {
+  if (_engineClient) return _engineClient;
+
+  const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+  if (!ext) {
+    throw new Error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
+  }
+  if (!ext.isActive) await ext.activate();
+
+  const result = await vscode.commands.executeCommand<{ port: number } | null>(
+    'neko.engine.ensureFrameServer',
+  );
+  if (!result?.port) {
+    throw new Error('Failed to start engine frame server');
+  }
+  _engineClient = new EngineClient(result.port, { timeout: 300_000 });
+  return _engineClient;
+}
+
+export class EngineAudioAnalyzerAdapter implements IAudioAnalyzer {
+  async analyzeLoudness(source: string, targetLufs?: number) {
+    const client = await getEngineClient();
+    return client.analyzeLoudness(source, targetLufs ?? -14);
+  }
+
+  async detectSilence(source: string, thresholdDbfs?: number, minDuration?: number) {
+    const client = await getEngineClient();
+    return client.detectSilence(source, thresholdDbfs ?? -40, minDuration ?? 0.5);
+  }
+}
+
+// =============================================================================
+// IFrameExtractor → EngineClient.extractFrame + probe
+// =============================================================================
+
+export class EngineFrameExtractorAdapter implements IFrameExtractor {
+  async extractFrame(source: string, time: number): Promise<string | null> {
+    const client = await getEngineClient();
+    const buffer = await client.extractFrame(source, time);
+    if (!buffer) return null;
+    // Convert ArrayBuffer to base64 string
+    return Buffer.from(buffer).toString('base64');
+  }
+
+  async probe(
+    source: string,
+  ): Promise<{ duration: number; fps: number; width: number; height: number }> {
+    const client = await getEngineClient();
+    const result = await client.probe('videos', source);
+    return {
+      duration: result.duration,
+      fps: result.fps,
+      width: result.width,
+      height: result.height,
+    };
   }
 }

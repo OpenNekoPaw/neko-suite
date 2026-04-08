@@ -37,6 +37,8 @@ import {
   PromptOptimizerAdapter,
   MediaGeneratorAdapter,
   TimelineArrangerAdapter,
+  EngineAudioAnalyzerAdapter,
+  EngineFrameExtractorAdapter,
 } from './pipeline-adapters';
 import { createDocumentReaderService } from '../services/DocumentReaderService';
 import { getLogger } from '../base';
@@ -152,11 +154,13 @@ export function bootstrapPipeline(
     });
   };
 
-  // Register quality check tools (multimodal LLM evaluation)
+  // Register quality check tools (multimodal LLM evaluation + audio/video analysis)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
   const qaTools = createQualityCheckTools({
     createService: () => platform.createService() as any,
     mediaGenerator,
+    audioAnalyzer: new EngineAudioAnalyzerAdapter(),
+    frameExtractor: new EngineFrameExtractorAdapter(),
   });
   for (const tool of qaTools) {
     toolRegistry.register(tool);
