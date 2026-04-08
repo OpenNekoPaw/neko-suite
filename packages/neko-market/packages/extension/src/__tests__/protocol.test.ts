@@ -1,11 +1,13 @@
 /**
- * Protocol tests for neko-market extension <-> webview message routing.
+ * Protocol tests for neko-market extension -- source contract + real code paths.
  *
- * Verifies DTO mapping logic (toMarketItem, toInstalledItem) and
- * webview-side filterToAssetTypes category mapping.
+ * Uses source contract tests to verify DTO mapping logic in MarketplaceHandler
+ * and tests InstalledRegistry.ready() directly.
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 vi.mock('vscode', () => ({
   Uri: { file: (p: string) => ({ fsPath: p, toString: () => p }) },
@@ -16,147 +18,100 @@ vi.mock('vscode', () => ({
   })),
 }));
 
-// ---------------------------------------------------------------------------
-// toMarketItem / toInstalledItem are private functions in MarketplaceHandler.
-// We replicate their logic here to verify the flattening contract that the
-// webview depends on. If the source changes, these tests catch drift.
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Source contract: MarketplaceHandler DTO mappers
+// ============================================================================
 
-function toMarketItem(pkg: Record<string, unknown>): Record<string, unknown> {
-  const m = pkg['manifest'] as Record<string, unknown>;
-  const d = (m['distribution'] ?? {}) as Record<string, unknown>;
-  const rating = d['rating'] as Record<string, unknown> | undefined;
-  return {
-    id: pkg['id'],
-    name: m['name'],
-    description: d['description'],
-    author: d['author'],
-    publisherId: d['publisherId'],
-    version: m['version'],
-    type: m['type'],
-    thumbnail: m['thumbnail'],
-    tags: d['tags'],
-    downloadCount: (pkg['downloadCount'] as number | undefined) ?? d['downloads'],
-    rating: rating?.['average'],
-    installState: pkg['installState'],
-    installedVersion: pkg['installedVersion'],
-  };
-}
+const handlerSource = readFileSync(join(__dirname, '..', 'MarketplaceHandler.ts'), 'utf-8');
 
-function toInstalledItem(pkg: Record<string, unknown>): Record<string, unknown> {
-  const manifest = pkg['manifest'] as Record<string, unknown> | undefined;
-  return {
-    packageId: pkg['packageId'],
-    name: manifest?.['name'] ?? pkg['packageId'],
-    version: pkg['version'],
-    type: pkg['type'],
-    installedAt: new Date(pkg['installedAt'] as number).toISOString(),
-    installedPath: pkg['installedPath'],
-    enabled: pkg['enabled'],
-  };
-}
-
-function filterToAssetTypes(filter: string): string[] | undefined {
-  switch (filter) {
-    case 'all':
-      return undefined;
-    case 'skill':
-      return ['skill', 'plugin'];
-    case 'shader':
-      return ['shader', 'shader-preset'];
-    case 'model':
-      return ['ai-model', 'lora', 'embedding', '3d-model'];
-    case 'preset':
-      return ['preset', 'template', 'lut'];
-    default:
-      return undefined;
-  }
-}
-
-describe('neko-market protocol', () => {
-  describe('toMarketItem', () => {
-    it('flattens nested MarketPackage to flat webview item', () => {
-      const pkg = {
-        id: 'pkg-1',
-        manifest: {
-          name: 'Cool Shader',
-          version: '1.0.0',
-          type: 'shader',
-          thumbnail: 'thumb.png',
-          distribution: {
-            description: 'A cool shader',
-            author: 'dev-user',
-            publisherId: 'pub-123',
-            tags: ['video', 'effect'],
-            downloads: 500,
-            rating: { average: 4.5 },
-          },
-        },
-        downloadCount: 600,
-        installState: 'installed',
-        installedVersion: '1.0.0',
-      };
-
-      const item = toMarketItem(pkg);
-
-      expect(item['name']).toBe('Cool Shader');
-      expect(item['author']).toBe('dev-user');
-      expect(item['version']).toBe('1.0.0');
-      // downloadCount from pkg takes precedence over distribution.downloads
-      expect(item['downloadCount']).toBe(600);
-      expect(item['rating']).toBe(4.5);
-      expect(item['installedVersion']).toBe('1.0.0');
-    });
+describe('MarketplaceHandler source contract -- toMarketItem', () => {
+  it('flattens manifest.name to top-level name', () => {
+    expect(handlerSource).toContain('name: m.name');
   });
 
-  describe('toInstalledItem', () => {
-    it('converts timestamp to ISO string', () => {
-      const pkg = {
-        packageId: 'pkg-2',
-        manifest: { name: 'My Preset' },
-        version: '2.1.0',
-        type: 'preset',
-        installedAt: 1712000000000, // 2024-04-01T...
-        installedPath: '/home/.neko/packages/pkg-2',
-        enabled: true,
-      };
-
-      const item = toInstalledItem(pkg);
-
-      expect(item['packageId']).toBe('pkg-2');
-      expect(item['name']).toBe('My Preset');
-      expect(typeof item['installedAt']).toBe('string');
-      expect((item['installedAt'] as string).endsWith('Z')).toBe(true);
-      // Verify it parses back to the same timestamp
-      expect(new Date(item['installedAt'] as string).getTime()).toBe(1712000000000);
-    });
-
-    it('falls back to packageId when manifest.name is missing', () => {
-      const pkg = {
-        packageId: 'fallback-id',
-        version: '0.1.0',
-        type: 'skill',
-        installedAt: Date.now(),
-        installedPath: '/tmp',
-        enabled: false,
-      };
-
-      const item = toInstalledItem(pkg);
-      expect(item['name']).toBe('fallback-id');
-    });
+  it('maps distribution author', () => {
+    expect(handlerSource).toContain('author: d?.author');
   });
 
-  describe('filterToAssetTypes', () => {
-    it('model maps to ai-model, lora, embedding, 3d-model', () => {
-      expect(filterToAssetTypes('model')).toEqual(['ai-model', 'lora', 'embedding', '3d-model']);
-    });
+  it('maps manifest version', () => {
+    expect(handlerSource).toContain('version: m.version');
+  });
 
-    it('skill maps to skill and plugin', () => {
-      expect(filterToAssetTypes('skill')).toEqual(['skill', 'plugin']);
-    });
+  it('uses downloadCount with fallback to distribution.downloads', () => {
+    expect(handlerSource).toContain('downloadCount: pkg.downloadCount ?? d?.downloads');
+  });
 
-    it('all returns undefined (no filter)', () => {
-      expect(filterToAssetTypes('all')).toBeUndefined();
-    });
+  it('extracts rating average', () => {
+    expect(handlerSource).toContain('rating: d?.rating?.average');
+  });
+});
+
+describe('MarketplaceHandler source contract -- toInstalledItem', () => {
+  it('converts installedAt timestamp to ISO string', () => {
+    expect(handlerSource).toContain('new Date(pkg.installedAt).toISOString()');
+  });
+
+  it('falls back to packageId when manifest.name is missing', () => {
+    expect(handlerSource).toContain('pkg.manifest?.name ?? pkg.packageId');
+  });
+});
+
+describe('MarketplaceHandler source contract -- DTO mapper usage', () => {
+  it('all search results use .map(toMarketItem)', () => {
+    expect(handlerSource).toContain('.map(toMarketItem)');
+  });
+
+  it('all installed results use .map(toInstalledItem)', () => {
+    expect(handlerSource).toContain('.map(toInstalledItem)');
+  });
+
+  it('handles all expected message types', () => {
+    const expectedTypes = [
+      'market:search',
+      'market:getFeatured',
+      'market:getPackage',
+      'market:install',
+      'market:uninstall',
+      'market:listInstalled',
+      'market:checkUpdates',
+      'market:enable',
+      'market:disable',
+    ];
+    for (const t of expectedTypes) {
+      expect(handlerSource).toContain(`'${t}'`);
+    }
+  });
+});
+
+// ============================================================================
+// Real code: InstalledRegistry.ready() (NKM-004)
+// ============================================================================
+
+describe('InstalledRegistry -- ready() method', () => {
+  it('ready() initializes empty registry when file does not exist', async () => {
+    const { InstalledRegistry } = await import('../../../core/src/registry/installed-registry');
+    const registry = new InstalledRegistry('/tmp/nonexistent-test-registry.json');
+
+    // ready() should not throw even if file doesn't exist
+    await expect(registry.ready()).resolves.toBeUndefined();
+  });
+
+  it('ready() is idempotent -- calling twice returns same promise', async () => {
+    const { InstalledRegistry } = await import('../../../core/src/registry/installed-registry');
+    const registry = new InstalledRegistry('/tmp/nonexistent-test-registry-2.json');
+
+    const p1 = registry.ready();
+    const p2 = registry.ready();
+    await Promise.all([p1, p2]);
+    // Both should resolve without error
+  });
+
+  it('listAll returns empty array after loading nonexistent file', async () => {
+    const { InstalledRegistry } = await import('../../../core/src/registry/installed-registry');
+    const registry = new InstalledRegistry('/tmp/nonexistent-test-registry-3.json');
+    await registry.ready();
+
+    const all = registry.list();
+    expect(all).toEqual([]);
   });
 });

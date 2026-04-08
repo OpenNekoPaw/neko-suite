@@ -1,78 +1,139 @@
 /**
- * Protocol tests for neko-story extension.
+ * Protocol integration tests for neko-story extension.
  *
- * Verifies that FOUNTAIN_GLOB and SEE_LINK_PATTERN cover the same
- * set of supported file extensions (.fountain, .nks, .story).
+ * Exercises real production code paths:
+ * - TimelineConverter.convert() produces AudioElement for audio assets (NKS-003)
+ * - Source contract: FOUNTAIN_GLOB and SEE_LINK_PATTERN cover same extensions
+ * - Source contract: PreviewPanel CSP includes img-src
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 vi.mock('vscode', () => ({
-  Uri: { file: (p: string) => ({ fsPath: p, toString: () => p, parse: (s: string) => s }) },
+  Uri: { file: (p: string) => ({ scheme: 'file', fsPath: p }) },
   EventEmitter: vi.fn(),
-  workspace: {
-    findFiles: vi.fn().mockResolvedValue([]),
-    createFileSystemWatcher: vi.fn(() => ({
-      onDidCreate: vi.fn(),
-      onDidChange: vi.fn(),
-      onDidDelete: vi.fn(),
-      dispose: vi.fn(),
-    })),
-  },
+  commands: { executeCommand: vi.fn() },
+  window: { onDidChangeTextEditorSelection: vi.fn(() => ({ dispose: vi.fn() })) },
 }));
 
-// The constants are module-level in the source files, so we replicate
-// their values here and verify the patterns match the expected extensions.
-const FOUNTAIN_GLOB = '**/*.{fountain,nks,story}';
-const SEE_LINK_PATTERN = /\[\[see:\s*([^\]]+\.(?:fountain|nks|story))\s*\]\]/gi;
+import { TimelineConverter } from '../converters/TimelineConverter';
+import type { FountainDocument } from '@neko-story/types';
 
-const SUPPORTED_EXTENSIONS = ['.fountain', '.nks', '.story'];
+// Read source files for contract verification
+const workspaceIndexSource = readFileSync(
+  join(__dirname, '../services/WorkspaceIndexService.ts'),
+  'utf-8',
+);
+const documentLinkSource = readFileSync(join(__dirname, '../providers/documentLink.ts'), 'utf-8');
+const previewPanelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), 'utf-8');
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../../../../package.json'), 'utf-8'));
 
 describe('neko-story protocol', () => {
-  describe('FOUNTAIN_GLOB', () => {
-    it('includes .fountain extension', () => {
-      expect(FOUNTAIN_GLOB).toContain('fountain');
-    });
-
-    it('includes .nks extension', () => {
-      expect(FOUNTAIN_GLOB).toContain('nks');
-    });
-
-    it('includes .story extension', () => {
-      expect(FOUNTAIN_GLOB).toContain('story');
-    });
-  });
-
-  describe('SEE_LINK_PATTERN', () => {
-    it.each(SUPPORTED_EXTENSIONS)('matches [[see: file%s]] references', (ext) => {
-      const input = `[[see: scenes/intro${ext}]]`;
-      SEE_LINK_PATTERN.lastIndex = 0;
-      const match = SEE_LINK_PATTERN.exec(input);
-      expect(match).not.toBeNull();
-      expect(match?.[1]).toBe(`scenes/intro${ext}`);
-    });
-
-    it('does not match unsupported extensions', () => {
-      SEE_LINK_PATTERN.lastIndex = 0;
-      expect(SEE_LINK_PATTERN.exec('[[see: file.txt]]')).toBeNull();
-
-      SEE_LINK_PATTERN.lastIndex = 0;
-      expect(SEE_LINK_PATTERN.exec('[[see: file.md]]')).toBeNull();
-    });
-  });
-
   describe('format support consistency', () => {
     it('FOUNTAIN_GLOB and SEE_LINK_PATTERN cover the same extensions', () => {
-      // Extract extensions from glob: "**/*.{fountain,nks,story}" -> [fountain,nks,story]
-      const globMatch = FOUNTAIN_GLOB.match(/\{([^}]+)\}/);
-      const globExtensions = globMatch?.[1]?.split(',').sort() ?? [];
+      // Extract extensions from FOUNTAIN_GLOB in source
+      const globMatch = workspaceIndexSource.match(/FOUNTAIN_GLOB\s*=\s*'\*\*\/\*\.\{([^}]+)\}'/);
+      const globExts = globMatch?.[1]?.split(',').sort() ?? [];
 
-      // Extract extensions from regex source: (?:fountain|nks|story)
-      const regexMatch = SEE_LINK_PATTERN.source.match(/\(\?:([^)]+)\)/);
-      const regexExtensions = regexMatch?.[1]?.split('|').sort() ?? [];
+      // Extract extensions from SEE_LINK_PATTERN in source
+      const regexMatch = documentLinkSource.match(/\(\?:([^)]+)\)/);
+      const regexExts = regexMatch?.[1]?.split('|').sort() ?? [];
 
-      expect(globExtensions).toEqual(regexExtensions);
-      expect(globExtensions).toEqual(['fountain', 'nks', 'story']);
+      expect(globExts).toEqual(regexExts);
+      expect(globExts).toEqual(['fountain', 'nks', 'story']);
+    });
+
+    it('package.json language extensions match FOUNTAIN_GLOB', () => {
+      const languages = packageJson.contributes?.languages;
+      expect(languages).toBeDefined();
+
+      const lang = languages?.find(
+        (l: { id: string }) => l.id === 'fountain' || l.id === 'nekostory',
+      );
+      expect(lang).toBeDefined();
+
+      const pkgExts = (lang.extensions as string[]).map((e: string) => e.replace(/^\./, '')).sort();
+      expect(pkgExts).toEqual(['fountain', 'nks', 'story']);
+    });
+  });
+
+  describe('NKS-003: audio asset mapping', () => {
+    it('converts audio asset reference to AudioElement (type: audio)', () => {
+      const doc: FountainDocument = {
+        titlePage: null,
+        elements: [
+          {
+            type: 'scene_heading',
+            raw: 'INT. STUDIO',
+            text: 'INT. STUDIO',
+            sceneNumber: null,
+            line: 1,
+          },
+          {
+            type: 'note',
+            text: '[[AUDIO: background.mp3]]',
+            noteType: 'inline',
+            line: 2,
+            assetRef: { type: 'audio', path: 'background.mp3' },
+          },
+        ] as any,
+      };
+
+      const converter = new TimelineConverter();
+      const result = converter.convert(doc, 'Test Script');
+
+      // Should have a media track with one AudioElement
+      const mediaTrack = result.project.tracks.find((t) => t.type === 'media');
+      expect(mediaTrack).toBeDefined();
+      expect(mediaTrack!.elements).toHaveLength(1);
+
+      const audioEl = mediaTrack!.elements[0]!;
+      expect(audioEl.type).toBe('audio');
+      expect((audioEl as any).src).toBe('background.mp3');
+    });
+
+    it('converts video asset reference to MediaElement with mediaType video', () => {
+      const doc: FountainDocument = {
+        titlePage: null,
+        elements: [
+          {
+            type: 'scene_heading',
+            raw: 'EXT. PARK',
+            text: 'EXT. PARK',
+            sceneNumber: null,
+            line: 1,
+          },
+          {
+            type: 'note',
+            text: '[[VIDEO: clip.mp4]]',
+            noteType: 'inline',
+            line: 2,
+            assetRef: { type: 'video', path: 'clip.mp4' },
+          },
+        ] as any,
+      };
+
+      const converter = new TimelineConverter();
+      const result = converter.convert(doc, 'Test Script');
+
+      const mediaTrack = result.project.tracks.find((t) => t.type === 'media');
+      expect(mediaTrack).toBeDefined();
+      const videoEl = mediaTrack!.elements[0]! as any;
+      expect(videoEl.type).toBe('media');
+      expect(videoEl.mediaType).toBe('video');
+    });
+  });
+
+  describe('PreviewPanel CSP', () => {
+    it('includes img-src directive in Content-Security-Policy', () => {
+      expect(previewPanelSource).toContain('img-src');
+    });
+
+    it('includes script-src with nonce', () => {
+      expect(previewPanelSource).toContain('script-src');
+      expect(previewPanelSource).toContain('nonce-');
     });
   });
 });

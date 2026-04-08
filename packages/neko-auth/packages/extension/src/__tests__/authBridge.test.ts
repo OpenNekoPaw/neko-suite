@@ -1,23 +1,37 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ============================================================================
-// Mock vscode module
+// Mock vscode module with working EventEmitter
 // ============================================================================
 
-vi.mock('vscode', () => ({
-  Uri: { file: (p: string) => ({ scheme: 'file', fsPath: p }) },
-  commands: { executeCommand: vi.fn() },
-  window: { showErrorMessage: vi.fn() },
-  EventEmitter: vi.fn(),
-}));
+vi.mock('vscode', () => {
+  class VscodeEventEmitter<T> {
+    private listeners: Array<(data: T) => void> = [];
+    event = (listener: (data: T) => void) => {
+      this.listeners.push(listener);
+      return { dispose: vi.fn() };
+    };
+    fire = (data: T) => {
+      this.listeners.forEach((l) => l(data));
+    };
+    dispose = vi.fn();
+  }
+  return {
+    Uri: { file: (p: string) => ({ scheme: 'file', fsPath: p }) },
+    commands: { executeCommand: vi.fn() },
+    window: { showErrorMessage: vi.fn() },
+    EventEmitter: VscodeEventEmitter,
+  };
+});
 
 import { AuthTokenError, AuthNetworkError } from '@neko/auth-core';
+import { NekoAuthAPIImpl } from '../auth-api';
 
 // ============================================================================
-// Tests
+// Tests: AuthTokenError (real production class)
 // ============================================================================
 
-describe('AuthTokenError — isTokenInvalid getter', () => {
+describe('AuthTokenError -- isTokenInvalid getter', () => {
   it('returns true for HTTP 401 (unauthorized)', () => {
     const err = new AuthTokenError('Unauthorized', 401);
 
@@ -47,7 +61,7 @@ describe('AuthTokenError — isTokenInvalid getter', () => {
   });
 });
 
-describe('AuthNetworkError — distinct error type', () => {
+describe('AuthNetworkError -- distinct error type', () => {
   it('has AUTH_NETWORK_ERROR code', () => {
     const err = new AuthNetworkError('Connection refused');
 
@@ -57,20 +71,92 @@ describe('AuthNetworkError — distinct error type', () => {
   });
 });
 
-describe('Error type discrimination', () => {
-  it('can distinguish token errors from network errors by code', () => {
-    const errors: Array<AuthTokenError | AuthNetworkError> = [
-      new AuthTokenError('Token expired', 401),
-      new AuthNetworkError('DNS resolution failed'),
-    ];
+// ============================================================================
+// Tests: NekoAuthAPIImpl (real production class)
+// ============================================================================
 
-    const tokenErrors = errors.filter((e): e is AuthTokenError => e.code === 'AUTH_TOKEN_ERROR');
-    const networkErrors = errors.filter(
-      (e): e is AuthNetworkError => e.code === 'AUTH_NETWORK_ERROR',
-    );
+describe('NekoAuthAPIImpl -- construction and event wiring', () => {
+  let mockService: {
+    onDidRefresh: ((session: unknown) => void) | null;
+    getSession: ReturnType<typeof vi.fn>;
+    login: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+  };
+  let mockContext: {
+    subscriptions: Array<{ dispose: () => void }>;
+  };
 
-    expect(tokenErrors).toHaveLength(1);
-    expect(networkErrors).toHaveLength(1);
-    expect(tokenErrors[0]?.isTokenInvalid).toBe(true);
+  beforeEach(() => {
+    mockService = {
+      onDidRefresh: null,
+      getSession: vi.fn().mockResolvedValue(null),
+      login: vi.fn().mockResolvedValue({ userId: 'u1', token: 'tok' }),
+      logout: vi.fn().mockResolvedValue(undefined),
+    };
+    mockContext = { subscriptions: [] };
+  });
+
+  it('registers itself in context.subscriptions for cleanup', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    expect(mockContext.subscriptions.length).toBe(1);
+    expect(typeof mockContext.subscriptions[0]?.dispose).toBe('function');
+  });
+
+  it('exposes onDidChangeSession as an event', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    expect(typeof api.onDidChangeSession).toBe('function');
+  });
+
+  it('fires onDidChangeSession when service.onDidRefresh is called (NKAT-001)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    const received: unknown[] = [];
+    api.onDidChangeSession((session) => received.push(session));
+
+    // Simulate a silent token refresh from the auth service
+    const refreshedSession = { userId: 'u1', token: 'refreshed-tok' };
+    mockService.onDidRefresh!(refreshedSession);
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual(refreshedSession);
+  });
+
+  it('fires onDidChangeSession on login()', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    const received: unknown[] = [];
+    api.onDidChangeSession((session) => received.push(session));
+
+    await api.login();
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual({ userId: 'u1', token: 'tok' });
+  });
+
+  it('fires onDidChangeSession with null on logout()', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    const received: unknown[] = [];
+    api.onDidChangeSession((session) => received.push(session));
+
+    await api.logout();
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBeNull();
+  });
+
+  it('getCloudToken returns null (Phase 2 stub)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = new NekoAuthAPIImpl(mockService as any, mockContext as any);
+
+    const token = await api.getCloudToken('github');
+    expect(token).toBeNull();
   });
 });

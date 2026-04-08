@@ -23,11 +23,13 @@ const declaredCommands: string[] =
     (c) => c.command,
   ) ?? [];
 
+const extensionSource = readFileSync(resolve(__dirname, '..', 'extension.ts'), 'utf-8');
+
 // ============================================================================
-// Tests
+// Tests: package.json command declarations
 // ============================================================================
 
-describe('neko-assets package.json — removed cloud sync commands', () => {
+describe('neko-assets package.json -- removed cloud sync commands', () => {
   const removedCommands = [
     'neko.assets.sync',
     'neko.assets.push',
@@ -42,7 +44,7 @@ describe('neko-assets package.json — removed cloud sync commands', () => {
   });
 });
 
-describe('neko-assets package.json — required commands are present', () => {
+describe('neko-assets package.json -- required commands are present', () => {
   it('declares viewHistory command', () => {
     expect(declaredCommands).toContain('neko.assets.viewHistory');
   });
@@ -52,7 +54,50 @@ describe('neko-assets package.json — required commands are present', () => {
   });
 
   it('has a non-trivial number of commands registered', () => {
-    // Guard against accidentally emptying the commands array
     expect(declaredCommands.length).toBeGreaterThan(10);
+  });
+});
+
+// ============================================================================
+// Tests: extension.ts source contract -- registerLegacyCommands
+// ============================================================================
+
+describe('extension.ts -- registerLegacyCommands keeps only valid commands', () => {
+  it('does NOT contain neko.assets.sync command registration', () => {
+    // registerLegacyCommands should not register removed cloud sync commands
+    expect(extensionSource).not.toMatch(/registerCommand\(\s*['"]neko\.assets\.sync['"]/);
+  });
+
+  it('does NOT contain neko.assets.push command registration', () => {
+    expect(extensionSource).not.toMatch(/registerCommand\(\s*['"]neko\.assets\.push['"]/);
+  });
+
+  it('does NOT contain neko.assets.pull command registration', () => {
+    expect(extensionSource).not.toMatch(/registerCommand\(\s*['"]neko\.assets\.pull['"]/);
+  });
+
+  it('DOES contain neko.assets.viewHistory command registration', () => {
+    expect(extensionSource).toContain("'neko.assets.viewHistory'");
+  });
+
+  it('DOES contain neko.assets.previewMedia command registration', () => {
+    expect(extensionSource).toContain("'neko.assets.previewMedia'");
+  });
+});
+
+describe('extension.ts -- no cloud sync TreeDataProvider (NKAS-002)', () => {
+  it('does NOT register a neko.cloudSync TreeDataProvider', () => {
+    expect(extensionSource).not.toContain('neko.cloudSync');
+    expect(extensionSource).not.toMatch(/registerTreeDataProvider\(\s*['"].*cloudSync/);
+  });
+});
+
+describe('extension.ts -- registerLegacyCommands function exists', () => {
+  it('defines registerLegacyCommands as a function', () => {
+    expect(extensionSource).toMatch(/function registerLegacyCommands/);
+  });
+
+  it('is called during activation', () => {
+    expect(extensionSource).toContain('registerLegacyCommands(context)');
   });
 });

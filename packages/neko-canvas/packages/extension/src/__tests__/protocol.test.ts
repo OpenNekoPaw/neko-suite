@@ -1,90 +1,72 @@
 /**
- * Protocol tests for neko-canvas extension <-> webview message routing.
+ * Protocol source contract tests for neko-canvas extension.
  *
- * Verifies correct field names used in cross-boundary messages:
- *   nodes.list  -> nodeType (not "type")
- *   scriptIndexResult -> scenes (not "index")
- *   modelInstalledResult -> installedVersion (not "installed")
+ * Verifies that canvasEditorProvider.ts uses the correct DTO field names
+ * in cross-boundary messages. If someone changes a field name, this test fails.
+ *
+ * Tested contracts (post-fix):
+ *   NKV-001: nodes.list uses nodeType (not bare "type")
+ *   NKV-002: scriptIndexResult uses scenes (not "index")
+ *   NKV-003: modelInstalledResult uses installedVersion (not "installed")
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-vi.mock('vscode', () => ({
-  Uri: { file: (p: string) => ({ fsPath: p, toString: () => p }) },
-  EventEmitter: vi.fn(),
-  commands: { executeCommand: vi.fn() },
-  workspace: { fs: { readFile: vi.fn() } },
-  window: {},
-}));
+// Read the production source file for contract verification
+const providerSource = readFileSync(join(__dirname, '../editor/canvasEditorProvider.ts'), 'utf-8');
 
-describe('neko-canvas protocol', () => {
-  describe('nodes.list request', () => {
-    it('uses nodeType parameter, not type', () => {
-      // The extension sends { type: "nodes.list", nodeType: ... } to the webview.
-      // The webview reads message.nodeType (not message.type) for filtering.
-      const request = {
-        type: 'nodes.list',
-        _requestId: 1,
-        nodeType: 'image',
-      };
-
-      expect(request).toHaveProperty('nodeType', 'image');
-      // "type" is the message discriminator, not the filter parameter
-      expect(request.type).toBe('nodes.list');
-    });
-
-    it('nodeType is optional (lists all nodes when omitted)', () => {
-      const request = { type: 'nodes.list', _requestId: 2 };
-      expect(request).not.toHaveProperty('nodeType');
+describe('canvasEditorProvider message contracts', () => {
+  describe('NKV-001: nodes.list nodeType parameter', () => {
+    it('sends nodeType field, not bare type', () => {
+      // After NKV-001 fix: the provider must send nodeType: type
+      expect(providerSource).toContain('nodeType: type');
     });
   });
 
-  describe('scriptIndexResult message', () => {
-    it('uses scenes field, not index', () => {
-      const msg = {
-        type: 'scriptIndexResult',
-        nodeId: 'node-1',
-        scenes: [{ heading: 'INT. OFFICE', line: 5 }],
-      };
-
-      expect(msg).toHaveProperty('scenes');
-      expect(msg).not.toHaveProperty('index');
-      expect(msg.type).toBe('scriptIndexResult');
+  describe('NKV-002: scriptIndexResult scenes field', () => {
+    it('sends scenes field on success', () => {
+      // After NKV-002 fix: must use "scenes" not "index"
+      expect(providerSource).toContain('scenes: index,');
     });
 
-    it('scenes is null on error', () => {
-      const errorMsg = {
-        type: 'scriptIndexResult',
-        nodeId: 'node-2',
-        scenes: null,
-        error: 'neko-story not available',
-      };
+    it('sends scenes: null on error', () => {
+      expect(providerSource).toContain('scenes: null,');
+    });
 
-      expect(errorMsg.scenes).toBeNull();
-      expect(errorMsg.error).toBeDefined();
+    it('does not use bare index as field name in scriptIndexResult', () => {
+      // Ensure no regression: the response object should not have { index: index }
+      const lines = providerSource.split('\n');
+      const scriptIndexLines = lines.filter(
+        (l) => l.includes('scriptIndexResult') || l.includes('index: index'),
+      );
+      const hasOldPattern = scriptIndexLines.some((l) => /\bindex: index\b/.test(l));
+      expect(hasOldPattern).toBe(false);
     });
   });
 
-  describe('modelInstalledResult message', () => {
-    it('uses installedVersion field, not installed', () => {
-      const msg = {
-        type: 'modelInstalledResult',
-        nodeId: 'model-1',
-        installedVersion: 'installed',
-      };
-
-      expect(msg).toHaveProperty('installedVersion');
-      expect(msg).not.toHaveProperty('installed');
+  describe('NKV-003: modelInstalledResult installedVersion field', () => {
+    it('sends installedVersion field', () => {
+      // After NKV-003 fix: must use "installedVersion" not "installed"
+      expect(providerSource).toContain('installedVersion:');
     });
 
-    it('installedVersion is null when not installed', () => {
-      const msg = {
-        type: 'modelInstalledResult',
-        nodeId: 'model-2',
-        installedVersion: null,
-      };
+    it('does not use bare installed as field name', () => {
+      // The old pattern "installed: installed" should not appear
+      const lines = providerSource.split('\n');
+      const badPattern = lines.some((l) => /^\s+installed:\s+installed/.test(l));
+      expect(badPattern).toBe(false);
+    });
+  });
 
-      expect(msg.installedVersion).toBeNull();
+  describe('source file existence', () => {
+    it('canvasEditorProvider.ts is non-empty', () => {
+      expect(providerSource.length).toBeGreaterThan(100);
+    });
+
+    it('exports CanvasEditorProvider class', () => {
+      expect(providerSource).toContain('export class CanvasEditorProvider');
     });
   });
 });
