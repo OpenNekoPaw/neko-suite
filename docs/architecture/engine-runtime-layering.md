@@ -1,6 +1,6 @@
 # ADR: neko-engine Runtime 分层与宿主模型
 
-> 状态：Active（R0-R2 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
+> 状态：Active（R0-R3 + P1 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
 > 关联：[engine-plugin-rfc.md](./engine-plugin-rfc.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md)
 
 ---
@@ -96,7 +96,7 @@ Runtime 负责：
 │ GPU / Codec / File Probe / Project Context / Device Base    │
 ├─────────────────────────────────────────────────────────────┤
 │ Runtime Packages                                            │
-│ runtime-video   runtime-puppet  runtime-scene               │
+│ runtime-media   runtime-puppet  runtime-scene               │
 │ runtime-format  runtime-device  runtime-ml                  │
 │ runtime-game    runtime-sim     runtime-xr    (future)      │
 └─────────────────────────────────────────────────────────────┘
@@ -129,7 +129,7 @@ packages/neko-engine/packages/
 ├── host-cli/             # CLI frontend (✅ Phase R0 已重命名)
 ├── runtime-scene/        # 3D scene / model / render (✅ Phase R0 已重命名)
 ├── runtime-puppet/       # 2D puppet / drawing (✅ Phase R0 已重命名)
-├── runtime-video/        # 视频/音频/时间线/导出 (待从 engine-kernel 拆出)
+├── runtime-media/        # 通用媒体域逻辑：probe/diff/subtitle/jpeg (✅ Phase R3 已拆出)
 ├── runtime-format/       # 文件格式探测/文档预览/转换 (待从 engine-kernel 拆出)
 ├── runtime-device/       # camera / audio input / midi / gamepad (✅ Phase R1 已拆出)
 ├── runtime-ml/           # onnx/candle lightweight inference (✅ Phase R2 已拆出)
@@ -174,7 +174,7 @@ packages/neko-engine/packages/
 |------|-------------|---------|------|
 | R1 | `runtime-device` | Camera/Midi/Gamepad service + cpal/midir/gilrs 依赖 | 低 |
 | R2 | `runtime-ml` | ml/ 模块 + MlService + ort/ndarray 依赖 | 低 |
-| R3 | `runtime-video`（部分） | media_service/ 域逻辑（probe/diff/subtitle/waveform）—— 不含 GPU pipeline | 中 |
+| R3 | `runtime-media` | media_service/ 域逻辑（probe/diff/subtitle/jpeg_encoder）+ common.rs（waveform/loudness/silence）—— 不含 GPU pipeline | 中 |
 | R4 | RuntimeDescriptor trait | 统一 runtime 发现机制 | 低 |
 
 engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemetry/Service Traits + 与 GPU 强耦合的 service impls
@@ -291,12 +291,13 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 - host-api 通过 optional `onnx` feature 依赖 runtime-ml
 - engine-kernel 保留原 ml/ 模块（待后续清理）
 
-### Phase R3：runtime-video 域逻辑（渐进）
+### Phase R3：拆出 runtime-media ✅ 已完成
 
-- 创建 `runtime-video/` crate
-- 仅迁移与 GPU 无关的域逻辑：media_service/（probe/diff/subtitle）、common.rs（波形/响度/静音分析）
-- GPU 强耦合的 service impls 暂留 engine-kernel
-- 后续通过 trait 抽象逐步解耦
+- 创建 `runtime-media/` crate（覆盖 audio/video/image 通用域逻辑，不含 timeline）
+- 迁移 media_service/ 中与 GPU 无关的模块：probe, audio_diff, video_diff, image_diff, subtitle, jpeg_encoder, ffmpeg_parser
+- 56 个测试覆盖 probe/diff/encoding 逻辑
+- Timeline（diff + 数据模型 + 执行引擎）留在 engine-kernel（依赖 JVI 格式 + GPU Compositor）
+- services/impls/common.rs 留在 engine-kernel（依赖 audio codec 层）
 
 ### Phase R2：引入 Runtime Registry
 

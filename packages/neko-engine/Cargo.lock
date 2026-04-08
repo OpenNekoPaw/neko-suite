@@ -2527,6 +2527,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "neko-runtime-media"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytemuck",
+ "ffmpeg-next",
+ "image",
+ "neko-engine-kernel",
+ "neko-engine-types",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "neko-runtime-ml"
 version = "0.1.0"
 dependencies = [
