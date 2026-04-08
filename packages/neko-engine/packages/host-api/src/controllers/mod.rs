@@ -32,6 +32,7 @@ mod stream;
 mod task;
 mod timeline;
 pub(crate) mod utils;
+mod plugins;
 mod video;
 
 pub use audio::AudioController;
@@ -50,6 +51,7 @@ pub use scenes::ScenesController;
 pub use stream::StreamController;
 pub use task::TaskController;
 pub use timeline::TimelineController;
+pub use plugins::PluginsController;
 pub use video::VideoController;
 
 use crate::error::ApiResult;

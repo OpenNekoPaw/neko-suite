@@ -3,10 +3,11 @@
 use crate::controllers::{
     AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
     DocumentsController, EffectsController, GamepadController, ImageController, MidiController,
-    ModelsController, NodeController, PuppetsController, ScenesController, StreamController,
-    TaskController, TimelineController, VideoController,
+    ModelsController, NodeController, PluginsController, PuppetsController, ScenesController,
+    StreamController, TaskController, TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
+use crate::plugin::PluginManager;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::services::{
     AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
@@ -39,6 +40,7 @@ pub struct ActionRouter {
     gamepad_controller: GamepadController,
     color_correction_controller: ColorCorrectionController,
     documents_controller: DocumentsController,
+    plugins_controller: PluginsController,
 }
 
 impl ActionRouter {
@@ -60,6 +62,7 @@ impl ActionRouter {
         gamepad_service: Arc<GamepadService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
+        plugin_manager: Arc<PluginManager>,
         #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
         Self {
@@ -95,6 +98,7 @@ impl ActionRouter {
             gamepad_controller: GamepadController::new(gamepad_service),
             color_correction_controller: ColorCorrectionController::new(),
             documents_controller: DocumentsController::new(),
+            plugins_controller: PluginsController::new(plugin_manager),
         }
     }
 
@@ -194,6 +198,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::PLUGINS => {
+                self.plugins_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -226,6 +235,7 @@ impl ActionRouter {
             groups::GAMEPAD => Some(self.gamepad_controller.actions()),
             groups::COLOR_CORRECTION => Some(self.color_correction_controller.actions()),
             groups::DOCUMENTS => Some(self.documents_controller.actions()),
+            groups::PLUGINS => Some(self.plugins_controller.actions()),
             _ => None,
         }
     }
@@ -251,6 +261,8 @@ mod tests {
         let midi_service = Arc::new(MidiService::new());
         let gamepad_service = Arc::new(GamepadService::new());
 
+        let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
+
         ActionRouter::new(
             task_service,
             node_service,
@@ -267,6 +279,7 @@ mod tests {
             gamepad_service,
             resource_registry,
             stream_registry,
+            plugin_manager,
         )
     }
 

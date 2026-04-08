@@ -140,6 +140,9 @@ impl EngineApi {
         let midi_service_ref = midi_service.clone();
         let gamepad_service_ref = gamepad_service.clone();
 
+        // Plugin manager
+        let plugin_manager = Arc::new(crate::plugin::PluginManager::new(vec![], "0.1.0"));
+
         // Create router
         let router = ActionRouter::new(
             task_service,
@@ -157,6 +160,7 @@ impl EngineApi {
             gamepad_service,
             resource_registry.clone(),
             stream_registry.clone(),
+            plugin_manager,
             #[cfg(feature = "onnx")]
             Some(std::sync::Arc::new(MlService::new(
                 config.ml.max_loaded,

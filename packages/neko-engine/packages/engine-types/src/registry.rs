@@ -25,6 +25,7 @@ pub mod groups {
     pub const GAMEPAD: &str = "gamepad";
     pub const COLOR_CORRECTION: &str = "color-correction";
     pub const DOCUMENTS: &str = "documents";
+    pub const PLUGINS: &str = "plugins";
 
     pub const ALL: &[&str] = &[
         NODES,
@@ -44,6 +45,7 @@ pub mod groups {
         GAMEPAD,
         COLOR_CORRECTION,
         DOCUMENTS,
+        PLUGINS,
     ];
 }
 
@@ -213,4 +215,6 @@ pub mod actions {
     pub const COLOR_CORRECTION: &[&str] = &["upload_lut", "remove_lut", "list_luts"];
 
     pub const DOCUMENTS: &[&str] = &["probe"];
+
+    pub const PLUGINS: &[&str] = &["list", "inspect", "enable", "disable", "reload"];
 }

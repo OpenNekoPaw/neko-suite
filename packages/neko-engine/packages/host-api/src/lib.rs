@@ -26,6 +26,7 @@
 #![deny(clippy::all)]
 
 pub mod controllers;
+pub mod plugin;
 pub mod registry;
 
 mod engine;
