@@ -8,35 +8,11 @@ import type {
   CanvasNode,
   CanvasConnection,
   CanvasViewport as ViewportType,
-  MediaCanvasNode,
-  StoryboardCanvasNode,
-  AnnotationCanvasNode,
-  ShotCanvasNode,
-  SceneGroupCanvasNode,
-  GalleryCanvasNode,
-  ScriptCanvasNode,
-  DocumentCanvasNode,
-  ModelCanvasNode,
 } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
-import {
-  MediaNode,
-  StoryboardNode,
-  AnnotationNode,
-  TextNode,
-  ArtboardNode,
-  GroupNode,
-  ShotNode,
-  SceneGroupNode,
-  GalleryNode,
-  ScriptNode,
-  DocumentNode,
-  ModelNode,
-} from './nodes';
+import { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodes';
 import { ConnectionLayer } from './connections';
-import type { TextCanvasNode } from '../types/extendedCanvas';
-import type { ArtboardCanvasNode } from '../types/extendedCanvas';
 import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
@@ -153,6 +129,7 @@ export function InfiniteCanvas({
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const nodeRendererRegistryRef = useRef(createBuiltInNodeRendererRegistry());
 
   // Viewport transform hook
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
@@ -281,29 +258,32 @@ export function InfiniteCanvas({
           const isSelected = selectedNodeIds.includes(node.id);
 
           return renderNode(
-            node,
-            nodes,
-            viewport,
-            isSelected,
-            containerRef as React.RefObject<HTMLElement | null>,
-            onNodeSelect,
-            onNodeDrag,
-            onNodeMove,
-            onNodeResize,
-            onNodeResizeEnd,
-            onNodeRotate,
-            onNodeRotateEnd,
-            onNodeUpdateData,
-            startDragConnection,
-            onScriptLoadScenes,
-            onScriptOpen,
-            onScriptNavigateToScene,
-            onDocumentOpen,
-            onModelCheckInstalled,
-            onSelectShotCandidate,
-            onAssignSelectedShotsToScene,
-            onAutoLayoutSceneShots,
-            selectedNodeIds,
+            nodeRendererRegistryRef.current,
+            {
+              node,
+              allNodes: nodes,
+              viewport,
+              isSelected,
+              containerRef: containerRef as React.RefObject<HTMLElement | null>,
+              onSelect: onNodeSelect,
+              onDrag: onNodeDrag,
+              onMove: onNodeMove,
+              onResize: onNodeResize,
+              onResizeEnd: onNodeResizeEnd,
+              onRotate: onNodeRotate,
+              onRotateEnd: onNodeRotateEnd,
+              onUpdateData: onNodeUpdateData,
+              onConnectionStart: startDragConnection,
+              onScriptLoadScenes,
+              onScriptOpen,
+              onScriptNavigateToScene,
+              onDocumentOpen,
+              onModelCheckInstalled,
+              onSelectShotCandidate,
+              onAssignSelectedShotsToScene,
+              onAutoLayoutSceneShots,
+              selectedNodeIds,
+            },
           );
         })}
       </CanvasViewport>
@@ -345,136 +325,8 @@ export function InfiniteCanvas({
 // =============================================================================
 
 function renderNode(
-  node: CanvasNode,
-  allNodes: CanvasNode[],
-  viewport: ViewportType,
-  isSelected: boolean,
-  containerRef: React.RefObject<HTMLElement | null>,
-  onSelect?: (nodeId: string, multi: boolean) => void,
-  onDrag?: (nodeId: string, position: { x: number; y: number }) => void,
-  onMove?: (nodeId: string, position: { x: number; y: number }) => void,
-  onResize?: (
-    nodeId: string,
-    size: { width: number; height: number },
-    position: { x: number; y: number },
-  ) => void,
-  onResizeEnd?: (
-    nodeId: string,
-    size: { width: number; height: number },
-    position: { x: number; y: number },
-  ) => void,
-  onRotate?: (nodeId: string, rotation: number) => void,
-  onRotateEnd?: (nodeId: string, rotation: number) => void,
-  onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void,
-  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void,
-  onScriptLoadScenes?: (nodeId: string, scriptPath: string) => void,
-  onScriptOpen?: (scriptPath: string) => void,
-  onScriptNavigateToScene?: (linkedSceneGroupId: string) => void,
-  onDocumentOpen?: (docPath: string) => void,
-  onModelCheckInstalled?: (nodeId: string, modelPath: string) => void,
-  onSelectShotCandidate?: (nodeId: string, candidateId: string) => void,
-  onAssignSelectedShotsToScene?: (sceneId: string) => void,
-  onAutoLayoutSceneShots?: (sceneId: string) => void,
-  selectedNodeIds: string[] = [],
+  registry: ReturnType<typeof createBuiltInNodeRendererRegistry>,
+  context: Parameters<typeof renderCanvasNode>[1],
 ): React.ReactNode {
-  const commonProps = {
-    viewport,
-    isSelected,
-    containerRef,
-    onSelect,
-    onDrag,
-    onMove,
-    onResize,
-    onResizeEnd,
-    onRotate,
-    onRotateEnd,
-    onConnectionStart,
-    onUpdateData,
-  };
-
-  const nodeType = node.type as string;
-  switch (nodeType) {
-    case 'media':
-      return <MediaNode key={node.id} node={node as MediaCanvasNode} {...commonProps} />;
-    case 'storyboard':
-      return <StoryboardNode key={node.id} node={node as StoryboardCanvasNode} {...commonProps} />;
-    case 'annotation':
-      return <AnnotationNode key={node.id} node={node as AnnotationCanvasNode} {...commonProps} />;
-    case 'text':
-      return (
-        <TextNode
-          key={node.id}
-          node={node as unknown as TextCanvasNode}
-          {...commonProps}
-          onContentChange={(nodeId, content) => onUpdateData?.(nodeId, { content })}
-          onStyleChange={(nodeId, style) => onUpdateData?.(nodeId, { style })}
-        />
-      );
-    case 'artboard':
-      return (
-        <ArtboardNode key={node.id} node={node as unknown as ArtboardCanvasNode} {...commonProps} />
-      );
-    case 'group':
-      return (
-        <GroupNode
-          key={node.id}
-          node={node as import('@neko/shared').GroupCanvasNode}
-          allNodes={allNodes}
-          {...commonProps}
-        />
-      );
-    case 'shot':
-      return (
-        <ShotNode
-          key={node.id}
-          node={node as ShotCanvasNode}
-          {...commonProps}
-          onSelectCandidate={onSelectShotCandidate}
-        />
-      );
-    case 'scene':
-      return (
-        <SceneGroupNode
-          key={node.id}
-          node={node as SceneGroupCanvasNode}
-          {...commonProps}
-          selectedShotCount={allNodes.filter((candidate) => selectedNodeIds.includes(candidate.id) && candidate.type === 'shot').length}
-          onAssignSelectedShots={onAssignSelectedShotsToScene}
-          onAutoLayoutShots={onAutoLayoutSceneShots}
-        />
-      );
-    case 'gallery':
-      return <GalleryNode key={node.id} node={node as GalleryCanvasNode} {...commonProps} />;
-    case 'script':
-      return (
-        <ScriptNode
-          key={node.id}
-          node={node as ScriptCanvasNode}
-          {...commonProps}
-          onLoadScenes={onScriptLoadScenes}
-          onOpenScript={onScriptOpen}
-          onNavigateToScene={onScriptNavigateToScene}
-        />
-      );
-    case 'document':
-      return (
-        <DocumentNode
-          key={node.id}
-          node={node as DocumentCanvasNode}
-          {...commonProps}
-          onOpenDocument={onDocumentOpen}
-        />
-      );
-    case 'model':
-      return (
-        <ModelNode
-          key={node.id}
-          node={node as ModelCanvasNode}
-          {...commonProps}
-          onCheckInstalled={onModelCheckInstalled}
-        />
-      );
-    default:
-      return null;
-  }
+  return renderCanvasNode(registry, context);
 }
