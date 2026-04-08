@@ -398,7 +398,7 @@
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
 | NKS-001 | P0 | fixed | 文档宣称支持 `.nks/.story`，实际语言注册与索引仅覆盖 `.fountain` |
-| NKS-002 | P0 | open | Webview CSP 未声明 `img-src`，资产图片预览存在被拦截风险 |
+| NKS-002 | P0 | fixed | Webview CSP 未声明 `img-src`，资产图片预览存在被拦截风险 |
 | NKS-003 | P0 | fixed | `AUDIO` 资产被错误映射为 `mediaType: image`，音频转换语义失真 |
 | NKS-004 | P1 | open | 滚动同步链路未闭环（`scroll` 分支空实现 + 缺失 `data-line`） |
 | NKS-005 | P1 | fixed | 与 `neko-agent` 的命令依赖未在扩展依赖中声明 |
@@ -788,7 +788,7 @@
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
 | NKM-001 | P0 | fixed | 安装链路未解包归档，InstallTarget 后置逻辑与实际产物形态不匹配 |
-| NKM-002 | P0 | open | Extension 与 Webview 的市场 DTO 未统一，大量强制断言掩盖运行时错配 |
+| NKM-002 | P0 | fixed | Extension 与 Webview 的市场 DTO 未统一，大量强制断言掩盖运行时错配 |
 | NKM-003 | P1 | fixed | 类型筛选使用 `model/preset` 聚合值，偏离共享 `AssetType` 契约 |
 | NKM-004 | P1 | fixed | `InstalledRegistry.load()` 异步竞态可能导致首次打开状态不准 |
 | NKM-005 | P1 | fixed | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |

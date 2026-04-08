@@ -27,6 +27,7 @@ export interface MarketItem {
 
 export interface InstalledItem {
   packageId: string;
+  name: string;
   version: string;
   type: string;
   installedAt: string;

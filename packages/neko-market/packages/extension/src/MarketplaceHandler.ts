@@ -7,7 +7,11 @@
 import type { ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 import type { MarketplaceService } from './MarketplaceService';
-import type { MarketSearchQuery } from '@neko/shared/types/asset/market';
+import type {
+  MarketSearchQuery,
+  MarketPackage,
+  InstalledPackage,
+} from '@neko/shared/types/asset/market';
 import type { AssetType } from '@neko/shared/types/asset/manifest';
 
 interface WebviewMessage {
@@ -16,6 +20,44 @@ interface WebviewMessage {
 }
 
 type PostMessageFn = (msg: unknown) => void;
+
+// =============================================================================
+// DTO Mappers — flatten backend types to webview-friendly shapes
+// =============================================================================
+
+/** Flatten MarketPackage (nested manifest) → webview MarketItem */
+function toMarketItem(pkg: MarketPackage): Record<string, unknown> {
+  const m = pkg.manifest;
+  const d = m.distribution;
+  return {
+    id: pkg.id,
+    name: m.name,
+    description: d?.description,
+    author: d?.author,
+    publisherId: d?.publisherId,
+    version: m.version,
+    type: m.type,
+    thumbnail: m.thumbnail,
+    tags: d?.tags,
+    downloadCount: pkg.downloadCount ?? d?.downloads,
+    rating: d?.rating?.average,
+    installState: pkg.installState,
+    installedVersion: pkg.installedVersion,
+  };
+}
+
+/** Flatten InstalledPackage → webview InstalledItem */
+function toInstalledItem(pkg: InstalledPackage): Record<string, unknown> {
+  return {
+    packageId: pkg.packageId,
+    name: pkg.manifest?.name ?? pkg.packageId,
+    version: pkg.version,
+    type: pkg.type,
+    installedAt: new Date(pkg.installedAt).toISOString(),
+    installedPath: pkg.installedPath,
+    enabled: pkg.enabled,
+  };
+}
 
 export class MarketplaceHandler {
   constructor(
@@ -67,7 +109,13 @@ export class MarketplaceHandler {
   ): Promise<boolean> {
     try {
       const result = await this._service.search(query);
-      postMessage({ type: 'market:searchResult', data: result });
+      postMessage({
+        type: 'market:searchResult',
+        data: {
+          items: result.items.map(toMarketItem),
+          total: result.total,
+        },
+      });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error('Search failed', e);
@@ -82,7 +130,7 @@ export class MarketplaceHandler {
   ): Promise<boolean> {
     try {
       const items = await this._service.getFeatured(assetType);
-      postMessage({ type: 'market:featuredResult', data: items });
+      postMessage({ type: 'market:featuredResult', data: items.map(toMarketItem) });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error('getFeatured failed', e);
@@ -94,7 +142,7 @@ export class MarketplaceHandler {
   private async _handleGetPackage(packageId: string, postMessage: PostMessageFn): Promise<boolean> {
     try {
       const pkg = await this._service.getPackage(packageId);
-      postMessage({ type: 'market:packageResult', data: pkg });
+      postMessage({ type: 'market:packageResult', data: pkg ? toMarketItem(pkg) : undefined });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error(`getPackage failed: ${packageId}`, e);
@@ -119,7 +167,7 @@ export class MarketplaceHandler {
       // Refresh installed list after success
       if (result.success) {
         const installed = await this._service.listInstalled();
-        postMessage({ type: 'market:installedResult', data: installed });
+        postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
       }
     } catch (err) {
       const e = toBaseError(err);
@@ -138,7 +186,7 @@ export class MarketplaceHandler {
 
       // Refresh installed list
       const installed = await this._service.listInstalled();
-      postMessage({ type: 'market:installedResult', data: installed });
+      postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error(`Uninstall failed: ${packageId}`, e);
@@ -150,7 +198,7 @@ export class MarketplaceHandler {
   private async _handleListInstalled(postMessage: PostMessageFn): Promise<boolean> {
     try {
       const installed = await this._service.listInstalled();
-      postMessage({ type: 'market:installedResult', data: installed });
+      postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error('listInstalled failed', e);
@@ -178,7 +226,7 @@ export class MarketplaceHandler {
 
       // Refresh installed list
       const installed = await this._service.listInstalled();
-      postMessage({ type: 'market:installedResult', data: installed });
+      postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error(`Enable failed: ${packageId}`, e);
@@ -194,7 +242,7 @@ export class MarketplaceHandler {
 
       // Refresh installed list
       const installed = await this._service.listInstalled();
-      postMessage({ type: 'market:installedResult', data: installed });
+      postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error(`Disable failed: ${packageId}`, e);
