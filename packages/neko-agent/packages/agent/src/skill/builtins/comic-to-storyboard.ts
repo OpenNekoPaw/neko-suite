@@ -6,6 +6,12 @@
  */
 
 import type { Skill } from '@neko/shared';
+import {
+  TOOL_NAMES_SYSTEM,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PIPELINE,
+  TOOL_NAMES_TIMELINE,
+} from '@neko/shared';
 
 /**
  * Comic to Storyboard skill content
@@ -159,25 +165,26 @@ export const comicToStoryboardSkill: Skill = {
   content: comicToStoryboardContent,
   allowedTools: [
     // Vision analysis (LLM with image input)
-    'Read',
-    'ListDirectory',
-    'Glob',
-    // Character generation with reference
-    'GenerateCharacter',
-    'GenerateImage',
-    'GenerateVideo',
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
+    // Media generation
+    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     // Pipeline orchestration
-    'StartPipeline',
-    'ConfirmPipelineGate',
-    'RetryPipelineScenes',
+    TOOL_NAMES_PIPELINE.START_PIPELINE,
+    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
+    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
     // Timeline operations
-    'GetTimelineInfo',
-    'ListElements',
-    'AddElement',
-    'UpdateElement',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
     // Audio for dialogue
-    'GenerateTTS',
-    'GenerateMusic',
+    TOOL_NAMES_MEDIA.GENERATE_TTS,
+    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
+    // TODO(P1): implement when tools are available:
+    // GenerateCharacter
   ],
   pipelineFlowId: 'flowE', // Comic variant of storyboard-to-timeline
   icon: '📚',

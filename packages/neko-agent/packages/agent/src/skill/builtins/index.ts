@@ -5,6 +5,12 @@
  */
 
 import type { Skill, ISkillRegistry } from '@neko/shared';
+import {
+  TOOL_NAMES_TIMELINE,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PIPELINE,
+  TOOL_NAMES_SYSTEM,
+} from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
 import { scriptGenerationSkill } from './script-generation';
@@ -76,30 +82,18 @@ You are an expert video editor. Help users with timeline-based editing tasks.
 `,
   allowedTools: [
     // Timeline query (read-only)
-    'GetTimelineInfo',
-    'GetElementInfo',
-    'ListElements',
-    'ListEffects',
-    'ListTransitions',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     // Element editing
-    'AddElement',
-    'UpdateElement',
-    'DeleteElement',
-    'TrimElement',
-    'SplitElement',
-    // Effects and transitions
-    'AddEffect',
-    'UpdateEffect',
-    'RemoveEffect',
-    'SetTransition',
-    'RemoveTransition',
-    // Track management
-    'AddTrack',
-    'DeleteTrack',
-    'ReorderTracks',
-    'SetTrackProperties',
-    // Playback
-    'SetPlaybackSpeed',
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
+    // TODO(P1): implement when tools are available:
+    // GetElementInfo, TrimElement, SplitElement,
+    // AddEffect, UpdateEffect, RemoveEffect,
+    // SetTransition, RemoveTransition,
+    // AddTrack, DeleteTrack, ReorderTracks, SetTrackProperties,
+    // SetPlaybackSpeed, ListEffects, ListTransitions
   ],
   icon: '🎬',
   source: 'builtin',
@@ -160,16 +154,12 @@ You are a professional colorist. Help users achieve their desired visual style.
 `,
   allowedTools: [
     // Timeline query (read-only)
-    'GetTimelineInfo',
-    'GetElementInfo',
-    'ListElements',
-    // Color grading
-    'SetColorCorrection',
-    'ResetColorCorrection',
-    // Effects for color
-    'AddEffect',
-    'UpdateEffect',
-    'RemoveEffect',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    // TODO(P1): implement when tools are available:
+    // GetElementInfo, SetColorCorrection, ResetColorCorrection,
+    // AddEffect, UpdateEffect, RemoveEffect
   ],
   icon: '🎨',
   source: 'builtin',
@@ -228,19 +218,15 @@ Automatically lower music when dialogue plays:
 `,
   allowedTools: [
     // Timeline query (read-only)
-    'GetTimelineInfo',
-    'GetElementInfo',
-    'ListElements',
-    // Audio editing
-    'SetAudioProperties',
-    'AddAudioKeyframe',
-    'SetPlaybackSpeed',
-    'SeparateAudio',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     // Element operations for audio clips
-    'AddElement',
-    'UpdateElement',
-    'DeleteElement',
-    'TrimElement',
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
+    // TODO(P1): implement when tools are available:
+    // GetElementInfo, SetAudioProperties, AddAudioKeyframe,
+    // SetPlaybackSpeed, SeparateAudio, TrimElement
   ],
   icon: '🎵',
   source: 'builtin',
@@ -297,19 +283,19 @@ You are a professional subtitler. Help users create accessible, well-timed capti
 `,
   allowedTools: [
     // Timeline query (read-only)
-    'GetTimelineInfo',
-    'GetElementInfo',
-    'ListElements',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     // Element operations for subtitle clips
-    'AddElement',
-    'UpdateElement',
-    'DeleteElement',
-    'TrimElement',
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
     // File operations for SRT/VTT
-    'Read',
-    'Write',
-    'ListDirectory',
-    'Glob',
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.WRITE,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
+    // TODO(P1): implement when tools are available:
+    // GetElementInfo, TrimElement
   ],
   icon: '📝',
   source: 'builtin',
@@ -395,7 +381,14 @@ Fountain is a plain-text screenplay format:
 | Action paragraph | 2.0 seconds |
 | Minimum scene | 3.0 seconds |
 `,
-  allowedTools: ['Read', 'Write', 'ListDirectory', 'Glob', 'GetTimelineInfo', 'ListElements'],
+  allowedTools: [
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.WRITE,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+  ],
   icon: '📜',
   source: 'builtin',
   enabled: true,
@@ -470,22 +463,22 @@ use the Pipeline system to automate the full workflow.
 `,
   allowedTools: [
     // Pipeline control
-    'StartPipeline',
-    'ConfirmPipelineGate',
+    TOOL_NAMES_PIPELINE.START_PIPELINE,
+    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
     // Timeline (for post-pipeline adjustments)
-    'GetTimelineInfo',
-    'ListElements',
-    'AddElement',
-    'UpdateElement',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
     // Media generation (for individual additions)
-    'GenerateImage',
-    'GenerateVideo',
-    'GenerateMusic',
-    'GenerateTTS',
+    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
+    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
+    TOOL_NAMES_MEDIA.GENERATE_TTS,
     // File operations
-    'Read',
-    'ListDirectory',
-    'Glob',
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
   ],
   pipelineFlowId: 'flowF',
   icon: '🎬',
@@ -521,11 +514,11 @@ If the user wants to restart the entire pipeline instead of just failed scenes,
 suggest using StartPipeline with the original parameters.
 `,
   allowedTools: [
-    'RetryPipelineScenes',
-    'StartPipeline',
-    'ConfirmPipelineGate',
-    'GetTimelineInfo',
-    'ListElements',
+    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
+    TOOL_NAMES_PIPELINE.START_PIPELINE,
+    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
   ],
   icon: '🔄',
   source: 'builtin',
@@ -596,7 +589,14 @@ Report to the user what music was generated (prompt used, duration) and where it
 - If timeline has no elements yet, ask the user to describe the scene mood instead of reading an empty timeline
 - If generation fails, report the error and suggest the user check their music provider configuration
 `,
-  allowedTools: ['GetTimelineInfo', 'ListElements', 'GenerateMusic', 'AddTrack', 'AddElement'],
+  allowedTools: [
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    // TODO(P1): implement when tools are available:
+    // AddTrack
+  ],
   icon: '🎵',
   source: 'builtin',
   enabled: true,
@@ -666,11 +666,11 @@ When the user says "this scene doesn't look right" or "场景不对":
 - Reports are kept in memory for 1 hour after completion
 `,
   allowedTools: [
-    'GetPipelineReport',
-    'ListPipelineReports',
-    'RetryPipelineScenes',
-    'StartPipeline',
-    'ConfirmPipelineGate',
+    TOOL_NAMES_PIPELINE.GET_PIPELINE_REPORT,
+    TOOL_NAMES_PIPELINE.LIST_PIPELINE_REPORTS,
+    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
+    TOOL_NAMES_PIPELINE.START_PIPELINE,
+    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
   ],
   icon: '🔍',
   source: 'builtin',

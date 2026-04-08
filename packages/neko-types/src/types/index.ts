@@ -189,3 +189,9 @@ export * from './generated-asset';
 
 // Storage layout types (unified path management, three-level hierarchy)
 export * from './storage';
+
+// Tool name constants (single source of truth for all registered tool names)
+export * from './tool-names';
+
+// Agent capability provider protocol (sub-package → neko-agent capability injection)
+export * from './agent-capability';

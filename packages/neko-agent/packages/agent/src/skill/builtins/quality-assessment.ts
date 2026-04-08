@@ -9,6 +9,7 @@
  */
 
 import type { Skill } from '@neko/shared';
+import { TOOL_NAMES_QUALITY, TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 export const qualityAssessmentSkill: Skill = {
   name: 'quality-assessment',
@@ -103,21 +104,15 @@ Summarize results in a clear table:
 `,
   allowedTools: [
     // Quality evaluation
-    'QualityCheck',
-    // Remediation: effects
-    'AddEffect',
-    'UpdateEffect',
-    // Remediation: color correction
-    'SetColorCorrection',
-    // Remediation: audio
-    'SetAudioProperties',
+    TOOL_NAMES_QUALITY.QUALITY_CHECK,
     // Remediation: regeneration
-    'GenerateImage',
-    'GenerateVideo',
+    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     // Read-only context
-    'GetTimelineInfo',
-    'ListElements',
-    'GetElementInfo',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    // TODO(P1): implement when tools are available:
+    // AddEffect, UpdateEffect, SetColorCorrection, SetAudioProperties, GetElementInfo
   ],
   icon: '📊',
   source: 'builtin',

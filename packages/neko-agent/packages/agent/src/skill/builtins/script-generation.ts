@@ -6,6 +6,7 @@
  */
 
 import type { Skill } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 /**
  * Script Generation skill content
@@ -292,13 +293,13 @@ export const scriptGenerationSkill: Skill = {
   content: scriptGenerationContent,
   allowedTools: [
     // File operations for script I/O
-    'Read',
-    'Write',
-    'ListDirectory',
-    'Glob',
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.WRITE,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
     // Can chain into other skills
-    'GetTimelineInfo',
-    'ListElements',
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
   ],
   icon: '✍️',
   source: 'builtin',

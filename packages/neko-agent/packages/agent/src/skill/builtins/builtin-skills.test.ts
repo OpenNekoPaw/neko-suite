@@ -6,6 +6,13 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  TOOL_NAMES_TIMELINE,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PIPELINE,
+  TOOL_NAMES_QUALITY,
+  TOOL_NAMES_SYSTEM,
+} from '@neko/shared';
+import {
   builtinSkills,
   comicToStoryboardSkill,
   scriptGenerationSkill,
@@ -61,10 +68,9 @@ describe('Builtin Skills', () => {
     });
 
     it('should have required tools', () => {
-      expect(comicToStoryboardSkill.allowedTools).toContain('GenerateCharacter');
-      expect(comicToStoryboardSkill.allowedTools).toContain('GenerateVideo');
-      expect(comicToStoryboardSkill.allowedTools).toContain('StartPipeline');
-      expect(comicToStoryboardSkill.allowedTools).toContain('GenerateTTS');
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
     });
 
     it('should have flowE pipeline ID', () => {
@@ -113,9 +119,9 @@ describe('Builtin Skills', () => {
     });
 
     it('should have required tools', () => {
-      expect(scriptGenerationSkill.allowedTools).toContain('Read');
-      expect(scriptGenerationSkill.allowedTools).toContain('Write');
-      expect(scriptGenerationSkill.allowedTools).toContain('GetTimelineInfo');
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ);
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.WRITE);
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO);
     });
 
     it('should have writing icon', () => {
@@ -163,25 +169,19 @@ describe('Builtin Skills', () => {
     });
 
     it('should have QualityCheck as primary tool', () => {
-      expect(qualityAssessmentSkill.allowedTools).toContain('QualityCheck');
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_QUALITY.QUALITY_CHECK);
     });
 
-    it('should have remediation tools for all fix types', () => {
-      // Effects
-      expect(qualityAssessmentSkill.allowedTools).toContain('AddEffect');
-      expect(qualityAssessmentSkill.allowedTools).toContain('UpdateEffect');
-      // Color
-      expect(qualityAssessmentSkill.allowedTools).toContain('SetColorCorrection');
-      // Audio
-      expect(qualityAssessmentSkill.allowedTools).toContain('SetAudioProperties');
-      // Regeneration
-      expect(qualityAssessmentSkill.allowedTools).toContain('GenerateImage');
-      expect(qualityAssessmentSkill.allowedTools).toContain('GenerateVideo');
+    it('should have regeneration tools for remediation', () => {
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_IMAGE);
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
     });
 
     it('should have timeline query tools for context', () => {
-      expect(qualityAssessmentSkill.allowedTools).toContain('GetTimelineInfo');
-      expect(qualityAssessmentSkill.allowedTools).toContain('ListElements');
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO);
+      expect(qualityAssessmentSkill.allowedTools).toContain(
+        TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+      );
     });
 
     it('should be registered as /quality-check slash command', () => {
@@ -268,35 +268,39 @@ describe('Builtin Skills', () => {
     });
 
     it('should have pipeline skills with StartPipeline tool', () => {
-      expect(storyboardToTimelineSkill.allowedTools).toContain('StartPipeline');
-      expect(comicToStoryboardSkill.allowedTools).toContain('StartPipeline');
+      expect(storyboardToTimelineSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
     });
 
     it('should have pipeline skills with ConfirmPipelineGate tool', () => {
-      expect(storyboardToTimelineSkill.allowedTools).toContain('ConfirmPipelineGate');
-      expect(comicToStoryboardSkill.allowedTools).toContain('ConfirmPipelineGate');
+      expect(storyboardToTimelineSkill.allowedTools).toContain(
+        TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
+      );
+      expect(comicToStoryboardSkill.allowedTools).toContain(
+        TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
+      );
     });
   });
 
   describe('tool coverage', () => {
     it('should have AI generation tools in ai-generate skill', () => {
-      expect(aiGenerateSkill.allowedTools).toContain('GenerateImage');
-      expect(aiGenerateSkill.allowedTools).toContain('GenerateVideo');
-      expect(aiGenerateSkill.allowedTools).toContain('GenerateTTS');
-      expect(aiGenerateSkill.allowedTools).toContain('GenerateMusic');
+      expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_IMAGE);
+      expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
+      expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
+      expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_MUSIC);
     });
 
     it('should have timeline tools in video-editing skill', () => {
-      expect(videoEditingSkill.allowedTools).toContain('GetTimelineInfo');
-      expect(videoEditingSkill.allowedTools).toContain('AddElement');
-      expect(videoEditingSkill.allowedTools).toContain('UpdateElement');
-      expect(videoEditingSkill.allowedTools).toContain('TrimElement');
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT);
     });
 
     it('should have file tools in script-generation skill', () => {
-      expect(scriptGenerationSkill.allowedTools).toContain('Read');
-      expect(scriptGenerationSkill.allowedTools).toContain('Write');
-      expect(scriptGenerationSkill.allowedTools).toContain('ListDirectory');
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ);
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.WRITE);
+      expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.LIST_DIRECTORY);
     });
   });
 });

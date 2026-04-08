@@ -236,9 +236,10 @@ Extension Host
 
 | Subsystem | Components | Responsibilities |
 |-----------|-----------|-----------------|
-| **Tool** | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry | Tool registration / execution / layered injection / set management |
+| **Tool** | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry, TOOL_NAMES | Tool registration / execution / layered injection / set management / name constants |
 | **Skill** | SkillRegistry, SkillService, SkillMatcher, SkillInjector, ToolGuard | Skill discovery / application / prompt injection / tool guarding |
 | **Hook** | PermissionHooks, MemoryHooks, ValidationHooks, SettingsHookLoader | In-process TS interception + external Shell hook chaining |
+| **Capability** | CapabilityDiscoveryService, AgentCapabilityProvider | Sub-package capability discovery (manifest + command) / registration / lifecycle |
 
 **Concept Boundaries**:
 - `Tool` = atomic capability (executable function)
@@ -256,6 +257,7 @@ Extension Host
 | Unified Engine Architecture | [adr-unified-engine.md](./docs/adr-unified-engine.md) | EngineClient HTTP dispatch unifies all Engine calls, ports reduced from 3 to 1 |
 | Cross-Cutting Concerns | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md) | Logger/i18n/Theme/Error unified in @neko/shared, three-layer isolation |
 | AI Agent Architecture | [plans/2026-03-10-neko-agent-skill-tool-refactor-design.md](./docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md) | ToolSet/Skill/Hook subsystem separation; Shell hooks bridged to PermissionHooks; Skill auto-activates ToolSets |
+| Agent Capability Provider | [architecture/neko-agent-media-requirements-fit.md](./docs/architecture/neko-agent-media-requirements-fit.md) | Sub-packages register AgentCapabilityProvider via manifest+command; TOOL_NAMES constants as naming contract; CapabilityDiscoveryService hybrid discovery |
 | Media Streaming | [diff.md §4.1](./docs/diff.md) | H.264 + PCM streaming, not per-frame extraction |
 | Diff Parallelization | [diff.md §六](./docs/diff.md) | SSIM‖PSNR parallel + early waveform + message queue unblocking |
 | Cross-Language Architecture | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust engine is the authoritative data model, TS handles UI only |

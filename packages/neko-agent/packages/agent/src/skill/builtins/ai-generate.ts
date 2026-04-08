@@ -6,6 +6,7 @@
  */
 
 import type { Skill, SkillToolDefinition } from '@neko/shared';
+import { TOOL_NAMES_MEDIA, TOOL_NAMES_TRANSCRIBE, TOOL_NAMES_SYSTEM } from '@neko/shared';
 
 /**
  * Tool definitions for AI generation
@@ -299,17 +300,15 @@ export const aiGenerateSkill: Skill = {
     'AI media generation capabilities including image, video, audio, and music generation. Use when user mentions: generate image, create video, text-to-speech, TTS, background music, BGM, AI drawing, create picture, make video, voiceover, dubbing.',
   content: aiGenerateContent,
   allowedTools: [
-    'GenerateImage',
-    'GenerateVideo',
-    'GenerateTTS',
-    'GenerateMusic',
-    'GenerateCharacter',
-    'TransferStyle',
-    'EnhanceVideo',
-    'OptimizeAudio',
-    'TranscribeAudio',
-    'Read',
-    'ListDirectory',
+    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
+    TOOL_NAMES_MEDIA.GENERATE_TTS,
+    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
+    TOOL_NAMES_TRANSCRIBE.TRANSCRIBE_AUDIO,
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    // TODO(P1): implement when tools are available:
+    // GenerateCharacter, TransferStyle, EnhanceVideo, OptimizeAudio
   ],
   toolDefinitions: aiGenerateToolDefinitions,
   icon: '🎨',

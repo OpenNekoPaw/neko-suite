@@ -15,6 +15,7 @@ import type {
   SkillMatch,
   SkillInjection,
   ISkillRegistry,
+  IToolRegistry,
   ISkillMatcher,
   ISkillInjector,
   SkillDiscoveryResult,
@@ -23,6 +24,7 @@ import type {
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
 import { KeywordSkillMatcher } from './skill-matcher';
+import { getLogger } from '../utils/logger';
 
 // =============================================================================
 // Types
@@ -36,6 +38,8 @@ export interface SkillServiceConfig {
   registry?: ISkillRegistry;
   matcher?: ISkillMatcher;
   injector?: ISkillInjector;
+  /** Optional tool registry for validating skill allowedTools references */
+  toolRegistry?: IToolRegistry;
   minRelevanceThreshold?: number;
   autoApplyThreshold?: number;
 }
@@ -49,13 +53,16 @@ export class SkillService {
 
   private readonly _matcher: ISkillMatcher;
   private readonly _injector: ISkillInjector;
+  private readonly _toolRegistry: IToolRegistry | undefined;
   private readonly _minRelevanceThreshold: number;
   private readonly _autoApplyThreshold: number;
+  private readonly _logger = getLogger('SkillService');
 
   constructor(config: SkillServiceConfig = {}) {
     this.registry = config.registry || new SkillRegistry();
     this._matcher = config.matcher || new KeywordSkillMatcher();
     this._injector = config.injector || new SkillInjector();
+    this._toolRegistry = config.toolRegistry;
     this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
     this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
   }
@@ -66,11 +73,29 @@ export class SkillService {
 
   /**
    * Apply a skill — prepare injection payload.
+   * Validates allowedTools references if toolRegistry is available.
    * @param skill Skill to apply
    * @param args Optional arguments (for skills with command trigger)
    */
   async apply(skill: Skill, args?: string): Promise<SkillInjection> {
+    this._validateAllowedTools(skill);
     return this._injector.injectSkill(skill, args);
+  }
+
+  /**
+   * Warn about allowedTools that reference unregistered tools.
+   * Non-blocking: logs warnings but does not prevent skill application.
+   */
+  private _validateAllowedTools(skill: Skill): void {
+    if (!this._toolRegistry || !skill.allowedTools || skill.allowedTools.length === 0) {
+      return;
+    }
+
+    for (const toolName of skill.allowedTools) {
+      if (!this._toolRegistry.get(toolName)) {
+        this._logger.warn(`Skill "${skill.name}" references unregistered tool "${toolName}"`);
+      }
+    }
   }
 
   // ===========================================================================

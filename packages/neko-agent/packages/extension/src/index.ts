@@ -20,17 +20,7 @@ import type { ChatMessage } from '@neko/platform';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
-import {
-  createNekoCutTools,
-  createNekoCanvasTools,
-  createNekoEngineEffectsTools,
-  createTranscribeTools,
-  createNekoStoryTools,
-  createNekoSketchTools,
-  createNekoCutVideoGenerationTools,
-  createSkillProviderTools,
-} from './tools/extensionTools';
-import { createPuppetFaceTools } from './tools/puppetFaceTools';
+import { registerExtensionTools } from './bootstrap/toolBootstrap';
 import {
   setCanvasSelection,
   clearCanvasSelection,
@@ -39,6 +29,7 @@ import {
 } from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
+import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
@@ -73,6 +64,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Initialize Pipeline orchestration layer (L2)
   bootstrapPipeline(bootstrapResult.platform, bootstrapResult.toolRegistry);
+
+  // Initialize capability discovery (P0-1: sub-packages register their own tools)
+  bootstrapCapabilities({ toolRegistry: bootstrapResult.toolRegistry }, context);
 
   // Create chat view provider
   const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
@@ -176,77 +170,7 @@ function subscribeCanvasSelection(context: vscode.ExtensionContext): void {
     });
 }
 
-/**
- * Register tools from other Neko extensions (NekoCut, NekoCanvas, Engine Effects, NekoStory).
- *
- * `platform` is used to build an embedFn for SearchScriptIndex (L3 semantic search).
- * If no embedding-capable provider is configured, SearchScriptIndex is omitted gracefully.
- */
-function registerExtensionTools(
-  toolRegistry: { register: (tool: unknown) => void },
-  platform: Platform,
-): void {
-  // Register NekoCut tools
-  const nekocutTools = createNekoCutTools();
-  nekocutTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register NekoCanvas tools (pass media + config so model auto-resolution works)
-  const nekocanvasTools = createNekoCanvasTools(platform.media, platform.config);
-  nekocanvasTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register Engine Effects tools (GPU shader management)
-  const effectsTools = createNekoEngineEffectsTools();
-  effectsTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register Transcribe tools (Whisper STT)
-  const transcribeTools = createTranscribeTools();
-  transcribeTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Build embedding function from the platform's service (requires an embedding-capable provider).
-  // Returns undefined if no such provider is configured — SearchScriptIndex is silently omitted.
-  const embedFn = buildEmbedFn(platform);
-
-  // Register NekoStory tools (screenplay index + semantic search)
-  const storyTools = createNekoStoryTools(embedFn);
-  storyTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register NekoSketch tools (AI image generation → canvas layer)
-  const sketchTools = createNekoSketchTools(platform.media);
-  sketchTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register NekoCut AI video generation tools (P2)
-  const cutVideoTools = createNekoCutVideoGenerationTools(platform.media);
-  cutVideoTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register Skill Provider discovery tool (P3)
-  const skillTools = createSkillProviderTools();
-  skillTools.forEach((tool) => toolRegistry.register(tool));
-
-  // Register Puppet Face tools (AI face parameter manipulation)
-  const puppetFaceTools = createPuppetFaceTools();
-  puppetFaceTools.forEach((tool) => toolRegistry.register(tool));
-
-  getRootLogger().info(
-    `Registered ${nekocutTools.length + nekocanvasTools.length + effectsTools.length + transcribeTools.length + storyTools.length + sketchTools.length + cutVideoTools.length + skillTools.length + puppetFaceTools.length} extension tools`,
-  );
-}
-
-/**
- * Builds an embed function backed by the platform's AI service.
- * The service is created lazily on first call. Errors (e.g. no embedding-capable
- * provider configured) propagate to the caller so SearchScriptIndex can surface
- * a descriptive error message instead of silently failing.
- */
-function buildEmbedFn(platform: Platform): (texts: string[]) => Promise<number[][]> {
-  let service: ReturnType<Platform['createService']> | undefined;
-  return async (texts: string[]) => {
-    if (!service) {
-      service = platform.createService();
-    }
-    const result = await service.embed(texts);
-    return result.embeddings;
-  };
-}
+// Tool registration moved to ./bootstrap/toolBootstrap.ts
 
 /** Default max tokens for the internal chat command. */
 const INTERNAL_CHAT_DEFAULT_MAX_TOKENS = 1000;
