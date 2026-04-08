@@ -59,14 +59,17 @@ COPY .cargo/ ./.cargo/
 COPY vendor/ ./vendor/
 
 # 复制所有 crate
-COPY packages/types/           ./packages/types/
-COPY packages/native-core/     ./packages/native-core/
-COPY packages/native-api/      ./packages/native-api/
-COPY packages/native-http/     ./packages/native-http/
-COPY packages/native-cli/      ./packages/native-cli/
-COPY packages/native-scene/    ./packages/native-scene/
-COPY packages/native-puppet/   ./packages/native-puppet/
-COPY packages/native-napi/     ./packages/native-napi/
+COPY packages/engine-types/    ./packages/engine-types/
+COPY packages/engine-kernel/   ./packages/engine-kernel/
+COPY packages/host-api/        ./packages/host-api/
+COPY packages/host-http/       ./packages/host-http/
+COPY packages/host-cli/        ./packages/host-cli/
+COPY packages/host-napi/       ./packages/host-napi/
+COPY packages/runtime-scene/   ./packages/runtime-scene/
+COPY packages/runtime-puppet/  ./packages/runtime-puppet/
+COPY packages/runtime-device/  ./packages/runtime-device/
+COPY packages/runtime-ml/      ./packages/runtime-ml/
+COPY packages/runtime-media/   ./packages/runtime-media/
 
 # 构建 CLI binary（离线，使用 vendor + 预构建 FFmpeg）
 # - mold 链接器：内存占用极低
@@ -75,7 +78,7 @@ COPY packages/native-napi/     ./packages/native-napi/
 #   thin LTO 仍能跨 crate 优化，但内存占用降低约 70%
 RUN RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=mold -C strip=symbols" \
     CARGO_PROFILE_RELEASE_LTO=thin \
-    cargo build --release --offline --frozen --bin neko-engine -p neko-native-cli
+    cargo build --release --offline --frozen --bin neko-engine -p neko-host-cli
 
 # ==================== 阶段3：运行阶段 ====================
 FROM debian:bookworm-slim AS runner

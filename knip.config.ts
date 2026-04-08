@@ -65,7 +65,7 @@ const config: KnipConfig = {
     'packages/neko-preview': {},
     'packages/neko-assets': {},
     'packages/neko-engine': {
-      ignore: ['packages/native-*/**'], // Rust packages, skip
+      ignore: ['packages/engine-*/**', 'packages/host-napi/**', 'packages/host-cli/**', 'packages/runtime-*/**'], // Rust packages, skip
     },
 
     // ── Extension sub-packages ────────────────────────
@@ -185,8 +185,8 @@ const config: KnipConfig = {
       // VSCode wrapper package; workspace deps are consumed via nested extension/core packages
       ignoreDependencies: ['@neko/auth-core', '@neko/auth-extension', '@neko/shared'],
     },
-    'packages/neko-engine/packages/native-napi': { ignore: ['**/*'] },
-    'packages/neko-engine/packages/native-cli': {
+    'packages/neko-engine/packages/host-napi': { ignore: ['**/*'] },
+    'packages/neko-engine/packages/host-cli': {
       // Rust CLI binary, not TypeScript
       entry: ['package.json'],
     },

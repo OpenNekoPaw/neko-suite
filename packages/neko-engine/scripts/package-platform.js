@@ -146,7 +146,7 @@ function ensureNativeBinary(target, options, ctx) {
   }
 
   ctx.log(`⚙️  Native binary missing, building ${target} via pnpm run build:napi...`);
-  ctx.runPnpm(path.join(ENGINE_DIR, 'packages', 'native-napi'), ['run', 'build:napi']);
+  ctx.runPnpm(path.join(ENGINE_DIR, 'packages', 'host-napi'), ['run', 'build:napi']);
 
   if (!ctx.existsSync(nodePath)) {
     throw new Error(`Native binary build finished but ${path.basename(nodePath)} was not produced.`);
@@ -232,7 +232,7 @@ function printUsage() {
       `Targets: ${getSupportedTargets().join(', ')}`,
       '',
       'Options:',
-      '  --skip-native-build  Do not build native-napi automatically when the host target is missing',
+      '  --skip-native-build  Do not build host-napi automatically when the host target is missing',
       '  --help               Print this help message',
     ].join('\n'),
   );

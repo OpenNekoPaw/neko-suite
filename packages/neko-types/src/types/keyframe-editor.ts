@@ -5,7 +5,7 @@
 // Both neko-puppet (2D parameter keyframes) and neko-model (3D bone/morph
 // keyframes) consume these types through adapter components.
 //
-// Aligned with native-core animation/keyframe.rs EasingType + InterpolationMode.
+// Aligned with engine-kernel animation/keyframe.rs EasingType + InterpolationMode.
 // =============================================================================
 
 import type { EasingType, CubicBezierParams } from './easing';

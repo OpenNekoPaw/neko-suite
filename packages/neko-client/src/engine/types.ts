@@ -4,7 +4,7 @@
  * Authoritative sources:
  * - Proto: packages/neko-proto/diff.proto
  * - Rust types: packages/neko-engine/packages/types/src/{request,media,waveform,stream}.rs
- * - Rust diff: packages/neko-engine/packages/native-core/src/media_service/{diff,audio_diff,video_diff,image_diff,timeline_diff}.rs
+ * - Rust diff: packages/neko-engine/packages/engine-kernel/src/media_service/{diff,audio_diff,video_diff,image_diff,timeline_diff}.rs
  *
  * Environment-agnostic: works in both Extension Host (Node.js 18+) and Webview (browser).
  */
@@ -119,7 +119,7 @@ export interface Resolution {
 }
 
 // =============================================================================
-// Diff types (from native-core/src/media_service/diff.rs + proto diff.proto)
+// Diff types (from engine-kernel/src/media_service/diff.rs + proto diff.proto)
 // =============================================================================
 
 export type DiffCategory = 'Video' | 'Audio' | 'Image' | 'Timeline' | 'Canvas' | 'Model';
@@ -158,7 +158,7 @@ export interface DiffResult {
 }
 
 // =============================================================================
-// ImageContentDiff (from native-core/src/media_service/image_diff.rs)
+// ImageContentDiff (from engine-kernel/src/media_service/image_diff.rs)
 // =============================================================================
 
 export interface ImageContentDiff {
@@ -179,7 +179,7 @@ export interface ImageContentDiff {
 }
 
 // =============================================================================
-// AudioContentDiff (from native-core/src/media_service/audio_diff.rs)
+// AudioContentDiff (from engine-kernel/src/media_service/audio_diff.rs)
 // =============================================================================
 
 export interface AudioDiffRegion {
@@ -207,7 +207,7 @@ export interface AudioContentDiff {
 }
 
 // =============================================================================
-// VideoContentDiff (from native-core/src/media_service/video_diff.rs)
+// VideoContentDiff (from engine-kernel/src/media_service/video_diff.rs)
 // =============================================================================
 
 export interface FrameMetric {
@@ -250,7 +250,7 @@ export interface VideoContentDiff {
 }
 
 // =============================================================================
-// TimelineContentDiff (from native-core/src/media_service/timeline_diff.rs)
+// TimelineContentDiff (from engine-kernel/src/media_service/timeline_diff.rs)
 // =============================================================================
 
 export type TimelineChangeType = 'Added' | 'Removed' | 'Modified' | 'Moved' | 'Unchanged';
@@ -352,7 +352,7 @@ export interface WaveformResult {
 }
 
 // =============================================================================
-// Loudness Analysis (from native-core/src/domain/loudness.rs)
+// Loudness Analysis (from engine-kernel/src/domain/loudness.rs)
 // =============================================================================
 
 /** Result of ITU-R BS.1770-4 loudness analysis */
@@ -370,7 +370,7 @@ export interface LoudnessAnalysis {
 }
 
 // =============================================================================
-// Silence Detection (from native-core/src/domain/silence.rs)
+// Silence Detection (from engine-kernel/src/domain/silence.rs)
 // =============================================================================
 
 /** A contiguous region of silence in the audio */
@@ -402,7 +402,7 @@ export interface SilenceAnalysis {
 }
 
 // =============================================================================
-// Effects types (from native-core/src/gpu/custom_shader_processor.rs)
+// Effects types (from engine-kernel/src/gpu/custom_shader_processor.rs)
 // =============================================================================
 
 /** Shader parameter definition */

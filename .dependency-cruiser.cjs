@@ -143,8 +143,11 @@ module.exports = {
     },
     exclude: {
       path: [
-        // Rust native packages (not TS)
-        'packages/neko-engine/packages/native-',
+        // Rust packages (not TS)
+        'packages/neko-engine/packages/engine-',
+        'packages/neko-engine/packages/host-napi',
+        'packages/neko-engine/packages/host-cli',
+        'packages/neko-engine/packages/runtime-',
         // Planned/empty packages
         'packages/neko-model',
         'packages/neko-audio',

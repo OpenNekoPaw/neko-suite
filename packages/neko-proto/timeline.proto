@@ -3,13 +3,13 @@
 //
 // Authority: neko-engine Rust domain model
 // Source files:
-//   - packages/neko-engine/packages/native-core/src/domain/timeline.rs
-//   - packages/neko-engine/packages/native-core/src/domain/transform.rs
-//   - packages/neko-engine/packages/native-core/src/animation/easing.rs
-//   - packages/neko-engine/packages/native-core/src/animation/keyframe.rs
-//   - packages/neko-engine/packages/native-core/src/animation/interpolate.rs
-//   - packages/neko-engine/packages/native-core/src/gpu/compositor.rs (BlendMode)
-//   - packages/neko-engine/packages/native-core/src/gpu/transition_processor.rs (TransitionType)
+//   - packages/neko-engine/packages/engine-kernel/src/domain/timeline.rs
+//   - packages/neko-engine/packages/engine-kernel/src/domain/transform.rs
+//   - packages/neko-engine/packages/engine-kernel/src/animation/easing.rs
+//   - packages/neko-engine/packages/engine-kernel/src/animation/keyframe.rs
+//   - packages/neko-engine/packages/engine-kernel/src/animation/interpolate.rs
+//   - packages/neko-engine/packages/engine-kernel/src/gpu/compositor.rs (BlendMode)
+//   - packages/neko-engine/packages/engine-kernel/src/gpu/transition_processor.rs (TransitionType)
 //   - packages/neko-engine/packages/types/src/common.rs (TrackType)
 //   - packages/neko-engine/packages/types/src/effects.rs (EffectParams)
 //

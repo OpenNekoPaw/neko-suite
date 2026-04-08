@@ -48,14 +48,14 @@ vendor/**
 
 # Sub-packages — exclude all, then re-include runtime files
 packages/**
-!packages/native-napi/index.js
-!packages/native-napi/index.d.ts
-!packages/native-napi/neko-engine.*.node
+!packages/host-napi/index.js
+!packages/host-napi/index.d.ts
+!packages/host-napi/neko-engine.*.node
 
 # FFmpeg dylibs (bundled by scripts/bundle-ffmpeg.js)
-!packages/native-napi/*.dylib
-!packages/native-napi/*.so*
-!packages/native-napi/*.dll
+!packages/host-napi/*.dylib
+!packages/host-napi/*.so*
+!packages/host-napi/*.dll
 
 # Include compiled output, ORT dylibs, and localization
 !dist/**

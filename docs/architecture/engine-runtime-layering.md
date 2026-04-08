@@ -273,7 +273,8 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 ### Phase R0：语义化重命名 ✅ 已完成
 
 - 8 个 crate 从 `native-*` 重命名为 `engine-*/host-*/runtime-*`
-- npm 包名 `@neko-engine/native-napi` → `@neko-engine/host-napi`
+- npm 包名 `@neko-engine/native-napi` → `@neko-engine/host-napi`; `@neko-engine/native-cli` → `@neko-engine/host-cli`
+- 删除遗留空目录 `native-cli`、`native-core`、`native-napi`
 - 全部 Rust/TS 源码路径、23 个文档同步更新
 - 674 tests passed, 0 failed
 

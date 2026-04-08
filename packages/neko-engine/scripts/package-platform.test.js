@@ -60,7 +60,7 @@ test('ensureNativeBinary auto-builds the host target when the native artifact is
   assert.equal(result.path, nativeBinaryPath);
   assert.deepEqual(commands, [
     'log:⚙️  Native binary missing, building darwin-arm64 via pnpm run build:napi...',
-    `pnpm:${path.join(ENGINE_DIR, 'packages', 'native-napi')}:run build:napi`,
+    `pnpm:${path.join(ENGINE_DIR, 'packages', 'host-napi')}:run build:napi`,
   ]);
 });
 

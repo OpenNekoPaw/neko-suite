@@ -18,7 +18,7 @@
  *
  * @see BasicColorAdjustment in types/colorCorrection.ts
  * @see ColorCorrectionParams in types/mediaEngine/effects.ts
- * @see JsEffectParams in native-napi/index.d.ts
+ * @see JsEffectParams in host-napi/index.d.ts
  */
 
 import type { BasicColorAdjustment } from '../types/colorCorrection';

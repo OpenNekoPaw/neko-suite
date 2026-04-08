@@ -5,7 +5,7 @@ const path = require('path');
 const rawConfig = require('./package-config.json');
 
 const ENGINE_DIR = path.resolve(__dirname, '..');
-const NAPI_DIR = path.join(ENGINE_DIR, 'packages', 'native-napi');
+const NAPI_DIR = path.join(ENGINE_DIR, 'packages', 'host-napi');
 const BIN_DIR = path.join(ENGINE_DIR, 'bin');
 const BTBN_BASE_URL = 'https://github.com/BtbN/FFmpeg-Builds/releases/download';
 

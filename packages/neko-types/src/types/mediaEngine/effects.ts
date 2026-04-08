@@ -33,8 +33,8 @@ export type GpuEffectType =
  * All values use engine-native ranges (NOT UI ranges).
  * Use mapBasicColorToEngine() to convert from BasicColorAdjustment (UI ranges).
  *
- * @see JsEffectParams in native-napi/index.d.ts
- * @see EffectParams in native-core/src/gpu/processor.rs
+ * @see JsEffectParams in host-napi/index.d.ts
+ * @see EffectParams in engine-kernel/src/gpu/processor.rs
  */
 export interface ColorCorrectionParams {
   type: 'colorCorrection';

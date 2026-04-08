@@ -19,7 +19,7 @@ test('package config resolves supported targets and ORT artifact names', () => {
   assert.equal(getTargetConfig('win32-x64')?.ort.dest, 'onnxruntime-win-x64.dll');
 });
 
-test('package config resolves native-napi binary paths from the shared target map', () => {
+test('package config resolves host-napi binary paths from the shared target map', () => {
   assert.equal(
     resolveNodeBinaryPath('darwin-arm64'),
     path.join(NAPI_DIR, 'neko-engine.darwin-arm64.node'),

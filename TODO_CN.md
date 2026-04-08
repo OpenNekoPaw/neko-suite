@@ -22,10 +22,10 @@
 ### 待做
 
 ### neko-cut（视频编辑）— P0-1：字段一致性
-> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 7/10，完整创作 5.5/10。导出链路关键缺口。
-- [ ] **Transition 字段命名统一**：审计 `inTransition` vs `transitionIn`，统一 Property Panel 写 / Preview 合成读 / Export Service 全路径
-- [ ] **Effects 导出链**：导出时 `effects: []` 为空；实现 `EffectInstance` → `EffectParams` schema 映射；验证色彩校正 + 蒙版导出
-- [ ] **编辑/预览/导出字段一致性**：确保所有元素类型在三个时态的字段读取一致
+> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 8/10，完整创作 6.5/10。
+- [x] **Transition 字段命名统一**：`transitionIn/transitionOut` 为主字段，保留 `inTransition/outTransition` legacy 兼容读取
+- [x] **Effects 导出链**：`effects / colorCorrection / masks` 已补齐导出转换（EffectInstance→EffectParams + 蒙版形状验证 + 动画 baseValue fallback）
+- [x] **编辑/预览/导出字段一致性**：元素 `speed/reverse/timeRemap` 在暂停态/播放态/导出态一致；全局 `playbackSpeed` 与元素级 `speed` 分层明确
 - [ ] 导出往返测试套件：编辑 → 预览 → 导出 → 重新导入一致性验证
 
 ### neko-canvas（故事板）— P0-2：协议修复
@@ -82,10 +82,11 @@
 ### neko-cut
 - [ ] AI action `ai-auto-edit`（需定义"自动剪辑"语义）
 - [ ] AI action `ai-match-music`（需节奏检测 + 场景匹配）
-- [ ] **字幕系统整合**：单一数据模型 + 编辑入口；.srt/.vtt → subtitle 轨道而非 text 轨道；SubtitlePanel 集成到主工作区
-- [ ] **暂停帧合成扩展**：将高质量合成扩展到 text/subtitle/shape/scene3d 元素
-- [ ] **资产库集成**：嵌入为可停靠面板（当前为独立 Webview）
-- [ ] **涟漪编辑完善**：将 `rippleEditingEnabled` 扩展到插入/拖动/裁剪/分割操作
+- [x] **字幕系统整合**：subtitle 轨/元素统一数据模型；PropertyPanel + 内联 SubtitlePanel 双入口；.srt/.vtt/.ass 拖入创建 subtitle 轨
+- [x] **暂停帧合成扩展**：text/subtitle/shape 通过 Webview overlay 补齐；scene3d 保留引擎 seek 帧
+- [x] **资产库集成**：主工作区左侧 dock 面板（Assets + Subtitles 标签）
+- [x] **涟漪编辑完善**：ripple 已覆盖删除/插入/粘贴/裁剪(trimToPlayhead)/分割/同轨拖动；剩余：跨多选组合 + insert/overwrite 模式切换 + 左 trim/跨轨拖动边界规则
+- [ ] **高级时间编辑**：可视化 speed curve / time remap UI / slip-slide-roll edit
 
 ### neko-story
 > [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas 流水线

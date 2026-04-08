@@ -19,7 +19,7 @@
 |------|------|------|------|
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
 | **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估；剩余：MCP 重连退避 + **Webview 架构优化**（[ADR](./docs/architecture/neko-agent-webview-optimization.md)） |
-| **neko-cut** | Alpha | 92% | **~62.9K LOC**，50+ 命令；AI Handler 14/16 action；**P0 缺口**：transition 字段命名 + effects 导出链 + edit/preview/export 字段一致性（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
+| **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
 | **neko-story** | Alpha | 92% | **0 TODO**，145 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图；**下一步**：ScriptIndex 升级 + 轻量分镜表 + Story→Agent→Canvas 流水线（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
 | **neko-canvas** | Alpha | 80% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0**：协议修复（nodes.update/create + 消息通道 + 结果审阅）；**P1**：场景语义 + 渲染器注册表（[ADR](./docs/architecture/canvas-role-boundary.md)） |
 | **neko-preview** | Alpha | 86% | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅**；一期剩余：FDX；二期：XLSX/PPTX |
@@ -163,16 +163,21 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P3：CanvasEmbedNode（.nkc 缩略图 + 双击打开）
 - [ ] 节点性能优化（按需，当前 DOM/SVG 方案足够）
 
-### neko-cut — 时间线字段一致性待做
-> [评估 ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 7/10，完整创作 5.5/10
-- [ ] **P0：Transition 字段命名** — 统一 `inTransition` vs `transitionIn`，覆盖 Property Panel / Preview / Export
-- [ ] **P0：Effects 导出链** — 导出时 `effects: []` 为空；实现 EffectInstance→EffectParams 映射
-- [ ] **P0：编辑/预览/导出一致性** — 确保所有元素类型在三个管线的字段读取一致
-- [ ] P1：暂停帧合成扩展（text/subtitle/shape/scene3d 元素）
-- [ ] P1：字幕系统整合（单一数据模型 + 编辑入口）
-- [ ] P1：资产库集成（嵌入为可停靠面板）
-- [ ] P2：涟漪编辑完善（insert/drag/trim/split）
-- [ ] P2：高级时间编辑（slip/slide/roll edit + 速度斜坡 + 倒放）
+### neko-cut — 时间线编辑能力（P0/P1 已关闭）
+> [评估 ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 8/10，完整创作 6.5/10
+- [x] **P0：Transition 字段命名** — `transitionIn/transitionOut` 为主字段，保留 legacy 兼容读取
+- [x] **P0：Effects 导出链** — effects/colorCorrection/masks 已补齐导出转换
+- [x] **P0：编辑/预览/导出一致性** — 元素 speed/reverse/timeRemap + 全局 playbackSpeed 分层明确
+- [x] P1：暂停帧合成扩展（text/subtitle/shape Webview overlay + scene3d 引擎 seek 帧）
+- [x] P1：字幕系统整合（subtitle 轨/元素统一模型 + PropertyPanel/内联面板双入口 + .srt/.vtt/.ass 拖入）
+- [x] P1：资产库集成（主工作区左侧 dock 面板）
+- [x] P1：播放倍率控制（0.1x-4x + PreviewControls UI + stream speed 消息契约）
+- [x] P1：元素级速度/倒放/复制/分割保留左右（正式操作链 + 右键菜单）
+- [x] P2：涟漪编辑基础闭环（删除/插入/粘贴/裁剪/分割/同轨拖动）
+- [ ] P2：涟漪编辑完善（跨多选组合 + insert/overwrite 模式 + 左 trim/跨轨边界规则）
+- [ ] P2：高级时间编辑（slip/slide/roll edit + 可视化 speed curve/time remap UI）
+- [ ] P2：导出往返测试套件
+- [ ] 底层原生 composite 协议扩展（当前 text/subtitle/shape 走 Webview overlay）
 
 ### neko-agent — Webview 架构优化待做
 > [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10

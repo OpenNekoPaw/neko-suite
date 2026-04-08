@@ -137,8 +137,8 @@ jobs:
         shell: bash
 
       # Build native addon
-      - name: Build native-napi
-        working-directory: packages/neko-engine/packages/native-napi
+      - name: Build host-napi
+        working-directory: packages/neko-engine/packages/host-napi
         run: |
           npm run build:ffmpeg-env
           npx @napi-rs/cli build --platform --release --target ${{ matrix.rust-target }}

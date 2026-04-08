@@ -3,11 +3,11 @@
 //
 // Authority: neko-engine Rust media_service module
 // Source files:
-//   - packages/neko-engine/packages/native-core/src/media_service/diff.rs
-//   - packages/neko-engine/packages/native-core/src/media_service/image_diff.rs
-//   - packages/neko-engine/packages/native-core/src/media_service/audio_diff.rs
-//   - packages/neko-engine/packages/native-core/src/media_service/video_diff.rs
-//   - packages/neko-engine/packages/native-core/src/media_service/probe.rs
+//   - packages/neko-engine/packages/engine-kernel/src/media_service/diff.rs
+//   - packages/neko-engine/packages/engine-kernel/src/media_service/image_diff.rs
+//   - packages/neko-engine/packages/engine-kernel/src/media_service/audio_diff.rs
+//   - packages/neko-engine/packages/engine-kernel/src/media_service/video_diff.rs
+//   - packages/neko-engine/packages/engine-kernel/src/media_service/probe.rs
 //
 // Purpose:
 //   Single source of truth for diff result types shared between neko-engine

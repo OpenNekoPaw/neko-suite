@@ -196,7 +196,7 @@ jobs:
         working-directory: packages/neko-engine
 
       - name: Clippy lint (onnx feature)
-        run: cargo clippy --package neko-native-core --features onnx -- -D warnings
+        run: cargo clippy --package neko-engine-kernel --features onnx -- -D warnings
         working-directory: packages/neko-engine
 
       - name: Run tests
@@ -206,7 +206,7 @@ jobs:
       - name: Run tests (onnx feature)
         # Runs the 10 always-on ML tests (register/list/evict_idle_empty etc.)
         # that compile onnx-gated code but require no ORT dylib at runtime.
-        run: cargo test --package neko-native-core --features onnx
+        run: cargo test --package neko-engine-kernel --features onnx
         working-directory: packages/neko-engine
 
       # ── ONNX Runtime dylib — session + eviction timing tests ──────────
@@ -230,7 +230,7 @@ jobs:
         # --include-ignored to run the three #[ignore] evict_idle timing
         # tests that need a live ORT session (stale / fresh / mixed).
         run: |
-          cargo test --package neko-native-core --features onnx \
+          cargo test --package neko-engine-kernel --features onnx \
             -- ml::tests::test_evict_idle --include-ignored
         working-directory: packages/neko-engine
 
@@ -447,8 +447,8 @@ jobs:
         shell: bash
 
       # Build the native .node for this platform
-      - name: Build native-napi
-        working-directory: packages/neko-engine/packages/native-napi
+      - name: Build host-napi
+        working-directory: packages/neko-engine/packages/host-napi
         run: |
           npm run build:ffmpeg-env
           npx @napi-rs/cli build --platform --release --target ${{ matrix.rust-target }}

@@ -2,7 +2,7 @@
 /**
  * Bundle FFmpeg shared libraries for platform-specific VSIX packaging.
  *
- * Copies FFmpeg dylibs into packages/native-napi/ (same dir as .node file)
+ * Copies FFmpeg dylibs into packages/host-napi/ (same dir as .node file)
  * so the dynamic linker finds them via @loader_path (macOS) / $ORIGIN (Linux).
  *
  * Sources:
