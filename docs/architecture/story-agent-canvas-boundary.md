@@ -51,11 +51,14 @@
 - `canvas` 已暴露 `NekoCanvasAPI.storyboard.import(...)` 与 `neko.canvas.importStoryboard`
 - `neko-story` 已提供 `GetScriptIndex` / `SearchScriptIndex` / `GenerateScenePlan` / `GenerateShotPlan`
 - shared planner 已支持 `mechanical | semantic` 双路径 payload
+- `neko-story` extension API 已暴露 `generateScenePlans()` / `generateShotPlan()`
+- `neko-agent` 的 `parseStoryboard` 已优先通过 `neko-story` 结构化 planning 生成 `scenePlans`
+- `neko-agent` pipeline 已新增 `importStoryboardToCanvas` stage，可将 semantic storyboard 正式导入 `canvas`
+- `StartPipeline` 已支持 `importToCanvas` / `canvasStartX` / `canvasStartY` 参数，用于开启 semantic canvas handoff
 
 仍未完全落地：
 
-- Agent 主流程尚未把 `GenerateScenePlan / GenerateShotPlan` 作为标准语义拆镜入口
-- `semantic` 路径虽然已具备契约和导入能力，但还未成为 chat / pipeline 主链
+- `semantic` 路径已进入 pipeline 主链，但 `story.generateStoryboard` 仍未直接启动该标准流程
 - 轻量分镜表的 Agent / Canvas 状态仍缺少统一事实源与完整回写
 - “从剧本开始视频创作”标准主流程尚未闭环
 
@@ -164,6 +167,7 @@ canvas
 
 - `story.generateStoryboard` 不应在 `story` 内直接实现拆镜逻辑
 - 该命令应成为 Agent 工作流入口，调用 Agent 的对应工具或 pipeline
+- 当前实现中，semantic planning 已进入 Agent pipeline；剩余工作是让 `story` 命令直接触发该标准入口，而不是只发送 context
 
 ---
 
@@ -387,9 +391,10 @@ canvas
 - 2：已完成当前迭代目标
 - 3：已完成当前迭代目标
 - 4：已完成当前迭代目标
-- 5：已部分完成
+- 5：已完成当前迭代核心闭环
   - shared planner / canvas import 已支持 semantic payload
-  - agent 主流程尚未统一消费 `GenerateScenePlan / GenerateShotPlan`
+  - agent pipeline 已统一消费 `GenerateScenePlan / GenerateShotPlan` 对应的结构化 planning
+  - `importStoryboardToCanvas` 已成为 semantic canvas sink
 
 ---
 
