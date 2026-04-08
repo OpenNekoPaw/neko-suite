@@ -1,6 +1,7 @@
 import type {
   CanvasNode,
   CanvasNodeType,
+  GalleryCell,
   GalleryPreset,
   GeneratedImageVersion,
   PortDefinition,
@@ -73,6 +74,13 @@ function inferGalleryPreset(value: unknown): GalleryPreset {
     return value;
   }
   return 'character-3view';
+}
+
+function inferGenerationStatus(value: unknown): GalleryCell['generationStatus'] {
+  if (value === 'pending' || value === 'generating' || value === 'done' || value === 'error') {
+    return value;
+  }
+  return 'idle';
 }
 
 export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNode, 'id'> {
@@ -240,6 +248,30 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         label,
         generationStatus: 'idle' as const,
       }));
+      const normalizedCells: GalleryCell[] = Array.isArray(data.cells)
+        ? data.cells.map((cell, index): GalleryCell => {
+            const raw = typeof cell === 'object' && cell !== null ? cell : {};
+            const generationHistory =
+              asObjectArray<GeneratedImageVersion>(
+                (raw as { generationHistory?: unknown }).generationHistory,
+              ) ?? DEFAULT_EMPTY_HISTORY;
+            const selectedCandidate = generationHistory.find((candidate) => candidate.selected);
+            return {
+              id: asString((raw as { id?: unknown }).id, `cell-${Date.now()}-${index}`),
+              label: asString((raw as { label?: unknown }).label, presetConfig.labels[index] ?? ''),
+              image:
+                asString((raw as { image?: unknown }).image) ||
+                selectedCandidate?.dataUrl ||
+                undefined,
+              prompt: asString((raw as { prompt?: unknown }).prompt) || undefined,
+              generationStatus: inferGenerationStatus(
+                (raw as { generationStatus?: unknown }).generationStatus,
+              ),
+              costumeLabel: asString((raw as { costumeLabel?: unknown }).costumeLabel) || undefined,
+              generationHistory,
+            };
+          })
+        : defaultCells;
       return {
         type,
         position,
@@ -252,7 +284,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
           preset,
           rows: asNumber(data.rows, presetConfig.rows),
           cols: asNumber(data.cols, presetConfig.cols),
-          cells: Array.isArray(data.cells) ? data.cells : defaultCells,
+          cells: normalizedCells,
           globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
           characterName: asString(data.characterName) || undefined,
         },

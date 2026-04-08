@@ -66,6 +66,7 @@ export interface NodeRendererContext extends NodeRendererCommonProps {
   onCanvasEmbedOpen?: (canvasPath: string) => void;
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
   onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
+  onSelectGalleryCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   onAutoLayoutSceneShots?: (sceneId: string) => void;
   onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
@@ -146,8 +147,13 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
         onReorderShots={onReorderSceneShots}
       />
     ),
-    gallery: ({ node, ...commonProps }) => (
-      <GalleryNode key={node.id} node={node as GalleryCanvasNode} {...commonProps} />
+    gallery: ({ node, onSelectGalleryCellCandidate, ...commonProps }) => (
+      <GalleryNode
+        key={node.id}
+        node={node as GalleryCanvasNode}
+        {...commonProps}
+        onSelectCellCandidate={onSelectGalleryCellCandidate}
+      />
     ),
     script: ({
       node,

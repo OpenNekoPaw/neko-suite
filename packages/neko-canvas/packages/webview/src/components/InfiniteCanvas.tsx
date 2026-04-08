@@ -83,6 +83,8 @@ export interface InfiniteCanvasProps {
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
   /** Called when a ShotNode candidate is selected */
   onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
+  /** Called when a Gallery cell candidate is selected */
+  onSelectGalleryCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
   /** Called when selected shots should be attached to a scene */
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   /** Called to auto-layout the shots inside a scene */
@@ -125,6 +127,7 @@ export function InfiniteCanvas({
   onCanvasEmbedOpen,
   onModelCheckInstalled,
   onSelectShotCandidate,
+  onSelectGalleryCellCandidate,
   onAssignSelectedShotsToScene,
   onAutoLayoutSceneShots,
   onReorderSceneShots,
@@ -281,6 +284,7 @@ export function InfiniteCanvas({
             onCanvasEmbedOpen,
             onModelCheckInstalled,
             onSelectShotCandidate,
+            onSelectGalleryCellCandidate,
             onAssignSelectedShotsToScene,
             onAutoLayoutSceneShots,
             onReorderSceneShots,

@@ -33,7 +33,7 @@ export interface GalleryNodeProps {
   ) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Partial<GalleryCanvasNode['data']>) => void;
-  // Generation is triggered via right-click context menu, not directly on the node
+  onSelectCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
 }
 
 // =============================================================================
@@ -71,7 +71,21 @@ function CellOverlay({ status }: { status: GalleryCell['generationStatus'] }) {
   return null;
 }
 
-function GalleryCellView({ cell }: { cell: GalleryCell }) {
+function GalleryCellView({
+  cell,
+  nodeId,
+  onSelectCellCandidate,
+}: {
+  cell: GalleryCell;
+  nodeId: string;
+  onSelectCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
+}) {
+  const generationHistory = cell.generationHistory ?? [];
+  const selectedCandidate = generationHistory.find((candidate) => candidate.selected);
+  const displayImage = cell.image ?? selectedCandidate?.dataUrl;
+  const candidateIndex = generationHistory.findIndex((candidate) => candidate.selected);
+  const candidateTotal = generationHistory.length;
+
   return (
     <div
       className="relative overflow-hidden flex flex-col"
@@ -84,9 +98,9 @@ function GalleryCellView({ cell }: { cell: GalleryCell }) {
       title={cell.label}
     >
       {/* Image or placeholder */}
-      {cell.image ? (
+      {displayImage ? (
         <img
-          src={cell.image}
+          src={displayImage}
           alt={cell.label}
           className="w-full h-full object-cover flex-1"
           draggable={false}
@@ -115,13 +129,77 @@ function GalleryCellView({ cell }: { cell: GalleryCell }) {
           fontSize: 8,
           color: '#fff',
           lineHeight: '14px',
-          opacity: cell.image ? 1 : 0,
+          opacity: displayImage ? 1 : 0,
           transition: 'opacity 0.15s',
         }}
       >
         {cell.label}
         {cell.costumeLabel && ` · ${cell.costumeLabel}`}
       </div>
+
+      {candidateTotal > 1 && (
+        <div
+          className="absolute top-1 left-1 right-1 flex items-center justify-between"
+          style={{ pointerEvents: 'none' }}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (candidateIndex <= 0) return;
+              const prev = generationHistory[candidateIndex - 1];
+              if (prev) onSelectCellCandidate?.(nodeId, cell.id, prev.id);
+            }}
+            disabled={candidateIndex <= 0}
+            style={{
+              pointerEvents: 'auto',
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              border: '1px solid #ffffff30',
+              backgroundColor: '#00000080',
+              color: '#fff',
+              fontSize: 11,
+              opacity: candidateIndex <= 0 ? 0.45 : 1,
+            }}
+          >
+            ←
+          </button>
+          <span
+            className="px-1.5 py-0.5 rounded-full"
+            style={{
+              pointerEvents: 'auto',
+              backgroundColor: '#00000080',
+              color: '#fff',
+              fontSize: 9,
+              lineHeight: '12px',
+            }}
+          >
+            {candidateIndex + 1}/{candidateTotal}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (candidateIndex >= candidateTotal - 1) return;
+              const next = generationHistory[candidateIndex + 1];
+              if (next) onSelectCellCandidate?.(nodeId, cell.id, next.id);
+            }}
+            disabled={candidateIndex >= candidateTotal - 1}
+            style={{
+              pointerEvents: 'auto',
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              border: '1px solid #ffffff30',
+              backgroundColor: '#00000080',
+              color: '#fff',
+              fontSize: 11,
+              opacity: candidateIndex >= candidateTotal - 1 ? 0.45 : 1,
+            }}
+          >
+            →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -141,6 +219,7 @@ export function GalleryNode({
   onResizeEnd,
   onConnectionStart,
   onUpdateData,
+  onSelectCellCandidate,
 }: GalleryNodeProps) {
   const { preset, rows, cols, cells, characterName } = node.data;
 
@@ -216,7 +295,12 @@ export function GalleryNode({
           }}
         >
           {cells.map((cell) => (
-            <GalleryCellView key={cell.id} cell={cell} />
+            <GalleryCellView
+              key={cell.id}
+              cell={cell}
+              nodeId={node.id}
+              onSelectCellCandidate={onSelectCellCandidate}
+            />
           ))}
           {/* Fill empty slots if cells < rows*cols */}
           {Array.from({ length: Math.max(0, rows * cols - cells.length) }).map((_, i) => (

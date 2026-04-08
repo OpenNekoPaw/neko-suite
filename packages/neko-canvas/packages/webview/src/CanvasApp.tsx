@@ -318,11 +318,34 @@ export function CanvasApp() {
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
         const cells = galleryNode.data.cells.map((c) =>
           c.id === cellId
-            ? {
-                ...c,
-                generationStatus: status as import('@neko/shared').GalleryCell['generationStatus'],
-                ...(status === 'done' && dataUrl ? { image: dataUrl } : {}),
-              }
+            ? (() => {
+                if (status === 'done' && dataUrl) {
+                  const history = [
+                    ...(c.generationHistory ?? []),
+                    {
+                      id: `gallery-${cellId}-${Date.now()}`,
+                      dataUrl,
+                      prompt: '',
+                      timestamp: Date.now(),
+                      selected: true,
+                    },
+                  ].map((candidate, index, list) => ({
+                    ...candidate,
+                    selected: index === list.length - 1,
+                  }));
+                  return {
+                    ...c,
+                    generationStatus: 'done' as const,
+                    image: dataUrl,
+                    generationHistory: history,
+                  };
+                }
+                return {
+                  ...c,
+                  generationStatus:
+                    status as import('@neko/shared').GalleryCell['generationStatus'],
+                };
+              })()
             : c,
         );
         updateNodeData(nodeId, { cells });
@@ -367,7 +390,25 @@ export function CanvasApp() {
       } else if (node.type === 'gallery' && cellId) {
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
         const cells = galleryNode.data.cells.map((c) =>
-          c.id === cellId ? { ...c, image: imageData } : c,
+          c.id === cellId
+            ? {
+                ...c,
+                image: imageData,
+                generationHistory: [
+                  ...(c.generationHistory ?? []),
+                  {
+                    id: `gallery-sketch-${cellId}-${Date.now()}`,
+                    dataUrl: imageData,
+                    prompt: '',
+                    timestamp: Date.now(),
+                    selected: true,
+                  },
+                ].map((candidate, index, list) => ({
+                  ...candidate,
+                  selected: index === list.length - 1,
+                })),
+              }
+            : c,
         );
         updateNodeData(nodeId, { cells });
       }
@@ -558,6 +599,30 @@ export function CanvasApp() {
         generationHistory: nextHistory,
         generatedImage: selected?.dataUrl,
       });
+    },
+    [nodes, updateNodeData],
+  );
+
+  const handleSelectGalleryCellCandidate = useCallback(
+    (nodeId: string, cellId: string, candidateId: string) => {
+      const target = nodes.find((node) => node.id === nodeId);
+      if (!target || target.type !== 'gallery') return;
+
+      const cells = target.data.cells.map((cell) => {
+        if (cell.id !== cellId) return cell;
+        const nextHistory = (cell.generationHistory ?? []).map((candidate) => ({
+          ...candidate,
+          selected: candidate.id === candidateId,
+        }));
+        const selected = nextHistory.find((candidate) => candidate.selected);
+        return {
+          ...cell,
+          generationHistory: nextHistory,
+          image: selected?.dataUrl ?? cell.image,
+        };
+      });
+
+      updateNodeData(nodeId, { cells });
     },
     [nodes, updateNodeData],
   );
@@ -960,6 +1025,7 @@ export function CanvasApp() {
             onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
             onSelectShotCandidate={handleSelectShotCandidate}
+            onSelectGalleryCellCandidate={handleSelectGalleryCellCandidate}
             onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
             onReorderSceneShots={handleReorderSceneShots}
