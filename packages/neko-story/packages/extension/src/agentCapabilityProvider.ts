@@ -48,9 +48,9 @@ class NekoStoryCapabilityProviderImpl implements AgentCapabilityProvider {
         name: TOOL_NAMES_STORY.GET_SCRIPT_INDEX,
         description:
           'Get a structured index of a Fountain screenplay (.fountain) file. ' +
-          'Returns scenes with sequential IDs (S1, S2...) and 0-based line_start/line_end so you can ' +
+          'Returns scenes with stable semantic IDs and 0-based line_start/line_end so you can ' +
           'fetch exact scene content with Read(offset=line_start, limit=line_end-line_start+1). ' +
-          'Also returns all characters with their first appearance line and which scenes they appear in.',
+          'Also returns scene-level metadata plus all characters with their first appearance line and which scenes they appear in.',
         category: 'document',
         isReadOnly: true,
         isConcurrencySafe: true,

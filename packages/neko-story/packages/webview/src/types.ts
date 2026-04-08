@@ -3,6 +3,8 @@
  * Simplified version of @neko-story/types for webview bundle size
  */
 
+import type { NekoStoryScriptIndex } from '@neko/shared';
+
 export interface Position {
   line: number;
   character: number;
@@ -138,15 +140,43 @@ export interface FountainDocument {
   elements: AnyFountainElement[];
 }
 
+export type StoryAgentStatus =
+  | 'not-requested'
+  | 'ready'
+  | 'review'
+  | 'sent'
+  | 'skipped';
+
+export type StoryCanvasStatus =
+  | 'not-sent'
+  | 'queued'
+  | 'sent'
+  | 'opened'
+  | 'skipped';
+
+export interface StorySceneState {
+  readonly sceneId: string;
+  readonly agentStatus: StoryAgentStatus;
+  readonly canvasStatus: StoryCanvasStatus;
+}
+
+export type StorySceneAction =
+  | 'analyze'
+  | 'generateStoryboard'
+  | 'sendToCanvas'
+  | 'openCanvas'
+  | 'toggleSkip';
+
 // Message types for VSCode communication
 export type StoryViewMode = 'screenplay' | 'table' | 'grid';
 
 export type MessageToWebview =
-  | { type: 'update'; document: FountainDocument }
+  | { type: 'update'; document: FountainDocument; scriptIndex: NekoStoryScriptIndex }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: StoryViewMode };
 
 export type MessageToExtension =
   | { type: 'ready' }
   | { type: 'navigate'; line: number; character: number }
-  | { type: 'scroll'; line: number };
+  | { type: 'scroll'; line: number }
+  | { type: 'sceneAction'; sceneId: string; action: StorySceneAction };

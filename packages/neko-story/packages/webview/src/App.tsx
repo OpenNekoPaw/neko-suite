@@ -1,9 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import { ScriptTableView } from './components/ScriptTableView';
 import { CreativeGridView } from './components/CreativeGridView';
-import type { FountainDocument, MessageToWebview, StoryViewMode } from './types';
+import type {
+  FountainDocument,
+  MessageToWebview,
+  StorySceneAction,
+  StorySceneState,
+  StoryViewMode,
+} from './types';
+import type { NekoStoryScriptIndex } from '@neko/shared';
 import './styles/screenplay.css';
 import './styles/print.css';
 
@@ -63,12 +70,15 @@ function TabBar({
 
 export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
+  const [scriptIndex, setScriptIndex] = useState<NekoStoryScriptIndex | null>(null);
+  const [sceneStates, setSceneStates] = useState<Record<string, StorySceneState>>({});
   const [view, setView] = useState<StoryViewMode>('screenplay');
 
   const handleMessage = useCallback((message: MessageToWebview) => {
     switch (message.type) {
       case 'update':
         setDocument(message.document);
+        setScriptIndex(message.scriptIndex);
         break;
       case 'scrollTo':
         scrollToLine(message.line);
@@ -79,7 +89,26 @@ export function App() {
     }
   }, []);
 
-  useVSCodeMessaging(handleMessage);
+  useEffect(() => {
+    if (!scriptIndex) {
+      setSceneStates({});
+      return;
+    }
+
+    setSceneStates((current) => {
+      const next: Record<string, StorySceneState> = {};
+      for (const scene of scriptIndex.scenes) {
+        next[scene.sceneId] = current[scene.sceneId] ?? {
+          sceneId: scene.sceneId,
+          agentStatus: 'not-requested',
+          canvasStatus: 'not-sent',
+        };
+      }
+      return next;
+    });
+  }, [scriptIndex]);
+
+  const { postMessage } = useVSCodeMessaging(handleMessage);
 
   const handleNavigate = useCallback((line: number) => {
     // Switch to screenplay view and scroll to line
@@ -87,6 +116,47 @@ export function App() {
     // Give the DOM a tick to switch views before scrolling
     setTimeout(() => scrollToLine(line), 50);
   }, []);
+
+  const handleSceneAction = useCallback(
+    (sceneId: string, action: StorySceneAction) => {
+      setSceneStates((current) => {
+        const existing = current[sceneId];
+        if (!existing) {
+          return current;
+        }
+
+        let nextState: StorySceneState = existing;
+        switch (action) {
+          case 'analyze':
+            nextState = { ...existing, agentStatus: 'ready' };
+            break;
+          case 'generateStoryboard':
+            nextState = { ...existing, agentStatus: 'review', canvasStatus: 'queued' };
+            break;
+          case 'sendToCanvas':
+            nextState = { ...existing, canvasStatus: 'sent' };
+            break;
+          case 'openCanvas':
+            nextState = { ...existing, canvasStatus: 'opened' };
+            break;
+          case 'toggleSkip': {
+            const skipped = existing.agentStatus !== 'skipped' || existing.canvasStatus !== 'skipped';
+            nextState = {
+              ...existing,
+              agentStatus: skipped ? 'skipped' : 'not-requested',
+              canvasStatus: skipped ? 'skipped' : 'not-sent',
+            };
+            break;
+          }
+        }
+
+        return { ...current, [sceneId]: nextState };
+      });
+
+      postMessage({ type: 'sceneAction', sceneId, action });
+    },
+    [postMessage],
+  );
 
   return (
     <div
@@ -97,7 +167,14 @@ export function App() {
 
       <div className="flex-1 overflow-hidden">
         {view === 'screenplay' && <ScriptRenderer document={document} />}
-        {view === 'table' && <ScriptTableView document={document} onNavigate={handleNavigate} />}
+        {view === 'table' && (
+          <ScriptTableView
+            scriptIndex={scriptIndex}
+            sceneStates={sceneStates}
+            onNavigate={handleNavigate}
+            onSceneAction={handleSceneAction}
+          />
+        )}
         {view === 'grid' && <CreativeGridView document={document} onNavigate={handleNavigate} />}
       </div>
     </div>
