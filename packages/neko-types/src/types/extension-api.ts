@@ -19,6 +19,11 @@ import type {
   GalleryCanvasNode,
 } from './canvas';
 import type { ProjectData } from './project';
+import type {
+  ApplyCanvasStoryboardOptions,
+  CanvasStoryboardPayload,
+  CreatedCanvasStoryboard,
+} from './storyboard-planner';
 
 // =============================================================================
 // NekoCut API
@@ -240,6 +245,16 @@ export interface NekoCanvasAPI {
      * @returns The ID of the created shape
      */
     addShape(canvasId: string, shape: ShapeConfig): Promise<string>;
+  };
+
+  storyboard: {
+    /**
+     * Import a storyboard payload into the active canvas as scene/shot nodes.
+     */
+    import(
+      payload: CanvasStoryboardPayload,
+      options?: ApplyCanvasStoryboardOptions,
+    ): Promise<CreatedCanvasStoryboard>;
   };
 
   nodes: {
