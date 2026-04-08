@@ -42,6 +42,7 @@ export type { IDocumentReader, IFileReader, ReadDocumentStageDeps } from './stag
 export { createParseStoryboardStage } from './stages/parse-storyboard';
 export type {
   IStoryParser,
+  IStructuredStoryPlanner,
   ILLMAnalyzer,
   ParseStoryboardStageDeps,
 } from './stages/parse-storyboard';

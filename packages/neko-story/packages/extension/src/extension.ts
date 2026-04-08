@@ -19,6 +19,7 @@ import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
+import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
@@ -315,11 +316,35 @@ export function activate(context: vscode.ExtensionContext) {
      * Returns undefined if the file has not been indexed yet.
      */
     getScriptIndex(uriOrPath: string) {
-      const uri =
-        uriOrPath.startsWith('file://') || uriOrPath.includes('://')
-          ? vscode.Uri.parse(uriOrPath)
-          : vscode.Uri.file(uriOrPath);
+      const uri = resolveUriOrPath(uriOrPath);
       return indexService.getScriptIndex(uri);
+    },
+
+    /**
+     * Builds deterministic scene-level storyboard plans from ScriptIndex.
+     * Returns undefined if the file has not been indexed yet.
+     */
+    generateScenePlans(uriOrPath: string, sceneIds?: readonly string[]) {
+      const uri = resolveUriOrPath(uriOrPath);
+      const index = indexService.getScriptIndex(uri);
+      if (!index) {
+        return undefined;
+      }
+      return buildStoryScenePlans(index, { sceneIds });
+    },
+
+    /**
+     * Builds deterministic shot plans for a single indexed scene.
+     * Returns undefined if the file or scene is unavailable.
+     */
+    generateShotPlan(uriOrPath: string, sceneId: string, recommendedShotCount?: number) {
+      const uri = resolveUriOrPath(uriOrPath);
+      const index = indexService.getScriptIndex(uri);
+      const scene = index?.scenes.find((entry) => entry.sceneId === sceneId);
+      if (!scene) {
+        return undefined;
+      }
+      return buildShotPlansForScene(scene, recommendedShotCount);
     },
   };
 
@@ -336,6 +361,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {}
 
+function resolveUriOrPath(uriOrPath: string): vscode.Uri {
+  return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
+    ? vscode.Uri.parse(uriOrPath)
+    : vscode.Uri.file(uriOrPath);
+}
+
 function buildSceneAgentPayload(
   editor: vscode.TextEditor,
   intent: string,
@@ -350,7 +381,12 @@ function buildSceneAgentPayload(
     return null;
   }
 
-  const selection = new vscode.Selection(scene.line_start, 0, scene.line_end, Number.MAX_SAFE_INTEGER);
+  const selection = new vscode.Selection(
+    scene.line_start,
+    0,
+    scene.line_end,
+    Number.MAX_SAFE_INTEGER,
+  );
   const selectedText = editor.document.getText(selection);
   const scriptPath = editor.document.uri.fsPath;
 

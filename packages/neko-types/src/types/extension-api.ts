@@ -24,6 +24,7 @@ import type {
   CanvasStoryboardPayload,
   CreatedCanvasStoryboard,
 } from './storyboard-planner';
+import type { StoryScenePlan, StoryShotPlan } from './storyboard-planner';
 
 // =============================================================================
 // NekoCut API
@@ -420,6 +421,25 @@ export interface NekoStoryAPI {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+
+  /**
+   * Builds deterministic scene-level storyboard plans from the indexed screenplay.
+   * Returns undefined if the file has not been indexed yet.
+   */
+  generateScenePlans(
+    uriOrPath: string,
+    sceneIds?: readonly string[],
+  ): readonly StoryScenePlan[] | undefined;
+
+  /**
+   * Builds deterministic shot plans for a single scene in the indexed screenplay.
+   * Returns undefined if the file or scene has not been indexed yet.
+   */
+  generateShotPlan(
+    uriOrPath: string,
+    sceneId: string,
+    recommendedShotCount?: number,
+  ): readonly StoryShotPlan[] | undefined;
 }
 
 // =============================================================================

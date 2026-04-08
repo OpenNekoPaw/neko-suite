@@ -89,6 +89,41 @@ describe('parseStoryboard stage', () => {
     expect(result.scenes).toEqual(mockScenes);
   });
 
+  it('should prefer structuredStoryPlanner for indexed fountain format', async () => {
+    const plan = {
+      scenes: [
+        {
+          ...mockScenes[0]!,
+          sceneId: 'scene-1',
+          shotPlans: [{ shotNumber: 1, visualDescription: 'Office wide shot', duration: 5 }],
+        },
+      ],
+      scenePlans: [
+        {
+          sceneId: 'scene-1',
+          sceneTitle: 'INT. OFFICE - DAY',
+          summary: 'A busy office',
+          recommendedShotCount: 1,
+          shotPlans: [{ shotNumber: 1, visualDescription: 'Office wide shot', duration: 5 }],
+        },
+      ],
+    };
+    const stage = createParseStoryboardStage({
+      structuredStoryPlanner: { plan: vi.fn().mockResolvedValue(plan) },
+      storyParser: { parseToScenes: vi.fn(() => mockScenes) },
+      llmAnalyzer: { extractScenes: vi.fn() },
+    });
+
+    const result = await stage.execute({
+      source: '/tmp/script.fountain',
+      documentText: 'INT. OFFICE - DAY',
+      sourceFormat: 'fountain',
+    });
+
+    expect(result.scenes).toEqual(plan.scenes);
+    expect(result.scenePlans).toEqual(plan.scenePlans);
+  });
+
   it('should use llmAnalyzer for freeform format', async () => {
     const stage = createParseStoryboardStage({
       llmAnalyzer: { extractScenes: async () => mockScenes },
