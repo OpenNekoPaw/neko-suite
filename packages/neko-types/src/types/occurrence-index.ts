@@ -37,6 +37,10 @@ export interface OccurrenceIndexEntry {
   locator: OccurrenceLocator;
 }
 
+export interface CreativeEntityOccurrenceIndex {
+  findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;
+}
+
 export function isTrustedOccurrenceEntry(entry: OccurrenceIndexEntry): boolean {
   return (entry.strength ?? 'confirmed') === 'confirmed';
 }

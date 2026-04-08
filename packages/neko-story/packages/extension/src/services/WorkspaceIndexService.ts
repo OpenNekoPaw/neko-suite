@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { CreativeEntityRef, OccurrenceIndexEntry } from '@neko/shared';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Character, SceneHeading, Section } from '@neko-story/types';
 import type {
@@ -209,6 +210,56 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
       scenes,
       characters,
     };
+  }
+
+  listOccurrencesByCharacterId(characterId: string): readonly OccurrenceIndexEntry[] {
+    if (!this.characterIndexService) {
+      return [];
+    }
+
+    const results: OccurrenceIndexEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const [name, locations] of this.characterIndex) {
+      const resolution = this.characterIndexService.resolveCharacter(name);
+      if (resolution?.characterId !== characterId) {
+        continue;
+      }
+
+      for (const location of locations) {
+        const key = `${location.uri.toString()}:${location.range.start.line}:${location.range.start.character}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        results.push({
+          entity: {
+            kind: 'character',
+            id: characterId,
+            label: resolution.record.displayName ?? resolution.record.canonicalName,
+          },
+          source: 'script',
+          sourceId: key,
+          strength: 'confirmed',
+          provenance: 'rule',
+          locator: {
+            uri: location.uri.toString(),
+            lineStart: location.range.start.line,
+            lineEnd: location.range.end.line,
+          },
+        });
+      }
+    }
+
+    return results;
+  }
+
+  listOccurrences(entity: CreativeEntityRef): readonly OccurrenceIndexEntry[] {
+    if (entity.kind === 'character') {
+      return this.listOccurrencesByCharacterId(entity.id);
+    }
+
+    return [];
   }
 
   dispose(): void {

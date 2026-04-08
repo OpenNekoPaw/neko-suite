@@ -309,6 +309,18 @@ export function activate(context: vscode.ExtensionContext) {
           : vscode.Uri.file(uriOrPath);
       return indexService.getScriptIndex(uri);
     },
+
+    entities: {
+      async findOccurrences(entity) {
+        await indexService.ensureInitialized();
+        return [...indexService.listOccurrences(entity)];
+      },
+
+      async findCharacterOccurrences(characterId: string) {
+        await indexService.ensureInitialized();
+        return [...indexService.listOccurrencesByCharacterId(characterId)];
+      },
+    },
   };
 
   // Register capability provider with neko-agent (if installed)
@@ -333,7 +345,9 @@ function createAgentOccurrenceLookup() {
       }
 
       try {
-        const api = extension.isActive ? extension.exports : ((await extension.activate()) as NekoAgentAPI);
+        const api = extension.isActive
+          ? extension.exports
+          : ((await extension.activate()) as NekoAgentAPI);
         return api.entities.findCharacterOccurrences(characterId);
       } catch {
         return [];

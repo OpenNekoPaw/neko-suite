@@ -286,6 +286,8 @@ function createMockIndex(files: Record<string, string>): IWorkspaceIndex {
     getAllCharacterNames: () => Array.from(characterIndex.keys()).sort(),
     getAllSceneLocations: () => Array.from(sceneIndex.keys()).sort(),
     getScriptIndex: () => undefined,
+    listOccurrencesByCharacterId: () => [],
+    listOccurrences: () => [],
     onDidUpdateIndex: (() => ({ dispose: () => {} })) as any,
     dispose: () => {},
   };
@@ -317,7 +319,8 @@ function createMockCharacterIndex(): ICharacterWorkspaceIndex {
       name === 'JOHN'
         ? { characterId: 'char_john', matchedBy: 'canonicalName' as const, record }
         : undefined,
-    getDefinitionLocation: (id: string) => (id === 'char_john' ? (definitionLocation as any) : undefined),
+    getDefinitionLocation: (id: string) =>
+      id === 'char_john' ? (definitionLocation as any) : undefined,
     dispose: () => {},
   };
 }

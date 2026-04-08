@@ -385,6 +385,18 @@ export interface NekoStoryAPI {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+
+  entities: {
+    /**
+     * Find projected occurrences for a creative entity inside indexed scripts.
+     */
+    findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;
+
+    /**
+     * Convenience query for character identity occurrences inside scripts.
+     */
+    findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
+  };
 }
 
 // =============================================================================

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { CreativeEntityRef, OccurrenceIndexEntry } from '@neko/shared';
 import type { FountainDocument } from '@neko-story/types';
 
 // -- ScriptIndex types (agent-accessible structured representation) --
@@ -121,6 +122,16 @@ export interface IWorkspaceIndex extends vscode.Disposable {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uri: vscode.Uri): ScriptIndex | undefined;
+
+  /**
+   * Returns projected occurrence entries for a stable character identity across scripts.
+   */
+  listOccurrencesByCharacterId(characterId: string): readonly OccurrenceIndexEntry[];
+
+  /**
+   * Returns projected occurrence entries for a supported creative entity.
+   */
+  listOccurrences(entity: CreativeEntityRef): readonly OccurrenceIndexEntry[];
 
   /**
    * Fires when the index has been updated with the affected URIs.

@@ -27,7 +27,14 @@ import {
   onDidChangeCanvasSelection,
   recordCanvasChange,
 } from './services/canvasAmbientContext';
-import type { CreativeEntityRef, NekoAgentAPI, NekoCanvasAPI } from '@neko/shared';
+import { NEKO_EXTENSION_IDS } from '@neko/shared';
+import type {
+  CreativeEntityRef,
+  NekoAgentAPI,
+  NekoCanvasAPI,
+  NekoStoryAPI,
+  OccurrenceIndexEntry,
+} from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -154,12 +161,18 @@ function createGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
 
 function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
   const findCharacterOccurrences = async (characterId: string) => {
-    if (!assetIndex) {
-      return [];
+    const results: OccurrenceIndexEntry[] = [];
+    const storyApi = await getStoryApi();
+    if (storyApi) {
+      results.push(...(await storyApi.entities.findCharacterOccurrences(characterId)));
     }
 
-    await assetIndex.load();
-    return assetIndex.listOccurrencesByCharacterId(characterId);
+    if (assetIndex) {
+      await assetIndex.load();
+      results.push(...assetIndex.listOccurrencesByCharacterId(characterId));
+    }
+
+    return dedupeOccurrences(results);
   };
 
   const findOccurrences = async (entity: CreativeEntityRef) => {
@@ -176,6 +189,35 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
       findCharacterOccurrences,
     },
   };
+}
+
+async function getStoryApi(): Promise<NekoStoryAPI | undefined> {
+  const storyExt = vscode.extensions.getExtension<NekoStoryAPI>(NEKO_EXTENSION_IDS.NEKO_STORY);
+  if (!storyExt) {
+    return undefined;
+  }
+
+  try {
+    return storyExt.isActive ? storyExt.exports : ((await storyExt.activate()) as NekoStoryAPI);
+  } catch {
+    return undefined;
+  }
+}
+
+function dedupeOccurrences(entries: readonly OccurrenceIndexEntry[]): OccurrenceIndexEntry[] {
+  const seen = new Set<string>();
+  const results: OccurrenceIndexEntry[] = [];
+
+  for (const entry of entries) {
+    const key = `${entry.source}:${entry.sourceId}:${entry.locator.uri ?? ''}:${entry.locator.lineStart ?? -1}:${entry.locator.nodeId ?? ''}:${entry.entity.kind}:${entry.entity.id}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    results.push(entry);
+  }
+
+  return results;
 }
 
 /**
