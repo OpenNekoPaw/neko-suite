@@ -47,6 +47,12 @@ export type {
   ParseStoryboardStageDeps,
 } from './stages/parse-storyboard';
 
+export { createImportStoryboardToCanvasStage } from './stages/import-storyboard-to-canvas';
+export type {
+  IStoryboardCanvasSink,
+  ImportStoryboardToCanvasStageDeps,
+} from './stages/import-storyboard-to-canvas';
+
 export { createGeneratePromptsStage } from './stages/generate-prompts';
 export type { IPromptOptimizer, GeneratePromptsStageDeps } from './stages/generate-prompts';
 

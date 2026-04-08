@@ -2,12 +2,12 @@
  * Pipeline Registry — Manages stage pool and flow definitions
  *
  * Flows are predefined combinations of stages:
- *   flowA: readDocument → parseStoryboard → generatePrompts → batchGenerate → arrange
+ *   flowA: readDocument → parseStoryboard → importStoryboardToCanvas → generatePrompts → batchGenerate → arrange
  *   flowB: generatePrompts → batchGenerate → arrange
  *   flowC: readDocument → generatePrompts → batchGenerate → arrange
  *   flowD: parseStoryboard → arrange
- *   flowE: parseStoryboard → generatePrompts → batchGenerate → arrange
- *   flowF: parseStoryboard → generatePrompts → batchGenerate → arrange
+ *   flowE: parseStoryboard → importStoryboardToCanvas → generatePrompts → batchGenerate → arrange
+ *   flowF: parseStoryboard → importStoryboardToCanvas → generatePrompts → batchGenerate → arrange
  */
 
 import type { IPipelineStage, IPipelineRegistry, FlowId } from './types';
@@ -17,6 +17,7 @@ const FLOW_DEFINITIONS: Record<FlowId, string[]> = {
   flowA: [
     'readDocument',
     'parseStoryboard',
+    'importStoryboardToCanvas',
     'generatePrompts',
     'generatePilot',
     'batchGenerate',
@@ -35,6 +36,7 @@ const FLOW_DEFINITIONS: Record<FlowId, string[]> = {
   flowD: ['parseStoryboard', 'arrangeOnTimeline'],
   flowE: [
     'parseStoryboard',
+    'importStoryboardToCanvas',
     'generatePrompts',
     'generatePilot',
     'batchGenerate',
@@ -43,6 +45,7 @@ const FLOW_DEFINITIONS: Record<FlowId, string[]> = {
   ],
   flowF: [
     'parseStoryboard',
+    'importStoryboardToCanvas',
     'generatePrompts',
     'generatePilot',
     'batchGenerate',
