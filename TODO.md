@@ -158,11 +158,15 @@
 
 ### neko-engine Architecture (2026-04-08 restructuring complete)
 
-**Completed**: R0 (8 crate semantic rename) → R1 (runtime-device) → R2 (runtime-ml) → R3 (runtime-media) → P1 (PluginManager MVP) → cleanup (delete duplicate device/ml code, remove midir/gilrs/ort deps). 11 crates, 758 tests.
+**Completed**: R0 (8 crate semantic rename) → R1 (runtime-device) → R2 (runtime-ml) → R3 (runtime-media) → P1 (PluginManager MVP) → cleanup (delete duplicate device/ml code, remove midir/gilrs/ort deps) → P0 fix (video_diff ffmpeg-next) → P1 fix (runtime-media independent). 11 crates, 758 tests. Zero external CLI dependencies.
+
+**Resolved**:
+- [x] **P0: video_diff.rs ffmpeg CLI** — rewritten to ffmpeg-next filter graph API (filter::Graph + buffer/buffersink for ssim/psnr). No external binary dependency.
+- [x] **P1: media_service 循环依赖** — runtime-media 自包含（自定义 MediaError + ffmpeg-next 直接解码音频），engine-kernel 单向依赖 runtime-media
 
 **Remaining tech debt**:
-- [ ] **P0: video_diff.rs 依赖外部 ffmpeg CLI 进程** — `std::process::Command::new("ffmpeg")` 调用系统 PATH 上的 ffmpeg 二进制而非 engine 已链接的 `ffmpeg-next` 库 API。用户未安装 ffmpeg CLI 时视频 diff 静默失败。影响 neko-tools MediaDiff 功能。修复方案：改用 `ffmpeg-next` filter graph API（`filter::Graph` + ssim/psnr filter）
-- [ ] media_service/ 在 engine-kernel 和 runtime-media 中存在副本（循环依赖约束：engine-kernel 内部 service 引用 media_service，runtime-media 依赖 engine-kernel 的 error/audio 类型）
+- [ ] media_service/ 在 engine-kernel 和 runtime-media 中仍有副本（engine-kernel 内部 service 引用 media_service；后续可委托给 runtime-media）
+- [ ] generate_diff_video (blend) 为 stub（需 encode+mux pipeline，使用频率低）
 - [ ] P2: PluginManager 纳入 effects:register / models:register 统一生命周期
 - [ ] P2: semver crate 替换当前 PluginManager 的简单 major 版本比较
 - [ ] R4: RuntimeDescriptor trait — host-api 动态发现 runtime（当前 ActionRouter 硬编码 18 个 controller）
