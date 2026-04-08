@@ -27,3 +27,5 @@ export {
   type DiffLineType,
   type DiffStats,
 } from './diff';
+
+export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';

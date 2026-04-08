@@ -16,7 +16,9 @@ import type {
   NekoStoryAPI,
   NekoSketchAPI,
   ToolParameters,
+  StoryScenePlan,
 } from '@neko/shared';
+import { applyStoryboardPayloadToCanvas, createStoryboardPayload } from '@neko/shared';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
 import type { MediaGenerationService, ConfigManager } from '@neko/platform';
@@ -1429,14 +1431,19 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
       name: 'import_script_to_canvas',
       description:
         'Import a Fountain screenplay into the active canvas as a storyboard skeleton. ' +
-        'Each scene heading becomes a SceneGroupNode; each dialogue/action block becomes a ShotNode ' +
-        'inside its parent scene. Call GetScriptIndex first to verify the file is indexed.',
+        'Supports two code paths: mechanical skeleton import, or semantic import when ScenePlan/ShotPlan data is provided.',
       parameters: {
         type: 'object',
         properties: {
           path: {
             type: 'string',
             description: 'Absolute path to the .fountain screenplay file',
+          },
+          mode: {
+            type: 'string',
+            enum: ['mechanical', 'semantic'],
+            description:
+              'Storyboard import mode. mechanical = line-heuristic skeleton, semantic = use ScenePlan/ShotPlan input when provided.',
           },
           startX: {
             type: 'number',
@@ -1449,6 +1456,11 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
           scenesLimit: {
             type: 'number',
             description: 'Maximum number of scenes to import (default: all, max: 50)',
+          },
+          scenePlans: {
+            type: 'array',
+            description:
+              'Optional semantic ScenePlan/ShotPlan array. Used when mode=semantic; falls back to mechanical planning when omitted.',
           },
         },
         required: ['path'],
@@ -1469,76 +1481,22 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
 
         const startX = (args.startX as number | undefined) ?? 100;
         const startY = (args.startY as number | undefined) ?? 100;
-        const maxScenes = Math.min(
-          (args.scenesLimit as number | undefined) ?? index.scenes.length,
-          50,
-        );
-
-        const SCENE_WIDTH = 900;
-        const SCENE_GAP = 80;
-        const SHOT_WIDTH = 200;
-        const SHOT_GAP = 20;
-
-        const created: { sceneId: string; shotIds: string[] }[] = [];
-
-        for (let si = 0; si < maxScenes; si++) {
-          const scene = index.scenes[si];
-          if (!scene) continue;
-          const sceneX = startX + si * (SCENE_WIDTH + SCENE_GAP);
-
-          // Create SceneGroupNode
-          const sceneNodeId = await canvasApi.nodes.create(
-            'scene' as import('@neko/shared').CanvasNodeType,
-            { x: sceneX, y: startY },
-            {
-              sceneTitle: scene.heading,
-              sceneNumber: si + 1,
-              shotIds: [] as string[],
-            },
-          );
-
-          // Create ShotNodes for each dialogue/action block in the scene
-          // We estimate shots from line range: one shot per ~10 lines, min 1
-          const lineSpan = scene.line_end - scene.line_start;
-          const shotCount = Math.max(1, Math.min(Math.round(lineSpan / 10), 8));
-          const shotIds: string[] = [];
-
-          for (let sh = 0; sh < shotCount; sh++) {
-            const shotX = sceneX + sh * (SHOT_WIDTH + SHOT_GAP);
-            const shotY = startY + 240;
-            const shotNodeId = await canvasApi.nodes.create(
-              'shot' as import('@neko/shared').CanvasNodeType,
-              { x: shotX, y: shotY },
-              {
-                shotNumber: si * 8 + sh + 1,
-                sceneGroupId: sceneNodeId,
-                duration: 3,
-                visualDescription: '',
-                shotScale: 'MS' as const,
-                characters: [] as unknown[],
-                emotion: [] as string[],
-                sceneTags: [] as string[],
-                generationStatus: 'idle' as const,
-                generationHistory: [] as unknown[],
-              },
-            );
-            shotIds.push(shotNodeId);
-          }
-
-          // Update SceneGroupNode with shot IDs
-          await canvasApi.nodes.update(sceneNodeId, { shotIds });
-
-          created.push({ sceneId: sceneNodeId, shotIds });
-        }
+        const payload = createStoryboardPayload(index, {
+          mode: (args.mode as 'mechanical' | 'semantic' | undefined) ?? 'mechanical',
+          scenesLimit: Math.min((args.scenesLimit as number | undefined) ?? index.scenes.length, 50),
+          scenePlans: (args.scenePlans as StoryScenePlan[] | undefined) ?? [],
+        });
+        const created = await applyStoryboardPayloadToCanvas(canvasApi, payload, { startX, startY });
 
         logger.info(
-          `import_script_to_canvas: created ${created.length} scenes with ${created.reduce((n, s) => n + s.shotIds.length, 0)} shots`,
+          `import_script_to_canvas: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,
         );
         return {
           success: true,
-          scenesCreated: created.length,
-          totalShots: created.reduce((n, s) => n + s.shotIds.length, 0),
-          scenes: created,
+          mode: created.mode,
+          scenesCreated: created.scenesCreated,
+          totalShots: created.totalShots,
+          scenes: created.scenes,
         };
       },
     });

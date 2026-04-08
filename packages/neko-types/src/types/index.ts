@@ -147,6 +147,7 @@ export * from './mediaEngine';
 
 // Canvas types (infinite canvas editor)
 export * from './canvas';
+export * from './storyboard-planner';
 
 // Sketch types (.nks document format)
 export * from './sketch';
