@@ -2,7 +2,6 @@ import type { MessageBundle } from '@neko/shared';
 
 import { ai } from './ai';
 import { animation } from './animation';
-import { assetLibrary } from './assetLibrary';
 import { audio } from './audio';
 import { blendMode } from './blendMode';
 import { chat } from './chat';
@@ -31,7 +30,6 @@ import { transition } from './transition';
 export const bundles: Record<string, MessageBundle> = {
   ai,
   animation,
-  assetLibrary,
   audio,
   blendMode,
   chat,

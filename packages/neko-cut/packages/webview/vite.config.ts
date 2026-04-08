@@ -96,7 +96,6 @@ export default defineConfig(({ command }) => {
     rollupOptions: {
       input: {
         index: path.resolve(__dirname, 'index.html'),
-        assetLibrary: path.resolve(__dirname, 'assetLibrary.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',
