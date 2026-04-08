@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { NekoCutAPI } from '@neko/shared';
+import type { NekoCutAPI, NekoStoryAPI, StoryScenePlan } from '@neko/shared';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
@@ -35,6 +35,14 @@ export interface IDocumentReader {
 
 export interface IStoryParser {
   parseToScenes(content: string): StoryboardScene[];
+}
+
+export interface IStructuredStoryPlanner {
+  plan(ctx: {
+    source?: string;
+    sourceFormat?: 'fountain' | 'freeform' | 'document';
+    globalStyle?: string;
+  }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined>;
 }
 
 export interface ILLMAnalyzer {
@@ -218,6 +226,74 @@ export class StoryParserAdapter implements IStoryParser {
       estimatedDuration: Math.max(3, Math.ceil(text.length / 100) * 2),
       suggestedPrompt: text.slice(0, 500),
     }));
+  }
+}
+
+// =============================================================================
+// IStructuredStoryPlanner → neko-story extension API
+// =============================================================================
+
+export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
+  async plan(ctx: {
+    source?: string;
+    sourceFormat?: 'fountain' | 'freeform' | 'document';
+    globalStyle?: string;
+  }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined> {
+    if (ctx.sourceFormat !== 'fountain' || !ctx.source || ctx.source.includes('\n')) {
+      return undefined;
+    }
+
+    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.nekostory');
+    if (!storyExt) {
+      logger.warn('neko-story extension not installed, skipping structured scene planning');
+      return undefined;
+    }
+
+    const api = storyExt.isActive
+      ? storyExt.exports
+      : ((await storyExt.activate()) as NekoStoryAPI);
+
+    const scenePlans = api.generateScenePlans(ctx.source);
+    const scriptIndex = api.getScriptIndex(ctx.source);
+    if (!scenePlans || !scriptIndex) {
+      logger.warn(
+        'neko-story ScriptIndex unavailable, falling back to parser-based scene extraction',
+      );
+      return undefined;
+    }
+
+    const scenes = scenePlans.map((scenePlan, index) => {
+      const scene = scriptIndex.scenes.find((entry) => entry.sceneId === scenePlan.sceneId);
+      const description =
+        scenePlan.summary || scene?.actionSummary || scenePlan.sceneTitle || 'Scene';
+      const suggestedPrompt = scenePlan.shotPlans
+        ?.map((shotPlan) => shotPlan.visualDescription)
+        .filter((value): value is string => Boolean(value && value.trim()))
+        .join(' ')
+        .slice(0, 500);
+
+      return {
+        index,
+        sceneId: scenePlan.sceneId,
+        heading: scene?.heading ?? scenePlan.sceneTitle ?? `Scene ${index + 1}`,
+        description,
+        dialogue:
+          scenePlan.shotPlans
+            ?.map((shotPlan) => shotPlan.dialogue)
+            .filter((value): value is string => Boolean(value && value.trim())) ?? [],
+        estimatedDuration:
+          scenePlan.shotPlans?.reduce((total, shotPlan) => total + (shotPlan.duration ?? 0), 0) ??
+          scene?.estimatedDuration ??
+          3,
+        suggestedPrompt:
+          suggestedPrompt && suggestedPrompt.length > 0
+            ? suggestedPrompt
+            : [scene?.sceneTitle, description].filter(Boolean).join('. ').slice(0, 500),
+        shotPlans: scenePlan.shotPlans,
+      } satisfies StoryboardScene;
+    });
+
+    return { scenes, scenePlans };
   }
 }
 

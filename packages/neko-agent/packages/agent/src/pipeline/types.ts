@@ -8,6 +8,8 @@
  *   L0 Atomic       → MediaGeneration / NekoCutAPI / Parser (existing)
  */
 
+import type { StoryScenePlan, StoryShotPlan } from '@neko/shared';
+
 // =============================================================================
 // Stage Types
 // =============================================================================
@@ -114,6 +116,8 @@ export interface EvalResult {
 export interface StoryboardScene {
   /** Scene index (0-based) */
   index: number;
+  /** Stable story scene ID when the source came from ScriptIndex */
+  sceneId?: string;
   /** Scene heading (e.g., "INT. COFFEE SHOP - DAY") */
   heading: string;
   /** Visual description of the scene */
@@ -124,6 +128,8 @@ export interface StoryboardScene {
   estimatedDuration: number;
   /** AI-generated video prompt for this scene */
   suggestedPrompt: string;
+  /** Semantic shot plan source when available */
+  shotPlans?: readonly StoryShotPlan[];
 }
 
 /**
@@ -142,6 +148,8 @@ export interface PipelineContext {
   // — Storyboard —
   /** Structured scenes (from parseStoryboard stage) */
   scenes?: StoryboardScene[];
+  /** Deterministic semantic scene plans (for downstream canvas import) */
+  scenePlans?: readonly StoryScenePlan[];
 
   // — Generation —
   /** Batch ID for tracking parallel generation */
