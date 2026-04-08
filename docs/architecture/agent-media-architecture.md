@@ -5,6 +5,8 @@
 **实施日期**: 2026-04-03  
 **关联**: neko-agent · neko-story · neko-canvas · @neko/shared
 
+> 后续关于 `story` / `agent` / `canvas` 的职责收敛，以及轻量分镜表的定位，见 [story-agent-canvas-boundary.md](./story-agent-canvas-boundary.md)。
+
 ---
 
 ## 背景
