@@ -27,3 +27,8 @@ export {
   type DiffLineType,
   type DiffStats,
 } from './diff';
+
+export {
+  applyCanvasTimelineSyncToCanvas,
+  buildStoryboardImportTimelineSyncPayload,
+} from './canvasTimelineSync';

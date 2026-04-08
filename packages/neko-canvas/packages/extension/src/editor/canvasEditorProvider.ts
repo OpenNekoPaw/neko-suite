@@ -8,8 +8,20 @@ import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
-import { loadNkc } from '@neko/shared';
-import type { CanvasNode, CanvasNodeType } from '@neko/shared';
+import {
+  buildStoryboardImportTimelineSyncPayload,
+  inferCanvasDocumentType,
+  inferCanvasDroppedAssetKind,
+  inferCanvasMediaType,
+  inferCanvasModelType,
+  loadNkc,
+} from '@neko/shared';
+import type {
+  CanvasDroppedAsset,
+  CanvasNode,
+  CanvasNodeType,
+  CanvasTimelineSyncPayload,
+} from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -17,6 +29,52 @@ import { getLogger } from '../utils/logger';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
+
+function mapOperationToCanvasChangeEvent(operation: {
+  type?: string;
+  payload?: Record<string, unknown>;
+}): CanvasChangeEvent {
+  const opType = operation.type ?? 'unknown';
+  const payload = operation.payload ?? {};
+  const payloadNode = payload['node'];
+  const payloadGroupNode = payload['groupNode'];
+  const nodeId =
+    typeof payload['nodeId'] === 'string'
+      ? payload['nodeId']
+      : typeof payloadNode === 'object' &&
+          payloadNode !== null &&
+          typeof (payloadNode as { id?: unknown }).id === 'string'
+        ? (payloadNode as { id: string }).id
+        : typeof payloadGroupNode === 'object' &&
+            payloadGroupNode !== null &&
+            typeof (payloadGroupNode as { id?: unknown }).id === 'string'
+          ? (payloadGroupNode as { id: string }).id
+          : undefined;
+  const nodeIds = Array.isArray(payload['childIds'])
+    ? (payload['childIds'] as unknown[]).filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : nodeId
+      ? [nodeId]
+      : undefined;
+
+  return {
+    type: opType.includes('.add')
+      ? 'add'
+      : opType.includes('.remove') || opType.includes('.ungroup')
+        ? 'delete'
+        : 'update',
+    nodeId,
+    nodeIds,
+    entityType: opType.startsWith('canvas.connection')
+      ? 'connection'
+      : opType.startsWith('canvas.node')
+        ? 'node'
+        : 'operation',
+    reason: 'operationApplied',
+    operationType: opType,
+  };
+}
 
 // NekoPreviewAPI type (matches neko-preview/src/types/api.ts)
 interface NekoPreviewAPI {
@@ -285,9 +343,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<string> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
     const result = await this.sendRequest<{ nodeId: string }>('nodes.create', {
-      type,
-      position,
-      data,
+      payload: { type, position, data },
     });
     this._onDidChangeCanvas.fire({ type: 'add' });
     return result.nodeId;
@@ -515,6 +571,130 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
+
+      case 'pickCanvasDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            'Neko Canvas': ['nkc'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'canvas.nkc';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Canvas';
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'canvas',
+                path: contractedPath,
+                name: fileName,
+                title,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
+      case 'pickScriptDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Scripts: ['fountain', 'nks', 'story'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'script.fountain';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Script';
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'script',
+                path: contractedPath,
+                name: fileName,
+                title,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
+      case 'pickReferenceDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Documents: ['pdf', 'docx', 'epub', 'cbz'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'document.pdf';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Document';
+          const docType = inferCanvasDocumentType(fileName);
+          if (!docType) break;
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'document',
+                path: contractedPath,
+                name: fileName,
+                title,
+                docType,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
+      case 'pickModelReference': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Models: ['safetensors', 'ckpt', 'pt', 'pth', 'bin'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'model.safetensors';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const modelName = fileName.replace(/\.[^.]+$/, '') || 'Model';
+          const modelType = inferCanvasModelType(fileName);
+          if (!modelType) break;
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'model',
+                path: contractedPath,
+                name: fileName,
+                modelName,
+                modelType,
+                role: 'reference',
+              },
+            ],
+          });
+        }
+        break;
+      }
+
       case 'canvasChanged':
         this._onDidChangeCanvas.fire({
           type: message.changeType as 'add' | 'update' | 'delete',
@@ -529,6 +709,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           undo: () => {},
           redo: () => {},
         });
+        this._onDidChangeCanvas.fire(
+          mapOperationToCanvasChangeEvent(
+            message.operation as {
+              type?: string;
+              payload?: Record<string, unknown>;
+            },
+          ),
+        );
         break;
 
       // =================================================================
@@ -712,23 +900,76 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'resolveDroppedFiles': {
-        // Webview dropped files from VSCode explorer - resolve URIs and detect media types
+        // Webview dropped files from VSCode explorer - resolve them into node-ready asset DTOs.
         const droppedUris = message.uris as string[];
-        const resolvedFiles: Array<{ uri: string; name: string; mediaType: string }> = [];
+        const resolvedAssets: CanvasDroppedAsset[] = [];
 
         for (const uriStr of droppedUris) {
           try {
             const fileUri = vscode.Uri.parse(uriStr);
             const fileName = fileUri.path.split('/').pop() || 'file';
-            const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-            const mediaType = this.detectMediaType(ext);
-            if (!mediaType) continue;
+            const assetKind = inferCanvasDroppedAssetKind(fileName);
+            if (!assetKind) continue;
 
-            const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
-            resolvedFiles.push({
-              uri: webviewUri.toString(),
+            if (assetKind === 'media') {
+              const mediaType = inferCanvasMediaType(fileName);
+              if (!mediaType) continue;
+
+              const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
+              resolvedAssets.push({
+                kind: 'media',
+                path: webviewUri.toString(),
+                name: fileName,
+                mediaType,
+              });
+              continue;
+            }
+
+            const contractedPath = await this.contractAssetPath(fileUri.fsPath, document.uri);
+            const baseName = fileName.replace(/\.[^.]+$/, '');
+
+            if (assetKind === 'script') {
+              resolvedAssets.push({
+                kind: 'script',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Script',
+              });
+              continue;
+            }
+
+            if (assetKind === 'document') {
+              const docType = inferCanvasDocumentType(fileName);
+              if (!docType) continue;
+              resolvedAssets.push({
+                kind: 'document',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Document',
+                docType,
+              });
+              continue;
+            }
+
+            if (assetKind === 'canvas') {
+              resolvedAssets.push({
+                kind: 'canvas',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Canvas',
+              });
+              continue;
+            }
+
+            const modelType = inferCanvasModelType(fileName);
+            if (!modelType) continue;
+            resolvedAssets.push({
+              kind: 'model',
+              path: contractedPath,
               name: fileName,
-              mediaType,
+              modelName: baseName || 'Model',
+              modelType,
+              role: 'reference',
             });
           } catch {
             // Skip invalid URIs
@@ -736,10 +977,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
         }
 
-        if (resolvedFiles.length > 0) {
+        if (resolvedAssets.length > 0) {
           webviewPanel.webview.postMessage({
-            type: 'dropMedia',
-            files: resolvedFiles,
+            type: 'dropAssets',
+            assets: resolvedAssets,
           });
         }
         break;
@@ -869,6 +1110,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           await vscode.commands.executeCommand('neko.cut.importStoryboard', {
             projectName,
             shots,
+          });
+          const shotIds = shots
+            .map((shot) =>
+              typeof shot === 'object' &&
+              shot !== null &&
+              typeof (shot as { id?: unknown }).id === 'string'
+                ? (shot as { id: string }).id
+                : null,
+            )
+            .filter((shotId): shotId is string => shotId !== null);
+          const importedAt = Date.now();
+          const payload: CanvasTimelineSyncPayload = buildStoryboardImportTimelineSyncPayload(
+            shotIds,
+            projectName,
+            importedAt,
+          );
+          webviewPanel.webview.postMessage({
+            type: 'timelineSync',
+            payload,
+          });
+          this._onDidChangeCanvas.fire({
+            type: 'update',
+            nodeIds: shotIds,
+            entityType: 'import',
+            reason: 'importToTimeline',
+            operationType: 'timeline.import',
           });
         } catch {
           vscode.window.showWarningMessage(
@@ -1000,6 +1267,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'selectionChange': {
         const nodes = (message.nodes ?? []) as CanvasNode[];
         this._onSelectionChange.fire(nodes);
+        this._onDidChangeCanvas.fire({
+          type: 'update',
+          entityType: 'selection',
+          reason: 'selectionChange',
+          nodeIds: nodes.map((node) => node.id),
+        });
         break;
       }
 
@@ -1021,32 +1294,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
-
-  private static readonly MEDIA_EXTENSIONS: Record<string, string> = {
-    png: 'image',
-    jpg: 'image',
-    jpeg: 'image',
-    gif: 'image',
-    webp: 'image',
-    bmp: 'image',
-    svg: 'image',
-    mp4: 'video',
-    mov: 'video',
-    avi: 'video',
-    mkv: 'video',
-    webm: 'video',
-    m4v: 'video',
-    mp3: 'audio',
-    wav: 'audio',
-    ogg: 'audio',
-    m4a: 'audio',
-    aac: 'audio',
-    flac: 'audio',
-  };
-
-  private detectMediaType(ext: string): string | null {
-    return CanvasEditorProvider.MEDIA_EXTENSIONS[ext] ?? null;
-  }
 
   /** Resolve asset path (PathVariable, webview URI, relative, or absolute) to absolute filesystem path */
   private async resolveAssetPath(assetPath: string, documentUri: vscode.Uri): Promise<string> {

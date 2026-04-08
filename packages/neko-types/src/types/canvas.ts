@@ -275,6 +275,10 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     voiceOver?: string;
     /** Sound effect cue */
     soundCue?: string;
+    /** Last successful storyboard import into neko-cut timeline */
+    lastImportedToTimelineAt?: number;
+    /** Target project name used during the last storyboard import */
+    lastImportedToTimelineProject?: string;
   };
 }
 

@@ -1,12 +1,12 @@
 # neko-canvas 架构
 
-> 无限画布 + 节点图编辑器，支持媒体节点内联播放、故事板卡片、连接系统和自动对齐。
+> 无限画布 + 语义编排编辑器，支持媒体节点内联播放、分镜系统、输入引用节点、候选审阅和跨扩展回流。
 
 ---
 
 ## 系统定位
 
-neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放等能力。它也是 neko-sketch（绘画工具）的基础平台。
+neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放、分镜生成审阅、上下文引用组织等能力。它也是连接 neko-agent、neko-story、neko-sketch、neko-cut 的语义中枢。
 
 ---
 
@@ -31,7 +31,7 @@ packages/neko-canvas/
 │  extension.ts                                             │
 │    ├─ CanvasEditorProvider (CustomEditorProvider)          │
 │    │    └─ 处理 .nkc 文件读写                              │
-│    │    └─ 消息分发（save/pickMedia/dropFiles/media:*）    │
+│    │    └─ 消息分发（save/pick*/dropFiles/media:*）        │
 │    │                                                     │
 │    ├─ Views                                              │
 │    │    ├─ CanvasOutlineProvider (TreeView 大纲)           │
@@ -53,12 +53,10 @@ packages/neko-canvas/
 │  │    │    ├─ CanvasViewport (CSS transform 变换层) │      │
 │  │    │    ├─ ConnectionLayer (SVG 连线)            │      │
 │  │    │    └─ Node Components                      │      │
-│  │    │         ├─ MediaNode (视频/音频/图片)       │      │
-│  │    │         ├─ StoryboardNode (故事板卡片)      │      │
-│  │    │         ├─ AnnotationNode (文字注释)        │      │
-│  │    │         ├─ TextNode (排版文字 + 富文本工具栏) │      │
-│  │    │         ├─ ArtboardNode (画板/画框 + 导出)  │      │
-│  │    │         └─ GroupNode (分组 + 子节点列表)     │      │
+│  │    │         ├─ Media / Storyboard / Annotation │      │
+│  │    │         ├─ Text / Artboard / Group         │      │
+│  │    │         ├─ Shot / Scene / Gallery          │      │
+│  │    │         └─ Script / Document / Model / CanvasEmbed │
 │  │    │                                            │      │
 │  │    ├─ Controls                                  │      │
 │  │    │    ├─ ZoomControls (缩放控制)               │      │
@@ -72,6 +70,7 @@ packages/neko-canvas/
 │  │  Zustand Stores                                 │      │
 │  │    ├─ canvasStore (节点/连接/选区/视口)           │      │
 │  │    ├─ historyStore (撤销/重做)                   │      │
+│  │    ├─ canvasOperationStore (EditOperation bridge) │    │
 │  │    └─ clipboardStore (复制/粘贴)                 │      │
 │  │                                                 │      │
 │  │  Interaction Hooks                              │      │
@@ -104,6 +103,13 @@ packages/neko-canvas/
 | `TextNode` | 排版文字 | 富文本编辑 |
 | `ArtboardNode` | 画板/画框 | 固定尺寸容器 |
 | `GroupNode` | 分组 | 子节点列表 + 标签 + 颜色 + 组/取消组 |
+| `ShotNode` | 单镜分镜节点 | 候选版本导航、prompt/生成状态、cut 回流元数据 |
+| `SceneGroupNode` | 场景语义容器 | 镜头纳管、排序、自动布局、场景级批量生成 |
+| `GalleryNode` | 角色/视角画廊 | cell 级生成、候选审阅、角色引用 |
+| `ScriptNode` | 剧本引用 | TOC 模式、scene 跳转 |
+| `DocumentNode` | 文档引用 | PDF/DOCX/EPUB/CBZ 封面预览 |
+| `ModelNode` | 模型引用 | reference/workflow 双模式 |
+| `CanvasEmbedNode` | 子画布引用 | `.nkc` 嵌入和打开 |
 
 ### 节点增强功能
 
@@ -112,6 +118,8 @@ packages/neko-canvas/
 | 富文本工具栏 | `TextNode` | 字号、粗体、对齐（左/中/右）、文字颜色 |
 | 画板导出 | `ArtboardNode` | postMessage → Extension 保存对话框，导出配置 JSON |
 | 分组管理 | `GroupNode` | BaseNode 包装、子节点列表、标签/颜色编辑 |
+| 候选审阅 | `ShotNode` / `GalleryNode` | N/M 切换并稳定写回选中结果 |
+| 输入引用 | `ScriptNode` / `DocumentNode` / `ModelNode` / `CanvasEmbedNode` | Explorer 拖入 + toolbar picker |
 
 ### 连接系统
 
@@ -169,9 +177,9 @@ packages/neko-canvas/
 ```
 VSCode Explorer 拖放文件到 Webview
   → postMessage('resolveDroppedFiles', paths)
-    → Extension Host 解析文件类型 + probe
-      → postMessage('dropMedia', mediaInfo)
-        → canvasStore.addNode(MediaNode, dropPosition)
+    → Extension Host 解析文件类型
+      → postMessage('dropAssets', assetDtos)
+        → canvasStore.addNode(MediaNode | ScriptNode | DocumentNode | ModelNode | CanvasEmbedNode, dropPosition)
 ```
 
 ---
@@ -192,24 +200,31 @@ VSCode Explorer 拖放文件到 Webview
 ### Webview → Extension
 
 ```
-ready                      — Webview 就绪
-save(canvasData)           — 保存画布 JSON
-canvasStatus(info)         — 同步大纲/状态栏
-pickMedia                  — 打开文件选择器
-resolveDroppedFiles(paths) — 解析拖放的文件
-media:probe(path)          — 媒体探测
-media:play/seek/pause/stop — 播放控制
-media:captureFrame         — 截取帧
-exportArtboard(data)       — 导出画板配置
+ready                             — Webview 就绪
+save(canvasData)                  — 保存画布 JSON
+canvasStatus(info)                — 同步大纲/状态栏
+pickMedia                         — 打开媒体选择器
+pickScriptDocument                — 打开剧本选择器
+pickReferenceDocument             — 打开文档选择器
+pickModelReference                — 打开模型选择器
+pickCanvasDocument                — 打开 .nkc 选择器
+resolveDroppedFiles(paths)        — 解析拖放的文件
+media:probe(path)                 — 媒体探测
+media:play/seek/pause/stop        — 播放控制
+media:captureFrame                — 截取帧
+operationApplied                  — EditOperation 脏标记桥接
+exportArtboard(data)              — 导出画板配置
 ```
 
 ### Extension → Webview
 
 ```
-update(canvasData)         — 加载画布数据
-keyboardAction(action)     — 转发快捷键
-addMedia(mediaInfo)        — 文件选择器结果
-dropMedia(mediaInfoList)   — 拖放文件解析结果
+update(canvasData)               — 加载画布数据
+keyboardAction(action)           — 转发快捷键
+addMedia(mediaInfo)              — 文件选择器结果
+dropAssets(assetDtoList)         — 拖放/选择文件解析结果
+generationProgress               — 批量生成进度
+timelineSync(payload)            — cut → canvas 最小回流（共享契约，仅操作元数据）
 ```
 
 ---

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import type { CanvasData, CanvasViewport } from '@neko/shared';
+import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -17,6 +17,12 @@ import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
+import { buildCanvasNode } from './utils/nodeFactory';
+import {
+  appendSelectedGenerationCandidate,
+  selectGenerationCandidate,
+} from './utils/generationHistory';
+import { setGlobalVSCodeApi } from './utils/vscode';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
@@ -46,7 +52,7 @@ const vscode: VSCodeAPI = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCod
 
 // Expose on window so child components (e.g. MediaNode) can postMessage
 if (vscode) {
-  (window as unknown as Record<string, unknown>).vscode = vscode;
+  setGlobalVSCodeApi(vscode);
 }
 
 // =============================================================================
@@ -93,6 +99,9 @@ export function CanvasApp() {
     resizeNodeEnd,
     rotateNode,
     rotateNodeEnd,
+    assignShotsToScene,
+    reorderSceneShots,
+    autoLayoutSceneShots,
     selectNodes,
     groupNodes,
     ungroupNodes,
@@ -150,12 +159,22 @@ export function CanvasApp() {
   // Node helpers
   // =========================================================================
 
-  const { addTextAt, addSceneAt, addMediaAt, addShotAt, addSceneGroupAt, addGalleryAt } =
-    useNodeHelpers({
-      addNode,
-      nodeCount: nodes.length,
-      reportAction,
-    });
+  const {
+    addTextAt,
+    addSceneAt,
+    addMediaAt,
+    addShotAt,
+    addSceneGroupAt,
+    addGalleryAt,
+    addScriptAt,
+    addDocumentAt,
+    addModelAt,
+    addCanvasEmbedAt,
+  } = useNodeHelpers({
+    addNode,
+    nodeCount: nodes.length,
+    reportAction,
+  });
 
   // =========================================================================
   // Clipboard
@@ -187,6 +206,38 @@ export function CanvasApp() {
   const handleAddGallery = useCallback(() => {
     addGalleryAt(getViewportCenter());
   }, [addGalleryAt, getViewportCenter]);
+
+  const handleAddScript = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickScriptDocument' });
+    } else {
+      addScriptAt(getViewportCenter());
+    }
+  }, [addScriptAt, getViewportCenter]);
+
+  const handleAddDocument = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickReferenceDocument' });
+    } else {
+      addDocumentAt(getViewportCenter());
+    }
+  }, [addDocumentAt, getViewportCenter]);
+
+  const handleAddModel = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickModelReference' });
+    } else {
+      addModelAt(getViewportCenter());
+    }
+  }, [addModelAt, getViewportCenter]);
+
+  const handleAddCanvasEmbed = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickCanvasDocument' });
+    } else {
+      addCanvasEmbedAt(getViewportCenter());
+    }
+  }, [addCanvasEmbedAt, getViewportCenter]);
 
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
@@ -233,16 +284,28 @@ export function CanvasApp() {
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
     onAddMediaFromExtension: handleAddMediaFromExtension,
-    onDropMedia: (files) => {
+    onDropAssets: (assets: CanvasDroppedAsset[]) => {
       const pos = dropPositionRef.current ?? getViewportCenter();
-      files.forEach((file, i) => {
+      assets.forEach((asset, i) => {
         const offset = i * 30;
-        addMediaAt(
-          { x: pos.x + offset, y: pos.y + offset },
-          file.mediaType as 'image' | 'video' | 'audio',
-          file.uri,
-          file.name,
-        );
+        const dropPos = { x: pos.x + offset, y: pos.y + offset };
+        switch (asset.kind) {
+          case 'media':
+            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name);
+            break;
+          case 'script':
+            addScriptAt(dropPos, asset.path, asset.title);
+            break;
+          case 'document':
+            addDocumentAt(dropPos, asset.path, asset.title, asset.docType);
+            break;
+          case 'model':
+            addModelAt(dropPos, asset.path, asset.modelName, asset.modelType, asset.role);
+            break;
+          case 'canvas':
+            addCanvasEmbedAt(dropPos, asset.path, asset.title);
+            break;
+        }
       });
       dropPositionRef.current = null;
     },
@@ -257,16 +320,13 @@ export function CanvasApp() {
       if (node.type === 'shot') {
         if (status === 'done' && dataUrl) {
           const shotNode = node as import('@neko/shared').ShotCanvasNode;
-          const history = [
-            ...(shotNode.data.generationHistory ?? []),
-            {
-              id: `v-${Date.now()}`,
-              dataUrl,
-              prompt: '',
-              timestamp: Date.now(),
-              selected: true,
-            },
-          ];
+          const history = appendSelectedGenerationCandidate(shotNode.data.generationHistory ?? [], {
+            id: `v-${Date.now()}`,
+            dataUrl,
+            prompt: '',
+            timestamp: Date.now(),
+            selected: true,
+          });
           updateNodeData(nodeId, {
             generationStatus: 'done',
             generatedImage: dataUrl,
@@ -279,11 +339,28 @@ export function CanvasApp() {
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
         const cells = galleryNode.data.cells.map((c) =>
           c.id === cellId
-            ? {
-                ...c,
-                generationStatus: status as import('@neko/shared').GalleryCell['generationStatus'],
-                ...(status === 'done' && dataUrl ? { image: dataUrl } : {}),
-              }
+            ? (() => {
+                if (status === 'done' && dataUrl) {
+                  const history = appendSelectedGenerationCandidate(c.generationHistory ?? [], {
+                    id: `gallery-${cellId}-${Date.now()}`,
+                    dataUrl,
+                    prompt: '',
+                    timestamp: Date.now(),
+                    selected: true,
+                  });
+                  return {
+                    ...c,
+                    generationStatus: 'done' as const,
+                    image: dataUrl,
+                    generationHistory: history,
+                  };
+                }
+                return {
+                  ...c,
+                  generationStatus:
+                    status as import('@neko/shared').GalleryCell['generationStatus'],
+                };
+              })()
             : c,
         );
         updateNodeData(nodeId, { cells });
@@ -295,22 +372,29 @@ export function CanvasApp() {
     onModelInstalledResult: (nodeId, installedVersion) => {
       updateNodeData(nodeId, { installedVersion: installedVersion ?? undefined });
     },
+    onTimelineSync: (payload) => {
+      payload.shots.forEach(({ shotId, projectName, importedAt }) => {
+        const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === shotId);
+        if (node?.type !== 'shot') return;
+        updateNodeData(shotId, {
+          lastImportedToTimelineAt: importedAt ?? node.data.lastImportedToTimelineAt,
+          lastImportedToTimelineProject: projectName ?? node.data.lastImportedToTimelineProject,
+        });
+      });
+    },
     onUpdateNodeImage: (nodeId, imageData, cellId) => {
       // Sketch round-trip: update the shot node's generatedImage and append to history
       const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
       if (!node) return;
       if (node.type === 'shot') {
         const shotNode = node as import('@neko/shared').ShotCanvasNode;
-        const history = [
-          ...(shotNode.data.generationHistory ?? []),
-          {
-            id: `sketch-${Date.now()}`,
-            dataUrl: imageData,
-            prompt: '',
-            timestamp: Date.now(),
-            selected: true,
-          },
-        ];
+        const history = appendSelectedGenerationCandidate(shotNode.data.generationHistory ?? [], {
+          id: `sketch-${Date.now()}`,
+          dataUrl: imageData,
+          prompt: '',
+          timestamp: Date.now(),
+          selected: true,
+        });
         updateNodeData(nodeId, {
           generatedImage: imageData,
           generationHistory: history,
@@ -318,7 +402,19 @@ export function CanvasApp() {
       } else if (node.type === 'gallery' && cellId) {
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
         const cells = galleryNode.data.cells.map((c) =>
-          c.id === cellId ? { ...c, image: imageData } : c,
+          c.id === cellId
+            ? {
+                ...c,
+                image: imageData,
+                generationHistory: appendSelectedGenerationCandidate(c.generationHistory ?? [], {
+                  id: `gallery-sketch-${cellId}-${Date.now()}`,
+                  dataUrl: imageData,
+                  prompt: '',
+                  timestamp: Date.now(),
+                  selected: true,
+                }),
+              }
+            : c,
         );
         updateNodeData(nodeId, { cells });
       }
@@ -328,8 +424,17 @@ export function CanvasApp() {
       return type ? allNodes.filter((n) => n.type === type) : allNodes;
     },
     getNode: (id) => useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === id),
-    updateNode: (id, updates) => useCanvasStore.getState().updateNode(id, updates),
-    createNode: (node) => useCanvasStore.getState().addNode(node),
+    updateNode: (id, data) => useCanvasStore.getState().updateNodeData(id, data),
+    createNode: (nodeSpec) => {
+      const currentNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+      const node = buildCanvasNode({
+        type: nodeSpec.type,
+        position: nodeSpec.position,
+        data: nodeSpec.data,
+        zIndex: currentNodes.length,
+      });
+      return useCanvasStore.getState().addNode(node);
+    },
   });
 
   // =========================================================================
@@ -452,9 +557,88 @@ export function CanvasApp() {
     vscode?.postMessage({ type: 'openDocument', docPath });
   }, []);
 
+  const handleCanvasEmbedOpen = useCallback((canvasPath: string) => {
+    vscode?.postMessage({ type: 'openDocument', docPath: canvasPath });
+  }, []);
+
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
+
+  const handleAssignSelectedShotsToScene = useCallback(
+    (sceneId: string) => {
+      const shotIds = nodes
+        .filter((node) => selectedNodeIds.includes(node.id) && node.type === 'shot')
+        .map((node) => node.id);
+      if (shotIds.length === 0) return;
+      assignShotsToScene(sceneId, shotIds, true);
+    },
+    [assignShotsToScene, nodes, selectedNodeIds],
+  );
+
+  const handleAutoLayoutSceneShots = useCallback(
+    (sceneId: string) => {
+      autoLayoutSceneShots(sceneId);
+    },
+    [autoLayoutSceneShots],
+  );
+
+  const handleBatchGenerateSceneShots = useCallback(
+    (sceneId: string) => {
+      const target = nodes.find((node) => node.id === sceneId);
+      if (!target || target.type !== 'scene' || target.data.shotIds.length === 0) return;
+      vscode?.postMessage({
+        type: 'sendToAgent',
+        nodeIds: target.data.shotIds,
+        action: 'batch',
+      });
+    },
+    [nodes],
+  );
+
+  const handleReorderSceneShots = useCallback(
+    (sceneId: string, shotIds: string[]) => {
+      reorderSceneShots(sceneId, shotIds, true);
+    },
+    [reorderSceneShots],
+  );
+
+  const handleSelectShotCandidate = useCallback(
+    (nodeId: string, candidateId: string) => {
+      const target = nodes.find((node) => node.id === nodeId);
+      if (!target || target.type !== 'shot') return;
+
+      const nextHistory = selectGenerationCandidate(target.data.generationHistory, candidateId);
+      const selected = nextHistory.find((candidate) => candidate.selected);
+
+      updateNodeData(nodeId, {
+        generationHistory: nextHistory,
+        generatedImage: selected?.dataUrl,
+      });
+    },
+    [nodes, updateNodeData],
+  );
+
+  const handleSelectGalleryCellCandidate = useCallback(
+    (nodeId: string, cellId: string, candidateId: string) => {
+      const target = nodes.find((node) => node.id === nodeId);
+      if (!target || target.type !== 'gallery') return;
+
+      const cells = target.data.cells.map((cell) => {
+        if (cell.id !== cellId) return cell;
+        const nextHistory = selectGenerationCandidate(cell.generationHistory ?? [], candidateId);
+        const selected = nextHistory.find((candidate) => candidate.selected);
+        return {
+          ...cell,
+          generationHistory: nextHistory,
+          image: selected?.dataUrl ?? cell.image,
+        };
+      });
+
+      updateNodeData(nodeId, { cells });
+    },
+    [nodes, updateNodeData],
+  );
 
   // =========================================================================
   // Generation panel
@@ -809,6 +993,10 @@ export function CanvasApp() {
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
+          onAddScript={handleAddScript}
+          onAddDocument={handleAddDocument}
+          onAddModel={handleAddModel}
+          onAddCanvasEmbed={handleAddCanvasEmbed}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />
@@ -848,7 +1036,14 @@ export function CanvasApp() {
             onScriptOpen={handleScriptOpen}
             onScriptNavigateToScene={handleScriptNavigateToScene}
             onDocumentOpen={handleDocumentOpen}
+            onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
+            onSelectShotCandidate={handleSelectShotCandidate}
+            onSelectGalleryCellCandidate={handleSelectGalleryCellCandidate}
+            onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
+            onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
+            onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
+            onReorderSceneShots={handleReorderSceneShots}
             isPanMode={isPanMode}
           />
 

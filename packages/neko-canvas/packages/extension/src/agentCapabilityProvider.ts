@@ -20,7 +20,11 @@ import type {
   ICapabilityMediaService,
   ICapabilityConfigManager,
 } from '@neko/shared';
-import { TOOL_NAMES_CANVAS } from '@neko/shared';
+import {
+  TOOL_NAMES_CANVAS,
+  applyCanvasTimelineSyncToCanvas,
+  buildStoryboardImportTimelineSyncPayload,
+} from '@neko/shared';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -544,6 +548,15 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 projectName,
                 shots: timelineShots,
               });
+              const importedAt = Date.now();
+              await applyCanvasTimelineSyncToCanvas(
+                api,
+                buildStoryboardImportTimelineSyncPayload(
+                  timelineShots.map((shot) => shot.id),
+                  projectName,
+                  importedAt,
+                ),
+              );
 
               return {
                 success: true,

@@ -6,8 +6,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { CanvasData, CanvasNode } from '@neko/shared';
+import type {
+  CanvasData,
+  CanvasDroppedAsset,
+  CanvasNode,
+  CanvasNodeType,
+  CanvasTimelineSyncPayload,
+  OperationSource,
+} from '@neko/shared';
 import { setLocale } from '../i18n';
+import { useCanvasOperationStore } from '../stores/canvasOperationStore';
 
 // =============================================================================
 // Types
@@ -32,7 +40,7 @@ export interface UseVSCodeMessagesOptions {
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
   onAddMediaFromExtension: (mediaType: string, uri: string, name: string) => void;
-  onDropMedia: (files: Array<{ uri: string; name: string; mediaType: string }>) => void;
+  onDropAssets: (assets: CanvasDroppedAsset[]) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
   /** Called with the AI-built prompt string for AutoPrompt */
@@ -41,16 +49,26 @@ export interface UseVSCodeMessagesOptions {
   onScriptIndexResult?: (nodeId: string, scenes: unknown[]) => void;
   /** Called when model install status is known */
   onModelInstalledResult?: (nodeId: string, installedVersion: string | null) => void;
+  /** Called when cut syncs minimal operational metadata back into canvas */
+  onTimelineSync?: (payload: CanvasTimelineSyncPayload) => void;
   /** Return all nodes (optionally filtered by type) — used to respond to nodes.list requests */
   getNodes?: (type?: string) => CanvasNode[];
   /** Return a single node by id — used to respond to nodes.get requests */
   getNode?: (id: string) => CanvasNode | undefined;
   /** Update a node — used to respond to nodes.update requests */
-  updateNode?: (id: string, updates: Partial<CanvasNode>) => void;
-  /** Create a node — used to respond to nodes.create requests */
-  createNode?: (node: Omit<CanvasNode, 'id'>) => string;
+  updateNode?: (id: string, data: Record<string, unknown>) => void;
+  /** Create a node from the contract DTO — used to respond to nodes.create requests */
+  createNode?: (node: {
+    type: CanvasNodeType;
+    position: { x: number; y: number };
+    data: Record<string, unknown>;
+  }) => string;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
+}
+
+function withOperationSource<T>(source: OperationSource, run: () => T): T {
+  return useCanvasOperationStore.getState().withOperationSource(source, run);
 }
 
 export interface UseVSCodeMessagesReturn {
@@ -68,11 +86,12 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     defaultCanvasData,
     setCanvasData,
     onAddMediaFromExtension,
-    onDropMedia,
+    onDropAssets,
     onGenerationProgress,
     onBuildPromptResult,
     onScriptIndexResult,
     onModelInstalledResult,
+    onTimelineSync,
     getNodes,
     getNode,
     updateNode,
@@ -86,8 +105,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   // Stable refs for callbacks to avoid re-registering listener
   const onAddMediaRef = useRef(onAddMediaFromExtension);
   onAddMediaRef.current = onAddMediaFromExtension;
-  const onDropMediaRef = useRef(onDropMedia);
-  onDropMediaRef.current = onDropMedia;
+  const onDropAssetsRef = useRef(onDropAssets);
+  onDropAssetsRef.current = onDropAssets;
   const onGenerationProgressRef = useRef(onGenerationProgress);
   onGenerationProgressRef.current = onGenerationProgress;
   const onBuildPromptResultRef = useRef(onBuildPromptResult);
@@ -96,6 +115,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onScriptIndexResultRef.current = onScriptIndexResult;
   const onModelInstalledResultRef = useRef(onModelInstalledResult);
   onModelInstalledResultRef.current = onModelInstalledResult;
+  const onTimelineSyncRef = useRef(onTimelineSync);
+  onTimelineSyncRef.current = onTimelineSync;
   const getNodesRef = useRef(getNodes);
   getNodesRef.current = getNodes;
   const getNodeRef = useRef(getNode);
@@ -129,13 +150,31 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               message.name as string,
             );
             break;
+          case 'dropAssets': {
+            const assets = (message.assets as CanvasDroppedAsset[] | undefined) ?? [];
+            onDropAssetsRef.current(assets);
+            break;
+          }
           case 'dropMedia': {
-            const files = message.files as Array<{
-              uri: string;
-              name: string;
-              mediaType: string;
-            }>;
-            onDropMediaRef.current(files);
+            const assets = (
+              (message.files as
+                | Array<{ uri: string; name: string; mediaType: string }>
+                | undefined) ?? []
+            ).map((file) => {
+              const mediaType: 'image' | 'video' | 'audio' =
+                file.mediaType === 'video'
+                  ? 'video'
+                  : file.mediaType === 'audio'
+                    ? 'audio'
+                    : 'image';
+              return {
+                kind: 'media' as const,
+                path: file.uri,
+                name: file.name,
+                mediaType,
+              };
+            });
+            onDropAssetsRef.current(assets);
             break;
           }
           case 'generationProgress':
@@ -158,10 +197,19 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               (message.installedVersion as string | null) ?? null,
             );
             break;
+          case 'timelineSync':
+            if (
+              typeof message.payload === 'object' &&
+              message.payload !== null &&
+              Array.isArray((message.payload as { shots?: unknown }).shots)
+            ) {
+              onTimelineSyncRef.current?.(message.payload as CanvasTimelineSyncPayload);
+            }
+            break;
 
           // ----------------------------------------------------------------
           // nodes.* — request/response API for MCP Canvas tools
-          // The extension sends { type, _requestId, ...payload } and expects
+          // The extension sends { type, _requestId, ...dto } and expects
           // { type: '_response', _requestId, ...result } back.
           // ----------------------------------------------------------------
           case 'nodes.list': {
@@ -182,17 +230,34 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'nodes.update': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            updateNodeRef.current?.(
-              message.nodeId as string,
-              message.updates as Partial<CanvasNode>,
-            );
+            withOperationSource('ai', () => {
+              updateNodeRef.current?.(
+                message.nodeId as string,
+                (message.data as Record<string, unknown>) ?? {},
+              );
+            });
             vscode.postMessage({ type: '_response', _requestId: requestId, success: true });
             break;
           }
           case 'nodes.create': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            const id = createNodeRef.current?.(message.node as Omit<CanvasNode, 'id'>) ?? '';
+            const payload = (message.payload as
+              | {
+                  type?: CanvasNodeType;
+                  position?: { x: number; y: number };
+                  data?: Record<string, unknown>;
+                }
+              | undefined) ?? { data: {} };
+            const id = withOperationSource(
+              'ai',
+              () =>
+                createNodeRef.current?.({
+                  type: payload.type ?? 'annotation',
+                  position: payload.position ?? { x: 0, y: 0 },
+                  data: payload.data ?? {},
+                }) ?? '',
+            );
             vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
             break;
           }

@@ -54,7 +54,6 @@ neko-suite 创意项目包含多种数据类型，版本管理和协作策略因
 
 # Operation history (session-level, not version-controlled)
 *.nkv-ops
-*.nkc-ops
 *.nks-ops
 *.nka-ops
 
@@ -225,7 +224,7 @@ hamming_distance = popcount(hash_a ^ hash_b)
 |------|------|--------|---------|
 | neko-cut | Zustand `operationHistorySlice` | `.nkv-ops` JSON | 200 |
 | neko-sketch | `HistoryManager` + region snapshot | `.nks-ops` | 100 |
-| neko-canvas | `CanvasOperationStore` + `historyStore` | `.nkc-ops` | 500 |
+| neko-canvas | `CanvasOperationStore` + `historyStore` | 无 sidecar（运行时 bridge） | - |
 
 **架构**：
 - 共享 SDK：`@neko/shared/nkv/history.ts`（serialize/deserialize）
@@ -234,7 +233,7 @@ hamming_distance = popcount(hash_a ^ hash_b)
 - Engine 快速路径：20 种增量操作（~100 bytes JSON）
 - `.nkv-ops` 文件不入 Git（session 级数据，频繁变动）
 
-**结论**：✅ 当前设计正确。操作历史是 undo/redo 机制，不是审计日志。
+**结论**：✅ 当前设计收敛为运行时操作桥接。操作历史是 undo/redo 机制，不是审计日志，也不再默认落盘为 `.nkc-ops`。
 
 **潜在扩展（按需触发，非当前优先级）**：
 

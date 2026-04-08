@@ -9,7 +9,7 @@
  */
 
 import { useCallback } from 'react';
-import type { CanvasNode, CanvasConnection, ConnectionType } from '@neko/shared';
+import type { CanvasNode, CanvasConnection, CanvasNodeType, ConnectionType } from '@neko/shared';
 import { CollapsibleSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
@@ -29,6 +29,14 @@ export interface PropertyPanelProps {
   onToggleLock: (id: string) => void;
   width?: number;
 }
+
+interface NodeSpecificPropertiesProps {
+  node: CanvasNode;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}
+
+type NodePropertiesRenderer = (props: NodeSpecificPropertiesProps) => React.ReactNode;
+type NodePropertiesRendererRegistry = Partial<Record<CanvasNodeType, NodePropertiesRenderer>>;
 
 // =============================================================================
 // Component
@@ -318,344 +326,364 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
   );
 }
 
-function NodeSpecificProperties({
-  node,
-  onUpdateData,
-}: {
-  node: CanvasNode;
-  onUpdateData: (data: Record<string, unknown>) => void;
-}) {
-  const data = node.data as Record<string, unknown>;
+function NodeSpecificProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+  return renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData });
+}
 
-  const nodeType = node.type as string;
-  switch (nodeType) {
-    case 'annotation':
-      return (
-        <CollapsibleSection title={t('panel.content')}>
+function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+  const data = node.data as Record<string, unknown>;
+  return (
+    <CollapsibleSection title={t('panel.content')}>
+      <textarea
+        className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
+        style={{
+          backgroundColor: 'var(--control-bg)',
+          borderColor: 'var(--control-border)',
+          color: 'var(--control-fg)',
+          minHeight: 60,
+        }}
+        value={(data.content as string) ?? ''}
+        onChange={(e) => onUpdateData({ content: e.target.value })}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = 'var(--node-selected)';
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = 'var(--control-border)';
+        }}
+      />
+    </CollapsibleSection>
+  );
+}
+
+function StoryboardNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+  const data = node.data as Record<string, unknown>;
+  return (
+    <CollapsibleSection title={t('panel.storyboard')}>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.title')}
+          </label>
+          <input
+            type="text"
+            className="w-full text-xs px-2 py-1 rounded border outline-none"
+            style={{
+              backgroundColor: 'var(--control-bg)',
+              borderColor: 'var(--control-border)',
+              color: 'var(--control-fg)',
+            }}
+            value={(data.title as string) ?? ''}
+            onChange={(e) => onUpdateData({ title: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.description')}
+          </label>
           <textarea
             className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
             style={{
               backgroundColor: 'var(--control-bg)',
               borderColor: 'var(--control-border)',
               color: 'var(--control-fg)',
-              minHeight: 60,
+              minHeight: 40,
             }}
-            value={(data.content as string) ?? ''}
-            onChange={(e) => onUpdateData({ content: e.target.value })}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'var(--node-selected)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'var(--control-border)';
-            }}
+            value={(data.description as string) ?? ''}
+            onChange={(e) => onUpdateData({ description: e.target.value })}
           />
-        </CollapsibleSection>
-      );
-
-    case 'storyboard':
-      return (
-        <CollapsibleSection title={t('panel.storyboard')}>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.title')}
-              </label>
-              <input
-                type="text"
-                className="w-full text-xs px-2 py-1 rounded border outline-none"
-                style={{
-                  backgroundColor: 'var(--control-bg)',
-                  borderColor: 'var(--control-border)',
-                  color: 'var(--control-fg)',
-                }}
-                value={(data.title as string) ?? ''}
-                onChange={(e) => onUpdateData({ title: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.description')}
-              </label>
-              <textarea
-                className="w-full text-xs px-2 py-1.5 rounded border outline-none resize-none"
-                style={{
-                  backgroundColor: 'var(--control-bg)',
-                  borderColor: 'var(--control-border)',
-                  color: 'var(--control-fg)',
-                  minHeight: 40,
-                }}
-                value={(data.description as string) ?? ''}
-                onChange={(e) => onUpdateData({ description: e.target.value })}
-              />
-            </div>
-          </div>
-        </CollapsibleSection>
-      );
-
-    case 'text': {
-      const textStyle = (data.style as Record<string, unknown>) ?? {};
-      return (
-        <CollapsibleSection title={t('panel.textStyle')}>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.fontSize')}
-              </label>
-              <select
-                className="w-full text-xs px-2 py-1 rounded border outline-none"
-                style={{
-                  backgroundColor: 'var(--control-bg)',
-                  borderColor: 'var(--control-border)',
-                  color: 'var(--control-fg)',
-                }}
-                value={(textStyle.fontSize as number) ?? 14}
-                onChange={(e) =>
-                  onUpdateData({
-                    style: { ...textStyle, fontSize: Number(e.target.value) },
-                  })
-                }
-              >
-                {[10, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
-                  <option key={s} value={s}>
-                    {s}px
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.fontWeight')}
-              </label>
-              <button
-                className="text-xs px-2 py-0.5 rounded border transition-colors"
-                style={{
-                  backgroundColor:
-                    textStyle.fontWeight === 'bold' ? 'var(--node-selected)' : 'var(--control-bg)',
-                  borderColor: 'var(--control-border)',
-                  color: textStyle.fontWeight === 'bold' ? 'var(--neko-fg)' : 'var(--control-fg)',
-                  fontWeight: 'bold',
-                }}
-                onClick={() =>
-                  onUpdateData({
-                    style: {
-                      ...textStyle,
-                      fontWeight: textStyle.fontWeight === 'bold' ? 'normal' : 'bold',
-                    },
-                  })
-                }
-              >
-                B
-              </button>
-            </div>
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.textAlign')}
-              </label>
-              <div className="flex gap-1">
-                {(['left', 'center', 'right'] as const).map((align) => (
-                  <button
-                    key={align}
-                    style={{
-                      flex: 1,
-                      fontSize: 11,
-                      padding: '3px 0',
-                      borderRadius: 5,
-                      border: '1px solid',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s, border-color 0.15s',
-                      backgroundColor:
-                        (textStyle.textAlign ?? 'left') === align
-                          ? 'rgba(59,130,246,0.20)'
-                          : 'rgba(0,0,0,0.18)',
-                      borderColor:
-                        (textStyle.textAlign ?? 'left') === align
-                          ? 'rgba(59,130,246,0.45)'
-                          : 'var(--control-border)',
-                      color:
-                        (textStyle.textAlign ?? 'left') === align ? '#93bbfd' : 'var(--neko-fg)',
-                    }}
-                    onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
-                  >
-                    {align.charAt(0).toUpperCase() + align.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.textColor')}
-              </label>
-              <input
-                type="color"
-                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
-                value={(textStyle.color as string) ?? '#e5e5e5'}
-                onChange={(e) => onUpdateData({ style: { ...textStyle, color: e.target.value } })}
-              />
-            </div>
-          </div>
-        </CollapsibleSection>
-      );
-    }
-
-    case 'group': {
-      const childIds = (data.childIds as string[]) ?? [];
-      return (
-        <CollapsibleSection title={t('panel.group')}>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.groupLabel')}
-              </label>
-              <input
-                type="text"
-                className="w-full text-xs px-2 py-1 rounded border outline-none"
-                style={{
-                  backgroundColor: 'var(--control-bg)',
-                  borderColor: 'var(--control-border)',
-                  color: 'var(--control-fg)',
-                }}
-                value={(data.label as string) ?? ''}
-                onChange={(e) => onUpdateData({ label: e.target.value })}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.groupColor')}
-              </label>
-              <input
-                type="color"
-                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
-                value={(data.color as string) ?? '#6b7280'}
-                onChange={(e) => onUpdateData({ color: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
-                {t('panel.groupChildren')} ({childIds.length})
-              </label>
-              <div className="space-y-0.5 max-h-[120px] overflow-auto">
-                {childIds.length === 0 ? (
-                  <span
-                    className="text-[10px] italic"
-                    style={{ color: 'var(--neko-fg-secondary)' }}
-                  >
-                    {t('group.empty')}
-                  </span>
-                ) : (
-                  childIds.map((id) => (
-                    <div
-                      key={id}
-                      className="text-[10px] px-1.5 py-0.5 rounded truncate"
-                      style={{
-                        backgroundColor: 'var(--control-bg)',
-                        color: 'var(--control-fg)',
-                      }}
-                    >
-                      {id.slice(-8)}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </CollapsibleSection>
-      );
-    }
-
-    case 'media':
-      return (
-        <CollapsibleSection title={t('panel.media')}>
-          <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-            <div className="flex justify-between">
-              <span>{t('panel.type')}</span>
-              <span style={{ color: 'var(--neko-fg)' }}>
-                {(data.mediaType as string) ?? 'unknown'}
-              </span>
-            </div>
-            {typeof data.assetPath === 'string' && (
-              <div className="truncate" title={data.assetPath}>
-                {data.assetPath.split('/').pop()}
-              </div>
-            )}
-            {data.duration != null && (
-              <div className="flex justify-between">
-                <span>{t('panel.duration')}</span>
-                <span style={{ color: 'var(--neko-fg)' }}>
-                  {formatDuration(data.duration as number)}
-                </span>
-              </div>
-            )}
-          </div>
-        </CollapsibleSection>
-      );
-
-    case 'shot':
-      return <ShotProperties data={data} onUpdateData={onUpdateData} />;
-
-    case 'scene':
-      return <SceneProperties data={data} onUpdateData={onUpdateData} />;
-
-    case 'gallery':
-      return <GalleryProperties data={data} onUpdateData={onUpdateData} />;
-
-    default:
-      return null;
-  }
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
 }
+
+function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+  const data = node.data as Record<string, unknown>;
+  const textStyle = (data.style as Record<string, unknown>) ?? {};
+  return (
+    <CollapsibleSection title={t('panel.textStyle')}>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.fontSize')}
+          </label>
+          <select
+            className="w-full text-xs px-2 py-1 rounded border outline-none"
+            style={{
+              backgroundColor: 'var(--control-bg)',
+              borderColor: 'var(--control-border)',
+              color: 'var(--control-fg)',
+            }}
+            value={(textStyle.fontSize as number) ?? 14}
+            onChange={(e) =>
+              onUpdateData({
+                style: { ...textStyle, fontSize: Number(e.target.value) },
+              })
+            }
+          >
+            {[10, 12, 14, 16, 18, 20, 24, 28, 32].map((s) => (
+              <option key={s} value={s}>
+                {s}px
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.fontWeight')}
+          </label>
+          <button
+            className="text-xs px-2 py-0.5 rounded border transition-colors"
+            style={{
+              backgroundColor:
+                textStyle.fontWeight === 'bold' ? 'var(--node-selected)' : 'var(--control-bg)',
+              borderColor: 'var(--control-border)',
+              color: textStyle.fontWeight === 'bold' ? 'var(--neko-fg)' : 'var(--control-fg)',
+              fontWeight: 'bold',
+            }}
+            onClick={() =>
+              onUpdateData({
+                style: {
+                  ...textStyle,
+                  fontWeight: textStyle.fontWeight === 'bold' ? 'normal' : 'bold',
+                },
+              })
+            }
+          >
+            B
+          </button>
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.textAlign')}
+          </label>
+          <div className="flex gap-1">
+            {(['left', 'center', 'right'] as const).map((align) => (
+              <button
+                key={align}
+                style={{
+                  flex: 1,
+                  fontSize: 11,
+                  padding: '3px 0',
+                  borderRadius: 5,
+                  border: '1px solid',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, border-color 0.15s',
+                  backgroundColor:
+                    (textStyle.textAlign ?? 'left') === align
+                      ? 'rgba(59,130,246,0.20)'
+                      : 'rgba(0,0,0,0.18)',
+                  borderColor:
+                    (textStyle.textAlign ?? 'left') === align
+                      ? 'rgba(59,130,246,0.45)'
+                      : 'var(--control-border)',
+                  color: (textStyle.textAlign ?? 'left') === align ? '#93bbfd' : 'var(--neko-fg)',
+                }}
+                onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
+              >
+                {align.charAt(0).toUpperCase() + align.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.textColor')}
+          </label>
+          <input
+            type="color"
+            className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+            value={(textStyle.color as string) ?? '#e5e5e5'}
+            onChange={(e) => onUpdateData({ style: { ...textStyle, color: e.target.value } })}
+          />
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function GroupNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+  const data = node.data as Record<string, unknown>;
+  const childIds = (data.childIds as string[]) ?? [];
+  return (
+    <CollapsibleSection title={t('panel.group')}>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.groupLabel')}
+          </label>
+          <input
+            type="text"
+            className="w-full text-xs px-2 py-1 rounded border outline-none"
+            style={{
+              backgroundColor: 'var(--control-bg)',
+              borderColor: 'var(--control-border)',
+              color: 'var(--control-fg)',
+            }}
+            value={(data.label as string) ?? ''}
+            onChange={(e) => onUpdateData({ label: e.target.value })}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.groupColor')}
+          </label>
+          <input
+            type="color"
+            className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+            value={(data.color as string) ?? '#6b7280'}
+            onChange={(e) => onUpdateData({ color: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {t('panel.groupChildren')} ({childIds.length})
+          </label>
+          <div className="space-y-0.5 max-h-[120px] overflow-auto">
+            {childIds.length === 0 ? (
+              <span className="text-[10px] italic" style={{ color: 'var(--neko-fg-secondary)' }}>
+                {t('group.empty')}
+              </span>
+            ) : (
+              childIds.map((id) => (
+                <div
+                  key={id}
+                  className="text-[10px] px-1.5 py-0.5 rounded truncate"
+                  style={{
+                    backgroundColor: 'var(--control-bg)',
+                    color: 'var(--control-fg)',
+                  }}
+                >
+                  {id.slice(-8)}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function MediaNodeProperties({ node }: NodeSpecificPropertiesProps) {
+  const data = node.data as Record<string, unknown>;
+  return (
+    <CollapsibleSection title={t('panel.media')}>
+      <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+        <div className="flex justify-between">
+          <span>{t('panel.type')}</span>
+          <span style={{ color: 'var(--neko-fg)' }}>{(data.mediaType as string) ?? 'unknown'}</span>
+        </div>
+        {typeof data.assetPath === 'string' && (
+          <div className="truncate" title={data.assetPath}>
+            {data.assetPath.split('/').pop()}
+          </div>
+        )}
+        {data.duration != null && (
+          <div className="flex justify-between">
+            <span>{t('panel.duration')}</span>
+            <span style={{ color: 'var(--neko-fg)' }}>
+              {formatDuration(data.duration as number)}
+            </span>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+export function createBuiltInNodePropertiesRendererRegistry(): NodePropertiesRendererRegistry {
+  return {
+    annotation: AnnotationNodeProperties,
+    storyboard: StoryboardNodeProperties,
+    text: TextNodeProperties,
+    group: GroupNodeProperties,
+    media: MediaNodeProperties,
+    shot: ({ node, onUpdateData }) => (
+      <ShotProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
+    ),
+    scene: ({ node, onUpdateData }) => (
+      <SceneProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
+    ),
+    gallery: ({ node, onUpdateData }) => (
+      <GalleryProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
+    ),
+  };
+}
+
+export function renderNodeSpecificProperties(
+  registry: NodePropertiesRendererRegistry,
+  props: NodeSpecificPropertiesProps,
+): React.ReactNode {
+  const renderer = registry[props.node.type];
+  return renderer ? renderer(props) : null;
+}
+
+const NODE_PROPERTIES_RENDERERS = createBuiltInNodePropertiesRendererRegistry();
 
 // =============================================================================
 // Creator node property panels
 // =============================================================================
 
-const SHOT_SCALE_OPTIONS = [
-  { value: 'ECU', label: 'ECU — 极近景' },
-  { value: 'CU', label: 'CU — 近景' },
-  { value: 'MCU', label: 'MCU — 中近景' },
-  { value: 'MS', label: 'MS — 中景' },
-  { value: 'MLS', label: 'MLS — 中远景' },
-  { value: 'LS', label: 'LS — 全景' },
-  { value: 'VLS', label: 'VLS — 大全景' },
-  { value: 'ELS', label: 'ELS — 远景' },
-];
+function getShotScaleOptions() {
+  return [
+    { value: 'ECU', label: t('panel.shotScale.ecu') },
+    { value: 'CU', label: t('panel.shotScale.cu') },
+    { value: 'MCU', label: t('panel.shotScale.mcu') },
+    { value: 'MS', label: t('panel.shotScale.ms') },
+    { value: 'MLS', label: t('panel.shotScale.mls') },
+    { value: 'LS', label: t('panel.shotScale.ls') },
+    { value: 'VLS', label: t('panel.shotScale.vls') },
+    { value: 'ELS', label: t('panel.shotScale.els') },
+  ];
+}
 
-const CAMERA_MOVEMENT_OPTIONS = [
-  { value: '', label: '无' },
-  { value: 'static', label: '静止' },
-  { value: 'pan', label: '摇镜 Pan' },
-  { value: 'tilt', label: '俯仰 Tilt' },
-  { value: 'zoom-in', label: '推镜 Zoom In' },
-  { value: 'zoom-out', label: '拉镜 Zoom Out' },
-  { value: 'dolly', label: '移镜 Dolly' },
-  { value: 'handheld', label: '手持 Handheld' },
-];
+function getCameraMovementOptions() {
+  return [
+    { value: '', label: t('panel.none') },
+    { value: 'static', label: t('panel.cameraMovement.static') },
+    { value: 'pan', label: t('panel.cameraMovement.pan') },
+    { value: 'tilt', label: t('panel.cameraMovement.tilt') },
+    { value: 'zoom-in', label: t('panel.cameraMovement.zoomIn') },
+    { value: 'zoom-out', label: t('panel.cameraMovement.zoomOut') },
+    { value: 'dolly', label: t('panel.cameraMovement.dolly') },
+    { value: 'handheld', label: t('panel.cameraMovement.handheld') },
+  ];
+}
 
-const CAMERA_ANGLE_OPTIONS = [
-  { value: '', label: '无' },
-  { value: 'eye-level', label: '平视' },
-  { value: 'high-angle', label: '俯拍' },
-  { value: 'low-angle', label: '仰拍' },
-  { value: 'bird-eye', label: '鸟瞰' },
-  { value: 'dutch', label: '斜角' },
-];
+function getCameraAngleOptions() {
+  return [
+    { value: '', label: t('panel.none') },
+    { value: 'eye-level', label: t('panel.cameraAngle.eyeLevel') },
+    { value: 'high-angle', label: t('panel.cameraAngle.highAngle') },
+    { value: 'low-angle', label: t('panel.cameraAngle.lowAngle') },
+    { value: 'bird-eye', label: t('panel.cameraAngle.birdEye') },
+    { value: 'dutch', label: t('panel.cameraAngle.dutch') },
+  ];
+}
 
-const TIME_OF_DAY_OPTIONS = [
-  { value: '', label: '不限' },
-  { value: 'dawn', label: '黎明' },
-  { value: 'morning', label: '上午' },
-  { value: 'noon', label: '正午' },
-  { value: 'afternoon', label: '下午' },
-  { value: 'dusk', label: '黄昏' },
-  { value: 'night', label: '夜晚' },
-];
+function getTimeOfDayOptions() {
+  return [
+    { value: '', label: t('panel.timeOfDay.any') },
+    { value: 'dawn', label: t('panel.timeOfDay.dawn') },
+    { value: 'morning', label: t('panel.timeOfDay.morning') },
+    { value: 'noon', label: t('panel.timeOfDay.noon') },
+    { value: 'afternoon', label: t('panel.timeOfDay.afternoon') },
+    { value: 'dusk', label: t('panel.timeOfDay.dusk') },
+    { value: 'night', label: t('panel.timeOfDay.night') },
+  ];
+}
 
-const GALLERY_PRESET_OPTIONS = [
-  { value: 'character-3view', label: '三视图' },
-  { value: 'character-4view', label: '四视图' },
-  { value: 'expression-9', label: '表情包 (9格)' },
-  { value: 'turnaround-8', label: '转身动画 (8帧)' },
-  { value: 'scene-views', label: '场景三视' },
-  { value: 'custom', label: '自定义' },
-];
+function getGalleryPresetOptions() {
+  return [
+    { value: 'character-3view', label: t('panel.galleryPreset.character3View') },
+    { value: 'character-4view', label: t('panel.galleryPreset.character4View') },
+    { value: 'expression-9', label: t('panel.galleryPreset.expression9') },
+    { value: 'turnaround-8', label: t('panel.galleryPreset.turnaround8') },
+    { value: 'scene-views', label: t('panel.galleryPreset.sceneViews') },
+    { value: 'custom', label: t('panel.galleryPreset.custom') },
+  ];
+}
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -779,36 +807,36 @@ function ShotProperties({
 }) {
   return (
     <>
-      <CollapsibleSection title="画面">
+      <CollapsibleSection title={t('panel.shotVisual')}>
         <div className="space-y-2">
           <TextareaField
-            label="画面描述"
+            label={t('panel.visualDescription')}
             value={(data.visualDescription as string) ?? ''}
             onChange={(v) => onUpdateData({ visualDescription: v })}
             minHeight={72}
           />
           <div className="grid grid-cols-3 gap-1.5">
             <SelectField
-              label="景别"
+              label={t('panel.shotScale')}
               value={(data.shotScale as string) ?? 'MS'}
-              options={SHOT_SCALE_OPTIONS}
+              options={getShotScaleOptions()}
               onChange={(v) => onUpdateData({ shotScale: v })}
             />
             <SelectField
-              label="运镜"
+              label={t('panel.cameraMovement')}
               value={(data.cameraMovement as string) ?? ''}
-              options={CAMERA_MOVEMENT_OPTIONS}
+              options={getCameraMovementOptions()}
               onChange={(v) => onUpdateData({ cameraMovement: v || undefined })}
             />
             <SelectField
-              label="角度"
+              label={t('panel.cameraAngle')}
               value={(data.cameraAngle as string) ?? ''}
-              options={CAMERA_ANGLE_OPTIONS}
+              options={getCameraAngleOptions()}
               onChange={(v) => onUpdateData({ cameraAngle: v || undefined })}
             />
           </div>
           <div>
-            <FieldLabel>时长 (秒)</FieldLabel>
+            <FieldLabel>{t('panel.durationSeconds')}</FieldLabel>
             <input
               type="number"
               min={0.5}
@@ -829,23 +857,23 @@ function ShotProperties({
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="台词与音效" defaultExpanded={false}>
+      <CollapsibleSection title={t('panel.dialogueAndSound')} defaultExpanded={false}>
         <div className="space-y-2">
           <TextareaField
-            label="台词"
+            label={t('panel.dialogue')}
             value={(data.dialogue as string) ?? ''}
             onChange={(v) => onUpdateData({ dialogue: v || undefined })}
           />
           <TextareaField
-            label="旁白"
+            label={t('panel.voiceOver')}
             value={(data.voiceOver as string) ?? ''}
             onChange={(v) => onUpdateData({ voiceOver: v || undefined })}
           />
           <TextField
-            label="音效提示"
+            label={t('panel.soundCue')}
             value={(data.soundCue as string) ?? ''}
             onChange={(v) => onUpdateData({ soundCue: v || undefined })}
-            placeholder="例：脚步声、风声…"
+            placeholder={t('panel.soundCuePlaceholder')}
           />
         </div>
       </CollapsibleSection>
@@ -861,30 +889,30 @@ function SceneProperties({
   onUpdateData: (data: Record<string, unknown>) => void;
 }) {
   return (
-    <CollapsibleSection title="场景信息">
+    <CollapsibleSection title={t('panel.sceneInfo')}>
       <div className="space-y-2">
         <TextField
-          label="场景标题"
+          label={t('panel.sceneTitle')}
           value={(data.sceneTitle as string) ?? ''}
           onChange={(v) => onUpdateData({ sceneTitle: v })}
-          placeholder="例：INT. 办公室 - 白天"
+          placeholder={t('panel.sceneTitlePlaceholder')}
         />
         <div className="grid grid-cols-2 gap-1.5">
           <TextField
-            label="地点"
+            label={t('panel.location')}
             value={(data.location as string) ?? ''}
             onChange={(v) => onUpdateData({ location: v || undefined })}
-            placeholder="例：办公室"
+            placeholder={t('panel.locationPlaceholder')}
           />
           <SelectField
-            label="时间"
+            label={t('panel.timeOfDay')}
             value={(data.timeOfDay as string) ?? ''}
-            options={TIME_OF_DAY_OPTIONS}
+            options={getTimeOfDayOptions()}
             onChange={(v) => onUpdateData({ timeOfDay: v || undefined })}
           />
         </div>
         <div>
-          <FieldLabel>包含镜头数</FieldLabel>
+          <FieldLabel>{t('panel.includedShotCount')}</FieldLabel>
           <span className="text-xs" style={{ color: 'var(--neko-fg)' }}>
             {((data.shotIds as string[]) ?? []).length}
           </span>
@@ -902,22 +930,22 @@ function GalleryProperties({
   onUpdateData: (data: Record<string, unknown>) => void;
 }) {
   return (
-    <CollapsibleSection title="画廊设置">
+    <CollapsibleSection title={t('panel.gallerySettings')}>
       <div className="space-y-2">
         <TextField
-          label="角色名"
+          label={t('panel.characterName')}
           value={(data.characterName as string) ?? ''}
           onChange={(v) => onUpdateData({ characterName: v || undefined })}
-          placeholder="例：Alice"
+          placeholder={t('panel.characterNamePlaceholder')}
         />
         <SelectField
-          label="预设布局"
+          label={t('panel.galleryPreset')}
           value={(data.preset as string) ?? 'character-3view'}
-          options={GALLERY_PRESET_OPTIONS}
+          options={getGalleryPresetOptions()}
           onChange={(v) => onUpdateData({ preset: v })}
         />
         <TextareaField
-          label="全局提示词前缀"
+          label={t('panel.globalPromptPrefix')}
           value={(data.globalPromptPrefix as string) ?? ''}
           onChange={(v) => onUpdateData({ globalPromptPrefix: v || undefined })}
           minHeight={48}
@@ -1006,19 +1034,19 @@ function ConnectionProperties({
 
 function getNodeTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    media: '媒体',
-    storyboard: '场景板',
-    annotation: '备注',
-    group: '组',
-    text: '文本',
-    artboard: '画板',
-    shot: '镜头',
-    scene: '场景',
-    gallery: '角色画廊',
-    script: '剧本',
-    document: '文档',
-    model: '模型',
-    'canvas-embed': '嵌入画布',
+    media: t('node.media'),
+    storyboard: t('node.storyboard'),
+    annotation: t('toolbar.annotation'),
+    group: t('node.group'),
+    text: t('toolbar.text'),
+    artboard: t('node.artboard'),
+    shot: t('node.shot'),
+    scene: t('node.sceneGroup'),
+    gallery: t('node.gallery'),
+    script: t('node.script'),
+    document: t('node.document'),
+    model: t('node.model'),
+    'canvas-embed': t('node.canvasEmbed'),
   };
   return labels[type] ?? type;
 }
