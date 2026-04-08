@@ -18,6 +18,7 @@ import { FountainInlineCompletionProvider } from './providers/inlineCompletion';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
+import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
@@ -143,8 +144,27 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.commands.executeCommand('vscode.openWith', saveUri, 'neko.cut.editor');
     }),
-    vscode.commands.registerCommand('neko.story.generateStoryboard', () => {
-      vscode.window.showInformationMessage('Generate storyboard - Coming soon');
+    vscode.commands.registerCommand('neko.story.generateStoryboard', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== 'nekostory') {
+        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        return;
+      }
+
+      const payload = buildSceneAgentPayload(
+        editor,
+        '请为这个场景生成 storyboard 计划，并准备发送到 canvas：',
+      );
+      if (!payload) {
+        vscode.window.showWarningMessage('当前光标不在可识别的场景中');
+        return;
+      }
+
+      try {
+        await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+      } catch {
+        // neko-agent extension not installed or not activated — silently ignore
+      }
     }),
     vscode.commands.registerCommand(
       'neko.story.applyInlineDiff',
@@ -315,3 +335,39 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+function buildSceneAgentPayload(
+  editor: vscode.TextEditor,
+  intent: string,
+): AgentContextPayload | null {
+  const document = parse(editor.document.getText());
+  const scriptIndex = buildScriptIndex(editor.document.uri, document);
+  const cursorLine = editor.selection.active.line;
+  const scene = scriptIndex.scenes.find(
+    (entry) => entry.line_start <= cursorLine && entry.line_end >= cursorLine,
+  );
+  if (!scene) {
+    return null;
+  }
+
+  const selection = new vscode.Selection(scene.line_start, 0, scene.line_end, Number.MAX_SAFE_INTEGER);
+  const selectedText = editor.document.getText(selection);
+  const scriptPath = editor.document.uri.fsPath;
+
+  return {
+    type: 'story-selection',
+    id: `story:${scriptPath}:${scene.sceneId}`,
+    label: scene.sceneTitle,
+    summary: `Scene: ${scene.sceneTitle}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`,
+    data: {
+      scriptPath,
+      sceneId: scene.sceneId,
+      selectedText,
+      range: {
+        start: { line: scene.line_start, character: 0 },
+        end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
+      },
+    },
+    intent,
+  };
+}

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
+import { createStoryboardPayload } from '@neko/shared';
 import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 
@@ -200,7 +201,7 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     if (action === 'sendToCanvas') {
-      await this.sendSceneToAgent(scene, '请把这个场景转换为 canvas storyboard skeleton：');
+      await this.sendSceneToCanvas(scriptIndex, scene);
     }
   }
 
@@ -272,6 +273,34 @@ export class PreviewPanel implements vscode.Disposable {
       await vscode.commands.executeCommand('neko.agent.sendContext', payload);
     } catch {
       // neko-agent not installed or not active
+    }
+  }
+
+  private async sendSceneToCanvas(
+    scriptIndex: NekoStoryScriptIndex,
+    scene: NekoStoryScriptIndex['scenes'][number],
+  ): Promise<void> {
+    const sceneIndex: NekoStoryScriptIndex = {
+      ...scriptIndex,
+      scenes: [scene],
+    };
+    const payload = createStoryboardPayload(sceneIndex, {
+      mode: 'mechanical',
+      scenesLimit: 1,
+    });
+
+    try {
+      await vscode.commands.executeCommand('neko.canvas.importStoryboard', payload);
+      vscode.window.showInformationMessage(`已发送场景到 Canvas：${scene.sceneTitle}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('No active canvas editor')) {
+        vscode.window.showWarningMessage(
+          '没有活动的 Canvas 编辑器。请先打开一个 .nkc 画布，再重试发送场景。',
+        );
+        return;
+      }
+      vscode.window.showErrorMessage(`发送场景到 Canvas 失败：${message}`);
     }
   }
 
