@@ -11,6 +11,7 @@
 //! Timeline diff and GPU pipelines remain in engine-kernel.
 
 pub mod audio_diff;
+pub mod error;
 pub mod ffmpeg_parser;
 pub mod image_diff;
 pub mod jpeg_encoder;

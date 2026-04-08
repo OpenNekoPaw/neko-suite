@@ -3,7 +3,7 @@
 //! Decodes two images, computes structural similarity (SSIM),
 //! peak signal-to-noise ratio (PSNR), and generates a difference heatmap.
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use serde::Serialize;
 use std::io::Cursor;

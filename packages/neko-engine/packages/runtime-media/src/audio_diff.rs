@@ -3,8 +3,8 @@
 //! Decodes two audio files to F32 PCM (48kHz mono), computes
 //! Signal-to-Noise Ratio (SNR), and identifies difference regions.
 
-use neko_engine_kernel::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
+use ffmpeg_next as ffmpeg;
 use serde::{Deserialize, Serialize};
 
 /// Unified sample rate for comparison (48 kHz)
@@ -179,59 +179,82 @@ pub fn diff_audio_content_with_options(
     })
 }
 
-/// Decode an audio file to F32 mono samples at 48kHz with optional time range
+/// Decode an audio file to F32 mono samples at 48kHz with optional time range.
+///
+/// Uses ffmpeg-next library API directly — no external CLI dependency.
 fn decode_to_f32_mono(
     path: &str,
     start_time: Option<f64>,
     end_time: Option<f64>,
 ) -> Result<Vec<f32>> {
-    let mut decoder = FfmpegAudioDecoder::new()
-        .with_output_format(SampleFormat::F32)
-        .with_output_sample_rate(COMPARE_SAMPLE_RATE)
-        .with_output_channels(COMPARE_CHANNELS);
+    use ffmpeg::software::resampling;
+    use ffmpeg::util::frame::audio::Audio as AudioFrame;
+    use ffmpeg::{codec, format, media};
 
-    // Build FFmpeg command with time range if specified
-    let mut args = Vec::new();
-    if let Some(t) = start_time {
-        args.push("-ss".to_string());
-        args.push(t.to_string());
-    }
-    args.push("-i".to_string());
-    args.push(path.to_string());
-    if let Some(end) = end_time {
-        if let Some(start) = start_time {
-            let duration = (end - start).max(0.0);
-            args.push("-t".to_string());
-            args.push(duration.to_string());
-        } else {
-            args.push("-to".to_string());
-            args.push(end.to_string());
-        }
-    }
+    static FFMPEG_INIT: std::sync::Once = std::sync::Once::new();
+    FFMPEG_INIT.call_once(|| {
+        ffmpeg::init().expect("Failed to initialize FFmpeg");
+    });
 
-    // Note: FfmpegAudioDecoder.open() doesn't support custom args yet
-    // For now, we'll decode the full file and trim in memory
-    // TODO: Extend FfmpegAudioDecoder to accept custom FFmpeg args
-
-    decoder
-        .open(path)
+    let mut ictx = format::input(&path)
         .map_err(|e| Error::Other(format!("Failed to open audio {}: {}", path, e)))?;
 
-    let mut all_samples = Vec::new();
+    let stream = ictx
+        .streams()
+        .best(media::Type::Audio)
+        .ok_or_else(|| Error::Other(format!("No audio stream in {}", path)))?;
 
-    loop {
-        match decoder.decode_next() {
-            Ok(Some(frame)) => {
-                // Frame data is F32 mono, convert bytes to f32
-                let f32_samples: &[f32] = bytemuck::cast_slice(&frame.data);
-                all_samples.extend_from_slice(f32_samples);
-            }
-            Ok(None) => break, // EOF
-            Err(e) => {
-                tracing::warn!("Audio decode error (continuing): {}", e);
-                break;
-            }
+    let stream_index = stream.index();
+    let time_base = stream.time_base();
+
+    let context = codec::context::Context::from_parameters(stream.parameters())
+        .map_err(|e| Error::Other(format!("Codec context error: {}", e)))?;
+    let mut audio_decoder = context
+        .decoder()
+        .audio()
+        .map_err(|e| Error::Other(format!("Audio decoder error: {}", e)))?;
+
+    // Set up resampler: input format → F32 mono 48kHz
+    let mut resampler = resampling::Context::get(
+        audio_decoder.format(),
+        audio_decoder.channel_layout(),
+        audio_decoder.rate(),
+        ffmpeg::format::Sample::F32(ffmpeg::format::sample::Type::Packed),
+        ffmpeg::ChannelLayout::MONO,
+        COMPARE_SAMPLE_RATE,
+    )
+    .map_err(|e| Error::Other(format!("Resampler init error: {}", e)))?;
+
+    let mut all_samples = Vec::new();
+    let mut decoded_frame = AudioFrame::empty();
+    let mut resampled_frame = AudioFrame::empty();
+
+    for (stream_pkt, packet) in ictx.packets() {
+        if stream_pkt.index() != stream_index {
+            continue;
         }
+
+        audio_decoder.send_packet(&packet).ok();
+
+        while audio_decoder.receive_frame(&mut decoded_frame).is_ok() {
+            resampler
+                .run(&decoded_frame, &mut resampled_frame)
+                .map_err(|e| Error::Other(format!("Resample error: {}", e)))?;
+
+            // Resampled data is F32 packed mono
+            let data = resampled_frame.data(0);
+            let f32_samples: &[f32] = bytemuck::cast_slice(data);
+            all_samples.extend_from_slice(f32_samples);
+        }
+    }
+
+    // Flush decoder
+    audio_decoder.send_eof().ok();
+    while audio_decoder.receive_frame(&mut decoded_frame).is_ok() {
+        resampler.run(&decoded_frame, &mut resampled_frame).ok();
+        let data = resampled_frame.data(0);
+        let f32_samples: &[f32] = bytemuck::cast_slice(data);
+        all_samples.extend_from_slice(f32_samples);
     }
 
     // Trim samples based on time range (in-memory fallback)

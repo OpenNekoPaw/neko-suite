@@ -77,6 +77,9 @@ hound = "3.5"
 
 # NOTE: ML inference (ort/ndarray/rustfft) moved to neko-runtime-ml
 
+# Media domain logic (probe, diff, subtitle, jpeg — self-contained, no cycle)
+neko-runtime-media = { path = "../runtime-media" }
+
 # Base64 encoding
 base64.workspace = true
 

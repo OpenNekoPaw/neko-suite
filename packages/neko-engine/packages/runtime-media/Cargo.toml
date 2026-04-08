@@ -9,14 +9,11 @@ license.workspace = true
 crate-type = ["lib"]
 
 [dependencies]
-# Engine kernel (for error types and audio codec bindings)
-neko-engine-kernel = { path = "../engine-kernel" }
-
-# Shared types
-neko-engine-types = { path = "../engine-types" }
-
 # FFmpeg bindings (probe, subtitle, audio decode for diff)
 ffmpeg-next = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
 
 # Image I/O (JPEG encoding, image diff)
 image = { workspace = true }

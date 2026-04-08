@@ -2387,6 +2387,7 @@ dependencies = [
  "libc",
  "metal",
  "neko-engine-types",
+ "neko-runtime-media",
  "neko-runtime-puppet",
  "neko-runtime-scene",
  "objc",
@@ -2529,10 +2530,9 @@ dependencies = [
  "bytemuck",
  "ffmpeg-next",
  "image",
- "neko-engine-kernel",
- "neko-engine-types",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
 ]
 

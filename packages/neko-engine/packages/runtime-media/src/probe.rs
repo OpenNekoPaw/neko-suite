@@ -7,7 +7,7 @@
 //! - Container-level metadata tags (title, artist, album, etc.)
 //! - Embedded cover art (attached pictures)
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
 use ffmpeg_next as ffmpeg;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

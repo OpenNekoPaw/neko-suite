@@ -2,7 +2,7 @@
 //!
 //! Extracts embedded subtitle streams and converts them to a common format.
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
 use ffmpeg_next as ffmpeg;
 use std::path::Path;
 use std::sync::Once;

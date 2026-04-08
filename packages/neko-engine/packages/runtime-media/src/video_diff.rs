@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use crate::audio_diff::{diff_audio_content, AudioContentDiff};
 use crate::ffmpeg_parser::{parse_psnr_log, parse_ssim_log};
 use crate::probe::global_probe_cache;
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
 
 // ─────────────────────────────────────────────────────────────
 // FFmpeg binary discovery

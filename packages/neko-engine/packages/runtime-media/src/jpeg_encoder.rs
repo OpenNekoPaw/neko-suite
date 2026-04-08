@@ -17,7 +17,7 @@
 //! let jpeg_data = encode_rgba_to_jpeg(&rgba_buffer, 1920, 1080, 85)?;
 //! ```
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::error::{MediaError as Error, Result};
 use image::codecs::jpeg::JpegEncoder;
 use image::{ColorType, ImageEncoder};
 use std::io::Cursor;
@@ -56,7 +56,7 @@ pub fn encode_rgba_to_jpeg(
             // Rgba16Float: 8 bytes per pixel (4 × f16)
             rgba16f_to_rgb(rgba_data)
         } else {
-            return Err(Error::InvalidParameter(format!(
+            return Err(Error::Other(format!(
             "RGBA data size mismatch: expected {} (RGBA8) or {} (Rgba16Float) bytes, got {} bytes",
             expected_rgba8, expected_rgba16f, rgba_data.len()
         )));
@@ -69,12 +69,12 @@ pub fn encode_rgba_to_jpeg(
     let encoder = JpegEncoder::new_with_quality(&mut jpeg_buffer, quality);
     encoder
         .write_image(&rgb_data, width, height, ColorType::Rgb8.into())
-        .map_err(|e| Error::Jpeg(format!("JPEG encoding failed: {}", e)))?;
+        .map_err(|e| Error::Image(format!("JPEG encoding failed: {}", e)))?;
 
     let jpeg_data = jpeg_buffer.into_inner();
 
     if jpeg_data.is_empty() {
-        return Err(Error::Jpeg("JPEG encoding produced no output".to_string()));
+        return Err(Error::Image("JPEG encoding produced no output".to_string()));
     }
 
     Ok(jpeg_data)
