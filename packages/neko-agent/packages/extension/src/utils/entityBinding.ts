@@ -3,6 +3,7 @@ import {
   isShotNode,
   type CanvasNode,
   type NekoStoryScriptIndex,
+  type OccurrenceIndexEntry,
   type ShotCharacter,
 } from '@neko/shared';
 
@@ -59,4 +60,30 @@ export function parseGeneratedAssetBindingMetadata(
     sourceNodeId,
     characterIds: characterIds && characterIds.length > 0 ? characterIds : undefined,
   };
+}
+
+export function projectCharacterOccurrencesFromCanvasNode(
+  node: CanvasNode,
+  characterId: string,
+): OccurrenceIndexEntry[] {
+  const boundCharacterIds = extractCharacterIdsFromCanvasNode(node);
+  if (!boundCharacterIds.includes(characterId)) {
+    return [];
+  }
+
+  return [
+    {
+      entity: {
+        kind: 'character',
+        id: characterId,
+      },
+      source: 'canvas-node',
+      sourceId: node.id,
+      strength: 'confirmed',
+      provenance: 'lineage',
+      locator: {
+        nodeId: node.id,
+      },
+    },
+  ];
 }

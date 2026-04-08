@@ -42,7 +42,10 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
-import { extractCharacterIdsFromCanvasNode } from './utils/entityBinding';
+import {
+  extractCharacterIdsFromCanvasNode,
+  projectCharacterOccurrencesFromCanvasNode,
+} from './utils/entityBinding';
 import { GeneratedAssetIndex, resolveGeneratedDir } from './services/generatedAssetIndex';
 
 /**
@@ -167,6 +170,14 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
       results.push(...(await storyApi.entities.findCharacterOccurrences(characterId)));
     }
 
+    const canvasApi = await getCanvasApi();
+    if (canvasApi) {
+      const nodes = await canvasApi.nodes.list();
+      for (const node of nodes) {
+        results.push(...projectCharacterOccurrencesFromCanvasNode(node, characterId));
+      }
+    }
+
     if (assetIndex) {
       await assetIndex.load();
       results.push(...assetIndex.listOccurrencesByCharacterId(characterId));
@@ -199,6 +210,19 @@ async function getStoryApi(): Promise<NekoStoryAPI | undefined> {
 
   try {
     return storyExt.isActive ? storyExt.exports : ((await storyExt.activate()) as NekoStoryAPI);
+  } catch {
+    return undefined;
+  }
+}
+
+async function getCanvasApi(): Promise<NekoCanvasAPI | undefined> {
+  const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>(NEKO_EXTENSION_IDS.NEKO_CANVAS);
+  if (!canvasExt) {
+    return undefined;
+  }
+
+  try {
+    return canvasExt.isActive ? canvasExt.exports : ((await canvasExt.activate()) as NekoCanvasAPI);
   } catch {
     return undefined;
   }

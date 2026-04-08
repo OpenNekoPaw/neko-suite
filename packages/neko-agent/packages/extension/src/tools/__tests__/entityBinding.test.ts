@@ -4,6 +4,7 @@ import {
   buildShotCharactersForScene,
   extractCharacterIdsFromCanvasNode,
   parseGeneratedAssetBindingMetadata,
+  projectCharacterOccurrencesFromCanvasNode,
 } from '../../utils/entityBinding';
 
 describe('entityBinding helpers', () => {
@@ -69,5 +70,31 @@ describe('entityBinding helpers', () => {
       sourceNodeId: 'node-1',
       characterIds: ['char_alice', 'char_bob'],
     });
+  });
+
+  it('projects character occurrences from supported canvas nodes', () => {
+    const shotNode = {
+      id: 'shot-1',
+      type: 'shot',
+      data: {
+        characters: [{ characterName: 'ALICE', characterId: 'char_alice' }],
+      },
+    } as CanvasNode;
+
+    expect(projectCharacterOccurrencesFromCanvasNode(shotNode, 'char_alice')).toEqual([
+      {
+        entity: {
+          kind: 'character',
+          id: 'char_alice',
+        },
+        source: 'canvas-node',
+        sourceId: 'shot-1',
+        strength: 'confirmed',
+        provenance: 'lineage',
+        locator: {
+          nodeId: 'shot-1',
+        },
+      },
+    ]);
   });
 });
