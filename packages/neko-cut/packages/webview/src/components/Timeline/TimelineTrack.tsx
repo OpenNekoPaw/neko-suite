@@ -10,6 +10,7 @@ import type { TimelineTrack as TrackType, TimelineElement, AIQuickAction } from 
 import type { EditOperation } from '@neko/shared';
 import { createMeta } from '../../stores/utils/operation-helpers';
 import { getLogger } from '../../utils/logger';
+import { getDuplicateInsertTime } from './timelineDuplicateActions';
 import { buildTimelineReverseUpdates, buildTimelineSpeedUpdates } from './timelineSpeedActions';
 import { buildTrimToPlayheadUpdates, collectTimelineRippleOps } from './timelineTrimActions';
 
@@ -74,6 +75,7 @@ export const TimelineTrack = memo(function TimelineTrack({
     toggleElementHidden,
     toggleElementMuted,
     copySelected,
+    pasteAtTime,
     currentTime,
     separateVideoAudio,
     unseparateVideoAudio,
@@ -714,9 +716,8 @@ export const TimelineTrack = memo(function TimelineTrack({
           label: t('timeline.contextMenu.duplicate'),
           shortcut: '⌘D',
           onClick: () => {
-            // Duplicate element after current position
             copySelected();
-            // Note: paste will be at current time, ideally after the element
+            pasteAtTime(getDuplicateInsertTime(project, selectedElements, element));
           },
         },
         { label: '', separator: true, onClick: () => {} },
@@ -967,12 +968,15 @@ export const TimelineTrack = memo(function TimelineTrack({
       separateVideoAudio,
       unseparateVideoAudio,
       removeElement,
+      pasteAtTime,
       dispatch,
       dispatchBatch,
       t,
       onExecuteAIAction,
       commitElementUpdate,
       rippleEditingEnabled,
+      project,
+      selectedElements,
       track.elements,
     ],
   );
