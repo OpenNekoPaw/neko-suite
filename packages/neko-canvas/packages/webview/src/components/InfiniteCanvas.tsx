@@ -4,11 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import type {
-  CanvasNode,
-  CanvasConnection,
-  CanvasViewport as ViewportType,
-} from '@neko/shared';
+import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
 import { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodes';
@@ -79,6 +75,8 @@ export interface InfiniteCanvasProps {
   // ── DocumentNode callbacks ─────────────────────────────────────────────────
   /** Called when user opens a document */
   onDocumentOpen?: (docPath: string) => void;
+  /** Called when user opens an embedded canvas */
+  onCanvasEmbedOpen?: (canvasPath: string) => void;
 
   // ── ModelNode callbacks ────────────────────────────────────────────────────
   /** Called to check if a model is installed */
@@ -89,6 +87,8 @@ export interface InfiniteCanvasProps {
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   /** Called to auto-layout the shots inside a scene */
   onAutoLayoutSceneShots?: (sceneId: string) => void;
+  /** Called to reorder the shots inside a scene */
+  onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
 }
 
 // =============================================================================
@@ -122,10 +122,12 @@ export function InfiniteCanvas({
   onScriptOpen,
   onScriptNavigateToScene,
   onDocumentOpen,
+  onCanvasEmbedOpen,
   onModelCheckInstalled,
   onSelectShotCandidate,
   onAssignSelectedShotsToScene,
   onAutoLayoutSceneShots,
+  onReorderSceneShots,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -257,34 +259,33 @@ export function InfiniteCanvas({
         {visibleNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(
-            nodeRendererRegistryRef.current,
-            {
-              node,
-              allNodes: nodes,
-              viewport,
-              isSelected,
-              containerRef: containerRef as React.RefObject<HTMLElement | null>,
-              onSelect: onNodeSelect,
-              onDrag: onNodeDrag,
-              onMove: onNodeMove,
-              onResize: onNodeResize,
-              onResizeEnd: onNodeResizeEnd,
-              onRotate: onNodeRotate,
-              onRotateEnd: onNodeRotateEnd,
-              onUpdateData: onNodeUpdateData,
-              onConnectionStart: startDragConnection,
-              onScriptLoadScenes,
-              onScriptOpen,
-              onScriptNavigateToScene,
-              onDocumentOpen,
-              onModelCheckInstalled,
-              onSelectShotCandidate,
-              onAssignSelectedShotsToScene,
-              onAutoLayoutSceneShots,
-              selectedNodeIds,
-            },
-          );
+          return renderNode(nodeRendererRegistryRef.current, {
+            node,
+            allNodes: nodes,
+            viewport,
+            isSelected,
+            containerRef: containerRef as React.RefObject<HTMLElement | null>,
+            onSelect: onNodeSelect,
+            onDrag: onNodeDrag,
+            onMove: onNodeMove,
+            onResize: onNodeResize,
+            onResizeEnd: onNodeResizeEnd,
+            onRotate: onNodeRotate,
+            onRotateEnd: onNodeRotateEnd,
+            onUpdateData: onNodeUpdateData,
+            onConnectionStart: startDragConnection,
+            onScriptLoadScenes,
+            onScriptOpen,
+            onScriptNavigateToScene,
+            onDocumentOpen,
+            onCanvasEmbedOpen,
+            onModelCheckInstalled,
+            onSelectShotCandidate,
+            onAssignSelectedShotsToScene,
+            onAutoLayoutSceneShots,
+            onReorderSceneShots,
+            selectedNodeIds,
+          });
         })}
       </CanvasViewport>
 

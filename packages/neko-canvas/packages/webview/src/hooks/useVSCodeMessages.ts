@@ -27,6 +27,12 @@ export interface GenerationProgressPayload {
   dataUrl?: string;
 }
 
+export interface TimelineImportResultPayload {
+  shotIds: string[];
+  projectName: string;
+  importedAt: number;
+}
+
 export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
@@ -41,6 +47,8 @@ export interface UseVSCodeMessagesOptions {
   onScriptIndexResult?: (nodeId: string, scenes: unknown[]) => void;
   /** Called when model install status is known */
   onModelInstalledResult?: (nodeId: string, installedVersion: string | null) => void;
+  /** Called when canvas -> cut import succeeds and shot metadata should be synced back */
+  onTimelineImportResult?: (payload: TimelineImportResultPayload) => void;
   /** Return all nodes (optionally filtered by type) — used to respond to nodes.list requests */
   getNodes?: (type?: string) => CanvasNode[];
   /** Return a single node by id — used to respond to nodes.get requests */
@@ -77,6 +85,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     onBuildPromptResult,
     onScriptIndexResult,
     onModelInstalledResult,
+    onTimelineImportResult,
     getNodes,
     getNode,
     updateNode,
@@ -100,6 +109,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onScriptIndexResultRef.current = onScriptIndexResult;
   const onModelInstalledResultRef = useRef(onModelInstalledResult);
   onModelInstalledResultRef.current = onModelInstalledResult;
+  const onTimelineImportResultRef = useRef(onTimelineImportResult);
+  onTimelineImportResultRef.current = onTimelineImportResult;
   const getNodesRef = useRef(getNodes);
   getNodesRef.current = getNodes;
   const getNodeRef = useRef(getNode);
@@ -179,6 +190,17 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               message.nodeId as string,
               (message.installedVersion as string | null) ?? null,
             );
+            break;
+          case 'timelineImportResult':
+            onTimelineImportResultRef.current?.({
+              shotIds: Array.isArray(message.shotIds)
+                ? (message.shotIds as unknown[]).filter(
+                    (value): value is string => typeof value === 'string',
+                  )
+                : [],
+              projectName: (message.projectName as string | undefined) ?? '',
+              importedAt: (message.importedAt as number | undefined) ?? Date.now(),
+            });
             break;
 
           // ----------------------------------------------------------------

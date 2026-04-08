@@ -38,10 +38,10 @@ export type { DocumentNodeProps } from './DocumentNode';
 export { ModelNode } from './ModelNode';
 export type { ModelNodeProps } from './ModelNode';
 
-export {
-  createBuiltInNodeRendererRegistry,
-  renderCanvasNode,
-} from './nodeRendererRegistry';
+export { CanvasEmbedNode } from './CanvasEmbedNode';
+export type { CanvasEmbedNodeProps } from './CanvasEmbedNode';
+
+export { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodeRendererRegistry';
 export type {
   NodeRenderer,
   NodeRendererCommonProps,

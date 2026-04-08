@@ -12,6 +12,8 @@
  *   NKV-003: modelInstalledResult uses installedVersion (not "installed")
  *   NKV-004: webview consumes the same nodes.update / nodes.create DTO
  *   NKV-005: operation bridge uses shared VSCode gateway
+ *   NKV-006: timeline import success round-trips shotIds/projectName/importedAt
+ *   NKV-007: canvas ops sidecar persists to .nkc-ops
  */
 
 import { describe, it, expect } from 'vitest';
@@ -53,7 +55,7 @@ describe('canvasEditorProvider message contracts', () => {
     });
 
     it('consumes payload wrapper in webview', () => {
-      expect(webviewSource).toContain('const payload = (message.payload as {');
+      expect(webviewSource).toContain('const payload = (message.payload as');
       expect(webviewSource).toContain('type: payload.type ??');
       expect(webviewSource).toContain('position: payload.position ??');
       expect(webviewSource).toContain('data: payload.data ?? {}');
@@ -97,12 +99,37 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-005: operation bridge gateway', () => {
     it('uses shared VSCode gateway helper', () => {
-      expect(operationStoreSource).toContain("import { getGlobalVSCodeApi } from '../utils/vscode';");
+      expect(operationStoreSource).toContain(
+        "import { getGlobalVSCodeApi } from '../utils/vscode';",
+      );
       expect(operationStoreSource).toContain('const vscode = getGlobalVSCodeApi();');
     });
 
     it('does not directly read window.__vscode_api__', () => {
       expect(operationStoreSource).not.toContain('__vscode_api__');
+    });
+  });
+
+  describe('NKV-006: timeline import round-trip', () => {
+    it('extension sends timelineImportResult with stable fields', () => {
+      expect(providerSource).toContain("type: 'timelineImportResult'");
+      expect(providerSource).toContain('shotIds,');
+      expect(providerSource).toContain('projectName,');
+      expect(providerSource).toContain('importedAt,');
+    });
+
+    it('webview consumes timelineImportResult payload', () => {
+      expect(webviewSource).toContain("case 'timelineImportResult'");
+      expect(webviewSource).toContain(
+        'projectName: (message.projectName as string | undefined) ??',
+      );
+      expect(webviewSource).toContain('importedAt: (message.importedAt as number | undefined) ??');
+    });
+  });
+
+  describe('NKV-007: operation sidecar path', () => {
+    it('persists operation logs beside the canvas document as .nkc-ops', () => {
+      expect(providerSource).toContain('documentUri.with({ path: `${documentUri.path}-ops` })');
     });
   });
 

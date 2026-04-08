@@ -30,16 +30,16 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function asObjectArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function inferDocumentType(
-  value: unknown,
-): 'pdf' | 'docx' | 'epub' | 'cbz' {
+function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' {
   if (value === 'pdf' || value === 'docx' || value === 'epub' || value === 'cbz') {
     return value;
   }
@@ -161,7 +161,8 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
           duration: asNumber(data.duration, 3),
           visualDescription: asString(data.visualDescription, ''),
           characters: asObjectArray<ShotCharacter>(data.characters) ?? DEFAULT_EMPTY_CHARACTERS,
-          shotScale: data.shotScale === 'ECU' ||
+          shotScale:
+            data.shotScale === 'ECU' ||
             data.shotScale === 'CU' ||
             data.shotScale === 'MCU' ||
             data.shotScale === 'MS' ||
@@ -169,8 +170,8 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
             data.shotScale === 'LS' ||
             data.shotScale === 'VLS' ||
             data.shotScale === 'ELS'
-            ? data.shotScale
-            : 'MS',
+              ? data.shotScale
+              : 'MS',
           cameraMovement:
             data.cameraMovement === 'static' ||
             data.cameraMovement === 'pan' ||
@@ -210,6 +211,11 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
           dialogue: asString(data.dialogue) || undefined,
           voiceOver: asString(data.voiceOver) || undefined,
           soundCue: asString(data.soundCue) || undefined,
+          lastImportedToTimelineAt:
+            typeof data.lastImportedToTimelineAt === 'number'
+              ? data.lastImportedToTimelineAt
+              : undefined,
+          lastImportedToTimelineProject: asString(data.lastImportedToTimelineProject) || undefined,
         },
       };
     case 'scene':
@@ -284,17 +290,18 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         position,
         size: { width: 240, height: 160 },
         zIndex,
-        ports: inferModelRole(data.role) === 'workflow'
-          ? [
-              {
-                id: 'output',
-                type: 'output',
-                position: 'right',
-                dataType: 'any',
-                label: 'Model',
-              },
-            ]
-          : DEFAULT_EMPTY_PORTS,
+        ports:
+          inferModelRole(data.role) === 'workflow'
+            ? [
+                {
+                  id: 'output',
+                  type: 'output',
+                  position: 'right',
+                  dataType: 'any',
+                  label: 'Model',
+                },
+              ]
+            : DEFAULT_EMPTY_PORTS,
         data: {
           modelPath: asString(data.modelPath, ''),
           modelName: asString(data.modelName, ''),

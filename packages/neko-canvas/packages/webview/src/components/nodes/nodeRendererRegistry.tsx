@@ -3,6 +3,7 @@ import type {
   AnnotationCanvasNode,
   CanvasNode,
   CanvasNodeType,
+  CanvasEmbedCanvasNode,
   DocumentCanvasNode,
   GalleryCanvasNode,
   GroupCanvasNode,
@@ -17,6 +18,7 @@ import type {
 import {
   AnnotationNode,
   ArtboardNode,
+  CanvasEmbedNode,
   DocumentNode,
   GalleryNode,
   GroupNode,
@@ -61,10 +63,12 @@ export interface NodeRendererContext extends NodeRendererCommonProps {
   onScriptOpen?: (scriptPath: string) => void;
   onScriptNavigateToScene?: (linkedSceneGroupId: string) => void;
   onDocumentOpen?: (docPath: string) => void;
+  onCanvasEmbedOpen?: (canvasPath: string) => void;
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
   onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   onAutoLayoutSceneShots?: (sceneId: string) => void;
+  onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
 }
 
 export type NodeRenderer = (context: NodeRendererContext) => React.ReactNode;
@@ -116,6 +120,7 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
       selectedNodeIds,
       onAssignSelectedShotsToScene,
       onAutoLayoutSceneShots,
+      onReorderSceneShots,
       ...commonProps
     }) => (
       <SceneGroupNode
@@ -127,14 +132,30 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
             (candidate) => selectedNodeIds.includes(candidate.id) && candidate.type === 'shot',
           ).length
         }
+        shots={allNodes
+          .filter((candidate): candidate is ShotCanvasNode => candidate.type === 'shot')
+          .filter((candidate) => candidate.data.sceneGroupId === node.id)
+          .sort(
+            (a, b) =>
+              (node as SceneGroupCanvasNode).data.shotIds.indexOf(a.id) -
+              (node as SceneGroupCanvasNode).data.shotIds.indexOf(b.id),
+          )
+          .map((shot) => ({ id: shot.id, shotNumber: shot.data.shotNumber }))}
         onAssignSelectedShots={onAssignSelectedShotsToScene}
         onAutoLayoutShots={onAutoLayoutSceneShots}
+        onReorderShots={onReorderSceneShots}
       />
     ),
     gallery: ({ node, ...commonProps }) => (
       <GalleryNode key={node.id} node={node as GalleryCanvasNode} {...commonProps} />
     ),
-    script: ({ node, onScriptLoadScenes, onScriptOpen, onScriptNavigateToScene, ...commonProps }) => (
+    script: ({
+      node,
+      onScriptLoadScenes,
+      onScriptOpen,
+      onScriptNavigateToScene,
+      ...commonProps
+    }) => (
       <ScriptNode
         key={node.id}
         node={node as ScriptCanvasNode}
@@ -150,6 +171,14 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
         node={node as DocumentCanvasNode}
         {...commonProps}
         onOpenDocument={onDocumentOpen}
+      />
+    ),
+    'canvas-embed': ({ node, onCanvasEmbedOpen, ...commonProps }) => (
+      <CanvasEmbedNode
+        key={node.id}
+        node={node as CanvasEmbedCanvasNode}
+        {...commonProps}
+        onOpenCanvas={onCanvasEmbedOpen}
       />
     ),
     model: ({ node, onModelCheckInstalled, ...commonProps }) => (

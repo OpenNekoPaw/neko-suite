@@ -12,6 +12,7 @@ describe('canvas drop classification', () => {
     expect(inferCanvasDroppedAssetKind('pilot.fountain')).toBe('script');
     expect(inferCanvasDroppedAssetKind('brief.epub')).toBe('document');
     expect(inferCanvasDroppedAssetKind('character-lora.safetensors')).toBe('model');
+    expect(inferCanvasDroppedAssetKind('storyboard.nkc')).toBe('canvas');
   });
 
   it('infers detailed media, document, and model subtypes', () => {

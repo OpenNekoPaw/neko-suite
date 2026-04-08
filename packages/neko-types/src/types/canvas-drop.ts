@@ -1,6 +1,6 @@
 import type { DocumentCanvasNode, ModelCanvasNode } from './canvas';
 
-export type CanvasDroppedAssetKind = 'media' | 'script' | 'document' | 'model';
+export type CanvasDroppedAssetKind = 'media' | 'script' | 'document' | 'model' | 'canvas';
 
 export interface DroppedMediaCanvasAsset {
   kind: 'media';
@@ -33,11 +33,19 @@ export interface DroppedModelCanvasAsset {
   role: ModelCanvasNode['data']['role'];
 }
 
+export interface DroppedCanvasEmbedAsset {
+  kind: 'canvas';
+  name: string;
+  path: string;
+  title: string;
+}
+
 export type CanvasDroppedAsset =
   | DroppedMediaCanvasAsset
   | DroppedScriptCanvasAsset
   | DroppedDocumentCanvasAsset
-  | DroppedModelCanvasAsset;
+  | DroppedModelCanvasAsset
+  | DroppedCanvasEmbedAsset;
 
 const MEDIA_EXTENSIONS: Record<string, DroppedMediaCanvasAsset['mediaType']> = {
   png: 'image',
@@ -69,6 +77,7 @@ const DOCUMENT_EXTENSIONS: Record<string, DroppedDocumentCanvasAsset['docType']>
   cbz: 'cbz',
 };
 const MODEL_EXTENSIONS = new Set(['safetensors', 'ckpt', 'pt', 'pth', 'bin']);
+const CANVAS_EXTENSIONS = new Set(['nkc']);
 
 function getFileExtension(fileName: string): string {
   return fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -86,7 +95,9 @@ export function inferCanvasDocumentType(
   return DOCUMENT_EXTENSIONS[getFileExtension(fileName)] ?? null;
 }
 
-export function inferCanvasModelType(fileName: string): DroppedModelCanvasAsset['modelType'] | null {
+export function inferCanvasModelType(
+  fileName: string,
+): DroppedModelCanvasAsset['modelType'] | null {
   const lowerName = fileName.toLowerCase();
   const ext = getFileExtension(fileName);
   if (!MODEL_EXTENSIONS.has(ext)) {
@@ -117,6 +128,9 @@ export function inferCanvasDroppedAssetKind(fileName: string): CanvasDroppedAsse
   }
   if (inferCanvasModelType(fileName)) {
     return 'model';
+  }
+  if (CANVAS_EXTENSIONS.has(getFileExtension(fileName))) {
+    return 'canvas';
   }
   return null;
 }

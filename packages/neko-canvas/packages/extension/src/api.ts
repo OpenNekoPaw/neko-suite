@@ -55,7 +55,12 @@ export interface AssetChangeEvent {
 
 export interface CanvasChangeEvent {
   type: 'add' | 'update' | 'delete';
+  nodeId?: string;
+  nodeIds?: string[];
   shapeId?: string;
+  entityType?: 'node' | 'connection' | 'selection' | 'generation' | 'import' | 'operation';
+  reason?: string;
+  operationType?: string;
 }
 
 /**

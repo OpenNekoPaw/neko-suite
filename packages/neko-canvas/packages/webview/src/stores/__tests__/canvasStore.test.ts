@@ -72,13 +72,15 @@ describe('canvasStore scene container actions', () => {
   });
 
   it('assigns selected shots into a scene and auto-layouts them in shotIds order', () => {
-    useCanvasStore.getState().setCanvasData(
-      createCanvasData([
-        createSceneNode(),
-        createShotNode('shot-1', 20, 20),
-        createShotNode('shot-2', 40, 40),
-      ]),
-    );
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([
+          createSceneNode(),
+          createShotNode('shot-1', 20, 20),
+          createShotNode('shot-2', 40, 40),
+        ]),
+      );
 
     useCanvasStore.getState().assignShotsToScene('scene-1', ['shot-2', 'shot-1'], true);
 
@@ -101,9 +103,9 @@ describe('canvasStore scene container actions', () => {
   });
 
   it('updates scene membership when a shot is dragged into and out of a scene', () => {
-    useCanvasStore.getState().setCanvasData(
-      createCanvasData([createSceneNode(), createShotNode('shot-1', 900, 900)]),
-    );
+    useCanvasStore
+      .getState()
+      .setCanvasData(createCanvasData([createSceneNode(), createShotNode('shot-1', 900, 900)]));
 
     useCanvasStore.getState().moveNodeEnd('shot-1', { x: 160, y: 220 });
 
@@ -130,5 +132,49 @@ describe('canvasStore scene container actions', () => {
 
     expect(shot?.data.sceneGroupId).toBeUndefined();
     expect(scene?.data.shotIds).toEqual([]);
+  });
+
+  it('reorders managed shots within a scene and preserves shotIds order', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          ...createSceneNode(),
+          data: {
+            ...createSceneNode().data,
+            shotIds: ['shot-1', 'shot-2'],
+          },
+        },
+        {
+          ...createShotNode('shot-1', 160, 220),
+          data: {
+            ...createShotNode('shot-1', 160, 220).data,
+            sceneGroupId: 'scene-1',
+          },
+        },
+        {
+          ...createShotNode('shot-2', 420, 220),
+          data: {
+            ...createShotNode('shot-2', 420, 220).data,
+            sceneGroupId: 'scene-1',
+          },
+        },
+      ]),
+    );
+
+    useCanvasStore.getState().reorderSceneShots('scene-1', ['shot-2', 'shot-1'], true);
+
+    const state = useCanvasStore.getState().canvasData;
+    const scene = state?.nodes.find(
+      (node): node is SceneGroupCanvasNode => isSceneGroupNode(node) && node.id === 'scene-1',
+    );
+    const shot1 = state?.nodes.find(
+      (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-1',
+    );
+    const shot2 = state?.nodes.find(
+      (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-2',
+    );
+
+    expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
+    expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
   });
 });

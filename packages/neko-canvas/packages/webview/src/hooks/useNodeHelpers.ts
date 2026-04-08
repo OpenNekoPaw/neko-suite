@@ -49,6 +49,7 @@ export interface UseNodeHelpersReturn {
     modelType?: 'lora' | 'checkpoint' | 'controlnet' | 'vae',
     role?: 'reference' | 'workflow',
   ) => void;
+  addCanvasEmbedAt: (pos: { x: number; y: number }, canvasPath?: string, title?: string) => void;
 }
 
 // =============================================================================
@@ -263,6 +264,25 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     [addNode, nodeCount, reportAction],
   );
 
+  const addCanvasEmbedAt = useCallback(
+    (pos: { x: number; y: number }, canvasPath = '', title = 'Canvas') => {
+      const w = 220,
+        h = 180;
+      addNode({
+        type: 'canvas-embed',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          canvasPath,
+          canvasTitle: title,
+        },
+      });
+      reportAction('addNode', 'Add canvas embed', title || undefined);
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
   return {
     addTextAt,
     addSceneAt,
@@ -273,5 +293,6 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     addScriptAt,
     addDocumentAt,
     addModelAt,
+    addCanvasEmbedAt,
   };
 }

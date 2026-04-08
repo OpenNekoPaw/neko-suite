@@ -15,7 +15,7 @@ import {
   inferCanvasModelType,
   loadNkc,
 } from '@neko/shared';
-import type { CanvasDroppedAsset, CanvasNode, CanvasNodeType } from '@neko/shared';
+import type { CanvasDroppedAsset, CanvasNode, CanvasNodeType, EditOperation } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
@@ -23,6 +23,65 @@ import { getLogger } from '../utils/logger';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
+
+function mapOperationToCanvasChangeEvent(operation: {
+  type?: string;
+  payload?: Record<string, unknown>;
+}): CanvasChangeEvent {
+  const opType = operation.type ?? 'unknown';
+  const payload = operation.payload ?? {};
+  const payloadNode = payload['node'];
+  const payloadGroupNode = payload['groupNode'];
+  const nodeId =
+    typeof payload['nodeId'] === 'string'
+      ? payload['nodeId']
+      : typeof payloadNode === 'object' &&
+          payloadNode !== null &&
+          typeof (payloadNode as { id?: unknown }).id === 'string'
+        ? (payloadNode as { id: string }).id
+        : typeof payloadGroupNode === 'object' &&
+            payloadGroupNode !== null &&
+            typeof (payloadGroupNode as { id?: unknown }).id === 'string'
+          ? (payloadGroupNode as { id: string }).id
+          : undefined;
+  const nodeIds = Array.isArray(payload['childIds'])
+    ? (payload['childIds'] as unknown[]).filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : nodeId
+      ? [nodeId]
+      : undefined;
+
+  return {
+    type: opType.includes('.add')
+      ? 'add'
+      : opType.includes('.remove') || opType.includes('.ungroup')
+        ? 'delete'
+        : 'update',
+    nodeId,
+    nodeIds,
+    entityType: opType.startsWith('canvas.connection')
+      ? 'connection'
+      : opType.startsWith('canvas.node')
+        ? 'node'
+        : 'operation',
+    reason: 'operationApplied',
+    operationType: opType,
+  };
+}
+
+interface CanvasOpsSnapshot {
+  version: '1.0';
+  canvasVersion?: string;
+  canvasName?: string;
+  operations: EditOperation[];
+  savedAt: string;
+}
+
+interface CanvasSnapshotInfo {
+  version?: string;
+  name?: string;
+}
 
 // NekoPreviewAPI type (matches neko-preview/src/types/api.ts)
 interface NekoPreviewAPI {
@@ -77,6 +136,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private _previewApi: NekoPreviewAPI | null = null;
   // Batch image generation scheduler
   private readonly scheduler = new BatchGenerationScheduler();
+  // Persisted operation sidecar state (.nkc-ops)
+  private readonly operationLogs = new Map<string, EditOperation[]>();
+  private readonly lastCanvasSnapshots = new Map<string, CanvasSnapshotInfo>();
+  private readonly operationFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // Track active streams per panel for cleanup
   private _activeStreams = new Map<
     vscode.WebviewPanel,
@@ -154,6 +217,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         // Clear outline and hide status bar when editor closes
         this.outlineProvider?.updateData(null);
         this.statusBar?.hide();
+      }
+
+      const documentKey = this.getDocumentKey(document.uri);
+      const flushTimer = this.operationFlushTimers.get(documentKey);
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        this.operationFlushTimers.delete(documentKey);
       }
     });
 
@@ -404,6 +474,97 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return text;
   }
 
+  private getDocumentKey(documentUri: vscode.Uri): string {
+    return documentUri.toString();
+  }
+
+  private getOperationSidecarUri(documentUri: vscode.Uri): vscode.Uri {
+    return documentUri.with({ path: `${documentUri.path}-ops` });
+  }
+
+  private updateCanvasSnapshot(
+    documentUri: vscode.Uri,
+    data?: Record<string, unknown> | null,
+  ): void {
+    if (!data) return;
+    const version = typeof data['version'] === 'string' ? data['version'] : undefined;
+    const name = typeof data['name'] === 'string' ? data['name'] : undefined;
+    this.lastCanvasSnapshots.set(this.getDocumentKey(documentUri), { version, name });
+  }
+
+  private async loadOperationLog(documentUri: vscode.Uri): Promise<void> {
+    const documentKey = this.getDocumentKey(documentUri);
+    const sidecarUri = this.getOperationSidecarUri(documentUri);
+
+    try {
+      const raw = await vscode.workspace.fs.readFile(sidecarUri);
+      const parsed = JSON.parse(Buffer.from(raw).toString('utf-8')) as Partial<CanvasOpsSnapshot>;
+      const operations = Array.isArray(parsed.operations)
+        ? (parsed.operations as EditOperation[]).slice(-500)
+        : [];
+      this.operationLogs.set(documentKey, operations);
+      this.lastCanvasSnapshots.set(documentKey, {
+        version: typeof parsed.canvasVersion === 'string' ? parsed.canvasVersion : undefined,
+        name: typeof parsed.canvasName === 'string' ? parsed.canvasName : undefined,
+      });
+    } catch (error) {
+      const code = error instanceof vscode.FileSystemError ? error.code : undefined;
+      if (code !== 'FileNotFound') {
+        logger.warn(`Failed to load canvas operation sidecar: ${error}`);
+      }
+      this.operationLogs.set(documentKey, []);
+    }
+  }
+
+  private appendOperationLog(documentUri: vscode.Uri, operation: EditOperation): void {
+    const documentKey = this.getDocumentKey(documentUri);
+    const next = [...(this.operationLogs.get(documentKey) ?? []), operation];
+    if (next.length > 500) {
+      next.splice(0, next.length - 500);
+    }
+    this.operationLogs.set(documentKey, next);
+  }
+
+  private scheduleOperationLogFlush(documentUri: vscode.Uri): void {
+    const documentKey = this.getDocumentKey(documentUri);
+    const existing = this.operationFlushTimers.get(documentKey);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      void this.flushOperationLog(documentUri);
+    }, 150);
+    this.operationFlushTimers.set(documentKey, timer);
+  }
+
+  private async flushOperationLog(documentUri: vscode.Uri): Promise<void> {
+    const documentKey = this.getDocumentKey(documentUri);
+    const timer = this.operationFlushTimers.get(documentKey);
+    if (timer) {
+      clearTimeout(timer);
+      this.operationFlushTimers.delete(documentKey);
+    }
+
+    const operations = this.operationLogs.get(documentKey) ?? [];
+    const snapshot = this.lastCanvasSnapshots.get(documentKey);
+    const payload: CanvasOpsSnapshot = {
+      version: '1.0',
+      canvasVersion: snapshot?.version,
+      canvasName: snapshot?.name,
+      operations,
+      savedAt: new Date().toISOString(),
+    };
+
+    try {
+      await vscode.workspace.fs.writeFile(
+        this.getOperationSidecarUri(documentUri),
+        Buffer.from(JSON.stringify(payload, null, 2), 'utf-8'),
+      );
+    } catch (error) {
+      logger.warn(`Failed to persist canvas operation sidecar: ${error}`);
+    }
+  }
+
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
@@ -413,6 +574,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'ready': {
         // Read file content and send to webview
         try {
+          await this.loadOperationLog(document.uri);
           const fileData = await vscode.workspace.fs.readFile(document.uri);
           const content = Buffer.from(fileData).toString('utf-8');
           const result = content.trim() ? loadNkc(content) : null;
@@ -423,6 +585,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               result.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
             );
           }
+          this.updateCanvasSnapshot(document.uri, data as Record<string, unknown> | null);
           webviewPanel.webview.postMessage({ type: 'update', data });
           // Sync outline & status bar on initial load
           if (data) {
@@ -431,6 +594,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
         } catch {
           // File is empty or invalid JSON — send null to use defaults
+          await this.loadOperationLog(document.uri);
           webviewPanel.webview.postMessage({ type: 'update', data: null });
         }
         break;
@@ -442,6 +606,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           await this.normalizeCanvasPathsForSave(data, document.uri);
           const content = JSON.stringify(data, null, 2);
           await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
+          this.updateCanvasSnapshot(document.uri, data);
+          await this.flushOperationLog(document.uri);
           // Sync outline & status bar on every save
           this.syncOutline(data);
           this.syncStatusBar(data);
@@ -453,6 +619,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'canvasStatus': {
         // Webview reports status update (selection change, viewport change, etc.)
         const data = message.data as Record<string, unknown>;
+        this.updateCanvasSnapshot(document.uri, data);
         this.syncStatusBar(data);
         this.syncOutline(data);
         break;
@@ -528,11 +695,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       case 'operationApplied':
         // EditOperation sync from webview — fire dirty event
+        this.appendOperationLog(document.uri, message.operation as EditOperation);
+        this.scheduleOperationLogFlush(document.uri);
         this._onDidChangeCustomDocument.fire({
           document,
           undo: () => {},
           redo: () => {},
         });
+        this._onDidChangeCanvas.fire(
+          mapOperationToCanvasChangeEvent(
+            message.operation as {
+              type?: string;
+              payload?: Record<string, unknown>;
+            },
+          ),
+        );
         break;
 
       // =================================================================
@@ -767,6 +944,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               continue;
             }
 
+            if (assetKind === 'canvas') {
+              resolvedAssets.push({
+                kind: 'canvas',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Canvas',
+              });
+              continue;
+            }
+
             const modelType = inferCanvasModelType(fileName);
             if (!modelType) continue;
             resolvedAssets.push({
@@ -917,6 +1104,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             projectName,
             shots,
           });
+          const shotIds = shots
+            .map((shot) =>
+              typeof shot === 'object' &&
+              shot !== null &&
+              typeof (shot as { id?: unknown }).id === 'string'
+                ? (shot as { id: string }).id
+                : null,
+            )
+            .filter((shotId): shotId is string => shotId !== null);
+          const importedAt = Date.now();
+          webviewPanel.webview.postMessage({
+            type: 'timelineImportResult',
+            shotIds,
+            projectName,
+            importedAt,
+          });
+          this._onDidChangeCanvas.fire({
+            type: 'update',
+            nodeIds: shotIds,
+            entityType: 'import',
+            reason: 'importToTimeline',
+            operationType: 'timeline.import',
+          });
         } catch {
           vscode.window.showWarningMessage(
             'neko-cut is not available. Install neko-cut to import storyboard to timeline.',
@@ -1047,6 +1257,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'selectionChange': {
         const nodes = (message.nodes ?? []) as CanvasNode[];
         this._onSelectionChange.fire(nodes);
+        this._onDidChangeCanvas.fire({
+          type: 'update',
+          entityType: 'selection',
+          reason: 'selectionChange',
+          nodeIds: nodes.map((node) => node.id),
+        });
         break;
       }
 
