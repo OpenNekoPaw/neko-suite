@@ -1,0 +1,34 @@
+[package]
+name = "neko-runtime-ml"
+version.workspace = true
+edition.workspace = true
+description = "ML inference runtime for Neko Engine — ONNX model registry, upscale, denoise, CLIP, Whisper"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Engine kernel (for error types and service traits)
+neko-engine-kernel = { path = "../engine-kernel" }
+
+# ONNX Runtime inference
+ort = { workspace = true }
+ndarray = { workspace = true }
+rustfft = { workspace = true }
+
+# Image I/O (for upscale/denoise pipelines)
+image = { workspace = true }
+
+# FFmpeg bindings (for Whisper audio loading)
+ffmpeg-next = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }

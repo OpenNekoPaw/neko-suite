@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[cfg(feature = "onnx")]
-use neko_engine_kernel::services::IMlService;
+use neko_runtime_ml::IMlService;
 #[cfg(feature = "onnx")]
 use std::sync::Arc;
 

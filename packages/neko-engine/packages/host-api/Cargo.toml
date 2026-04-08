@@ -18,6 +18,9 @@ neko-engine-kernel = { path = "../engine-kernel", features = [] }
 # Device runtime (camera, MIDI, gamepad)
 neko-runtime-device = { path = "../runtime-device" }
 
+# ML runtime (ONNX inference — optional)
+neko-runtime-ml = { path = "../runtime-ml", optional = true }
+
 # Async runtime
 tokio.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }
@@ -44,7 +47,7 @@ base64.workspace = true
 
 [features]
 default = []
-onnx = ["neko-engine-kernel/onnx"]
+onnx = ["neko-engine-kernel/onnx", "neko-runtime-ml"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }

@@ -11,10 +11,7 @@ use neko_engine_kernel::services::{
 };
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
 #[cfg(feature = "onnx")]
-use neko_engine_kernel::{
-    ml::onnx_runtime::DeviceSelection,
-    services::{IMlService, MlService},
-};
+use neko_runtime_ml::{DeviceSelection, IMlService, MlService};
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use std::sync::Arc;
 use tokio::sync::Semaphore;

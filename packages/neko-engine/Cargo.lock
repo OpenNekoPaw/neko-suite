@@ -2435,6 +2435,7 @@ dependencies = [
  "neko-engine-kernel",
  "neko-engine-types",
  "neko-runtime-device",
+ "neko-runtime-ml",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2522,6 +2523,22 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "neko-runtime-ml"
+version = "0.1.0"
+dependencies = [
+ "ffmpeg-next",
+ "image",
+ "ndarray",
+ "neko-engine-kernel",
+ "ort",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
