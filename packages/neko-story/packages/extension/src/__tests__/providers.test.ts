@@ -862,6 +862,40 @@ describe('ReferenceProvider — Cross-file', () => {
     ).toBe(true);
   });
 
+  it('should ignore inferred occurrence entries for structural references', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const occurrenceLookup = createMockOccurrenceLookup([
+      {
+        entity: { kind: 'character', id: 'char_john' },
+        source: 'generated-asset',
+        sourceId: 'asset_1',
+        strength: 'inferred',
+        provenance: 'ai',
+        locator: { uri: '/project/.neko/.cache/generated/frame-1.png' },
+      },
+    ]);
+    const provider = new FountainReferenceProvider(
+      index,
+      createMockCharacterIndex(),
+      occurrenceLookup,
+    );
+    const doc = createMockDocument(FILE_A, '/project/a.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 4, character: 0 },
+      {} as any,
+      {} as any,
+    );
+
+    expect(
+      results.some((r: any) => r.uri.fsPath === '/project/.neko/.cache/generated/frame-1.png'),
+    ).toBe(false);
+  });
+
   it('should find all character references across files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,

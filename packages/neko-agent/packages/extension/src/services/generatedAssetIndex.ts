@@ -163,6 +163,8 @@ export class GeneratedAssetIndex {
       },
       source: 'generated-asset',
       sourceId: asset.id,
+      strength: 'confirmed',
+      provenance: 'lineage',
       locator: {
         uri: asset.path,
       },

@@ -50,6 +50,8 @@ describe('GeneratedAssetIndex entity projection', () => {
         },
         source: 'generated-asset',
         sourceId: 'asset-1',
+        strength: 'confirmed',
+        provenance: 'lineage',
         locator: {
           uri: '/tmp/a.png',
         },

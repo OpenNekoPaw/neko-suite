@@ -2,6 +2,10 @@
 // Occurrence Index Types — minimal cross-layer reference projection
 // =============================================================================
 
+export type OccurrenceStrength = 'confirmed' | 'inferred';
+
+export type OccurrenceProvenance = 'user' | 'lineage' | 'rule' | 'ai' | 'import';
+
 export interface CreativeEntityRef {
   kind: 'character' | 'scene' | 'object' | 'location' | 'action';
   id: string;
@@ -28,5 +32,11 @@ export interface OccurrenceIndexEntry {
     | 'timeline-element'
     | 'media-segment';
   sourceId: string;
+  strength?: OccurrenceStrength;
+  provenance?: OccurrenceProvenance;
   locator: OccurrenceLocator;
+}
+
+export function isTrustedOccurrenceEntry(entry: OccurrenceIndexEntry): boolean {
+  return (entry.strength ?? 'confirmed') === 'confirmed';
 }

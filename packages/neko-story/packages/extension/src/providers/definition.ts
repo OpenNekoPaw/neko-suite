@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isTrustedOccurrenceEntry } from '@neko/shared';
 import type { OccurrenceIndexEntry } from '@neko/shared';
 import type { IWorkspaceIndex } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
@@ -105,6 +106,9 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
         characterResolution.characterId,
       );
       for (const occurrence of occurrences ?? []) {
+        if (!isTrustedOccurrenceEntry(occurrence)) {
+          continue;
+        }
         const location = occurrenceToLocation(occurrence);
         if (location) {
           pushLocation(location);

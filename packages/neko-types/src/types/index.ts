@@ -190,6 +190,9 @@ export * from './generated-asset';
 // Character registry types (project-level identity contract)
 export * from './character-registry';
 
+// Creative entity graph types (structural relationship layer for unified identity)
+export * from './creative-entity-graph';
+
 // Occurrence index types (minimal cross-layer reference projection)
 export * from './occurrence-index';
 
