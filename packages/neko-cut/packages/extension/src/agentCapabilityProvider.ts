@@ -20,7 +20,7 @@ import type {
   ToolParameters,
   NekoCutAPI,
 } from '@neko/shared';
-import { TOOL_NAMES_TIMELINE } from '@neko/shared';
+import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
 
 /**
  * Create the NekoCut capability provider.
@@ -37,8 +37,9 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
 
   constructor(private readonly _api: NekoCutAPI) {}
 
-  getTools(_context: AgentCapabilityContext): Tool[] {
+  getTools(context: AgentCapabilityContext): Tool[] {
     const api = this._api;
+    const media = context.mediaService;
 
     return [
       {
@@ -156,6 +157,93 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
           return { success: true };
         },
       },
+      // GenerateVideoForClip — requires mediaService from context
+      ...(media
+        ? [
+            {
+              name: TOOL_NAMES_MEDIA.GENERATE_VIDEO_FOR_CLIP,
+              description:
+                'Generate an AI video clip from a text prompt and automatically add it to the NekoCut ' +
+                'timeline. Optionally accepts a reference image (base64 PNG/JPEG) for image-to-video ' +
+                'generation. Returns the new timeline element ID.',
+              category: 'generation' as const,
+              parameters: {
+                type: 'object' as const,
+                properties: {
+                  prompt: {
+                    type: 'string' as const,
+                    description: 'Text description of the video to generate',
+                  },
+                  trackId: {
+                    type: 'string' as const,
+                    description: 'Timeline track ID to insert into (default: first video track)',
+                  },
+                  startTime: {
+                    type: 'number' as const,
+                    description: 'Start time in seconds (default: end of selected track)',
+                  },
+                  referenceImageBase64: {
+                    type: 'string' as const,
+                    description: 'Base64-encoded PNG/JPEG for image-to-video generation (optional)',
+                  },
+                  durationHint: {
+                    type: 'number' as const,
+                    description: 'Requested duration in seconds (default: 5)',
+                  },
+                },
+                required: ['prompt'],
+              },
+              async execute(args: Record<string, unknown>) {
+                const prompt = args.prompt as string;
+                const durationHint = (args.durationHint as number | undefined) ?? 5;
+
+                let task;
+                try {
+                  task = await media.generateVideo({
+                    prompt,
+                    referenceImageBase64: args.referenceImageBase64 as string | undefined,
+                    durationSeconds: durationHint,
+                  });
+                } catch (err) {
+                  return { success: false, error: `Video generation failed: ${String(err)}` };
+                }
+
+                let completed;
+                try {
+                  completed = await media.waitForTask(task.id, 10 * 60 * 1000);
+                } catch (err) {
+                  return { success: false, error: `Video generation timed out: ${String(err)}` };
+                }
+
+                if (completed.status !== 'completed' || !completed.outputs?.length) {
+                  return { success: false, error: `Video generation ${completed.status}` };
+                }
+
+                const videoUrl = completed.outputs[0]!.url;
+                const resolvedTrackId = (args.trackId as string) ?? 'track-0';
+                const resolvedStartTime = (args.startTime as number) ?? 0;
+
+                const elementId = await api.timeline.addElement({
+                  type: 'video',
+                  trackId: resolvedTrackId,
+                  startTime: resolvedStartTime,
+                  duration: durationHint,
+                  source: videoUrl,
+                });
+
+                return {
+                  success: true,
+                  data: {
+                    elementId,
+                    trackId: resolvedTrackId,
+                    startTime: resolvedStartTime,
+                    videoUrl,
+                  },
+                };
+              },
+            } satisfies Tool,
+          ]
+        : []),
     ];
   }
 

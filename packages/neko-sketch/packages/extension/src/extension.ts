@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import type { NekoSketchAPI, SketchImportContext } from '@neko/shared';
+import { createNekoSketchCapabilityProvider } from './agentCapabilityProvider';
 import { SketchEditorProvider } from './editor';
 import { LayerOutlineProvider, SketchStatusBar } from './views';
 import { setRootLogger, getRootLogger } from './utils/logger';
@@ -101,6 +102,14 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
       return sketchEditorProvider.getCanvasImageData();
     },
   };
+
+  // Register capability provider with neko-agent (if installed)
+  try {
+    const provider = createNekoSketchCapabilityProvider(api);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+  } catch {
+    // neko-agent not installed — silently ignore
+  }
 
   return api;
 }

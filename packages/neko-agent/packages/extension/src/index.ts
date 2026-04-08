@@ -20,7 +20,7 @@ import type { ChatMessage } from '@neko/platform';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
-import { registerExtensionTools } from './bootstrap/toolBootstrap';
+import { registerExtensionTools, buildEmbedFn } from './bootstrap/toolBootstrap';
 import {
   setCanvasSelection,
   clearCanvasSelection,
@@ -66,7 +66,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   bootstrapPipeline(bootstrapResult.platform, bootstrapResult.toolRegistry);
 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
-  bootstrapCapabilities({ toolRegistry: bootstrapResult.toolRegistry }, context);
+  // Platform services are injected into context so providers can use media/config/embed
+  // without depending on @neko/platform directly.
+  bootstrapCapabilities(
+    {
+      toolRegistry: bootstrapResult.toolRegistry,
+      mediaService: bootstrapResult.platform.media,
+      configManager: bootstrapResult.platform.config,
+      embedFn: buildEmbedFn(bootstrapResult.platform),
+    },
+    context,
+  );
 
   // Create chat view provider
   const chatViewProvider = new ChatViewProvider(context.extensionUri, context);

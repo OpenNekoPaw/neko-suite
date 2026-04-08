@@ -24,6 +24,7 @@ import {
 import { setRootLogger, setErrorHandler, handleError, getLogger } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { initOrtDylib } from './mediaEngine/OrtInitializer';
+import { createEngineCapabilityProvider } from './agentCapabilityProvider';
 
 // =============================================================================
 // Extension State
@@ -43,7 +44,7 @@ let frameServerPort: number | null = null;
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel('Neko Engine');
   context.subscriptions.push(outputChannel);
 
@@ -74,6 +75,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Update status bar
   updateStatusBar('idle');
+
+  // Register agent capability provider (non-blocking — neko-agent may not be installed)
+  try {
+    const provider = createEngineCapabilityProvider();
+    await vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+  } catch {
+    // neko-agent not installed
+  }
 
   log('Extension activated');
 }

@@ -64,6 +64,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   private readonly _deps: CapabilityDiscoveryDeps;
   private readonly _disposables: vscode.Disposable[] = [];
   private readonly _logger = getRootLogger().child('CapabilityDiscovery');
+  private _capabilityContext: AgentCapabilityContext | null = null;
 
   private readonly _onDidRegister = new vscode.EventEmitter<AgentCapabilityProvider>();
   readonly onDidRegister = this._onDidRegister.event;
@@ -82,14 +83,25 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   /**
    * Initialize: scan manifests + register command handler.
    * Call this during extension activation.
+   *
+   * @param context VSCode extension context
+   * @param capabilityContext Platform services context passed to all providers
    */
-  activate(context: vscode.ExtensionContext): void {
+  activate(
+    context: vscode.ExtensionContext,
+    capabilityContext?: Omit<AgentCapabilityContext, 'extensionContext'>,
+  ): void {
+    this._capabilityContext = {
+      extensionContext: context,
+      ...capabilityContext,
+    };
+
     // Register the command that sub-packages call to provide their capabilities
     this._disposables.push(
       vscode.commands.registerCommand(
         'neko.agent.registerCapabilities',
         (provider: AgentCapabilityProvider) => {
-          this.registerProvider(provider, { extensionContext: context });
+          this.registerProvider(provider, this._capabilityContext!);
         },
       ),
     );

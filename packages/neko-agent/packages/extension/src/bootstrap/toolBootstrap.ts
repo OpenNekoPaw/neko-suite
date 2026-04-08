@@ -1,74 +1,46 @@
 /**
- * Tool Bootstrap — Register tools from other Neko extensions.
+ * Tool Bootstrap — Register neko-agent's own meta-tools.
  *
- * Extracted from index.ts to reduce coupling in the main entry point.
- * Each sub-package's tools are registered via factory functions that
- * gracefully return empty arrays when the corresponding extension is not installed.
+ * All domain tools have been migrated to their respective sub-packages via
+ * AgentCapabilityProvider protocol. Sub-packages register their own tools
+ * at activation time via `neko.agent.registerCapabilities` command.
  *
- * NOTE: This is a transitional module. As sub-packages adopt the
- * AgentCapabilityProvider protocol (P0-1), their factory functions will
- * migrate out of neko-agent into the sub-packages themselves.
- * Sub-packages that have already registered via CapabilityProvider are
- * automatically skipped (see `MIGRATED_PROVIDERS`).
+ * This module now only registers:
+ * - SkillProvider (meta-tool: enumerates skills from all installed extensions)
+ *
+ * Migrated sub-packages (2026-04-08):
+ * - neko-cut → timeline tools + GenerateVideoForClip
+ * - neko-engine → effects + transcribe + analysis tools
+ * - neko-canvas → canvas node/generation tools
+ * - neko-story → script index/search tools
+ * - neko-sketch → AI painting tools
+ * - neko-puppet → face parameter tools
  */
 
 import { getRootLogger } from '../base';
-import {
-  // NekoCut: REMOVED — migrated to AgentCapabilityProvider (neko-cut/agentCapabilityProvider.ts)
-  createNekoCanvasTools,
-  createNekoEngineEffectsTools,
-  createTranscribeTools,
-  createNekoStoryTools,
-  createNekoSketchTools,
-  createNekoCutVideoGenerationTools,
-  createSkillProviderTools,
-} from '../tools/extensionTools';
-import { createPuppetFaceTools } from '../tools/puppetFaceTools';
+import { createSkillProviderTools } from '../tools/extensionTools';
 import type { Platform } from '@neko/platform';
 
 /**
- * Register tools from other Neko extensions via fallback factory functions.
- *
- * Sub-packages that have migrated to AgentCapabilityProvider are NOT included here.
- * They register their own tools via `neko.agent.registerCapabilities` command.
- *
- * Migrated sub-packages (remove from here as each migrates):
- * - neko-cut ✅ (2026-04-08)
+ * Register neko-agent's own meta-tools.
+ * Domain tools are now registered by sub-packages via CapabilityProvider.
  */
 export function registerExtensionTools(
   toolRegistry: { register: (tool: unknown) => void },
-  platform: Platform,
+  _platform: Platform,
 ): void {
-  const batches: Array<{ name: string; tools: unknown[] }> = [
-    // NekoCut: migrated to AgentCapabilityProvider — tools registered by neko-cut on activation
-    { name: 'NekoCanvas', tools: createNekoCanvasTools(platform.media, platform.config) },
-    { name: 'EngineEffects', tools: createNekoEngineEffectsTools() },
-    { name: 'Transcribe', tools: createTranscribeTools() },
-    { name: 'NekoStory', tools: createNekoStoryTools(buildEmbedFn(platform)) },
-    { name: 'NekoSketch', tools: createNekoSketchTools(platform.media) },
-    { name: 'NekoCutVideo', tools: createNekoCutVideoGenerationTools(platform.media) },
-    { name: 'SkillProvider', tools: createSkillProviderTools() },
-    { name: 'PuppetFace', tools: createPuppetFaceTools() },
-  ];
-
-  let total = 0;
-  for (const batch of batches) {
-    for (const tool of batch.tools) {
-      toolRegistry.register(tool);
-    }
-    total += batch.tools.length;
+  const tools = createSkillProviderTools();
+  for (const tool of tools) {
+    toolRegistry.register(tool);
   }
-
-  getRootLogger().info(`Registered ${total} extension tools (fallback)`);
+  getRootLogger().info(`Registered ${tools.length} meta-tool(s)`);
 }
 
 /**
  * Builds an embed function backed by the platform's AI service.
- * The service is created lazily on first call. Errors (e.g. no embedding-capable
- * provider configured) propagate to the caller so SearchScriptIndex can surface
- * a descriptive error message instead of silently failing.
+ * Used by capabilityBootstrap to inject into AgentCapabilityContext.
  */
-function buildEmbedFn(platform: Platform): (texts: string[]) => Promise<number[][]> {
+export function buildEmbedFn(platform: Platform): (texts: string[]) => Promise<number[][]> {
   let service: ReturnType<Platform['createService']> | undefined;
   return async (texts: string[]) => {
     if (!service) {

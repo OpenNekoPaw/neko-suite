@@ -1,0 +1,954 @@
+/**
+ * NekoCanvas Agent Capability Provider
+ *
+ * Provides canvas editing, storyboard, and generation tools to neko-agent
+ * via the AgentCapabilityProvider protocol.
+ *
+ * This replaces the `createNekoCanvasTools()` factory function that was previously
+ * maintained inside neko-agent's extension code.
+ */
+
+import * as vscode from 'vscode';
+import type {
+  AgentCapabilityProvider,
+  AgentCapabilityContext,
+  Tool,
+  ToolGroup,
+  ToolParameters,
+  NekoCanvasAPI,
+  CanvasNodeType,
+  ICapabilityMediaService,
+  ICapabilityConfigManager,
+} from '@neko/shared';
+import { TOOL_NAMES_CANVAS } from '@neko/shared';
+import { getRootLogger } from './utils/logger';
+
+/**
+ * Create the NekoCanvas capability provider.
+ *
+ * @param api The NekoCanvasAPI exports from the extension activation
+ */
+export function createNekoCanvasCapabilityProvider(api: NekoCanvasAPI): AgentCapabilityProvider {
+  return new NekoCanvasCapabilityProviderImpl(api);
+}
+
+/**
+ * Auto-resolve model from ConfigManager when workspace config has no model set.
+ * Writes to workspace config so neko-canvas can read it on next generation.
+ */
+async function ensureProjectModel(
+  configManager: ICapabilityConfigManager | undefined,
+  type: 'image' | 'video' | 'audio',
+): Promise<void> {
+  if (!configManager) return;
+  const key = `neko.project.models.${type}`;
+  const wsConfig = vscode.workspace.getConfiguration();
+  const current = wsConfig.get<string>(key, '');
+  if (current) return;
+  const model = configManager.getEnabledModels().find((m) => m.type === type);
+  if (model?.name) {
+    await wsConfig.update(key, model.name, vscode.ConfigurationTarget.Workspace);
+    getRootLogger().info(`Auto-resolved ${type} model from ConfigManager: ${model.name}`);
+  }
+}
+
+class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
+  readonly id = 'neko-canvas';
+  readonly version = '1.0.0';
+
+  constructor(private readonly _api: NekoCanvasAPI) {}
+
+  getTools(context: AgentCapabilityContext): Tool[] {
+    const api = this._api;
+    const logger = getRootLogger();
+    const configManager = context.configManager;
+    const mediaService = context.mediaService;
+
+    const tools: Tool[] = [
+      // -----------------------------------------------------------------------
+      // Canvas management tools
+      // -----------------------------------------------------------------------
+      {
+        name: TOOL_NAMES_CANVAS.CREATE_CANVAS,
+        description: 'Create a new canvas',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Canvas name',
+            },
+            width: {
+              type: 'number',
+              description: 'Canvas width in pixels',
+            },
+            height: {
+              type: 'number',
+              description: 'Canvas height in pixels',
+            },
+            backgroundColor: {
+              type: 'string',
+              description: 'Background color (hex)',
+            },
+          },
+          required: ['name', 'width', 'height'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.canvas.create({
+              name: args.name as string,
+              width: args.width as number,
+              height: args.height as number,
+              backgroundColor: args.backgroundColor as string | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to create canvas: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.ADD_CANVAS_SHAPE,
+        description: 'Add a shape to a canvas',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            canvasId: {
+              type: 'string',
+              description: 'Canvas ID',
+            },
+            type: {
+              type: 'string',
+              enum: ['rectangle', 'ellipse', 'polygon', 'path', 'text'],
+              description: 'Shape type',
+            },
+            x: {
+              type: 'number',
+              description: 'X position',
+            },
+            y: {
+              type: 'number',
+              description: 'Y position',
+            },
+            width: {
+              type: 'number',
+              description: 'Width',
+            },
+            height: {
+              type: 'number',
+              description: 'Height',
+            },
+            fill: {
+              type: 'string',
+              description: 'Fill color',
+            },
+            stroke: {
+              type: 'string',
+              description: 'Stroke color',
+            },
+          },
+          required: ['canvasId', 'type', 'x', 'y'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const { canvasId, ...shape } = args;
+            const data = await api.canvas.addShape(canvasId as string, {
+              type: shape.type as 'rectangle' | 'ellipse' | 'polygon' | 'path' | 'text',
+              x: shape.x as number,
+              y: shape.y as number,
+              width: shape.width as number | undefined,
+              height: shape.height as number | undefined,
+              fill: shape.fill as string | undefined,
+              stroke: shape.stroke as string | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to add shape: ${String(err)}` };
+          }
+        },
+      },
+
+      // -----------------------------------------------------------------------
+      // Storyboard / Node tools
+      // -----------------------------------------------------------------------
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_LIST_NODES,
+        description:
+          'List all nodes on the active canvas. Optionally filter by type (shot, scene, gallery, media, annotation, etc.).',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              description: 'Optional node type filter',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.list(args.type as CanvasNodeType | undefined);
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to list nodes: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+        description: 'Get full details of a single canvas node by its ID.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeId: { type: 'string', description: 'Canvas node ID' },
+          },
+          required: ['nodeId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.get(args.nodeId as string);
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to get node: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE,
+        description:
+          "Update a canvas node's data fields. Use this to set shot descriptions, characters, " +
+          'camera settings, or generation parameters. Always write generation params to the node ' +
+          'before calling canvas_generate_image so they persist across sessions.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeId: { type: 'string', description: 'Canvas node ID' },
+            data: {
+              type: 'object',
+              description:
+                'Partial node data to merge. For ShotNode: visualDescription, shotScale, ' +
+                'cameraMovement, characters[], emotion[], dialogue. ' +
+                'For SceneGroupNode: sceneTitle, location, timeOfDay.',
+            },
+          },
+          required: ['nodeId', 'data'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            await api.nodes.update(args.nodeId as string, args.data as Record<string, unknown>);
+            return { success: true };
+          } catch (err) {
+            return { success: false, error: `Failed to update node: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+        description: "Create a new node on the active canvas. Returns the new node's ID.",
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: [
+                'shot',
+                'scene',
+                'gallery',
+                'annotation',
+                'media',
+                'storyboard',
+                'text',
+                'artboard',
+                'script',
+                'document',
+                'model',
+              ],
+              description: 'Node type',
+            },
+            x: { type: 'number', description: 'Canvas X position' },
+            y: { type: 'number', description: 'Canvas Y position' },
+            data: {
+              type: 'object',
+              description:
+                'Initial node data. For shot: { shotNumber, duration, visualDescription, shotScale }. ' +
+                'For scene: { sceneTitle, sceneNumber }. For gallery: { preset, rows, cols, cells }.',
+            },
+          },
+          required: ['type', 'x', 'y', 'data'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.create(
+              args.type as CanvasNodeType,
+              { x: args.x as number, y: args.y as number },
+              args.data as object,
+            );
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to create node: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE,
+        description:
+          'Trigger image generation for a ShotNode or a specific GalleryCell. ' +
+          'Call canvas_update_node first to write the prompt/params to the node ' +
+          'so they are persisted. Generation runs asynchronously in the background.',
+        category: 'generation',
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeId: { type: 'string', description: 'ShotNode or GalleryNode ID' },
+            cellId: {
+              type: 'string',
+              description: 'GalleryCell ID (required when nodeId is a GalleryNode)',
+            },
+          },
+          required: ['nodeId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            await ensureProjectModel(configManager, 'image');
+            await api.nodes.generateImage(args.nodeId as string, args.cellId as string | undefined);
+            return { success: true };
+          } catch (err) {
+            return { success: false, error: `Failed to generate image: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_BATCH,
+        description:
+          'Trigger image generation for multiple nodes at once. ' +
+          'Useful for generating all shots in a scene in one command. ' +
+          'Runs up to 2 generations concurrently via the scheduler.',
+        category: 'generation',
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeIds: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of ShotNode IDs to generate images for',
+            },
+          },
+          required: ['nodeIds'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            await ensureProjectModel(configManager, 'image');
+            await api.nodes.generateBatch(args.nodeIds as string[]);
+            return { success: true };
+          } catch (err) {
+            return { success: false, error: `Failed to generate batch: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.SET_PROJECT_GENERATION_CONFIG,
+        description:
+          'Persist project-level generation parameters and model configuration. ' +
+          'These become the default for all nodes unless overridden per-node. ' +
+          'Always call this before batch generation to ensure params survive context compression.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            imageRatio: {
+              type: 'string',
+              enum: ['16:9', '9:16', '1:1', '4:3', '2.39:1'],
+              description: 'Image aspect ratio',
+            },
+            imageResolution: {
+              type: 'string',
+              enum: ['512', '720p', '1080p', '2K'],
+              description: 'Image resolution',
+            },
+            videoRatio: {
+              type: 'string',
+              enum: ['16:9', '9:16', '1:1'],
+              description: 'Video aspect ratio',
+            },
+            videoResolution: {
+              type: 'string',
+              enum: ['480p', '720p', '1080p'],
+              description: 'Video resolution',
+            },
+            videoDuration: { type: 'number', description: 'Video duration in seconds' },
+            videoFps: { type: 'number', enum: ['24', '30'], description: 'Video frame rate' },
+            imageModel: { type: 'string', description: 'Image generation model id' },
+            videoModel: { type: 'string', description: 'Video generation model id' },
+            audioModel: { type: 'string', description: 'Audio generation model id' },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const configEntries: Record<string, unknown> = {};
+            if (args.imageRatio !== undefined)
+              configEntries['neko.project.generation.image.ratio'] = args.imageRatio;
+            if (args.imageResolution !== undefined)
+              configEntries['neko.project.generation.image.resolution'] = args.imageResolution;
+            if (args.videoRatio !== undefined)
+              configEntries['neko.project.generation.video.ratio'] = args.videoRatio;
+            if (args.videoResolution !== undefined)
+              configEntries['neko.project.generation.video.resolution'] = args.videoResolution;
+            if (args.videoDuration !== undefined)
+              configEntries['neko.project.generation.video.duration'] = args.videoDuration;
+            if (args.videoFps !== undefined)
+              configEntries['neko.project.generation.video.fps'] = args.videoFps;
+            if (args.imageModel !== undefined)
+              configEntries['neko.project.models.image'] = args.imageModel;
+            if (args.videoModel !== undefined)
+              configEntries['neko.project.models.video'] = args.videoModel;
+            if (args.audioModel !== undefined)
+              configEntries['neko.project.models.audio'] = args.audioModel;
+
+            const wsConfig = vscode.workspace.getConfiguration();
+            await Promise.all(
+              Object.entries(configEntries).map(([key, value]) =>
+                wsConfig.update(key, value, vscode.ConfigurationTarget.Workspace),
+              ),
+            );
+
+            return { success: true, data: { updated: Object.keys(configEntries) } };
+          } catch (err) {
+            return { success: false, error: `Failed to set generation config: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.EXPORT_STORYBOARD,
+        description:
+          'Export the storyboard as a ZIP image pack or import it into the neko-cut timeline. ' +
+          'ZIP format: creates a .zip file with shot images + manifest.json at a user-chosen path. ' +
+          'neko-cut format: sends all shots to the active neko-cut timeline as MediaElement clips. ' +
+          'Returns the saved file path (ZIP) or a confirmation (neko-cut).',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            format: {
+              type: 'string',
+              enum: ['zip', 'neko-cut'],
+              description:
+                '"zip" to save image pack + manifest.json, "neko-cut" to import into timeline',
+            },
+            projectName: {
+              type: 'string',
+              description: 'Project name used for file naming and manifest (default: "storyboard")',
+            },
+          },
+          required: ['format'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const format = args.format as 'zip' | 'neko-cut';
+            const projectName = (args.projectName as string | undefined) ?? 'storyboard';
+
+            // Fetch all shot and scene nodes
+            const [allShots, allScenes] = await Promise.all([
+              api.nodes.list('shot' as CanvasNodeType),
+              api.nodes.list('scene' as CanvasNodeType),
+            ]);
+
+            if (allShots.length === 0) {
+              return {
+                success: false,
+                error: 'No shot nodes found on the canvas. Create ShotNodes first.',
+              };
+            }
+
+            // Build scene title lookup
+            const sceneTitleMap = new Map<string, string>();
+            for (const scene of allScenes) {
+              const d = scene.data as Record<string, unknown>;
+              sceneTitleMap.set(scene.id, (d['sceneTitle'] as string | undefined) ?? '');
+            }
+
+            // Build manifest shots
+            interface ManifestShot {
+              id: string;
+              shotNumber: number;
+              sceneId?: string;
+              sceneTitle?: string;
+              shotScale?: string;
+              cameraMovement?: string;
+              duration: number;
+              visualDescription: string;
+              characters: string[];
+              emotion: string[];
+              dialogue?: string;
+              voiceOver?: string;
+              soundCue?: string;
+              imageFile?: string;
+            }
+
+            const manifestShots: ManifestShot[] = allShots.map((node) => {
+              const d = node.data as Record<string, unknown>;
+              const shotNumber = (d['shotNumber'] as number | undefined) ?? 0;
+              const sceneId = d['sceneGroupId'] as string | undefined;
+              const chars =
+                (d['characters'] as Array<{ characterName?: string }> | undefined) ?? [];
+              const pad = String(shotNumber).padStart(3, '0');
+              const scale = (d['shotScale'] as string | undefined) ?? '';
+              const firstChar =
+                typeof chars[0]?.characterName === 'string' ? chars[0].characterName : '';
+              const imageFile = `shots/${pad}_${scale}${firstChar ? `_${firstChar}` : ''}.png`;
+              return {
+                id: node.id,
+                shotNumber,
+                sceneId,
+                sceneTitle: sceneId ? sceneTitleMap.get(sceneId) : undefined,
+                shotScale: scale || undefined,
+                cameraMovement: d['cameraMovement'] as string | undefined,
+                duration: (d['duration'] as number | undefined) ?? 3,
+                visualDescription: (d['visualDescription'] as string | undefined) ?? '',
+                characters: chars.map((c) => c.characterName ?? '').filter(Boolean),
+                emotion: (d['emotion'] as string[] | undefined) ?? [],
+                dialogue: d['dialogue'] as string | undefined,
+                voiceOver: d['voiceOver'] as string | undefined,
+                soundCue: d['soundCue'] as string | undefined,
+                imageFile: (d['generatedImage'] as string | undefined) ? imageFile : undefined,
+              };
+            });
+
+            if (format === 'neko-cut') {
+              const timelineShots = manifestShots.map((s) => ({
+                id: s.id,
+                shotNumber: s.shotNumber,
+                duration: s.duration,
+                imageDataUrl: allShots.find((n) => n.id === s.id)
+                  ? ((allShots.find((n) => n.id === s.id)!.data as Record<string, unknown>)[
+                      'generatedImage'
+                    ] as string | undefined)
+                  : undefined,
+                dialogue: s.dialogue,
+                voiceOver: s.voiceOver,
+                soundCue: s.soundCue,
+                label: `#${String(s.shotNumber).padStart(3, '0')} ${s.shotScale ?? ''}`.trim(),
+              }));
+
+              await vscode.commands.executeCommand('neko.cut.importStoryboard', {
+                projectName,
+                shots: timelineShots,
+              });
+
+              return {
+                success: true,
+                data: {
+                  format: 'neko-cut',
+                  shotsImported: timelineShots.length,
+                  message: `${timelineShots.length} shots imported into neko-cut timeline`,
+                },
+              };
+            }
+
+            // ZIP format — delegate to a command since ZIP requires AdmZip
+            // which should not be a dependency of neko-canvas
+            await vscode.commands.executeCommand('neko.canvas.exportStoryboard', 'zip');
+
+            return {
+              success: true,
+              data: {
+                format: 'zip',
+                totalShots: manifestShots.length,
+                message: 'Storyboard ZIP export initiated',
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to export storyboard: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_APPLY_STYLE_TRANSFER,
+        description:
+          'Apply style transfer to target ShotNodes using a GalleryNode as IP-Adapter reference. ' +
+          'Sets referenceNodeId on each target shot to the given GalleryNode, then triggers batch ' +
+          'image generation so each shot is re-generated with the style reference applied. ' +
+          'Use canvas_list_nodes to find GalleryNode IDs before calling this.',
+        category: 'generation',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetNodeIds: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of ShotNode IDs to apply style transfer to',
+            },
+            referenceNodeId: {
+              type: 'string',
+              description: 'GalleryNode ID to use as IP-Adapter style reference',
+            },
+          },
+          required: ['targetNodeIds', 'referenceNodeId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const targetNodeIds = args.targetNodeIds as string[];
+            const refNodeId = args.referenceNodeId as string;
+
+            // Verify the reference node is a gallery node
+            const refNode = await api.nodes.get(refNodeId);
+            if (!refNode) {
+              return { success: false, error: `Reference node "${refNodeId}" not found` };
+            }
+            if (refNode.type !== 'gallery') {
+              return {
+                success: false,
+                error: `Reference node must be a GalleryNode (got type: "${refNode.type}")`,
+              };
+            }
+
+            // Set referenceNodeId on each target shot
+            const updateErrors: string[] = [];
+            for (const nodeId of targetNodeIds) {
+              try {
+                await api.nodes.update(nodeId, { referenceNodeId: refNodeId });
+              } catch (err) {
+                updateErrors.push(`${nodeId}: ${String(err)}`);
+              }
+            }
+
+            if (updateErrors.length > 0) {
+              return {
+                success: false,
+                error: `Failed to update reference on some nodes: ${updateErrors.join(', ')}`,
+              };
+            }
+
+            // Trigger batch generation with the style reference set
+            await api.nodes.generateBatch(targetNodeIds);
+
+            logger.info(
+              `canvas_apply_style_transfer: ref="${refNodeId}" targets=${targetNodeIds.length}`,
+            );
+            return {
+              success: true,
+              data: {
+                message: `Style transfer queued for ${targetNodeIds.length} shot(s) using GalleryNode "${refNodeId}"`,
+                targetNodeIds,
+                referenceNodeId: refNodeId,
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to apply style transfer: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.IMPORT_SCRIPT_TO_CANVAS,
+        description:
+          'Import a Fountain screenplay into the active canvas as a storyboard skeleton. ' +
+          'Each scene heading becomes a SceneGroupNode; each dialogue/action block becomes a ShotNode ' +
+          'inside its parent scene. Call GetScriptIndex first to verify the file is indexed.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Absolute path to the .fountain screenplay file',
+            },
+            startX: {
+              type: 'number',
+              description: 'Canvas X position of the first SceneGroupNode (default: 100)',
+            },
+            startY: {
+              type: 'number',
+              description: 'Canvas Y position of the first SceneGroupNode (default: 100)',
+            },
+            scenesLimit: {
+              type: 'number',
+              description: 'Maximum number of scenes to import (default: all, max: 50)',
+            },
+          },
+          required: ['path'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            // Get story index via the neko-story command
+            const scriptIndex = await vscode.commands.executeCommand<
+              | {
+                  scenes: Array<{
+                    id: string;
+                    heading: string;
+                    line_start: number;
+                    line_end: number;
+                  }>;
+                }
+              | undefined
+            >('neko.story.getScriptIndex', args.path as string);
+
+            if (!scriptIndex) {
+              return {
+                success: false,
+                error: 'Script not indexed. Open the .fountain file in VSCode first, then retry.',
+              };
+            }
+            if (scriptIndex.scenes.length === 0) {
+              return { success: false, error: 'No scenes found in this screenplay.' };
+            }
+
+            const startX = (args.startX as number | undefined) ?? 100;
+            const startY = (args.startY as number | undefined) ?? 100;
+            const maxScenes = Math.min(
+              (args.scenesLimit as number | undefined) ?? scriptIndex.scenes.length,
+              50,
+            );
+
+            const SCENE_WIDTH = 900;
+            const SCENE_GAP = 80;
+            const SHOT_WIDTH = 200;
+            const SHOT_GAP = 20;
+
+            const created: { sceneId: string; shotIds: string[] }[] = [];
+
+            for (let si = 0; si < maxScenes; si++) {
+              const scene = scriptIndex.scenes[si];
+              if (!scene) continue;
+              const sceneX = startX + si * (SCENE_WIDTH + SCENE_GAP);
+
+              // Create SceneGroupNode
+              const sceneNodeId = await api.nodes.create(
+                'scene' as CanvasNodeType,
+                { x: sceneX, y: startY },
+                {
+                  sceneTitle: scene.heading,
+                  sceneNumber: si + 1,
+                  shotIds: [] as string[],
+                },
+              );
+
+              // Create ShotNodes for each dialogue/action block in the scene
+              const lineSpan = scene.line_end - scene.line_start;
+              const shotCount = Math.max(1, Math.min(Math.round(lineSpan / 10), 8));
+              const shotIds: string[] = [];
+
+              for (let sh = 0; sh < shotCount; sh++) {
+                const shotX = sceneX + sh * (SHOT_WIDTH + SHOT_GAP);
+                const shotY = startY + 240;
+                const shotNodeId = await api.nodes.create(
+                  'shot' as CanvasNodeType,
+                  { x: shotX, y: shotY },
+                  {
+                    shotNumber: si * 8 + sh + 1,
+                    sceneGroupId: sceneNodeId,
+                    duration: 3,
+                    visualDescription: '',
+                    shotScale: 'MS' as const,
+                    characters: [] as unknown[],
+                    emotion: [] as string[],
+                    sceneTags: [] as string[],
+                    generationStatus: 'idle' as const,
+                    generationHistory: [] as unknown[],
+                  },
+                );
+                shotIds.push(shotNodeId);
+              }
+
+              // Update SceneGroupNode with shot IDs
+              await api.nodes.update(sceneNodeId, { shotIds });
+
+              created.push({ sceneId: sceneNodeId, shotIds });
+            }
+
+            logger.info(
+              `import_script_to_canvas: created ${created.length} scenes with ${created.reduce((n, s) => n + s.shotIds.length, 0)} shots`,
+            );
+            return {
+              success: true,
+              data: {
+                scenesCreated: created.length,
+                totalShots: created.reduce((n, s) => n + s.shotIds.length, 0),
+                scenes: created,
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to import script to canvas: ${String(err)}` };
+          }
+        },
+      },
+    ];
+
+    // -----------------------------------------------------------------------
+    // Keyframe Video Generation (requires mediaService)
+    // -----------------------------------------------------------------------
+    if (mediaService) {
+      tools.push(createVideoKeyframeTool(api, mediaService, logger));
+    }
+
+    return tools;
+  }
+
+  getToolGroups(): ToolGroup[] {
+    return [
+      {
+        name: 'canvas-editing',
+        description:
+          'Canvas editing and storyboard tools for NekoCanvas — canvas, node, shot, scene, storyboard, generation',
+        tools: Object.values(TOOL_NAMES_CANVAS),
+        alwaysActive: false,
+        source: 'builtin',
+        enabled: true,
+        loadingTier: 'eager',
+      },
+    ];
+  }
+}
+
+/**
+ * Create the keyframe video generation tool (requires mediaService).
+ */
+function createVideoKeyframeTool(
+  api: NekoCanvasAPI,
+  media: ICapabilityMediaService,
+  logger: ReturnType<typeof getRootLogger>,
+): Tool {
+  return {
+    name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES,
+    description:
+      'Generate a video clip for a ShotNode using first-frame and last-frame images as keyframes. ' +
+      'The first frame node and last frame node must already have generated images. ' +
+      'Calls the configured video model with the keyframe references and stores the result ' +
+      "in the target node's generatedVideo field. Returns error if media service is unavailable.",
+    category: 'generation',
+    parameters: {
+      type: 'object',
+      properties: {
+        nodeId: {
+          type: 'string',
+          description: 'Target ShotNode ID where the generated video will be stored',
+        },
+        firstFrameNodeId: {
+          type: 'string',
+          description: 'ShotNode ID whose generatedImage is used as the first (start) frame',
+        },
+        lastFrameNodeId: {
+          type: 'string',
+          description: 'ShotNode ID whose generatedImage is used as the last (end) frame',
+        },
+        duration: {
+          type: 'number',
+          description: 'Video duration in seconds (default: 3)',
+        },
+        aspectRatio: {
+          type: 'string',
+          description: 'Aspect ratio e.g. "16:9" or "9:16" (default: "16:9")',
+        },
+      },
+      required: ['nodeId', 'firstFrameNodeId', 'lastFrameNodeId'],
+    } satisfies ToolParameters,
+    async execute(args) {
+      try {
+        const nodeId = args.nodeId as string;
+        const firstFrameNodeId = args.firstFrameNodeId as string;
+        const lastFrameNodeId = args.lastFrameNodeId as string;
+        const duration = (args.duration as number | undefined) ?? 3;
+        const aspectRatio = (args.aspectRatio as string | undefined) ?? '16:9';
+
+        // Fetch all three nodes in parallel
+        const [targetNode, firstNode, lastNode] = await Promise.all([
+          api.nodes.get(nodeId),
+          api.nodes.get(firstFrameNodeId),
+          api.nodes.get(lastFrameNodeId),
+        ]);
+
+        if (!targetNode) return { success: false, error: `Target node "${nodeId}" not found` };
+        if (!firstNode)
+          return { success: false, error: `First frame node "${firstFrameNodeId}" not found` };
+        if (!lastNode)
+          return { success: false, error: `Last frame node "${lastFrameNodeId}" not found` };
+
+        const firstFrameData = (firstNode.data as Record<string, unknown>)['generatedImage'] as
+          | string
+          | undefined;
+        const lastFrameData = (lastNode.data as Record<string, unknown>)['generatedImage'] as
+          | string
+          | undefined;
+
+        if (!firstFrameData) {
+          return {
+            success: false,
+            error: `First frame node "${firstFrameNodeId}" has no generated image. Run canvas_generate_image first.`,
+          };
+        }
+
+        // Build prompt from target node's visual description
+        const visualDesc = (targetNode.data as Record<string, unknown>)['visualDescription'] as
+          | string
+          | undefined;
+        const shotNumber = (targetNode.data as Record<string, unknown>)['shotNumber'] as
+          | number
+          | undefined;
+        const prompt = visualDesc?.trim() || `Shot ${shotNumber ?? ''} video clip`;
+
+        // Mark node as generating
+        await api.nodes.update(nodeId, { generationStatus: 'generating' });
+
+        let task;
+        try {
+          task = await media.generateVideo({
+            prompt,
+            aspectRatio,
+            duration,
+            referenceImageUrl: firstFrameData,
+            metadata: lastFrameData ? { lastFrameUrl: lastFrameData } : undefined,
+          });
+        } catch (err) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return { success: false, error: `Video generation failed to start: ${String(err)}` };
+        }
+
+        // Wait for completion (up to 5 minutes)
+        let completed;
+        try {
+          completed = await media.waitForTask(task.id, 5 * 60 * 1000);
+        } catch (err) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return { success: false, error: `Video generation timed out: ${String(err)}` };
+        }
+
+        if (completed.status !== 'completed' || !completed.outputs?.length) {
+          await api.nodes.update(nodeId, { generationStatus: 'error' });
+          return { success: false, error: `Video generation ${completed.status}` };
+        }
+
+        const output = completed.outputs[0]!;
+        await api.nodes.update(nodeId, {
+          generatedVideo: output.url,
+          generationStatus: 'done',
+        });
+
+        logger.info(`canvas_generate_video_with_keyframes: nodeId=${nodeId} taskId=${task.id}`);
+        return {
+          success: true,
+          data: {
+            message: `Video generated for shot "${nodeId}"`,
+            videoUrl: output.url,
+            taskId: task.id,
+            duration,
+            aspectRatio,
+          },
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: `Failed to generate video with keyframes: ${String(err)}`,
+        };
+      }
+    },
+  };
+}

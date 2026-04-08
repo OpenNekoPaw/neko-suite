@@ -15,6 +15,7 @@ import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
+import { createNekoCanvasCapabilityProvider } from './agentCapabilityProvider';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 
@@ -163,6 +164,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       ];
     },
   };
+
+  // Register capability provider with neko-agent (if installed)
+  try {
+    const provider = createNekoCanvasCapabilityProvider(api);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+  } catch {
+    // neko-agent not installed — silently ignore
+  }
 
   return api;
 }

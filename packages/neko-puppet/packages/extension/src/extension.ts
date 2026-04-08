@@ -6,15 +6,17 @@
  */
 import * as vscode from 'vscode';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import type { NekoPuppetAPI } from '@neko/shared';
 import { PuppetEditorProvider } from './editor';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler } from './utils/errorHandler';
 import { registerCommands } from './commands';
+import { createNekoPuppetCapabilityProvider } from './agentCapabilityProvider';
 
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<NekoPuppetAPI> {
   const rootLogger = createVSCodeLogger('Neko Puppet', 'NekoPuppet', context);
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
@@ -41,6 +43,22 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCommands(context);
 
   logger.info('Extension activated');
+
+  // Expose NekoPuppetAPI for cross-extension communication (neko-agent tools)
+  const api: NekoPuppetAPI = {
+    getCurrentFaceParams: () => puppetEditorProvider.getCurrentFaceParams(),
+    setFaceParams: (params: Record<string, number>) => puppetEditorProvider.setFaceParams(params),
+  };
+
+  // Register Agent Capability Provider
+  try {
+    const provider = createNekoPuppetCapabilityProvider(api);
+    await vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+  } catch {
+    // neko-agent not installed — silently skip
+  }
+
+  return api;
 }
 
 /**

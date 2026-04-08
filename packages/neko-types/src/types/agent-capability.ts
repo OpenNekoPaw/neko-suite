@@ -59,19 +59,59 @@ export interface CapabilityDeclaration {
 }
 
 // =============================================================================
+// Platform service interfaces for capability providers (minimal L0 contracts)
+// =============================================================================
+
+/**
+ * Minimal media generation interface exposed to capability providers.
+ * Subset of MediaGenerationService — avoids sub-packages depending on @neko/platform.
+ */
+export interface ICapabilityMediaService {
+  generateImage(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
+  generateVideo(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
+  waitForTask(
+    taskId: string,
+    timeout?: number,
+  ): Promise<{
+    status: string;
+    outputs?: Array<{ url: string; mimeType?: string }>;
+  }>;
+}
+
+/**
+ * Minimal config interface exposed to capability providers.
+ * Subset of ConfigManager — avoids sub-packages depending on @neko/platform.
+ */
+export interface ICapabilityConfigManager {
+  getEnabledModels(): Array<{ id: string; name: string; type?: string }>;
+}
+
+// =============================================================================
 // Runtime Provider (dynamic registration)
 // =============================================================================
 
 /**
  * Context passed to providers when requesting tools.
- * Keeps the provider decoupled from VSCode API at the type level.
+ * Keeps the provider decoupled from VSCode API and @neko/platform at the type level.
+ *
+ * Platform services are optional — providers that don't need them (e.g. neko-engine)
+ * simply ignore them. Providers that need media generation (e.g. neko-canvas, neko-sketch)
+ * use `mediaService` and `configManager`.
  */
 export interface AgentCapabilityContext {
   /**
    * Extension context handle (opaque at L0; sub-packages cast to vscode.ExtensionContext at L1).
-   * Provides access to workspace state, secrets, extension storage, etc.
    */
   extensionContext: unknown;
+
+  /** Media generation service (image/video/music/TTS). Injected by neko-agent when available. */
+  mediaService?: ICapabilityMediaService;
+
+  /** Config manager for model routing. Injected by neko-agent when available. */
+  configManager?: ICapabilityConfigManager;
+
+  /** Embedding function for semantic search. Injected by neko-agent when available. */
+  embedFn?: (texts: string[]) => Promise<number[][]>;
 }
 
 /**

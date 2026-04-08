@@ -21,8 +21,28 @@
 
 ### To Do
 
+### neko-cut (Video Editing) — P0-1: Field Consistency
+> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — Scores: 7/10 basic, 5.5/10 complete. Critical gaps in export chain.
+- [ ] **Transition field naming unification**: audit `inTransition` vs `transitionIn` across Property Panel write / Preview composite read / Export Service; choose canonical name and update all paths
+- [ ] **Effects export chain**: `effects: []` currently empty in export; implement `EffectInstance` → `EffectParams` schema mapping; verify color correction + mask export
+- [ ] **Edit/Preview/Export field consistency**: ensure all element types have matching field reads across edit-time, preview-time, and export-time
+- [ ] Export round-trip test suite: edit → preview → export → reimport consistency check
+
+### neko-canvas (Storyboard) — P0-2: Protocol Fixes
+> [ADR](./docs/architecture/canvas-role-boundary.md) — Current 80%. Protocol inconsistencies block Agent→Canvas reliability.
+- [ ] **Fix `nodes.update`/`nodes.create` protocol inconsistency**: audit Extension→Webview calls; unify to `{ nodeId, data }` for update, `{ type, position, data }` for create; update all Agent tools that call `canvas_update_node`/`canvas_create_node`
+- [ ] **Fix message channel consistency**: audit `canvasOperationStore` VSCode API exposure; unify Webview-side VSCode API calls through single wrapper; ensure `operationApplied` event fires reliably + dirty tracking
+- [ ] **Complete result review cycle**: define canonical field for selected candidate (`generationHistory.selected`); implement `onSelectCandidate` handler; sync selected → node state → store → `generatedAsset` field
+
+### neko-agent (AI Assistant) — P0-2: Webview Architecture
+> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10. Top-level controller bloat + weak message contracts.
+- [ ] **Decompose `AIAssistant` component** (~589 lines) → `AppShell` + `ConversationController` + `ChatWorkspace`
+- [ ] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
+- [ ] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
+
 ### neko-engine (Engine)
 - [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
+- [ ] Integrate `effects:register` / `models:register` into unified plugin lifecycle (PluginManager P1 follow-up)
 
 ### neko-assets (Asset Management)
 - [ ] Search enhancement follow-ups:
@@ -33,6 +53,7 @@
 - [ ] **Cross-domain linking**: Script→media references / asset path completion
 - [ ] `neko://` protocol (ADR design only; depends on server-side)
 - [ ] Git LFS integration
+- [ ] **Remove `CreativeGridView` from neko-story** (ADR-1: image generation belongs entirely in canvas)
 
 ### Waiting on Backend
 - [ ] neko-market: Registry Server integration (client UI 100% ready)
@@ -51,6 +72,9 @@
 ### neko-canvas
 - [ ] Install jsPDF + JSZip to unlock PDF/ZIP storyboard export
 - [ ] Basic template system (needs to be built from scratch; commands not yet registered)
+- [ ] **Strengthen `SceneGroupNode` semantics**: true semantic container + scene-level batch operations + shot ordering + auto-layout
+- [ ] **First-class input nodes**: toolbar buttons for script/document/model reference nodes; support drag-from-file-tree/marketplace
+- [ ] **Node renderer registry**: replace hardcoded `switch(node.type)` with `NodeRendererRegistry`; allow external registration
 - [ ] **CanvasEmbedNode** (type exists; needs UI component)
 - [ ] Character consistency — IP-Adapter reference injection
 - [ ] Scene background consistency — ControlNet injection
@@ -58,15 +82,31 @@
 ### neko-cut
 - [ ] AI action `ai-auto-edit` (needs to define "auto-edit" semantics)
 - [ ] AI action `ai-match-music` (needs beat detection + scene matching)
+- [ ] **Subtitle system consolidation**: single data model + editing entry; .srt/.vtt → subtitle track not text track; integrate SubtitlePanel into main workspace
+- [ ] **Pause-time composite expansion**: extend high-quality composite to text/subtitle/shape/scene3d elements
+- [ ] **Asset library integration**: embed asset panel as dockable pane in editor (currently separate Webview)
+- [ ] **Ripple editing completeness**: extend `rippleEditingEnabled` to insert/drag/trim/split operations
 
 ### neko-story
-- [ ] Storyboard image generation (needs Agent integration)
+> [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas Pipeline
+- [ ] **ScriptIndex upgrade**: introduce stable `sceneId` (not just line numbers) + `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`; separate dialogue from action blocks
+- [ ] **Lightweight storyboard table**: upgrade `ScriptTableView` with Agent status + Canvas status columns; scene-level action buttons (jump to script, request Agent analysis, generate storyboard, send to Canvas, open SceneGroupNode, mark skip)
+- [ ] **Two code paths**: Path A mechanical (story→canvas skeleton) + Path B creative (story→agent→canvas semantic ShotPlan); make `flowF` standard entry for video creation
+- [ ] Agent tools: `GetScriptIndex` + `SearchScriptIndex` + `ScenePlan`/`ShotPlan` generation
+- [ ] Upgrade `import_script_to_canvas` from line-count skeleton to semantic ShotPlan import
 
 ### neko-agent
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)
 - [ ] **P1-1: Pipeline media landing unification** — `MediaGeneratorAdapter` returns remote URLs; chat main path saves locally + indexes assets. Need shared `MediaPersistenceService` or adapter-level alignment
-- [ ] **CapabilityProvider context extension** — extend `AgentCapabilityContext` to carry `platform` services, unblocking Canvas/Sketch/Story/CutVideo migration
+- [x] **CapabilityProvider context extension** — extended `AgentCapabilityContext` with `mediaService`/`configManager`/`embedFn`; all sub-packages migrated
 - [ ] **24 TODO(P1) Tools** — blocked on neko-cut API expansion (8 timeline + 7 effects + 2 color + 3 audio) and new model capabilities (4 generation)
+- [ ] **Zustand state management migration**: replace hook/ref architecture with Zustand stores (conversation, UI, config, resources, skills, context); align with neko-cut/canvas/model Webview pattern
+- [ ] **Subdivide `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` to reduce re-render blast radius
+- [ ] **RichContentBlock registry** ([ADR §6.2](./docs/architecture/agent-media-architecture.md)): define `RichContentBlock` type + `RichContentRegistry` (kind→component mapping) + `ContentBlockRenderer` integration; implement storyboard / media_card / comparison / form / data_table kinds
+- [ ] **`mediaPreprocessor.ts`** ([ADR-7](./docs/architecture/agent-media-architecture.md)): image resize if >1568px/>4MB; video keyframe extraction via EngineClient (max 8 frames); store in `.neko/preprocessed/`
+- [ ] **Fix Context Chip consumption**: distinguish file-level vs content-level chips in `InputArea.tsx`
+- [ ] **Unify Explorer "Send to Agent"**: replace 4 existing implementations with unified `sendFileChip(uri, intent, typeOverride?)`
+- [ ] **`parse_script_to_shots` refactor** (ADR-2): extract as agent-internal step (zero canvas deps), separate from `create_canvas_storyboard`
 
 ### neko-tools
 - [ ] Whisper ASR Diff + Demucs source separation
@@ -94,10 +134,39 @@
 - [ ] AI MCP Tools: `face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] Phase 3.5: Blender MCP bridge / 3DGS loader / rapier3d physics
 
+### neko-engine (Engine Plugin Expansion)
+> [ADR](./docs/architecture/engine-plugin-rfc.md) + [Runtime Layering](./docs/architecture/engine-runtime-layering.md)
+- [ ] Extract `runtime-format` crate (decouple file format probing from engine-kernel)
+- [ ] Create FormatRegistry / DeviceRegistry / ExporterRegistry / PreviewRegistry (plugin-extensible registries)
+- [ ] Connector plugin support (external sidecar/remote runtime declarations + health check + state sync)
+
 ### neko-live (VTuber Livestreaming)
 - [ ] Phase 5.1.3: Camera + MediaPipe (needs nokhwa crate)
 - [ ] Phase 5.2: Calibration system + audio/video merging + import into neko-cut timeline
 - [ ] Phase 5.3: Live streaming (RTMP/SRT → OBS)
+
+---
+
+## 🟤 Phase 3.6 — Cross-Extension Semantic Layer
+
+> Goal: Unified entity identity + multimodal version management. Independent from core editing, builds on top of Phase 1-3 foundations.
+
+### Unified Entity Identity System
+> [ADR](./docs/architecture/adr-character-unified-index.md) — Characters → Scenes → Objects progressive entity binding
+- [ ] **P1: Structure closure** — `characters.json` contract + read/write service + JSON schema; add `characterId` to `GalleryNode`/`ShotCharacter`/`GeneratedAsset`; `CharacterWorkspaceIndex` service; script name→characterId resolution
+- [ ] **P1: Generation lineage** — auto-inherit `characterId` when generating from annotated ShotNode/GalleryNode; `registryId` field on Asset Entity; update `import_script_to_canvas` to populate character bindings
+- [ ] **P2: CreativeEntityGraph + OccurrenceIndex** — entity/occurrence/asset/canvas-node/script-range/timeline-element/media-segment node types; confirmed/inferred edges with provenance; unified Definition/References/Hover queries
+- [ ] **P2: Scene & Object extension** — `sceneId` binding model (SceneGroupNode↔script scene); `objectId` for items/props; replicate character binding for objects
+- [ ] **P3: Rule matching + text vectors** — filename/alias/tag matching; `CharacterMatchSuggestion` with confidence; text embedding index for descriptions/prompts
+- [ ] **P3: Multimodal vector enhancement** — image/face/video keyframe/speaker embedding; multimodal candidate recall; vector results default to `inferred`
+
+### Multimodal Git Integration
+> [ADR](./docs/architecture/adr-multimodal-git-integration.md) — 6-phase plan for Git + multimodal version management
+- [ ] **P1: Git integration baseline** — `.gitattributes` template for media files; connect `MediaDiff` viewer to SCM panel; display basic media change summaries
+- [ ] **P2: CLI diff driver** — `neko-diff` CLI tool; format-specific summaries replacing `Binary files differ`
+- [ ] **P3: JSON semantic diff** — semantic diff schema for `characters.json`/`library.json`; `JsonSemanticDiff` analyzer; Webview review panel
+- [ ] **P3: Entity impact analysis** — connect JSON diff to CreativeEntityGraph; "affected characters/scenes/objects" view; back-jump to Definition/References
+- [ ] **P4: Commit-level semantic review** — aggregated entity changes across multifile commits; confirmed vs inferred change distinction
 
 ---
 
@@ -242,4 +311,4 @@
 
 ---
 
-*Last updated: 2026-04-08 (+ Agent P0/P1 architecture refactor completed)*
+*Last updated: 2026-04-08 (+ architecture doc analysis: P0 cut/canvas/agent field consistency + Phase 3.6 Entity Identity & Git Integration)*

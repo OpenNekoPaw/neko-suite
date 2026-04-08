@@ -527,7 +527,7 @@ interface AgentCapabilityProvider {
 - `AgentCapabilityProvider` 协议定义在 `packages/neko-types/src/types/agent-capability.ts`
 - `CapabilityDiscoveryService` 混合发现（manifest 静态声明 + Command 动态注册）在 `packages/neko-agent/packages/extension/src/services/capabilityDiscoveryService.ts`
 - neko-cut 示范迁移：`packages/neko-cut/packages/extension/src/agentCapabilityProvider.ts`
-- 现有 `registerExtensionTools()` 保留为 fallback，待其他子包逐步迁移
+- 所有域工具已迁移至各自子包，`registerExtensionTools()` 仅保留 SkillProvider 元工具
 
 #### 2. 统一 Tool 命名契约 ✅
 

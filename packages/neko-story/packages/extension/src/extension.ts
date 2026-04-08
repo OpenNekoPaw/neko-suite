@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
+import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
   createVSCodeLogger,
   createNewFile,
@@ -301,6 +302,14 @@ export function activate(context: vscode.ExtensionContext) {
       return indexService.getScriptIndex(uri);
     },
   };
+
+  // Register capability provider with neko-agent (if installed)
+  try {
+    const provider = createNekoStoryCapabilityProvider(api);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+  } catch {
+    // neko-agent not installed — silently ignore
+  }
 
   return api;
 }

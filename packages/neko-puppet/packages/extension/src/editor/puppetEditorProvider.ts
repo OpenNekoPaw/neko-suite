@@ -65,6 +65,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   public static readonly viewType = 'neko.puppetEditor';
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
+  private _activeDocument: PuppetDocument | undefined;
   private enginePort: number | undefined;
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
@@ -101,6 +102,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _token: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
+    this._activeDocument = document;
 
     webviewPanel.webview.options = {
       enableScripts: true,
@@ -118,6 +120,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     webviewPanel.onDidDispose(() => {
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
+        this._activeDocument = undefined;
       }
     });
   }
@@ -415,5 +418,29 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API (NekoPuppetAPI)
+  // ---------------------------------------------------------------------------
+
+  /** Get current face parameters from the active puppet document */
+  getCurrentFaceParams(): Record<string, number> {
+    return this._activeDocument?.projectData?.parameters ?? {};
+  }
+
+  /** Set face parameters on the active puppet document and sync to webview */
+  async setFaceParams(params: Record<string, number>): Promise<void> {
+    if (!this._activeDocument?.projectData) return;
+    this._activeDocument.projectData.parameters = {
+      ...this._activeDocument.projectData.parameters,
+      ...params,
+    };
+    this._activeDocument.dirty = true;
+    // Sync to webview
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'loadState',
+      parameters: this._activeDocument.projectData.parameters,
+    });
   }
 }
