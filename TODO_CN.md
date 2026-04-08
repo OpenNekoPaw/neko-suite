@@ -21,8 +21,28 @@
 
 ### 待做
 
+### neko-cut（视频编辑）— P0-1：字段一致性
+> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 7/10，完整创作 5.5/10。导出链路关键缺口。
+- [ ] **Transition 字段命名统一**：审计 `inTransition` vs `transitionIn`，统一 Property Panel 写 / Preview 合成读 / Export Service 全路径
+- [ ] **Effects 导出链**：导出时 `effects: []` 为空；实现 `EffectInstance` → `EffectParams` schema 映射；验证色彩校正 + 蒙版导出
+- [ ] **编辑/预览/导出字段一致性**：确保所有元素类型在三个时态的字段读取一致
+- [ ] 导出往返测试套件：编辑 → 预览 → 导出 → 重新导入一致性验证
+
+### neko-canvas（故事板）— P0-2：协议修复
+> [ADR](./docs/architecture/canvas-role-boundary.md) — 当前 80%。协议不一致阻塞 Agent→Canvas 可靠性。
+- [ ] **修复 `nodes.update`/`nodes.create` 协议不一致**：审计 Extension→Webview 调用；统一为 update `{ nodeId, data }`、create `{ type, position, data }`；更新所有 Agent 工具
+- [ ] **修复消息通道一致性**：审计 `canvasOperationStore` VSCode API 暴露；统一 Webview 侧 VSCode API 调用；确保 `operationApplied` 事件可靠触发 + 脏标记
+- [ ] **完成结果审阅周期**：定义候选选中规范字段（`generationHistory.selected`）；实现 `onSelectCandidate` 处理器；同步选中 → 节点状态 → store → `generatedAsset` 字段
+
+### neko-agent（AI 助手）— P0-2：Webview 架构
+> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10。顶层控制器膨胀 + 消息契约薄弱。
+- [ ] **拆分 `AIAssistant` 组件**（~589 行）→ `AppShell` + `ConversationController` + `ChatWorkspace`
+- [ ] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
+- [ ] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
+
 ### neko-engine（引擎）
 - [ ] 新增 action：`documents:text-extract` / `models:clip-embed` / `text:stats`（action registry 中不存在）
+- [ ] 将 `effects:register` / `models:register` 集成到统一插件生命周期（PluginManager P1 后续）
 
 ### neko-assets（资产管理）
 - [ ] 搜索增强后续：
@@ -33,6 +53,7 @@
 - [ ] **跨域链接**：剧本→媒体引用 / 资产路径补全
 - [ ] `neko://` 协议（仅 ADR 设计，依赖服务端）
 - [ ] Git LFS 集成
+- [ ] **从 neko-story 移除 `CreativeGridView`**（ADR-1：图片生成完全归属 canvas）
 
 ### 等后端就绪
 - [ ] neko-market：Registry Server 对接（客户端 UI 100% 就绪）
@@ -51,6 +72,9 @@
 ### neko-canvas
 - [ ] 安装 jsPDF + JSZip 解锁 PDF/ZIP 分镜导出
 - [ ] 模板系统基础版（需从零实现，命令未注册）
+- [ ] **强化 `SceneGroupNode` 语义**：真正的语义容器 + 场景级批量操作 + 镜头排序 + 自动布局
+- [ ] **一等公民输入节点**：工具栏添加剧本/文档/模型引用节点按钮；支持从文件树/市场拖入
+- [ ] **节点渲染器注册表**：替换硬编码 `switch(node.type)` 为 `NodeRendererRegistry`；允许外部注册
 - [ ] **CanvasEmbedNode**（类型已有，需 UI 组件）
 - [ ] 角色一致性 — IP-Adapter reference 注入
 - [ ] 场景背景一致性 — ControlNet 注入
@@ -58,12 +82,31 @@
 ### neko-cut
 - [ ] AI action `ai-auto-edit`（需定义"自动剪辑"语义）
 - [ ] AI action `ai-match-music`（需节奏检测 + 场景匹配）
+- [ ] **字幕系统整合**：单一数据模型 + 编辑入口；.srt/.vtt → subtitle 轨道而非 text 轨道；SubtitlePanel 集成到主工作区
+- [ ] **暂停帧合成扩展**：将高质量合成扩展到 text/subtitle/shape/scene3d 元素
+- [ ] **资产库集成**：嵌入为可停靠面板（当前为独立 Webview）
+- [ ] **涟漪编辑完善**：将 `rippleEditingEnabled` 扩展到插入/拖动/裁剪/分割操作
 
 ### neko-story
-- [ ] 故事板图片生成（需 Agent 集成）
+> [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas 流水线
+- [ ] **ScriptIndex 升级**：引入稳定 `sceneId`（不再仅依赖行号）+ `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`；分离对话与动作块
+- [ ] **轻量分镜表**：升级 `ScriptTableView`，增加 Agent 状态 + Canvas 状态列；场景级操作按钮（跳转剧本、请求 Agent 分析、生成分镜、发送到 Canvas、打开 SceneGroupNode、标记跳过）
+- [ ] **双代码路径**：路径 A 机械式（story→canvas 骨架）+ 路径 B 创意式（story→agent→canvas 语义 ShotPlan）；`flowF` 作为视频创作标准入口
+- [ ] Agent 工具：`GetScriptIndex` + `SearchScriptIndex` + `ScenePlan`/`ShotPlan` 生成
+- [ ] 升级 `import_script_to_canvas`：从行数骨架导入改为语义 ShotPlan 导入
 
 ### neko-agent
 - [ ] MCP 重连退避（指数退避 + 熔断）
+- [ ] **P1-1：Pipeline 媒体落地统一** — `MediaGeneratorAdapter` 返回远程 URL；聊天主路径本地保存 + 索引资产。需共享 `MediaPersistenceService` 或适配器层对齐
+- [x] **CapabilityProvider 上下文扩展** — `AgentCapabilityContext` 已扩展 `mediaService`/`configManager`/`embedFn`；所有子包已迁移
+- [ ] **24 个 TODO(P1) 工具** — 阻塞于 neko-cut API 扩展（8 时间线 + 7 特效 + 2 调色 + 3 音频）和新模型能力（4 生成）
+- [ ] **Zustand 状态管理迁移**：用 Zustand stores 替换 hook/ref 架构（conversation、UI、config、resources、skills、context）；与 neko-cut/canvas/model Webview 模式对齐
+- [ ] **拆分 `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` 减少重渲染范围
+- [ ] **RichContentBlock 注册表**（[ADR §6.2](./docs/architecture/agent-media-architecture.md)）：定义 `RichContentBlock` 类型 + `RichContentRegistry`（kind→组件映射）+ `ContentBlockRenderer` 集成；实现 storyboard / media_card / comparison / form / data_table kinds
+- [ ] **`mediaPreprocessor.ts`**（[ADR-7](./docs/architecture/agent-media-architecture.md)）：图片超 1568px/4MB 自动缩放；视频通过 EngineClient 提取关键帧（最多 8 帧）；存储到 `.neko/preprocessed/`
+- [ ] **修复 Context Chip 消费**：`InputArea.tsx` 中区分文件级 vs 内容级 chip
+- [ ] **统一 Explorer "发送到 Agent"**：4 个现有实现合并为统一 `sendFileChip(uri, intent, typeOverride?)`
+- [ ] **`parse_script_to_shots` 重构**（ADR-2）：提取为 agent 内部步骤（零 canvas 依赖），与 `create_canvas_storyboard` 分离
 
 ### neko-tools
 - [ ] Whisper ASR Diff + Demucs 音源分离
@@ -91,10 +134,39 @@
 - [ ] AI MCP Tools：`face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] Phase 3.5：Blender MCP 桥接 / 3DGS 加载器 / rapier3d 物理
 
+### neko-engine（引擎插件扩展）
+> [ADR](./docs/architecture/engine-plugin-rfc.md) + [Runtime 分层](./docs/architecture/engine-runtime-layering.md)
+- [ ] 提取 `runtime-format` crate（将文件格式探测从 engine-kernel 解耦）
+- [ ] 创建 FormatRegistry / DeviceRegistry / ExporterRegistry / PreviewRegistry（插件可扩展注册表）
+- [ ] Connector 插件支持（外部 sidecar/远程 runtime 声明 + 健康检查 + 状态同步）
+
 ### neko-live（VTuber 直播）
 - [ ] Phase 5.1.3：摄像头 + MediaPipe（需 nokhwa crate）
 - [ ] Phase 5.2：标定系统 + 音视频合并 + 导入 neko-cut 时间线
 - [ ] Phase 5.3：直播推流（RTMP/SRT → OBS）
+
+---
+
+## 🟤 Phase 3.6 — 跨扩展语义层
+
+> 目标：统一实体身份 + 多模态版本管理。独立于核心编辑，构建在一期至三期基础之上。
+
+### 统一实体身份系统
+> [ADR](./docs/architecture/adr-character-unified-index.md) — 角色 → 场景 → 物品渐进式实体绑定
+- [ ] **P1：结构闭环** — `characters.json` 契约 + 读写服务 + JSON Schema；`GalleryNode`/`ShotCharacter`/`GeneratedAsset` 添加 `characterId`；`CharacterWorkspaceIndex` 服务；剧本名称→characterId 解析
+- [ ] **P1：生成血统** — 从已标注 ShotNode/GalleryNode 生成时自动继承 `characterId`；Asset Entity 添加 `registryId` 字段；更新 `import_script_to_canvas` 填充角色绑定
+- [ ] **P2：CreativeEntityGraph + OccurrenceIndex** — entity/occurrence/asset/canvas-node/script-range/timeline-element/media-segment 节点类型；confirmed/inferred 边 + provenance；统一 Definition/References/Hover 查询
+- [ ] **P2：场景与物品扩展** — `sceneId` 绑定模型（SceneGroupNode↔剧本场景）；`objectId` 用于道具/物品；复制角色绑定模式
+- [ ] **P3：规则匹配 + 文本向量** — 文件名/别名/标签匹配；`CharacterMatchSuggestion` 含置信度；描述/提示词文本嵌入索引
+- [ ] **P3：多模态向量增强** — 图像/人脸/视频关键帧/说话人嵌入；多模态候选召回；向量结果默认 `inferred`
+
+### 多模态 Git 集成
+> [ADR](./docs/architecture/adr-multimodal-git-integration.md) — Git + 多模态版本管理 6 阶段计划
+- [ ] **P1：Git 集成基线** — 媒体文件 `.gitattributes` 模板；连接 `MediaDiff` 查看器到 SCM 面板；显示基本媒体变更摘要
+- [ ] **P2：CLI diff driver** — `neko-diff` CLI 工具；格式特定摘要替代 `Binary files differ`
+- [ ] **P3：JSON 语义 diff** — `characters.json`/`library.json` 语义 diff schema；`JsonSemanticDiff` 分析器；Webview 审阅面板
+- [ ] **P3：实体影响分析** — 连接 JSON diff 到 CreativeEntityGraph；"受影响角色/场景/物品"视图；回跳到 Definition/References
+- [ ] **P4：提交级语义审阅** — 跨多文件提交的聚合实体变更；confirmed vs inferred 变更区分
 
 ---
 
@@ -220,8 +292,15 @@
 ### ✅ 一期 Sprint 1（2026-04-06）
 - puppetFaceTools `readFileSync` → async + Engine Semaphore(8/4/2) + Assets 搜索 L0 持久化索引 + 类型筛选 + EPUB 大纲 TreeView + Cut AI background-remove/smart-crop + DragDropBroker
 
+### ✅ P0+P1 Agent 架构（2026-04-08）
+- **P0-1**: AgentCapabilityProvider 协议（接口 + CapabilityDiscoveryService 混合 manifest/command 发现 + neko-cut 示范迁移）
+- **P0-2**: TOOL_NAMES 常量（44 工具，11 分类）+ Builtin Skill 命名漂移修复（31 个不存在 Tool 移除）+ SkillService 运行时校验
+- **P0-3**: toolBootstrap.ts 提取 + capabilityBootstrap.ts + index.ts 简化为编排层
+- **P1-2**: 质检音频/视频依赖注入（EngineAudioAnalyzerAdapter + EngineFrameExtractorAdapter 接入 pipeline-bootstrap）
+- **P1-3**: 默认媒体模型（DALL-E 3 / Sora / TTS-1 / Jukebox）+ defaultMediaModels 配置实现开箱即用媒体生成
+
 </details>
 
 ---
 
-*最后更新：2026-04-06（Sprint 1 + P0/P1 Bug + 基础设施一致性 + 阻塞 I/O 修复 3 处：extensionTools ZIP async + system-prompt-builder async + generatedAssetIndex async load/flush）*
+*最后更新：2026-04-08（+ 架构文档分析：P0 cut/canvas/agent 字段一致性 + Phase 3.6 实体身份 & Git 集成）*
