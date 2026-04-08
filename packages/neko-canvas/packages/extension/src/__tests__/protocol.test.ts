@@ -16,6 +16,7 @@
  *   NKV-007: canvas ops sidecar persists to .nkc-ops
  *   NKV-008: operation log snapshot is restored into webview on ready
  *   NKV-009: toolbar can pick .nkc files into canvas-embed nodes
+ *   NKV-010: toolbar pickers cover script/document/model reference nodes
  */
 
 import { describe, it, expect } from 'vitest';
@@ -154,6 +155,17 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("case 'pickCanvasDocument'");
       expect(providerSource).toContain("kind: 'canvas'");
       expect(providerSource).toContain("type: 'dropAssets'");
+    });
+  });
+
+  describe('NKV-010: reference picker entrypoints', () => {
+    it('extension handles script/document/model picker messages', () => {
+      expect(providerSource).toContain("case 'pickScriptDocument'");
+      expect(providerSource).toContain("case 'pickReferenceDocument'");
+      expect(providerSource).toContain("case 'pickModelReference'");
+      expect(providerSource).toContain("kind: 'script'");
+      expect(providerSource).toContain("kind: 'document'");
+      expect(providerSource).toContain("kind: 'model'");
     });
   });
 

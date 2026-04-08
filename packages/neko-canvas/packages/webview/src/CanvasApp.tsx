@@ -204,15 +204,27 @@ export function CanvasApp() {
   }, [addGalleryAt, getViewportCenter]);
 
   const handleAddScript = useCallback(() => {
-    addScriptAt(getViewportCenter());
+    if (vscode) {
+      vscode.postMessage({ type: 'pickScriptDocument' });
+    } else {
+      addScriptAt(getViewportCenter());
+    }
   }, [addScriptAt, getViewportCenter]);
 
   const handleAddDocument = useCallback(() => {
-    addDocumentAt(getViewportCenter());
+    if (vscode) {
+      vscode.postMessage({ type: 'pickReferenceDocument' });
+    } else {
+      addDocumentAt(getViewportCenter());
+    }
   }, [addDocumentAt, getViewportCenter]);
 
   const handleAddModel = useCallback(() => {
-    addModelAt(getViewportCenter());
+    if (vscode) {
+      vscode.postMessage({ type: 'pickModelReference' });
+    } else {
+      addModelAt(getViewportCenter());
+    }
   }, [addModelAt, getViewportCenter]);
 
   const handleAddCanvasEmbed = useCallback(() => {

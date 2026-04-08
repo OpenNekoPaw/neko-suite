@@ -724,6 +724,100 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'pickScriptDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Scripts: ['fountain', 'nks', 'story'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'script.fountain';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Script';
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'script',
+                path: contractedPath,
+                name: fileName,
+                title,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
+      case 'pickReferenceDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Documents: ['pdf', 'docx', 'epub', 'cbz'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'document.pdf';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Document';
+          const docType = inferCanvasDocumentType(fileName);
+          if (!docType) break;
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'document',
+                path: contractedPath,
+                name: fileName,
+                title,
+                docType,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
+      case 'pickModelReference': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Models: ['safetensors', 'ckpt', 'pt', 'pth', 'bin'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'model.safetensors';
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const modelName = fileName.replace(/\.[^.]+$/, '') || 'Model';
+          const modelType = inferCanvasModelType(fileName);
+          if (!modelType) break;
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'model',
+                path: contractedPath,
+                name: fileName,
+                modelName,
+                modelType,
+                role: 'reference',
+              },
+            ],
+          });
+        }
+        break;
+      }
+
       case 'canvasChanged':
         this._onDidChangeCanvas.fire({
           type: message.changeType as 'add' | 'update' | 'delete',
