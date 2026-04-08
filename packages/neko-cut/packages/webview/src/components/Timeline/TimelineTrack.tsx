@@ -11,6 +11,7 @@ import type { EditOperation } from '@neko/shared';
 import { createMeta } from '../../stores/utils/operation-helpers';
 import { getLogger } from '../../utils/logger';
 import { buildTimelineReverseUpdates, buildTimelineSpeedUpdates } from './timelineSpeedActions';
+import { buildTrimToPlayheadUpdates, collectTimelineRippleOps } from './timelineTrimActions';
 
 const logger = getLogger('TimelineTrack');
 
@@ -59,6 +60,7 @@ export const TimelineTrack = memo(function TimelineTrack({
     selectElement,
     updateElement,
     dispatch,
+    dispatchBatch,
     pushOperation,
     showClipThumbnails,
     project,
@@ -740,11 +742,50 @@ export const TimelineTrack = memo(function TimelineTrack({
         {
           label: t('timeline.contextMenu.trimToPlayhead'),
           onClick: () => {
-            if (currentTime > elementStart && currentTime < elementEnd) {
-              // Trim end to playhead
-              const newTrimEnd = element.trimEnd + (elementEnd - currentTime);
-              updateElement(track.id, element.id, { trimEnd: newTrimEnd });
+            const updates = buildTrimToPlayheadUpdates(element, currentTime);
+            if (!updates) {
+              return;
             }
+
+            const trimOp: EditOperation = {
+              type: 'element.update',
+              meta: createMeta('user', 'Trim to playhead'),
+              payload: {
+                trackId: track.id,
+                elementId: element.id,
+                updates,
+              },
+              before: {
+                updates: {
+                  trimEnd: element.trimEnd,
+                },
+              },
+            };
+
+            if (!rippleEditingEnabled) {
+              dispatch(trimOp);
+              return;
+            }
+
+            const updatedTrimEnd =
+              typeof updates.trimEnd === 'number' ? updates.trimEnd : element.trimEnd;
+            const originalEffectiveDuration =
+              element.duration - element.trimStart - element.trimEnd;
+            const updatedEffectiveDuration = element.duration - element.trimStart - updatedTrimEnd;
+            const rippleOps = collectTimelineRippleOps(
+              track.id,
+              track.elements,
+              element.id,
+              elementEnd,
+              updatedEffectiveDuration - originalEffectiveDuration,
+            );
+
+            if (rippleOps.length === 0) {
+              dispatch(trimOp);
+              return;
+            }
+
+            dispatchBatch([trimOp, ...rippleOps]);
           },
           disabled: currentTime <= elementStart || currentTime >= elementEnd,
         },
@@ -926,10 +967,13 @@ export const TimelineTrack = memo(function TimelineTrack({
       separateVideoAudio,
       unseparateVideoAudio,
       removeElement,
-      updateElement,
+      dispatch,
+      dispatchBatch,
       t,
       onExecuteAIAction,
       commitElementUpdate,
+      rippleEditingEnabled,
+      track.elements,
     ],
   );
 
