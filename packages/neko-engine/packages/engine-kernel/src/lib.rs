@@ -32,8 +32,7 @@ pub mod preview;
 pub mod services;
 pub mod telemetry;
 
-#[cfg(feature = "onnx")]
-pub mod ml;
+// NOTE: ml module moved to neko-runtime-ml
 
 // Re-export puppet world types so higher-level crates (host-api, host-http)
 // can access them without depending directly on neko-runtime-puppet

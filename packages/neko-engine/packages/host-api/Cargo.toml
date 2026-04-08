@@ -47,7 +47,7 @@ base64.workspace = true
 
 [features]
 default = []
-onnx = ["neko-engine-kernel/onnx", "neko-runtime-ml"]
+onnx = ["neko-runtime-ml"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }

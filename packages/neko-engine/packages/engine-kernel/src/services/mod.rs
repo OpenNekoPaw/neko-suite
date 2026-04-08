@@ -19,8 +19,7 @@ mod task;
 mod timeline;
 mod video;
 
-#[cfg(feature = "onnx")]
-pub mod ml;
+// NOTE: ml service trait and impl moved to neko-runtime-ml
 
 pub mod impls;
 
@@ -40,13 +39,11 @@ pub use timeline::{ITimelineService, StreamStats, TimelineStreamResult};
 pub use video::IVideoService;
 
 // Re-export implementations
+// NOTE: CameraService, MidiService, GamepadService moved to neko-runtime-device
+// NOTE: MlService moved to neko-runtime-ml
 pub use impls::{
-    AudioService, CameraService, EffectsService, ExportService, GamepadService, ImageService,
-    MidiService, NodeService, PuppetService, SceneService, ServiceContainer, TaskService,
-    TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
+    SceneService, ServiceContainer, TaskService, TimelineService, VideoService,
 };
 
-#[cfg(feature = "onnx")]
-pub use impls::MlService;
-#[cfg(feature = "onnx")]
-pub use ml::IMlService;
+// NOTE: MlService and IMlService moved to neko-runtime-ml

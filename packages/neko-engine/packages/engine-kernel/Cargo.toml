@@ -74,15 +74,8 @@ ebur128.workspace = true
 cpal = "0.15"
 # WAV file writing
 hound = "3.5"
-# MIDI input - cross-platform
-midir = "0.10"
-# Gamepad input - cross-platform
-gilrs = "0.11"
 
-# ML inference - ONNX Runtime
-ort = { workspace = true, optional = true }
-ndarray = { workspace = true, optional = true }
-rustfft = { workspace = true, optional = true }
+# NOTE: ML inference (ort/ndarray/rustfft) moved to neko-runtime-ml
 
 # Base64 encoding
 base64.workspace = true
@@ -124,4 +117,4 @@ videotoolbox = []  # macOS VideoToolbox
 vaapi = []         # Linux VAAPI
 cuda = []          # NVIDIA CUDA
 tracy = ["tracing-tracy", "tracy-client"]  # Tracy profiler integration
-onnx = ["ort", "ndarray", "rustfft"]  # ONNX Runtime ML inference
+# NOTE: onnx feature removed — ML inference is now in neko-runtime-ml
