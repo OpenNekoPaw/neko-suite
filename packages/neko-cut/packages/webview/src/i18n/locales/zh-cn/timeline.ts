@@ -30,6 +30,8 @@ export const timeline = {
   'timeline.contextMenu.cut': '剪切',
   'timeline.contextMenu.duplicate': '复制片段',
   'timeline.contextMenu.splitAtPlayhead': '在播放头处分割',
+  'timeline.contextMenu.splitKeepLeft': '分割并保留左侧',
+  'timeline.contextMenu.splitKeepRight': '分割并保留右侧',
   'timeline.contextMenu.trimToPlayhead': '裁剪到播放头',
   'timeline.contextMenu.show': '显示',
   'timeline.contextMenu.hide': '隐藏',

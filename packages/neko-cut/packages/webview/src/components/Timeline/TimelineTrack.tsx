@@ -67,6 +67,8 @@ export const TimelineTrack = memo(function TimelineTrack({
     moveElement,
     removeElement,
     splitAtPlayhead,
+    splitAndKeepLeft,
+    splitAndKeepRight,
     toggleElementHidden,
     toggleElementMuted,
     copySelected,
@@ -724,6 +726,18 @@ export const TimelineTrack = memo(function TimelineTrack({
           disabled: !canSplit,
         },
         {
+          label: t('timeline.contextMenu.splitKeepLeft'),
+          shortcut: 'Q',
+          onClick: () => splitAndKeepLeft(track.id, element.id),
+          disabled: !canSplit,
+        },
+        {
+          label: t('timeline.contextMenu.splitKeepRight'),
+          shortcut: 'W',
+          onClick: () => splitAndKeepRight(track.id, element.id),
+          disabled: !canSplit,
+        },
+        {
           label: t('timeline.contextMenu.trimToPlayhead'),
           onClick: () => {
             if (currentTime > elementStart && currentTime < elementEnd) {
@@ -905,6 +919,8 @@ export const TimelineTrack = memo(function TimelineTrack({
       currentTime,
       copySelected,
       splitAtPlayhead,
+      splitAndKeepLeft,
+      splitAndKeepRight,
       toggleElementHidden,
       toggleElementMuted,
       separateVideoAudio,
