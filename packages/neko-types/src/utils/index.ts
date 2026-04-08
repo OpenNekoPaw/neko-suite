@@ -32,3 +32,4 @@ export {
   applyCanvasTimelineSyncToCanvas,
   buildStoryboardImportTimelineSyncPayload,
 } from './canvasTimelineSync';
+export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';
