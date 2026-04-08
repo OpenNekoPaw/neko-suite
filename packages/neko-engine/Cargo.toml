@@ -73,6 +73,7 @@ gltf = { version = "1.4", features = ["KHR_lights_punctual"] }
 
 # Utilities
 bytemuck = { version = "1.14", features = ["derive"] }
+semver = "1"
 crossbeam-channel = "0.5"
 indicatif = "0.17"
 

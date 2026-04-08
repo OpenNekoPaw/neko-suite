@@ -6,5 +6,5 @@
 pub mod manifest;
 pub mod manager;
 
-pub use manager::{LoadedPlugin, PluginManager, PluginState};
+pub use manager::{LoadedPlugin, PluginActivationHandler, PluginManager, PluginState};
 pub use manifest::{EnginePluginManifest, PluginKind};

@@ -5,7 +5,6 @@
 
 mod audio;
 pub(crate) mod common;
-mod container;
 mod effects;
 mod export;
 mod image;
@@ -18,9 +17,9 @@ mod timeline;
 mod video;
 
 // NOTE: ml impl moved to neko-runtime-ml
+// NOTE: ServiceContainer removed — EngineApi (host-api) handles service assembly
 
 pub use audio::AudioService;
-pub use container::ServiceContainer;
 pub use effects::EffectsService;
 pub use export::ExportService;
 pub use image::ImageService;

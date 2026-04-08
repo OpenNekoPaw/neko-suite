@@ -28,6 +28,7 @@
 pub mod controllers;
 pub mod plugin;
 pub mod registry;
+pub mod runtime;
 
 mod engine;
 mod error;

@@ -46,7 +46,7 @@ pub mod prelude {
     pub use crate::services::{
         AudioService, ExportService as CoreExportService, IAudioService, IExportService,
         IImageService, INodeService, IStreamPlayback, ITaskService, ITimelineService,
-        IVideoService, ImageService, NodeService, ServiceContainer, TaskService, TimelineService,
+        IVideoService, ImageService, NodeService, TaskService, TimelineService,
         VideoService,
     };
 }

@@ -2432,6 +2432,7 @@ dependencies = [
  "neko-engine-types",
  "neko-runtime-device",
  "neko-runtime-ml",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

@@ -6,10 +6,32 @@
 //! - Track plugin state (enabled / disabled)
 //! - Provide query API for the PluginsController
 
-use super::manifest::{EnginePluginManifest, PluginKind};
+use super::manifest::{EnginePluginManifest, PluginCapability, PluginKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+
+/// Callback for plugin activation/deactivation events.
+///
+/// Implementors register capabilities with the appropriate service
+/// (e.g., EffectsService for shaders, MlService for models).
+pub trait PluginActivationHandler: Send + Sync {
+    /// Called when a plugin is enabled. Should register capabilities.
+    fn on_activate(
+        &self,
+        plugin_id: &str,
+        kind: PluginKind,
+        capabilities: &[PluginCapability],
+        install_path: &Path,
+    ) -> std::result::Result<(), String>;
+
+    /// Called when a plugin is disabled. Should unregister capabilities.
+    fn on_deactivate(
+        &self,
+        plugin_id: &str,
+        kind: PluginKind,
+    ) -> std::result::Result<(), String>;
+}
 
 /// Plugin runtime state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -40,6 +62,7 @@ pub struct PluginManager {
     plugins: Mutex<HashMap<String, LoadedPlugin>>,
     install_dirs: Vec<PathBuf>,
     engine_version: String,
+    activation_handler: Option<Box<dyn PluginActivationHandler>>,
 }
 
 impl PluginManager {
@@ -52,7 +75,14 @@ impl PluginManager {
             plugins: Mutex::new(HashMap::new()),
             install_dirs,
             engine_version: engine_version.to_string(),
+            activation_handler: None,
         }
+    }
+
+    /// Set the activation handler for plugin enable/disable lifecycle callbacks.
+    pub fn with_activation_handler(mut self, handler: Box<dyn PluginActivationHandler>) -> Self {
+        self.activation_handler = Some(handler);
+        self
     }
 
     /// Scan all install directories for plugin manifests.
@@ -141,33 +171,67 @@ impl PluginManager {
         plugins.get(id).cloned()
     }
 
-    /// Enable a plugin.
+    /// Enable a plugin. Invokes the activation handler if set.
     pub fn enable(&self, id: &str) -> Result<(), String> {
-        let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
-        let plugin = plugins
-            .get_mut(id)
-            .ok_or_else(|| format!("Plugin not found: {id}"))?;
+        let (kind, capabilities, install_path) = {
+            let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
+            let plugin = plugins
+                .get_mut(id)
+                .ok_or_else(|| format!("Plugin not found: {id}"))?;
 
-        if plugin.state == PluginState::Error {
-            return Err(format!(
-                "Cannot enable plugin with errors: {}",
-                plugin.error.as_deref().unwrap_or("unknown")
-            ));
+            if plugin.state == PluginState::Error {
+                return Err(format!(
+                    "Cannot enable plugin with errors: {}",
+                    plugin.error.as_deref().unwrap_or("unknown")
+                ));
+            }
+
+            let kind = plugin.manifest.kind;
+            let capabilities = plugin.manifest.capabilities.clone();
+            let install_path = plugin.install_path.clone();
+
+            plugin.state = PluginState::Enabled;
+            (kind, capabilities, install_path)
+        };
+
+        // Invoke activation handler outside the lock
+        if let Some(handler) = &self.activation_handler {
+            if let Err(e) = handler.on_activate(id, kind, &capabilities, &install_path) {
+                tracing::warn!(plugin = %id, error = %e, "Activation handler failed");
+                // Revert state
+                if let Ok(mut plugins) = self.plugins.lock() {
+                    if let Some(p) = plugins.get_mut(id) {
+                        p.state = PluginState::Disabled;
+                        p.error = Some(format!("Activation failed: {e}"));
+                    }
+                }
+                return Err(format!("Activation failed: {e}"));
+            }
         }
 
-        plugin.state = PluginState::Enabled;
         tracing::info!(plugin = %id, "Plugin enabled");
         Ok(())
     }
 
-    /// Disable a plugin.
+    /// Disable a plugin. Invokes the deactivation handler if set.
     pub fn disable(&self, id: &str) -> Result<(), String> {
-        let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
-        let plugin = plugins
-            .get_mut(id)
-            .ok_or_else(|| format!("Plugin not found: {id}"))?;
+        let kind = {
+            let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
+            let plugin = plugins
+                .get_mut(id)
+                .ok_or_else(|| format!("Plugin not found: {id}"))?;
 
-        plugin.state = PluginState::Disabled;
+            let kind = plugin.manifest.kind;
+            plugin.state = PluginState::Disabled;
+            kind
+        };
+
+        if let Some(handler) = &self.activation_handler {
+            if let Err(e) = handler.on_deactivate(id, kind) {
+                tracing::warn!(plugin = %id, error = %e, "Deactivation handler failed");
+            }
+        }
+
         tracing::info!(plugin = %id, "Plugin disabled");
         Ok(())
     }
@@ -212,20 +276,35 @@ impl PluginManager {
     }
 
     fn validate_compatibility(&self, manifest: &EnginePluginManifest) -> PluginState {
-        // Simple version prefix check for MVP.
-        // TODO(P1): use semver crate for proper range matching
         let required = &manifest.engine_version;
-        if required.starts_with('^') {
-            let base = required.trim_start_matches('^');
-            // Check major version match
-            let engine_major = self.engine_version.split('.').next().unwrap_or("0");
-            let required_major = base.split('.').next().unwrap_or("0");
-            if engine_major != required_major {
+
+        // Parse engine version
+        let engine_ver = match semver::Version::parse(&self.engine_version) {
+            Ok(v) => v,
+            Err(_) => {
+                tracing::warn!(version = %self.engine_version, "Invalid engine version");
                 return PluginState::Error;
             }
+        };
+
+        // Parse version requirement (supports ^, ~, >=, =, *, ranges)
+        let req = match semver::VersionReq::parse(required) {
+            Ok(r) => r,
+            Err(_) => {
+                tracing::warn!(
+                    plugin = %manifest.id,
+                    requirement = %required,
+                    "Invalid engineVersion requirement"
+                );
+                return PluginState::Error;
+            }
+        };
+
+        if req.matches(&engine_ver) {
+            PluginState::Disabled // compatible, needs explicit enable
+        } else {
+            PluginState::Error
         }
-        // Default: compatible → disabled (needs explicit enable)
-        PluginState::Disabled
     }
 }
 
@@ -364,5 +443,95 @@ mod tests {
         assert_eq!(mgr.list_by_kind(PluginKind::Shader).len(), 2);
         assert_eq!(mgr.list_by_kind(PluginKind::Model).len(), 1);
         assert_eq!(mgr.list_by_kind(PluginKind::Format).len(), 0);
+    }
+
+    // ── semver tests ──
+
+    fn create_plugin_with_version(dir: &Path, id: &str, engine_version: &str) {
+        let plugin_dir = dir.join(id);
+        fs::create_dir_all(&plugin_dir).unwrap();
+        let manifest = serde_json::json!({
+            "id": id,
+            "name": format!("Test {}", id),
+            "version": "1.0.0",
+            "kind": "shader",
+            "engineVersion": engine_version,
+            "platforms": [],
+            "capabilities": [],
+            "permissions": []
+        });
+        fs::write(
+            plugin_dir.join("plugin.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_semver_caret_compatible() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", "^0.1.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.5");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Disabled); // compatible
+    }
+
+    #[test]
+    fn test_semver_caret_incompatible_minor() {
+        let tmp = tempfile::tempdir().unwrap();
+        // ^0.1.0 requires >=0.1.0 <0.2.0 for 0.x versions
+        create_plugin_with_version(tmp.path(), "p1", "^0.1.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.2.0");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Error);
+    }
+
+    #[test]
+    fn test_semver_tilde() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", "~1.2.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "1.2.9");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Disabled);
+    }
+
+    #[test]
+    fn test_semver_tilde_incompatible() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", "~1.2.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "1.3.0");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Error);
+    }
+
+    #[test]
+    fn test_semver_exact() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", "=1.0.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "1.0.0");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Disabled);
+
+        let mgr2 = PluginManager::new(vec![tmp.path().to_path_buf()], "1.0.1");
+        mgr2.scan();
+        assert_eq!(mgr2.get("p1").unwrap().state, PluginState::Error);
+    }
+
+    #[test]
+    fn test_semver_range() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", ">=0.2.0, <1.0.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.5.0");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Disabled);
+    }
+
+    #[test]
+    fn test_semver_invalid_requirement() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_plugin_with_version(tmp.path(), "p1", "not_a_version");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0");
+        mgr.scan();
+        assert_eq!(mgr.get("p1").unwrap().state, PluginState::Error);
     }
 }
