@@ -13,7 +13,11 @@ export function SceneHeadingRenderer({ element }: SceneHeadingRendererProps) {
   const heading = [element.intExt, element.location, element.time].filter(Boolean).join(' - ');
 
   return (
-    <div className="scene-heading element" onClick={handleClick}>
+    <div
+      className="scene-heading element"
+      data-line={element.range.start.line}
+      onClick={handleClick}
+    >
       {heading}
       {element.sceneNumber && <span className="scene-number">#{element.sceneNumber}</span>}
     </div>

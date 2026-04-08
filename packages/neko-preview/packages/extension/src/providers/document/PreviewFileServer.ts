@@ -80,7 +80,15 @@ class PreviewFileServer {
    */
   async getPort(): Promise<number> {
     if (this._port !== null) return this._port;
+    return this._fetchPort();
+  }
 
+  /** Invalidate cached port so next getPort() re-queries the engine. */
+  invalidatePort(): void {
+    this._port = null;
+  }
+
+  private async _fetchPort(): Promise<number> {
     const result = await vscode.commands
       .executeCommand<{ port: number } | null>('neko.engine.ensureFrameServer')
       .then(
@@ -98,6 +106,29 @@ class PreviewFileServer {
     return this._port;
   }
 
+  /**
+   * Execute a fetch with automatic port retry.
+   * If the request fails with a connection error, invalidate the cached port,
+   * re-query the engine, and retry once.
+   */
+  private async _fetchWithRetry(
+    buildUrl: (base: string) => string,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const port = await this.getPort();
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      const res = await fetch(buildUrl(base), init);
+      return res;
+    } catch {
+      // Connection failed — port may be stale; retry with fresh port
+      this.invalidatePort();
+      const newPort = await this.getPort();
+      const newBase = `http://127.0.0.1:${newPort}`;
+      return fetch(buildUrl(newBase), init);
+    }
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   /**
@@ -108,13 +139,12 @@ class PreviewFileServer {
    */
   async registerFile(filePath: string): Promise<{ url: string; token: string }> {
     const resolved = await this.resolvePath(filePath);
-    const port = await this.getPort();
-    const base = `http://127.0.0.1:${port}`;
+    const body = JSON.stringify({ filePath: resolved });
 
-    const res = await fetch(`${base}/v1/preview/register`, {
+    const res = await this._fetchWithRetry((base) => `${base}/v1/preview/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: resolved }),
+      body,
     });
 
     if (!res.ok) {
@@ -122,7 +152,8 @@ class PreviewFileServer {
     }
 
     const { token } = (await res.json()) as { token: string };
-    const url = `${base}/v1/preview/file/${token}`;
+    const port = await this.getPort();
+    const url = `http://127.0.0.1:${port}/v1/preview/file/${token}`;
     logger.info(`Registered preview file token=${token} → ${filePath}`);
     return { url, token };
   }
@@ -139,13 +170,12 @@ class PreviewFileServer {
    */
   async registerEpub(filePath: string): Promise<{ url: string; token: string }> {
     const resolved = await this.resolvePath(filePath);
-    const port = await this.getPort();
-    const base = `http://127.0.0.1:${port}`;
+    const body = JSON.stringify({ filePath: resolved });
 
-    const res = await fetch(`${base}/v1/preview/register`, {
+    const res = await this._fetchWithRetry((base) => `${base}/v1/preview/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: resolved }),
+      body,
     });
 
     if (!res.ok) {
@@ -153,8 +183,9 @@ class PreviewFileServer {
     }
 
     const { token } = (await res.json()) as { token: string };
+    const port = await this.getPort();
     // Trailing slash → epub.js DIRECTORY mode: fetches entries on demand
-    const url = `${base}/v1/preview/epub/${token}/`;
+    const url = `http://127.0.0.1:${port}/v1/preview/epub/${token}/`;
     logger.info(`Registered EPUB token=${token} → ${filePath}`);
     return { url, token };
   }
@@ -166,7 +197,7 @@ class PreviewFileServer {
   async unregisterFile(token: string): Promise<void> {
     if (this._port === null) return;
     try {
-      await fetch(`http://127.0.0.1:${this._port}/v1/preview/unregister/${token}`, {
+      await this._fetchWithRetry((base) => `${base}/v1/preview/unregister/${token}`, {
         method: 'DELETE',
       });
       logger.info(`Unregistered preview file token=${token}`);

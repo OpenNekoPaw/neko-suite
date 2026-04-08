@@ -13,7 +13,11 @@ export function DialogueBlock({ character, elements }: DialogueBlockProps) {
 
   return (
     <div className="dialogue-block">
-      <div className="character element" onClick={handleCharacterClick}>
+      <div
+        className="character element"
+        data-line={character.range.start.line}
+        onClick={handleCharacterClick}
+      >
         {character.name}
         {character.extension && <span className="extension"> ({character.extension})</span>}
       </div>
@@ -24,6 +28,7 @@ export function DialogueBlock({ character, elements }: DialogueBlockProps) {
             <div
               key={index}
               className="dialogue element"
+              data-line={dialogue.range.start.line}
               onClick={() => navigateToLine(dialogue.range.start.line)}
             >
               {dialogue.text}
@@ -36,6 +41,7 @@ export function DialogueBlock({ character, elements }: DialogueBlockProps) {
             <div
               key={index}
               className="parenthetical element"
+              data-line={paren.range.start.line}
               onClick={() => navigateToLine(paren.range.start.line)}
             >
               ({paren.text})

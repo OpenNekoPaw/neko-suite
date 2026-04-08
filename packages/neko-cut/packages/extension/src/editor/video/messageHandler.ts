@@ -440,8 +440,9 @@ export class MessageHandler {
           error: error || 'Export failed',
         });
 
-        if (filePath && fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+        if (filePath) {
+          const fsp = await import('node:fs/promises');
+          await fsp.unlink(filePath).catch(() => {});
         }
       }
     } catch (err) {
@@ -468,8 +469,9 @@ export class MessageHandler {
         this._exportWriteStream = null;
       }
 
-      if (filePath && fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      if (filePath) {
+        const fsp = await import('node:fs/promises');
+        await fsp.unlink(filePath).catch(() => {});
       }
 
       this._exportFilePath = null;
@@ -701,8 +703,9 @@ export class MessageHandler {
       // Resolve path relative to .nkv file
       const absolutePath = await this.resolveStoredMediaPath(filePath);
 
-      // Get file stats
-      const stats = fs.statSync(absolutePath);
+      // Get file stats (async)
+      const fsPromises = await import('node:fs/promises');
+      const stats = await fsPromises.stat(absolutePath);
       const fileSize = stats.size;
 
       // Validate range
@@ -719,15 +722,15 @@ export class MessageHandler {
         return;
       }
 
-      // Read specific range using Node.js fs
+      // Read specific range using async file handle
       const length = actualEnd - actualStart + 1;
       const buffer = Buffer.alloc(length);
-      const fd = fs.openSync(absolutePath, 'r');
+      const fh = await fsPromises.open(absolutePath, 'r');
 
       try {
-        fs.readSync(fd, buffer, 0, length, actualStart);
+        await fh.read(buffer, 0, length, actualStart);
       } finally {
-        fs.closeSync(fd);
+        await fh.close();
       }
 
       // Convert to base64 for transfer

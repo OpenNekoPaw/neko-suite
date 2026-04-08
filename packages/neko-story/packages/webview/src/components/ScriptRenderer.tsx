@@ -119,7 +119,11 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
 function TransitionRenderer({ element }: { element: Transition }) {
   return (
-    <div className="transition element" onClick={() => navigateToLine(element.range.start.line)}>
+    <div
+      className="transition element"
+      data-line={element.range.start.line}
+      onClick={() => navigateToLine(element.range.start.line)}
+    >
       {element.text}
     </div>
   );
@@ -127,7 +131,11 @@ function TransitionRenderer({ element }: { element: Transition }) {
 
 function CenteredRenderer({ element }: { element: Centered }) {
   return (
-    <div className="centered element" onClick={() => navigateToLine(element.range.start.line)}>
+    <div
+      className="centered element"
+      data-line={element.range.start.line}
+      onClick={() => navigateToLine(element.range.start.line)}
+    >
       {element.text}
     </div>
   );
@@ -137,6 +145,7 @@ function SectionRenderer({ element }: { element: Section }) {
   return (
     <div
       className={`section level-${element.level} element`}
+      data-line={element.range.start.line}
       onClick={() => navigateToLine(element.range.start.line)}
     >
       {element.text}
@@ -146,7 +155,11 @@ function SectionRenderer({ element }: { element: Section }) {
 
 function SynopsisRenderer({ element }: { element: Synopsis }) {
   return (
-    <div className="synopsis element" onClick={() => navigateToLine(element.range.start.line)}>
+    <div
+      className="synopsis element"
+      data-line={element.range.start.line}
+      onClick={() => navigateToLine(element.range.start.line)}
+    >
       {element.text}
     </div>
   );
@@ -161,7 +174,11 @@ function NoteRenderer({ element }: { element: Note }) {
 
     if (assetRef.type === 'image') {
       return (
-        <div className="asset-note asset-note--image element" onClick={handleClick}>
+        <div
+          className="asset-note asset-note--image element"
+          data-line={element.range.start.line}
+          onClick={handleClick}
+        >
           {resolvedUri ? (
             <img src={resolvedUri} alt={fileName} className="asset-thumb" />
           ) : (
@@ -173,7 +190,11 @@ function NoteRenderer({ element }: { element: Note }) {
 
     const icon = assetRef.type === 'video' ? '🎬' : '🎵';
     return (
-      <div className="asset-note asset-note--media element" onClick={handleClick}>
+      <div
+        className="asset-note asset-note--media element"
+        data-line={element.range.start.line}
+        onClick={handleClick}
+      >
         <span className={`asset-badge asset-badge--${assetRef.type}`}>
           {icon} {fileName}
         </span>
@@ -182,7 +203,7 @@ function NoteRenderer({ element }: { element: Note }) {
   }
 
   return (
-    <div className="note element" onClick={handleClick}>
+    <div className="note element" data-line={element.range.start.line} onClick={handleClick}>
       {element.text}
     </div>
   );
@@ -190,7 +211,11 @@ function NoteRenderer({ element }: { element: Note }) {
 
 function LyricsRenderer({ element }: { element: Lyrics }) {
   return (
-    <div className="lyrics element" onClick={() => navigateToLine(element.range.start.line)}>
+    <div
+      className="lyrics element"
+      data-line={element.range.start.line}
+      onClick={() => navigateToLine(element.range.start.line)}
+    >
       {element.text}
     </div>
   );

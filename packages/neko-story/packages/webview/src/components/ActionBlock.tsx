@@ -11,7 +11,11 @@ export function ActionBlock({ element }: ActionBlockProps) {
   };
 
   return (
-    <div className={`action element ${element.centered ? 'centered' : ''}`} onClick={handleClick}>
+    <div
+      className={`action element ${element.centered ? 'centered' : ''}`}
+      data-line={element.range.start.line}
+      onClick={handleClick}
+    >
       {element.text}
     </div>
   );

@@ -23,7 +23,7 @@
 | NKC-004 | P0 | fixed | AI 状态消息协议不一致，Webview 无法正确更新 AI 状态 |
 | NKC-005 | P1 | fixed | 导出完成事件丢失 `outputPath`，后续”打开文件/目录”链路受影响 |
 | NKC-006 | P1 | fixed | AI 输入源路径解析仍为占位实现，真实媒体处理易失败 |
-| NKC-007 | P1 | open | 资源访问边界偏宽 + 同步 I/O，存在安全与性能风险 |
+| NKC-007 | P1 | fixed | 资源访问边界偏宽 + 同步 I/O，存在安全与性能风险 |
 | NKC-008 | P1 | fixed | 多编辑器场景下状态栏/大纲更新存在可见性竞态 |
 | NKC-009 | P2 | open | 扩展侧存在未接线/残留执行路径，增加维护成本与歧义 |
 | NKC-010 | P1 | open | 当前测试主要覆盖 webview slice，extension 协议链路覆盖不足 |
@@ -216,8 +216,8 @@
 |---|---|---|---|
 | NKP-001 | P0 | fixed | 错误页直接拼接动态字符串且无 CSP，存在 XSS 注入面 |
 | NKP-002 | P1 | verified | CBZ 预览的 Blob URL 回收不完整，长会话存在内存泄漏风险 |
-| NKP-003 | P1 | open | 文档预览文件服务端口缓存未失效重试，engine 重启后可能持续失败 |
-| NKP-004 | P1 | open | 对外声明配置项未落地（`videoQuality`/`autoPlay`） |
+| NKP-003 | P1 | fixed | 文档预览文件服务端口缓存未失效重试，engine 重启后可能持续失败 |
+| NKP-004 | P1 | fixed | 对外声明配置项未落地（`videoQuality`/`autoPlay`） |
 | NKP-005 | P2 | fixed | 文档消息协议与实现漂移，类型约束与实际 payload 不一致 |
 | NKP-006 | P1 | open | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
 | NKP-007 | P2 | open | `copy:webview` 构建脚本吞错，可能打包不完整产物 |
@@ -400,7 +400,7 @@
 | NKS-001 | P0 | fixed | 文档宣称支持 `.nks/.story`，实际语言注册与索引仅覆盖 `.fountain` |
 | NKS-002 | P0 | fixed | Webview CSP 未声明 `img-src`，资产图片预览存在被拦截风险 |
 | NKS-003 | P0 | fixed | `AUDIO` 资产被错误映射为 `mediaType: image`，音频转换语义失真 |
-| NKS-004 | P1 | open | 滚动同步链路未闭环（`scroll` 分支空实现 + 缺失 `data-line`） |
+| NKS-004 | P1 | fixed | 滚动同步链路未闭环（`scroll` 分支空实现 + 缺失 `data-line`） |
 | NKS-005 | P1 | fixed | 与 `neko-agent` 的命令依赖未在扩展依赖中声明 |
 | NKS-006 | P1 | open | `generateStoryboard` 仍为占位命令，核心能力未落地 |
 | NKS-007 | P2 | open | 工作区索引采用全量重建，规模增大时性能退化风险高 |

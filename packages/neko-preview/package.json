@@ -154,23 +154,7 @@
     },
     "configuration": {
       "title": "%neko.preview.config.title%",
-      "properties": {
-        "neko.preview.videoQuality": {
-          "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "default": "medium",
-          "description": "%neko.preview.videoQuality.description%"
-        },
-        "neko.preview.autoPlay": {
-          "type": "boolean",
-          "default": false,
-          "description": "%neko.preview.autoPlay.description%"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {

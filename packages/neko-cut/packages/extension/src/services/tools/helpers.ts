@@ -132,8 +132,16 @@ export async function resolveMediaPath(
   // Absolute path: return as-is
   if (path.isAbsolute(storedPath)) return storedPath;
 
-  // Relative path: resolve against base dir
-  return path.resolve(baseDir, storedPath);
+  // Relative path: resolve against base dir with traversal protection
+  const resolved = path.resolve(baseDir, storedPath);
+  const normalized = path.normalize(resolved);
+  if (
+    !normalized.startsWith(path.normalize(baseDir) + path.sep) &&
+    normalized !== path.normalize(baseDir)
+  ) {
+    throw new Error(`Path traversal blocked: "${storedPath}" resolves outside project directory`);
+  }
+  return normalized;
 }
 
 /**
