@@ -156,6 +156,18 @@
 - [x] neko-tools: vscode mock 补 `extensions.getExtension` ✅
 - [ ] 4 个扩展零 TS 测试：puppet / engine(TS) / live / model(TS)（低优先级）
 
+### neko-engine 架构（2026-04-08 重构完成）
+
+**已完成**：R0（8 crate 语义化重命名）→ R1（runtime-device）→ R2（runtime-ml）→ R3（runtime-media）→ P1（PluginManager MVP）→ 清理（删除重复 device/ml 代码，移除 midir/gilrs/ort 依赖）。11 个 crate，758 个测试。
+
+**剩余技术债**：
+- [ ] **P0: video_diff.rs 依赖外部 ffmpeg CLI 进程** — `std::process::Command::new("ffmpeg")` 调用系统 PATH 上的 ffmpeg 而非 engine 已链接的 `ffmpeg-next` 库 API。用户未安装 ffmpeg CLI 时视频 diff 静默失败。影响 neko-tools MediaDiff。修复方案：改用 `ffmpeg-next` filter graph API（`filter::Graph` + ssim/psnr filter）
+- [ ] media_service/ 在 engine-kernel 和 runtime-media 中存在副本（循环依赖约束）
+- [ ] P2: PluginManager 纳入 effects:register / models:register 统一生命周期
+- [ ] P2: semver crate 替换当前 PluginManager 的简单 major 版本比较
+- [ ] R4: RuntimeDescriptor trait — host-api 动态发现 runtime（当前 ActionRouter 硬编码 18 个 controller）
+- [ ] ServiceContainer 可考虑删除（host-api EngineApi 已接管服务装配）
+
 ### 其他
 - [ ] Probe 缓存合并：MediaProbeCache（neko-tools）+ MediaMetadataCache（neko-assets）→ 统一
 - [ ] Linux/Windows NV12 导出零拷贝
