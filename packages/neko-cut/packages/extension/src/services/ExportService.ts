@@ -498,6 +498,7 @@ export class ExportService implements vscode.Disposable {
       opacity: this.asNumber(el.opacity, 1.0),
       blendMode: el.blendMode ?? 'normal',
       effects: this.sanitizeEffects(el.effects),
+      masks: this.sanitizeMasks(el.masks),
       muted: el.muted ?? false,
       hidden: el.hidden ?? false,
       locked: el.locked ?? false,
@@ -637,6 +638,134 @@ export class ExportService implements vscode.Disposable {
         };
       })
       .sort((a, b) => this.asNumber(a.order, 0) - this.asNumber(b.order, 0));
+  }
+
+  private sanitizeMasks(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((mask): mask is Record<string, unknown> => !!mask && typeof mask === 'object')
+      .filter((mask) => mask.enabled !== false)
+      .map((mask) => {
+        const shape = this.sanitizeMaskShape(mask.shape);
+        if (!shape) {
+          return null;
+        }
+
+        const animation =
+          mask.animation && typeof mask.animation === 'object' && !Array.isArray(mask.animation)
+            ? (mask.animation as Record<string, unknown>)
+            : undefined;
+
+        return {
+          shape,
+          inverted: mask.inverted === true,
+          feather: this.getAnimatedMaskBaseValue(animation?.feather, mask.feather, 0),
+          expansion: this.getAnimatedMaskBaseValue(animation?.expansion, mask.expansion, 0),
+          opacity: this.getAnimatedMaskBaseValue(animation?.opacity, mask.opacity, 100) / 100,
+          blendMode: typeof mask.blendMode === 'string' ? mask.blendMode : 'add',
+          order: this.asNumber(mask.order, 0),
+        };
+      })
+      .filter((mask): mask is Record<string, unknown> => mask !== null)
+      .sort((a, b) => this.asNumber(a.order, 0) - this.asNumber(b.order, 0))
+      .map(({ order: _order, ...mask }) => mask);
+  }
+
+  private sanitizeMaskShape(shape: unknown): Record<string, unknown> | undefined {
+    if (!shape || typeof shape !== 'object' || Array.isArray(shape)) {
+      return undefined;
+    }
+
+    const record = shape as Record<string, unknown>;
+    switch (record.type) {
+      case 'rectangle':
+        return {
+          type: 'rectangle',
+          centerX: this.asNumber(record.centerX, 50),
+          centerY: this.asNumber(record.centerY, 50),
+          width: this.asNumber(record.width, 50),
+          height: this.asNumber(record.height, 50),
+          rotation: this.asNumber(record.rotation, 0),
+          cornerRadius: this.asNumber(record.cornerRadius, 0),
+        };
+      case 'ellipse':
+        return {
+          type: 'ellipse',
+          centerX: this.asNumber(record.centerX, 50),
+          centerY: this.asNumber(record.centerY, 50),
+          width: this.asNumber(record.width, 50),
+          height: this.asNumber(record.height, 50),
+          rotation: this.asNumber(record.rotation, 0),
+        };
+      case 'polygon':
+        return {
+          type: 'polygon',
+          points: this.sanitizePointArray(record.points),
+        };
+      case 'bezier':
+        return {
+          type: 'bezier',
+          controlPoints: this.sanitizeBezierControlPoints(record.points),
+          closed: record.closed !== false,
+        };
+      default:
+        return undefined;
+    }
+  }
+
+  private sanitizePointArray(value: unknown): number[][] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((point): point is Record<string, unknown> => !!point && typeof point === 'object')
+      .map((point) => [this.asNumber(point.x, 0), this.asNumber(point.y, 0)]);
+  }
+
+  private sanitizeBezierControlPoints(value: unknown): Array<Record<string, number[]>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((point): point is Record<string, unknown> => !!point && typeof point === 'object')
+      .map((point) => {
+        const anchor =
+          point.anchor && typeof point.anchor === 'object' && !Array.isArray(point.anchor)
+            ? (point.anchor as Record<string, unknown>)
+            : {};
+        const handleIn =
+          point.handleIn && typeof point.handleIn === 'object' && !Array.isArray(point.handleIn)
+            ? (point.handleIn as Record<string, unknown>)
+            : {};
+        const handleOut =
+          point.handleOut && typeof point.handleOut === 'object' && !Array.isArray(point.handleOut)
+            ? (point.handleOut as Record<string, unknown>)
+            : {};
+
+        return {
+          position: [this.asNumber(anchor.x, 0), this.asNumber(anchor.y, 0)],
+          handleIn: [this.asNumber(handleIn.x, 0), this.asNumber(handleIn.y, 0)],
+          handleOut: [this.asNumber(handleOut.x, 0), this.asNumber(handleOut.y, 0)],
+        };
+      });
+  }
+
+  private getAnimatedMaskBaseValue(
+    animationProp: unknown,
+    fallback: unknown,
+    defaultValue: number,
+  ): number {
+    if (animationProp && typeof animationProp === 'object' && !Array.isArray(animationProp)) {
+      const baseValue = (animationProp as Record<string, unknown>).baseValue;
+      return this.asNumber(baseValue, this.asNumber(fallback, defaultValue));
+    }
+
+    return this.asNumber(fallback, defaultValue);
   }
 
   private sanitizeEffectParameters(

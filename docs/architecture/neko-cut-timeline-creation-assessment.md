@@ -399,9 +399,10 @@ effects: [], // EffectInstance ↔ EffectParams schema differs; skip for export
 
 ### P0
 
-- 统一 `transitionIn/transitionOut` 与 `inTransition/outTransition` 命名
-- 打通 `effects / colorCorrection / masks` 的导出链路
-- 保证编辑态、预览态、导出态字段一致
+- 已完成：统一 `transitionIn/transitionOut` 与 `inTransition/outTransition` 命名
+- 已完成：打通 `effects / colorCorrection / masks` 的导出链路
+- 剩余：继续收敛编辑态、播放态预览、暂停态预览、导出态之间的字段一致性
+  - 当前主要残留在播放态预览的全局 speed 接口与元素 speed 模型之间
 
 ### P1
 
