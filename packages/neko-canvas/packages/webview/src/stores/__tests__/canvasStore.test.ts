@@ -34,6 +34,7 @@ function createCanvasData(): CanvasData {
           duration: 3,
           visualDescription: '',
           characters: [{ characterName: 'ALICE', characterId: 'char_alice' }],
+          objectIds: ['obj_ring'],
           shotScale: 'MS',
           characterAction: '',
           emotion: ['happy'],
@@ -100,6 +101,7 @@ describe('canvasStore deriveSuccessorNode', () => {
     expect((newNode?.data as { characters: Array<{ characterId?: string }> }).characters).toEqual([
       { characterName: 'ALICE', characterId: 'char_alice' },
     ]);
+    expect((newNode?.data as { objectIds?: string[] }).objectIds).toEqual(['obj_ring']);
   });
 
   it('preserves gallery character identity when deriving a successor gallery', () => {

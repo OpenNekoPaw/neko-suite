@@ -252,6 +252,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     duration: number;
     visualDescription: string;
     characters: ShotCharacter[];
+    /** Stable prop / object bindings backed by AssetEntity IDs */
+    objectIds?: string[];
     shotScale: ShotScale;
     cameraMovement?: CameraMovement;
     cameraAngle?: CameraAngle;

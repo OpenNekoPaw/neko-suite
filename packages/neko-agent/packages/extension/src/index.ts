@@ -44,7 +44,9 @@ import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
 import {
   extractCharacterIdsFromCanvasNode,
+  extractObjectIdsFromCanvasNode,
   projectCharacterOccurrencesFromCanvasNode,
+  projectObjectOccurrencesFromCanvasNode,
   projectSceneOccurrencesFromCanvasNode,
 } from './utils/entityBinding';
 import { GeneratedAssetIndex, resolveGeneratedDir } from './services/generatedAssetIndex';
@@ -211,6 +213,27 @@ function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
             ...projectSceneOccurrencesFromCanvasNode(node, entity.id, canvasDocumentUri),
           );
         }
+      }
+
+      return dedupeOccurrences(results);
+    }
+
+    if (entity.kind === 'object') {
+      const results: OccurrenceIndexEntry[] = [];
+      const canvasApi = await getCanvasApi();
+      if (canvasApi) {
+        const canvasDocumentUri = await canvasApi.canvas.getActiveDocumentUri();
+        const nodes = await canvasApi.nodes.list();
+        for (const node of nodes) {
+          results.push(
+            ...projectObjectOccurrencesFromCanvasNode(node, entity.id, canvasDocumentUri),
+          );
+        }
+      }
+
+      if (assetIndex) {
+        await assetIndex.load();
+        results.push(...assetIndex.listOccurrencesByObjectId(entity.id));
       }
 
       return dedupeOccurrences(results);
@@ -678,6 +701,7 @@ function registerCommands(
           if (input.style) parts.push(`Style: ${input.style}`);
 
           let characterIds: string[] = [];
+          let objectIds: string[] = [];
           const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
           if (canvasExt) {
             try {
@@ -686,6 +710,7 @@ function registerCommands(
                 : ((await canvasExt.activate()) as NekoCanvasAPI);
               const sourceNode = await canvasApi.nodes.get(input.nodeId);
               characterIds = extractCharacterIdsFromCanvasNode(sourceNode);
+              objectIds = extractObjectIdsFromCanvasNode(sourceNode);
             } catch (err) {
               getRootLogger().warn('Failed to resolve canvas node generation bindings', {
                 error: err,
@@ -700,6 +725,7 @@ function registerCommands(
             metadata: {
               sourceNodeId: input.nodeId,
               characterIds,
+              objectIds,
             },
           });
 

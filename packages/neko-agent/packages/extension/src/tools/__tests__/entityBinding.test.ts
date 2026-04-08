@@ -3,9 +3,11 @@ import type { CanvasNode, NekoStoryScriptIndex } from '@neko/shared';
 import {
   buildShotCharactersForScene,
   extractCharacterIdsFromCanvasNode,
+  extractObjectIdsFromCanvasNode,
   extractSceneIdsFromCanvasNode,
   parseGeneratedAssetBindingMetadata,
   projectCharacterOccurrencesFromCanvasNode,
+  projectObjectOccurrencesFromCanvasNode,
   projectSceneOccurrencesFromCanvasNode,
 } from '../../utils/entityBinding';
 
@@ -62,6 +64,17 @@ describe('entityBinding helpers', () => {
     expect(extractCharacterIdsFromCanvasNode(galleryNode)).toEqual(['char_alice']);
   });
 
+  it('extracts bound object ids from shot nodes', () => {
+    const shotNode = {
+      type: 'shot',
+      data: {
+        objectIds: ['obj_ring', 42, 'obj_gun'],
+      },
+    } as CanvasNode;
+
+    expect(extractObjectIdsFromCanvasNode(shotNode)).toEqual(['obj_ring', 'obj_gun']);
+  });
+
   it('extracts bound scene ids from scene group nodes', () => {
     const sceneNode = {
       type: 'scene',
@@ -81,10 +94,12 @@ describe('entityBinding helpers', () => {
       parseGeneratedAssetBindingMetadata({
         sourceNodeId: 'node-1',
         characterIds: ['char_alice', 42, 'char_bob'],
+        objectIds: ['obj_ring', 42, 'obj_gun'],
       }),
     ).toEqual({
       sourceNodeId: 'node-1',
       characterIds: ['char_alice', 'char_bob'],
+      objectIds: ['obj_ring', 'obj_gun'],
     });
   });
 
@@ -149,6 +164,39 @@ describe('entityBinding helpers', () => {
         locator: {
           uri: 'file:///workspace/storyboard.nkc',
           nodeId: 'scene-1',
+        },
+      },
+    ]);
+  });
+
+  it('projects object occurrences from bound shot nodes', () => {
+    const shotNode = {
+      id: 'shot-1',
+      type: 'shot',
+      data: {
+        objectIds: ['obj_ring'],
+      },
+    } as CanvasNode;
+
+    expect(
+      projectObjectOccurrencesFromCanvasNode(
+        shotNode,
+        'obj_ring',
+        'file:///workspace/storyboard.nkc',
+      ),
+    ).toEqual([
+      {
+        entity: {
+          kind: 'object',
+          id: 'obj_ring',
+        },
+        source: 'canvas-node',
+        sourceId: 'shot-1',
+        strength: 'confirmed',
+        provenance: 'lineage',
+        locator: {
+          uri: 'file:///workspace/storyboard.nkc',
+          nodeId: 'shot-1',
         },
       },
     ]);

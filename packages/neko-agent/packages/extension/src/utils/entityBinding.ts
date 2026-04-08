@@ -11,6 +11,7 @@ import {
 export interface GeneratedAssetBindingMetadata {
   sourceNodeId?: string;
   characterIds?: string[];
+  objectIds?: string[];
 }
 
 export function buildShotCharactersForScene(
@@ -43,6 +44,16 @@ export function extractCharacterIdsFromCanvasNode(node: CanvasNode | undefined):
   return [];
 }
 
+export function extractObjectIdsFromCanvasNode(node: CanvasNode | undefined): string[] {
+  if (!node || !isShotNode(node)) {
+    return [];
+  }
+
+  return Array.isArray(node.data.objectIds)
+    ? node.data.objectIds.filter((objectId): objectId is string => typeof objectId === 'string')
+    : [];
+}
+
 export function extractSceneIdsFromCanvasNode(node: CanvasNode | undefined): string[] {
   if (!node || !isSceneGroupNode(node)) {
     return [];
@@ -64,10 +75,15 @@ export function parseGeneratedAssetBindingMetadata(
   const characterIds = Array.isArray(rawCharacterIds)
     ? rawCharacterIds.filter((value): value is string => typeof value === 'string')
     : undefined;
+  const rawObjectIds = metadata['objectIds'];
+  const objectIds = Array.isArray(rawObjectIds)
+    ? rawObjectIds.filter((value): value is string => typeof value === 'string')
+    : undefined;
 
   return {
     sourceNodeId,
     characterIds: characterIds && characterIds.length > 0 ? characterIds : undefined,
+    objectIds: objectIds && objectIds.length > 0 ? objectIds : undefined,
   };
 }
 
@@ -120,6 +136,34 @@ export function projectSceneOccurrencesFromCanvasNode(
       sourceId: node.id,
       strength: 'confirmed',
       provenance: 'import',
+      locator: {
+        uri: canvasDocumentUri,
+        nodeId: node.id,
+      },
+    },
+  ];
+}
+
+export function projectObjectOccurrencesFromCanvasNode(
+  node: CanvasNode,
+  objectId: string,
+  canvasDocumentUri?: string,
+): OccurrenceIndexEntry[] {
+  const boundObjectIds = extractObjectIdsFromCanvasNode(node);
+  if (!boundObjectIds.includes(objectId)) {
+    return [];
+  }
+
+  return [
+    {
+      entity: {
+        kind: 'object',
+        id: objectId,
+      },
+      source: 'canvas-node',
+      sourceId: node.id,
+      strength: 'confirmed',
+      provenance: 'lineage',
       locator: {
         uri: canvasDocumentUri,
         nodeId: node.id,

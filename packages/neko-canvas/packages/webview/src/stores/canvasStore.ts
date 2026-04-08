@@ -708,6 +708,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         cameraAngle: srcData.cameraAngle,
         duration: srcData.duration ?? 3,
         characters: Array.isArray(srcData.characters) ? structuredClone(srcData.characters) : [],
+        objectIds: Array.isArray(srcData.objectIds) ? structuredClone(srcData.objectIds) : [],
         emotion: Array.isArray(srcData.emotion) ? structuredClone(srcData.emotion) : [],
         generationStatus: 'idle',
         generationHistory: [],

@@ -37,6 +37,8 @@ export interface BaseGeneratedAsset {
   model?: string;
   /** Stable character bindings inherited from source context */
   characterIds?: string[];
+  /** Stable prop / object bindings inherited from source context */
+  objectIds?: string[];
   /** Source canvas node ID (ShotNode / GalleryNode) */
   sourceNodeId?: string;
 }

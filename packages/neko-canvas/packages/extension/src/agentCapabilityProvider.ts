@@ -235,7 +235,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               type: 'object',
               description:
                 'Partial node data to merge. For ShotNode: visualDescription, shotScale, ' +
-                'cameraMovement, characters[], emotion[], dialogue. ' +
+                'cameraMovement, characters[], objectIds[], emotion[], dialogue. ' +
                 'For SceneGroupNode: sceneTitle, location, timeOfDay.',
             },
           },
@@ -279,7 +279,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             data: {
               type: 'object',
               description:
-                'Initial node data. For shot: { shotNumber, duration, visualDescription, shotScale }. ' +
+                'Initial node data. For shot: { shotNumber, duration, visualDescription, shotScale, objectIds }. ' +
                 'For scene: { sceneTitle, sceneNumber }. For gallery: { preset, rows, cols, cells }.',
             },
           },

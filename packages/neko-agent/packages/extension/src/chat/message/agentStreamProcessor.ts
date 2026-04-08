@@ -668,6 +668,7 @@ function buildGeneratedAssets(
       model,
       sourceNodeId: bindingMetadata.sourceNodeId,
       characterIds: bindingMetadata.characterIds,
+      objectIds: bindingMetadata.objectIds,
     };
 
     switch (taskType) {

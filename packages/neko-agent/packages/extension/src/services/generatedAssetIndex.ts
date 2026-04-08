@@ -149,6 +149,11 @@ export class GeneratedAssetIndex {
     return this.list().filter((asset) => asset.characterIds?.includes(characterId));
   }
 
+  /** List generated assets bound to a specific object / prop entity. */
+  listByObjectId(objectId: string): GeneratedAsset[] {
+    return this.list().filter((asset) => asset.objectIds?.includes(objectId));
+  }
+
   /** List generated assets derived from a specific source node. */
   listBySourceNodeId(sourceNodeId: string): GeneratedAsset[] {
     return this.list().filter((asset) => asset.sourceNodeId === sourceNodeId);
@@ -160,6 +165,23 @@ export class GeneratedAssetIndex {
       entity: {
         kind: 'character',
         id: characterId,
+      },
+      source: 'generated-asset',
+      sourceId: asset.id,
+      strength: 'confirmed',
+      provenance: 'lineage',
+      locator: {
+        uri: asset.path,
+      },
+    }));
+  }
+
+  /** Project object-bound generated assets into occurrence entries. */
+  listOccurrencesByObjectId(objectId: string): OccurrenceIndexEntry[] {
+    return this.listByObjectId(objectId).map((asset) => ({
+      entity: {
+        kind: 'object',
+        id: objectId,
       },
       source: 'generated-asset',
       sourceId: asset.id,
