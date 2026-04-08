@@ -141,6 +141,7 @@ Rust 层（neko-engine）
   ├─ runtime-puppet:  2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
   ├─ runtime-device:  设备 I/O（cpal 麦克风/nokhwa 摄像头、midir MIDI、gilrs 手柄）
   ├─ runtime-ml:      ML 推理（ONNX Runtime — 超分/降噪/CLIP/Whisper）
+  ├─ runtime-media:   媒体域逻辑（probe/diff/字幕/JPEG — 无 GPU 依赖）
   ├─ host-api:        ActionRouter、控制器、PluginManager
   ├─ host-http:       REST API + WebSocket 流
   ├─ host-napi:       N-API 绑定 (cdylib)

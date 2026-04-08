@@ -12,7 +12,7 @@
 
 - **职责**：GPU 渲染、硬件编解码、帧缓存、导出、3D/2D 场景 ECS——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`engine-kernel`（Rust 核心）、`engine-types`（共享 DTO）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`runtime-device`（设备 I/O）、`runtime-ml`（ML 推理）、`host-api`（控制器 + PluginManager）、`host-napi`（N-API）、`host-http`（axum）、`host-cli`（CLI）、`extension`（VSCode）
+- **子包**：`engine-kernel`（Rust 核心）、`engine-types`（共享 DTO）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`runtime-device`（设备 I/O）、`runtime-ml`（ML 推理）、`runtime-media`（媒体域逻辑）、`host-api`（控制器 + PluginManager）、`host-napi`（N-API）、`host-http`（axum）、`host-cli`（CLI）、`extension`（VSCode）
 - **依赖**：`@neko-engine/host-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
@@ -58,6 +58,7 @@ packages/
 ├── runtime-puppet/    # 2D 骨骼 ECS（bevy_ecs + inox2d）
 ├── runtime-device/    # 设备 I/O（cpal/midir/gilrs）
 ├── runtime-ml/        # ML 推理（ONNX Runtime）
+├── runtime-media/     # 媒体域逻辑（probe/diff/字幕/JPEG）
 ├── host-api/          # Controller + ActionRouter + PluginManager
 ├── host-http/         # HTTP/WebSocket 服务（axum）
 ├── host-napi/         # N-API 绑定（napi-rs 编译为 .node）

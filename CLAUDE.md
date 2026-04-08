@@ -141,6 +141,7 @@ Rust Layer (neko-engine)
   +-- runtime-puppet:  2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
   +-- runtime-device:  Device I/O (camera/mic via cpal, MIDI via midir, gamepad via gilrs)
   +-- runtime-ml:      ML inference (ONNX Runtime — upscale/denoise/CLIP/Whisper)
+  +-- runtime-media:   Media domain logic (probe/diff/subtitle/JPEG — no GPU)
   +-- host-api:        ActionRouter, controllers, PluginManager
   +-- host-http:       REST API + WebSocket streaming
   +-- host-napi:       N-API bindings (cdylib)
