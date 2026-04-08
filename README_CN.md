@@ -324,6 +324,7 @@ ext install neko.neko-suite
   - [设备访问策略](./docs/architecture/device-access.md) - 硬件设备代理方案
   - [Engine 插件化 RFC](./docs/architecture/engine-plugin-rfc.md) - 能力插件化与市场/宿主分工
   - [Engine Runtime 分层](./docs/architecture/engine-runtime-layering.md) - runtime 按包拆分与单宿主策略
+  - [Story-Agent-Canvas 职责 ADR](./docs/architecture/story-agent-canvas-boundary.md) - Agent-first 视频创作中 story / agent / canvas 的边界，以及轻量分镜表的定位
   - [格式策略](./docs/architecture/format-strategy.md) - nk\* 文件格式设计
   - [市场平台](./docs/architecture/marketplace.md) - 资产市场架构
   - [本地模型部署](./docs/architecture/model-runtime.md) - ONNX/GGUF 运行时
