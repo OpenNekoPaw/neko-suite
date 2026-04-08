@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
+import type { AgentContextPayload, NekoAgentAPI, NekoStoryAPI } from '@neko/shared';
+import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
   createVSCodeLogger,
@@ -34,6 +35,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   logger.info('Extension activated');
 
+  const occurrenceLookup = createAgentOccurrenceLookup();
+
   const characterIndexService = new CharacterWorkspaceIndexService();
   context.subscriptions.push(characterIndexService);
   void characterIndexService.ensureInitialized();
@@ -66,7 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService, characterIndexService),
+      new FountainReferenceProvider(indexService, characterIndexService, occurrenceLookup),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
@@ -320,3 +323,21 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+function createAgentOccurrenceLookup() {
+  return {
+    async findCharacterOccurrences(characterId: string) {
+      const extension = vscode.extensions.getExtension<NekoAgentAPI>(NEKO_EXTENSION_IDS.NEKO_AGENT);
+      if (!extension) {
+        return [];
+      }
+
+      try {
+        const api = extension.isActive ? extension.exports : ((await extension.activate()) as NekoAgentAPI);
+        return api.entities.findCharacterOccurrences(characterId);
+      } catch {
+        return [];
+      }
+    },
+  };
+}

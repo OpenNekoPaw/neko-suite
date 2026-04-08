@@ -27,7 +27,7 @@ import {
   onDidChangeCanvasSelection,
   recordCanvasChange,
 } from './services/canvasAmbientContext';
-import type { NekoCanvasAPI } from '@neko/shared';
+import type { CreativeEntityRef, NekoAgentAPI, NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -36,11 +36,12 @@ import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
 import { extractCharacterIdsFromCanvasNode } from './utils/entityBinding';
+import { GeneratedAssetIndex, resolveGeneratedDir } from './services/generatedAssetIndex';
 
 /**
  * Activate the extension
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<NekoAgentAPI> {
   // Initialize logger
   const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context);
   setRootLogger(logger);
@@ -122,7 +123,59 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Status bar — shows active LLM model, click to open chat
   context.subscriptions.push(createStatusBar(bootstrapResult.platform));
 
+  const generatedAssetIndex = createGeneratedAssetIndex();
+  if (generatedAssetIndex) {
+    context.subscriptions.push({
+      dispose: () => {
+        generatedAssetIndex.dispose();
+      },
+    });
+  }
+
   getRootLogger().info('Extension activated');
+
+  return createAgentApi(generatedAssetIndex);
+}
+
+function createGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  try {
+    const generatedDir = resolveGeneratedDir(workspaceRoot);
+    return new GeneratedAssetIndex(generatedDir);
+  } catch {
+    getRootLogger().warn('Failed to initialize generated asset index for extension API');
+    return undefined;
+  }
+}
+
+function createAgentApi(assetIndex?: GeneratedAssetIndex): NekoAgentAPI {
+  const findCharacterOccurrences = async (characterId: string) => {
+    if (!assetIndex) {
+      return [];
+    }
+
+    await assetIndex.load();
+    return assetIndex.listOccurrencesByCharacterId(characterId);
+  };
+
+  const findOccurrences = async (entity: CreativeEntityRef) => {
+    if (entity.kind === 'character') {
+      return findCharacterOccurrences(entity.id);
+    }
+
+    return [];
+  };
+
+  return {
+    entities: {
+      findOccurrences,
+      findCharacterOccurrences,
+    },
+  };
 }
 
 /**

@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
+import type { OccurrenceIndexEntry } from '@neko/shared';
 import type { IWorkspaceIndex } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
+
+export interface IEntityOccurrenceLookup {
+  findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
+}
 
 /**
  * Provides go-to-definition for Fountain files.
@@ -64,6 +69,7 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
     private readonly characterIndex?: ICharacterWorkspaceIndex,
+    private readonly occurrenceLookup?: IEntityOccurrenceLookup,
   ) {}
 
   async provideReferences(
@@ -94,6 +100,16 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
       if (definition) {
         pushLocation(definition);
       }
+
+      const occurrences = await this.occurrenceLookup?.findCharacterOccurrences(
+        characterResolution.characterId,
+      );
+      for (const occurrence of occurrences ?? []) {
+        const location = occurrenceToLocation(occurrence);
+        if (location) {
+          pushLocation(location);
+        }
+      }
     }
 
     // Collect all character references across workspace
@@ -102,6 +118,10 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
       for (const loc of charLocs) {
         pushLocation(new vscode.Location(loc.uri, loc.range));
       }
+      return results;
+    }
+
+    if (results.length > 0) {
       return results;
     }
 
@@ -125,4 +145,15 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
 
     return results;
   }
+}
+
+function occurrenceToLocation(entry: OccurrenceIndexEntry): vscode.Location | undefined {
+  const uriValue = entry.locator.uri;
+  if (!uriValue) {
+    return undefined;
+  }
+
+  const uri = uriValue.includes('://') ? vscode.Uri.parse(uriValue) : vscode.Uri.file(uriValue);
+  const line = entry.locator.lineStart ?? 0;
+  return new vscode.Location(uri, new vscode.Range(line, 0, line, 0));
 }

@@ -9,6 +9,7 @@ import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
 import type { IWorkspaceIndex, SymbolLocation } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
+import type { OccurrenceIndexEntry } from '@neko/shared';
 
 // Mock vscode module
 vi.mock('vscode', () => ({
@@ -318,6 +319,12 @@ function createMockCharacterIndex(): ICharacterWorkspaceIndex {
         : undefined,
     getDefinitionLocation: (id: string) => (id === 'char_john' ? (definitionLocation as any) : undefined),
     dispose: () => {},
+  };
+}
+
+function createMockOccurrenceLookup(entries: OccurrenceIndexEntry[] = []) {
+  return {
+    findCharacterOccurrences: vi.fn(async () => entries),
   };
 }
 
@@ -820,6 +827,39 @@ describe('ReferenceProvider — Cross-file', () => {
     );
 
     expect(results.some((r: any) => r.uri.fsPath === '/project/characters.json')).toBe(true);
+  });
+
+  it('should include generated asset occurrences when registry binding exists', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const occurrenceLookup = createMockOccurrenceLookup([
+      {
+        entity: { kind: 'character', id: 'char_john' },
+        source: 'generated-asset',
+        sourceId: 'asset_1',
+        locator: { uri: '/project/.neko/.cache/generated/frame-1.png' },
+      },
+    ]);
+    const provider = new FountainReferenceProvider(
+      index,
+      createMockCharacterIndex(),
+      occurrenceLookup,
+    );
+    const doc = createMockDocument(FILE_A, '/project/a.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 4, character: 0 },
+      {} as any,
+      {} as any,
+    );
+
+    expect(occurrenceLookup.findCharacterOccurrences).toHaveBeenCalledWith('char_john');
+    expect(
+      results.some((r: any) => r.uri.fsPath === '/project/.neko/.cache/generated/frame-1.png'),
+    ).toBe(true);
   });
 
   it('should find all character references across files', async () => {

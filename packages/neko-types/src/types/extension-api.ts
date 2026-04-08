@@ -18,6 +18,7 @@ import type {
   SceneGroupCanvasNode,
   GalleryCanvasNode,
 } from './canvas';
+import type { CreativeEntityRef, OccurrenceIndexEntry } from './occurrence-index';
 import type { ProjectData } from './project';
 
 // =============================================================================
@@ -384,6 +385,28 @@ export interface NekoStoryAPI {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+}
+
+// =============================================================================
+// NekoAgent API
+// =============================================================================
+
+/**
+ * NekoAgent Extension API
+ * Exported by neko-agent extension for cross-module entity occurrence lookup.
+ */
+export interface NekoAgentAPI {
+  entities: {
+    /**
+     * Find projected occurrences for a creative entity across agent-managed indexes.
+     */
+    findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;
+
+    /**
+     * Convenience query for character identity occurrences.
+     */
+    findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
+  };
 }
 
 // =============================================================================
