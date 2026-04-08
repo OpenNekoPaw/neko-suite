@@ -21,11 +21,25 @@ const REGISTRY_VERSION = 1;
 
 export class InstalledRegistry {
   private data: InstalledRegistryData | undefined;
+  private _loadPromise: Promise<void> | undefined;
 
   constructor(private readonly filePath: string) {}
 
   /** Load the registry from disk */
   async load(): Promise<void> {
+    if (this._loadPromise) return this._loadPromise;
+    this._loadPromise = this._doLoad();
+    return this._loadPromise;
+  }
+
+  /** Wait until the registry is loaded (call before accessing data) */
+  async ready(): Promise<void> {
+    if (this.data) return;
+    if (this._loadPromise) return this._loadPromise;
+    return this.load();
+  }
+
+  private async _doLoad(): Promise<void> {
     try {
       const content = await readFile(this.filePath, 'utf-8');
       this.data = JSON.parse(content) as InstalledRegistryData;

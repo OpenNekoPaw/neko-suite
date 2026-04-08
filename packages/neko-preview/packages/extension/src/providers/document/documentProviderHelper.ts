@@ -251,7 +251,7 @@ export function getErrorHtml(message: string): string {
     }
   </style>
 </head>
-<body><div><p>${message}</p></div></body>
+<body><div><p>${message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</p></div></body>
 </html>`;
 }
 

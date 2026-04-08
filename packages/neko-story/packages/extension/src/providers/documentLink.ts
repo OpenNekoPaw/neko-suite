@@ -5,7 +5,7 @@ import * as path from 'path';
  * Regex matching [[see: relative/path.ext]] references.
  * Captures the file path inside the brackets.
  */
-const SEE_LINK_PATTERN = /\[\[see:\s*([^\]]+\.fountain)\s*\]\]/gi;
+const SEE_LINK_PATTERN = /\[\[see:\s*([^\]]+\.(?:fountain|nks|story))\s*\]\]/gi;
 
 /**
  * Provides clickable document links for [[see: file.fountain]] references.

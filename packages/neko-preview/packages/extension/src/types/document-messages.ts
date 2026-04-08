@@ -17,10 +17,10 @@ export interface DocumentDataMessage {
     /** Direct webview URI — preferred for large files (EPUB).
      *  When present, the webview should load via URL instead of decoding base64. */
     url?: string;
-    /** File name for display */
-    fileName: string;
-    /** File size in bytes */
-    fileSize: number;
+    /** File name for display (optional — not sent by all providers) */
+    fileName?: string;
+    /** File size in bytes (optional — not sent by all providers) */
+    fileSize?: number;
   };
 }
 

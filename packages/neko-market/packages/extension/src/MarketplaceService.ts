@@ -109,7 +109,10 @@ export class MarketplaceService implements vscode.Disposable {
       versionResolver,
       targets,
       this._installedRegistry,
-      { nekoSuiteVersion: '0.0.1' },
+      {
+        nekoSuiteVersion:
+          vscode.extensions.getExtension('neko.neko-market')?.packageJSON?.version ?? '0.0.0',
+      },
     );
 
     this._installedRegistry.load().catch((err) => {

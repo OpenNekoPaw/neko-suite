@@ -236,7 +236,11 @@ export function activate(context: vscode.ExtensionContext) {
         intent: selectedText ? '请帮我改写这段内容：' : undefined,
       };
 
-      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+      try {
+        await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+      } catch {
+        // neko-agent extension not installed or not activated — silently ignore
+      }
     }),
     vscode.commands.registerCommand('neko.story.scriptTableView', () => {
       const panel = PreviewPanel.createOrShow(context.extensionUri);

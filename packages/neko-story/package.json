@@ -43,7 +43,9 @@
           "nekostory"
         ],
         "extensions": [
-          ".fountain"
+          ".fountain",
+          ".nks",
+          ".story"
         ],
         "icon": {
           "light": "./icons/file-story.svg",

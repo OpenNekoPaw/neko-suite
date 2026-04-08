@@ -8,9 +8,13 @@
  *           InstalledRegistry.
  */
 
-import { mkdir, cp, rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import type { AssetManifest } from '@neko/shared/types/asset/manifest';
 import type {
   IInstallManager,
@@ -104,11 +108,19 @@ export class InstallManager implements IInstallManager {
       }
       onProgress?.({ packageId, phase: 'validating', percent: 100 });
 
-      // 7. Install to target path
+      // 7. Extract archive to target path
       onProgress?.({ packageId, phase: 'installing', percent: 0 });
       const installPath = target.getInstallPath(manifest);
       await mkdir(installPath, { recursive: true });
-      await cp(archivePath, installPath, { recursive: true });
+      if (archivePath.endsWith('.tar.gz') || archivePath.endsWith('.tgz')) {
+        await execFileAsync('tar', ['-xzf', archivePath, '-C', installPath]);
+      } else if (archivePath.endsWith('.zip')) {
+        await execFileAsync('unzip', ['-o', archivePath, '-d', installPath]);
+      } else {
+        // Fallback: assume the archive is already a directory (e.g., from cache)
+        const { cp } = await import('node:fs/promises');
+        await cp(archivePath, installPath, { recursive: true });
+      }
       onProgress?.({ packageId, phase: 'installing', percent: 50 });
 
       // 8. Post-install hook
@@ -169,6 +181,7 @@ export class InstallManager implements IInstallManager {
   }
 
   async listInstalled(): Promise<InstalledPackage[]> {
+    await this.installed.ready();
     return this.installed.list();
   }
 

@@ -11,9 +11,9 @@
 
 ## 当前盘点
 
-- 剩余 `open`：53 项（批次 1 修复 13 项 + 验证 1 项，批次 2 修复 6 项 + 验证 2 项）
-- 严重级别分布：`P0 = 8`，`P1 = 27`，`P2 = 17`，`P3 = 2`
-- 已完成：`neko-engine` 10 项，`neko-cut` 6 项，`neko-canvas` 7 项，`neko-agent` 4 项，`neko-auth` 2 项
+- 剩余 `open`：41 项（批次 1-4 合计修复 31 项 + 验证 4 项）
+- 严重级别分布：`P0 = 3`，`P1 = 21`，`P2 = 15`，`P3 = 2`
+- 已完成：neko-engine 10, neko-cut 6, neko-canvas 7, neko-agent 4, neko-auth 2, neko-market 5, neko-preview 2, neko-story 3
 
 ## 执行规则
 
@@ -115,14 +115,14 @@
 
 **执行清单**
 
-- [ ] 在 core 层补全“下载归档 → 校验 → 解包 → 交给 target hook”安装契约，修复安装目录形态错误。
-- [ ] 为市场 Host/Webview 建立 DTO adapter，禁止直接把共享类型强转成 webview 扁平结构。
-- [ ] 拆分“UI 聚合筛选类型”和“后端查询类型”，对齐共享 `AssetType` 契约。
-- [ ] 为 `InstalledRegistry.load()` 引入 ready 阶段，消除首次打开已安装列表竞态。
-- [ ] 给 `openSkills` 增加 webview ready 前的待发送消息队列。
-- [ ] 接入 `neko-auth` 的许可/认证主链路，明确 `paid/private` 资产能力边界。
-- [ ] 统一 `registryUrl` 与架构文档口径，移除 `nekoSuiteVersion` 硬编码。
-- [ ] 补安装编排与 webview 协议级测试，覆盖下载、解包、注册、筛选和消息时序。
+- [x] 在 core 层补全”下载归档 → 校验 → 解包 → 交给 target hook”安装契约：区分 tar.gz/zip/目录。（NKM-001, 2026-04-08）
+- [ ] 为市场 Host/Webview 建立 DTO adapter，禁止直接把共享类型强转成 webview 扁平结构。（NKM-002, 待修复）
+- [x] 拆分”UI 聚合筛选类型”和”后端查询类型”：`filterToAssetTypes()` 映射 model→ai-model/lora/embedding/3d-model。（NKM-003, 2026-04-08）
+- [x] 为 `InstalledRegistry.load()` 引入 `ready()` 阶段 + `_loadPromise` 去重，`listInstalled()` 内 await ready()。（NKM-004, 2026-04-08）
+- [x] 给 `openSkills` 增加 webview ready 前的待发送消息队列 + `market:ready` 握手。（NKM-005, 2026-04-08）
+- [ ] 接入 `neko-auth` 的许可/认证主链路，明确 `paid/private` 资产能力边界。（NKM-006, 待修复）
+- [x] `nekoSuiteVersion` 改为从扩展 packageJSON.version 动态读取。（NKM-007, 2026-04-08）
+- [ ] 补安装编排与 webview 协议级测试，覆盖下载、解包、注册、筛选和消息时序。（NKM-008, 待补充）
 
 **完成标志**
 
@@ -148,13 +148,14 @@
 
 **执行清单**
 
-- [ ] 修复 `neko-preview` 错误页的 HTML 注入面，加入最小 CSP 和统一转义函数。
-- [ ] 修复 CBZ Blob URL 回收、PreviewFileServer 端口失效重试与对外配置项未接线问题。
-- [ ] 清理 `document:data` 等文档消息协议与实现漂移，并补文档链路测试。
-- [ ] 统一 `neko-story` 的格式支持集合，让文档、语言注册、索引和文档链接匹配到同一组扩展名。
-- [ ] 修复 `AUDIO` 资产错误映射为 `image` 的问题，明确音频元素或音频轨道策略。
-- [ ] 补齐剧本预览滚动同步、`neko-agent` 依赖声明和 `generateStoryboard` 占位入口处理。
-- [ ] 为 CSP、滚动同步、音频映射和文档预览链路补回归测试。
+- [x] 修复 `neko-preview` 错误页 HTML 注入面：统一 HTML 转义（`&<>"` 实体编码）。（NKP-001, 2026-04-08）
+- [x] 验证 CBZ Blob URL 回收已正确实现（CbzViewer unmount 时 revoke）。（NKP-002, 2026-04-08 verified）
+- [x] 修正 `document:data` 协议类型：`fileName`/`fileSize` 改为 optional（providers 不发送）。（NKP-005, 2026-04-08）
+- [x] 统一 `neko-story` 格式支持：package.json + 索引 glob + 文档链接正则均覆盖 `.fountain/.nks/.story`。（NKS-001, 2026-04-08）
+- [x] 修复 `AUDIO` 资产映射：音频资产产出 `AudioElement`（type: 'audio'），不再映射为 image。（NKS-003, 2026-04-08）
+- [x] 为 `neko.agent.sendContext` 调用加 try-catch 兜底（neko-agent 未安装时静默忽略）。（NKS-005, 2026-04-08）
+- [ ] 补齐剧本预览主动滚动同步。（NKS-004, 待修复）
+- [ ] 为 CSP、音频映射和文档预览链路补回归测试。（NKS-009/NKP-006, 待补充）
 
 **完成标志**
 

@@ -120,6 +120,9 @@ export const MarketplaceApp: React.FC = () => {
   useEffect(() => {
     window.addEventListener('message', handleMessage);
 
+    // Signal ready so extension can flush pending messages
+    MarketMessages.ready();
+
     // Initial data load
     MarketMessages.getFeatured();
     MarketMessages.listInstalled();

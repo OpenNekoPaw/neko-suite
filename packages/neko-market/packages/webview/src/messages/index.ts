@@ -25,6 +25,9 @@ export interface MarketSearchQuery {
 }
 
 export const MarketMessages = {
+  /** Signal that webview is ready to receive messages */
+  ready: () => postMessage({ type: 'market:ready' }),
+
   /** Search the marketplace */
   search: (query: MarketSearchQuery) => postMessage({ type: 'market:search', query }),
 

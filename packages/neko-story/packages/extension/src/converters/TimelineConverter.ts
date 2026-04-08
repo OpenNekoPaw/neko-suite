@@ -17,6 +17,7 @@ import type {
   TextElement,
   SubtitleElement,
   MediaElement,
+  AudioElement,
 } from '@neko/shared';
 import { generateId, ENGINE_DEFAULT_TRANSFORM, CENTERED_TRANSFORM } from '@neko/shared';
 import type { FountainDocument, AnyFountainElement, AssetReference } from '@neko-story/types';
@@ -186,24 +187,41 @@ function makeMediaElement(
   startTime: number,
   duration: number,
   name: string,
-): MediaElement {
-  return {
+): MediaElement | AudioElement {
+  const base = {
     id: generateId(),
-    type: 'media',
     name,
     src: assetRef.path,
-    mediaType: assetRef.type === 'video' ? 'video' : 'image',
     duration,
     startTime,
     trimStart: 0,
     trimEnd: 0,
+    hidden: false,
+    locked: false,
+  };
+
+  // Audio assets should produce AudioElement, not MediaElement
+  if (assetRef.type === 'audio') {
+    return {
+      ...base,
+      type: 'audio' as const,
+      transform: { ...ENGINE_DEFAULT_TRANSFORM },
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      muted: false,
+    };
+  }
+
+  return {
+    ...base,
+    type: 'media' as const,
+    mediaType: assetRef.type === 'video' ? 'video' : 'image',
     transform: { ...ENGINE_DEFAULT_TRANSFORM },
     opacity: 1,
     blendMode: 'normal',
     effects: [],
-    muted: assetRef.type === 'video' ? false : true,
-    hidden: false,
-    locked: false,
+    muted: assetRef.type !== 'video',
   };
 }
 
@@ -228,7 +246,7 @@ export class TimelineConverter {
     // and media track (MediaElements from asset references)
     const sceneElements: TextElement[] = [];
     const subtitleElements: SubtitleElement[] = [];
-    const mediaElements: MediaElement[] = [];
+    const mediaElements: (MediaElement | AudioElement)[] = [];
 
     let cursor = 0; // absolute timeline position (seconds)
     let subtitleCursor = 0; // subtitle cursor advances with dialogue

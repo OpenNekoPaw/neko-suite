@@ -14,6 +14,8 @@ export class MarketplaceProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.marketplace';
 
   private _view?: vscode.WebviewView;
+  private _webviewReady = false;
+  private _pendingMessages: unknown[] = [];
   private readonly _handler: MarketplaceHandler;
   private readonly _logger: ILogger;
   private readonly _disposables: vscode.Disposable[] = [];
@@ -45,6 +47,16 @@ export class MarketplaceProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
+
+    // Reset ready state when view is disposed
+    webviewView.onDidDispose(
+      () => {
+        this._webviewReady = false;
+      },
+      null,
+      this._disposables,
+    );
+
     this._logger.debug('Webview resolved');
   }
 
@@ -52,9 +64,13 @@ export class MarketplaceProvider implements vscode.WebviewViewProvider {
   // Public API (for commands)
   // ===========================================================================
 
-  /** Send an arbitrary message to the webview */
+  /** Send an arbitrary message to the webview (queues if not ready) */
   public sendMessage(msg: unknown): void {
-    this._view?.webview.postMessage(msg);
+    if (this._webviewReady && this._view) {
+      this._view.webview.postMessage(msg);
+    } else {
+      this._pendingMessages.push(msg);
+    }
   }
 
   // ===========================================================================
@@ -66,6 +82,15 @@ export class MarketplaceProvider implements vscode.WebviewViewProvider {
 
     webview.onDidReceiveMessage(
       async (message: { type: string; [key: string]: unknown }) => {
+        // Handle webview ready signal — flush pending messages
+        if (message.type === 'market:ready') {
+          this._webviewReady = true;
+          for (const pending of this._pendingMessages) {
+            webview.postMessage(pending);
+          }
+          this._pendingMessages = [];
+          return;
+        }
         await this._handler.handleMessage(message, postMessage);
       },
       undefined,

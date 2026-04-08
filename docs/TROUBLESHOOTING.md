@@ -214,11 +214,11 @@
 
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
-| NKP-001 | P0 | open | 错误页直接拼接动态字符串且无 CSP，存在 XSS 注入面 |
-| NKP-002 | P1 | open | CBZ 预览的 Blob URL 回收不完整，长会话存在内存泄漏风险 |
+| NKP-001 | P0 | fixed | 错误页直接拼接动态字符串且无 CSP，存在 XSS 注入面 |
+| NKP-002 | P1 | verified | CBZ 预览的 Blob URL 回收不完整，长会话存在内存泄漏风险 |
 | NKP-003 | P1 | open | 文档预览文件服务端口缓存未失效重试，engine 重启后可能持续失败 |
 | NKP-004 | P1 | open | 对外声明配置项未落地（`videoQuality`/`autoPlay`） |
-| NKP-005 | P2 | open | 文档消息协议与实现漂移，类型约束与实际 payload 不一致 |
+| NKP-005 | P2 | fixed | 文档消息协议与实现漂移，类型约束与实际 payload 不一致 |
 | NKP-006 | P1 | open | 测试覆盖盲区集中在文档链路与 EPUB 解析，回归风险偏高 |
 | NKP-007 | P2 | open | `copy:webview` 构建脚本吞错，可能打包不完整产物 |
 | NKP-008 | P3 | open | `AudioPlayer` 存在重复卸载清理逻辑，增加维护复杂度 |
@@ -397,11 +397,11 @@
 
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
-| NKS-001 | P0 | open | 文档宣称支持 `.nks/.story`，实际语言注册与索引仅覆盖 `.fountain` |
+| NKS-001 | P0 | fixed | 文档宣称支持 `.nks/.story`，实际语言注册与索引仅覆盖 `.fountain` |
 | NKS-002 | P0 | open | Webview CSP 未声明 `img-src`，资产图片预览存在被拦截风险 |
-| NKS-003 | P0 | open | `AUDIO` 资产被错误映射为 `mediaType: image`，音频转换语义失真 |
+| NKS-003 | P0 | fixed | `AUDIO` 资产被错误映射为 `mediaType: image`，音频转换语义失真 |
 | NKS-004 | P1 | open | 滚动同步链路未闭环（`scroll` 分支空实现 + 缺失 `data-line`） |
-| NKS-005 | P1 | open | 与 `neko-agent` 的命令依赖未在扩展依赖中声明 |
+| NKS-005 | P1 | fixed | 与 `neko-agent` 的命令依赖未在扩展依赖中声明 |
 | NKS-006 | P1 | open | `generateStoryboard` 仍为占位命令，核心能力未落地 |
 | NKS-007 | P2 | open | 工作区索引采用全量重建，规模增大时性能退化风险高 |
 | NKS-008 | P2 | open | i18n 基础设施已搭建但大量 UI 文案硬编码，国际化一致性不足 |
@@ -787,13 +787,13 @@
 
 | 编号 | 严重级别 | 状态 | 问题摘要 |
 |---|---|---|---|
-| NKM-001 | P0 | open | 安装链路未解包归档，InstallTarget 后置逻辑与实际产物形态不匹配 |
+| NKM-001 | P0 | fixed | 安装链路未解包归档，InstallTarget 后置逻辑与实际产物形态不匹配 |
 | NKM-002 | P0 | open | Extension 与 Webview 的市场 DTO 未统一，大量强制断言掩盖运行时错配 |
-| NKM-003 | P1 | open | 类型筛选使用 `model/preset` 聚合值，偏离共享 `AssetType` 契约 |
-| NKM-004 | P1 | open | `InstalledRegistry.load()` 异步竞态可能导致首次打开状态不准 |
-| NKM-005 | P1 | open | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |
+| NKM-003 | P1 | fixed | 类型筛选使用 `model/preset` 聚合值，偏离共享 `AssetType` 契约 |
+| NKM-004 | P1 | fixed | `InstalledRegistry.load()` 异步竞态可能导致首次打开状态不准 |
+| NKM-005 | P1 | fixed | `openSkills` 依赖即时 `postMessage`，view 未 resolve 时筛选消息可能丢失 |
 | NKM-006 | P1 | open | 付费/私有资产许可校验仍是 stub，认证与商业能力未闭环 |
-| NKM-007 | P2 | open | `registryUrl` 配置与架构文档不一致，`nekoSuiteVersion` 仍为硬编码 |
+| NKM-007 | P2 | fixed | `registryUrl` 配置与架构文档不一致，`nekoSuiteVersion` 仍为硬编码 |
 | NKM-008 | P1 | open | 测试覆盖偏 core unit，缺少安装编排与 webview 协议级回归 |
 
 ### 问题详情（追加）

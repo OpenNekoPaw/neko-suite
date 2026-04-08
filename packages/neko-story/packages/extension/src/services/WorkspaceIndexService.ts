@@ -9,7 +9,7 @@ import type {
   CharacterEntry,
 } from './types';
 
-const FOUNTAIN_GLOB = '**/*.fountain';
+const FOUNTAIN_GLOB = '**/*.{fountain,nks,story}';
 
 /**
  * Workspace-wide index service for Fountain documents.

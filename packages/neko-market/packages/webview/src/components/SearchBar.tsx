@@ -15,6 +15,22 @@ const TYPE_FILTER_KEYS: { key: AssetTypeFilter; i18nKey: string }[] = [
   { key: 'preset', i18nKey: 'marketplace.filter.preset' },
 ];
 
+/** Map UI filter labels to backend AssetType values */
+function filterToAssetTypes(filter: AssetTypeFilter): string[] | undefined {
+  switch (filter) {
+    case 'all':
+      return undefined;
+    case 'skill':
+      return ['skill', 'plugin'];
+    case 'shader':
+      return ['shader', 'shader-preset'];
+    case 'model':
+      return ['ai-model', 'lora', 'embedding', '3d-model'];
+    case 'preset':
+      return ['preset', 'template', 'lut'];
+  }
+}
+
 export const SearchBar: React.FC = () => {
   const { searchText, assetTypeFilter, setSearchText, setSearching, setAssetTypeFilter } =
     useMarketplaceStore();
@@ -32,7 +48,7 @@ export const SearchBar: React.FC = () => {
         setSearching(true);
         MarketMessages.search({
           text: text || undefined,
-          types: assetTypeFilter !== 'all' ? [assetTypeFilter] : undefined,
+          types: filterToAssetTypes(assetTypeFilter),
         });
       }, 300);
     },
@@ -45,7 +61,7 @@ export const SearchBar: React.FC = () => {
       setSearching(true);
       MarketMessages.search({
         text: searchText || undefined,
-        types: filter !== 'all' ? [filter] : undefined,
+        types: filterToAssetTypes(filter),
       });
     },
     [searchText, setAssetTypeFilter, setSearching],
