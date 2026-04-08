@@ -31,7 +31,8 @@
 //! The sampling is done via FFmpeg's `fps` filter before SSIM/PSNR computation,
 //! ensuring accurate timestamps in the output.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +40,56 @@ use crate::audio_diff::{diff_audio_content, AudioContentDiff};
 use crate::ffmpeg_parser::{parse_psnr_log, parse_ssim_log};
 use crate::probe::global_probe_cache;
 use neko_engine_kernel::error::{Error, Result};
+
+// ─────────────────────────────────────────────────────────────
+// FFmpeg binary discovery
+// ─────────────────────────────────────────────────────────────
+
+static FFMPEG_BIN: OnceLock<PathBuf> = OnceLock::new();
+
+/// Locate the `ffmpeg` CLI binary. Search order:
+/// 1. `FFMPEG_PATH` environment variable (explicit override)
+/// 2. Same directory as the currently running executable
+/// 3. System PATH (via `which`/`where`)
+fn ffmpeg_binary() -> &'static Path {
+    FFMPEG_BIN
+        .get_or_init(|| {
+            if let Ok(p) = std::env::var("FFMPEG_PATH") {
+                let path = PathBuf::from(&p);
+                if path.is_file() {
+                    return path;
+                }
+            }
+
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(dir) = exe.parent() {
+                    let candidate = dir.join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
+                    if candidate.is_file() {
+                        return candidate;
+                    }
+                }
+            }
+
+            let which_cmd = if cfg!(windows) { "where" } else { "which" };
+            if let Ok(output) = std::process::Command::new(which_cmd)
+                .arg("ffmpeg")
+                .output()
+            {
+                if output.status.success() {
+                    let path_str = String::from_utf8_lossy(&output.stdout);
+                    let path = PathBuf::from(path_str.trim());
+                    if path.is_file() {
+                        return path;
+                    }
+                }
+            }
+
+            tracing::warn!("ffmpeg binary not found — video diff will fail. \
+                Set FFMPEG_PATH env var or install ffmpeg to your system PATH.");
+            PathBuf::from("ffmpeg")
+        })
+        .as_path()
+}
 
 /// SSIM threshold below which a frame is considered "different"
 const DEFAULT_SSIM_THRESHOLD: f64 = 0.95;
@@ -388,7 +439,7 @@ fn run_ffmpeg_ssim(
         )
     };
 
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = std::process::Command::new(ffmpeg_binary());
 
     // Input A with optional time range
     if let Some(t) = start_time {
@@ -418,7 +469,7 @@ fn run_ffmpeg_ssim(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| Error::Other(format!("Failed to run ffmpeg ssim: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to run ffmpeg ssim (binary: {}): {}", ffmpeg_binary().display(), e)))?;
 
     // Check exit status FIRST (before checking file existence)
     if !output.status.success() {
@@ -478,7 +529,7 @@ fn run_ffmpeg_psnr(
         )
     };
 
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = std::process::Command::new(ffmpeg_binary());
 
     // Input A with optional time range
     if let Some(t) = start_time {
@@ -508,7 +559,7 @@ fn run_ffmpeg_psnr(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| Error::Other(format!("Failed to run ffmpeg psnr: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to run ffmpeg psnr (binary: {}): {}", ffmpeg_binary().display(), e)))?;
 
     // Check exit status FIRST (before checking file existence)
     if !output.status.success() {
@@ -537,7 +588,7 @@ fn run_ffmpeg_psnr(
 
 /// Generate a visual difference video using FFmpeg blend=difference
 fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()> {
-    let result = std::process::Command::new("ffmpeg")
+    let result = std::process::Command::new(ffmpeg_binary())
         .args([
             "-y",
             "-i",
@@ -552,7 +603,7 @@ fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| Error::Other(format!("Failed to run ffmpeg blend: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to run ffmpeg blend (binary: {}): {}", ffmpeg_binary().display(), e)))?;
 
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
