@@ -58,9 +58,9 @@
 
 仍未完全落地：
 
-- `semantic` 路径已进入 pipeline 主链，但 `story.generateStoryboard` 仍未直接启动该标准流程
-- 轻量分镜表的 Agent / Canvas 状态仍缺少统一事实源与完整回写
-- “从剧本开始视频创作”标准主流程尚未闭环
+- 轻量分镜表状态当前为 extension 内存级统一事实源，尚未持久化到 workspaceState
+- `canvasStatus = opened` 仍主要由用户动作驱动，尚未接入 canvas 实时打开/聚焦事件
+- “从剧本开始视频创作”已具备命令入口，但整包级联验证仍需要更大范围回归
 
 ---
 
@@ -349,6 +349,7 @@ canvas
 - 将其升级为“轻量分镜表 + 下游状态表”
 - `CreativeGridView` 只作为可选场景级展示，不作为正式 storyboard UI
 - `generateStoryboard` 命令重定向为 Agent 编排入口
+- 新增 `从剧本开始视频创作` 正式命令，走 `flowF` 标准主链
 
 ### 10.2 agent
 
@@ -385,9 +386,9 @@ canvas
 
 ### 当前对应状态
 
-- 1：已部分完成
+- 1：已完成当前迭代目标
   - `story` 已具备场景级 `sendToCanvas`
-  - “从剧本开始视频创作”仍未形成标准流程入口
+  - `neko.story.startVideoCreation` 已作为正式标准流程入口落地
 - 2：已完成当前迭代目标
 - 3：已完成当前迭代目标
 - 4：已完成当前迭代目标
