@@ -24,6 +24,7 @@ export interface SceneEntry {
  */
 export interface CharacterEntry {
   readonly name: string;
+  readonly characterId?: string;
   readonly first_line: number;
   readonly scene_ids: readonly string[]; // IDs of scenes where character appears
 }

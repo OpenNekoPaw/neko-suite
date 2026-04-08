@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko-suite.dev/schemas/characters-v1.json",
+  "title": "Neko Suite Character Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "characters"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CharacterRecord"
+      }
+    }
+  },
+  "$defs": {
+    "CharacterRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "canonicalName", "aliases", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "enum": ["confirmed", "candidate", "deprecated"]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "role": { "type": "string" },
+            "gender": { "type": "string" },
+            "ageRange": { "type": "string" },
+            "notes": { "type": "string" }
+          }
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "assetEntityId": { "type": "string" },
+            "galleryNodeId": { "type": "string" },
+            "voiceAssetId": { "type": "string" }
+          }
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "assetEntityIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "galleryNodeIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "generatedAssetIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "scriptNames": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

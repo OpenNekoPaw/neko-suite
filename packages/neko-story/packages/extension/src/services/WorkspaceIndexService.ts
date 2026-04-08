@@ -8,6 +8,7 @@ import type {
   SceneEntry,
   CharacterEntry,
 } from './types';
+import type { ICharacterWorkspaceIndex } from './CharacterWorkspaceIndexService';
 
 const FOUNTAIN_GLOB = '**/*.{fountain,nks,story}';
 
@@ -31,7 +32,7 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
   private readonly _onDidUpdateIndex = new vscode.EventEmitter<vscode.Uri[]>();
   readonly onDidUpdateIndex = this._onDidUpdateIndex.event;
 
-  constructor() {
+  constructor(private readonly characterIndexService?: ICharacterWorkspaceIndex) {
     this.disposables.push(this._onDidUpdateIndex);
     this.setupWatchers();
   }
@@ -197,6 +198,7 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
       .sort(([, a], [, b]) => a.firstLine - b.firstLine)
       .map(([name, entry]) => ({
         name,
+        characterId: this.characterIndexService?.resolveCharacter(name)?.characterId,
         first_line: entry.firstLine,
         scene_ids: Array.from(entry.sceneIds),
       }));

@@ -35,6 +35,10 @@ export interface BaseGeneratedAsset {
   prompt?: string;
   /** Model / provider identifier (e.g. `fal.ai/flux`, `dashscope/wanx`) */
   model?: string;
+  /** Stable character bindings inherited from source context */
+  characterIds?: string[];
+  /** Source canvas node ID (ShotNode / GalleryNode) */
+  sourceNodeId?: string;
 }
 
 // -----------------------------------------------------------------------------

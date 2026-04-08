@@ -318,6 +318,7 @@ export interface NekoStorySceneEntry {
  */
 export interface NekoStoryCharacterEntry {
   readonly name: string;
+  readonly characterId?: string;
   readonly first_line: number;
   readonly scene_ids: readonly string[];
 }

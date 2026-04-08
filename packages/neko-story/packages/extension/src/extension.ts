@@ -18,6 +18,7 @@ import { FountainInlineCompletionProvider } from './providers/inlineCompletion';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
+import { CharacterWorkspaceIndexService } from './services/CharacterWorkspaceIndexService';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
@@ -33,8 +34,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   logger.info('Extension activated');
 
+  const characterIndexService = new CharacterWorkspaceIndexService();
+  context.subscriptions.push(characterIndexService);
+  void characterIndexService.ensureInitialized();
+
   // Create shared workspace index service
-  const indexService = new WorkspaceIndexService();
+  const indexService = new WorkspaceIndexService(characterIndexService);
   context.subscriptions.push(indexService);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
