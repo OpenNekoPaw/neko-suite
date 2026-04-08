@@ -198,7 +198,11 @@ export interface NekoCanvasAssetChangeEvent {
 export interface CanvasChangeEvent {
   readonly type: 'add' | 'update' | 'delete';
   readonly nodeId?: string;
+  readonly nodeIds?: string[];
   readonly shapeId?: string;
+  readonly entityType?: 'node' | 'connection' | 'selection' | 'generation' | 'import' | 'operation';
+  readonly reason?: string;
+  readonly operationType?: string;
 }
 
 /**

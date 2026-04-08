@@ -4,6 +4,7 @@
  * Child ShotNodes remain in canvasData.nodes; shotIds stores order only.
  */
 
+import { useMemo, useState } from 'react';
 import type { SceneGroupCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
@@ -35,6 +36,8 @@ export interface SceneGroupNodeProps {
   selectedShotCount?: number;
   onAssignSelectedShots?: (sceneId: string) => void;
   onAutoLayoutShots?: (sceneId: string) => void;
+  shots?: Array<{ id: string; shotNumber?: number }>;
+  onReorderShots?: (sceneId: string, shotIds: string[]) => void;
 }
 
 // =============================================================================
@@ -55,8 +58,29 @@ export function SceneGroupNode({
   selectedShotCount = 0,
   onAssignSelectedShots,
   onAutoLayoutShots,
+  shots = [],
+  onReorderShots,
 }: SceneGroupNodeProps) {
   const { sceneTitle, sceneNumber, location, timeOfDay, shotIds } = node.data;
+  const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
+  const orderedShots = useMemo(() => {
+    const shotMap = new Map(shots.map((shot) => [shot.id, shot]));
+    return shotIds
+      .map((shotId) => shotMap.get(shotId))
+      .filter((shot): shot is NonNullable<typeof shot> => Boolean(shot));
+  }, [shotIds, shots]);
+
+  const handleShotDrop = (targetShotId: string) => {
+    if (!draggedShotId || draggedShotId === targetShotId) return;
+    const fromIndex = shotIds.indexOf(draggedShotId);
+    const toIndex = shotIds.indexOf(targetShotId);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const nextShotIds = [...shotIds];
+    nextShotIds.splice(fromIndex, 1);
+    nextShotIds.splice(toIndex, 0, draggedShotId);
+    onReorderShots?.(node.id, nextShotIds);
+  };
 
   return (
     <BaseNode
@@ -136,8 +160,7 @@ export function SceneGroupNode({
                 borderRadius: 3,
                 border: '1px solid var(--node-border)',
                 backgroundColor: 'transparent',
-                color:
-                  selectedShotCount > 0 ? 'var(--neko-fg)' : 'var(--node-fg-secondary)',
+                color: selectedShotCount > 0 ? 'var(--neko-fg)' : 'var(--node-fg-secondary)',
                 cursor: selectedShotCount > 0 ? 'pointer' : 'not-allowed',
                 opacity: selectedShotCount > 0 ? 1 : 0.5,
               }}
@@ -168,24 +191,51 @@ export function SceneGroupNode({
 
         {/* ── Horizontal shot strip placeholder ── */}
         <div
-          className="flex-1 flex items-center justify-center"
-          style={{ color: 'var(--node-fg-secondary)', opacity: 0.4 }}
+          className="flex-1 flex items-center justify-center px-2 py-2"
+          style={{ color: 'var(--node-fg-secondary)' }}
         >
           {shotIds.length === 0 ? (
-            <span>拖入 ShotNode 到此场景</span>
+            <span style={{ opacity: 0.4 }}>拖入 ShotNode 到此场景</span>
           ) : (
-            <div className="flex gap-1 items-center">
-              {shotIds.slice(0, 8).map((id, i) => (
+            <div className="flex flex-wrap gap-1.5 items-center justify-center">
+              {orderedShots.map((shot, i) => (
                 <div
-                  key={id}
-                  className="w-4 h-5 rounded-sm flex-shrink-0"
-                  style={{
-                    backgroundColor: 'var(--node-border)',
-                    opacity: 0.5 + (i / shotIds.length) * 0.5,
+                  key={shot.id}
+                  draggable={!node.locked}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    setDraggedShotId(shot.id);
+                    e.dataTransfer.effectAllowed = 'move';
                   }}
-                />
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleShotDrop(shot.id);
+                    setDraggedShotId(null);
+                  }}
+                  onDragEnd={() => setDraggedShotId(null)}
+                  className="px-2 py-1 rounded-md flex items-center gap-1.5"
+                  style={{
+                    backgroundColor:
+                      draggedShotId === shot.id ? 'rgba(59,130,246,0.18)' : 'var(--control-bg)',
+                    border: '1px solid var(--node-border)',
+                    color: 'var(--neko-fg)',
+                    opacity: 0.6 + (i / Math.max(shotIds.length, 1)) * 0.4,
+                    cursor: node.locked ? 'default' : 'grab',
+                  }}
+                  title={`镜头 ${shot.shotNumber ?? i + 1}`}
+                >
+                  <span style={{ fontSize: 9, opacity: 0.6 }}>⋮⋮</span>
+                  <span className="font-mono" style={{ fontSize: 10 }}>
+                    #{String(shot.shotNumber ?? i + 1).padStart(2, '0')}
+                  </span>
+                </div>
               ))}
-              {shotIds.length > 8 && <span style={{ fontSize: 9 }}>+{shotIds.length - 8}</span>}
             </div>
           )}
         </div>

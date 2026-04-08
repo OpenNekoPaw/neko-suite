@@ -96,6 +96,7 @@ export function CanvasApp() {
     rotateNode,
     rotateNodeEnd,
     assignShotsToScene,
+    reorderSceneShots,
     autoLayoutSceneShots,
     selectNodes,
     groupNodes,
@@ -164,6 +165,7 @@ export function CanvasApp() {
     addScriptAt,
     addDocumentAt,
     addModelAt,
+    addCanvasEmbedAt,
   } = useNodeHelpers({
     addNode,
     nodeCount: nodes.length,
@@ -276,6 +278,9 @@ export function CanvasApp() {
           case 'model':
             addModelAt(dropPos, asset.path, asset.modelName, asset.modelType, asset.role);
             break;
+          case 'canvas':
+            addCanvasEmbedAt(dropPos, asset.path, asset.title);
+            break;
         }
       });
       dropPositionRef.current = null;
@@ -328,6 +333,16 @@ export function CanvasApp() {
     },
     onModelInstalledResult: (nodeId, installedVersion) => {
       updateNodeData(nodeId, { installedVersion: installedVersion ?? undefined });
+    },
+    onTimelineImportResult: ({ shotIds, projectName, importedAt }) => {
+      shotIds.forEach((shotId) => {
+        const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === shotId);
+        if (node?.type !== 'shot') return;
+        updateNodeData(shotId, {
+          lastImportedToTimelineAt: importedAt,
+          lastImportedToTimelineProject: projectName,
+        });
+      });
     },
     onUpdateNodeImage: (nodeId, imageData, cellId) => {
       // Sketch round-trip: update the shot node's generatedImage and append to history
@@ -495,6 +510,10 @@ export function CanvasApp() {
     vscode?.postMessage({ type: 'openDocument', docPath });
   }, []);
 
+  const handleCanvasEmbedOpen = useCallback((canvasPath: string) => {
+    vscode?.postMessage({ type: 'openDocument', docPath: canvasPath });
+  }, []);
+
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
@@ -515,6 +534,13 @@ export function CanvasApp() {
       autoLayoutSceneShots(sceneId);
     },
     [autoLayoutSceneShots],
+  );
+
+  const handleReorderSceneShots = useCallback(
+    (sceneId: string, shotIds: string[]) => {
+      reorderSceneShots(sceneId, shotIds, true);
+    },
+    [reorderSceneShots],
   );
 
   const handleSelectShotCandidate = useCallback(
@@ -931,10 +957,12 @@ export function CanvasApp() {
             onScriptOpen={handleScriptOpen}
             onScriptNavigateToScene={handleScriptNavigateToScene}
             onDocumentOpen={handleDocumentOpen}
+            onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
             onSelectShotCandidate={handleSelectShotCandidate}
             onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
+            onReorderSceneShots={handleReorderSceneShots}
             isPanMode={isPanMode}
           />
 

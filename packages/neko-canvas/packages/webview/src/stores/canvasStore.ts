@@ -90,6 +90,8 @@ export interface CanvasStore {
   rotateNodeEnd: (id: string, rotation: number) => void;
   /** Assign existing ShotNodes into a SceneGroupNode and optionally auto-layout them */
   assignShotsToScene: (sceneId: string, shotIds: string[], autoLayout?: boolean) => void;
+  /** Reorder existing ShotNodes within a SceneGroupNode */
+  reorderSceneShots: (sceneId: string, shotIds: string[], autoLayout?: boolean) => void;
   /** Auto-layout all shots owned by a scene using the current shotIds order */
   autoLayoutSceneShots: (sceneId: string) => void;
 
@@ -173,9 +175,7 @@ function isShotInsideScene(scene: SceneGroupCanvasNode, shot: ShotCanvasNode): b
 }
 
 function getSceneOwnedShots(nodes: CanvasNode[], sceneId: string): ShotCanvasNode[] {
-  return nodes
-    .filter(isShotNode)
-    .filter((node) => node.data.sceneGroupId === sceneId);
+  return nodes.filter(isShotNode).filter((node) => node.data.sceneGroupId === sceneId);
 }
 
 function sortShotsByCanvasOrder(shots: ShotCanvasNode[]): ShotCanvasNode[] {
@@ -216,13 +216,19 @@ function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
   const orderedShotIds = getSceneShotOrder(scene, nodes);
   if (orderedShotIds.length === 0) return nodes;
 
-  const sceneWidth = Math.max(scene.size.width - SCENE_LAYOUT_PADDING_X * 2, SCENE_LAYOUT_MIN_COLUMN_WIDTH);
+  const sceneWidth = Math.max(
+    scene.size.width - SCENE_LAYOUT_PADDING_X * 2,
+    SCENE_LAYOUT_MIN_COLUMN_WIDTH,
+  );
   const shots = orderedShotIds
     .map((shotId) => nodes.find((node) => isShotNode(node) && node.id === shotId))
     .filter((node): node is ShotCanvasNode => Boolean(node));
   if (shots.length === 0) return nodes;
   const maxShotWidth = Math.max(...shots.map((shot) => shot.size.width));
-  const columns = Math.max(1, Math.floor((sceneWidth + SCENE_LAYOUT_GAP_X) / (maxShotWidth + SCENE_LAYOUT_GAP_X)));
+  const columns = Math.max(
+    1,
+    Math.floor((sceneWidth + SCENE_LAYOUT_GAP_X) / (maxShotWidth + SCENE_LAYOUT_GAP_X)),
+  );
 
   return nodes.map((node) => {
     if (!isShotNode(node)) return node;
@@ -235,7 +241,10 @@ function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
       ...node,
       position: {
         x: scene.position.x + SCENE_LAYOUT_PADDING_X + col * (node.size.width + SCENE_LAYOUT_GAP_X),
-        y: scene.position.y + SCENE_LAYOUT_PADDING_TOP + row * (node.size.height + SCENE_LAYOUT_GAP_Y),
+        y:
+          scene.position.y +
+          SCENE_LAYOUT_PADDING_TOP +
+          row * (node.size.height + SCENE_LAYOUT_GAP_Y),
       },
     };
   });
@@ -387,19 +396,20 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     );
 
     const filteredNodes = canvasData.nodes.filter((node) => node.id !== id);
-    const nodesWithDetachedShots = removedNode && isSceneGroupNode(removedNode)
-      ? filteredNodes.map((node) =>
-          isShotNode(node) && node.data.sceneGroupId === id
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  sceneGroupId: undefined,
-                },
-              }
-            : node,
-        )
-      : filteredNodes;
+    const nodesWithDetachedShots =
+      removedNode && isSceneGroupNode(removedNode)
+        ? filteredNodes.map((node) =>
+            isShotNode(node) && node.data.sceneGroupId === id
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    sceneGroupId: undefined,
+                  },
+                }
+              : node,
+          )
+        : filteredNodes;
     const relinkedNodes = relinkSceneShotIds(nodesWithDetachedShots);
 
     set({
@@ -443,7 +453,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
-    const movedNodes = canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node));
+    const movedNodes = canvasData.nodes.map((node) =>
+      node.id === id ? { ...node, position } : node,
+    );
     const nextNodes =
       oldNode && isShotNode(oldNode) ? syncShotSceneMembership(movedNodes, id) : movedNodes;
 
@@ -567,7 +579,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
               ...node,
               data: {
                 ...node.data,
-                shotIds: [...node.data.shotIds.filter((shotId) => !uniqueShotIds.includes(shotId)), ...uniqueShotIds],
+                shotIds: [
+                  ...node.data.shotIds.filter((shotId) => !uniqueShotIds.includes(shotId)),
+                  ...uniqueShotIds,
+                ],
               },
             }
           : node,
@@ -580,6 +595,65 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         nodes: autoLayout ? layoutSceneShots(relinkedNodes, sceneId) : relinkedNodes,
       },
     });
+  },
+
+  reorderSceneShots: (sceneId, shotIds, autoLayout = true) => {
+    const { canvasData } = get();
+    if (!canvasData || shotIds.length === 0) return;
+
+    const scene = canvasData.nodes.find(
+      (node): node is SceneGroupCanvasNode => isSceneGroupNode(node) && node.id === sceneId,
+    );
+    if (!scene) return;
+
+    const dedupedShotIds = shotIds.filter((shotId, index) => shotIds.indexOf(shotId) === index);
+    const ownedShots = getSceneOwnedShots(canvasData.nodes, sceneId).map((shot) => shot.id);
+    if (
+      dedupedShotIds.length !== ownedShots.length ||
+      dedupedShotIds.some((shotId) => !ownedShots.includes(shotId))
+    ) {
+      return;
+    }
+
+    if (
+      scene.data.shotIds.length === dedupedShotIds.length &&
+      scene.data.shotIds.every((shotId, index) => shotId === dedupedShotIds[index])
+    ) {
+      return;
+    }
+
+    recordHistory(canvasData);
+
+    const before: Partial<CanvasNode> = { data: scene.data };
+    const nextNodes = canvasData.nodes.map((node) =>
+      isSceneGroupNode(node) && node.id === sceneId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              shotIds: dedupedShotIds,
+            },
+          }
+        : node,
+    );
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: autoLayout ? layoutSceneShots(nextNodes, sceneId) : nextNodes,
+      },
+    });
+
+    useCanvasOperationStore.getState().recordNodeUpdate(
+      sceneId,
+      {
+        data: {
+          ...scene.data,
+          shotIds: dedupedShotIds,
+        },
+      } as Partial<CanvasNode>,
+      before,
+    );
   },
 
   autoLayoutSceneShots: (sceneId) => {

@@ -12,6 +12,7 @@ describe('nodeRendererRegistry', () => {
     expect(registry.gallery).toBeTypeOf('function');
     expect(registry.script).toBeTypeOf('function');
     expect(registry.document).toBeTypeOf('function');
+    expect(registry['canvas-embed']).toBeTypeOf('function');
     expect(registry.model).toBeTypeOf('function');
   });
 });
