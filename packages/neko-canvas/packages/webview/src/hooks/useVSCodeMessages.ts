@@ -6,8 +6,15 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { CanvasData, CanvasDroppedAsset, CanvasNode, CanvasNodeType } from '@neko/shared';
+import type {
+  CanvasData,
+  CanvasDroppedAsset,
+  CanvasNode,
+  CanvasNodeType,
+  OperationSource,
+} from '@neko/shared';
 import { setLocale } from '../i18n';
+import { useCanvasOperationStore } from '../stores/canvasOperationStore';
 
 // =============================================================================
 // Types
@@ -63,6 +70,10 @@ export interface UseVSCodeMessagesOptions {
   }) => string;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
+}
+
+function withOperationSource<T>(source: OperationSource, run: () => T): T {
+  return useCanvasOperationStore.getState().withOperationSource(source, run);
 }
 
 export interface UseVSCodeMessagesReturn {
@@ -226,10 +237,12 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'nodes.update': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            updateNodeRef.current?.(
-              message.nodeId as string,
-              (message.data as Record<string, unknown>) ?? {},
-            );
+            withOperationSource('ai', () => {
+              updateNodeRef.current?.(
+                message.nodeId as string,
+                (message.data as Record<string, unknown>) ?? {},
+              );
+            });
             vscode.postMessage({ type: '_response', _requestId: requestId, success: true });
             break;
           }
@@ -243,12 +256,15 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
                   data?: Record<string, unknown>;
                 }
               | undefined) ?? { data: {} };
-            const id =
-              createNodeRef.current?.({
-                type: payload.type ?? 'annotation',
-                position: payload.position ?? { x: 0, y: 0 },
-                data: payload.data ?? {},
-              }) ?? '';
+            const id = withOperationSource(
+              'ai',
+              () =>
+                createNodeRef.current?.({
+                  type: payload.type ?? 'annotation',
+                  position: payload.position ?? { x: 0, y: 0 },
+                  data: payload.data ?? {},
+                }) ?? '',
+            );
             vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
             break;
           }

@@ -48,9 +48,12 @@ export interface CanvasOperationStore {
   /** 操作日志（用于审计/AI 分析） */
   operationLog: EditOperation[];
   maxLogSize: number;
+  operationSourceOverride: OperationSource | null;
 
   /** 记录操作（由 canvasStore 的 action 调用） */
   recordOperation: (op: EditOperation) => void;
+  /** Temporarily override operation source within a synchronous mutation boundary */
+  withOperationSource: <T>(source: OperationSource, run: () => T) => T;
 
   /** 清空日志 */
   clearLog: () => void;
@@ -76,15 +79,37 @@ export interface CanvasOperationStore {
 export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) => ({
   operationLog: [],
   maxLogSize: 500,
+  operationSourceOverride: null,
 
   recordOperation: (op) => {
-    const { operationLog, maxLogSize } = get();
-    const newLog = [...operationLog, op];
+    const { operationLog, maxLogSize, operationSourceOverride } = get();
+    const newLog = [
+      ...operationLog,
+      operationSourceOverride
+        ? {
+            ...op,
+            meta: {
+              ...op.meta,
+              source: operationSourceOverride,
+            },
+          }
+        : op,
+    ];
     if (newLog.length > maxLogSize) {
       newLog.splice(0, newLog.length - maxLogSize);
     }
     set({ operationLog: newLog });
-    syncOperationToExtension(op);
+    syncOperationToExtension(newLog[newLog.length - 1]!);
+  },
+
+  withOperationSource: (source, run) => {
+    const previous = get().operationSourceOverride;
+    set({ operationSourceOverride: source });
+    try {
+      return run();
+    } finally {
+      set({ operationSourceOverride: previous });
+    }
   },
 
   clearLog: () => set({ operationLog: [] }),
