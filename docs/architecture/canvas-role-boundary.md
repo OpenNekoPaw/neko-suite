@@ -1,6 +1,6 @@
 # neko-canvas 职责边界与缺口分析
 
-**状态**: 分析文档  
+**状态**: 持续更新（2026-04-08 已落实 asset 代理边界与 `timelineSync` 最小回流契约）  
 **日期**: 2026-04-08  
 **关联**: `canvas-agent-integration.md` · `project-data-management.md` · `ARCHITECTURE_CN.md`
 
@@ -248,6 +248,16 @@ Agent 擅长理解的对象是：
 
 > 当前方向正确，主要问题不是定位错误，而是若干增强型中枢能力仍需继续补强。
 
+当前已明确的跨扩展边界：
+
+- `neko-assets` 是资产事实源
+- `NekoCanvasAPI.asset` 只是受限代理层，当前只暴露 `import/list/getById`
+- `neko-canvas` 是语义编排与审阅状态层
+- `neko-cut` 是时间线与成片事实源
+- `cut -> canvas` 通过共享 `timelineSync` 契约做最小回流
+- 当前允许回流的字段仅限 `shotId`、`projectName`、`importedAt` 一类操作元数据
+- 这些回流字段只能更新 `lastImportedToTimeline*` 之类状态，不可覆盖 `shot` 的语义描述层
+
 ---
 
 ## 八、画布功能 P0 缺口清单
@@ -364,7 +374,8 @@ Agent 擅长理解的对象是：
 现状：
 
 - `NekoCanvasAPI` 定义了 `asset` 命名空间
-- 实际实现中除 `import` 外多为 stub
+- 历史上实际实现中除 `import` 外多为 stub
+- 当前已收敛为 `neko-assets` 的受限代理实现
 
 风险：
 
@@ -372,15 +383,15 @@ Agent 擅长理解的对象是：
 
 建议：
 
-- 明确声明 `asset` 只是便捷代理，事实源仍为 `neko-assets`
-- 收缩代理面，只保留 `import/list/getById`
+- 保持“代理而非事实源”的注释、测试和实现一致
+- 后续优先推动 `neko-assets` 提供正式扩展 API，逐步替代 command 级代理
 
 ### P1-3 `canvas -> cut` 主要是单向导出
 
 现状：
 
 - 画布可将 storyboard 导入 `cut`
-- 缺少从时间线状态回流到画布的明确策略
+- 当前已通过共享 `timelineSync` 契约补上最小回流策略
 
 风险：
 
@@ -388,10 +399,10 @@ Agent 擅长理解的对象是：
 
 建议：
 
-- 用共享 `timelineSync` 契约固定 `cut -> canvas` 最小回流字段
-- 当前仅允许回流 `shotId`、`projectName`、`importedAt` 等操作元数据
-- 明确单向权威或补充最小必要回流机制
-- 例如只回流：时长变化、选中镜头、已产出视频缩略图
+- 保持 `timelineSync` 的“最小字段、显式 reason、共享类型”原则
+- 新增回流字段前，先审查是否属于操作元数据还是语义事实
+- 只有前者才允许进入 `cut -> canvas` 契约
+- 下一步如需扩展，优先考虑：选中镜头、导出视频缩略图、渲染产物引用
 
 ### P1-4 节点渲染注册表已完成首轮落地
 
@@ -451,8 +462,8 @@ Agent 擅长理解的对象是：
 
 ### 10.1 两周内
 
-- 明确 `asset` 命名空间的代理边界
-- 收敛 `canvas ↔ cut` 最小回流后的双向语义范围
+- 基于当前 `asset` 代理边界补正式 API 演进方案
+- 基于 `timelineSync` 收敛更明确的双向语义范围
 
 ### 10.2 一个月内
 
