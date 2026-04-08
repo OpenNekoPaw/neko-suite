@@ -52,6 +52,22 @@ async function ensureProjectModel(
   }
 }
 
+async function syncTimelineImportMetadata(
+  api: NekoCanvasAPI,
+  shotIds: string[],
+  projectName: string,
+  importedAt: number,
+): Promise<void> {
+  await Promise.all(
+    shotIds.map((shotId) =>
+      api.nodes.update(shotId, {
+        lastImportedToTimelineAt: importedAt,
+        lastImportedToTimelineProject: projectName,
+      }),
+    ),
+  );
+}
+
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
   readonly version = '1.0.0';
@@ -544,6 +560,13 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 projectName,
                 shots: timelineShots,
               });
+              const importedAt = Date.now();
+              await syncTimelineImportMetadata(
+                api,
+                timelineShots.map((shot) => shot.id),
+                projectName,
+                importedAt,
+              );
 
               return {
                 success: true,

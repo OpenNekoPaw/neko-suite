@@ -37,6 +37,22 @@ export interface Tool {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
+async function syncTimelineImportMetadata(
+  api: NekoCanvasAPI,
+  shotIds: string[],
+  projectName: string,
+  importedAt: number,
+): Promise<void> {
+  await Promise.all(
+    shotIds.map((shotId) =>
+      api.nodes.update(shotId, {
+        lastImportedToTimelineAt: importedAt,
+        lastImportedToTimelineProject: projectName,
+      }),
+    ),
+  );
+}
+
 // =============================================================================
 // NekoCut Tools
 // =============================================================================
@@ -711,6 +727,13 @@ export function createNekoCanvasTools(
             projectName,
             shots: timelineShots,
           });
+          const importedAt = Date.now();
+          await syncTimelineImportMetadata(
+            api,
+            timelineShots.map((shot) => shot.id),
+            projectName,
+            importedAt,
+          );
 
           return {
             success: true,
