@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import type { AgentContextPayload, NekoAgentAPI, NekoStoryAPI } from '@neko/shared';
+import type {
+  AgentContextPayload,
+  AssetEntity,
+  NekoAgentAPI,
+  NekoAssetsAPI,
+  NekoStoryAPI,
+} from '@neko/shared';
 import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
@@ -36,6 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
   logger.info('Extension activated');
 
   const occurrenceLookup = createAgentOccurrenceLookup();
+  const assetLookup = createAssetsEntityLookup();
 
   const characterIndexService = new CharacterWorkspaceIndexService();
   context.subscriptions.push(characterIndexService);
@@ -64,17 +71,22 @@ export function activate(context: vscode.ExtensionContext) {
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(indexService, characterIndexService),
+      new FountainDefinitionProvider(indexService, characterIndexService, assetLookup),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService, characterIndexService, occurrenceLookup),
+      new FountainReferenceProvider(
+        indexService,
+        characterIndexService,
+        occurrenceLookup,
+        assetLookup,
+      ),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService, characterIndexService),
+      new FountainHoverProvider(indexService, characterIndexService, assetLookup),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(
@@ -338,6 +350,22 @@ export function deactivate() {}
 
 function createAgentOccurrenceLookup() {
   return {
+    async findOccurrences(entity) {
+      const extension = vscode.extensions.getExtension<NekoAgentAPI>(NEKO_EXTENSION_IDS.NEKO_AGENT);
+      if (!extension) {
+        return [];
+      }
+
+      try {
+        const api = extension.isActive
+          ? extension.exports
+          : ((await extension.activate()) as NekoAgentAPI);
+        return api.entities.findOccurrences(entity);
+      } catch {
+        return [];
+      }
+    },
+
     async findCharacterOccurrences(characterId: string) {
       const extension = vscode.extensions.getExtension<NekoAgentAPI>(NEKO_EXTENSION_IDS.NEKO_AGENT);
       if (!extension) {
@@ -351,6 +379,54 @@ function createAgentOccurrenceLookup() {
         return api.entities.findCharacterOccurrences(characterId);
       } catch {
         return [];
+      }
+    },
+  };
+}
+
+function createAssetsEntityLookup() {
+  return {
+    async resolveObject(name: string): Promise<AssetEntity | null> {
+      const extension = vscode.extensions.getExtension<NekoAssetsAPI>(
+        NEKO_EXTENSION_IDS.NEKO_ASSETS,
+      );
+      if (!extension) {
+        return null;
+      }
+
+      try {
+        const api = extension.isActive
+          ? extension.exports
+          : ((await extension.activate()) as NekoAssetsAPI);
+        return api.entities.resolveEntityByName(name, { categories: ['object', 'vehicle'] });
+      } catch {
+        return null;
+      }
+    },
+
+    async getDefinitionLocation(id: string): Promise<vscode.Location | null> {
+      const extension = vscode.extensions.getExtension<NekoAssetsAPI>(
+        NEKO_EXTENSION_IDS.NEKO_ASSETS,
+      );
+      if (!extension) {
+        return null;
+      }
+
+      try {
+        const api = extension.isActive
+          ? extension.exports
+          : ((await extension.activate()) as NekoAssetsAPI);
+        const location = await api.entities.getDefinitionLocation(id);
+        if (!location) {
+          return null;
+        }
+
+        return new vscode.Location(
+          vscode.Uri.parse(location.uri),
+          new vscode.Position(location.line, location.character),
+        );
+      } catch {
+        return null;
       }
     },
   };

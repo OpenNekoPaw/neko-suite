@@ -54,6 +54,7 @@ let library: AssetLibrary | null = null;
 let diffService: AssetDiffService | null = null;
 let thumbnailService: ThumbnailService | null = null;
 let healthMonitor: AssetHealthMonitor | null = null;
+let assetLibraryPath: string | null = null;
 
 // =============================================================================
 // Node.js IFileSystem Adapter
@@ -148,6 +149,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAs
       });
 
       await library.initialize();
+      assetLibraryPath = layout.project.assetLibrary;
       logger.info(`AssetLibrary initialized at ${layout.project.assetLibrary}`);
 
       // Initialize AssetDiffService with Git integration
@@ -1220,6 +1222,69 @@ function createAssetsApi(): NekoAssetsAPI {
         }
       },
 
+      async resolveEntityByName(name, options) {
+        if (!library) {
+          return null;
+        }
+
+        try {
+          const needle = normalizeEntityToken(name);
+          if (!needle) {
+            return null;
+          }
+
+          const entities = await library.getAllEntities();
+          const categories = options?.categories;
+          const categorySet = categories ? new Set(categories) : undefined;
+
+          return (
+            entities.find((entity) => {
+              if (categorySet && !categorySet.has(entity.category as (typeof categories)[number])) {
+                return false;
+              }
+
+              const tokens = [entity.name, ...(entity.aliases ?? []), ...entity.tags].map(
+                normalizeEntityToken,
+              );
+
+              return tokens.includes(needle);
+            }) ?? null
+          );
+        } catch (error) {
+          logger.error('assets api resolveEntityByName failed:', error);
+          return null;
+        }
+      },
+
+      async getDefinitionLocation(id) {
+        if (!assetLibraryPath) {
+          return null;
+        }
+
+        try {
+          const content = await fs.readFile(assetLibraryPath, 'utf-8');
+          const lines = content.split('\n');
+          const pattern = `"id": "${id}"`;
+
+          for (let line = 0; line < lines.length; line++) {
+            const current = lines[line];
+            const character = current?.indexOf(pattern) ?? -1;
+            if (character >= 0) {
+              return {
+                uri: vscode.Uri.file(assetLibraryPath).toString(),
+                line,
+                character,
+              };
+            }
+          }
+
+          return null;
+        } catch (error) {
+          logger.error('assets api getDefinitionLocation failed:', error);
+          return null;
+        }
+      },
+
       async findOccurrences(entity: CreativeEntityRef) {
         if (!library) {
           return [];
@@ -1239,6 +1304,10 @@ function createAssetsApi(): NekoAssetsAPI {
       },
     },
   };
+}
+
+function normalizeEntityToken(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? '';
 }
 
 function matchesCreativeEntity(assetEntity: AssetEntity, entity: CreativeEntityRef): boolean {

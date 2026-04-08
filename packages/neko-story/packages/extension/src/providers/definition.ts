@@ -3,9 +3,16 @@ import { isTrustedOccurrenceEntry } from '@neko/shared';
 import type { OccurrenceIndexEntry } from '@neko/shared';
 import type { IWorkspaceIndex } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
+import type { AssetEntity, CreativeEntityRef } from '@neko/shared';
 
 export interface IEntityOccurrenceLookup {
   findCharacterOccurrences(characterId: string): Promise<OccurrenceIndexEntry[]>;
+  findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;
+}
+
+export interface IAssetEntityLookup {
+  resolveObject(name: string): Promise<AssetEntity | null>;
+  getDefinitionLocation(id: string): Promise<vscode.Location | null>;
 }
 
 /**
@@ -16,6 +23,7 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
     private readonly characterIndex?: ICharacterWorkspaceIndex,
+    private readonly assetLookup?: IAssetEntityLookup,
   ) {}
 
   async provideDefinition(
@@ -32,7 +40,17 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
 
     const characterResolution = this.characterIndex?.resolveCharacter(word);
     if (characterResolution) {
-      const definition = this.characterIndex?.getDefinitionLocation(characterResolution.characterId);
+      const definition = this.characterIndex?.getDefinitionLocation(
+        characterResolution.characterId,
+      );
+      if (definition) {
+        return definition;
+      }
+    }
+
+    const objectEntity = await this.assetLookup?.resolveObject(word);
+    if (objectEntity) {
+      const definition = await this.assetLookup?.getDefinitionLocation(objectEntity.id);
       if (definition) {
         return definition;
       }
@@ -71,6 +89,7 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     private readonly index: IWorkspaceIndex,
     private readonly characterIndex?: ICharacterWorkspaceIndex,
     private readonly occurrenceLookup?: IEntityOccurrenceLookup,
+    private readonly assetLookup?: IAssetEntityLookup,
   ) {}
 
   async provideReferences(
@@ -97,7 +116,9 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
 
     const characterResolution = this.characterIndex?.resolveCharacter(word);
     if (characterResolution) {
-      const definition = this.characterIndex?.getDefinitionLocation(characterResolution.characterId);
+      const definition = this.characterIndex?.getDefinitionLocation(
+        characterResolution.characterId,
+      );
       if (definition) {
         pushLocation(definition);
       }
@@ -105,6 +126,29 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
       const occurrences = await this.occurrenceLookup?.findCharacterOccurrences(
         characterResolution.characterId,
       );
+      for (const occurrence of occurrences ?? []) {
+        if (!isTrustedOccurrenceEntry(occurrence)) {
+          continue;
+        }
+        const location = occurrenceToLocation(occurrence);
+        if (location) {
+          pushLocation(location);
+        }
+      }
+    }
+
+    const objectEntity = await this.assetLookup?.resolveObject(word);
+    if (objectEntity) {
+      const definition = await this.assetLookup?.getDefinitionLocation(objectEntity.id);
+      if (definition) {
+        pushLocation(definition);
+      }
+
+      const occurrences = await this.occurrenceLookup?.findOccurrences({
+        kind: 'object',
+        id: objectEntity.id,
+        label: objectEntity.name,
+      });
       for (const occurrence of occurrences ?? []) {
         if (!isTrustedOccurrenceEntry(occurrence)) {
           continue;

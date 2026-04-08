@@ -2,8 +2,9 @@ import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
 import type { IWorkspaceIndex } from '../services/types';
-import type { CharacterRecord } from '@neko/shared';
+import type { AssetEntity, CharacterRecord } from '@neko/shared';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
+import type { IAssetEntityLookup } from './definition';
 
 /**
  * Provides hover information for Fountain files.
@@ -14,6 +15,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
     private readonly characterIndex?: ICharacterWorkspaceIndex,
+    private readonly assetLookup?: IAssetEntityLookup,
   ) {}
 
   async provideHover(
@@ -42,6 +44,11 @@ export class FountainHoverProvider implements vscode.HoverProvider {
           return new vscode.Hover(
             this.formatCharacterStats(charName, localStats, crossFileStats, registryRecord),
           );
+        }
+
+        const objectEntity = await this.assetLookup?.resolveObject(charName);
+        if (objectEntity) {
+          return new vscode.Hover(this.formatObjectStats(objectEntity));
         }
       }
     }
@@ -196,6 +203,23 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     }
     md.appendMarkdown(`**Characters:** ${stats.characters.join(', ') || 'None'}\n\n`);
     md.appendMarkdown(`**Dialogue lines:** ${stats.dialogueCount}\n`);
+    return md;
+  }
+
+  private formatObjectStats(entity: AssetEntity): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`### ${entity.name}\n\n`);
+    md.appendMarkdown(`**Object ID:** \`${entity.id}\`\n\n`);
+    md.appendMarkdown(`**Category:** ${entity.category}\n\n`);
+    if (entity.aliases && entity.aliases.length > 0) {
+      md.appendMarkdown(`**Aliases:** ${entity.aliases.join(', ')}\n\n`);
+    }
+    if (entity.tags.length > 0) {
+      md.appendMarkdown(`**Tags:** ${entity.tags.join(', ')}\n\n`);
+    }
+    if (entity.description) {
+      md.appendMarkdown(`${entity.description}\n`);
+    }
     return md;
   }
 }

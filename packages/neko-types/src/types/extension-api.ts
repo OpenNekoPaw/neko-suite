@@ -443,6 +443,23 @@ export interface NekoAssetsAPI {
     getEntityById(id: string): Promise<AssetEntity | null>;
 
     /**
+     * Resolve an asset entity by exact name, alias, or tag.
+     */
+    resolveEntityByName(
+      name: string,
+      options?: {
+        categories?: Array<'character' | 'object' | 'vehicle' | 'environment' | 'effect'>;
+      },
+    ): Promise<AssetEntity | null>;
+
+    /**
+     * Return a definition-like location inside the project asset library JSON.
+     */
+    getDefinitionLocation(
+      id: string,
+    ): Promise<{ uri: string; line: number; character: number } | null>;
+
+    /**
      * Find projected occurrences for a creative entity inside the asset library.
      */
     findOccurrences(entity: CreativeEntityRef): Promise<OccurrenceIndexEntry[]>;

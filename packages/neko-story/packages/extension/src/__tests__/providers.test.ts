@@ -9,7 +9,7 @@ import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
 import type { IWorkspaceIndex, SymbolLocation } from '../services/types';
 import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
-import type { OccurrenceIndexEntry } from '@neko/shared';
+import type { AssetEntity, OccurrenceIndexEntry } from '@neko/shared';
 
 // Mock vscode module
 vi.mock('vscode', () => ({
@@ -327,7 +327,42 @@ function createMockCharacterIndex(): ICharacterWorkspaceIndex {
 
 function createMockOccurrenceLookup(entries: OccurrenceIndexEntry[] = []) {
   return {
+    findOccurrences: vi.fn(async () => entries),
     findCharacterOccurrences: vi.fn(async () => entries),
+  };
+}
+
+function createMockAssetLookup(): {
+  resolveObject: (name: string) => Promise<AssetEntity | null>;
+  getDefinitionLocation: (id: string) => Promise<any>;
+} {
+  const entity: AssetEntity = {
+    id: 'obj_ring',
+    name: 'RING',
+    category: 'object',
+    description: 'A gold ring used as a recurring prop.',
+    metadata: {},
+    variants: [],
+    tags: ['jewelry', 'prop'],
+    aliases: ['WEDDING RING'],
+    usageCount: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  return {
+    resolveObject: async (name: string) =>
+      name === 'RING' || name === 'WEDDING RING' ? entity : null,
+    getDefinitionLocation: async (id: string) =>
+      id === 'obj_ring'
+        ? {
+            uri: {
+              fsPath: '/project/.neko/assets/library.json',
+              toString: () => 'file:///project/.neko/assets/library.json',
+            },
+            range: { start: { line: 12, character: 4 }, end: { line: 12, character: 20 } },
+          }
+        : null,
   };
 }
 
@@ -811,6 +846,17 @@ describe('DefinitionProvider — Cross-file', () => {
 
     expect(result).toBeNull();
   });
+
+  it('should resolve object definitions through asset lookup', async () => {
+    const index = createMockIndex({ '/test.fountain': 'The RING glints.' });
+    const provider = new FountainDefinitionProvider(index, undefined, createMockAssetLookup());
+    const doc = createMockDocument('RING', '/test.fountain');
+
+    const result = await provider.provideDefinition(doc, { line: 0, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    expect(result.uri.fsPath).toBe('/project/.neko/assets/library.json');
+  });
 });
 
 describe('ReferenceProvider — Cross-file', () => {
@@ -919,6 +965,42 @@ describe('ReferenceProvider — Cross-file', () => {
     const files = results.map((r: any) => r.uri.fsPath);
     expect(files.filter((f: string) => f === '/project/a.fountain')).toHaveLength(2);
     expect(files.filter((f: string) => f === '/project/b.fountain')).toHaveLength(1);
+  });
+
+  it('should include object references from agent occurrence lookup', async () => {
+    const index = createMockIndex({ '/test.fountain': 'RING' });
+    const occurrenceLookup = createMockOccurrenceLookup([
+      {
+        entity: { kind: 'object', id: 'obj_ring' },
+        source: 'canvas-node',
+        sourceId: 'shot-1',
+        locator: { uri: '/project/storyboard.nkc' },
+      },
+    ]);
+    const provider = new FountainReferenceProvider(
+      index,
+      undefined,
+      occurrenceLookup,
+      createMockAssetLookup(),
+    );
+    const doc = createMockDocument('RING', '/test.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 0, character: 0 },
+      {} as any,
+      {} as any,
+    );
+
+    expect(occurrenceLookup.findOccurrences).toHaveBeenCalledWith({
+      kind: 'object',
+      id: 'obj_ring',
+      label: 'RING',
+    });
+    expect(results.some((r: any) => r.uri.fsPath === '/project/storyboard.nkc')).toBe(true);
+    expect(results.some((r: any) => r.uri.fsPath === '/project/.neko/assets/library.json')).toBe(
+      true,
+    );
   });
 });
 
@@ -1064,6 +1146,20 @@ describe('HoverProvider — Cross-file stats', () => {
     expect(md.value).toContain('MARY');
     // Should NOT contain "files" since MARY is only in one file
     expect(md.value).not.toContain('files');
+  });
+
+  it('should show object metadata when object is resolved from asset lookup', async () => {
+    const index = createMockIndex({ '/test.fountain': 'RING' });
+    const provider = new FountainHoverProvider(index, undefined, createMockAssetLookup());
+    const doc = createMockDocument('RING', '/test.fountain');
+
+    const result = await provider.provideHover(doc, { line: 0, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    const md = result.contents;
+    expect(md.value).toContain('Object ID');
+    expect(md.value).toContain('obj_ring');
+    expect(md.value).toContain('jewelry');
   });
 });
 
