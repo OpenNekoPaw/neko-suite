@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Create shared workspace index service
   const indexService = new WorkspaceIndexService();
   context.subscriptions.push(indexService);
-  const sceneStateStore = new StorySceneStateStore();
+  const sceneStateStore = new StorySceneStateStore(context.workspaceState);
   context.subscriptions.push(sceneStateStore);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
