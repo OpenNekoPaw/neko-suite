@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { t } from '../i18n';
 
 const logger = new ConsoleLogger('ErrorBoundary', LogLevel.Info);
 
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           }}
         >
           <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#x26A0;&#xFE0F;</div>
-          <h2 style={{ marginBottom: '0.5rem' }}>Something went wrong</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>{t('error.title')}</h2>
           <p style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '1rem' }}>
             {this.state.error.message}
           </p>
@@ -57,7 +58,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               cursor: 'pointer',
             }}
           >
-            Try again
+            {t('error.retry')}
           </button>
         </div>
       );

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { mockPostMessage } from './setup';
+import { screen, fireEvent } from '@testing-library/react';
+import { mockPostMessage, renderWithI18n } from './setup';
 import { ScriptRenderer } from '../components/ScriptRenderer';
 import type {
   FountainDocument,
@@ -33,14 +33,14 @@ beforeEach(() => {
 
 describe('ScriptRenderer', () => {
   it('renders empty state when document is null', () => {
-    render(<ScriptRenderer document={null} />);
+    renderWithI18n(<ScriptRenderer document={null} />);
     expect(screen.getByText('No Script Loaded')).toBeInTheDocument();
     expect(screen.getByText('Open a .fountain file to preview')).toBeInTheDocument();
   });
 
   it('renders empty screenplay when document has no elements', () => {
     const doc: FountainDocument = { titlePage: null, elements: [] };
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
     expect(container.querySelector('.screenplay')).toBeInTheDocument();
   });
 
@@ -55,7 +55,7 @@ describe('ScriptRenderer', () => {
       raw: 'INT. COFFEE SHOP - DAY',
     };
     const doc: FountainDocument = { titlePage: null, elements: [heading] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('INT - COFFEE SHOP - DAY')).toBeInTheDocument();
   });
 
@@ -70,7 +70,7 @@ describe('ScriptRenderer', () => {
       raw: 'EXT. PARK - NIGHT #5#',
     };
     const doc: FountainDocument = { titlePage: null, elements: [heading] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('#5')).toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe('ScriptRenderer', () => {
       raw: 'John walks into the room.',
     };
     const doc: FountainDocument = { titlePage: null, elements: [action] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('John walks into the room.')).toBeInTheDocument();
   });
 
@@ -96,7 +96,7 @@ describe('ScriptRenderer', () => {
       raw: '>THE END<',
     };
     const doc: FountainDocument = { titlePage: null, elements: [action] };
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
     const el = container.querySelector('.action.centered');
     expect(el).toBeInTheDocument();
     expect(el?.textContent).toBe('THE END');
@@ -121,7 +121,7 @@ describe('ScriptRenderer', () => {
       titlePage: null,
       elements: [character, dialogue],
     };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('JOHN')).toBeInTheDocument();
     expect(screen.getByText('Hello, world!')).toBeInTheDocument();
   });
@@ -145,7 +145,7 @@ describe('ScriptRenderer', () => {
       titlePage: null,
       elements: [character, dialogue],
     };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('(V.O.)')).toBeInTheDocument();
   });
 
@@ -174,7 +174,7 @@ describe('ScriptRenderer', () => {
       titlePage: null,
       elements: [character, paren, dialogue],
     };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('(whispering)')).toBeInTheDocument();
     expect(screen.getByText('I have a secret.')).toBeInTheDocument();
   });
@@ -190,7 +190,7 @@ describe('ScriptRenderer', () => {
       titlePage: null,
       elements: [transition],
     };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('CUT TO:')).toBeInTheDocument();
   });
 
@@ -205,7 +205,7 @@ describe('ScriptRenderer', () => {
       titlePage: null,
       elements: [centered],
     };
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
     expect(container.querySelector('.centered.element')).toBeInTheDocument();
   });
 
@@ -218,7 +218,7 @@ describe('ScriptRenderer', () => {
       raw: '## Act Two',
     };
     const doc: FountainDocument = { titlePage: null, elements: [section] };
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
     const el = container.querySelector('.section.level-2');
     expect(el).toBeInTheDocument();
     expect(el?.textContent).toBe('Act Two');
@@ -232,7 +232,7 @@ describe('ScriptRenderer', () => {
       raw: '= John meets Mary at the coffee shop.',
     };
     const doc: FountainDocument = { titlePage: null, elements: [synopsis] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('John meets Mary at the coffee shop.')).toBeInTheDocument();
   });
 
@@ -244,7 +244,7 @@ describe('ScriptRenderer', () => {
       raw: '[[This needs revision.]]',
     };
     const doc: FountainDocument = { titlePage: null, elements: [note] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('This needs revision.')).toBeInTheDocument();
   });
 
@@ -256,7 +256,7 @@ describe('ScriptRenderer', () => {
       raw: '~La la la',
     };
     const doc: FountainDocument = { titlePage: null, elements: [lyrics] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('La la la')).toBeInTheDocument();
   });
 
@@ -267,7 +267,7 @@ describe('ScriptRenderer', () => {
       raw: '===',
     };
     const doc: FountainDocument = { titlePage: null, elements: [pageBreak] };
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
     expect(container.querySelector('.page-break')).toBeInTheDocument();
   });
 
@@ -282,7 +282,7 @@ describe('ScriptRenderer', () => {
       raw: 'Title: My Screenplay\nAuthor: John Doe',
     };
     const doc: FountainDocument = { titlePage, elements: [] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
     expect(screen.getByText('My Screenplay')).toBeInTheDocument();
     expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
@@ -300,7 +300,7 @@ describe('Click navigation', () => {
       raw: 'INT. OFFICE - DAY',
     };
     const doc: FountainDocument = { titlePage: null, elements: [heading] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
 
     fireEvent.click(screen.getByText('INT - OFFICE - DAY'));
     expect(mockPostMessage).toHaveBeenCalledWith({
@@ -319,7 +319,7 @@ describe('Click navigation', () => {
       raw: 'He stands up.',
     };
     const doc: FountainDocument = { titlePage: null, elements: [action] };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
 
     fireEvent.click(screen.getByText('He stands up.'));
     expect(mockPostMessage).toHaveBeenCalledWith({
@@ -348,7 +348,7 @@ describe('Click navigation', () => {
       titlePage: null,
       elements: [character, dialogue],
     };
-    render(<ScriptRenderer document={doc} />);
+    renderWithI18n(<ScriptRenderer document={doc} />);
 
     fireEvent.click(screen.getByText('Good morning!'));
     expect(mockPostMessage).toHaveBeenCalledWith({
@@ -410,7 +410,7 @@ describe('Complex document rendering', () => {
       ],
     };
 
-    const { container } = render(<ScriptRenderer document={doc} />);
+    const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
 
     expect(screen.getByText('Act One')).toBeInTheDocument();
     expect(screen.getByText('INT - OFFICE - DAY')).toBeInTheDocument();

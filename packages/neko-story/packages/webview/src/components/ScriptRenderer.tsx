@@ -10,6 +10,7 @@ import type {
   Lyrics,
 } from '../types';
 import { navigateToLine } from '../hooks/useVSCodeMessaging';
+import { useTranslation } from '../i18n/I18nContext';
 import { TitlePageRenderer } from './TitlePage';
 import { SceneHeadingRenderer } from './SceneHeading';
 import { ActionBlock } from './ActionBlock';
@@ -20,11 +21,13 @@ interface ScriptRendererProps {
 }
 
 export function ScriptRenderer({ document }: ScriptRendererProps) {
+  const { t } = useTranslation();
+
   if (!document) {
     return (
       <div className="empty-state">
-        <h2>No Script Loaded</h2>
-        <p>Open a .fountain file to preview</p>
+        <h2>{t('script.empty.title')}</h2>
+        <p>{t('script.empty.hint')}</p>
       </div>
     );
   }

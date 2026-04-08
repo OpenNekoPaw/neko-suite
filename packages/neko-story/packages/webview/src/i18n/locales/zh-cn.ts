@@ -10,4 +10,25 @@ export const zhCN = {
   // Error boundary
   'error.title': '出了点问题',
   'error.retry': '重试',
+
+  // Scene table view
+  'table.empty': '打开剧本文件以生成分镜表',
+  'table.noScenes': '未找到场景标题（以 INT./EXT. 开头的行）',
+  'table.scenes': '{count} 个场景',
+  'table.characters': '{count} 个角色',
+  'table.totalDuration': '预计总时长 {duration}',
+  'table.header.number': '场景编号',
+  'table.header.heading': '场景标题',
+  'table.header.intExt': '景',
+  'table.header.location': '地点',
+  'table.header.time': '时',
+  'table.header.duration': '时长',
+
+  // Creative grid view
+  'grid.empty': '打开剧本文件以显示创意视图',
+  'grid.noScenes': '未找到场景标题（以 INT./EXT. 开头的行）',
+  'grid.scenes': '{count} 个场景',
+  'grid.estDuration': '预计 {duration}',
+  'grid.generated': '{done}/{total} 已生成',
+  'grid.notGenerated': '未生成',
 } satisfies MessageBundle;

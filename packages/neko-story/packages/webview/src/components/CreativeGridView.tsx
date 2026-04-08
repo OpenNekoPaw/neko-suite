@@ -15,6 +15,7 @@ import {
   formatDurationShort,
   type SceneBreakdown,
 } from '../utils/sceneBreakdown';
+import { useTranslation } from '../i18n/I18nContext';
 
 // =============================================================================
 // Types
@@ -40,6 +41,7 @@ function SceneCard({
   image?: string;
   onNavigate?: (line: number) => void;
 }) {
+  const { t } = useTranslation();
   const intExtColor =
     scene.intExt === 'EXT' ? '#16a34a' : scene.intExt === 'INT' ? '#3b82f6' : '#6b7280';
 
@@ -72,7 +74,7 @@ function SceneCard({
             style={{ color: 'var(--vscode-foreground)' }}
           >
             <span style={{ fontSize: 24 }}>🎬</span>
-            <span style={{ fontSize: 10 }}>未生成</span>
+            <span style={{ fontSize: 10 }}>{t('grid.notGenerated')}</span>
           </div>
         )}
 
@@ -161,13 +163,15 @@ export function CreativeGridView({
   onNavigate,
   generatedImages = {},
 }: CreativeGridViewProps) {
+  const { t } = useTranslation();
+
   if (!document) {
     return (
       <div
         className="flex items-center justify-center h-full text-sm"
         style={{ color: 'var(--vscode-descriptionForeground)' }}
       >
-        打开剧本文件以显示创意视图
+        {t('grid.empty')}
       </div>
     );
   }
@@ -180,7 +184,7 @@ export function CreativeGridView({
         className="flex items-center justify-center h-full text-sm"
         style={{ color: 'var(--vscode-descriptionForeground)' }}
       >
-        未找到场景标题（以 INT./EXT. 开头的行）
+        {t('grid.noScenes')}
       </div>
     );
   }
@@ -200,10 +204,13 @@ export function CreativeGridView({
           color: 'var(--vscode-descriptionForeground)',
         }}
       >
-        <span>{scenes.length} 个场景</span>
-        <span>预计 {formatDurationShort(totalDuration)}</span>
+        <span>{t('grid.scenes', { count: scenes.length })}</span>
+        <span>{t('grid.estDuration', { duration: formatDurationShort(totalDuration) })}</span>
         <span>
-          {scenes.filter((s) => generatedImages[s.sceneIndex]).length}/{scenes.length} 已生成
+          {t('grid.generated', {
+            done: scenes.filter((s) => generatedImages[s.sceneIndex]).length,
+            total: scenes.length,
+          })}
         </span>
       </div>
 

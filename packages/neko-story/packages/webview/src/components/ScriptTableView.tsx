@@ -16,6 +16,7 @@ import {
   formatDurationShort,
   type SceneBreakdown,
 } from '../utils/sceneBreakdown';
+import { useTranslation } from '../i18n/I18nContext';
 
 // =============================================================================
 // Types
@@ -160,13 +161,15 @@ function SceneRow({
 // =============================================================================
 
 export function ScriptTableView({ document, onNavigate }: ScriptTableViewProps) {
+  const { t } = useTranslation();
+
   if (!document) {
     return (
       <div
         className="flex items-center justify-center h-full text-sm"
         style={{ color: 'var(--vscode-descriptionForeground)' }}
       >
-        打开剧本文件以生成分镜表
+        {t('table.empty')}
       </div>
     );
   }
@@ -180,7 +183,7 @@ export function ScriptTableView({ document, onNavigate }: ScriptTableViewProps) 
         className="flex items-center justify-center h-full text-sm"
         style={{ color: 'var(--vscode-descriptionForeground)' }}
       >
-        未找到场景标题（以 INT./EXT. 开头的行）
+        {t('table.noScenes')}
       </div>
     );
   }
@@ -199,23 +202,26 @@ export function ScriptTableView({ document, onNavigate }: ScriptTableViewProps) 
           color: 'var(--vscode-descriptionForeground)',
         }}
       >
-        <span>{scenes.length} 个场景</span>
-        <span>{characters.length} 个角色</span>
+        <span>{t('table.scenes', { count: scenes.length })}</span>
+        <span>{t('table.characters', { count: characters.length })}</span>
         <span>
-          预计总时长{' '}
-          {formatDurationShort(scenes.reduce((acc, s) => acc + s.estimatedDurationSec, 0))}
+          {t('table.totalDuration', {
+            duration: formatDurationShort(
+              scenes.reduce((acc, s) => acc + s.estimatedDurationSec, 0),
+            ),
+          })}
         </span>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <Th title="场景编号">#</Th>
-            <Th>场景标题</Th>
-            <Th title="内景/外景">景</Th>
-            <Th>地点</Th>
-            <Th title="时间">时</Th>
-            <Th title="预计时长">时长</Th>
+            <Th title={t('table.header.number')}>#</Th>
+            <Th>{t('table.header.heading')}</Th>
+            <Th title={t('table.header.intExt')}>{t('table.header.intExt')}</Th>
+            <Th>{t('table.header.location')}</Th>
+            <Th title={t('table.header.time')}>{t('table.header.time')}</Th>
+            <Th title={t('table.header.duration')}>{t('table.header.duration')}</Th>
             {characters.map((char) => (
               <Th key={char} title={char}>
                 {char.length > 6 ? char.slice(0, 5) + '…' : char}
