@@ -1,6 +1,6 @@
 # story-agent-canvas 职责 ADR 与轻量分镜表设计
 
-**状态**: 架构决策（待实施）
+**状态**: 架构决策（部分实施）
 **日期**: 2026-04-08
 **关联**: `agent-media-architecture.md` · `canvas-agent-integration.md` · `canvas-role-boundary.md` · `ARCHITECTURE_CN.md`
 
@@ -40,6 +40,24 @@
 3. `neko-canvas` 是唯一正式的 storyboard 工作台。
 4. `story` 中保留“轻量分镜表”，但其定位是“审阅和派发面板”，不是第二个 `canvas`。
 5. 机械型导入可以由 `story` 直接调用 `canvas`，创造性拆镜必须经过 `agent`。
+
+### 2.3 当前实施进度
+
+截至 2026-04-08，已落地：
+
+- `ScriptIndex` 已升级为稳定 `sceneId` + scene 元数据 + sceneCharacters + actionSummary + estimatedDuration
+- `ScriptTableView` 已升级为轻量分镜表，包含 Agent / Canvas 状态列与场景级动作入口
+- `story` 的 `sendToCanvas` 已走 `neko.canvas.importStoryboard` 正式导入入口
+- `canvas` 已暴露 `NekoCanvasAPI.storyboard.import(...)` 与 `neko.canvas.importStoryboard`
+- `neko-story` 已提供 `GetScriptIndex` / `SearchScriptIndex` / `GenerateScenePlan` / `GenerateShotPlan`
+- shared planner 已支持 `mechanical | semantic` 双路径 payload
+
+仍未完全落地：
+
+- Agent 主流程尚未把 `GenerateScenePlan / GenerateShotPlan` 作为标准语义拆镜入口
+- `semantic` 路径虽然已具备契约和导入能力，但还未成为 chat / pipeline 主链
+- 轻量分镜表的 Agent / Canvas 状态仍缺少统一事实源与完整回写
+- “从剧本开始视频创作”标准主流程尚未闭环
 
 ---
 
@@ -360,6 +378,18 @@ canvas
 4. 将 `generateStoryboard` 收敛为 Agent 入口，而不是在 `story` 内实现拆镜逻辑
 
 5. 将 `import_script_to_canvas` 从“按行数估算 ShotNode”升级为“按语义生成 ShotPlan”
+
+### 当前对应状态
+
+- 1：已部分完成
+  - `story` 已具备场景级 `sendToCanvas`
+  - “从剧本开始视频创作”仍未形成标准流程入口
+- 2：已完成当前迭代目标
+- 3：已完成当前迭代目标
+- 4：已完成当前迭代目标
+- 5：已部分完成
+  - shared planner / canvas import 已支持 semantic payload
+  - agent 主流程尚未统一消费 `GenerateScenePlan / GenerateShotPlan`
 
 ---
 
