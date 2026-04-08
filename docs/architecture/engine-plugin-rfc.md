@@ -343,12 +343,14 @@ neko-engine Host
 - Shader / Model 已有运行时注册入口（`effects:register` / `models:register`）
 - 无统一 PluginManager / Manifest / 插件状态模型
 
-### Phase P1：Capability Plugin MVP
+### Phase P1：Capability Plugin MVP（可与 Runtime 拆分 R1/R2 并行）
 
-- 新建 `PluginManager`
-- 定义 `EnginePluginManifest`
+- 在 host-api 新增 `plugin/` 模块
+- 定义 `EnginePluginManifest` struct（对应第六节 manifest 草案）
+- 实现 `PluginManager`：扫描安装目录、校验 manifest、激活/停用
+- 新增 `plugins` action group（list/inspect/enable/disable）到 `engine-types/src/registry.rs`
 - 把 Shader / Model 注册纳入统一插件生命周期
-- 新增 `plugins:list / inspect / enable / disable`
+- 不依赖 runtime 拆分，可独立实施
 
 ### Phase P2：扩展到格式/设备/导出器
 

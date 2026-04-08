@@ -15,6 +15,9 @@ neko-engine-types = { path = "../engine-types" }
 # Core services
 neko-engine-kernel = { path = "../engine-kernel", features = [] }
 
+# Device runtime (camera, MIDI, gamepad)
+neko-runtime-device = { path = "../runtime-device" }
+
 # Async runtime
 tokio.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }

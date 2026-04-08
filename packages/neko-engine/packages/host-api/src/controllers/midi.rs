@@ -2,7 +2,8 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::{IMidiService, MidiService};
+use neko_engine_kernel::services::IMidiService;
+use neko_runtime_device::MidiService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;

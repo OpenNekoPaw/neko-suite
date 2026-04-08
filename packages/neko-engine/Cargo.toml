@@ -9,6 +9,7 @@ members = [
     "packages/host-cli",
     "packages/runtime-scene",
     "packages/runtime-puppet",
+    "packages/runtime-device",
 ]
 
 [workspace.package]

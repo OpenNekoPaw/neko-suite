@@ -2434,6 +2434,7 @@ dependencies = [
  "glam",
  "neko-engine-kernel",
  "neko-engine-types",
+ "neko-runtime-device",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2502,6 +2503,25 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wgpu",
+]
+
+[[package]]
+name = "neko-runtime-device"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "crossbeam-channel",
+ "gilrs",
+ "hound",
+ "midir",
+ "neko-engine-kernel",
+ "neko-engine-types",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

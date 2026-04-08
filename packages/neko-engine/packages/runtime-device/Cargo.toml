@@ -1,0 +1,42 @@
+[package]
+name = "neko-runtime-device"
+version.workspace = true
+edition.workspace = true
+description = "Device input runtime for Neko Engine — camera, MIDI, gamepad"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Engine kernel (for error types and service traits)
+neko-engine-kernel = { path = "../engine-kernel" }
+
+# Shared types
+neko-engine-types = { path = "../engine-types" }
+
+# Audio capture - cross-platform mic input (WASAPI/CoreAudio/ALSA)
+cpal = "0.15"
+# WAV file writing
+hound = "3.5"
+# MIDI input - cross-platform
+midir = "0.10"
+# Gamepad input - cross-platform
+gilrs = "0.11"
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Broadcast channels for event streaming
+crossbeam-channel = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# UUID generation
+uuid = { workspace = true }

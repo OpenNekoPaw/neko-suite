@@ -9,10 +9,10 @@ use crate::controllers::{
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::services::{
-    AudioService, CameraService, EffectsService, ExportService, GamepadService, ImageService,
-    MidiService, NodeService, PuppetService, SceneService, TaskService, TimelineService,
-    VideoService,
+    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
+    SceneService, TaskService, TimelineService, VideoService,
 };
+use neko_runtime_device::{CameraService, GamepadService, MidiService};
 
 #[cfg(feature = "onnx")]
 use neko_engine_kernel::services::IMlService;

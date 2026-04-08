@@ -2,8 +2,8 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::camera::CameraCaptureConfig;
-use neko_engine_kernel::services::{CameraService, ICameraService};
+use neko_engine_kernel::services::camera::{CameraCaptureConfig, ICameraService};
+use neko_runtime_device::CameraService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;

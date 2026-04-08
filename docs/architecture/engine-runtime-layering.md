@@ -147,18 +147,37 @@ packages/neko-engine/packages/
 | `runtime-docs` | `runtime-format` | 覆盖范围更广（格式探测 + 文档预览 + 格式转换），与 FormatRegistry 对齐 |
 | `engine-host-api` | `host-api` | 三段 crate 名过长且 `engine-` 前缀冗余（已在 neko-engine workspace 内） |
 
-### 4.3 engine-kernel 待拆分内容
+### 4.3 engine-kernel 拆分分析
 
-`engine-kernel` 当前仍是巨石 crate，后续需拆出：
+> **重要发现**：对 engine-kernel 的 service 实现进行深度依赖分析后，发现大部分 service（Video/Audio/Timeline/Export/Effects/Image）与 GPU/Decoder/Encoder 基础设施深度耦合。直接拆出 runtime-video 会导致循环依赖或需要引入复杂抽象层。因此采用**渐进策略**：先拆可独立的，再逐步解耦。
 
-| 目标 runtime | 从 engine-kernel 迁出的模块 |
-|-------------|--------------------------|
-| `runtime-video` | `audio/`, `animation/`, `export/`, `preview/`, `media_service/`, service impls（Video/Audio/Timeline/Effects/Export/Image/Playback/Task/Node） |
-| `runtime-device` | `services/impls/camera.rs`, `midi.rs`, `gamepad.rs` |
-| `runtime-ml` | `ml/` 模块, `services/impls/ml.rs` |
-| `runtime-format` | 文档预览/格式探测逻辑（当前较薄） |
+**Service 耦合度分析**：
 
-engine-kernel 保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemetry/Service Traits
+| Service | GPU/Codec 依赖 | 可迁移性 |
+|---------|---------------|---------|
+| VideoService | Decoder/Encoder/GPU | ❌ 强耦合 |
+| AudioService | FfmpegAudioDecoder/Encoder | ❌ 强耦合 |
+| TimelineService | GpuCompositor/PreviewPipeline | ❌ 强耦合 |
+| ExportService | GPU export pipeline (100%) | ❌ 强耦合 |
+| EffectsService | CustomShaderProcessor (100%) | ❌ 强耦合 |
+| ImageService | HwAccelDecoder + GPU texture | ❌ 强耦合 |
+| CameraService | cpal mic capture | ✅ 可迁移 |
+| MidiService | midir | ✅ 可迁移 |
+| GamepadService | gilrs | ✅ 可迁移 |
+| MlService | ort/ndarray (optional) | ✅ 可迁移 |
+| TaskService | 无外部依赖 | ✅ 可迁移 |
+| PuppetService | 无 GPU 依赖 | ✅ 可迁移 |
+
+**渐进拆分顺序**：
+
+| 阶段 | 目标 runtime | 迁出内容 | 风险 |
+|------|-------------|---------|------|
+| R1 | `runtime-device` | Camera/Midi/Gamepad service + cpal/midir/gilrs 依赖 | 低 |
+| R2 | `runtime-ml` | ml/ 模块 + MlService + ort/ndarray 依赖 | 低 |
+| R3 | `runtime-video`（部分） | media_service/ 域逻辑（probe/diff/subtitle/waveform）—— 不含 GPU pipeline | 中 |
+| R4 | RuntimeDescriptor trait | 统一 runtime 发现机制 | 低 |
+
+engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemetry/Service Traits + 与 GPU 强耦合的 service impls
 
 ---
 
@@ -258,19 +277,26 @@ engine-kernel 保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemetry/Ser
 - 全部 Rust/TS 源码路径、23 个文档同步更新
 - 674 tests passed, 0 failed
 
-### Phase R1：从 engine-kernel 拆出 runtime-video
+### Phase R1：拆出 runtime-device
+
+- 创建 `runtime-device/` crate
+- 迁移 Camera/Midi/Gamepad service（trait + impl）
+- 将 cpal/midir/gilrs 硬件依赖从 engine-kernel 移到 runtime-device
+- host-api 新增依赖 `neko-runtime-device`
+
+### Phase R2：拆出 runtime-ml
+
+- 创建 `runtime-ml/` crate（带 onnx feature）
+- 迁移 ml/ 模块 + MlService
+- 将 ort/ndarray/rustfft 依赖移到 runtime-ml
+- host-api 改为 optional 依赖
+
+### Phase R3：runtime-video 域逻辑（渐进）
 
 - 创建 `runtime-video/` crate
-- 迁移 audio/animation/export/preview/media_service 模块
-- 迁移 service 实现（VideoService/AudioService/TimelineService 等）
-- engine-kernel 仅保留 service traits + 共享基础设施
-- 保持单一 Host 应用
-
-### Phase R2：拆出 runtime-device + runtime-ml
-
-- 创建 `runtime-device/`（CameraService/MidiService/GamepadService）
-- 创建 `runtime-ml/`（ml/ 模块 + MlService，保持 onnx feature flag）
-- 更新 host-api 依赖
+- 仅迁移与 GPU 无关的域逻辑：media_service/（probe/diff/subtitle）、common.rs（波形/响度/静音分析）
+- GPU 强耦合的 service impls 暂留 engine-kernel
+- 后续通过 trait 抽象逐步解耦
 
 ### Phase R2：引入 Runtime Registry
 
