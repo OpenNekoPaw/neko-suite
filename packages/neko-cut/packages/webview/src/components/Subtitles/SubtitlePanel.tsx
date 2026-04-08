@@ -3,7 +3,7 @@
  * 字幕面板组件 - 字幕管理和编辑
  */
 
-import { memo, useCallback, useState, useMemo } from 'react';
+import { memo, useCallback, useState, useMemo, useEffect } from 'react';
 import { useTranslation } from '../../i18n/I18nContext';
 import type { SubtitleTrack, SubtitleCue, SubtitleStyle } from '../../types/subtitle';
 import { createSubtitleTrack, createSubtitleCue, SUBTITLE_TEMPLATES } from '../../types/subtitle';
@@ -54,6 +54,35 @@ export const SubtitlePanel = memo(function SubtitlePanel({
       null
     );
   }, [currentTrack, currentTime]);
+
+  useEffect(() => {
+    if (tracks.length === 0) {
+      setSelectedTrackId(null);
+      setSelectedCueId(null);
+      setEditingCueId(null);
+      return;
+    }
+
+    if (!selectedTrackId || !tracks.some((track) => track.id === selectedTrackId)) {
+      setSelectedTrackId(tracks[0]?.id ?? null);
+    }
+  }, [tracks, selectedTrackId]);
+
+  useEffect(() => {
+    if (!currentTrack) {
+      setSelectedCueId(null);
+      setEditingCueId(null);
+      return;
+    }
+
+    if (selectedCueId && !currentTrack.cues.some((cue) => cue.id === selectedCueId)) {
+      setSelectedCueId(null);
+    }
+
+    if (editingCueId && !currentTrack.cues.some((cue) => cue.id === editingCueId)) {
+      setEditingCueId(null);
+    }
+  }, [currentTrack, selectedCueId, editingCueId]);
 
   // ==========================================================================
   // Track Management

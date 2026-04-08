@@ -238,50 +238,49 @@
 - `packages/neko-cut/packages/webview/src/stores/slices/elementOpsSlice.ts`
 - `packages/neko-types/src/operations/apply-element.ts`
 
-### 4.4 素材库没有整合进主剪辑工作区
+### 4.4 素材库已嵌入主剪辑工作区，但仍可继续优化交互
 
 仓库中存在独立的素材库 Webview：
 
 - `packages/neko-cut/packages/webview/src/assetLibrary.tsx`
 
-但主编辑界面 `App.tsx` 并没有把素材库嵌入同一工作区。
+本轮已在主编辑界面 `App.tsx` 增加左侧 dock 工作区，并把素材库作为内嵌面板接入。
 
-这会导致创作流程出现割裂：
+因此，之前的创作流割裂点已明显缓解：
 
 - 浏览素材
 - 回到时间线
 - 再进行摆放
 
-对于视频创作工具来说，素材面板通常应成为主工作区组成部分，而不是独立入口。
+当前剩余问题更多偏产品交互层，例如：
 
-### 4.5 字幕能力存在“两套体系”
+- dock 显隐与默认布局策略
+- 与属性面板并存时的空间分配
+- 资产库与时间线之间更强的上下文联动
+
+### 4.5 字幕能力主链路已收敛，但历史双模型组件仍待清理
 
 当前代码同时存在：
 
 - `subtitle` 轨道元素体系
 - 独立 `SubtitlePanel` 组件体系
 
-当前主编辑器已经补上了一条基于时间线 `subtitle` 元素的直接编辑入口：
+当前主编辑器已经补上了两条基于时间线 `subtitle` 元素的编辑入口：
 
 - `PropertyPanel` 可直接编辑 `subtitle` 元素文本、字号、字体、颜色、背景、对齐、描边
+- 主工作区新增内嵌 `SubtitlePanel`，通过 adapter 直接读写 timeline `subtitle` 轨 / 元素
 
-但 `SubtitlePanel` 这套独立 `SubtitleTrack/SubtitleCue/SubtitleStyle` 模型仍未接入主编辑器，也尚未与 timeline `subtitle` 元素完全对齐。
-
-同时，拖入字幕文件时走的是：
+同时，拖入字幕文件已改为直接创建：
 
 - `subtitle` 轨
+- `subtitle` 元素
 
-而不是：
-
-- 独立 `text` 占位元素
-
-这意味着字幕能力还没有统一到一个明确的数据模型和交互入口上。
+这意味着字幕主链路已经统一到 timeline subtitle model。
 
 结论：
 
-- “编辑入口缺失”已部分缓解
-- “字幕文件导入链路”已收敛到 timeline `subtitle` model
-- “双模型并存”仍是当前字幕系统整合的主要剩余问题
+- “单一数据模型 + 主编辑入口”这一 P1 目标已基本完成
+- 剩余问题主要是历史 `SubtitlePanel` 抽象层仍保留旧类型适配痕迹，后续可继续内聚或裁剪
 
 对应实现：
 
@@ -410,11 +409,11 @@
   - `text / subtitle / shape` 通过 Webview overlay 补齐
   - `scene3d` 通过保留引擎 seek 帧避免被 media-only composite 覆盖
   - 底层原生 composite 协议仍待后续扩展
-- 已部分完成：字幕元素已接入主编辑器 Property Panel
-  - timeline `subtitle` 元素已有直接编辑入口
+- 已完成：字幕系统整合到 timeline `subtitle` model
+  - Property Panel 与主工作区字幕面板均直接读写 `subtitle` 轨 / 元素
   - 字幕文件拖入已改为创建 `subtitle` 轨 / `subtitle` 元素
-  - `SubtitlePanel` 独立模型仍待继续收敛
-- 将素材库嵌入主编辑工作区
+- 已完成：将素材库嵌入主编辑工作区
+  - 主工作区左侧新增 dock 面板，内含 Assets / Subtitles 两个工作标签
 
 ### P2
 
