@@ -14,6 +14,25 @@ import {
   colorCorrectionToCompositeEffect,
 } from '../../utils/composite-helpers';
 
+function getLegacyCompatibleTransition(
+  element: EditorElement,
+  key: 'transitionIn' | 'transitionOut',
+): EditorElement['transitionIn'] | EditorElement['transitionOut'] | undefined {
+  if (key === 'transitionIn') {
+    return (
+      element.transitionIn ??
+      ((element as EditorElement & { inTransition?: EditorElement['transitionIn'] }).inTransition ??
+        undefined)
+    );
+  }
+
+  return (
+    element.transitionOut ??
+    ((element as EditorElement & { outTransition?: EditorElement['transitionOut'] }).outTransition ??
+      undefined)
+  );
+}
+
 /**
  * Build CompositeLayerConfig[] from ProjectData at a given time.
  * Extracts all visible media elements at the specified time point.
@@ -124,25 +143,31 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
     elements: track.elements
       .filter((e) => e.type === 'media')
       .sort((a, b) => a.startTime - b.startTime)
-      .map((e) => ({
-        id: e.id,
-        startTime: e.startTime,
-        duration: e.duration,
-        transitionIn: e.transitionIn
-          ? {
-              type: e.transitionIn.type,
-              duration: e.transitionIn.duration,
-              easing: e.transitionIn.easing,
-            }
-          : undefined,
-        transitionOut: e.transitionOut
-          ? {
-              type: e.transitionOut.type,
-              duration: e.transitionOut.duration,
-              easing: e.transitionOut.easing,
-            }
-          : undefined,
-      })),
+      .map((e) => {
+        const editorElement = e as EditorElement;
+        const transitionIn = getLegacyCompatibleTransition(editorElement, 'transitionIn');
+        const transitionOut = getLegacyCompatibleTransition(editorElement, 'transitionOut');
+
+        return {
+          id: e.id,
+          startTime: e.startTime,
+          duration: e.duration,
+          transitionIn: transitionIn
+            ? {
+                type: transitionIn.type,
+                duration: transitionIn.duration,
+                easing: transitionIn.easing,
+              }
+            : undefined,
+          transitionOut: transitionOut
+            ? {
+                type: transitionOut.type,
+                duration: transitionOut.duration,
+                easing: transitionOut.easing,
+              }
+            : undefined,
+        };
+      }),
   }));
   applyTransitions(layers, trackElements, time);
 

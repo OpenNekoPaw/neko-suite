@@ -292,6 +292,27 @@ interface PropertyPanelProps {
   onExecuteAIAction?: (actionId: string, elementIds: string[]) => void;
 }
 
+function getLegacyCompatibleTransition(
+  element: TimelineElement | null | undefined,
+  key: 'transitionIn' | 'transitionOut',
+): Transition | null {
+  if (!element) {
+    return null;
+  }
+
+  if (key === 'transitionIn') {
+    return (
+      element.transitionIn ??
+      ((element as TimelineElement & { inTransition?: Transition }).inTransition ?? null)
+    );
+  }
+
+  return (
+    element.transitionOut ??
+    ((element as TimelineElement & { outTransition?: Transition }).outTransition ?? null)
+  );
+}
+
 export const PropertyPanel = memo(function PropertyPanel({
   element,
   projectDefaults,
@@ -589,7 +610,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   const handleInTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      const changes = { inTransition: transition ?? undefined } as Partial<TimelineElement>;
+      const changes = { transitionIn: transition ?? undefined } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -600,7 +621,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   const handleOutTransitionChange = useCallback(
     (transition: Transition | null) => {
       if (!element) return;
-      const changes = { outTransition: transition ?? undefined } as Partial<TimelineElement>;
+      const changes = { transitionOut: transition ?? undefined } as Partial<TimelineElement>;
       onElementChange(element.id, changes);
       onElementCommit?.(element.id, changes);
     },
@@ -817,7 +838,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={element?.transitionIn ?? null}
+          transition={getLegacyCompatibleTransition(element, 'transitionIn')}
           onChange={handleInTransitionChange}
           showDuration={true}
           disabled={isDisabled}
@@ -831,7 +852,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={element?.transitionOut ?? null}
+          transition={getLegacyCompatibleTransition(element, 'transitionOut')}
           onChange={handleOutTransitionChange}
           showDuration={true}
           disabled={isDisabled}
