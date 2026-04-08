@@ -140,19 +140,23 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           }
           case 'dropMedia': {
             const assets = (
-              (message.files as Array<{ uri: string; name: string; mediaType: string }> | undefined) ??
-              []
-            ).map((file) => ({
-              kind: 'media' as const,
-              path: file.uri,
-              name: file.name,
-              mediaType:
+              (message.files as
+                | Array<{ uri: string; name: string; mediaType: string }>
+                | undefined) ?? []
+            ).map((file) => {
+              const mediaType: 'image' | 'video' | 'audio' =
                 file.mediaType === 'video'
                   ? 'video'
                   : file.mediaType === 'audio'
                     ? 'audio'
-                    : 'image',
-            }));
+                    : 'image';
+              return {
+                kind: 'media' as const,
+                path: file.uri,
+                name: file.name,
+                mediaType,
+              };
+            });
             onDropAssetsRef.current(assets);
             break;
           }
@@ -200,18 +204,23 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'nodes.update': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            updateNodeRef.current?.(message.nodeId as string, (message.data as Record<string, unknown>) ?? {});
+            updateNodeRef.current?.(
+              message.nodeId as string,
+              (message.data as Record<string, unknown>) ?? {},
+            );
             vscode.postMessage({ type: '_response', _requestId: requestId, success: true });
             break;
           }
           case 'nodes.create': {
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
-            const payload = (message.payload as {
-              type?: CanvasNodeType;
-              position?: { x: number; y: number };
-              data?: Record<string, unknown>;
-            } | undefined) ?? { data: {} };
+            const payload = (message.payload as
+              | {
+                  type?: CanvasNodeType;
+                  position?: { x: number; y: number };
+                  data?: Record<string, unknown>;
+                }
+              | undefined) ?? { data: {} };
             const id =
               createNodeRef.current?.({
                 type: payload.type ?? 'annotation',
