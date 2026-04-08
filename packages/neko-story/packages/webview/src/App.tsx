@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import { ScriptTableView } from './components/ScriptTableView';
@@ -79,6 +79,7 @@ export function App() {
       case 'update':
         setDocument(message.document);
         setScriptIndex(message.scriptIndex);
+        setSceneStates(message.sceneStates);
         break;
       case 'scrollTo':
         scrollToLine(message.line);
@@ -88,25 +89,6 @@ export function App() {
         break;
     }
   }, []);
-
-  useEffect(() => {
-    if (!scriptIndex) {
-      setSceneStates({});
-      return;
-    }
-
-    setSceneStates((current) => {
-      const next: Record<string, StorySceneState> = {};
-      for (const scene of scriptIndex.scenes) {
-        next[scene.sceneId] = current[scene.sceneId] ?? {
-          sceneId: scene.sceneId,
-          agentStatus: 'not-requested',
-          canvasStatus: 'not-sent',
-        };
-      }
-      return next;
-    });
-  }, [scriptIndex]);
 
   const { postMessage } = useVSCodeMessaging(handleMessage);
 
@@ -119,40 +101,6 @@ export function App() {
 
   const handleSceneAction = useCallback(
     (sceneId: string, action: StorySceneAction) => {
-      setSceneStates((current) => {
-        const existing = current[sceneId];
-        if (!existing) {
-          return current;
-        }
-
-        let nextState: StorySceneState = existing;
-        switch (action) {
-          case 'analyze':
-            nextState = { ...existing, agentStatus: 'ready' };
-            break;
-          case 'generateStoryboard':
-            nextState = { ...existing, agentStatus: 'review', canvasStatus: 'queued' };
-            break;
-          case 'sendToCanvas':
-            nextState = { ...existing, canvasStatus: 'sent' };
-            break;
-          case 'openCanvas':
-            nextState = { ...existing, canvasStatus: 'opened' };
-            break;
-          case 'toggleSkip': {
-            const skipped = existing.agentStatus !== 'skipped' || existing.canvasStatus !== 'skipped';
-            nextState = {
-              ...existing,
-              agentStatus: skipped ? 'skipped' : 'not-requested',
-              canvasStatus: skipped ? 'skipped' : 'not-sent',
-            };
-            break;
-          }
-        }
-
-        return { ...current, [sceneId]: nextState };
-      });
-
       postMessage({ type: 'sceneAction', sceneId, action });
     },
     [postMessage],

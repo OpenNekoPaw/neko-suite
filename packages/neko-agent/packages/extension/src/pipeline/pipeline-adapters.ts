@@ -49,6 +49,7 @@ export interface IStructuredStoryPlanner {
     source?: string;
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     globalStyle?: string;
+    stageParams?: Record<string, Record<string, unknown>>;
   }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined>;
 }
 
@@ -254,6 +255,7 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
     source?: string;
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     globalStyle?: string;
+    stageParams?: Record<string, Record<string, unknown>>;
   }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined> {
     if (ctx.sourceFormat !== 'fountain' || !ctx.source || ctx.source.includes('\n')) {
       return undefined;
@@ -269,7 +271,12 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
       ? storyExt.exports
       : ((await storyExt.activate()) as NekoStoryAPI);
 
-    const scenePlans = api.generateScenePlans(ctx.source);
+    const sceneIdsRaw = ctx.stageParams?.['parseStoryboard']?.['sceneIds'];
+    const sceneIds = Array.isArray(sceneIdsRaw)
+      ? sceneIdsRaw.filter((value): value is string => typeof value === 'string')
+      : undefined;
+
+    const scenePlans = api.generateScenePlans(ctx.source, sceneIds);
     const scriptIndex = api.getScriptIndex(ctx.source);
     if (!scenePlans || !scriptIndex) {
       logger.warn(
