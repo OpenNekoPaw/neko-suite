@@ -240,14 +240,13 @@ Agent 擅长理解的对象是：
 
 ### 7.2 尚未完全对齐的部分
 
-- 语义模型比用户入口更成熟
-- 结果审查闭环不完整
-- 节点扩展能力仍偏内建
-- 与资产层、时间线层的边界有少量混叠
+- 与资产层、时间线层的边界仍需继续收敛
+- 场景级批量工作流和审阅体验仍有增强空间
+- 操作审计与双向回流仍处于最小可用阶段
 
 这意味着：
 
-> 当前方向正确，主要问题不是定位错误，而是若干关键中枢能力尚未补齐。
+> 当前方向正确，主要问题不是定位错误，而是若干增强型中枢能力仍需继续补强。
 
 ---
 
@@ -255,97 +254,91 @@ Agent 擅长理解的对象是：
 
 以下问题会直接影响 `neko-canvas` 是否能成为 Agent-first IDE 的稳定中枢。
 
-### P0-1 `nodes.update` / `nodes.create` 协议不一致
+### P0-1 `nodes.update` / `nodes.create` 协议基础一致性已修复
 
 现状：
 
 - Extension 侧通过 `sendRequest('nodes.update', { nodeId, data })`
 - Extension 侧通过 `sendRequest('nodes.create', { type, position, data })`
-- Webview 侧却按 `message.updates` 和 `message.node` 读取
+- Webview 侧已统一按 `{ nodeId, data }` / `{ type, position, data }` 处理
 
 影响：
 
-- Agent 工具 `canvas_update_node`
-- `import_script_to_canvas`
-- 未来所有跨扩展创建/更新节点能力
-
-都可能出现写入不生效或行为异常。
+- 跨扩展创建/更新节点主链路已稳定
+- 剩余工作集中在继续收敛周边桥接接口，而不是协议本身失配
 
 建议：
 
-- 统一 `nodes.update` 契约为 `{ nodeId, data }`
-- 统一 `nodes.create` 契约为 `{ type, position, data }`
-- 在 webview 层完成结构拼装，不要混用“高层输入”和“底层完整节点对象”
+- 保持 `nodes.update` / `nodes.create` 当前统一契约不再分叉
+- 新增桥接能力时继续在 webview 层完成结构拼装
+- 避免重新引入“完整节点对象”和“局部 patch”双轨输入
 
-### P0-2 操作桥接消息通道存在不一致风险
+### P0-2 操作桥接消息通道已完成统一封装
 
 现状：
 
-- `canvasOperationStore` 使用 `window.__vscode_api__`
-- 主应用只显式获取 `acquireVsCodeApi()` 并向 `window` 暴露 `vscode`
+- webview 内 VSCode API 已收敛到统一工具层
+- store / hook / 组件不再混用不同的全局入口
 
 影响：
 
-- `operationApplied` 可能无法稳定发送
-- dirty 标记、操作审计、AI 修改追踪链路会变弱
+- `operationApplied`、dirty 标记和历史恢复主链路已稳定
+- 剩余问题更多是消息语义继续细化，而不是通道可靠性
 
 建议：
 
-- 统一 webview 内 VSCode API 暴露方式
-- 所有 store / hook / 节点组件都走同一层封装
+- 保持统一封装作为唯一消息出口
+- 后续新增消息类型时优先扩展工具层，而不是直接访问全局对象
 
 ### P0-3 结果审查闭环未完成
 
 现状：
 
 - `ShotNode` 已有候选版本导航 UI
-- 父层未真正接入 `onSelectCandidate`
+- `ShotNode` / `GalleryNode` 都已接入父层候选切换
 
 影响：
 
-- 用户可以生成多个候选，但不能把“筛选结果”稳定写回节点状态
-- `canvas` 只能生成，难以承担“结果审查台”职责
+- 结果审查主链路已闭环
+- 剩余问题主要转向批量比较体验和更强的审阅 UI
 
 建议：
 
-- 明确 `selectedCandidateId` 或统一 `generationHistory.selected`
-- 在 store 层实现候选切换动作
-- 同步更新 `generatedImage` / `generatedAsset`
+- 保持 `generationHistory.selected` 作为统一事实来源
+- 后续补多候选对比器和更强的批量审阅体验
 
 ### P0-4 `scene -> shot` 仍是弱容器语义
 
 现状：
 
 - `scene` 已有 `shotIds`
-- `SceneGroupNode` 仍偏展示占位
+- `SceneGroupNode` 已支持镜头纳管、排序、自动布局、场景级批量生成
 
 影响：
 
-- 场景级批量操作难做
-- 镜头排序和组织能力不足
-- 作为 storyboard 中枢时，容器能力偏弱
+- 场景容器已从展示占位升级为基础语义容器
+- 剩余缺口集中在更强的批量编辑和更丰富的场景级工作流
 
 建议：
 
-- 将 `scene` 强化为真实语义容器
-- 补齐拖入、排序、自动布局、场景级生成等交互
+- 继续补齐场景级属性批量编辑与更强的工作流入口
+- 保持 `scene.shotIds` 作为顺序权威来源
 
 ### P0-5 创作入口未覆盖全部关键语义节点
 
 现状：
 
-- Toolbar / helper 主要入口仍集中在 `shot / scene / gallery / media / annotation`
-- `script / document / model` 尚未成为一等入口
+- `script / document / model / canvas-embed` 已具备 Explorer 拖入和 toolbar picker 入口
 
 影响：
 
-- `canvas` 更像分镜板，而不是完整创作编排台
-- 跨插件上下文聚合能力虽有模型，但未进入主工作流
+- 主工作流入口已覆盖关键语义节点
+- 剩余问题主要是入口体验继续打磨，而不是能力缺失
 
 建议：
 
-- 为 `script / document / model` 提供明确创建入口
-- 支持从文件树、文档预览、模型市场直接投放到画布
+- 保持现有 picker + dropAssets 契约
+- 后续再考虑从模型市场、文档预览等位置做更深入口联动
 
 ---
 
@@ -353,12 +346,12 @@ Agent 擅长理解的对象是：
 
 以下问题不会立即阻断主链路，但会限制 `neko-canvas` 从“可用”升级为“成熟编排台”。
 
-### P1-1 `canvas-embed` 未落地
+### P1-1 `canvas-embed` 已完成最小落地
 
 现状：
 
-- 类型系统和 outline 已包含 `canvas-embed`
-- webview 渲染层尚未真正实现
+- 类型系统、outline、webview 渲染、打开动作都已接通
+- Explorer 拖入和 toolbar picker 都可创建 `canvas-embed`
 
 价值：
 
@@ -398,43 +391,46 @@ Agent 擅长理解的对象是：
 - 明确单向权威或补充最小必要回流机制
 - 例如只回流：时长变化、选中镜头、已产出视频缩略图
 
-### P1-4 节点扩展仍是硬编码
+### P1-4 节点渲染注册表已完成首轮落地
 
 现状：
 
-- `InfiniteCanvas` 通过 `switch(node.type)` 分发组件
+- `NodeRendererRegistry` 已替代核心渲染分发硬编码
+- 新节点类型已可通过注册表扩展渲染入口
 
 风险：
 
-- 适合当前内建节点
-- 不利于未来通过插件注册新节点类型
+- 当前注册表主要覆盖渲染分发
+- metadata、属性面板 schema 等扩展点仍未完全外置
 
 建议：
 
-- 中期引入 `NodeRendererRegistry`
-- 将节点 metadata、图标、默认尺寸、属性面板 schema 外置
+- 继续把节点 metadata、图标、默认尺寸、属性面板 schema 收敛到注册表周边
+- 为后续插件化节点扩展预留更稳定的声明式接口
 
-### P1-5 事件契约还不够细
+### P1-5 事件契约已细化到可支撑主链路
 
 现状：
 
-- `CanvasChangeEvent` 偏弱
-- Agent 已在尝试把画布变更注入 ambient context
+- `CanvasChangeEvent` 已细化为更明确的变更类型
+- Agent ambient context 已可消费这些增量事件
 
 风险：
 
-- 难以支持增量上下文、AI 审计、智能提醒
+- 当前事件粒度已足够支撑增量上下文和基础审计
+- 剩余缺口主要在更强的智能提醒和跨插件消费约定
 
 建议：
 
-- 细化 node change / selection change / generation change / import change 事件
+- 保持现有事件分类稳定
+- 后续围绕场景排序、审阅动作和 cut 回流继续补充更细语义
 
 ### P1-6 操作历史设计领先于实现
 
 现状：
 
 - 项目文档已将 `.nkc-ops` 纳入整体策略
-- 当前 canvas 侧仍主要停留在内存 log + `operationApplied`
+- 当前已支持 `.nkc-ops` 最小持久化、重载恢复、AI source 过滤和基础可视化
 
 价值：
 
@@ -444,8 +440,8 @@ Agent 擅长理解的对象是：
 
 建议：
 
-- 先做最小持久化
-- 再做 AI source 过滤和可视化
+- 已完成最小持久化与基础可视化
+- 后续重点转向更强的回放、筛选和审计 UI
 
 ---
 
@@ -453,22 +449,19 @@ Agent 擅长理解的对象是：
 
 ### 10.1 两周内
 
-- 修复 `nodes.update` / `nodes.create` 协议
-- 修复 `operationApplied` 通道一致性
-- 完成候选结果切换闭环
+- 明确 `asset` 命名空间的代理边界
+- 收敛 `canvas ↔ cut` 最小回流后的双向语义范围
 
 ### 10.2 一个月内
 
-- 强化 `scene` 容器语义
-- 为 `script / document / model` 补齐一等入口
-- 明确 `asset` 命名空间的代理边界
+- 强化场景级批量编辑与更高阶的 storyboard 工作流
+- 完善多候选对比器和更强的批量审阅体验
 
 ### 10.3 一季度内
 
-- 落地 `canvas-embed`
-- 引入节点注册表
-- 补齐 `.nkc-ops` 最小持久化
-- 定义 `canvas ↔ cut` 最小回流模型
+- 完善 `.nkc-ops` 的回放/审计体验
+- 继续定义更强的 `canvas ↔ cut` 双向模型
+- 推进角色一致性、素材引用注入等增强能力
 
 ---
 
@@ -482,8 +475,8 @@ Agent 擅长理解的对象是：
 
 当前真正需要解决的，不是“要不要让 canvas 更像 timeline”，而是：
 
-- 能否把中枢协议补稳
-- 能否把结果审查闭环补齐
-- 能否把跨插件语义入口做完整
+- 能否继续收敛跨扩展边界
+- 能否把场景级工作流和审阅体验做强
+- 能否把操作审计与双向回流做成稳定能力
 
 只有这些补齐后，`neko-canvas` 才能真正承担 **Agent-first IDE 主工作台** 的角色。
