@@ -224,8 +224,10 @@
 
 - 删除元素后，后续元素整体前移
 - 插入素材时推开后续元素
+- 粘贴素材时可按 ripple 语义整体推开后续元素
 - 单元素同轨拖动时带动后续元素
 - 右侧 trim 改变有效时长时推动后续元素
+- `trimToPlayhead()` 已接入 undo/redo，并可在 ripple 模式下前移后续元素
 - `splitAtPlayhead()` 后将右侧片段与后续元素整体后移
 
 未见完整覆盖：
@@ -319,6 +321,9 @@
 
 - speed 预设已改为写入元素 `speed` 契约并按源时长重算 timeline duration
 - reverse 已改为切换元素 `speed.reverse`
+- `split and keep left/right` 已从隐藏快捷键补到显式菜单入口
+- `duplicate` 已改为直接在当前选择末尾后插入副本，不再只是 copy
+- `trim to playhead` 已改为正式操作并具备 ripple 语义
 
 但仍缺少：
 
@@ -339,8 +344,9 @@
 - 拖拽定位
 - 裁切
 - 分割
+- 分割并保留左/右侧
 - 跨轨移动
-- 复制粘贴
+- 复制、粘贴、就地重复
 - 轨道管理
 - 吸附与时间线缩放
 - 撤销重做
@@ -426,6 +432,8 @@
 - 完整波纹编辑
 - 更丰富的时间编辑语义
   - 已完成一部分：时间线右键菜单 speed / reverse 已切到正式元素速度契约
+  - 已完成一部分：`split keep left/right`、`duplicate`、`trim to playhead` 已接入显式菜单和正式操作链
+  - 已完成一部分：ripple 已覆盖 paste 与 trim-to-playhead
 - 自动剪辑与自动配乐闭环
 - 更完整的速度系统（speed ramp / time remap UI / slip-slide-roll）
 
