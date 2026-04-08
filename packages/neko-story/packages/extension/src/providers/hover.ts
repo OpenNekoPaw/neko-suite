@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
 import type { IWorkspaceIndex } from '../services/types';
+import type { CharacterRecord } from '@neko/shared';
+import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
 
 /**
  * Provides hover information for Fountain files.
@@ -9,7 +11,10 @@ import type { IWorkspaceIndex } from '../services/types';
  * Scene stats remain per-file (scene content is local).
  */
 export class FountainHoverProvider implements vscode.HoverProvider {
-  constructor(private readonly index: IWorkspaceIndex) {}
+  constructor(
+    private readonly index: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideHover(
     document: vscode.TextDocument,
@@ -19,6 +24,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     const line = document.lineAt(position.line).text;
 
     await this.index.ensureInitialized();
+    await this.characterIndex?.ensureInitialized();
 
     // Use indexed document if available, otherwise parse on the fly
     const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
@@ -32,7 +38,10 @@ export class FountainHoverProvider implements vscode.HoverProvider {
         const localStats = this.getLocalCharacterStats(fountainDoc, charName);
         const crossFileStats = this.getCrossFileCharacterStats(charName);
         if (localStats) {
-          return new vscode.Hover(this.formatCharacterStats(charName, localStats, crossFileStats));
+          const registryRecord = this.characterIndex?.resolveCharacter(charName)?.record;
+          return new vscode.Hover(
+            this.formatCharacterStats(charName, localStats, crossFileStats, registryRecord),
+          );
         }
       }
     }
@@ -144,9 +153,25 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     name: string,
     local: LocalCharacterStats,
     crossFile: CrossFileCharacterStats,
+    registryRecord?: CharacterRecord,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
+    if (registryRecord) {
+      md.appendMarkdown(`**Character ID:** \`${registryRecord.id}\`\n\n`);
+      if (registryRecord.displayName) {
+        md.appendMarkdown(`**Display Name:** ${registryRecord.displayName}\n\n`);
+      }
+      if (registryRecord.aliases.length > 0) {
+        md.appendMarkdown(`**Aliases:** ${registryRecord.aliases.join(', ')}\n\n`);
+      }
+      if (registryRecord.metadata?.role) {
+        md.appendMarkdown(`**Role:** ${registryRecord.metadata.role}\n\n`);
+      }
+      if (registryRecord.metadata?.notes) {
+        md.appendMarkdown(`**Notes:** ${registryRecord.metadata.notes}\n\n`);
+      }
+    }
     md.appendMarkdown(`| Stat | Value |\n|------|-------|\n`);
     md.appendMarkdown(`| Appearances (this file) | ${local.appearances} |\n`);
     md.appendMarkdown(`| Dialogue lines (this file) | ${local.dialogueLines} |\n`);

@@ -61,17 +61,17 @@ export function activate(context: vscode.ExtensionContext) {
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(indexService),
+      new FountainDefinitionProvider(indexService, characterIndexService),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService),
+      new FountainReferenceProvider(indexService, characterIndexService),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService),
+      new FountainHoverProvider(indexService, characterIndexService),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(

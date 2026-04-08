@@ -18,12 +18,14 @@ export interface ICharacterWorkspaceIndex extends vscode.Disposable {
   save(registry: CharacterRegistryFile): Promise<void>;
   findById(id: string): CharacterRecord | undefined;
   resolveCharacter(name: string): CharacterNameResolution | undefined;
+  getDefinitionLocation(characterId: string): vscode.Location | undefined;
 }
 
 export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly recordsById = new Map<string, CharacterRecord>();
   private readonly lookup = new Map<string, CharacterNameResolution>();
+  private readonly definitionLocations = new Map<string, vscode.Location>();
   private registry: CharacterRegistryFile = createEmptyCharacterRegistry();
   private registryUri: vscode.Uri | undefined;
   private initPromise: Promise<void> | undefined;
@@ -62,12 +64,13 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
 
     try {
       const raw = await vscode.workspace.fs.readFile(uri);
-      const parsed = JSON.parse(Buffer.from(raw).toString('utf-8')) as unknown;
+      const text = Buffer.from(raw).toString('utf-8');
+      const parsed = JSON.parse(text) as unknown;
       if (!isCharacterRegistryFile(parsed)) {
         this.applyRegistry(createEmptyCharacterRegistry());
         return;
       }
-      this.applyRegistry(parsed);
+      this.applyRegistry(parsed, text);
     } catch {
       this.applyRegistry(createEmptyCharacterRegistry());
     }
@@ -82,7 +85,7 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
     const json = JSON.stringify(registry, null, 2);
     await vscode.workspace.fs.writeFile(uri, Buffer.from(json, 'utf-8'));
     this.registryUri = uri;
-    this.applyRegistry(registry);
+    this.applyRegistry(registry, json);
   }
 
   findById(id: string): CharacterRecord | undefined {
@@ -93,6 +96,10 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
     return this.lookup.get(normalizeCharacterLookupKey(name));
   }
 
+  getDefinitionLocation(characterId: string): vscode.Location | undefined {
+    return this.definitionLocations.get(characterId);
+  }
+
   dispose(): void {
     for (const disposable of this.disposables) {
       disposable.dispose();
@@ -100,6 +107,7 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
     this.disposables.length = 0;
     this.recordsById.clear();
     this.lookup.clear();
+    this.definitionLocations.clear();
   }
 
   private setupWatcher(): void {
@@ -129,10 +137,13 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
     return uri;
   }
 
-  private applyRegistry(registry: CharacterRegistryFile): void {
+  private applyRegistry(registry: CharacterRegistryFile, rawText?: string): void {
     this.registry = registry;
     this.recordsById.clear();
     this.lookup.clear();
+    this.definitionLocations.clear();
+
+    const lines = rawText?.split(/\r?\n/);
 
     for (const record of registry.characters) {
       this.recordsById.set(record.id, record);
@@ -147,6 +158,7 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
       for (const scriptName of record.bindings?.scriptNames ?? []) {
         this.addLookup(scriptName, record.id, record, 'scriptName');
       }
+      this.addDefinitionLocation(record.id, lines);
     }
 
     this._onDidUpdateRegistry.fire(this.registry);
@@ -163,5 +175,27 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
       return;
     }
     this.lookup.set(key, { characterId, matchedBy, record });
+  }
+
+  private addDefinitionLocation(characterId: string, lines: string[] | undefined): void {
+    if (!lines || !this.registryUri) {
+      return;
+    }
+
+    const pattern = `"id": "${characterId}"`;
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      const charIndex = line?.indexOf(pattern) ?? -1;
+      if (charIndex >= 0) {
+        const range = new vscode.Range(
+          lineIndex,
+          charIndex,
+          lineIndex,
+          charIndex + pattern.length,
+        );
+        this.definitionLocations.set(characterId, new vscode.Location(this.registryUri, range));
+        return;
+      }
+    }
   }
 }

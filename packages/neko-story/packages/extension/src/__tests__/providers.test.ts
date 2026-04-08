@@ -8,6 +8,7 @@ import { FountainHoverProvider } from '../providers/hover';
 import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
 import type { IWorkspaceIndex, SymbolLocation } from '../services/types';
+import type { ICharacterWorkspaceIndex } from '../services/CharacterWorkspaceIndexService';
 
 // Mock vscode module
 vi.mock('vscode', () => ({
@@ -285,6 +286,37 @@ function createMockIndex(files: Record<string, string>): IWorkspaceIndex {
     getAllSceneLocations: () => Array.from(sceneIndex.keys()).sort(),
     getScriptIndex: () => undefined,
     onDidUpdateIndex: (() => ({ dispose: () => {} })) as any,
+    dispose: () => {},
+  };
+}
+
+function createMockCharacterIndex(): ICharacterWorkspaceIndex {
+  const definitionLocation = {
+    uri: { fsPath: '/project/characters.json', toString: () => 'file:///project/characters.json' },
+    range: { start: { line: 3, character: 6 }, end: { line: 3, character: 24 } },
+  };
+
+  const record = {
+    id: 'char_john',
+    canonicalName: 'JOHN',
+    displayName: 'John',
+    aliases: ['Johnny'],
+    status: 'confirmed' as const,
+    metadata: { role: 'protagonist', notes: 'Main lead' },
+  };
+
+  return {
+    ensureInitialized: async () => {},
+    getRegistry: () => ({ version: 1 as const, characters: [record] }),
+    getRegistryUri: () => definitionLocation.uri as any,
+    reload: async () => {},
+    save: async () => {},
+    findById: (id: string) => (id === 'char_john' ? record : undefined),
+    resolveCharacter: (name: string) =>
+      name === 'JOHN'
+        ? { characterId: 'char_john', matchedBy: 'canonicalName' as const, record }
+        : undefined,
+    getDefinitionLocation: (id: string) => (id === 'char_john' ? (definitionLocation as any) : undefined),
     dispose: () => {},
   };
 }
@@ -727,6 +759,20 @@ describe('Mock Index — Multi-file indexing', () => {
 // ============================================================
 
 describe('DefinitionProvider — Cross-file', () => {
+  it('should prefer characters.json definition when registry binding exists', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const provider = new FountainDefinitionProvider(index, createMockCharacterIndex());
+    const doc = createMockDocument(FILE_B, '/project/b.fountain');
+
+    const result = await provider.provideDefinition(doc, { line: 4, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    expect(result.uri.fsPath).toBe('/project/characters.json');
+  });
+
   it('should find character definition across files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -758,6 +804,24 @@ describe('DefinitionProvider — Cross-file', () => {
 });
 
 describe('ReferenceProvider — Cross-file', () => {
+  it('should include characters.json record in references when registry binding exists', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const provider = new FountainReferenceProvider(index, createMockCharacterIndex());
+    const doc = createMockDocument(FILE_A, '/project/a.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 4, character: 0 },
+      {} as any,
+      {} as any,
+    );
+
+    expect(results.some((r: any) => r.uri.fsPath === '/project/characters.json')).toBe(true);
+  });
+
   it('should find all character references across files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
@@ -873,6 +937,23 @@ describe('WorkspaceSymbolProvider — Cross-file', () => {
 });
 
 describe('HoverProvider — Cross-file stats', () => {
+  it('should show registry metadata when character is bound', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const provider = new FountainHoverProvider(index, createMockCharacterIndex());
+    const doc = createMockDocument(FILE_A, '/project/a.fountain');
+
+    const result = await provider.provideHover(doc, { line: 4, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    const md = result.contents;
+    expect(md.value).toContain('Character ID');
+    expect(md.value).toContain('char_john');
+    expect(md.value).toContain('Johnny');
+  });
+
   it('should show cross-file stats when character appears in multiple files', async () => {
     const index = createMockIndex({
       '/project/a.fountain': FILE_A,
