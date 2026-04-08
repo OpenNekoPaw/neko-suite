@@ -2,16 +2,23 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
+import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
+import { buildScriptIndex } from '../services/scriptIndexBuilder';
 
 type MessageToWebview =
-  | { type: 'update'; document: FountainDocument }
+  | { type: 'update'; document: FountainDocument; scriptIndex: NekoStoryScriptIndex }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: 'screenplay' | 'table' | 'grid' };
 
 type MessageFromWebview =
   | { type: 'ready' }
   | { type: 'navigate'; line: number; character: number }
-  | { type: 'scroll'; line: number };
+  | { type: 'scroll'; line: number }
+  | {
+      type: 'sceneAction';
+      sceneId: string;
+      action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip';
+    };
 
 export class PreviewPanel implements vscode.Disposable {
   public static currentPanel: PreviewPanel | undefined;
@@ -109,6 +116,9 @@ export class PreviewPanel implements vscode.Disposable {
       case 'scroll':
         // Could sync editor scroll position here
         break;
+      case 'sceneAction':
+        void this.handleSceneAction(message.sceneId, message.action);
+        break;
     }
   }
 
@@ -147,8 +157,51 @@ export class PreviewPanel implements vscode.Disposable {
 
     const text = this.activeEditor.document.getText();
     const document = parse(text);
+    const scriptIndex = buildScriptIndex(this.activeEditor.document.uri, document);
 
-    this.postMessage({ type: 'update', document: this.resolveAssets(document) });
+    this.postMessage({ type: 'update', document: this.resolveAssets(document), scriptIndex });
+  }
+
+  private async handleSceneAction(
+    sceneId: string,
+    action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip',
+  ): Promise<void> {
+    const editor = this.activeEditor;
+    if (!editor || !this.isStoryDocument(editor.document)) {
+      return;
+    }
+
+    const document = parse(editor.document.getText());
+    const scriptIndex = buildScriptIndex(editor.document.uri, document);
+    const scene = scriptIndex.scenes.find((entry) => entry.sceneId === sceneId);
+    if (!scene) {
+      return;
+    }
+
+    if (action === 'openCanvas') {
+      await vscode.commands.executeCommand('neko.canvas.new');
+      return;
+    }
+
+    if (action === 'toggleSkip') {
+      return;
+    }
+
+    await this.selectSceneRange(scene.line_start, scene.line_end);
+
+    if (action === 'analyze') {
+      await this.sendSceneToAgent(scene, '请分析这个场景并给出 scene-level 分镜建议：');
+      return;
+    }
+
+    if (action === 'generateStoryboard') {
+      await this.sendSceneToAgent(scene, '请为这个场景生成 storyboard 计划，并准备发送到 canvas：');
+      return;
+    }
+
+    if (action === 'sendToCanvas') {
+      await this.sendSceneToAgent(scene, '请把这个场景转换为 canvas storyboard skeleton：');
+    }
   }
 
   /** Walk elements and inject resolvedUri for notes with assetRef */
@@ -175,6 +228,51 @@ export class PreviewPanel implements vscode.Disposable {
 
   private scrollPreviewToLine(line: number) {
     this.postMessage({ type: 'scrollTo', line });
+  }
+
+  private async selectSceneRange(startLine: number, endLine: number): Promise<void> {
+    if (!this.activeEditor) return;
+    const selection = new vscode.Selection(startLine, 0, endLine, Number.MAX_SAFE_INTEGER);
+    this.activeEditor.selection = selection;
+    this.activeEditor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+    await vscode.window.showTextDocument(this.activeEditor.document, {
+      viewColumn: this.activeEditor.viewColumn,
+      preserveFocus: false,
+    });
+  }
+
+  private async sendSceneToAgent(
+    scene: NekoStoryScriptIndex['scenes'][number],
+    intent: string,
+  ): Promise<void> {
+    if (!this.activeEditor) return;
+
+    const selection = new vscode.Selection(scene.line_start, 0, scene.line_end, Number.MAX_SAFE_INTEGER);
+    const selectedText = this.activeEditor.document.getText(selection);
+    const scriptPath = this.activeEditor.document.uri.fsPath;
+
+    const payload: AgentContextPayload = {
+      type: 'story-selection',
+      id: `story:${scriptPath}:${scene.sceneId}`,
+      label: scene.sceneTitle,
+      summary: `Scene: ${scene.sceneTitle}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`,
+      data: {
+        scriptPath,
+        sceneId: scene.sceneId,
+        selectedText,
+        range: {
+          start: { line: scene.line_start, character: 0 },
+          end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
+        },
+      },
+      intent,
+    };
+
+    try {
+      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+    } catch {
+      // neko-agent not installed or not active
+    }
   }
 
   public postMessage(message: MessageToWebview) {

@@ -309,11 +309,28 @@ export interface NekoCanvasAPI {
  * `Read(offset=line_start, limit=line_end-line_start+1)` access patterns.
  */
 export interface NekoStorySceneEntry {
+  /** Stable scene ID derived from semantic content, not raw line numbers alone */
   readonly id: string;
+  /** Backward-compatible full heading text, e.g. "INT. OFFICE - DAY" */
   readonly heading: string;
+  /** Stable scene ID exposed explicitly for new consumers */
+  readonly sceneId: string;
+  /** Normalized scene title, same semantic value as heading */
+  readonly sceneTitle: string;
   readonly intExt: string | null;
+  /** Canonical time-of-day field for new consumers */
+  readonly timeOfDay: string | null;
   readonly location: string;
+  /** Backward-compatible alias of timeOfDay */
   readonly time: string | null;
+  /** Explicit scene number if present in Fountain heading, else null */
+  readonly sceneNumber: string | null;
+  /** Character names that appear in this scene */
+  readonly sceneCharacters: readonly string[];
+  /** Short scene-level summary derived from action blocks */
+  readonly actionSummary: string;
+  /** Estimated scene duration in seconds */
+  readonly estimatedDuration: number;
   readonly line_start: number;
   readonly line_end: number;
 }

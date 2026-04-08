@@ -9,11 +9,18 @@ import type { FountainDocument } from '@neko-story/types';
  * enabling `Read(offset=line_start, limit=line_end-line_start+1)` in agent tools.
  */
 export interface SceneEntry {
-  readonly id: string; // Sequential ID: "S1", "S2", ...
+  readonly id: string; // Stable semantic scene ID
   readonly heading: string; // Full heading text, e.g. "INT. COFFEE SHOP - DAY"
+  readonly sceneId: string;
+  readonly sceneTitle: string;
   readonly intExt: string | null;
+  readonly timeOfDay: string | null;
   readonly location: string;
   readonly time: string | null;
+  readonly sceneNumber: string | null;
+  readonly sceneCharacters: readonly string[];
+  readonly actionSummary: string;
+  readonly estimatedDuration: number;
   readonly line_start: number;
   readonly line_end: number; // Inclusive; last line before next scene or EOF
 }
