@@ -14,6 +14,7 @@
  *   NKV-005: operation bridge uses shared VSCode gateway
  *   NKV-006: timeline import success round-trips shotIds/projectName/importedAt
  *   NKV-007: canvas ops sidecar persists to .nkc-ops
+ *   NKV-008: operation log snapshot is restored into webview on ready
  */
 
 import { describe, it, expect } from 'vitest';
@@ -130,6 +131,20 @@ describe('canvasEditorProvider message contracts', () => {
   describe('NKV-007: operation sidecar path', () => {
     it('persists operation logs beside the canvas document as .nkc-ops', () => {
       expect(providerSource).toContain('documentUri.with({ path: `${documentUri.path}-ops` })');
+    });
+  });
+
+  describe('NKV-008: operation log snapshot restore', () => {
+    it('extension posts operationLogSnapshot during ready flow', () => {
+      expect(providerSource).toContain("type: 'operationLogSnapshot'");
+      expect(providerSource).toContain(
+        'operations: this.operationLogs.get(this.getDocumentKey(document.uri)) ?? []',
+      );
+    });
+
+    it('webview hydrates operation log from snapshot', () => {
+      expect(webviewSource).toContain("case 'operationLogSnapshot'");
+      expect(webviewSource).toContain('hydrateOperationLog(');
     });
   });
 

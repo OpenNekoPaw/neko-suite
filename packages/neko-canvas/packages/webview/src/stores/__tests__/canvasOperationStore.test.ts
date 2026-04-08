@@ -53,4 +53,14 @@ describe('canvasOperationStore', () => {
       'system',
     ]);
   });
+
+  it('hydrates persisted operation log without mutating source override', () => {
+    useCanvasOperationStore.getState().withOperationSource('ai', () => {
+      useCanvasOperationStore.getState().hydrateOperationLog([createOperation('system')]);
+    });
+
+    const [operation] = useCanvasOperationStore.getState().operationLog;
+    expect(operation?.meta.source).toBe('system');
+    expect(useCanvasOperationStore.getState().operationSourceOverride).toBeNull();
+  });
 });

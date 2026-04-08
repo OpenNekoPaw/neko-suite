@@ -587,6 +587,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
           this.updateCanvasSnapshot(document.uri, data as Record<string, unknown> | null);
           webviewPanel.webview.postMessage({ type: 'update', data });
+          webviewPanel.webview.postMessage({
+            type: 'operationLogSnapshot',
+            operations: this.operationLogs.get(this.getDocumentKey(document.uri)) ?? [],
+          });
           // Sync outline & status bar on initial load
           if (data) {
             this.syncOutline(data as Record<string, unknown>);
@@ -596,6 +600,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           // File is empty or invalid JSON — send null to use defaults
           await this.loadOperationLog(document.uri);
           webviewPanel.webview.postMessage({ type: 'update', data: null });
+          webviewPanel.webview.postMessage({
+            type: 'operationLogSnapshot',
+            operations: this.operationLogs.get(this.getDocumentKey(document.uri)) ?? [],
+          });
         }
         break;
       }

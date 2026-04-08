@@ -54,6 +54,8 @@ export interface CanvasOperationStore {
   recordOperation: (op: EditOperation) => void;
   /** Temporarily override operation source within a synchronous mutation boundary */
   withOperationSource: <T>(source: OperationSource, run: () => T) => T;
+  /** Replace operation log from persisted sidecar without re-emitting to extension */
+  hydrateOperationLog: (operations: EditOperation[]) => void;
 
   /** 清空日志 */
   clearLog: () => void;
@@ -110,6 +112,12 @@ export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) =
     } finally {
       set({ operationSourceOverride: previous });
     }
+  },
+
+  hydrateOperationLog: (operations) => {
+    const { maxLogSize } = get();
+    const next = operations.slice(-maxLogSize);
+    set({ operationLog: next });
   },
 
   clearLog: () => set({ operationLog: [] }),
