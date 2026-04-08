@@ -58,6 +58,11 @@ export interface CanvasStoryboardPayload {
   readonly scenes: readonly CanvasStoryboardScenePlan[];
 }
 
+export interface ApplyCanvasStoryboardOptions {
+  readonly startX?: number;
+  readonly startY?: number;
+}
+
 export interface CreateStoryboardPayloadOptions {
   readonly mode?: StoryboardImportMode;
   readonly scenesLimit?: number;

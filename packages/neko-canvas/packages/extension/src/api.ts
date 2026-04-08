@@ -2,7 +2,13 @@
  * NekoCanvas API - Exported interface for other extensions
  */
 import * as vscode from 'vscode';
-import type { CanvasNode, CanvasNodeType } from '@neko/shared';
+import type {
+  ApplyCanvasStoryboardOptions,
+  CanvasNode,
+  CanvasNodeType,
+  CanvasStoryboardPayload,
+  CreatedCanvasStoryboard,
+} from '@neko/shared';
 
 // Types
 export interface Asset {
@@ -117,6 +123,19 @@ export interface NekoCanvasAPI {
      * Delete shape
      */
     deleteShape(canvasId: string, shapeId: string): Promise<void>;
+  };
+
+  /**
+   * Storyboard operations — scene/shot structure import sink for story/agent.
+   */
+  storyboard: {
+    /**
+     * Import a storyboard payload into the active canvas.
+     */
+    import(
+      payload: CanvasStoryboardPayload,
+      options?: ApplyCanvasStoryboardOptions,
+    ): Promise<CreatedCanvasStoryboard>;
   };
 
   /**

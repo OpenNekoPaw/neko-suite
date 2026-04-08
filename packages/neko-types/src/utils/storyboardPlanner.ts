@@ -1,5 +1,6 @@
 import type { NekoCanvasAPI, NekoStoryScriptIndex } from '../types/extension-api';
 import type {
+  ApplyCanvasStoryboardOptions,
   CanvasStoryboardPayload,
   CanvasStoryboardScenePlan,
   CanvasStoryboardShotPlan,
@@ -9,11 +10,6 @@ import type {
   StoryShotPlan,
 } from '../types/storyboard-planner';
 import type { CanvasNodeType, ShotCharacter } from '../types/canvas';
-
-interface ApplyStoryboardPayloadOptions {
-  readonly startX?: number;
-  readonly startY?: number;
-}
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -65,7 +61,7 @@ export function createStoryboardPayload(
 export async function applyStoryboardPayloadToCanvas(
   api: Pick<NekoCanvasAPI, 'nodes'>,
   payload: CanvasStoryboardPayload,
-  options: ApplyStoryboardPayloadOptions = {},
+  options: ApplyCanvasStoryboardOptions = {},
 ): Promise<CreatedCanvasStoryboard> {
   const startX = options.startX ?? DEFAULT_START_X;
   const startY = options.startY ?? DEFAULT_START_Y;

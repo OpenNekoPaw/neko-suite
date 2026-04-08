@@ -7,17 +7,23 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import {
+  applyStoryboardPayloadToCanvas,
+  type ApplyCanvasStoryboardOptions,
+  type CanvasStoryboardPayload,
+  type CreatedCanvasStoryboard,
+} from '@neko/shared';
+import {
   createVSCodeLogger,
   VSCodeErrorHandler,
   createNewFile,
 } from '@neko/shared/vscode/extension';
+import { getRootLogger, setRootLogger } from './utils/logger';
+import { setErrorHandler, handleError } from './utils/errorHandler';
 import { CanvasEditorProvider } from './editor';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from './agentCapabilityProvider';
-import { setRootLogger, getRootLogger } from './utils/logger';
-import { setErrorHandler, handleError } from './utils/errorHandler';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
@@ -80,14 +86,6 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     }),
   );
 
-  // Register commands
-  registerCommands(context);
-
-  // Register plugin slash commands into neko-agent chat panel
-  registerAgentSlashCommands(context);
-
-  logger.info('Extension activated');
-
   // Return API for other extensions
   // Asset operations now delegate to neko-assets via commands
   const api: NekoCanvasAPI & ISkillProvider = {
@@ -115,6 +113,9 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       updateShape: (canvasId, shapeId, updates) =>
         canvasEditorProvider.updateShape(shapeId, updates),
       deleteShape: (canvasId, shapeId) => canvasEditorProvider.deleteShape(shapeId),
+    },
+    storyboard: {
+      import: (payload, options) => importStoryboardToCanvas(api, payload, options),
     },
     nodes: {
       list: (type) => canvasEditorProvider.listNodes(type),
@@ -165,6 +166,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     },
   };
 
+  // Register commands
+  registerCommands(context, (payload, options) => importStoryboardToCanvas(api, payload, options));
+
+  // Register plugin slash commands into neko-agent chat panel
+  registerAgentSlashCommands(context);
+
+  logger.info('Extension activated');
+
   // Register capability provider with neko-agent (if installed)
   try {
     const provider = createNekoCanvasCapabilityProvider(api);
@@ -193,7 +202,13 @@ function getCanvasTemplate(name: string): string {
 /**
  * Register extension commands
  */
-function registerCommands(context: vscode.ExtensionContext): void {
+function registerCommands(
+  context: vscode.ExtensionContext,
+  importStoryboard: (
+    payload: CanvasStoryboardPayload,
+    options?: ApplyCanvasStoryboardOptions,
+  ) => Promise<CreatedCanvasStoryboard>,
+): void {
   // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.new', async (uri?: vscode.Uri) => {
@@ -288,6 +303,26 @@ function registerCommands(context: vscode.ExtensionContext): void {
     ),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.importStoryboard',
+      async (
+        payload?: CanvasStoryboardPayload,
+        options?: ApplyCanvasStoryboardOptions,
+      ): Promise<CreatedCanvasStoryboard> => {
+        if (!payload) {
+          throw new Error('neko.canvas.importStoryboard: missing storyboard payload');
+        }
+
+        const created = await importStoryboard(payload, options);
+        getRootLogger().info(
+          `importStoryboard: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,
+        );
+        return created;
+      },
+    ),
+  );
+
   // Canvas keyboard shortcuts - forwarded to webview
   const keyboardActions = [
     'neko.canvas.deleteSelected',
@@ -368,6 +403,14 @@ function registerCommands(context: vscode.ExtensionContext): void {
       }
     }),
   );
+}
+
+async function importStoryboardToCanvas(
+  api: NekoCanvasAPI,
+  payload: CanvasStoryboardPayload,
+  options?: ApplyCanvasStoryboardOptions,
+): Promise<CreatedCanvasStoryboard> {
+  return applyStoryboardPayloadToCanvas(api, payload, options);
 }
 
 /**

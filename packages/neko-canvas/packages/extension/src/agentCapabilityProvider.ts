@@ -22,7 +22,7 @@ import type {
   NekoStoryAPI,
   StoryScenePlan,
 } from '@neko/shared';
-import { TOOL_NAMES_CANVAS, applyStoryboardPayloadToCanvas, createStoryboardPayload } from '@neko/shared';
+import { TOOL_NAMES_CANVAS, createStoryboardPayload } from '@neko/shared';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -720,7 +720,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               ),
               scenePlans: (args.scenePlans as StoryScenePlan[] | undefined) ?? [],
             });
-            const created = await applyStoryboardPayloadToCanvas(api, payload, { startX, startY });
+            const created = await api.storyboard.import(payload, { startX, startY });
 
             logger.info(
               `import_script_to_canvas: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,
