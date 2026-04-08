@@ -269,17 +269,18 @@
 
 同时，拖入字幕文件时走的是：
 
-- `text` 轨
+- `subtitle` 轨
 
 而不是：
 
-- `subtitle` 轨
+- 独立 `text` 占位元素
 
 这意味着字幕能力还没有统一到一个明确的数据模型和交互入口上。
 
 结论：
 
 - “编辑入口缺失”已部分缓解
+- “字幕文件导入链路”已收敛到 timeline `subtitle` model
 - “双模型并存”仍是当前字幕系统整合的主要剩余问题
 
 对应实现：
@@ -411,7 +412,8 @@
   - 底层原生 composite 协议仍待后续扩展
 - 已部分完成：字幕元素已接入主编辑器 Property Panel
   - timeline `subtitle` 元素已有直接编辑入口
-  - `SubtitlePanel` 独立模型与字幕文件拖入链路仍待继续收敛
+  - 字幕文件拖入已改为创建 `subtitle` 轨 / `subtitle` 元素
+  - `SubtitlePanel` 独立模型仍待继续收敛
 - 将素材库嵌入主编辑工作区
 
 ### P2
