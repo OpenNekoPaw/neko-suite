@@ -16,16 +16,28 @@ interface StorySceneWorkflowRecord extends StorySceneState {
   readonly shotIds?: readonly string[];
 }
 
+interface StorySceneStatePersistence {
+  get<T>(key: string, defaultValue: T): T;
+  update(key: string, value: unknown): Thenable<void>;
+}
+
 export interface StoryPipelineEventPayload {
   readonly scriptPath: string;
   readonly sceneId: string;
 }
 
 export class StorySceneStateStore implements vscode.Disposable {
+  private static readonly storageKey = 'neko.story.sceneStateStore';
   private readonly statesByDocument = new Map<string, Record<string, StorySceneWorkflowRecord>>();
   private readonly onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+  private readonly persistence?: StorySceneStatePersistence;
 
   readonly onDidChange = this.onDidChangeEmitter.event;
+
+  constructor(persistence?: StorySceneStatePersistence) {
+    this.persistence = persistence;
+    this.restoreFromPersistence();
+  }
 
   syncDocument(
     documentUri: vscode.Uri,
@@ -44,6 +56,7 @@ export class StorySceneStateStore implements vscode.Disposable {
     }
 
     this.statesByDocument.set(key, next);
+    this.persist();
     return next;
   }
 
@@ -76,6 +89,7 @@ export class StorySceneStateStore implements vscode.Disposable {
     };
 
     this.statesByDocument.set(documentUri.toString(), next);
+    this.persist();
     this.onDidChangeEmitter.fire(documentUri);
   }
 
@@ -142,5 +156,28 @@ export class StorySceneStateStore implements vscode.Disposable {
 
   dispose(): void {
     this.onDidChangeEmitter.dispose();
+  }
+
+  private restoreFromPersistence(): void {
+    const stored = this.persistence?.get<Record<string, Record<string, StorySceneWorkflowRecord>>>(
+      StorySceneStateStore.storageKey,
+      {},
+    );
+    if (!stored) {
+      return;
+    }
+
+    for (const [documentUri, sceneStates] of Object.entries(stored)) {
+      this.statesByDocument.set(documentUri, sceneStates);
+    }
+  }
+
+  private persist(): void {
+    if (!this.persistence) {
+      return;
+    }
+
+    const serialized = Object.fromEntries(this.statesByDocument.entries());
+    void this.persistence.update(StorySceneStateStore.storageKey, serialized);
   }
 }
