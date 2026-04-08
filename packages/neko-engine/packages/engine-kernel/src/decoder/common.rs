@@ -173,8 +173,9 @@ impl HwDeviceContext {
 
             if ret < 0 || hw_device_ctx.is_null() {
                 return Err(Error::Ffmpeg(format!(
-                    "Failed to create hardware device context: error code {}",
-                    ret
+                    "Failed to create hardware device context for {:?}: error code {} \
+                     (this may happen in sandboxed environments — software decoding will be used)",
+                    hw_type, ret
                 )));
             }
         }
