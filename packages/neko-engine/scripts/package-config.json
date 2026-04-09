@@ -1,14 +1,16 @@
 {
   "ortVersion": "1.20.1",
+  "ffmpegVersion": "8.1",
   "btbnTag": "latest",
-  "btbnVersion": "7.1",
+  "btbnVersion": "8.1",
   "ffmpegLibs": [
     "avcodec",
+    "avdevice",
+    "avfilter",
     "avformat",
     "avutil",
-    "swscale",
     "swresample",
-    "avfilter"
+    "swscale"
   ],
   "targets": {
     "darwin-arm64": {
@@ -20,6 +22,10 @@
         "ext": "tgz"
       },
       "ffmpeg": {
+        "source": "homebrew",
+        "brewPrefix": "/opt/homebrew/opt/ffmpeg"
+      },
+      "ffmpegDev": {
         "source": "homebrew",
         "brewPrefix": "/opt/homebrew/opt/ffmpeg"
       }
@@ -35,6 +41,10 @@
       "ffmpeg": {
         "source": "homebrew",
         "brewPrefix": "/usr/local/opt/ffmpeg"
+      },
+      "ffmpegDev": {
+        "source": "homebrew",
+        "brewPrefix": "/usr/local/opt/ffmpeg"
       }
     },
     "linux-x64": {
@@ -48,6 +58,10 @@
       "ffmpeg": {
         "source": "btbn",
         "archiveTemplate": "ffmpeg-n{btbnVersion}-{btbnTag}-linux64-gpl-shared-{btbnVersion}.tar.xz"
+      },
+      "ffmpegDev": {
+        "source": "btbn",
+        "archiveTemplate": "ffmpeg-n{ffmpegVersion}-{btbnTag}-linux64-lgpl-shared-{ffmpegVersion}.tar.xz"
       }
     },
     "win32-x64": {
@@ -61,6 +75,10 @@
       "ffmpeg": {
         "source": "btbn",
         "archiveTemplate": "ffmpeg-n{btbnVersion}-{btbnTag}-win64-gpl-shared-{btbnVersion}.zip"
+      },
+      "ffmpegDev": {
+        "source": "btbn",
+        "archiveTemplate": "ffmpeg-n{ffmpegVersion}-{btbnTag}-win64-lgpl-shared-{ffmpegVersion}.zip"
       }
     }
   }

@@ -7,6 +7,7 @@ const rawConfig = require('./package-config.json');
 const ENGINE_DIR = path.resolve(__dirname, '..');
 const NAPI_DIR = path.join(ENGINE_DIR, 'packages', 'host-napi');
 const BIN_DIR = path.join(ENGINE_DIR, 'bin');
+const DEPS_DIR = path.join(ENGINE_DIR, 'deps');
 const BTBN_BASE_URL = 'https://github.com/BtbN/FFmpeg-Builds/releases/download';
 
 /**
@@ -16,6 +17,7 @@ const BTBN_BASE_URL = 'https://github.com/BtbN/FFmpeg-Builds/releases/download';
 function expandTemplate(template) {
   return template
     .replaceAll('{ortVersion}', rawConfig.ortVersion)
+    .replaceAll('{ffmpegVersion}', rawConfig.ffmpegVersion)
     .replaceAll('{btbnVersion}', rawConfig.btbnVersion)
     .replaceAll('{btbnTag}', rawConfig.btbnTag);
 }
@@ -52,6 +54,18 @@ function getTargetConfig(targetKey) {
           archive: expandTemplate(target.ffmpeg.archiveTemplate),
         };
 
+  const ffmpegDev = target.ffmpegDev
+    ? target.ffmpegDev.source === 'homebrew'
+      ? {
+          source: 'homebrew',
+          brewPrefix: target.ffmpegDev.brewPrefix,
+        }
+      : {
+          source: 'btbn',
+          archive: expandTemplate(target.ffmpegDev.archiveTemplate),
+        }
+    : null;
+
   return {
     nodeFile: target.nodeFile,
     ort: {
@@ -61,6 +75,7 @@ function getTargetConfig(targetKey) {
       ext: target.ort.ext,
     },
     ffmpeg,
+    ffmpegDev,
   };
 }
 
@@ -101,6 +116,7 @@ function resolveNodeBinaryPath(targetKey) {
 module.exports = {
   BIN_DIR,
   BTBN_BASE_URL,
+  DEPS_DIR,
   ENGINE_DIR,
   NAPI_DIR,
   config: rawConfig,

@@ -225,6 +225,7 @@ addMedia(mediaInfo)              — 文件选择器结果
 dropAssets(assetDtoList)         — 拖放/选择文件解析结果
 generationProgress               — 批量生成进度
 timelineSync(payload)            — cut → canvas 最小回流（共享契约，仅操作元数据）
+importStoryboard(payload, opts)  — story/agent → canvas 分镜导入（CanvasStoryboardPayload）
 ```
 
 ---

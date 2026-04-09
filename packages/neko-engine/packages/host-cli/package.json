@@ -4,8 +4,8 @@
   "private": true,
   "description": "Command-line tool for neko media processing",
   "scripts": {
-    "build:native": "cargo build --release",
-    "build:debug": "cargo build"
+    "build:native": "FFMPEG_DIR=\"$(cd ../.. && pwd)/deps/ffmpeg\" cargo build --release",
+    "build:debug": "FFMPEG_DIR=\"$(cd ../.. && pwd)/deps/ffmpeg\" cargo build"
   },
   "engines": {
     "node": ">= 18"

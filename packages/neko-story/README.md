@@ -10,7 +10,7 @@
 
 ## Quick Reference
 
-- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**分镜系统**（脚本视图 + 创意视图，规划中）
+- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**分镜系统**（轻量分镜表 + ScenePlan/ShotPlan 规划器 + story→agent→canvas 语义流水线）
 - **入口**：`packages/extension/src/extension.ts`
 - **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
 - **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
@@ -25,10 +25,15 @@ VSCode 原生编辑器（.nks / .fountain 文件）
   ├── LSP / Language Server → 智能补全（角色/场景/动作）
   └── Extension Host
         ├── @neko-story/parser → 剧本解析 → AST
+        ├── scriptIndexBuilder → 稳定 sceneId + 场景元数据
+        ├── storyScenePlanner → ScenePlan / ShotPlan 确定性规划
+        ├── StorySceneStateStore → 场景工作流状态 + workspaceState 持久化
         └── 命令
-              ├── Preview Story        → 开启 Webview 预览面板
-              ├── Convert to Timeline  → 生成 .nkv 项目文件 → neko-cut
-              └── Generate Storyboard  → [规划] 脚本视图 + 创意视图 + AI 批量生图
+              ├── Preview Story          → 开启 Webview 预览面板（含轻量分镜表）
+              ├── Convert to Timeline    → 生成 .nkv 项目文件 → neko-cut
+              ├── Generate Storyboard    → 启动 Agent pipeline（规划 + canvas 导入）
+              ├── Start Video Creation   → flowF 标准视频主流程（规划 → 生成 → 时间线）
+              └── Send to Canvas         → 场景级 storyboard payload 导入 canvas
 ```
 
 ### 包结构
@@ -37,8 +42,11 @@ VSCode 原生编辑器（.nks / .fountain 文件）
 packages/
 ├── types/      # @neko-story/types  剧本 AST 类型定义
 ├── parser/     # @neko-story/parser 剧本解析器（支持 .nks / .fountain）
-├── extension/  # VSCode 扩展：语言服务、命令、Webview 触发
-└── webview/    # React 预览 UI
+├── extension/  # VSCode 扩展：语言服务、命令、规划器、状态管理、Webview 触发
+│     ├── services/scriptIndexBuilder.ts    # 稳定 sceneId + 场景元数据构建
+│     ├── services/storyScenePlanner.ts     # ScenePlan / ShotPlan 确定性规划
+│     └── services/storySceneStateStore.ts  # 场景工作流状态 + workspaceState 持久化
+└── webview/    # React 预览 UI（含轻量分镜表 ScriptTableView）
 ```
 
 ## Deep Dive
@@ -48,8 +56,10 @@ packages/
 ```
 编写剧本 (.nks / .fountain)
   │
-  ├── 实时预览（Webview 预览面板）
-  ├── AI 解析（neko-agent）→ 生成 Neko-Script
+  ├── 实时预览（Webview 预览面板 + 轻量分镜表）
+  ├── ScenePlan / ShotPlan（确定性规划器 → 语义分镜数据）
+  ├── Agent 流水线（story → agent → canvas 语义导入 + 批量视频生成）
+  ├── Send to Canvas（场景级 storyboard payload → neko-canvas 节点）
   └── 转换为时间线（neko-cut）→ 自动摆放素材
 ```
 

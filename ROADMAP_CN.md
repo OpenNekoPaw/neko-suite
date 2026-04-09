@@ -20,7 +20,7 @@
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
 | **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估；剩余：MCP 重连退避 + **Webview 架构优化**（[ADR](./docs/architecture/neko-agent-webview-optimization.md)） |
 | **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
-| **neko-story** | Alpha | 92% | **0 TODO**，145 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图；**下一步**：ScriptIndex 升级 + 轻量分镜表 + Story→Agent→Canvas 流水线（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
+| **neko-story** | Alpha | 92% | **1 TODO**，155 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore；Story→Agent→Canvas 语义流水线已落地（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
 | **neko-canvas** | Alpha | 80% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0**：协议修复（nodes.update/create + 消息通道 + 结果审阅）；**P1**：场景语义 + 渲染器注册表（[ADR](./docs/architecture/canvas-role-boundary.md)） |
 | **neko-preview** | Alpha | 86% | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅**；一期剩余：FDX；二期：XLSX/PPTX |
 | **neko-assets** | Alpha | 88% | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：L1-L3 缓存（依赖 Engine 新 action） |
@@ -188,12 +188,16 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P1：拆分 `InputAreaContext` → `ModelContext` + `MentionContext` + `GenerationContext`
 - [ ] P2：消息追踪（trace ID 注入 + 结构化审计链路）
 
-### neko-story — Story-Agent-Canvas 流水线待做
+### neko-story — Story-Agent-Canvas 流水线 ✅
 > [ADR](./docs/architecture/story-agent-canvas-boundary.md) — 明确 story/agent/canvas 责任边界
-- [ ] P1：ScriptIndex 升级（稳定 `sceneId` + sceneTitle/location/timeOfDay + sceneCharacters[] + actionSummary + estimatedDuration）
-- [ ] P1：轻量分镜表（agent 状态 + canvas 状态列 + 场景级操作按钮）
-- [ ] P1：双代码路径 — 路径 A 机械式（story→canvas）+ 路径 B 创意式（story→agent→canvas 语义 ShotPlan）
-- [ ] P1：Agent 工具（`GetScriptIndex` + `SearchScriptIndex` + ScenePlan/ShotPlan 生成）
+- ✅ ScriptIndex 升级（稳定 `sceneId` + sceneTitle/location/timeOfDay + sceneCharacters[] + actionSummary + estimatedDuration）
+- ✅ 轻量分镜表（Agent/Canvas 状态列 + 场景级操作按钮）
+- ✅ 双代码路径 — 路径 A 机械式 + 路径 B 语义式（story→agent→canvas ShotPlan）；`flowF` 标准入口 `neko.story.startVideoCreation`
+- ✅ Agent 工具（`GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`）
+- ✅ `import_script_to_canvas` 升级为语义 ShotPlan 导入；共享 `createStoryboardPayload` / `applyStoryboardPayloadToCanvas`
+- ✅ `NekoCanvasAPI.storyboard.import()` + `neko.canvas.importStoryboard` 命令
+- ✅ `StorySceneStateStore` + `workspaceState` 持久化 + pipeline 事件回写
+- [ ] P2：将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
 
 ### neko-agent — 富媒体架构待做
 > [ADR](./docs/architecture/agent-media-architecture.md)

@@ -183,7 +183,8 @@ LLM 适配和媒体生成服务。62 个源文件。
 | `ai/` | AgentRunner（薄包装 AgentSession）+ AgentManager（LRU 多会话池，max=10）+ HookManager（esbuild 编译）+ AgentContext |
 | `services/` | ConfigBridge（配置消息路由）+ SkillFileService/PromptFileService/HookFileService（文件监听）+ ConnectionStateManager |
 | `editor/` | EditorModel + EditorRegistry（活动编辑器抽象） |
-| `tools/` | 扩展工具注册（NekoCut/NekoCanvas API 桥接） |
+| `tools/` | 扩展工具注册（NekoCut/NekoCanvas/NekoStory API 桥接） |
+| `pipeline/` | Pipeline 编排层：7 stages（readDocument → parseStoryboard → importStoryboardToCanvas → generatePrompts → generatePilot → batchGenerate → arrangeOnTimeline）+ pipeline-adapters（IStructuredStoryPlanner / IStoryboardCanvasSink 等桥接器）+ pipeline-progress-bridge（事件转发 + 回写） |
 
 ### @neko-agent/webview — 对话 UI
 

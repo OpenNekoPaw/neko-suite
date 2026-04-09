@@ -103,6 +103,8 @@
     "test:extension": "vitest --config vitest.config.ts --run",
     "test:scripts": "node --test scripts/*.test.js",
     "test": "pnpm run test:extension && pnpm run test:scripts",
+    "setup:ffmpeg": "node scripts/download-ffmpeg.js",
+    "setup": "pnpm run setup:ffmpeg && pnpm run bundle:ort",
     "bundle:ort": "node scripts/download-ort.js",
     "bundle:ort:all": "node scripts/download-ort.js --all",
     "bundle:ffmpeg": "node scripts/bundle-ffmpeg.js",

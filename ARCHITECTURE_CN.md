@@ -157,8 +157,21 @@ Extension Host
 
 ```
 neko-story 剧本（.fountain）
-  │ import_script_to_canvas MCP Tool
-  │   └── 每场景 1 SceneGroupNode + ~lineSpan/10 ShotNodes
+  │
+  ├── 路径 A：机械式（import_script_to_canvas 工具）
+  │     └── createStoryboardPayload(mode=mechanical) → ~lineSpan/10 ShotNodes
+  │
+  ├── 路径 B：语义式（story → agent → canvas 流水线）
+  │     └── ScriptIndex（稳定 sceneId + 元数据）
+  │           → GenerateScenePlan / GenerateShotPlan（确定性规划器）
+  │           → neko-agent parseStoryboard（IStructuredStoryPlanner 优先）
+  │           → importStoryboardToCanvas 流水线阶段
+  │           → NekoCanvasAPI.storyboard.import(mode=semantic)
+  │
+  ├── 路径 F：完整视频创作（neko.story.startVideoCreation → flowF）
+  │     └── parseStoryboard → importStoryboardToCanvas → generatePrompts
+  │           → generatePilot → batchGenerate → qualityGate → arrangeOnTimeline
+  │
   ▼
 neko-canvas
   ├── GenerationPromptPanel
@@ -174,6 +187,10 @@ neko-canvas
           ▼
     neko-cut 时间线（ShotNode → VideoClip 轨道段）
 ```
+
+**共享分镜工具** (`@neko/shared/utils/storyboardPlanner.ts`):
+- `createStoryboardPayload()` — 从 `ScriptIndex` 构建 `CanvasStoryboardPayload`（机械式或语义式）
+- `applyStoryboardPayloadToCanvas()` — 将 payload 应用到 canvas API，创建场景/镜头节点
 
 **Canvas 节点类型全览**（@neko/shared `types/canvas.ts`）：
 
@@ -372,9 +389,9 @@ neko-canvas / neko-cut / neko-story
 
 | 扩展 | 导出类型 | 关键命名空间 |
 |------|---------|-------------|
-| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `nodes` / `events` |
+| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events` |
 | neko-cut | `NekoCutAPI & ISkillProvider` | `timeline` / `ai` |
-| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` |
+| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` / `generateScenePlans` / `generateShotPlan` |
 | neko-auth | `NekoAuthAPI` | `getSession` / `onDidChangeSession` |
 
 ### 跨扩展命令协议
@@ -388,8 +405,12 @@ neko-agent 注册以下命令供其他扩展调用，命令未注册时静默 no
 | `neko.agent.registerSlashCommands` | neko-canvas / neko-cut 等 | 向 Agent 聊天面板注册 `/slash` 命令 |
 | `neko.agent.internalChat` | 任意扩展 | 复用已配置的 LLM 服务进行推理 |
 | `neko.agent.sendContext` | neko-canvas / neko-story | 注入上下文 payload（AgentContextChip UI + story-selection / canvas-selection）|
+| `neko.agent.startPipeline` | neko-story | 启动流水线流程（flowF 等），传入结构化参数（source、importToCanvas、eventCommand）|
 | `neko.agent.buildPrompt` | neko-canvas `GenerationPromptPanel` | 中文场景描述 → 结构化英文 prompt（含角色/景别/情绪）|
 | `neko.story.applyInlineDiff` | neko-agent | 对剧本文件应用 WorkspaceEdit（接受/拒绝确认）|
+| `neko.story.startVideoCreation` | 用户 / neko-story | 从当前剧本场景启动标准视频创作流程（flowF）|
+| `neko.story.handlePipelineEvent` | neko-agent pipeline | 将流水线事件回写到 StorySceneStateStore，用于状态跟踪 |
+| `neko.canvas.importStoryboard` | neko-story / neko-agent | 将 `CanvasStoryboardPayload` 导入活动画布，创建场景/镜头节点 |
 
 ### ISkillProvider — 技能发现接口
 

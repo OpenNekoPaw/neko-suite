@@ -90,11 +90,12 @@
 
 ### neko-story
 > [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas 流水线
-- [ ] **ScriptIndex 升级**：引入稳定 `sceneId`（不再仅依赖行号）+ `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`；分离对话与动作块
-- [ ] **轻量分镜表**：升级 `ScriptTableView`，增加 Agent 状态 + Canvas 状态列；场景级操作按钮（跳转剧本、请求 Agent 分析、生成分镜、发送到 Canvas、打开 SceneGroupNode、标记跳过）
-- [ ] **双代码路径**：路径 A 机械式（story→canvas 骨架）+ 路径 B 创意式（story→agent→canvas 语义 ShotPlan）；`flowF` 作为视频创作标准入口
-- [ ] Agent 工具：`GetScriptIndex` + `SearchScriptIndex` + `ScenePlan`/`ShotPlan` 生成
-- [ ] 升级 `import_script_to_canvas`：从行数骨架导入改为语义 ShotPlan 导入
+- [x] **ScriptIndex 升级**：稳定 `sceneId` + `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`
+- [x] **轻量分镜表**：`ScriptTableView` 含 Agent/Canvas 状态列 + 场景级操作按钮
+- [x] **双代码路径**：路径 A 机械式 + 路径 B 语义式（story→agent→canvas ShotPlan）；`flowF` 标准入口 `neko.story.startVideoCreation`
+- [x] Agent 工具：`GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`
+- [x] 升级 `import_script_to_canvas`：通过 `createStoryboardPayload` / `applyStoryboardPayloadToCanvas` 支持语义 ShotPlan 导入
+- [ ] 将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
 
 ### neko-agent
 - [ ] MCP 重连退避（指数退避 + 熔断）

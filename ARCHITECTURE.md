@@ -157,8 +157,21 @@ Extension Host
 
 ```
 neko-story script (.fountain)
-  │ import_script_to_canvas MCP Tool
-  │   └── 1 SceneGroupNode per scene + ~lineSpan/10 ShotNodes
+  │
+  ├── Path A: Mechanical (import_script_to_canvas tool)
+  │     └── createStoryboardPayload(mode=mechanical) → ~lineSpan/10 ShotNodes
+  │
+  ├── Path B: Semantic (story → agent → canvas pipeline)
+  │     └── ScriptIndex (stable sceneId + metadata)
+  │           → GenerateScenePlan / GenerateShotPlan (deterministic planners)
+  │           → neko-agent parseStoryboard (IStructuredStoryPlanner preferred)
+  │           → importStoryboardToCanvas pipeline stage
+  │           → NekoCanvasAPI.storyboard.import(mode=semantic)
+  │
+  ├── Path F: Full video creation (neko.story.startVideoCreation → flowF)
+  │     └── parseStoryboard → importStoryboardToCanvas → generatePrompts
+  │           → generatePilot → batchGenerate → qualityGate → arrangeOnTimeline
+  │
   ▼
 neko-canvas
   ├── GenerationPromptPanel
@@ -174,6 +187,10 @@ neko-canvas
           ▼
     neko-cut timeline (ShotNode → VideoClip track segments)
 ```
+
+**Shared Storyboard Utils** (`@neko/shared/utils/storyboardPlanner.ts`):
+- `createStoryboardPayload()` — builds `CanvasStoryboardPayload` from `ScriptIndex` (mechanical or semantic mode)
+- `applyStoryboardPayloadToCanvas()` — applies payload to canvas API, creating scene/shot nodes
 
 **Complete Canvas Node Types** (`@neko/shared` `types/canvas.ts`):
 
@@ -273,6 +290,7 @@ Extension Host
 | Creative Context Compression | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7-level priority semantic classification: user messages permanently retained; creative decisions/version anchors/iteration chains/asset state/aesthetic preferences compressed in tiers |
 | Ablation Experiment Framework | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig mapping + MetricsHooks metric collection, zero intrusion on existing subsystems |
 | Agent Media Architecture | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story storyboard responsibility boundaries; Agent self-sufficiency; GeneratedAsset disk storage + JSON references; DragDropBroker cross-extension transfer; Send-to-Agent unified protocol (file-level + content-level, zero base64); MediaPreprocessor auto-scaling/frame-extraction |
+| Story-Agent-Canvas Boundary | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md) | Agent-first boundary convergence: story owns script facts + lightweight review table, agent owns orchestration, canvas owns storyboard workspace; dual-path (mechanical/semantic) import; StorySceneStateStore + workspaceState persistence |
 | Document Preview | [architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ/DOCX built-in previewer; waterfall virtual scroll + dual-column mode; Webview direct connection to neko-engine HTTP (no postMessage relay); epub.js fetchForEpub replaces XHR |
 | Path System | *Internalized* | Project files store only relative paths + `${VAR}/path`; PathResolver (@neko/shared L0) unified resolution; Rust ProjectContext (resolve/validate); EngineClient/PreviewFileServer auto-expand variables; variable sources: .neko/settings.json + settings.local.json |
 
@@ -373,9 +391,9 @@ neko-canvas / neko-cut / neko-story
 
 | Extension | Export Type | Key Namespaces |
 |-----------|-----------|----------------|
-| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `nodes` / `events` |
+| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events` |
 | neko-cut | `NekoCutAPI & ISkillProvider` | `timeline` / `ai` |
-| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` |
+| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` / `generateScenePlans` / `generateShotPlan` |
 | neko-auth | `NekoAuthAPI` | `getSession` / `onDidChangeSession` |
 
 ### Cross-Extension Command Protocol
@@ -389,8 +407,12 @@ neko-agent registers the following commands for other extensions to invoke. Comm
 | `neko.agent.registerSlashCommands` | neko-canvas / neko-cut etc. | Register `/slash` commands in the Agent chat panel |
 | `neko.agent.internalChat` | Any extension | Reuse the configured LLM service for inference |
 | `neko.agent.sendContext` | neko-canvas / neko-story | Inject context payload (AgentContextChip UI + story-selection / canvas-selection) |
+| `neko.agent.startPipeline` | neko-story | Start a pipeline flow (flowF etc.) with structured params (source, importToCanvas, eventCommand) |
 | `neko.agent.buildPrompt` | neko-canvas `GenerationPromptPanel` | Chinese scene description → structured English prompt (with character/shot scale/mood) |
 | `neko.story.applyInlineDiff` | neko-agent | Apply WorkspaceEdit to script file (accept/reject confirmation) |
+| `neko.story.startVideoCreation` | User / neko-story | Launch standard video creation workflow (flowF) from the current screenplay scene |
+| `neko.story.handlePipelineEvent` | neko-agent pipeline | Write-back pipeline events to StorySceneStateStore for status tracking |
+| `neko.canvas.importStoryboard` | neko-story / neko-agent | Import a `CanvasStoryboardPayload` into the active canvas as scene/shot nodes |
 
 ### ISkillProvider — Skill Discovery Interface
 

@@ -89,11 +89,12 @@
 
 ### neko-story
 > [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas Pipeline
-- [ ] **ScriptIndex upgrade**: introduce stable `sceneId` (not just line numbers) + `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`; separate dialogue from action blocks
-- [ ] **Lightweight storyboard table**: upgrade `ScriptTableView` with Agent status + Canvas status columns; scene-level action buttons (jump to script, request Agent analysis, generate storyboard, send to Canvas, open SceneGroupNode, mark skip)
-- [ ] **Two code paths**: Path A mechanical (story→canvas skeleton) + Path B creative (story→agent→canvas semantic ShotPlan); make `flowF` standard entry for video creation
-- [ ] Agent tools: `GetScriptIndex` + `SearchScriptIndex` + `ScenePlan`/`ShotPlan` generation
-- [ ] Upgrade `import_script_to_canvas` from line-count skeleton to semantic ShotPlan import
+- [x] **ScriptIndex upgrade**: stable `sceneId` + `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`
+- [x] **Lightweight storyboard table**: `ScriptTableView` with Agent/Canvas status columns + scene-level action buttons
+- [x] **Two code paths**: Path A mechanical + Path B semantic (story→agent→canvas ShotPlan); `flowF` standard entry via `neko.story.startVideoCreation`
+- [x] Agent tools: `GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`
+- [x] Upgrade `import_script_to_canvas` to semantic ShotPlan import via `createStoryboardPayload` / `applyStoryboardPayloadToCanvas`
+- [ ] Upgrade `canvasStatus = opened` from button-driven to canvas real-time event write-back
 
 ### neko-agent
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)

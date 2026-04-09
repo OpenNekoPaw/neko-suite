@@ -82,7 +82,7 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 18 packag
 | Module           | Role                                                                                                      | Status    | Scale                            |
 | ---------------- | --------------------------------------------------------------------------------------------------------- | --------- | -------------------------------- |
 | **neko-preview** | Media preview - Video/Audio Provider + WebCodecs player + Apple Music-style waveform                      | Alpha 85% | 7.2K TS/TSX (42 files), 5 tests  |
-| **neko-story**   | Screenplay editor - Fountain LSP + preview + timeline generation + PDF export                             | WIP 75%   | 5.9K TS/TSX (41 files), 3 tests  |
+| **neko-story**   | Screenplay editor - Fountain LSP + preview + timeline generation + ScenePlan/ShotPlan + story→agent→canvas pipeline | Alpha 88% | 8.0K TS/TSX (50 files), 10 tests |
 | **neko-market**  | Asset marketplace - Skills/shaders/models/presets search + install + versioning + local model deployment  | Alpha 97% | 4.4K TS/TSX (47 files), 9 tests  |
 | **neko-assets**  | Asset management - registry + thumbnails + external media libraries + Document + PathVariable full format | Alpha 92% | 9.2K TS (47 files), 7 tests      |
 | **neko-tools**   | Media tools - Diff comparison + parallel optimization + protocol enhancement                              | WIP 62%   | 14.9K TS (69 files), 6 tests     |
@@ -149,11 +149,11 @@ Video Frames + Effects + Transitions → wgpu Compositor → Real-time Preview /
 │                                                                     │
 │  1. Write: Draft screenplays in Fountain format with neko-story     │
 │            ↓                                                        │
-│  2. Think: neko-agent auto-parses scripts, places assets on         │
-│            timeline, generates previews                             │
+│  2. Think: neko-agent parses scripts via ScenePlan/ShotPlan,        │
+│            orchestrates storyboard → canvas → timeline pipeline     │
 │            ↓                                                        │
-│  3. Draw:  Organize assets in neko-canvas, edit visuals in          │
-│            neko-sketch in real-time                                  │
+│  3. Draw:  Semantic storyboard import into neko-canvas, edit        │
+│            visuals in neko-sketch in real-time                       │
 │            ↓                                                        │
 │  4. Sound: Record voiceovers in neko-audio, AI auto-denoise         │
 │            and align                                                │
