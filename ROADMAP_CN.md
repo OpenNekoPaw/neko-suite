@@ -20,8 +20,8 @@
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
 | **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估；剩余：MCP 重连退避 + **Webview 架构优化**（[ADR](./docs/architecture/neko-agent-webview-optimization.md)） |
 | **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
-| **neko-story** | Alpha | 92% | **1 TODO**，155 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore；Story→Agent→Canvas 语义流水线已落地（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
-| **neko-canvas** | Alpha | 80% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0**：协议修复（nodes.update/create + 消息通道 + 结果审阅）；**P1**：场景语义 + 渲染器注册表（[ADR](./docs/architecture/canvas-role-boundary.md)） |
+| **neko-story** | Alpha | 95% | **0 TODO(P0)**，155+ 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore 跨会话持久化；Story→Agent→Canvas 语义流水线已贯通（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
+| **neko-canvas** | Alpha | 90% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅（协议统一 + 消息封装 + 审查闭环 + SceneGroupNode 语义容器 + 创作入口覆盖）+ P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry；剩余 P1 增强（[ADR](./docs/architecture/canvas-role-boundary.md)） |
 | **neko-preview** | Alpha | 86% | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅**；一期剩余：FDX；二期：XLSX/PPTX |
 | **neko-assets** | Alpha | 88% | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：L1-L3 缓存（依赖 Engine 新 action） |
 | **neko-market** | Alpha | 88% | **~4.4K LOC**；React Webview 完整实现（Browse/Installed/Updates + Zustand + i18n）+ market-core 58 tests；剩余：Registry Server 对接（neko-hub） |
@@ -124,7 +124,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 
 ---
 
-## Phase 3: 视觉增强 + 3D 能力 (~82%)
+## Phase 3: 视觉增强 + 3D 能力 (~88%)
 
 ### neko-engine GPU 效果管线 ✅
 > 完成时间：2026-03-27（Phase 3 GPU 零拷贝重构）
@@ -142,7 +142,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ 分镜导出到 neko-cut 时间线（`neko.cut.importStoryboard` postMessage→webview）
 - ✅ neko-story → Agent 协同（右键 "→ Agent" context 注入 + `neko.story.applyInlineDiff`）
 
-### neko-canvas — 分镜 + AI 协同 ✅（核心），协议修复待做
+### neko-canvas — 分镜 + AI 协同 ✅（P0 全部收敛）
 > [角色边界 ADR](./docs/architecture/canvas-role-boundary.md) — canvas 作为语义编排层
 - ✅ ShotNode + SceneGroupNode（场景横向容器）
 - ✅ GenerationPromptPanel（内嵌生图对话框，委托 neko-agent.generateForNode，ADR-2D-007）
@@ -153,27 +153,32 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ ScriptNode（TOC 目录 + getScriptIndex 跳转）/ DocumentNode（PDF/DOCX/EPUB 封面缩略图）/ ModelNode（reference/workflow 双模式）
 - ✅ `import_script_to_canvas` MCP Tool（screenplay → SceneGroupNode + ShotNode 链）
 - ✅ Agent Context Protocol（`neko.agent.sendContext` + AgentContextChip + canvasAmbientContext 系统注入）
-- [ ] **P0：协议一致性** — 修复 `nodes.update`/`nodes.create` 不一致 + 消息通道可靠性 + 结果审阅周期（候选选择 → 节点状态同步）
-- [ ] P1：SceneGroupNode 作为真正语义容器（批量操作 + 镜头排序 + 自动布局）
-- [ ] P1：一等公民输入节点（剧本/文档/模型引用 + 从文件树拖入）
-- [ ] P1：节点渲染器注册表（替换硬编码 `switch(node.type)`）
-- [ ] P2：候选选择 UI（GeneratedImageVersion[] ◀ N/M ▶；单次生成 1-4 张）
+- ✅ **P0-1：协议一致性** — `nodes.update`/`nodes.create` 统一契约（update `{ nodeId, data }`、create `{ type, position, data }`）
+- ✅ **P0-2：消息通道封装** — webview 内 VSCode API 收敛到统一工具层；`operationApplied` + dirty 标记稳定
+- ✅ **P0-3：结果审查闭环** — `generationHistory.selected` 作为统一事实源；ShotNode/GalleryNode 候选切换 UI
+- ✅ **P0-4：SceneGroupNode 语义容器** — 镜头纳管/排序/自动布局/场景级批量生成
+- ✅ **P0-5：创作入口覆盖** — script/document/model/canvas-embed picker + Explorer 拖入
+- ✅ **P1-1：CanvasEmbedNode** — 类型 + outline + webview 渲染 + picker 入口
+- ✅ **P1-4：NodeRendererRegistry** — 替代核心渲染分发硬编码，新节点通过注册表扩展
+- ✅ **P1：asset 代理边界** — 收敛为 `neko-assets` 受限代理 + `timelineSync` 最小回流契约
+- ✅ `.nkc-ops` 操作历史持久化 + AI 来源过滤
+- [ ] P1：`NodeRendererRegistry` 扩展（metadata/图标/属性面板 schema 收敛到注册表）
+- [ ] P1：`asset` 命名空间清理（推动 `neko-assets` 提供正式扩展 API）
+- [ ] P2：批量候选对比器 + 更强审阅 UI
 - [ ] P2：角色一致性（@引用素材 → IP-Adapter reference 注入）
-- [ ] P2：`.nkc-ops` 操作历史持久化 + AI 来源过滤
-- [ ] P3：CanvasEmbedNode（.nkc 缩略图 + 双击打开）
 - [ ] 节点性能优化（按需，当前 DOM/SVG 方案足够）
 
-### neko-cut — 时间线编辑能力（P0/P1 已关闭）
+### neko-cut — 时间线编辑能力（P0/P1/P2 基础已关闭）
 > [评估 ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 8/10，完整创作 6.5/10
-- [x] **P0：Transition 字段命名** — `transitionIn/transitionOut` 为主字段，保留 legacy 兼容读取
-- [x] **P0：Effects 导出链** — effects/colorCorrection/masks 已补齐导出转换
-- [x] **P0：编辑/预览/导出一致性** — 元素 speed/reverse/timeRemap + 全局 playbackSpeed 分层明确
-- [x] P1：暂停帧合成扩展（text/subtitle/shape Webview overlay + scene3d 引擎 seek 帧）
-- [x] P1：字幕系统整合（subtitle 轨/元素统一模型 + PropertyPanel/内联面板双入口 + .srt/.vtt/.ass 拖入）
-- [x] P1：资产库集成（主工作区左侧 dock 面板）
-- [x] P1：播放倍率控制（0.1x-4x + PreviewControls UI + stream speed 消息契约）
-- [x] P1：元素级速度/倒放/复制/分割保留左右（正式操作链 + 右键菜单）
-- [x] P2：涟漪编辑基础闭环（删除/插入/粘贴/裁剪/分割/同轨拖动）
+- ✅ **P0：Transition 字段命名** — `transitionIn/transitionOut` 为主字段，保留 legacy 兼容读取
+- ✅ **P0：Effects 导出链** — effects/colorCorrection/masks 已补齐导出转换
+- ✅ **P0：编辑/预览/导出一致性** — 元素 speed/reverse/timeRemap + 全局 playbackSpeed 分层明确
+- ✅ P1：暂停帧合成扩展（text/subtitle/shape Webview overlay + scene3d 引擎 seek 帧）
+- ✅ P1：字幕系统整合（subtitle 轨/元素统一模型 + PropertyPanel/内联面板双入口 + .srt/.vtt/.ass 拖入）
+- ✅ P1：资产库集成（主工作区左侧 dock 面板）
+- ✅ P1：播放倍率控制（0.1x-4x + PreviewControls UI + stream speed 消息契约）
+- ✅ P1：元素级速度/倒放/复制/分割保留左右（正式操作链 + 右键菜单）
+- ✅ P2：涟漪编辑基础闭环（删除/插入/粘贴/裁剪/分割/同轨拖动）
 - [ ] P2：涟漪编辑完善（跨多选组合 + insert/overwrite 模式 + 左 trim/跨轨边界规则）
 - [ ] P2：高级时间编辑（slip/slide/roll edit + 可视化 speed curve/time remap UI）
 - [ ] P2：导出往返测试套件
@@ -188,7 +193,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P1：拆分 `InputAreaContext` → `ModelContext` + `MentionContext` + `GenerationContext`
 - [ ] P2：消息追踪（trace ID 注入 + 结构化审计链路）
 
-### neko-story — Story-Agent-Canvas 流水线 ✅
+### neko-story — Story-Agent-Canvas 流水线 ✅（语义流水线贯通）
 > [ADR](./docs/architecture/story-agent-canvas-boundary.md) — 明确 story/agent/canvas 责任边界
 - ✅ ScriptIndex 升级（稳定 `sceneId` + sceneTitle/location/timeOfDay + sceneCharacters[] + actionSummary + estimatedDuration）
 - ✅ 轻量分镜表（Agent/Canvas 状态列 + 场景级操作按钮）
@@ -196,7 +201,8 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ Agent 工具（`GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`）
 - ✅ `import_script_to_canvas` 升级为语义 ShotPlan 导入；共享 `createStoryboardPayload` / `applyStoryboardPayloadToCanvas`
 - ✅ `NekoCanvasAPI.storyboard.import()` + `neko.canvas.importStoryboard` 命令
-- ✅ `StorySceneStateStore` + `workspaceState` 持久化 + pipeline 事件回写
+- ✅ `StorySceneStateStore` + `workspaceState` 跨会话持久化 + pipeline 事件回写场景状态
+- ✅ Fountain 流水线接入场景规划（Agent 路由 + 语义分镜导入 canvas）
 - [ ] P2：将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
 
 ### neko-agent — 富媒体架构待做
@@ -606,4 +612,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新：2026-04-08（+ Phase 3.6 实体身份 & Git 集成；cut/canvas/agent/story 架构 ADR 集成）*
+*最后更新：2026-04-09（Sprint 2 收敛：canvas P0 全部闭环 + story 状态持久化 + 语义分镜流水线贯通；Phase 3 ~88%）*

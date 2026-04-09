@@ -19,6 +19,14 @@
 - [x] **neko-cut**: AI action `ai-background-remove` + `ai-smart-crop`（委托 neko-agent 云端 AI，复用 `generateForNode` 模式）
 - [x] **跨模块**: DragDropBroker（Agent `dnd:start` → Extension payload 暂存 → Canvas/Cut `dnd:drop` → `importAsset`/`importGeneratedClip`；`ImageGridCard` draggable）
 
+### ✅ Sprint 2 已完成（2026-04-09）
+- [x] **neko-canvas**: P0-1~P0-5 全部收敛 — `nodes.update`/`nodes.create` 协议统一 + 消息通道封装 + 结果审查闭环（`generationHistory.selected`）+ `SceneGroupNode` 升级为语义容器（镜头纳管/排序/自动布局/批量生成）+ 创作入口覆盖（script/document/model/canvas-embed picker + 拖入）
+- [x] **neko-canvas**: P1-1 `CanvasEmbedNode` 最小落地（类型 + outline + webview 渲染 + picker 入口）
+- [x] **neko-canvas**: P1-4 `NodeRendererRegistry` 首轮落地（替代核心渲染分发硬编码，新节点可通过注册表扩展）
+- [x] **neko-canvas**: asset 代理边界收敛（受限代理实现 + `timelineSync` 最小回流契约）
+- [x] **neko-story**: 场景工作流状态持久化（`StorySceneStateStore` + `workspaceState` 跨会话）+ 语义分镜流水线入口 `neko.story.startVideoCreation` + 场景/镜头规划工具 + canvas 移交
+- [x] **neko-agent**: Fountain 流水线接入场景规划 + 语义分镜导入 canvas 管道
+
 ### 待做
 
 ### neko-cut（视频编辑）— P0-1：字段一致性
@@ -28,11 +36,13 @@
 - [x] **编辑/预览/导出字段一致性**：元素 `speed/reverse/timeRemap` 在暂停态/播放态/导出态一致；全局 `playbackSpeed` 与元素级 `speed` 分层明确
 - [ ] 导出往返测试套件：编辑 → 预览 → 导出 → 重新导入一致性验证
 
-### neko-canvas（故事板）— P0-2：协议修复
-> [ADR](./docs/architecture/canvas-role-boundary.md) — 当前 80%。协议不一致阻塞 Agent→Canvas 可靠性。
-- [ ] **修复 `nodes.update`/`nodes.create` 协议不一致**：审计 Extension→Webview 调用；统一为 update `{ nodeId, data }`、create `{ type, position, data }`；更新所有 Agent 工具
-- [ ] **修复消息通道一致性**：审计 `canvasOperationStore` VSCode API 暴露；统一 Webview 侧 VSCode API 调用；确保 `operationApplied` 事件可靠触发 + 脏标记
-- [ ] **完成结果审阅周期**：定义候选选中规范字段（`generationHistory.selected`）；实现 `onSelectCandidate` 处理器；同步选中 → 节点状态 → store → `generatedAsset` 字段
+### neko-canvas（故事板）— 收敛增强
+> [ADR](./docs/architecture/canvas-role-boundary.md) — P0 全部收敛，进入 P1 增强阶段。
+- [ ] 继续收敛周边桥接接口（保持 `nodes.update/create` 统一契约不分叉）
+- [ ] 消息语义细化（新增消息类型优先扩展工具层，而非直接访问全局对象）
+- [ ] 批量候选对比器 + 更强的审阅 UI 体验
+- [ ] `NodeRendererRegistry` 扩展：metadata、图标、默认尺寸、属性面板 schema 收敛到注册表
+- [ ] `asset` 命名空间边界清理：推动 `neko-assets` 提供正式扩展 API，替代 command 级代理
 
 ### neko-agent（AI 助手）— P0-2：Webview 架构
 > [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10。顶层控制器膨胀 + 消息契约薄弱。
@@ -72,10 +82,10 @@
 ### neko-canvas
 - [ ] 安装 jsPDF + JSZip 解锁 PDF/ZIP 分镜导出
 - [ ] 模板系统基础版（需从零实现，命令未注册）
-- [ ] **强化 `SceneGroupNode` 语义**：真正的语义容器 + 场景级批量操作 + 镜头排序 + 自动布局
-- [ ] **一等公民输入节点**：工具栏添加剧本/文档/模型引用节点按钮；支持从文件树/市场拖入
-- [ ] **节点渲染器注册表**：替换硬编码 `switch(node.type)` 为 `NodeRendererRegistry`；允许外部注册
-- [ ] **CanvasEmbedNode**（类型已有，需 UI 组件）
+- [x] ~~**强化 `SceneGroupNode` 语义**~~：已升级为语义容器（镜头纳管/排序/自动布局/场景级批量生成）
+- [x] ~~**一等公民输入节点**~~：script/document/model/canvas-embed picker + Explorer 拖入已完成
+- [x] ~~**节点渲染器注册表**~~：`NodeRendererRegistry` 已替代核心渲染分发硬编码（首轮，metadata/schema 扩展见一期 P1）
+- [x] ~~**CanvasEmbedNode**~~：类型 + outline + webview 渲染 + picker 入口已完成
 - [ ] 角色一致性 — IP-Adapter reference 注入
 - [ ] 场景背景一致性 — ControlNet 注入
 
@@ -95,6 +105,7 @@
 - [x] **双代码路径**：路径 A 机械式 + 路径 B 语义式（story→agent→canvas ShotPlan）；`flowF` 标准入口 `neko.story.startVideoCreation`
 - [x] Agent 工具：`GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`
 - [x] 升级 `import_script_to_canvas`：通过 `createStoryboardPayload` / `applyStoryboardPayloadToCanvas` 支持语义 ShotPlan 导入
+- [x] **场景工作流状态持久化**：`StorySceneStateStore` 统一事实源 + `workspaceState` 跨会话持久化 + 管道事件回写场景状态
 - [ ] 将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
 
 ### neko-agent
@@ -301,8 +312,13 @@
 - **P1-2**: 质检音频/视频依赖注入（EngineAudioAnalyzerAdapter + EngineFrameExtractorAdapter 接入 pipeline-bootstrap）
 - **P1-3**: 默认媒体模型（DALL-E 3 / Sora / TTS-1 / Jukebox）+ defaultMediaModels 配置实现开箱即用媒体生成
 
+### ✅ Sprint 2 — Canvas 收敛 + Story 流水线（2026-04-09）
+- **neko-canvas**: P0-1~P0-5 全部收敛（协议统一 + 消息封装 + 审查闭环 + SceneGroupNode 语义容器 + 创作入口覆盖）+ P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + asset 代理边界 + timelineSync 回流契约
+- **neko-story**: 场景工作流状态持久化（StorySceneStateStore + workspaceState）+ 语义分镜入口 + 场景/镜头规划工具 + canvas 移交
+- **neko-agent**: Fountain 流水线接入场景规划 + 语义分镜 canvas 导入管道
+
 </details>
 
 ---
 
-*最后更新：2026-04-08（+ 架构文档分析：P0 cut/canvas/agent 字段一致性 + Phase 3.6 实体身份 & Git 集成）*
+*最后更新：2026-04-09（Sprint 2 收敛：canvas P0 全部闭环 + story 状态持久化 + 语义分镜流水线贯通）*
