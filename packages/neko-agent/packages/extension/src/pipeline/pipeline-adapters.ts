@@ -339,9 +339,10 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
     const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
     const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.nekostory');
     if (!canvasExt || !storyExt) {
-      throw new Error(
-        'importStoryboardToCanvas: neko-story or neko-canvas extension is unavailable',
+      logger.warn(
+        'importStoryboardToCanvas: neko-story or neko-canvas extension is unavailable, skipping canvas import',
       );
+      return undefined;
     }
 
     const canvasApi = canvasExt.isActive

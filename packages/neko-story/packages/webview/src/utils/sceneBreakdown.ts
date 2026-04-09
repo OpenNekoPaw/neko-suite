@@ -87,15 +87,6 @@ export function buildSceneBreakdowns(doc: FountainDocument): SceneBreakdown[] {
 }
 
 /**
- * extractAllCharacters — Sorted list of all unique character names in the document.
- */
-export function extractAllCharacters(scenes: SceneBreakdown[]): string[] {
-  const set = new Set<string>();
-  for (const s of scenes) s.characters.forEach((c) => set.add(c));
-  return [...set].sort();
-}
-
-/**
  * formatDurationShort — "1m 30s" or "45s"
  */
 export function formatDurationShort(sec: number): string {
