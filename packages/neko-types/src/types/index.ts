@@ -149,6 +149,7 @@ export * from './mediaEngine';
 export * from './canvas';
 export * from './canvas-drop';
 export * from './canvas-timeline-sync';
+export * from './storyboard-planner';
 
 // Sketch types (.nks document format)
 export * from './sketch';

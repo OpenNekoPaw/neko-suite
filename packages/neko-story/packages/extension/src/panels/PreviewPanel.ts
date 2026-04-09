@@ -2,16 +2,30 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
+import { createStoryboardPayload } from '@neko/shared';
+import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
+import { buildScriptIndex } from '../services/scriptIndexBuilder';
+import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
 
 type MessageToWebview =
-  | { type: 'update'; document: FountainDocument }
+  | {
+      type: 'update';
+      document: FountainDocument;
+      scriptIndex: NekoStoryScriptIndex;
+      sceneStates: Record<string, StorySceneState>;
+    }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: 'screenplay' | 'table' | 'grid' };
 
 type MessageFromWebview =
   | { type: 'ready' }
   | { type: 'navigate'; line: number; character: number }
-  | { type: 'scroll'; line: number };
+  | { type: 'scroll'; line: number }
+  | {
+      type: 'sceneAction';
+      sceneId: string;
+      action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip';
+    };
 
 export class PreviewPanel implements vscode.Disposable {
   public static currentPanel: PreviewPanel | undefined;
@@ -19,13 +33,19 @@ export class PreviewPanel implements vscode.Disposable {
 
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
+  private readonly sceneStateStore: StorySceneStateStore;
   private disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private updateTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    sceneStateStore: StorySceneStateStore,
+  ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
+    this.sceneStateStore = sceneStateStore;
 
     // Set webview content
     this.panel.webview.html = this.getHtmlForWebview();
@@ -64,10 +84,18 @@ export class PreviewPanel implements vscode.Disposable {
           }
         }
       }),
+      this.sceneStateStore.onDidChange((uri) => {
+        if (this.activeEditor?.document.uri.toString() === uri.toString()) {
+          this.updatePreview();
+        }
+      }),
     );
   }
 
-  public static createOrShow(extensionUri: vscode.Uri): PreviewPanel | undefined {
+  public static createOrShow(
+    extensionUri: vscode.Uri,
+    sceneStateStore: StorySceneStateStore,
+  ): PreviewPanel | undefined {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
       : vscode.ViewColumn.One;
@@ -90,7 +118,7 @@ export class PreviewPanel implements vscode.Disposable {
       ],
     });
 
-    PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
+    PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri, sceneStateStore);
     return PreviewPanel.currentPanel;
   }
 
@@ -108,6 +136,9 @@ export class PreviewPanel implements vscode.Disposable {
         break;
       case 'scroll':
         // Could sync editor scroll position here
+        break;
+      case 'sceneAction':
+        void this.handleSceneAction(message.sceneId, message.action);
         break;
     }
   }
@@ -147,8 +178,80 @@ export class PreviewPanel implements vscode.Disposable {
 
     const text = this.activeEditor.document.getText();
     const document = parse(text);
+    const scriptIndex = buildScriptIndex(this.activeEditor.document.uri, document);
+    const sceneStates = this.sceneStateStore.getSceneStates(
+      this.activeEditor.document.uri,
+      scriptIndex,
+    );
 
-    this.postMessage({ type: 'update', document: this.resolveAssets(document) });
+    this.postMessage({
+      type: 'update',
+      document: this.resolveAssets(document),
+      scriptIndex,
+      sceneStates,
+    });
+  }
+
+  private async handleSceneAction(
+    sceneId: string,
+    action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip',
+  ): Promise<void> {
+    const editor = this.activeEditor;
+    if (!editor || !this.isStoryDocument(editor.document)) {
+      return;
+    }
+
+    const document = parse(editor.document.getText());
+    const scriptIndex = buildScriptIndex(editor.document.uri, document);
+    const scene = scriptIndex.scenes.find((entry) => entry.sceneId === sceneId);
+    if (!scene) {
+      return;
+    }
+    const sceneStates = this.sceneStateStore.getSceneStates(editor.document.uri, scriptIndex);
+    const existingState = sceneStates[sceneId];
+    if (!existingState) {
+      return;
+    }
+
+    if (action === 'openCanvas') {
+      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        canvasStatus: 'opened',
+      });
+      await vscode.commands.executeCommand('neko.canvas.new');
+      return;
+    }
+
+    if (action === 'toggleSkip') {
+      const skipped =
+        existingState.agentStatus !== 'skipped' || existingState.canvasStatus !== 'skipped';
+      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        agentStatus: skipped ? 'skipped' : 'not-requested',
+        canvasStatus: skipped ? 'skipped' : 'not-sent',
+      });
+      return;
+    }
+
+    await this.selectSceneRange(scene.line_start, scene.line_end);
+
+    if (action === 'analyze') {
+      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        agentStatus: 'ready',
+      });
+      await this.sendSceneToAgent(scene, '请分析这个场景并给出 scene-level 分镜建议：');
+      return;
+    }
+
+    if (action === 'generateStoryboard') {
+      await vscode.commands.executeCommand('neko.story.generateStoryboard');
+      return;
+    }
+
+    if (action === 'sendToCanvas') {
+      await this.sendSceneToCanvas(scriptIndex, scene);
+      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+        canvasStatus: 'sent',
+      });
+    }
   }
 
   /** Walk elements and inject resolvedUri for notes with assetRef */
@@ -175,6 +278,84 @@ export class PreviewPanel implements vscode.Disposable {
 
   private scrollPreviewToLine(line: number) {
     this.postMessage({ type: 'scrollTo', line });
+  }
+
+  private async selectSceneRange(startLine: number, endLine: number): Promise<void> {
+    if (!this.activeEditor) return;
+    const selection = new vscode.Selection(startLine, 0, endLine, Number.MAX_SAFE_INTEGER);
+    this.activeEditor.selection = selection;
+    this.activeEditor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+    await vscode.window.showTextDocument(this.activeEditor.document, {
+      viewColumn: this.activeEditor.viewColumn,
+      preserveFocus: false,
+    });
+  }
+
+  private async sendSceneToAgent(
+    scene: NekoStoryScriptIndex['scenes'][number],
+    intent: string,
+  ): Promise<void> {
+    if (!this.activeEditor) return;
+
+    const selection = new vscode.Selection(
+      scene.line_start,
+      0,
+      scene.line_end,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const selectedText = this.activeEditor.document.getText(selection);
+    const scriptPath = this.activeEditor.document.uri.fsPath;
+
+    const payload: AgentContextPayload = {
+      type: 'story-selection',
+      id: `story:${scriptPath}:${scene.sceneId}`,
+      label: scene.sceneTitle,
+      summary: `Scene: ${scene.sceneTitle}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`,
+      data: {
+        scriptPath,
+        sceneId: scene.sceneId,
+        selectedText,
+        range: {
+          start: { line: scene.line_start, character: 0 },
+          end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
+        },
+      },
+      intent,
+    };
+
+    try {
+      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+    } catch {
+      // neko-agent not installed or not active
+    }
+  }
+
+  private async sendSceneToCanvas(
+    scriptIndex: NekoStoryScriptIndex,
+    scene: NekoStoryScriptIndex['scenes'][number],
+  ): Promise<void> {
+    const sceneIndex: NekoStoryScriptIndex = {
+      ...scriptIndex,
+      scenes: [scene],
+    };
+    const payload = createStoryboardPayload(sceneIndex, {
+      mode: 'mechanical',
+      scenesLimit: 1,
+    });
+
+    try {
+      await vscode.commands.executeCommand('neko.canvas.importStoryboard', payload);
+      vscode.window.showInformationMessage(`已发送场景到 Canvas：${scene.sceneTitle}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('No active canvas editor')) {
+        vscode.window.showWarningMessage(
+          '没有活动的 Canvas 编辑器。请先打开一个 .nkc 画布，再重试发送场景。',
+        );
+        return;
+      }
+      vscode.window.showErrorMessage(`发送场景到 Canvas 失败：${message}`);
+    }
   }
 
   public postMessage(message: MessageToWebview) {

@@ -101,6 +101,8 @@ export const TOOL_NAMES_EFFECTS = {
 export const TOOL_NAMES_STORY = {
   GET_SCRIPT_INDEX: 'GetScriptIndex',
   SEARCH_SCRIPT_INDEX: 'SearchScriptIndex',
+  GENERATE_SCENE_PLAN: 'GenerateScenePlan',
+  GENERATE_SHOT_PLAN: 'GenerateShotPlan',
   STORY_APPLY_SUGGESTION: 'story_apply_suggestion',
 } as const;
 

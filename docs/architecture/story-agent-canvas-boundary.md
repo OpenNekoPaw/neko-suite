@@ -1,6 +1,6 @@
 # story-agent-canvas 职责 ADR 与轻量分镜表设计
 
-**状态**: 架构决策（待实施）
+**状态**: 架构决策（部分实施）
 **日期**: 2026-04-08
 **关联**: `agent-media-architecture.md` · `canvas-agent-integration.md` · `canvas-role-boundary.md` · `ARCHITECTURE_CN.md`
 
@@ -40,6 +40,29 @@
 3. `neko-canvas` 是唯一正式的 storyboard 工作台。
 4. `story` 中保留“轻量分镜表”，但其定位是“审阅和派发面板”，不是第二个 `canvas`。
 5. 机械型导入可以由 `story` 直接调用 `canvas`，创造性拆镜必须经过 `agent`。
+
+### 2.3 当前实施进度
+
+截至 2026-04-08，已落地：
+
+- `ScriptIndex` 已升级为稳定 `sceneId` + scene 元数据 + sceneCharacters + actionSummary + estimatedDuration
+- `ScriptTableView` 已升级为轻量分镜表，包含 Agent / Canvas 状态列与场景级动作入口
+- `story` 的 `sendToCanvas` 已走 `neko.canvas.importStoryboard` 正式导入入口
+- `canvas` 已暴露 `NekoCanvasAPI.storyboard.import(...)` 与 `neko.canvas.importStoryboard`
+- `neko-story` 已提供 `GetScriptIndex` / `SearchScriptIndex` / `GenerateScenePlan` / `GenerateShotPlan`
+- shared planner 已支持 `mechanical | semantic` 双路径 payload
+- `neko-story` extension API 已暴露 `generateScenePlans()` / `generateShotPlan()`
+- `neko-agent` 的 `parseStoryboard` 已优先通过 `neko-story` 结构化 planning 生成 `scenePlans`
+- `neko-agent` pipeline 已新增 `importStoryboardToCanvas` stage，可将 semantic storyboard 正式导入 `canvas`
+- `StartPipeline` 已支持 `importToCanvas` / `canvasStartX` / `canvasStartY` 参数，用于开启 semantic canvas handoff
+- 轻量分镜表状态已升级为 extension 侧统一事实源，并通过 `workspaceState` 做跨会话持久化
+- `story` 已提供 `neko.story.startVideoCreation`，作为从当前场景启动 `flowF` 标准视频主流程的正式入口
+
+仍未完全落地：
+
+- `canvasStatus = opened` 仍主要由用户动作驱动，尚未接入 canvas 实时打开/聚焦事件
+- `StorySceneStateStore` 当前持久化的是 scene 级工作流状态，不包含更细粒度的 canvas 打开态映射
+- “从剧本开始视频创作”标准主流程已具备命令入口，但整包级联验证仍需要更大范围回归
 
 ---
 
@@ -146,6 +169,7 @@ canvas
 
 - `story.generateStoryboard` 不应在 `story` 内直接实现拆镜逻辑
 - 该命令应成为 Agent 工作流入口，调用 Agent 的对应工具或 pipeline
+- 当前实现中，semantic planning 已进入 Agent pipeline；剩余工作是让 `story` 命令直接触发该标准入口，而不是只发送 context
 
 ---
 
@@ -327,6 +351,8 @@ canvas
 - 将其升级为“轻量分镜表 + 下游状态表”
 - `CreativeGridView` 只作为可选场景级展示，不作为正式 storyboard UI
 - `generateStoryboard` 命令重定向为 Agent 编排入口
+- 新增 `从剧本开始视频创作` 正式命令，走 `flowF` 标准主链
+- 轻量分镜表状态统一由 `StorySceneStateStore` 承担，并持久化到 `workspaceState`
 
 ### 10.2 agent
 
@@ -360,6 +386,20 @@ canvas
 4. 将 `generateStoryboard` 收敛为 Agent 入口，而不是在 `story` 内实现拆镜逻辑
 
 5. 将 `import_script_to_canvas` 从“按行数估算 ShotNode”升级为“按语义生成 ShotPlan”
+
+### 当前对应状态
+
+- 1：已完成当前迭代目标
+  - `story` 已具备场景级 `sendToCanvas`
+  - `neko.story.startVideoCreation` 已作为正式标准流程入口落地
+  - 轻量分镜表状态已具备跨会话恢复能力
+- 2：已完成当前迭代目标
+- 3：已完成当前迭代目标
+- 4：已完成当前迭代目标
+- 5：已完成当前迭代核心闭环
+  - shared planner / canvas import 已支持 semantic payload
+  - agent pipeline 已统一消费 `GenerateScenePlan / GenerateShotPlan` 对应的结构化 planning
+  - `importStoryboardToCanvas` 已成为 semantic canvas sink
 
 ---
 

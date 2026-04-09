@@ -13,6 +13,7 @@ import {
   createPipelineHookRegistry,
   createReadDocumentStage,
   createParseStoryboardStage,
+  createImportStoryboardToCanvasStage,
   createGeneratePromptsStage,
   createBatchGenerateStage,
   createGeneratePilotStage,
@@ -33,6 +34,8 @@ import {
   VSCodeFileReader,
   DocumentReaderAdapter,
   StoryParserAdapter,
+  StructuredStoryPlannerAdapter,
+  CanvasStoryboardSinkAdapter,
   LLMAnalyzerAdapter,
   PromptOptimizerAdapter,
   MediaGeneratorAdapter,
@@ -75,6 +78,8 @@ export function bootstrapPipeline(
   const documentReaderService = createDocumentReaderService();
   const documentReader = new DocumentReaderAdapter(documentReaderService);
   const storyParser = new StoryParserAdapter();
+  const structuredStoryPlanner = new StructuredStoryPlannerAdapter();
+  const storyboardCanvasSink = new CanvasStoryboardSinkAdapter();
   const llmAnalyzer = new LLMAnalyzerAdapter();
   const promptOptimizer = new PromptOptimizerAdapter();
 
@@ -123,7 +128,10 @@ export function bootstrapPipeline(
 
   // Register all 6 stages
   registry.registerStage(createReadDocumentStage({ fileReader, documentReader }));
-  registry.registerStage(createParseStoryboardStage({ storyParser, llmAnalyzer }));
+  registry.registerStage(
+    createParseStoryboardStage({ storyParser, structuredStoryPlanner, llmAnalyzer }),
+  );
+  registry.registerStage(createImportStoryboardToCanvasStage({ storyboardCanvasSink }));
   registry.registerStage(createGeneratePromptsStage({ promptOptimizer }));
   registry.registerStage(createGeneratePilotStage({ mediaGenerator }));
   registry.registerStage(createBatchGenerateStage({ mediaGenerator }));

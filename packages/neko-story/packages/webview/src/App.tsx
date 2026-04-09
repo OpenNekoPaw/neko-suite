@@ -3,7 +3,14 @@ import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import { ScriptTableView } from './components/ScriptTableView';
 import { CreativeGridView } from './components/CreativeGridView';
-import type { FountainDocument, MessageToWebview, StoryViewMode } from './types';
+import type {
+  FountainDocument,
+  MessageToWebview,
+  StorySceneAction,
+  StorySceneState,
+  StoryViewMode,
+} from './types';
+import type { NekoStoryScriptIndex } from '@neko/shared';
 import './styles/screenplay.css';
 import './styles/print.css';
 
@@ -63,12 +70,16 @@ function TabBar({
 
 export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
+  const [scriptIndex, setScriptIndex] = useState<NekoStoryScriptIndex | null>(null);
+  const [sceneStates, setSceneStates] = useState<Record<string, StorySceneState>>({});
   const [view, setView] = useState<StoryViewMode>('screenplay');
 
   const handleMessage = useCallback((message: MessageToWebview) => {
     switch (message.type) {
       case 'update':
         setDocument(message.document);
+        setScriptIndex(message.scriptIndex);
+        setSceneStates(message.sceneStates);
         break;
       case 'scrollTo':
         scrollToLine(message.line);
@@ -79,7 +90,7 @@ export function App() {
     }
   }, []);
 
-  useVSCodeMessaging(handleMessage);
+  const { postMessage } = useVSCodeMessaging(handleMessage);
 
   const handleNavigate = useCallback((line: number) => {
     // Switch to screenplay view and scroll to line
@@ -87,6 +98,13 @@ export function App() {
     // Give the DOM a tick to switch views before scrolling
     setTimeout(() => scrollToLine(line), 50);
   }, []);
+
+  const handleSceneAction = useCallback(
+    (sceneId: string, action: StorySceneAction) => {
+      postMessage({ type: 'sceneAction', sceneId, action });
+    },
+    [postMessage],
+  );
 
   return (
     <div
@@ -97,7 +115,14 @@ export function App() {
 
       <div className="flex-1 overflow-hidden">
         {view === 'screenplay' && <ScriptRenderer document={document} />}
-        {view === 'table' && <ScriptTableView document={document} onNavigate={handleNavigate} />}
+        {view === 'table' && (
+          <ScriptTableView
+            scriptIndex={scriptIndex}
+            sceneStates={sceneStates}
+            onNavigate={handleNavigate}
+            onSceneAction={handleSceneAction}
+          />
+        )}
         {view === 'grid' && <CreativeGridView document={document} onNavigate={handleNavigate} />}
       </div>
     </div>

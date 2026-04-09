@@ -79,6 +79,11 @@
         "category": "Neko Story"
       },
       {
+        "command": "neko.story.startVideoCreation",
+        "title": "Start Video Creation",
+        "category": "Neko Story"
+      },
+      {
         "command": "neko.story.newFile",
         "title": "%neko.story.newFile.title%",
         "category": "Neko Story"
@@ -122,6 +127,11 @@
           "command": "neko.story.creativeGridView",
           "when": "editorLangId == nekostory",
           "group": "navigation"
+        },
+        {
+          "command": "neko.story.startVideoCreation",
+          "when": "editorLangId == nekostory",
+          "group": "navigation"
         }
       ],
       "editor/context": [
@@ -129,6 +139,11 @@
           "command": "neko.story.sendToAgent",
           "when": "editorLangId == nekostory",
           "group": "neko@1"
+        },
+        {
+          "command": "neko.story.startVideoCreation",
+          "when": "editorLangId == nekostory",
+          "group": "neko@2"
         }
       ],
       "explorer/context": [],

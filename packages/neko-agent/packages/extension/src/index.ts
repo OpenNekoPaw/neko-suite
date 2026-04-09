@@ -35,6 +35,8 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
+import type { PipelineBootstrapResult } from './pipeline/pipeline-bootstrap';
+import { subscribePipelineProgress } from './pipeline/pipeline-progress-bridge';
 
 /**
  * Activate the extension
@@ -63,7 +65,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
 
   // Initialize Pipeline orchestration layer (L2)
-  bootstrapPipeline(bootstrapResult.platform, bootstrapResult.toolRegistry);
+  const pipelineBootstrap = bootstrapPipeline(
+    bootstrapResult.platform,
+    bootstrapResult.toolRegistry,
+  );
 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
@@ -87,7 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // Register commands
-  registerCommands(context, chatViewProvider, services);
+  registerCommands(context, chatViewProvider, services, pipelineBootstrap);
 
   // Register pipeline commands
   registerPipelineCommands(context, chatViewProvider);
@@ -234,6 +239,7 @@ function registerCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
+  pipelineBootstrap: PipelineBootstrapResult,
 ): void {
   // Open AI Chat
   context.subscriptions.push(
@@ -255,6 +261,57 @@ function registerCommands(
       'neko.agent.sendContext',
       async (payload: import('@neko/shared').AgentContextPayload) => {
         await chatViewProvider.sendContextPayload(payload);
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.startPipeline',
+      async (params: {
+        flowId: 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
+        source: string;
+        sourceFormat?: 'fountain' | 'freeform' | 'document';
+        style?: string;
+        importToCanvas?: boolean;
+        canvasStartX?: number;
+        canvasStartY?: number;
+        eventCommand?: string;
+        eventPayload?: Record<string, unknown>;
+        skipStages?: string[];
+        stageParams?: Record<string, Record<string, unknown>>;
+      }) => {
+        const handle = pipelineBootstrap.startPipeline(
+          params.flowId,
+          {
+            source: params.source,
+            sourceFormat: params.sourceFormat,
+            globalStyle: params.style,
+            stageParams: {
+              ...(params.stageParams ?? {}),
+              ...(params.importToCanvas
+                ? {
+                    importStoryboardToCanvas: {
+                      enabled: true,
+                      startX: params.canvasStartX,
+                      startY: params.canvasStartY,
+                    },
+                  }
+                : {}),
+            },
+          },
+          {
+            skipStages: params.skipStages,
+            globalStyle: params.style,
+          },
+        );
+
+        subscribePipelineProgress(chatViewProvider.webview, handle.id, handle, {
+          eventCommand: params.eventCommand,
+          eventPayload: params.eventPayload,
+        });
+
+        return { pipelineId: handle.id, flowId: handle.flowId };
       },
     ),
   );

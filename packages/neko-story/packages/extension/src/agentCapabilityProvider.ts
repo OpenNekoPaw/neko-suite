@@ -16,9 +16,11 @@ import type {
   ToolGroup,
   ToolParameters,
   NekoStoryAPI,
+  StoryScenePlan,
 } from '@neko/shared';
 import { TOOL_NAMES_STORY } from '@neko/shared';
 import { getRootLogger } from './utils/logger';
+import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 
 /**
  * Create the NekoStory capability provider.
@@ -48,9 +50,9 @@ class NekoStoryCapabilityProviderImpl implements AgentCapabilityProvider {
         name: TOOL_NAMES_STORY.GET_SCRIPT_INDEX,
         description:
           'Get a structured index of a Fountain screenplay (.fountain) file. ' +
-          'Returns scenes with sequential IDs (S1, S2...) and 0-based line_start/line_end so you can ' +
+          'Returns scenes with stable semantic IDs and 0-based line_start/line_end so you can ' +
           'fetch exact scene content with Read(offset=line_start, limit=line_end-line_start+1). ' +
-          'Also returns all characters with their first appearance line and which scenes they appear in.',
+          'Also returns scene-level metadata plus all characters with their first appearance line and which scenes they appear in.',
         category: 'document',
         isReadOnly: true,
         isConcurrencySafe: true,
@@ -262,6 +264,138 @@ class NekoStoryCapabilityProviderImpl implements AgentCapabilityProvider {
             };
           } catch (err) {
             return { success: false, error: `Search failed: ${String(err)}` };
+          }
+        },
+      },
+
+      // -----------------------------------------------------------------------
+      // GenerateScenePlan — deterministic scene-level storyboard planning
+      // -----------------------------------------------------------------------
+      {
+        name: TOOL_NAMES_STORY.GENERATE_SCENE_PLAN,
+        description:
+          'Generate structured ScenePlan objects for one or more screenplay scenes. ' +
+          'Use this after GetScriptIndex or SearchScriptIndex when you need a stable scene-level ' +
+          'plan that can be reviewed or passed to canvas semantic import.',
+        category: 'document',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Absolute file path or URI string of the .fountain screenplay file',
+            },
+            scene_ids: {
+              type: 'array',
+              description:
+                'Optional array of sceneId values. When omitted, generates plans for all indexed scenes.',
+            },
+          },
+          required: ['path'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const index = api.getScriptIndex(args.path as string);
+            if (!index) {
+              return {
+                success: false,
+                error:
+                  'Script not indexed yet. Open the .fountain file in VSCode first, then retry.',
+              };
+            }
+
+            const sceneIds = Array.isArray(args.scene_ids)
+              ? (args.scene_ids as string[])
+              : undefined;
+            const scenePlans = buildStoryScenePlans(index, { sceneIds });
+
+            logger.info(
+              `GenerateScenePlan: scenes=${index.scenes.length} planned=${scenePlans.length}`,
+            );
+            return {
+              success: true,
+              data: {
+                script_path: args.path as string,
+                scenePlans,
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to generate scene plan: ${String(err)}` };
+          }
+        },
+      },
+
+      // -----------------------------------------------------------------------
+      // GenerateShotPlan — deterministic shot planning for one scene
+      // -----------------------------------------------------------------------
+      {
+        name: TOOL_NAMES_STORY.GENERATE_SHOT_PLAN,
+        description:
+          'Generate a structured ShotPlan list for a single sceneId in a screenplay. ' +
+          'Useful when you already selected a target scene and want shot-level semantic import input.',
+        category: 'document',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Absolute file path or URI string of the .fountain screenplay file',
+            },
+            scene_id: {
+              type: 'string',
+              description: 'Target sceneId to generate shot plans for',
+            },
+            recommended_shot_count: {
+              type: 'number',
+              description: 'Optional explicit shot count override (1-8)',
+            },
+          },
+          required: ['path', 'scene_id'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const index = api.getScriptIndex(args.path as string);
+            if (!index) {
+              return {
+                success: false,
+                error:
+                  'Script not indexed yet. Open the .fountain file in VSCode first, then retry.',
+              };
+            }
+
+            const sceneId = args.scene_id as string;
+            const scene = index.scenes.find((entry) => entry.sceneId === sceneId);
+            if (!scene) {
+              return {
+                success: false,
+                error: `Scene not found in ScriptIndex: ${sceneId}`,
+              };
+            }
+
+            const requestedCount = args.recommended_shot_count as number | undefined;
+            const shotPlans = buildShotPlansForScene(scene, requestedCount);
+            const scenePlan: StoryScenePlan = {
+              sceneId: scene.sceneId,
+              sceneTitle: scene.sceneTitle,
+              summary: scene.actionSummary,
+              recommendedShotCount: shotPlans.length,
+              shotPlans,
+            };
+
+            logger.info(`GenerateShotPlan: scene=${sceneId} shots=${shotPlans.length}`);
+            return {
+              success: true,
+              data: {
+                script_path: args.path as string,
+                scenePlan,
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to generate shot plan: ${String(err)}` };
           }
         },
       },

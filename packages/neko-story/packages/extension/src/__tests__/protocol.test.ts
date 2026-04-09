@@ -28,6 +28,11 @@ const workspaceIndexSource = readFileSync(
 );
 const documentLinkSource = readFileSync(join(__dirname, '../providers/documentLink.ts'), 'utf-8');
 const previewPanelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), 'utf-8');
+const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
+const capabilityProviderSource = readFileSync(
+  join(__dirname, '../agentCapabilityProvider.ts'),
+  'utf-8',
+);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../../../../package.json'), 'utf-8'));
 
 describe('neko-story protocol', () => {
@@ -134,6 +139,37 @@ describe('neko-story protocol', () => {
     it('includes script-src with nonce', () => {
       expect(previewPanelSource).toContain('script-src');
       expect(previewPanelSource).toContain('nonce-');
+    });
+  });
+
+  describe('storyboard command handoff', () => {
+    it('routes generateStoryboard command through scene agent payload', () => {
+      expect(extensionSource).toContain("'neko.story.generateStoryboard'");
+      expect(extensionSource).toContain('const payload = buildSceneAgentPayload(');
+      expect(extensionSource).toContain("'neko.agent.startPipeline'");
+      expect(extensionSource).toContain("flowId: 'flowF'");
+      expect(extensionSource).toContain('createStoryPipelineParams(payload, {');
+      expect(extensionSource).toContain('skipStages: [');
+    });
+
+    it('registers pipeline event write-back command for scene state store', () => {
+      expect(extensionSource).toContain("'neko.story.handlePipelineEvent'");
+      expect(extensionSource).toContain('sceneStateStore.handlePipelineEvent(');
+    });
+
+    it('registers a standard video creation command on top of the same story pipeline', () => {
+      expect(extensionSource).toContain("'neko.story.startVideoCreation'");
+      expect(extensionSource).toContain('createStoryPipelineParams(payload, {');
+      expect(extensionSource).toContain("flowId: 'flowF'");
+      expect(extensionSource).toContain("eventCommand: 'neko.story.handlePipelineEvent'");
+      expect(extensionSource).toContain('sceneIds: [data.sceneId]');
+    });
+
+    it('registers ScenePlan and ShotPlan agent tools in story capability provider', () => {
+      expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.GENERATE_SCENE_PLAN');
+      expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.GENERATE_SHOT_PLAN');
+      expect(capabilityProviderSource).toContain('buildStoryScenePlans(index');
+      expect(capabilityProviderSource).toContain('buildShotPlansForScene(scene');
     });
   });
 });

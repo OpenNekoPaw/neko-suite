@@ -19,6 +19,12 @@ import type {
   GalleryCanvasNode,
 } from './canvas';
 import type { ProjectData } from './project';
+import type {
+  ApplyCanvasStoryboardOptions,
+  CanvasStoryboardPayload,
+  CreatedCanvasStoryboard,
+} from './storyboard-planner';
+import type { StoryScenePlan, StoryShotPlan } from './storyboard-planner';
 
 // =============================================================================
 // NekoCut API
@@ -242,6 +248,16 @@ export interface NekoCanvasAPI {
     addShape(canvasId: string, shape: ShapeConfig): Promise<string>;
   };
 
+  storyboard: {
+    /**
+     * Import a storyboard payload into the active canvas as scene/shot nodes.
+     */
+    import(
+      payload: CanvasStoryboardPayload,
+      options?: ApplyCanvasStoryboardOptions,
+    ): Promise<CreatedCanvasStoryboard>;
+  };
+
   nodes: {
     /**
      * List all nodes on the active canvas, optionally filtered by type
@@ -309,11 +325,28 @@ export interface NekoCanvasAPI {
  * `Read(offset=line_start, limit=line_end-line_start+1)` access patterns.
  */
 export interface NekoStorySceneEntry {
+  /** Stable scene ID derived from semantic content, not raw line numbers alone */
   readonly id: string;
+  /** Backward-compatible full heading text, e.g. "INT. OFFICE - DAY" */
   readonly heading: string;
+  /** Stable scene ID exposed explicitly for new consumers */
+  readonly sceneId: string;
+  /** Normalized scene title, same semantic value as heading */
+  readonly sceneTitle: string;
   readonly intExt: string | null;
+  /** Canonical time-of-day field for new consumers */
+  readonly timeOfDay: string | null;
   readonly location: string;
+  /** Backward-compatible alias of timeOfDay */
   readonly time: string | null;
+  /** Explicit scene number if present in Fountain heading, else null */
+  readonly sceneNumber: string | null;
+  /** Character names that appear in this scene */
+  readonly sceneCharacters: readonly string[];
+  /** Short scene-level summary derived from action blocks */
+  readonly actionSummary: string;
+  /** Estimated scene duration in seconds */
+  readonly estimatedDuration: number;
   readonly line_start: number;
   readonly line_end: number;
 }
@@ -388,6 +421,25 @@ export interface NekoStoryAPI {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+
+  /**
+   * Builds deterministic scene-level storyboard plans from the indexed screenplay.
+   * Returns undefined if the file has not been indexed yet.
+   */
+  generateScenePlans(
+    uriOrPath: string,
+    sceneIds?: readonly string[],
+  ): readonly StoryScenePlan[] | undefined;
+
+  /**
+   * Builds deterministic shot plans for a single scene in the indexed screenplay.
+   * Returns undefined if the file or scene has not been indexed yet.
+   */
+  generateShotPlan(
+    uriOrPath: string,
+    sceneId: string,
+    recommendedShotCount?: number,
+  ): readonly StoryShotPlan[] | undefined;
 }
 
 // =============================================================================
