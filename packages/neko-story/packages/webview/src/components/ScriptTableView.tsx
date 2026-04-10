@@ -21,49 +21,27 @@ interface ScriptTableViewProps {
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
 }
 
-function Th({ children, title }: { children: React.ReactNode; title?: string }) {
+// =============================================================================
+// Primitives
+// =============================================================================
+
+function Th({ children, width }: { children: React.ReactNode; width?: string }) {
   return (
     <th
-      className="px-2 py-1.5 text-left font-medium whitespace-nowrap"
+      className="px-3 py-1.5 text-left font-medium whitespace-nowrap"
       style={{
-        color: 'var(--vscode-foreground)',
-        borderBottom: '2px solid var(--vscode-panel-border)',
+        color: 'var(--vscode-descriptionForeground)',
+        borderBottom: '1px solid var(--vscode-panel-border)',
         backgroundColor: 'var(--vscode-editor-background)',
-        opacity: 0.75,
         fontSize: 11,
         position: 'sticky',
         top: 0,
         zIndex: 1,
+        width,
       }}
-      title={title}
     >
       {children}
     </th>
-  );
-}
-
-function Td({
-  children,
-  center,
-  muted,
-}: {
-  children: React.ReactNode;
-  center?: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <td
-      className="px-2 py-1.5"
-      style={{
-        borderBottom: '1px solid var(--vscode-panel-border)',
-        color: muted ? 'var(--vscode-descriptionForeground)' : 'var(--vscode-foreground)',
-        fontSize: 12,
-        textAlign: center ? 'center' : 'left',
-        verticalAlign: 'top',
-      }}
-    >
-      {children}
-    </td>
   );
 }
 
@@ -75,30 +53,23 @@ function StatusBadge({
   tone: 'neutral' | 'info' | 'success' | 'warn';
 }) {
   const palette = {
-    neutral: {
-      background: '#6b728020',
-      foreground: 'var(--vscode-descriptionForeground)',
-    },
-    info: {
-      background: '#3b82f620',
-      foreground: '#3b82f6',
-    },
-    success: {
-      background: '#16a34a20',
-      foreground: '#16a34a',
-    },
-    warn: {
-      background: '#f59e0b20',
-      foreground: '#f59e0b',
-    },
+    neutral: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
+    info: { bg: '#3b82f620', fg: '#3b82f6' },
+    success: { bg: '#16a34a20', fg: '#16a34a' },
+    warn: { bg: '#f59e0b20', fg: '#f59e0b' },
   } as const;
 
   return (
     <span
-      className="px-1.5 py-0.5 rounded text-xs whitespace-nowrap"
       style={{
-        backgroundColor: palette[tone].background,
-        color: palette[tone].foreground,
+        display: 'inline-block',
+        padding: '1px 6px',
+        borderRadius: 3,
+        whiteSpace: 'nowrap',
+        backgroundColor: palette[tone].bg,
+        color: palette[tone].fg,
+        fontSize: 10,
+        lineHeight: '16px',
       }}
     >
       {label}
@@ -106,21 +77,76 @@ function StatusBadge({
   );
 }
 
-function ActionButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
+function IntExtBadge({ value }: { value: string | null | undefined }) {
+  const label = value ?? '—';
+  const isExt = value === 'EXT';
+  const isInt = value === 'INT';
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '0 4px',
+        borderRadius: 3,
+        fontSize: 9,
+        lineHeight: '16px',
+        fontWeight: 600,
+        backgroundColor: isExt ? '#16a34a20' : isInt ? '#3b82f620' : '#6b728020',
+        color: isExt ? '#16a34a' : isInt ? '#3b82f6' : 'var(--vscode-descriptionForeground)',
+        marginLeft: 6,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function CharacterBadge({ name }: { name: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '1px 5px',
+        borderRadius: 3,
+        fontSize: 10,
+        lineHeight: '14px',
+        backgroundColor: 'var(--vscode-badge-background)',
+        color: 'var(--vscode-badge-foreground)',
+        whiteSpace: 'nowrap',
+        marginRight: 4,
+        marginBottom: 2,
+      }}
+    >
+      {name}
+    </span>
+  );
+}
+
+function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="px-1.5 py-0.5 rounded border"
       style={{
-        borderColor: 'var(--vscode-panel-border)',
-        color: 'var(--vscode-foreground)',
-        backgroundColor: 'var(--vscode-button-secondaryBackground)',
-        fontSize: 11,
+        display: 'inline-block',
+        padding: '2px 6px',
+        borderRadius: 3,
+        border: '1px solid var(--vscode-panel-border)',
+        color: 'var(--vscode-descriptionForeground)',
+        backgroundColor: 'transparent',
+        fontSize: 10,
+        lineHeight: '14px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        marginRight: 3,
+        marginBottom: 2,
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.backgroundColor = 'var(--vscode-list-hoverBackground)';
+        el.style.color = 'var(--vscode-foreground)';
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLButtonElement;
+        el.style.backgroundColor = 'transparent';
+        el.style.color = 'var(--vscode-descriptionForeground)';
       }}
       onClick={(event) => {
         event.stopPropagation();
@@ -133,7 +159,13 @@ function ActionButton({
   );
 }
 
-function getAgentStatusMeta(status: StorySceneState['agentStatus'], t: ScriptTableViewTranslation) {
+// =============================================================================
+// Status helpers
+// =============================================================================
+
+type TranslationFn = ReturnType<typeof useTranslation>['t'];
+
+function getAgentStatusMeta(status: StorySceneState['agentStatus'], t: TranslationFn) {
   switch (status) {
     case 'ready':
       return { label: t('table.status.agent.ready'), tone: 'info' as const };
@@ -149,10 +181,7 @@ function getAgentStatusMeta(status: StorySceneState['agentStatus'], t: ScriptTab
   }
 }
 
-function getCanvasStatusMeta(
-  status: StorySceneState['canvasStatus'],
-  t: ScriptTableViewTranslation,
-) {
+function getCanvasStatusMeta(status: StorySceneState['canvasStatus'], t: TranslationFn) {
   switch (status) {
     case 'queued':
       return { label: t('table.status.canvas.queued'), tone: 'warn' as const };
@@ -168,78 +197,204 @@ function getCanvasStatusMeta(
   }
 }
 
-type ScriptTableViewTranslation = ReturnType<typeof useTranslation>['t'];
+// =============================================================================
+// Scene row
+// =============================================================================
+
+const MAX_VISIBLE_CHARACTERS = 3;
 
 function SceneRow({
   scene,
+  sceneIndex,
+  isOdd,
   state,
   onNavigate,
   onSceneAction,
   t,
 }: {
   scene: NekoStoryScriptIndex['scenes'][number];
+  sceneIndex: number;
+  isOdd: boolean;
   state: StorySceneState;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
-  t: ScriptTableViewTranslation;
+  t: TranslationFn;
 }) {
   const agentStatus = getAgentStatusMeta(state.agentStatus, t);
   const canvasStatus = getCanvasStatusMeta(state.canvasStatus, t);
-  const intExtLabel = scene.intExt ?? '—';
-  const summary = scene.actionSummary || '—';
-  const sceneCharacters = scene.sceneCharacters.join(', ') || '—';
+  const isSkipped = state.agentStatus === 'skipped' || state.canvasStatus === 'skipped';
+  const displayNumber = scene.sceneNumber
+    ? `#${scene.sceneNumber}`
+    : `#${String(sceneIndex).padStart(2, '0')}`;
+  const visibleChars = scene.sceneCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
+  const overflowCount = scene.sceneCharacters.length - MAX_VISIBLE_CHARACTERS;
+
+  const rowBg = isOdd ? 'var(--vscode-list-hoverBackground)' : 'transparent';
 
   return (
     <tr
-      className="hover:opacity-80 cursor-pointer"
       onClick={() => onNavigate?.(scene.line_start)}
-      style={{ transition: 'opacity 0.1s' }}
+      style={{
+        cursor: 'pointer',
+        opacity: isSkipped ? 0.45 : 1,
+        backgroundColor: rowBg,
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
+          'var(--vscode-list-activeSelectionBackground)';
+        (e.currentTarget as HTMLTableRowElement).style.opacity = isSkipped ? '0.55' : '0.85';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLTableRowElement).style.backgroundColor = rowBg;
+        (e.currentTarget as HTMLTableRowElement).style.opacity = isSkipped ? '0.45' : '1';
+      }}
     >
-      <Td muted>
-        <span className="font-mono text-xs">{scene.sceneNumber ?? scene.sceneId.slice(-6)}</span>
-      </Td>
-      <Td>
-        <div style={{ fontWeight: 500 }}>{scene.sceneTitle}</div>
-        <div style={{ color: 'var(--vscode-descriptionForeground)', fontSize: 11 }}>
-          {summary}
-        </div>
-      </Td>
-      <Td muted>{scene.location || '—'}</Td>
-      <Td muted center>
-        {scene.timeOfDay ?? '—'}
-      </Td>
-      <Td muted>{sceneCharacters}</Td>
-      <Td muted center>
+      {/* # */}
+      <td
+        style={{
+          padding: '8px 12px',
+          textAlign: 'center',
+          verticalAlign: 'top',
+          borderBottom: '1px solid var(--vscode-panel-border)',
+        }}
+      >
         <span
-          className="px-1 rounded text-xs"
           style={{
-            backgroundColor:
-              scene.intExt === 'EXT'
-                ? '#16a34a20'
-                : scene.intExt === 'INT'
-                  ? '#3b82f620'
-                  : '#6b728020',
-            color:
-              scene.intExt === 'EXT'
-                ? '#16a34a'
-                : scene.intExt === 'INT'
-                  ? '#3b82f6'
-                  : 'var(--vscode-descriptionForeground)',
+            display: 'inline-block',
+            fontFamily: 'monospace',
+            fontSize: 10,
+            fontWeight: 600,
+            padding: '2px 6px',
+            borderRadius: 3,
+            backgroundColor: 'var(--vscode-badge-background)',
+            color: 'var(--vscode-badge-foreground)',
+            whiteSpace: 'nowrap',
           }}
         >
-          {intExtLabel}
+          {displayNumber}
         </span>
-      </Td>
-      <Td muted center>{formatDurationShort(scene.estimatedDuration)}</Td>
-      <Td center>
-        <StatusBadge label={agentStatus.label} tone={agentStatus.tone} />
-      </Td>
-      <Td center>
-        <StatusBadge label={canvasStatus.label} tone={canvasStatus.tone} />
-      </Td>
-      <Td>
-        <div className="flex flex-wrap gap-1">
-          <ActionButton label={t('table.action.jump')} onClick={() => onNavigate?.(scene.line_start)} />
+      </td>
+
+      {/* Scene info */}
+      <td
+        style={{
+          padding: '8px 12px',
+          verticalAlign: 'top',
+          borderBottom: '1px solid var(--vscode-panel-border)',
+        }}
+      >
+        {/* Title + INT/EXT */}
+        <div style={{ lineHeight: '20px' }}>
+          <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--vscode-foreground)' }}>
+            {scene.sceneTitle}
+          </span>
+          <IntExtBadge value={scene.intExt} />
+        </div>
+        {/* Location · Time · Duration */}
+        <div style={{ fontSize: 11, color: 'var(--vscode-descriptionForeground)', marginTop: 2 }}>
+          {scene.location && <span>{scene.location}</span>}
+          {scene.location && scene.timeOfDay && (
+            <span style={{ margin: '0 3px', opacity: 0.5 }}>·</span>
+          )}
+          {scene.timeOfDay && <span>{scene.timeOfDay}</span>}
+          {(scene.location || scene.timeOfDay) && (
+            <span style={{ margin: '0 3px', opacity: 0.5 }}>·</span>
+          )}
+          <span style={{ opacity: 0.6 }}>{formatDurationShort(scene.estimatedDuration)}</span>
+        </div>
+        {/* Summary */}
+        {scene.actionSummary && (
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--vscode-descriptionForeground)',
+              opacity: 0.6,
+              marginTop: 2,
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
+            {scene.actionSummary}
+          </div>
+        )}
+      </td>
+
+      {/* Characters */}
+      <td
+        style={{
+          padding: '8px 12px',
+          verticalAlign: 'top',
+          borderBottom: '1px solid var(--vscode-panel-border)',
+        }}
+      >
+        {scene.sceneCharacters.length > 0 ? (
+          <div>
+            {visibleChars.map((name) => (
+              <CharacterBadge key={name} name={name} />
+            ))}
+            {overflowCount > 0 && (
+              <span
+                style={{ fontSize: 10, color: 'var(--vscode-descriptionForeground)' }}
+                title={scene.sceneCharacters.slice(MAX_VISIBLE_CHARACTERS).join(', ')}
+              >
+                +{overflowCount}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--vscode-descriptionForeground)' }}>—</span>
+        )}
+      </td>
+
+      {/* Status */}
+      <td
+        style={{
+          padding: '8px 12px',
+          verticalAlign: 'top',
+          borderBottom: '1px solid var(--vscode-panel-border)',
+        }}
+      >
+        <div>
+          <div style={{ marginBottom: 4 }}>
+            <span
+              style={{
+                fontSize: 9,
+                color: 'var(--vscode-descriptionForeground)',
+                opacity: 0.5,
+                marginRight: 4,
+              }}
+            >
+              A
+            </span>
+            <StatusBadge label={agentStatus.label} tone={agentStatus.tone} />
+          </div>
+          <div>
+            <span
+              style={{
+                fontSize: 9,
+                color: 'var(--vscode-descriptionForeground)',
+                opacity: 0.5,
+                marginRight: 4,
+              }}
+            >
+              C
+            </span>
+            <StatusBadge label={canvasStatus.label} tone={canvasStatus.tone} />
+          </div>
+        </div>
+      </td>
+
+      {/* Actions */}
+      <td
+        style={{
+          padding: '8px 12px',
+          verticalAlign: 'top',
+          borderBottom: '1px solid var(--vscode-panel-border)',
+        }}
+      >
+        <div>
           <ActionButton
             label={t('table.action.analyze')}
             onClick={() => onSceneAction?.(scene.sceneId, 'analyze')}
@@ -257,18 +412,18 @@ function SceneRow({
             onClick={() => onSceneAction?.(scene.sceneId, 'openCanvas')}
           />
           <ActionButton
-            label={
-              state.agentStatus === 'skipped' || state.canvasStatus === 'skipped'
-                ? t('table.action.unskip')
-                : t('table.action.skip')
-            }
+            label={isSkipped ? t('table.action.unskip') : t('table.action.skip')}
             onClick={() => onSceneAction?.(scene.sceneId, 'toggleSkip')}
           />
         </div>
-      </Td>
+      </td>
     </tr>
   );
 }
+
+// =============================================================================
+// Main component
+// =============================================================================
 
 export function ScriptTableView({
   scriptIndex,
@@ -307,12 +462,14 @@ export function ScriptTableView({
       className="h-full overflow-auto"
       style={{ backgroundColor: 'var(--vscode-editor-background)' }}
     >
+      {/* Summary bar */}
       <div
-        className="flex items-center gap-4 px-4 py-2 text-xs sticky top-0 z-10"
+        className="flex items-center gap-4 px-4 py-1.5 sticky top-0 z-20"
         style={{
           backgroundColor: 'var(--vscode-editor-background)',
           borderBottom: '1px solid var(--vscode-panel-border)',
           color: 'var(--vscode-descriptionForeground)',
+          fontSize: 11,
         }}
       >
         <span>{t('table.scenes', { count: scriptIndex.scenes.length })}</span>
@@ -320,26 +477,24 @@ export function ScriptTableView({
         <span>{t('table.totalDuration', { duration: formatDurationShort(totalDuration) })}</span>
       </div>
 
+      {/* Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <Th title={t('table.header.number')}>#</Th>
+            <Th width="52px">#</Th>
             <Th>{t('table.header.heading')}</Th>
-            <Th>{t('table.header.location')}</Th>
-            <Th title={t('table.header.time')}>{t('table.header.time')}</Th>
-            <Th>{t('table.header.characters')}</Th>
-            <Th title={t('table.header.intExt')}>{t('table.header.intExt')}</Th>
-            <Th title={t('table.header.duration')}>{t('table.header.duration')}</Th>
-            <Th>{t('table.header.agent')}</Th>
-            <Th>{t('table.header.canvas')}</Th>
-            <Th>{t('table.header.action')}</Th>
+            <Th width="150px">{t('table.header.characters')}</Th>
+            <Th width="120px">{t('table.header.status')}</Th>
+            <Th width="auto">{t('table.header.action')}</Th>
           </tr>
         </thead>
         <tbody>
-          {scriptIndex.scenes.map((scene) => (
+          {scriptIndex.scenes.map((scene, i) => (
             <SceneRow
               key={scene.sceneId}
               scene={scene}
+              sceneIndex={i + 1}
+              isOdd={i % 2 === 1}
               state={
                 sceneStates[scene.sceneId] ?? {
                   sceneId: scene.sceneId,

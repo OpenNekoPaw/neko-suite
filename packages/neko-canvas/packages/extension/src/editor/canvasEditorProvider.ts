@@ -1206,7 +1206,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const nodeId = nodeIds[0];
           if (!nodeId) break;
           const node = await this.getNode(nodeId);
-          if (!node) break;
+          if (!node) {
+            logger.warn(`sendToAgent: node ${nodeId} not found`);
+            vscode.window.showWarningMessage('Cannot send to Agent: node not found');
+            break;
+          }
           const d = node.data as Record<string, unknown>;
           const payload = {
             type: 'canvas-node' as const,
@@ -1219,7 +1223,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             data: { nodes: nodeIds },
             intent,
           };
-          await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+          try {
+            await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+          } catch (err) {
+            logger.error(`sendToAgent failed: ${err}`);
+            vscode.window.showWarningMessage(
+              'Failed to send to Agent. Is the AI Assistant extension installed and enabled?',
+            );
+          }
         }
         break;
       }

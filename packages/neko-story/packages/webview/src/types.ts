@@ -158,7 +158,7 @@ export type StorySceneAction =
   | 'toggleSkip';
 
 // Message types for VSCode communication
-export type StoryViewMode = 'screenplay' | 'table' | 'grid';
+export type StoryViewMode = 'screenplay' | 'table';
 
 export type MessageToWebview =
   | {

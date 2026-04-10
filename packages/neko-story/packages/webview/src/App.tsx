@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import { ScriptTableView } from './components/ScriptTableView';
-import { CreativeGridView } from './components/CreativeGridView';
 import type {
   FountainDocument,
   MessageToWebview,
@@ -11,6 +10,7 @@ import type {
   StoryViewMode,
 } from './types';
 import type { NekoStoryScriptIndex } from '@neko/shared';
+import { useTranslation } from './i18n/I18nContext';
 import './styles/screenplay.css';
 import './styles/print.css';
 
@@ -18,10 +18,9 @@ import './styles/print.css';
 // Tab bar
 // =============================================================================
 
-const TABS: { id: StoryViewMode; label: string }[] = [
-  { id: 'screenplay', label: '剧本预览' },
-  { id: 'table', label: '分镜表' },
-  { id: 'grid', label: '创意视图' },
+const TAB_IDS: { id: StoryViewMode; labelKey: string }[] = [
+  { id: 'screenplay', labelKey: 'tab.screenplay' },
+  { id: 'table', labelKey: 'tab.table' },
 ];
 
 function TabBar({
@@ -31,12 +30,13 @@ function TabBar({
   active: StoryViewMode;
   onChange: (v: StoryViewMode) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="flex items-center gap-0 flex-shrink-0"
       style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
     >
-      {TABS.map((tab) => (
+      {TAB_IDS.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
@@ -57,7 +57,7 @@ function TabBar({
             marginBottom: -1,
           }}
         >
-          {tab.label}
+          {t(tab.labelKey)}
         </button>
       ))}
     </div>
@@ -92,12 +92,12 @@ export function App() {
 
   const { postMessage } = useVSCodeMessaging(handleMessage);
 
-  const handleNavigate = useCallback((line: number) => {
-    // Switch to screenplay view and scroll to line
-    setView('screenplay');
-    // Give the DOM a tick to switch views before scrolling
-    setTimeout(() => scrollToLine(line), 50);
-  }, []);
+  const handleNavigate = useCallback(
+    (line: number) => {
+      postMessage({ type: 'navigate', line, character: 0 });
+    },
+    [postMessage],
+  );
 
   const handleSceneAction = useCallback(
     (sceneId: string, action: StorySceneAction) => {
@@ -123,7 +123,6 @@ export function App() {
             onSceneAction={handleSceneAction}
           />
         )}
-        {view === 'grid' && <CreativeGridView document={document} onNavigate={handleNavigate} />}
       </div>
     </div>
   );

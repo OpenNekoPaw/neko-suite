@@ -3,6 +3,7 @@ import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
 import { createStoryboardPayload } from '@neko/shared';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
@@ -15,7 +16,7 @@ type MessageToWebview =
       sceneStates: Record<string, StorySceneState>;
     }
   | { type: 'scrollTo'; line: number }
-  | { type: 'setView'; view: 'screenplay' | 'table' | 'grid' };
+  | { type: 'setView'; view: 'screenplay' | 'table' };
 
 type MessageFromWebview =
   | { type: 'ready' }
@@ -376,7 +377,7 @@ export class PreviewPanel implements vscode.Disposable {
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html ${injectLocaleAttribute()}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

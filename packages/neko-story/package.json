@@ -103,12 +103,6 @@
         "title": "Open Breakdown Table",
         "icon": "$(table)",
         "category": "Neko Story"
-      },
-      {
-        "command": "neko.story.creativeGridView",
-        "title": "Open Creative Grid",
-        "icon": "$(layout)",
-        "category": "Neko Story"
       }
     ],
     "menus": {
@@ -120,11 +114,6 @@
         },
         {
           "command": "neko.story.scriptTableView",
-          "when": "editorLangId == nekostory",
-          "group": "navigation"
-        },
-        {
-          "command": "neko.story.creativeGridView",
           "when": "editorLangId == nekostory",
           "group": "navigation"
         },

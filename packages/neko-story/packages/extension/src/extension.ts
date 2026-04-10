@@ -322,10 +322,6 @@ export function activate(context: vscode.ExtensionContext) {
       const panel = PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
       panel?.postMessage({ type: 'setView', view: 'table' });
     }),
-    vscode.commands.registerCommand('neko.story.creativeGridView', () => {
-      const panel = PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
-      panel?.postMessage({ type: 'setView', view: 'grid' });
-    }),
     vscode.commands.registerCommand(
       'neko.story.handlePipelineEvent',
       async (params: {
