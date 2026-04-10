@@ -92,11 +92,11 @@ jobs:
           - target: darwin-arm64
             os: macos-14
             rust-target: aarch64-apple-darwin
-            ffmpeg-install: brew install ffmpeg@7 pkg-config && brew link ffmpeg@7
+            ffmpeg-install: brew install ffmpeg pkg-config
           - target: darwin-x64
             os: macos-13
             rust-target: x86_64-apple-darwin
-            ffmpeg-install: brew install ffmpeg@7 pkg-config && brew link ffmpeg@7
+            ffmpeg-install: brew install ffmpeg pkg-config
           - target: linux-x64
             os: ubuntu-latest
             rust-target: x86_64-unknown-linux-gnu
@@ -139,7 +139,7 @@ jobs:
       # Build native addon
       - name: Build host-napi
         working-directory: packages/neko-engine/packages/host-napi
-        run: npx napi build --platform --release --target ${{ matrix.rust-target }}
+        run: pnpm run build:napi -- --target ${{ matrix.rust-target }}
 
       # Package platform VSIX (ORT + FFmpeg bundling handled by script)
       - name: Package platform VSIX
