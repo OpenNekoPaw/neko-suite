@@ -29,7 +29,7 @@ type MessageFromWebview =
     };
 
 export class PreviewPanel implements vscode.Disposable {
-  public static currentPanel: PreviewPanel | undefined;
+  private static readonly panels = new Set<PreviewPanel>();
   private static readonly viewType = 'nekoStory.preview';
 
   private readonly panel: vscode.WebviewPanel;
@@ -93,22 +93,14 @@ export class PreviewPanel implements vscode.Disposable {
     );
   }
 
-  public static createOrShow(
+  public static create(
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
-  ): PreviewPanel | undefined {
+  ): PreviewPanel {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
       : vscode.ViewColumn.One;
 
-    // If panel exists, show it
-    if (PreviewPanel.currentPanel) {
-      PreviewPanel.currentPanel.panel.reveal(column);
-      PreviewPanel.currentPanel.updatePreview();
-      return PreviewPanel.currentPanel;
-    }
-
-    // Create new panel
     const workspaceFolderUris = vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? [];
     const panel = vscode.window.createWebviewPanel(PreviewPanel.viewType, 'Story Preview', column, {
       enableScripts: true,
@@ -119,8 +111,14 @@ export class PreviewPanel implements vscode.Disposable {
       ],
     });
 
-    PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri, sceneStateStore);
-    return PreviewPanel.currentPanel;
+    const instance = new PreviewPanel(panel, extensionUri, sceneStateStore);
+    PreviewPanel.panels.add(instance);
+    return instance;
+  }
+
+  /** Broadcast a message to all live panels */
+  public static broadcastMessage(message: MessageToWebview): void {
+    PreviewPanel.panels.forEach((p) => p.postMessage(message));
   }
 
   private isStoryDocument(document: vscode.TextDocument): boolean {
@@ -393,7 +391,7 @@ export class PreviewPanel implements vscode.Disposable {
   }
 
   public dispose() {
-    PreviewPanel.currentPanel = undefined;
+    PreviewPanel.panels.delete(this);
 
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);

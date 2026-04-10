@@ -1,9 +1,54 @@
 import * as vscode from 'vscode';
 import type { IWorkspaceIndex } from '../services/types';
 
+// Scene heading prefix patterns: INT. / EXT. / INT./EXT. / EST. / I/E.
+const HEADING_PREFIX_RE = /^\s*(?:\.|\s*(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?\s*)$/i;
+// Already typed a valid prefix followed by content: "INT. xxx" or ".xxx"
+const HEADING_LOCATION_RE = /^\s*(?:\.|(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?)\s+/i;
+// After " - " separator for time-of-day
+const HEADING_TIME_RE = /\s+-\s+$/;
+
+const TRANSITION_PREFIXES = [
+  'CUT TO:',
+  'FADE TO:',
+  'FADE IN:',
+  'FADE OUT.',
+  'DISSOLVE TO:',
+  'SMASH CUT TO:',
+  'MATCH CUT TO:',
+  'JUMP CUT TO:',
+  'TIME CUT:',
+  'INTERCUT:',
+];
+
+const TIMES_OF_DAY = [
+  'DAY',
+  'NIGHT',
+  'MORNING',
+  'EVENING',
+  'DAWN',
+  'DUSK',
+  'LATER',
+  'CONTINUOUS',
+  'MOMENTS LATER',
+  'SAME TIME',
+];
+
+const HEADING_PREFIXES = [
+  { label: 'INT. ', detail: 'Interior scene' },
+  { label: 'EXT. ', detail: 'Exterior scene' },
+  { label: 'INT./EXT. ', detail: 'Interior/Exterior scene' },
+  { label: 'EST. ', detail: 'Establishing shot' },
+  { label: 'I/E. ', detail: 'Interior/Exterior (short)' },
+];
+
 /**
- * Provides auto-completion for Fountain files.
- * Uses IWorkspaceIndex for cross-file character and location suggestions.
+ * Provides context-aware auto-completion for Fountain screenplay files.
+ *
+ * Completion contexts:
+ * - Character names: after a blank line + uppercase text, or `@` forced character
+ * - Scene headings: three sub-phases (prefix → location → time-of-day)
+ * - Transitions: only when line matches known transition prefix patterns
  */
 export class FountainCompletionProvider implements vscode.CompletionItemProvider {
   constructor(private readonly index: IWorkspaceIndex) {}
@@ -19,113 +64,141 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
 
     await this.index.ensureInitialized();
 
-    const items: vscode.CompletionItem[] = [];
+    // @-forced character: always takes priority
+    if (linePrefix.startsWith('@')) {
+      return this.getCharacterCompletions(linePrefix.slice(1));
+    }
 
-    // Character name completion (after blank line, typing uppercase)
+    // Scene heading: three-phase detection
+    if (HEADING_TIME_RE.test(linePrefix)) {
+      // Phase C: after " - " → time-of-day
+      return this.getTimeCompletions();
+    }
+    if (HEADING_LOCATION_RE.test(linePrefix)) {
+      // Phase B: after prefix like "INT. " → locations + composite snippets
+      return this.getLocationCompletions();
+    }
+    if (HEADING_PREFIX_RE.test(linePrefix)) {
+      // Phase A: typing prefix → INT. / EXT. / etc.
+      return this.getPrefixCompletions(linePrefix);
+    }
+
+    // Character name: blank line above + uppercase start
     if (this.isCharacterContext(document, position, linePrefix)) {
-      items.push(...this.getCharacterCompletions());
+      return this.getCharacterCompletions(linePrefix.trim());
     }
 
-    // Scene heading completion
-    if (this.isSceneHeadingContext(linePrefix)) {
-      items.push(...this.getSceneHeadingCompletions(linePrefix));
+    // Transition: blank line above + matches transition prefix
+    if (this.isTransitionContext(document, position, linePrefix)) {
+      return this.getTransitionCompletions(linePrefix);
     }
 
-    // Transition completion
-    if (this.isTransitionContext(linePrefix)) {
-      items.push(...this.getTransitionCompletions());
-    }
-
-    return items;
+    return [];
   }
+
+  // ---------------------------------------------------------------------------
+  // Context detection
+  // ---------------------------------------------------------------------------
 
   private isCharacterContext(
     document: vscode.TextDocument,
     position: vscode.Position,
     linePrefix: string,
   ): boolean {
-    // Check if previous line is blank and current line starts with uppercase
     if (position.line === 0) return false;
     const prevLine = document.lineAt(position.line - 1).text;
-    return prevLine.trim() === '' && /^[A-Z]/.test(linePrefix);
+    // After blank line, starting with uppercase letter (Fountain character cue rule)
+    return prevLine.trim() === '' && /^[A-Z\u4e00-\u9fff]/.test(linePrefix.trim());
   }
 
-  private isSceneHeadingContext(linePrefix: string): boolean {
-    // Starting to type INT, EXT, etc. or forced scene heading with .
-    return /^(\.|\s*(?:INT|EXT|EST|I\/E)?\.?\s*)$/i.test(linePrefix);
+  private isTransitionContext(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    linePrefix: string,
+  ): boolean {
+    if (position.line === 0) return false;
+    const prevLine = document.lineAt(position.line - 1).text;
+    if (prevLine.trim() !== '') return false;
+    // Only match if the typed text is a prefix of a known transition
+    const upper = linePrefix.trim().toUpperCase();
+    return upper.length >= 2 && TRANSITION_PREFIXES.some((t) => t.startsWith(upper));
   }
 
-  private isTransitionContext(linePrefix: string): boolean {
-    // Starting to type a transition
-    return /^[A-Z\s]*$/.test(linePrefix) && linePrefix.length > 0;
-  }
+  // ---------------------------------------------------------------------------
+  // Completion generators
+  // ---------------------------------------------------------------------------
 
-  private getCharacterCompletions(): vscode.CompletionItem[] {
+  private getCharacterCompletions(typed: string): vscode.CompletionItem[] {
     const names = this.index.getAllCharacterNames();
-    return names.map((name) => {
-      const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.User);
-      item.detail = 'Character';
-      item.insertText = name;
+    const upper = typed.toUpperCase();
+    return names
+      .filter((name) => !upper || name.toUpperCase().startsWith(upper))
+      .map((name, i) => {
+        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.User);
+        item.detail = 'Character';
+        item.sortText = String(i).padStart(4, '0');
+        item.filterText = name;
+        return item;
+      });
+  }
+
+  private getPrefixCompletions(linePrefix: string): vscode.CompletionItem[] {
+    const typed = linePrefix.trim().toUpperCase();
+    const isForced = linePrefix.trim() === '.';
+
+    return HEADING_PREFIXES.filter(
+      (p) => isForced || typed === '' || p.label.toUpperCase().startsWith(typed),
+    ).map((p, i) => {
+      const item = new vscode.CompletionItem(p.label, vscode.CompletionItemKind.Keyword);
+      item.detail = p.detail;
+      item.sortText = String(i).padStart(2, '0');
+      // For forced heading ".", replace the dot with full prefix
+      if (isForced) {
+        item.insertText = p.label.substring(1); // skip the leading dot since "." is already typed
+      }
       return item;
     });
   }
 
-  private getSceneHeadingCompletions(linePrefix: string): vscode.CompletionItem[] {
+  private getLocationCompletions(): vscode.CompletionItem[] {
+    const locations = this.index.getAllSceneLocations();
     const items: vscode.CompletionItem[] = [];
 
-    // Scene heading prefixes
-    const prefixes = [
-      { label: 'INT. ', detail: 'Interior scene' },
-      { label: 'EXT. ', detail: 'Exterior scene' },
-      { label: 'INT./EXT. ', detail: 'Interior/Exterior scene' },
-      { label: 'EST. ', detail: 'Establishing shot' },
-    ];
-
-    for (const prefix of prefixes) {
-      if (prefix.label.toUpperCase().startsWith(linePrefix.toUpperCase()) || linePrefix === '.') {
-        const item = new vscode.CompletionItem(prefix.label, vscode.CompletionItemKind.Keyword);
-        item.detail = prefix.detail;
-        item.insertText = linePrefix === '.' ? prefix.label.substring(1) : prefix.label;
-        items.push(item);
-      }
-    }
-
-    // Collect existing locations from workspace index
-    const locations = this.index.getAllSceneLocations();
-    for (const location of locations) {
-      const item = new vscode.CompletionItem(location, vscode.CompletionItemKind.Reference);
-      item.detail = 'Previous location';
+    // Plain location names
+    locations.forEach((loc, i) => {
+      const item = new vscode.CompletionItem(loc, vscode.CompletionItemKind.Reference);
+      item.detail = 'Location';
+      item.sortText = `0${String(i).padStart(4, '0')}`;
       items.push(item);
-    }
+    });
 
-    // Time of day suggestions
-    const times = ['DAY', 'NIGHT', 'MORNING', 'EVENING', 'LATER', 'CONTINUOUS', 'MOMENTS LATER'];
-    for (const time of times) {
-      const item = new vscode.CompletionItem(time, vscode.CompletionItemKind.Constant);
-      item.detail = 'Time of day';
-      item.sortText = 'z' + time; // Sort after locations
-      items.push(item);
-    }
+    // Composite snippets: "Location - DAY" with tab stop on time
+    locations.forEach((loc, i) => {
+      const snippet = new vscode.CompletionItem(`${loc} - DAY`, vscode.CompletionItemKind.Snippet);
+      snippet.detail = 'Location + time';
+      snippet.insertText = new vscode.SnippetString(`${loc} - \${1|${TIMES_OF_DAY.join(',')}|}`);
+      snippet.sortText = `1${String(i).padStart(4, '0')}`;
+      items.push(snippet);
+    });
 
     return items;
   }
 
-  private getTransitionCompletions(): vscode.CompletionItem[] {
-    const transitions = [
-      'CUT TO:',
-      'FADE TO:',
-      'FADE IN:',
-      'FADE OUT.',
-      'DISSOLVE TO:',
-      'SMASH CUT TO:',
-      'MATCH CUT TO:',
-      'JUMP CUT TO:',
-      'TIME CUT:',
-    ];
+  private getTimeCompletions(): vscode.CompletionItem[] {
+    return TIMES_OF_DAY.map((time, i) => {
+      const item = new vscode.CompletionItem(time, vscode.CompletionItemKind.Constant);
+      item.detail = 'Time of day';
+      item.sortText = String(i).padStart(2, '0');
+      return item;
+    });
+  }
 
-    return transitions.map((t) => {
+  private getTransitionCompletions(linePrefix: string): vscode.CompletionItem[] {
+    const upper = linePrefix.trim().toUpperCase();
+    return TRANSITION_PREFIXES.filter((t) => t.startsWith(upper)).map((t, i) => {
       const item = new vscode.CompletionItem(t, vscode.CompletionItemKind.Snippet);
       item.detail = 'Transition';
+      item.sortText = String(i).padStart(2, '0');
       return item;
     });
   }

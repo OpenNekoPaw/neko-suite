@@ -101,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.story.preview', () => {
-      PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
+      PreviewPanel.create(context.extensionUri, sceneStateStore);
     }),
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
       const editor = vscode.window.activeTextEditor;
@@ -319,8 +319,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('neko.story.scriptTableView', () => {
-      const panel = PreviewPanel.createOrShow(context.extensionUri, sceneStateStore);
-      panel?.postMessage({ type: 'setView', view: 'table' });
+      const panel = PreviewPanel.create(context.extensionUri, sceneStateStore);
+      panel.postMessage({ type: 'setView', view: 'table' });
     }),
     vscode.commands.registerCommand(
       'neko.story.handlePipelineEvent',
