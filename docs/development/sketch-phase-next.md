@@ -2,7 +2,7 @@
 
 ## Status
 
-**M1 + M2 + M3 Implemented** — M3.5 (free transform) deferred; M4/M5/M6 pending
+**M1-M4 + M6.3 Implemented** — M3.5 (free transform), M5 (normal maps), M6.1/2/4 pending
 
 ## Source ADRs
 
