@@ -2,7 +2,7 @@
 
 ## Status
 
-**All milestones implemented** (M1-M6)
+**All P0 + P1 implemented** (M1-M6 + P1 tail) — Only P2 items remain
 
 ## Source ADRs
 
