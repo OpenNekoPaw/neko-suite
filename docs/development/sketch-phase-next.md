@@ -2,7 +2,7 @@
 
 ## Status
 
-**M1 + M2 Implemented** — M3 in progress
+**M1 + M2 + M3 Implemented** — M3.5 (free transform) deferred; M4/M5/M6 pending
 
 ## Source ADRs
 
