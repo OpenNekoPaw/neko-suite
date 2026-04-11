@@ -259,6 +259,8 @@ export class RenderPipeline implements IRenderPipeline {
     targetFBO: WebGLFramebuffer,
     targetWidth: number,
     targetHeight: number,
+    hardness = 0.7,
+    alphaLock = false,
   ): void {
     const gl = this.gl;
     const pointCount = points.length / 3; // x, y, pressure per point
@@ -277,7 +279,7 @@ export class RenderPipeline implements IRenderPipeline {
 
     gl.uniform4fv(colorLoc, color);
     gl.uniform1f(sizeLoc, size);
-    gl.uniform1f(hardnessLoc, 0.7);
+    gl.uniform1f(hardnessLoc, hardness);
     // Orthographic projection: map document pixel coords → clip space
     gl.uniformMatrix3fv(transformLoc, false, ortho3(targetWidth, targetHeight));
 
@@ -287,9 +289,14 @@ export class RenderPipeline implements IRenderPipeline {
     gl.bufferData(gl.ARRAY_BUFFER, points, gl.DYNAMIC_DRAW);
 
     gl.enable(gl.BLEND);
-    // Use separate blend for alpha channel to avoid squaring alpha.
-    // RGB: standard alpha blend; Alpha: additive (correct coverage accumulation).
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    if (alphaLock) {
+      // Alpha lock: paint RGB normally but preserve existing alpha
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    } else {
+      // Use separate blend for alpha channel to avoid squaring alpha.
+      // RGB: standard alpha blend; Alpha: additive (correct coverage accumulation).
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    }
     gl.drawArrays(gl.POINTS, 0, pointCount);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 

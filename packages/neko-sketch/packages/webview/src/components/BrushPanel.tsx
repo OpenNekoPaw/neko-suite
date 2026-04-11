@@ -30,6 +30,7 @@ export function BrushPanel() {
   const setBrushSize = useSketchStore((s) => s.setBrushSize);
   const setBrushOpacity = useSketchStore((s) => s.setBrushOpacity);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
+  const setBrushSettings = useSketchStore((s) => s.setBrushSettings);
   const show = useSketchStore((s) => s.showBrushPanel);
 
   if (!show) return null;
@@ -96,6 +97,25 @@ export function BrushPanel() {
           onChange={(e) => setBrushOpacity(Number(e.target.value) / 100)}
         />
       </div>
+
+      {/* Hardness */}
+      {!isEraser && (
+        <div className="sketch-panel-row">
+          <label htmlFor="brush-hardness">
+            Hardness {Math.round(brushSettings.hardness * 100)}%
+          </label>
+          <input
+            id="brush-hardness"
+            type="range"
+            className="sketch-slider"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(brushSettings.hardness * 100)}
+            onChange={(e) => setBrushSettings({ hardness: Number(e.target.value) / 100 })}
+          />
+        </div>
+      )}
 
       {/* Color picker — hidden in eraser mode (eraser has no color) */}
       {!isEraser && (

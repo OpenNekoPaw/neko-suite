@@ -62,6 +62,8 @@ export interface IRenderPipeline {
     targetFBO: WebGLFramebuffer,
     targetWidth: number,
     targetHeight: number,
+    hardness?: number,
+    alphaLock?: boolean,
   ): void;
   clear(fbo: WebGLFramebuffer): void;
   dispose(): void;

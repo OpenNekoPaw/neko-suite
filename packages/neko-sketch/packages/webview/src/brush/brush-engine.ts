@@ -18,6 +18,7 @@ export interface IBrushEngine {
     layerFBO: WebGLFramebuffer,
     width: number,
     height: number,
+    alphaLock?: boolean,
   ): void;
   addPoint(point: StrokePoint): void;
   endStroke(): StrokeResult | null;
@@ -32,6 +33,7 @@ export class BrushEngine implements IBrushEngine {
   private fboWidth = 0;
   private fboHeight = 0;
   private active = false;
+  private alphaLock = false;
   private bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
   constructor(pipeline: IRenderPipeline) {
@@ -44,9 +46,11 @@ export class BrushEngine implements IBrushEngine {
     layerFBO: WebGLFramebuffer,
     width: number,
     height: number,
+    alphaLock = false,
   ): void {
     this.points = [point];
     this.settings = settings;
+    this.alphaLock = alphaLock;
     this.layerFBO = layerFBO;
     this.fboWidth = width;
     this.fboHeight = height;
@@ -130,6 +134,8 @@ export class BrushEngine implements IBrushEngine {
       this.layerFBO,
       this.fboWidth,
       this.fboHeight,
+      this.settings.hardness,
+      this.alphaLock,
     );
   }
 

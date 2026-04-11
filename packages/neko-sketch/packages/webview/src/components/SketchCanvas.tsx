@@ -217,6 +217,48 @@ function renderSelectionPreview(
   ctx.restore();
 }
 
+/** Render lasso path preview on a 2D overlay canvas. */
+function renderLassoPreview(
+  previewCanvas: HTMLCanvasElement,
+  points: readonly { x: number; y: number }[],
+  docW: number,
+  docH: number,
+  viewport: ViewportState,
+): void {
+  const phW = previewCanvas.width;
+  const phH = previewCanvas.height;
+  const ctx = previewCanvas.getContext('2d');
+  if (!ctx || phW === 0 || phH === 0 || points.length < 2) return;
+
+  ctx.clearRect(0, 0, phW, phH);
+
+  const { zoom, panX, panY } = viewport;
+  const scaleX = (zoom * phW) / docW;
+  const scaleY = (zoom * phH) / docH;
+  const tx = (phW / 2) * (1 - zoom) + panX;
+  const ty = (phH / 2) * (1 - zoom) + panY;
+
+  ctx.save();
+  ctx.setTransform(scaleX, 0, 0, scaleY, tx, ty);
+
+  const invScale = 1 / Math.min(scaleX, scaleY);
+  ctx.lineWidth = invScale;
+  ctx.setLineDash([4 * invScale, 4 * invScale]);
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+  ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+
+  ctx.beginPath();
+  ctx.moveTo(points[0]!.x, points[0]!.y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i]!.x, points[i]!.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 /**
  * Render a vector shape drag preview on a 2D overlay canvas.
  *
@@ -364,6 +406,8 @@ export function SketchCanvas() {
 
   // Select-rect tool state — tracks starting canvas position
   const selectStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Lasso selection: accumulates path points during drag
+  const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
 
   // Alt key state for zoom tool (Alt+click = zoom out)
   const altHeldRef = useRef(false);
@@ -772,7 +816,9 @@ export function SketchCanvas() {
     activeTool === 'move' ||
     activeTool === 'zoom' ||
     activeTool === 'transform' ||
-    activeTool === 'select-rect';
+    activeTool === 'select-rect' ||
+    activeTool === 'select-lasso' ||
+    activeTool === 'select-wand';
 
   const onStrokeStart = useCallback(
     (point: StrokePoint) => {
@@ -931,6 +977,38 @@ export function SketchCanvas() {
         return;
       }
 
+      if (activeTool === 'select-lasso') {
+        // Start lasso selection path
+        const { x, y } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        lassoPointsRef.current = [{ x, y }];
+        return;
+      }
+
+      if (activeTool === 'select-wand') {
+        // Magic wand: instant selection on click
+        const layer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+        if (!layer?.texture || !renderer) return;
+        const { x, y } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        const fbo = renderer.textures.createFramebuffer(layer.texture);
+        const pixels = renderer.textures.readPixels(fbo, 0, 0, canvas.width, canvas.height);
+        renderer.textures.deleteFramebuffer(fbo);
+        useSketchStore.getState().selectWand(pixels, x, y, 30, true);
+        needsRenderRef.current = true;
+        return;
+      }
+
       if (activeTool === 'shape') {
         const { x, y } = screenToCanvas(
           point.x,
@@ -955,12 +1033,14 @@ export function SketchCanvas() {
       const fbo = renderer.textures.createFramebuffer(tex);
       strokeTexRef.current = tex;
       strokeFboRef.current = fbo;
+      const activeLayer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
       brushRef.current?.beginStroke(
         { ...point, x, y },
         brushSettings,
         fbo,
         canvas.width,
         canvas.height,
+        activeLayer?.alphaLock ?? false,
       );
       needsRenderRef.current = true;
     },
@@ -1069,12 +1149,37 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, transform do nothing on move
+      if (activeTool === 'select-lasso') {
+        // Accumulate lasso path points and render preview
+        const { x, y } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        lassoPointsRef.current.push({ x, y });
+        // Render lasso path preview on overlay canvas
+        const previewEl = vectorPreviewCanvasRef.current;
+        if (previewEl && lassoPointsRef.current.length > 1) {
+          renderLassoPreview(
+            previewEl,
+            lassoPointsRef.current,
+            canvas.width,
+            canvas.height,
+            viewport,
+          );
+        }
+        return;
+      }
+
+      // zoom, eyedropper, fill, transform, select-wand do nothing on move
       if (
         activeTool === 'zoom' ||
         activeTool === 'eyedropper' ||
         activeTool === 'fill' ||
-        activeTool === 'transform'
+        activeTool === 'transform' ||
+        activeTool === 'select-wand'
       ) {
         return;
       }
@@ -1202,7 +1307,18 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, and transform are single-click tools — nothing to do on end
+      if (activeTool === 'select-lasso') {
+        // Finish lasso selection + clear preview
+        clearOverlayCanvas(vectorPreviewCanvasRef.current);
+        const pts = lassoPointsRef.current;
+        if (pts.length >= 3) {
+          useSketchStore.getState().selectLasso(pts);
+        }
+        lassoPointsRef.current = [];
+        return;
+      }
+
+      // zoom, eyedropper, fill, select-wand, and transform are single-click tools — nothing to do on end
       if (
         activeTool === 'zoom' ||
         activeTool === 'eyedropper' ||
