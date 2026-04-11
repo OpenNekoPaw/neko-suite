@@ -26,6 +26,8 @@ export interface GenerationParams {
   cameraAngle?: string;
   referenceRefs?: string[];
   count?: number;
+  characterIds?: string[];
+  sourceNodeId?: string;
   [key: string]: unknown;
 }
 
@@ -182,6 +184,8 @@ export class BatchGenerationScheduler implements vscode.Disposable {
       cameraAngle: task.params.cameraAngle,
       referenceRefs: task.params.referenceRefs,
       count: task.params.count ?? 1,
+      characterIds: task.params.characterIds,
+      sourceNodeId: task.params.sourceNodeId,
     };
 
     const result = await vscode.commands.executeCommand<{ dataUrl: string } | undefined>(

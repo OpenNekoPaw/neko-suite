@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CharacterRegistryService,
   loadCharacterBindingsForNames,
+  resolveCharacterBindingsForNames,
   resolveCharacterRegistryPath,
 } from '../character-registry';
 
@@ -98,5 +99,51 @@ describe('CharacterRegistryService', () => {
       ALICE: 'char_alice',
     });
     expect(resolveCharacterRegistryPath('/workspace')).toBe('/workspace/characters.json');
+  });
+
+  it('prefers resolver-backed bindings and falls back to workspace registry', async () => {
+    const fs = await import('node:fs/promises');
+    vi.mocked(fs.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        version: 1,
+        characters: [
+          {
+            id: 'char_bob',
+            canonicalName: 'BOB',
+            aliases: [],
+            status: 'confirmed',
+          },
+        ],
+      }),
+    );
+
+    const characterResolver = {
+      resolveCharacter(name: string) {
+        if (name === 'ALICE') {
+          return {
+            record: {
+              id: 'char_alice',
+              canonicalName: 'ALICE',
+              aliases: [],
+              status: 'confirmed' as const,
+            },
+            matchedName: 'ALICE',
+            matchSource: 'canonicalName' as const,
+          };
+        }
+        return undefined;
+      },
+    };
+
+    await expect(
+      resolveCharacterBindingsForNames(['ALICE', 'BOB'], {
+        workspaceRoot: '/workspace',
+        uriOrPath: '/workspace/story.fountain',
+        characterResolver,
+      }),
+    ).resolves.toEqual({
+      ALICE: 'char_alice',
+      BOB: 'char_bob',
+    });
   });
 });

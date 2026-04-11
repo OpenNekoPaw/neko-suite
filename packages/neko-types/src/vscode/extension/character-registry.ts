@@ -8,6 +8,11 @@ import {
   isCharacterRegistryFile,
   normalizeCharacterLookupKey,
 } from '../../types/character-registry';
+import type { NekoStoryAPI } from '../../types/extension-api';
+
+export interface CharacterBindingResolver {
+  resolveCharacter(name: string, uriOrPath?: string): ReturnType<NekoStoryAPI['resolveCharacter']>;
+}
 
 export function resolveCharacterRegistryPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, 'characters.json');
@@ -118,4 +123,50 @@ export async function loadCharacterBindingsForNames(
 
   const service = new CharacterRegistryService(resolveCharacterRegistryPath(workspaceRoot));
   return service.resolveIds(names);
+}
+
+export async function resolveCharacterBindingsForNames(
+  names: readonly string[],
+  options: {
+    workspaceRoot?: string;
+    uriOrPath?: string;
+    characterResolver?: CharacterBindingResolver;
+  } = {},
+): Promise<Record<string, string>> {
+  if (names.length === 0) {
+    return {};
+  }
+
+  const resolved: Record<string, string> = {};
+  const unresolved = new Set<string>();
+
+  for (const name of names) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      continue;
+    }
+
+    const existing = resolved[name];
+    if (existing) {
+      continue;
+    }
+
+    const match = options.characterResolver?.resolveCharacter(name, options.uriOrPath);
+    const characterId = match?.record.id;
+    if (characterId) {
+      resolved[name] = characterId;
+      continue;
+    }
+
+    unresolved.add(name);
+  }
+
+  if (unresolved.size === 0 || !options.workspaceRoot) {
+    return resolved;
+  }
+
+  const fallback = await loadCharacterBindingsForNames(options.workspaceRoot, [...unresolved]);
+  return {
+    ...fallback,
+    ...resolved,
+  };
 }

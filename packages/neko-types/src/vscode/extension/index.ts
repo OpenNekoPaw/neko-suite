@@ -28,6 +28,7 @@ export { toWebviewAsset } from './webview-asset';
 export {
   CharacterRegistryService,
   loadCharacterBindingsForNames,
+  resolveCharacterBindingsForNames,
   resolveCharacterRegistryPath,
 } from './character-registry';
 

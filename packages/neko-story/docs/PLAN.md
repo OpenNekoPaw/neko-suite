@@ -145,7 +145,7 @@ interface IStoryboardGenerator {
 - [x] 定义 TimelineProject 类型（与 neko-cut 对接）✅
 - [x] 实现 TimelineConverter（场景 → 时间线片段）✅
 - [x] 实现 neko.story.toTimeline 命令 ✅
-- [ ] 实现资产链接服务（查找关联资产）
+- [x] 实现资产链接服务（查找关联资产，内部命令：`neko.story.linkCharacterAsset` / `neko.story.linkLocationAsset`）
 - [x] 实现 `neko.story.generateStoryboard` 命令入口（发送当前场景到 Agent）
 - [x] 实现 `PreviewPanel.sendToCanvas` 机械式场景导入（`neko.canvas.importStoryboard`）
 - [x] 提供 `GenerateScenePlan` / `GenerateShotPlan` Agent 工具

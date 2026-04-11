@@ -21,6 +21,7 @@ import { FountainInlineCompletionProvider } from './providers/inlineCompletion';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
+import { AssetLinkingService } from './services/AssetLinkingService';
 import { CharacterWorkspaceIndexService } from './services/CharacterWorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
@@ -49,11 +50,30 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(indexService);
   const characterIndexService = new CharacterWorkspaceIndexService();
   context.subscriptions.push(characterIndexService);
+  const assetLinkingService = new AssetLinkingService();
   const sceneStateStore = new StorySceneStateStore(context.workspaceState);
   context.subscriptions.push(sceneStateStore);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
   void characterIndexService.ensureInitialized();
+
+  const resolveStoryboardCharacterBindings = async (
+    names: readonly string[],
+    uriOrPath?: string,
+  ): Promise<Record<string, string>> => {
+    const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+    const bindings: Record<string, string> = {};
+
+    for (const name of names) {
+      const resolved = characterIndexService.resolveCharacter(name, uri);
+      const characterId = resolved?.record.id;
+      if (characterId) {
+        bindings[name] = characterId;
+      }
+    }
+
+    return bindings;
+  };
 
   // Register language providers
   context.subscriptions.push(
@@ -108,7 +128,11 @@ export function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.story.preview', () => {
-      PreviewPanel.create(context.extensionUri, sceneStateStore);
+      PreviewPanel.create(
+        context.extensionUri,
+        sceneStateStore,
+        resolveStoryboardCharacterBindings,
+      );
     }),
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
       const editor = vscode.window.activeTextEditor;
@@ -326,9 +350,35 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('neko.story.scriptTableView', () => {
-      const panel = PreviewPanel.create(context.extensionUri, sceneStateStore);
+      const panel = PreviewPanel.create(
+        context.extensionUri,
+        sceneStateStore,
+        resolveStoryboardCharacterBindings,
+      );
       panel.postMessage({ type: 'setView', view: 'table' });
     }),
+    vscode.commands.registerCommand(
+      'neko.story.linkCharacterAsset',
+      async (args: { name: string; characterId?: string; aliases?: readonly string[] }) => {
+        if (!args?.name) {
+          return null;
+        }
+        return assetLinkingService.linkCharacter(args.name, {
+          characterId: args.characterId,
+          aliases: args.aliases,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'neko.story.linkLocationAsset',
+      async (args: string | { location: string }) => {
+        const location = typeof args === 'string' ? args : args?.location;
+        if (!location) {
+          return null;
+        }
+        return assetLinkingService.linkLocation(location);
+      },
+    ),
     vscode.commands.registerCommand(
       'neko.story.handlePipelineEvent',
       async (params: {

@@ -12,7 +12,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { Platform, MediaOutput } from '@neko/platform';
+import type { MediaGenerationRequestBase, Platform, MediaOutput } from '@neko/platform';
 import { parsePlanMarkdown, type AgentEvent } from '@neko/agent';
 import type { AgentPhase, ContentBlock, Plan } from '@neko-agent/types';
 import type {
@@ -434,6 +434,7 @@ export class AgentStreamProcessor {
               taskType,
               task.request?.prompt,
               task.modelId,
+              task.request,
             );
 
             // Register assets in the index for cross-plugin discovery
@@ -643,9 +644,11 @@ function buildGeneratedAssets(
   taskType: 'image' | 'video' | 'audio',
   prompt?: string,
   model?: string,
+  request?: MediaGenerationRequestBase,
 ): GeneratedAsset[] {
   const now = new Date().toISOString();
   const assets: GeneratedAsset[] = [];
+  const lineage = extractGeneratedAssetLineage(request?.metadata);
 
   for (let i = 0; i < localPaths.length; i++) {
     const localPath = localPaths[i];
@@ -662,6 +665,7 @@ function buildGeneratedAssets(
       generatedAt: now,
       prompt,
       model,
+      ...lineage,
     };
 
     switch (taskType) {
@@ -705,4 +709,25 @@ function buildGeneratedAssets(
   }
 
   return assets;
+}
+
+function extractGeneratedAssetLineage(
+  metadata: Record<string, unknown> | undefined,
+): Pick<GeneratedAsset, 'characterIds' | 'sourceNodeId'> {
+  if (!metadata) {
+    return {};
+  }
+
+  const sourceNodeId =
+    typeof metadata['sourceNodeId'] === 'string' ? metadata['sourceNodeId'] : undefined;
+  const characterIds = Array.isArray(metadata['characterIds'])
+    ? metadata['characterIds'].filter(
+        (value): value is string => typeof value === 'string' && value.length > 0,
+      )
+    : undefined;
+
+  return {
+    sourceNodeId,
+    characterIds: characterIds && characterIds.length > 0 ? characterIds : undefined,
+  };
 }

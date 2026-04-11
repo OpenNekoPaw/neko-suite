@@ -14,7 +14,7 @@ import {
   type NekoStoryAPI,
   type StoryScenePlan,
 } from '@neko/shared';
-import { loadCharacterBindingsForNames } from '@neko/shared/vscode/extension';
+import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
@@ -143,7 +143,7 @@ export class StoryParserAdapter implements IStoryParser {
   parseToScenes(content: string): StoryboardScene[] {
     // Synchronous: call neko-story parser directly
     // neko-story extension exposes parseScript() via API
-    const storyExt = vscode.extensions.getExtension('neko.nekostory');
+    const storyExt = vscode.extensions.getExtension('neko.neko-story');
     if (!storyExt?.isActive) {
       logger.warn('neko-story extension not active, using fallback parser');
       return this.fallbackParse(content);
@@ -262,7 +262,7 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
       return undefined;
     }
 
-    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.nekostory');
+    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
     if (!storyExt) {
       logger.warn('neko-story extension not installed, skipping structured scene planning');
       return undefined;
@@ -338,7 +338,7 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
     }
 
     const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
-    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.nekostory');
+    const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
     if (!canvasExt || !storyExt) {
       logger.warn(
         'importStoryboardToCanvas: neko-story or neko-canvas extension is unavailable, skipping canvas import',
@@ -368,9 +368,13 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
 
     const stageParams = ctx.stageParams?.['importStoryboardToCanvas'] ?? {};
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const characterBindings = await loadCharacterBindingsForNames(
-      workspaceRoot,
+    const characterBindings = await resolveCharacterBindingsForNames(
       filteredIndex.characters.map((character) => character.name),
+      {
+        workspaceRoot,
+        uriOrPath: ctx.source,
+        characterResolver: storyApi,
+      },
     );
     const payload = createStoryboardPayload(filteredIndex, {
       mode: 'semantic',

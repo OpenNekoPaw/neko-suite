@@ -28,8 +28,9 @@ import {
   applyStoryboardPayloadToCanvas,
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
+  extractCanvasNodeGenerationLineage,
 } from '@neko/shared';
-import { loadCharacterBindingsForNames } from '@neko/shared/vscode/extension';
+import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -729,9 +730,13 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const startX = (args.startX as number | undefined) ?? 100;
             const startY = (args.startY as number | undefined) ?? 100;
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            const characterBindings = await loadCharacterBindingsForNames(
-              workspaceRoot,
+            const characterBindings = await resolveCharacterBindingsForNames(
               scriptIndex.characters.map((character) => character.name),
+              {
+                workspaceRoot,
+                uriOrPath: args.path as string,
+                characterResolver: storyApi,
+              },
             );
             const payload = createStoryboardPayload(scriptIndex, {
               mode: (args.mode as 'mechanical' | 'semantic' | undefined) ?? 'mechanical',
@@ -874,6 +879,16 @@ function createVideoKeyframeTool(
           | number
           | undefined;
         const prompt = visualDesc?.trim() || `Shot ${shotNumber ?? ''} video clip`;
+        const lineage = extractCanvasNodeGenerationLineage(targetNode);
+        const metadata: Record<string, unknown> = {
+          sourceNodeId: lineage?.sourceNodeId ?? nodeId,
+        };
+        if (lastFrameData) {
+          metadata['lastFrameUrl'] = lastFrameData;
+        }
+        if (lineage?.characterIds && lineage.characterIds.length > 0) {
+          metadata['characterIds'] = [...lineage.characterIds];
+        }
 
         // Mark node as generating
         await api.nodes.update(nodeId, { generationStatus: 'generating' });
@@ -885,7 +900,7 @@ function createVideoKeyframeTool(
             aspectRatio,
             duration,
             referenceImageUrl: firstFrameData,
-            metadata: lastFrameData ? { lastFrameUrl: lastFrameData } : undefined,
+            metadata,
           });
         } catch (err) {
           await api.nodes.update(nodeId, { generationStatus: 'error' });

@@ -572,6 +572,8 @@ function registerCommands(
         cameraAngle?: string;
         referenceRefs?: string[];
         count?: number;
+        characterIds?: string[];
+        sourceNodeId?: string;
       }): Promise<{ dataUrl: string } | undefined> => {
         try {
           const platform = services.get(IPlatform);
@@ -589,10 +591,22 @@ function registerCommands(
           }
           if (input.style) parts.push(`Style: ${input.style}`);
 
+          const metadata: Record<string, unknown> = {
+            nodeId: input.nodeId,
+            sourceNodeId: input.sourceNodeId ?? input.nodeId,
+          };
+          if (input.cellId) {
+            metadata['cellId'] = input.cellId;
+          }
+          if (input.characterIds && input.characterIds.length > 0) {
+            metadata['characterIds'] = input.characterIds;
+          }
+
           const task = await platform.media.generateImage({
             prompt: parts.join(', '),
             ratio: (input.ratio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined) ?? '16:9',
             count: input.count ?? 1,
+            metadata,
           });
 
           // Report generating status to the webview

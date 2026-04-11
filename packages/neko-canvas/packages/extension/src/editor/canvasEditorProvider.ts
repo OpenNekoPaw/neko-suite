@@ -10,6 +10,7 @@ import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import {
   buildStoryboardImportTimelineSyncPayload,
+  extractCanvasNodeGenerationLineage,
   inferCanvasDocumentType,
   inferCanvasDroppedAssetKind,
   inferCanvasMediaType,
@@ -350,10 +351,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   async generateImageForNode(nodeId: string, cellId?: string): Promise<void> {
+    const node = await this.getNode(nodeId);
+    const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
+
     this.scheduler.enqueue({
       nodeId,
       cellId,
-      params: { prompt: '' },
+      params: {
+        prompt: '',
+        sourceNodeId: lineage?.sourceNodeId ?? nodeId,
+        characterIds: lineage?.characterIds ? [...lineage.characterIds] : undefined,
+      },
       onProgress: (status, dataUrl) => {
         this.activeWebviewPanel?.webview.postMessage({
           type: 'generationProgress',
@@ -992,7 +1000,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const cellId = message.cellId as string | undefined;
         const rawParams = message.params as Record<string, unknown>;
         if (!nodeId || typeof rawParams['prompt'] !== 'string') break;
-        const params = rawParams as typeof rawParams & { prompt: string };
+        const node = await this.getNode(nodeId);
+        const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
+        const params = {
+          ...rawParams,
+          prompt: rawParams['prompt'],
+          sourceNodeId:
+            typeof rawParams['sourceNodeId'] === 'string'
+              ? rawParams['sourceNodeId']
+              : (lineage?.sourceNodeId ?? nodeId),
+          characterIds: Array.isArray(rawParams['characterIds'])
+            ? (rawParams['characterIds'] as string[])
+            : lineage?.characterIds
+              ? [...lineage.characterIds]
+              : undefined,
+        };
 
         this.scheduler.enqueue({
           nodeId,

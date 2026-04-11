@@ -3,10 +3,7 @@ import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
 import { createStoryboardPayload } from '@neko/shared';
-import {
-  injectLocaleAttribute,
-  loadCharacterBindingsForNames,
-} from '@neko/shared/vscode/extension';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
@@ -31,6 +28,11 @@ type MessageFromWebview =
       action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip';
     };
 
+type ResolveCharacterBindings = (
+  names: readonly string[],
+  uriOrPath?: string,
+) => Promise<Record<string, string>>;
+
 export class PreviewPanel implements vscode.Disposable {
   private static readonly panels = new Set<PreviewPanel>();
   private static readonly viewType = 'nekoStory.preview';
@@ -38,6 +40,7 @@ export class PreviewPanel implements vscode.Disposable {
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
   private readonly sceneStateStore: StorySceneStateStore;
+  private readonly resolveCharacterBindings: ResolveCharacterBindings;
   private disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private updateTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -46,10 +49,12 @@ export class PreviewPanel implements vscode.Disposable {
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
+    resolveCharacterBindings: ResolveCharacterBindings,
   ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
     this.sceneStateStore = sceneStateStore;
+    this.resolveCharacterBindings = resolveCharacterBindings;
 
     // Set webview content
     this.panel.webview.html = this.getHtmlForWebview();
@@ -99,6 +104,7 @@ export class PreviewPanel implements vscode.Disposable {
   public static create(
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
+    resolveCharacterBindings: ResolveCharacterBindings,
   ): PreviewPanel {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
@@ -114,7 +120,12 @@ export class PreviewPanel implements vscode.Disposable {
       ],
     });
 
-    const instance = new PreviewPanel(panel, extensionUri, sceneStateStore);
+    const instance = new PreviewPanel(
+      panel,
+      extensionUri,
+      sceneStateStore,
+      resolveCharacterBindings,
+    );
     PreviewPanel.panels.add(instance);
     return instance;
   }
@@ -336,10 +347,9 @@ export class PreviewPanel implements vscode.Disposable {
     scriptIndex: NekoStoryScriptIndex,
     scene: NekoStoryScriptIndex['scenes'][number],
   ): Promise<void> {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const characterBindings = await loadCharacterBindingsForNames(
-      workspaceRoot,
+    const characterBindings = await this.resolveCharacterBindings(
       scene.sceneCharacters,
+      scriptIndex.uri,
     );
     const sceneIndex: NekoStoryScriptIndex = {
       ...scriptIndex,

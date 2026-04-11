@@ -11,10 +11,13 @@ Accepted
 - 已新增共享 `characters.json` 契约、读写服务和名称解析工具
 - 已为 `AssetEntity`、`GalleryNode`、`ShotCharacter`、`GeneratedAsset` 等承载层补充 `registryId` / `characterId` / `characterIds`
 - 已打通 story -> canvas / storyboard payload 的 `characterId` 注入路径
+- `PreviewPanel`、`neko-agent pipeline`、`canvas capability` 已统一通过 `NekoStoryAPI.resolveCharacter()` 优先解析角色绑定
+- 画布图片 / 视频生成入口已统一继承 `characterIds` 与 `sourceNodeId` 到 media task / GeneratedAsset
 - `neko-story` 已落地独立的 `CharacterWorkspaceIndexService`，并与 `WorkspaceIndexService` 分层组合
 - Fountain LSP 已支持基于注册表的 `Definition`、`References`、`Completion`、`Hover`、`WorkspaceSymbol`
 - `NekoStoryAPI` 已暴露 `getCharacterRegistry()` 与 `resolveCharacter()` 供跨扩展复用
 - `neko-story` 已新增“打开角色注册表”命令，可自动创建并打开工作区根目录 `characters.json`
+- `neko-story` 已新增最小可用资产链接服务，可通过内部命令按角色 / 场景位置查找关联资产
 
 当前尚未完成的部分：
 
@@ -1049,7 +1052,7 @@ Suggestion services
 - [x] 生成资产模型支持 `characterIds` / `sourceNodeId`
 - [x] Asset Entity 支持 `registryId`
 - [x] `import_script_to_canvas` 基于注册表填充人物绑定
-- [ ] 生成资产在所有生成入口统一自动继承 `characterId`
+- [x] 生成资产在所有生成入口统一自动继承 `characterId`
 
 ### Phase 3：关系图与出现点索引
 

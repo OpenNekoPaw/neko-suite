@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { CharacterRecord, CharacterRegistryFile } from '@neko/shared';
-import type { FountainDocument } from '@neko-story/types';
+import type { AssetEntity, CharacterRecord, CharacterRegistryFile } from '@neko/shared';
+import type { AssetReference, FountainDocument } from '@neko-story/types';
 
 // -- ScriptIndex types (agent-accessible structured representation) --
 
@@ -76,6 +76,14 @@ export interface CharacterRegistrySymbol {
   readonly label: string;
   readonly detail?: string;
   readonly location: vscode.Location;
+}
+
+export type AssetLinkMatchSource = 'registryId' | 'name' | 'alias' | 'tag';
+
+export interface AssetLinkMatch {
+  readonly entity: AssetEntity;
+  readonly reference: AssetReference;
+  readonly matchedBy: AssetLinkMatchSource;
 }
 
 /**
@@ -191,4 +199,22 @@ export interface ICharacterWorkspaceIndex extends vscode.Disposable {
    * Searches registry-backed character symbols for workspace-wide symbol UI.
    */
   searchCharacters(query: string, currentUri?: vscode.Uri): readonly CharacterRegistrySymbol[];
+}
+
+export interface IAssetLinker {
+  /**
+   * Finds the best linked character asset using registryId first, then exact name/alias fallback.
+   */
+  linkCharacter(
+    name: string,
+    options?: {
+      characterId?: string;
+      aliases?: readonly string[];
+    },
+  ): Promise<AssetLinkMatch | null>;
+
+  /**
+   * Finds the best linked environment asset for a story location label.
+   */
+  linkLocation(location: string): Promise<AssetLinkMatch | null>;
 }
