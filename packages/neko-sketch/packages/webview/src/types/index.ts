@@ -110,7 +110,8 @@ export type ToolType =
   | 'pixel'
   | 'vector'
   | 'gradient'
-  | 'text';
+  | 'text'
+  | 'clone';
 
 export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'polygon' | 'star' | 'path';
 

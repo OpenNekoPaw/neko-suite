@@ -27,6 +27,7 @@ const TOOL_CURSORS: Record<ToolType, string> = {
   vector: 'default',
   gradient: 'crosshair',
   text: 'text',
+  clone: 'crosshair',
 };
 
 export class ToolManager implements IToolManager {

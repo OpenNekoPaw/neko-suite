@@ -70,11 +70,13 @@ export class RenderPipeline implements IRenderPipeline {
     this.strokeVBO = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.strokeVBO);
 
-    // a_position (vec2) + a_pressure (float) = 12 bytes per vertex
+    // a_position (vec2) + a_pressure (float) + a_tilt (vec2) = 20 bytes per vertex
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 12, 0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 20, 0);
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 12, 8);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 20, 8);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 20, 12);
 
     gl.bindVertexArray(null);
   }
@@ -263,7 +265,7 @@ export class RenderPipeline implements IRenderPipeline {
     alphaLock = false,
   ): void {
     const gl = this.gl;
-    const pointCount = points.length / 3; // x, y, pressure per point
+    const pointCount = points.length / 5; // x, y, pressure, tiltX, tiltY per point
     if (pointCount === 0) return;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);

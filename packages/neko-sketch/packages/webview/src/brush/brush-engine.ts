@@ -115,16 +115,18 @@ export class BrushEngine implements IBrushEngine {
     const profile = BRUSH_PROFILES[this.settings.type];
     const color = hexToRGBA(this.settings.color, this.settings.opacity);
 
-    // Convert to Float32Array (x, y, pressure) per point
-    const data = new Float32Array(points.length * 3);
+    // Convert to Float32Array (x, y, pressure, tiltX, tiltY) per point
+    const data = new Float32Array(points.length * 5);
     for (let i = 0; i < points.length; i++) {
       const pt = points[i]!;
       const pressure = this.settings.pressureSizeEnabled
         ? pressureToSize(pt.pressure, 1.0, profile.minSizeFraction, profile.pressureCurve)
         : 1.0;
-      data[i * 3] = pt.x;
-      data[i * 3 + 1] = pt.y;
-      data[i * 3 + 2] = pressure;
+      data[i * 5] = pt.x;
+      data[i * 5 + 1] = pt.y;
+      data[i * 5 + 2] = pressure;
+      data[i * 5 + 3] = pt.tiltX;
+      data[i * 5 + 4] = pt.tiltY;
     }
 
     // Apply pressure to opacity for the whole stroke segment

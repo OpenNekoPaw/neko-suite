@@ -132,11 +132,14 @@ export const STROKE_VERT = `#version 300 es
 precision highp float;
 layout(location = 0) in vec2 a_position;
 layout(location = 1) in float a_pressure;
+layout(location = 2) in vec2 a_tilt;
 uniform mat3 u_transform;
 uniform float u_size;
 out float v_pressure;
+out vec2 v_tilt;
 void main() {
   v_pressure = a_pressure;
+  v_tilt = a_tilt;
   vec3 pos = u_transform * vec3(a_position, 1.0);
   gl_Position = vec4(pos.xy, 0.0, 1.0);
   gl_PointSize = u_size * a_pressure;
@@ -147,12 +150,24 @@ void main() {
 export const STROKE_FRAG = `#version 300 es
 precision highp float;
 in float v_pressure;
+in vec2 v_tilt;
 out vec4 fragColor;
 uniform vec4 u_color;
 uniform float u_hardness;
 void main() {
   vec2 center = gl_PointCoord - vec2(0.5);
-  float dist = length(center) * 2.0;
+
+  // Apply tilt influence: elongate the dab along the tilt direction.
+  // tiltX/tiltY are in [-90,90] degrees — normalize to [-1,1] range.
+  vec2 tiltNorm = clamp(v_tilt / 90.0, -1.0, 1.0);
+  float tiltStrength = length(tiltNorm) * 0.4; // max 40% elongation
+  // Stretch the distance field perpendicular to tilt direction
+  vec2 tiltDir = length(tiltNorm) > 0.01 ? normalize(tiltNorm) : vec2(0.0, 1.0);
+  vec2 perpDir = vec2(-tiltDir.y, tiltDir.x);
+  float along = dot(center, tiltDir);
+  float perp = dot(center, perpDir);
+  float dist = length(vec2(along / (1.0 + tiltStrength), perp * (1.0 + tiltStrength))) * 2.0;
+
   float edge = 1.0 - u_hardness;
   float alpha = 1.0 - smoothstep(u_hardness, u_hardness + edge, dist);
   alpha *= v_pressure;
