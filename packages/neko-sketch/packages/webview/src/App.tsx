@@ -112,6 +112,20 @@ export function App() {
             setCanvas(parsed.canvas);
             setLayers(parsed.layers);
             setViewport(parsed.viewport);
+            // Restore scenes (lighting, camera, atmosphere)
+            const state = store.getState();
+            state.clearScenes();
+            for (const scene of parsed.scenes) {
+              // Re-inject scenes via direct state set (scenes are self-contained)
+              store.setState((s) => ({ scenes: [...s.scenes, scene] }));
+            }
+            if (parsed.scenes.length > 0) {
+              state.setActiveScene(parsed.scenes[0]!.id);
+            }
+            // Restore global filters
+            if (parsed.filters.length > 0) {
+              store.setState({ filters: parsed.filters });
+            }
             // Auto-select the topmost raster layer (or last layer) for immediate editing
             const rasterLayer = [...parsed.layers].reverse().find((l) => l.type === 'raster');
             const fallback = parsed.layers[parsed.layers.length - 1];
@@ -135,7 +149,14 @@ export function App() {
           const state = store.getState();
           const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
           const gl = canvas?.getContext('webgl2') ?? null;
-          const doc = serializeDocument(state.canvas, state.layers, state.viewport, gl);
+          const doc = serializeDocument(
+            state.canvas,
+            state.layers,
+            state.viewport,
+            gl,
+            state.scenes,
+            state.filters,
+          );
           vscode.postMessage({ type: 'document:save', data: doc });
           markClean();
           break;

@@ -2,7 +2,7 @@
 
 ## 状态
 
-Proposed
+Accepted — P0 (flat point light) + P1 (normal map lighting) implemented
 
 ## 关联
 

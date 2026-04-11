@@ -163,10 +163,17 @@ export class SketchRenderer implements ISketchRenderer {
         params,
         enabled: true,
       };
-      const result = this._filterPipeline.applyFilters(tex, w, h, [applied], this._filterRegistry);
-      // TODO(P1): blend original and adjusted by opacity for partial-strength adjustments
-      void opacity;
-      return result;
+      const adjusted = this._filterPipeline.applyFilters(
+        tex,
+        w,
+        h,
+        [applied],
+        this._filterRegistry,
+      );
+      // Blend original and adjusted by opacity for partial-strength adjustments
+      if (opacity >= 1.0) return adjusted;
+      // Mix: lerp between original and adjusted via a blit pass
+      return this._filterPipeline.mixTextures(tex, adjusted, w, h, opacity);
     };
 
     // Composite layers with optional filter chain, lighting, and per-layer parallax transforms

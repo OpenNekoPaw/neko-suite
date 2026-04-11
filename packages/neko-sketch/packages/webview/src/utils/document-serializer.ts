@@ -5,6 +5,10 @@
  * the in-memory Zustand store state.
  */
 import type { LayerData, BlendMode, LayerType, CanvasConfig, ViewportState } from '../types';
+import type { Scene } from '../types/scene';
+import type { AppliedFilter } from '../types/filter';
+import { DEFAULT_AMBIENT_LIGHT } from '../types/light';
+import { DEFAULT_CAMERA, DEFAULT_ATMOSPHERE } from '../types/scene';
 
 // ─── NksDocument shape (matches extension/src/types.ts) ───
 
@@ -46,6 +50,10 @@ interface NksDocument {
     readonly panY: number;
     readonly zoom: number;
   };
+  /** v1.1: scene data including lighting, camera, atmosphere */
+  readonly scenes?: readonly Scene[];
+  /** v1.1: global filter stack */
+  readonly filters?: readonly AppliedFilter[];
 }
 
 // ─── Deserialization (load) ───
@@ -113,14 +121,30 @@ export function deserializeDocument(data: unknown): {
   canvas: Partial<CanvasConfig>;
   layers: LayerData[];
   viewport: Partial<ViewportState>;
+  scenes: Scene[];
+  filters: AppliedFilter[];
 } | null {
   if (!data || typeof data !== 'object') return null;
   const doc = data as Partial<NksDocument>;
+
+  // Deserialize scenes with defaults for missing lighting fields
+  const rawScenes = (doc.scenes as Scene[] | undefined) ?? [];
+  const scenes: Scene[] = rawScenes.map((s) => ({
+    id: s.id,
+    name: s.name,
+    layers: s.layers ?? [],
+    camera: s.camera ?? DEFAULT_CAMERA,
+    atmosphere: s.atmosphere ?? DEFAULT_ATMOSPHERE,
+    ambientLight: s.ambientLight ?? DEFAULT_AMBIENT_LIGHT,
+    lightingEnabled: s.lightingEnabled ?? false,
+  }));
 
   return {
     canvas: doc.canvas ?? {},
     layers: deserializeLayers(doc.layers ?? []),
     viewport: doc.viewport ?? {},
+    scenes,
+    filters: (doc.filters as AppliedFilter[] | undefined) ?? [],
   };
 }
 
@@ -195,6 +219,10 @@ function serializeLayer(layer: LayerData, gl: WebGL2RenderingContext | null): Nk
     maskLayerId: layer.maskLayerId,
     children: layer.children.map((c) => serializeLayer(c, gl)),
     data,
+    normalData:
+      layer.normalTexture && gl
+        ? readTextureAsBase64(gl, layer.normalTexture, layer.width, layer.height)
+        : undefined,
     alphaLock: layer.alphaLock || undefined,
     adjustmentFilter: layer.adjustmentFilter,
     adjustmentParams: layer.adjustmentParams,
@@ -207,6 +235,8 @@ export function serializeDocument(
   layers: LayerData[],
   viewport: ViewportState,
   gl?: WebGL2RenderingContext | null,
+  scenes?: readonly Scene[],
+  filters?: readonly AppliedFilter[],
 ): NksDocument {
   return {
     version: '1.1',
@@ -224,5 +254,7 @@ export function serializeDocument(
       panY: viewport.panY,
       zoom: viewport.zoom,
     },
+    scenes: scenes && scenes.length > 0 ? scenes : undefined,
+    filters: filters && filters.length > 0 ? filters : undefined,
   };
 }

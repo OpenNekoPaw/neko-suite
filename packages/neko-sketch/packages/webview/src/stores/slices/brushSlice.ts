@@ -2,12 +2,14 @@
  * Brush Slice - brush settings state
  */
 import type { StateCreator } from 'zustand';
-import type { BrushSettings, BrushType } from '../../types';
+import type { BrushSettings, BrushType, SymmetryConfig } from '../../types';
 import { getDefaultBrushSettings } from '../../brush';
 
 export interface BrushSlice {
   brushSettings: BrushSettings;
+  symmetry: SymmetryConfig;
   setBrushSettings: (updates: Partial<BrushSettings>) => void;
+  setSymmetry: (updates: Partial<SymmetryConfig>) => void;
   setBrushType: (type: BrushType) => void;
   setBrushColor: (color: string) => void;
   setBrushSize: (size: number) => void;
@@ -16,6 +18,7 @@ export interface BrushSlice {
 
 export const createBrushSlice: StateCreator<BrushSlice> = (set) => ({
   brushSettings: getDefaultBrushSettings('pen'),
+  symmetry: { mode: 'none', axisX: 0, axisY: 0, radialCount: 4 },
 
   setBrushSettings: (updates) =>
     set((state) => ({
@@ -42,5 +45,10 @@ export const createBrushSlice: StateCreator<BrushSlice> = (set) => ({
   setBrushOpacity: (opacity) =>
     set((state) => ({
       brushSettings: { ...state.brushSettings, opacity: Math.max(0, Math.min(1, opacity)) },
+    })),
+
+  setSymmetry: (updates) =>
+    set((state) => ({
+      symmetry: { ...state.symmetry, ...updates },
     })),
 });

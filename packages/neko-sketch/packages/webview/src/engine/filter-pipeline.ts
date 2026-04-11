@@ -247,6 +247,58 @@ void main() { fragColor = texture(u_texture, v_texCoord); }
     gl.bindVertexArray(null);
   }
 
+  /**
+   * Mix two textures by a blend factor. Returns the mixed result texture.
+   * result = mix(texA, texB, factor)
+   */
+  mixTextures(
+    texA: WebGLTexture,
+    texB: WebGLTexture,
+    width: number,
+    height: number,
+    factor: number,
+  ): WebGLTexture {
+    this.ensureBuffers(width, height);
+    const gl = this.gl;
+    const program = this.getOrCompileProgram(
+      '__mix',
+      `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texA;
+uniform sampler2D u_texB;
+uniform float u_factor;
+void main() {
+  vec4 a = texture(u_texA, v_texCoord);
+  vec4 b = texture(u_texB, v_texCoord);
+  fragColor = mix(a, b, u_factor);
+}`,
+    );
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.filterFboA);
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(program);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texA);
+    gl.uniform1i(gl.getUniformLocation(program, 'u_texA'), 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, texB);
+    gl.uniform1i(gl.getUniformLocation(program, 'u_texB'), 1);
+
+    gl.uniform1f(gl.getUniformLocation(program, 'u_factor'), factor);
+
+    gl.disable(gl.BLEND);
+    this.drawQuad();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    return this.filterTexA!;
+  }
+
   dispose(): void {
     const gl = this.gl;
     this.programs.forEach((p) => gl.deleteProgram(p));

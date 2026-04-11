@@ -8,6 +8,7 @@ import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { FilterRegistry } from '../engine/filter-registry';
 import type { FilterCategory, FilterDef } from '../types/filter';
+import { BUILTIN_PRESETS } from '../types/filter-preset';
 
 const registry = new FilterRegistry();
 
@@ -48,6 +49,31 @@ export function FilterPanel() {
   return (
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.filters')}>
       <h3 className="sketch-panel-title m-0 mb-1">{t('sketch.panel.filters')}</h3>
+
+      {/* Presets (Looks) */}
+      <div className="flex flex-wrap gap-1 mb-1">
+        {BUILTIN_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--vscode-input-border)] hover:bg-[var(--vscode-list-hoverBackground)]"
+            title={preset.name}
+            onClick={() => {
+              // Replace current filter stack with preset filters
+              const state = useSketchStore.getState();
+              // Clear existing filters
+              for (const f of state.filters) {
+                state.removeFilter(f.id);
+              }
+              // Apply preset filters
+              for (const pf of preset.filters) {
+                state.addFilter(pf.filterId, pf.params);
+              }
+            }}
+          >
+            {preset.name}
+          </button>
+        ))}
+      </div>
 
       {/* Add filter selector */}
       <select

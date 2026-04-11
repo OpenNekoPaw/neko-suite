@@ -2,7 +2,7 @@
 
 ## 状态
 
-Proposed
+Accepted — P0 core editing complete, P1 professional tools in progress
 
 ## 关联
 

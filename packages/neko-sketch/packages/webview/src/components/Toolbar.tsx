@@ -18,11 +18,16 @@ const TOOLS: { type: ToolType; icon: React.ReactNode; key: string }[] = [
   { type: 'brush', icon: <BrushIcon />, key: 'sketch.toolbar.brush' },
   { type: 'eraser', icon: <EraserIcon />, key: 'sketch.toolbar.eraser' },
   { type: 'select-rect', icon: <SelectIcon />, key: 'sketch.toolbar.select' },
+  { type: 'select-lasso', icon: <LassoIcon />, key: 'sketch.toolbar.lasso' },
+  { type: 'select-wand', icon: <WandIcon />, key: 'sketch.toolbar.wand' },
   { type: 'move', icon: <MoveIcon />, key: 'sketch.toolbar.move' },
   { type: 'shape', icon: <ShapeIcon />, key: 'sketch.toolbar.shape' },
   { type: 'transform', icon: <TransformIcon />, key: 'sketch.toolbar.transform' },
   { type: 'eyedropper', icon: <EyedropperIcon />, key: 'sketch.toolbar.eyedropper' },
   { type: 'fill', icon: <FillIcon />, key: 'sketch.toolbar.fill' },
+  { type: 'gradient', icon: <GradientIcon />, key: 'sketch.toolbar.gradient' },
+  { type: 'text', icon: <TextIcon />, key: 'sketch.toolbar.text' },
+  { type: 'clone', icon: <CloneIcon />, key: 'sketch.toolbar.clone' },
   { type: 'zoom', icon: <ZoomIcon />, key: 'sketch.toolbar.zoom' },
 ];
 
@@ -224,6 +229,98 @@ function ZoomIcon() {
       <circle cx="7" cy="7" r="4" />
       <path d="M13 13l-3-3" />
       <path d="M5 7h4M7 5v4" />
+    </svg>
+  );
+}
+
+function LassoIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 5C4 3 6 2 8 2s4 1 4 3-2 4-4 5-4 2-4 4" />
+      <circle cx="4" cy="14" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function WandIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 13L13 3" />
+      <path d="M10 2l1 1M14 6l-1-1M7 3l.5 1.5M13 9l-1.5-.5" />
+    </svg>
+  );
+}
+
+function GradientIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    >
+      <rect x="3" y="3" width="10" height="10" rx="1" />
+      <line x1="5" y1="3" x2="5" y2="13" opacity="0.2" />
+      <line x1="7" y1="3" x2="7" y2="13" opacity="0.4" />
+      <line x1="9" y1="3" x2="9" y2="13" opacity="0.6" />
+      <line x1="11" y1="3" x2="11" y2="13" opacity="0.8" />
+    </svg>
+  );
+}
+
+function TextIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 4h8M8 4v9" />
+      <path d="M6 13h4" />
+    </svg>
+  );
+}
+
+function CloneIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="7" cy="7" r="4" />
+      <circle cx="10" cy="10" r="4" strokeDasharray="2 2" />
     </svg>
   );
 }

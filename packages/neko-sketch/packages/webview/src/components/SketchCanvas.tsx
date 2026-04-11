@@ -40,6 +40,10 @@ import {
 } from '../tools/transform-tool';
 import type { TransformState } from '../tools/transform-tool';
 import { TransformOverlay } from './TransformOverlay';
+import { GuidesOverlay } from './GuidesOverlay';
+import type { Guide } from './GuidesOverlay';
+import { ReferenceOverlay } from './ReferenceOverlay';
+import type { ReferenceImage } from './ReferenceOverlay';
 import { PixelGrid } from './PixelGrid';
 import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
@@ -419,6 +423,29 @@ export function SketchCanvas() {
   // Free transform state
   const [transformState, setTransformState] = useState<TransformState | null>(null);
 
+  // Guides state (ruler guide lines)
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const guideIdCounter = useRef(0);
+  const addGuide = useCallback((axis: 'horizontal' | 'vertical', position: number) => {
+    const id = `guide-${++guideIdCounter.current}`;
+    setGuides((prev) => [...prev, { id, axis, position }]);
+  }, []);
+  const moveGuide = useCallback((id: string, position: number) => {
+    setGuides((prev) => prev.map((g) => (g.id === id ? { ...g, position } : g)));
+  }, []);
+  const removeGuide = useCallback((id: string) => {
+    setGuides((prev) => prev.filter((g) => g.id !== id));
+  }, []);
+
+  // Reference images state (floating overlays)
+  const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
+  const updateReferenceImage = useCallback((id: string, updates: Partial<ReferenceImage>) => {
+    setReferenceImages((prev) => prev.map((img) => (img.id === id ? { ...img, ...updates } : img)));
+  }, []);
+  const removeReferenceImage = useCallback((id: string) => {
+    setReferenceImages((prev) => prev.filter((img) => img.id !== id));
+  }, []);
+
   // Alt key state for zoom tool (Alt+click = zoom out)
   const altHeldRef = useRef(false);
 
@@ -705,10 +732,19 @@ export function SketchCanvas() {
                 if (isLightObject(obj)) lights.push(obj);
               }
             }
+            // Find first available normal map texture from visible layers
+            let normalMapTex: WebGLTexture | null = null;
+            for (const lr of layersToRender) {
+              if (lr.visible && lr.normalTexture) {
+                normalMapTex = lr.normalTexture;
+                break;
+              }
+            }
             lightingConfig = {
               enabled: true,
               lights,
               ambient: activeScene.ambientLight,
+              normalMapTex,
             };
           }
 
@@ -1095,7 +1131,18 @@ export function SketchCanvas() {
       const fbo = renderer.textures.createFramebuffer(tex);
       strokeTexRef.current = tex;
       strokeFboRef.current = fbo;
-      const activeLayer = useSketchStore.getState().layers.find((l) => l.id === activeLayerId);
+      const storeState = useSketchStore.getState();
+      const activeLayer = storeState.layers.find((l) => l.id === activeLayerId);
+      const symmetryConfig = storeState.symmetry;
+      // Set symmetry axis to canvas center if not explicitly positioned
+      const symWithDefaults =
+        symmetryConfig.mode !== 'none'
+          ? {
+              ...symmetryConfig,
+              axisX: symmetryConfig.axisX || canvas.width / 2,
+              axisY: symmetryConfig.axisY || canvas.height / 2,
+            }
+          : symmetryConfig;
       brushRef.current?.beginStroke(
         { ...point, x, y },
         brushSettings,
@@ -1103,6 +1150,7 @@ export function SketchCanvas() {
         canvas.width,
         canvas.height,
         activeLayer?.alphaLock ?? false,
+        symWithDefaults,
       );
       needsRenderRef.current = true;
     },
@@ -1962,6 +2010,22 @@ export function SketchCanvas() {
       />
       {/* Pixel grid — visible only in pixel tool at sufficient zoom */}
       <PixelGrid canvasWidth={canvas.width} canvasHeight={canvas.height} />
+      {/* Ruler and guide lines overlay */}
+      <GuidesOverlay
+        guides={guides}
+        viewport={viewport}
+        canvasWidth={canvas.width}
+        canvasHeight={canvas.height}
+        onAddGuide={addGuide}
+        onMoveGuide={moveGuide}
+        onRemoveGuide={removeGuide}
+      />
+      {/* Reference images overlay */}
+      <ReferenceOverlay
+        images={referenceImages}
+        onUpdate={updateReferenceImage}
+        onRemove={removeReferenceImage}
+      />
       {/* Light position indicators — shows light icons when lighting is active */}
       <LightOverlay />
       {/* Transform handles — visible when transform tool is active */}

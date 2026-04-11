@@ -2,7 +2,7 @@
 
 ## Status
 
-**All P0 + P1 implemented** (M1-M6 + P1 tail) — Only P2 items remain
+**P0 complete, P1 end-to-end wiring in progress** — Core engine + types landed; UI/serialization/tool integration completed in fixup pass
 
 ## Source ADRs
 
