@@ -6,6 +6,7 @@
  */
 
 import type {
+  AssetEntity,
   ClassificationResult,
   SuggestedEntity,
   VariantAttributes,
@@ -17,10 +18,14 @@ import type {
 } from '@neko/shared';
 import type { IAssetClassifier } from './IClassifier';
 
+/** Injectable entity loader for similarity matching */
+export type EntityLoader = () => Promise<readonly AssetEntity[]>;
+
 /**
  * Rule-based classifier implementation
  */
 export class RuleClassifier implements IAssetClassifier {
+  constructor(private readonly loadEntities?: EntityLoader) {}
   /**
    * Analyze a file based on naming patterns
    */
@@ -57,14 +62,43 @@ export class RuleClassifier implements IAssetClassifier {
   }
 
   /**
-   * Find similar entities (not supported in rule-based)
+   * Find similar entities by matching file name/path against entity names,
+   * aliases, tags, and directory structure.
    */
   async findSimilarEntities(
-    _filePath: string,
-    _options?: ClassifierOptions,
+    filePath: string,
+    options?: ClassifierOptions,
   ): Promise<SuggestedEntity[]> {
-    // Rule-based classifier cannot find similar entities
-    return [];
+    if (!this.loadEntities) {
+      return [];
+    }
+
+    const entities = await this.loadEntities();
+    if (entities.length === 0) {
+      return [];
+    }
+
+    const threshold = options?.similarityThreshold ?? 0.3;
+    const maxResults = options?.maxSimilarEntities ?? 5;
+    const fileTokens = extractFileTokens(filePath);
+
+    const scored: Array<{ entity: AssetEntity; score: number }> = [];
+
+    for (const entity of entities) {
+      const score = computeMatchScore(entity, fileTokens);
+      if (score >= threshold) {
+        scored.push({ entity, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    return scored.slice(0, maxResults).map(({ entity, score }) => ({
+      entity,
+      similarity: score,
+      matchType: 'name' as const,
+      suggestedVariantName: this.suggestName(filePath),
+    }));
   }
 
   // =========================================================================
@@ -298,6 +332,10 @@ export class RuleClassifier implements IAssetClassifier {
   }
 
   /**
+   * Suggest name is also used by findSimilarEntities, so kept accessible.
+   */
+
+  /**
    * Generate a human-readable description
    */
   private generateDescription(
@@ -344,4 +382,76 @@ export class RuleClassifier implements IAssetClassifier {
 
     return parts.join(' ');
   }
+}
+
+// =============================================================================
+// Rule-based similarity helpers
+// =============================================================================
+
+interface FileTokens {
+  /** Lowercase base name without extension */
+  readonly baseName: string;
+  /** Lowercase parent directory name */
+  readonly dirName: string;
+  /** Individual word tokens from base name */
+  readonly words: readonly string[];
+}
+
+function extractFileTokens(filePath: string): FileTokens {
+  const parts = filePath.split(/[/\\]/);
+  const rawName = parts[parts.length - 1] ?? filePath;
+  const baseName = rawName.replace(/\.[^.]+$/, '').toLowerCase();
+  const dirName = (parts[parts.length - 2] ?? '').toLowerCase();
+  const words = baseName.split(/[-_\s]+/).filter((w) => w.length > 1);
+  return { baseName, dirName, words };
+}
+
+function normalize(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[-_\s]+/g, ' ');
+}
+
+function computeMatchScore(entity: AssetEntity, tokens: FileTokens): number {
+  let best = 0;
+
+  // Name match (0.9): entity name contained in filename or vice versa
+  const normalizedName = normalize(entity.name);
+  if (tokens.baseName.includes(normalizedName) || normalizedName.includes(tokens.baseName)) {
+    best = Math.max(best, 0.9);
+  }
+
+  // Alias match (0.8)
+  if (entity.aliases) {
+    for (const alias of entity.aliases) {
+      const normalizedAlias = normalize(alias);
+      if (tokens.baseName.includes(normalizedAlias) || normalizedAlias.includes(tokens.baseName)) {
+        best = Math.max(best, 0.8);
+        break;
+      }
+    }
+  }
+
+  // Tag match (0.6)
+  for (const tag of entity.tags) {
+    const normalizedTag = normalize(tag);
+    if (tokens.words.some((w) => w === normalizedTag || normalizedTag.includes(w))) {
+      best = Math.max(best, 0.6);
+      break;
+    }
+  }
+
+  // Directory match (0.5): parent dir matches entity name or category
+  if (tokens.dirName.length > 1) {
+    if (
+      tokens.dirName.includes(normalizedName) ||
+      normalizedName.includes(tokens.dirName) ||
+      tokens.dirName === entity.category
+    ) {
+      best = Math.max(best, 0.5);
+    }
+  }
+
+  return best;
 }

@@ -2,12 +2,15 @@ import * as vscode from 'vscode';
 import type {
   CharacterEntityQuery,
   CreativeEntityOccurrence,
+  IAssetLinker,
   ICharacterWorkspaceIndex,
   ICreativeEntityGraph,
   ICreativeEntityWorkspaceIndex,
   IOccurrenceIndex,
   ISceneWorkspaceIndex,
   IWorkspaceIndex,
+  LocationEntityQuery,
+  ObjectEntityQuery,
   SceneEntityQuery,
   SymbolLocation,
 } from './types';
@@ -28,6 +31,7 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     private readonly occurrenceIndex?: IOccurrenceIndex,
     private readonly entityGraph?: ICreativeEntityGraph,
     private readonly sceneIndex?: ISceneWorkspaceIndex,
+    private readonly assetLinker?: IAssetLinker,
   ) {}
 
   async ensureInitialized(): Promise<void> {
@@ -192,6 +196,56 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
         characterCount: entry.sceneCharacters.length,
         estimatedDuration: entry.estimatedDuration,
       },
+    };
+  }
+
+  async queryLocation(
+    query: string,
+    currentUri?: vscode.Uri,
+  ): Promise<LocationEntityQuery | undefined> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0 || !this.sceneIndex) {
+      return undefined;
+    }
+
+    const scenes = this.sceneIndex.getScenesByLocation(trimmed);
+    if (scenes.length === 0) {
+      return undefined;
+    }
+
+    const scriptReferences = this.sceneIndex.getLocationReferences(trimmed, currentUri);
+    const linkedAsset = (await this.assetLinker?.linkLocation(trimmed)) ?? undefined;
+
+    return {
+      kind: 'location',
+      query: trimmed,
+      location: scenes[0]?.location ?? trimmed,
+      scenes,
+      scriptReferences,
+      linkedAsset,
+      stats: {
+        sceneCount: scenes.length,
+        fileCount: countDistinctLocations(scriptReferences),
+      },
+    };
+  }
+
+  async queryObject(query: string): Promise<ObjectEntityQuery | undefined> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0 || !this.assetLinker) {
+      return undefined;
+    }
+
+    const match = await this.assetLinker.linkObject(trimmed);
+    if (!match) {
+      return undefined;
+    }
+
+    return {
+      kind: 'object',
+      query: trimmed,
+      entity: match.entity,
+      linkedAsset: match,
     };
   }
 

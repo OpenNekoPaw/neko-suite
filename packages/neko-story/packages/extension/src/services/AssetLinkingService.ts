@@ -5,6 +5,7 @@ import type { AssetLinkMatch, AssetLinkMatchSource, IAssetLinker } from './types
 
 const CHARACTER_CATEGORY = 'character';
 const LOCATION_CATEGORY = 'environment';
+const OBJECT_CATEGORY = 'object';
 
 export interface AssetLinkingServiceDeps {
   readonly loadEntities?: () => Promise<readonly AssetEntity[]>;
@@ -41,6 +42,13 @@ export class AssetLinkingService implements IAssetLinker {
     const entities = await this.loadEntities();
     const candidates = entities.filter((entity) => entity.category === LOCATION_CATEGORY);
     const names = buildLookupSet([location]);
+    return findBestMatch(candidates, names);
+  }
+
+  async linkObject(name: string): Promise<AssetLinkMatch | null> {
+    const entities = await this.loadEntities();
+    const candidates = entities.filter((entity) => entity.category === OBJECT_CATEGORY);
+    const names = buildLookupSet([name]);
     return findBestMatch(candidates, names);
   }
 

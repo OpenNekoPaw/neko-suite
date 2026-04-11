@@ -313,6 +313,33 @@ export interface ISceneWorkspaceIndex extends vscode.Disposable {
 
   /** List all indexed scene IDs for the workspace. */
   getAllSceneIds(currentUri?: vscode.Uri): readonly string[];
+
+  /** Get all scene entries sharing a given location name. */
+  getScenesByLocation(location: string): readonly SceneEntry[];
+}
+
+// -- Location entity types (Phase 4: derived from scene locations + environment assets) --
+
+export interface LocationEntityQuery {
+  readonly kind: 'location';
+  readonly query: string;
+  readonly location: string;
+  readonly scenes: readonly SceneEntry[];
+  readonly scriptReferences: readonly vscode.Location[];
+  readonly linkedAsset?: AssetLinkMatch;
+  readonly stats: {
+    readonly sceneCount: number;
+    readonly fileCount: number;
+  };
+}
+
+// -- Object entity types (Phase 4: backed by AssetLibrary object category) --
+
+export interface ObjectEntityQuery {
+  readonly kind: 'object';
+  readonly query: string;
+  readonly entity: AssetEntity;
+  readonly linkedAsset: AssetLinkMatch;
 }
 
 /**
@@ -329,6 +356,12 @@ export interface ICreativeEntityWorkspaceIndex extends vscode.Disposable {
 
   /** Resolves a scene query into script definition, cross-file references, and cross-modal occurrences. */
   queryScene(query: string, currentUri?: vscode.Uri): SceneEntityQuery | undefined;
+
+  /** Aggregates all scenes sharing a location name and links to environment assets. */
+  queryLocation(query: string, currentUri?: vscode.Uri): Promise<LocationEntityQuery | undefined>;
+
+  /** Finds an object asset entity by name/alias/tag matching. */
+  queryObject(query: string): Promise<ObjectEntityQuery | undefined>;
 }
 
 /**
@@ -395,4 +428,9 @@ export interface IAssetLinker {
    * Finds the best linked environment asset for a story location label.
    */
   linkLocation(location: string): Promise<AssetLinkMatch | null>;
+
+  /**
+   * Finds the best linked object asset for a name/alias/tag match.
+   */
+  linkObject(name: string): Promise<AssetLinkMatch | null>;
 }

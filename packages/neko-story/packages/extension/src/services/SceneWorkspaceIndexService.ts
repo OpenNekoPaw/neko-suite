@@ -106,6 +106,12 @@ export class SceneWorkspaceIndexService implements ISceneWorkspaceIndex {
     return Array.from(this.sceneIdMap.keys());
   }
 
+  getScenesByLocation(location: string): readonly SceneEntry[] {
+    const normalized = normalizeKey(location);
+    const entries = this.locationMap.get(normalized);
+    return entries ? entries.map((e) => e.entry) : [];
+  }
+
   dispose(): void {
     for (const d of this.disposables) {
       d.dispose();

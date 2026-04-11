@@ -6,7 +6,7 @@ Accepted
 
 ## 当前实现进度（2026-04-12）
 
-截至 2026 年 4 月 12 日，人物统一索引已完成 Phase 1–4（场景部分），范围如下：
+截至 2026 年 4 月 12 日，人物统一索引已完成 Phase 1–4 + Phase 5 规则匹配，范围如下：
 
 - 已新增共享 `characters.json` 契约、读写服务和名称解析工具
 - 已为 `AssetEntity`、`GalleryNode`、`ShotCharacter`、`GeneratedAsset` 等承载层补充 `registryId` / `characterId` / `characterIds`
@@ -44,10 +44,26 @@ Phase 4 新增（场景一等实体）：
 - References 支持场景跨模态引用
 - `applyStoryboardPayloadToCanvas()` 导入时自动注入 `sceneId`
 
+Phase 4 补充（object / location 实体查询）：
+
+- 已新增 `LocationEntityQuery` 和 `ObjectEntityQuery` 类型
+- `ICreativeEntityWorkspaceIndex` 新增 `queryLocation()` 和 `queryObject()` 方法
+- `AssetLinkingService` 新增 `linkObject()` — 按 name/alias/tag 匹配 object 类资产
+- `SceneWorkspaceIndexService` 新增 `getScenesByLocation()` — 按地点名聚合 scene
+- Hover 场景标题时通过 `queryScene()` 已自然覆盖 location 信息展示
+
+Phase 5 部分（规则匹配）：
+
+- 已填充 `RuleClassifier.findSimilarEntities()` — name/alias/tag/directory 四层规则匹配
+- 支持 `similarityThreshold` 和 `maxSimilarEntities` 参数
+- 构造函数支持 `EntityLoader` 注入（向后兼容）
+
 当前尚未完成的部分：
 
-- `object / location / action` 尚未形成与 character/scene 同级的实体链路
-- `object / location` 以及跨模态资产侧的 Rename / CodeAction 还没有正式切到统一实体层
+- `action` 尚未形成独立实体链路（按 ADR 设计为语义索引节点，不急于做 registry）
+- 文本向量索引（`EmbedFn` provider 接入）尚未完成
+- UI 候选确认 → registry 写回流程尚未完成
+- Phase 6 多模态向量增强尚未启动
 
 ## 关联
 
@@ -1094,15 +1110,16 @@ Suggestion services
 - [x] `queryScene()` 接入 OccurrenceIndex + Graph + StorySceneStateStore
 - [x] `applyStoryboardPayloadToCanvas()` 自动注入 `sceneId`
 - [x] Definition / References / Hover 支持场景跨模态查询
-- [ ] 引入 `objectId` 的统一引用模型
-- [ ] 物品实体接入 Asset Library 与 shot / generated asset 绑定
+- [x] `queryLocation()` — 聚合同名地点的 scene + environment asset
+- [x] `queryObject()` — 通过 AssetLibrary 查询 object 类资产
+- [x] `AssetLinkingService.linkObject()` — name/alias/tag 匹配
 
 ### Phase 5：规则匹配与文本向量
 
-- 文件名 / aliases / tags 规则匹配
-- 基于 prompt / source node / lineage 的建议
-- 为 scene / prompt / asset description / action phrase 建文本向量索引
-- UI 确认后写回注册表
+- [x] `RuleClassifier.findSimilarEntities()` — name/alias/tag/directory 四层规则匹配
+- [ ] 基于 prompt / source node / lineage 的建议
+- [ ] 为 scene / prompt / asset description / action phrase 建文本向量索引（EmbedFn provider）
+- [ ] UI 确认后写回注册表
 
 ### Phase 6：多模态向量增强
 

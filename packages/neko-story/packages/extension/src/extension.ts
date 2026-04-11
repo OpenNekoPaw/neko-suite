@@ -90,6 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
     occurrenceIndexService,
     entityGraphService,
     sceneIndexService,
+    assetLinkingService,
   );
   context.subscriptions.push(creativeEntityIndexService);
   // Non-blocking background initialization
