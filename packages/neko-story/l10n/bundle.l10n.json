@@ -1,4 +1,6 @@
 {
   "neko.story.newFile.title": "New Story File",
-  "neko.story.newFile.noFolder": "No folder selected. Please open a workspace or right-click a folder."
+  "neko.story.newFile.noFolder": "No folder selected. Please open a workspace or right-click a folder.",
+  "neko.story.openCharacterRegistry.title": "Open Character Registry",
+  "neko.story.openCharacterRegistry.noFolder": "No workspace folder available. Open a workspace before creating characters.json."
 }

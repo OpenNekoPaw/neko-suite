@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
-import type { IWorkspaceIndex } from '../services/types';
+import type { ICharacterWorkspaceIndex, IWorkspaceIndex, SymbolLocation } from '../services/types';
 
 /**
  * Provides go-to-definition for Fountain files.
  * Supports cross-file navigation via IWorkspaceIndex.
  */
 export class FountainDefinitionProvider implements vscode.DefinitionProvider {
-  constructor(private readonly index: IWorkspaceIndex) {}
+  constructor(
+    private readonly index: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideDefinition(
     document: vscode.TextDocument,
@@ -18,6 +21,25 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
 
     const word = document.getText(wordRange).trim();
     await this.index.ensureInitialized();
+    await this.characterIndex?.ensureInitialized();
+
+    const characterDefinition = this.characterIndex?.getDefinition(word, document.uri);
+    if (characterDefinition) {
+      return characterDefinition;
+    }
+
+    const referenceNames = this.characterIndex?.getReferenceNames(word, document.uri) ?? [];
+    const resolvedCharacterDefinition = findFirstCharacterDefinition(
+      this.index,
+      referenceNames,
+      document.uri,
+    );
+    if (resolvedCharacterDefinition) {
+      return new vscode.Location(
+        resolvedCharacterDefinition.uri,
+        resolvedCharacterDefinition.range.start,
+      );
+    }
 
     // Try character definition (first occurrence, current file preferred)
     const charDef = this.index.findCharacterDefinition(word, document.uri);
@@ -48,12 +70,15 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
  * Returns cross-file results via IWorkspaceIndex.
  */
 export class FountainReferenceProvider implements vscode.ReferenceProvider {
-  constructor(private readonly index: IWorkspaceIndex) {}
+  constructor(
+    private readonly index: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideReferences(
     document: vscode.TextDocument,
     position: vscode.Position,
-    _context: vscode.ReferenceContext,
+    context: vscode.ReferenceContext,
     _token: vscode.CancellationToken,
   ): Promise<vscode.Location[]> {
     const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
@@ -61,6 +86,28 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
 
     const word = document.getText(wordRange).trim();
     await this.index.ensureInitialized();
+    await this.characterIndex?.ensureInitialized();
+
+    const referenceNames = this.characterIndex?.getReferenceNames(word, document.uri) ?? [];
+    if (referenceNames.length > 0) {
+      const locations = collectCharacterReferenceLocations(
+        this.index,
+        referenceNames,
+        document.uri,
+      );
+      const registryDefinition = context.includeDeclaration
+        ? this.characterIndex?.getDefinition(word, document.uri)
+        : undefined;
+
+      if (locations.length > 0 || registryDefinition) {
+        const references = locations.map(
+          (location) => new vscode.Location(location.uri, location.range),
+        );
+        return registryDefinition
+          ? dedupeLocations([registryDefinition, ...references])
+          : references;
+      }
+    }
 
     // Collect all character references across workspace
     const charLocs = this.index.findCharacterLocations(word, document.uri);
@@ -82,4 +129,61 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
 
     return [];
   }
+}
+
+function findFirstCharacterDefinition(
+  index: IWorkspaceIndex,
+  names: readonly string[],
+  currentUri: vscode.Uri,
+): SymbolLocation | undefined {
+  for (const name of names) {
+    const definition = index.findCharacterDefinition(name, currentUri);
+    if (definition) {
+      return definition;
+    }
+  }
+
+  return undefined;
+}
+
+function collectCharacterReferenceLocations(
+  index: IWorkspaceIndex,
+  names: readonly string[],
+  currentUri: vscode.Uri,
+): readonly SymbolLocation[] {
+  const deduped = new Map<string, SymbolLocation>();
+
+  for (const name of names) {
+    for (const location of index.findCharacterLocations(name, currentUri)) {
+      const key = serializeLocation(location.uri, location.range);
+      if (!deduped.has(key)) {
+        deduped.set(key, location);
+      }
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
+function dedupeLocations(locations: readonly vscode.Location[]): vscode.Location[] {
+  const deduped = new Map<string, vscode.Location>();
+
+  for (const location of locations) {
+    const key = serializeLocation(location.uri, location.range);
+    if (!deduped.has(key)) {
+      deduped.set(key, location);
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
+function serializeLocation(uri: vscode.Uri, range: vscode.Range): string {
+  return [
+    uri.toString(),
+    range.start.line,
+    range.start.character,
+    range.end.line,
+    range.end.character,
+  ].join(':');
 }

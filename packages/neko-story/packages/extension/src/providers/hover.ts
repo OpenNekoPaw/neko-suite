@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
-import type { IWorkspaceIndex } from '../services/types';
+import type {
+  ICharacterWorkspaceIndex,
+  IWorkspaceIndex,
+  ResolvedCharacterMatch,
+} from '../services/types';
 
 /**
  * Provides hover information for Fountain files.
@@ -9,7 +13,10 @@ import type { IWorkspaceIndex } from '../services/types';
  * Scene stats remain per-file (scene content is local).
  */
 export class FountainHoverProvider implements vscode.HoverProvider {
-  constructor(private readonly index: IWorkspaceIndex) {}
+  constructor(
+    private readonly index: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideHover(
     document: vscode.TextDocument,
@@ -19,6 +26,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     const line = document.lineAt(position.line).text;
 
     await this.index.ensureInitialized();
+    await this.characterIndex?.ensureInitialized();
 
     // Use indexed document if available, otherwise parse on the fly
     const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
@@ -29,10 +37,21 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     if (charMatch) {
       const charName = charMatch[1]?.trim();
       if (charName) {
-        const localStats = this.getLocalCharacterStats(fountainDoc, charName);
-        const crossFileStats = this.getCrossFileCharacterStats(charName);
-        if (localStats) {
-          return new vscode.Hover(this.formatCharacterStats(charName, localStats, crossFileStats));
+        const resolved = this.characterIndex?.resolveCharacter(charName, document.uri);
+        const referenceNames = resolved
+          ? (this.characterIndex?.getReferenceNames(charName, document.uri) ?? [charName])
+          : [charName];
+        const localStats = this.getLocalCharacterStats(fountainDoc, referenceNames);
+        const crossFileStats = this.getCrossFileCharacterStats(referenceNames);
+        if (localStats || resolved) {
+          return new vscode.Hover(
+            this.formatCharacterStats(
+              resolved?.record.displayName ?? resolved?.record.canonicalName ?? charName,
+              localStats,
+              crossFileStats,
+              resolved,
+            ),
+          );
         }
       }
     }
@@ -51,8 +70,9 @@ export class FountainHoverProvider implements vscode.HoverProvider {
 
   private getLocalCharacterStats(
     doc: { elements: Array<{ type: string }> },
-    name: string,
+    names: readonly string[],
   ): LocalCharacterStats | null {
+    const nameSet = new Set(names);
     let appearances = 0;
     let dialogueLines = 0;
     let firstAppearance = -1;
@@ -61,7 +81,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     for (const element of doc.elements) {
       if (element.type === 'character') {
         const char = element as Character;
-        if (char.name === name) {
+        if (nameSet.has(char.name)) {
           appearances++;
           if (firstAppearance === -1) {
             firstAppearance = char.range.start.line;
@@ -77,7 +97,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
             e.type === 'character' && (e as Character).range.start.line < dialogue.range.start.line,
         );
         const lastChar = prevElements[prevElements.length - 1] as Character | undefined;
-        if (lastChar?.name === name) {
+        if (lastChar && nameSet.has(lastChar.name)) {
           dialogueLines++;
         }
       }
@@ -88,14 +108,32 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     return { appearances, dialogueLines, firstAppearance, lastAppearance };
   }
 
-  private getCrossFileCharacterStats(name: string): CrossFileCharacterStats {
-    const locations = this.index.findCharacterLocations(name);
-    const fileSet = new Set<string>();
-    for (const loc of locations) {
-      fileSet.add(loc.uri.toString());
+  private getCrossFileCharacterStats(names: readonly string[]): CrossFileCharacterStats {
+    const deduped = new Map<string, string>();
+
+    for (const name of names) {
+      const locations = this.index.findCharacterLocations(name);
+      for (const loc of locations) {
+        const key = [
+          loc.uri.toString(),
+          loc.range.start.line,
+          loc.range.start.character,
+          loc.range.end.line,
+          loc.range.end.character,
+        ].join(':');
+        if (!deduped.has(key)) {
+          deduped.set(key, loc.uri.toString());
+        }
+      }
     }
+
+    const fileSet = new Set<string>();
+    for (const uri of deduped.values()) {
+      fileSet.add(uri);
+    }
+
     return {
-      totalAppearances: locations.length,
+      totalAppearances: deduped.size,
       fileCount: fileSet.size,
     };
   }
@@ -142,21 +180,45 @@ export class FountainHoverProvider implements vscode.HoverProvider {
 
   private formatCharacterStats(
     name: string,
-    local: LocalCharacterStats,
+    local: LocalCharacterStats | null,
     crossFile: CrossFileCharacterStats,
+    resolved?: ResolvedCharacterMatch,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
-    md.appendMarkdown(`| Stat | Value |\n|------|-------|\n`);
-    md.appendMarkdown(`| Appearances (this file) | ${local.appearances} |\n`);
-    md.appendMarkdown(`| Dialogue lines (this file) | ${local.dialogueLines} |\n`);
-    md.appendMarkdown(`| First appearance | Line ${local.firstAppearance + 1} |\n`);
-    md.appendMarkdown(`| Last appearance | Line ${local.lastAppearance + 1} |\n`);
+
+    if (resolved) {
+      md.appendMarkdown(`**Registry ID:** \`${resolved.record.id}\`\n\n`);
+      md.appendMarkdown(`**Canonical Name:** ${resolved.record.canonicalName}\n\n`);
+
+      if (resolved.record.displayName) {
+        md.appendMarkdown(`**Display Name:** ${resolved.record.displayName}\n\n`);
+      }
+      if (resolved.record.aliases.length > 0) {
+        md.appendMarkdown(`**Aliases:** ${resolved.record.aliases.join(', ')}\n\n`);
+      }
+      if (resolved.record.metadata?.role) {
+        md.appendMarkdown(`**Role:** ${resolved.record.metadata.role}\n\n`);
+      }
+      md.appendMarkdown(`**Status:** ${resolved.record.status}\n\n`);
+    }
+
+    if (local) {
+      md.appendMarkdown(`| Stat | Value |\n|------|-------|\n`);
+      md.appendMarkdown(`| Appearances (this file) | ${local.appearances} |\n`);
+      md.appendMarkdown(`| Dialogue lines (this file) | ${local.dialogueLines} |\n`);
+      md.appendMarkdown(`| First appearance | Line ${local.firstAppearance + 1} |\n`);
+      md.appendMarkdown(`| Last appearance | Line ${local.lastAppearance + 1} |\n`);
+    }
 
     // Cross-file stats (only show if more than 1 file)
-    if (crossFile.fileCount > 1) {
+    if (crossFile.fileCount > 1 && local) {
       md.appendMarkdown(
         `| **Total appearances** | **${crossFile.totalAppearances} in ${crossFile.fileCount} files** |\n`,
+      );
+    } else if (crossFile.fileCount > 1) {
+      md.appendMarkdown(
+        `**Total appearances:** ${crossFile.totalAppearances} in ${crossFile.fileCount} files\n`,
       );
     }
 

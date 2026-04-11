@@ -3,7 +3,10 @@ import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
 import { createStoryboardPayload } from '@neko/shared';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  injectLocaleAttribute,
+  loadCharacterBindingsForNames,
+} from '@neko/shared/vscode/extension';
 import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
@@ -333,6 +336,11 @@ export class PreviewPanel implements vscode.Disposable {
     scriptIndex: NekoStoryScriptIndex,
     scene: NekoStoryScriptIndex['scenes'][number],
   ): Promise<void> {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const characterBindings = await loadCharacterBindingsForNames(
+      workspaceRoot,
+      scene.sceneCharacters,
+    );
     const sceneIndex: NekoStoryScriptIndex = {
       ...scriptIndex,
       scenes: [scene],
@@ -340,6 +348,7 @@ export class PreviewPanel implements vscode.Disposable {
     const payload = createStoryboardPayload(sceneIndex, {
       mode: 'mechanical',
       scenesLimit: 1,
+      characterBindings,
     });
 
     try {

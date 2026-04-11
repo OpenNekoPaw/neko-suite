@@ -67,6 +67,7 @@ export interface CreateStoryboardPayloadOptions {
   readonly mode?: StoryboardImportMode;
   readonly scenesLimit?: number;
   readonly scenePlans?: readonly StoryScenePlan[];
+  readonly characterBindings?: Readonly<Record<string, string>>;
 }
 
 export interface CreatedCanvasStoryboardScene {

@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
+import { createEmptyCharacterRegistryFile } from '@neko/shared';
 import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
+  CharacterRegistryService,
   createVSCodeLogger,
   createNewFile,
+  resolveCharacterRegistryPath,
   VSCodeErrorHandler,
 } from '@neko/shared/vscode/extension';
 import { setErrorHandler } from './utils/errorHandler';
@@ -18,6 +21,7 @@ import { FountainInlineCompletionProvider } from './providers/inlineCompletion';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
+import { CharacterWorkspaceIndexService } from './services/CharacterWorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
@@ -43,10 +47,13 @@ export function activate(context: vscode.ExtensionContext) {
   // Create shared workspace index service
   const indexService = new WorkspaceIndexService();
   context.subscriptions.push(indexService);
+  const characterIndexService = new CharacterWorkspaceIndexService();
+  context.subscriptions.push(characterIndexService);
   const sceneStateStore = new StorySceneStateStore(context.workspaceState);
   context.subscriptions.push(sceneStateStore);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
+  void characterIndexService.ensureInitialized();
 
   // Register language providers
   context.subscriptions.push(
@@ -58,28 +65,28 @@ export function activate(context: vscode.ExtensionContext) {
     // Auto-completion (cross-file via index)
     vscode.languages.registerCompletionItemProvider(
       FOUNTAIN_SELECTOR,
-      new FountainCompletionProvider(indexService),
+      new FountainCompletionProvider(indexService, characterIndexService),
       '.', // Trigger on period for forced scene headings
       '@', // Trigger on @ for forced characters
     ),
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(indexService),
+      new FountainDefinitionProvider(indexService, characterIndexService),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService),
+      new FountainReferenceProvider(indexService, characterIndexService),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService),
+      new FountainHoverProvider(indexService, characterIndexService),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(
-      new FountainWorkspaceSymbolProvider(indexService),
+      new FountainWorkspaceSymbolProvider(indexService, characterIndexService),
     ),
     // Document links — [[see: file.fountain]] clickable
     vscode.languages.registerDocumentLinkProvider(
@@ -350,6 +357,29 @@ export function activate(context: vscode.ExtensionContext) {
         noFolderErrorMessage: vscode.l10n.t('neko.story.newFile.noFolder'),
       });
     }),
+    vscode.commands.registerCommand(
+      'neko.story.openCharacterRegistry',
+      async (uri?: vscode.Uri) => {
+        const folder = resolveTargetWorkspaceFolder(uri);
+        if (!folder) {
+          vscode.window.showErrorMessage(
+            vscode.l10n.t('neko.story.openCharacterRegistry.noFolder'),
+          );
+          return;
+        }
+
+        const registryPath = resolveCharacterRegistryPath(folder.uri.fsPath);
+        const registryUri = vscode.Uri.file(registryPath);
+        const registryService = new CharacterRegistryService(registryPath);
+
+        if (!(await workspaceFileExists(registryUri))) {
+          await registryService.save(createEmptyCharacterRegistryFile());
+        }
+
+        const document = await vscode.workspace.openTextDocument(registryUri);
+        await vscode.window.showTextDocument(document, { preserveFocus: false });
+      },
+    ),
   );
 
   // Expose API for cross-extension communication (e.g., neko-agent pipeline)
@@ -388,6 +418,22 @@ export function activate(context: vscode.ExtensionContext) {
     getScriptIndex(uriOrPath: string) {
       const uri = resolveUriOrPath(uriOrPath);
       return indexService.getScriptIndex(uri);
+    },
+
+    /**
+     * Returns the current workspace folder's character registry snapshot.
+     */
+    getCharacterRegistry(uriOrPath?: string) {
+      const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+      return characterIndexService.getRegistry(uri);
+    },
+
+    /**
+     * Resolves a character name / alias against the project registry.
+     */
+    resolveCharacter(name: string, uriOrPath?: string) {
+      const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+      return characterIndexService.resolveCharacter(name, uri);
     },
 
     /**
@@ -435,6 +481,34 @@ function resolveUriOrPath(uriOrPath: string): vscode.Uri {
   return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
     ? vscode.Uri.parse(uriOrPath)
     : vscode.Uri.file(uriOrPath);
+}
+
+function resolveTargetWorkspaceFolder(uri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+  if (uri) {
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (folder) {
+      return folder;
+    }
+  }
+
+  const activeDocumentUri = vscode.window.activeTextEditor?.document.uri;
+  if (activeDocumentUri) {
+    const folder = vscode.workspace.getWorkspaceFolder(activeDocumentUri);
+    if (folder) {
+      return folder;
+    }
+  }
+
+  return vscode.workspace.workspaceFolders?.[0];
+}
+
+async function workspaceFileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createStoryPipelineParams(

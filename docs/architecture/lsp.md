@@ -145,6 +145,21 @@ L3 - LSP Indexer
 - [x] `SearchScriptIndex` Agent 工具：读取场景文本 → `platform.embed()` 懒加载嵌入 → top-K 检索
 - [ ] 媒体语义增强（CLIP/Whisper Prompt 对齐、音频 Diff ASR）— 按需推进
 
+### Phase 3.1：人物统一索引 ✅ 已完成第一阶段（2026-04-11）
+
+- [x] 项目级 `characters.json` 契约与读写服务（共享层）
+- [x] `CharacterWorkspaceIndexService`：工作区根目录注册表加载、热更新、名字/别名解析
+- [x] Fountain `Definition`：剧本人名优先跳转到 `characters.json`
+- [x] Fountain `References`：按 canonicalName / aliases / scriptNames 聚合查询
+- [x] Fountain `Completion / Hover / WorkspaceSymbol`：叠加注册表元数据与符号结果
+- [x] `NekoStoryAPI.getCharacterRegistry()` / `resolveCharacter()`：向跨扩展调用暴露统一人物身份层
+
+实现约束：
+
+- 继续保留 `WorkspaceIndexService` 作为剧本符号与出现点索引
+- `CharacterWorkspaceIndexService` 单独负责注册表身份解析
+- Provider 通过组合两层索引完成 LSP 查询，不把 `characters.json` 混入原有 `IWorkspaceIndex`
+
 ## 剧本 Agent 索引策略
 
 > 核心结论：**LSP 结构索引与向量索引互补，不可互替。** 二者分别对应不同的查询类型，Agent 工作流依赖两者协同。
@@ -186,6 +201,26 @@ neko-story 扩展
                         └── Agent: Read(offset=line_start, limit=N) → 完整场次原文
 ```
 
+### 人物统一索引架构（已实现）
+
+```
+WorkspaceIndexService
+  ├─ script symbols / scenes / sections
+  └─ character occurrence locations
+
+CharacterWorkspaceIndexService
+  ├─ workspace-root characters.json
+  ├─ canonicalName / displayName / aliases / scriptNames
+  └─ registry definition location
+
+Fountain Providers
+  ├─ Definition      → registry first, script fallback
+  ├─ References      → registry aliases aggregate script occurrences
+  ├─ Completion      → registry names + script names
+  ├─ Hover           → registry metadata + local/cross-file stats
+  └─ WorkspaceSymbol → registry symbols + script symbols
+```
+
 **关键设计约束**：向量搜索返回值**必须携带 `line_start`**，才能衔接 Read 工具做精准读取。`ScriptEmbeddingIndex` 的缓存 key 是 `uri`，失效条件是 `total_lines` 变化（文件修改时 WorkspaceIndexService 重新解析，total_lines 变化自动触发重新嵌入）。
 
 ### 工具层对接（已实现）
@@ -206,8 +241,9 @@ neko-agent extensionTools.ts
 |------|------|
 | `neko-story/extension/src/services/types.ts` | `ScriptIndex` / `SceneEntry` / `CharacterEntry` 类型定义 |
 | `neko-story/extension/src/services/WorkspaceIndexService.ts` | `getScriptIndex()` 实现（顺序 ID + 行号边界） |
+| `neko-story/extension/src/services/CharacterWorkspaceIndexService.ts` | `characters.json` 加载、热更新、角色解析、符号查询 |
 | `neko-story/extension/src/extension.ts` | 公开 API `getScriptIndex(uriOrPath)` |
-| `neko-types/src/types/extension-api.ts` | `NekoStoryAPI` / `NekoStoryScriptIndex` 跨扩展契约 |
+| `neko-types/src/types/extension-api.ts` | `NekoStoryAPI` / `NekoStoryScriptIndex` / `getCharacterRegistry` / `resolveCharacter` 跨扩展契约 |
 | `neko-agent/extension/src/services/ScriptEmbeddingIndex.ts` | 内存向量缓存 + 余弦搜索 |
 | `neko-agent/extension/src/tools/extensionTools.ts` | `GetScriptIndex` + `SearchScriptIndex` 工具注册 |
 | `neko-agent/extension/src/index.ts` | `buildEmbedFn()` 从 platform 注入 embedFn |

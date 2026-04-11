@@ -74,6 +74,20 @@ describe('storyboardPlanner', () => {
     });
   });
 
+  it('injects character ids from character bindings', () => {
+    const payload = createStoryboardPayload(scriptIndex, {
+      characterBindings: {
+        ALICE: 'char_alice',
+        BOB: 'char_bob',
+      },
+    });
+
+    expect(payload.scenes[0]!.shotPlans[0]!.characters).toEqual([
+      { characterId: 'char_alice', characterName: 'ALICE' },
+      { characterId: 'char_bob', characterName: 'BOB' },
+    ]);
+  });
+
   it('applies a storyboard payload to canvas via unified helper', async () => {
     const create = vi
       .fn<NekoCanvasAPI['nodes']['create']>()

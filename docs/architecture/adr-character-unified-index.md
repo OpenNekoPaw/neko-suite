@@ -2,7 +2,26 @@
 
 ## 状态
 
-Proposed
+Accepted
+
+## 当前实现进度（2026-04-11）
+
+截至 2026 年 4 月 11 日，人物统一索引已经完成第一条可用主链，范围如下：
+
+- 已新增共享 `characters.json` 契约、读写服务和名称解析工具
+- 已为 `AssetEntity`、`GalleryNode`、`ShotCharacter`、`GeneratedAsset` 等承载层补充 `registryId` / `characterId` / `characterIds`
+- 已打通 story -> canvas / storyboard payload 的 `characterId` 注入路径
+- `neko-story` 已落地独立的 `CharacterWorkspaceIndexService`，并与 `WorkspaceIndexService` 分层组合
+- Fountain LSP 已支持基于注册表的 `Definition`、`References`、`Completion`、`Hover`、`WorkspaceSymbol`
+- `NekoStoryAPI` 已暴露 `getCharacterRegistry()` 与 `resolveCharacter()` 供跨扩展复用
+- `neko-story` 已新增“打开角色注册表”命令，可自动创建并打开工作区根目录 `characters.json`
+
+当前尚未完成的部分：
+
+- 尚未引入通用 `CreativeEntityGraph`
+- 尚未引入统一 `OccurrenceIndex`
+- `scene / object / location / action` 仍停留在预留抽象，尚未形成与人物同级的 registry 链路
+- Rename / CodeAction 还没有正式切到统一角色身份层
 
 ## 关联
 
@@ -919,7 +938,9 @@ Suggestion services
 
 - 保留现有 `ScriptIndex`
 - 新增“角色名解析到 `characterId`”步骤
-- `Definition / References / Completion` 优先使用注册表别名
+- 已引入独立 `CharacterWorkspaceIndexService`，不与 `WorkspaceIndexService` 混合建模
+- `Definition / References / Completion / Hover / WorkspaceSymbol` 已优先使用注册表别名与规范名
+- `NekoStoryAPI` 已开放 `getCharacterRegistry()` 与 `resolveCharacter()` 供跨扩展复用
 
 ### 9.2 `neko-assets`
 
@@ -1016,22 +1037,25 @@ Suggestion services
 
 ### Phase 1：结构闭环
 
-- 新增 `characters.json` 契约与读写服务
-- 为 `GalleryNode` / `ShotCharacter` / `GeneratedAsset` 增加 `characterId`
-- 增加 `CharacterWorkspaceIndex`
-- 剧本人名 `Definition / References` 接到人物注册表
+- [x] 新增 `characters.json` 契约与读写服务
+- [x] 为 `GalleryNode` / `ShotCharacter` / `GeneratedAsset` 增加 `characterId`
+- [x] 增加 `CharacterWorkspaceIndex`
+- [x] 剧本人名 `Definition / References` 接到人物注册表
+- [x] `Completion / Hover / WorkspaceSymbol` 接到人物注册表
+- [x] `NekoStoryAPI` 暴露角色注册表读取与解析能力
 
 ### Phase 2：生成链路打通
 
-- 生成资产自动继承 `characterId`
-- Asset Entity 支持 `registryId`
-- `import_script_to_canvas` 基于注册表填充人物绑定
+- [x] 生成资产模型支持 `characterIds` / `sourceNodeId`
+- [x] Asset Entity 支持 `registryId`
+- [x] `import_script_to_canvas` 基于注册表填充人物绑定
+- [ ] 生成资产在所有生成入口统一自动继承 `characterId`
 
 ### Phase 3：关系图与出现点索引
 
-- 在 `AssetGraph` 基础上引入 `CreativeEntityGraph`
-- 增加 `OccurrenceIndex`
-- 为 Definition / References / Hover 提供统一查询入口
+- [ ] 在 `AssetGraph` 基础上引入 `CreativeEntityGraph`
+- [ ] 增加 `OccurrenceIndex`
+- [ ] 为 Definition / References / Hover / Rename 提供统一查询入口
 
 ### Phase 4：扩展到场景 / 物品
 

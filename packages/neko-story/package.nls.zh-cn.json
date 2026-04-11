@@ -1,4 +1,5 @@
 {
   "neko.story.newFile.title": "新建剧本",
+  "neko.story.openCharacterRegistry.title": "打开角色注册表",
   "neko.story.exportPdf.title": "导出剧本为 PDF"
 }

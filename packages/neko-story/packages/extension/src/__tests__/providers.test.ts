@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { CharacterRecord } from '@neko/shared';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument } from '@neko-story/types';
 import { FountainDocumentSymbolProvider } from '../providers/documentSymbol';
@@ -7,7 +8,7 @@ import { FountainCompletionProvider } from '../providers/completion';
 import { FountainHoverProvider } from '../providers/hover';
 import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
-import type { IWorkspaceIndex, SymbolLocation } from '../services/types';
+import type { ICharacterWorkspaceIndex, IWorkspaceIndex, SymbolLocation } from '../services/types';
 
 // Mock vscode module
 vi.mock('vscode', () => ({
@@ -20,6 +21,12 @@ vi.mock('vscode', () => ({
     constructor(label: string, kind: number) {
       this.label = label;
       this.kind = kind;
+    }
+  },
+  SnippetString: class {
+    value: string;
+    constructor(value: string) {
+      this.value = value;
     }
   },
   CompletionItemKind: {
@@ -285,6 +292,148 @@ function createMockIndex(files: Record<string, string>): IWorkspaceIndex {
     getAllSceneLocations: () => Array.from(sceneIndex.keys()).sort(),
     getScriptIndex: () => undefined,
     onDidUpdateIndex: (() => ({ dispose: () => {} })) as any,
+    dispose: () => {},
+  };
+}
+
+function createMockCharacterIndex(
+  records: readonly CharacterRecord[],
+  registryPath = '/project/characters.json',
+): ICharacterWorkspaceIndex {
+  const registry = {
+    version: 1 as const,
+    characters: records,
+  };
+  const byKey = new Map<
+    string,
+    {
+      record: CharacterRecord;
+      matchedName: string;
+      matchSource: 'canonicalName' | 'displayName' | 'alias' | 'scriptName';
+    }
+  >();
+
+  const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+  const collectNames = (record: CharacterRecord) => [
+    { value: record.canonicalName, source: 'canonicalName' as const },
+    { value: record.displayName, source: 'displayName' as const },
+    ...record.aliases.map((value) => ({ value, source: 'alias' as const })),
+    ...(record.bindings?.scriptNames ?? []).map((value) => ({
+      value,
+      source: 'scriptName' as const,
+    })),
+  ];
+
+  for (const record of records) {
+    for (const entry of collectNames(record)) {
+      if (!entry.value || entry.value.trim().length === 0) {
+        continue;
+      }
+
+      const key = normalize(entry.value);
+      if (!byKey.has(key)) {
+        byKey.set(key, {
+          record,
+          matchedName: entry.value,
+          matchSource: entry.source,
+        });
+      }
+    }
+  }
+
+  const collectReferenceNames = (record: CharacterRecord) => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+
+    for (const candidate of [
+      record.canonicalName,
+      record.displayName,
+      ...record.aliases,
+      ...(record.bindings?.scriptNames ?? []),
+    ]) {
+      if (!candidate || candidate.trim().length === 0) {
+        continue;
+      }
+
+      const key = normalize(candidate);
+      if (!seen.has(key)) {
+        seen.add(key);
+        names.push(candidate);
+      }
+    }
+
+    return names;
+  };
+
+  return {
+    ensureInitialized: async () => {},
+    getRegistry: () => registry,
+    resolveCharacter: (name: string) => byKey.get(normalize(name)),
+    getDefinition: (name: string) => {
+      const resolved = byKey.get(normalize(name));
+      if (!resolved) {
+        return undefined;
+      }
+
+      return {
+        uri: {
+          fsPath: registryPath,
+          toString: () => `file://${registryPath}`,
+          scheme: 'file',
+        },
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: resolved.record.id.length },
+        },
+      } as any;
+    },
+    getReferenceNames: (name: string) => {
+      const resolved = byKey.get(normalize(name));
+      return resolved ? collectReferenceNames(resolved.record) : [];
+    },
+    getAllCompletionNames: () => {
+      const names: string[] = [];
+      const seen = new Set<string>();
+
+      for (const record of records) {
+        for (const name of collectReferenceNames(record)) {
+          const key = normalize(name);
+          if (!seen.has(key)) {
+            seen.add(key);
+            names.push(name);
+          }
+        }
+      }
+
+      return names;
+    },
+    searchCharacters: (query: string) => {
+      const lowerQuery = normalize(query);
+      if (!lowerQuery) {
+        return [];
+      }
+
+      return records
+        .filter((record) =>
+          collectReferenceNames(record).some((name) => normalize(name).includes(lowerQuery)),
+        )
+        .map((record) => ({
+          record,
+          label: record.displayName ?? record.canonicalName,
+          detail: `characters.json • ${record.canonicalName}`,
+          location: {
+            uri: {
+              fsPath: registryPath,
+              toString: () => `file://${registryPath}`,
+              scheme: 'file',
+            },
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: record.id.length },
+            },
+          } as any,
+        }));
+    },
     dispose: () => {},
   };
 }
@@ -640,6 +789,30 @@ INT. OFFICE - NIGHT
 ALICE
 Working late.`;
 
+const ALIAS_FILE_A = `INT. OFFICE - DAY
+
+ALICE
+Hello!`;
+
+const ALIAS_FILE_B = `EXT. PARK - NIGHT
+
+ALLY
+I am here.`;
+
+const ALICE_RECORD: CharacterRecord = {
+  id: 'char_alice',
+  canonicalName: 'ALICE',
+  displayName: 'Alice',
+  aliases: ['ALLY'],
+  status: 'confirmed',
+  metadata: {
+    role: 'protagonist',
+  },
+  bindings: {
+    scriptNames: ['ALICE', 'ALLY'],
+  },
+};
+
 describe('Mock Index — Multi-file indexing', () => {
   let index: IWorkspaceIndex;
 
@@ -755,6 +928,18 @@ describe('DefinitionProvider — Cross-file', () => {
 
     expect(result).toBeNull();
   });
+
+  it('should prefer characters.json definition when alias resolves through registry', async () => {
+    const index = createMockIndex({ '/project/scene.fountain': ALIAS_FILE_B });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const provider = new FountainDefinitionProvider(index, characterIndex);
+    const doc = createMockDocument(ALIAS_FILE_B, '/project/scene.fountain');
+
+    const result = await provider.provideDefinition(doc, { line: 2, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    expect(result.uri.fsPath).toBe('/project/characters.json');
+  });
 });
 
 describe('ReferenceProvider — Cross-file', () => {
@@ -778,6 +963,28 @@ describe('ReferenceProvider — Cross-file', () => {
     const files = results.map((r: any) => r.uri.fsPath);
     expect(files.filter((f: string) => f === '/project/a.fountain')).toHaveLength(2);
     expect(files.filter((f: string) => f === '/project/b.fountain')).toHaveLength(1);
+  });
+
+  it('should aggregate registry aliases and include declaration when requested', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': ALIAS_FILE_A,
+      '/project/b.fountain': ALIAS_FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const provider = new FountainReferenceProvider(index, characterIndex);
+    const doc = createMockDocument(ALIAS_FILE_B, '/project/b.fountain');
+
+    const results = await provider.provideReferences(
+      doc,
+      { line: 2, character: 0 },
+      { includeDeclaration: true } as any,
+      {} as any,
+    );
+
+    const files = results.map((result: any) => result.uri.fsPath);
+    expect(files).toContain('/project/a.fountain');
+    expect(files).toContain('/project/b.fountain');
+    expect(files).toContain('/project/characters.json');
   });
 });
 
@@ -805,8 +1012,8 @@ J`;
     const charItems = items.filter((i: any) => i.detail === 'Character');
     const names = charItems.map((i: any) => i.label);
     expect(names).toContain('JOHN');
-    expect(names).toContain('MARY');
-    expect(names).toContain('ALICE');
+    expect(names).not.toContain('MARY');
+    expect(names).not.toContain('ALICE');
   });
 
   it('should suggest scene locations from all files', async () => {
@@ -831,6 +1038,38 @@ J`;
     expect(names).toContain('OFFICE');
     expect(names).toContain('COFFEE SHOP');
     expect(names).toContain('PARK');
+  });
+
+  it('should include registry aliases before script-only names', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': `INT. OFFICE - DAY
+
+ALAN
+Hello!`,
+      '/project/b.fountain': FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const provider = new FountainCompletionProvider(index, characterIndex);
+
+    const text = `INT. NEW SCENE - DAY
+
+A`;
+    const doc = createMockDocument(text, '/project/c.fountain');
+
+    const items = await provider.provideCompletionItems(
+      doc,
+      { line: 2, character: 1 },
+      {} as any,
+      {} as any,
+    );
+
+    const names = items
+      .filter((item: any) => item.detail === 'Character')
+      .map((item: any) => item.label);
+
+    expect(names).toContain('ALICE');
+    expect(names).toContain('ALLY');
+    expect(names.indexOf('ALLY')).toBeLessThan(names.indexOf('ALAN'));
   });
 });
 
@@ -861,6 +1100,21 @@ describe('WorkspaceSymbolProvider — Cross-file', () => {
 
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((r: any) => r.name === 'ALICE')).toBe(true);
+  });
+
+  it('should include registry characters in workspace symbol results', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': ALIAS_FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const provider = new FountainWorkspaceSymbolProvider(index, characterIndex);
+
+    const results = await provider.provideWorkspaceSymbols('ally', {} as any);
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]?.location.uri.fsPath).toBe('/project/characters.json');
+    expect(results[0]?.name).toBe('Alice');
   });
 
   it('should return empty for no match', async () => {
@@ -906,6 +1160,25 @@ describe('HoverProvider — Cross-file stats', () => {
     expect(md.value).toContain('MARY');
     // Should NOT contain "files" since MARY is only in one file
     expect(md.value).not.toContain('files');
+  });
+
+  it('should include registry metadata when character resolves through registry', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': ALIAS_FILE_A,
+      '/project/b.fountain': ALIAS_FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const provider = new FountainHoverProvider(index, characterIndex);
+    const doc = createMockDocument(ALIAS_FILE_B, '/project/b.fountain');
+
+    const result = await provider.provideHover(doc, { line: 2, character: 0 }, {} as any);
+
+    expect(result).toBeDefined();
+    const md = result.contents;
+    expect(md.value).toContain('Alice');
+    expect(md.value).toContain('Registry ID');
+    expect(md.value).toContain('Canonical Name');
+    expect(md.value).toContain('protagonist');
   });
 });
 

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import type { IWorkspaceIndex } from '../services/types';
+import { normalizeCharacterLookupKey } from '@neko/shared';
+import type { ICharacterWorkspaceIndex, IWorkspaceIndex } from '../services/types';
 
 // Scene heading prefix patterns: INT. / EXT. / INT./EXT. / EST. / I/E.
 const HEADING_PREFIX_RE = /^\s*(?:\.|\s*(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?\s*)$/i;
@@ -51,7 +52,10 @@ const HEADING_PREFIXES = [
  * - Transitions: only when line matches known transition prefix patterns
  */
 export class FountainCompletionProvider implements vscode.CompletionItemProvider {
-  constructor(private readonly index: IWorkspaceIndex) {}
+  constructor(
+    private readonly index: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideCompletionItems(
     document: vscode.TextDocument,
@@ -63,10 +67,11 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     const linePrefix = line.substring(0, position.character);
 
     await this.index.ensureInitialized();
+    await this.characterIndex?.ensureInitialized();
 
     // @-forced character: always takes priority
     if (linePrefix.startsWith('@')) {
-      return this.getCharacterCompletions(linePrefix.slice(1));
+      return this.getCharacterCompletions(linePrefix.slice(1), document.uri);
     }
 
     // Scene heading: three-phase detection
@@ -85,7 +90,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
 
     // Character name: blank line above + uppercase start
     if (this.isCharacterContext(document, position, linePrefix)) {
-      return this.getCharacterCompletions(linePrefix.trim());
+      return this.getCharacterCompletions(linePrefix.trim(), document.uri);
     }
 
     // Transition: blank line above + matches transition prefix
@@ -128,8 +133,11 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
   // Completion generators
   // ---------------------------------------------------------------------------
 
-  private getCharacterCompletions(typed: string): vscode.CompletionItem[] {
-    const names = this.index.getAllCharacterNames();
+  private getCharacterCompletions(typed: string, currentUri: vscode.Uri): vscode.CompletionItem[] {
+    const names = mergeCharacterNames(
+      this.characterIndex?.getAllCompletionNames(currentUri) ?? [],
+      this.index.getAllCharacterNames(),
+    );
     const upper = typed.toUpperCase();
     return names
       .filter((name) => !upper || name.toUpperCase().startsWith(upper))
@@ -167,7 +175,7 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     // Plain location names
     locations.forEach((loc, i) => {
       const item = new vscode.CompletionItem(loc, vscode.CompletionItemKind.Reference);
-      item.detail = 'Location';
+      item.detail = 'Previous location';
       item.sortText = `0${String(i).padStart(4, '0')}`;
       items.push(item);
     });
@@ -202,4 +210,28 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
       return item;
     });
   }
+}
+
+function mergeCharacterNames(
+  preferredNames: readonly string[],
+  fallbackNames: readonly string[],
+): readonly string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const name of [...preferredNames, ...fallbackNames]) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      continue;
+    }
+
+    const key = normalizeCharacterLookupKey(name);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(name);
+  }
+
+  return merged;
 }

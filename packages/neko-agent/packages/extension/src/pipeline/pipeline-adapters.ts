@@ -14,6 +14,7 @@ import {
   type NekoStoryAPI,
   type StoryScenePlan,
 } from '@neko/shared';
+import { loadCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
@@ -366,10 +367,16 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
     };
 
     const stageParams = ctx.stageParams?.['importStoryboardToCanvas'] ?? {};
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const characterBindings = await loadCharacterBindingsForNames(
+      workspaceRoot,
+      filteredIndex.characters.map((character) => character.name),
+    );
     const payload = createStoryboardPayload(filteredIndex, {
       mode: 'semantic',
       scenesLimit: filteredIndex.scenes.length,
       scenePlans: ctx.scenePlans,
+      characterBindings,
     });
 
     return canvasApi.storyboard.import(payload, {

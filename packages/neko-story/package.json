@@ -89,6 +89,11 @@
         "category": "Neko Story"
       },
       {
+        "command": "neko.story.openCharacterRegistry",
+        "title": "%neko.story.openCharacterRegistry.title%",
+        "category": "Neko Story"
+      },
+      {
         "command": "neko.story.sendToAgent",
         "title": "→ Agent",
         "category": "Neko Story"
@@ -140,6 +145,10 @@
         {
           "command": "neko.story.newFile",
           "group": "1@6"
+        },
+        {
+          "command": "neko.story.openCharacterRegistry",
+          "group": "1@7"
         }
       ]
     }

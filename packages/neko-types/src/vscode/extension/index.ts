@@ -24,6 +24,13 @@ export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';
 // Webview asset utilities (GeneratedAsset → webviewUri conversion)
 export { toWebviewAsset } from './webview-asset';
 
+// Character registry utilities (workspace characters.json read/write + lookup)
+export {
+  CharacterRegistryService,
+  loadCharacterBindingsForNames,
+  resolveCharacterRegistryPath,
+} from './character-registry';
+
 // New-file UX (unique name → write → reveal → rename)
 export { createNewFile } from './create-new-file';
 export type { CreateNewFileOptions, TemplateChoice } from './create-new-file';

@@ -232,6 +232,7 @@ export interface GeneratedImageVersion {
 
 /** Character reference within a shot */
 export interface ShotCharacter {
+  characterId?: string;
   characterName: string;
   /** GalleryNode id used for IP-Adapter reference */
   referenceNodeId?: string;
@@ -330,6 +331,7 @@ export interface GalleryCanvasNode extends CanvasNodeBase {
     cols: number;
     cells: GalleryCell[];
     globalPromptPrefix?: string;
+    characterId?: string;
     characterName?: string;
   };
 }

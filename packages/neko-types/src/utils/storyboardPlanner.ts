@@ -37,8 +37,8 @@ export function createStoryboardPayload(
       const scenePlan = scenePlans.get(scene.sceneId);
       const shotPlans =
         mode === 'semantic'
-          ? buildSemanticShotPlans(scene, scenePlan, nextShotNumber)
-          : buildMechanicalShotPlans(scene, scenePlan, nextShotNumber);
+          ? buildSemanticShotPlans(scene, scenePlan, nextShotNumber, options.characterBindings)
+          : buildMechanicalShotPlans(scene, scenePlan, nextShotNumber, options.characterBindings);
       nextShotNumber += shotPlans.length;
 
       return {
@@ -65,7 +65,8 @@ export async function applyStoryboardPayloadToCanvas(
 ): Promise<CreatedCanvasStoryboard> {
   const startX = options.startX ?? DEFAULT_START_X;
   const startY = options.startY ?? DEFAULT_START_Y;
-  const createdScenes: Array<{ sourceSceneId: string; sceneNodeId: string; shotIds: string[] }> = [];
+  const createdScenes: Array<{ sourceSceneId: string; sceneNodeId: string; shotIds: string[] }> =
+    [];
 
   for (let sceneIndex = 0; sceneIndex < payload.scenes.length; sceneIndex++) {
     const scene = payload.scenes[sceneIndex];
@@ -132,6 +133,7 @@ function buildMechanicalShotPlans(
   scene: NekoStoryScriptIndex['scenes'][number],
   scenePlan: StoryScenePlan | undefined,
   firstShotNumber: number,
+  characterBindings: Readonly<Record<string, string>> | undefined,
 ): CanvasStoryboardShotPlan[] {
   const lineSpan = scene.line_end - scene.line_start;
   const shotCount = clampShotCount(scenePlan?.recommendedShotCount ?? Math.round(lineSpan / 10));
@@ -142,7 +144,7 @@ function buildMechanicalShotPlans(
     shotNumber: firstShotNumber + index,
     duration: DEFAULT_SHOT_DURATION,
     visualDescription: baseDescription,
-    characters: createShotCharacters(scene.sceneCharacters),
+    characters: createShotCharacters(scene.sceneCharacters, characterBindings),
     shotScale: 'MS',
     characterAction: scene.actionSummary || '',
     emotion: [],
@@ -154,14 +156,15 @@ function buildSemanticShotPlans(
   scene: NekoStoryScriptIndex['scenes'][number],
   scenePlan: StoryScenePlan | undefined,
   firstShotNumber: number,
+  characterBindings: Readonly<Record<string, string>> | undefined,
 ): CanvasStoryboardShotPlan[] {
   const semanticPlans = scenePlan?.shotPlans ?? [];
   if (semanticPlans.length === 0) {
-    return buildMechanicalShotPlans(scene, scenePlan, firstShotNumber);
+    return buildMechanicalShotPlans(scene, scenePlan, firstShotNumber, characterBindings);
   }
 
   return semanticPlans.map((shotPlan, index) =>
-    normalizeShotPlan(scene, shotPlan, firstShotNumber + index),
+    normalizeShotPlan(scene, shotPlan, firstShotNumber + index, characterBindings),
   );
 }
 
@@ -169,14 +172,15 @@ function normalizeShotPlan(
   scene: NekoStoryScriptIndex['scenes'][number],
   shotPlan: StoryShotPlan,
   shotNumber: number,
+  characterBindings: Readonly<Record<string, string>> | undefined,
 ): CanvasStoryboardShotPlan {
   return {
     shotNumber: shotPlan.shotNumber ?? shotNumber,
     duration: shotPlan.duration ?? DEFAULT_SHOT_DURATION,
     visualDescription: shotPlan.visualDescription ?? (scene.actionSummary || scene.sceneTitle),
     characters: shotPlan.characters
-      ? [...shotPlan.characters]
-      : createShotCharacters(scene.sceneCharacters),
+      ? attachCharacterBindings(shotPlan.characters, characterBindings)
+      : createShotCharacters(scene.sceneCharacters, characterBindings),
     shotScale: shotPlan.shotScale ?? 'MS',
     cameraMovement: shotPlan.cameraMovement,
     cameraAngle: shotPlan.cameraAngle,
@@ -191,8 +195,59 @@ function normalizeShotPlan(
   };
 }
 
-function createShotCharacters(sceneCharacters: readonly string[]): ShotCharacter[] {
-  return sceneCharacters.map((characterName) => ({ characterName }));
+function createShotCharacters(
+  sceneCharacters: readonly string[],
+  characterBindings: Readonly<Record<string, string>> | undefined,
+): ShotCharacter[] {
+  return sceneCharacters.map((characterName) => {
+    const characterId = resolveCharacterBinding(characterBindings, characterName);
+    return characterId ? { characterId, characterName } : { characterName };
+  });
+}
+
+function attachCharacterBindings(
+  characters: readonly ShotCharacter[],
+  characterBindings: Readonly<Record<string, string>> | undefined,
+): ShotCharacter[] {
+  return characters.map((character) => {
+    if (character.characterId) {
+      return { ...character };
+    }
+
+    const characterId = resolveCharacterBinding(characterBindings, character.characterName);
+    return characterId ? { ...character, characterId } : { ...character };
+  });
+}
+
+function resolveCharacterBinding(
+  characterBindings: Readonly<Record<string, string>> | undefined,
+  characterName: string,
+): string | undefined {
+  if (!characterBindings) {
+    return undefined;
+  }
+
+  const directMatch = characterBindings[characterName];
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const target = normalizeLookupKey(characterName);
+  if (!target) {
+    return undefined;
+  }
+
+  for (const [candidate, characterId] of Object.entries(characterBindings)) {
+    if (normalizeLookupKey(candidate) === target) {
+      return characterId;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeLookupKey(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
 function compactTags(values: Array<string | undefined>): string[] {

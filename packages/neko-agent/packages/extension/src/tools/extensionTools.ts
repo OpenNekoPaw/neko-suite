@@ -24,6 +24,7 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
 } from '@neko/shared';
+import { loadCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
 import type { MediaGenerationService, ConfigManager } from '@neko/platform';
@@ -1495,12 +1496,24 @@ export function createNekoStoryTools(embedFn?: EmbedFn): Tool[] {
 
         const startX = (args.startX as number | undefined) ?? 100;
         const startY = (args.startY as number | undefined) ?? 100;
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const characterBindings = await loadCharacterBindingsForNames(
+          workspaceRoot,
+          index.characters.map((character) => character.name),
+        );
         const payload = createStoryboardPayload(index, {
           mode: (args.mode as 'mechanical' | 'semantic' | undefined) ?? 'mechanical',
-          scenesLimit: Math.min((args.scenesLimit as number | undefined) ?? index.scenes.length, 50),
+          scenesLimit: Math.min(
+            (args.scenesLimit as number | undefined) ?? index.scenes.length,
+            50,
+          ),
           scenePlans: (args.scenePlans as StoryScenePlan[] | undefined) ?? [],
+          characterBindings,
         });
-        const created = await applyStoryboardPayloadToCanvas(canvasApi, payload, { startX, startY });
+        const created = await applyStoryboardPayloadToCanvas(canvasApi, payload, {
+          startX,
+          startY,
+        });
 
         logger.info(
           `import_script_to_canvas: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { CharacterRecord, CharacterRegistryFile } from '@neko/shared';
 import type { FountainDocument } from '@neko-story/types';
 
 // -- ScriptIndex types (agent-accessible structured representation) --
@@ -60,6 +61,21 @@ export interface SymbolLocation {
   readonly kind: 'character' | 'scene' | 'section';
   readonly range: vscode.Range;
   readonly detail?: string;
+}
+
+export type CharacterMatchSource = 'canonicalName' | 'displayName' | 'alias' | 'scriptName';
+
+export interface ResolvedCharacterMatch {
+  readonly record: CharacterRecord;
+  readonly matchedName: string;
+  readonly matchSource: CharacterMatchSource;
+}
+
+export interface CharacterRegistrySymbol {
+  readonly record: CharacterRecord;
+  readonly label: string;
+  readonly detail?: string;
+  readonly location: vscode.Location;
 }
 
 /**
@@ -132,4 +148,47 @@ export interface IWorkspaceIndex extends vscode.Disposable {
    * Fires when the index has been updated with the affected URIs.
    */
   readonly onDidUpdateIndex: vscode.Event<vscode.Uri[]>;
+}
+
+/**
+ * Workspace-aware character registry index backed by project-level characters.json.
+ *
+ * Keeps registry identity separate from the Fountain occurrence index so both can
+ * evolve independently and be composed by LSP providers.
+ */
+export interface ICharacterWorkspaceIndex extends vscode.Disposable {
+  /**
+   * Ensures characters.json state has been loaded for all current workspace folders.
+   */
+  ensureInitialized(): Promise<void>;
+
+  /**
+   * Returns the current workspace folder's registry snapshot.
+   */
+  getRegistry(currentUri?: vscode.Uri): CharacterRegistryFile | undefined;
+
+  /**
+   * Resolves a character name / alias / script binding to a registry record.
+   */
+  resolveCharacter(name: string, currentUri?: vscode.Uri): ResolvedCharacterMatch | undefined;
+
+  /**
+   * Returns the registry definition location for a character, if present.
+   */
+  getDefinition(name: string, currentUri?: vscode.Uri): vscode.Location | undefined;
+
+  /**
+   * Returns all script-facing names that should be treated as references to the same character.
+   */
+  getReferenceNames(name: string, currentUri?: vscode.Uri): readonly string[];
+
+  /**
+   * Returns all registry-driven completion labels for the current workspace folder.
+   */
+  getAllCompletionNames(currentUri?: vscode.Uri): readonly string[];
+
+  /**
+   * Searches registry-backed character symbols for workspace-wide symbol UI.
+   */
+  searchCharacters(query: string, currentUri?: vscode.Uri): readonly CharacterRegistrySymbol[];
 }

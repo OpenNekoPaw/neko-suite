@@ -29,6 +29,7 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
 } from '@neko/shared';
+import { loadCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -727,6 +728,11 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
 
             const startX = (args.startX as number | undefined) ?? 100;
             const startY = (args.startY as number | undefined) ?? 100;
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const characterBindings = await loadCharacterBindingsForNames(
+              workspaceRoot,
+              scriptIndex.characters.map((character) => character.name),
+            );
             const payload = createStoryboardPayload(scriptIndex, {
               mode: (args.mode as 'mechanical' | 'semantic' | undefined) ?? 'mechanical',
               scenesLimit: Math.min(
@@ -734,6 +740,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 50,
               ),
               scenePlans: (args.scenePlans as StoryScenePlan[] | undefined) ?? [],
+              characterBindings,
             });
             const created = await api.storyboard.import(payload, { startX, startY });
 

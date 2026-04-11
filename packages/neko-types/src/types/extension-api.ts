@@ -25,6 +25,7 @@ import type {
   CreatedCanvasStoryboard,
 } from './storyboard-planner';
 import type { StoryScenePlan, StoryShotPlan } from './storyboard-planner';
+import type { CharacterRegistryFile, CharacterRecord } from './character-registry';
 
 // =============================================================================
 // NekoCut API
@@ -399,6 +400,12 @@ export interface NekoStoryConversionResult {
   readonly characterNames: readonly string[];
 }
 
+export interface NekoStoryResolvedCharacter {
+  readonly record: CharacterRecord;
+  readonly matchedName: string;
+  readonly matchSource: 'canonicalName' | 'displayName' | 'alias' | 'scriptName';
+}
+
 /**
  * NekoStory Extension API
  * Exported by neko-story extension for screenplay parsing and index access
@@ -421,6 +428,17 @@ export interface NekoStoryAPI {
    * Returns undefined if the file has not been indexed yet.
    */
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
+
+  /**
+   * Returns the project-level characters.json snapshot for the given file path or URI.
+   * When omitted, uses the active workspace folder or the first workspace folder.
+   */
+  getCharacterRegistry(uriOrPath?: string): CharacterRegistryFile | undefined;
+
+  /**
+   * Resolves a character name / alias / script binding against the project registry.
+   */
+  resolveCharacter(name: string, uriOrPath?: string): NekoStoryResolvedCharacter | undefined;
 
   /**
    * Builds deterministic scene-level storyboard plans from the indexed screenplay.

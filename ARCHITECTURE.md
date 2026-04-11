@@ -393,7 +393,7 @@ neko-canvas / neko-cut / neko-story
 |-----------|-----------|----------------|
 | neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events` |
 | neko-cut | `NekoCutAPI & ISkillProvider` | `timeline` / `ai` |
-| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` / `generateScenePlans` / `generateShotPlan` |
+| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` / `getCharacterRegistry` / `resolveCharacter` / `generateScenePlans` / `generateShotPlan` |
 | neko-auth | `NekoAuthAPI` | `getSession` / `onDidChangeSession` |
 
 ### Cross-Extension Command Protocol

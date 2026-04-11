@@ -91,6 +91,8 @@ export interface VariantAttributes {
 
 /** Character-specific metadata */
 export interface CharacterMetadata {
+  /** Stable character registry ID from characters.json */
+  registryId?: string;
   /** Role in story: protagonist, antagonist, supporting, npc */
   role?: string;
   /** Personality traits */

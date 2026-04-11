@@ -286,6 +286,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
           cols: asNumber(data.cols, presetConfig.cols),
           cells: normalizedCells,
           globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
+          characterId: asString(data.characterId) || undefined,
           characterName: asString(data.characterName) || undefined,
         },
       };

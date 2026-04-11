@@ -25,7 +25,7 @@ export interface BaseGeneratedAsset {
   type: GeneratedAssetType;
   /** Globally unique identifier (e.g. `crypto.randomUUID()`) */
   id: string;
-  /** Absolute file-system path: `/workspace/.neko/generated/...` */
+  /** Absolute file-system path to the generated binary */
   path: string;
   /** MIME type of the stored file */
   mimeType: string;
@@ -35,6 +35,10 @@ export interface BaseGeneratedAsset {
   prompt?: string;
   /** Model / provider identifier (e.g. `fal.ai/flux`, `dashscope/wanx`) */
   model?: string;
+  /** Stable creative entity bindings inherited from the source context */
+  characterIds?: readonly string[];
+  /** Source canvas node or upstream node identifier for lineage tracing */
+  sourceNodeId?: string;
 }
 
 // -----------------------------------------------------------------------------
