@@ -2,7 +2,7 @@
 
 ## Status
 
-**M1-M5 + M6.1/M6.3 Implemented** — M3.5 (free transform), M6.2 (gradient), M6.4 (text) pending
+**All milestones implemented** (M1-M6)
 
 ## Source ADRs
 

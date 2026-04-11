@@ -32,6 +32,14 @@ import { renderPaths } from '../engine/vector-renderer';
 import { computeOnionSkinGhosts } from '../utils/frame-manager';
 import { atmosphereToEmitter } from '../data/atmosphere-presets';
 import { computeParallaxOffsets, buildParallaxTransform } from '../engine/parallax-renderer';
+import {
+  hitTestHandle,
+  applyHandleDrag,
+  applyTransformToPixels,
+  INITIAL_MATRIX,
+} from '../tools/transform-tool';
+import type { TransformState } from '../tools/transform-tool';
+import { TransformOverlay } from './TransformOverlay';
 import { PixelGrid } from './PixelGrid';
 import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
@@ -408,6 +416,8 @@ export function SketchCanvas() {
   const selectStartRef = useRef<{ x: number; y: number } | null>(null);
   // Lasso selection: accumulates path points during drag
   const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
+  // Free transform state
+  const [transformState, setTransformState] = useState<TransformState | null>(null);
 
   // Alt key state for zoom tool (Alt+click = zoom out)
   const altHeldRef = useRef(false);
@@ -905,8 +915,60 @@ export function SketchCanvas() {
       }
 
       if (activeTool === 'transform') {
-        // Transform tool: show transform context menu at click position
-        setTransformMenu({ x: point.x, y: point.y });
+        const { x: dx, y: dy } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+
+        // If transform is already active, check handle hit
+        if (transformState) {
+          const handle = hitTestHandle(dx, dy, transformState.bounds, transformState.matrix);
+          if (handle) {
+            setTransformState({
+              ...transformState,
+              activeHandle: handle,
+              dragStart: { x: dx, y: dy },
+            });
+            return;
+          }
+          // Click outside handles — confirm transform
+          const layer = useSketchStore
+            .getState()
+            .layers.find((l) => l.id === transformState.layerId);
+          if (layer?.texture && rendererRef.current) {
+            const imgData = readTextureToImageData(
+              rendererRef.current,
+              layer.texture,
+              canvas.width,
+              canvas.height,
+            );
+            const transformed = applyTransformToPixels(
+              imgData,
+              transformState.matrix,
+              canvas.width,
+              canvas.height,
+            );
+            uploadImageDataToTexture(rendererRef.current, layer.texture, transformed);
+            markDirty();
+          }
+          setTransformState(null);
+          needsRenderRef.current = true;
+          return;
+        }
+
+        // Start new transform on active layer
+        if (activeLayerId) {
+          setTransformState({
+            layerId: activeLayerId,
+            matrix: INITIAL_MATRIX,
+            bounds: { x: 0, y: 0, width: canvas.width, height: canvas.height },
+            activeHandle: null,
+            dragStart: null,
+          });
+        }
         return;
       }
 
@@ -1173,7 +1235,29 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, transform, select-wand do nothing on move
+      if (activeTool === 'transform' && transformState?.activeHandle && transformState.dragStart) {
+        const { x: dx, y: dy } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        const deltaX = dx - transformState.dragStart.x;
+        const deltaY = dy - transformState.dragStart.y;
+        const newMatrix = applyHandleDrag(
+          transformState.matrix,
+          transformState.activeHandle,
+          deltaX,
+          deltaY,
+          transformState.bounds,
+        );
+        setTransformState({ ...transformState, matrix: newMatrix, dragStart: { x: dx, y: dy } });
+        needsRenderRef.current = true;
+        return;
+      }
+
+      // zoom, eyedropper, fill, transform (no active drag), select-wand do nothing on move
       if (
         activeTool === 'zoom' ||
         activeTool === 'eyedropper' ||
@@ -1318,13 +1402,14 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, select-wand, and transform are single-click tools — nothing to do on end
-      if (
-        activeTool === 'zoom' ||
-        activeTool === 'eyedropper' ||
-        activeTool === 'fill' ||
-        activeTool === 'transform'
-      ) {
+      if (activeTool === 'transform' && transformState?.activeHandle) {
+        // Release handle — stop dragging but keep transform active
+        setTransformState({ ...transformState, activeHandle: null, dragStart: null });
+        return;
+      }
+
+      // zoom, eyedropper, fill, select-wand are single-click tools — nothing to do on end
+      if (activeTool === 'zoom' || activeTool === 'eyedropper' || activeTool === 'fill') {
         return;
       }
 
@@ -1879,6 +1964,8 @@ export function SketchCanvas() {
       <PixelGrid canvasWidth={canvas.width} canvasHeight={canvas.height} />
       {/* Light position indicators — shows light icons when lighting is active */}
       <LightOverlay />
+      {/* Transform handles — visible when transform tool is active */}
+      {transformState && <TransformOverlay transform={transformState} viewport={viewport} />}
 
       {/* Canvas right-click context menu */}
       {canvasMenu && (

@@ -108,7 +108,9 @@ export type ToolType =
   | 'fill'
   | 'zoom'
   | 'pixel'
-  | 'vector';
+  | 'vector'
+  | 'gradient'
+  | 'text';
 
 export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'polygon' | 'star' | 'path';
 
