@@ -5,7 +5,7 @@
  * Interpolates points, applies pressure mapping, and
  * renders dabs to the active layer's framebuffer.
  */
-import type { StrokePoint, BrushSettings, StrokeResult } from '../types';
+import type { StrokePoint, BrushSettings, StrokeResult, SymmetryConfig } from '../types';
 import type { IRenderPipeline } from '../engine/types';
 import { interpolateStroke } from './stroke-interpolator';
 import { pressureToSize, pressureToOpacity } from './pressure-mapper';
@@ -19,6 +19,7 @@ export interface IBrushEngine {
     width: number,
     height: number,
     alphaLock?: boolean,
+    symmetry?: SymmetryConfig | null,
   ): void;
   addPoint(point: StrokePoint): void;
   endStroke(): StrokeResult | null;
@@ -34,6 +35,7 @@ export class BrushEngine implements IBrushEngine {
   private fboHeight = 0;
   private active = false;
   private alphaLock = false;
+  private symmetry: SymmetryConfig | null = null;
   private bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
   constructor(pipeline: IRenderPipeline) {
@@ -47,10 +49,12 @@ export class BrushEngine implements IBrushEngine {
     width: number,
     height: number,
     alphaLock = false,
+    symmetry?: SymmetryConfig | null,
   ): void {
     this.points = [point];
     this.settings = settings;
     this.alphaLock = alphaLock;
+    this.symmetry = symmetry && symmetry.mode !== 'none' ? symmetry : null;
     this.layerFBO = layerFBO;
     this.fboWidth = width;
     this.fboHeight = height;
@@ -73,6 +77,14 @@ export class BrushEngine implements IBrushEngine {
     const interpolated = interpolateStroke(recent, Math.max(1, spacing));
 
     this.renderPoints(interpolated);
+
+    // Render mirrored segments for symmetry painting
+    if (this.symmetry) {
+      const mirrored = mirrorPoints(interpolated, this.symmetry);
+      for (const seg of mirrored) {
+        this.renderPoints(seg);
+      }
+    }
   }
 
   endStroke(): StrokeResult | null {
@@ -156,6 +168,40 @@ export class BrushEngine implements IBrushEngine {
     this.active = false;
     this.bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
+}
+
+/** Generate mirrored point arrays for symmetry painting */
+function mirrorPoints(points: StrokePoint[], sym: SymmetryConfig): StrokePoint[][] {
+  const result: StrokePoint[][] = [];
+  const { mode, axisX, axisY, radialCount } = sym;
+
+  if (mode === 'vertical' || mode === 'both') {
+    result.push(points.map((p) => ({ ...p, x: 2 * axisX - p.x })));
+  }
+  if (mode === 'horizontal' || mode === 'both') {
+    result.push(points.map((p) => ({ ...p, y: 2 * axisY - p.y })));
+  }
+  if (mode === 'both') {
+    // Diagonal mirror (both axes)
+    result.push(points.map((p) => ({ ...p, x: 2 * axisX - p.x, y: 2 * axisY - p.y })));
+  }
+  if (mode === 'radial') {
+    const n = Math.max(2, Math.min(16, radialCount));
+    for (let i = 1; i < n; i++) {
+      const angle = (2 * Math.PI * i) / n;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      result.push(
+        points.map((p) => {
+          const dx = p.x - axisX;
+          const dy = p.y - axisY;
+          return { ...p, x: axisX + dx * cos - dy * sin, y: axisY + dx * sin + dy * cos };
+        }),
+      );
+    }
+  }
+
+  return result;
 }
 
 /** Convert hex color string to RGBA tuple */

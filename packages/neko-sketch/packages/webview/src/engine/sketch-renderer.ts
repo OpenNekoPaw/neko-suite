@@ -31,6 +31,7 @@ export interface LightingConfig {
   readonly enabled: boolean;
   readonly lights: readonly LightSceneObject[];
   readonly ambient: AmbientLightConfig;
+  readonly normalMapTex?: WebGLTexture | null;
 }
 
 export class SketchRenderer implements ISketchRenderer {
@@ -137,7 +138,14 @@ export class SketchRenderer implements ISketchRenderer {
     // Build lighting callback if lighting is enabled with active lights
     const lightingFn = lightingConfig?.enabled
       ? (tex: WebGLTexture, w: number, h: number) =>
-          this._lightPass.apply(tex, w, h, lightingConfig.lights, lightingConfig.ambient)
+          this._lightPass.apply(
+            tex,
+            w,
+            h,
+            lightingConfig.lights,
+            lightingConfig.ambient,
+            lightingConfig.normalMapTex,
+          )
       : undefined;
 
     // Build adjustment callback — reuses FilterPipeline for per-layer adjustment processing

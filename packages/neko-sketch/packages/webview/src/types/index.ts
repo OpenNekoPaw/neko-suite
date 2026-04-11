@@ -42,6 +42,20 @@ export interface StrokeResult {
   readonly layerId: string;
 }
 
+// ─── Symmetry Types ───
+
+export type SymmetryMode = 'none' | 'vertical' | 'horizontal' | 'both' | 'radial';
+
+export interface SymmetryConfig {
+  readonly mode: SymmetryMode;
+  /** Axis X position in document pixels (default: canvas center) */
+  readonly axisX: number;
+  /** Axis Y position in document pixels (default: canvas center) */
+  readonly axisY: number;
+  /** Number of axes for radial mode (2-16) */
+  readonly radialCount: number;
+}
+
 // ─── Layer Types ───
 
 export type LayerType = 'raster' | 'group' | 'vector' | 'text' | 'fill' | 'adjustment';

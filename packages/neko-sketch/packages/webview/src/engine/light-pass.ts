@@ -10,7 +10,7 @@ import type { ITextureManager } from './types';
 import type { LightSceneObject } from '../types/scene';
 import type { AmbientLightConfig } from '../types/light';
 import { QUAD_VERT } from './shaders';
-import { LIGHT_POINT_FRAG, LIGHT_AMBIENT_FRAG } from './light-shaders';
+import { LIGHT_POINT_FRAG, LIGHT_NORMAL_FRAG, LIGHT_AMBIENT_FRAG } from './light-shaders';
 
 /** Fullscreen quad: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -34,6 +34,7 @@ export class LightPass {
 
   // Shader programs (lazy-compiled)
   private pointProgram: WebGLProgram | null = null;
+  private normalProgram: WebGLProgram | null = null;
   private ambientProgram: WebGLProgram | null = null;
 
   constructor(gl: WebGL2RenderingContext, textures: ITextureManager) {
@@ -80,6 +81,13 @@ export class LightPass {
     return this.pointProgram;
   }
 
+  private getNormalProgram(): WebGLProgram {
+    if (!this.normalProgram) {
+      this.normalProgram = this.compileProgram(QUAD_VERT, LIGHT_NORMAL_FRAG);
+    }
+    return this.normalProgram;
+  }
+
   private getAmbientProgram(): WebGLProgram {
     if (!this.ambientProgram) {
       this.ambientProgram = this.compileProgram(QUAD_VERT, LIGHT_AMBIENT_FRAG);
@@ -102,6 +110,7 @@ export class LightPass {
     height: number,
     lights: readonly LightSceneObject[],
     ambient: AmbientLightConfig,
+    normalMapTex?: WebGLTexture | null,
   ): WebGLTexture {
     const gl = this.gl;
     this.ensureBuffers(width, height);
@@ -116,32 +125,44 @@ export class LightPass {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
 
-    // Accumulate point lights
-    const pointProg = this.getPointProgram();
+    // Accumulate point lights — use normal-mapped shader when normal map is available
+    const useNormals = !!normalMapTex;
+    const lightProg = useNormals ? this.getNormalProgram() : this.getPointProgram();
+
     for (const light of lights) {
       if (light.properties.lightType !== 'point') continue;
 
-      gl.useProgram(pointProg);
+      gl.useProgram(lightProg);
 
       // Bind scene texture
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-      gl.uniform1i(gl.getUniformLocation(pointProg, 'u_scene'), 0);
+      gl.uniform1i(gl.getUniformLocation(lightProg, 'u_scene'), 0);
+
+      // Bind normal map if available
+      if (useNormals) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, normalMapTex!);
+        gl.uniform1i(gl.getUniformLocation(lightProg, 'u_normalMap'), 1);
+        gl.uniform1f(gl.getUniformLocation(lightProg, 'u_height'), light.properties.height);
+        gl.uniform1f(gl.getUniformLocation(lightProg, 'u_specularPower'), 32.0);
+        gl.uniform1f(gl.getUniformLocation(lightProg, 'u_specularIntensity'), 0.5);
+      }
 
       // Set transform to identity (texture-space rendering)
-      gl.uniformMatrix3fv(gl.getUniformLocation(pointProg, 'u_transform'), false, IDENTITY3);
+      gl.uniformMatrix3fv(gl.getUniformLocation(lightProg, 'u_transform'), false, IDENTITY3);
 
       // Light uniforms
-      gl.uniform2f(gl.getUniformLocation(pointProg, 'u_resolution'), width, height);
-      gl.uniform2f(gl.getUniformLocation(pointProg, 'u_lightPos'), light.x, light.y);
+      gl.uniform2f(gl.getUniformLocation(lightProg, 'u_resolution'), width, height);
+      gl.uniform2f(gl.getUniformLocation(lightProg, 'u_lightPos'), light.x, light.y);
       gl.uniform3f(
-        gl.getUniformLocation(pointProg, 'u_lightColor'),
+        gl.getUniformLocation(lightProg, 'u_lightColor'),
         light.properties.color[0],
         light.properties.color[1],
         light.properties.color[2],
       );
-      gl.uniform1f(gl.getUniformLocation(pointProg, 'u_intensity'), light.properties.intensity);
-      gl.uniform1f(gl.getUniformLocation(pointProg, 'u_radius'), light.properties.radius);
+      gl.uniform1f(gl.getUniformLocation(lightProg, 'u_intensity'), light.properties.intensity);
+      gl.uniform1f(gl.getUniformLocation(lightProg, 'u_radius'), light.properties.radius);
 
       this.drawQuad();
     }
@@ -220,6 +241,7 @@ export class LightPass {
     if (this.litFbo) this.textures.deleteFramebuffer(this.litFbo);
     if (this.litTex) this.textures.deleteTexture(this.litTex);
     if (this.pointProgram) gl.deleteProgram(this.pointProgram);
+    if (this.normalProgram) gl.deleteProgram(this.normalProgram);
     if (this.ambientProgram) gl.deleteProgram(this.ambientProgram);
     if (this.quadVAO) gl.deleteVertexArray(this.quadVAO);
     if (this.quadVBO) gl.deleteBuffer(this.quadVBO);

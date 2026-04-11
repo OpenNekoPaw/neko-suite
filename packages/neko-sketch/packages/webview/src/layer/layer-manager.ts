@@ -133,7 +133,7 @@ export function duplicateLayer(layers: LayerData[], id: string): LayerData[] {
 export function updateLayer(
   layers: LayerData[],
   id: string,
-  updates: Partial<Pick<LayerData, 'name' | 'visible' | 'locked' | 'opacity' | 'blendMode'>>,
+  updates: Partial<LayerData>,
 ): LayerData[] {
   return layers.map((l) => {
     if (l.id === id) {
