@@ -29,7 +29,15 @@ export interface EpubNavigateMessage {
   payload: { href: string };
 }
 
-export type DocumentExtensionMessage = DocumentDataMessage | EpubNavigateMessage;
+export interface DocumentRestoreStateMessage {
+  type: 'document:restoreState';
+  payload: Record<string, unknown>;
+}
+
+export type DocumentExtensionMessage =
+  | DocumentDataMessage
+  | EpubNavigateMessage
+  | DocumentRestoreStateMessage;
 
 // =============================================================================
 // Webview → Extension Messages
@@ -37,6 +45,31 @@ export type DocumentExtensionMessage = DocumentDataMessage | EpubNavigateMessage
 
 export interface DocumentReadyMessage {
   type: 'ready';
+}
+
+export interface DocumentSaveStateMessage {
+  type: 'document:saveState';
+  payload: Record<string, unknown>;
+}
+
+export interface DocumentStatusPayload {
+  /** Total page/chapter count for the current document. */
+  pageCount?: number;
+  /** Current page number or current chapter index (1-based). */
+  currentPage?: number;
+  /** Current chapter href for chapter-based documents (EPUB). */
+  chapterHref?: string;
+  /** Current chapter title for chapter-based documents (EPUB). */
+  chapterTitle?: string;
+  /** File size in bytes. */
+  fileSize?: number;
+  /** Zoom percentage, e.g. 125. */
+  zoom?: number;
+}
+
+export interface DocumentStatusUpdateMessage {
+  type: 'document:statusUpdate';
+  payload: DocumentStatusPayload;
 }
 
 /** Region selection for CBZ image-based documents */
@@ -65,4 +98,8 @@ export interface DocumentSendToAiMessage {
   };
 }
 
-export type DocumentWebviewMessage = DocumentReadyMessage | DocumentSendToAiMessage;
+export type DocumentWebviewMessage =
+  | DocumentReadyMessage
+  | DocumentSaveStateMessage
+  | DocumentStatusUpdateMessage
+  | DocumentSendToAiMessage;

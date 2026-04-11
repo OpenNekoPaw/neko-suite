@@ -17,7 +17,7 @@ import type { TocEntry } from '../epub/EpubParser';
 // Tree Node
 // =============================================================================
 
-interface TocNode {
+export interface TocNode {
   entry: TocEntry;
   children: TocNode[];
 }
@@ -31,6 +31,7 @@ export class EpubOutlineProvider implements vscode.TreeDataProvider<TocNode>, vs
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private roots: TocNode[] = [];
+  private activeHref: string | null = null;
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -42,8 +43,16 @@ export class EpubOutlineProvider implements vscode.TreeDataProvider<TocNode>, vs
     this._onDidChangeTreeData.fire(undefined);
   }
 
+  /** Mark the current chapter href and return the matching node if found. */
+  setActiveHref(href: string | null): TocNode | undefined {
+    this.activeHref = href;
+    this._onDidChangeTreeData.fire(undefined);
+    return href ? findNodeByHref(this.roots, href) : undefined;
+  }
+
   /** Clear the outline (e.g. when no EPUB editor is active). */
   clear(): void {
+    this.activeHref = null;
     this.roots = [];
     this._onDidChangeTreeData.fire(undefined);
   }
@@ -54,6 +63,7 @@ export class EpubOutlineProvider implements vscode.TreeDataProvider<TocNode>, vs
 
   getTreeItem(element: TocNode): vscode.TreeItem {
     const hasChildren = element.children.length > 0;
+    const isActive = this.activeHref ? matchesHref(element.entry.href, this.activeHref) : false;
     const item = new vscode.TreeItem(
       element.entry.label || 'Untitled',
       hasChildren
@@ -62,8 +72,10 @@ export class EpubOutlineProvider implements vscode.TreeDataProvider<TocNode>, vs
     );
 
     item.description = element.entry.href;
-    item.tooltip = element.entry.label;
-    item.iconPath = new vscode.ThemeIcon(hasChildren ? 'book' : 'bookmark');
+    item.tooltip = isActive ? `${element.entry.label} (Current chapter)` : element.entry.label;
+    item.iconPath = new vscode.ThemeIcon(
+      isActive ? 'circle-filled' : hasChildren ? 'book' : 'bookmark',
+    );
     item.command = {
       command: 'neko.epub.goToChapter',
       title: 'Go to Chapter',
@@ -110,14 +122,21 @@ function buildHierarchy(entries: TocEntry[]): TocNode[] {
     const node: TocNode = { entry, children: [] };
 
     // Pop stack until we find a parent at shallower depth
-    while (stack.length > 0 && stack[stack.length - 1]!.entry.depth >= entry.depth) {
+    while (stack.length > 0) {
+      const parent = stack[stack.length - 1];
+      if (!parent || parent.entry.depth < entry.depth) {
+        break;
+      }
       stack.pop();
     }
 
     if (stack.length === 0) {
       roots.push(node);
     } else {
-      stack[stack.length - 1]!.children.push(node);
+      const parent = stack[stack.length - 1];
+      if (parent) {
+        parent.children.push(node);
+      }
     }
 
     stack.push(node);
@@ -142,4 +161,17 @@ function findParentInSubtree(node: TocNode, target: TocNode): TocNode | undefine
     if (result) return result;
   }
   return undefined;
+}
+
+function findNodeByHref(nodes: TocNode[], href: string): TocNode | undefined {
+  for (const node of nodes) {
+    if (matchesHref(node.entry.href, href)) return node;
+    const nested = findNodeByHref(node.children, href);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function matchesHref(a: string, b: string): boolean {
+  return a === b || a.includes(b) || b.includes(a);
 }

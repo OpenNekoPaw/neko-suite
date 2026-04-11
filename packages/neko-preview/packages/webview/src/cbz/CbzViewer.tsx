@@ -46,6 +46,8 @@ export const CbzViewer: FC = () => {
   const [imageHeights, setImageHeights] = useState<Map<number, number>>(new Map());
   const persistedPageRef = useRef(currentPage);
   persistedPageRef.current = currentPage;
+  const pageCacheRef = useRef(pageCache);
+  pageCacheRef.current = pageCache;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Track which pages are currently being decoded to avoid duplicate work
@@ -57,7 +59,7 @@ export const CbzViewer: FC = () => {
   // Track active waterfall images for region selection
   const waterfallImgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
 
-  const { selection, sendTextToAgent, sendRegionToAgent, sendFileToAgent } = useDocumentSelection({
+  const { sendRegionToAgent, sendFileToAgent } = useDocumentSelection({
     pageNumber: currentPage + 1,
     enabled: false, // CBZ uses region selection, not text
   });
@@ -113,10 +115,6 @@ export const CbzViewer: FC = () => {
       setCurrentPage(restoredPage);
       decodingRef.current.clear();
       setLoading(false);
-      postMessage({
-        type: 'document:statusUpdate',
-        payload: { pageCount: filtered.length, currentPage: restoredPage + 1 },
-      } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
@@ -188,7 +186,7 @@ export const CbzViewer: FC = () => {
     }
 
     for (const i of keep) {
-      if (!pageCache.has(i)) {
+      if (!pageCacheRef.current.has(i)) {
         void decodePage(i, imageEntries);
       }
     }
@@ -204,6 +202,32 @@ export const CbzViewer: FC = () => {
       return next;
     });
   }, [viewMode, currentPage, imageEntries, decodePage]); // pageCache intentionally omitted
+
+  const updateCurrentPageFromScroll = useCallback(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const anchorY = containerRect.top + containerRect.height / 3;
+    let fallbackPage: number | null = null;
+
+    for (const [idx, el] of pageRefsMap.current) {
+      const rect = el.getBoundingClientRect();
+      if (fallbackPage == null && rect.bottom >= containerRect.top) {
+        fallbackPage = idx;
+      }
+      if (rect.top <= anchorY && rect.bottom >= anchorY) {
+        if (idx !== persistedPageRef.current) {
+          setCurrentPage(idx);
+        }
+        return;
+      }
+    }
+
+    if (fallbackPage != null && fallbackPage !== persistedPageRef.current) {
+      setCurrentPage(fallbackPage);
+    }
+  }, [setCurrentPage]);
 
   // =========================================================================
   // Waterfall mode: IntersectionObserver
@@ -240,12 +264,6 @@ export const CbzViewer: FC = () => {
           }
         }
 
-        // Update current page to first visible
-        if (visibleSet.size > 0) {
-          const sorted = [...visibleSet].sort((a, b) => a - b);
-          setCurrentPage(sorted[0] ?? 0);
-        }
-
         // Revoke pages far from any visible page
         const allVisible = [...visibleSet];
         if (allVisible.length > 0) {
@@ -267,6 +285,8 @@ export const CbzViewer: FC = () => {
             return changed ? next : prev;
           });
         }
+
+        updateCurrentPageFromScroll();
       },
       {
         root: scrollContainer,
@@ -284,7 +304,33 @@ export const CbzViewer: FC = () => {
       observer.disconnect();
       observerRef.current = null;
     };
-  }, [viewMode, imageEntries, decodePage]); // pageCache intentionally omitted
+  }, [viewMode, imageEntries, decodePage, updateCurrentPageFromScroll]);
+
+  useEffect(() => {
+    if (viewMode !== 'scroll' || imageEntries.length === 0) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    let rafId = 0;
+    const handleScroll = () => {
+      if (rafId !== 0) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateCurrentPageFromScroll();
+      });
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      if (rafId !== 0) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [viewMode, imageEntries.length, updateCurrentPageFromScroll]);
 
   // Scroll to restored page after initial load in scroll mode
   const hasRestoredRef = useRef(false);
@@ -302,11 +348,22 @@ export const CbzViewer: FC = () => {
   // Revoke all Blob URLs on unmount
   useEffect(() => {
     return () => {
-      pageCache.forEach((url) => URL.revokeObjectURL(url));
+      pageCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = imageEntries.length;
+
+  useEffect(() => {
+    if (loading || totalPages === 0) return;
+    postMessage({
+      type: 'document:statusUpdate',
+      payload: {
+        pageCount: totalPages,
+        currentPage: currentPage + 1,
+      },
+    });
+  }, [loading, totalPages, currentPage]);
 
   const goToPage = useCallback(
     (page: number) => {

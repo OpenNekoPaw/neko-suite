@@ -19,32 +19,10 @@ import type { PreviewEntry } from '../../utils/html';
 import { getWebviewHtml } from '../../utils/html';
 import { getLogger } from '../../utils/logger';
 import type { StatusBarManager } from '../../ui/StatusBarManager';
-import type { DocumentWebviewMessage } from '../../types/document-messages';
+import type { DocumentStatusPayload, DocumentWebviewMessage } from '../../types/document-messages';
+import { handleError } from '../../utils/errorHandler';
 
 const logger = getLogger('DocumentProvider');
-
-/**
- * Resolve a file path that may contain asset/media library variables.
- *
- * Paths from asset libraries may contain unresolved variables like "${A}/..."
- * which need to be expanded to absolute paths before passing to neko-engine.
- * Always attempts resolution — the command is a no-op for plain absolute paths.
- */
-async function resolveDocumentPath(fsPath: string): Promise<string> {
-  try {
-    const resolved = await vscode.commands.executeCommand<string>(
-      'neko.assets.resolvePath',
-      fsPath,
-    );
-    if (resolved && resolved !== fsPath) {
-      logger.info(`Resolved path: ${fsPath} → ${resolved}`);
-      return resolved;
-    }
-  } catch {
-    // neko-assets not active — fall through to raw path
-  }
-  return fsPath;
-}
 
 /**
  * Configure a webview panel for document preview and wire up message handling.
@@ -59,6 +37,8 @@ export async function setupDocumentWebview(
     onReady?: () => Promise<void>;
     /** Handle additional webview messages not covered by the default switch. */
     onMessage?: (msg: { type: string; payload: Record<string, unknown> }) => void;
+    /** Handle document status updates after the default status-bar update. */
+    onStatusUpdate?: (payload: DocumentStatusPayload) => void;
     /** StatusBarManager for document info display. */
     statusBar?: StatusBarManager;
     /** ExtensionContext for workspaceState persistence (reading progress). */
@@ -118,7 +98,7 @@ export async function setupDocumentWebview(
 
         // ── Status bar update from webview ─────────────────────────────
         case 'document:statusUpdate': {
-          const payload = (msg as { payload: Record<string, unknown> }).payload;
+          const payload = (msg as { payload: DocumentStatusPayload }).payload;
           if (options?.statusBar) {
             const format =
               entry === 'epub'
@@ -137,6 +117,7 @@ export async function setupDocumentWebview(
               zoom: payload.zoom as number | undefined,
             });
           }
+          options?.onStatusUpdate?.(payload);
           break;
         }
 
@@ -166,8 +147,11 @@ export async function setupDocumentWebview(
             await vscode.commands.executeCommand('neko.agent.sendContext', payload);
           } catch {
             logger.warn('neko.agent.sendContext command not available');
-            vscode.window.showWarningMessage(
-              'AI Agent extension is not available. Please install neko-agent to use this feature.',
+            void handleError(
+              new Error(
+                'AI Agent extension is not available. Please install neko-agent to use this feature.',
+              ),
+              { showToUser: true, severity: 'warning' },
             );
           }
           break;

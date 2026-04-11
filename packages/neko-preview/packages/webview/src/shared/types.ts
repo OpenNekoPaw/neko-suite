@@ -4,6 +4,8 @@
  * Defines the postMessage contract between Extension and Webview.
  */
 
+import type { DocumentExtensionMessage, DocumentWebviewMessage } from './document-types';
+
 // =============================================================================
 // Media Info (from Extension probe)
 // =============================================================================
@@ -81,8 +83,6 @@ export interface PreviewStreamReconnectMessage {
   };
 }
 
-import type { DocumentDataMessage } from './document-types';
-
 export type ExtensionMessage =
   | PreviewInitMessage
   | PreviewStreamReadyMessage
@@ -90,7 +90,7 @@ export type ExtensionMessage =
   | PreviewFrameDataMessage
   | PreviewWaveformMessage
   | PreviewLyricsMessage
-  | DocumentDataMessage;
+  | DocumentExtensionMessage;
 
 // =============================================================================
 // Webview → Extension Messages
@@ -153,4 +153,5 @@ export type WebviewMessage =
   | SpeedMessage
   | CaptureFrameMessage
   | StatusUpdateMessage
-  | EofMessage;
+  | EofMessage
+  | DocumentWebviewMessage;

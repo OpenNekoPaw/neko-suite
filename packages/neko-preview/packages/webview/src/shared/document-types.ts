@@ -1,63 +1,25 @@
 /**
- * Document preview message types (shared across all document webviews).
- * Mirrors the Extension-side types in types/document-messages.ts.
- *
- * New protocol (postMessage-only, no direct HTTP from webview):
- *   Extension → Webview:
- *     document:metadata  — probe result + token
- *     document:rangeData — byte range response (base64)
- *     document:entryData — ZIP entry response (base64)
- *   Webview → Extension:
- *     document:readRange — request byte range
- *     document:readEntry — request ZIP entry
+ * Document preview message types shared by document webviews.
+ * Mirrors the extension-side protocol in extension/src/types/document-messages.ts.
  */
 
-// ── Extension → Webview ─────────────────────────────────────────────────────
+// =============================================================================
+// Extension → Webview
+// =============================================================================
 
-/** Legacy: sends data or url. Kept for backward compatibility. */
 export interface DocumentDataMessage {
   type: 'document:data';
   payload: {
     data?: string;
     url?: string;
-    fileName: string;
-    fileSize: number;
+    fileName?: string;
+    fileSize?: number;
   };
 }
 
-/** New: sends probe metadata after engine connection. */
-export interface DocumentMetadataMessage {
-  type: 'document:metadata';
-  payload: {
-    format: string;
-    fileSize: number;
-    mimeType: string;
-    entryCount?: number;
-    title?: string;
-    author?: string;
-    token: string;
-    fileName: string;
-  };
-}
-
-/** Response to document:readRange */
-export interface DocumentRangeDataMessage {
-  type: 'document:rangeData';
-  payload: {
-    start: number;
-    end: number;
-    data: string; // base64
-  };
-}
-
-/** Response to document:readEntry */
-export interface DocumentEntryDataMessage {
-  type: 'document:entryData';
-  payload: {
-    entryPath: string;
-    data: string; // base64
-    contentType: string;
-  };
+export interface DocumentRestoreStateMessage {
+  type: 'document:restoreState';
+  payload: Record<string, unknown>;
 }
 
 export interface EpubNavigateMessage {
@@ -67,12 +29,36 @@ export interface EpubNavigateMessage {
 
 export type DocumentExtensionMessage =
   | DocumentDataMessage
-  | DocumentMetadataMessage
-  | DocumentRangeDataMessage
-  | DocumentEntryDataMessage
+  | DocumentRestoreStateMessage
   | EpubNavigateMessage;
 
+// =============================================================================
 // Webview → Extension
+// =============================================================================
+
+export interface DocumentReadyMessage {
+  type: 'ready';
+}
+
+export interface DocumentSaveStateMessage {
+  type: 'document:saveState';
+  payload: Record<string, unknown>;
+}
+
+export interface DocumentStatusPayload {
+  pageCount?: number;
+  currentPage?: number;
+  chapterHref?: string;
+  chapterTitle?: string;
+  fileSize?: number;
+  zoom?: number;
+}
+
+export interface DocumentStatusUpdateMessage {
+  type: 'document:statusUpdate';
+  payload: DocumentStatusPayload;
+}
+
 export interface DocumentRegion {
   x: number;
   y: number;
@@ -80,16 +66,22 @@ export interface DocumentRegion {
   height: number;
 }
 
-export interface DocumentSendToAiPayload {
-  selectedText?: string;
-  pageNumber?: number;
-  chapterTitle?: string;
-  region?: DocumentRegion;
-  contentKind?: 'text' | 'image' | 'mixed';
+export interface DocumentSendToAiMessage {
+  type: 'document:sendToAi';
+  payload: {
+    text?: string;
+    imageData?: string;
+    contentKind: 'text' | 'image' | 'mixed';
+    context?: {
+      page?: number;
+      chapter?: string;
+      region?: DocumentRegion;
+    };
+  };
 }
 
-export function postDocumentSendToAi(payload: DocumentSendToAiPayload): void {
-  // postMessage is typed loosely in webview context; cast required.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).vscodeApi?.postMessage({ type: 'document:sendToAi', payload });
-}
+export type DocumentWebviewMessage =
+  | DocumentReadyMessage
+  | DocumentSaveStateMessage
+  | DocumentStatusUpdateMessage
+  | DocumentSendToAiMessage;

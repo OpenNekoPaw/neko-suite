@@ -63,6 +63,10 @@ const MAX_SELECTION_CHARS = 4000;
 
 type ViewMode = 'waterfall' | 'paginated';
 
+function matchesHref(a: string, b: string): boolean {
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 /**
  * Custom request function for epub.js that uses fetch() instead of XMLHttpRequest.
  * VSCode webview service workers can block XHR to localhost; fetch works reliably.
@@ -123,7 +127,10 @@ export const EpubViewer: FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentChapter, setCurrentChapter] = usePersistedState('currentChapter', '');
+  const [currentChapterHref, setCurrentChapterHref] = usePersistedState('currentChapterHref', '');
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('viewMode', 'waterfall');
+  const [chapterCount, setChapterCount] = useState(0);
+  const [, setChapterLayoutVersion] = useState(0);
   const [epubSelection, setEpubSelection] = useState<DocumentSelection | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [iframeMenuPos, setIframeMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -132,6 +139,8 @@ export const EpubViewer: FC = () => {
 
   const persistedChapterRef = useRef(currentChapter);
   persistedChapterRef.current = currentChapter;
+  const persistedChapterHrefRef = useRef(currentChapterHref);
+  persistedChapterHrefRef.current = currentChapterHref;
 
   // Rendition mode refs (paginated)
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -142,6 +151,7 @@ export const EpubViewer: FC = () => {
 
   // Waterfall mode refs
   const waterfallContainerRef = useRef<HTMLDivElement>(null);
+  const measureContainerRef = useRef<HTMLDivElement>(null);
   const spineEntriesRef = useRef<SpineEntry[]>([]);
   const chapterRefsMap = useRef<Map<number, HTMLElement>>(new Map());
   const loadedChaptersRef = useRef<Set<number>>(new Set());
@@ -149,12 +159,26 @@ export const EpubViewer: FC = () => {
   const waterfallObserverRef = useRef<IntersectionObserver | null>(null);
   const [waterfallReady, setWaterfallReady] = useState(false);
   const chapterHeightsRef = useRef<Map<number, number>>(new Map());
+  const measuringChaptersRef = useRef<Map<number, Promise<number>>>(new Map());
+  const measurementQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Waterfall text selection via native document selection
-  const { selection: waterfallSelection, sendTextToAgent: waterfallSendTextToAgent } =
-    useDocumentSelection({
-      chapterTitle: currentChapter,
-    });
+  const { selection: waterfallSelection } = useDocumentSelection({
+    chapterTitle: currentChapter,
+  });
+
+  const applyCurrentChapter = useCallback(
+    (chapter: TocItem | null | undefined) => {
+      if (!chapter) return;
+      if (chapter.label !== persistedChapterRef.current) {
+        setCurrentChapter(chapter.label);
+      }
+      if (chapter.href !== persistedChapterHrefRef.current) {
+        setCurrentChapterHref(chapter.href);
+      }
+    },
+    [setCurrentChapter, setCurrentChapterHref],
+  );
 
   // =========================================================================
   // Extension ↔ Webview messaging
@@ -216,80 +240,83 @@ export const EpubViewer: FC = () => {
     return list?.[0] ?? null;
   };
 
-  const setupRendition = useCallback((rendition: Rendition, tocItems: TocItem[]) => {
-    rendition.themes.register('vscode', {
-      body: {
-        background: 'var(--vscode-editor-background) !important',
-        color: 'var(--vscode-editor-foreground) !important',
-        'font-family': 'var(--vscode-font-family) !important',
-        'line-height': '1.6',
-        padding: '20px !important',
-      },
-      'a, a:visited': { color: 'var(--vscode-textLink-foreground) !important' },
-      'img, image': {
-        'max-width': '100% !important',
-        height: 'auto !important',
-        display: 'block !important',
-        margin: '0 auto !important',
-      },
-    });
-    rendition.themes.select('vscode');
+  const setupRendition = useCallback(
+    (rendition: Rendition, tocItems: TocItem[]) => {
+      rendition.themes.register('vscode', {
+        body: {
+          background: 'var(--vscode-editor-background) !important',
+          color: 'var(--vscode-editor-foreground) !important',
+          'font-family': 'var(--vscode-font-family) !important',
+          'line-height': '1.6',
+          padding: '20px !important',
+        },
+        'a, a:visited': { color: 'var(--vscode-textLink-foreground) !important' },
+        'img, image': {
+          'max-width': '100% !important',
+          height: 'auto !important',
+          display: 'block !important',
+          margin: '0 auto !important',
+        },
+      });
+      rendition.themes.select('vscode');
 
-    rendition.on('relocated', (location: { start: { href: string } }) => {
-      const chapter = tocItems.find((item) => location.start.href.includes(item.href));
-      if (chapter) setCurrentChapter(chapter.label);
-      setEpubSelection(null);
-    });
-
-    rendition.on('selected', async (_cfi: string, contents: EpubContents) => {
-      const sel = contents.window.getSelection();
-      const raw = sel?.toString().trim() ?? '';
-      if (!raw) {
+      rendition.on('relocated', (location: { start: { href: string } }) => {
+        const chapter = tocItems.find((item) => matchesHref(location.start.href, item.href));
+        applyCurrentChapter(chapter);
         setEpubSelection(null);
-        return;
-      }
-      const text = raw.length > MAX_SELECTION_CHARS ? raw.slice(0, MAX_SELECTION_CHARS) : raw;
+      });
 
-      const iframeEl = viewerRef.current?.querySelector('iframe');
-      const iframeRect = iframeEl?.getBoundingClientRect();
-      const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
-      const rangeRect = range?.getBoundingClientRect();
-      const rect =
-        iframeRect && rangeRect
-          ? new DOMRect(
-              iframeRect.left + rangeRect.left,
-              iframeRect.top + rangeRect.top,
-              rangeRect.width,
-              rangeRect.height,
-            )
-          : null;
-
-      setEpubSelection({ text, rect });
-    });
-
-    rendition.on('click', () => {
-      setEpubSelection(null);
-    });
-
-    // Forward contextmenu from iframe to parent menu
-    rendition.hooks.content.register((contents: EpubContents) => {
-      contents.document.addEventListener('contextmenu', (e: MouseEvent) => {
-        e.preventDefault();
-        // Detect right-click on image
-        const target = e.target as HTMLElement;
-        const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
-        setRightClickedImageSrc(imgEl?.src ?? null);
+      rendition.on('selected', async (_cfi: string, contents: EpubContents) => {
+        const sel = contents.window.getSelection();
+        const raw = sel?.toString().trim() ?? '';
+        if (!raw) {
+          setEpubSelection(null);
+          return;
+        }
+        const text = raw.length > MAX_SELECTION_CHARS ? raw.slice(0, MAX_SELECTION_CHARS) : raw;
 
         const iframeEl = viewerRef.current?.querySelector('iframe');
         const iframeRect = iframeEl?.getBoundingClientRect();
-        if (iframeRect) {
-          const x = Math.min(iframeRect.left + e.clientX, window.innerWidth - 180);
-          const y = Math.min(iframeRect.top + e.clientY, window.innerHeight - 120);
-          setIframeMenuPos({ x, y });
-        }
+        const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+        const rangeRect = range?.getBoundingClientRect();
+        const rect =
+          iframeRect && rangeRect
+            ? new DOMRect(
+                iframeRect.left + rangeRect.left,
+                iframeRect.top + rangeRect.top,
+                rangeRect.width,
+                rangeRect.height,
+              )
+            : null;
+
+        setEpubSelection({ text, rect });
       });
-    });
-  }, []);
+
+      rendition.on('click', () => {
+        setEpubSelection(null);
+      });
+
+      // Forward contextmenu from iframe to parent menu
+      rendition.hooks.content.register((contents: EpubContents) => {
+        contents.document.addEventListener('contextmenu', (e: MouseEvent) => {
+          e.preventDefault();
+          // Detect right-click on image
+          const target = e.target as HTMLElement;
+          const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
+          setRightClickedImageSrc(imgEl?.src ?? null);
+
+          const iframeEl = viewerRef.current?.querySelector('iframe');
+          const iframeRect = iframeEl?.getBoundingClientRect();
+          if (iframeRect) {
+            const x = Math.min(iframeRect.left + e.clientX, window.innerWidth - 180);
+            const y = Math.min(iframeRect.top + e.clientY, window.innerHeight - 120);
+            setIframeMenuPos({ x, y });
+          }
+        });
+      });
+    },
+    [applyCurrentChapter],
+  );
 
   // =========================================================================
   // Book loading / re-rendering
@@ -365,6 +392,7 @@ export const EpubViewer: FC = () => {
       }
     }
     spineEntriesRef.current = entries;
+    setChapterCount(entries.length || tocItems.length);
 
     return tocItems;
   }, []);
@@ -395,16 +423,18 @@ export const EpubViewer: FC = () => {
 
   /** Navigate to persisted chapter after load */
   const restoreChapter = useCallback(() => {
-    const saved = persistedChapterRef.current;
-    if (!saved) return;
-    const toc = tocRef.current.find((item) => item.label === saved);
+    const savedHref = persistedChapterHrefRef.current;
+    const fallbackLabel = persistedChapterRef.current;
+    const toc = savedHref
+      ? tocRef.current.find((item) => matchesHref(item.href, savedHref))
+      : fallbackLabel
+        ? tocRef.current.find((item) => item.label === fallbackLabel)
+        : null;
     if (!toc) return;
     // Delay to let waterfall observer or rendition settle
     requestAnimationFrame(() => {
       // Waterfall: scroll to chapter element directly
-      const entry = spineEntriesRef.current.find(
-        (e) => e.href === toc.href || e.href.includes(toc.href) || toc.href.includes(e.href),
-      );
+      const entry = spineEntriesRef.current.find((e) => matchesHref(e.href, toc.href));
       if (entry) {
         const el = chapterRefsMap.current.get(entry.index);
         el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -428,12 +458,6 @@ export const EpubViewer: FC = () => {
         await initBook(book);
         setLoading(false);
         loadingRef.current = false;
-        // Send status with chapter count
-        const chapterCount = spineEntriesRef.current.length || tocRef.current.length;
-        postMessage({
-          type: 'document:statusUpdate',
-          payload: { pageCount: chapterCount },
-        } as never);
         // Restore persisted chapter position
         restoreChapter();
       } catch (err) {
@@ -471,6 +495,25 @@ export const EpubViewer: FC = () => {
     },
     [initBook],
   );
+
+  useEffect(() => {
+    if (loading || chapterCount === 0) return;
+
+    const currentChapterIndex = currentChapterHref
+      ? tocRef.current.findIndex((item) => matchesHref(item.href, currentChapterHref)) + 1
+      : undefined;
+
+    postMessage({
+      type: 'document:statusUpdate',
+      payload: {
+        pageCount: chapterCount,
+        currentPage:
+          currentChapterIndex && currentChapterIndex > 0 ? currentChapterIndex : undefined,
+        chapterHref: currentChapterHref || undefined,
+        chapterTitle: currentChapter || undefined,
+      },
+    });
+  }, [loading, chapterCount, currentChapterHref, currentChapter]);
 
   // =========================================================================
   // Waterfall mode: load/unload chapter content
@@ -539,6 +582,26 @@ export const EpubViewer: FC = () => {
     loadedChaptersRef.current.delete(entry.index);
   }, []);
 
+  /** Update current chapter title based on scroll position */
+  const updateCurrentChapterFromScroll = useCallback(() => {
+    const container = waterfallContainerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const checkY = containerRect.top + containerRect.height * 0.3;
+
+    for (const entry of spineEntriesRef.current) {
+      const el = chapterRefsMap.current.get(entry.index);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.top <= checkY && rect.bottom >= checkY) {
+        const toc = tocRef.current.find((item) => matchesHref(entry.href, item.href));
+        applyCurrentChapter(toc);
+        return;
+      }
+    }
+  }, [applyCurrentChapter]);
+
   // =========================================================================
   // Waterfall mode: IntersectionObserver
   // =========================================================================
@@ -584,40 +647,48 @@ export const EpubViewer: FC = () => {
       observer.disconnect();
       waterfallObserverRef.current = null;
     };
-  }, [viewMode, waterfallReady, loadChapterContent, unloadChapterContent]);
-
-  /** Update current chapter title based on scroll position */
-  const updateCurrentChapterFromScroll = useCallback(() => {
-    const container = waterfallContainerRef.current;
-    if (!container) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const checkY = containerRect.top + containerRect.height * 0.3;
-
-    for (const entry of spineEntriesRef.current) {
-      const el = chapterRefsMap.current.get(entry.index);
-      if (!el) continue;
-      const rect = el.getBoundingClientRect();
-      if (rect.top <= checkY && rect.bottom >= checkY) {
-        const toc = tocRef.current.find(
-          (item) => entry.href.includes(item.href) || item.href.includes(entry.href),
-        );
-        if (toc) setCurrentChapter(toc.label);
-        return;
-      }
-    }
-  }, []);
+  }, [
+    viewMode,
+    waterfallReady,
+    loadChapterContent,
+    unloadChapterContent,
+    updateCurrentChapterFromScroll,
+  ]);
 
   /** Navigate waterfall to a specific href */
   const navigateWaterfallToHref = useCallback((href: string) => {
-    const entry = spineEntriesRef.current.find(
-      (e) => e.href === href || e.href.includes(href) || href.includes(e.href),
-    );
+    const entry = spineEntriesRef.current.find((e) => matchesHref(e.href, href));
     if (entry) {
       const el = chapterRefsMap.current.get(entry.index);
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, []);
+
+  useEffect(() => {
+    if (viewMode !== 'waterfall' || !waterfallReady) return;
+
+    const container = waterfallContainerRef.current;
+    if (!container) return;
+
+    let rafId = 0;
+    const handleScroll = () => {
+      if (rafId !== 0) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateCurrentChapterFromScroll();
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (rafId !== 0) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [viewMode, waterfallReady, updateCurrentChapterFromScroll]);
 
   const setChapterRef = useCallback((index: number, el: HTMLElement | null) => {
     if (el) {
@@ -701,8 +772,11 @@ export const EpubViewer: FC = () => {
       | undefined;
     const currentCfi = location?.start?.cfi;
 
-    // Find the TOC href for the current chapter (bridge between modes)
-    const chapterHref = tocRef.current.find((item) => item.label === currentChapter)?.href;
+    // Current chapter href bridges waterfall and paginated modes.
+    const chapterHref =
+      currentChapterHref ||
+      tocRef.current.find((item) => item.label === currentChapter)?.href ||
+      undefined;
 
     setViewMode(nextMode);
     setWaterfallReady(false);
@@ -725,7 +799,7 @@ export const EpubViewer: FC = () => {
       const displayTarget = currentCfi ?? chapterHref;
       await renderBook(book, tocRef.current, displayTarget);
     }
-  }, [viewMode, renderBook, currentChapter, navigateWaterfallToHref]);
+  }, [viewMode, renderBook, currentChapter, currentChapterHref, navigateWaterfallToHref]);
 
   // =========================================================================
   // Send page to AI

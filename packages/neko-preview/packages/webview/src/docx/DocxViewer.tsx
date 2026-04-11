@@ -65,7 +65,6 @@ export const DocxViewer: FC = () => {
         });
       }
       setLoading(false);
-      postMessage({ type: 'document:statusUpdate', payload: {} } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
@@ -93,6 +92,16 @@ export const DocxViewer: FC = () => {
 
   const zoomIn = useCallback(() => setScale((s) => Math.min(s + 0.1, 3)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(s - 0.1, 0.5)), []);
+
+  useEffect(() => {
+    if (loading) return;
+    postMessage({
+      type: 'document:statusUpdate',
+      payload: {
+        zoom: Math.round(scale * 100),
+      },
+    });
+  }, [loading, scale]);
 
   const [rightClickedImageSrc, setRightClickedImageSrc] = useState<string | null>(null);
 

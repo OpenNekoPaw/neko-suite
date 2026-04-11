@@ -13,6 +13,15 @@ import {
 } from './documentProviderHelper';
 import { previewFileServer, UnresolvedPathVariableError } from './PreviewFileServer';
 import type { StatusBarManager } from '../../ui/StatusBarManager';
+import type { DocumentStatusPayload } from '../../types/document-messages';
+
+export interface EpubActiveLocation {
+  uri: vscode.Uri;
+  currentPage?: number;
+  pageCount?: number;
+  chapterHref?: string;
+  chapterTitle?: string;
+}
 
 export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider, vscode.Disposable {
   static readonly viewType = 'neko.epubPreview';
@@ -21,11 +30,17 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
   private readonly panels = new Map<string, vscode.WebviewPanel>();
   /** fsPath → registered token (for cleanup on panel dispose) */
   private readonly tokens = new Map<string, string>();
+  /** fsPath → current reading location */
+  private readonly locations = new Map<string, Omit<EpubActiveLocation, 'uri'>>();
   private _activeUri: vscode.Uri | null = null;
 
   private readonly _onDidChangeActiveEpub = new vscode.EventEmitter<vscode.Uri | null>();
   /** Fires when the active EPUB editor changes (or becomes null). */
   readonly onDidChangeActiveEpub = this._onDidChangeActiveEpub.event;
+  private readonly _onDidChangeActiveLocation =
+    new vscode.EventEmitter<EpubActiveLocation | null>();
+  /** Fires when the active EPUB reading location changes. */
+  readonly onDidChangeActiveLocation = this._onDidChangeActiveLocation.event;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -49,20 +64,33 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
     const key = document.uri.fsPath;
     this.panels.set(key, webviewPanel);
 
+    const emitActiveLocation = (): void => {
+      if (this._activeUri?.fsPath !== key) return;
+      this._onDidChangeActiveLocation.fire(this.getActiveLocation());
+    };
+
     webviewPanel.onDidChangeViewState((e) => {
       if (e.webviewPanel.active) {
         this._activeUri = document.uri;
         this._onDidChangeActiveEpub.fire(document.uri);
+        emitActiveLocation();
       }
     });
+
+    if (webviewPanel.active) {
+      this._activeUri = document.uri;
+      this._onDidChangeActiveEpub.fire(document.uri);
+    }
 
     const filePath = document.uri.fsPath;
 
     webviewPanel.onDidDispose(() => {
       this.panels.delete(key);
+      this.locations.delete(key);
       if (this._activeUri?.fsPath === key) {
         this._activeUri = null;
         this._onDidChangeActiveEpub.fire(null);
+        this._onDidChangeActiveLocation.fire(null);
       }
       const token = this.tokens.get(key);
       if (token) {
@@ -93,7 +121,11 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
           }
         }
       },
-      onMessage: (msg) => {
+      onStatusUpdate: (payload) => {
+        this.updateLocation(document.uri, payload);
+        emitActiveLocation();
+      },
+      onMessage: (_msg) => {
         // EPUB-specific messages handled here if needed
       },
     });
@@ -113,9 +145,30 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
     return this._activeUri;
   }
 
+  getActiveLocation(): EpubActiveLocation | null {
+    const activeUri = this._activeUri;
+    if (!activeUri) return null;
+    return {
+      uri: activeUri,
+      ...(this.locations.get(activeUri.fsPath) ?? {}),
+    };
+  }
+
+  private updateLocation(uri: vscode.Uri, payload: DocumentStatusPayload): void {
+    const previous = this.locations.get(uri.fsPath) ?? {};
+    this.locations.set(uri.fsPath, {
+      currentPage: payload.currentPage ?? previous.currentPage,
+      pageCount: payload.pageCount ?? previous.pageCount,
+      chapterHref: payload.chapterHref ?? previous.chapterHref,
+      chapterTitle: payload.chapterTitle ?? previous.chapterTitle,
+    });
+  }
+
   dispose(): void {
     this.panels.clear();
     this.tokens.clear();
+    this.locations.clear();
     this._onDidChangeActiveEpub.dispose();
+    this._onDidChangeActiveLocation.dispose();
   }
 }

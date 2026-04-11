@@ -96,10 +96,6 @@ export const PdfViewer: FC = () => {
         setCurrentPage(restoredPage);
         await computeViewports(pdf, scale);
         setLoading(false);
-        postMessage({
-          type: 'document:statusUpdate',
-          payload: { pageCount: pdf.numPages, currentPage: restoredPage },
-        } as never);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
@@ -154,6 +150,22 @@ export const PdfViewer: FC = () => {
     void computeViewports(pdf, scale);
   }, [scale, computeViewports]);
 
+  const emitStatusSnapshot = useCallback(() => {
+    if (loading || numPages === 0) return;
+    postMessage({
+      type: 'document:statusUpdate',
+      payload: {
+        pageCount: numPages,
+        currentPage,
+        zoom: Math.round(scale * 100),
+      },
+    });
+  }, [loading, numPages, currentPage, scale]);
+
+  useEffect(() => {
+    emitStatusSnapshot();
+  }, [emitStatusSnapshot]);
+
   // Scroll to restored page after initial load in scroll mode
   const hasRestoredRef = useRef(false);
   useEffect(() => {
@@ -166,6 +178,32 @@ export const PdfViewer: FC = () => {
     }
     hasRestoredRef.current = true;
   }, [loading, pageViewports.length > 0]);
+
+  const updateCurrentPageFromScroll = useCallback(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const midY = containerRect.top + containerRect.height / 3;
+    let fallbackPage: number | null = null;
+
+    for (const [pageNum, el] of pageRefsMap.current) {
+      const rect = el.getBoundingClientRect();
+      if (fallbackPage == null && rect.bottom >= containerRect.top) {
+        fallbackPage = pageNum;
+      }
+      if (rect.top <= midY && rect.bottom >= midY) {
+        if (pageNum !== persistedPageRef.current) {
+          setCurrentPage(pageNum);
+        }
+        return;
+      }
+    }
+
+    if (fallbackPage != null && fallbackPage !== persistedPageRef.current) {
+      setCurrentPage(fallbackPage);
+    }
+  }, [setCurrentPage]);
 
   // =========================================================================
   // Shared page renderer
@@ -283,6 +321,32 @@ export const PdfViewer: FC = () => {
     };
   }, [viewMode, pageViewports, renderPageIntoEl]);
 
+  useEffect(() => {
+    if (viewMode !== 'scroll' || pageViewports.length === 0) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    let rafId = 0;
+    const handleScroll = () => {
+      if (rafId !== 0) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateCurrentPageFromScroll();
+      });
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      if (rafId !== 0) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [viewMode, pageViewports.length, updateCurrentPageFromScroll]);
+
   // =========================================================================
   // Single page mode: render on page change
   // =========================================================================
@@ -300,22 +364,6 @@ export const PdfViewer: FC = () => {
 
     return () => cancelAnimationFrame(rafId);
   }, [viewMode, currentPage, scale, pageViewports, renderPageIntoEl]);
-
-  const updateCurrentPageFromScroll = useCallback(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
-
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const midY = containerRect.top + containerRect.height / 3;
-
-    for (const [pageNum, el] of pageRefsMap.current) {
-      const rect = el.getBoundingClientRect();
-      if (rect.top <= midY && rect.bottom >= midY) {
-        setCurrentPage(pageNum);
-        return;
-      }
-    }
-  }, []);
 
   // =========================================================================
   // Navigation + mode switch

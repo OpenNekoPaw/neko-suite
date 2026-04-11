@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { getNonce } from './nonce';
 
 /** Supported preview entry points */
@@ -33,12 +34,13 @@ export interface WebviewHtmlOptions {
 export function getWebviewHtml(options: WebviewHtmlOptions): string {
   const { webview, extensionUri, entry, devMode = false, devPort = 5174 } = options;
   const nonce = getNonce();
+  const localeAttr = injectLocaleAttribute();
 
   if (devMode) {
-    return getDevHtml(nonce, entry, devPort);
+    return getDevHtml(nonce, entry, devPort, localeAttr);
   }
 
-  return getProdHtml(webview, extensionUri, nonce, entry);
+  return getProdHtml(webview, extensionUri, nonce, entry, localeAttr);
 }
 
 /** Display names for entry types */
@@ -57,7 +59,12 @@ const ENGINE = 'http://127.0.0.1:*';
 /**
  * Dev mode: connect to Vite dev server for HMR
  */
-function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string {
+function getDevHtml(
+  nonce: string,
+  entry: PreviewEntry,
+  devPort: number,
+  localeAttr: string,
+): string {
   const devUrl = `http://localhost:${devPort}`;
   const isDocument = DOCUMENT_ENTRIES.has(entry);
   const isEpub = entry === 'epub';
@@ -82,7 +89,7 @@ function getDevHtml(nonce: string, entry: PreviewEntry, devPort: number): string
   const frameSrc = isEpub ? `frame-src blob: ${devUrl};` : '';
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html ${localeAttr}>
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -115,6 +122,7 @@ function getProdHtml(
   extensionUri: vscode.Uri,
   nonce: string,
   entry: PreviewEntry,
+  localeAttr: string,
 ): string {
   const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', `${entry}.js`));
@@ -142,7 +150,7 @@ function getProdHtml(
   const frameSrc = isEpub ? `frame-src blob: ${csp};` : '';
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html ${localeAttr}>
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />

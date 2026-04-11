@@ -18,7 +18,10 @@ import { VideoPreviewProvider } from './providers/VideoPreviewProvider';
 import { AudioPreviewProvider } from './providers/AudioPreviewProvider';
 import { PdfPreviewProvider } from './providers/document/PdfPreviewProvider';
 import { CbzPreviewProvider } from './providers/document/CbzPreviewProvider';
-import { EpubPreviewProvider } from './providers/document/EpubPreviewProvider';
+import {
+  EpubPreviewProvider,
+  type EpubActiveLocation,
+} from './providers/document/EpubPreviewProvider';
 import { DocxPreviewProvider } from './providers/document/DocxPreviewProvider';
 import { registerOpenCommand } from './providers/document/documentProviderHelper';
 import { EpubSymbolProvider } from './epub/EpubSymbolProvider';
@@ -229,6 +232,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   });
   context.subscriptions.push(epubOutlineView, epubOutlineProvider);
 
+  const syncEpubOutlineLocation = async (location: EpubActiveLocation | null): Promise<void> => {
+    const node = epubOutlineProvider.setActiveHref(location?.chapterHref ?? null);
+    if (!node) return;
+    try {
+      await epubOutlineView.reveal(node, {
+        select: true,
+        focus: false,
+        expand: true,
+      });
+    } catch (err) {
+      logger.warn(
+        `Failed to reveal EPUB outline node: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
   // Track active EPUB editor and refresh outline
   const refreshEpubOutline = async (uri: vscode.Uri | null): Promise<void> => {
     if (uri && uri.fsPath.endsWith('.epub')) {
@@ -236,6 +255,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
       try {
         const toc = await readEpubToc(uri.fsPath);
         epubOutlineProvider.update(toc);
+        await syncEpubOutlineLocation(epubProvider.getActiveLocation());
       } catch (err) {
         logger.warn(
           `Failed to parse EPUB TOC: ${err instanceof Error ? err.message : String(err)}`,
@@ -259,6 +279,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   context.subscriptions.push(
     epubProvider.onDidChangeActiveEpub((uri) => {
       void refreshEpubOutline(uri);
+    }),
+  );
+  context.subscriptions.push(
+    epubProvider.onDidChangeActiveLocation((location) => {
+      void syncEpubOutlineLocation(location);
     }),
   );
 
