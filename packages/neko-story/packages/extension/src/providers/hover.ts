@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
 import type {
+  CharacterEntityStats,
   ICreativeEntityWorkspaceIndex,
   ResolvedCharacterMatch,
   IWorkspaceIndex,
@@ -59,6 +60,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
               localStats,
               crossFileStats,
               characterQuery?.resolved,
+              characterQuery?.stats,
             ),
           );
         }
@@ -192,6 +194,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     local: LocalCharacterStats | null,
     crossFile: CrossFileCharacterStats,
     resolved?: Pick<ResolvedCharacterMatch, 'record'>,
+    entityStats?: CharacterEntityStats,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
@@ -229,6 +232,22 @@ export class FountainHoverProvider implements vscode.HoverProvider {
       md.appendMarkdown(
         `**Total appearances:** ${crossFile.totalAppearances} in ${crossFile.fileCount} files\n`,
       );
+    }
+
+    // Cross-modal stats (canvas/asset/generated)
+    const hasModalStats =
+      entityStats?.canvasNodeCount || entityStats?.assetCount || entityStats?.generatedAssetCount;
+    if (hasModalStats) {
+      md.appendMarkdown(`\n---\n\n`);
+      if (entityStats.canvasNodeCount) {
+        md.appendMarkdown(`Canvas nodes: **${entityStats.canvasNodeCount}**\n\n`);
+      }
+      if (entityStats.assetCount) {
+        md.appendMarkdown(`Asset entities: **${entityStats.assetCount}**\n\n`);
+      }
+      if (entityStats.generatedAssetCount) {
+        md.appendMarkdown(`Generated assets: **${entityStats.generatedAssetCount}**\n\n`);
+      }
     }
 
     return md;

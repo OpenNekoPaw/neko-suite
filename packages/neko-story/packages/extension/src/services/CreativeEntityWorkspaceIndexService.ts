@@ -3,30 +3,36 @@ import type {
   CharacterEntityQuery,
   CreativeEntityOccurrence,
   ICharacterWorkspaceIndex,
+  ICreativeEntityGraph,
   ICreativeEntityWorkspaceIndex,
+  IOccurrenceIndex,
   IWorkspaceIndex,
   SymbolLocation,
 } from './types';
 import { serializeLocationKey } from './locationKey';
 
 /**
- * Character-first creative entity facade.
+ * Creative entity query facade composing registry, script index, cross-modal
+ * occurrence index, and relationship graph into a single query surface.
  *
- * Phase 1 keeps the implementation deliberately small: it composes the
- * registry-backed character index with script occurrences so providers can
- * consume a single query surface. Graph / canvas / asset occurrences can be
- * attached here in later phases without rewriting provider logic again.
+ * Providers consume this interface without caring about the backing services.
+ * Phase 3 adds IOccurrenceIndex and ICreativeEntityGraph; they are optional
+ * so existing callers continue to work without them.
  */
 export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorkspaceIndex {
   constructor(
     private readonly workspaceIndex: IWorkspaceIndex,
     private readonly characterIndex: ICharacterWorkspaceIndex,
+    private readonly occurrenceIndex?: IOccurrenceIndex,
+    private readonly entityGraph?: ICreativeEntityGraph,
   ) {}
 
   async ensureInitialized(): Promise<void> {
     await Promise.all([
       this.workspaceIndex.ensureInitialized(),
       this.characterIndex.ensureInitialized(),
+      this.occurrenceIndex?.ensureInitialized(),
+      this.entityGraph?.ensureInitialized(),
     ]);
   }
 
@@ -87,6 +93,19 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
       });
     }
 
+    // Merge cross-modal occurrences from the occurrence index (canvas/asset/generated)
+    if (entityId && this.occurrenceIndex) {
+      const crossModalOccurrences = this.occurrenceIndex.queryOccurrences('character', entityId);
+      for (const occ of crossModalOccurrences) {
+        occurrences.push(occ);
+      }
+    }
+
+    const crossModalCounts =
+      entityId && this.occurrenceIndex
+        ? this.occurrenceIndex.countBySource('character', entityId)
+        : undefined;
+
     return {
       kind: 'character',
       query,
@@ -99,6 +118,9 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
       stats: {
         totalScriptReferences: scriptReferences.length,
         fileCount: countDistinctFiles(scriptOccurrences),
+        canvasNodeCount: crossModalCounts?.['canvas'] ?? undefined,
+        assetCount: crossModalCounts?.['asset'] ?? undefined,
+        generatedAssetCount: crossModalCounts?.['generated-asset'] ?? undefined,
       },
     };
   }

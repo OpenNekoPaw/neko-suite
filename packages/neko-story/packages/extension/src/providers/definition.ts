@@ -81,10 +81,20 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
 
     const characterQuery = this.creativeEntityIndex?.queryCharacter(word, document.uri);
     if (characterQuery) {
-      const references =
+      const scriptRefs =
         context.includeDeclaration && characterQuery.registryDefinition
           ? dedupeLocations([characterQuery.registryDefinition, ...characterQuery.scriptReferences])
           : [...characterQuery.scriptReferences];
+
+      // Append cross-modal occurrences (canvas/asset/generated) if available
+      const crossModalRefs = characterQuery.occurrences
+        .filter((occ) => occ.source !== 'registry' && occ.source !== 'script')
+        .map((occ) => occ.location);
+
+      const references =
+        crossModalRefs.length > 0
+          ? dedupeLocations([...scriptRefs, ...crossModalRefs])
+          : scriptRefs;
 
       if (references.length > 0) {
         return references;

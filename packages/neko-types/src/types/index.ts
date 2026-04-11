@@ -201,3 +201,6 @@ export * from './tool-names';
 
 // Agent capability provider protocol (sub-package → neko-agent capability injection)
 export * from './agent-capability';
+
+// Creative entity graph types (cross-modal relationship graph, ADR Phase 3)
+export * from './creative-entity-graph';

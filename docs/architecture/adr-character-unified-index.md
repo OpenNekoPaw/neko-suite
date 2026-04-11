@@ -4,9 +4,9 @@
 
 Accepted
 
-## 当前实现进度（2026-04-11）
+## 当前实现进度（2026-04-12）
 
-截至 2026 年 4 月 11 日，人物统一索引已经完成第一条可用主链，范围如下：
+截至 2026 年 4 月 12 日，人物统一索引已完成 Phase 1–3，范围如下：
 
 - 已新增共享 `characters.json` 契约、读写服务和名称解析工具
 - 已为 `AssetEntity`、`GalleryNode`、`ShotCharacter`、`GeneratedAsset` 等承载层补充 `registryId` / `characterId` / `characterIds`
@@ -21,10 +21,17 @@ Accepted
 - `neko-story` 已新增“打开角色注册表”命令，可自动创建并打开工作区根目录 `characters.json`
 - `neko-story` 已新增最小可用资产链接服务，可通过内部命令按角色 / 场景位置查找关联资产
 
+Phase 3 新增（跨模态关系图与出现点索引）：
+
+- 已引入 `CreativeEntityGraphService`，从 canvas/asset/generated-asset 构建 graph 节点和关系边，持久化到 `.neko/.cache/asset-graph.json`
+- 已引入 `OccurrenceIndexService`，索引 GalleryNode/ShotCharacter/AssetEntity/GeneratedAsset 的 characterId 出现点
+- 已引入 `CrossModalDataProvider`，通过 `NekoCanvasAPI.nodes.list()` + `neko.assets.getAllEntities` + generated index 采集跨扩展数据
+- `CreativeEntityWorkspaceIndexService` 已组合 OccurrenceIndex + EntityGraph，`queryCharacter()` 返回跨模态 stats
+- Hover 已展示 canvas nodes / asset entities / generated assets 计数
+- Find References 已包含跨模态位置
+
 当前尚未完成的部分：
 
-- 尚未引入通用 `CreativeEntityGraph`
-- 尚未引入统一 `OccurrenceIndex`
 - `scene / object / location / action` 仍停留在预留抽象，尚未形成与人物同级的 registry 链路
 - `scene / object / location` 以及跨模态资产侧的 Rename / CodeAction 还没有正式切到统一实体层
 
@@ -1058,9 +1065,13 @@ Suggestion services
 
 ### Phase 3：关系图与出现点索引
 
-- [ ] 在 `AssetGraph` 基础上引入 `CreativeEntityGraph`
-- [ ] 增加 `OccurrenceIndex`
-- [ ] 为 Definition / References / Hover / Rename 提供统一查询入口
+- [x] 引入 `CreativeEntityGraphService`（graph 节点/边构建 + 持久化到 `.neko/.cache/asset-graph.json`）
+- [x] 引入 `OccurrenceIndexService`（跨模态出现点索引：canvas/asset/generated-asset）
+- [x] 引入 `CrossModalDataProvider`（跨扩展数据采集层：canvas nodes + asset entities + generated assets）
+- [x] `CreativeEntityWorkspaceIndexService` 组合 OccurrenceIndex + EntityGraph
+- [x] References provider 返回跨模态引用（canvas/asset/generated 位置）
+- [x] Hover provider 展示跨模态统计（canvas nodes / asset entities / generated assets 计数）
+- [x] 共享类型 `@neko/shared` 新增 `creative-entity-graph.ts`（GraphNode / RelationEdge / GraphSnapshot）
 
 ### Phase 4：扩展到场景 / 物品
 

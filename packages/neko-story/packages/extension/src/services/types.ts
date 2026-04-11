@@ -1,5 +1,12 @@
 import * as vscode from 'vscode';
-import type { AssetEntity, CharacterRecord, CharacterRegistryFile } from '@neko/shared';
+import type {
+  AssetEntity,
+  CharacterRecord,
+  CharacterRegistryFile,
+  CreativeGraphNodeKind,
+  CreativeRelationEdge,
+  CreativeGraphNode,
+} from '@neko/shared';
 import type { AssetReference, FountainDocument } from '@neko-story/types';
 
 // -- ScriptIndex types (agent-accessible structured representation) --
@@ -202,7 +209,12 @@ export interface ICharacterWorkspaceIndex extends vscode.Disposable {
 }
 
 export type CreativeEntityKind = 'character' | 'scene' | 'object' | 'location' | 'action';
-export type CreativeEntityOccurrenceSource = 'registry' | 'script';
+export type CreativeEntityOccurrenceSource =
+  | 'registry'
+  | 'script'
+  | 'canvas'
+  | 'asset'
+  | 'generated-asset';
 export type CreativeEntityOccurrenceRole = 'definition' | 'reference';
 
 export interface CreativeEntityOccurrence {
@@ -218,6 +230,9 @@ export interface CreativeEntityOccurrence {
 export interface CharacterEntityStats {
   readonly totalScriptReferences: number;
   readonly fileCount: number;
+  readonly canvasNodeCount?: number;
+  readonly assetCount?: number;
+  readonly generatedAssetCount?: number;
 }
 
 export interface CharacterEntityQuery {
@@ -250,6 +265,54 @@ export interface ICreativeEntityWorkspaceIndex extends vscode.Disposable {
    * deduplicated script occurrences.
    */
   queryCharacter(name: string, currentUri?: vscode.Uri): CharacterEntityQuery | undefined;
+}
+
+/**
+ * Cross-modal occurrence index tracking entity appearances across
+ * script, canvas, assets, and generated media.
+ *
+ * Answers "where does this entity appear?" across all modalities.
+ * See ADR §4.6 for the full OccurrenceIndex model.
+ */
+export interface IOccurrenceIndex extends vscode.Disposable {
+  ensureInitialized(): Promise<void>;
+
+  /**
+   * Returns all cross-modal occurrences for a given entity.
+   * Script occurrences are handled by IWorkspaceIndex; this covers
+   * canvas nodes, asset entities, and generated assets.
+   */
+  queryOccurrences(
+    entityKind: CreativeEntityKind,
+    entityId: string,
+    options?: { readonly sources?: readonly CreativeEntityOccurrenceSource[] },
+  ): readonly CreativeEntityOccurrence[];
+
+  /**
+   * Returns occurrence counts grouped by source for a given entity.
+   */
+  countBySource(entityKind: CreativeEntityKind, entityId: string): Readonly<Record<string, number>>;
+
+  readonly onDidUpdate: vscode.Event<void>;
+}
+
+/**
+ * Cross-modal relationship graph tracking connections between creative
+ * entities and their representations across modalities.
+ *
+ * Answers "how are these entities connected?" with strength and provenance.
+ * See ADR §4.5 for the full CreativeEntityGraph model.
+ */
+export interface ICreativeEntityGraph extends vscode.Disposable {
+  ensureInitialized(): Promise<void>;
+
+  /** Get all relationship edges involving a given entity ID */
+  getEdgesForEntity(entityId: string): readonly CreativeRelationEdge[];
+
+  /** Get all graph nodes of a given kind */
+  getNodesByKind(kind: CreativeGraphNodeKind): readonly CreativeGraphNode[];
+
+  readonly onDidUpdate: vscode.Event<void>;
 }
 
 export interface IAssetLinker {
