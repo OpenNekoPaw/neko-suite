@@ -64,9 +64,12 @@ export interface CanvasChangeEvent {
   nodeId?: string;
   nodeIds?: string[];
   shapeId?: string;
+  documentUri?: string;
   entityType?: 'node' | 'connection' | 'selection' | 'generation' | 'import' | 'operation';
   reason?: string;
   operationType?: string;
+  sourceScriptUri?: string;
+  storyboardImport?: CreatedCanvasStoryboard;
 }
 
 /**

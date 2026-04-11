@@ -4,7 +4,11 @@ import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
 import { createStoryboardPayload } from '@neko/shared';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
-import type { AgentContextPayload, NekoStoryScriptIndex } from '@neko/shared';
+import type {
+  AgentContextPayload,
+  CreatedCanvasStoryboardScene,
+  NekoStoryScriptIndex,
+} from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
 
@@ -227,9 +231,6 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     if (action === 'openCanvas') {
-      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
-        canvasStatus: 'opened',
-      });
       await vscode.commands.executeCommand('neko.canvas.new');
       return;
     }
@@ -260,10 +261,14 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     if (action === 'sendToCanvas') {
-      await this.sendSceneToCanvas(scriptIndex, scene);
-      this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
-        canvasStatus: 'sent',
-      });
+      const importedScene = await this.sendSceneToCanvas(scriptIndex, scene);
+      if (importedScene) {
+        this.sceneStateStore.recordCanvasImport(editor.document.uri, scriptIndex, importedScene);
+      } else {
+        this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+          canvasStatus: 'sent',
+        });
+      }
     }
   }
 
@@ -346,7 +351,7 @@ export class PreviewPanel implements vscode.Disposable {
   private async sendSceneToCanvas(
     scriptIndex: NekoStoryScriptIndex,
     scene: NekoStoryScriptIndex['scenes'][number],
-  ): Promise<void> {
+  ): Promise<CreatedCanvasStoryboardScene | undefined> {
     const characterBindings = await this.resolveCharacterBindings(
       scene.sceneCharacters,
       scriptIndex.uri,
@@ -362,17 +367,21 @@ export class PreviewPanel implements vscode.Disposable {
     });
 
     try {
-      await vscode.commands.executeCommand('neko.canvas.importStoryboard', payload);
+      const created = await vscode.commands.executeCommand<{
+        scenes?: CreatedCanvasStoryboardScene[];
+      }>('neko.canvas.importStoryboard', payload);
       vscode.window.showInformationMessage(`已发送场景到 Canvas：${scene.sceneTitle}`);
+      return created?.scenes?.find((createdScene) => createdScene.sourceSceneId === scene.sceneId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('No active canvas editor')) {
         vscode.window.showWarningMessage(
           '没有活动的 Canvas 编辑器。请先打开一个 .nkc 画布，再重试发送场景。',
         );
-        return;
+        return undefined;
       }
       vscode.window.showErrorMessage(`发送场景到 Canvas 失败：${message}`);
+      return undefined;
     }
   }
 

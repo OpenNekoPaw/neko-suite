@@ -8,11 +8,19 @@ const capabilitySource = readFileSync(join(__dirname, '../agentCapabilityProvide
 describe('canvas storyboard import contracts', () => {
   it('exports a storyboard import API on NekoCanvasAPI implementation', () => {
     expect(extensionSource).toContain('storyboard: {');
-    expect(extensionSource).toContain('import: (payload, options) => importStoryboardToCanvas(api, payload, options)');
+    expect(extensionSource).toContain(
+      'import: (payload, options) => importStoryboardToCanvas(api, payload, options)',
+    );
   });
 
   it('registers a public command for storyboard payload import', () => {
     expect(extensionSource).toContain("'neko.canvas.importStoryboard'");
+  });
+
+  it('publishes storyboard import write-back events to external subscribers', () => {
+    expect(extensionSource).toContain(
+      'canvasEditorProvider.reportStoryboardImport(payload, created);',
+    );
   });
 
   it('routes agent storyboard import through the canvas storyboard API', () => {

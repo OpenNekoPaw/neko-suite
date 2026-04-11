@@ -40,6 +40,20 @@ export interface CharacterRegistryFile {
   readonly characters: readonly CharacterRecord[];
 }
 
+export interface CharacterBindingMatch {
+  readonly record: Pick<CharacterRecord, 'id'>;
+}
+
+export interface CharacterBindingResolver {
+  resolveCharacter(name: string, uriOrPath?: string): CharacterBindingMatch | undefined;
+}
+
+export interface ResolveCharacterBindingsOptions {
+  readonly uriOrPath?: string;
+  readonly characterResolver?: CharacterBindingResolver;
+  readonly fallbackLoader?: (names: readonly string[]) => Promise<Record<string, string>>;
+}
+
 const CHARACTER_REGISTRY_VERSION = 1 as const;
 
 export function createEmptyCharacterRegistryFile(): CharacterRegistryFile {
@@ -101,4 +115,45 @@ export function isCharacterRegistryFile(value: unknown): value is CharacterRegis
     Array.isArray(candidate['characters']) &&
     candidate['characters'].every((record) => isCharacterRecord(record))
   );
+}
+
+export async function resolveCharacterBindingsForNames(
+  names: readonly string[],
+  options: ResolveCharacterBindingsOptions = {},
+): Promise<Record<string, string>> {
+  if (names.length === 0) {
+    return {};
+  }
+
+  const resolved: Record<string, string> = {};
+  const unresolved = new Set<string>();
+
+  for (const name of names) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      continue;
+    }
+
+    if (resolved[name]) {
+      continue;
+    }
+
+    const match = options.characterResolver?.resolveCharacter(name, options.uriOrPath);
+    const characterId = match?.record.id;
+    if (typeof characterId === 'string' && characterId.length > 0) {
+      resolved[name] = characterId;
+      continue;
+    }
+
+    unresolved.add(name);
+  }
+
+  if (unresolved.size === 0 || !options.fallbackLoader) {
+    return resolved;
+  }
+
+  const fallback = await options.fallbackLoader([...unresolved]);
+  return {
+    ...fallback,
+    ...resolved,
+  };
 }

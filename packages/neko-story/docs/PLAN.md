@@ -188,10 +188,14 @@ extension → parser → types
    - 轻量分镜表状态已通过 `workspaceState` 跨会话持久化
    - 已新增“从剧本开始视频创作”标准入口 `neko.story.startVideoCreation`
 
-### 当前剩余收口项
+### 当前收口状态
 
-- [ ] 将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
-- [ ] 对 `story + agent + canvas` 主链补更大范围回归验证（至少包级构建与关键命令链路）
+- [x] 将 `canvasStatus = opened` 从按钮驱动升级为 canvas 实时事件回写
+- [x] 对 `story + agent + canvas` 主链补更大范围回归验证
+  已完成 `@neko/shared` / `@neko-agent/extension` / `@neko-story/extension` /
+  `@neko-canvas/extension` 关键测试，以及 `@neko-story/extension` /
+  `@neko-canvas/extension` 包级构建；根 `pnpm test` 已尝试，但当前环境失败点为
+  与本轮无关的 `@neko/auth-core` 本地回环端口监听 `EPERM`
 
 ## 构建与测试
 

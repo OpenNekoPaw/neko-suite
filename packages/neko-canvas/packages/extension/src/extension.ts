@@ -216,7 +216,11 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       deleteShape: (canvasId, shapeId) => canvasEditorProvider.deleteShape(shapeId),
     },
     storyboard: {
-      import: (payload, options) => importStoryboardToCanvas(api, payload, options),
+      import: async (payload, options) => {
+        const created = await importStoryboardToCanvas(api, payload, options);
+        canvasEditorProvider.reportStoryboardImport(payload, created);
+        return created;
+      },
     },
     nodes: {
       list: (type) => canvasEditorProvider.listNodes(type),
@@ -268,7 +272,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   };
 
   // Register commands
-  registerCommands(context, (payload, options) => importStoryboardToCanvas(api, payload, options));
+  registerCommands(context, api.storyboard.import);
 
   // Register plugin slash commands into neko-agent chat panel
   registerAgentSlashCommands(context);

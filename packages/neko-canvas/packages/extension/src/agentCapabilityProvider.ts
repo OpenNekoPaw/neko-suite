@@ -29,8 +29,8 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
   extractCanvasNodeGenerationLineage,
+  resolveCharacterBindingsForNames,
 } from '@neko/shared';
-import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
 
 /**

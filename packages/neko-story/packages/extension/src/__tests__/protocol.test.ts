@@ -157,6 +157,11 @@ describe('neko-story protocol', () => {
       expect(extensionSource).toContain('sceneStateStore.handlePipelineEvent(');
     });
 
+    it('subscribes to canvas change events for realtime scene-state write-back', () => {
+      expect(extensionSource).toContain('subscribeCanvasSceneWriteback(context, sceneStateStore);');
+      expect(extensionSource).toContain('sceneStateStore.handleCanvasEvent(event);');
+    });
+
     it('registers a standard video creation command on top of the same story pipeline', () => {
       expect(extensionSource).toContain("'neko.story.startVideoCreation'");
       expect(extensionSource).toContain('createStoryPipelineParams(payload, {');

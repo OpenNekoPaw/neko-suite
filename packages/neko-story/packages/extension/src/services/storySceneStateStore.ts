@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
-import type { NekoStoryScriptIndex } from '@neko/shared';
+import type {
+  CanvasChangeEvent,
+  CreatedCanvasStoryboardScene,
+  NekoStoryScriptIndex,
+} from '@neko/shared';
 
 export type StoryAgentStatus = 'not-requested' | 'ready' | 'review' | 'sent' | 'skipped';
 export type StoryCanvasStatus = 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
@@ -133,12 +137,18 @@ export class StorySceneStateStore implements vscode.Disposable {
         const importedScene = result?.canvasStoryboard?.scenes?.find(
           (scene) => scene.sourceSceneId === sceneId,
         );
+        if (importedScene) {
+          this.recordCanvasImport(documentUri, scriptIndex, importedScene, {
+            pipelineId,
+            agentStatus: 'sent',
+          });
+          return;
+        }
+
         this.updateSceneState(documentUri, scriptIndex, sceneId, {
           pipelineId,
           agentStatus: 'sent',
-          canvasStatus: importedScene ? 'sent' : 'queued',
-          canvasSceneNodeId: importedScene?.sceneNodeId,
-          shotIds: importedScene?.shotIds,
+          canvasStatus: 'queued',
         });
         return;
       }
@@ -151,6 +161,96 @@ export class StorySceneStateStore implements vscode.Disposable {
         return;
       default:
         return;
+    }
+  }
+
+  recordCanvasImport(
+    documentUri: vscode.Uri,
+    scriptIndex: NekoStoryScriptIndex,
+    importedScene: CreatedCanvasStoryboardScene,
+    nextState: Partial<StorySceneWorkflowRecord> = {},
+  ): void {
+    const current = this.getSceneStates(documentUri, scriptIndex)[importedScene.sourceSceneId];
+    if (!current) {
+      return;
+    }
+
+    this.updateSceneState(documentUri, scriptIndex, importedScene.sourceSceneId, {
+      ...nextState,
+      canvasStatus: current.canvasStatus === 'opened' ? 'opened' : 'sent',
+      canvasSceneNodeId: importedScene.sceneNodeId,
+      shotIds: importedScene.shotIds,
+    });
+  }
+
+  handleCanvasEvent(event: CanvasChangeEvent): void {
+    const changedDocumentKeys = new Set<string>();
+
+    if (event.storyboardImport && event.sourceScriptUri) {
+      const documentKey = normalizeDocumentKey(event.sourceScriptUri);
+      const current = this.statesByDocument.get(documentKey);
+      if (current) {
+        const next = { ...current };
+        let changed = false;
+
+        for (const scene of event.storyboardImport.scenes) {
+          const existing = next[scene.sourceSceneId];
+          if (!existing || existing.canvasStatus === 'skipped') {
+            continue;
+          }
+
+          next[scene.sourceSceneId] = {
+            ...existing,
+            canvasStatus: 'opened',
+            canvasSceneNodeId: scene.sceneNodeId,
+            shotIds: scene.shotIds,
+          };
+          changed = true;
+        }
+
+        if (changed) {
+          this.statesByDocument.set(documentKey, next);
+          changedDocumentKeys.add(documentKey);
+        }
+      }
+    }
+
+    const nodeIds = collectCanvasEventNodeIds(event);
+    if (nodeIds.length > 0) {
+      for (const [documentKey, sceneStates] of this.statesByDocument.entries()) {
+        const next = { ...sceneStates };
+        let changed = false;
+
+        for (const [sceneId, state] of Object.entries(sceneStates)) {
+          if (state.canvasStatus === 'skipped' || state.canvasStatus === 'opened') {
+            continue;
+          }
+
+          if (!matchesCanvasNodes(state, nodeIds)) {
+            continue;
+          }
+
+          next[sceneId] = {
+            ...state,
+            canvasStatus: 'opened',
+          };
+          changed = true;
+        }
+
+        if (changed) {
+          this.statesByDocument.set(documentKey, next);
+          changedDocumentKeys.add(documentKey);
+        }
+      }
+    }
+
+    if (changedDocumentKeys.size === 0) {
+      return;
+    }
+
+    this.persist();
+    for (const documentKey of changedDocumentKeys) {
+      this.onDidChangeEmitter.fire(vscode.Uri.parse(documentKey));
     }
   }
 
@@ -180,4 +280,28 @@ export class StorySceneStateStore implements vscode.Disposable {
     const serialized = Object.fromEntries(this.statesByDocument.entries());
     void this.persistence.update(StorySceneStateStore.storageKey, serialized);
   }
+}
+
+function normalizeDocumentKey(uriOrPath: string): string {
+  return uriOrPath.includes('://')
+    ? vscode.Uri.parse(uriOrPath).toString()
+    : vscode.Uri.file(uriOrPath).toString();
+}
+
+function collectCanvasEventNodeIds(event: CanvasChangeEvent): string[] {
+  return Array.from(
+    new Set(
+      [event.nodeId, ...(event.nodeIds ?? [])].filter(
+        (nodeId): nodeId is string => typeof nodeId === 'string' && nodeId.length > 0,
+      ),
+    ),
+  );
+}
+
+function matchesCanvasNodes(state: StorySceneWorkflowRecord, nodeIds: readonly string[]): boolean {
+  if (state.canvasSceneNodeId && nodeIds.includes(state.canvasSceneNodeId)) {
+    return true;
+  }
+
+  return (state.shotIds ?? []).some((shotId) => nodeIds.includes(shotId));
 }

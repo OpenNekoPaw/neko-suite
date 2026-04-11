@@ -24,8 +24,8 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
   extractCanvasNodeGenerationLineage,
+  resolveCharacterBindingsForNames,
 } from '@neko/shared';
-import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { ScriptEmbeddingIndex, type EmbedFn } from '../services/ScriptEmbeddingIndex';
 import { setActiveGenerationConfig } from '../services/canvasAmbientContext';
 import type { MediaGenerationService, ConfigManager } from '@neko/platform';

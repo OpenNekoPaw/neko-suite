@@ -12,9 +12,9 @@ import {
   type NekoCanvasAPI,
   type NekoCutAPI,
   type NekoStoryAPI,
+  resolveCharacterBindingsForNames,
   type StoryScenePlan,
 } from '@neko/shared';
-import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';

@@ -122,4 +122,73 @@ Alice waits.`),
       canvasStatus: 'queued',
     });
   });
+
+  it('marks a scene as opened when canvas reports storyboard import results', () => {
+    const uri = vscode.Uri.file('/project/demo.fountain') as never;
+    const scriptIndex = buildScriptIndex(
+      uri,
+      parse(`INT. OFFICE - DAY
+
+Alice waits.`),
+    );
+    const sceneId = scriptIndex.scenes[0]!.sceneId;
+    const store = new StorySceneStateStore(createPersistence());
+
+    store.getSceneStates(uri, scriptIndex);
+    store.handleCanvasEvent({
+      type: 'update',
+      sourceScriptUri: scriptIndex.uri,
+      storyboardImport: {
+        mode: 'mechanical',
+        scenesCreated: 1,
+        totalShots: 2,
+        scenes: [
+          {
+            sourceSceneId: sceneId,
+            sceneNodeId: 'scene-node-1',
+            shotIds: ['shot-1', 'shot-2'],
+          },
+        ],
+      },
+    });
+
+    expect(store.getSceneStates(uri, scriptIndex)[sceneId]).toMatchObject({
+      sceneId,
+      canvasStatus: 'opened',
+    });
+  });
+
+  it('marks a previously imported scene as opened when later canvas events reference its nodes', () => {
+    const uri = vscode.Uri.file('/project/demo.fountain') as never;
+    const scriptIndex = buildScriptIndex(
+      uri,
+      parse(`INT. OFFICE - DAY
+
+Alice waits.`),
+    );
+    const sceneId = scriptIndex.scenes[0]!.sceneId;
+    const store = new StorySceneStateStore(createPersistence());
+
+    store.recordCanvasImport(uri, scriptIndex, {
+      sourceSceneId: sceneId,
+      sceneNodeId: 'scene-node-1',
+      shotIds: ['shot-1', 'shot-2'],
+    });
+    expect(store.getSceneStates(uri, scriptIndex)[sceneId]).toMatchObject({
+      sceneId,
+      canvasStatus: 'sent',
+    });
+
+    store.handleCanvasEvent({
+      type: 'update',
+      nodeIds: ['shot-2'],
+      entityType: 'selection',
+      reason: 'selectionChange',
+    });
+
+    expect(store.getSceneStates(uri, scriptIndex)[sceneId]).toMatchObject({
+      sceneId,
+      canvasStatus: 'opened',
+    });
+  });
 });

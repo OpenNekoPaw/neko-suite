@@ -207,9 +207,12 @@ export interface CanvasChangeEvent {
   readonly nodeId?: string;
   readonly nodeIds?: string[];
   readonly shapeId?: string;
+  readonly documentUri?: string;
   readonly entityType?: 'node' | 'connection' | 'selection' | 'generation' | 'import' | 'operation';
   readonly reason?: string;
   readonly operationType?: string;
+  readonly sourceScriptUri?: string;
+  readonly storyboardImport?: CreatedCanvasStoryboard;
 }
 
 /**

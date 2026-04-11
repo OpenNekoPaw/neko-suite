@@ -22,6 +22,8 @@ import type {
   CanvasNode,
   CanvasNodeType,
   CanvasTimelineSyncPayload,
+  CanvasStoryboardPayload,
+  CreatedCanvasStoryboard,
 } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
@@ -383,6 +385,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
+  reportStoryboardImport(payload: CanvasStoryboardPayload, created: CreatedCanvasStoryboard): void {
+    const nodeIds = created.scenes.flatMap((scene) => [scene.sceneNodeId, ...scene.shotIds]);
+    this._onDidChangeCanvas.fire({
+      type: 'update',
+      nodeIds,
+      documentUri: this.activeDocument?.uri.toString(),
+      entityType: 'import',
+      reason: 'storyboardImported',
+      operationType: 'storyboard.import',
+      sourceScriptUri: payload.sourceScriptUri,
+      storyboardImport: created,
+    });
+  }
+
   /**
    * Save a base64 data URL to workspace .neko/generated/image/ and return a GeneratedImage.
    * ADR-4: writes binary to disk, returns JSON reference only.
@@ -415,6 +431,30 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     } catch (err) {
       logger.warn('Failed to push generated image to neko-cut', { nodeId, err });
     }
+  }
+
+  private reportCanvasReady(documentUri: vscode.Uri, data: Record<string, unknown> | null): void {
+    const nodeIds = Array.isArray(data?.['nodes'])
+      ? (data['nodes'] as unknown[])
+          .map((node) => {
+            if (typeof node !== 'object' || node === null) {
+              return null;
+            }
+            return typeof (node as { id?: unknown }).id === 'string'
+              ? (node as { id: string }).id
+              : null;
+          })
+          .filter((nodeId): nodeId is string => nodeId !== null)
+      : [];
+
+    this._onDidChangeCanvas.fire({
+      type: 'update',
+      nodeIds,
+      documentUri: documentUri.toString(),
+      entityType: 'operation',
+      reason: 'editorReady',
+      operationType: 'canvas.editor.ready',
+    });
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
@@ -489,9 +529,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             this.syncOutline(data as Record<string, unknown>);
             this.syncStatusBar(data as Record<string, unknown>);
           }
+          this.reportCanvasReady(document.uri, data as Record<string, unknown> | null);
         } catch {
           // File is empty or invalid JSON — send null to use defaults
           webviewPanel.webview.postMessage({ type: 'update', data: null });
+          this.reportCanvasReady(document.uri, null);
         }
         break;
       }

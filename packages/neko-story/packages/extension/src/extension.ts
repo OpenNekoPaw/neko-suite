@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { AgentContextPayload, NekoStoryAPI } from '@neko/shared';
+import type { AgentContextPayload, NekoCanvasAPI, NekoStoryAPI } from '@neko/shared';
 import { createEmptyCharacterRegistryFile } from '@neko/shared';
 import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
@@ -56,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Non-blocking background initialization
   void indexService.ensureInitialized();
   void characterIndexService.ensureInitialized();
+  subscribeCanvasSceneWriteback(context, sceneStateStore);
 
   const resolveStoryboardCharacterBindings = async (
     names: readonly string[],
@@ -526,6 +527,47 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+function subscribeCanvasSceneWriteback(
+  context: vscode.ExtensionContext,
+  sceneStateStore: StorySceneStateStore,
+): void {
+  let subscribed = false;
+
+  const trySubscribe = async (): Promise<void> => {
+    if (subscribed) {
+      return;
+    }
+
+    const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+    if (!canvasExt?.isActive) {
+      return;
+    }
+
+    try {
+      const api = canvasExt.exports;
+      if (!api?.events?.onDidChangeCanvas) {
+        return;
+      }
+
+      subscribed = true;
+      context.subscriptions.push(
+        api.events.onDidChangeCanvas((event) => {
+          sceneStateStore.handleCanvasEvent(event);
+        }),
+      );
+    } catch {
+      // neko-canvas unavailable or failed to activate; retry on extension changes
+    }
+  };
+
+  void trySubscribe();
+  context.subscriptions.push(
+    vscode.extensions.onDidChange(() => {
+      void trySubscribe();
+    }),
+  );
+}
 
 function resolveUriOrPath(uriOrPath: string): vscode.Uri {
   return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
