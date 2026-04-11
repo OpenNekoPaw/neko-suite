@@ -58,8 +58,18 @@ interface SpineEntry {
   section: EpubSection;
 }
 
+interface WaterfallPageMetrics {
+  currentPage: number;
+  pageCount: number;
+}
+
 /** Max characters forwarded to agent — stays within message size budget */
 const MAX_SELECTION_CHARS = 4000;
+const WATERFALL_CHAPTER_MAX_WIDTH_PX = 800;
+const WATERFALL_CHAPTER_PADDING_PX = 20;
+const WATERFALL_RESOURCE_SETTLE_TIMEOUT_MS = 1500;
+const WATERFALL_INITIAL_CHAPTER_HEIGHT_FACTOR = 1.25;
+const WATERFALL_MIN_CHAPTER_HEIGHT_PX = 320;
 
 type ViewMode = 'waterfall' | 'paginated';
 
@@ -122,6 +132,32 @@ const WATERFALL_THEME_CSS = `
   }
 `;
 
+function average(values: Iterable<number>): number | null {
+  let total = 0;
+  let count = 0;
+  for (const value of values) {
+    total += value;
+    count += 1;
+  }
+  return count > 0 ? total / count : null;
+}
+
+function calculateWaterfallPageMetrics(
+  scrollTop: number,
+  viewportHeight: number,
+  totalHeight: number,
+): WaterfallPageMetrics {
+  const safeViewportHeight = Math.max(1, Math.ceil(viewportHeight));
+  const safeTotalHeight = Math.max(safeViewportHeight, Math.ceil(totalHeight));
+  const pageCount = Math.max(1, Math.ceil(safeTotalHeight / safeViewportHeight));
+  const currentPage = Math.min(
+    pageCount,
+    Math.max(1, Math.floor(Math.max(scrollTop, 0) / safeViewportHeight) + 1),
+  );
+
+  return { currentPage, pageCount };
+}
+
 export const EpubViewer: FC = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -130,7 +166,11 @@ export const EpubViewer: FC = () => {
   const [currentChapterHref, setCurrentChapterHref] = usePersistedState('currentChapterHref', '');
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('viewMode', 'waterfall');
   const [chapterCount, setChapterCount] = useState(0);
-  const [, setChapterLayoutVersion] = useState(0);
+  const [chapterLayoutVersion, setChapterLayoutVersion] = useState(0);
+  const [waterfallPageMetrics, setWaterfallPageMetrics] = useState<WaterfallPageMetrics>({
+    currentPage: 1,
+    pageCount: 1,
+  });
   const [epubSelection, setEpubSelection] = useState<DocumentSelection | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [iframeMenuPos, setIframeMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -159,8 +199,11 @@ export const EpubViewer: FC = () => {
   const waterfallObserverRef = useRef<IntersectionObserver | null>(null);
   const [waterfallReady, setWaterfallReady] = useState(false);
   const chapterHeightsRef = useRef<Map<number, number>>(new Map());
+  const resolvedChapterHeightsRef = useRef<Set<number>>(new Set());
   const measuringChaptersRef = useRef<Map<number, Promise<number>>>(new Map());
   const measurementQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const measurementSessionRef = useRef(0);
+  const chapterLayoutFrameRef = useRef<number | null>(null);
 
   // Waterfall text selection via native document selection
   const { selection: waterfallSelection } = useDocumentSelection({
@@ -178,6 +221,259 @@ export const EpubViewer: FC = () => {
       }
     },
     [setCurrentChapter, setCurrentChapterHref],
+  );
+
+  const queueChapterLayoutRefresh = useCallback(() => {
+    if (chapterLayoutFrameRef.current !== null) return;
+    chapterLayoutFrameRef.current = window.requestAnimationFrame(() => {
+      chapterLayoutFrameRef.current = null;
+      setChapterLayoutVersion((version) => version + 1);
+    });
+  }, []);
+
+  const measureRenderedChapterHeight = useCallback((el: HTMLElement): number => {
+    return Math.max(1, Math.ceil(el.getBoundingClientRect().height));
+  }, []);
+
+  const getFallbackChapterHeight = useCallback((): number => {
+    const viewportHeight = waterfallContainerRef.current?.clientHeight ?? window.innerHeight;
+    const measuredAverage = average(chapterHeightsRef.current.values());
+    const estimatedHeight =
+      measuredAverage ?? viewportHeight * WATERFALL_INITIAL_CHAPTER_HEIGHT_FACTOR;
+
+    return Math.max(WATERFALL_MIN_CHAPTER_HEIGHT_PX, Math.ceil(estimatedHeight));
+  }, []);
+
+  const getChapterPlaceholderHeight = useCallback(
+    (index: number): number => {
+      return chapterHeightsRef.current.get(index) ?? getFallbackChapterHeight();
+    },
+    [getFallbackChapterHeight],
+  );
+
+  const commitChapterHeight = useCallback(
+    (index: number, height: number): number => {
+      const nextHeight = Math.max(1, Math.ceil(height));
+      const previousHeight = chapterHeightsRef.current.get(index);
+      if (previousHeight != null && Math.abs(previousHeight - nextHeight) <= 1) {
+        return previousHeight;
+      }
+      chapterHeightsRef.current.set(index, nextHeight);
+      queueChapterLayoutRefresh();
+      return nextHeight;
+    },
+    [queueChapterLayoutRefresh],
+  );
+
+  const rewriteSectionResources = useCallback((root: ParentNode, sectionBase: string) => {
+    const rewriteAttr = (target: Element, attr: string) => {
+      const value = target.getAttribute(attr);
+      if (
+        value &&
+        !value.startsWith('blob:') &&
+        !value.startsWith('data:') &&
+        !value.startsWith('http')
+      ) {
+        try {
+          target.setAttribute(attr, new URL(value, sectionBase).href);
+        } catch {
+          /* keep original */
+        }
+      }
+    };
+
+    root.querySelectorAll('img').forEach((img) => rewriteAttr(img, 'src'));
+    root.querySelectorAll('image').forEach((img) => {
+      rewriteAttr(img, 'href');
+      rewriteAttr(img, 'xlink:href');
+    });
+    root.querySelectorAll('link[rel="stylesheet"]').forEach((link) => rewriteAttr(link, 'href'));
+  }, []);
+
+  const waitForChapterResources = useCallback(async (root: ParentNode) => {
+    const waitForLoad = (target: EventTarget, ready: () => boolean): Promise<void> => {
+      if (ready()) return Promise.resolve();
+
+      return new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          window.clearTimeout(timeoutId);
+          target.removeEventListener('load', finish as EventListener);
+          target.removeEventListener('error', finish as EventListener);
+          resolve();
+        };
+
+        const timeoutId = window.setTimeout(finish, WATERFALL_RESOURCE_SETTLE_TIMEOUT_MS);
+        target.addEventListener('load', finish as EventListener, { once: true });
+        target.addEventListener('error', finish as EventListener, { once: true });
+      });
+    };
+
+    const images = Array.from(root.querySelectorAll('img'));
+    const stylesheets = Array.from(root.querySelectorAll('link[rel="stylesheet"]'));
+
+    await Promise.all([
+      ...images.map((img) => waitForLoad(img, () => img.complete)),
+      ...stylesheets.map((link) => waitForLoad(link, () => Boolean(link.sheet))),
+    ]);
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }, []);
+
+  const updateWaterfallPageMetrics = useCallback(() => {
+    const container = waterfallContainerRef.current;
+    if (!container) return;
+
+    const nextMetrics = calculateWaterfallPageMetrics(
+      container.scrollTop,
+      container.clientHeight,
+      container.scrollHeight,
+    );
+
+    setWaterfallPageMetrics((previous) => {
+      if (
+        previous.currentPage === nextMetrics.currentPage &&
+        previous.pageCount === nextMetrics.pageCount
+      ) {
+        return previous;
+      }
+      return nextMetrics;
+    });
+  }, []);
+
+  const settleLoadedChapterHeight = useCallback(
+    async (entry: SpineEntry, el: HTMLElement) => {
+      await waitForChapterResources(el);
+      if (
+        chapterRefsMap.current.get(entry.index) !== el ||
+        !loadedChaptersRef.current.has(entry.index)
+      ) {
+        return;
+      }
+
+      const height = commitChapterHeight(entry.index, measureRenderedChapterHeight(el));
+      resolvedChapterHeightsRef.current.add(entry.index);
+      el.style.minHeight = `${height}px`;
+      updateWaterfallPageMetrics();
+    },
+    [
+      waitForChapterResources,
+      commitChapterHeight,
+      measureRenderedChapterHeight,
+      updateWaterfallPageMetrics,
+    ],
+  );
+
+  const measureChapterHeight = useCallback(
+    async (entry: SpineEntry): Promise<number> => {
+      const cachedHeight = chapterHeightsRef.current.get(entry.index);
+      if (cachedHeight != null && resolvedChapterHeightsRef.current.has(entry.index)) {
+        return cachedHeight;
+      }
+
+      const pendingMeasurement = measuringChaptersRef.current.get(entry.index);
+      if (pendingMeasurement) return pendingMeasurement;
+
+      const sessionId = measurementSessionRef.current;
+      const task = measurementQueueRef.current.then(async () => {
+        const latestHeight = chapterHeightsRef.current.get(entry.index);
+        if (latestHeight != null && resolvedChapterHeightsRef.current.has(entry.index)) {
+          return latestHeight;
+        }
+
+        const liveChapter = chapterRefsMap.current.get(entry.index);
+        if (liveChapter && loadedChaptersRef.current.has(entry.index)) {
+          await waitForChapterResources(liveChapter);
+          if (
+            chapterRefsMap.current.get(entry.index) === liveChapter &&
+            loadedChaptersRef.current.has(entry.index)
+          ) {
+            const liveHeight = commitChapterHeight(
+              entry.index,
+              measureRenderedChapterHeight(liveChapter),
+            );
+            resolvedChapterHeightsRef.current.add(entry.index);
+            liveChapter.style.minHeight = `${liveHeight}px`;
+            updateWaterfallPageMetrics();
+            return liveHeight;
+          }
+        }
+
+        const book = bookRef.current;
+        const measureContainer = measureContainerRef.current;
+        if (!book || !measureContainer || sessionId !== measurementSessionRef.current) {
+          return getFallbackChapterHeight();
+        }
+
+        try {
+          measureContainer.replaceChildren();
+          measureContainer.style.width = `${Math.max(
+            1,
+            waterfallContainerRef.current?.clientWidth ?? measureContainer.clientWidth,
+          )}px`;
+
+          const article = document.createElement('article');
+          article.className = 'epub-chapter-content';
+          article.style.maxWidth = `${WATERFALL_CHAPTER_MAX_WIDTH_PX}px`;
+          article.style.padding = `${WATERFALL_CHAPTER_PADDING_PX}px`;
+          article.style.boxSizing = 'border-box';
+          article.style.borderBottom = '1px solid var(--vscode-panel-border)';
+          article.style.margin = '0 auto';
+
+          const html = await entry.section.render(book.load.bind(book));
+          if (sessionId !== measurementSessionRef.current) return getFallbackChapterHeight();
+
+          article.innerHTML = html;
+          rewriteSectionResources(article, entry.section.url ?? '');
+          measureContainer.appendChild(article);
+
+          await waitForChapterResources(article);
+          if (sessionId !== measurementSessionRef.current) return getFallbackChapterHeight();
+
+          const measuredHeight = commitChapterHeight(
+            entry.index,
+            measureRenderedChapterHeight(article),
+          );
+          resolvedChapterHeightsRef.current.add(entry.index);
+          updateWaterfallPageMetrics();
+          return measuredHeight;
+        } catch (err) {
+          logger.error(`Failed to measure chapter ${entry.index}:`, err);
+          return chapterHeightsRef.current.get(entry.index) ?? getFallbackChapterHeight();
+        } finally {
+          entry.section.unload();
+          if (measureContainerRef.current === measureContainer) {
+            measureContainer.replaceChildren();
+          }
+        }
+      });
+
+      measuringChaptersRef.current.set(entry.index, task);
+      measurementQueueRef.current = task.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      return task.finally(() => {
+        if (measuringChaptersRef.current.get(entry.index) === task) {
+          measuringChaptersRef.current.delete(entry.index);
+        }
+      });
+    },
+    [
+      commitChapterHeight,
+      getFallbackChapterHeight,
+      measureRenderedChapterHeight,
+      rewriteSectionResources,
+      updateWaterfallPageMetrics,
+      waitForChapterResources,
+    ],
   );
 
   // =========================================================================
@@ -198,7 +494,7 @@ export const EpubViewer: FC = () => {
     } else if (msg.type === 'epub:navigate') {
       const href = (msg as { type: string; payload: { href: string } }).payload.href;
       if (viewMode === 'waterfall') {
-        navigateWaterfallToHref(href);
+        void navigateWaterfallToHref(href);
       } else {
         renditionRef.current?.display(href);
       }
@@ -224,6 +520,9 @@ export const EpubViewer: FC = () => {
 
     return () => {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      if (chapterLayoutFrameRef.current !== null) {
+        cancelAnimationFrame(chapterLayoutFrameRef.current);
+      }
       renditionRef.current?.destroy();
       bookRef.current?.destroy();
     };
@@ -406,10 +705,17 @@ export const EpubViewer: FC = () => {
         // Destroy any existing rendition
         renditionRef.current?.destroy();
         renditionRef.current = null;
+        measurementSessionRef.current += 1;
+        measurementQueueRef.current = Promise.resolve();
+        measuringChaptersRef.current.clear();
         loadedChaptersRef.current.clear();
         loadingChaptersRef.current.clear();
         chapterHeightsRef.current.clear();
+        resolvedChapterHeightsRef.current.clear();
+        measureContainerRef.current?.replaceChildren();
+        setWaterfallPageMetrics({ currentPage: 1, pageCount: 1 });
         setWaterfallReady(true);
+        setChapterLayoutVersion((version) => version + 1);
       } else {
         await renderBook(book, tocItems);
       }
@@ -422,7 +728,7 @@ export const EpubViewer: FC = () => {
   // =========================================================================
 
   /** Navigate to persisted chapter after load */
-  const restoreChapter = useCallback(() => {
+  const restoreChapter = () => {
     const savedHref = persistedChapterHrefRef.current;
     const fallbackLabel = persistedChapterRef.current;
     const toc = savedHref
@@ -433,16 +739,13 @@ export const EpubViewer: FC = () => {
     if (!toc) return;
     // Delay to let waterfall observer or rendition settle
     requestAnimationFrame(() => {
-      // Waterfall: scroll to chapter element directly
-      const entry = spineEntriesRef.current.find((e) => matchesHref(e.href, toc.href));
-      if (entry) {
-        const el = chapterRefsMap.current.get(entry.index);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (viewMode === 'waterfall') {
+        void navigateWaterfallToHref(toc.href);
       } else {
         renditionRef.current?.display(toc.href);
       }
     });
-  }, []);
+  };
 
   /** Load EPUB from a localhost URL served by neko-engine. */
   const loadEpubFromUrl = useCallback(
@@ -466,7 +769,7 @@ export const EpubViewer: FC = () => {
         loadingRef.current = false;
       }
     },
-    [initBook],
+    [initBook, restoreChapter],
   );
 
   /** Legacy: load EPUB from base64 string (fallback). */
@@ -493,94 +796,115 @@ export const EpubViewer: FC = () => {
         loadingRef.current = false;
       }
     },
-    [initBook],
+    [initBook, restoreChapter],
   );
 
   useEffect(() => {
-    if (loading || chapterCount === 0) return;
+    if (loading) return;
 
     const currentChapterIndex = currentChapterHref
       ? tocRef.current.findIndex((item) => matchesHref(item.href, currentChapterHref)) + 1
       : undefined;
+    const pageCount = viewMode === 'waterfall' ? waterfallPageMetrics.pageCount : chapterCount;
+    const currentPage =
+      viewMode === 'waterfall'
+        ? waterfallPageMetrics.currentPage
+        : currentChapterIndex && currentChapterIndex > 0
+          ? currentChapterIndex
+          : undefined;
 
     postMessage({
       type: 'document:statusUpdate',
       payload: {
-        pageCount: chapterCount,
-        currentPage:
-          currentChapterIndex && currentChapterIndex > 0 ? currentChapterIndex : undefined,
+        pageCount: pageCount > 0 ? pageCount : undefined,
+        currentPage,
         chapterHref: currentChapterHref || undefined,
         chapterTitle: currentChapter || undefined,
       },
     });
-  }, [loading, chapterCount, currentChapterHref, currentChapter]);
+  }, [loading, chapterCount, currentChapterHref, currentChapter, viewMode, waterfallPageMetrics]);
 
   // =========================================================================
   // Waterfall mode: load/unload chapter content
   // =========================================================================
 
-  const loadChapterContent = useCallback(async (entry: SpineEntry) => {
-    const book = bookRef.current;
-    if (!book) return;
-    if (loadedChaptersRef.current.has(entry.index) || loadingChaptersRef.current.has(entry.index))
-      return;
+  const loadChapterContent = useCallback(
+    async (entry: SpineEntry) => {
+      const book = bookRef.current;
+      if (!book) return;
+      if (loadedChaptersRef.current.has(entry.index) || loadingChaptersRef.current.has(entry.index))
+        return;
 
-    const el = chapterRefsMap.current.get(entry.index);
-    if (!el) return;
+      const el = chapterRefsMap.current.get(entry.index);
+      if (!el) return;
 
-    loadingChaptersRef.current.add(entry.index);
-    try {
-      // section.render() returns HTML string with resource URLs resolved via book.load()
-      const html = await entry.section.render(book.load.bind(book));
+      loadingChaptersRef.current.add(entry.index);
+      try {
+        // section.render() returns HTML string with resource URLs resolved via book.load()
+        const html = await entry.section.render(book.load.bind(book));
 
-      if (!chapterRefsMap.current.has(entry.index)) return;
+        if (!chapterRefsMap.current.has(entry.index)) return;
 
-      el.innerHTML = html;
+        el.innerHTML = html;
 
-      // Rewrite relative resource URLs to absolute HTTP URLs served by neko-engine.
-      // Use section.url as base (e.g. http://…/epub/{token}/OEBPS/text/ch1.xhtml)
-      // so that relative paths like "../image/cover.jpg" resolve correctly.
-      const sectionBase = entry.section.url ?? '';
-      const rewriteAttr = (el2: Element, attr: string) => {
-        const val = el2.getAttribute(attr);
-        if (
-          val &&
-          !val.startsWith('blob:') &&
-          !val.startsWith('data:') &&
-          !val.startsWith('http')
-        ) {
-          try {
-            el2.setAttribute(attr, new URL(val, sectionBase).href);
-          } catch {
-            /* keep original */
-          }
+        // Rewrite relative resource URLs to absolute HTTP URLs served by neko-engine.
+        // Use section.url as base (e.g. http://…/epub/{token}/OEBPS/text/ch1.xhtml)
+        // so that relative paths like "../image/cover.jpg" resolve correctly.
+        rewriteSectionResources(el, entry.section.url ?? '');
+
+        loadedChaptersRef.current.add(entry.index);
+        const height = commitChapterHeight(entry.index, measureRenderedChapterHeight(el));
+        el.style.minHeight = `${height}px`;
+        updateWaterfallPageMetrics();
+        void settleLoadedChapterHeight(entry, el);
+      } catch (err) {
+        logger.error(`Failed to load chapter ${entry.index}:`, err);
+      } finally {
+        loadingChaptersRef.current.delete(entry.index);
+      }
+    },
+    [
+      commitChapterHeight,
+      measureRenderedChapterHeight,
+      rewriteSectionResources,
+      settleLoadedChapterHeight,
+      updateWaterfallPageMetrics,
+    ],
+  );
+
+  const unloadChapterContent = useCallback(
+    (entry: SpineEntry) => {
+      const el = chapterRefsMap.current.get(entry.index);
+      if (!el || !loadedChaptersRef.current.has(entry.index)) return;
+
+      const height = commitChapterHeight(entry.index, measureRenderedChapterHeight(el));
+      el.style.minHeight = `${height}px`;
+      el.innerHTML = '';
+      loadedChaptersRef.current.delete(entry.index);
+      entry.section.unload();
+      updateWaterfallPageMetrics();
+    },
+    [commitChapterHeight, measureRenderedChapterHeight, updateWaterfallPageMetrics],
+  );
+
+  const prefetchChapterNeighborhood = useCallback(
+    (targetEntry: SpineEntry, radius = 1) => {
+      const entries = spineEntriesRef.current;
+      const center = entries.findIndex((entry) => entry.index === targetEntry.index);
+      if (center < 0) return;
+
+      for (let distance = 0; distance <= radius; distance++) {
+        const candidateIndexes = distance === 0 ? [center] : [center - distance, center + distance];
+
+        for (const candidateIndex of candidateIndexes) {
+          const candidate = entries[candidateIndex];
+          if (!candidate) continue;
+          void loadChapterContent(candidate);
         }
-      };
-      el.querySelectorAll('img').forEach((img) => rewriteAttr(img, 'src'));
-      el.querySelectorAll('image').forEach((img) => {
-        rewriteAttr(img, 'href');
-        rewriteAttr(img, 'xlink:href');
-      });
-      el.querySelectorAll('link[rel="stylesheet"]').forEach((link) => rewriteAttr(link, 'href'));
-
-      loadedChaptersRef.current.add(entry.index);
-      chapterHeightsRef.current.set(entry.index, el.scrollHeight);
-    } catch (err) {
-      logger.error(`Failed to load chapter ${entry.index}:`, err);
-    } finally {
-      loadingChaptersRef.current.delete(entry.index);
-    }
-  }, []);
-
-  const unloadChapterContent = useCallback((entry: SpineEntry) => {
-    const el = chapterRefsMap.current.get(entry.index);
-    if (!el || !loadedChaptersRef.current.has(entry.index)) return;
-
-    chapterHeightsRef.current.set(entry.index, el.scrollHeight);
-    el.style.minHeight = `${el.scrollHeight}px`;
-    el.innerHTML = '';
-    loadedChaptersRef.current.delete(entry.index);
-  }, []);
+      }
+    },
+    [loadChapterContent],
+  );
 
   /** Update current chapter title based on scroll position */
   const updateCurrentChapterFromScroll = useCallback(() => {
@@ -656,13 +980,37 @@ export const EpubViewer: FC = () => {
   ]);
 
   /** Navigate waterfall to a specific href */
-  const navigateWaterfallToHref = useCallback((href: string) => {
-    const entry = spineEntriesRef.current.find((e) => matchesHref(e.href, href));
-    if (entry) {
+  const navigateWaterfallToHref = useCallback(
+    async (href: string) => {
+      const entry = spineEntriesRef.current.find((e) => matchesHref(e.href, href));
+      if (!entry) return;
+
+      const container = waterfallContainerRef.current;
       const el = chapterRefsMap.current.get(entry.index);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, []);
+      if (!container || !el) return;
+
+      prefetchChapterNeighborhood(entry, 2);
+
+      const targetTop = el.offsetTop;
+      const distance = Math.abs(container.scrollTop - targetTop);
+      const behavior: ScrollBehavior = distance > container.clientHeight * 3 ? 'auto' : 'smooth';
+
+      container.scrollTo({ top: targetTop, behavior });
+      updateWaterfallPageMetrics();
+
+      requestAnimationFrame(() => {
+        const latestEl = chapterRefsMap.current.get(entry.index);
+        const latestContainer = waterfallContainerRef.current;
+        if (!latestEl || !latestContainer) return;
+        const correction = latestEl.offsetTop;
+        if (Math.abs(latestContainer.scrollTop - correction) > 4) {
+          latestContainer.scrollTo({ top: correction, behavior: 'auto' });
+        }
+        updateWaterfallPageMetrics();
+      });
+    },
+    [prefetchChapterNeighborhood, updateWaterfallPageMetrics],
+  );
 
   useEffect(() => {
     if (viewMode !== 'waterfall' || !waterfallReady) return;
@@ -676,6 +1024,7 @@ export const EpubViewer: FC = () => {
       rafId = requestAnimationFrame(() => {
         rafId = 0;
         updateCurrentChapterFromScroll();
+        updateWaterfallPageMetrics();
       });
     };
 
@@ -688,7 +1037,46 @@ export const EpubViewer: FC = () => {
         cancelAnimationFrame(rafId);
       }
     };
-  }, [viewMode, waterfallReady, updateCurrentChapterFromScroll]);
+  }, [viewMode, waterfallReady, updateCurrentChapterFromScroll, updateWaterfallPageMetrics]);
+
+  useEffect(() => {
+    if (viewMode !== 'waterfall' || !waterfallReady) return;
+    updateWaterfallPageMetrics();
+  }, [viewMode, waterfallReady, chapterLayoutVersion, updateWaterfallPageMetrics]);
+
+  useEffect(() => {
+    if (viewMode !== 'waterfall' || !waterfallReady) return;
+
+    const container = waterfallContainerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      updateWaterfallPageMetrics();
+    });
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, [viewMode, waterfallReady, updateWaterfallPageMetrics]);
+
+  useEffect(() => {
+    if (viewMode !== 'waterfall' || !waterfallReady || loading) return;
+
+    let cancelled = false;
+    const sessionId = measurementSessionRef.current;
+
+    const warmChapterHeights = async () => {
+      for (const entry of spineEntriesRef.current) {
+        if (cancelled || sessionId !== measurementSessionRef.current) return;
+        await measureChapterHeight(entry);
+      }
+    };
+
+    void warmChapterHeights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode, waterfallReady, loading, measureChapterHeight]);
 
   const setChapterRef = useCallback((index: number, el: HTMLElement | null) => {
     if (el) {
@@ -789,7 +1177,9 @@ export const EpubViewer: FC = () => {
       setWaterfallReady(true);
       // Scroll waterfall to the chapter we were reading
       if (chapterHref) {
-        requestAnimationFrame(() => navigateWaterfallToHref(chapterHref));
+        requestAnimationFrame(() => {
+          void navigateWaterfallToHref(chapterHref);
+        });
       }
     } else {
       // Wait for React to update display so the viewer container is visible
@@ -1021,7 +1411,22 @@ export const EpubViewer: FC = () => {
             </div>
           )}
 
-          {/* Waterfall mode: custom DOM container */}
+          <div
+            ref={measureContainerRef}
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: '-20000px',
+              height: 0,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+              visibility: 'hidden',
+            }}
+          >
+            <style>{WATERFALL_THEME_CSS}</style>
+          </div>
+
           {/* Waterfall mode: custom DOM container */}
           <div
             ref={waterfallContainerRef}
@@ -1037,9 +1442,10 @@ export const EpubViewer: FC = () => {
                 data-href={entry.href}
                 className="epub-chapter-content mx-auto"
                 style={{
-                  maxWidth: '800px',
-                  padding: '20px',
-                  minHeight: chapterHeightsRef.current.get(entry.index) ?? '200px',
+                  maxWidth: `${WATERFALL_CHAPTER_MAX_WIDTH_PX}px`,
+                  padding: `${WATERFALL_CHAPTER_PADDING_PX}px`,
+                  minHeight: getChapterPlaceholderHeight(entry.index),
+                  boxSizing: 'border-box',
                   borderBottom: '1px solid var(--vscode-panel-border)',
                 }}
               />
