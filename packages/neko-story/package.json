@@ -64,23 +64,23 @@
     "commands": [
       {
         "command": "neko.story.preview",
-        "title": "Preview Story",
+        "title": "%neko.story.preview.title%",
         "icon": "$(open-preview)",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.toTimeline",
-        "title": "Convert to Timeline",
+        "title": "%neko.story.toTimeline.title%",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.generateStoryboard",
-        "title": "Generate Storyboard",
+        "title": "%neko.story.generateStoryboard.title%",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.startVideoCreation",
-        "title": "Start Video Creation",
+        "title": "%neko.story.startVideoCreation.title%",
         "category": "Neko Story"
       },
       {
@@ -95,17 +95,17 @@
       },
       {
         "command": "neko.story.sendToAgent",
-        "title": "→ Agent",
+        "title": "%neko.story.sendToAgent.title%",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.applyInlineDiff",
-        "title": "Apply AI Inline Diff",
+        "title": "%neko.story.applyInlineDiff.title%",
         "category": "Neko Story"
       },
       {
         "command": "neko.story.scriptTableView",
-        "title": "Open Breakdown Table",
+        "title": "%neko.story.scriptTableView.title%",
         "icon": "$(table)",
         "category": "Neko Story"
       }

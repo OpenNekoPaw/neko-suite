@@ -1,27 +1,7 @@
 /**
- * Global Logger Registry
- *
- * Provides a simple way for modules to obtain loggers without
- * constructor injection. The root logger is set once during
- * extension activation; modules call `getLogger(source)` to
- * get a child logger.
+ * Global Logger Registry — delegates to shared createLoggerRegistry().
  */
 
-import type { ILogger } from '@neko/shared';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { createLoggerRegistry } from '@neko/shared';
 
-let _rootLogger: ILogger = new ConsoleLogger('NekoStory', LogLevel.Info);
-
-/**
- * Set the root logger (called once in activate())
- */
-export function setRootLogger(logger: ILogger): void {
-  _rootLogger = logger;
-}
-
-/**
- * Get the root logger directly (for extension.ts top-level logs)
- */
-export function getRootLogger(): ILogger {
-  return _rootLogger;
-}
+export const { setRootLogger, getRootLogger, getLogger } = createLoggerRegistry('NekoStory');

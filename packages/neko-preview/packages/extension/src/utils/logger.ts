@@ -1,12 +1,7 @@
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { ILogger } from '@neko/shared';
+/**
+ * Global Logger Registry — delegates to shared createLoggerRegistry().
+ */
 
-let rootLogger: ILogger = new ConsoleLogger('NekoPreview', LogLevel.Info);
+import { createLoggerRegistry } from '@neko/shared';
 
-export function setRootLogger(logger: ILogger): void {
-  rootLogger = logger;
-}
-
-export function getLogger(source: string): ILogger {
-  return rootLogger.child(source);
-}
+export const { setRootLogger, getRootLogger, getLogger } = createLoggerRegistry('NekoPreview');

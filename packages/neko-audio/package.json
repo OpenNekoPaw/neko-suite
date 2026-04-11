@@ -70,37 +70,37 @@
     "commands": [
       {
         "command": "neko.audio.record",
-        "title": "Record Audio",
+        "title": "%neko.audio.record.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.denoise",
-        "title": "Denoise Audio",
+        "title": "%neko.audio.denoise.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.normalize",
-        "title": "Normalize Audio",
+        "title": "%neko.audio.normalize.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.showSpectrum",
-        "title": "Show Spectrum Analyzer",
+        "title": "%neko.audio.showSpectrum.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.trim",
-        "title": "Trim Audio",
+        "title": "%neko.audio.trim.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.fadeIn",
-        "title": "Apply Fade In",
+        "title": "%neko.audio.fadeIn.title%",
         "category": "Neko Audio"
       },
       {
         "command": "neko.audio.fadeOut",
-        "title": "Apply Fade Out",
+        "title": "%neko.audio.fadeOut.title%",
         "category": "Neko Audio"
       },
       {
@@ -110,7 +110,7 @@
       },
       {
         "command": "neko.audio.exportAs",
-        "title": "Export Audio As...",
+        "title": "%neko.audio.exportAs.title%",
         "category": "Neko Audio"
       }
     ],

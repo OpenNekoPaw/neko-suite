@@ -2,8 +2,8 @@
  * i18n for neko-assets extension
  */
 
-import { I18nService } from '@neko/shared/i18n/core.ts';
-import type { SupportedLocale } from '@neko/shared/i18n/types.ts';
+import { I18nService } from '@neko/shared';
+import type { SupportedLocale } from '@neko/shared';
 import { en } from './locales/en';
 import { zhCn } from './locales/zh-cn';
 

@@ -1,5 +1,12 @@
 {
   "neko.story.newFile.title": "New Story File",
   "neko.story.openCharacterRegistry.title": "Open Character Registry",
-  "neko.story.exportPdf.title": "Export Screenplay as PDF"
+  "neko.story.exportPdf.title": "Export Screenplay as PDF",
+  "neko.story.preview.title": "Preview Story",
+  "neko.story.toTimeline.title": "Convert to Timeline",
+  "neko.story.generateStoryboard.title": "Generate Storyboard",
+  "neko.story.startVideoCreation.title": "Start Video Creation",
+  "neko.story.sendToAgent.title": "→ Agent",
+  "neko.story.applyInlineDiff.title": "Apply AI Inline Diff",
+  "neko.story.scriptTableView.title": "Open Breakdown Table"
 }

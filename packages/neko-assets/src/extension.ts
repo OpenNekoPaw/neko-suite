@@ -89,7 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   logger.info('Activating extension...');
 
   // 0. Initialize i18n
-  const { getVSCodeLocale } = await import('@neko/shared/vscode/extension/i18n-bridge.ts');
+  const { getVSCodeLocale } = await import('@neko/shared/vscode/extension');
   const locale = getVSCodeLocale();
   const { initI18n } = await import('./i18n');
   initI18n(locale);

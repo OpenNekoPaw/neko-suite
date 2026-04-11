@@ -1,3 +1,11 @@
 {
-  "neko.audio.new.title": "新建音频项目"
+  "neko.audio.new.title": "新建音频项目",
+  "neko.audio.record.title": "录制音频",
+  "neko.audio.denoise.title": "音频降噪",
+  "neko.audio.normalize.title": "音频归一化",
+  "neko.audio.showSpectrum.title": "显示频谱分析器",
+  "neko.audio.trim.title": "裁剪音频",
+  "neko.audio.fadeIn.title": "应用淡入",
+  "neko.audio.fadeOut.title": "应用淡出",
+  "neko.audio.exportAs.title": "导出音频为..."
 }

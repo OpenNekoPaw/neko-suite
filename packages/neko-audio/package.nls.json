@@ -1,3 +1,11 @@
 {
-  "neko.audio.new.title": "New Audio Project"
+  "neko.audio.new.title": "New Audio Project",
+  "neko.audio.record.title": "Record Audio",
+  "neko.audio.denoise.title": "Denoise Audio",
+  "neko.audio.normalize.title": "Normalize Audio",
+  "neko.audio.showSpectrum.title": "Show Spectrum Analyzer",
+  "neko.audio.trim.title": "Trim Audio",
+  "neko.audio.fadeIn.title": "Apply Fade In",
+  "neko.audio.fadeOut.title": "Apply Fade Out",
+  "neko.audio.exportAs.title": "Export Audio As..."
 }

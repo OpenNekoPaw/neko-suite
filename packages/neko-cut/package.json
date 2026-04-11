@@ -81,227 +81,227 @@
       },
       {
         "command": "neko.timeline.getInfo",
-        "title": "Get Timeline Info",
+        "title": "%neko.timeline.getInfo.title%",
         "category": "NekoCut: Timeline"
       },
       {
         "command": "neko.timeline.listElements",
-        "title": "List Timeline Elements",
+        "title": "%neko.timeline.listElements.title%",
         "category": "NekoCut: Timeline"
       },
       {
         "command": "neko.element.add",
-        "title": "Add Element",
+        "title": "%neko.element.add.title%",
         "category": "NekoCut: Element"
       },
       {
         "command": "neko.element.update",
-        "title": "Update Element",
+        "title": "%neko.element.update.title%",
         "category": "NekoCut: Element"
       },
       {
         "command": "neko.element.delete",
-        "title": "Delete Element",
+        "title": "%neko.element.delete.title%",
         "category": "NekoCut: Element"
       },
       {
         "command": "neko.element.getInfo",
-        "title": "Get Element Info",
+        "title": "%neko.element.getInfo.title%",
         "category": "NekoCut: Element"
       },
       {
         "command": "neko.track.add",
-        "title": "Add Track",
+        "title": "%neko.track.add.title%",
         "category": "NekoCut: Track"
       },
       {
         "command": "neko.track.delete",
-        "title": "Delete Track",
+        "title": "%neko.track.delete.title%",
         "category": "NekoCut: Track"
       },
       {
         "command": "neko.track.reorder",
-        "title": "Reorder Track",
+        "title": "%neko.track.reorder.title%",
         "category": "NekoCut: Track"
       },
       {
         "command": "neko.track.setProperties",
-        "title": "Set Track Properties",
+        "title": "%neko.track.setProperties.title%",
         "category": "NekoCut: Track"
       },
       {
         "command": "neko.effect.list",
-        "title": "List Effects",
+        "title": "%neko.effect.list.title%",
         "category": "NekoCut: Effect"
       },
       {
         "command": "neko.effect.add",
-        "title": "Add Effect",
+        "title": "%neko.effect.add.title%",
         "category": "NekoCut: Effect"
       },
       {
         "command": "neko.effect.update",
-        "title": "Update Effect",
+        "title": "%neko.effect.update.title%",
         "category": "NekoCut: Effect"
       },
       {
         "command": "neko.effect.remove",
-        "title": "Remove Effect",
+        "title": "%neko.effect.remove.title%",
         "category": "NekoCut: Effect"
       },
       {
         "command": "neko.transition.list",
-        "title": "List Transitions",
+        "title": "%neko.transition.list.title%",
         "category": "NekoCut: Transition"
       },
       {
         "command": "neko.transition.add",
-        "title": "Add Transition",
+        "title": "%neko.transition.add.title%",
         "category": "NekoCut: Transition"
       },
       {
         "command": "neko.transition.remove",
-        "title": "Remove Transition",
+        "title": "%neko.transition.remove.title%",
         "category": "NekoCut: Transition"
       },
       {
         "command": "neko.mask.add",
-        "title": "Add Mask",
+        "title": "%neko.mask.add.title%",
         "category": "NekoCut: Mask"
       },
       {
         "command": "neko.mask.update",
-        "title": "Update Mask",
+        "title": "%neko.mask.update.title%",
         "category": "NekoCut: Mask"
       },
       {
         "command": "neko.mask.remove",
-        "title": "Remove Mask",
+        "title": "%neko.mask.remove.title%",
         "category": "NekoCut: Mask"
       },
       {
         "command": "neko.keyframe.get",
-        "title": "Get Keyframes",
+        "title": "%neko.keyframe.get.title%",
         "category": "NekoCut: Keyframe"
       },
       {
         "command": "neko.keyframe.add",
-        "title": "Add Keyframe",
+        "title": "%neko.keyframe.add.title%",
         "category": "NekoCut: Keyframe"
       },
       {
         "command": "neko.keyframe.update",
-        "title": "Update Keyframe",
+        "title": "%neko.keyframe.update.title%",
         "category": "NekoCut: Keyframe"
       },
       {
         "command": "neko.keyframe.remove",
-        "title": "Remove Keyframe",
+        "title": "%neko.keyframe.remove.title%",
         "category": "NekoCut: Keyframe"
       },
       {
         "command": "neko.shape.add",
-        "title": "Add Shape",
+        "title": "%neko.shape.add.title%",
         "category": "NekoCut: Shape"
       },
       {
         "command": "neko.shape.update",
-        "title": "Update Shape",
+        "title": "%neko.shape.update.title%",
         "category": "NekoCut: Shape"
       },
       {
         "command": "neko.color.set",
-        "title": "Set Color Correction",
+        "title": "%neko.color.set.title%",
         "category": "NekoCut: Color"
       },
       {
         "command": "neko.color.reset",
-        "title": "Reset Color Correction",
+        "title": "%neko.color.reset.title%",
         "category": "NekoCut: Color"
       },
       {
         "command": "neko.audio.setProperties",
-        "title": "Set Audio Properties",
+        "title": "%neko.audio.setProperties.title%",
         "category": "NekoCut: Audio"
       },
       {
         "command": "neko.audio.addKeyframe",
-        "title": "Add Audio Keyframe",
+        "title": "%neko.audio.addKeyframe.title%",
         "category": "NekoCut: Audio"
       },
       {
         "command": "neko.animation.add",
-        "title": "Add Animation",
+        "title": "%neko.animation.add.title%",
         "category": "NekoCut: Animation"
       },
       {
         "command": "neko.subtitle.add",
-        "title": "Add Subtitle",
+        "title": "%neko.subtitle.add.title%",
         "category": "NekoCut: Subtitle"
       },
       {
         "command": "neko.subtitle.import",
-        "title": "Import Subtitles",
+        "title": "%neko.subtitle.import.title%",
         "category": "NekoCut: Subtitle"
       },
       {
         "command": "neko.media.trim",
-        "title": "Trim Media",
+        "title": "%neko.media.trim.title%",
         "category": "NekoCut: Media"
       },
       {
         "command": "neko.media.split",
-        "title": "Split Media",
+        "title": "%neko.media.split.title%",
         "category": "NekoCut: Media"
       },
       {
         "command": "neko.media.setSpeed",
-        "title": "Set Media Speed",
+        "title": "%neko.media.setSpeed.title%",
         "category": "NekoCut: Media"
       },
       {
         "command": "neko.media.separateAudio",
-        "title": "Separate Audio",
+        "title": "%neko.media.separateAudio.title%",
         "category": "NekoCut: Media"
       },
       {
         "command": "neko.render.frame",
-        "title": "Render Frame",
+        "title": "%neko.render.frame.title%",
         "category": "NekoCut: Render"
       },
       {
         "command": "neko.render.clip",
-        "title": "Render Clip",
+        "title": "%neko.render.clip.title%",
         "category": "NekoCut: Render"
       },
       {
         "command": "neko.render.thumbnail",
-        "title": "Get Thumbnail",
+        "title": "%neko.render.thumbnail.title%",
         "category": "NekoCut: Render"
       },
       {
         "command": "neko.export.video",
-        "title": "Export Video",
+        "title": "%neko.export.video.title%",
         "category": "NekoCut: Export"
       },
       {
         "command": "neko.export.getProgress",
-        "title": "Get Export Progress",
+        "title": "%neko.export.getProgress.title%",
         "category": "NekoCut: Export"
       },
       {
         "command": "neko.cut.previewMedia",
-        "title": "Preview Media",
+        "title": "%neko.cut.previewMedia.title%",
         "category": "NekoCut"
       },
       {
         "command": "neko.cut.importGeneratedClip",
-        "title": "Import Generated Clip",
+        "title": "%neko.cut.importGeneratedClip.title%",
         "category": "NekoCut"
       },
       {
         "command": "neko.cut.importStoryboard",
-        "title": "Import Storyboard",
+        "title": "%neko.cut.importStoryboard.title%",
         "category": "NekoCut"
       }
     ],
