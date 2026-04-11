@@ -14,7 +14,7 @@ import * as path from 'path';
 import { getMediaType } from '@neko/shared';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
-import { MediaDiffService } from '../services/MediaDiffService';
+import { MediaDiffService, type IMediaDiffService } from '../services/MediaDiffService';
 import { EngineMediaService } from '../../services/EngineMediaService';
 import {
   type IMediaDiffEditorSessionFactory,
@@ -35,7 +35,7 @@ const LOCAL_COMPARE_FILES_KEY = 'mediaDiff.localCompareFiles';
 export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvider {
   public static readonly viewType = 'neko.mediaDiff';
 
-  private readonly diffService: MediaDiffService;
+  private readonly diffService: IMediaDiffService;
   private readonly sessionFactory: IMediaDiffEditorSessionFactory;
   private activeSessions: Map<string, IMediaDiffEditorSession> = new Map();
   /** Map from document URI to the previous file URI for local comparison */
@@ -43,7 +43,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    diffService?: MediaDiffService,
+    diffService?: IMediaDiffService,
     engineMediaService?: IEngineMediaService,
     sessionFactory?: IMediaDiffEditorSessionFactory,
   ) {
@@ -178,22 +178,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
    */
   private async isFileTrackedInGit(uri: vscode.Uri): Promise<boolean> {
     try {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-      if (!workspaceFolder) {
-        return false;
-      }
-
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-      const path = await import('path');
-
-      const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
-
-      await execAsync(`git ls-files --error-unmatch "${relativePath}"`, {
-        cwd: workspaceFolder.uri.fsPath,
-      });
-      return true;
+      return await this.diffService.isTracked(uri);
     } catch {
       return false;
     }

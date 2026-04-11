@@ -5,6 +5,7 @@ export { bootstrapNekoToolsExtension } from './bootstrapExtension';
 export {
   IAssetEntityReader,
   IEngineMediaService,
+  IEngineRuntimeResolver,
   IExtensionErrorHandler,
   IExtensionI18n,
   IRootLogger,

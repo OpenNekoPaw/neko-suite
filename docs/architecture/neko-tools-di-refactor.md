@@ -55,9 +55,9 @@
 
 待完成：
 
-- Request scope 的取消、超时、临时资源进一步收口
-- `EngineMediaService` / `GitMediaService` 的更细粒度职责拆分
-- Webview stream client factory 注入
+- `MediaDiffService` 模块级单例与 feature-level bootstrap 仍可进一步收口
+- `IWorkspaceIO` / `ITempFileService` / `IScheduler` 尚未抽象成统一基础设施
+- Webview 的 `blob registry` / `raf scheduler` / playback hooks 仍未完全独立
 
 ### 本轮已落地实现
 
@@ -65,12 +65,17 @@
   - `src/extension.ts` 已退化为单一 composition root 入口
   - 激活期依赖已集中到 `bootstrapCoreServices` / `bootstrapNekoToolsExtension`
   - `logger / errorHandler / extension i18n / asset reader / variant comparison / engine media service` 已可显式组装
+  - 已新增 `IEngineRuntimeResolver` / `VSCodeEngineRuntimeResolver`，将 engine 激活与 frame server 解析从 `EngineMediaService` 中拆出
 - Media Diff Extension
   - 已新增 `MediaDiffEditorSession` / `MediaDiffEditorSessionFactory`
   - `MediaDiffEditorProvider` 仅保留 editor 壳层职责，不再直接拥有 message handler 生命周期
+  - 已新增 `MediaDiffRequestState`，收口 request scope 的 `AbortController`、git fetch promise、previous file temp path，并通过 `previousFileRef` 避免跨 ref 误复用临时文件
+  - 已新增 `GitCliGateway`，将 `git show / git ls-files / git log / extractFileToPath` 的 CLI 细节从 `GitMediaService` 中拆出
+  - `MediaDiffEditorProvider` 已移除内联 `child_process` 调用，Git tracked 判断统一回收到 `IMediaDiffService.isTracked`
 - Media Diff Webview
   - 已新增 `bridge`、`initialState`、`MediaDiffRuntimeProvider`
   - `useMediaDiffProtocol` 已改为依赖注入 runtime，而非直接读取全局对象
+  - 已新增 `streamClientFactory` 注入，音视频播放组件不再直接 `new AudioStreamClient` / `new H264StreamClient`
 - i18n
   - extension runtime 文案已统一走 `vscode.l10n`
   - webview locale 注入链路已补齐
@@ -81,6 +86,7 @@
 - `pnpm --dir packages/neko-tools run compile:extension`
 - `pnpm --dir packages/neko-tools run compile`
 - `pnpm --dir packages/neko-tools test -- --run`
+- 当前结果：`9` 个测试文件，`103` 个测试通过
 
 ---
 

@@ -94,6 +94,11 @@ export interface IMediaDiffService extends vscode.Disposable {
   hasChanges(uri: vscode.Uri): Promise<boolean>;
 
   /**
+   * Check if file is tracked by Git
+   */
+  isTracked(uri: vscode.Uri): Promise<boolean>;
+
+  /**
    * Get file commit history
    * @param uri - File URI
    * @param maxCount - Maximum number of commits to return
@@ -400,6 +405,10 @@ export class MediaDiffService implements IMediaDiffService {
   async hasChanges(uri: vscode.Uri): Promise<boolean> {
     const changes = await this.gitService.getChangedMediaFiles();
     return changes.some((c) => c.uri === uri.toString());
+  }
+
+  async isTracked(uri: vscode.Uri): Promise<boolean> {
+    return this.gitService.isTracked(uri);
   }
 
   async getFileHistory(uri: vscode.Uri, maxCount?: number): Promise<GitCommitInfo[]> {

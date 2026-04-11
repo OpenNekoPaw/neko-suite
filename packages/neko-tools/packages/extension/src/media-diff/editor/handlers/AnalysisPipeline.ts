@@ -107,7 +107,9 @@ export async function areFilesIdentical(pathA: string, pathB: string): Promise<b
  */
 export async function ensurePreviousFilePath(ctx: IHandlerContext, ref: string): Promise<void> {
   // Already have a path (local comparison or previously cached)
-  if (ctx.previousUri || ctx.previousFilePath) return;
+  if (ctx.previousUri || ctx.requestState.hasPreviousFileForRef(ref)) return;
+
+  await ctx.requestState.clearPreviousFilePath();
 
   try {
     const os = await import('os');
@@ -121,7 +123,7 @@ export async function ensurePreviousFilePath(ctx: IHandlerContext, ref: string):
 
     // Zero-copy: git show pipes directly to file, no memory buffering
     await ctx.diffService.extractPreviousToFile(ctx.fileUri, ref, tmpPath);
-    ctx.previousFilePath = tmpPath;
+    await ctx.requestState.setPreviousFilePath(tmpPath, ref);
   } catch (error) {
     // File may not exist in the ref (new file) — not an error
     logger.warn('Could not extract previous version:', error);
@@ -135,12 +137,7 @@ export async function ensurePreviousFilePath(ctx: IHandlerContext, ref: string):
  * Does NOT affect analyses from other handlers sharing the same diffService.
  */
 export function cancelCurrentAnalysis(ctx: IHandlerContext): void {
-  if (ctx.currentAbortController) {
-    ctx.currentAbortController.abort();
-    ctx.currentAbortController = null;
-  }
-  // Clear stale fetch promise so handleStartStreaming doesn't await an old git fetch.
-  ctx.fetchPromise = null;
+  ctx.requestState.cancelCurrentAnalysis();
 }
 
 // ── Fetch state broadcast ─────────────────────────────────────────────
@@ -169,9 +166,7 @@ export async function initializeDiff(ctx: IHandlerContext, ref: string = 'HEAD')
   if (ctx.isDisposed) return;
 
   // Cancel any previous analysis for this handler
-  cancelCurrentAnalysis(ctx);
-  const abortController = new AbortController();
-  ctx.currentAbortController = abortController;
+  const abortController = ctx.requestState.beginAnalysis();
 
   // Track whether the background pipeline took ownership of abortController cleanup
   let pipelineOwnsCleanup = false;
@@ -197,13 +192,14 @@ export async function initializeDiff(ctx: IHandlerContext, ref: string = 'HEAD')
       // handleStartStreaming awaits this.fetchPromise to avoid the race condition
       // where the user clicks Play before git show finishes (3-30s).
       sendFetchState(ctx, 'fetching');
-      ctx.fetchPromise = ensurePreviousFilePath(ctx, ref);
-      await ctx.fetchPromise;
-      ctx.fetchPromise = null;
+      const fetchPromise = ensurePreviousFilePath(ctx, ref);
+      ctx.requestState.fetchPromise = fetchPromise;
+      await fetchPromise;
+      ctx.requestState.clearFetchPromise(fetchPromise);
       sendFetchState(ctx, 'ready');
 
       // MD5 check: skip expensive diff if files are identical
-      const prevPath = ctx.previousUri?.fsPath ?? ctx.previousFilePath;
+      const prevPath = ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath;
       if (prevPath && (await areFilesIdentical(ctx.fileUri.fsPath, prevPath))) {
         ctx.sendMessage({
           type: 'mediaDiff:result',
@@ -257,8 +253,8 @@ export async function initializeDiff(ctx: IHandlerContext, ref: string = 'HEAD')
     });
   } finally {
     // Only clean up if the background pipeline didn't take ownership
-    if (!pipelineOwnsCleanup && ctx.currentAbortController === abortController) {
-      ctx.currentAbortController = null;
+    if (!pipelineOwnsCleanup) {
+      ctx.requestState.clearAbortController(abortController);
     }
   }
 }
@@ -277,9 +273,7 @@ export async function initializeLocalDiff(ctx: IHandlerContext): Promise<void> {
   }
 
   // Cancel any previous analysis for this handler
-  cancelCurrentAnalysis(ctx);
-  const abortController = new AbortController();
-  ctx.currentAbortController = abortController;
+  const abortController = ctx.requestState.beginAnalysis();
 
   let pipelineOwnsCleanup = false;
 
@@ -348,8 +342,8 @@ export async function initializeLocalDiff(ctx: IHandlerContext): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
-    if (!pipelineOwnsCleanup && ctx.currentAbortController === abortController) {
-      ctx.currentAbortController = null;
+    if (!pipelineOwnsCleanup) {
+      ctx.requestState.clearAbortController(abortController);
     }
   }
 }
@@ -438,9 +432,7 @@ function runAnalysisPipeline(
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      if (ctx.currentAbortController === abortController) {
-        ctx.currentAbortController = null;
-      }
+      ctx.requestState.clearAbortController(abortController);
     }
   };
   void run();
@@ -524,9 +516,7 @@ function runLocalAnalysisPipeline(
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      if (ctx.currentAbortController === abortController) {
-        ctx.currentAbortController = null;
-      }
+      ctx.requestState.clearAbortController(abortController);
     }
   };
   void run();

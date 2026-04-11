@@ -7,7 +7,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { EngineMediaService } from '../services/EngineMediaService';
+import type { IEngineMediaService } from '../contracts/IEngineMediaService';
 import { getLogger } from '../utils/logger';
 import { MediaProbeCache } from './services/MediaProbeCache';
 
@@ -27,7 +27,7 @@ const JVI_SELECTOR: vscode.DocumentSelector = { language: 'nekotools-jvi' };
  */
 export function initializeMediaLsp(
   context: vscode.ExtensionContext,
-  engineService?: EngineMediaService,
+  engineService?: IEngineMediaService,
 ): void {
   const probeCache = new MediaProbeCache();
 

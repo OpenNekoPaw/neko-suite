@@ -274,6 +274,16 @@ describe('MediaDiffService', () => {
     });
   });
 
+  describe('isTracked', () => {
+    it('should delegate to git service', async () => {
+      const mockUri = { fsPath: '/test/image.png' } as any;
+
+      await service.isTracked(mockUri);
+
+      expect(mockGitService.isTracked).toHaveBeenCalledWith(mockUri);
+    });
+  });
+
   describe('cancel', () => {
     it('should cancel registry analyzers', () => {
       const cancelSpy = vi.spyOn(mockRegistry, 'cancelAll');

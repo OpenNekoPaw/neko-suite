@@ -2,6 +2,7 @@ import type { IErrorHandler, ILogger } from '@neko/shared';
 import { createServiceId } from '../base/serviceCollection';
 import type { IAssetEntityReader as AssetEntityReaderContract } from '../contracts/IAssetEntityReader';
 import type { IEngineMediaService as EngineMediaServiceContract } from '../contracts/IEngineMediaService';
+import type { IEngineRuntimeResolver as EngineRuntimeResolverContract } from '../contracts/IEngineRuntimeResolver';
 import type { IExtensionI18n as ExtensionI18nContract } from '../contracts/IExtensionI18n';
 import type { IVariantComparisonService as VariantComparisonServiceContract } from '../contracts/IVariantComparisonService';
 
@@ -15,6 +16,9 @@ export const IAssetEntityReader = createServiceId<AssetEntityReaderContract>(
 );
 export const IVariantComparisonService = createServiceId<VariantComparisonServiceContract>(
   'nekoTools.variantComparisonService',
+);
+export const IEngineRuntimeResolver = createServiceId<EngineRuntimeResolverContract>(
+  'nekoTools.engineRuntimeResolver',
 );
 export const IEngineMediaService = createServiceId<EngineMediaServiceContract>(
   'nekoTools.engineMediaService',

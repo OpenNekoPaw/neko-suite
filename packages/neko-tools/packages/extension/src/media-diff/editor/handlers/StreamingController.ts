@@ -47,10 +47,10 @@ export async function handleStartStreaming(
     // This handles the race where the user clicks Play before ensurePreviousFilePath
     // finishes (3-30s for large repos).
     const currentPath = ctx.fileUri.fsPath;
-    let previousPath = ctx.previousUri?.fsPath ?? ctx.previousFilePath;
-    if (!previousPath && ctx.fetchPromise) {
-      await ctx.fetchPromise;
-      previousPath = ctx.previousUri?.fsPath ?? ctx.previousFilePath;
+    let previousPath = ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath;
+    if (!previousPath && ctx.requestState.fetchPromise) {
+      await ctx.requestState.fetchPromise;
+      previousPath = ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath;
     }
     if (!previousPath) {
       throw new Error('No previous file available for streaming');
@@ -284,10 +284,10 @@ export async function handleStartAudioStreaming(
 
     // 1. Resolve file paths, awaiting git fetch if still in progress.
     const currentPath = ctx.fileUri.fsPath;
-    let previousPath = ctx.previousUri?.fsPath ?? ctx.previousFilePath;
-    if (!previousPath && ctx.fetchPromise) {
-      await ctx.fetchPromise;
-      previousPath = ctx.previousUri?.fsPath ?? ctx.previousFilePath;
+    let previousPath = ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath;
+    if (!previousPath && ctx.requestState.fetchPromise) {
+      await ctx.requestState.fetchPromise;
+      previousPath = ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath;
     }
     if (!previousPath) {
       throw new Error('No previous file available for audio streaming');

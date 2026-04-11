@@ -51,7 +51,9 @@ export async function handleGetFrame(
   requestId?: string,
 ): Promise<void> {
   const filePath =
-    version === 'current' ? ctx.fileUri.fsPath : (ctx.previousUri?.fsPath ?? ctx.previousFilePath);
+    version === 'current'
+      ? ctx.fileUri.fsPath
+      : (ctx.previousUri?.fsPath ?? ctx.requestState.previousFilePath);
 
   if (!filePath) return;
 

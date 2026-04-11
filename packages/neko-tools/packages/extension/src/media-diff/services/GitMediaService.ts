@@ -14,9 +14,6 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { exec, spawn } from 'child_process';
-import { createWriteStream } from 'fs';
-import { promisify } from 'util';
 import {
   type MediaType,
   type MediaFileChange,
@@ -27,9 +24,9 @@ import {
   isSupportedMediaFile,
 } from '@neko/shared';
 import { getLogger } from '../../utils/logger';
+import { GitCliGateway, type GitCliTarget, type IGitCliGateway } from './GitCliGateway';
 
 const logger = getLogger('GitMediaService');
-const execAsync = promisify(exec);
 
 // =============================================================================
 // Git Extension Types (from VSCode Git Extension)
@@ -160,7 +157,7 @@ export class GitMediaService implements IGitMediaService {
   private disposables: vscode.Disposable[] = [];
   private initPromise: Promise<void> | null = null;
 
-  constructor() {
+  constructor(private readonly gitCliGateway: IGitCliGateway = new GitCliGateway()) {
     this.initPromise = this.initialize();
   }
 
@@ -357,136 +354,39 @@ export class GitMediaService implements IGitMediaService {
 
   async isTracked(uri: vscode.Uri): Promise<boolean> {
     await this.ensureInitialized();
-
-    try {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-      if (!workspaceFolder) {
-        return false;
-      }
-
-      const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
-      const { stdout } = await execAsync(`git ls-files --error-unmatch "${relativePath}"`, {
-        cwd: workspaceFolder.uri.fsPath,
-      });
-      return stdout.trim().length > 0;
-    } catch {
-      return false;
-    }
+    return this.gitCliGateway.isTracked(this.getCliTarget(uri));
   }
 
   async getFileHistory(uri: vscode.Uri, maxCount: number = 20): Promise<GitCommitInfo[]> {
     await this.ensureInitialized();
-
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-    if (!workspaceFolder) {
-      return [];
-    }
-
-    const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
-
-    try {
-      // %x1f = unit separator (field delimiter), %x1e = record separator
-      // --follow tracks renames
-      const format = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e';
-      const { stdout } = await execAsync(
-        `git log --follow --max-count=${maxCount} --format="${format}" -- "${relativePath}"`,
-        {
-          cwd: workspaceFolder.uri.fsPath,
-          maxBuffer: 1024 * 1024,
-        },
-      );
-
-      if (!stdout.trim()) {
-        return [];
-      }
-
-      return stdout
-        .split('\x1e')
-        .filter((record) => record.trim())
-        .map((record) => {
-          const [hash, shortHash, subject, authorName, date] = record.trim().split('\x1f');
-          return {
-            hash: hash!,
-            shortHash: shortHash!,
-            subject: subject!,
-            authorName: authorName!,
-            date: date!,
-          };
-        });
-    } catch (error) {
-      logger.warn('Failed to get file history:', error);
-      return [];
-    }
+    return this.gitCliGateway.getFileHistory(this.getCliTarget(uri), maxCount);
   }
 
   async extractFileToPath(uri: vscode.Uri, ref: string, outputPath: string): Promise<void> {
     await this.ensureInitialized();
-
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-    if (!workspaceFolder) {
-      throw new Error('File is not in a workspace');
-    }
-
-    const relativePath = this.getRelativePath(uri);
-
-    return new Promise<void>((resolve, reject) => {
-      const gitProcess = spawn('git', ['show', `${ref}:${relativePath}`], {
-        cwd: workspaceFolder.uri.fsPath,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      const fileStream = createWriteStream(outputPath);
-      const stderrChunks: Buffer[] = [];
-
-      gitProcess.stdout.pipe(fileStream);
-      gitProcess.stderr.on('data', (chunk: Buffer) => {
-        stderrChunks.push(chunk);
-      });
-
-      fileStream.on('error', (err) => {
-        gitProcess.kill();
-        reject(new Error(`Failed to write to ${outputPath}: ${err.message}`));
-      });
-
-      gitProcess.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          const stderr = Buffer.concat(stderrChunks).toString();
-          reject(new Error(`git show ${ref}:${relativePath} failed (code ${code}): ${stderr}`));
-        }
-      });
-
-      gitProcess.on('error', (err) => {
-        reject(new Error(`Failed to spawn git: ${err.message}`));
-      });
-    });
+    return this.gitCliGateway.extractFileToPath(this.getCliTarget(uri), ref, outputPath);
   }
 
   /**
    * Get file at commit using git CLI
    */
   private async getFileAtCommitCLI(uri: vscode.Uri, commitHash: string): Promise<Buffer> {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-    if (!workspaceFolder) {
+    return this.gitCliGateway.getFileAtCommit(this.getCliTarget(uri), commitHash);
+  }
+
+  private getCliTarget(uri: vscode.Uri): GitCliTarget {
+    const repositoryRoot = this.repository?.rootUri.fsPath;
+    const workspaceRoot = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    const cwd = repositoryRoot ?? workspaceRoot;
+
+    if (!cwd) {
       throw new Error('File is not in a workspace');
     }
 
-    const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
-
-    try {
-      // Use git show with binary output
-      const { stdout } = await execAsync(`git show "${commitHash}:${relativePath}"`, {
-        cwd: workspaceFolder.uri.fsPath,
-        encoding: 'buffer',
-        maxBuffer: 100 * 1024 * 1024, // 100MB for large media files
-      });
-      return stdout as unknown as Buffer;
-    } catch (error) {
-      throw new Error(
-        `Failed to get file at ${commitHash}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    return {
+      cwd,
+      relativePath: path.relative(cwd, uri.fsPath),
+    };
   }
 
   /**

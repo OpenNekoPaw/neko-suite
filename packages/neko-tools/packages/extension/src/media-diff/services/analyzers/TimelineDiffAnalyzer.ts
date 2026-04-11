@@ -10,15 +10,16 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import type { DiffOptions, DiffResult, TimelineDiffDetails } from '@neko/shared';
+import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 
 export class TimelineDiffAnalyzer extends BaseMediaDiffAnalyzer {
   readonly mediaType = 'timeline' as const;
-  private readonly engineMediaService: EngineMediaService;
+  private readonly engineMediaService: IEngineMediaService;
   private activeTempFiles = new Set<string>();
 
-  constructor(engineMediaService?: EngineMediaService) {
+  constructor(engineMediaService?: IEngineMediaService) {
     super(['.nkv']);
     this.engineMediaService = engineMediaService ?? new EngineMediaService();
   }

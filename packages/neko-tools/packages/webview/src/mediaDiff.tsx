@@ -6,12 +6,14 @@ import { i18nService } from './i18n';
 import { MediaDiffRuntimeProvider } from './runtime/MediaDiffRuntimeContext';
 import { getWebviewBridge } from './runtime/bridge';
 import { getMediaDiffInitialState } from './runtime/initialState';
+import { getDefaultMediaDiffStreamClientFactory } from './runtime/streamClientFactory';
 import './styles/index.css';
 
 const bridge = getWebviewBridge();
 const runtime = {
   bridge,
   initialState: getMediaDiffInitialState(bridge),
+  streamClientFactory: getDefaultMediaDiffStreamClientFactory(),
 };
 
 const root = document.getElementById('root');

@@ -17,8 +17,9 @@
 import * as vscode from 'vscode';
 import type { MediaDiffRequest, MediaDiffResponse } from '@neko/shared';
 import type { EngineClient } from '@neko/neko-client';
-import { MediaDiffService } from '../services/MediaDiffService';
+import type { IMediaDiffService } from '../services/MediaDiffService';
 import type { IHandlerContext } from './handlers/types';
+import { MediaDiffRequestState } from './MediaDiffRequestState';
 import {
   initializeDiff,
   initializeLocalDiff,
@@ -47,16 +48,7 @@ import {
 export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerContext {
   // ── IHandlerContext — mutable state ─────────────────────────────────
   isDisposed = false;
-  /** Per-handler AbortController — only cancels this handler's analysis */
-  currentAbortController: AbortController | null = null;
-  /** Cached previous file path for frame extraction (Git mode writes to temp file) */
-  previousFilePath: string | null = null;
-  /**
-   * In-flight promise for ensurePreviousFilePath (Git mode only).
-   * Set before git show starts, cleared after it resolves.
-   * handleStartStreaming awaits this before using previousFilePath.
-   */
-  fetchPromise: Promise<void> | null = null;
+  readonly requestState = new MediaDiffRequestState();
   /** Cached diff result — used to avoid redundant probe calls in handleStartStreaming */
   lastDiffResult: import('@neko/shared').DiffResult | null = null;
   /** Last ref used for diff (for re-analysis with time range) */
@@ -90,7 +82,7 @@ export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerConte
   constructor(
     readonly webview: vscode.Webview,
     readonly fileUri: vscode.Uri,
-    readonly diffService: MediaDiffService,
+    readonly diffService: IMediaDiffService,
     readonly engineClient: EngineClient | null,
     readonly previousUri?: vscode.Uri,
   ) {}
@@ -262,22 +254,6 @@ export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerConte
     // Stop active streams (fire-and-forget)
     void handleStopStreaming(this);
     void handleStopAudioStreaming(this);
-    // Clean up temp files created for Git mode frame extraction
-    void this.cleanupTempFiles();
-  }
-
-  /**
-   * Clean up temp files created for Git mode frame extraction
-   */
-  private async cleanupTempFiles(): Promise<void> {
-    if (this.previousFilePath) {
-      try {
-        const fs = await import('fs/promises');
-        await fs.unlink(this.previousFilePath);
-      } catch {
-        /* ignore */
-      }
-      this.previousFilePath = null;
-    }
+    this.requestState.dispose();
   }
 }

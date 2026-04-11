@@ -18,6 +18,7 @@ import type {
   EngineMediaInfo,
   EngineFieldDiff,
 } from '@neko/shared';
+import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 import { getLogger } from '../../../utils/logger';
@@ -65,10 +66,10 @@ function fieldString(fields: EngineFieldDiff[], name: string, side: 'A' | 'B'): 
 
 export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
   readonly mediaType = 'video' as const;
-  private readonly engineMediaService: EngineMediaService;
+  private readonly engineMediaService: IEngineMediaService;
   private activeTempFiles = new Set<string>();
 
-  constructor(engineMediaService?: EngineMediaService) {
+  constructor(engineMediaService?: IEngineMediaService) {
     super(VIDEO_EXTENSIONS);
     this.engineMediaService = engineMediaService ?? new EngineMediaService();
   }

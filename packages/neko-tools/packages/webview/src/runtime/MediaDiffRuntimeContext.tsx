@@ -1,10 +1,12 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { InitialState } from '../components/MediaDiff/types';
 import type { IWebviewBridge } from './bridge';
+import type { IMediaDiffStreamClientFactory } from './streamClientFactory';
 
 export interface IMediaDiffRuntime {
   bridge: IWebviewBridge;
   initialState: InitialState;
+  streamClientFactory: IMediaDiffStreamClientFactory;
 }
 
 const MediaDiffRuntimeContext = createContext<IMediaDiffRuntime | null>(null);

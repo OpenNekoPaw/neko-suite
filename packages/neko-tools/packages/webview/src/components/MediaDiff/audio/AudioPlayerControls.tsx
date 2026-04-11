@@ -4,11 +4,12 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
-import { AudioStreamClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../../i18n/I18nContext';
 import type { AudioStreamConfig } from '@neko/shared';
 import { formatTime } from './audioUtils';
+import { useMediaDiffRuntime } from '../../../runtime/MediaDiffRuntimeContext';
+import type { AudioStreamClient } from '@neko/neko-client';
 
 const logger = new ConsoleLogger('AudioPlayerControls', LogLevel.Info);
 
@@ -35,6 +36,7 @@ export const AudioPlayerControls = memo(function AudioPlayerControls({
   isFetchingPrevious,
 }: AudioPlayerControlsProps) {
   const { t } = useTranslation();
+  const { streamClientFactory } = useMediaDiffRuntime();
   const currentClientRef = useRef<AudioStreamClient | null>(null);
   const previousClientRef = useRef<AudioStreamClient | null>(null);
   const rafRef = useRef<number>(0);
@@ -49,13 +51,13 @@ export const AudioPlayerControls = memo(function AudioPlayerControls({
     const { port, currentAudioStreamId, previousAudioStreamId } = audioStreamConfig;
     const baseUrl = `ws://127.0.0.1:${port}/v1/streams`;
 
-    const currentClient = new AudioStreamClient({
+    const currentClient = streamClientFactory.createAudioStreamClient({
       websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
       volume: playingVersion === 'previous' ? 0 : 1,
       onError: (err) => logger.error('Current stream error', err),
     });
 
-    const previousClient = new AudioStreamClient({
+    const previousClient = streamClientFactory.createAudioStreamClient({
       websocketUrl: `${baseUrl}/${previousAudioStreamId}`,
       volume: playingVersion === 'current' ? 0 : 1,
       onError: (err) => logger.error('Previous stream error', err),
@@ -76,7 +78,7 @@ export const AudioPlayerControls = memo(function AudioPlayerControls({
       currentClientRef.current = null;
       previousClientRef.current = null;
     };
-  }, [audioStreamConfig]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [audioStreamConfig, streamClientFactory]);
 
   // Time tracking via requestAnimationFrame polling AudioStreamClient.getCurrentTime()
   useEffect(() => {

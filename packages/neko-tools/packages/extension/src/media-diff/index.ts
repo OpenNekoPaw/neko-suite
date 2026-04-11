@@ -6,6 +6,7 @@
 
 // Services
 export { GitMediaService, type IGitMediaService } from './services/GitMediaService';
+export { GitCliGateway, type GitCliTarget, type IGitCliGateway } from './services/GitCliGateway';
 export {
   MediaDiffService,
   type IMediaDiffService,
@@ -46,13 +47,13 @@ export { MediaDiffEditorSessionFactory } from './editor/MediaDiffEditorSessionFa
 
 import * as vscode from 'vscode';
 import { getMediaType } from '@neko/shared';
+import type { IEngineMediaService } from '../contracts/IEngineMediaService';
 import { MediaDiffService, getMediaDiffService } from './services/MediaDiffService';
 import { ImageDiffAnalyzer } from './services/analyzers/ImageDiffAnalyzer';
 import { VideoDiffAnalyzer } from './services/analyzers/VideoDiffAnalyzer';
 import { AudioDiffAnalyzer } from './services/analyzers/AudioDiffAnalyzer';
 import { TimelineDiffAnalyzer } from './services/analyzers/TimelineDiffAnalyzer';
 import { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
-import { EngineMediaService } from '../services/EngineMediaService';
 import { handleError } from '../utils/errorHandler';
 
 /**
@@ -61,7 +62,7 @@ import { handleError } from '../utils/errorHandler';
  */
 export function initializeMediaDiff(
   context: vscode.ExtensionContext,
-  engineMediaService?: EngineMediaService,
+  engineMediaService?: IEngineMediaService,
 ): MediaDiffEditorProvider {
   // Get or create the diff service
   const diffService = getMediaDiffService();

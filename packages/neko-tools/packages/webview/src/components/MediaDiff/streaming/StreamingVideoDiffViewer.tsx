@@ -11,11 +11,12 @@
  */
 
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
-import { H264StreamClient, AudioStreamClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import type { AudioStreamClient, H264StreamClient } from '@neko/neko-client';
 import { FramePairBuffer } from './FramePairBuffer';
 import { DiffRenderer, type DiffMode } from './DiffRenderer';
 import type { StreamConfig } from '@neko/shared';
+import { useMediaDiffRuntime } from '../../../runtime/MediaDiffRuntimeContext';
 
 const logger = new ConsoleLogger('StreamingVideoDiff', LogLevel.Info);
 
@@ -75,6 +76,7 @@ export const StreamingVideoDiffViewer = memo(
       },
       ref,
     ) {
+      const { streamClientFactory } = useMediaDiffRuntime();
       const canvasRef = useRef<HTMLCanvasElement>(null);
       const rendererRef = useRef<DiffRenderer | null>(null);
       const bufferRef = useRef<FramePairBuffer | null>(null);
@@ -214,7 +216,7 @@ export const StreamingVideoDiffViewer = memo(
         let frameCountA = 0;
         let frameCountB = 0;
 
-        const clientA = new H264StreamClient({
+        const clientA = streamClientFactory.createVideoStreamClient({
           websocketUrl: `${baseUrl}/${currentStreamId}`,
           width,
           height,
@@ -242,7 +244,7 @@ export const StreamingVideoDiffViewer = memo(
           },
         });
 
-        const clientB = new H264StreamClient({
+        const clientB = streamClientFactory.createVideoStreamClient({
           websocketUrl: `${baseUrl}/${previousStreamId}`,
           width,
           height,
@@ -284,7 +286,7 @@ export const StreamingVideoDiffViewer = memo(
           audioContextState: audioContext?.state,
         });
         if (currentAudioStreamId) {
-          const audioClient = new AudioStreamClient({
+          const audioClient = streamClientFactory.createAudioStreamClient({
             websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
             volume: 1.0,
             onError: (err) => {
@@ -317,7 +319,7 @@ export const StreamingVideoDiffViewer = memo(
           rendererRef.current = null;
           seekFilterRef.current = null;
         };
-      }, [streamConfig]); // Re-create pipeline only when config changes
+      }, [streamClientFactory, streamConfig]); // Re-create pipeline only when config changes
 
       // ── Sync diff mode ───────────────────────────────────────────────────
       useEffect(() => {

@@ -10,11 +10,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { findSrcNodeAtOffset } from '../services/JviParser';
 import type { IMediaProbeCache, ProbeResultLike } from '../services/types';
-import type { EngineMediaService } from '../../services/EngineMediaService';
+import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
 
 export class JviHoverProvider implements vscode.HoverProvider {
   constructor(
-    private readonly engineService: EngineMediaService | undefined,
+    private readonly engineService: IEngineMediaService | undefined,
     private readonly probeCache: IMediaProbeCache,
   ) {}
 

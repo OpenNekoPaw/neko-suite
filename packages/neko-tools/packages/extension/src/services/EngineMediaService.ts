@@ -13,11 +13,12 @@
  *   3. Lazy-initialize the HTTP client on first use
  */
 
-import * as vscode from 'vscode';
 import type { EngineDiffResult } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 import type { SilenceAnalysis } from '@neko/neko-client'; // Used by detectSilence()
 import type { IEngineMediaService } from '../contracts/IEngineMediaService';
+import type { IEngineRuntimeResolver } from '../contracts/IEngineRuntimeResolver';
+import { VSCodeEngineRuntimeResolver } from './EngineRuntimeResolver';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('EngineMediaService');
@@ -26,16 +27,16 @@ const logger = getLogger('EngineMediaService');
 // Service
 // =============================================================================
 
-const ENGINE_EXTENSION_ID = 'neko.neko-engine';
-
 export class EngineMediaService implements IEngineMediaService {
   private client: EngineClient | null = null;
-  private initPromise: Promise<EngineClient | null> | null = null;
 
   /**
    * Create with an existing EngineClient (for testing or shared instances).
    */
-  constructor(client?: EngineClient) {
+  constructor(
+    private readonly runtimeResolver: IEngineRuntimeResolver = new VSCodeEngineRuntimeResolver(),
+    client?: EngineClient,
+  ) {
     this.client = client ?? null;
   }
 
@@ -45,49 +46,8 @@ export class EngineMediaService implements IEngineMediaService {
    */
   async ensureClient(): Promise<EngineClient | null> {
     if (this.client) return this.client;
-
-    // Prevent concurrent initialization
-    if (this.initPromise) return this.initPromise;
-
-    this.initPromise = this.initializeClient();
-    const result = await this.initPromise;
-    this.initPromise = null;
-    return result;
-  }
-
-  private async initializeClient(): Promise<EngineClient | null> {
-    // 1. Ensure engine extension is activated
-    const ext = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
-    if (!ext) {
-      logger.error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
-      return null;
-    }
-
-    if (!ext.isActive) {
-      try {
-        await ext.activate();
-      } catch (error) {
-        logger.error(`Failed to activate ${ENGINE_EXTENSION_ID}:`, error);
-        return null;
-      }
-    }
-
-    // 2. Ensure Frame Server is running → get port
-    try {
-      const result = await vscode.commands.executeCommand<{ port: number } | null>(
-        'neko.engine.ensureFrameServer',
-      );
-      if (!result) {
-        logger.error('ensureFrameServer returned null');
-        return null;
-      }
-
-      this.client = new EngineClient(result.port);
-      return this.client;
-    } catch (error) {
-      logger.error('Failed to start frame server:', error);
-      return null;
-    }
+    this.client = await this.runtimeResolver.ensureClient();
+    return this.client;
   }
 
   /**

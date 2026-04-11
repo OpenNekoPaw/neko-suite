@@ -9,30 +9,22 @@
 import type * as vscode from 'vscode';
 import type { EngineClient } from '@neko/neko-client';
 import type { DiffResult, MediaDiffResponse } from '@neko/shared';
-import type { MediaDiffService } from '../../services/MediaDiffService';
+import type { IMediaDiffService } from '../../services/MediaDiffService';
+import type { IMediaDiffRequestState } from '../MediaDiffRequestState';
 
 export interface IHandlerContext {
   // ── Immutable references ────────────────────────────────────────────
   readonly webview: vscode.Webview;
   readonly fileUri: vscode.Uri;
   readonly previousUri?: vscode.Uri;
-  readonly diffService: MediaDiffService;
+  readonly diffService: IMediaDiffService;
   readonly engineClient: EngineClient | null;
+  readonly requestState: IMediaDiffRequestState;
   /** Session ID for grouping streams from this handler */
   readonly sessionId: string;
 
   // ── Mutable state ───────────────────────────────────────────────────
   isDisposed: boolean;
-  /** Cached previous file path for frame extraction (Git mode writes to temp file) */
-  previousFilePath: string | null;
-  /** Per-handler AbortController — only cancels this handler's analysis */
-  currentAbortController: AbortController | null;
-  /**
-   * In-flight promise for ensurePreviousFilePath (Git mode only).
-   * Set before git show starts, cleared after it resolves.
-   * handleStartStreaming awaits this before using previousFilePath.
-   */
-  fetchPromise: Promise<void> | null;
   /** Cached diff result — used to avoid redundant probe calls in handleStartStreaming */
   lastDiffResult: DiffResult | null;
   /** Last ref used for diff (for re-analysis with time range) */

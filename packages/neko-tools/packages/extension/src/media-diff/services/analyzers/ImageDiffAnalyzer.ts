@@ -12,6 +12,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import type { DiffOptions, DiffResult, ImageDiffDetails } from '@neko/shared';
+import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 
@@ -19,10 +20,10 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.sv
 
 export class ImageDiffAnalyzer extends BaseMediaDiffAnalyzer {
   readonly mediaType = 'image' as const;
-  private readonly engineMediaService: EngineMediaService;
+  private readonly engineMediaService: IEngineMediaService;
   private activeTempFiles = new Set<string>();
 
-  constructor(engineMediaService?: EngineMediaService) {
+  constructor(engineMediaService?: IEngineMediaService) {
     super(IMAGE_EXTENSIONS);
     this.engineMediaService = engineMediaService ?? new EngineMediaService();
   }

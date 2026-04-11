@@ -16,6 +16,7 @@ import type {
   EngineAudioDiffRegion,
 } from '@neko/shared';
 import type { SilenceAnalysis } from '@neko/neko-client';
+import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
 import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 import { EngineMediaService } from '../../../services/EngineMediaService';
 import { getLogger } from '../../../utils/logger';
@@ -26,11 +27,11 @@ const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a'];
 
 export class AudioDiffAnalyzer extends BaseMediaDiffAnalyzer {
   readonly mediaType = 'audio' as const;
-  private readonly engineMediaService: EngineMediaService;
+  private readonly engineMediaService: IEngineMediaService;
   /** All active temp files across concurrent calls (for cancel cleanup) */
   private activeTempFiles = new Set<string>();
 
-  constructor(engineMediaService?: EngineMediaService) {
+  constructor(engineMediaService?: IEngineMediaService) {
     super(AUDIO_EXTENSIONS);
     this.engineMediaService = engineMediaService ?? new EngineMediaService();
   }

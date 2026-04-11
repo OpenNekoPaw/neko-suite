@@ -13,7 +13,7 @@ import { parseJviDocument } from '../services/JviParser';
 import { checkStructure, checkReferences } from '../services/JviDiagnosticAnalyzer';
 import type { DiagnosticEntry } from '../types';
 import type { IMediaProbeCache, ProbeResultLike } from '../services/types';
-import type { EngineMediaService } from '../../services/EngineMediaService';
+import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
 
 const LANGUAGE_ID = 'nekotools-jvi';
 const DEBOUNCE_MS = 300;
@@ -24,7 +24,7 @@ export class JviDiagnosticsProvider implements vscode.Disposable {
   private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
-    private readonly engineService: EngineMediaService | undefined,
+    private readonly engineService: IEngineMediaService | undefined,
     private readonly probeCache: IMediaProbeCache,
   ) {
     this.collection = vscode.languages.createDiagnosticCollection('nekotools-jvi');

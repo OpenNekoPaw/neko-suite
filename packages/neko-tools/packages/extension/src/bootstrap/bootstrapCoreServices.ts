@@ -8,14 +8,17 @@ import {
 } from '../base/serviceCollection';
 import type { IAssetEntityReader } from '../contracts/IAssetEntityReader';
 import type { IEngineMediaService } from '../contracts/IEngineMediaService';
+import type { IEngineRuntimeResolver } from '../contracts/IEngineRuntimeResolver';
 import type { IExtensionI18n } from '../contracts/IExtensionI18n';
 import type { IVariantComparisonService } from '../contracts/IVariantComparisonService';
 import { EngineMediaService } from '../services/EngineMediaService';
+import { VSCodeEngineRuntimeResolver } from '../services/EngineRuntimeResolver';
 import { setErrorHandler } from '../utils/errorHandler';
 import { setRootLogger } from '../utils/logger';
 import {
   IAssetEntityReader as IAssetEntityReaderId,
   IEngineMediaService as IEngineMediaServiceId,
+  IEngineRuntimeResolver as IEngineRuntimeResolverId,
   IExtensionErrorHandler,
   IExtensionI18n as IExtensionI18nId,
   IRootLogger,
@@ -27,6 +30,7 @@ export interface ICoreServicesBootstrapResult extends vscode.Disposable {
   logger: ILogger;
   errorHandler: IErrorHandler;
   i18n: IExtensionI18n;
+  engineRuntimeResolver: IEngineRuntimeResolver;
   engineMediaService: IEngineMediaService;
   assetEntityReader: IAssetEntityReader;
   variantComparisonService: IVariantComparisonService;
@@ -101,7 +105,8 @@ export function bootstrapCoreServices(
   const logger = createVSCodeLogger('Neko Tools', 'NekoTools', context);
   const errorHandler = new VSCodeErrorHandler(logger);
   const i18n = new VscodeExtensionI18n();
-  const engineMediaService = new EngineMediaService();
+  const engineRuntimeResolver = new VSCodeEngineRuntimeResolver();
+  const engineMediaService = new EngineMediaService(engineRuntimeResolver);
   const assetEntityReader = new VscodeCommandAssetEntityReader();
   const variantComparisonService = new VscodeCommandVariantComparisonService();
 
@@ -111,6 +116,7 @@ export function bootstrapCoreServices(
   services.set(IRootLogger, logger);
   services.set(IExtensionErrorHandler, errorHandler);
   services.set(IExtensionI18nId, i18n);
+  services.set(IEngineRuntimeResolverId, engineRuntimeResolver);
   services.set(IEngineMediaServiceId, engineMediaService);
   services.set(IAssetEntityReaderId, assetEntityReader);
   services.set(IVariantComparisonServiceId, variantComparisonService);
@@ -123,6 +129,7 @@ export function bootstrapCoreServices(
     logger,
     errorHandler,
     i18n,
+    engineRuntimeResolver,
     engineMediaService,
     assetEntityReader,
     variantComparisonService,

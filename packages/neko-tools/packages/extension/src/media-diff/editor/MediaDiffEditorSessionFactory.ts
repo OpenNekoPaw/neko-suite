@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
 import type { EngineClient } from '@neko/neko-client';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
-import type { MediaDiffService } from '../services/MediaDiffService';
+import type { IMediaDiffService } from '../services/MediaDiffService';
 import { MediaDiffMessageHandler } from './MediaDiffMessageHandler';
 import {
   type IMediaDiffEditorMessageHandler,
@@ -14,7 +14,7 @@ import {
 export interface IMediaDiffEditorMessageHandlerFactoryOptions {
   webview: vscode.Webview;
   documentUri: vscode.Uri;
-  diffService: MediaDiffService;
+  diffService: IMediaDiffService;
   engineClient: EngineClient | null;
   previousUri?: vscode.Uri;
 }
@@ -25,7 +25,7 @@ export type MediaDiffEditorMessageHandlerFactory = (
 
 export class MediaDiffEditorSessionFactory implements IMediaDiffEditorSessionFactory {
   constructor(
-    private readonly diffService: MediaDiffService,
+    private readonly diffService: IMediaDiffService,
     private readonly engineMediaService: IEngineMediaService,
     private readonly createMessageHandler: MediaDiffEditorMessageHandlerFactory = (options) =>
       new MediaDiffMessageHandler(
