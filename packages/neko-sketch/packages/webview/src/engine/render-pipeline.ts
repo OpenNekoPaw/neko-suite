@@ -93,6 +93,7 @@ export class RenderPipeline implements IRenderPipeline {
     layers: ReadonlyArray<LayerData>,
     viewport: ViewportState,
     filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
+    lightingFn?: (filteredTex: WebGLTexture, width: number, height: number) => WebGLTexture,
     layerTransforms?: ReadonlyMap<string, Float32Array>,
   ): void {
     const gl = this.gl;
@@ -160,6 +161,11 @@ export class RenderPipeline implements IRenderPipeline {
     let outputTex = texs[current]!;
     if (filterFn) {
       outputTex = filterFn(outputTex, cw, ch);
+    }
+
+    // Apply lighting pass if provided
+    if (lightingFn) {
+      outputTex = lightingFn(outputTex, cw, ch);
     }
 
     // Blit final composite to screen with viewport transform

@@ -3,12 +3,21 @@
  *
  * Create/delete scenes, manage layers with parallax settings, and camera controls.
  */
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
-import type { SceneLayerType, AtmospherePreset, AtmosphereConfig } from '../types/scene';
+import type {
+  SceneLayerType,
+  AtmospherePreset,
+  AtmosphereConfig,
+  SceneObject,
+} from '../types/scene';
+import { isLightObject } from '../types/scene';
+import type { AmbientLightConfig } from '../types/light';
+import { DEFAULT_LIGHT_PROPERTIES } from '../types/light';
 import { SCENE_TEMPLATES } from '../data/scene-templates';
 import type { LayerData } from '../types';
+import { LightPanel } from './LightPanel';
 
 export function ScenePanel() {
   const { t } = useTranslation();
@@ -22,6 +31,11 @@ export function ScenePanel() {
   const updateSceneLayer = useSketchStore((s) => s.updateSceneLayer);
   const updateCamera = useSketchStore((s) => s.updateCamera);
   const setAtmosphere = useSketchStore((s) => s.setAtmosphere);
+  const updateAmbientLight = useSketchStore((s) => s.updateAmbientLight);
+  const toggleLighting = useSketchStore((s) => s.toggleLighting);
+  const addSceneObject = useSketchStore((s) => s.addSceneObject);
+  const removeSceneObject = useSketchStore((s) => s.removeSceneObject);
+  const updateSceneObject = useSketchStore((s) => s.updateSceneObject);
   const canvasLayers: readonly LayerData[] = useSketchStore((s) => s.layers);
 
   const activeScene = scenes.find((s) => s.id === activeSceneId);
@@ -209,6 +223,20 @@ export function ScenePanel() {
             setAtmosphere={setAtmosphere}
           />
 
+          {/* Lighting — inline sub-section */}
+          <LightingSection
+            sceneId={activeScene.id}
+            lightingEnabled={activeScene.lightingEnabled}
+            ambientLight={activeScene.ambientLight}
+            sceneLayers={activeScene.layers}
+            toggleLighting={toggleLighting}
+            updateAmbientLight={updateAmbientLight}
+            addSceneLayer={addSceneLayer}
+            addSceneObject={addSceneObject}
+            removeSceneObject={removeSceneObject}
+            updateSceneObject={updateSceneObject}
+          />
+
           {/* Delete scene */}
           <button
             className="mt-1 text-xs text-red-400 hover:text-red-300"
@@ -232,6 +260,212 @@ const ATMOSPHERE_PRESETS: { value: AtmospherePreset; key: string }[] = [
   { value: 'fireflies', key: 'sketch.atmosphere.preset.fireflies' },
   { value: 'dust', key: 'sketch.atmosphere.preset.dust' },
 ];
+
+/* ── Lighting sub-section ─────────────────────────────────── */
+
+interface LightingSectionProps {
+  sceneId: string;
+  lightingEnabled: boolean;
+  ambientLight: AmbientLightConfig;
+  sceneLayers: readonly import('../types/scene').SceneLayer[];
+  toggleLighting: (sceneId: string) => void;
+  updateAmbientLight: (sceneId: string, config: Partial<AmbientLightConfig>) => void;
+  addSceneLayer: (sceneId: string, layer: Omit<import('../types/scene').SceneLayer, 'id'>) => void;
+  addSceneObject: (sceneId: string, layerId: string, obj: Omit<SceneObject, 'id'>) => void;
+  removeSceneObject: (sceneId: string, layerId: string, objectId: string) => void;
+  updateSceneObject: (
+    sceneId: string,
+    layerId: string,
+    objectId: string,
+    updates: Partial<SceneObject>,
+  ) => void;
+}
+
+function LightingSection(props: LightingSectionProps) {
+  const { t } = useTranslation();
+  const {
+    sceneId,
+    lightingEnabled,
+    ambientLight,
+    sceneLayers,
+    toggleLighting,
+    updateAmbientLight,
+    addSceneLayer,
+    addSceneObject,
+    removeSceneObject,
+    updateSceneObject,
+  } = props;
+
+  const [selectedLightId, setSelectedLightId] = useState<string | null>(null);
+
+  // Collect all light objects across scene layers
+  const lightEntries: { layerId: string; light: import('../types/scene').LightSceneObject }[] = [];
+  for (const sl of sceneLayers) {
+    for (const obj of sl.objects) {
+      if (isLightObject(obj)) {
+        lightEntries.push({ layerId: sl.id, light: obj });
+      }
+    }
+  }
+
+  const handleAddLight = useCallback(() => {
+    // Ensure at least one scene layer exists for lights
+    let targetLayerId: string | undefined;
+    if (sceneLayers.length === 0) {
+      addSceneLayer(sceneId, {
+        name: 'Lights',
+        type: 'effect' as import('../types/scene').SceneLayerType,
+        zIndex: 0,
+        parallaxFactor: [1, 1],
+        objects: [],
+        visible: true,
+        canvasLayerId: null,
+      });
+      // Get the newly created layer
+      const state = useSketchStore.getState();
+      const sc = state.scenes.find((s) => s.id === sceneId);
+      targetLayerId = sc?.layers[sc.layers.length - 1]?.id;
+    } else {
+      targetLayerId = sceneLayers[0]?.id;
+    }
+    if (!targetLayerId) return;
+
+    addSceneObject(sceneId, targetLayerId, {
+      type: 'light',
+      x: 400,
+      y: 300,
+      width: 0,
+      height: 0,
+      rotation: 0,
+      properties: { ...DEFAULT_LIGHT_PROPERTIES },
+    });
+  }, [sceneId, sceneLayers, addSceneLayer, addSceneObject]);
+
+  const selectedEntry = lightEntries.find((e) => e.light.id === selectedLightId);
+
+  return (
+    <div className="mt-1 pt-1" style={{ borderTop: '1px solid var(--sketch-divider)' }}>
+      <div className="flex items-center gap-1 mb-1">
+        <p className="sketch-panel-title m-0 flex-1">Lighting</p>
+        <label className="flex items-center gap-0.5 text-[10px]">
+          <input
+            type="checkbox"
+            checked={lightingEnabled}
+            onChange={() => toggleLighting(sceneId)}
+          />
+          {t('sketch.common.enabled')}
+        </label>
+      </div>
+
+      {lightingEnabled && (
+        <>
+          {/* Ambient light */}
+          <div className="flex items-center gap-1 text-[10px] mb-0.5">
+            <span className="w-14 opacity-60">Ambient</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={ambientLight.intensity}
+              onChange={(e) =>
+                updateAmbientLight(sceneId, { intensity: parseFloat(e.target.value) })
+              }
+              className="sketch-slider flex-1"
+              aria-label="Ambient intensity"
+            />
+            <span className="w-8 text-right tabular-nums">{ambientLight.intensity.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] mb-1">
+            <span className="w-14 opacity-60">Color</span>
+            <input
+              type="color"
+              value={rgbToHex(ambientLight.color)}
+              onChange={(e) => updateAmbientLight(sceneId, { color: hexToRgb(e.target.value) })}
+              className="w-6 h-4 p-0 border-0 cursor-pointer"
+              aria-label="Ambient color"
+            />
+          </div>
+
+          {/* Light list */}
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-xs opacity-60 flex-1">Lights</span>
+            <button
+              className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
+              onClick={handleAddLight}
+              aria-label="Add point light"
+            >
+              +
+            </button>
+          </div>
+
+          {lightEntries.map(({ layerId, light }) => (
+            <div
+              key={light.id}
+              className={`flex items-center gap-1 text-[10px] px-1 py-0.5 rounded cursor-pointer ${
+                selectedLightId === light.id
+                  ? 'bg-[var(--vscode-list-activeSelectionBackground)]'
+                  : 'hover:bg-[var(--vscode-list-hoverBackground)]'
+              }`}
+              onClick={() => setSelectedLightId(light.id)}
+            >
+              <span className="opacity-40">&#9728;</span>
+              <span className="flex-1 truncate">{light.properties.lightType}</span>
+              <span className="opacity-40 tabular-nums">
+                ({Math.round(light.x)}, {Math.round(light.y)})
+              </span>
+              <button
+                className="text-red-400 text-[10px] px-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeSceneObject(sceneId, layerId, light.id);
+                  if (selectedLightId === light.id) setSelectedLightId(null);
+                }}
+                aria-label="Remove light"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {/* Light property inspector */}
+          {selectedEntry && (
+            <LightPanel
+              sceneId={sceneId}
+              layerId={selectedEntry.layerId}
+              light={selectedEntry.light}
+              updateSceneObject={updateSceneObject}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Color conversion helpers ──────────────────────────────── */
+
+function rgbToHex(color: readonly [number, number, number]): string {
+  const r = Math.round(color[0] * 255)
+    .toString(16)
+    .padStart(2, '0');
+  const g = Math.round(color[1] * 255)
+    .toString(16)
+    .padStart(2, '0');
+  const b = Math.round(color[2] * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+function hexToRgb(hex: string): readonly [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b] as const;
+}
+
+/* ── Atmosphere sub-section (previously a standalone panel) ─────────── */
 
 function AtmosphereSection(props: {
   sceneId: string;

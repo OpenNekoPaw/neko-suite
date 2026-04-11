@@ -15,14 +15,23 @@ import type {
 import type { LayerData, ViewportState } from '../types';
 import type { AppliedFilter } from '../types/filter';
 import type { ParticleEmitterConfig } from '../types/particle';
+import type { LightSceneObject } from '../types/scene';
+import type { AmbientLightConfig } from '../types/light';
 import { WebGLContext } from './webgl-context';
 import { ShaderManager } from './shader-manager';
 import { TextureManager } from './texture-manager';
 import { RenderPipeline } from './render-pipeline';
 import { FilterPipeline } from './filter-pipeline';
 import { FilterRegistry } from './filter-registry';
+import { LightPass } from './light-pass';
 import { ParticleRenderer } from './particle-renderer';
 import { ParticleSimulation } from './particle-simulation';
+
+export interface LightingConfig {
+  readonly enabled: boolean;
+  readonly lights: readonly LightSceneObject[];
+  readonly ambient: AmbientLightConfig;
+}
 
 export class SketchRenderer implements ISketchRenderer {
   private _context!: IWebGLContext;
@@ -31,6 +40,7 @@ export class SketchRenderer implements ISketchRenderer {
   private _pipeline!: IRenderPipeline;
   private _filterPipeline!: FilterPipeline;
   private _filterRegistry!: FilterRegistry;
+  private _lightPass!: LightPass;
   private _particleRenderer!: ParticleRenderer;
   private _particleSim!: ParticleSimulation;
   private initialized = false;
@@ -53,6 +63,9 @@ export class SketchRenderer implements ISketchRenderer {
   get filterRegistry(): FilterRegistry {
     return this._filterRegistry;
   }
+  get lightPass(): LightPass {
+    return this._lightPass;
+  }
   get particleRenderer(): ParticleRenderer {
     return this._particleRenderer;
   }
@@ -74,6 +87,7 @@ export class SketchRenderer implements ISketchRenderer {
     this._pipeline = new RenderPipeline(gl, this._shaders, this._textures);
     this._filterRegistry = new FilterRegistry();
     this._filterPipeline = new FilterPipeline(gl, this._textures);
+    this._lightPass = new LightPass(gl, this._textures);
     this._particleRenderer = new ParticleRenderer(gl);
     this._particleSim = new ParticleSimulation();
 
@@ -108,6 +122,7 @@ export class SketchRenderer implements ISketchRenderer {
     particlePreview: boolean,
     dt: number,
     layerTransforms?: ReadonlyMap<string, Float32Array>,
+    lightingConfig?: LightingConfig,
   ): void {
     if (!this.initialized) return;
 
@@ -119,8 +134,14 @@ export class SketchRenderer implements ISketchRenderer {
             this._filterPipeline.applyFilters(tex, w, h, enabledFilters, this._filterRegistry)
         : undefined;
 
-    // Composite layers with optional filter chain and per-layer parallax transforms
-    this._pipeline.compositeLayerStack(layers, viewport, filterFn, layerTransforms);
+    // Build lighting callback if lighting is enabled with active lights
+    const lightingFn = lightingConfig?.enabled
+      ? (tex: WebGLTexture, w: number, h: number) =>
+          this._lightPass.apply(tex, w, h, lightingConfig.lights, lightingConfig.ambient)
+      : undefined;
+
+    // Composite layers with optional filter chain, lighting, and per-layer parallax transforms
+    this._pipeline.compositeLayerStack(layers, viewport, filterFn, lightingFn, layerTransforms);
 
     // Render particles on top if preview is active
     if (particlePreview && emitters.length > 0) {
@@ -144,6 +165,7 @@ export class SketchRenderer implements ISketchRenderer {
   dispose(): void {
     if (!this.initialized) return;
     this._filterPipeline.dispose();
+    this._lightPass.dispose();
     this._particleRenderer.dispose();
     this._pipeline.dispose();
     this._textures.dispose();

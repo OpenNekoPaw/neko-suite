@@ -79,6 +79,7 @@ function buildLayerData(name: string, width: number, height: number): LayerData 
     maskLayerId: null,
     children: [],
     texture: null, // Will be uploaded by renderer
+    alphaLock: false,
   };
 }
 

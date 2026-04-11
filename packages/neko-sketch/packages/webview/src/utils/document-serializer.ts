@@ -24,6 +24,8 @@ interface NksLayerData {
   readonly maskLayerId: string | null;
   readonly children: NksLayerData[];
   readonly data?: string;
+  readonly normalData?: string;
+  readonly alphaLock?: boolean;
 }
 
 interface NksDocument {
@@ -97,6 +99,8 @@ function deserializeLayers(raw: NksLayerData[]): LayerData[] {
     children: deserializeLayers(l.children ?? []),
     texture: null,
     pendingData: l.data,
+    pendingNormalData: l.normalData,
+    alphaLock: l.alphaLock ?? false,
   }));
 }
 
@@ -187,6 +191,7 @@ function serializeLayer(layer: LayerData, gl: WebGL2RenderingContext | null): Nk
     maskLayerId: layer.maskLayerId,
     children: layer.children.map((c) => serializeLayer(c, gl)),
     data,
+    alphaLock: layer.alphaLock || undefined,
   };
 }
 
@@ -198,7 +203,7 @@ export function serializeDocument(
   gl?: WebGL2RenderingContext | null,
 ): NksDocument {
   return {
-    version: '1.0',
+    version: '1.1',
     canvas: {
       width: canvas.width,
       height: canvas.height,

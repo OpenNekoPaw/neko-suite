@@ -11,7 +11,8 @@ import type {
   CameraConfig,
   AtmosphereConfig,
 } from '../../types/scene';
-import { DEFAULT_CAMERA, DEFAULT_ATMOSPHERE } from '../../types/scene';
+import type { AmbientLightConfig } from '../../types/light';
+import { DEFAULT_CAMERA, DEFAULT_ATMOSPHERE, DEFAULT_AMBIENT_LIGHT } from '../../types/scene';
 
 let sceneCounter = 0;
 let layerCounter = 0;
@@ -31,8 +32,16 @@ export interface SceneSlice {
   updateSceneLayer: (sceneId: string, layerId: string, updates: Partial<SceneLayer>) => void;
   addSceneObject: (sceneId: string, layerId: string, obj: Omit<SceneObject, 'id'>) => void;
   removeSceneObject: (sceneId: string, layerId: string, objectId: string) => void;
+  updateSceneObject: (
+    sceneId: string,
+    layerId: string,
+    objectId: string,
+    updates: Partial<SceneObject>,
+  ) => void;
   updateCamera: (sceneId: string, camera: Partial<CameraConfig>) => void;
   setAtmosphere: (sceneId: string, atmosphere: Partial<AtmosphereConfig>) => void;
+  updateAmbientLight: (sceneId: string, config: Partial<AmbientLightConfig>) => void;
+  toggleLighting: (sceneId: string) => void;
   clearScenes: () => void;
 }
 
@@ -48,6 +57,8 @@ export const createSceneSlice: StateCreator<SceneSlice> = (set) => ({
       layers: [],
       camera: DEFAULT_CAMERA,
       atmosphere: DEFAULT_ATMOSPHERE,
+      ambientLight: DEFAULT_AMBIENT_LIGHT,
+      lightingEnabled: false,
     };
     set((s) => ({
       scenes: [...s.scenes, scene],
@@ -128,6 +139,25 @@ export const createSceneSlice: StateCreator<SceneSlice> = (set) => ({
       ),
     })),
 
+  updateSceneObject: (sceneId, layerId, objectId, updates) =>
+    set((s) => ({
+      scenes: s.scenes.map((sc) =>
+        sc.id === sceneId
+          ? {
+              ...sc,
+              layers: sc.layers.map((l) =>
+                l.id === layerId
+                  ? {
+                      ...l,
+                      objects: l.objects.map((o) => (o.id === objectId ? { ...o, ...updates } : o)),
+                    }
+                  : l,
+              ),
+            }
+          : sc,
+      ),
+    })),
+
   updateCamera: (sceneId, camera) =>
     set((s) => ({
       scenes: s.scenes.map((sc) =>
@@ -139,6 +169,20 @@ export const createSceneSlice: StateCreator<SceneSlice> = (set) => ({
     set((s) => ({
       scenes: s.scenes.map((sc) =>
         sc.id === sceneId ? { ...sc, atmosphere: { ...sc.atmosphere, ...atmosphere } } : sc,
+      ),
+    })),
+
+  updateAmbientLight: (sceneId, config) =>
+    set((s) => ({
+      scenes: s.scenes.map((sc) =>
+        sc.id === sceneId ? { ...sc, ambientLight: { ...sc.ambientLight, ...config } } : sc,
+      ),
+    })),
+
+  toggleLighting: (sceneId) =>
+    set((s) => ({
+      scenes: s.scenes.map((sc) =>
+        sc.id === sceneId ? { ...sc, lightingEnabled: !sc.lightingEnabled } : sc,
       ),
     })),
 

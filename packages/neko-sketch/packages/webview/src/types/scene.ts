@@ -3,6 +3,8 @@
  *
  * Defines scene structure with layers, objects, camera, and atmosphere.
  */
+import type { LightProperties, AmbientLightConfig } from './light';
+import { DEFAULT_AMBIENT_LIGHT } from './light';
 
 // ─── Scene Objects ───
 
@@ -17,6 +19,23 @@ export interface SceneObject {
   readonly height: number;
   readonly rotation: number;
   readonly properties: Record<string, unknown>;
+}
+
+/** Strongly-typed light scene object */
+export interface LightSceneObject {
+  readonly id: string;
+  readonly type: 'light';
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly rotation: number;
+  readonly properties: LightProperties;
+}
+
+/** Type guard for light scene objects */
+export function isLightObject(obj: SceneObject): obj is SceneObject & LightSceneObject {
+  return obj.type === 'light';
 }
 
 // ─── Scene Layers ───
@@ -77,7 +96,13 @@ export interface Scene {
   readonly layers: readonly SceneLayer[];
   readonly camera: CameraConfig;
   readonly atmosphere: AtmosphereConfig;
+  /** Global ambient light configuration */
+  readonly ambientLight: AmbientLightConfig;
+  /** Whether the lighting system is active for this scene */
+  readonly lightingEnabled: boolean;
 }
+
+export { DEFAULT_AMBIENT_LIGHT };
 
 export const DEFAULT_CAMERA: CameraConfig = {
   x: 0,

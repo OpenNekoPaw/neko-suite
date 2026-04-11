@@ -17,6 +17,9 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useSketchStore } from '../stores';
 import { SketchRenderer } from '../engine';
+import type { LightingConfig } from '../engine';
+import type { LightSceneObject } from '../types/scene';
+import { isLightObject } from '../types/scene';
 import { BrushEngine } from '../brush';
 import { usePointerInput } from '../hooks/usePointerInput';
 import type { StrokePoint, LayerData } from '../types';
@@ -278,6 +281,58 @@ function renderVectorPreview(
   ctx.restore();
 }
 
+/** SVG overlay showing light position indicators when lighting is enabled. */
+function LightOverlay() {
+  const scenes = useSketchStore((s) => s.scenes);
+  const activeSceneId = useSketchStore((s) => s.activeSceneId);
+  const viewport = useSketchStore((s) => s.viewport);
+
+  const scene = activeSceneId ? scenes.find((s) => s.id === activeSceneId) : null;
+  if (!scene?.lightingEnabled) return null;
+
+  const lights: import('../types/scene').LightSceneObject[] = [];
+  for (const sl of scene.layers) {
+    for (const obj of sl.objects) {
+      if (isLightObject(obj)) {
+        lights.push(obj);
+      }
+    }
+  }
+  if (lights.length === 0) return null;
+
+  const { zoom, panX, panY } = viewport;
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      aria-hidden="true"
+      style={{ overflow: 'visible' }}
+    >
+      {lights.map((obj) => {
+        // Convert document coordinates to CSS screen coordinates
+        const sx = obj.x * zoom + panX;
+        const sy = obj.y * zoom + panY;
+        const sr = obj.properties.radius * zoom;
+        return (
+          <g key={obj.id}>
+            <circle
+              cx={sx}
+              cy={sy}
+              r={sr}
+              fill="none"
+              stroke="rgba(255,200,50,0.25)"
+              strokeWidth={1}
+              strokeDasharray="4 4"
+            />
+            <circle cx={sx} cy={sy} r={6} fill="rgba(255,200,50,0.8)" />
+            <circle cx={sx} cy={sy} r={3} fill="rgba(255,255,200,1)" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function SketchCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onionCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -297,6 +352,15 @@ export function SketchCanvas() {
 
   // Move tool state — tracks starting screen position for pan delta
   const moveStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Light drag state — when dragging a light object in move mode
+  const lightDragRef = useRef<{
+    sceneId: string;
+    layerId: string;
+    objectId: string;
+    startX: number;
+    startY: number;
+  } | null>(null);
 
   // Select-rect tool state — tracks starting canvas position
   const selectStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -531,6 +595,7 @@ export function SketchCanvas() {
               maskLayerId: null,
               children: [],
               texture: strokeTexRef.current,
+              alphaLock: false,
             };
             // Insert stroke layer right after the active layer
             const mutable = [...state.layers];
@@ -577,6 +642,22 @@ export function SketchCanvas() {
             }
           }
 
+          // Gather lighting configuration from active scene
+          let lightingConfig: LightingConfig | undefined;
+          if (activeScene?.lightingEnabled) {
+            const lights: LightSceneObject[] = [];
+            for (const sl of activeScene.layers) {
+              for (const obj of sl.objects) {
+                if (isLightObject(obj)) lights.push(obj);
+              }
+            }
+            lightingConfig = {
+              enabled: true,
+              lights,
+              ambient: activeScene.ambientLight,
+            };
+          }
+
           renderer.renderWithEffects(
             layersToRender,
             state.viewport,
@@ -585,6 +666,7 @@ export function SketchCanvas() {
             emittersForRender.length > 0,
             dt,
             layerTransforms,
+            lightingConfig,
           );
 
           // Onion skin overlay (P0)
@@ -798,6 +880,39 @@ export function SketchCanvas() {
       }
 
       if (activeTool === 'move') {
+        // Check if clicking on a light object first
+        const { x: cx, y: cy } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        const state = useSketchStore.getState();
+        const scene = state.activeSceneId
+          ? state.scenes.find((s) => s.id === state.activeSceneId)
+          : null;
+        if (scene?.lightingEnabled) {
+          for (const sl of scene.layers) {
+            for (const obj of sl.objects) {
+              if (isLightObject(obj)) {
+                const dx = cx - obj.x;
+                const dy = cy - obj.y;
+                const hitRadius = Math.max(20, obj.properties.radius * 0.1);
+                if (dx * dx + dy * dy < hitRadius * hitRadius) {
+                  lightDragRef.current = {
+                    sceneId: scene.id,
+                    layerId: sl.id,
+                    objectId: obj.id,
+                    startX: point.x,
+                    startY: point.y,
+                  };
+                  return;
+                }
+              }
+            }
+          }
+        }
         // Start layer drag — tracks screen position for delta
         moveStartRef.current = { x: point.x, y: point.y };
         return;
@@ -891,6 +1006,26 @@ export function SketchCanvas() {
       }
 
       if (activeTool === 'move') {
+        // Light drag takes priority
+        const ld = lightDragRef.current;
+        if (ld) {
+          const dx = (point.x - ld.startX) / viewport.zoom;
+          const dy = (point.y - ld.startY) / viewport.zoom;
+          lightDragRef.current = { ...ld, startX: point.x, startY: point.y };
+          const state = useSketchStore.getState();
+          const sc = state.scenes.find((s) => s.id === ld.sceneId);
+          const sl = sc?.layers.find((l) => l.id === ld.layerId);
+          const obj = sl?.objects.find((o) => o.id === ld.objectId);
+          if (obj) {
+            state.updateSceneObject(ld.sceneId, ld.layerId, ld.objectId, {
+              x: obj.x + dx,
+              y: obj.y + dy,
+            });
+          }
+          needsRenderRef.current = true;
+          return;
+        }
+
         // Move active layer by adjusting offsetX/offsetY
         const last = moveStartRef.current;
         if (!last) return;
@@ -1017,6 +1152,13 @@ export function SketchCanvas() {
       }
 
       if (activeTool === 'move') {
+        // Finish light drag if active
+        if (lightDragRef.current) {
+          lightDragRef.current = null;
+          markDirty();
+          needsRenderRef.current = true;
+          return;
+        }
         // Finish layer move — apply final delta
         const last = moveStartRef.current;
         if (last && activeLayerId) {
@@ -1619,6 +1761,8 @@ export function SketchCanvas() {
       />
       {/* Pixel grid — visible only in pixel tool at sufficient zoom */}
       <PixelGrid canvasWidth={canvas.width} canvasHeight={canvas.height} />
+      {/* Light position indicators — shows light icons when lighting is active */}
+      <LightOverlay />
 
       {/* Canvas right-click context menu */}
       {canvasMenu && (

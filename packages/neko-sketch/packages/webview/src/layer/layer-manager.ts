@@ -37,6 +37,7 @@ export function createLayer(
     maskLayerId: null,
     children: [],
     texture: null,
+    alphaLock: false,
   };
 }
 
