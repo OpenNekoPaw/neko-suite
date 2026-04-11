@@ -17,6 +17,7 @@ import * as vscode from 'vscode';
 import type { EngineDiffResult } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 import type { SilenceAnalysis } from '@neko/neko-client'; // Used by detectSilence()
+import type { IEngineMediaService } from '../contracts/IEngineMediaService';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('EngineMediaService');
@@ -27,7 +28,7 @@ const logger = getLogger('EngineMediaService');
 
 const ENGINE_EXTENSION_ID = 'neko.neko-engine';
 
-export class EngineMediaService {
+export class EngineMediaService implements IEngineMediaService {
   private client: EngineClient | null = null;
   private initPromise: Promise<EngineClient | null> | null = null;
 

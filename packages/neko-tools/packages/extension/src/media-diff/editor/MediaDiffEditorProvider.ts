@@ -12,9 +12,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { getMediaType } from '@neko/shared';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
 import { MediaDiffService } from '../services/MediaDiffService';
-import { MediaDiffMessageHandler } from './MediaDiffMessageHandler';
 import { EngineMediaService } from '../../services/EngineMediaService';
+import {
+  type IMediaDiffEditorSessionFactory,
+  type IMediaDiffEditorSession,
+} from './MediaDiffEditorSession';
+import { MediaDiffEditorSessionFactory } from './MediaDiffEditorSessionFactory';
 
 // Storage key for persisting local compare files
 const LOCAL_COMPARE_FILES_KEY = 'mediaDiff.localCompareFiles';
@@ -30,18 +36,24 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
   public static readonly viewType = 'neko.mediaDiff';
 
   private readonly diffService: MediaDiffService;
-  private readonly engineMediaService: EngineMediaService;
-  private activeWebviews: Map<string, vscode.WebviewPanel> = new Map();
+  private readonly sessionFactory: IMediaDiffEditorSessionFactory;
+  private activeSessions: Map<string, IMediaDiffEditorSession> = new Map();
   /** Map from document URI to the previous file URI for local comparison */
   private localCompareFiles: Map<string, vscode.Uri> = new Map();
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     diffService?: MediaDiffService,
-    engineMediaService?: EngineMediaService,
+    engineMediaService?: IEngineMediaService,
+    sessionFactory?: IMediaDiffEditorSessionFactory,
   ) {
     this.diffService = diffService ?? new MediaDiffService();
-    this.engineMediaService = engineMediaService ?? new EngineMediaService();
+    this.sessionFactory =
+      sessionFactory ??
+      new MediaDiffEditorSessionFactory(
+        this.diffService,
+        engineMediaService ?? new EngineMediaService(),
+      );
     // Restore persisted local compare files
     this.restoreLocalCompareFiles();
   }
@@ -105,7 +117,6 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     _token: vscode.CancellationToken,
   ): Promise<void> {
     const docUri = document.uri.toString();
-    this.activeWebviews.set(docUri, webviewPanel);
 
     // Check if this is a local file comparison
     const previousUri = this.localCompareFiles.get(docUri);
@@ -150,41 +161,16 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       requiresRecompare,
     );
 
-    // Create message handler with optional previousUri for local comparison
-    const engineClient = await this.engineMediaService.ensureClient();
-    if (!engineClient) {
-      webviewPanel.webview.postMessage({
-        type: 'mediaDiff:error',
-        error: 'neko-engine extension not available. Install it for media diff analysis.',
-      });
-    }
-    const messageHandler = new MediaDiffMessageHandler(
-      webviewPanel.webview,
-      document.uri,
-      this.diffService,
-      engineClient,
+    const session = await this.sessionFactory.createSession({
+      webviewPanel,
+      documentUri: document.uri,
       previousUri,
-    );
-
-    // Handle messages from webview
-    webviewPanel.webview.onDidReceiveMessage(
-      async (message) => {
-        await messageHandler.handleMessage(message);
-      },
-      undefined,
-      this.context.subscriptions,
-    );
-
-    // Cleanup on dispose (don't delete localCompareFiles - keep for session restore)
-    webviewPanel.onDidDispose(() => {
-      this.activeWebviews.delete(docUri);
-      messageHandler.dispose();
     });
-
-    // Initialize diff analysis (skip if requires recompare)
-    if (!requiresRecompare) {
-      messageHandler.initializeDiff();
-    }
+    this.activeSessions.set(docUri, session);
+    session.attach(() => {
+      this.activeSessions.delete(docUri);
+    });
+    await session.start(requiresRecompare);
   }
 
   /**
@@ -234,7 +220,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     );
 
     const nonce = getNonce();
-    const locale = vscode.env.language || 'en';
+    const localeAttributes = injectLocaleAttribute();
 
     const initialState = JSON.stringify({
       mediaType,
@@ -246,7 +232,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
     });
 
     return `<!DOCTYPE html>
-<html lang="${locale}">
+<html ${localeAttributes}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -262,8 +248,11 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
   }
 
   dispose(): void {
+    for (const session of this.activeSessions.values()) {
+      session.dispose();
+    }
+    this.activeSessions.clear();
     this.diffService.dispose();
-    this.activeWebviews.clear();
     this.localCompareFiles.clear();
   }
 }

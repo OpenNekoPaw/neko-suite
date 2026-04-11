@@ -15,6 +15,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { AssetEntity, AssetVariant, VariantComparisonResult } from '@neko/shared';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { AssetVariantDiffMessageHandler } from './AssetVariantDiffMessageHandler';
 
 // Storage key for persisting comparison state
@@ -171,14 +172,18 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     // Get comparison state
     const state = this.comparisonStates.get(docUri);
     if (!state) {
-      webviewPanel.webview.html = this.getErrorHtml('Comparison state not found');
+      webviewPanel.webview.html = this.getErrorHtml(
+        vscode.l10n.t('assetDiff.error.comparisonStateNotFound'),
+      );
       return;
     }
 
     // Load entity and variants
     const entity = await this.getEntity(state.entityId);
     if (!entity) {
-      webviewPanel.webview.html = this.getErrorHtml(`Entity not found: ${state.entityId}`);
+      webviewPanel.webview.html = this.getErrorHtml(
+        vscode.l10n.t('assetDiff.error.entityNotFound', state.entityId),
+      );
       return;
     }
 
@@ -186,7 +191,9 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     const variantB = entity.variants.find((v) => v.id === state.variantIdB);
 
     if (!variantA || !variantB) {
-      webviewPanel.webview.html = this.getErrorHtml('One or both variants not found');
+      webviewPanel.webview.html = this.getErrorHtml(
+        vscode.l10n.t('assetDiff.error.variantsNotFound'),
+      );
       return;
     }
 
@@ -278,7 +285,7 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     variantB: AssetVariant,
   ): string {
     const nonce = getNonce();
-    const locale = vscode.env.language || 'en';
+    const localeAttributes = injectLocaleAttribute();
 
     // Get thumbnail URIs
     const fileA = variantA.files[0];
@@ -340,12 +347,12 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     });
 
     return `<!DOCTYPE html>
-<html lang="${locale}">
+<html ${localeAttributes}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https: data: blob:;">
-  <title>Asset Variant Diff</title>
+  <title>${vscode.l10n.t('assetDiff.title')}</title>
   <style>
     :root {
       --vscode-font-family: var(--vscode-editor-font-family, monospace);

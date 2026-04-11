@@ -32,6 +32,13 @@ export {
 // Editor
 export { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
 export { MediaDiffMessageHandler } from './editor/MediaDiffMessageHandler';
+export {
+  MediaDiffEditorSession,
+  type IMediaDiffEditorSession,
+  type IMediaDiffEditorSessionFactory,
+  type IMediaDiffEditorMessageHandler,
+} from './editor/MediaDiffEditorSession';
+export { MediaDiffEditorSessionFactory } from './editor/MediaDiffEditorSessionFactory';
 
 // =============================================================================
 // Module Initialization

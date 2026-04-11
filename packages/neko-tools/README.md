@@ -15,6 +15,7 @@
 - **子包**：`extension/`（Host）、`webview/`（React Diff UI）
 - **依赖**：`@neko/shared`、`sharp`（图像处理）
 - **被依赖**：neko-cut、neko-canvas、neko-agent（extensionDependency）
+- **设计文档**：[`docs/architecture/neko-tools-di-refactor.md`](../../docs/architecture/neko-tools-di-refactor.md)
 
 ## Architecture
 

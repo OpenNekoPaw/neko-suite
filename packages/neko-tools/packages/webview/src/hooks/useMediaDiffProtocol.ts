@@ -9,23 +9,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type {
-  DiffResult,
-  GitCommitInfo,
-  MediaType,
-  StreamConfig,
-  AudioStreamConfig,
-} from '@neko/shared';
+import type { DiffResult, GitCommitInfo, StreamConfig, AudioStreamConfig } from '@neko/shared';
+import { useMediaDiffRuntime } from '../runtime/MediaDiffRuntimeContext';
 import type { InitialState } from '../components/MediaDiff/types';
-
-// Acquire VSCode API (singleton)
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-const vscode = acquireVsCodeApi();
 
 // =============================================================================
 // State Interface
@@ -60,6 +46,70 @@ export interface MediaDiffProtocolState {
   isFetchingPrevious: boolean;
 }
 
+type MediaDiffIncomingMessage =
+  | {
+      type: 'mediaDiff:progress';
+      payload: { progress: number; stage: string };
+    }
+  | {
+      type: 'mediaDiff:result';
+      payload: DiffResult;
+    }
+  | {
+      type: 'mediaDiff:error';
+      error?: string;
+    }
+  | {
+      type: 'mediaDiff:imageData';
+      payload: {
+        currentImage?: ArrayBuffer;
+        previousImage?: ArrayBuffer;
+        heatmap?: ArrayBuffer;
+        mimeType?: string;
+      };
+    }
+  | {
+      type: 'mediaDiff:waveformData';
+      payload: {
+        currentWaveform?: number[];
+        previousWaveform?: number[];
+      };
+    }
+  | {
+      type: 'mediaDiff:frameData';
+      payload: {
+        version: 'current' | 'previous';
+        imageBuffer: ArrayBuffer;
+      };
+    }
+  | {
+      type: 'mediaDiff:fileHistory';
+      payload: { commits?: GitCommitInfo[] };
+    }
+  | {
+      type: 'mediaDiff:elementThumbnail';
+      payload: {
+        src: string;
+        imageBuffer: ArrayBuffer;
+      };
+    }
+  | {
+      type: 'mediaDiff:fetchState';
+      state?: 'fetching' | 'idle';
+    }
+  | {
+      type: 'mediaDiff:streamConfig';
+      payload: StreamConfig | null;
+    }
+  | {
+      type: 'mediaDiff:audioStreamConfig';
+      payload: AudioStreamConfig | null;
+    }
+  | {
+      type: 'mediaDiff:streamError';
+      error?: string;
+    };
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -74,16 +124,12 @@ function arrayBufferToBlobUrl(buffer: ArrayBuffer, mimeType: string): string {
   return URL.createObjectURL(blob);
 }
 
-function getDefaultInitialState(): InitialState {
-  // Extension injects window.initialState before script loads
-  const win = window as unknown as { initialState?: InitialState };
+function isMediaDiffIncomingMessage(message: unknown): message is MediaDiffIncomingMessage {
   return (
-    win.initialState ?? {
-      mediaType: 'image' as MediaType,
-      fileName: '',
-      isLocalComparison: false,
-      fileUri: '',
-    }
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    typeof (message as { type?: unknown }).type === 'string'
   );
 }
 
@@ -111,6 +157,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendAudioStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
   sendSetTimeRange: (startTime?: number, endTime?: number) => void;
 } {
+  const { bridge, initialState } = useMediaDiffRuntime();
   const [state, setState] = useState<MediaDiffProtocolState>(() => ({
     diffResult: null,
     isLoading: false,
@@ -125,7 +172,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     previousFrameSrc: null,
     commits: [],
     elementThumbnails: new Map(),
-    initialState: getDefaultInitialState(),
+    initialState,
     streamConfig: null,
     streamError: null,
     audioStreamConfig: null,
@@ -152,9 +199,12 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   // =========================================================================
 
   useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      const msg = event.data;
-      if (!msg || !msg.type) return;
+    const unsubscribe = bridge.subscribe((message) => {
+      if (!isMediaDiffIncomingMessage(message)) {
+        return;
+      }
+
+      const msg = message;
 
       switch (msg.type) {
         case 'mediaDiff:progress':
@@ -281,11 +331,10 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
           }));
           break;
       }
-    }
+    });
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [trackBlobUrl, revokeBlobUrl]);
+    return unsubscribe;
+  }, [bridge, trackBlobUrl, revokeBlobUrl]);
 
   // Cleanup all Blob URLs on unmount
   useEffect(() => {
@@ -301,152 +350,173 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   const sendInit = useCallback(
     (ref?: string) => {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
-      vscode.postMessage({
+      bridge.postMessage({
         type: 'mediaDiff:init',
         requestId: nextRequestId(),
         timestamp: Date.now(),
-        payload: { fileUri: state.initialState.fileUri, ref },
+        payload: { fileUri: initialState.fileUri, ref },
       });
     },
-    [state.initialState.fileUri],
+    [bridge, initialState.fileUri],
   );
 
-  const sendInitLocal = useCallback((currentUri: string, previousUri: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    vscode.postMessage({
-      type: 'mediaDiff:initLocal',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { currentUri, previousUri },
-    });
-  }, []);
+  const sendInitLocal = useCallback(
+    (currentUri: string, previousUri: string) => {
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      bridge.postMessage({
+        type: 'mediaDiff:initLocal',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { currentUri, previousUri },
+      });
+    },
+    [bridge],
+  );
 
-  const sendSeek = useCallback((time: number) => {
-    vscode.postMessage({
-      type: 'mediaDiff:seek',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { time },
-    });
-  }, []);
+  const sendSeek = useCallback(
+    (time: number) => {
+      bridge.postMessage({
+        type: 'mediaDiff:seek',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { time },
+      });
+    },
+    [bridge],
+  );
 
-  const sendGetFrame = useCallback((time: number, version: 'current' | 'previous') => {
-    vscode.postMessage({
-      type: 'mediaDiff:getFrame',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { time, version },
-    });
-  }, []);
+  const sendGetFrame = useCallback(
+    (time: number, version: 'current' | 'previous') => {
+      bridge.postMessage({
+        type: 'mediaDiff:getFrame',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { time, version },
+      });
+    },
+    [bridge],
+  );
 
-  const sendChangeRef = useCallback((ref: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    vscode.postMessage({
-      type: 'mediaDiff:changeRef',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { ref },
-    });
-  }, []);
+  const sendChangeRef = useCallback(
+    (ref: string) => {
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      bridge.postMessage({
+        type: 'mediaDiff:changeRef',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { ref },
+      });
+    },
+    [bridge],
+  );
 
   const sendCancel = useCallback(() => {
-    vscode.postMessage({
+    bridge.postMessage({
       type: 'mediaDiff:cancel',
       requestId: nextRequestId(),
       timestamp: Date.now(),
     });
     setState((prev) => ({ ...prev, isLoading: false, progress: null }));
-  }, []);
+  }, [bridge]);
 
-  const sendGetFileHistory = useCallback((maxCount?: number) => {
-    vscode.postMessage({
-      type: 'mediaDiff:getFileHistory',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { maxCount },
-    });
-  }, []);
+  const sendGetFileHistory = useCallback(
+    (maxCount?: number) => {
+      bridge.postMessage({
+        type: 'mediaDiff:getFileHistory',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { maxCount },
+      });
+    },
+    [bridge],
+  );
 
-  const sendInspectElement = useCallback((src: string) => {
-    vscode.postMessage({
-      type: 'mediaDiff:inspectElement',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { src },
-    });
-  }, []);
+  const sendInspectElement = useCallback(
+    (src: string) => {
+      bridge.postMessage({
+        type: 'mediaDiff:inspectElement',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { src },
+      });
+    },
+    [bridge],
+  );
 
   const sendStartStreaming = useCallback(() => {
-    vscode.postMessage({
+    bridge.postMessage({
       type: 'mediaDiff:startStreaming',
       requestId: nextRequestId(),
       timestamp: Date.now(),
       payload: {},
     });
-  }, []);
+  }, [bridge]);
 
   const sendStopStreaming = useCallback(() => {
     setState((prev) => ({ ...prev, streamConfig: null, streamError: null }));
-    vscode.postMessage({
+    bridge.postMessage({
       type: 'mediaDiff:stopStreaming',
       requestId: nextRequestId(),
       timestamp: Date.now(),
       payload: {},
     });
-  }, []);
+  }, [bridge]);
 
   const sendStreamControl = useCallback(
     (action: 'play' | 'pause' | 'seek', payload?: { time?: number; speed?: number }) => {
-      vscode.postMessage({
+      bridge.postMessage({
         type: 'mediaDiff:streamControl',
         requestId: nextRequestId(),
         timestamp: Date.now(),
         payload: { action, ...payload },
       });
     },
-    [],
+    [bridge],
   );
 
   const sendStartAudioStreaming = useCallback(() => {
-    vscode.postMessage({
+    bridge.postMessage({
       type: 'mediaDiff:startAudioStreaming',
       requestId: nextRequestId(),
       timestamp: Date.now(),
       payload: {},
     });
-  }, []);
+  }, [bridge]);
 
   const sendStopAudioStreaming = useCallback(() => {
     setState((prev) => ({ ...prev, audioStreamConfig: null, streamError: null }));
-    vscode.postMessage({
+    bridge.postMessage({
       type: 'mediaDiff:stopAudioStreaming',
       requestId: nextRequestId(),
       timestamp: Date.now(),
       payload: {},
     });
-  }, []);
+  }, [bridge]);
 
   const sendAudioStreamControl = useCallback(
     (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => {
-      vscode.postMessage({
+      bridge.postMessage({
         type: 'mediaDiff:audioStreamControl',
         requestId: nextRequestId(),
         timestamp: Date.now(),
         payload: { action, ...payload },
       });
     },
-    [],
+    [bridge],
   );
 
-  const sendSetTimeRange = useCallback((startTime?: number, endTime?: number) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    vscode.postMessage({
-      type: 'mediaDiff:setTimeRange',
-      requestId: nextRequestId(),
-      timestamp: Date.now(),
-      payload: { startTime, endTime },
-    });
-  }, []);
+  const sendSetTimeRange = useCallback(
+    (startTime?: number, endTime?: number) => {
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+      bridge.postMessage({
+        type: 'mediaDiff:setTimeRange',
+        requestId: nextRequestId(),
+        timestamp: Date.now(),
+        payload: { startTime, endTime },
+      });
+    },
+    [bridge],
+  );
 
   return {
     ...state,
