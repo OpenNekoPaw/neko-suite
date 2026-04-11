@@ -2,7 +2,7 @@
 
 ## Status
 
-**M1-M4 + M6.3 Implemented** — M3.5 (free transform), M5 (normal maps), M6.1/2/4 pending
+**M1-M5 + M6.1/M6.3 Implemented** — M3.5 (free transform), M6.2 (gradient), M6.4 (text) pending
 
 ## Source ADRs
 
