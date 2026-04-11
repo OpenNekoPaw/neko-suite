@@ -4,6 +4,7 @@ import {
   FountainCharacterCodeActionProvider,
   FountainCharacterRenameProvider,
 } from '../providers/rename';
+import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
 import type { ICharacterWorkspaceIndex, IWorkspaceIndex, SymbolLocation } from '../services/types';
 
 const vscodeState = vi.hoisted(() => {
@@ -311,7 +312,12 @@ describe('FountainCharacterRenameProvider', () => {
       '/project/story.fountain': `EXT. PARK - NIGHT\n\nALLY\nHello!`,
     });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainCharacterRenameProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainCharacterRenameProvider(
+      index,
+      characterIndex,
+      creativeEntityIndex,
+    );
     const document = createMockDocument(`EXT. PARK - NIGHT\n\nALLY\nHello!`);
 
     const result = await provider.prepareRename(
@@ -334,7 +340,12 @@ describe('FountainCharacterRenameProvider', () => {
       '/project/story.fountain': `EXT. PARK - NIGHT\n\nALLY\nHello!`,
     });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainCharacterRenameProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainCharacterRenameProvider(
+      index,
+      characterIndex,
+      creativeEntityIndex,
+    );
     const document = createMockDocument(`EXT. PARK - NIGHT\n\nALLY\nHello!`);
 
     vscodeState.openDocuments.set(
@@ -365,6 +376,42 @@ describe('FountainCharacterRenameProvider', () => {
     expect(nextRegistry.characters[0]?.canonicalName).toBe('EVE');
     expect(nextRegistry.characters[0]?.bindings?.scriptNames).toEqual(['ALICE', 'ALLY']);
   });
+
+  it('rejects registry rename when the target name is already claimed by another character', async () => {
+    const bobRecord: CharacterRecord = {
+      id: 'char_bob',
+      canonicalName: 'BOB',
+      aliases: [],
+      status: 'confirmed',
+    };
+    const index = createMockIndex({
+      '/project/story.fountain': `EXT. PARK - NIGHT\n\nALLY\nHello!`,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD, bobRecord]);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainCharacterRenameProvider(
+      index,
+      characterIndex,
+      creativeEntityIndex,
+    );
+    const document = createMockDocument(`EXT. PARK - NIGHT\n\nALLY\nHello!`);
+
+    vscodeState.openDocuments.set(
+      '/project/characters.json',
+      JSON.stringify(
+        {
+          version: 1,
+          characters: [ALICE_RECORD, bobRecord],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await expect(
+      provider.provideRenameEdits(document, { line: 2, character: 0 } as any, 'BOB', {} as any),
+    ).rejects.toThrow('already used');
+  });
 });
 
 describe('FountainCharacterCodeActionProvider', () => {
@@ -373,7 +420,8 @@ describe('FountainCharacterCodeActionProvider', () => {
       '/project/story.fountain': `EXT. PARK - NIGHT\n\nALLY\nHello!`,
     });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainCharacterCodeActionProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainCharacterCodeActionProvider(index, creativeEntityIndex);
     const document = createMockDocument(`EXT. PARK - NIGHT\n\nALLY\nHello!`);
 
     const actions = await provider.provideCodeActions(
@@ -396,7 +444,8 @@ describe('FountainCharacterCodeActionProvider', () => {
       '/project/story.fountain': `EXT. PARK - NIGHT\n\nJOHN\nHello!`,
     });
     const characterIndex = createMockCharacterIndex([]);
-    const provider = new FountainCharacterCodeActionProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainCharacterCodeActionProvider(index, creativeEntityIndex);
     const document = createMockDocument(`EXT. PARK - NIGHT\n\nJOHN\nHello!`);
 
     const actions = await provider.provideCodeActions(

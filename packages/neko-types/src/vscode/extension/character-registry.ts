@@ -16,6 +16,8 @@ export function resolveCharacterRegistryPath(workspaceRoot: string): string {
 }
 
 export class CharacterRegistryService {
+  private static readonly writeChains = new Map<string, Promise<void>>();
+
   constructor(private readonly filePath: string) {}
 
   async load(): Promise<CharacterRegistryFile> {
@@ -29,6 +31,12 @@ export class CharacterRegistryService {
   }
 
   async save(registry: CharacterRegistryFile): Promise<void> {
+    await CharacterRegistryService.withFileLock(this.filePath, async () => {
+      await this.saveUnlocked(registry);
+    });
+  }
+
+  private async saveUnlocked(registry: CharacterRegistryFile): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
 
     const json = JSON.stringify(registry, null, 2);
@@ -87,26 +95,58 @@ export class CharacterRegistryService {
   }
 
   async upsert(record: CharacterRecord): Promise<CharacterRegistryFile> {
-    const registry = await this.load();
-    const nextCharacters = registry.characters.filter((candidate) => candidate.id !== record.id);
-    nextCharacters.push(record);
+    return this.mutate(async (registry) => {
+      const nextCharacters = registry.characters.filter((candidate) => candidate.id !== record.id);
+      nextCharacters.push(record);
 
-    const nextRegistry: CharacterRegistryFile = {
-      version: 1,
-      characters: nextCharacters,
-    };
-    await this.save(nextRegistry);
-    return nextRegistry;
+      return {
+        version: 1,
+        characters: nextCharacters,
+      };
+    });
   }
 
   async remove(id: string): Promise<CharacterRegistryFile> {
-    const registry = await this.load();
-    const nextRegistry: CharacterRegistryFile = {
+    return this.mutate(async (registry) => ({
       version: 1,
       characters: registry.characters.filter((record) => record.id !== id),
-    };
-    await this.save(nextRegistry);
-    return nextRegistry;
+    }));
+  }
+
+  private async mutate(
+    operation: (
+      registry: CharacterRegistryFile,
+    ) => Promise<CharacterRegistryFile> | CharacterRegistryFile,
+  ): Promise<CharacterRegistryFile> {
+    return CharacterRegistryService.withFileLock(this.filePath, async () => {
+      const registry = await this.load();
+      const nextRegistry = await operation(registry);
+      await this.saveUnlocked(nextRegistry);
+      return nextRegistry;
+    });
+  }
+
+  private static async withFileLock<T>(filePath: string, operation: () => Promise<T>): Promise<T> {
+    const previous = CharacterRegistryService.writeChains.get(filePath) ?? Promise.resolve();
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const nextChain = previous.catch(() => {}).then(() => gate);
+    CharacterRegistryService.writeChains.set(filePath, nextChain);
+
+    await previous.catch(() => {});
+
+    try {
+      return await operation();
+    } finally {
+      release?.();
+      const current = CharacterRegistryService.writeChains.get(filePath);
+      if (current === nextChain) {
+        CharacterRegistryService.writeChains.delete(filePath);
+      }
+    }
   }
 }
 

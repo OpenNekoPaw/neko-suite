@@ -1,10 +1,6 @@
 import * as vscode from 'vscode';
-import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
-import type {
-  ICharacterWorkspaceIndex,
-  ICreativeEntityWorkspaceIndex,
-  IWorkspaceIndex,
-} from '../services/types';
+import type { ICreativeEntityWorkspaceIndex, IWorkspaceIndex } from '../services/types';
+import { serializeLocationKey } from '../services/locationKey';
 
 /**
  * Provides go-to-definition for Fountain files.
@@ -13,10 +9,7 @@ import type {
 export class FountainDefinitionProvider implements vscode.DefinitionProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
-    private readonly characterIndex?: ICharacterWorkspaceIndex,
-    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
-      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
-      : undefined,
+    private readonly creativeEntityIndex?: ICreativeEntityWorkspaceIndex,
   ) {}
 
   async provideDefinition(
@@ -70,10 +63,7 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
 export class FountainReferenceProvider implements vscode.ReferenceProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
-    private readonly characterIndex?: ICharacterWorkspaceIndex,
-    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
-      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
-      : undefined,
+    private readonly creativeEntityIndex?: ICreativeEntityWorkspaceIndex,
   ) {}
 
   async provideReferences(
@@ -127,21 +117,11 @@ function dedupeLocations(locations: readonly vscode.Location[]): vscode.Location
   const deduped = new Map<string, vscode.Location>();
 
   for (const location of locations) {
-    const key = serializeLocation(location.uri, location.range);
+    const key = serializeLocationKey(location.uri, location.range);
     if (!deduped.has(key)) {
       deduped.set(key, location);
     }
   }
 
   return Array.from(deduped.values());
-}
-
-function serializeLocation(uri: vscode.Uri, range: vscode.Range): string {
-  return [
-    uri.toString(),
-    range.start.line,
-    range.start.character,
-    range.end.line,
-    range.end.character,
-  ].join(':');
 }

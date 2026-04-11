@@ -216,7 +216,7 @@ export class StorySceneStateStore implements vscode.Disposable {
     }
 
     const nodeIds = collectCanvasEventNodeIds(event);
-    if (nodeIds.length > 0) {
+    if (nodeIds.size > 0) {
       for (const [documentKey, sceneStates] of this.statesByDocument.entries()) {
         const next = { ...sceneStates };
         let changed = false;
@@ -288,20 +288,21 @@ function normalizeDocumentKey(uriOrPath: string): string {
     : vscode.Uri.file(uriOrPath).toString();
 }
 
-function collectCanvasEventNodeIds(event: CanvasChangeEvent): string[] {
-  return Array.from(
-    new Set(
-      [event.nodeId, ...(event.nodeIds ?? [])].filter(
-        (nodeId): nodeId is string => typeof nodeId === 'string' && nodeId.length > 0,
-      ),
+function collectCanvasEventNodeIds(event: CanvasChangeEvent): ReadonlySet<string> {
+  return new Set(
+    [event.nodeId, ...(event.nodeIds ?? [])].filter(
+      (nodeId): nodeId is string => typeof nodeId === 'string' && nodeId.length > 0,
     ),
   );
 }
 
-function matchesCanvasNodes(state: StorySceneWorkflowRecord, nodeIds: readonly string[]): boolean {
-  if (state.canvasSceneNodeId && nodeIds.includes(state.canvasSceneNodeId)) {
+function matchesCanvasNodes(
+  state: StorySceneWorkflowRecord,
+  nodeIds: ReadonlySet<string>,
+): boolean {
+  if (state.canvasSceneNodeId && nodeIds.has(state.canvasSceneNodeId)) {
     return true;
   }
 
-  return (state.shotIds ?? []).some((shotId) => nodeIds.includes(shotId));
+  return (state.shotIds ?? []).some((shotId) => nodeIds.has(shotId));
 }

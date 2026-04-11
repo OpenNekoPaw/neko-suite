@@ -1052,7 +1052,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               ? rawParams['sourceNodeId']
               : (lineage?.sourceNodeId ?? nodeId),
           characterIds: Array.isArray(rawParams['characterIds'])
-            ? (rawParams['characterIds'] as string[])
+            ? rawParams['characterIds'].filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
             : lineage?.characterIds
               ? [...lineage.characterIds]
               : undefined,

@@ -79,6 +79,45 @@ describe('CharacterRegistryService', () => {
     );
   });
 
+  it('serializes concurrent upserts for the same registry file', async () => {
+    const fs = await import('node:fs/promises');
+    let persisted = JSON.stringify({ version: 1, characters: [] });
+    let staged = persisted;
+
+    vi.mocked(fs.readFile).mockImplementation(async () => persisted);
+    vi.mocked(fs.writeFile).mockImplementation(async (_path, content) => {
+      staged = String(content);
+    });
+    vi.mocked(fs.rename).mockImplementation(async () => {
+      persisted = staged;
+    });
+
+    const service = new CharacterRegistryService('/workspace/characters.json');
+
+    await Promise.all([
+      service.upsert({
+        id: 'char_alice',
+        canonicalName: 'ALICE',
+        aliases: [],
+        status: 'confirmed',
+      }),
+      service.upsert({
+        id: 'char_bob',
+        canonicalName: 'BOB',
+        aliases: [],
+        status: 'confirmed',
+      }),
+    ]);
+
+    await expect(service.load()).resolves.toEqual({
+      version: 1,
+      characters: expect.arrayContaining([
+        expect.objectContaining({ id: 'char_alice' }),
+        expect.objectContaining({ id: 'char_bob' }),
+      ]),
+    });
+  });
+
   it('loads bindings from a workspace helper', async () => {
     const fs = await import('node:fs/promises');
     vi.mocked(fs.readFile).mockResolvedValueOnce(

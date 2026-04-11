@@ -4,10 +4,10 @@
 import * as vscode from 'vscode';
 import type {
   ApplyCanvasStoryboardOptions,
+  CanvasChangeEvent as SharedCanvasChangeEvent,
   CanvasNode,
   CanvasNodeType,
   CanvasStoryboardPayload,
-  CreatedCanvasStoryboard,
 } from '@neko/shared';
 
 // Types
@@ -59,18 +59,7 @@ export interface AssetChangeEvent {
   assetId: string;
 }
 
-export interface CanvasChangeEvent {
-  type: 'add' | 'update' | 'delete';
-  nodeId?: string;
-  nodeIds?: string[];
-  shapeId?: string;
-  documentUri?: string;
-  entityType?: 'node' | 'connection' | 'selection' | 'generation' | 'import' | 'operation';
-  reason?: string;
-  operationType?: string;
-  sourceScriptUri?: string;
-  storyboardImport?: CreatedCanvasStoryboard;
-}
+export type CanvasChangeEvent = SharedCanvasChangeEvent;
 
 /**
  * NekoCanvas API interface exported to other extensions

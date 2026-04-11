@@ -7,6 +7,7 @@ import type {
   IWorkspaceIndex,
   SymbolLocation,
 } from './types';
+import { serializeLocationKey } from './locationKey';
 
 /**
  * Character-first creative entity facade.
@@ -102,7 +103,10 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     };
   }
 
-  dispose(): void {}
+  dispose(): void {
+    // No subscriptions yet. Keep Disposable symmetry so future graph / occurrence
+    // backends can attach cleanup here without changing provider call sites.
+  }
 }
 
 function pickCharacterDefinition(
@@ -135,7 +139,7 @@ function collectCharacterLocations(
 
   for (const name of names) {
     for (const location of workspaceIndex.findCharacterLocations(name, currentUri)) {
-      const key = serializeLocation(location.uri, location.range);
+      const key = serializeLocationKey(location.uri, location.range);
       if (!deduped.has(key)) {
         deduped.set(key, location);
       }
@@ -153,14 +157,4 @@ function countDistinctFiles(locations: readonly SymbolLocation[]): number {
   }
 
   return files.size;
-}
-
-function serializeLocation(uri: vscode.Uri, range: vscode.Range): string {
-  return [
-    uri.toString(),
-    range.start.line,
-    range.start.character,
-    range.end.line,
-    range.end.character,
-  ].join(':');
 }

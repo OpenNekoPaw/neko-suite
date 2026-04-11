@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
-import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
 import type {
-  ICharacterWorkspaceIndex,
   ICreativeEntityWorkspaceIndex,
+  ResolvedCharacterMatch,
   IWorkspaceIndex,
 } from '../services/types';
 
@@ -16,10 +15,7 @@ import type {
 export class FountainHoverProvider implements vscode.HoverProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
-    private readonly characterIndex?: ICharacterWorkspaceIndex,
-    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
-      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
-      : undefined,
+    private readonly creativeEntityIndex?: ICreativeEntityWorkspaceIndex,
   ) {}
 
   async provideHover(
@@ -195,18 +191,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     name: string,
     local: LocalCharacterStats | null,
     crossFile: CrossFileCharacterStats,
-    resolved?: {
-      readonly record: {
-        readonly id: string;
-        readonly canonicalName: string;
-        readonly displayName?: string;
-        readonly aliases: readonly string[];
-        readonly status: string;
-        readonly metadata?: {
-          readonly role?: string;
-        };
-      };
-    },
+    resolved?: Pick<ResolvedCharacterMatch, 'record'>,
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);

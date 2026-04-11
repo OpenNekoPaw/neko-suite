@@ -17,7 +17,7 @@ import type {
 const CHARACTER_REGISTRY_FILE = 'characters.json';
 const CHARACTER_REGISTRY_GLOB = `**/${CHARACTER_REGISTRY_FILE}`;
 
-interface CharacterLookupEntry extends ResolvedCharacterMatch {}
+type CharacterLookupEntry = ResolvedCharacterMatch;
 
 interface CharacterWorkspaceState {
   readonly registryUri: vscode.Uri;
@@ -37,6 +37,8 @@ interface CharacterWorkspaceState {
 export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly states = new Map<string, CharacterWorkspaceState>();
+  private readonly reloadChains = new Map<string, Promise<void>>();
+  private readonly reloadVersions = new Map<string, number>();
   private initPromise: Promise<void> | undefined;
 
   constructor() {
@@ -187,10 +189,28 @@ export class CharacterWorkspaceIndexService implements ICharacterWorkspaceIndex 
   }
 
   private async reloadWorkspaceFolder(folder: vscode.WorkspaceFolder): Promise<void> {
-    const state = await loadWorkspaceState(folder);
-    if (state) {
-      this.states.set(folder.uri.toString(), state);
-    }
+    const folderKey = folder.uri.toString();
+    const reloadVersion = (this.reloadVersions.get(folderKey) ?? 0) + 1;
+    this.reloadVersions.set(folderKey, reloadVersion);
+
+    const previous = this.reloadChains.get(folderKey) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        const state = await loadWorkspaceState(folder);
+        if (!state || this.reloadVersions.get(folderKey) !== reloadVersion) {
+          return;
+        }
+
+        this.states.set(folderKey, state);
+      });
+
+    this.reloadChains.set(folderKey, next);
+    await next.finally(() => {
+      if (this.reloadChains.get(folderKey) === next) {
+        this.reloadChains.delete(folderKey);
+      }
+    });
   }
 
   private getState(currentUri?: vscode.Uri): CharacterWorkspaceState | undefined {

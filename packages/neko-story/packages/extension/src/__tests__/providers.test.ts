@@ -984,7 +984,8 @@ describe('DefinitionProvider — Cross-file', () => {
   it('should prefer characters.json definition when alias resolves through registry', async () => {
     const index = createMockIndex({ '/project/scene.fountain': ALIAS_FILE_B });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainDefinitionProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainDefinitionProvider(index, creativeEntityIndex);
     const doc = createMockDocument(ALIAS_FILE_B, '/project/scene.fountain');
 
     const result = await provider.provideDefinition(doc, { line: 2, character: 0 }, {} as any);
@@ -1023,7 +1024,8 @@ describe('ReferenceProvider — Cross-file', () => {
       '/project/b.fountain': ALIAS_FILE_B,
     });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainReferenceProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainReferenceProvider(index, creativeEntityIndex);
     const doc = createMockDocument(ALIAS_FILE_B, '/project/b.fountain');
 
     const results = await provider.provideReferences(
@@ -1220,7 +1222,8 @@ describe('HoverProvider — Cross-file stats', () => {
       '/project/b.fountain': ALIAS_FILE_B,
     });
     const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
-    const provider = new FountainHoverProvider(index, characterIndex);
+    const creativeEntityIndex = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+    const provider = new FountainHoverProvider(index, creativeEntityIndex);
     const doc = createMockDocument(ALIAS_FILE_B, '/project/b.fountain');
 
     const result = await provider.provideHover(doc, { line: 2, character: 0 }, {} as any);

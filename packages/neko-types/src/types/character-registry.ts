@@ -88,32 +88,39 @@ function isCharacterRecordStatus(value: unknown): value is CharacterRecordStatus
   return value === 'confirmed' || value === 'candidate' || value === 'deprecated';
 }
 
+function isObjectLike(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
+}
+
+function getObjectField(value: object, key: string): unknown {
+  return Reflect.get(value, key);
+}
+
 export function isCharacterRecord(value: unknown): value is CharacterRecord {
-  if (typeof value !== 'object' || value === null) {
+  if (!isObjectLike(value)) {
     return false;
   }
 
-  const candidate = value as Record<string, unknown>;
-  const aliases = candidate['aliases'];
+  const aliases = getObjectField(value, 'aliases');
 
   return (
-    typeof candidate['id'] === 'string' &&
-    typeof candidate['canonicalName'] === 'string' &&
+    typeof getObjectField(value, 'id') === 'string' &&
+    typeof getObjectField(value, 'canonicalName') === 'string' &&
     isReadonlyStringArray(aliases) &&
-    isCharacterRecordStatus(candidate['status'])
+    isCharacterRecordStatus(getObjectField(value, 'status'))
   );
 }
 
 export function isCharacterRegistryFile(value: unknown): value is CharacterRegistryFile {
-  if (typeof value !== 'object' || value === null) {
+  if (!isObjectLike(value)) {
     return false;
   }
 
-  const candidate = value as Record<string, unknown>;
+  const characters = getObjectField(value, 'characters');
   return (
-    candidate['version'] === CHARACTER_REGISTRY_VERSION &&
-    Array.isArray(candidate['characters']) &&
-    candidate['characters'].every((record) => isCharacterRecord(record))
+    getObjectField(value, 'version') === CHARACTER_REGISTRY_VERSION &&
+    Array.isArray(characters) &&
+    characters.every((record) => isCharacterRecord(record))
   );
 }
 

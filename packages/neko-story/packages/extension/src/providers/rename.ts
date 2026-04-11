@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import {
+  collectCharacterLookupKeys,
   normalizeCharacterLookupKey,
   type CharacterRecord,
   type CharacterRegistryFile,
 } from '@neko/shared';
-import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
 import type {
   CharacterEntityQuery,
   ICharacterWorkspaceIndex,
@@ -30,10 +30,8 @@ interface CharacterRenameContext {
 export class FountainCharacterRenameProvider implements vscode.RenameProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
-    private readonly characterIndex?: ICharacterWorkspaceIndex,
-    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
-      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
-      : undefined,
+    private readonly characterIndex: ICharacterWorkspaceIndex,
+    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex,
   ) {}
 
   async prepareRename(
@@ -88,6 +86,17 @@ export class FountainCharacterRenameProvider implements vscode.RenameProvider {
       return null;
     }
 
+    const conflictingRecord = findConflictingCharacterRecord(
+      context.registry.characters,
+      currentRecord.id,
+      nextCanonicalName,
+    );
+    if (conflictingRecord) {
+      throw new Error(
+        `Character name "${nextCanonicalName}" is already used by "${conflictingRecord.canonicalName}" in characters.json.`,
+      );
+    }
+
     const nextRecord = renameCharacterRecord(
       currentRecord,
       nextCanonicalName,
@@ -115,7 +124,7 @@ export class FountainCharacterRenameProvider implements vscode.RenameProvider {
     position: vscode.Position,
   ): Promise<CharacterRenameContext | undefined> {
     const wordRange = document.getWordRangeAtPosition(position, CHARACTER_WORD_RE);
-    if (!wordRange || !this.characterIndex || !this.creativeEntityIndex) {
+    if (!wordRange) {
       return undefined;
     }
 
@@ -144,10 +153,7 @@ export class FountainCharacterRenameProvider implements vscode.RenameProvider {
 export class FountainCharacterCodeActionProvider implements vscode.CodeActionProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
-    private readonly characterIndex?: ICharacterWorkspaceIndex,
-    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
-      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
-      : undefined,
+    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex,
   ) {}
 
   async provideCodeActions(
@@ -158,7 +164,7 @@ export class FountainCharacterCodeActionProvider implements vscode.CodeActionPro
   ): Promise<vscode.CodeAction[]> {
     const position = range.start;
     const wordRange = document.getWordRangeAtPosition(position, CHARACTER_WORD_RE);
-    if (!wordRange || !this.creativeEntityIndex) {
+    if (!wordRange) {
       return [];
     }
 
@@ -180,6 +186,25 @@ export class FountainCharacterCodeActionProvider implements vscode.CodeActionPro
     action.isPreferred = true;
     return [action];
   }
+}
+
+function findConflictingCharacterRecord(
+  records: readonly CharacterRecord[],
+  currentRecordId: string,
+  nextCanonicalName: string,
+): CharacterRecord | undefined {
+  const nextKey = normalizeCharacterLookupKey(nextCanonicalName);
+  if (!nextKey) {
+    return undefined;
+  }
+
+  return records.find((record) => {
+    if (record.id === currentRecordId) {
+      return false;
+    }
+
+    return collectCharacterLookupKeys(record).includes(nextKey);
+  });
 }
 
 function renameCharacterRecord(

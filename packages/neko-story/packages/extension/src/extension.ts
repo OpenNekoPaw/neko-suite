@@ -72,14 +72,25 @@ export function activate(context: vscode.ExtensionContext) {
     names: readonly string[],
     uriOrPath?: string,
   ): Promise<Record<string, string>> => {
-    const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+    let uri: vscode.Uri | undefined;
+    try {
+      uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+    } catch (error) {
+      logger.warn(`Failed to resolve storyboard character binding URI: ${formatError(error)}`);
+      return {};
+    }
+
     const bindings: Record<string, string> = {};
 
     for (const name of names) {
-      const resolved = characterIndexService.resolveCharacter(name, uri);
-      const characterId = resolved?.record.id;
-      if (characterId) {
-        bindings[name] = characterId;
+      try {
+        const resolved = characterIndexService.resolveCharacter(name, uri);
+        const characterId = resolved?.record.id;
+        if (characterId) {
+          bindings[name] = characterId;
+        }
+      } catch (error) {
+        logger.warn(`Failed to resolve storyboard character "${name}": ${formatError(error)}`);
       }
     }
 
@@ -103,25 +114,17 @@ export function activate(context: vscode.ExtensionContext) {
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(
-        indexService,
-        characterIndexService,
-        creativeEntityIndexService,
-      ),
+      new FountainDefinitionProvider(indexService, creativeEntityIndexService),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(
-        indexService,
-        characterIndexService,
-        creativeEntityIndexService,
-      ),
+      new FountainReferenceProvider(indexService, creativeEntityIndexService),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService, characterIndexService, creativeEntityIndexService),
+      new FountainHoverProvider(indexService, creativeEntityIndexService),
     ),
     vscode.languages.registerRenameProvider(
       FOUNTAIN_SELECTOR,
@@ -133,11 +136,7 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.languages.registerCodeActionsProvider(
       FOUNTAIN_SELECTOR,
-      new FountainCharacterCodeActionProvider(
-        indexService,
-        characterIndexService,
-        creativeEntityIndexService,
-      ),
+      new FountainCharacterCodeActionProvider(indexService, creativeEntityIndexService),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(
@@ -517,8 +516,13 @@ export function activate(context: vscode.ExtensionContext) {
      * Resolves a character name / alias against the project registry.
      */
     resolveCharacter(name: string, uriOrPath?: string) {
-      const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
-      return characterIndexService.resolveCharacter(name, uri);
+      try {
+        const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+        return characterIndexService.resolveCharacter(name, uri);
+      } catch (error) {
+        logger.warn(`Failed to resolve character "${name}": ${formatError(error)}`);
+        return undefined;
+      }
     },
 
     /**
@@ -607,6 +611,10 @@ function resolveUriOrPath(uriOrPath: string): vscode.Uri {
   return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
     ? vscode.Uri.parse(uriOrPath)
     : vscode.Uri.file(uriOrPath);
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function resolveTargetWorkspaceFolder(uri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
