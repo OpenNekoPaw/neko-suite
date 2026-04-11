@@ -11,6 +11,14 @@ import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
 import type { LayerData } from '../types';
 
+/** Adjustment layer types that map to FilterRegistry IDs */
+const ADJUSTMENT_TYPES = [
+  { id: 'brightness-contrast', label: 'Brightness / Contrast' },
+  { id: 'hue-saturation', label: 'Hue / Saturation' },
+  { id: 'exposure', label: 'Exposure' },
+  { id: 'temperature', label: 'Temperature' },
+] as const;
+
 export function LayerPanel() {
   const { t } = useTranslation();
   const layers = useSketchStore((s) => s.layers);
@@ -21,11 +29,13 @@ export function LayerPanel() {
   const updateLayerProps = useSketchStore((s) => s.updateLayerProps);
   const duplicateLayerById = useSketchStore((s) => s.duplicateLayerById);
   const moveLayerTo = useSketchStore((s) => s.moveLayerTo);
+  const addAdjustmentLayer = useSketchStore((s) => s.addAdjustmentLayer);
   const show = useSketchStore((s) => s.showLayerPanel);
 
   const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
     null,
   );
+  const [showAdjDropdown, setShowAdjDropdown] = useState(false);
 
   const handleLayerContextMenu = useCallback(
     (e: React.MouseEvent, layer: LayerData) => {
@@ -59,6 +69,15 @@ export function LayerPanel() {
         },
         { separator: true },
         {
+          label: layer.clippingMask ? 'Release Clipping Mask' : 'Create Clipping Mask',
+          onClick: () => updateLayerProps(layer.id, { clippingMask: !layer.clippingMask }),
+        },
+        {
+          label: layer.alphaLock ? 'Unlock Alpha' : 'Lock Alpha',
+          onClick: () => updateLayerProps(layer.id, { alphaLock: !layer.alphaLock }),
+        },
+        { separator: true },
+        {
           label: t('sketch.layer.delete'),
           danger: true,
           onClick: () => removeLayerById(layer.id),
@@ -76,14 +95,43 @@ export function LayerPanel() {
       {/* Header */}
       <div className="sketch-panel-header">
         <h3 className="sketch-panel-title">{t('sketch.panel.layers')}</h3>
-        <button
-          aria-label={t('sketch.layer.add')}
-          className="sketch-icon-button"
-          onClick={() => addNewLayer()}
-          title={t('sketch.layer.add')}
-        >
-          <PlusIcon />
-        </button>
+        <div className="flex gap-0.5 relative">
+          <button
+            aria-label={t('sketch.layer.add')}
+            className="sketch-icon-button"
+            onClick={() => addNewLayer()}
+            title={t('sketch.layer.add')}
+          >
+            <PlusIcon />
+          </button>
+          <button
+            aria-label="Add adjustment layer"
+            className="sketch-icon-button"
+            onClick={() => setShowAdjDropdown((v) => !v)}
+            title="Add adjustment layer"
+          >
+            <AdjustIcon />
+          </button>
+          {showAdjDropdown && (
+            <div
+              className="absolute right-0 top-full mt-0.5 z-10 py-0.5 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-editor-background)] shadow-md"
+              onMouseLeave={() => setShowAdjDropdown(false)}
+            >
+              {ADJUSTMENT_TYPES.map((adj) => (
+                <button
+                  key={adj.id}
+                  className="block w-full text-left text-[10px] px-2 py-0.5 hover:bg-[var(--vscode-list-hoverBackground)] whitespace-nowrap"
+                  onClick={() => {
+                    addAdjustmentLayer(adj.id, {});
+                    setShowAdjDropdown(false);
+                  }}
+                >
+                  {adj.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Layer list */}
@@ -167,7 +215,7 @@ function LayerItem(props: {
         {layer.locked ? <LockClosedIcon /> : <LockOpenIcon />}
       </button>
 
-      {/* Name */}
+      {/* Name + badges */}
       <span
         className="flex-1 truncate text-xs"
         style={{
@@ -177,6 +225,21 @@ function LayerItem(props: {
       >
         {layer.name}
       </span>
+      {layer.type === 'adjustment' && (
+        <span className="text-[8px] px-1 py-0 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
+          ADJ
+        </span>
+      )}
+      {layer.clippingMask && (
+        <span className="text-[8px] opacity-50" title="Clipping mask">
+          &#8627;
+        </span>
+      )}
+      {layer.alphaLock && (
+        <span className="text-[8px] opacity-50" title="Alpha lock">
+          &#945;
+        </span>
+      )}
 
       {/* Remove */}
       <button
@@ -281,6 +344,25 @@ function LockOpenIcon() {
     >
       <rect x="2" y="5" width="8" height="6" rx="1" />
       <path d="M4 5V4a2 2 0 014 0" />
+    </svg>
+  );
+}
+
+function AdjustIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+    >
+      <circle cx="3" cy="6" r="1.5" />
+      <path d="M3 2v2.5M3 7.5V10" />
+      <circle cx="9" cy="4" r="1.5" />
+      <path d="M9 2v0.5M9 5.5V10" />
     </svg>
   );
 }

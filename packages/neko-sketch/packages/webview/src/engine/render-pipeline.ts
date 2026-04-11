@@ -6,7 +6,8 @@
  */
 import type { IRenderPipeline, IShaderManager, ITextureManager } from './types';
 import type { LayerData, ViewportState } from '../types';
-import { BLEND_MODE_INDEX } from './shaders';
+import { BLEND_MODE_INDEX, QUAD_VERT } from './shaders';
+import { CLIPPING_MASK_FRAG, LAYER_MASK_FRAG } from './mask-shaders';
 
 /** Fullscreen quad geometry: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -27,6 +28,12 @@ export class RenderPipeline implements IRenderPipeline {
   private compFboB: WebGLFramebuffer | null = null;
   private compWidth = 0;
   private compHeight = 0;
+
+  // Mask processing (temporary FBO for applying masks before blend)
+  private maskTex: WebGLTexture | null = null;
+  private maskFbo: WebGLFramebuffer | null = null;
+  private clipProgram: WebGLProgram | null = null;
+  private layerMaskProgram: WebGLProgram | null = null;
 
   constructor(gl: WebGL2RenderingContext, shaders: IShaderManager, textures: ITextureManager) {
     this.gl = gl;
@@ -95,6 +102,14 @@ export class RenderPipeline implements IRenderPipeline {
     filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
     lightingFn?: (filteredTex: WebGLTexture, width: number, height: number) => WebGLTexture,
     layerTransforms?: ReadonlyMap<string, Float32Array>,
+    adjustmentFn?: (
+      tex: WebGLTexture,
+      w: number,
+      h: number,
+      filterId: string,
+      params: Record<string, number>,
+      opacity: number,
+    ) => WebGLTexture,
   ): void {
     const gl = this.gl;
     if (layers.length === 0) return;
@@ -119,11 +134,56 @@ export class RenderPipeline implements IRenderPipeline {
     this.clear(fbos[0]!);
 
     for (const layer of layers) {
-      if (!layer.visible || !layer.texture) continue;
+      if (!layer.visible) continue;
+
+      // Adjustment layer: apply filter effect to current composite
+      if (layer.type === 'adjustment' && layer.adjustmentFilter && adjustmentFn) {
+        const adjustedTex = adjustmentFn(
+          texs[current]!,
+          cw,
+          ch,
+          layer.adjustmentFilter,
+          layer.adjustmentParams ?? {},
+          layer.opacity,
+        );
+        // Blit adjusted result back into current ping-pong buffer
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[current]!);
+        gl.viewport(0, 0, cw, ch);
+        const blitProg = this.shaders.getProgram('blit');
+        gl.useProgram(blitProg);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, adjustedTex);
+        gl.uniform1i(gl.getUniformLocation(blitProg, 'u_texture'), 0);
+        gl.uniform1f(gl.getUniformLocation(blitProg, 'u_opacity'), 1.0);
+        gl.uniformMatrix3fv(gl.getUniformLocation(blitProg, 'u_transform'), false, identity3());
+        gl.disable(gl.BLEND);
+        this.drawQuad();
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        continue;
+      }
+
+      if (!layer.texture) continue;
+
+      // Apply masks if present
+      let effectiveTex = layer.texture;
+
+      // Clipping mask: restrict to alpha of the composite below
+      if (layer.clippingMask) {
+        effectiveTex = this.applyMask(effectiveTex, texs[current]!, cw, ch, true);
+      }
+
+      // Layer mask: multiply alpha by grayscale mask layer
+      if (layer.maskLayerId) {
+        const maskLayer = layers.find((l) => l.id === layer.maskLayerId);
+        if (maskLayer?.texture) {
+          effectiveTex = this.applyMask(effectiveTex, maskLayer.texture, cw, ch, false);
+        }
+      }
 
       const targetFbo = fbos[1 - current]!;
       const baseTex = texs[current]!;
-      const blendTex = layer.texture;
+      const blendTex = effectiveTex;
       const modeIndex = BLEND_MODE_INDEX[layer.blendMode] ?? 0;
 
       // Render blended result to target
@@ -298,12 +358,97 @@ export class RenderPipeline implements IRenderPipeline {
     gl.bindVertexArray(null);
   }
 
+  /**
+   * Apply a clipping or layer mask to a texture, returning the masked result.
+   * - Clipping mask: clips layer alpha to the alpha of the base composite below.
+   * - Layer mask: multiplies layer alpha by the luminance of a grayscale mask layer.
+   */
+  applyMask(
+    layerTex: WebGLTexture,
+    maskTex: WebGLTexture,
+    width: number,
+    height: number,
+    isClippingMask: boolean,
+  ): WebGLTexture {
+    const gl = this.gl;
+
+    // Ensure mask FBO exists
+    if (!this.maskTex || !this.maskFbo) {
+      this.maskTex = this.textures.createTexture(width, height);
+      this.maskFbo = this.textures.createFramebuffer(this.maskTex);
+    }
+
+    // Lazy-compile mask programs
+    const program = isClippingMask
+      ? (this.clipProgram ??= this.compileProgram(QUAD_VERT, CLIPPING_MASK_FRAG))
+      : (this.layerMaskProgram ??= this.compileProgram(QUAD_VERT, LAYER_MASK_FRAG));
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskFbo);
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(program);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, layerTex);
+    gl.uniform1i(gl.getUniformLocation(program, isClippingMask ? 'u_layer' : 'u_layer'), 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, maskTex);
+    gl.uniform1i(gl.getUniformLocation(program, isClippingMask ? 'u_base' : 'u_mask'), 1);
+
+    gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_transform'), false, identity3());
+
+    gl.disable(gl.BLEND);
+    this.drawQuad();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return this.maskTex;
+  }
+
+  private compileProgram(vertSrc: string, fragSrc: string): WebGLProgram {
+    const gl = this.gl;
+    const vert = this.compileShader(gl.VERTEX_SHADER, vertSrc);
+    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
+    const program = gl.createProgram();
+    if (!program) throw new Error('Failed to create mask program');
+    gl.attachShader(program, vert);
+    gl.attachShader(program, frag);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      const info = gl.getProgramInfoLog(program);
+      gl.deleteProgram(program);
+      throw new Error(`Mask program link failed: ${info}`);
+    }
+    gl.deleteShader(vert);
+    gl.deleteShader(frag);
+    return program;
+  }
+
+  private compileShader(type: number, source: string): WebGLShader {
+    const gl = this.gl;
+    const shader = gl.createShader(type);
+    if (!shader) throw new Error('Failed to create shader');
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const info = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+      throw new Error(`Mask shader compile failed: ${info}`);
+    }
+    return shader;
+  }
+
   dispose(): void {
     const gl = this.gl;
     if (this.compFboA) this.textures.deleteFramebuffer(this.compFboA);
     if (this.compFboB) this.textures.deleteFramebuffer(this.compFboB);
     if (this.compTexA) this.textures.deleteTexture(this.compTexA);
     if (this.compTexB) this.textures.deleteTexture(this.compTexB);
+    if (this.maskFbo) this.textures.deleteFramebuffer(this.maskFbo);
+    if (this.maskTex) this.textures.deleteTexture(this.maskTex);
+    if (this.clipProgram) gl.deleteProgram(this.clipProgram);
+    if (this.layerMaskProgram) gl.deleteProgram(this.layerMaskProgram);
     if (this.quadVAO) gl.deleteVertexArray(this.quadVAO);
     if (this.quadVBO) gl.deleteBuffer(this.quadVBO);
     if (this.strokeVAO) gl.deleteVertexArray(this.strokeVAO);

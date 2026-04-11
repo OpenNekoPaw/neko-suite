@@ -26,6 +26,8 @@ interface NksLayerData {
   readonly data?: string;
   readonly normalData?: string;
   readonly alphaLock?: boolean;
+  readonly adjustmentFilter?: string;
+  readonly adjustmentParams?: Record<string, number>;
 }
 
 interface NksDocument {
@@ -101,6 +103,8 @@ function deserializeLayers(raw: NksLayerData[]): LayerData[] {
     pendingData: l.data,
     pendingNormalData: l.normalData,
     alphaLock: l.alphaLock ?? false,
+    adjustmentFilter: l.adjustmentFilter,
+    adjustmentParams: l.adjustmentParams,
   }));
 }
 
@@ -192,6 +196,8 @@ function serializeLayer(layer: LayerData, gl: WebGL2RenderingContext | null): Nk
     children: layer.children.map((c) => serializeLayer(c, gl)),
     data,
     alphaLock: layer.alphaLock || undefined,
+    adjustmentFilter: layer.adjustmentFilter,
+    adjustmentParams: layer.adjustmentParams,
   };
 }
 

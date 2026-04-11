@@ -140,8 +140,36 @@ export class SketchRenderer implements ISketchRenderer {
           this._lightPass.apply(tex, w, h, lightingConfig.lights, lightingConfig.ambient)
       : undefined;
 
+    // Build adjustment callback — reuses FilterPipeline for per-layer adjustment processing
+    const adjustmentFn = (
+      tex: WebGLTexture,
+      w: number,
+      h: number,
+      filterId: string,
+      params: Record<string, number>,
+      opacity: number,
+    ): WebGLTexture => {
+      const applied = {
+        id: '__adj',
+        filterId,
+        params,
+        enabled: true,
+      };
+      const result = this._filterPipeline.applyFilters(tex, w, h, [applied], this._filterRegistry);
+      // TODO(P1): blend original and adjusted by opacity for partial-strength adjustments
+      void opacity;
+      return result;
+    };
+
     // Composite layers with optional filter chain, lighting, and per-layer parallax transforms
-    this._pipeline.compositeLayerStack(layers, viewport, filterFn, lightingFn, layerTransforms);
+    this._pipeline.compositeLayerStack(
+      layers,
+      viewport,
+      filterFn,
+      lightingFn,
+      layerTransforms,
+      adjustmentFn,
+    );
 
     // Render particles on top if preview is active
     if (particlePreview && emitters.length > 0) {

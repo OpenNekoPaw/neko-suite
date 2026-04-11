@@ -6,6 +6,7 @@ import type { LayerData } from '../../types';
 import { t } from '../../i18n';
 import {
   createLayer,
+  createAdjustmentLayer,
   addLayer,
   removeLayer,
   moveLayer,
@@ -28,8 +29,23 @@ export interface LayerSlice {
   duplicateLayerById: (id: string) => void;
   updateLayerProps: (
     id: string,
-    updates: Partial<Pick<LayerData, 'name' | 'visible' | 'locked' | 'opacity' | 'blendMode'>>,
+    updates: Partial<
+      Pick<
+        LayerData,
+        | 'name'
+        | 'visible'
+        | 'locked'
+        | 'opacity'
+        | 'blendMode'
+        | 'clippingMask'
+        | 'maskLayerId'
+        | 'alphaLock'
+        | 'adjustmentFilter'
+        | 'adjustmentParams'
+      >
+    >,
   ) => void;
+  addAdjustmentLayer: (filterId: string, defaultParams: Record<string, number>) => void;
   groupSelectedLayers: (ids: string[]) => void;
   setLayers: (layers: LayerData[]) => void;
 }
@@ -96,6 +112,23 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
     }
     set({ layers: updateLayer(state.layers, id, updates) });
     useSketchOperationStore.getState().recordLayerUpdate(id, updates, before);
+  },
+
+  addAdjustmentLayer: (filterId, defaultParams) => {
+    const state = get();
+    const canvas = (state as unknown as { canvas: { width: number; height: number } }).canvas;
+    const name = filterId.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const newLayer = createAdjustmentLayer(
+      name,
+      canvas?.width ?? 1920,
+      canvas?.height ?? 1080,
+      filterId,
+      defaultParams,
+    );
+    set({
+      layers: addLayer(state.layers, newLayer),
+      activeLayerId: newLayer.id,
+    });
   },
 
   groupSelectedLayers: (ids) =>

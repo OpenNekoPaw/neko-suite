@@ -1,5 +1,6 @@
 export {
   createLayer,
+  createAdjustmentLayer,
   addLayer,
   removeLayer,
   moveLayer,

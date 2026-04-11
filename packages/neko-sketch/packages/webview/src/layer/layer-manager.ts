@@ -41,6 +41,36 @@ export function createLayer(
   };
 }
 
+/** Create an adjustment layer that applies a filter effect to layers below */
+export function createAdjustmentLayer(
+  name: string,
+  width: number,
+  height: number,
+  filterId: string,
+  defaultParams: Record<string, number>,
+): LayerData {
+  return {
+    id: generateLayerId(),
+    name,
+    type: 'adjustment',
+    visible: true,
+    locked: false,
+    opacity: 1.0,
+    blendMode: 'normal',
+    width,
+    height,
+    offsetX: 0,
+    offsetY: 0,
+    clippingMask: false,
+    maskLayerId: null,
+    children: [],
+    texture: null,
+    alphaLock: false,
+    adjustmentFilter: filterId,
+    adjustmentParams: defaultParams,
+  };
+}
+
 /** Find a layer by ID in a nested tree */
 function findLayer(layers: ReadonlyArray<LayerData>, id: string): LayerData | undefined {
   for (const layer of layers) {

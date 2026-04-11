@@ -73,6 +73,10 @@ export interface LayerData {
   pendingNormalData?: string;
   /** Alpha lock: paint without altering layer transparency */
   readonly alphaLock: boolean;
+  /** Adjustment layer: which filter to apply (references FilterDef.id) */
+  readonly adjustmentFilter?: string;
+  /** Adjustment layer: filter parameter overrides */
+  readonly adjustmentParams?: Record<string, number>;
 }
 
 // ─── Tool Types ───

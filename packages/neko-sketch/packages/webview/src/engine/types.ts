@@ -46,6 +46,14 @@ export interface IRenderPipeline {
     filterFn?: (compositeTex: WebGLTexture, width: number, height: number) => WebGLTexture,
     lightingFn?: (filteredTex: WebGLTexture, width: number, height: number) => WebGLTexture,
     layerTransforms?: ReadonlyMap<string, Float32Array>,
+    adjustmentFn?: (
+      tex: WebGLTexture,
+      w: number,
+      h: number,
+      filterId: string,
+      params: Record<string, number>,
+      opacity: number,
+    ) => WebGLTexture,
   ): void;
   renderStrokeSegment(
     points: Float32Array,
