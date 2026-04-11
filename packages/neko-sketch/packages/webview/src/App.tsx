@@ -116,13 +116,13 @@ export function App() {
             const state = store.getState();
             state.clearScenes();
             for (const scene of parsed.scenes) {
-              // Re-inject scenes via direct state set (scenes are self-contained)
               store.setState((s) => ({ scenes: [...s.scenes, scene] }));
             }
             if (parsed.scenes.length > 0) {
               state.setActiveScene(parsed.scenes[0]!.id);
             }
-            // Restore global filters
+            // Restore global filters — always clear first to prevent bleed between documents
+            state.clearFilters();
             if (parsed.filters.length > 0) {
               store.setState({ filters: parsed.filters });
             }

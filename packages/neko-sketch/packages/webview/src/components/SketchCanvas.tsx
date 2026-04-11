@@ -553,6 +553,40 @@ export function SketchCanvas() {
         return { ...layer, pendingData: undefined };
       }
 
+      // Restore saved normal map data (base64 PNG from .nks file)
+      if (layer.pendingNormalData && !layer.normalTexture) {
+        const normalImg = new Image();
+        normalImg.src = `data:image/png;base64,${layer.pendingNormalData}`;
+        const layerId = layer.id;
+        void normalImg.decode().then(() => {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = layer.width;
+          offscreen.height = layer.height;
+          const ctx = offscreen.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(normalImg, 0, 0);
+          const imageData = ctx.getImageData(0, 0, layer.width, layer.height);
+          const r = rendererRef.current;
+          if (!r) return;
+          const normalTex = r.textures.createTexture(
+            layer.width,
+            layer.height,
+            new Uint8Array(imageData.data.buffer),
+          );
+          const state = useSketchStore.getState();
+          state.setLayers(
+            state.layers.map((l) =>
+              l.id === layerId
+                ? { ...l, normalTexture: normalTex, pendingNormalData: undefined }
+                : l,
+            ),
+          );
+          needsRenderRef.current = true;
+        });
+        changed = true;
+        return { ...layer, pendingNormalData: undefined };
+      }
+
       // Create solid-color texture for fill layers
       if (layer.type === 'fill') {
         const w = layer.width;
@@ -1119,6 +1153,31 @@ export function SketchCanvas() {
         return;
       }
 
+      // Gradient: drag to define start→end, apply on release
+      if (activeTool === 'gradient') {
+        const { x, y } = screenToCanvas(
+          point.x,
+          point.y,
+          viewport.zoom,
+          viewport.panX,
+          viewport.panY,
+        );
+        selectStartRef.current = { x, y };
+        return;
+      }
+
+      // Text: click to place text insertion point (opens text editor overlay)
+      if (activeTool === 'text') {
+        // TODO(P1): open text editing overlay at click position
+        return;
+      }
+
+      // Clone stamp: Alt+click sets source, normal click clones
+      if (activeTool === 'clone') {
+        // TODO(P1): implement clone stamp pointer logic
+        return;
+      }
+
       // Default: brush / eraser — draw to scratch texture, merge on stroke end
       const { x, y } = screenToCanvas(
         point.x,
@@ -1305,13 +1364,15 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, transform (no active drag), select-wand do nothing on move
+      // Tools that do nothing on move (single-click or handled elsewhere)
       if (
         activeTool === 'zoom' ||
         activeTool === 'eyedropper' ||
         activeTool === 'fill' ||
         activeTool === 'transform' ||
-        activeTool === 'select-wand'
+        activeTool === 'select-wand' ||
+        activeTool === 'text' ||
+        activeTool === 'clone'
       ) {
         return;
       }
@@ -1456,8 +1517,23 @@ export function SketchCanvas() {
         return;
       }
 
-      // zoom, eyedropper, fill, select-wand are single-click tools — nothing to do on end
-      if (activeTool === 'zoom' || activeTool === 'eyedropper' || activeTool === 'fill') {
+      // Single-click or no-end-action tools
+      if (
+        activeTool === 'zoom' ||
+        activeTool === 'eyedropper' ||
+        activeTool === 'fill' ||
+        activeTool === 'text' ||
+        activeTool === 'clone'
+      ) {
+        return;
+      }
+
+      if (activeTool === 'gradient') {
+        // Finish gradient drag — apply gradient to active layer
+        const start = selectStartRef.current;
+        if (!start) return;
+        // TODO(P1): render gradient shader to layer FBO using start→end
+        selectStartRef.current = null;
         return;
       }
 
@@ -1940,6 +2016,30 @@ export function SketchCanvas() {
       { label: t('sketch.canvas.rotate90'), onClick: rotateActiveLayer90 },
       { separator: true },
       { label: t('sketch.canvas.clearLayer'), danger: true, onClick: clearActiveLayer },
+      { separator: true },
+      {
+        label: 'Add Reference Image...',
+        onClick: () => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              const src = reader.result as string;
+              const id = `ref-${Date.now()}`;
+              setReferenceImages((prev) => [
+                ...prev,
+                { id, src, x: 50, y: 50, width: 200, height: 200, opacity: 0.5 },
+              ]);
+            };
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        },
+      },
       { separator: true },
       {
         label: t('sketch.canvas.zoomIn'),

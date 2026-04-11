@@ -33,6 +33,7 @@ export function GuidesOverlay({
   viewport,
   canvasWidth,
   canvasHeight,
+  onAddGuide,
   onMoveGuide,
   onRemoveGuide,
 }: GuidesOverlayProps) {
@@ -73,7 +74,7 @@ export function GuidesOverlay({
       aria-hidden="true"
       style={{ overflow: 'visible' }}
     >
-      {/* Horizontal ruler background */}
+      {/* Horizontal ruler background — drag down to create horizontal guide */}
       <rect
         x={RULER_SIZE}
         y={0}
@@ -81,8 +82,14 @@ export function GuidesOverlay({
         height={RULER_SIZE}
         fill="var(--vscode-editor-background)"
         opacity={0.8}
+        style={{ pointerEvents: 'auto', cursor: 'ns-resize' }}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          const pos = (e.clientY - panY) / zoom;
+          onAddGuide('horizontal', Math.round(pos));
+        }}
       />
-      {/* Vertical ruler background */}
+      {/* Vertical ruler background — drag right to create vertical guide */}
       <rect
         x={0}
         y={RULER_SIZE}
@@ -90,6 +97,12 @@ export function GuidesOverlay({
         height="100%"
         fill="var(--vscode-editor-background)"
         opacity={0.8}
+        style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          const pos = (e.clientX - panX) / zoom;
+          onAddGuide('vertical', Math.round(pos));
+        }}
       />
 
       {/* Horizontal ruler ticks */}

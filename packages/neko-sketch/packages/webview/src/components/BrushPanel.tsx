@@ -10,7 +10,15 @@
  */
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
-import type { BrushType } from '../types';
+import type { BrushType, SymmetryMode } from '../types';
+
+const SYMMETRY_MODES: { mode: SymmetryMode; label: string }[] = [
+  { mode: 'none', label: 'Off' },
+  { mode: 'vertical', label: 'Vertical' },
+  { mode: 'horizontal', label: 'Horizontal' },
+  { mode: 'both', label: 'Both' },
+  { mode: 'radial', label: 'Radial' },
+];
 
 /** Brush types available when the brush tool is active (eraser handled by toolbar) */
 const BRUSH_TYPES: { type: BrushType; key: string }[] = [
@@ -31,6 +39,8 @@ export function BrushPanel() {
   const setBrushOpacity = useSketchStore((s) => s.setBrushOpacity);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
   const setBrushSettings = useSketchStore((s) => s.setBrushSettings);
+  const symmetry = useSketchStore((s) => s.symmetry);
+  const setSymmetry = useSketchStore((s) => s.setSymmetry);
   const show = useSketchStore((s) => s.showBrushPanel);
 
   if (!show) return null;
@@ -114,6 +124,25 @@ export function BrushPanel() {
             value={Math.round(brushSettings.hardness * 100)}
             onChange={(e) => setBrushSettings({ hardness: Number(e.target.value) / 100 })}
           />
+        </div>
+      )}
+
+      {/* Symmetry mode — hidden in eraser mode */}
+      {!isEraser && (
+        <div className="sketch-panel-row">
+          <label htmlFor="symmetry-mode">Symmetry</label>
+          <select
+            id="symmetry-mode"
+            className="sketch-select"
+            value={symmetry.mode}
+            onChange={(e) => setSymmetry({ mode: e.target.value as SymmetryMode })}
+          >
+            {SYMMETRY_MODES.map((s) => (
+              <option key={s.mode} value={s.mode}>
+                {s.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
