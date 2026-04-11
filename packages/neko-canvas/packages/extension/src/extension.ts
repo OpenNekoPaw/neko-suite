@@ -334,7 +334,9 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.addToAssetLibrary', async (uri?: vscode.Uri) => {
       if (!uri) {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.canvas.addToAssetLibrary.noFile'));
+        void handleError(new Error(vscode.l10n.t('neko.canvas.addToAssetLibrary.noFile')), {
+          showToUser: true,
+        });
         return;
       }
 
@@ -390,7 +392,10 @@ function registerCommands(
       'neko.canvas.importAsset',
       async (asset?: { path?: string; type?: string }) => {
         if (!asset?.path) {
-          vscode.window.showWarningMessage('neko.canvas.importAsset: missing asset path');
+          void handleError(new Error('neko.canvas.importAsset: missing asset path'), {
+            showToUser: true,
+            severity: 'warning',
+          });
           return;
         }
 
@@ -480,8 +485,11 @@ function registerCommands(
         const { nodeId, imageData, cellId } = args;
         const delivered = canvasEditorProvider.postUpdateNodeImage(nodeId, imageData, cellId);
         if (!delivered) {
-          vscode.window.showWarningMessage(
-            'No active canvas editor — open the canvas first, then send back from Sketch.',
+          void handleError(
+            new Error(
+              'No active canvas editor — open the canvas first, then send back from Sketch.',
+            ),
+            { showToUser: true, severity: 'warning' },
           );
         }
       },

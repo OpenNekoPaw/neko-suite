@@ -23,7 +23,7 @@ import {
   VSCodeErrorHandler,
 } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
-import { setErrorHandler } from './utils/errorHandler';
+import { setErrorHandler, handleError } from './utils/errorHandler';
 
 const logger = getLogger('Extension');
 
@@ -172,11 +172,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
           ext: '.nka',
           template: (title) => getAudioProjectTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.audio.new.noFolder'),
+          onError: (error) => void handleError(error, { showToUser: true }),
         });
         logger.info('Created audio project');
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.audio.new.failed', msg));
+        void handleError(error instanceof Error ? error : new Error(String(error)), {
+          showToUser: true,
+        });
       }
     }),
 

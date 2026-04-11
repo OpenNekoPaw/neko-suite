@@ -9,7 +9,7 @@ import {
   resolveCharacterRegistryPath,
   VSCodeErrorHandler,
 } from '@neko/shared/vscode/extension';
-import { setErrorHandler } from './utils/errorHandler';
+import { setErrorHandler, handleError } from './utils/errorHandler';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
 import { FountainDefinitionProvider, FountainReferenceProvider } from './providers/definition';
@@ -201,7 +201,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== 'nekostory') {
-        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
         return;
       }
 
@@ -250,7 +250,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.story.generateStoryboard', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== 'nekostory') {
-        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
         return;
       }
 
@@ -259,7 +259,10 @@ export function activate(context: vscode.ExtensionContext) {
         '请为这个场景生成 storyboard 计划，并准备发送到 canvas：',
       );
       if (!payload) {
-        vscode.window.showWarningMessage('当前光标不在可识别的场景中');
+        void handleError(new Error('当前光标不在可识别的场景中'), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
 
@@ -288,7 +291,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.story.startVideoCreation', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== 'nekostory') {
-        vscode.window.showErrorMessage('请在剧本文件中执行此命令');
+        void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
         return;
       }
 
@@ -297,7 +300,10 @@ export function activate(context: vscode.ExtensionContext) {
         '请基于当前场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
       );
       if (!payload) {
-        vscode.window.showWarningMessage('当前光标不在可识别的场景中');
+        void handleError(new Error('当前光标不在可识别的场景中'), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
 
@@ -469,6 +475,7 @@ export function activate(context: vscode.ExtensionContext) {
         ext: '.fountain',
         template: (title) => getStoryTemplate(title),
         noFolderErrorMessage: vscode.l10n.t('neko.story.newFile.noFolder'),
+        onError: (error) => void handleError(error, { showToUser: true }),
       });
     }),
     vscode.commands.registerCommand(
@@ -476,9 +483,9 @@ export function activate(context: vscode.ExtensionContext) {
       async (uri?: vscode.Uri) => {
         const folder = resolveTargetWorkspaceFolder(uri);
         if (!folder) {
-          vscode.window.showErrorMessage(
-            vscode.l10n.t('neko.story.openCharacterRegistry.noFolder'),
-          );
+          void handleError(new Error(vscode.l10n.t('neko.story.openCharacterRegistry.noFolder')), {
+            showToUser: true,
+          });
           return;
         }
 

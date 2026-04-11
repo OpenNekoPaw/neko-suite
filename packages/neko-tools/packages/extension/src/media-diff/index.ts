@@ -46,6 +46,7 @@ import { AudioDiffAnalyzer } from './services/analyzers/AudioDiffAnalyzer';
 import { TimelineDiffAnalyzer } from './services/analyzers/TimelineDiffAnalyzer';
 import { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
 import { EngineMediaService } from '../services/EngineMediaService';
+import { handleError } from '../utils/errorHandler';
 
 /**
  * Initialize the media diff module
@@ -92,7 +93,9 @@ export function initializeMediaDiff(
         const selectedFiles = uris ?? (uri ? [uri] : []);
 
         if (selectedFiles.length !== 2) {
-          vscode.window.showErrorMessage(vscode.l10n.t('mediaDiff.error.selectTwoFiles'));
+          void handleError(new Error(vscode.l10n.t('mediaDiff.error.selectTwoFiles')), {
+            showToUser: true,
+          });
           return;
         }
 
@@ -100,11 +103,15 @@ export function initializeMediaDiff(
 
         // Validate both files are supported media types
         if (!diffService.isSupported(file1)) {
-          vscode.window.showErrorMessage(vscode.l10n.t('mediaDiff.error.unsupportedType'));
+          void handleError(new Error(vscode.l10n.t('mediaDiff.error.unsupportedType')), {
+            showToUser: true,
+          });
           return;
         }
         if (!diffService.isSupported(file2)) {
-          vscode.window.showErrorMessage(vscode.l10n.t('mediaDiff.error.unsupportedType'));
+          void handleError(new Error(vscode.l10n.t('mediaDiff.error.unsupportedType')), {
+            showToUser: true,
+          });
           return;
         }
 
@@ -112,7 +119,9 @@ export function initializeMediaDiff(
         const mediaType1 = getMediaType(file1.fsPath);
         const mediaType2 = getMediaType(file2.fsPath);
         if (mediaType1 !== mediaType2) {
-          vscode.window.showErrorMessage(vscode.l10n.t('mediaDiff.error.typeMismatch'));
+          void handleError(new Error(vscode.l10n.t('mediaDiff.error.typeMismatch')), {
+            showToUser: true,
+          });
           return;
         }
 

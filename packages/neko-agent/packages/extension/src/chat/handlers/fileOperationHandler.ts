@@ -94,7 +94,7 @@ export class FileOperationHandler {
       } else {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          vscode.window.showErrorMessage('No workspace folder open');
+          void handleError(new Error('No workspace folder open'), { showToUser: true });
           return;
         }
         basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'prompts');
@@ -149,7 +149,7 @@ export class FileOperationHandler {
       } else {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          vscode.window.showErrorMessage('No workspace folder open');
+          void handleError(new Error('No workspace folder open'), { showToUser: true });
           return;
         }
         const fileName = source === 'local' ? 'settings.local.json' : 'settings.json';
@@ -192,7 +192,7 @@ export class FileOperationHandler {
       } else {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          vscode.window.showErrorMessage('No workspace folder open');
+          void handleError(new Error('No workspace folder open'), { showToUser: true });
           return;
         }
         basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'skills');
@@ -207,20 +207,22 @@ export class FileOperationHandler {
           break;
         case 'reference':
           if (!filePath) {
-            vscode.window.showErrorMessage('No file path provided for reference');
+            void handleError(new Error('No file path provided for reference'), {
+              showToUser: true,
+            });
             return;
           }
           fullPath = path.join(basePath, skillName, 'references', filePath);
           break;
         case 'script':
           if (!filePath) {
-            vscode.window.showErrorMessage('No file path provided for script');
+            void handleError(new Error('No file path provided for script'), { showToUser: true });
             return;
           }
           fullPath = path.join(basePath, skillName, 'scripts', filePath);
           break;
         default:
-          vscode.window.showErrorMessage(`Unknown file type: ${fileType}`);
+          void handleError(new Error(`Unknown file type: ${fileType}`), { showToUser: true });
           return;
       }
 
@@ -228,7 +230,7 @@ export class FileOperationHandler {
       try {
         await fs.promises.access(fullPath);
       } catch {
-        vscode.window.showErrorMessage(`File not found: ${fullPath}`);
+        void handleError(new Error(`File not found: ${fullPath}`), { showToUser: true });
         return;
       }
 
@@ -251,7 +253,7 @@ export class FileOperationHandler {
       } else {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-          vscode.window.showErrorMessage('No workspace folder open');
+          void handleError(new Error('No workspace folder open'), { showToUser: true });
           return;
         }
         basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'commands');
@@ -264,7 +266,7 @@ export class FileOperationHandler {
       try {
         await fs.promises.access(fullPath);
       } catch {
-        vscode.window.showErrorMessage(`File not found: ${fullPath}`);
+        void handleError(new Error(`File not found: ${fullPath}`), { showToUser: true });
         return;
       }
 

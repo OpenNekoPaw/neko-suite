@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
+import { handleError } from '../base';
 
 /**
  * Register timeline-related VSCode commands
@@ -452,7 +453,10 @@ export function registerTimelineCommands(
       }) => {
         const webview = _videoEditorProvider.getActiveWebview();
         if (!webview) {
-          vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+          void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
+            showToUser: true,
+            severity: 'warning',
+          });
           return;
         }
         webview.postMessage({

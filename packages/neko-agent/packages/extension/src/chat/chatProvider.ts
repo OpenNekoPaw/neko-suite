@@ -8,7 +8,7 @@
  */
 
 import * as vscode from 'vscode';
-import { getService, getLogger } from '../base';
+import { getService, getLogger, handleError } from '../base';
 
 const logger = getLogger('ChatProvider');
 import type { Platform } from '@neko/platform';
@@ -995,7 +995,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     } catch (err) {
       this._logger.error(`Failed to send to ${target}:`, err);
-      vscode.window.showWarningMessage(`Failed to send to ${target}. Is the extension installed?`);
+      void handleError(
+        err instanceof Error
+          ? err
+          : new Error(`Failed to send to ${target}. Is the extension installed?`),
+        { showToUser: true, severity: 'warning' },
+      );
     }
   }
 

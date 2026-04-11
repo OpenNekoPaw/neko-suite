@@ -1,5 +1,5 @@
 /**
- * NekoStory Extension Error Handler Registry
+ * NekoTools Extension Error Handler Registry
  *
  * Global error handler access for module-level code.
  * Initialized in activate() with VSCodeErrorHandler.

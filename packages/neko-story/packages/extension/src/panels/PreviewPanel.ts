@@ -11,6 +11,7 @@ import type {
 } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
+import { handleError } from '../utils/errorHandler';
 
 type MessageToWebview =
   | {
@@ -375,12 +376,13 @@ export class PreviewPanel implements vscode.Disposable {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('No active canvas editor')) {
-        vscode.window.showWarningMessage(
-          '没有活动的 Canvas 编辑器。请先打开一个 .nkc 画布，再重试发送场景。',
+        void handleError(
+          new Error('没有活动的 Canvas 编辑器。请先打开一个 .nkc 画布，再重试发送场景。'),
+          { showToUser: true, severity: 'warning' },
         );
         return undefined;
       }
-      vscode.window.showErrorMessage(`发送场景到 Canvas 失败：${message}`);
+      void handleError(error instanceof Error ? error : new Error(message), { showToUser: true });
       return undefined;
     }
   }

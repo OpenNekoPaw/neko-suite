@@ -21,8 +21,9 @@ import {
 import { initializeAssetDiff } from '../packages/extension/src/asset-diff';
 import { initializeMediaLsp } from '../packages/extension/src/media-lsp';
 import { EngineMediaService } from '../packages/extension/src/services/EngineMediaService';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
+import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { setRootLogger, getRootLogger } from '../packages/extension/src/utils/logger';
+import { setErrorHandler, handleError } from '../packages/extension/src/utils/errorHandler';
 
 // =============================================================================
 // Activation
@@ -31,6 +32,7 @@ import { setRootLogger, getRootLogger } from '../packages/extension/src/utils/lo
 export function activate(context: vscode.ExtensionContext) {
   const logger = createVSCodeLogger('Neko Tools', 'NekoTools', context);
   setRootLogger(logger);
+  setErrorHandler(new VSCodeErrorHandler(logger));
   logger.info('Activating extension...');
 
   // 0. Shared EngineMediaService (lazy-init, used by MediaDiff + MediaLsp)
@@ -98,7 +100,10 @@ export function activate(context: vscode.ExtensionContext) {
         const selectedFiles = uris ?? (uri ? [uri] : []);
 
         if (selectedFiles.length < 2) {
-          vscode.window.showWarningMessage('Please select at least 2 files to compare');
+          void handleError(new Error('Please select at least 2 files to compare'), {
+            showToUser: true,
+            severity: 'warning',
+          });
           return;
         }
 
@@ -139,7 +144,9 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         entities = (await vscode.commands.executeCommand('neko.assets.getAllEntities')) ?? [];
       } catch {
-        vscode.window.showErrorMessage('Cannot access asset library. Is neko-assets active?');
+        void handleError(new Error('Cannot access asset library. Is neko-assets active?'), {
+          showToUser: true,
+        });
         return;
       }
 

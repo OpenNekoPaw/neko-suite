@@ -60,6 +60,12 @@ export interface CreateNewFileOptions {
   templates?: TemplateChoice[];
   /** Title for the template quick-pick dialog. */
   templatePickTitle?: string;
+  /**
+   * Optional error handler for displaying errors (e.g., no folder available).
+   * When provided, the handler is called instead of `vscode.window.showErrorMessage`.
+   * Accepts an Error and should display it to the user.
+   */
+  onError?: (error: Error) => void;
 }
 
 /**
@@ -113,7 +119,12 @@ export async function createNewFile(
     targetFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
   }
   if (!targetFolder) {
-    vscode.window.showErrorMessage(options.noFolderErrorMessage ?? 'No workspace folder is open.');
+    const msg = options.noFolderErrorMessage ?? 'No workspace folder is open.';
+    if (options.onError) {
+      options.onError(new Error(msg));
+    } else {
+      vscode.window.showErrorMessage(msg);
+    }
     return undefined;
   }
 

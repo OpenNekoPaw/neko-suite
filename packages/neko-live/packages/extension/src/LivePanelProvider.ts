@@ -12,6 +12,7 @@ import type { ILogger } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
 import { VmcReceiver } from './vmc/VmcReceiver';
 import { RecordingService } from './RecordingService';
+import { handleError } from './utils/errorHandler';
 
 export class LivePanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.livePreview';
@@ -140,15 +141,16 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       };
       const src = json.model?.src;
       if (!src) {
-        vscode.window.showWarningMessage(vscode.l10n.t('neko.live.avatar.noModelSrc'));
+        void handleError(new Error(vscode.l10n.t('neko.live.avatar.noModelSrc')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return undefined;
       }
       return path.resolve(path.dirname(nkmPath), src);
     } catch (err) {
       this.logger.error('Failed to read .nkm project', err);
-      vscode.window.showErrorMessage(
-        vscode.l10n.t('neko.live.avatar.projectReadFailed', (err as Error).message),
-      );
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
       return undefined;
     }
   }
@@ -162,15 +164,16 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       };
       const src = json.puppet?.src;
       if (!src) {
-        vscode.window.showWarningMessage(vscode.l10n.t('neko.live.avatar.noPuppetSrc'));
+        void handleError(new Error(vscode.l10n.t('neko.live.avatar.noPuppetSrc')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return undefined;
       }
       return path.resolve(path.dirname(nkpPath), src);
     } catch (err) {
       this.logger.error('Failed to read .nkp project', err);
-      vscode.window.showErrorMessage(
-        vscode.l10n.t('neko.live.avatar.projectReadFailed', (err as Error).message),
-      );
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
       return undefined;
     }
   }
@@ -188,7 +191,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     });
 
     this.vmcReceiver.on('error', (err) => {
-      vscode.window.showErrorMessage(vscode.l10n.t('neko.live.vmcError', err.message));
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
     });
 
     this.vmcReceiver.on('started', () => {
@@ -201,9 +204,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
     this.vmcReceiver.start().catch((err: Error) => {
       this.logger.error('Failed to start VMC receiver', err);
-      vscode.window.showErrorMessage(
-        vscode.l10n.t('neko.live.vmcStartFailed', String(port), err.message),
-      );
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
     });
   }
 
@@ -219,7 +220,9 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   private async loadPuppet(filePath: string): Promise<void> {
     const client = await this.ensureEngineClient();
     if (!client) {
-      vscode.window.showErrorMessage(vscode.l10n.t('neko.live.engineNotAvailable'));
+      void handleError(new Error(vscode.l10n.t('neko.live.engineNotAvailable')), {
+        showToUser: true,
+      });
       return;
     }
 
@@ -244,9 +247,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       this.logger.info(vscode.l10n.t('neko.live.puppetLoaded', filePath));
     } catch (err) {
       this.logger.error('Failed to load puppet', err);
-      vscode.window.showErrorMessage(
-        vscode.l10n.t('neko.live.puppetLoadFailed', (err as Error).message),
-      );
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
     }
   }
 
@@ -420,11 +421,14 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
             break;
 
           case 'showWarning':
-            vscode.window.showWarningMessage(message.message as string);
+            void handleError(new Error(message.message as string), {
+              showToUser: true,
+              severity: 'warning',
+            });
             break;
 
           case 'showError':
-            vscode.window.showErrorMessage(message.message as string);
+            void handleError(new Error(message.message as string), { showToUser: true });
             break;
 
           default:

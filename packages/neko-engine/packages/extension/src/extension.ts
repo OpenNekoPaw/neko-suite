@@ -355,7 +355,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
  */
 async function cmdStartEngine(): Promise<void> {
   if (!manager) {
-    vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
+    void handleError(new Error('Neko Engine: Manager not initialized'), { showToUser: true });
     return;
   }
 
@@ -546,7 +546,7 @@ async function cmdProbeMedia(): Promise<void> {
  */
 async function cmdExportProject(): Promise<void> {
   if (!exportService) {
-    vscode.window.showErrorMessage('Neko Engine: Export service not available');
+    void handleError(new Error('Neko Engine: Export service not available'), { showToUser: true });
     return;
   }
 
@@ -694,7 +694,7 @@ function cmdOpenDocs(): void {
  */
 async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
   if (!manager) {
-    vscode.window.showErrorMessage('Neko Engine: Manager not initialized');
+    void handleError(new Error('Neko Engine: Manager not initialized'), { showToUser: true });
     return null;
   }
 

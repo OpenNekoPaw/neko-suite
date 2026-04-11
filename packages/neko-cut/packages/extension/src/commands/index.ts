@@ -90,7 +90,10 @@ export function registerCommands(
           // The webview ready handler will auto-show the export panel
           return;
         }
-        vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+        void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
 
@@ -119,7 +122,10 @@ export function registerCommands(
       async (params: { assetPath: string; duration?: number; trackIndex?: number }) => {
         const webview = videoEditorProvider.getActiveWebview();
         if (!webview) {
-          vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+          void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
+            showToUser: true,
+            severity: 'warning',
+          });
           return;
         }
         const ext = path.extname(params.assetPath).toLowerCase();
@@ -159,7 +165,10 @@ async function addToTimeline(
   const webview = editorProvider.getActiveWebview();
 
   if (!webview) {
-    vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+    void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
+      showToUser: true,
+      severity: 'warning',
+    });
     return;
   }
 
@@ -174,7 +183,9 @@ async function addToTimeline(
   } else if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) {
     mediaType = 'image';
   } else {
-    vscode.window.showErrorMessage(vscode.l10n.t('timeline.error.unsupportedType', { ext }));
+    void handleError(new Error(vscode.l10n.t('timeline.error.unsupportedType', { ext })), {
+      showToUser: true,
+    });
     return;
   }
 
@@ -209,25 +220,35 @@ async function openInEditor(fileUri: vscode.Uri): Promise<void> {
 async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<void> {
   const docUri = editorProvider.getActiveDocumentUri();
   if (!docUri) {
-    vscode.window.showWarningMessage(vscode.l10n.t('editor.warning.noProjectOpen'));
+    void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
+      showToUser: true,
+      severity: 'warning',
+    });
     return;
   }
 
   const exportService = editorProvider.getExportService(docUri);
   if (!exportService) {
-    vscode.window.showErrorMessage('Export service not available for this document.');
+    void handleError(new Error('Export service not available for this document.'), {
+      showToUser: true,
+    });
     return;
   }
 
   if (exportService.isExporting()) {
-    vscode.window.showWarningMessage('An export is already in progress.');
+    void handleError(new Error('An export is already in progress.'), {
+      showToUser: true,
+      severity: 'warning',
+    });
     return;
   }
 
   // Read project data from document
   const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === docUri);
   if (!document) {
-    vscode.window.showErrorMessage('Cannot read project data: document not found.');
+    void handleError(new Error('Cannot read project data: document not found.'), {
+      showToUser: true,
+    });
     return;
   }
 
@@ -235,7 +256,7 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
   try {
     project = JSON.parse(document.getText()) as import('@neko/shared').ProjectData;
   } catch {
-    vscode.window.showErrorMessage('Cannot parse project data.');
+    void handleError(new Error('Cannot parse project data.'), { showToUser: true });
     return;
   }
 

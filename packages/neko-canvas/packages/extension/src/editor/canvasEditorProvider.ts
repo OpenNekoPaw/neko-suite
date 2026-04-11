@@ -29,6 +29,7 @@ import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
 import { getLogger } from '../utils/logger';
+import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
@@ -581,7 +582,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
         } catch (error) {
           logger.error(`Failed to open media preview: ${error}`);
-          vscode.window.showErrorMessage(`Failed to open media preview: ${assetPath}`);
+          void handleError(error instanceof Error ? error : new Error(String(error)), {
+            showToUser: true,
+          });
         }
         break;
       }
@@ -1135,7 +1138,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(fsPath));
         } catch (error) {
           logger.error(`Failed to open document: ${error}`);
-          vscode.window.showErrorMessage(`Cannot open document: ${docPath}`);
+          void handleError(error instanceof Error ? error : new Error(String(error)), {
+            showToUser: true,
+          });
         }
         break;
       }
@@ -1204,8 +1209,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             operationType: 'timeline.import',
           });
         } catch {
-          vscode.window.showWarningMessage(
-            'neko-cut is not available. Install neko-cut to import storyboard to timeline.',
+          void handleError(
+            new Error(
+              'neko-cut is not available. Install neko-cut to import storyboard to timeline.',
+            ),
+            { showToUser: true, severity: 'warning' },
           );
         }
         break;
@@ -1220,12 +1228,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         // 如果 webview 报告导出错误
         if (artboardData.error) {
-          vscode.window.showErrorMessage('Failed to capture artboard');
+          void handleError(new Error('Failed to capture artboard'), { showToUser: true });
           break;
         }
 
         if (!imageData) {
-          vscode.window.showErrorMessage('No image data received');
+          void handleError(new Error('No image data received'), { showToUser: true });
           break;
         }
 
@@ -1249,7 +1257,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             vscode.window.showInformationMessage(`Artboard exported: ${saveUri.fsPath}`);
           } catch (error) {
             logger.error(`Failed to export artboard: ${error}`);
-            vscode.window.showErrorMessage('Failed to export artboard');
+            void handleError(error instanceof Error ? error : new Error(String(error)), {
+              showToUser: true,
+            });
           }
         }
         break;
@@ -1274,7 +1284,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const node = await this.getNode(nodeId);
           if (!node) {
             logger.warn(`sendToAgent: node ${nodeId} not found`);
-            vscode.window.showWarningMessage('Cannot send to Agent: node not found');
+            void handleError(new Error('Cannot send to Agent: node not found'), {
+              showToUser: true,
+              severity: 'warning',
+            });
             break;
           }
           const d = node.data as Record<string, unknown>;
@@ -1293,9 +1306,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             await vscode.commands.executeCommand('neko.agent.sendContext', payload);
           } catch (err) {
             logger.error(`sendToAgent failed: ${err}`);
-            vscode.window.showWarningMessage(
-              'Failed to send to Agent. Is the AI Assistant extension installed and enabled?',
-            );
+            void handleError(err instanceof Error ? err : new Error(String(err)), {
+              showToUser: true,
+              severity: 'warning',
+            });
           }
         }
         break;
@@ -1313,7 +1327,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         // Prefer the image provided by the webview; fall back to the stored generatedImage
         const raw = imageDataFromWebview ?? (d['generatedImage'] as string | undefined) ?? null;
         if (!raw) {
-          vscode.window.showWarningMessage('No generated image found for this shot node');
+          void handleError(new Error('No generated image found for this shot node'), {
+            showToUser: true,
+            severity: 'warning',
+          });
           break;
         }
         // Strip data URL prefix if present
@@ -1334,8 +1351,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             },
           });
         } catch {
-          vscode.window.showErrorMessage(
-            'Failed to open image in Sketch — is neko-sketch installed?',
+          void handleError(
+            new Error('Failed to open image in Sketch — is neko-sketch installed?'),
+            { showToUser: true },
           );
         }
         break;

@@ -519,7 +519,10 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
 
       const mediaType = detectMediaType(uri.fsPath);
       if (mediaType !== 'video' && mediaType !== 'audio' && mediaType !== 'image') {
-        vscode.window.showWarningMessage('Only media files can be added to the timeline.');
+        void handleError(new Error('Only media files can be added to the timeline.'), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
 
@@ -529,7 +532,9 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
           type: mediaType,
         });
       } catch {
-        vscode.window.showErrorMessage('Failed to add to timeline. Is neko-cut active?');
+        void handleError(new Error('Failed to add to timeline. Is neko-cut active?'), {
+          showToUser: true,
+        });
       }
     }),
   );
@@ -545,7 +550,9 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
           type: 'MediaNode',
         });
       } catch {
-        vscode.window.showErrorMessage('Failed to add to canvas. Is neko-canvas active?');
+        void handleError(new Error('Failed to add to canvas. Is neko-canvas active?'), {
+          showToUser: true,
+        });
       }
     }),
   );
@@ -635,8 +642,9 @@ function registerMediaLibraryCommands(
         });
         vscode.window.showInformationMessage(t('mediaLibrary.add.success', { name }));
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(t('mediaLibrary.add.error', { error: msg }));
+        void handleError(error instanceof Error ? error : new Error(String(error)), {
+          showToUser: true,
+        });
       }
     }),
   );

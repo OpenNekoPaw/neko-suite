@@ -13,6 +13,7 @@ import {
   setRootLogger,
   setErrorHandler,
   getRootLogger,
+  handleError,
 } from './base';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus, IPlatform } from './bootstrap';
@@ -349,7 +350,7 @@ function registerCommands(
     vscode.commands.registerCommand('neko.script.generate', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showErrorMessage('No active editor');
+        void handleError(new Error('No active editor'), { showToUser: true });
         return;
       }
 
@@ -364,7 +365,7 @@ function registerCommands(
     vscode.commands.registerCommand('neko.script.optimize', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showErrorMessage('No active editor');
+        void handleError(new Error('No active editor'), { showToUser: true });
         return;
       }
 
@@ -377,7 +378,7 @@ function registerCommands(
     vscode.commands.registerCommand('neko.script.generateImage', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showErrorMessage('No active editor');
+        void handleError(new Error('No active editor'), { showToUser: true });
         return;
       }
 
@@ -393,7 +394,7 @@ function registerCommands(
     vscode.commands.registerCommand('neko.script.generateVideo', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showErrorMessage('No active editor');
+        void handleError(new Error('No active editor'), { showToUser: true });
         return;
       }
 
@@ -773,7 +774,7 @@ function registerPipelineCommands(
       }
 
       if (!filePath) {
-        vscode.window.showErrorMessage('No file selected');
+        void handleError(new Error('No file selected'), { showToUser: true });
         return;
       }
 

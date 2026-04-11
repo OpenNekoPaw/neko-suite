@@ -71,6 +71,7 @@ export function registerCommands(
           ext: '.nks',
           template: (title) => getSketchTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.sketch.new.noFolder'),
+          onError: (error) => void handleError(error, { showToUser: true }),
         });
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -172,7 +173,10 @@ export function registerCommands(
     vscode.commands.registerCommand('neko.sketch.sendToTimeline', async () => {
       const base64 = await editorProvider.requestExport();
       if (!base64) {
-        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToTimeline.noCanvas'));
+        void handleError(new Error(vscode.l10n.t('neko.sketch.sendToTimeline.noCanvas')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
       try {
@@ -183,8 +187,10 @@ export function registerCommands(
           duration: 3,
           source: 'sketch',
         });
-      } catch {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.sendToTimeline.failed'));
+      } catch (error) {
+        void handleError(error instanceof Error ? error : new Error(String(error)), {
+          showToUser: true,
+        });
       }
     }),
   );
@@ -194,12 +200,18 @@ export function registerCommands(
     vscode.commands.registerCommand('neko.sketch.sendToCanvas', async () => {
       const ctx = editorProvider.getImportContext();
       if (!ctx?.sourceNodeId) {
-        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToCanvas.noContext'));
+        void handleError(new Error(vscode.l10n.t('neko.sketch.sendToCanvas.noContext')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
       const base64 = await editorProvider.requestExport();
       if (!base64) {
-        vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.sendToCanvas.noCanvas'));
+        void handleError(new Error(vscode.l10n.t('neko.sketch.sendToCanvas.noCanvas')), {
+          showToUser: true,
+          severity: 'warning',
+        });
         return;
       }
       try {
@@ -208,8 +220,10 @@ export function registerCommands(
           cellId: ctx.metadata?.['cellId'],
           imageData: base64,
         });
-      } catch {
-        vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.sendToCanvas.failed'));
+      } catch (error) {
+        void handleError(error instanceof Error ? error : new Error(String(error)), {
+          showToUser: true,
+        });
       }
     }),
   );
@@ -225,7 +239,9 @@ export function registerCommands(
           // Create a temp .nks file so the custom editor opens
           const workspaceFolders = vscode.workspace.workspaceFolders;
           if (!workspaceFolders?.[0]) {
-            vscode.window.showErrorMessage(vscode.l10n.t('neko.sketch.editImage.noWorkspace'));
+            void handleError(new Error(vscode.l10n.t('neko.sketch.editImage.noWorkspace')), {
+              showToUser: true,
+            });
             return;
           }
           const tempDir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'temp');

@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import type { AssetFileStatus } from '@neko/shared';
+import { handleError } from '../utils/errorHandler';
 import type { AssetLibrary, FileAccessChecker, FileHealthResult } from '@neko/asset';
 import { getLogger } from '../utils/logger';
 
@@ -154,7 +155,7 @@ export class AssetHealthMonitor implements vscode.Disposable {
 
   private async handleRelocateFile(fileId?: string, variantId?: string): Promise<void> {
     if (!fileId || !variantId) {
-      vscode.window.showErrorMessage('No file specified for relocation.');
+      void handleError(new Error('No file specified for relocation.'), { showToUser: true });
       return;
     }
 
@@ -172,8 +173,9 @@ export class AssetHealthMonitor implements vscode.Disposable {
         vscode.commands.executeCommand('neko.assets.refreshViews');
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Failed to relocate file: ${msg}`);
+      void handleError(error instanceof Error ? error : new Error(String(error)), {
+        showToUser: true,
+      });
     }
   }
 
