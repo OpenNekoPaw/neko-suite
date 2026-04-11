@@ -14,6 +14,10 @@ import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
 import { FountainCompletionProvider } from './providers/completion';
 import { FountainDefinitionProvider, FountainReferenceProvider } from './providers/definition';
 import { FountainHoverProvider } from './providers/hover';
+import {
+  FountainCharacterCodeActionProvider,
+  FountainCharacterRenameProvider,
+} from './providers/rename';
 import { FountainWorkspaceSymbolProvider } from './providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from './providers/documentLink';
 import { FountainDiagnosticsProvider } from './providers/diagnostics';
@@ -23,6 +27,7 @@ import { getStoryTemplate } from './templates/storyTemplate';
 import { WorkspaceIndexService } from './services/WorkspaceIndexService';
 import { AssetLinkingService } from './services/AssetLinkingService';
 import { CharacterWorkspaceIndexService } from './services/CharacterWorkspaceIndexService';
+import { CreativeEntityWorkspaceIndexService } from './services/CreativeEntityWorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
@@ -50,6 +55,11 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(indexService);
   const characterIndexService = new CharacterWorkspaceIndexService();
   context.subscriptions.push(characterIndexService);
+  const creativeEntityIndexService = new CreativeEntityWorkspaceIndexService(
+    indexService,
+    characterIndexService,
+  );
+  context.subscriptions.push(creativeEntityIndexService);
   const assetLinkingService = new AssetLinkingService();
   const sceneStateStore = new StorySceneStateStore(context.workspaceState);
   context.subscriptions.push(sceneStateStore);
@@ -93,17 +103,41 @@ export function activate(context: vscode.ExtensionContext) {
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
       FOUNTAIN_SELECTOR,
-      new FountainDefinitionProvider(indexService, characterIndexService),
+      new FountainDefinitionProvider(
+        indexService,
+        characterIndexService,
+        creativeEntityIndexService,
+      ),
     ),
     // Find references (cross-file via index)
     vscode.languages.registerReferenceProvider(
       FOUNTAIN_SELECTOR,
-      new FountainReferenceProvider(indexService, characterIndexService),
+      new FountainReferenceProvider(
+        indexService,
+        characterIndexService,
+        creativeEntityIndexService,
+      ),
     ),
     // Hover information (cross-file stats via index)
     vscode.languages.registerHoverProvider(
       FOUNTAIN_SELECTOR,
-      new FountainHoverProvider(indexService, characterIndexService),
+      new FountainHoverProvider(indexService, characterIndexService, creativeEntityIndexService),
+    ),
+    vscode.languages.registerRenameProvider(
+      FOUNTAIN_SELECTOR,
+      new FountainCharacterRenameProvider(
+        indexService,
+        characterIndexService,
+        creativeEntityIndexService,
+      ),
+    ),
+    vscode.languages.registerCodeActionsProvider(
+      FOUNTAIN_SELECTOR,
+      new FountainCharacterCodeActionProvider(
+        indexService,
+        characterIndexService,
+        creativeEntityIndexService,
+      ),
     ),
     // Workspace symbol search — Ctrl+T (cross-file via index)
     vscode.languages.registerWorkspaceSymbolProvider(

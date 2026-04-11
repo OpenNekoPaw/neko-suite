@@ -14,6 +14,8 @@ Accepted
 - `PreviewPanel`、`neko-agent pipeline`、`canvas capability` 已统一通过 `NekoStoryAPI.resolveCharacter()` 优先解析角色绑定
 - 画布图片 / 视频生成入口已统一继承 `characterIds` 与 `sourceNodeId` 到 media task / GeneratedAsset
 - `neko-story` 已落地独立的 `CharacterWorkspaceIndexService`，并与 `WorkspaceIndexService` 分层组合
+- `neko-story` 已新增 `CreativeEntityWorkspaceIndexService`，为角色定义 / 引用 / 悬停提供统一查询入口
+- `neko-story` 已为剧本角色引用补充最小可用的 Rename / CodeAction 入口，显式重命名 `characters.json` 身份而不隐式改写剧本文本
 - Fountain LSP 已支持基于注册表的 `Definition`、`References`、`Completion`、`Hover`、`WorkspaceSymbol`
 - `NekoStoryAPI` 已暴露 `getCharacterRegistry()` 与 `resolveCharacter()` 供跨扩展复用
 - `neko-story` 已新增“打开角色注册表”命令，可自动创建并打开工作区根目录 `characters.json`
@@ -24,7 +26,7 @@ Accepted
 - 尚未引入通用 `CreativeEntityGraph`
 - 尚未引入统一 `OccurrenceIndex`
 - `scene / object / location / action` 仍停留在预留抽象，尚未形成与人物同级的 registry 链路
-- Rename / CodeAction 还没有正式切到统一角色身份层
+- `scene / object / location` 以及跨模态资产侧的 Rename / CodeAction 还没有正式切到统一实体层
 
 ## 关联
 

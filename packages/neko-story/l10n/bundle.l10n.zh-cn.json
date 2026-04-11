@@ -2,5 +2,6 @@
   "neko.story.newFile.title": "新建剧本",
   "neko.story.newFile.noFolder": "未选择文件夹。请打开工作区或右键点击文件夹。",
   "neko.story.openCharacterRegistry.title": "打开角色注册表",
-  "neko.story.openCharacterRegistry.noFolder": "没有可用的工作区文件夹。请先打开工作区，再创建 characters.json。"
+  "neko.story.openCharacterRegistry.noFolder": "没有可用的工作区文件夹。请先打开工作区，再创建 characters.json。",
+  "neko.story.renameCharacterIdentity.action": "重命名角色身份（注册表）"
 }

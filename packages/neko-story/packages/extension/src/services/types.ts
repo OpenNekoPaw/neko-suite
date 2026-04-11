@@ -201,6 +201,57 @@ export interface ICharacterWorkspaceIndex extends vscode.Disposable {
   searchCharacters(query: string, currentUri?: vscode.Uri): readonly CharacterRegistrySymbol[];
 }
 
+export type CreativeEntityKind = 'character' | 'scene' | 'object' | 'location' | 'action';
+export type CreativeEntityOccurrenceSource = 'registry' | 'script';
+export type CreativeEntityOccurrenceRole = 'definition' | 'reference';
+
+export interface CreativeEntityOccurrence {
+  readonly entityKind: CreativeEntityKind;
+  readonly entityId?: string;
+  readonly source: CreativeEntityOccurrenceSource;
+  readonly role: CreativeEntityOccurrenceRole;
+  readonly label: string;
+  readonly location: vscode.Location;
+  readonly detail?: string;
+}
+
+export interface CharacterEntityStats {
+  readonly totalScriptReferences: number;
+  readonly fileCount: number;
+}
+
+export interface CharacterEntityQuery {
+  readonly kind: 'character';
+  readonly query: string;
+  readonly resolved?: ResolvedCharacterMatch;
+  readonly referenceNames: readonly string[];
+  readonly registryDefinition?: vscode.Location;
+  readonly scriptDefinition?: vscode.Location;
+  readonly scriptReferences: readonly vscode.Location[];
+  readonly occurrences: readonly CreativeEntityOccurrence[];
+  readonly stats: CharacterEntityStats;
+}
+
+/**
+ * Unified creative-entity query facade.
+ *
+ * Current scope is intentionally narrow: character identity + script occurrence
+ * composition. Future phases can extend the same entrypoint with scene/object/
+ * location graph and occurrence backends without changing provider call sites.
+ */
+export interface ICreativeEntityWorkspaceIndex extends vscode.Disposable {
+  /**
+   * Ensures all backing indices are ready before querying.
+   */
+  ensureInitialized(): Promise<void>;
+
+  /**
+   * Resolves a character query into registry identity, definition target, and
+   * deduplicated script occurrences.
+   */
+  queryCharacter(name: string, currentUri?: vscode.Uri): CharacterEntityQuery | undefined;
+}
+
 export interface IAssetLinker {
   /**
    * Finds the best linked character asset using registryId first, then exact name/alias fallback.

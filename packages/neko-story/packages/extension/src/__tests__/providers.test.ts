@@ -8,6 +8,7 @@ import { FountainCompletionProvider } from '../providers/completion';
 import { FountainHoverProvider } from '../providers/hover';
 import { FountainWorkspaceSymbolProvider } from '../providers/workspaceSymbol';
 import { FountainDocumentLinkProvider } from '../providers/documentLink';
+import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
 import type { ICharacterWorkspaceIndex, IWorkspaceIndex, SymbolLocation } from '../services/types';
 
 // Mock vscode module
@@ -892,6 +893,57 @@ describe('Mock Index — Multi-file indexing', () => {
     expect(index.findCharacterLocations('UNKNOWN')).toHaveLength(0);
     expect(index.findSceneLocations('NOWHERE')).toHaveLength(0);
     expect(index.searchSymbols('zzzzz')).toHaveLength(0);
+  });
+});
+
+describe('CreativeEntityWorkspaceIndexService', () => {
+  it('should aggregate registry identity and alias-backed script references', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': ALIAS_FILE_A,
+      '/project/b.fountain': ALIAS_FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([ALICE_RECORD]);
+    const service = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+
+    await service.ensureInitialized();
+
+    const result = service.queryCharacter('ALLY', {
+      fsPath: '/project/b.fountain',
+      toString: () => 'file:///project/b.fountain',
+      scheme: 'file',
+    } as any);
+
+    expect(result).toBeDefined();
+    expect(result?.resolved?.record.id).toBe('char_alice');
+    expect(result?.registryDefinition?.uri.fsPath).toBe('/project/characters.json');
+    expect(result?.scriptReferences).toHaveLength(2);
+    expect(result?.referenceNames).toEqual(['ALICE', 'ALLY']);
+    expect(result?.stats.totalScriptReferences).toBe(2);
+    expect(result?.stats.fileCount).toBe(2);
+  });
+
+  it('should fall back to script-only character occurrences when no registry match exists', async () => {
+    const index = createMockIndex({
+      '/project/a.fountain': FILE_A,
+      '/project/b.fountain': FILE_B,
+    });
+    const characterIndex = createMockCharacterIndex([]);
+    const service = new CreativeEntityWorkspaceIndexService(index, characterIndex);
+
+    await service.ensureInitialized();
+
+    const result = service.queryCharacter('JOHN', {
+      fsPath: '/project/b.fountain',
+      toString: () => 'file:///project/b.fountain',
+      scheme: 'file',
+    } as any);
+
+    expect(result).toBeDefined();
+    expect(result?.resolved).toBeUndefined();
+    expect(result?.registryDefinition).toBeUndefined();
+    expect(result?.scriptDefinition?.uri.fsPath).toBe('/project/b.fountain');
+    expect(result?.scriptReferences).toHaveLength(3);
+    expect(result?.stats.fileCount).toBe(2);
   });
 });
 

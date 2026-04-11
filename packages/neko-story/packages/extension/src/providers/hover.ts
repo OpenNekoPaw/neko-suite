@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { parse } from '@neko-story/parser';
 import type { Character, SceneHeading, Dialogue } from '@neko-story/types';
+import { CreativeEntityWorkspaceIndexService } from '../services/CreativeEntityWorkspaceIndexService';
 import type {
   ICharacterWorkspaceIndex,
+  ICreativeEntityWorkspaceIndex,
   IWorkspaceIndex,
-  ResolvedCharacterMatch,
 } from '../services/types';
 
 /**
@@ -16,6 +17,9 @@ export class FountainHoverProvider implements vscode.HoverProvider {
   constructor(
     private readonly index: IWorkspaceIndex,
     private readonly characterIndex?: ICharacterWorkspaceIndex,
+    private readonly creativeEntityIndex: ICreativeEntityWorkspaceIndex | undefined = characterIndex
+      ? new CreativeEntityWorkspaceIndexService(index, characterIndex)
+      : undefined,
   ) {}
 
   async provideHover(
@@ -26,7 +30,7 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     const line = document.lineAt(position.line).text;
 
     await this.index.ensureInitialized();
-    await this.characterIndex?.ensureInitialized();
+    await this.creativeEntityIndex?.ensureInitialized();
 
     // Use indexed document if available, otherwise parse on the fly
     const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
@@ -37,19 +41,28 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     if (charMatch) {
       const charName = charMatch[1]?.trim();
       if (charName) {
-        const resolved = this.characterIndex?.resolveCharacter(charName, document.uri);
-        const referenceNames = resolved
-          ? (this.characterIndex?.getReferenceNames(charName, document.uri) ?? [charName])
-          : [charName];
+        const characterQuery = this.creativeEntityIndex?.queryCharacter(charName, document.uri);
+        const referenceNames =
+          characterQuery?.referenceNames.length && characterQuery.referenceNames[0]
+            ? characterQuery.referenceNames
+            : [charName];
         const localStats = this.getLocalCharacterStats(fountainDoc, referenceNames);
-        const crossFileStats = this.getCrossFileCharacterStats(referenceNames);
-        if (localStats || resolved) {
+        const crossFileStats = characterQuery
+          ? {
+              totalAppearances: characterQuery.stats.totalScriptReferences,
+              fileCount: characterQuery.stats.fileCount,
+            }
+          : this.getCrossFileCharacterStats(referenceNames);
+
+        if (localStats || characterQuery?.resolved) {
           return new vscode.Hover(
             this.formatCharacterStats(
-              resolved?.record.displayName ?? resolved?.record.canonicalName ?? charName,
+              characterQuery?.resolved?.record.displayName ??
+                characterQuery?.resolved?.record.canonicalName ??
+                charName,
               localStats,
               crossFileStats,
-              resolved,
+              characterQuery?.resolved,
             ),
           );
         }
@@ -182,7 +195,18 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     name: string,
     local: LocalCharacterStats | null,
     crossFile: CrossFileCharacterStats,
-    resolved?: ResolvedCharacterMatch,
+    resolved?: {
+      readonly record: {
+        readonly id: string;
+        readonly canonicalName: string;
+        readonly displayName?: string;
+        readonly aliases: readonly string[];
+        readonly status: string;
+        readonly metadata?: {
+          readonly role?: string;
+        };
+      };
+    },
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`### ${name}\n\n`);
