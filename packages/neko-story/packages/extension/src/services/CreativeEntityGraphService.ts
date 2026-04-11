@@ -21,6 +21,7 @@ import type {
   CreativeRelationProvenance,
   GeneratedAsset,
   GalleryCanvasNode,
+  SceneGroupCanvasNode,
   ShotCanvasNode,
 } from '@neko/shared';
 import type { ICharacterWorkspaceIndex, ICreativeEntityGraph } from './types';
@@ -195,6 +196,23 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
               );
             }
           }
+        }
+      } else if (node.type === 'scene') {
+        const scene = node as SceneGroupCanvasNode;
+        this.addNode({
+          id: `canvas:${scene.id}`,
+          kind: 'canvas-node',
+          refId: scene.id,
+          label: scene.data.sceneTitle,
+        });
+
+        if (scene.data.sceneId) {
+          this.addEdge(
+            `canvas:${scene.id}`,
+            `scene:${scene.data.sceneId}`,
+            'set-in-scene',
+            'lineage',
+          );
         }
       }
     }

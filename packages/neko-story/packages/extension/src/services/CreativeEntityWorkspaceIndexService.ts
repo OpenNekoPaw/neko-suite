@@ -6,7 +6,9 @@ import type {
   ICreativeEntityGraph,
   ICreativeEntityWorkspaceIndex,
   IOccurrenceIndex,
+  ISceneWorkspaceIndex,
   IWorkspaceIndex,
+  SceneEntityQuery,
   SymbolLocation,
 } from './types';
 import { serializeLocationKey } from './locationKey';
@@ -25,6 +27,7 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     private readonly characterIndex: ICharacterWorkspaceIndex,
     private readonly occurrenceIndex?: IOccurrenceIndex,
     private readonly entityGraph?: ICreativeEntityGraph,
+    private readonly sceneIndex?: ISceneWorkspaceIndex,
   ) {}
 
   async ensureInitialized(): Promise<void> {
@@ -33,6 +36,7 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
       this.characterIndex.ensureInitialized(),
       this.occurrenceIndex?.ensureInitialized(),
       this.entityGraph?.ensureInitialized(),
+      this.sceneIndex?.ensureInitialized(),
     ]);
   }
 
@@ -125,9 +129,75 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     };
   }
 
+  queryScene(query: string, currentUri?: vscode.Uri): SceneEntityQuery | undefined {
+    const trimmed = query.trim();
+    if (trimmed.length === 0 || !this.sceneIndex) {
+      return undefined;
+    }
+
+    const resolved = this.sceneIndex.resolveScene(trimmed, currentUri);
+    if (!resolved) {
+      return undefined;
+    }
+
+    const { entry, scriptUri } = resolved;
+    const sceneId = entry.sceneId;
+
+    const scriptDefinition = new vscode.Location(
+      scriptUri,
+      new vscode.Range(entry.line_start, 0, entry.line_start, entry.heading.length),
+    );
+
+    const scriptReferences = this.sceneIndex.getLocationReferences(entry.location, currentUri);
+    const canvasBinding = this.sceneIndex.getCanvasBinding(sceneId, scriptUri);
+
+    const occurrences: CreativeEntityOccurrence[] = [
+      {
+        entityKind: 'scene',
+        entityId: sceneId,
+        source: 'script',
+        role: 'definition',
+        label: entry.heading,
+        location: scriptDefinition,
+        detail: `${entry.intExt ?? ''} ${entry.location} - ${entry.timeOfDay ?? ''}`.trim(),
+      },
+    ];
+
+    if (this.occurrenceIndex) {
+      for (const occ of this.occurrenceIndex.queryOccurrences('scene', sceneId)) {
+        occurrences.push(occ);
+      }
+    }
+
+    const crossModalCounts = this.occurrenceIndex?.countBySource('scene', sceneId);
+
+    return {
+      kind: 'scene',
+      query: trimmed,
+      sceneId,
+      heading: entry.heading,
+      location: entry.location,
+      intExt: entry.intExt,
+      timeOfDay: entry.timeOfDay,
+      sceneCharacters: entry.sceneCharacters,
+      scriptDefinition,
+      scriptReferences,
+      occurrences,
+      canvasSceneNodeId: canvasBinding?.canvasSceneNodeId,
+      stats: {
+        totalScriptOccurrences: scriptReferences.length,
+        fileCount: countDistinctLocations(scriptReferences),
+        canvasNodeCount: crossModalCounts?.['canvas'] ?? undefined,
+        shotCount: canvasBinding?.shotIds.length ?? undefined,
+        characterCount: entry.sceneCharacters.length,
+        estimatedDuration: entry.estimatedDuration,
+      },
+    };
+  }
+
   dispose(): void {
-    // No subscriptions yet. Keep Disposable symmetry so future graph / occurrence
-    // backends can attach cleanup here without changing provider call sites.
+    // No subscriptions owned. Keep Disposable symmetry so backing services
+    // can attach cleanup here without changing provider call sites.
   }
 }
 
@@ -172,6 +242,16 @@ function collectCharacterLocations(
 }
 
 function countDistinctFiles(locations: readonly SymbolLocation[]): number {
+  const files = new Set<string>();
+
+  for (const location of locations) {
+    files.add(location.uri.toString());
+  }
+
+  return files.size;
+}
+
+function countDistinctLocations(locations: readonly vscode.Location[]): number {
   const files = new Set<string>();
 
   for (const location of locations) {

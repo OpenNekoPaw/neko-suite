@@ -122,6 +122,15 @@ export class WorkspaceIndexService implements IWorkspaceIndex {
     return buildScriptIndex(uri, doc);
   }
 
+  getAllScriptIndices(): readonly ScriptIndex[] {
+    const result: ScriptIndex[] = [];
+    for (const [uriStr, doc] of this.fileCache) {
+      const uri = vscode.Uri.parse(uriStr);
+      result.push(buildScriptIndex(uri, doc));
+    }
+    return result;
+  }
+
   dispose(): void {
     for (const d of this.disposables) {
       d.dispose();

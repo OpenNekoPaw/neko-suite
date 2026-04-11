@@ -97,6 +97,31 @@ export class StorySceneStateStore implements vscode.Disposable {
     this.onDidChangeEmitter.fire(documentUri);
   }
 
+  /**
+   * Returns the canvas binding for a given sceneId, searching across all tracked documents.
+   * Used by SceneWorkspaceIndexService to resolve scene-canvas relationships.
+   */
+  getCanvasBinding(
+    sceneId: string,
+    documentUri?: vscode.Uri,
+  ): { canvasSceneNodeId: string; shotIds: readonly string[] } | undefined {
+    const searchEntries = documentUri
+      ? [[documentUri.toString(), this.statesByDocument.get(documentUri.toString())] as const]
+      : this.statesByDocument.entries();
+
+    for (const [, records] of searchEntries) {
+      if (!records) continue;
+      const record = records[sceneId];
+      if (record?.canvasSceneNodeId) {
+        return {
+          canvasSceneNodeId: record.canvasSceneNodeId,
+          shotIds: record.shotIds ?? [],
+        };
+      }
+    }
+    return undefined;
+  }
+
   handlePipelineEvent(
     scriptIndex: NekoStoryScriptIndex,
     payload: StoryPipelineEventPayload,

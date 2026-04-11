@@ -6,7 +6,7 @@ Accepted
 
 ## 当前实现进度（2026-04-12）
 
-截至 2026 年 4 月 12 日，人物统一索引已完成 Phase 1–3，范围如下：
+截至 2026 年 4 月 12 日，人物统一索引已完成 Phase 1–4（场景部分），范围如下：
 
 - 已新增共享 `characters.json` 契约、读写服务和名称解析工具
 - 已为 `AssetEntity`、`GalleryNode`、`ShotCharacter`、`GeneratedAsset` 等承载层补充 `registryId` / `characterId` / `characterIds`
@@ -30,10 +30,24 @@ Phase 3 新增（跨模态关系图与出现点索引）：
 - Hover 已展示 canvas nodes / asset entities / generated assets 计数
 - Find References 已包含跨模态位置
 
+Phase 4 新增（场景一等实体）：
+
+- 已为 `SceneGroupCanvasNode.data` 新增 `sceneId` 字段（向后兼容可选）
+- 已新增 `SceneWorkspaceIndexService`（script-backed 场景索引：resolveScene / getDefinition / getLocationReferences / getCanvasBinding）
+- `OccurrenceIndexService` 已扩展为索引 `SceneGroupCanvasNode.sceneId` 出现点
+- `CreativeEntityGraphService` 已为 scene canvas 节点生成 `set-in-scene` 边
+- `CreativeEntityWorkspaceIndexService` 新增 `queryScene()` 方法
+- `IWorkspaceIndex` 新增 `getAllScriptIndices()` 方法
+- `StorySceneStateStore` 新增 `getCanvasBinding()` 公共方法
+- Hover 场景标题展示跨模态统计（canvas nodes, shots, characters, duration, 跨文件 location 复用）
+- Definition 支持 sceneId 精确跳转
+- References 支持场景跨模态引用
+- `applyStoryboardPayloadToCanvas()` 导入时自动注入 `sceneId`
+
 当前尚未完成的部分：
 
-- `scene / object / location / action` 仍停留在预留抽象，尚未形成与人物同级的 registry 链路
-- `scene / object / location` 以及跨模态资产侧的 Rename / CodeAction 还没有正式切到统一实体层
+- `object / location / action` 尚未形成与 character/scene 同级的实体链路
+- `object / location` 以及跨模态资产侧的 Rename / CodeAction 还没有正式切到统一实体层
 
 ## 关联
 
@@ -1075,9 +1089,13 @@ Suggestion services
 
 ### Phase 4：扩展到场景 / 物品
 
-- 引入 `sceneId` / `objectId` 的统一引用模型
-- script scene 与 `SceneGroupNode` 形成稳定绑定
-- 物品实体接入 Asset Library 与 shot / generated asset 绑定
+- [x] `SceneGroupCanvasNode.data` 新增 `sceneId` 字段
+- [x] `SceneWorkspaceIndexService` 实现 script-backed 场景索引
+- [x] `queryScene()` 接入 OccurrenceIndex + Graph + StorySceneStateStore
+- [x] `applyStoryboardPayloadToCanvas()` 自动注入 `sceneId`
+- [x] Definition / References / Hover 支持场景跨模态查询
+- [ ] 引入 `objectId` 的统一引用模型
+- [ ] 物品实体接入 Asset Library 与 shot / generated asset 绑定
 
 ### Phase 5：规则匹配与文本向量
 

@@ -160,6 +160,11 @@ export interface IWorkspaceIndex extends vscode.Disposable {
   getScriptIndex(uri: vscode.Uri): ScriptIndex | undefined;
 
   /**
+   * Returns structured ScriptIndex for every indexed Fountain file in the workspace.
+   */
+  getAllScriptIndices(): readonly ScriptIndex[];
+
+  /**
    * Fires when the index has been updated with the affected URIs.
    */
   readonly onDidUpdateIndex: vscode.Event<vscode.Uri[]>;
@@ -247,24 +252,83 @@ export interface CharacterEntityQuery {
   readonly stats: CharacterEntityStats;
 }
 
+// -- Scene entity types (Phase 4: script-backed, no separate registry) --
+
+export interface ResolvedSceneMatch {
+  readonly entry: SceneEntry;
+  readonly scriptUri: vscode.Uri;
+  readonly matchedBy: 'sceneId' | 'location' | 'heading';
+}
+
+export interface SceneCanvasBinding {
+  readonly canvasSceneNodeId: string;
+  readonly shotIds: readonly string[];
+}
+
+export interface SceneEntityStats {
+  readonly totalScriptOccurrences: number;
+  readonly fileCount: number;
+  readonly canvasNodeCount?: number;
+  readonly shotCount?: number;
+  readonly characterCount: number;
+  readonly estimatedDuration: number;
+}
+
+export interface SceneEntityQuery {
+  readonly kind: 'scene';
+  readonly query: string;
+  readonly sceneId: string;
+  readonly heading: string;
+  readonly location: string;
+  readonly intExt: string | null;
+  readonly timeOfDay: string | null;
+  readonly sceneCharacters: readonly string[];
+  readonly scriptDefinition: vscode.Location;
+  readonly scriptReferences: readonly vscode.Location[];
+  readonly occurrences: readonly CreativeEntityOccurrence[];
+  readonly canvasSceneNodeId?: string;
+  readonly stats: SceneEntityStats;
+}
+
+/**
+ * Workspace-aware scene index backed by script files.
+ *
+ * Unlike ICharacterWorkspaceIndex (backed by characters.json), this service
+ * derives scene identity from the script source via IWorkspaceIndex.
+ */
+export interface ISceneWorkspaceIndex extends vscode.Disposable {
+  ensureInitialized(): Promise<void>;
+
+  /** Resolve a scene by sceneId, location name, or heading text. */
+  resolveScene(query: string, currentUri?: vscode.Uri): ResolvedSceneMatch | undefined;
+
+  /** Get the script-file location where this scene is defined. */
+  getDefinition(sceneId: string, currentUri?: vscode.Uri): vscode.Location | undefined;
+
+  /** Get all script-file locations sharing the same location name. */
+  getLocationReferences(location: string, currentUri?: vscode.Uri): readonly vscode.Location[];
+
+  /** Get the canvas binding for a scene, if any. */
+  getCanvasBinding(sceneId: string, documentUri?: vscode.Uri): SceneCanvasBinding | undefined;
+
+  /** List all indexed scene IDs for the workspace. */
+  getAllSceneIds(currentUri?: vscode.Uri): readonly string[];
+}
+
 /**
  * Unified creative-entity query facade.
  *
- * Current scope is intentionally narrow: character identity + script occurrence
- * composition. Future phases can extend the same entrypoint with scene/object/
- * location graph and occurrence backends without changing provider call sites.
+ * Composes registry, script index, occurrence index, relationship graph,
+ * and scene index into a single query surface for LSP providers.
  */
 export interface ICreativeEntityWorkspaceIndex extends vscode.Disposable {
-  /**
-   * Ensures all backing indices are ready before querying.
-   */
   ensureInitialized(): Promise<void>;
 
-  /**
-   * Resolves a character query into registry identity, definition target, and
-   * deduplicated script occurrences.
-   */
+  /** Resolves a character query into registry identity, definitions, and cross-modal occurrences. */
   queryCharacter(name: string, currentUri?: vscode.Uri): CharacterEntityQuery | undefined;
+
+  /** Resolves a scene query into script definition, cross-file references, and cross-modal occurrences. */
+  queryScene(query: string, currentUri?: vscode.Uri): SceneEntityQuery | undefined;
 }
 
 /**

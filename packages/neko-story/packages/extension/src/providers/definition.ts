@@ -38,7 +38,13 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
       return new vscode.Location(charDef.uri, charDef.range.start);
     }
 
-    // Try scene location
+    // Try scene definition via creative entity index (sceneId-aware)
+    const sceneQuery = this.creativeEntityIndex?.queryScene(word, document.uri);
+    if (sceneQuery?.scriptDefinition) {
+      return sceneQuery.scriptDefinition;
+    }
+
+    // Fallback: location-name-based scene lookup
     const sceneLocs = this.index.findSceneLocations(word, document.uri);
     if (sceneLocs.length > 0) {
       const first = sceneLocs[0]!;
@@ -107,7 +113,22 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
       return charLocs.map((loc) => new vscode.Location(loc.uri, loc.range));
     }
 
-    // Try scene locations
+    // Try scene query via creative entity index (includes canvas occurrences)
+    const sceneQuery = this.creativeEntityIndex?.queryScene(word, document.uri);
+    if (sceneQuery) {
+      const sceneRefs = [...sceneQuery.scriptReferences];
+      const sceneCrossModal = sceneQuery.occurrences
+        .filter((occ) => occ.source !== 'script')
+        .map((occ) => occ.location);
+      if (sceneCrossModal.length > 0) {
+        return dedupeLocations([...sceneRefs, ...sceneCrossModal]);
+      }
+      if (sceneRefs.length > 0) {
+        return sceneRefs;
+      }
+    }
+
+    // Fallback: location-name-based scene lookup
     const sceneLocs = this.index.findSceneLocations(word, document.uri);
     if (sceneLocs.length > 0) {
       return sceneLocs.map((loc) => new vscode.Location(loc.uri, loc.range));

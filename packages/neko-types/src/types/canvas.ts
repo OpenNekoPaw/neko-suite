@@ -289,6 +289,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
 export interface SceneGroupCanvasNode extends CanvasNodeBase {
   type: 'scene';
   data: {
+    /** Stable script scene ID binding (populated on storyboard import) */
+    sceneId?: string;
     sceneTitle: string;
     sceneNumber: number;
     location?: string;

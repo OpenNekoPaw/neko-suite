@@ -31,6 +31,7 @@ import { CreativeEntityWorkspaceIndexService } from './services/CreativeEntityWo
 import { CrossModalDataProvider } from './services/CrossModalDataProvider';
 import { OccurrenceIndexService } from './services/OccurrenceIndexService';
 import { CreativeEntityGraphService } from './services/CreativeEntityGraphService';
+import { SceneWorkspaceIndexService } from './services/SceneWorkspaceIndexService';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
@@ -75,16 +76,22 @@ export function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(entityGraphService);
 
+  const assetLinkingService = new AssetLinkingService();
+  const sceneStateStore = new StorySceneStateStore(context.workspaceState);
+  context.subscriptions.push(sceneStateStore);
+
+  // Phase 4: scene workspace index (script-backed, no separate registry)
+  const sceneIndexService = new SceneWorkspaceIndexService(indexService, sceneStateStore);
+  context.subscriptions.push(sceneIndexService);
+
   const creativeEntityIndexService = new CreativeEntityWorkspaceIndexService(
     indexService,
     characterIndexService,
     occurrenceIndexService,
     entityGraphService,
+    sceneIndexService,
   );
   context.subscriptions.push(creativeEntityIndexService);
-  const assetLinkingService = new AssetLinkingService();
-  const sceneStateStore = new StorySceneStateStore(context.workspaceState);
-  context.subscriptions.push(sceneStateStore);
   // Non-blocking background initialization
   void indexService.ensureInitialized();
   void characterIndexService.ensureInitialized();

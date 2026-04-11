@@ -5,6 +5,7 @@ import type {
   CharacterEntityStats,
   ICreativeEntityWorkspaceIndex,
   ResolvedCharacterMatch,
+  SceneEntityQuery,
   IWorkspaceIndex,
 } from '../services/types';
 
@@ -70,6 +71,12 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     // Check if hovering over a scene heading
     const sceneMatch = /^(\.|\s*(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s])/i.exec(line);
     if (sceneMatch) {
+      // Try cross-modal scene query first
+      const sceneQuery = this.creativeEntityIndex?.queryScene(line.trim(), document.uri);
+      if (sceneQuery) {
+        return new vscode.Hover(this.formatSceneEntityStats(sceneQuery));
+      }
+      // Fallback to local-only stats
       const sceneStats = this.getSceneStats(fountainDoc, position.line);
       if (sceneStats) {
         return new vscode.Hover(this.formatSceneStats(sceneStats));
@@ -247,6 +254,37 @@ export class FountainHoverProvider implements vscode.HoverProvider {
       }
       if (entityStats.generatedAssetCount) {
         md.appendMarkdown(`Generated assets: **${entityStats.generatedAssetCount}**\n\n`);
+      }
+    }
+
+    return md;
+  }
+
+  private formatSceneEntityStats(query: SceneEntityQuery): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`### Scene: ${query.location}\n\n`);
+    if (query.intExt || query.timeOfDay) {
+      md.appendMarkdown(`**${[query.intExt, query.timeOfDay].filter(Boolean).join(' - ')}**\n\n`);
+    }
+    md.appendMarkdown(`**Scene ID:** \`${query.sceneId}\`\n\n`);
+    md.appendMarkdown(`**Characters:** ${query.sceneCharacters.join(', ') || 'None'}\n\n`);
+    if (query.stats.estimatedDuration > 0) {
+      md.appendMarkdown(`**Est. duration:** ${query.stats.estimatedDuration}s\n\n`);
+    }
+    if (query.stats.fileCount > 1) {
+      md.appendMarkdown(
+        `**Location used in** ${query.stats.totalScriptOccurrences} scenes across ${query.stats.fileCount} files\n\n`,
+      );
+    }
+
+    const hasModalStats = query.stats.canvasNodeCount || query.stats.shotCount;
+    if (hasModalStats) {
+      md.appendMarkdown(`\n---\n\n`);
+      if (query.stats.canvasNodeCount) {
+        md.appendMarkdown(`Canvas scene nodes: **${query.stats.canvasNodeCount}**\n\n`);
+      }
+      if (query.stats.shotCount) {
+        md.appendMarkdown(`Canvas shots: **${query.stats.shotCount}**\n\n`);
       }
     }
 

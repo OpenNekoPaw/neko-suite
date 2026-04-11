@@ -7,7 +7,12 @@
 // =============================================================================
 
 import * as vscode from 'vscode';
-import type { CanvasNode, GalleryCanvasNode, ShotCanvasNode } from '@neko/shared';
+import type {
+  CanvasNode,
+  GalleryCanvasNode,
+  SceneGroupCanvasNode,
+  ShotCanvasNode,
+} from '@neko/shared';
 import type {
   CreativeEntityKind,
   CreativeEntityOccurrence,
@@ -171,6 +176,19 @@ export class OccurrenceIndexService implements IOccurrenceIndex {
             });
           }
         }
+      }
+    } else if (node.type === 'scene') {
+      const scene = node as SceneGroupCanvasNode;
+      const sceneId = scene.data.sceneId;
+      if (sceneId) {
+        this.addEntry({
+          entityKind: 'scene',
+          entityId: sceneId,
+          source: 'canvas',
+          label: scene.data.sceneTitle,
+          location: buildVirtualLocation('neko-canvas', `node/${scene.id}`),
+          detail: `Scene: ${scene.data.sceneTitle}${scene.data.location ? ` @ ${scene.data.location}` : ''}`,
+        });
       }
     }
   }
