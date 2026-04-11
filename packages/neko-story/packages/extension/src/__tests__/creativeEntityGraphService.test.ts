@@ -38,6 +38,16 @@ const mockVscode = vi.hoisted(() => {
     }
   }
 
+  function createMockWatcher() {
+    const emitter = new EventEmitter();
+    return {
+      onDidChange: emitter.event,
+      onDidCreate: emitter.event,
+      onDidDelete: emitter.event,
+      dispose: () => {},
+    };
+  }
+
   return {
     Uri,
     EventEmitter,
@@ -45,7 +55,10 @@ const mockVscode = vi.hoisted(() => {
       fs: {
         readFile: vi.fn().mockRejectedValue(new Error('not found')),
         writeFile: vi.fn().mockResolvedValue(undefined),
+        createDirectory: vi.fn().mockResolvedValue(undefined),
+        rename: vi.fn().mockResolvedValue(undefined),
       },
+      createFileSystemWatcher: vi.fn().mockReturnValue(createMockWatcher()),
     },
   };
 });

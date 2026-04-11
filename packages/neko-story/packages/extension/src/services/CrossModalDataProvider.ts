@@ -151,7 +151,13 @@ export class CrossModalDataProvider implements vscode.Disposable {
       return;
     }
 
-    const indexUri = vscode.Uri.joinPath(folders[0].uri, '.neko', 'generated', 'index.json');
+    const indexUri = vscode.Uri.joinPath(
+      folders[0].uri,
+      '.neko',
+      '.cache',
+      'generated',
+      'index.json',
+    );
     try {
       const raw = await vscode.workspace.fs.readFile(indexUri);
       const data = JSON.parse(new TextDecoder().decode(raw)) as {

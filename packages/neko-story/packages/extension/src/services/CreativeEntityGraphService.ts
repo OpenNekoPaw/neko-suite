@@ -3,8 +3,8 @@
 // graph tracking connections between creative entities and their canvas, asset,
 // and generated-asset representations.
 //
-// Persistence: debounced atomic flush to .neko/.cache/asset-graph.json.
-// Pattern: follows GeneratedAssetIndex (non-resetting timer + .tmp rename).
+// Persistence: debounced atomic flush to .neko/.cache/asset-graph.json
+// via mkdir + .tmp write + rename (follows GeneratedAssetIndex pattern).
 //
 // See ADR §4.5 for the CreativeEntityGraph model.
 // =============================================================================
@@ -90,11 +90,30 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
 
   private async initialize(): Promise<void> {
     await this.loadFromDisk();
-    await this.dataProvider.ensureInitialized();
+    await Promise.all([
+      this.characterIndex.ensureInitialized(),
+      this.dataProvider.ensureInitialized(),
+    ]);
     this.rebuild(this.dataProvider.getSnapshot());
 
     this.disposables.push(
       this.dataProvider.onDidUpdate(() => {
+        this.rebuild(this.dataProvider.getSnapshot());
+      }),
+    );
+
+    // Re-rebuild when character registry changes (file watcher triggers reload
+    // which eventually fires an event; we use a FileSystemWatcher as proxy).
+    const registryWatcher = vscode.workspace.createFileSystemWatcher('**/characters.json');
+    this.disposables.push(
+      registryWatcher,
+      registryWatcher.onDidChange(() => {
+        this.rebuild(this.dataProvider.getSnapshot());
+      }),
+      registryWatcher.onDidCreate(() => {
+        this.rebuild(this.dataProvider.getSnapshot());
+      }),
+      registryWatcher.onDidDelete(() => {
         this.rebuild(this.dataProvider.getSnapshot());
       }),
     );
@@ -311,9 +330,16 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     };
 
     try {
-      const uri = vscode.Uri.file(this.graphPath);
+      // Ensure parent directory exists
+      const targetUri = vscode.Uri.file(this.graphPath);
+      const parentUri = vscode.Uri.file(this.graphPath.replace(/[/\\][^/\\]+$/, ''));
+      await vscode.workspace.fs.createDirectory(parentUri);
+
+      // Atomic write: write to .tmp then rename
+      const tmpUri = vscode.Uri.file(`${this.graphPath}.tmp`);
       const encoded = new TextEncoder().encode(JSON.stringify(snapshot, null, 2));
-      await vscode.workspace.fs.writeFile(uri, encoded);
+      await vscode.workspace.fs.writeFile(tmpUri, encoded);
+      await vscode.workspace.fs.rename(tmpUri, targetUri, { overwrite: true });
       this.dirty = false;
     } catch (error) {
       getRootLogger().warn(
