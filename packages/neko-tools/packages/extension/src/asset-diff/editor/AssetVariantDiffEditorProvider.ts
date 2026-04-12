@@ -89,6 +89,8 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
   private activeSessions: Map<string, IAssetVariantDiffSession> = new Map();
   /** Map from document URI to comparison state */
   private comparisonStates: Map<string, ComparisonState> = new Map();
+  private isDisposed = false;
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -235,12 +237,26 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
       variantA,
       variantB,
     });
+
+    if (this.isDisposed) {
+      await session.disposeAsync();
+      return;
+    }
+
     this.activeSessions.set(docUri, session);
     session.attach(() => {
       this.activeWebviews.delete(docUri);
       this.activeSessions.delete(docUri);
     });
-    await session.start();
+
+    try {
+      await session.start();
+    } catch (error) {
+      this.activeWebviews.delete(docUri);
+      this.activeSessions.delete(docUri);
+      await session.disposeAsync();
+      throw error;
+    }
   }
 
   /**
@@ -337,12 +353,29 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
 </html>`;
   }
 
+  async disposeAsync(): Promise<void> {
+    this.disposePromise ??= this.disposeInternal();
+    return this.disposePromise;
+  }
+
   dispose(): void {
-    for (const session of this.activeSessions.values()) {
-      session.dispose();
+    void this.disposeAsync();
+  }
+
+  private async disposeInternal(): Promise<void> {
+    if (this.isDisposed) {
+      return;
     }
+
+    this.isDisposed = true;
+
+    const sessions = [...this.activeSessions.values()];
     this.activeSessions.clear();
     this.activeWebviews.clear();
+
+    await Promise.allSettled(sessions.map((session) => session.disposeAsync()));
+
+    this.sessionFactory.dispose();
     this.comparisonStates.clear();
   }
 }

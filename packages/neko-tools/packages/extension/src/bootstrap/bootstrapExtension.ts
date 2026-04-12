@@ -31,7 +31,7 @@ export function bootstrapNekoToolsExtension(
     coreServices.workspaceIO,
     coreServices.scheduler,
   );
-  bootstrapAssetDiff(
+  const assetDiffProvider = bootstrapAssetDiff(
     context,
     coreServices.assetEntityReader,
     coreServices.variantComparisonService,
@@ -48,7 +48,7 @@ export function bootstrapNekoToolsExtension(
   return {
     services: coreServices.services,
     async disposeAsync() {
-      await mediaDiffProvider.disposeAsync();
+      await Promise.all([mediaDiffProvider.disposeAsync(), assetDiffProvider.disposeAsync()]);
       coreServices.dispose();
     },
     dispose() {

@@ -77,6 +77,7 @@
   - 已补 `disposeAsync()` 清理链，`MediaDiffRequestState -> MediaDiffMessageHandler -> MediaDiffEditorSession -> MediaDiffEditorProvider -> deactivate()` 可显式等待 temp file / stream 清理完成
   - `MediaDiffEditorSessionFactory` 已显式支持 dispose 保护，停用阶段不会继续创建新 session
   - analyzer 的 buffer 落盘、Git previous file temp path、request-state 清理已统一切到 `ITempFileService`
+  - `TempFileBackedMediaDiffAnalyzer` 已补 pending cleanup 串行化，cancel 后的 temp file 清理会在下一次分析开始前完成收口
   - 已新增 `GitCliGateway`，将 `git show / git ls-files / git log / extractFileToPath` 的 CLI 细节从 `GitMediaService` 中拆出
   - `MediaDiffEditorProvider` 已移除内联 `child_process` 调用，Git tracked 判断统一回收到 `IMediaDiffService.isTracked`
   - `MediaDiffService` 的本地文件读取已切到 `IWorkspaceIO`，分析超时已切到 `IScheduler`
@@ -104,6 +105,7 @@
   - 已新增 `AssetVariantDiffSession` / `AssetVariantDiffSessionFactory`
   - `AssetVariantDiffEditorProvider` 已改为 provider 壳层，仅负责文档状态、webview HTML 与 session 装配
   - `bootstrapAssetDiff` 已显式组装 session factory，对齐 media diff 的 bootstrap 风格
+  - Asset Diff session / message handler / provider 已补齐 `disposeAsync()` 生命周期，与 Media Diff 统一
   - 已新增独立 `assetDiff.html + assetDiff.tsx` bundle，provider 不再内联大段 HTML/CSS/JS
   - 已新增 `AssetDiffRuntimeProvider` / `useAssetDiffProtocol`，Asset Diff webview 已对齐 runtime + hook 组织方式
 
@@ -113,7 +115,7 @@
 - `pnpm --dir packages/neko-tools run compile:extension`
 - `pnpm --dir packages/neko-tools run compile`
 - `pnpm --dir packages/neko-tools test -- --run`
-- 当前结果：`11` 个测试文件，`109` 个测试通过
+- 当前结果：`12` 个测试文件，`112` 个测试通过
 
 ---
 

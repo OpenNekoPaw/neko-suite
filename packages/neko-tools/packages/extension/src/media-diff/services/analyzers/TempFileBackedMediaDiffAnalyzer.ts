@@ -3,6 +3,7 @@ import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
 
 export abstract class TempFileBackedMediaDiffAnalyzer extends BaseMediaDiffAnalyzer {
   private readonly activeTempFiles = new Set<string>();
+  private pendingCleanup: Promise<void> = Promise.resolve();
 
   constructor(
     supportedExtensions: string[],
@@ -30,6 +31,10 @@ export abstract class TempFileBackedMediaDiffAnalyzer extends BaseMediaDiffAnaly
   }
 
   protected async cleanupTempFiles(files: readonly string[]): Promise<void> {
+    if (files.length === 0) {
+      return;
+    }
+
     await Promise.all(
       files.map(async (filePath) => {
         await this.tempFileService.deleteTempFile(filePath);
@@ -38,10 +43,18 @@ export abstract class TempFileBackedMediaDiffAnalyzer extends BaseMediaDiffAnaly
     );
   }
 
+  protected async waitForPendingCleanup(): Promise<void> {
+    await this.pendingCleanup;
+  }
+
   override cancel(): void {
     super.cancel();
     const files = [...this.activeTempFiles];
     this.activeTempFiles.clear();
-    void this.cleanupTempFiles(files);
+    this.pendingCleanup = this.pendingCleanup
+      .catch(() => {})
+      .then(async () => {
+        await this.cleanupTempFiles(files);
+      });
   }
 }

@@ -34,6 +34,7 @@ export class AudioDiffAnalyzer extends TempFileBackedMediaDiffAnalyzer {
 
   async analyze(current: Buffer, previous: Buffer, options?: DiffOptions): Promise<DiffResult> {
     this.createAbortController();
+    await this.waitForPendingCleanup();
 
     // Use local array to avoid race conditions between concurrent calls
     const localTempFiles: string[] = [];

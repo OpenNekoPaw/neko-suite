@@ -21,6 +21,8 @@ export type AssetVariantDiffMessageHandlerFactory = (
 ) => IAssetVariantDiffMessageHandler;
 
 export class AssetVariantDiffSessionFactory implements IAssetVariantDiffSessionFactory {
+  private isDisposed = false;
+
   constructor(
     private readonly compareVariants?: (
       entityId: string,
@@ -38,6 +40,7 @@ export class AssetVariantDiffSessionFactory implements IAssetVariantDiffSessionF
   ) {}
 
   createSession(options: IAssetVariantDiffSessionOptions): IAssetVariantDiffSession {
+    this.throwIfDisposed();
     const messageHandler = this.createMessageHandler({
       webview: options.webviewPanel.webview,
       entity: options.entity,
@@ -46,5 +49,15 @@ export class AssetVariantDiffSessionFactory implements IAssetVariantDiffSessionF
     });
 
     return new AssetVariantDiffSession(options.webviewPanel, messageHandler);
+  }
+
+  dispose(): void {
+    this.isDisposed = true;
+  }
+
+  private throwIfDisposed(): void {
+    if (this.isDisposed) {
+      throw new Error('AssetVariantDiffSessionFactory has been disposed');
+    }
   }
 }

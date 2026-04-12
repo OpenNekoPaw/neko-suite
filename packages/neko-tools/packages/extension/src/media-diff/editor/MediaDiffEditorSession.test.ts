@@ -80,17 +80,18 @@ describe('MediaDiffEditorSession', () => {
     expect(handler.initializeDiff).not.toHaveBeenCalled();
   });
 
-  it('should notify webview when engine client is unavailable', async () => {
+  it('should notify webview and skip initialization when engine client is unavailable', async () => {
     const { panel, webview } = createMockWebviewPanel();
     const handler = createMockMessageHandler();
     const session = new MediaDiffEditorSession(panel, handler, false);
 
-    await session.start(true);
+    await session.start(false);
 
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: 'mediaDiff:error',
       error: 'mediaDiff.error.engineUnavailable',
     });
+    expect(handler.initializeDiff).not.toHaveBeenCalled();
   });
 
   it('should dispose listeners and handler only once', async () => {

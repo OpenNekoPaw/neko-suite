@@ -73,6 +73,7 @@ export class VideoDiffAnalyzer extends TempFileBackedMediaDiffAnalyzer {
 
   async analyze(current: Buffer, previous: Buffer, options?: DiffOptions): Promise<DiffResult> {
     this.createAbortController();
+    await this.waitForPendingCleanup();
     const localTempFiles: string[] = [];
 
     try {

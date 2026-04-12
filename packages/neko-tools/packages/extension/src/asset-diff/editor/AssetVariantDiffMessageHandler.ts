@@ -53,6 +53,7 @@ interface AttributeDiff {
 
 export class AssetVariantDiffMessageHandler implements IAssetVariantDiffMessageHandler {
   private isDisposed = false;
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     private readonly webview: vscode.Webview,
@@ -296,7 +297,16 @@ export class AssetVariantDiffMessageHandler implements IAssetVariantDiffMessageH
     });
   }
 
+  async disposeAsync(): Promise<void> {
+    this.disposePromise ??= this.disposeInternal();
+    return this.disposePromise;
+  }
+
   dispose(): void {
+    void this.disposeAsync();
+  }
+
+  private async disposeInternal(): Promise<void> {
     this.isDisposed = true;
   }
 }

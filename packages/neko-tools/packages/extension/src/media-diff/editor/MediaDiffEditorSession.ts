@@ -47,8 +47,7 @@ export class MediaDiffEditorSession implements IMediaDiffEditorSession {
         await this.messageHandler.handleMessage(message as MediaDiffRequest);
       }),
       this.webviewPanel.onDidDispose(() => {
-        onDidDispose();
-        void this.disposeAsync();
+        void this.disposeAsync().finally(onDidDispose);
       }),
     );
   }
@@ -63,6 +62,7 @@ export class MediaDiffEditorSession implements IMediaDiffEditorSession {
         type: 'mediaDiff:error',
         error: vscode.l10n.t('mediaDiff.error.engineUnavailable'),
       });
+      return;
     }
 
     if (requiresRecompare) {
