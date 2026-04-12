@@ -20,6 +20,8 @@ import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { registerCommands } from './commands';
 import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
+import { TimelineToolExecutor } from './services/TimelineToolExecutor';
+import { TimelineToolBridge } from './services/timelineToolBridge';
 
 /**
  * Activate the extension
@@ -91,17 +93,14 @@ export async function activate(
   // ── P2: Exported API for neko-agent cross-extension communication ──────────
   // The `ai` namespace delegates to neko-agent via VSCode command so that
   // neko-cut doesn't take a direct dependency on @neko/platform.
+  const timelineBridge = new TimelineToolBridge(new TimelineToolExecutor());
   const api: NekoCutAPI & ISkillProvider = {
     timeline: {
-      getInfo: () => vscode.commands.executeCommand('neko.timeline.getInfo'),
-      addElement: (config) => vscode.commands.executeCommand('neko.element.add', config),
-      updateElement: (id, updates) =>
-        vscode.commands.executeCommand('neko.element.update', {
-          elementId: id,
-          properties: updates,
-        }),
-      deleteElement: (id) => vscode.commands.executeCommand('neko.element.delete', id),
-      listElements: () => vscode.commands.executeCommand('neko.timeline.listElements'),
+      getInfo: () => timelineBridge.getInfo(),
+      addElement: (config) => timelineBridge.addElement(config),
+      updateElement: (id, updates) => timelineBridge.updateElement(id, updates),
+      deleteElement: (id) => timelineBridge.deleteElement(id),
+      listElements: () => timelineBridge.listElements(),
     },
 
     ai: {
@@ -174,7 +173,7 @@ export async function activate(
   // This provides neko-cut's timeline tools to neko-agent via the discovery protocol.
   // Falls back silently if neko-agent is not installed.
   try {
-    const capabilityProvider = createNekoCutCapabilityProvider(api);
+    const capabilityProvider = createNekoCutCapabilityProvider(api, timelineBridge);
     await vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
   } catch {
     // neko-agent not installed — capability registration silently skipped

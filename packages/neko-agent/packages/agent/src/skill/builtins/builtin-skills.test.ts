@@ -179,8 +179,19 @@ describe('Builtin Skills', () => {
 
     it('should have timeline query tools for context', () => {
       expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO);
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO);
       expect(qualityAssessmentSkill.allowedTools).toContain(
         TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+      );
+    });
+
+    it('should have remediation editing tools enabled', () => {
+      expect(qualityAssessmentSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_EFFECT);
+      expect(qualityAssessmentSkill.allowedTools).toContain(
+        TOOL_NAMES_TIMELINE.SET_COLOR_CORRECTION,
+      );
+      expect(qualityAssessmentSkill.allowedTools).toContain(
+        TOOL_NAMES_TIMELINE.SET_AUDIO_PROPERTIES,
       );
     });
 
@@ -295,12 +306,21 @@ describe('Builtin Skills', () => {
       expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT);
       expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT);
       expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_EFFECT);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.SET_TRANSITION);
+      expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_TRACK);
     });
 
     it('should have file tools in script-generation skill', () => {
       expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ);
       expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.WRITE);
       expect(scriptGenerationSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.LIST_DIRECTORY);
+    });
+
+    it('should allow AddTrack in scene-to-music skill', () => {
+      const skill = builtinSkills.find((item) => item.name === 'scene-to-music');
+      expect(skill?.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_TRACK);
     });
   });
 });

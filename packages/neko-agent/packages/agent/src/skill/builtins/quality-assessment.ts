@@ -110,9 +110,12 @@ Summarize results in a clear table:
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     // Read-only context
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-    // TODO(P1): implement when tools are available:
-    // AddEffect, UpdateEffect, SetColorCorrection, SetAudioProperties, GetElementInfo
+    TOOL_NAMES_TIMELINE.ADD_EFFECT,
+    TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
+    TOOL_NAMES_TIMELINE.SET_COLOR_CORRECTION,
+    TOOL_NAMES_TIMELINE.SET_AUDIO_PROPERTIES,
   ],
   icon: '📊',
   source: 'builtin',

@@ -112,7 +112,7 @@
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)
 - [ ] **P1-1: Pipeline media landing unification** — `MediaGeneratorAdapter` returns remote URLs; chat main path saves locally + indexes assets. Need shared `MediaPersistenceService` or adapter-level alignment
 - [x] **CapabilityProvider context extension** — extended `AgentCapabilityContext` with `mediaService`/`configManager`/`embedFn`; all sub-packages migrated
-- [ ] **24 TODO(P1) Tools** — blocked on neko-cut API expansion (8 timeline + 7 effects + 2 color + 3 audio) and new model capabilities (4 generation)
+- [ ] **4 TODO(P1) Generation Tools** — remaining model capabilities: `GenerateCharacter` / `TransferStyle` / `EnhanceVideo` / `OptimizeAudio`
 - [ ] **Zustand state management migration**: replace hook/ref architecture with Zustand stores (conversation, UI, config, resources, skills, context); align with neko-cut/canvas/model Webview pattern
 - [ ] **Subdivide `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` to reduce re-render blast radius
 - [ ] **RichContentBlock registry** ([ADR §6.2](./docs/architecture/agent-media-architecture.md)): define `RichContentBlock` type + `RichContentRegistry` (kind→component mapping) + `ContentBlockRenderer` integration; implement storyboard / media_card / comparison / form / data_table kinds

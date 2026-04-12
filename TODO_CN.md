@@ -112,7 +112,7 @@
 - [ ] MCP 重连退避（指数退避 + 熔断）
 - [ ] **P1-1：Pipeline 媒体落地统一** — `MediaGeneratorAdapter` 返回远程 URL；聊天主路径本地保存 + 索引资产。需共享 `MediaPersistenceService` 或适配器层对齐
 - [x] **CapabilityProvider 上下文扩展** — `AgentCapabilityContext` 已扩展 `mediaService`/`configManager`/`embedFn`；所有子包已迁移
-- [ ] **24 个 TODO(P1) 工具** — 阻塞于 neko-cut API 扩展（8 时间线 + 7 特效 + 2 调色 + 3 音频）和新模型能力（4 生成）
+- [ ] **4 个 TODO(P1) 生成工具** — 剩余新模型能力：`GenerateCharacter` / `TransferStyle` / `EnhanceVideo` / `OptimizeAudio`
 - [ ] **Zustand 状态管理迁移**：用 Zustand stores 替换 hook/ref 架构（conversation、UI、config、resources、skills、context）；与 neko-cut/canvas/model Webview 模式对齐
 - [ ] **拆分 `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` 减少重渲染范围
 - [ ] **RichContentBlock 注册表**（[ADR §6.2](./docs/architecture/agent-media-architecture.md)）：定义 `RichContentBlock` 类型 + `RichContentRegistry`（kind→组件映射）+ `ContentBlockRenderer` 集成；实现 storyboard / media_card / comparison / form / data_table kinds

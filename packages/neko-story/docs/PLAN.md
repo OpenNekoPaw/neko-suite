@@ -197,6 +197,16 @@ extension → parser → types
   `@neko-canvas/extension` 包级构建；根 `pnpm test` 已尝试，但当前环境失败点为
   与本轮无关的 `@neko/auth-core` 本地回环端口监听 `EPERM`
 
+### 后续 TODO
+
+- `TODO(P1)` 为角色身份层补充“剧本文字替换”独立入口：与注册表 Rename 分离，作为显式 Code Action 或批处理执行，不隐式改写剧本文本
+- `TODO(P1)` 在共享层定义并落地最小可用的 `CreativeEntityGraph` / `OccurrenceIndex` 契约，停止让 `CreativeEntityWorkspaceIndexService` 只停留在 character-first 聚合器
+- `TODO(P1)` 将 `CreativeEntityWorkspaceIndexService` 升级为依赖 `Graph + OccurrenceIndex` 的统一查询底座，作为 Definition / References / Hover / Rename 的共享入口
+- `TODO(P1)` 把统一实体层从 `character` 扩到 `scene / location`：先建立稳定定义、引用与写路径，再决定是否升格独立 registry
+- `TODO(P1)` 让资产侧、画布侧开始消费统一实体写路径：至少支持从 `AssetEntity` / `GalleryNode` / `SceneGroupNode` 回跳 registry 定义，并补最小 Rename / CodeAction 入口
+- `TODO(P2)` 将 `object` 接入统一实体层：复用 Asset Library 分类与 tags / aliases，补跨场景引用与默认资产绑定
+- `TODO(P2)` 将 `action` 先落在语义出现点层，而不是独立 registry：支持 script line / shot / media segment 级索引与引用查询
+
 ## 构建与测试
 
 ### 影响范围

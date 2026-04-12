@@ -11,6 +11,7 @@
  */
 
 import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
+import { TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 // =============================================================================
 // Resident ToolSets — schema always in LLM context
@@ -86,7 +87,13 @@ export const shellExecutionToolSet: ToolGroup = {
 export const timelineQueryToolSet: ToolGroup = {
   name: 'timeline-query',
   description: 'Timeline query tools for viewing timeline info, elements, effects, and transitions',
-  tools: ['GetTimelineInfo', 'GetElementInfo', 'ListElements', 'ListEffects', 'ListTransitions'],
+  tools: [
+    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
+    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.LIST_EFFECTS,
+    TOOL_NAMES_TIMELINE.LIST_TRANSITIONS,
+  ],
   alwaysActive: true,
   priority: 90,
   loadingTier: 'eager',
@@ -117,7 +124,13 @@ export const elementEditingToolSet: ToolGroup = {
   name: 'element-editing',
   description:
     'Timeline element editing tools for adding, updating, deleting, trimming, and splitting',
-  tools: ['AddElement', 'UpdateElement', 'DeleteElement', 'TrimElement', 'SplitElement'],
+  tools: [
+    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
+    TOOL_NAMES_TIMELINE.SPLIT_ELEMENT,
+  ],
   alwaysActive: true,
   priority: 80,
   loadingTier: 'eager',
@@ -137,7 +150,13 @@ export const elementEditingToolSet: ToolGroup = {
 export const effectsTransitionsToolSet: ToolGroup = {
   name: 'effects-transitions',
   description: 'Visual effects and transition tools',
-  tools: ['AddEffect', 'UpdateEffect', 'RemoveEffect', 'SetTransition', 'RemoveTransition'],
+  tools: [
+    TOOL_NAMES_TIMELINE.ADD_EFFECT,
+    TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
+    TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
+    TOOL_NAMES_TIMELINE.SET_TRANSITION,
+    TOOL_NAMES_TIMELINE.REMOVE_TRANSITION,
+  ],
   alwaysActive: true,
   priority: 70,
   loadingTier: 'lazy',
@@ -169,7 +188,7 @@ export const animationKeyframesToolSet: ToolGroup = {
 export const colorGradingToolSet: ToolGroup = {
   name: 'color-grading-tools',
   description: 'Color correction and grading tools',
-  tools: ['SetColorCorrection', 'ResetColorCorrection'],
+  tools: [TOOL_NAMES_TIMELINE.SET_COLOR_CORRECTION, TOOL_NAMES_TIMELINE.RESET_COLOR_CORRECTION],
   alwaysActive: true,
   priority: 60,
   loadingTier: 'lazy',
@@ -185,7 +204,12 @@ export const colorGradingToolSet: ToolGroup = {
 export const audioEditingToolSet: ToolGroup = {
   name: 'audio-editing',
   description: 'Audio editing tools for volume, properties, and speed',
-  tools: ['SetAudioProperties', 'AddAudioKeyframe', 'SetPlaybackSpeed', 'SeparateAudio'],
+  tools: [
+    TOOL_NAMES_TIMELINE.SET_AUDIO_PROPERTIES,
+    TOOL_NAMES_TIMELINE.ADD_AUDIO_KEYFRAME,
+    TOOL_NAMES_TIMELINE.SET_PLAYBACK_SPEED,
+    TOOL_NAMES_TIMELINE.SEPARATE_AUDIO,
+  ],
   alwaysActive: true,
   priority: 60,
   loadingTier: 'lazy',
@@ -201,7 +225,12 @@ export const audioEditingToolSet: ToolGroup = {
 export const trackManagementToolSet: ToolGroup = {
   name: 'track-management',
   description: 'Track management tools for adding, deleting, and organizing tracks',
-  tools: ['AddTrack', 'DeleteTrack', 'ReorderTracks', 'SetTrackProperties'],
+  tools: [
+    TOOL_NAMES_TIMELINE.ADD_TRACK,
+    TOOL_NAMES_TIMELINE.DELETE_TRACK,
+    TOOL_NAMES_TIMELINE.REORDER_TRACKS,
+    TOOL_NAMES_TIMELINE.SET_TRACK_PROPERTIES,
+  ],
   alwaysActive: true,
   priority: 50,
   loadingTier: 'lazy',
@@ -249,10 +278,10 @@ export const aiGenerationToolSet: ToolGroup = {
   name: 'ai-generation',
   description: 'AI generation tools for creating images, videos, audio, and music',
   tools: [
-    'GenerateImage',
-    'GenerateVideo',
-    'GenerateTTS',
-    'GenerateMusic',
+    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
+    TOOL_NAMES_MEDIA.GENERATE_TTS,
+    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
     'GenerateCharacter',
     'TransferStyle',
     'EnhanceVideo',

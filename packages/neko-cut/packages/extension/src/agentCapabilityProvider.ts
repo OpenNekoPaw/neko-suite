@@ -21,54 +21,96 @@ import type {
   NekoCutAPI,
 } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
+import { TimelineToolBridge } from './services/timelineToolBridge';
 
 /**
  * Create the NekoCut capability provider.
  *
  * @param api The NekoCutAPI exports from the extension activation
  */
-export function createNekoCutCapabilityProvider(api: NekoCutAPI): AgentCapabilityProvider {
-  return new NekoCutCapabilityProviderImpl(api);
+export function createNekoCutCapabilityProvider(
+  api: NekoCutAPI,
+  timelineBridge: TimelineToolBridge,
+): AgentCapabilityProvider {
+  return new NekoCutCapabilityProviderImpl(api, timelineBridge);
+}
+
+function createTimelineTool(
+  bridge: TimelineToolBridge,
+  name: string,
+  description: string,
+  parameters: ToolParameters,
+  options: Pick<Tool, 'isReadOnly' | 'isConcurrencySafe' | 'isDestructive'> = {},
+): Tool {
+  return {
+    name,
+    description,
+    category: 'timeline',
+    parameters,
+    ...options,
+    async execute(args: Record<string, unknown>) {
+      return bridge.executeAgentTool(name, args);
+    },
+  };
 }
 
 class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-cut';
   readonly version = '1.0.0';
 
-  constructor(private readonly _api: NekoCutAPI) {}
+  constructor(
+    private readonly _api: NekoCutAPI,
+    private readonly _timelineBridge: TimelineToolBridge,
+  ) {}
 
   getTools(context: AgentCapabilityContext): Tool[] {
     const api = this._api;
+    const bridge = this._timelineBridge;
     const media = context.mediaService;
 
     return [
-      {
-        name: TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-        description: 'Get information about the current video timeline',
-        category: 'timeline',
-        isReadOnly: true,
-        isConcurrencySafe: true,
-        parameters: { type: 'object', properties: {} } satisfies ToolParameters,
-        async execute() {
-          return { success: true, data: await api.timeline.getInfo() };
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+        'Get information about the current video timeline',
+        { type: 'object', properties: {} },
+        { isReadOnly: true, isConcurrencySafe: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
+        'Get detailed information about a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+          },
+          required: ['elementId'],
         },
-      },
-      {
-        name: TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-        description: 'List all elements in the current timeline',
-        category: 'timeline',
-        isReadOnly: true,
-        isConcurrencySafe: true,
-        parameters: { type: 'object', properties: {} } satisfies ToolParameters,
-        async execute() {
-          return { success: true, data: await api.timeline.listElements() };
+        { isReadOnly: true, isConcurrencySafe: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+        'List timeline elements with optional track/type filters',
+        {
+          type: 'object',
+          properties: {
+            trackId: { type: 'string', description: 'Optional track filter' },
+            type: {
+              type: 'string',
+              enum: ['video', 'audio', 'image', 'text', 'shape', 'subtitle', 'media'],
+              description: 'Optional element type filter',
+            },
+          },
         },
-      },
-      {
-        name: TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
-        description: 'Add a new element to the timeline',
-        category: 'timeline',
-        parameters: {
+        { isReadOnly: true, isConcurrencySafe: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
+        'Add a new element to the timeline',
+        {
           type: 'object',
           properties: {
             type: {
@@ -76,87 +118,316 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
               enum: ['video', 'audio', 'image', 'text', 'shape', 'subtitle'],
               description: 'Type of element to add',
             },
-            trackId: {
-              type: 'string',
-              description: 'ID of the track to add the element to',
-            },
-            startTime: {
-              type: 'number',
-              description: 'Start time in seconds',
-            },
-            duration: {
-              type: 'number',
-              description: 'Duration in seconds',
-            },
-            source: {
-              type: 'string',
-              description: 'Source file path (for video/audio/image)',
-            },
-            content: {
-              type: 'string',
-              description: 'Text content (for text/subtitle elements)',
-            },
+            trackId: { type: 'string', description: 'Track ID' },
+            startTime: { type: 'number', description: 'Start time in seconds' },
+            duration: { type: 'number', description: 'Duration in seconds' },
+            source: { type: 'string', description: 'Source path or URL for media elements' },
+            content: { type: 'string', description: 'Text content for text/subtitle elements' },
           },
           required: ['type', 'trackId', 'startTime', 'duration'],
-        } satisfies ToolParameters,
-        async execute(args) {
-          const data = await api.timeline.addElement({
-            type: args.type as 'video' | 'audio' | 'image' | 'text' | 'shape' | 'subtitle',
-            trackId: args.trackId as string,
-            startTime: args.startTime as number,
-            duration: args.duration as number,
-            source: args.source as string | undefined,
-            content: args.content as string | undefined,
-          });
-          return { success: true, data };
         },
-      },
-      {
-        name: TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
-        description: 'Update an existing timeline element',
-        category: 'timeline',
-        parameters: {
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+        'Update an existing timeline element',
+        {
           type: 'object',
           properties: {
-            id: {
-              type: 'string',
-              description: 'ID of the element to update',
-            },
-            updates: {
-              type: 'object',
-              description: 'Properties to update',
-            },
+            id: { type: 'string', description: 'Element ID' },
+            updates: { type: 'object', description: 'Partial update payload' },
           },
           required: ['id', 'updates'],
-        } satisfies ToolParameters,
-        async execute(args) {
-          await api.timeline.updateElement(
-            args.id as string,
-            args.updates as Record<string, unknown>,
-          );
-          return { success: true };
         },
-      },
-      {
-        name: TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
-        description: 'Delete an element from the timeline',
-        category: 'timeline',
-        isDestructive: true,
-        parameters: {
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
+        'Delete an element from the timeline',
+        {
           type: 'object',
           properties: {
-            id: {
-              type: 'string',
-              description: 'ID of the element to delete',
-            },
+            id: { type: 'string', description: 'Element ID' },
           },
           required: ['id'],
-        } satisfies ToolParameters,
-        async execute(args) {
-          await api.timeline.deleteElement(args.id as string);
-          return { success: true };
         },
-      },
+        { isDestructive: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
+        'Trim the in/out points of a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            trimStart: { type: 'number', description: 'Trim offset at start in seconds' },
+            trimEnd: { type: 'number', description: 'Trim offset at end in seconds' },
+          },
+          required: ['elementId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SPLIT_ELEMENT,
+        'Split a timeline element at a relative time offset',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            splitTime: { type: 'number', description: 'Split offset within the clip in seconds' },
+          },
+          required: ['elementId', 'splitTime'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.LIST_EFFECTS,
+        'List built-in timeline effects',
+        { type: 'object', properties: {} },
+        { isReadOnly: true, isConcurrencySafe: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.ADD_EFFECT,
+        'Add an effect to a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            effectType: { type: 'string', description: 'Effect type identifier' },
+            params: { type: 'object', description: 'Effect parameter values' },
+          },
+          required: ['elementId', 'effectType'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
+        'Update an existing effect on a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            effectId: { type: 'string', description: 'Effect ID' },
+            params: { type: 'object', description: 'Updated effect parameter values' },
+          },
+          required: ['elementId', 'effectId', 'params'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
+        'Remove an effect from a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            effectId: { type: 'string', description: 'Effect ID' },
+          },
+          required: ['elementId', 'effectId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.LIST_TRANSITIONS,
+        'List available transition presets',
+        { type: 'object', properties: {} },
+        { isReadOnly: true, isConcurrencySafe: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SET_TRANSITION,
+        'Set an in/out transition on a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            placement: {
+              type: 'string',
+              enum: ['in', 'out'],
+              description: 'Transition placement',
+            },
+            type: { type: 'string', description: 'Transition type' },
+            duration: { type: 'number', description: 'Transition duration in seconds' },
+            easing: { type: 'string', description: 'Optional easing preset' },
+            params: { type: 'object', description: 'Optional transition parameters' },
+          },
+          required: ['elementId', 'placement', 'type', 'duration'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.REMOVE_TRANSITION,
+        'Remove an in/out transition from a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            placement: {
+              type: 'string',
+              enum: ['in', 'out'],
+              description: 'Transition placement',
+            },
+          },
+          required: ['elementId', 'placement'],
+        },
+      ),
+      createTimelineTool(bridge, TOOL_NAMES_TIMELINE.ADD_TRACK, 'Create a new timeline track', {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['video', 'media', 'audio', 'subtitle', 'shape', 'text'],
+            description: 'Track type',
+          },
+          name: { type: 'string', description: 'Optional track name' },
+        },
+        required: ['type'],
+      }),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.DELETE_TRACK,
+        'Delete a timeline track',
+        {
+          type: 'object',
+          properties: {
+            trackId: { type: 'string', description: 'Track ID' },
+          },
+          required: ['trackId'],
+        },
+        { isDestructive: true },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.REORDER_TRACKS,
+        'Reorder tracks by supplying the full ordered track ID list',
+        {
+          type: 'object',
+          properties: {
+            trackIds: {
+              type: 'array',
+              description: 'All track IDs in their desired order',
+              items: { type: 'string' },
+            },
+          },
+          required: ['trackIds'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SET_TRACK_PROPERTIES,
+        'Update timeline track properties',
+        {
+          type: 'object',
+          properties: {
+            trackId: { type: 'string', description: 'Track ID' },
+            name: { type: 'string', description: 'Track name' },
+            locked: { type: 'boolean', description: 'Whether the track is locked' },
+            muted: { type: 'boolean', description: 'Whether the track is muted' },
+          },
+          required: ['trackId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SET_COLOR_CORRECTION,
+        'Apply color correction to a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            colorCorrection: { type: 'object', description: 'Nested color correction payload' },
+            brightness: { type: 'number', description: 'Brightness adjustment' },
+            contrast: { type: 'number', description: 'Contrast adjustment' },
+            saturation: { type: 'number', description: 'Saturation adjustment' },
+            temperature: { type: 'number', description: 'Temperature adjustment' },
+            tint: { type: 'number', description: 'Tint adjustment' },
+            exposure: { type: 'number', description: 'Exposure adjustment' },
+            gamma: { type: 'number', description: 'Gamma adjustment' },
+            shadows: { type: 'number', description: 'Shadow adjustment' },
+            highlights: { type: 'number', description: 'Highlight adjustment' },
+          },
+          required: ['elementId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.RESET_COLOR_CORRECTION,
+        'Reset color correction to defaults for a timeline element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+          },
+          required: ['elementId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SET_AUDIO_PROPERTIES,
+        'Update audio properties for a media or audio element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            volume: { type: 'number', description: 'Volume percentage 0-200' },
+            pan: { type: 'number', description: 'Pan percentage -100 to 100' },
+            muted: { type: 'boolean', description: 'Mute state' },
+            fadeIn: { type: 'number', description: 'Fade-in duration in seconds' },
+            fadeOut: { type: 'number', description: 'Fade-out duration in seconds' },
+          },
+          required: ['elementId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.ADD_AUDIO_KEYFRAME,
+        'Add an audio keyframe for volume or pan automation',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            property: {
+              type: 'string',
+              enum: ['volume', 'pan'],
+              description: 'Automated audio property',
+            },
+            time: { type: 'number', description: 'Keyframe time in seconds' },
+            value: { type: 'number', description: 'Keyframe value' },
+          },
+          required: ['elementId', 'property', 'time', 'value'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SEPARATE_AUDIO,
+        'Separate embedded audio from a media element into an audio track',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Media element ID' },
+            targetTrackId: {
+              type: 'string',
+              description: 'Optional target audio track ID',
+            },
+          },
+          required: ['elementId'],
+        },
+      ),
+      createTimelineTool(
+        bridge,
+        TOOL_NAMES_TIMELINE.SET_PLAYBACK_SPEED,
+        'Set playback speed for a media or audio element',
+        {
+          type: 'object',
+          properties: {
+            elementId: { type: 'string', description: 'Element ID' },
+            speed: { type: 'number', description: 'Playback speed multiplier' },
+          },
+          required: ['elementId', 'speed'],
+        },
+      ),
       // GenerateVideoForClip — requires mediaService from context
       ...(media
         ? [

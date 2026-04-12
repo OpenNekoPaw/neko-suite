@@ -177,13 +177,14 @@ export interface Tool {
   /**
    * Whether this tool only reads state and never modifies it.
    * Default false (Fail-Closed). Mark true for query tools
-   * (e.g. GetTimelineInfo, ListElements).
+   * (e.g. GetTimelineInfo, ListTimelineElements).
    */
   isReadOnly?: boolean;
 
   /**
    * Whether this tool performs irreversible destructive operations.
-   * Default false. Mark true for deletion tools (e.g. DeleteElement, DeleteTrack).
+   * Default false. Mark true for deletion tools
+   * (e.g. DeleteTimelineElement, DeleteTrack).
    * Destructive tools may require additional user confirmation.
    */
   isDestructive?: boolean;

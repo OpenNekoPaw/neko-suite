@@ -83,17 +83,26 @@ You are an expert video editor. Help users with timeline-based editing tasks.
   allowedTools: [
     // Timeline query (read-only)
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.LIST_EFFECTS,
+    TOOL_NAMES_TIMELINE.LIST_TRANSITIONS,
     // Element editing
     TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
     TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
     TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
-    // TODO(P1): implement when tools are available:
-    // GetElementInfo, TrimElement, SplitElement,
-    // AddEffect, UpdateEffect, RemoveEffect,
-    // SetTransition, RemoveTransition,
-    // AddTrack, DeleteTrack, ReorderTracks, SetTrackProperties,
-    // SetPlaybackSpeed, ListEffects, ListTransitions
+    TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
+    TOOL_NAMES_TIMELINE.SPLIT_ELEMENT,
+    TOOL_NAMES_TIMELINE.ADD_EFFECT,
+    TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
+    TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
+    TOOL_NAMES_TIMELINE.SET_TRANSITION,
+    TOOL_NAMES_TIMELINE.REMOVE_TRANSITION,
+    TOOL_NAMES_TIMELINE.ADD_TRACK,
+    TOOL_NAMES_TIMELINE.DELETE_TRACK,
+    TOOL_NAMES_TIMELINE.REORDER_TRACKS,
+    TOOL_NAMES_TIMELINE.SET_TRACK_PROPERTIES,
+    TOOL_NAMES_TIMELINE.SET_PLAYBACK_SPEED,
   ],
   icon: '🎬',
   source: 'builtin',
@@ -155,11 +164,14 @@ You are a professional colorist. Help users achieve their desired visual style.
   allowedTools: [
     // Timeline query (read-only)
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
-    // TODO(P1): implement when tools are available:
-    // GetElementInfo, SetColorCorrection, ResetColorCorrection,
-    // AddEffect, UpdateEffect, RemoveEffect
+    TOOL_NAMES_TIMELINE.SET_COLOR_CORRECTION,
+    TOOL_NAMES_TIMELINE.RESET_COLOR_CORRECTION,
+    TOOL_NAMES_TIMELINE.ADD_EFFECT,
+    TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
+    TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
   ],
   icon: '🎨',
   source: 'builtin',
@@ -219,14 +231,17 @@ Automatically lower music when dialogue plays:
   allowedTools: [
     // Timeline query (read-only)
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     // Element operations for audio clips
     TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
     TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
     TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
-    // TODO(P1): implement when tools are available:
-    // GetElementInfo, SetAudioProperties, AddAudioKeyframe,
-    // SetPlaybackSpeed, SeparateAudio, TrimElement
+    TOOL_NAMES_TIMELINE.SET_AUDIO_PROPERTIES,
+    TOOL_NAMES_TIMELINE.ADD_AUDIO_KEYFRAME,
+    TOOL_NAMES_TIMELINE.SET_PLAYBACK_SPEED,
+    TOOL_NAMES_TIMELINE.SEPARATE_AUDIO,
+    TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
   ],
   icon: '🎵',
   source: 'builtin',
@@ -284,6 +299,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
   allowedTools: [
     // Timeline query (read-only)
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
+    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     // Element operations for subtitle clips
     TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
@@ -294,8 +310,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
-    // TODO(P1): implement when tools are available:
-    // GetElementInfo, TrimElement
+    TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
   ],
   icon: '📝',
   source: 'builtin',
@@ -548,7 +563,7 @@ Analyze the timeline and generate background music that matches the scene conten
 
 ### Step 1: Analyze the timeline
 Call GetTimelineInfo to get the total duration and timeline structure.
-Call ListElements to understand what's in the scene (video clips, subtitles, effects).
+Call ListTimelineElements to understand what's in the scene (video clips, subtitles, effects).
 From the elements, infer:
 - Overall mood (action, peaceful, dramatic, uplifting, mysterious, etc.)
 - Genre hint (if any visual style clues are present)
@@ -574,9 +589,9 @@ On completion, task_output returns { url: string } in the result field.
 
 ### Step 4: Insert the music track
 First check if a music/audio track exists. If not, call AddTrack with type 'audio'.
-Then call AddElement with:
+Then call AddTimelineElement with:
 - type: 'audio'
-- src: the URL returned by task_output
+- source: the URL returned by task_output
 - trackId: the music track id
 - startTime: 0
 - duration: match the generated clip duration (or timeline duration)
@@ -594,8 +609,7 @@ Report to the user what music was generated (prompt used, duration) and where it
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     TOOL_NAMES_MEDIA.GENERATE_MUSIC,
     TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
-    // TODO(P1): implement when tools are available:
-    // AddTrack
+    TOOL_NAMES_TIMELINE.ADD_TRACK,
   ],
   icon: '🎵',
   source: 'builtin',
