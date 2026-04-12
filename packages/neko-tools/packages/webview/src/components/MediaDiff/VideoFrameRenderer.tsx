@@ -4,12 +4,13 @@
  * Renders two video frames (JPEG Blob URLs) through WebGL shaders:
  * - Curtain: split-screen with draggable divider
  * - Heatmap: abs(colorA - colorB) mapped to color spectrum
- * - Flicker: rapid A/B alternation via requestAnimationFrame
+ * - Flicker: rapid A/B alternation via injected raf scheduler
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
+import { useMediaDiffRuntime } from '../../runtime/MediaDiffRuntimeContext';
 
 const logger = new ConsoleLogger('VideoFrameRenderer', LogLevel.Info);
 
@@ -169,12 +170,13 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
   onSliderChange,
 }: VideoFrameRendererProps) {
   const { t } = useTranslation();
+  const { rafScheduler } = useMediaDiffRuntime();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGLRenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
   const textureARef = useRef<WebGLTexture | null>(null);
   const textureBRef = useRef<WebGLTexture | null>(null);
-  const animFrameRef = useRef<number>(0);
+  const animFrameRef = useRef<number | null>(null);
   const flickerShowARef = useRef(true);
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -258,7 +260,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
   useEffect(() => {
     initGL();
     return () => {
-      cancelAnimationFrame(animFrameRef.current);
+      rafScheduler.cancelFrame(animFrameRef.current);
       const gl = glRef.current;
       if (gl) {
         if (programRef.current) gl.deleteProgram(programRef.current);
@@ -266,7 +268,7 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
         if (textureBRef.current) gl.deleteTexture(textureBRef.current);
       }
     };
-  }, [initGL]);
+  }, [initGL, rafScheduler]);
 
   // Rebuild program when mode changes
   useEffect(() => {
@@ -327,7 +329,8 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
   // Flicker animation loop
   useEffect(() => {
     if (mode !== 'flicker') {
-      cancelAnimationFrame(animFrameRef.current);
+      rafScheduler.cancelFrame(animFrameRef.current);
+      animFrameRef.current = null;
       return;
     }
 
@@ -350,12 +353,15 @@ export const VideoFrameRenderer = memo(function VideoFrameRenderer({
         gl.uniform1f(loc, flickerShowARef.current ? 1.0 : 0.0);
         render();
       }
-      animFrameRef.current = requestAnimationFrame(loop);
+      animFrameRef.current = rafScheduler.requestFrame(loop);
     };
 
-    animFrameRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animFrameRef.current);
-  }, [mode, render]);
+    animFrameRef.current = rafScheduler.requestFrame(loop);
+    return () => {
+      rafScheduler.cancelFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    };
+  }, [mode, rafScheduler, render]);
 
   // Mouse interaction for curtain mode
   const handleMouseDown = useCallback(() => {

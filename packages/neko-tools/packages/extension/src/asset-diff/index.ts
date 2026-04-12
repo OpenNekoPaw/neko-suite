@@ -10,6 +10,14 @@ export {
   AssetVariantDiffFileSystemProvider,
 } from './editor/AssetVariantDiffEditorProvider';
 export { AssetVariantDiffMessageHandler } from './editor/AssetVariantDiffMessageHandler';
+export {
+  AssetVariantDiffSession,
+  type IAssetVariantDiffMessageHandler,
+  type IAssetVariantDiffSession,
+  type IAssetVariantDiffSessionFactory,
+  type IAssetVariantDiffSessionOptions,
+} from './editor/AssetVariantDiffSession';
+export { AssetVariantDiffSessionFactory } from './editor/AssetVariantDiffSessionFactory';
 
 // =============================================================================
 // Module Initialization
@@ -21,6 +29,7 @@ import {
   AssetVariantDiffEditorProvider,
   AssetVariantDiffFileSystemProvider,
 } from './editor/AssetVariantDiffEditorProvider';
+import type { IAssetVariantDiffSessionFactory } from './editor/AssetVariantDiffSession';
 
 /**
  * Initialize the asset diff module
@@ -34,6 +43,7 @@ export function initializeAssetDiff(
     variantIdA: string,
     variantIdB: string,
   ) => Promise<VariantComparisonResult>,
+  sessionFactory?: IAssetVariantDiffSessionFactory,
 ): AssetVariantDiffEditorProvider {
   // Register file system provider for virtual documents
   const fsProvider = new AssetVariantDiffFileSystemProvider();
@@ -45,7 +55,12 @@ export function initializeAssetDiff(
   );
 
   // Create and register the editor provider
-  const editorProvider = new AssetVariantDiffEditorProvider(context, getEntity, compareVariants);
+  const editorProvider = new AssetVariantDiffEditorProvider(
+    context,
+    getEntity,
+    compareVariants,
+    sessionFactory,
+  );
 
   // Register custom editor
   context.subscriptions.push(

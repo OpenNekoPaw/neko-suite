@@ -25,9 +25,11 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { MediaDiffService, getMediaDiffService, disposeMediaDiffService } from './MediaDiffService';
+import { MediaDiffService } from './MediaDiffService';
 import { AnalyzerRegistry, type IMediaDiffAnalyzer } from './analyzers/IMediaDiffAnalyzer';
 import type { DiffResult, DiffOptions, MediaType } from '@neko/shared';
+import type { IScheduler } from '../../contracts/IScheduler';
+import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 
 // =============================================================================
 // Mock Analyzer
@@ -112,6 +114,29 @@ const createMockGitService = () => ({
   isTracked: vi.fn().mockResolvedValue(true),
   dispose: vi.fn(),
 });
+
+const createMockScheduler = (): IScheduler => ({
+  scheduleOnce: vi.fn((callback: () => void, delayMs: number) => {
+    const handle = setTimeout(callback, delayMs);
+    return {
+      cancel: vi.fn(() => clearTimeout(handle)),
+    };
+  }),
+  wait: vi.fn((delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs))),
+});
+
+const createMockWorkspaceIO = (): IWorkspaceIO =>
+  ({
+    readFile: vi.fn().mockResolvedValue(new Uint8Array(Buffer.from('local-file'))),
+    stat: vi.fn(),
+    findFiles: vi.fn(),
+    createFileSystemWatcher: vi.fn(),
+    getTextDocuments: vi.fn().mockReturnValue([]),
+    getVisibleTextEditors: vi.fn().mockReturnValue([]),
+    onDidOpenTextDocument: vi.fn(),
+    onDidChangeTextDocument: vi.fn(),
+    onDidCloseTextDocument: vi.fn(),
+  }) as unknown as IWorkspaceIO;
 
 // =============================================================================
 // AnalyzerRegistry Tests
@@ -226,11 +251,20 @@ describe('MediaDiffService', () => {
   let service: MediaDiffService;
   let mockGitService: ReturnType<typeof createMockGitService>;
   let mockRegistry: AnalyzerRegistry;
+  let mockWorkspaceIO: IWorkspaceIO;
+  let mockScheduler: IScheduler;
 
   beforeEach(() => {
     mockGitService = createMockGitService();
     mockRegistry = new AnalyzerRegistry();
-    service = new MediaDiffService(mockGitService as any, mockRegistry);
+    mockWorkspaceIO = createMockWorkspaceIO();
+    mockScheduler = createMockScheduler();
+    service = new MediaDiffService(
+      mockGitService as any,
+      mockRegistry,
+      mockWorkspaceIO,
+      mockScheduler,
+    );
   });
 
   afterEach(() => {
@@ -284,6 +318,24 @@ describe('MediaDiffService', () => {
     });
   });
 
+  describe('getLocalFileVersions', () => {
+    it('should read both files through workspace IO', async () => {
+      const currentUri = { fsPath: '/test/current.png' } as any;
+      const previousUri = { fsPath: '/test/previous.png' } as any;
+      const readFile = vi
+        .mocked(mockWorkspaceIO.readFile)
+        .mockResolvedValueOnce(new Uint8Array(Buffer.from('current')))
+        .mockResolvedValueOnce(new Uint8Array(Buffer.from('previous')));
+
+      const result = await service.getLocalFileVersions(currentUri, previousUri);
+
+      expect(readFile).toHaveBeenCalledWith(currentUri);
+      expect(readFile).toHaveBeenCalledWith(previousUri);
+      expect(Buffer.from(result.current).toString()).toContain('current');
+      expect(Buffer.from(result.previous).toString()).toContain('previous');
+    });
+  });
+
   describe('cancel', () => {
     it('should cancel registry analyzers', () => {
       const cancelSpy = vi.spyOn(mockRegistry, 'cancelAll');
@@ -306,30 +358,5 @@ describe('MediaDiffService', () => {
       expect(gitDisposeSpy).toHaveBeenCalled();
       expect(registryClearSpy).toHaveBeenCalled();
     });
-  });
-});
-
-// =============================================================================
-// Singleton Tests
-// =============================================================================
-
-describe('MediaDiffService Singleton', () => {
-  afterEach(() => {
-    disposeMediaDiffService();
-  });
-
-  it('should return same instance', () => {
-    const instance1 = getMediaDiffService();
-    const instance2 = getMediaDiffService();
-
-    expect(instance1).toBe(instance2);
-  });
-
-  it('should create new instance after dispose', () => {
-    const instance1 = getMediaDiffService();
-    disposeMediaDiffService();
-    const instance2 = getMediaDiffService();
-
-    expect(instance1).not.toBe(instance2);
   });
 });

@@ -5,6 +5,7 @@
  * Implementations are in sibling files; providers depend only on these interfaces.
  */
 
+import type * as vscode from 'vscode';
 import type {
   DiagnosticEntry,
   JviParsedProject,
@@ -58,7 +59,7 @@ export interface IMediaProbeCache {
 
 // ─── Workspace Index (Phase 2) ──────────────────────────────────────────────
 
-export interface IMediaWorkspaceIndex {
+export interface IMediaWorkspaceIndex extends vscode.Disposable {
   ensureInitialized(): Promise<void>;
 
   /** Returns the cached parsed project for a JVI URI, or undefined */

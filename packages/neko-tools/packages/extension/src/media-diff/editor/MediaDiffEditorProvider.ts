@@ -13,14 +13,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getMediaType } from '@neko/shared';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
-import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
-import { MediaDiffService, type IMediaDiffService } from '../services/MediaDiffService';
-import { EngineMediaService } from '../../services/EngineMediaService';
+import type { IMediaDiffService } from '../services/MediaDiffService';
 import {
   type IMediaDiffEditorSessionFactory,
   type IMediaDiffEditorSession,
 } from './MediaDiffEditorSession';
-import { MediaDiffEditorSessionFactory } from './MediaDiffEditorSessionFactory';
 
 // Storage key for persisting local compare files
 const LOCAL_COMPARE_FILES_KEY = 'mediaDiff.localCompareFiles';
@@ -40,20 +37,16 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
   private activeSessions: Map<string, IMediaDiffEditorSession> = new Map();
   /** Map from document URI to the previous file URI for local comparison */
   private localCompareFiles: Map<string, vscode.Uri> = new Map();
+  private isDisposed = false;
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    diffService?: IMediaDiffService,
-    engineMediaService?: IEngineMediaService,
-    sessionFactory?: IMediaDiffEditorSessionFactory,
+    diffService: IMediaDiffService,
+    sessionFactory: IMediaDiffEditorSessionFactory,
   ) {
-    this.diffService = diffService ?? new MediaDiffService();
-    this.sessionFactory =
-      sessionFactory ??
-      new MediaDiffEditorSessionFactory(
-        this.diffService,
-        engineMediaService ?? new EngineMediaService(),
-      );
+    this.diffService = diffService;
+    this.sessionFactory = sessionFactory;
     // Restore persisted local compare files
     this.restoreLocalCompareFiles();
   }
@@ -166,11 +159,24 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       documentUri: document.uri,
       previousUri,
     });
+
+    if (this.isDisposed) {
+      await session.disposeAsync();
+      return;
+    }
+
     this.activeSessions.set(docUri, session);
     session.attach(() => {
       this.activeSessions.delete(docUri);
     });
-    await session.start(requiresRecompare);
+
+    try {
+      await session.start(requiresRecompare);
+    } catch (error) {
+      this.activeSessions.delete(docUri);
+      await session.disposeAsync();
+      throw error;
+    }
   }
 
   /**
@@ -232,11 +238,28 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
 </html>`;
   }
 
+  async disposeAsync(): Promise<void> {
+    this.disposePromise ??= this.disposeInternal();
+    return this.disposePromise;
+  }
+
   dispose(): void {
-    for (const session of this.activeSessions.values()) {
-      session.dispose();
+    void this.disposeAsync();
+  }
+
+  private async disposeInternal(): Promise<void> {
+    if (this.isDisposed) {
+      return;
     }
+
+    this.isDisposed = true;
+
+    const sessions = [...this.activeSessions.values()];
     this.activeSessions.clear();
+
+    await Promise.allSettled(sessions.map((session) => session.disposeAsync()));
+
+    this.sessionFactory.dispose();
     this.diffService.dispose();
     this.localCompareFiles.clear();
   }

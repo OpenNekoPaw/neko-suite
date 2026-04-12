@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
-import { initializeAssetDiff } from '../asset-diff';
 import type { ServiceCollection } from '../base/serviceCollection';
-import { initializeMediaDiff, disposeMediaDiffService } from '../media-diff';
-import { initializeMediaLsp } from '../media-lsp';
 import { bootstrapCoreServices } from './bootstrapCoreServices';
+import { bootstrapAssetDiff } from './bootstrapAssetDiff';
+import { bootstrapMediaDiff } from './bootstrapMediaDiff';
+import { bootstrapMediaLsp } from './bootstrapMediaLsp';
 import { registerNekoToolsCommands } from './registerCommands';
 
 export interface INekoToolsExtensionActivation extends vscode.Disposable {
   services: ServiceCollection;
+  disposeAsync(): Promise<void>;
 }
 
 export function bootstrapNekoToolsExtension(
@@ -15,13 +16,25 @@ export function bootstrapNekoToolsExtension(
 ): INekoToolsExtensionActivation {
   const coreServices = bootstrapCoreServices(context);
 
-  initializeMediaDiff(context, coreServices.engineMediaService);
-  initializeMediaLsp(context, coreServices.engineMediaService);
-  initializeAssetDiff(
+  const mediaDiffProvider = bootstrapMediaDiff(
     context,
-    async (entityId) => coreServices.assetEntityReader.getEntity(entityId),
-    async (entityId, variantIdA, variantIdB) =>
-      coreServices.variantComparisonService.compare(entityId, variantIdA, variantIdB),
+    coreServices.services,
+    coreServices.engineMediaService,
+    coreServices.workspaceIO,
+    coreServices.scheduler,
+    coreServices.tempFileService,
+  );
+  bootstrapMediaLsp(
+    context,
+    coreServices.services,
+    coreServices.engineMediaService,
+    coreServices.workspaceIO,
+    coreServices.scheduler,
+  );
+  bootstrapAssetDiff(
+    context,
+    coreServices.assetEntityReader,
+    coreServices.variantComparisonService,
   );
 
   registerNekoToolsCommands(context, {
@@ -34,9 +47,12 @@ export function bootstrapNekoToolsExtension(
 
   return {
     services: coreServices.services,
-    dispose() {
-      disposeMediaDiffService();
+    async disposeAsync() {
+      await mediaDiffProvider.disposeAsync();
       coreServices.dispose();
+    },
+    dispose() {
+      void this.disposeAsync();
     },
   };
 }

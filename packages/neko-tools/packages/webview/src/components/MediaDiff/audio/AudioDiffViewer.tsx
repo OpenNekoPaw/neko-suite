@@ -10,6 +10,7 @@ import { OverlayWaveform } from './OverlayWaveform';
 import { ThreeTrackWaveform } from './ThreeTrackWaveform';
 import { AudioPlayerControls } from './AudioPlayerControls';
 import { AudioDetails } from './AudioDetails';
+import { useAudioDiffPlayback } from '../../../hooks/useAudioDiffPlayback';
 
 export const AudioDiffViewer = memo(function AudioDiffViewer({
   viewMode,
@@ -58,6 +59,28 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
     setScrollOffset(offset);
   }, []);
 
+  const { isPlaying, togglePlayback, seekTo } = useAudioDiffPlayback({
+    audioStreamConfig: audioStreamConfig ?? null,
+    playingVersion: localPlayingVersion,
+    onTimeChange: handleTimeChange,
+    onAudioStreamControl,
+  });
+
+  const displayCurrentWaveform = useMemo(
+    () =>
+      currentWaveform.length > 0
+        ? currentWaveform
+        : Array.from({ length: 100 }, () => Math.random()),
+    [currentWaveform],
+  );
+  const displayPreviousWaveform = useMemo(
+    () =>
+      previousWaveform.length > 0
+        ? previousWaveform
+        : Array.from({ length: 100 }, () => Math.random()),
+    [previousWaveform],
+  );
+
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center text-red-400">
@@ -81,21 +104,6 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
       </div>
     );
   }
-
-  const displayCurrentWaveform = useMemo(
-    () =>
-      currentWaveform.length > 0
-        ? currentWaveform
-        : Array.from({ length: 100 }, () => Math.random()),
-    [currentWaveform],
-  );
-  const displayPreviousWaveform = useMemo(
-    () =>
-      previousWaveform.length > 0
-        ? previousWaveform
-        : Array.from({ length: 100 }, () => Math.random()),
-    [previousWaveform],
-  );
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -128,13 +136,13 @@ export const AudioDiffViewer = memo(function AudioDiffViewer({
         />
       )}
       <AudioPlayerControls
-        audioStreamConfig={audioStreamConfig ?? null}
         currentTime={localTime}
         duration={duration}
+        isPlaying={isPlaying}
         playingVersion={localPlayingVersion}
         onPlayingVersionChange={handlePlayingVersionChange}
-        onTimeChange={handleTimeChange}
-        onAudioStreamControl={onAudioStreamControl}
+        onPlayPause={togglePlayback}
+        onSeek={seekTo}
         isFetchingPrevious={isFetchingPrevious}
       />
       <AudioDetails details={details} />

@@ -10,15 +10,10 @@
  * 3. Reset H264 decoders — start clean from next keyframe
  */
 
-import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { AudioStreamClient, H264StreamClient } from '@neko/neko-client';
-import { FramePairBuffer } from './FramePairBuffer';
-import { DiffRenderer, type DiffMode } from './DiffRenderer';
+import { useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
+import type { DiffMode } from './DiffRenderer';
 import type { StreamConfig } from '@neko/shared';
-import { useMediaDiffRuntime } from '../../../runtime/MediaDiffRuntimeContext';
-
-const logger = new ConsoleLogger('StreamingVideoDiff', LogLevel.Info);
+import { useVideoDiffStreaming } from '../../../hooks/useVideoDiffStreaming';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -54,11 +49,6 @@ export interface StreamingVideoDiffViewerHandle {
   resumeAudio(): void;
 }
 
-// ─── Seek filter tolerance (seconds) ─────────────────────────────────────────
-// Frames arriving with PTS more than this far from seek target are rejected.
-// Matches neko-preview's 2-second tolerance.
-const SEEK_FILTER_TOLERANCE_SEC = 2.0;
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export const StreamingVideoDiffViewer = memo(
@@ -76,260 +66,25 @@ export const StreamingVideoDiffViewer = memo(
       },
       ref,
     ) {
-      const { streamClientFactory } = useMediaDiffRuntime();
       const canvasRef = useRef<HTMLCanvasElement>(null);
-      const rendererRef = useRef<DiffRenderer | null>(null);
-      const bufferRef = useRef<FramePairBuffer | null>(null);
-      const clientARef = useRef<H264StreamClient | null>(null);
-      const clientBRef = useRef<H264StreamClient | null>(null);
-      const audioClientRef = useRef<AudioStreamClient | null>(null);
       const containerRef = useRef<HTMLDivElement>(null);
 
       // ── Slider drag state ────────────────────────────────────────────────
       const isDraggingRef = useRef(false);
 
-      // ── Seek filter state (neko-preview pattern) ─────────────────────────
-      // When set, onFrame rejects stale pre-seek frames whose PTS is far
-      // from the target. Cleared when the first valid post-seek frame arrives.
-      const seekFilterRef = useRef<number | null>(null);
+      const streaming = useVideoDiffStreaming({
+        canvasRef,
+        streamConfig,
+        diffMode,
+        sliderPosition,
+        onTimeUpdate,
+        onError,
+        audioContext,
+        onStreamEnd,
+      });
 
       // ── Expose seek handle to parent ─────────────────────────────────────
-      useImperativeHandle(
-        ref,
-        () => ({
-          seek(time: number) {
-            // 1. Arm seek filter — reject stale WebSocket-buffered frames
-            seekFilterRef.current = time;
-            // 2. Flush FramePairBuffer — discard queued frames
-            bufferRef.current?.flush();
-            // 3. Reset H264 decoders — start clean from next keyframe
-            clientARef.current?.resetDecoder();
-            clientBRef.current?.resetDecoder();
-            // 4. Reset audio clock for seek
-            audioClientRef.current?.resetClock();
-          },
-          async renderStaticPair(blobUrlA: string, blobUrlB: string) {
-            const renderer = rendererRef.current;
-            if (!renderer) return;
-            const [blobA, blobB] = await Promise.all([
-              fetch(blobUrlA).then((r) => r.blob()),
-              fetch(blobUrlB).then((r) => r.blob()),
-            ]);
-            const [bitmapA, bitmapB] = await Promise.all([
-              createImageBitmap(blobA),
-              createImageBitmap(blobB),
-            ]);
-            // renderPair accepts DiffFrame (VideoFrame | ImageBitmap) and closes them
-            renderer.renderPair(bitmapA, bitmapB);
-          },
-          pauseAudio() {
-            audioClientRef.current?.pause();
-          },
-          resumeAudio() {
-            audioClientRef.current?.resume();
-          },
-        }),
-        [],
-      );
-
-      // ── Setup streaming pipeline ─────────────────────────────────────────
-      useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const {
-          port,
-          currentStreamId,
-          previousStreamId,
-          currentAudioStreamId,
-          width,
-          height,
-          fps,
-        } = streamConfig;
-
-        logger.debug('Pipeline setup', {
-          port,
-          currentStreamId,
-          previousStreamId,
-          width,
-          height,
-          fps,
-        });
-
-        // 1. Create DiffRenderer (WebGL)
-        const renderer = new DiffRenderer({ canvas, width, height });
-        renderer.setMode(diffMode);
-        renderer.setSliderPosition(sliderPosition);
-        rendererRef.current = renderer;
-
-        // 2. Create FramePairBuffer
-        const halfFrameUs = 1_000_000 / fps / 2; // half-frame tolerance in microseconds
-        let pairCount = 0;
-        let singleCount = 0;
-        const buffer = new FramePairBuffer({
-          toleranceUs: halfFrameUs,
-          maxBufferSize: 10,
-          onPair: (pair) => {
-            pairCount++;
-            if (pairCount <= 3 || pairCount % 30 === 0) {
-              logger.debug(`Pair #${pairCount}`, {
-                ptsA: pair.frameA.timestamp,
-                ptsB: pair.frameB.timestamp,
-              });
-            }
-            renderer.renderPair(pair.frameA, pair.frameB);
-            // Report current time from frame PTS
-            const timeSec = pair.frameA.timestamp / 1_000_000;
-            onTimeUpdate?.(timeSec);
-          },
-          onSingle: (frame, side) => {
-            singleCount++;
-            if (singleCount <= 3 || singleCount % 30 === 0) {
-              logger.debug(`Single #${singleCount}`, { side, pts: frame.timestamp });
-            }
-            renderer.renderSingle(frame, side);
-            // Report current time
-            const timeSec = frame.timestamp / 1_000_000;
-            onTimeUpdate?.(timeSec);
-          },
-        });
-        bufferRef.current = buffer;
-
-        // 3. Create H264 stream clients with seek-filter-aware onFrame callbacks
-        const baseUrl = `ws://127.0.0.1:${port}/v1/streams`;
-
-        const filterFrame = (frame: VideoFrame, feed: (f: VideoFrame) => void) => {
-          const seekTarget = seekFilterRef.current;
-          if (seekTarget !== null) {
-            const frameSec = frame.timestamp / 1_000_000;
-            if (Math.abs(frameSec - seekTarget) > SEEK_FILTER_TOLERANCE_SEC) {
-              // Stale pre-seek frame — discard
-              frame.close();
-              return;
-            }
-            // First valid frame near seek target — disable filter
-            seekFilterRef.current = null;
-          }
-          feed(frame);
-        };
-
-        let frameCountA = 0;
-        let frameCountB = 0;
-
-        const clientA = streamClientFactory.createVideoStreamClient({
-          websocketUrl: `${baseUrl}/${currentStreamId}`,
-          width,
-          height,
-          onFrame: (frame) => {
-            frameCountA++;
-            if (frameCountA <= 5 || frameCountA % 60 === 0) {
-              logger.debug(`Frame A #${frameCountA}`, {
-                pts: frame.timestamp,
-                size: `${frame.displayWidth}x${frame.displayHeight}`,
-              });
-            }
-            filterFrame(frame, (f) => buffer.feedA(f));
-          },
-          onError: (err) => {
-            logger.error('Stream A error', err);
-            onError?.(err.message);
-          },
-          onConnectionChange: (connected) => {
-            logger.debug(`Stream A connection: ${connected ? 'OPEN' : 'CLOSED'}`);
-          },
-          onStreamEnd: () => {
-            logger.debug('Stream A ended (EOF)');
-            buffer.markEndOfStream('A');
-            onStreamEnd?.();
-          },
-        });
-
-        const clientB = streamClientFactory.createVideoStreamClient({
-          websocketUrl: `${baseUrl}/${previousStreamId}`,
-          width,
-          height,
-          onFrame: (frame) => {
-            frameCountB++;
-            if (frameCountB <= 5 || frameCountB % 60 === 0) {
-              logger.debug(`Frame B #${frameCountB}`, {
-                pts: frame.timestamp,
-                size: `${frame.displayWidth}x${frame.displayHeight}`,
-              });
-            }
-            filterFrame(frame, (f) => buffer.feedB(f));
-          },
-          onError: (err) => {
-            logger.error('Stream B error', err);
-            onError?.(err.message);
-          },
-          onConnectionChange: (connected) => {
-            logger.debug(`Stream B connection: ${connected ? 'OPEN' : 'CLOSED'}`);
-          },
-          onStreamEnd: () => {
-            logger.debug('Stream B ended (EOF)');
-            buffer.markEndOfStream('B');
-            onStreamEnd?.();
-          },
-        });
-
-        clientARef.current = clientA;
-        clientBRef.current = clientB;
-
-        // 4. Connect both video streams
-        void clientA.connect();
-        void clientB.connect();
-
-        // 5. Create AudioStreamClient if audio track exists
-        logger.debug('Audio setup', {
-          currentAudioStreamId,
-          hasAudioContext: !!audioContext,
-          audioContextState: audioContext?.state,
-        });
-        if (currentAudioStreamId) {
-          const audioClient = streamClientFactory.createAudioStreamClient({
-            websocketUrl: `${baseUrl}/${currentAudioStreamId}`,
-            volume: 1.0,
-            onError: (err) => {
-              logger.error('Audio error', err);
-            },
-            onConnectionChange: (connected) => {
-              logger.debug(`Audio connection: ${connected ? 'OPEN' : 'CLOSED'}`);
-            },
-            onStreamEnd: () => {
-              logger.debug('Audio stream ended (EOF)');
-            },
-          });
-          audioClientRef.current = audioClient;
-          void audioClient.connect(audioContext);
-        } else {
-          logger.debug('No audio stream ID — skipping audio');
-        }
-
-        // 6. Cleanup
-        return () => {
-          clientA.dispose();
-          clientB.dispose();
-          audioClientRef.current?.dispose();
-          buffer.dispose();
-          renderer.dispose();
-          clientARef.current = null;
-          clientBRef.current = null;
-          audioClientRef.current = null;
-          bufferRef.current = null;
-          rendererRef.current = null;
-          seekFilterRef.current = null;
-        };
-      }, [streamClientFactory, streamConfig]); // Re-create pipeline only when config changes
-
-      // ── Sync diff mode ───────────────────────────────────────────────────
-      useEffect(() => {
-        rendererRef.current?.setMode(diffMode);
-      }, [diffMode]);
-
-      // ── Sync slider position ─────────────────────────────────────────────
-      useEffect(() => {
-        rendererRef.current?.setSliderPosition(sliderPosition);
-      }, [sliderPosition]);
+      useImperativeHandle(ref, () => streaming, [streaming]);
 
       // ── Slider drag handlers (for curtain mode) ──────────────────────────
       const handlePointerDown = useCallback(

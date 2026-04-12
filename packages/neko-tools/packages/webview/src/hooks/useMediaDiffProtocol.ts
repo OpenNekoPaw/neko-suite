@@ -8,10 +8,10 @@
  * - Clean up Blob URLs on unmount
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { DiffResult, GitCommitInfo, StreamConfig, AudioStreamConfig } from '@neko/shared';
 import { useMediaDiffRuntime } from '../runtime/MediaDiffRuntimeContext';
-import type { InitialState } from '../components/MediaDiff/types';
+import type { ImmutableInitialState } from '../components/MediaDiff/types';
 
 // =============================================================================
 // State Interface
@@ -31,7 +31,7 @@ export interface MediaDiffProtocolState {
   previousFrameSrc: string | null;
   commits: GitCommitInfo[];
   elementThumbnails: Map<string, string>;
-  initialState: InitialState;
+  initialState: ImmutableInitialState;
   /** Stream config from extension (set when streaming is active) */
   streamConfig: StreamConfig | null;
   /** Stream error message */
@@ -119,11 +119,6 @@ function nextRequestId(): string {
   return `req-${Date.now()}-${++requestCounter}`;
 }
 
-function arrayBufferToBlobUrl(buffer: ArrayBuffer, mimeType: string): string {
-  const blob = new Blob([buffer], { type: mimeType });
-  return URL.createObjectURL(blob);
-}
-
 function isMediaDiffIncomingMessage(message: unknown): message is MediaDiffIncomingMessage {
   return (
     typeof message === 'object' &&
@@ -157,7 +152,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
   sendAudioStreamControl: (action: 'play' | 'pause' | 'seek', payload?: { time?: number }) => void;
   sendSetTimeRange: (startTime?: number, endTime?: number) => void;
 } {
-  const { bridge, initialState } = useMediaDiffRuntime();
+  const { bridge, initialState, blobUrlRegistry } = useMediaDiffRuntime();
   const [state, setState] = useState<MediaDiffProtocolState>(() => ({
     diffResult: null,
     isLoading: false,
@@ -179,20 +174,17 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     isFetchingPrevious: false,
   }));
 
-  // Track Blob URLs for cleanup
-  const blobUrlsRef = useRef<string[]>([]);
+  const revokeBlobUrl = useCallback(
+    (url: string | null) => {
+      blobUrlRegistry.revokeObjectUrl(url);
+    },
+    [blobUrlRegistry],
+  );
 
-  const trackBlobUrl = useCallback((url: string) => {
-    blobUrlsRef.current.push(url);
-    return url;
-  }, []);
-
-  const revokeBlobUrl = useCallback((url: string | null) => {
-    if (url) {
-      URL.revokeObjectURL(url);
-      blobUrlsRef.current = blobUrlsRef.current.filter((u) => u !== url);
-    }
-  }, []);
+  const createBlobUrl = useCallback(
+    (buffer: ArrayBuffer, mimeType: string) => blobUrlRegistry.createObjectUrl(buffer, mimeType),
+    [blobUrlRegistry],
+  );
 
   // =========================================================================
   // Message listener
@@ -247,13 +239,9 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
             const mime = mimeType ?? 'image/png';
             return {
               ...prev,
-              currentImageSrc: currentImage
-                ? trackBlobUrl(arrayBufferToBlobUrl(currentImage, mime))
-                : null,
-              previousImageSrc: previousImage
-                ? trackBlobUrl(arrayBufferToBlobUrl(previousImage, mime))
-                : null,
-              heatmapSrc: heatmap ? trackBlobUrl(arrayBufferToBlobUrl(heatmap, 'image/png')) : null,
+              currentImageSrc: currentImage ? createBlobUrl(currentImage, mime) : null,
+              previousImageSrc: previousImage ? createBlobUrl(previousImage, mime) : null,
+              heatmapSrc: heatmap ? createBlobUrl(heatmap, 'image/png') : null,
             };
           });
           break;
@@ -274,7 +262,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
             revokeBlobUrl(prev[key]);
             return {
               ...prev,
-              [key]: trackBlobUrl(arrayBufferToBlobUrl(imageBuffer, 'image/jpeg')),
+              [key]: createBlobUrl(imageBuffer, 'image/jpeg'),
             };
           });
           break;
@@ -293,7 +281,7 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
             const next = new Map(prev.elementThumbnails);
             const oldUrl = next.get(src);
             if (oldUrl) revokeBlobUrl(oldUrl);
-            next.set(src, trackBlobUrl(arrayBufferToBlobUrl(imageBuffer, 'image/jpeg')));
+            next.set(src, createBlobUrl(imageBuffer, 'image/jpeg'));
             return { ...prev, elementThumbnails: next };
           });
           break;
@@ -334,14 +322,12 @@ export function useMediaDiffProtocol(): MediaDiffProtocolState & {
     });
 
     return unsubscribe;
-  }, [bridge, trackBlobUrl, revokeBlobUrl]);
+  }, [bridge, createBlobUrl, revokeBlobUrl]);
 
   // Cleanup all Blob URLs on unmount
   useEffect(() => {
-    return () => {
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, []);
+    return () => blobUrlRegistry.revokeAll();
+  }, [blobUrlRegistry]);
 
   // =========================================================================
   // Send methods (Webview → Extension)

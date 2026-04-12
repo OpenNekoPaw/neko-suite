@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
+import type { ITempFileService } from '../../../contracts/ITempFileService';
 import { ImageDiffAnalyzer } from './ImageDiffAnalyzer';
 
 // =============================================================================
@@ -18,16 +20,10 @@ vi.mock('vscode', () => ({
 }));
 
 // =============================================================================
-// Mock EngineMediaService
+// Mock analyzer dependencies
 // =============================================================================
 
 const mockDiff = vi.fn();
-
-vi.mock('../../../services/EngineMediaService', () => ({
-  EngineMediaService: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    this.diff = mockDiff;
-  }),
-}));
 
 // =============================================================================
 // Test Suite
@@ -35,10 +31,26 @@ vi.mock('../../../services/EngineMediaService', () => ({
 
 describe('ImageDiffAnalyzer', () => {
   let analyzer: ImageDiffAnalyzer;
+  let engineMediaService: IEngineMediaService;
+  let tempFileService: ITempFileService;
 
   beforeEach(() => {
-    analyzer = new ImageDiffAnalyzer();
     mockDiff.mockReset();
+    engineMediaService = {
+      ensureClient: vi.fn(),
+      diff: mockDiff,
+      detectSilence: vi.fn(),
+      probe: vi.fn(),
+    };
+    tempFileService = {
+      createTempPath: vi.fn(),
+      writeTempFile: vi
+        .fn()
+        .mockResolvedValueOnce('/tmp/current.png')
+        .mockResolvedValueOnce('/tmp/previous.png'),
+      deleteTempFile: vi.fn().mockResolvedValue(undefined),
+    };
+    analyzer = new ImageDiffAnalyzer(engineMediaService, tempFileService);
   });
 
   afterEach(() => {
@@ -142,6 +154,7 @@ describe('ImageDiffAnalyzer', () => {
       expect(result).toHaveProperty('mediaType', 'image');
       expect(result).toHaveProperty('similarity');
       expect(result.similarity).toBeCloseTo(0.85, 1);
+      expect(mockDiff).toHaveBeenCalledWith('images', '/tmp/current.png', '/tmp/previous.png');
     });
 
     it('should throw when engine is unavailable', async () => {

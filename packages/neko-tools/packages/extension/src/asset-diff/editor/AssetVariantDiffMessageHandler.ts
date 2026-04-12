@@ -13,6 +13,7 @@ import type {
   VariantAttributes,
 } from '@neko/shared';
 import { getLogger } from '../../utils/logger';
+import type { IAssetVariantDiffMessageHandler } from './AssetVariantDiffSession';
 
 const logger = getLogger('AssetVariantDiffMessageHandler');
 
@@ -50,7 +51,7 @@ interface AttributeDiff {
 // Handler Implementation
 // =============================================================================
 
-export class AssetVariantDiffMessageHandler implements vscode.Disposable {
+export class AssetVariantDiffMessageHandler implements IAssetVariantDiffMessageHandler {
   private isDisposed = false;
 
   constructor(

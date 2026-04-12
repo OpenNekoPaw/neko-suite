@@ -9,6 +9,7 @@
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
+import { useMediaDiffRuntime } from '../../runtime/MediaDiffRuntimeContext';
 
 const logger = new ConsoleLogger('VideoDiffViewer', LogLevel.Info);
 import type { VideoDiffViewerProps } from './types';
@@ -278,6 +279,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   error,
 }: VideoDiffViewerProps) {
   const { t } = useTranslation();
+  const { audioContextFactory } = useMediaDiffRuntime();
   const [localTime, setLocalTime] = useState(currentTime);
   const [localSliderPosition, setLocalSliderPosition] = useState(sliderPosition);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -328,12 +330,12 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
 
   const handlePlayPause = useCallback(() => {
     // Pre-create AudioContext during user gesture to satisfy autoplay policy
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext({ sampleRate: 48000 });
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+      audioContextRef.current = audioContextFactory.create({ sampleRate: 48000 });
     }
     // Resume AudioContext if it was suspended (browser autoplay policy)
     if (audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume().catch(() => {});
+      audioContextFactory.resume(audioContextRef.current).catch(() => {});
     }
     setIsPlaying((prev) => {
       const next = !prev;
@@ -350,7 +352,17 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
       }
       return next;
     });
-  }, [onStreamControl, onTimeChange, localTime, streamConfig]);
+  }, [audioContextFactory, onStreamControl, onTimeChange, localTime, streamConfig]);
+
+  useEffect(() => {
+    return () => {
+      const audioContext = audioContextRef.current;
+      if (audioContext) {
+        void audioContextFactory.close(audioContext).catch(() => {});
+        audioContextRef.current = null;
+      }
+    };
+  }, [audioContextFactory]);
 
   // Handle stream end (one video finished) — do NOT auto-pause,
   // the longer video continues rendering via renderSingle

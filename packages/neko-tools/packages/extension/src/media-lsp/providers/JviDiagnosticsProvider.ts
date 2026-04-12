@@ -9,6 +9,8 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import type { IScheduledTask, IScheduler } from '../../contracts/IScheduler';
+import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 import { parseJviDocument } from '../services/JviParser';
 import { checkStructure, checkReferences } from '../services/JviDiagnosticAnalyzer';
 import type { DiagnosticEntry } from '../types';
@@ -21,37 +23,39 @@ const DEBOUNCE_MS = 300;
 export class JviDiagnosticsProvider implements vscode.Disposable {
   private readonly collection: vscode.DiagnosticCollection;
   private readonly disposables: vscode.Disposable[] = [];
-  private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly debounceTasks = new Map<string, IScheduledTask>();
 
   constructor(
     private readonly engineService: IEngineMediaService | undefined,
     private readonly probeCache: IMediaProbeCache,
+    private readonly workspaceIO: IWorkspaceIO,
+    private readonly scheduler: IScheduler,
   ) {
     this.collection = vscode.languages.createDiagnosticCollection('nekotools-jvi');
   }
 
   activate(): void {
     // Analyze already-open documents
-    for (const editor of vscode.window.visibleTextEditors) {
+    for (const editor of this.workspaceIO.getVisibleTextEditors()) {
       if (this.isJvi(editor.document)) {
         void this.analyzeDocument(editor.document);
       }
     }
 
     this.disposables.push(
-      vscode.workspace.onDidOpenTextDocument((doc) => {
+      this.workspaceIO.onDidOpenTextDocument((doc) => {
         if (this.isJvi(doc)) void this.analyzeDocument(doc);
       }),
-      vscode.workspace.onDidChangeTextDocument((e) => {
+      this.workspaceIO.onDidChangeTextDocument((e) => {
         if (this.isJvi(e.document)) this.scheduleAnalysis(e.document);
       }),
-      vscode.workspace.onDidCloseTextDocument((doc) => {
+      this.workspaceIO.onDidCloseTextDocument((doc) => {
         this.collection.delete(doc.uri);
         const key = doc.uri.toString();
-        const timer = this.debounceTimers.get(key);
-        if (timer) {
-          clearTimeout(timer);
-          this.debounceTimers.delete(key);
+        const task = this.debounceTasks.get(key);
+        if (task) {
+          task.cancel();
+          this.debounceTasks.delete(key);
         }
       }),
     );
@@ -63,12 +67,11 @@ export class JviDiagnosticsProvider implements vscode.Disposable {
 
   private scheduleAnalysis(doc: vscode.TextDocument): void {
     const key = doc.uri.toString();
-    const existing = this.debounceTimers.get(key);
-    if (existing) clearTimeout(existing);
-    this.debounceTimers.set(
+    this.debounceTasks.get(key)?.cancel();
+    this.debounceTasks.set(
       key,
-      setTimeout(() => {
-        this.debounceTimers.delete(key);
+      this.scheduler.scheduleOnce(() => {
+        this.debounceTasks.delete(key);
         void this.analyzeDocument(doc);
       }, DEBOUNCE_MS),
     );
@@ -136,7 +139,7 @@ export class JviDiagnosticsProvider implements vscode.Disposable {
 
   private async fileExists(absolutePath: string): Promise<boolean> {
     try {
-      await vscode.workspace.fs.stat(vscode.Uri.file(absolutePath));
+      await this.workspaceIO.stat(vscode.Uri.file(absolutePath));
       return true;
     } catch {
       return false;
@@ -165,8 +168,8 @@ export class JviDiagnosticsProvider implements vscode.Disposable {
 
   dispose(): void {
     this.collection.dispose();
-    for (const timer of this.debounceTimers.values()) clearTimeout(timer);
-    this.debounceTimers.clear();
+    for (const task of this.debounceTasks.values()) task.cancel();
+    this.debounceTasks.clear();
     this.disposables.forEach((d) => d.dispose());
   }
 }

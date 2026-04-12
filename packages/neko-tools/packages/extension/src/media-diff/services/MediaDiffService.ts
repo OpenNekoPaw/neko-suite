@@ -23,6 +23,8 @@ import {
 } from '@neko/shared';
 import { GitMediaService, type IGitMediaService } from './GitMediaService';
 import { AnalyzerRegistry, type IMediaDiffAnalyzer } from './analyzers/IMediaDiffAnalyzer';
+import type { IScheduler } from '../../contracts/IScheduler';
+import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 
 // =============================================================================
 // Service Interface
@@ -135,12 +137,21 @@ export interface IMediaDiffService extends vscode.Disposable {
 export class MediaDiffService implements IMediaDiffService {
   private readonly gitService: IGitMediaService;
   private readonly registry: AnalyzerRegistry;
+  private readonly workspaceIO: IWorkspaceIO;
+  private readonly scheduler: IScheduler;
   /** Track all active analyses for this service instance */
   private activeAnalyses = new Set<AbortController>();
 
-  constructor(gitService?: IGitMediaService, registry?: AnalyzerRegistry) {
+  constructor(
+    gitService: IGitMediaService | undefined,
+    registry: AnalyzerRegistry | undefined,
+    workspaceIO: IWorkspaceIO,
+    scheduler: IScheduler,
+  ) {
     this.gitService = gitService ?? new GitMediaService();
     this.registry = registry ?? new AnalyzerRegistry();
+    this.workspaceIO = workspaceIO;
+    this.scheduler = scheduler;
   }
 
   async analyze(
@@ -273,8 +284,8 @@ export class MediaDiffService implements IMediaDiffService {
     }
 
     const [currentBuffer, previousBuffer] = await Promise.all([
-      vscode.workspace.fs.readFile(currentUri),
-      vscode.workspace.fs.readFile(previousUri),
+      this.workspaceIO.readFile(currentUri),
+      this.workspaceIO.readFile(previousUri),
     ]);
 
     return {
@@ -436,43 +447,24 @@ export class MediaDiffService implements IMediaDiffService {
    * Wrap promise with timeout
    */
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error('Analysis timed out')), timeoutMs),
-      ),
-    ]);
+    let timeoutTask: ReturnType<IScheduler['scheduleOnce']> | null = null;
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutTask = this.scheduler.scheduleOnce(() => {
+        reject(new Error('Analysis timed out'));
+      }, timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      timeoutTask?.cancel();
+    }
   }
 
   dispose(): void {
     this.cancel();
     this.gitService.dispose();
     this.registry.clear();
-  }
-}
-
-// =============================================================================
-// Service Factory
-// =============================================================================
-
-let instance: MediaDiffService | null = null;
-
-/**
- * Get singleton instance of MediaDiffService
- */
-export function getMediaDiffService(): MediaDiffService {
-  if (!instance) {
-    instance = new MediaDiffService();
-  }
-  return instance;
-}
-
-/**
- * Dispose singleton instance
- */
-export function disposeMediaDiffService(): void {
-  if (instance) {
-    instance.dispose();
-    instance = null;
   }
 }

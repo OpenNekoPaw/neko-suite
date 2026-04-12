@@ -10,9 +10,15 @@ import type { IAssetEntityReader } from '../contracts/IAssetEntityReader';
 import type { IEngineMediaService } from '../contracts/IEngineMediaService';
 import type { IEngineRuntimeResolver } from '../contracts/IEngineRuntimeResolver';
 import type { IExtensionI18n } from '../contracts/IExtensionI18n';
+import type { IScheduler } from '../contracts/IScheduler';
+import type { ITempFileService } from '../contracts/ITempFileService';
 import type { IVariantComparisonService } from '../contracts/IVariantComparisonService';
+import type { IWorkspaceIO } from '../contracts/IWorkspaceIO';
 import { EngineMediaService } from '../services/EngineMediaService';
 import { VSCodeEngineRuntimeResolver } from '../services/EngineRuntimeResolver';
+import { DefaultScheduler } from '../services/Scheduler';
+import { DefaultTempFileService } from '../services/TempFileService';
+import { VSCodeWorkspaceIO } from '../services/WorkspaceIO';
 import { setErrorHandler } from '../utils/errorHandler';
 import { setRootLogger } from '../utils/logger';
 import {
@@ -21,6 +27,9 @@ import {
   IEngineRuntimeResolver as IEngineRuntimeResolverId,
   IExtensionErrorHandler,
   IExtensionI18n as IExtensionI18nId,
+  IScheduler as ISchedulerId,
+  ITempFileService as ITempFileServiceId,
+  IWorkspaceIO as IWorkspaceIOId,
   IRootLogger,
   IVariantComparisonService as IVariantComparisonServiceId,
 } from './serviceIds';
@@ -32,6 +41,9 @@ export interface ICoreServicesBootstrapResult extends vscode.Disposable {
   i18n: IExtensionI18n;
   engineRuntimeResolver: IEngineRuntimeResolver;
   engineMediaService: IEngineMediaService;
+  workspaceIO: IWorkspaceIO;
+  scheduler: IScheduler;
+  tempFileService: ITempFileService;
   assetEntityReader: IAssetEntityReader;
   variantComparisonService: IVariantComparisonService;
 }
@@ -107,6 +119,9 @@ export function bootstrapCoreServices(
   const i18n = new VscodeExtensionI18n();
   const engineRuntimeResolver = new VSCodeEngineRuntimeResolver();
   const engineMediaService = new EngineMediaService(engineRuntimeResolver);
+  const workspaceIO = new VSCodeWorkspaceIO();
+  const scheduler = new DefaultScheduler();
+  const tempFileService = new DefaultTempFileService();
   const assetEntityReader = new VscodeCommandAssetEntityReader();
   const variantComparisonService = new VscodeCommandVariantComparisonService();
 
@@ -118,6 +133,9 @@ export function bootstrapCoreServices(
   services.set(IExtensionI18nId, i18n);
   services.set(IEngineRuntimeResolverId, engineRuntimeResolver);
   services.set(IEngineMediaServiceId, engineMediaService);
+  services.set(IWorkspaceIOId, workspaceIO);
+  services.set(ISchedulerId, scheduler);
+  services.set(ITempFileServiceId, tempFileService);
   services.set(IAssetEntityReaderId, assetEntityReader);
   services.set(IVariantComparisonServiceId, variantComparisonService);
   setGlobalServices(services);
@@ -131,6 +149,9 @@ export function bootstrapCoreServices(
     i18n,
     engineRuntimeResolver,
     engineMediaService,
+    workspaceIO,
+    scheduler,
+    tempFileService,
     assetEntityReader,
     variantComparisonService,
     dispose() {

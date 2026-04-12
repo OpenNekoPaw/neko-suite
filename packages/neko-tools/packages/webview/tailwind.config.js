@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
+    "./assetDiff.html",
     "./mediaDiff.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],

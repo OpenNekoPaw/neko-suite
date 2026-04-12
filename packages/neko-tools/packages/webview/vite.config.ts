@@ -17,6 +17,7 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       input: {
+        assetDiff: path.resolve(__dirname, 'assetDiff.html'),
         mediaDiff: path.resolve(__dirname, 'mediaDiff.html'),
       },
       output: {

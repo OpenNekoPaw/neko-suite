@@ -55,30 +55,57 @@
 
 待完成：
 
-- `MediaDiffService` 模块级单例与 feature-level bootstrap 仍可进一步收口
-- `IWorkspaceIO` / `ITempFileService` / `IScheduler` 尚未抽象成统一基础设施
-- Webview 的 `blob registry` / `raf scheduler` / playback hooks 仍未完全独立
+- 评估是否继续把 command / quick pick / dialog 也收敛成更统一的 UI adapter
+- 视后续投入决定是否为 webview hook/runtime 增加更细粒度单测（`useAssetDiffProtocol` / `useVideoDiffStreaming`）
 
 ### 本轮已落地实现
 
 - Extension Host
   - `src/extension.ts` 已退化为单一 composition root 入口
   - 激活期依赖已集中到 `bootstrapCoreServices` / `bootstrapNekoToolsExtension`
-  - `logger / errorHandler / extension i18n / asset reader / variant comparison / engine media service` 已可显式组装
+  - `logger / errorHandler / extension i18n / asset reader / variant comparison / engine media service / temp file service` 已可显式组装
+  - 已新增 `IWorkspaceIO` / `VSCodeWorkspaceIO` 与 `IScheduler` / `DefaultScheduler`，并注册到 `ServiceCollection`
+  - 已新增 `ITempFileService` / `DefaultTempFileService`，用于统一 temp path 生成、写入和清理
+  - 已新增 `bootstrapMediaDiff` / `bootstrapMediaLsp` / `bootstrapAssetDiff`，feature 级组装已上收到 bootstrap 层
   - 已新增 `IEngineRuntimeResolver` / `VSCodeEngineRuntimeResolver`，将 engine 激活与 frame server 解析从 `EngineMediaService` 中拆出
 - Media Diff Extension
+  - `MediaDiffService` 已移除模块级单例，改为 activation scope 显式创建并注册到 `ServiceCollection`
   - 已新增 `MediaDiffEditorSession` / `MediaDiffEditorSessionFactory`
   - `MediaDiffEditorProvider` 仅保留 editor 壳层职责，不再直接拥有 message handler 生命周期
   - 已新增 `MediaDiffRequestState`，收口 request scope 的 `AbortController`、git fetch promise、previous file temp path，并通过 `previousFileRef` 避免跨 ref 误复用临时文件
+  - analyzer 与 `MediaDiffRequestState` 的深层默认构造已移除，`IEngineMediaService` / `ITempFileService` 仅允许从 bootstrap 显式注入
+  - 已补 `disposeAsync()` 清理链，`MediaDiffRequestState -> MediaDiffMessageHandler -> MediaDiffEditorSession -> MediaDiffEditorProvider -> deactivate()` 可显式等待 temp file / stream 清理完成
+  - `MediaDiffEditorSessionFactory` 已显式支持 dispose 保护，停用阶段不会继续创建新 session
+  - analyzer 的 buffer 落盘、Git previous file temp path、request-state 清理已统一切到 `ITempFileService`
   - 已新增 `GitCliGateway`，将 `git show / git ls-files / git log / extractFileToPath` 的 CLI 细节从 `GitMediaService` 中拆出
   - `MediaDiffEditorProvider` 已移除内联 `child_process` 调用，Git tracked 判断统一回收到 `IMediaDiffService.isTracked`
+  - `MediaDiffService` 的本地文件读取已切到 `IWorkspaceIO`，分析超时已切到 `IScheduler`
+  - `FrameOperations` 的 seek debounce 与 frame extraction wait 已切到 `IScheduler`
+- Media LSP
+  - `MediaProbeCache` / `MediaWorkspaceIndex` 已上收到 activation scope，并通过 bootstrap 注入到 diagnostics / hover / definition / reference provider
+  - `JviDiagnosticsProvider` / `JviHoverProvider` / `MediaWorkspaceIndex` 已切换到 `IWorkspaceIO`
+  - `JviDiagnosticsProvider` 的 debounce 已切换到 `IScheduler`
+  - `IMediaWorkspaceIndex` 已明确继承 `vscode.Disposable`，definition / reference provider 已在查询前 lazy await `ensureInitialized()`
 - Media Diff Webview
   - 已新增 `bridge`、`initialState`、`MediaDiffRuntimeProvider`
   - `useMediaDiffProtocol` 已改为依赖注入 runtime，而非直接读取全局对象
   - 已新增 `streamClientFactory` 注入，音视频播放组件不再直接 `new AudioStreamClient` / `new H264StreamClient`
+  - 已新增 `blobUrlRegistry` / `rafScheduler` runtime 抽象，并注入到 webview composition root
+  - 已新增 `audioContextFactory` runtime 抽象，`VideoDiffViewer` 不再直接 `new AudioContext`
+  - `useMediaDiffProtocol` 的 Blob URL 创建/回收已收口到 `IBlobUrlRegistry`
+  - `DiffRenderer` / `VideoFrameRenderer` 的 flicker 循环已切到 `IRafScheduler`
+  - 已新增 `useAudioDiffPlayback`，`AudioPlayerControls` 已退化为纯 UI 组件
+  - 已新增 `useVideoDiffStreaming`，`StreamingVideoDiffViewer` 已退化为 canvas + pointer shell
+  - `initialState` 已升级为只读 runtime 契约，并在 composition root 冻结，避免后续 provider 重建时出现隐式可变状态
 - i18n
   - extension runtime 文案已统一走 `vscode.l10n`
   - webview locale 注入链路已补齐
+- Asset Diff
+  - 已新增 `AssetVariantDiffSession` / `AssetVariantDiffSessionFactory`
+  - `AssetVariantDiffEditorProvider` 已改为 provider 壳层，仅负责文档状态、webview HTML 与 session 装配
+  - `bootstrapAssetDiff` 已显式组装 session factory，对齐 media diff 的 bootstrap 风格
+  - 已新增独立 `assetDiff.html + assetDiff.tsx` bundle，provider 不再内联大段 HTML/CSS/JS
+  - 已新增 `AssetDiffRuntimeProvider` / `useAssetDiffProtocol`，Asset Diff webview 已对齐 runtime + hook 组织方式
 
 ### 已验证
 
@@ -86,7 +113,7 @@
 - `pnpm --dir packages/neko-tools run compile:extension`
 - `pnpm --dir packages/neko-tools run compile`
 - `pnpm --dir packages/neko-tools test -- --run`
-- 当前结果：`9` 个测试文件，`103` 个测试通过
+- 当前结果：`11` 个测试文件，`109` 个测试通过
 
 ---
 
@@ -164,11 +191,9 @@
 
 当前问题：
 
-- `EngineMediaService` 同时承担 engine 扩展发现、激活、命令调用、`EngineClient` 创建
-- `GitMediaService` 同时承担 VSCode Git API 访问、Git CLI 执行、文件提取
-- `MediaDiffEditorProvider` 内部默认创建 service，并重复执行 Git tracked 判断
-- `MediaDiffMessageHandler` 堆积大量 session 状态和具体依赖
-- `MediaDiffService` 仍保留单例工厂，不利于显式组装
+- `MediaDiffMessageHandler` 虽已拆出 request state，但仍承担较多 session 级编排职责
+- temp file 创建和清理仍分散在 analyzer / pipeline 内，尚未统一到 `ITempFileService`
+- 若干流程仍直接使用 `setTimeout` / `os.tmpdir()` / `fs`，尚未统一基础设施抽象
 
 ### 4.2 Asset Diff
 
@@ -190,8 +215,8 @@
 当前问题：
 
 - `MediaWorkspaceIndex` 直接绑定 `vscode.workspace` watcher 和文件系统
-- `JviDiagnosticsProvider` 直接绑定 debounce 和 workspace FS
-- 初始化入口尚未形成明确的 bootstrap 语义
+- `JviDefinitionProvider` / `JviReferenceProvider` 仍直接依赖 VSCode 类型构造导航结果
+- media probe 相关流程仍与 VSCode document/runtime 细节存在耦合
 
 ### 4.4 Webview
 

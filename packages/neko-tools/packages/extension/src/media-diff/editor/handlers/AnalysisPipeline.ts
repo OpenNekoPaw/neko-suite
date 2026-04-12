@@ -112,14 +112,10 @@ export async function ensurePreviousFilePath(ctx: IHandlerContext, ref: string):
   await ctx.requestState.clearPreviousFilePath();
 
   try {
-    const os = await import('os');
     const path = await import('path');
 
     const ext = path.extname(ctx.fileUri.fsPath) || '.mp4';
-    const tmpPath = path.join(
-      os.tmpdir(),
-      `media-diff-prev-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`,
-    );
+    const tmpPath = ctx.tempFileService.createTempPath('media-diff-prev', ext);
 
     // Zero-copy: git show pipes directly to file, no memory buffering
     await ctx.diffService.extractPreviousToFile(ctx.fileUri, ref, tmpPath);

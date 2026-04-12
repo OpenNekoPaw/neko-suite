@@ -24,12 +24,12 @@ export async function handleSeek(
 ): Promise<void> {
   // Cancel any pending debounced seek
   if (ctx.seekDebounceTimer) {
-    clearTimeout(ctx.seekDebounceTimer);
+    ctx.seekDebounceTimer.cancel();
     ctx.seekDebounceTimer = null;
   }
 
   return new Promise<void>((resolve) => {
-    ctx.seekDebounceTimer = setTimeout(async () => {
+    ctx.seekDebounceTimer = ctx.scheduler.scheduleOnce(async () => {
       ctx.seekDebounceTimer = null;
       await Promise.all([
         handleGetFrame(ctx, time, 'current', requestId),
@@ -59,7 +59,7 @@ export async function handleGetFrame(
 
   // Wait if too many concurrent extractions
   while (ctx.activeFrameExtractions >= MAX_CONCURRENT_FRAMES) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await ctx.scheduler.wait(50);
   }
   ctx.activeFrameExtractions++;
 

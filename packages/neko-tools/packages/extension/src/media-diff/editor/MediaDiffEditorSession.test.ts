@@ -11,6 +11,8 @@ import { MediaDiffEditorSession } from './MediaDiffEditorSession';
 import { MediaDiffEditorSessionFactory } from './MediaDiffEditorSessionFactory';
 import type { IMediaDiffEditorMessageHandler } from './MediaDiffEditorSession';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
+import type { IScheduler } from '../../contracts/IScheduler';
+import type { ITempFileService } from '../../contracts/ITempFileService';
 import type { MediaDiffService } from '../services/MediaDiffService';
 
 function createMockDisposable() {
@@ -44,6 +46,7 @@ function createMockMessageHandler(): IMediaDiffEditorMessageHandler {
     initializeDiff: vi.fn().mockResolvedValue(undefined),
     handleMessage: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn(),
+    disposeAsync: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -90,18 +93,18 @@ describe('MediaDiffEditorSession', () => {
     });
   });
 
-  it('should dispose listeners and handler only once', () => {
+  it('should dispose listeners and handler only once', async () => {
     const { panel, receiveDisposable, disposeDisposable } = createMockWebviewPanel();
     const handler = createMockMessageHandler();
     const session = new MediaDiffEditorSession(panel, handler, true);
 
     session.attach(vi.fn());
-    session.dispose();
-    session.dispose();
+    await session.disposeAsync();
+    await session.disposeAsync();
 
     expect(receiveDisposable.dispose).toHaveBeenCalledTimes(1);
     expect(disposeDisposable.dispose).toHaveBeenCalledTimes(1);
-    expect(handler.dispose).toHaveBeenCalledTimes(1);
+    expect(handler.disposeAsync).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -122,11 +125,22 @@ describe('MediaDiffEditorSessionFactory', () => {
       detectSilence: vi.fn(),
       probe: vi.fn(),
     };
+    const tempFileService: ITempFileService = {
+      createTempPath: vi.fn(),
+      writeTempFile: vi.fn(),
+      deleteTempFile: vi.fn(),
+    };
+    const scheduler: IScheduler = {
+      scheduleOnce: vi.fn(),
+      wait: vi.fn(),
+    };
     const messageHandler = createMockMessageHandler();
     const createMessageHandler = vi.fn().mockReturnValue(messageHandler);
     const factory = new MediaDiffEditorSessionFactory(
       diffService,
       engineMediaService,
+      scheduler,
+      tempFileService,
       createMessageHandler,
     );
 
@@ -142,10 +156,50 @@ describe('MediaDiffEditorSessionFactory', () => {
       documentUri,
       diffService,
       engineClient,
+      scheduler,
+      tempFileService,
       previousUri,
     });
 
     await session.start(false);
     expect(messageHandler.initializeDiff).toHaveBeenCalledTimes(1);
+  });
+
+  it('should rethrow message handler factory failures', async () => {
+    const { panel } = createMockWebviewPanel();
+    const documentUri = { toString: () => 'file:///demo.mp4' } as vscode.Uri;
+    const diffService = {} as MediaDiffService;
+    const engineMediaService: IEngineMediaService = {
+      ensureClient: vi.fn().mockResolvedValue(null),
+      diff: vi.fn(),
+      detectSilence: vi.fn(),
+      probe: vi.fn(),
+    };
+    const tempFileService: ITempFileService = {
+      createTempPath: vi.fn(),
+      writeTempFile: vi.fn(),
+      deleteTempFile: vi.fn(),
+    };
+    const scheduler: IScheduler = {
+      scheduleOnce: vi.fn(),
+      wait: vi.fn(),
+    };
+    const createMessageHandler = vi.fn(() => {
+      throw new Error('handler failure');
+    });
+    const factory = new MediaDiffEditorSessionFactory(
+      diffService,
+      engineMediaService,
+      scheduler,
+      tempFileService,
+      createMessageHandler,
+    );
+
+    await expect(
+      factory.createSession({
+        webviewPanel: panel,
+        documentUri,
+      }),
+    ).rejects.toThrow('handler failure');
   });
 });

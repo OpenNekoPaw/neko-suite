@@ -202,3 +202,5 @@ export interface InitialState {
   ref?: string;
   requiresRecompare?: boolean;
 }
+
+export type ImmutableInitialState = Readonly<InitialState>;

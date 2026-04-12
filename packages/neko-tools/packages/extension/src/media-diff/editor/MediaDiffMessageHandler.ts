@@ -17,9 +17,11 @@
 import * as vscode from 'vscode';
 import type { MediaDiffRequest, MediaDiffResponse } from '@neko/shared';
 import type { EngineClient } from '@neko/neko-client';
+import type { IScheduler } from '../../contracts/IScheduler';
+import type { ITempFileService } from '../../contracts/ITempFileService';
 import type { IMediaDiffService } from '../services/MediaDiffService';
 import type { IHandlerContext } from './handlers/types';
-import { MediaDiffRequestState } from './MediaDiffRequestState';
+import { MediaDiffRequestState, type IMediaDiffRequestState } from './MediaDiffRequestState';
 import {
   initializeDiff,
   initializeLocalDiff,
@@ -48,7 +50,7 @@ import {
 export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerContext {
   // ── IHandlerContext — mutable state ─────────────────────────────────
   isDisposed = false;
-  readonly requestState = new MediaDiffRequestState();
+  readonly requestState: IMediaDiffRequestState;
   /** Cached diff result — used to avoid redundant probe calls in handleStartStreaming */
   lastDiffResult: import('@neko/shared').DiffResult | null = null;
   /** Last ref used for diff (for re-analysis with time range) */
@@ -78,14 +80,19 @@ export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerConte
 
   /** Session ID for grouping streams from this handler */
   readonly sessionId = `diff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     readonly webview: vscode.Webview,
     readonly fileUri: vscode.Uri,
     readonly diffService: IMediaDiffService,
     readonly engineClient: EngineClient | null,
+    readonly scheduler: IScheduler,
+    readonly tempFileService: ITempFileService,
     readonly previousUri?: vscode.Uri,
-  ) {}
+  ) {
+    this.requestState = new MediaDiffRequestState(tempFileService);
+  }
 
   // ── Public API (called by MediaDiffEditorProvider) ──────────────────
 
@@ -242,18 +249,29 @@ export class MediaDiffMessageHandler implements vscode.Disposable, IHandlerConte
 
   // ── Lifecycle ──────────────────────────────────────────────────────
 
+  async disposeAsync(): Promise<void> {
+    this.disposePromise ??= this.disposeInternal();
+    return this.disposePromise;
+  }
+
   dispose(): void {
+    void this.disposeAsync();
+  }
+
+  private async disposeInternal(): Promise<void> {
     this.isDisposed = true;
     // Cancel pending seek debounce
     if (this.seekDebounceTimer) {
-      clearTimeout(this.seekDebounceTimer);
+      this.seekDebounceTimer.cancel();
       this.seekDebounceTimer = null;
     }
     // Only cancel this handler's analysis, NOT the shared service
     cancelCurrentAnalysis(this);
-    // Stop active streams (fire-and-forget)
-    void handleStopStreaming(this);
-    void handleStopAudioStreaming(this);
-    this.requestState.dispose();
+
+    await Promise.allSettled([
+      handleStopStreaming(this),
+      handleStopAudioStreaming(this),
+      this.requestState.disposeAsync(),
+    ]);
   }
 }

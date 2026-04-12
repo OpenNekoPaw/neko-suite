@@ -8,17 +8,19 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { findSrcNodeAtOffset } from '../services/JviParser';
-import type { MediaWorkspaceIndex } from '../services/MediaWorkspaceIndex';
+import type { IMediaWorkspaceIndex } from '../services/types';
 
 export class JviReferenceProvider implements vscode.ReferenceProvider {
-  constructor(private readonly workspaceIndex: MediaWorkspaceIndex) {}
+  constructor(private readonly workspaceIndex: IMediaWorkspaceIndex) {}
 
-  provideReferences(
+  async provideReferences(
     document: vscode.TextDocument,
     position: vscode.Position,
     _context: vscode.ReferenceContext,
     _token: vscode.CancellationToken,
-  ): vscode.Location[] | null {
+  ): Promise<vscode.Location[] | null> {
+    await this.workspaceIndex.ensureInitialized();
+
     const text = document.getText();
     const offset = document.offsetAt(position);
 
@@ -34,7 +36,7 @@ export class JviReferenceProvider implements vscode.ReferenceProvider {
     return references.map(
       (ref) =>
         new vscode.Location(
-          vscode.Uri.parse(ref.nkvUri),
+          vscode.Uri.parse(ref.jviUri),
           new vscode.Range(
             new vscode.Position(ref.srcRange.startLine, ref.srcRange.startChar),
             new vscode.Position(ref.srcRange.endLine, ref.srcRange.endChar),

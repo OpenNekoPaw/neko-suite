@@ -10,7 +10,13 @@ export function activate(context: vscode.ExtensionContext): void {
   activation = bootstrapNekoToolsExtension(context);
 }
 
-export function deactivate(): void {
-  activation?.dispose();
+export async function deactivate(): Promise<void> {
+  const currentActivation = activation;
   activation = undefined;
+
+  if (!currentActivation) {
+    return;
+  }
+
+  await currentActivation.disposeAsync();
 }

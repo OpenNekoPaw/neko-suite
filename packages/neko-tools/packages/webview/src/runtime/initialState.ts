@@ -1,27 +1,27 @@
 import type { MediaType } from '@neko/shared';
-import type { InitialState } from '../components/MediaDiff/types';
+import type { ImmutableInitialState, InitialState } from '../components/MediaDiff/types';
 import type { IWebviewBridge } from './bridge';
 
-const DEFAULT_INITIAL_STATE: InitialState = {
+const DEFAULT_INITIAL_STATE: ImmutableInitialState = Object.freeze({
   mediaType: 'image' as MediaType,
   fileName: '',
   isLocalComparison: false,
   fileUri: '',
-};
+});
 
 declare global {
   interface Window {
-    initialState?: InitialState;
+    initialState?: ImmutableInitialState;
   }
 }
 
-export function getMediaDiffInitialState(bridge: IWebviewBridge): InitialState {
+export function getMediaDiffInitialState(bridge: IWebviewBridge): ImmutableInitialState {
   const persistedState = bridge.getState<Partial<InitialState>>();
   const injectedState = window.initialState;
 
-  return {
+  return Object.freeze({
     ...DEFAULT_INITIAL_STATE,
     ...persistedState,
     ...injectedState,
-  };
+  });
 }

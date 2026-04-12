@@ -6,9 +6,6 @@
  * This analyzer converts EngineDiffResult → Protocol VideoDiffDetails.
  */
 
-import * as fs from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import type {
   DiffOptions,
   DiffResult,
@@ -19,9 +16,9 @@ import type {
   EngineFieldDiff,
 } from '@neko/shared';
 import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
-import { BaseMediaDiffAnalyzer } from './IMediaDiffAnalyzer';
-import { EngineMediaService } from '../../../services/EngineMediaService';
+import type { ITempFileService } from '../../../contracts/ITempFileService';
 import { getLogger } from '../../../utils/logger';
+import { TempFileBackedMediaDiffAnalyzer } from './TempFileBackedMediaDiffAnalyzer';
 
 const logger = getLogger('VideoDiffAnalyzer');
 
@@ -64,14 +61,14 @@ function fieldString(fields: EngineFieldDiff[], name: string, side: 'A' | 'B'): 
   return typeof raw === 'string' ? raw : String(raw);
 }
 
-export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
+export class VideoDiffAnalyzer extends TempFileBackedMediaDiffAnalyzer {
   readonly mediaType = 'video' as const;
-  private readonly engineMediaService: IEngineMediaService;
-  private activeTempFiles = new Set<string>();
 
-  constructor(engineMediaService?: IEngineMediaService) {
-    super(VIDEO_EXTENSIONS);
-    this.engineMediaService = engineMediaService ?? new EngineMediaService();
+  constructor(
+    private readonly engineMediaService: IEngineMediaService,
+    tempFileService: ITempFileService,
+  ) {
+    super(VIDEO_EXTENSIONS, tempFileService);
   }
 
   async analyze(current: Buffer, previous: Buffer, options?: DiffOptions): Promise<DiffResult> {
@@ -87,6 +84,7 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
       } else {
         const ext = options?.fileExtension ?? '.mp4';
         [currentPath, previousPath] = await this.writeTempFiles(
+          'video-diff',
           current,
           previous,
           ext,
@@ -227,48 +225,7 @@ export class VideoDiffAnalyzer extends BaseMediaDiffAnalyzer {
           : undefined,
       };
     } finally {
-      await this.cleanupFiles(localTempFiles);
-    }
-  }
-
-  private async writeTempFiles(
-    current: Buffer,
-    previous: Buffer,
-    ext: string,
-    localTempFiles: string[],
-  ): Promise<[string, string]> {
-    const tempDir = os.tmpdir();
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).slice(2);
-
-    const currentPath = path.join(tempDir, `video-diff-a-${timestamp}-${random}${ext}`);
-    const previousPath = path.join(tempDir, `video-diff-b-${timestamp}-${random}${ext}`);
-
-    await Promise.all([fs.writeFile(currentPath, current), fs.writeFile(previousPath, previous)]);
-
-    localTempFiles.push(currentPath, previousPath);
-    this.activeTempFiles.add(currentPath);
-    this.activeTempFiles.add(previousPath);
-    return [currentPath, previousPath];
-  }
-
-  private async cleanupFiles(files: string[]): Promise<void> {
-    for (const file of files) {
-      try {
-        await fs.unlink(file);
-      } catch {
-        /* ignore */
-      }
-      this.activeTempFiles.delete(file);
-    }
-  }
-
-  override cancel(): void {
-    super.cancel();
-    const files = [...this.activeTempFiles];
-    this.activeTempFiles.clear();
-    for (const file of files) {
-      fs.unlink(file).catch(() => {});
+      await this.cleanupTempFiles(localTempFiles);
     }
   }
 }

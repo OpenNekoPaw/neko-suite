@@ -4,11 +4,13 @@ import type { MediaDiffRequest } from '@neko/shared';
 export interface IMediaDiffEditorMessageHandler extends vscode.Disposable {
   initializeDiff(ref?: string): Promise<void>;
   handleMessage(message: MediaDiffRequest): Promise<void>;
+  disposeAsync(): Promise<void>;
 }
 
 export interface IMediaDiffEditorSession extends vscode.Disposable {
   attach(onDidDispose: () => void): void;
   start(requiresRecompare?: boolean): Promise<void>;
+  disposeAsync(): Promise<void>;
 }
 
 export interface IMediaDiffEditorSessionOptions {
@@ -19,12 +21,14 @@ export interface IMediaDiffEditorSessionOptions {
 
 export interface IMediaDiffEditorSessionFactory {
   createSession(options: IMediaDiffEditorSessionOptions): Promise<IMediaDiffEditorSession>;
+  dispose(): void;
 }
 
 export class MediaDiffEditorSession implements IMediaDiffEditorSession {
   private readonly disposables: vscode.Disposable[] = [];
   private isAttached = false;
   private isDisposed = false;
+  private disposePromise: Promise<void> | null = null;
 
   constructor(
     private readonly webviewPanel: vscode.WebviewPanel,
@@ -44,7 +48,7 @@ export class MediaDiffEditorSession implements IMediaDiffEditorSession {
       }),
       this.webviewPanel.onDidDispose(() => {
         onDidDispose();
-        this.dispose();
+        void this.disposeAsync();
       }),
     );
   }
@@ -68,7 +72,16 @@ export class MediaDiffEditorSession implements IMediaDiffEditorSession {
     await this.messageHandler.initializeDiff();
   }
 
+  async disposeAsync(): Promise<void> {
+    this.disposePromise ??= this.disposeInternal();
+    return this.disposePromise;
+  }
+
   dispose(): void {
+    void this.disposeAsync();
+  }
+
+  private async disposeInternal(): Promise<void> {
     if (this.isDisposed) {
       return;
     }
@@ -79,6 +92,6 @@ export class MediaDiffEditorSession implements IMediaDiffEditorSession {
       this.disposables.pop()?.dispose();
     }
 
-    this.messageHandler.dispose();
+    await this.messageHandler.disposeAsync();
   }
 }

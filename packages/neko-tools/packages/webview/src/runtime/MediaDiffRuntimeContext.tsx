@@ -1,11 +1,17 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { InitialState } from '../components/MediaDiff/types';
+import type { ImmutableInitialState } from '../components/MediaDiff/types';
 import type { IWebviewBridge } from './bridge';
+import type { IAudioContextFactory } from './audioContextFactory';
+import type { IBlobUrlRegistry } from './blobUrlRegistry';
+import type { IRafScheduler } from './rafScheduler';
 import type { IMediaDiffStreamClientFactory } from './streamClientFactory';
 
 export interface IMediaDiffRuntime {
   bridge: IWebviewBridge;
-  initialState: InitialState;
+  initialState: ImmutableInitialState;
+  audioContextFactory: IAudioContextFactory;
+  blobUrlRegistry: IBlobUrlRegistry;
+  rafScheduler: IRafScheduler;
   streamClientFactory: IMediaDiffStreamClientFactory;
 }
 

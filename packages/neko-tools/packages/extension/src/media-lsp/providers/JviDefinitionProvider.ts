@@ -13,16 +13,18 @@ import {
   findLinkedIdAtOffset,
   findElementIdRange,
 } from '../services/JviParser';
-import type { MediaWorkspaceIndex } from '../services/MediaWorkspaceIndex';
+import type { IMediaWorkspaceIndex } from '../services/types';
 
 export class JviDefinitionProvider implements vscode.DefinitionProvider {
-  constructor(private readonly workspaceIndex: MediaWorkspaceIndex) {}
+  constructor(private readonly workspaceIndex: IMediaWorkspaceIndex) {}
 
-  provideDefinition(
+  async provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
     _token: vscode.CancellationToken,
-  ): vscode.Definition | null {
+  ): Promise<vscode.Definition | null> {
+    await this.workspaceIndex.ensureInitialized();
+
     const text = document.getText();
     const offset = document.offsetAt(position);
 
@@ -53,7 +55,7 @@ export class JviDefinitionProvider implements vscode.DefinitionProvider {
       const found = this.workspaceIndex.findElementById(linkedId.value);
       if (found) {
         return new vscode.Location(
-          vscode.Uri.parse(found.nkvUri),
+          vscode.Uri.parse(found.jviUri),
           new vscode.Range(
             new vscode.Position(found.range.startLine, found.range.startChar),
             new vscode.Position(found.range.endLine, found.range.endChar),

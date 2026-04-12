@@ -13,6 +13,8 @@
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+import type { IRafScheduler } from '../../../runtime/rafScheduler';
+
 /** Frame source accepted by renderPair: VideoFrame (streaming) or ImageBitmap (static) */
 export type DiffFrame = VideoFrame | ImageBitmap;
 
@@ -22,6 +24,7 @@ export interface DiffRendererConfig {
   canvas: HTMLCanvasElement;
   width: number;
   height: number;
+  rafScheduler: IRafScheduler;
 }
 
 // ─── Shader sources ──────────────────────────────────────────────────────────
@@ -174,10 +177,12 @@ export class DiffRenderer {
   /** Source frame dimensions (not canvas dimensions) */
   private frameWidth = 0;
   private frameHeight = 0;
+  private readonly rafScheduler: IRafScheduler;
 
   constructor(config: DiffRendererConfig) {
-    const { canvas, width, height } = config;
+    const { canvas, width, height, rafScheduler } = config;
     this.canvas = canvas;
+    this.rafScheduler = rafScheduler;
 
     // Allow 0x0 — will auto-resize from first frame in renderPair
     if (width > 0 && height > 0) {
@@ -386,14 +391,14 @@ export class DiffRenderer {
       if (this.disposed || this.currentMode !== 'flicker') return;
       this.flickerShowA = !this.flickerShowA;
       this.draw();
-      this.flickerRafId = requestAnimationFrame(toggle);
+      this.flickerRafId = this.rafScheduler.requestFrame(toggle);
     };
-    this.flickerRafId = requestAnimationFrame(toggle);
+    this.flickerRafId = this.rafScheduler.requestFrame(toggle);
   }
 
   private stopFlickerLoop(): void {
     if (this.flickerRafId !== null) {
-      cancelAnimationFrame(this.flickerRafId);
+      this.rafScheduler.cancelFrame(this.flickerRafId);
       this.flickerRafId = null;
     }
   }

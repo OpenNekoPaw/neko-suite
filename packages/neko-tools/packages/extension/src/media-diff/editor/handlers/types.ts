@@ -9,6 +9,8 @@
 import type * as vscode from 'vscode';
 import type { EngineClient } from '@neko/neko-client';
 import type { DiffResult, MediaDiffResponse } from '@neko/shared';
+import type { IScheduledTask, IScheduler } from '../../../contracts/IScheduler';
+import type { ITempFileService } from '../../../contracts/ITempFileService';
 import type { IMediaDiffService } from '../../services/MediaDiffService';
 import type { IMediaDiffRequestState } from '../MediaDiffRequestState';
 
@@ -19,6 +21,8 @@ export interface IHandlerContext {
   readonly previousUri?: vscode.Uri;
   readonly diffService: IMediaDiffService;
   readonly engineClient: EngineClient | null;
+  readonly scheduler: IScheduler;
+  readonly tempFileService: ITempFileService;
   readonly requestState: IMediaDiffRequestState;
   /** Session ID for grouping streams from this handler */
   readonly sessionId: string;
@@ -48,7 +52,7 @@ export interface IHandlerContext {
 
   // ── Frame operations state ──────────────────────────────────────────
   /** Debounce timer for seek requests to avoid VideoToolbox session exhaustion */
-  seekDebounceTimer: ReturnType<typeof setTimeout> | null;
+  seekDebounceTimer: IScheduledTask | null;
   /** Pending frame extraction promises for concurrency control */
   activeFrameExtractions: number;
 

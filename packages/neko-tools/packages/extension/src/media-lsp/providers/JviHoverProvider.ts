@@ -8,6 +8,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 import { findSrcNodeAtOffset } from '../services/JviParser';
 import type { IMediaProbeCache, ProbeResultLike } from '../services/types';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
@@ -16,6 +17,7 @@ export class JviHoverProvider implements vscode.HoverProvider {
   constructor(
     private readonly engineService: IEngineMediaService | undefined,
     private readonly probeCache: IMediaProbeCache,
+    private readonly workspaceIO: IWorkspaceIO,
   ) {}
 
   async provideHover(
@@ -71,7 +73,7 @@ export class JviHoverProvider implements vscode.HoverProvider {
     } else {
       // Check if file exists
       try {
-        await vscode.workspace.fs.stat(vscode.Uri.file(absolutePath));
+        await this.workspaceIO.stat(vscode.Uri.file(absolutePath));
         lines.push('', '*Engine unavailable — cannot probe metadata*');
       } catch {
         lines.push('', '*File not found*');

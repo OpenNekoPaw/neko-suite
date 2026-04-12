@@ -46,4 +46,8 @@ export class MediaProbeCache implements IMediaProbeCache {
   clear(): void {
     this.cache.clear();
   }
+
+  dispose(): void {
+    this.clear();
+  }
 }

@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 import { parseJviDocument } from './JviParser';
 import type {
   JviParsedProject,
@@ -34,7 +35,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
 
   private initPromise: Promise<void> | undefined;
 
-  constructor() {
+  constructor(private readonly workspaceIO: IWorkspaceIO) {
     this.setupWatchers();
   }
 
@@ -123,7 +124,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
   // ─── Internal ─────────────────────────────────────────────────────────
 
   private setupWatchers(): void {
-    const watcher = vscode.workspace.createFileSystemWatcher(JVI_GLOB);
+    const watcher = this.workspaceIO.createFileSystemWatcher(JVI_GLOB);
 
     watcher.onDidCreate((uri) => {
       void this.onFileChanged(uri);
@@ -139,7 +140,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
 
     // Watch live editor changes (unsaved buffers)
     this.disposables.push(
-      vscode.workspace.onDidChangeTextDocument((e) => {
+      this.workspaceIO.onDidChangeTextDocument((e) => {
         if (this.isRelevantDocument(e.document)) {
           this.parseAndCache(e.document.uri, e.document.getText());
           this.rebuildDerivedIndices();
@@ -148,7 +149,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
     );
 
     this.disposables.push(
-      vscode.workspace.onDidOpenTextDocument((doc) => {
+      this.workspaceIO.onDidOpenTextDocument((doc) => {
         if (this.isRelevantDocument(doc)) {
           this.parseAndCache(doc.uri, doc.getText());
           this.rebuildDerivedIndices();
@@ -162,7 +163,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
   }
 
   private async buildFullIndex(): Promise<void> {
-    const uris = await vscode.workspace.findFiles(JVI_GLOB);
+    const uris = await this.workspaceIO.findFiles(JVI_GLOB);
     for (const uri of uris) {
       const content = await this.readFileContent(uri);
       if (content !== undefined) {
@@ -187,12 +188,14 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
 
   private async readFileContent(uri: vscode.Uri): Promise<string | undefined> {
     // Prefer open editor buffer (may have unsaved changes)
-    const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+    const openDoc = this.workspaceIO
+      .getTextDocuments()
+      .find((document) => document.uri.toString() === uri.toString());
     if (openDoc) {
       return openDoc.getText();
     }
     try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
+      const bytes = await this.workspaceIO.readFile(uri);
       return new TextDecoder('utf-8').decode(bytes);
     } catch {
       return undefined;

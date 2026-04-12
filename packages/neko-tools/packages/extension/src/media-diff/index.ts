@@ -11,8 +11,6 @@ export {
   MediaDiffService,
   type IMediaDiffService,
   type DiffProgressCallback,
-  getMediaDiffService,
-  disposeMediaDiffService,
 } from './services/MediaDiffService';
 
 // Analyzers
@@ -47,13 +45,9 @@ export { MediaDiffEditorSessionFactory } from './editor/MediaDiffEditorSessionFa
 
 import * as vscode from 'vscode';
 import { getMediaType } from '@neko/shared';
-import type { IEngineMediaService } from '../contracts/IEngineMediaService';
-import { MediaDiffService, getMediaDiffService } from './services/MediaDiffService';
-import { ImageDiffAnalyzer } from './services/analyzers/ImageDiffAnalyzer';
-import { VideoDiffAnalyzer } from './services/analyzers/VideoDiffAnalyzer';
-import { AudioDiffAnalyzer } from './services/analyzers/AudioDiffAnalyzer';
-import { TimelineDiffAnalyzer } from './services/analyzers/TimelineDiffAnalyzer';
+import type { IMediaDiffService } from './services/MediaDiffService';
 import { MediaDiffEditorProvider } from './editor/MediaDiffEditorProvider';
+import type { IMediaDiffEditorSessionFactory } from './editor/MediaDiffEditorSession';
 import { handleError } from '../utils/errorHandler';
 
 /**
@@ -62,24 +56,11 @@ import { handleError } from '../utils/errorHandler';
  */
 export function initializeMediaDiff(
   context: vscode.ExtensionContext,
-  engineMediaService?: IEngineMediaService,
+  diffService: IMediaDiffService,
+  sessionFactory: IMediaDiffEditorSessionFactory,
 ): MediaDiffEditorProvider {
-  // Get or create the diff service
-  const diffService = getMediaDiffService();
-
-  // Register analyzers — all delegate to neko-engine's native diff actions
-  const imageDiffAnalyzer = new ImageDiffAnalyzer(engineMediaService);
-  const videoDiffAnalyzer = new VideoDiffAnalyzer(engineMediaService);
-  const audioDiffAnalyzer = new AudioDiffAnalyzer(engineMediaService);
-  const timelineDiffAnalyzer = new TimelineDiffAnalyzer(engineMediaService);
-
-  diffService.registerAnalyzer(imageDiffAnalyzer);
-  diffService.registerAnalyzer(videoDiffAnalyzer);
-  diffService.registerAnalyzer(audioDiffAnalyzer);
-  diffService.registerAnalyzer(timelineDiffAnalyzer);
-
   // Create and register the editor provider
-  const editorProvider = new MediaDiffEditorProvider(context, diffService, engineMediaService);
+  const editorProvider = new MediaDiffEditorProvider(context, diffService, sessionFactory);
 
   // Register custom editor
   context.subscriptions.push(

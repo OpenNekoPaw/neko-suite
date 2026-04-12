@@ -8,8 +8,10 @@
 
 import * as vscode from 'vscode';
 import type { IEngineMediaService } from '../contracts/IEngineMediaService';
+import type { IScheduler } from '../contracts/IScheduler';
+import type { IWorkspaceIO } from '../contracts/IWorkspaceIO';
 import { getLogger } from '../utils/logger';
-import { MediaProbeCache } from './services/MediaProbeCache';
+import type { IMediaProbeCache, IMediaWorkspaceIndex } from './services/types';
 
 const logger = getLogger('MediaLsp');
 import { JviDiagnosticsProvider } from './providers/JviDiagnosticsProvider';
@@ -17,9 +19,16 @@ import { JviHoverProvider } from './providers/JviHoverProvider';
 import { JviDocumentSymbolProvider } from './providers/JviDocumentSymbolProvider';
 import { JviDefinitionProvider } from './providers/JviDefinitionProvider';
 import { JviReferenceProvider } from './providers/JviReferenceProvider';
-import { MediaWorkspaceIndex } from './services/MediaWorkspaceIndex';
 
 const JVI_SELECTOR: vscode.DocumentSelector = { language: 'nekotools-jvi' };
+
+export interface IMediaLspInitializationOptions {
+  engineService?: IEngineMediaService;
+  probeCache: IMediaProbeCache;
+  scheduler: IScheduler;
+  workspaceIO: IWorkspaceIO;
+  workspaceIndex: IMediaWorkspaceIndex;
+}
 
 /**
  * Initialize the media LSP module.
@@ -27,28 +36,29 @@ const JVI_SELECTOR: vscode.DocumentSelector = { language: 'nekotools-jvi' };
  */
 export function initializeMediaLsp(
   context: vscode.ExtensionContext,
-  engineService?: IEngineMediaService,
+  options: IMediaLspInitializationOptions,
 ): void {
-  const probeCache = new MediaProbeCache();
+  const { engineService, probeCache, scheduler, workspaceIO, workspaceIndex } = options;
 
   // ─── Phase 1: Diagnostics + Hover ──────────────────────────────────────
 
-  const diagnostics = new JviDiagnosticsProvider(engineService, probeCache);
+  const diagnostics = new JviDiagnosticsProvider(engineService, probeCache, workspaceIO, scheduler);
   diagnostics.activate();
   context.subscriptions.push(diagnostics);
 
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(
       JVI_SELECTOR,
-      new JviHoverProvider(engineService, probeCache),
+      new JviHoverProvider(engineService, probeCache, workspaceIO),
     ),
   );
 
   // ─── Phase 2: Symbols + Navigation ─────────────────────────────────────
 
-  const workspaceIndex = new MediaWorkspaceIndex();
   context.subscriptions.push(workspaceIndex);
-  void workspaceIndex.ensureInitialized();
+  void workspaceIndex.ensureInitialized().catch((error) => {
+    logger.warn('Failed to initialize workspace index:', error);
+  });
 
   context.subscriptions.push(
     vscode.languages.registerDocumentSymbolProvider(JVI_SELECTOR, new JviDocumentSymbolProvider()),
