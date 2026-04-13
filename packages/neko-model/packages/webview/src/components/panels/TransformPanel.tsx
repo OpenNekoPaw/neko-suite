@@ -17,32 +17,29 @@ export function TransformPanel({
 }: TransformPanelProps): React.JSX.Element {
   if (!node) {
     return (
-      <div className="w-56 bg-[var(--vscode-sideBar-background,#252526)] border-l border-[var(--vscode-sideBar-border,#3c3c3c)] flex items-center justify-center text-xs opacity-40">
+      <div className="model-side-panel w-56 items-center justify-center px-4 text-center text-xs text-[var(--model-fg-secondary)]">
         No node selected
       </div>
     );
   }
 
   return (
-    <div className="w-56 bg-[var(--vscode-sideBar-background,#252526)] border-l border-[var(--vscode-sideBar-border,#3c3c3c)] overflow-y-auto text-xs">
-      <div className="p-2 border-b border-[var(--vscode-sideBar-border,#3c3c3c)]">
-        <div className="font-semibold text-[var(--vscode-sideBarTitle-foreground,#bbbbbb)]">
-          {node.name}
+    <div className="model-side-panel w-56 overflow-y-auto text-xs">
+      <div className="model-panel-header">
+        <div className="font-semibold text-[var(--model-fg)]">{node.name}</div>
+        <div className="mt-0.5 break-all text-[10px] text-[var(--model-fg-secondary)]">
+          {node.id}
         </div>
-        <div className="opacity-50 mt-0.5">{node.id}</div>
       </div>
 
-      {/* Transform mode selector */}
-      <div className="p-2 border-b border-[var(--vscode-sideBar-border,#3c3c3c)]">
-        <div className="font-semibold mb-1">Transform Mode</div>
+      <div className="model-panel-section">
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">Transform Mode</div>
         <div className="flex gap-1">
           {(['translate', 'rotate', 'scale'] as const).map((mode) => (
             <button
               key={mode}
-              className={`px-2 py-0.5 rounded text-[10px] ${
-                transformMode === mode
-                  ? 'bg-[var(--vscode-button-background,#0e639c)] text-[var(--vscode-button-foreground,#ffffff)]'
-                  : 'bg-[var(--vscode-button-secondaryBackground,#3a3d41)] text-[var(--vscode-button-secondaryForeground,#cccccc)]'
+              className={`${transformMode === mode ? 'model-btn-primary' : 'model-btn-secondary'} flex-1 px-2 py-1 text-[10px] ${
+                transformMode === mode ? '' : ''
               }`}
               onClick={() => onTransformModeChange(mode)}
             >
@@ -52,9 +49,8 @@ export function TransformPanel({
         </div>
       </div>
 
-      {/* Position */}
-      <div className="p-2 border-b border-[var(--vscode-sideBar-border,#3c3c3c)]">
-        <div className="font-semibold mb-1">Position</div>
+      <div className="model-panel-section">
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">Position</div>
         <div className="grid grid-cols-3 gap-1">
           <PropertyField label="X" value={node.position[0]} />
           <PropertyField label="Y" value={node.position[1]} />
@@ -62,9 +58,8 @@ export function TransformPanel({
         </div>
       </div>
 
-      {/* Rotation (displayed as quaternion) */}
-      <div className="p-2 border-b border-[var(--vscode-sideBar-border,#3c3c3c)]">
-        <div className="font-semibold mb-1">Rotation (XYZW)</div>
+      <div className="model-panel-section">
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">Rotation (XYZW)</div>
         <div className="grid grid-cols-2 gap-1">
           <PropertyField label="X" value={node.rotation[0]} />
           <PropertyField label="Y" value={node.rotation[1]} />
@@ -73,9 +68,8 @@ export function TransformPanel({
         </div>
       </div>
 
-      {/* Scale */}
       <div className="p-2">
-        <div className="font-semibold mb-1">Scale</div>
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">Scale</div>
         <div className="grid grid-cols-3 gap-1">
           <PropertyField label="X" value={node.scale[0]} />
           <PropertyField label="Y" value={node.scale[1]} />
@@ -83,8 +77,7 @@ export function TransformPanel({
         </div>
       </div>
 
-      {/* Flags */}
-      <div className="p-2 border-t border-[var(--vscode-sideBar-border,#3c3c3c)] opacity-50">
+      <div className="model-panel-footer text-[10px]">
         <div className="flex flex-wrap gap-2">
           {node.hasMesh && <span>Mesh</span>}
           {node.hasLight && <span>Light</span>}
@@ -105,12 +98,12 @@ function PropertyField({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-1">
-      <span className="opacity-50 w-3">{label}</span>
+      <span className="w-3 text-[var(--model-fg-secondary)]">{label}</span>
       <input
         type="text"
         readOnly
         value={(value ?? 0).toFixed(3)}
-        className="bg-[var(--vscode-input-background,#3c3c3c)] text-[var(--vscode-input-foreground,#cccccc)] border border-[var(--vscode-input-border,#555)] rounded px-1 py-0.5 w-full text-[10px]"
+        className="model-input w-full px-1.5 py-0.5 text-[10px] text-center"
       />
     </div>
   );

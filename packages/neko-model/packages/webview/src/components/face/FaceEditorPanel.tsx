@@ -52,44 +52,26 @@ export function FaceEditorPanel(): React.JSX.Element {
   const categories: FaceCategory[] = ['face', 'eyes', 'nose', 'mouth', 'eyebrows'];
 
   return (
-    <div className="w-64 h-full bg-[var(--vscode-sideBar-background)] border-l border-[var(--vscode-panel-border)] flex flex-col">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-        <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">面部编辑器</h2>
+    <div className="model-side-panel h-full w-64">
+      <div className="model-panel-header">
+        <h2 className="model-title">面部编辑器</h2>
       </div>
 
-      {/* Action Buttons */}
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)] flex gap-2">
-        <button
-          onClick={handleRandomize}
-          className="flex-1 px-2 py-1 text-xs bg-[var(--vscode-button-background)]
-                     text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)]
-                     transition-colors"
-        >
+      <div className="model-panel-section flex gap-2">
+        <button onClick={handleRandomize} className="model-btn-primary flex-1">
           随机
         </button>
-        <button
-          onClick={handleReset}
-          className="flex-1 px-2 py-1 text-xs bg-[var(--vscode-button-secondaryBackground)]
-                     text-[var(--vscode-button-secondaryForeground)] rounded
-                     hover:bg-[var(--vscode-button-secondaryHoverBackground)] transition-colors"
-        >
+        <button onClick={handleReset} className="model-btn-secondary flex-1">
           重置
         </button>
       </div>
 
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-        <button
-          onClick={handleAIGenerate}
-          className="w-full px-2 py-1 text-xs bg-[var(--vscode-button-background)]
-                     text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)]
-                     transition-colors"
-        >
+      <div className="model-panel-section">
+        <button onClick={handleAIGenerate} className="model-btn-primary w-full">
           AI 生成
         </button>
       </div>
 
-      {/* Parameter Categories */}
       <div className="flex-1 overflow-y-auto">
         {categories.map((category) => (
           <FaceParameterCategory
@@ -102,10 +84,7 @@ export function FaceEditorPanel(): React.JSX.Element {
         ))}
       </div>
 
-      {/* Footer Info */}
-      <div className="px-3 py-2 border-t border-[var(--vscode-panel-border)] text-xs text-[var(--vscode-descriptionForeground)]">
-        {FACE_PARAMETERS.length} 个参数
-      </div>
+      <div className="model-panel-footer text-xs">{FACE_PARAMETERS.length} 个参数</div>
     </div>
   );
 }

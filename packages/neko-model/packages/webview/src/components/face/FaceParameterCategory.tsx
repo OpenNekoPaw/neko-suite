@@ -25,12 +25,10 @@ export function FaceParameterCategory({
   const toggleExpanded = () => setIsExpanded(!isExpanded);
 
   return (
-    <div className="border-b border-[var(--vscode-panel-border)]">
+    <div className="border-b border-[var(--model-divider)] last:border-b-0">
       <button
         onClick={toggleExpanded}
-        className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium
-                   text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]
-                   transition-colors"
+        className="model-section-toggle flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
       >
         <span>{FACE_CATEGORIES[category]}</span>
         <svg
@@ -44,7 +42,7 @@ export function FaceParameterCategory({
       </button>
 
       {isExpanded && (
-        <div className="px-3 py-2 space-y-1">
+        <div className="space-y-1.5 px-3 py-2">
           {parameters.map((param) => (
             <FaceParameterSlider
               key={param.name}

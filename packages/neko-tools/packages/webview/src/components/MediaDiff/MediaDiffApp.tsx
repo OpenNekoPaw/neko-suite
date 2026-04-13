@@ -29,22 +29,23 @@ const ProgressOverlay = memo(function ProgressOverlay({
 }: ProgressOverlayProps) {
   const { t } = useTranslation();
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--vscode-editor-background)]/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-4 p-6 bg-[var(--vscode-editor-background)] rounded-lg border border-[var(--vscode-panel-border)] shadow-lg min-w-[300px]">
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+      style={{ backgroundColor: 'color-mix(in srgb, var(--neko-glass-bg) 86%, transparent)' }}
+    >
+      <div className="flex flex-col items-center gap-4 p-6 bg-[var(--neko-glass-bg)] rounded-lg border border-[var(--neko-glass-border)] shadow-lg min-w-[300px]">
         {/* Progress bar */}
-        <div className="w-full h-2 bg-[var(--vscode-input-background)] rounded-full overflow-hidden">
+        <div className="w-full h-2 bg-[var(--neko-hover)] rounded-full overflow-hidden">
           <div
-            className="h-full bg-[var(--vscode-button-background)] rounded-full transition-all duration-300"
+            className="h-full bg-[var(--neko-accent)] rounded-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="text-sm text-[var(--vscode-foreground)]">{stage}</div>
-        <div className="text-xs text-[var(--vscode-descriptionForeground)]">
-          {Math.round(progress)}%
-        </div>
+        <div className="text-sm text-[var(--neko-fg)]">{stage}</div>
+        <div className="text-xs text-[var(--neko-fg-secondary)]">{Math.round(progress)}%</div>
         <button
           type="button"
-          className="px-4 py-1.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+          className="px-4 py-1.5 text-xs bg-[var(--neko-elevated)] text-[var(--neko-fg)] rounded hover:bg-[var(--neko-hover)] transition-colors"
           onClick={onCancel}
         >
           {t('mediaDiff.cancel')}
@@ -82,7 +83,7 @@ const GitRefSelector = memo(function GitRefSelector({
     return (
       <button
         type="button"
-        className="px-3 py-1.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] rounded hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+        className="px-3 py-1.5 text-xs bg-[var(--neko-elevated)] text-[var(--neko-fg)] rounded border border-[var(--neko-border)] hover:bg-[var(--neko-hover)] transition-colors"
         onClick={onLoadHistory}
       >
         {t('mediaDiff.loadGitHistory')}
@@ -92,7 +93,7 @@ const GitRefSelector = memo(function GitRefSelector({
 
   return (
     <select
-      className="px-2 py-1 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)] rounded"
+      className="px-2 py-1 text-xs bg-[var(--neko-elevated)] text-[var(--neko-fg)] border border-[var(--neko-border)] rounded"
       value={currentRef ?? 'HEAD'}
       onChange={(e) => onChangeRef(e.target.value)}
     >
@@ -124,7 +125,7 @@ const ErrorDisplay = memo(function ErrorDisplay({ error, onRetry }: ErrorDisplay
         <div className="text-sm text-red-400 mb-4">{error}</div>
         <button
           type="button"
-          className="px-4 py-2 text-xs bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)] transition-colors"
+          className="px-4 py-2 text-xs bg-[var(--neko-accent)] text-white rounded hover:brightness-110 transition-[filter]"
           onClick={onRetry}
         >
           {t('mediaDiff.retry')}
@@ -211,18 +212,18 @@ export default function MediaDiffApp() {
   // Error state (non-loading)
   if (error && !isLoading) {
     return (
-      <div className="h-screen flex flex-col bg-[var(--vscode-editor-background)]">
+      <div className="h-screen flex flex-col bg-[var(--neko-surface)]">
         <ErrorDisplay error={error} onRetry={handleRetry} />
       </div>
     );
   }
 
   return (
-    <div className="relative h-screen flex flex-col bg-[var(--vscode-editor-background)]">
+    <div className="relative h-screen flex flex-col bg-[var(--neko-surface)]">
       {/* Git ref selector bar (only for Git mode) */}
       {!initialState.isLocalComparison && (
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--vscode-panel-border)]">
-          <span className="text-xs text-[var(--vscode-descriptionForeground)]">
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--neko-border)] bg-[var(--neko-surface)]">
+          <span className="text-xs text-[var(--neko-fg-secondary)]">
             {t('mediaDiff.compareWith')}
           </span>
           <GitRefSelector
@@ -272,14 +273,14 @@ export default function MediaDiffApp() {
 
       {/* Non-blocking inline indicator — when content is already visible (video/audio) */}
       {progress && diffResult && (
-        <div className="absolute bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] shadow-lg">
-          <div className="w-3 h-3 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin" />
-          <span className="text-[var(--vscode-descriptionForeground)]">
+        <div className="absolute bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-2 text-xs rounded-lg bg-[var(--neko-glass-bg)] border border-[var(--neko-glass-border)] shadow-lg">
+          <div className="w-3 h-3 border-2 border-[var(--neko-accent)] border-t-transparent rounded-full animate-spin" />
+          <span className="text-[var(--neko-fg-secondary)]">
             {progress.stage} {Math.round(progress.progress)}%
           </span>
           <button
             type="button"
-            className="ml-1 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
+            className="ml-1 text-[var(--neko-fg-secondary)] hover:text-[var(--neko-fg)]"
             onClick={sendCancel}
             title={t('mediaDiff.cancelAnalysis')}
           >

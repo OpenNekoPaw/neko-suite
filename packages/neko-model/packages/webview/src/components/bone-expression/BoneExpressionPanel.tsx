@@ -97,25 +97,21 @@ export function BoneExpressionPanel(): React.JSX.Element {
   );
 
   return (
-    <div className="w-64 h-full bg-[var(--vscode-sideBar-background)] border-l border-[var(--vscode-panel-border)] flex flex-col">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-        <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">Bone Expression</h2>
+    <div className="model-side-panel h-full w-64">
+      <div className="model-panel-header">
+        <h2 className="model-title">Bone Expression</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Lip Sync Section */}
-        <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-          <div className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">Lip Sync</div>
+        <div className="model-panel-section">
+          <div className="model-section-title mb-2">Lip Sync</div>
           <div className="grid grid-cols-3 gap-1">
             {PHONEMES.map((p) => (
               <button
                 key={p}
                 onClick={() => handlePhonemeClick(p)}
-                className={`px-2 py-1.5 text-xs rounded transition-colors ${
-                  activePhoneme === p
-                    ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-                    : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)]'
+                className={`${activePhoneme === p ? 'model-btn-primary' : 'model-btn-secondary'} px-2 py-1.5 text-xs ${
+                  activePhoneme === p ? '' : ''
                 }`}
               >
                 {p === 'silent' ? '\u2014' : p}
@@ -124,34 +120,29 @@ export function BoneExpressionPanel(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Eye Tracking Section */}
-        <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-          <div className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">
-            Eye Tracking
-          </div>
+        <div className="model-panel-section">
+          <div className="model-section-title mb-2">Eye Tracking</div>
           <div
             ref={eyeTrackRef}
             onMouseMove={handleEyeTrack}
-            className="w-32 h-32 mx-auto rounded border border-[var(--vscode-panel-border)] bg-[var(--vscode-input-background)] cursor-crosshair relative"
+            className="relative mx-auto h-32 w-32 cursor-crosshair rounded-lg border border-[var(--model-input-border)] bg-[var(--model-input-bg)]"
           >
-            {/* Crosshair guides */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-full h-px bg-[var(--vscode-panel-border)] opacity-30" />
+              <div className="h-px w-full bg-[var(--model-fg-muted)] opacity-60" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="h-full w-px bg-[var(--vscode-panel-border)] opacity-30" />
+              <div className="h-full w-px bg-[var(--model-fg-muted)] opacity-60" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-50">
+              <span className="text-[10px] text-[var(--model-fg-secondary)] opacity-70">
                 Move mouse
               </span>
             </div>
           </div>
         </div>
 
-        {/* Eyebrow Section */}
         <div className="px-3 py-2">
-          <div className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">Eyebrow</div>
+          <div className="model-section-title mb-2">Eyebrow</div>
           <EyebrowSlider
             label="Raise"
             value={eyebrowRaise}
@@ -184,9 +175,7 @@ function EyebrowSlider({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-10 shrink-0">
-        {label}
-      </span>
+      <span className="w-10 shrink-0 text-[10px] text-[var(--model-fg-secondary)]">{label}</span>
       <input
         type="range"
         min={-1}
@@ -194,9 +183,9 @@ function EyebrowSlider({
         step={0.01}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="flex-1 h-1 accent-[var(--vscode-button-background)]"
+        className="model-range flex-1"
       />
-      <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-8 text-right">
+      <span className="w-8 text-right text-[10px] text-[var(--model-fg-secondary)]">
         {value.toFixed(2)}
       </span>
     </div>

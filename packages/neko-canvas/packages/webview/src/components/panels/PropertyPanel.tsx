@@ -288,7 +288,7 @@ function NumberField({
         }}
         onFocus={(e) => {
           e.currentTarget.style.borderColor = 'var(--accent-blue)';
-          e.currentTarget.style.boxShadow = '0 0 0 2.5px rgba(59,130,246,0.20)';
+          e.currentTarget.style.boxShadow = '0 0 0 2.5px var(--control-focus-ring)';
         }}
         onBlur={(e) => {
           e.currentTarget.style.borderColor = 'var(--control-border)';
@@ -471,13 +471,16 @@ function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps)
                   transition: 'background 0.15s, border-color 0.15s',
                   backgroundColor:
                     (textStyle.textAlign ?? 'left') === align
-                      ? 'rgba(59,130,246,0.20)'
-                      : 'rgba(0,0,0,0.18)',
+                      ? 'var(--selection-bg)'
+                      : 'var(--control-bg)',
                   borderColor:
                     (textStyle.textAlign ?? 'left') === align
-                      ? 'rgba(59,130,246,0.45)'
+                      ? 'var(--selection-border)'
                       : 'var(--control-border)',
-                  color: (textStyle.textAlign ?? 'left') === align ? '#93bbfd' : 'var(--neko-fg)',
+                  color:
+                    (textStyle.textAlign ?? 'left') === align
+                      ? 'var(--badge-fg)'
+                      : 'var(--neko-fg)',
                 }}
                 onClick={() => onUpdateData({ style: { ...textStyle, textAlign: align } })}
               >

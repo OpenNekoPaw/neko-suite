@@ -83,76 +83,63 @@ export function LatencyTester(): React.JSX.Element {
   }, [calculateStats]);
 
   return (
-    <div className="w-64 h-full bg-[var(--vscode-sideBar-background)] border-l border-[var(--vscode-panel-border)] flex flex-col">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-        <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">延迟测试</h2>
+    <div className="model-side-panel h-full w-64">
+      <div className="model-panel-header">
+        <h2 className="model-title">延迟测试</h2>
       </div>
 
-      {/* Test Button */}
-      <div className="px-3 py-3 border-b border-[var(--vscode-panel-border)]">
-        <button
-          onClick={runTest}
-          disabled={isRunning}
-          className="w-full px-3 py-2 text-sm bg-[var(--vscode-button-background)]
-                     text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)]
-                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+      <div className="model-panel-section">
+        <button onClick={runTest} disabled={isRunning} className="model-btn-primary w-full text-sm">
           {isRunning ? '测试中...' : '开始测试 (100 次)'}
         </button>
       </div>
 
-      {/* Current RTT */}
       {currentRtt !== null && (
-        <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-          <div className="text-xs text-[var(--vscode-descriptionForeground)]">当前 RTT</div>
-          <div className="text-2xl font-mono text-[var(--vscode-foreground)]">
+        <div className="model-panel-section">
+          <div className="text-xs text-[var(--model-fg-secondary)]">当前 RTT</div>
+          <div className="text-2xl font-mono text-[var(--model-fg)]">
             {currentRtt.toFixed(2)} ms
           </div>
         </div>
       )}
 
-      {/* Statistics */}
       {stats && (
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
           <div>
-            <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">最小值</div>
-            <div className="text-lg font-mono text-[var(--vscode-foreground)]">
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">最小值</div>
+            <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.min.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">最大值</div>
-            <div className="text-lg font-mono text-[var(--vscode-foreground)]">
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">最大值</div>
+            <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.max.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">平均值</div>
-            <div className="text-lg font-mono text-[var(--vscode-foreground)]">
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">平均值</div>
+            <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.avg.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">P95</div>
-            <div className="text-lg font-mono text-[var(--vscode-foreground)]">
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">P95</div>
+            <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.p95.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-1">样本数</div>
-            <div className="text-lg font-mono text-[var(--vscode-foreground)]">
-              {stats.samples.length}
-            </div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">样本数</div>
+            <div className="text-lg font-mono text-[var(--model-fg)]">{stats.samples.length}</div>
           </div>
 
-          {/* Recommendation */}
-          <div className="mt-4 p-2 rounded bg-[var(--vscode-textBlockQuote-background)] border-l-2 border-[var(--vscode-textBlockQuote-border)]">
-            <div className="text-xs text-[var(--vscode-foreground)]">
+          <div className="model-quote mt-4 p-2">
+            <div className="text-xs text-[var(--model-fg)]">
               {stats.avg < 15 && '✅ 延迟优秀，H.264 流方案足够'}
               {stats.avg >= 15 && stats.avg < 30 && '⚠️ 延迟中等，考虑 JPEG 单帧模式'}
               {stats.avg >= 30 && '❌ 延迟较高，建议 R3F 双渲染'}
@@ -161,10 +148,7 @@ export function LatencyTester(): React.JSX.Element {
         </div>
       )}
 
-      {/* Footer */}
-      <div className="px-3 py-2 border-t border-[var(--vscode-panel-border)] text-xs text-[var(--vscode-descriptionForeground)]">
-        测量 Webview ↔ Rust 引擎往返时间
-      </div>
+      <div className="model-panel-footer text-xs">测量 Webview ↔ Rust 引擎往返时间</div>
     </div>
   );
 }

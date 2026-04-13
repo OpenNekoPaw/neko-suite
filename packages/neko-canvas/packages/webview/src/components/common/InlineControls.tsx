@@ -102,9 +102,9 @@ export function InlineSelect({
         padding: '2px 4px',
         borderRadius: 4,
         width,
-        border: '1px solid var(--neko-border)',
-        backgroundColor: 'var(--neko-surface)',
-        color: 'var(--neko-fg)',
+        border: '1px solid var(--control-border)',
+        backgroundColor: 'var(--control-bg)',
+        color: 'var(--control-fg)',
         flexShrink: 0,
       }}
     >
@@ -150,9 +150,9 @@ export function InlineInput({
         padding: '2px 6px',
         borderRadius: 4,
         width: width ?? '100%',
-        border: '1px solid var(--neko-border)',
-        backgroundColor: 'var(--neko-surface)',
-        color: 'var(--neko-fg)',
+        border: '1px solid var(--control-border)',
+        backgroundColor: 'var(--control-bg)',
+        color: 'var(--control-fg)',
         outline: 'none',
         flexShrink: 0,
       }}
@@ -186,9 +186,9 @@ export function InlineTextarea({
         padding: '4px 6px',
         borderRadius: 4,
         resize: 'none',
-        border: '1px solid var(--neko-border)',
-        backgroundColor: 'var(--neko-surface)',
-        color: 'var(--neko-fg)',
+        border: '1px solid var(--control-border)',
+        backgroundColor: 'var(--control-bg)',
+        color: 'var(--control-fg)',
         outline: 'none',
         boxSizing: 'border-box',
       }}

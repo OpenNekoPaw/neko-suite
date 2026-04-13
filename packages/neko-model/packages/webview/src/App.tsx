@@ -256,7 +256,7 @@ export function App(): React.JSX.Element {
 
       {/* Collapsible Keyframe Timeline (bottom panel) */}
       {isKeyframeEditorOpen && (
-        <div className="h-48 border-t border-[var(--vscode-panel-border)] overflow-hidden">
+        <div className="h-48 overflow-hidden border-t border-[var(--model-border)]">
           <ModelKeyframeTimeline />
         </div>
       )}
@@ -304,27 +304,19 @@ function ModelEmptyState() {
     }
   }, []);
 
-  const btnClass =
-    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
-    'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] ' +
-    'hover:bg-[var(--vscode-button-secondaryHoverBackground)]';
-  const primaryBtnClass =
-    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
-    'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] ' +
-    'hover:bg-[var(--vscode-button-hoverBackground)]';
+  const btnClass = 'model-btn-secondary px-4 py-2';
+  const primaryBtnClass = 'model-btn-primary px-4 py-2';
 
   return (
     <div
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`h-full flex flex-col items-center justify-center gap-5 text-sm transition-colors ${
-        isDragOver
-          ? 'bg-[var(--vscode-list-hoverBackground)]'
-          : 'bg-[var(--vscode-editor-background)]'
+      className={`flex h-full flex-col items-center justify-center gap-5 text-sm transition-colors ${
+        isDragOver ? 'bg-[var(--model-selected)]' : 'bg-[var(--model-bg)]'
       }`}
     >
-      <div className="opacity-40 text-center text-[var(--vscode-editor-foreground)]">
+      <div className="max-w-sm text-center text-[var(--model-fg-secondary)]">
         {t('empty.dropHint')}
       </div>
 

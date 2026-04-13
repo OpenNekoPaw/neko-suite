@@ -50,10 +50,9 @@ export function AnimationPlayer({
   }
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-[var(--vscode-panel-background,#252526)] border-t border-[var(--vscode-panel-border,#3c3c3c)] p-2 flex items-center gap-2 text-xs">
-      {/* Clip selector */}
+    <div className="model-bottom-panel absolute bottom-0 left-0 right-0 flex items-center gap-2 p-2 text-xs">
       <select
-        className="bg-[var(--vscode-dropdown-background,#3c3c3c)] text-[var(--vscode-dropdown-foreground,#cccccc)] border border-[var(--vscode-dropdown-border,#555)] rounded px-2 py-1 text-xs"
+        className="px-2 py-1 text-xs"
         value={activeClip ?? ''}
         onChange={(e) => handleClipChange(e.target.value)}
       >
@@ -65,9 +64,8 @@ export function AnimationPlayer({
         ))}
       </select>
 
-      {/* Playback controls */}
       <button
-        className="px-2 py-1 rounded bg-[var(--vscode-button-background,#0e639c)] text-[var(--vscode-button-foreground,#ffffff)] hover:opacity-80 disabled:opacity-40"
+        className="model-btn-primary px-2 py-1"
         onClick={playbackState === 'playing' ? onPause : onPlay}
         disabled={!activeClip}
       >
@@ -75,15 +73,14 @@ export function AnimationPlayer({
       </button>
 
       <button
-        className="px-2 py-1 rounded bg-[var(--vscode-button-secondaryBackground,#3a3d41)] text-[var(--vscode-button-secondaryForeground,#cccccc)] hover:opacity-80 disabled:opacity-40"
+        className="model-btn-secondary px-2 py-1"
         onClick={onStop}
         disabled={!activeClip || playbackState === 'stopped'}
       >
         Stop
       </button>
 
-      {/* Fade duration control */}
-      <label className="flex items-center gap-1 opacity-70">
+      <label className="flex items-center gap-1 text-[var(--model-fg-secondary)]">
         Fade
         <input
           type="number"
@@ -92,14 +89,13 @@ export function AnimationPlayer({
           step={0.1}
           value={fadeDuration}
           onChange={(e) => setFadeDuration(Math.max(0, parseFloat(e.target.value) || 0))}
-          className="w-12 bg-[var(--vscode-input-background,#3c3c3c)] text-[var(--vscode-input-foreground,#cccccc)] border border-[var(--vscode-input-border,#555)] rounded px-1 py-0.5 text-xs text-center"
+          className="model-input w-12 px-1 py-0.5 text-center text-xs"
         />
         s
       </label>
 
-      {/* Status */}
       {activeClip && (
-        <span className="ml-auto opacity-60">
+        <span className="ml-auto text-[var(--model-fg-secondary)]">
           {playbackState === 'playing'
             ? 'Playing'
             : playbackState === 'paused'

@@ -448,7 +448,7 @@ export function MediaNode({
           )}
           {(mediaType === 'video' || mediaType === 'audio') && (
             <button
-              className="p-0.5 rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors shrink-0"
+              className="p-0.5 rounded hover:bg-[var(--control-hover)] transition-colors shrink-0"
               onClick={openInPreview}
               title="Open in Neko Preview"
               onMouseDown={(e) => e.stopPropagation()}

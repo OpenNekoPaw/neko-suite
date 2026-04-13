@@ -26,32 +26,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render(): ReactNode {
     if (this.state.hasError && this.state.error) {
       return (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '1rem',
-            color: 'var(--vscode-editor-foreground)',
-            backgroundColor: 'var(--vscode-editor-background)',
-          }}
-        >
-          <h2 style={{ marginBottom: '0.5rem' }}>Something went wrong</h2>
-          <p style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '1rem' }}>
+        <div className="flex h-full flex-col items-center justify-center gap-3 bg-[var(--model-bg)] px-4 text-center text-[var(--model-fg)]">
+          <h2 className="text-base font-semibold">Something went wrong</h2>
+          <p className="max-w-md text-sm text-[var(--model-fg-secondary)]">
             {this.state.error.message}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--vscode-button-background)',
-              color: 'var(--vscode-button-foreground)',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
+            className="model-btn-primary"
           >
             Try again
           </button>

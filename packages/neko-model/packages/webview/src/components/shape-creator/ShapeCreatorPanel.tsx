@@ -33,25 +33,21 @@ export function ShapeCreatorPanel(): React.JSX.Element {
   }, [shapeType, params]);
 
   return (
-    <div className="w-64 h-full bg-[var(--vscode-sideBar-background)] border-l border-[var(--vscode-panel-border)] flex flex-col">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-        <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">Shape Creator</h2>
+    <div className="model-side-panel h-full w-64">
+      <div className="model-panel-header">
+        <h2 className="model-title">Shape Creator</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Shape Type Selector */}
-        <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-          <div className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">Shape</div>
+        <div className="model-panel-section">
+          <div className="model-section-title mb-2">Shape</div>
           <div className="grid grid-cols-3 gap-1">
             {SHAPE_TYPES.map((type) => (
               <button
                 key={type}
                 onClick={() => handleShapeChange(type)}
-                className={`flex flex-col items-center px-1 py-1.5 rounded transition-colors ${
-                  shapeType === type
-                    ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-                    : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)]'
+                className={`${shapeType === type ? 'model-btn-primary' : 'model-btn-secondary'} flex flex-col items-center px-1 py-1.5 ${
+                  shapeType === type ? '' : ''
                 }`}
                 title={type.charAt(0).toUpperCase() + type.slice(1)}
               >
@@ -62,18 +58,13 @@ export function ShapeCreatorPanel(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Dynamic Parameters */}
-        <div className="px-3 py-2 border-b border-[var(--vscode-panel-border)]">
-          <div className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">
-            Parameters
-          </div>
+        <div className="model-panel-section">
+          <div className="model-section-title mb-2">Parameters</div>
           {paramDefs.map((def) => (
             <div key={def.name} className="mb-2">
               <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-                  {def.label}
-                </span>
-                <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+                <span className="text-[10px] text-[var(--model-fg-secondary)]">{def.label}</span>
+                <span className="text-[10px] text-[var(--model-fg-secondary)]">
                   {(params[def.name] ?? def.default).toFixed(def.step < 1 ? 2 : 0)}
                 </span>
               </div>
@@ -84,20 +75,14 @@ export function ShapeCreatorPanel(): React.JSX.Element {
                 step={def.step}
                 value={params[def.name] ?? def.default}
                 onChange={(e) => handleParamChange(def.name, parseFloat(e.target.value))}
-                className="w-full h-1 accent-[var(--vscode-button-background)]"
+                className="model-range"
               />
             </div>
           ))}
         </div>
 
-        {/* Create Button */}
         <div className="px-3 py-3">
-          <button
-            onClick={handleCreate}
-            className="w-full px-2 py-1.5 text-xs rounded transition-colors
-                       bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]
-                       hover:bg-[var(--vscode-button-hoverBackground)]"
-          >
+          <button onClick={handleCreate} className="model-btn-primary w-full">
             Create {shapeType.charAt(0).toUpperCase() + shapeType.slice(1)}
           </button>
         </div>

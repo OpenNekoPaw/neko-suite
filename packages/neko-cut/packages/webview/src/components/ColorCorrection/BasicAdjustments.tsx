@@ -63,9 +63,7 @@ const SliderRow = memo(function SliderRow({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="w-24 text-[10px] text-[var(--vscode-descriptionForeground)] truncate">
-        {label}
-      </label>
+      <label className="w-24 text-[10px] text-[var(--nk-fg-secondary)] truncate">{label}</label>
       <input
         type="range"
         min={min}
@@ -74,17 +72,15 @@ const SliderRow = memo(function SliderRow({
         value={value}
         onChange={handleChange}
         onDoubleClick={handleDoubleClick}
-        className="flex-1 h-1 accent-[var(--vscode-button-background)] cursor-pointer"
+        className="nk-prop-slider cursor-pointer"
       />
       <input
         type="number"
         value={value.toFixed(step < 1 ? 2 : 0)}
         onChange={handleInputChange}
-        className="w-14 px-1 py-0.5 text-[10px] text-right bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded focus:outline-none focus:border-[var(--vscode-focusBorder)]"
+        className="nk-prop-input-sm w-14 text-right"
       />
-      {unit && (
-        <span className="w-4 text-[10px] text-[var(--vscode-descriptionForeground)]">{unit}</span>
-      )}
+      {unit && <span className="w-4 text-[10px] text-[var(--nk-fg-secondary)]">{unit}</span>}
     </div>
   );
 });
@@ -132,7 +128,7 @@ export const BasicAdjustments = memo(function BasicAdjustments({
       </div>
 
       {/* Highlights & Shadows */}
-      <div className="space-y-1.5 pt-1 border-t border-[var(--vscode-panel-border)]">
+      <div className="space-y-1.5 border-t border-[var(--nk-border)] pt-1">
         <SliderRow
           label={t('colorCorrection.basic.highlights')}
           value={basic.highlights}
@@ -168,7 +164,7 @@ export const BasicAdjustments = memo(function BasicAdjustments({
       </div>
 
       {/* Temperature & Tint */}
-      <div className="space-y-1.5 pt-1 border-t border-[var(--vscode-panel-border)]">
+      <div className="space-y-1.5 border-t border-[var(--nk-border)] pt-1">
         <SliderRow
           label={t('colorCorrection.basic.temperature')}
           value={basic.temperature}
@@ -188,7 +184,7 @@ export const BasicAdjustments = memo(function BasicAdjustments({
       </div>
 
       {/* Saturation & Vibrance */}
-      <div className="space-y-1.5 pt-1 border-t border-[var(--vscode-panel-border)]">
+      <div className="space-y-1.5 border-t border-[var(--nk-border)] pt-1">
         <SliderRow
           label={t('colorCorrection.basic.saturation')}
           value={basic.saturation}

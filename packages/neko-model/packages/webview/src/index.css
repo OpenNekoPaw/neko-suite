@@ -2,21 +2,335 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
-  color: var(--vscode-editor-foreground, #cccccc);
-  background-color: var(--vscode-editor-background, #1e1e1e);
+@layer base {
+  :root {
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    color: var(--neko-fg, var(--vscode-editor-foreground, #cccccc));
+    background-color: var(--vscode-editor-background, #1e1e1e);
+
+    --model-bg: var(--vscode-editor-background, #1e1e1e);
+    --model-surface: color-mix(
+      in srgb,
+      var(--neko-surface, #242426) 86%,
+      var(--neko-elevated, #2c2c2e) 14%
+    );
+    --model-elevated: var(--neko-elevated, #2c2c2e);
+    --model-overlay: color-mix(in srgb, var(--model-surface) 84%, var(--model-bg) 16%);
+    --model-border: var(--neko-border, rgba(255, 255, 255, 0.08));
+    --model-divider: var(--neko-divider, rgba(255, 255, 255, 0.06));
+    --model-fg: var(--neko-fg, #e8e8ed);
+    --model-fg-secondary: var(--neko-fg-secondary, #8e8e93);
+    --model-fg-muted: var(--neko-fg-muted, rgba(232, 232, 237, 0.38));
+    --model-hover: var(--neko-hover, rgba(255, 255, 255, 0.06));
+    --model-selected: var(--neko-accent-soft, rgba(10, 132, 255, 0.18));
+    --model-accent: var(--neko-accent, #0a84ff);
+    --model-focus-ring: color-mix(in srgb, var(--model-accent) 28%, transparent);
+    --model-input-bg: color-mix(in srgb, var(--model-elevated) 84%, var(--model-bg) 16%);
+    --model-input-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-button-bg: var(--model-accent);
+    --model-button-hover: color-mix(in srgb, var(--model-button-bg) 88%, #ffffff 12%);
+    --model-button-fg: #ffffff;
+    --model-button-secondary-bg: color-mix(in srgb, var(--model-fg) 8%, transparent);
+    --model-button-secondary-hover: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-button-secondary-fg: var(--model-fg);
+    --model-danger: var(--neko-danger, #ff453a);
+    --model-danger-soft: color-mix(in srgb, var(--model-danger) 12%, transparent);
+    --model-danger-border: color-mix(in srgb, var(--model-danger) 32%, transparent);
+  }
+
+  body.vscode-high-contrast,
+  body[data-vscode-theme-kind='vscode-high-contrast'] {
+    --model-surface: var(--neko-surface, var(--vscode-sideBar-background));
+    --model-elevated: var(--neko-elevated, var(--vscode-editorWidget-background));
+    --model-overlay: var(--model-surface);
+    --model-border: var(--neko-border, var(--vscode-contrastBorder));
+    --model-divider: var(--model-border);
+    --model-hover: var(--vscode-list-hoverBackground);
+    --model-selected: var(--vscode-list-activeSelectionBackground);
+    --model-input-bg: var(--model-elevated);
+    --model-input-border: var(--model-border);
+    --model-button-secondary-bg: transparent;
+    --model-button-secondary-hover: var(--model-hover);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--model-bg);
+    color: var(--model-fg);
+  }
+
+  body {
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+
+  input:not([type='range']),
+  textarea,
+  select {
+    color: var(--model-fg);
+    background: var(--model-input-bg);
+    border: 1px solid var(--model-input-border);
+    border-radius: 8px;
+    outline: none;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  input:not([type='range'])::placeholder,
+  textarea::placeholder {
+    color: var(--model-fg-secondary);
+  }
+
+  input:not([type='range']):focus,
+  textarea:focus,
+  select:focus,
+  button:focus-visible {
+    border-color: var(--model-accent);
+    box-shadow: 0 0 0 3px var(--model-focus-ring);
+    outline: none;
+  }
+
+  input[type='radio'],
+  input[type='checkbox'] {
+    accent-color: var(--model-accent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--model-fg) 18%, transparent);
+  }
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer components {
+  .model-side-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--model-surface);
+    color: var(--model-fg);
+    border-left: 1px solid var(--model-border);
+  }
 
-html, body, #root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+  .model-tree-panel {
+    background: var(--model-surface);
+    color: var(--model-fg);
+    border-right: 1px solid var(--model-border);
+  }
+
+  .model-bottom-panel {
+    background: var(--model-overlay);
+    color: var(--model-fg);
+    border-top: 1px solid var(--model-border);
+    backdrop-filter: blur(14px);
+  }
+
+  .model-panel-header {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--model-divider);
+  }
+
+  .model-panel-section {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--model-divider);
+  }
+
+  .model-panel-footer {
+    padding: 0.625rem 0.75rem;
+    border-top: 1px solid var(--model-divider);
+    color: var(--model-fg-secondary);
+  }
+
+  .model-title {
+    color: var(--model-fg);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .model-section-title {
+    color: var(--model-fg);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .model-subtitle {
+    color: var(--model-fg-secondary);
+    font-size: 0.75rem;
+  }
+
+  .model-btn-primary,
+  .model-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.625rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  .model-btn-primary {
+    background: var(--model-button-bg);
+    color: var(--model-button-fg);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--model-accent) 20%, transparent);
+  }
+
+  .model-btn-primary:hover:not(:disabled) {
+    background: var(--model-button-hover);
+  }
+
+  .model-btn-secondary {
+    background: var(--model-button-secondary-bg);
+    color: var(--model-button-secondary-fg);
+    border-color: var(--model-input-border);
+  }
+
+  .model-btn-secondary:hover:not(:disabled) {
+    background: var(--model-button-secondary-hover);
+  }
+
+  .model-btn-primary:disabled,
+  .model-btn-secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    box-shadow: none;
+  }
+
+  .model-input {
+    width: 100%;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .model-input-shell {
+    display: block;
+    width: 100%;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--model-fg);
+    background: var(--model-input-bg);
+    border: 1px solid var(--model-input-border);
+    border-radius: 8px;
+  }
+
+  .model-range {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    appearance: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    accent-color: var(--model-accent);
+  }
+
+  .model-range::-webkit-slider-thumb {
+    width: 12px;
+    height: 12px;
+    appearance: none;
+    border: 1px solid color-mix(in srgb, var(--model-accent) 72%, #ffffff 28%);
+    border-radius: 999px;
+    background: var(--model-accent);
+    transition:
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .model-range::-webkit-slider-thumb:hover {
+    transform: scale(1.05);
+  }
+
+  .model-range:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px var(--model-focus-ring);
+  }
+
+  .model-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--model-fg) 12%, transparent);
+  }
+
+  .model-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 1px solid color-mix(in srgb, var(--model-accent) 72%, #ffffff 28%);
+    border-radius: 999px;
+    background: var(--model-accent);
+  }
+
+  .model-section-toggle {
+    color: var(--model-fg);
+    border-radius: 8px;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .model-section-toggle:hover {
+    background: var(--model-hover);
+  }
+
+  .model-selectable-row {
+    border-radius: 8px;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .model-selectable-row:hover {
+    background: var(--model-hover);
+  }
+
+  .model-selected-row {
+    background: var(--model-selected);
+    color: var(--model-fg);
+  }
+
+  .model-quote {
+    background: color-mix(in srgb, var(--model-fg) 6%, transparent);
+    border-left: 2px solid color-mix(in srgb, var(--model-accent) 42%, transparent);
+    border-radius: 8px;
+    color: var(--model-fg);
+  }
 }

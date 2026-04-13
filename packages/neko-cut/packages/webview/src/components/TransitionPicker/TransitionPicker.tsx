@@ -64,15 +64,15 @@ const TransitionPresetCard = memo(function TransitionPresetCard({
     <button
       className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${
         isSelected
-          ? 'border-[var(--vscode-focusBorder)] bg-[var(--vscode-list-activeSelectionBackground)]'
-          : 'border-[var(--vscode-panel-border)] bg-[var(--vscode-input-background)] hover:bg-[var(--vscode-list-hoverBackground)]'
+          ? 'border-[var(--nk-border-focus)] bg-[var(--nk-bg-active)]'
+          : 'border-[var(--nk-border)] bg-[var(--nk-input-bg)] hover:bg-[var(--nk-bg-hover)]'
       } disabled:opacity-50 disabled:cursor-not-allowed min-w-[60px]`}
       onClick={onClick}
       disabled={disabled}
       title={t(preset.i18nKey)}
     >
       <span className="text-lg mb-1">{preset.icon}</span>
-      <span className="text-[9px] text-[var(--vscode-foreground)] truncate max-w-full">
+      <span className="max-w-full truncate text-[9px] text-[var(--nk-fg)]">
         {t(preset.i18nKey)}
       </span>
     </button>
@@ -100,17 +100,15 @@ const NoneTransitionCard = memo(function NoneTransitionCard({
     <button
       className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${
         isSelected
-          ? 'border-[var(--vscode-focusBorder)] bg-[var(--vscode-list-activeSelectionBackground)]'
-          : 'border-[var(--vscode-panel-border)] bg-[var(--vscode-input-background)] hover:bg-[var(--vscode-list-hoverBackground)]'
+          ? 'border-[var(--nk-border-focus)] bg-[var(--nk-bg-active)]'
+          : 'border-[var(--nk-border)] bg-[var(--nk-input-bg)] hover:bg-[var(--nk-bg-hover)]'
       } disabled:opacity-50 disabled:cursor-not-allowed min-w-[60px]`}
       onClick={onClick}
       disabled={disabled}
       title={t('transition.type.none')}
     >
       <span className="text-lg mb-1">✕</span>
-      <span className="text-[9px] text-[var(--vscode-foreground)]">
-        {t('transition.type.none')}
-      </span>
+      <span className="text-[9px] text-[var(--nk-fg)]">{t('transition.type.none')}</span>
     </button>
   );
 });
@@ -144,7 +142,7 @@ const DurationControl = memo(function DurationControl({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[10px] text-[var(--vscode-descriptionForeground)] w-16 shrink-0">
+      <label className="w-16 shrink-0 text-[10px] text-[var(--nk-fg-secondary)]">
         {t('transition.duration')}
       </label>
       <input
@@ -155,9 +153,9 @@ const DurationControl = memo(function DurationControl({
         value={value}
         onChange={handleChange}
         disabled={disabled}
-        className="flex-1 h-1 accent-[var(--vscode-button-background)]"
+        className="nk-prop-slider"
       />
-      <span className="text-[10px] text-[var(--vscode-foreground)] w-10 text-right font-mono">
+      <span className="w-10 text-right font-mono text-[10px] text-[var(--nk-fg)]">
         {value.toFixed(1)}s
       </span>
     </div>
@@ -190,14 +188,14 @@ const EasingControl = memo(function EasingControl({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[10px] text-[var(--vscode-descriptionForeground)] w-16 shrink-0">
+      <label className="w-16 shrink-0 text-[10px] text-[var(--nk-fg-secondary)]">
         {t('transition.easing')}
       </label>
       <select
         value={value}
         onChange={handleChange}
         disabled={disabled}
-        className="flex-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-[11px] outline-none focus:border-[var(--vscode-focusBorder)] disabled:opacity-50"
+        className="nk-select flex-1 disabled:opacity-50"
       >
         {EASING_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -268,7 +266,7 @@ export const TransitionPicker = memo(function TransitionPicker({
   return (
     <div className="flex flex-col gap-3 p-3">
       {/* Title */}
-      <h3 className="text-[12px] font-medium text-[var(--vscode-foreground)]">
+      <h3 className="text-[12px] font-medium text-[var(--nk-fg)]">
         {t('transition.selectTransition')}
       </h3>
 
@@ -295,7 +293,7 @@ export const TransitionPicker = memo(function TransitionPicker({
 
       {/* Duration & Easing Controls (only show when a transition is selected) */}
       {transition && (
-        <div className="flex flex-col gap-2 pt-2 border-t border-[var(--vscode-panel-border)]">
+        <div className="flex flex-col gap-2 border-t border-[var(--nk-border)] pt-2">
           {showDuration && (
             <DurationControl
               value={transition.duration}

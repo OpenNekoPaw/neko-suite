@@ -37,8 +37,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             justifyContent: 'center',
             height: '100%',
             padding: '1rem',
-            color: 'var(--vscode-editor-foreground)',
-            backgroundColor: 'var(--vscode-editor-background)',
+            color: 'var(--neko-fg)',
+            backgroundColor: 'var(--canvas-bg)',
           }}
         >
           <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#x26A0;&#xFE0F;</div>
@@ -50,8 +50,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
               padding: '0.5rem 1rem',
-              background: 'var(--vscode-button-background)',
-              color: 'var(--vscode-button-foreground)',
+              background: 'var(--button-bg)',
+              color: 'var(--button-fg)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',

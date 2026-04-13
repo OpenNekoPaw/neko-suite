@@ -19,8 +19,8 @@ export function SceneTree({
   const rootNodes = nodes.filter((n) => !n.parentId);
 
   return (
-    <div className="w-52 bg-[var(--vscode-sideBar-background,#252526)] border-r border-[var(--vscode-sideBar-border,#3c3c3c)] overflow-y-auto text-xs">
-      <div className="p-2 text-[var(--vscode-sideBarTitle-foreground,#bbbbbb)] font-semibold border-b border-[var(--vscode-sideBar-border,#3c3c3c)]">
+    <div className="model-tree-panel w-52 overflow-y-auto text-xs">
+      <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
         Scene
       </div>
       <div className="p-1">
@@ -78,15 +78,15 @@ function TreeNode({
   return (
     <div>
       <div
-        className={`flex items-center gap-1 px-1 py-0.5 cursor-pointer rounded ${
-          isSelected
-            ? 'bg-[var(--vscode-list-activeSelectionBackground,#094771)]'
-            : 'hover:bg-[var(--vscode-list-hoverBackground,#2a2d2e)]'
+        className={`model-selectable-row flex cursor-pointer items-center gap-1 px-1 py-0.5 ${
+          isSelected ? 'model-selected-row' : ''
         }`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         onClick={() => onSelectNode(node.id)}
       >
-        <span className="opacity-60 text-[10px]">{iconMap[icon]}</span>
+        <span className="text-[10px] text-[var(--model-fg-secondary)] opacity-80">
+          {iconMap[icon]}
+        </span>
         <span className="truncate">{node.name}</span>
       </div>
       {children.map((child) => (

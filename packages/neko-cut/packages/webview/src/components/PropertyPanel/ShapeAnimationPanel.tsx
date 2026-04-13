@@ -77,20 +77,13 @@ const CollapsibleSection = memo(function CollapsibleSection({
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   return (
-    <div className="border-b border-[var(--vscode-panel-border)]">
-      <button
-        className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        <span className="flex-1 text-left">{title}</span>
-        {badge !== undefined && (
-          <span className="px-1.5 py-0.5 text-[10px] bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
-            {badge}
-          </span>
-        )}
+    <div className="nk-prop-group">
+      <button className="nk-prop-group-header" onClick={() => setExpanded(!expanded)}>
+        <span className={`nk-prop-group-chevron ${expanded ? 'expanded' : ''}`}>▶</span>
+        <span className="nk-prop-group-title flex-1 text-left">{title}</span>
+        {badge !== undefined && <span className="nk-badge ml-auto text-[10px]">{badge}</span>}
       </button>
-      {expanded && <div className="px-2 pb-2 space-y-1.5">{children}</div>}
+      {expanded && <div className="nk-prop-group-body">{children}</div>}
     </div>
   );
 });
@@ -178,9 +171,12 @@ const PropertyRow = memo(function PropertyRow({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-2">
+      <div className="nk-prop-row">
         {/* Property Label */}
-        <label className="w-20 text-[11px] text-[var(--vscode-descriptionForeground)] truncate">
+        <label
+          className="truncate text-[11px] text-[var(--nk-fg-secondary)]"
+          style={{ width: '80px', flexShrink: 0 }}
+        >
           {label}
         </label>
 
@@ -194,11 +190,9 @@ const PropertyRow = memo(function PropertyRow({
             max={max}
             step={step}
             disabled={disabled}
-            className="w-full px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded disabled:opacity-50"
+            className="nk-prop-input flex-1 disabled:opacity-50"
           />
-          {unit && (
-            <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{unit}</span>
-          )}
+          {unit && <span className="nk-prop-unit">{unit}</span>}
         </div>
 
         {/* Keyframe Toggle */}
@@ -207,10 +201,10 @@ const PropertyRow = memo(function PropertyRow({
           disabled={disabled}
           className={`p-1 text-[11px] rounded transition-colors ${
             currentKeyframe
-              ? 'bg-[var(--vscode-inputOption-activeBackground)] text-[var(--vscode-inputOption-activeForeground)]'
+              ? 'bg-[var(--nk-bg-active)] text-[var(--nk-accent)]'
               : hasKf
-                ? 'text-[var(--vscode-textLink-foreground)]'
-                : 'text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]'
+                ? 'text-[var(--nk-accent)]'
+                : 'text-[var(--nk-fg-secondary)] hover:text-[var(--nk-fg)]'
           }`}
           title={currentKeyframe ? t('animation.removeKeyframe') : t('animation.addKeyframe')}
         >
@@ -222,7 +216,7 @@ const PropertyRow = memo(function PropertyRow({
           <button
             onClick={() => setShowKeyframes(!showKeyframes)}
             disabled={disabled}
-            className="p-1 text-[10px] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
+            className="p-1 text-[10px] text-[var(--nk-fg-secondary)] hover:text-[var(--nk-fg)]"
             title={t('animation.showKeyframes')}
           >
             {showKeyframes ? '▼' : '▶'} ({property.keyframes.length})
@@ -238,23 +232,21 @@ const PropertyRow = memo(function PropertyRow({
             .map((kf) => (
               <div
                 key={kf.id}
-                className={`flex items-center gap-2 px-2 py-1 text-[10px] rounded cursor-pointer ${
-                  Math.abs(kf.time - currentTime) < 0.01
-                    ? 'bg-[var(--vscode-list-activeSelectionBackground)]'
-                    : 'hover:bg-[var(--vscode-list-hoverBackground)]'
+                className={`vscode-list-item flex cursor-pointer items-center gap-2 px-2 py-1 text-[10px] ${
+                  Math.abs(kf.time - currentTime) < 0.01 ? 'active' : ''
                 }`}
                 onClick={() => onSeekToTime(kf.time)}
               >
                 <span className="font-mono">{kf.time.toFixed(2)}s</span>
                 <span className="flex-1">{kf.value.toFixed(2)}</span>
-                <span className="text-[var(--vscode-descriptionForeground)]">{kf.easing}</span>
+                <span className="text-[var(--nk-fg-secondary)]">{kf.easing}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onRemoveKeyframe(kf.id);
                   }}
                   disabled={disabled}
-                  className="p-0.5 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded"
+                  className="icon-button h-4 w-4 rounded"
                 >
                   ✕
                 </button>
@@ -416,15 +408,13 @@ const StrokeSection = memo(function StrokeSection({
     <div className="space-y-3">
       {/* Preset Selector */}
       <div className="space-y-1">
-        <label className="text-[11px] text-[var(--vscode-descriptionForeground)]">
-          {t('shape.stroke.preset.title')}
-        </label>
+        <label className="nk-label">{t('shape.stroke.preset.title')}</label>
         <div className="flex gap-2">
           <select
             value={selectedPreset}
             onChange={(e) => setSelectedPreset(e.target.value as StrokeAnimationPreset | '')}
             disabled={disabled}
-            className="flex-1 px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
+            className="nk-select flex-1"
           >
             <option value="">{t('shape.stroke.preset.select')}</option>
             {presets.map((preset) => (
@@ -436,7 +426,7 @@ const StrokeSection = memo(function StrokeSection({
           <button
             onClick={handleApplyPreset}
             disabled={disabled || !selectedPreset}
-            className="px-3 py-1 text-[11px] bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] rounded disabled:opacity-50"
+            className="nk-btn-primary text-[11px] disabled:opacity-50"
           >
             {t('common.apply')}
           </button>
@@ -546,14 +536,14 @@ const KeyframeTimelineMini = memo(function KeyframeTimelineMini({
   if (allTimes.length === 0) return null;
 
   return (
-    <div className="relative h-6 bg-[var(--vscode-input-background)] rounded overflow-hidden">
+    <div className="relative h-6 overflow-hidden rounded bg-[var(--nk-input-bg)]">
       {/* Timeline Bar */}
       <div className="absolute inset-0">
         {/* Keyframe Markers */}
         {allTimes.map((time, i) => (
           <button
             key={i}
-            className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-[var(--vscode-textLink-foreground)] rounded-sm transform -translate-x-1/2 hover:scale-125 transition-transform"
+            className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 transform rounded-sm bg-[var(--nk-accent)] transition-transform hover:scale-125"
             style={{ left: `${(time / duration) * 100}%` }}
             onClick={() => onSeekToTime(time)}
             title={`${time.toFixed(2)}s`}
@@ -562,16 +552,16 @@ const KeyframeTimelineMini = memo(function KeyframeTimelineMini({
 
         {/* Current Time Indicator */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-[var(--vscode-editorCursor-foreground)]"
+          className="absolute bottom-0 top-0 w-0.5 bg-[var(--nk-fg)]"
           style={{ left: `${(currentTime / duration) * 100}%` }}
         />
       </div>
 
       {/* Time Labels */}
-      <div className="absolute bottom-0 left-0 text-[9px] text-[var(--vscode-descriptionForeground)] px-1">
+      <div className="absolute bottom-0 left-0 px-1 text-[9px] text-[var(--nk-fg-secondary)]">
         0s
       </div>
-      <div className="absolute bottom-0 right-0 text-[9px] text-[var(--vscode-descriptionForeground)] px-1">
+      <div className="absolute bottom-0 right-0 px-1 text-[9px] text-[var(--nk-fg-secondary)]">
         {duration.toFixed(1)}s
       </div>
     </div>
@@ -657,24 +647,24 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
 
   if (!shape) {
     return (
-      <div className="flex items-center justify-center h-full text-[11px] text-[var(--vscode-descriptionForeground)]">
+      <div className="flex h-full items-center justify-center text-[11px] text-[var(--nk-fg-secondary)]">
         {t('shape.animation.selectShape')}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--vscode-sideBar-background)]">
+    <div className="nk-prop-panel">
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-[var(--vscode-panel-border)]">
-        <span className="text-[11px] font-medium text-[var(--vscode-foreground)]">
+      <div className="flex items-center justify-between border-b border-[var(--nk-border)] px-2 py-1.5">
+        <span className="text-[11px] font-medium text-[var(--nk-fg)]">
           {t('shape.animation.title')}
         </span>
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{shape.name}</span>
+        <span className="text-[10px] text-[var(--nk-fg-secondary)]">{shape.name}</span>
       </div>
 
       {/* Mini Timeline */}
-      <div className="px-2 py-1.5 border-b border-[var(--vscode-panel-border)]">
+      <div className="border-b border-[var(--nk-border)] px-2 py-1.5">
         <KeyframeTimelineMini
           animation={animation}
           currentTime={currentTime}
@@ -687,13 +677,13 @@ export const ShapeAnimationPanel = memo(function ShapeAnimationPanel({
       <div className="flex-1 overflow-y-auto">
         {!shape.animation ? (
           <div className="p-4 text-center">
-            <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-2">
+            <p className="mb-2 text-[11px] text-[var(--nk-fg-secondary)]">
               {t('shape.animation.noAnimation')}
             </p>
             <button
               onClick={handleInitAnimation}
               disabled={disabled}
-              className="px-3 py-1.5 text-[11px] bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] rounded disabled:opacity-50"
+              className="nk-btn-primary text-[11px] disabled:opacity-50"
             >
               {t('shape.animation.enable')}
             </button>
