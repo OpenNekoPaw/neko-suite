@@ -171,8 +171,20 @@ function getAgentStatusMeta(status: StorySceneState['agentStatus'], t: Translati
       return { label: t('table.status.agent.ready'), tone: 'info' as const };
     case 'review':
       return { label: t('table.status.agent.review'), tone: 'warn' as const };
+    case 'parsing':
+      return { label: t('table.status.agent.parsing'), tone: 'info' as const };
+    case 'prompt-review':
+      return { label: t('table.status.agent.prompt-review'), tone: 'warn' as const };
+    case 'pilot-review':
+      return { label: t('table.status.agent.pilot-review'), tone: 'warn' as const };
+    case 'generating':
+      return { label: t('table.status.agent.generating'), tone: 'info' as const };
+    case 'timeline-arranged':
+      return { label: t('table.status.agent.timeline-arranged'), tone: 'success' as const };
     case 'sent':
       return { label: t('table.status.agent.sent'), tone: 'success' as const };
+    case 'failed':
+      return { label: t('table.status.agent.failed'), tone: 'warn' as const };
     case 'skipped':
       return { label: t('table.status.skipped'), tone: 'neutral' as const };
     case 'not-requested':
@@ -223,6 +235,7 @@ function SceneRow({
   const agentStatus = getAgentStatusMeta(state.agentStatus, t);
   const canvasStatus = getCanvasStatusMeta(state.canvasStatus, t);
   const isSkipped = state.agentStatus === 'skipped' || state.canvasStatus === 'skipped';
+  const canStartCreation = state.agentStatus === 'not-requested' || state.agentStatus === 'ready';
   const displayNumber = scene.sceneNumber
     ? `#${scene.sceneNumber}`
     : `#${String(sceneIndex).padStart(2, '0')}`;
@@ -370,7 +383,7 @@ function SceneRow({
             </span>
             <StatusBadge label={agentStatus.label} tone={agentStatus.tone} />
           </div>
-          <div>
+          <div style={{ marginBottom: 4 }}>
             <span
               style={{
                 fontSize: 9,
@@ -383,6 +396,36 @@ function SceneRow({
             </span>
             <StatusBadge label={canvasStatus.label} tone={canvasStatus.tone} />
           </div>
+          {state.generationStatus && state.generationStatus !== 'idle' && (
+            <div>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: 'var(--vscode-descriptionForeground)',
+                  opacity: 0.5,
+                  marginRight: 4,
+                }}
+              >
+                G
+              </span>
+              <StatusBadge
+                label={
+                  state.generationStatus === 'generating'
+                    ? t('table.status.agent.generating')
+                    : state.generationStatus === 'done'
+                      ? t('table.status.agent.sent')
+                      : t('table.status.agent.failed')
+                }
+                tone={
+                  state.generationStatus === 'done'
+                    ? 'success'
+                    : state.generationStatus === 'partial-fail'
+                      ? 'warn'
+                      : 'info'
+                }
+              />
+            </div>
+          )}
         </div>
       </td>
 
@@ -395,6 +438,24 @@ function SceneRow({
         }}
       >
         <div>
+          {canStartCreation && (
+            <>
+              <ActionButton
+                label={t('table.action.startVideo')}
+                onClick={() => onSceneAction?.(scene.sceneId, 'startVideoCreation')}
+              />
+              <ActionButton
+                label={t('table.action.generateScene')}
+                onClick={() => onSceneAction?.(scene.sceneId, 'generateCurrentScene')}
+              />
+            </>
+          )}
+          {state.agentStatus === 'failed' && (
+            <ActionButton
+              label={t('table.action.retry')}
+              onClick={() => onSceneAction?.(scene.sceneId, 'retryFailed')}
+            />
+          )}
           <ActionButton
             label={t('table.action.analyze')}
             onClick={() => onSceneAction?.(scene.sceneId, 'analyze')}

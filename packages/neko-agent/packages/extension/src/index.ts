@@ -281,6 +281,7 @@ function registerCommands(
         eventPayload?: Record<string, unknown>;
         skipStages?: string[];
         stageParams?: Record<string, Record<string, unknown>>;
+        generationUnit?: 'scene' | 'shot';
       }) => {
         const handle = pipelineBootstrap.startPipeline(
           params.flowId,
@@ -288,6 +289,7 @@ function registerCommands(
             source: params.source,
             sourceFormat: params.sourceFormat,
             globalStyle: params.style,
+            generationUnit: params.generationUnit,
             stageParams: {
               ...(params.stageParams ?? {}),
               ...(params.importToCanvas

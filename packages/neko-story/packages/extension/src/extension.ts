@@ -288,40 +288,83 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     }),
-    vscode.commands.registerCommand('neko.story.startVideoCreation', async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'nekostory') {
-        void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
-        return;
-      }
-
-      const payload = buildSceneAgentPayload(
-        editor,
-        '请基于当前场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
-      );
-      if (!payload) {
-        void handleError(new Error('当前光标不在可识别的场景中'), {
-          showToUser: true,
-          severity: 'warning',
-        });
-        return;
-      }
-
-      try {
-        await vscode.commands.executeCommand(
-          'neko.agent.startPipeline',
-          createStoryPipelineParams(payload, {
-            flowId: 'flowF',
-          }),
-        );
-      } catch {
-        try {
-          await vscode.commands.executeCommand('neko.agent.sendContext', payload);
-        } catch {
-          // neko-agent extension not installed or not activated — silently ignore
+    vscode.commands.registerCommand(
+      'neko.story.startVideoCreation',
+      async (options?: { sceneId?: string; sceneIds?: string[]; mode?: 'scene' | 'all' }) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'nekostory') {
+          void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
+          return;
         }
-      }
-    }),
+
+        // "All scenes" mode: skip scene cursor check, process entire screenplay
+        if (options?.mode === 'all' || options?.sceneIds) {
+          const document = parse(editor.document.getText());
+          const scriptIndex = buildScriptIndex(editor.document.uri, document);
+          const scriptPath = editor.document.uri.fsPath;
+          const targetSceneIds = options?.sceneIds ?? scriptIndex.scenes.map((s) => s.sceneId);
+          const firstScene = scriptIndex.scenes[0];
+
+          if (!firstScene) {
+            void handleError(new Error('剧本中没有可识别的场景'), {
+              showToUser: true,
+              severity: 'warning',
+            });
+            return;
+          }
+
+          try {
+            await vscode.commands.executeCommand('neko.agent.startPipeline', {
+              flowId: 'flowF',
+              source: scriptPath,
+              sourceFormat: 'fountain' as const,
+              importToCanvas: true,
+              eventCommand: 'neko.story.handlePipelineEvent',
+              eventPayload: {
+                scriptPath,
+                sceneId: firstScene.sceneId,
+              },
+              stageParams: {
+                parseStoryboard: { sceneIds: targetSceneIds },
+              },
+            });
+          } catch {
+            // neko-agent extension not available
+          }
+          return;
+        }
+
+        // Single scene mode: use cursor position or explicit sceneId
+        const payload = options?.sceneId
+          ? buildSceneAgentPayloadBySceneId(editor, options.sceneId)
+          : buildSceneAgentPayload(
+              editor,
+              '请基于当前场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
+            );
+        if (!payload) {
+          void handleError(new Error('当前光标不在可识别的场景中'), {
+            showToUser: true,
+            severity: 'warning',
+          });
+          return;
+        }
+
+        try {
+          await vscode.commands.executeCommand(
+            'neko.agent.startPipeline',
+            createStoryPipelineParams(payload, {
+              flowId: 'flowF',
+            }),
+          );
+        } catch {
+          try {
+            await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+          } catch {
+            // neko-agent extension not installed or not activated — silently ignore
+          }
+        }
+      },
+    ),
     vscode.commands.registerCommand(
       'neko.story.applyInlineDiff',
       async (params: {
@@ -696,6 +739,7 @@ function createStoryPipelineParams(
   options: {
     flowId: FlowId;
     skipStages?: readonly string[];
+    generationUnit?: 'scene' | 'shot';
   },
 ) {
   const data = payload.data as {
@@ -708,6 +752,7 @@ function createStoryPipelineParams(
     source: data.scriptPath,
     sourceFormat: 'fountain' as const,
     importToCanvas: true,
+    generationUnit: options.generationUnit,
     eventCommand: 'neko.story.handlePipelineEvent',
     eventPayload: {
       scriptPath: data.scriptPath,
@@ -760,5 +805,47 @@ function buildSceneAgentPayload(
       },
     },
     intent,
+  };
+}
+
+/**
+ * Build an agent payload for a specific sceneId (used by ScriptTableView actions).
+ * Unlike buildSceneAgentPayload which uses cursor position, this looks up by sceneId.
+ */
+function buildSceneAgentPayloadBySceneId(
+  editor: vscode.TextEditor,
+  sceneId: string,
+): AgentContextPayload | null {
+  const document = parse(editor.document.getText());
+  const scriptIndex = buildScriptIndex(editor.document.uri, document);
+  const scene = scriptIndex.scenes.find((entry) => entry.sceneId === sceneId);
+  if (!scene) {
+    return null;
+  }
+
+  const selection = new vscode.Selection(
+    scene.line_start,
+    0,
+    scene.line_end,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const selectedText = editor.document.getText(selection);
+  const scriptPath = editor.document.uri.fsPath;
+
+  return {
+    type: 'story-selection',
+    id: `story:${scriptPath}:${scene.sceneId}`,
+    label: scene.sceneTitle,
+    summary: `Scene: ${scene.sceneTitle}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`,
+    data: {
+      scriptPath,
+      sceneId: scene.sceneId,
+      selectedText,
+      range: {
+        start: { line: scene.line_start, character: 0 },
+        end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
+      },
+    },
+    intent: '请基于当前场景启动标准视频创作流程。',
   };
 }

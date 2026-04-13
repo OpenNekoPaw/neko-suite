@@ -152,16 +152,20 @@ export interface PipelineContext {
   scenePlans?: readonly StoryScenePlan[];
   /** Result of importing semantic storyboard into canvas */
   canvasStoryboard?: CreatedCanvasStoryboard;
+  /** Generation granularity — 'scene' generates one media per scene, 'shot' generates per shot */
+  generationUnit?: 'scene' | 'shot';
 
   // — Generation —
   /** Batch ID for tracking parallel generation */
   batchId?: string;
-  /** Task IDs for each generated scene */
+  /** Task IDs for each generated scene/shot */
   taskIds?: string[];
-  /** Local file paths of generated media */
+  /** Local file paths of generated media (aligned with generation units) */
   generatedPaths?: string[];
-  /** Scene indices that failed generation */
+  /** Scene indices that failed generation (scene mode) */
   failedScenes?: number[];
+  /** Shot task IDs that failed generation (shot mode, format: "scene-{i}-shot-{j}") */
+  failedShots?: string[];
 
   // — Pilot —
   /** Generated pilot scene path (from generatePilot stage) */

@@ -12,9 +12,10 @@ import {
   type NekoCanvasAPI,
   type NekoCutAPI,
   type NekoStoryAPI,
-  resolveCharacterBindingsForNames,
   type StoryScenePlan,
+  type StoryShotPlan,
 } from '@neko/shared';
+import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { EngineClient } from '@neko/neko-client';
 import type { IAudioAnalyzer, IFrameExtractor } from '../tools/qualityCheckTools';
@@ -25,11 +26,13 @@ import { getLogger } from '../base';
 
 interface StoryboardScene {
   index: number;
+  sceneId?: string;
   heading: string;
   description: string;
   dialogue: string[];
   estimatedDuration: number;
   suggestedPrompt: string;
+  shotPlans?: readonly StoryShotPlan[];
 }
 
 export interface IFileReader {
@@ -45,13 +48,23 @@ export interface IStoryParser {
   parseToScenes(content: string): StoryboardScene[];
 }
 
+export interface StructuredStoryPlanResult {
+  scenes: StoryboardScene[];
+  scenePlans: readonly StoryScenePlan[];
+}
+
+export interface StructuredStoryPlanSkip {
+  skipped: true;
+  reason: string;
+}
+
 export interface IStructuredStoryPlanner {
   plan(ctx: {
     source?: string;
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     globalStyle?: string;
     stageParams?: Record<string, Record<string, unknown>>;
-  }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined>;
+  }): Promise<StructuredStoryPlanResult | StructuredStoryPlanSkip | undefined>;
 }
 
 export interface IStoryboardCanvasSink {
@@ -69,6 +82,11 @@ export interface ILLMAnalyzer {
 
 export interface IPromptOptimizer {
   optimizePrompt(scene: StoryboardScene, globalStyle?: string): Promise<string>;
+  optimizeShotPrompt?(
+    scene: StoryboardScene,
+    shot: StoryShotPlan,
+    globalStyle?: string,
+  ): Promise<string>;
 }
 
 export interface IMediaGenerator {
@@ -257,15 +275,18 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     globalStyle?: string;
     stageParams?: Record<string, Record<string, unknown>>;
-  }): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined> {
+  }): Promise<StructuredStoryPlanResult | StructuredStoryPlanSkip | undefined> {
     if (ctx.sourceFormat !== 'fountain' || !ctx.source || ctx.source.includes('\n')) {
       return undefined;
     }
 
     const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
     if (!storyExt) {
-      logger.warn('neko-story extension not installed, skipping structured scene planning');
-      return undefined;
+      return {
+        skipped: true,
+        reason:
+          'neko-story extension is not installed. Install it to enable structured scene planning.',
+      };
     }
 
     const api = storyExt.isActive
@@ -277,13 +298,22 @@ export class StructuredStoryPlannerAdapter implements IStructuredStoryPlanner {
       ? sceneIdsRaw.filter((value): value is string => typeof value === 'string')
       : undefined;
 
-    const scenePlans = api.generateScenePlans(ctx.source, sceneIds);
     const scriptIndex = api.getScriptIndex(ctx.source);
-    if (!scenePlans || !scriptIndex) {
-      logger.warn(
-        'neko-story ScriptIndex unavailable, falling back to parser-based scene extraction',
-      );
-      return undefined;
+    if (!scriptIndex) {
+      return {
+        skipped: true,
+        reason:
+          'Script is not indexed. Open the screenplay file first so neko-story can build its index.',
+      };
+    }
+
+    const scenePlans = api.generateScenePlans(ctx.source, sceneIds);
+    if (!scenePlans || scenePlans.length === 0) {
+      return {
+        skipped: true,
+        reason:
+          'No scene structure recognized in the screenplay. Ensure the file contains valid Fountain scene headings.',
+      };
     }
 
     const scenes = scenePlans.map((scenePlan, index) => {
@@ -432,25 +462,120 @@ Only return valid JSON array, no markdown fences.`;
 // IPromptOptimizer → vscode command neko.agent.internalChat
 // =============================================================================
 
+/**
+ * Build a structured template prompt from scene data.
+ * This is the deterministic base — LLM only refines style, not structure.
+ */
+export function buildTemplatePrompt(scene: StoryboardScene, globalStyle?: string): string {
+  const parts: string[] = [];
+
+  parts.push(`Scene: ${scene.heading}`);
+
+  if (scene.description) {
+    parts.push(`Visual: ${scene.description}`);
+  }
+
+  if (scene.dialogue.length > 0) {
+    const dialogueSummary = scene.dialogue.slice(0, 2).join('; ');
+    parts.push(`Action: ${dialogueSummary}`);
+  }
+
+  parts.push(`Duration: ${scene.estimatedDuration}s`);
+
+  const lead = scene.shotPlans?.[0];
+  if (lead) {
+    const cameraInfo = [lead.shotScale, lead.cameraMovement].filter(Boolean).join(' / ');
+    if (cameraInfo) {
+      parts.push(`Camera: ${cameraInfo}`);
+    }
+  }
+
+  if (globalStyle) {
+    parts.push(`Style: ${globalStyle}`);
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * Build a structured template prompt from shot-level data.
+ */
+export function buildShotTemplatePrompt(
+  scene: StoryboardScene,
+  shot: StoryShotPlan,
+  globalStyle?: string,
+): string {
+  const parts: string[] = [];
+
+  parts.push(`Scene: ${scene.heading}`);
+
+  if (shot.visualDescription) {
+    parts.push(`Visual: ${shot.visualDescription}`);
+  }
+
+  if (shot.dialogue) {
+    parts.push(`Dialogue: ${shot.dialogue}`);
+  }
+
+  if (shot.duration) {
+    parts.push(`Duration: ${shot.duration}s`);
+  }
+
+  const cameraInfo = [shot.shotScale, shot.cameraMovement, shot.cameraAngle]
+    .filter(Boolean)
+    .join(' / ');
+  if (cameraInfo) {
+    parts.push(`Camera: ${cameraInfo}`);
+  }
+
+  if (shot.characters && shot.characters.length > 0) {
+    parts.push(`Characters: ${shot.characters.map((c) => c.characterName).join(', ')}`);
+  }
+
+  if (shot.emotion && shot.emotion.length > 0) {
+    parts.push(`Mood: ${shot.emotion.join(', ')}`);
+  }
+
+  if (globalStyle) {
+    parts.push(`Style: ${globalStyle}`);
+  }
+
+  return parts.join('\n');
+}
+
+const CINEMATIC_SYSTEM_PROMPT =
+  'You are a cinematic prompt engineer. Refine the structured scene description below into vivid, atmospheric language for AI video generation (Sora/Runway/Kling style). Preserve all factual details — only enhance the cinematic expression. Max 200 words. Return only the refined prompt text.';
+
 export class PromptOptimizerAdapter implements IPromptOptimizer {
   async optimizePrompt(scene: StoryboardScene, globalStyle?: string): Promise<string> {
-    const systemPrompt = `You are a video generation prompt engineer. Optimize the scene description into a concise, vivid prompt for AI video generation (Sora/Runway/Kling style).
-Focus on: camera angle, lighting, movement, atmosphere. Max 200 words.
-${globalStyle ? `Style: ${globalStyle}` : ''}
-Return only the optimized prompt text, nothing else.`;
+    const templatePrompt = buildTemplatePrompt(scene, globalStyle);
+    return this.refineWithLLM(templatePrompt);
+  }
 
-    const userContent = `Scene: ${scene.heading}\nDescription: ${scene.description}\nDialogue: ${scene.dialogue.join('; ')}`;
+  async optimizeShotPrompt(
+    scene: StoryboardScene,
+    shot: StoryShotPlan,
+    globalStyle?: string,
+  ): Promise<string> {
+    const templatePrompt = buildShotTemplatePrompt(scene, shot, globalStyle);
+    return this.refineWithLLM(templatePrompt);
+  }
 
-    const response = await vscode.commands.executeCommand<string | null>(
-      'neko.agent.internalChat',
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-      { maxTokens: 500 },
-    );
+  private async refineWithLLM(templatePrompt: string): Promise<string> {
+    try {
+      const response = await vscode.commands.executeCommand<string | null>(
+        'neko.agent.internalChat',
+        [
+          { role: 'system', content: CINEMATIC_SYSTEM_PROMPT },
+          { role: 'user', content: templatePrompt },
+        ],
+        { maxTokens: 500 },
+      );
 
-    return response ?? scene.suggestedPrompt;
+      return response ?? templatePrompt;
+    } catch {
+      return templatePrompt;
+    }
   }
 }
 

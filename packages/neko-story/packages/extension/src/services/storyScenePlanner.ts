@@ -34,6 +34,7 @@ export function buildShotPlansForScene(
   recommendedShotCount = estimateShotCount(scene),
 ): StoryShotPlan[] {
   const shotCount = clampShotCount(recommendedShotCount);
+  const shotDurations = distributeDuration(scene.estimatedDuration, shotCount);
   const baseCharacters = scene.sceneCharacters.map((characterName) => ({ characterName }));
   const sceneTags = [scene.location, scene.timeOfDay ?? undefined].filter(
     (value): value is string => Boolean(value && value.trim()),
@@ -49,12 +50,12 @@ export function buildShotPlansForScene(
 
     return {
       shotNumber: index + 1,
-      duration: DEFAULT_SHOT_DURATION,
+      duration: shotDurations[index] ?? DEFAULT_SHOT_DURATION,
       visualDescription: buildVisualDescription(summary, index, shotCount),
       characters: focusCharacters,
       shotScale,
-      cameraAngle: index === 0 ? 'eye_level' : undefined,
-      cameraMovement: shotCount >= 3 && index === shotCount - 1 ? 'push_in' : undefined,
+      cameraAngle: index === 0 ? 'eye-level' : undefined,
+      cameraMovement: shotCount >= 3 && index === shotCount - 1 ? 'dolly-in' : undefined,
       characterAction: summary,
       emotion: [],
       sceneTags,
@@ -73,6 +74,26 @@ function clampShotCount(rawCount: number): number {
   return Math.max(MIN_SHOT_COUNT, Math.min(rawCount || MIN_SHOT_COUNT, MAX_SHOT_COUNT));
 }
 
+/**
+ * Distribute a scene's total duration across shots.
+ * First and last shots get slightly more time (establishing/payoff).
+ * Falls back to equal split when scene duration is too small.
+ */
+function distributeDuration(sceneDuration: number, shotCount: number): number[] {
+  if (shotCount <= 0) return [];
+  const total = Math.max(sceneDuration, shotCount * MIN_SHOT_DURATION);
+  if (shotCount === 1) return [Math.round(total)];
+
+  const base = total / shotCount;
+  return Array.from({ length: shotCount }, (_, i) => {
+    const isEdge = i === 0 || i === shotCount - 1;
+    const weight = isEdge ? 1.2 : 1.0;
+    return Math.max(MIN_SHOT_DURATION, Math.round(base * weight));
+  });
+}
+
+const MIN_SHOT_DURATION = 2;
+
 function buildVisualDescription(summary: string, index: number, total: number): string {
   if (total <= 1) return summary;
   if (index === 0) return `${summary} Establish the scene context.`;
@@ -82,7 +103,7 @@ function buildVisualDescription(summary: string, index: number, total: number): 
 
 function resolveShotScale(index: number, total: number): StoryShotPlan['shotScale'] {
   if (total === 1) return 'MS';
-  if (index === 0) return 'WS';
+  if (index === 0) return 'LS';
   if (index === total - 1) return 'CU';
   return 'MS';
 }

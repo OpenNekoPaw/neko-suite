@@ -49,11 +49,30 @@ describe('storyScenePlanner', () => {
 
     expect(shots[0]).toMatchObject({
       shotNumber: 1,
-      shotScale: 'WS',
+      shotScale: 'LS',
       sceneTags: ['OFFICE', 'DAY'],
     });
     expect(shots[shots.length - 1]).toMatchObject({
       shotScale: 'CU',
     });
+  });
+
+  it('distributes scene duration across shots proportionally', () => {
+    const shots = buildShotPlansForScene(scriptIndex.scenes[0]!, 3);
+
+    expect(shots).toHaveLength(3);
+    // Edge shots (first/last) get 1.2x weight, middle gets 1.0x
+    const totalDuration = shots.reduce((sum, shot) => sum + (shot.duration ?? 0), 0);
+    expect(totalDuration).toBeGreaterThanOrEqual(scriptIndex.scenes[0]!.estimatedDuration);
+    // First and last should be longer than middle
+    expect(shots[0]!.duration).toBeGreaterThanOrEqual(shots[1]!.duration!);
+    expect(shots[2]!.duration).toBeGreaterThanOrEqual(shots[1]!.duration!);
+  });
+
+  it('uses camera angle and movement constants matching type definitions', () => {
+    const shots = buildShotPlansForScene(scriptIndex.scenes[0]!, 3);
+
+    expect(shots[0]!.cameraAngle).toBe('eye-level');
+    expect(shots[2]!.cameraMovement).toBe('dolly-in');
   });
 });

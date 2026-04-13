@@ -140,7 +140,18 @@ export interface FountainDocument {
   elements: AnyFountainElement[];
 }
 
-export type StoryAgentStatus = 'not-requested' | 'ready' | 'review' | 'sent' | 'skipped';
+export type StoryAgentStatus =
+  | 'not-requested'
+  | 'ready'
+  | 'review'
+  | 'parsing'
+  | 'prompt-review'
+  | 'pilot-review'
+  | 'generating'
+  | 'timeline-arranged'
+  | 'sent'
+  | 'skipped'
+  | 'failed';
 
 export type StoryCanvasStatus = 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
 
@@ -148,6 +159,9 @@ export interface StorySceneState {
   readonly sceneId: string;
   readonly agentStatus: StoryAgentStatus;
   readonly canvasStatus: StoryCanvasStatus;
+  readonly generationStatus?: 'idle' | 'generating' | 'done' | 'partial-fail';
+  readonly timelineStatus?: 'not-arranged' | 'arranged';
+  readonly lastError?: string;
 }
 
 export type StorySceneAction =
@@ -155,7 +169,10 @@ export type StorySceneAction =
   | 'generateStoryboard'
   | 'sendToCanvas'
   | 'openCanvas'
-  | 'toggleSkip';
+  | 'toggleSkip'
+  | 'startVideoCreation'
+  | 'generateCurrentScene'
+  | 'retryFailed';
 
 // Message types for VSCode communication
 export type StoryViewMode = 'screenplay' | 'table';

@@ -7,6 +7,7 @@
 import { useEffect } from 'react';
 import type { ScriptCanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
+import { normalizeScriptScenes } from '../../utils/scriptScenes';
 
 // =============================================================================
 // Types
@@ -43,7 +44,19 @@ export interface ScriptNodeProps {
 // Component
 // =============================================================================
 
-const MAX_VISIBLE_SCENES = 5;
+/** Height of header + footer chrome in px */
+const CHROME_HEIGHT = 56;
+/** Approximate height of a single scene row in px */
+const SCENE_ROW_HEIGHT = 28;
+/** Height of the "+N scenes…" overflow indicator */
+const OVERFLOW_ROW_HEIGHT = 24;
+/** Absolute minimum visible scene rows */
+const MIN_VISIBLE_SCENES = 2;
+
+function computeMaxVisibleScenes(nodeHeight: number): number {
+  const available = nodeHeight - CHROME_HEIGHT - OVERFLOW_ROW_HEIGHT;
+  return Math.max(MIN_VISIBLE_SCENES, Math.floor(available / SCENE_ROW_HEIGHT));
+}
 
 export function ScriptNode({
   node,
@@ -59,7 +72,8 @@ export function ScriptNode({
   onOpenScript,
   onNavigateToScene,
 }: ScriptNodeProps) {
-  const { scriptPath, scriptTitle, scenes, linkedSceneGroupId } = node.data;
+  const { scriptPath, scriptTitle, linkedSceneGroupId } = node.data;
+  const scenes = normalizeScriptScenes(node.data.scenes);
 
   // Request scene TOC on mount if not yet loaded
   useEffect(() => {
@@ -69,7 +83,8 @@ export function ScriptNode({
   }, [node.id, scriptPath, scenes.length, onLoadScenes]);
 
   const fileName = scriptPath.split('/').pop() ?? scriptPath;
-  const visibleScenes = scenes.slice(0, MAX_VISIBLE_SCENES);
+  const maxVisible = computeMaxVisibleScenes(node.size.height);
+  const visibleScenes = scenes.slice(0, maxVisible);
   const hiddenCount = scenes.length - visibleScenes.length;
 
   return (

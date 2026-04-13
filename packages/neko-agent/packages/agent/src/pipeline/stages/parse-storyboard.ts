@@ -15,15 +15,25 @@ export interface IStoryParser {
   parseToScenes(content: string): StoryboardScene[];
 }
 
+/** Skip result returned when structured planning cannot proceed */
+export interface StructuredStoryPlanSkip {
+  skipped: true;
+  reason: string;
+}
+
 /** Dependency: structured scene planner (preferred for indexed Fountain files) */
 export interface IStructuredStoryPlanner {
   /**
    * Plan indexed Fountain scenes into semantic ScenePlan + StoryboardScene output.
-   * Returns undefined when structured planning is unavailable for the current context.
+   * Returns undefined when not applicable, or a skip with reason when applicable but failing.
    */
   plan(
     ctx: PipelineContext,
-  ): Promise<{ scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] } | undefined>;
+  ): Promise<
+    | { scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] }
+    | StructuredStoryPlanSkip
+    | undefined
+  >;
 }
 
 /** Dependency: LLM for free-form text analysis */
@@ -36,6 +46,15 @@ export interface ParseStoryboardStageDeps {
   storyParser?: IStoryParser;
   structuredStoryPlanner?: IStructuredStoryPlanner;
   llmAnalyzer: ILLMAnalyzer;
+}
+
+function isSkipResult(
+  result:
+    | { scenes: StoryboardScene[]; scenePlans: readonly StoryScenePlan[] }
+    | StructuredStoryPlanSkip
+    | undefined,
+): result is StructuredStoryPlanSkip {
+  return result !== undefined && 'skipped' in result && result.skipped === true;
 }
 
 export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPipelineStage {
@@ -52,17 +71,24 @@ export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPip
 
       let scenes: StoryboardScene[];
       let scenePlans: readonly StoryScenePlan[] | undefined;
+      let structuredSkipReason: string | undefined;
 
       if (ctx.sourceFormat === 'fountain') {
         const planned = await deps.structuredStoryPlanner?.plan(ctx);
-        if (planned) {
+
+        if (planned && !isSkipResult(planned)) {
           scenes = planned.scenes;
           scenePlans = planned.scenePlans;
-        } else if (deps.storyParser) {
-          // Fountain format: use neko-story parser
-          scenes = deps.storyParser.parseToScenes(text);
         } else {
-          scenes = await deps.llmAnalyzer.extractScenes(text, ctx.globalStyle);
+          if (isSkipResult(planned)) {
+            structuredSkipReason = planned.reason;
+          }
+
+          if (deps.storyParser) {
+            scenes = deps.storyParser.parseToScenes(text);
+          } else {
+            scenes = await deps.llmAnalyzer.extractScenes(text, ctx.globalStyle);
+          }
         }
       } else {
         // Free-form text: use LLM to extract scenes
@@ -70,7 +96,10 @@ export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPip
       }
 
       if (scenes.length === 0) {
-        throw new Error('parseStoryboard: No scenes extracted from input');
+        const detail = structuredSkipReason
+          ? ` Structured planning was skipped: ${structuredSkipReason}`
+          : '';
+        throw new Error(`parseStoryboard: No scenes extracted from input.${detail}`);
       }
 
       return { ...ctx, scenes, scenePlans };

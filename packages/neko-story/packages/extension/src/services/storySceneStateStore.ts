@@ -5,13 +5,27 @@ import type {
   NekoStoryScriptIndex,
 } from '@neko/shared';
 
-export type StoryAgentStatus = 'not-requested' | 'ready' | 'review' | 'sent' | 'skipped';
+export type StoryAgentStatus =
+  | 'not-requested'
+  | 'ready'
+  | 'review'
+  | 'parsing'
+  | 'prompt-review'
+  | 'pilot-review'
+  | 'generating'
+  | 'timeline-arranged'
+  | 'sent'
+  | 'skipped'
+  | 'failed';
 export type StoryCanvasStatus = 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
 
 export interface StorySceneState {
   readonly sceneId: string;
   readonly agentStatus: StoryAgentStatus;
   readonly canvasStatus: StoryCanvasStatus;
+  readonly generationStatus?: 'idle' | 'generating' | 'done' | 'partial-fail';
+  readonly timelineStatus?: 'not-arranged' | 'arranged';
+  readonly lastError?: string;
 }
 
 interface StorySceneWorkflowRecord extends StorySceneState {
@@ -130,23 +144,79 @@ export class StorySceneStateStore implements vscode.Disposable {
   ): void {
     const documentUri = vscode.Uri.parse(scriptIndex.uri);
     const sceneId = payload.sceneId;
+    const stage = event['stage'] as string | undefined;
 
     switch (event.type) {
       case 'pipeline_start':
         this.updateSceneState(documentUri, scriptIndex, sceneId, {
           pipelineId,
-          agentStatus: 'review',
+          agentStatus: 'parsing',
           canvasStatus: 'queued',
+          generationStatus: 'idle',
+          timelineStatus: 'not-arranged',
+          lastError: undefined,
         });
         return;
+
+      case 'stage_start':
+        if (stage === 'parseStoryboard') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'parsing',
+          });
+        }
+        return;
+
+      case 'gate_waiting':
+        if (stage === 'generatePrompts') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'prompt-review',
+          });
+        } else if (stage === 'generatePilot') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'pilot-review',
+          });
+        }
+        return;
+
+      case 'gate_confirmed':
+        if (stage === 'generatePilot') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'generating',
+            generationStatus: 'generating',
+          });
+        }
+        return;
+
       case 'stage_complete':
-        if (event['stage'] === 'importStoryboardToCanvas') {
+        if (stage === 'importStoryboardToCanvas') {
           this.updateSceneState(documentUri, scriptIndex, sceneId, {
             pipelineId,
             canvasStatus: 'sent',
           });
+        } else if (stage === 'parseStoryboard') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'prompt-review',
+          });
+        } else if (stage === 'batchGenerate') {
+          const failedScenes = event['failedScenes'] as number[] | undefined;
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            generationStatus: failedScenes && failedScenes.length > 0 ? 'partial-fail' : 'done',
+          });
+        } else if (stage === 'arrangeOnTimeline') {
+          this.updateSceneState(documentUri, scriptIndex, sceneId, {
+            pipelineId,
+            agentStatus: 'timeline-arranged',
+            timelineStatus: 'arranged',
+          });
         }
         return;
+
       case 'pipeline_complete': {
         const result = event['result'] as
           | {
@@ -177,13 +247,16 @@ export class StorySceneStateStore implements vscode.Disposable {
         });
         return;
       }
+
       case 'pipeline_error':
         this.updateSceneState(documentUri, scriptIndex, sceneId, {
           pipelineId,
-          agentStatus: 'ready',
+          agentStatus: 'failed',
           canvasStatus: 'not-sent',
+          lastError: (event['error'] as string) ?? 'Unknown pipeline error',
         });
         return;
+
       default:
         return;
     }

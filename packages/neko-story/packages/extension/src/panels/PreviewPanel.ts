@@ -212,7 +212,15 @@ export class PreviewPanel implements vscode.Disposable {
 
   private async handleSceneAction(
     sceneId: string,
-    action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip',
+    action:
+      | 'analyze'
+      | 'generateStoryboard'
+      | 'sendToCanvas'
+      | 'openCanvas'
+      | 'toggleSkip'
+      | 'startVideoCreation'
+      | 'generateCurrentScene'
+      | 'retryFailed',
   ): Promise<void> {
     const editor = this.activeEditor;
     if (!editor || !this.isStoryDocument(editor.document)) {
@@ -258,6 +266,25 @@ export class PreviewPanel implements vscode.Disposable {
 
     if (action === 'generateStoryboard') {
       await vscode.commands.executeCommand('neko.story.generateStoryboard');
+      return;
+    }
+
+    if (action === 'startVideoCreation') {
+      await vscode.commands.executeCommand('neko.story.startVideoCreation', { sceneId });
+      return;
+    }
+
+    if (action === 'generateCurrentScene') {
+      await vscode.commands.executeCommand('neko.story.startVideoCreation', {
+        sceneIds: [sceneId],
+      });
+      return;
+    }
+
+    if (action === 'retryFailed') {
+      await vscode.commands.executeCommand('neko.story.startVideoCreation', {
+        sceneIds: [sceneId],
+      });
       return;
     }
 

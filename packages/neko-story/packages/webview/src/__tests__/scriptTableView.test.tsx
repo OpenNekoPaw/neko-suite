@@ -38,13 +38,48 @@ const sceneStates: Record<string, StorySceneState> = {
 };
 
 describe('ScriptTableView', () => {
-  it('renders upgraded scene-level columns', () => {
+  it('renders scene-level columns and status badges', () => {
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={sceneStates} />);
 
-    expect(screen.getByText('Agent Status')).toBeInTheDocument();
-    expect(screen.getByText('Canvas Status')).toBeInTheDocument();
-    expect(screen.getByText('ALICE, BOB')).toBeInTheDocument();
+    // Column headers
+    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.getByText('Characters')).toBeInTheDocument();
+
+    // Character badges rendered separately
+    expect(screen.getByText('ALICE')).toBeInTheDocument();
+    expect(screen.getByText('BOB')).toBeInTheDocument();
+
+    // Agent status badge ('ready' → 'Analysed')
     expect(screen.getByText('Analysed')).toBeInTheDocument();
+  });
+
+  it('renders video creation buttons for not-requested scenes', () => {
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+    };
+
+    renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
+
+    expect(screen.getByRole('button', { name: 'Start Video' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Scene' })).toBeInTheDocument();
+  });
+
+  it('renders retry button for failed scenes', () => {
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'failed',
+        canvasStatus: 'not-sent',
+      },
+    };
+
+    renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
+
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
   it('dispatches scene actions from action buttons', () => {
@@ -60,5 +95,27 @@ describe('ScriptTableView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Storyboard' }));
     expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'generateStoryboard');
+  });
+
+  it('dispatches startVideoCreation action', () => {
+    const onSceneAction = vi.fn();
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'ready',
+        canvasStatus: 'not-sent',
+      },
+    };
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        onSceneAction={onSceneAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Video' }));
+    expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'startVideoCreation');
   });
 });

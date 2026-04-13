@@ -118,7 +118,7 @@ Alice waits.`),
     expect(persistence.update).toHaveBeenCalled();
     expect(store.getSceneStates(uri, scriptIndex)[sceneId]).toMatchObject({
       sceneId,
-      agentStatus: 'review',
+      agentStatus: 'parsing',
       canvasStatus: 'queued',
     });
   });
