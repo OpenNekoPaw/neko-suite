@@ -163,6 +163,39 @@ describe('parseStoryboard stage', () => {
     });
     await expect(stage.execute({})).rejects.toThrow('No text available');
   });
+
+  it('should throw hard error when structured planner returns skip for fountain', async () => {
+    const storyParser = { parseToScenes: vi.fn() };
+    const stage = createParseStoryboardStage({
+      structuredStoryPlanner: {
+        plan: vi.fn().mockResolvedValue({
+          skipped: true,
+          reason: 'Script is not indexed. Open the screenplay file first.',
+        }),
+      },
+      storyParser,
+      llmAnalyzer: { extractScenes: vi.fn() },
+    });
+
+    await expect(
+      stage.execute({ source: '/path/to/script.fountain', sourceFormat: 'fountain' }),
+    ).rejects.toThrow('Script is not indexed');
+
+    // Must NOT fall through to parser (which would parse the file path)
+    expect(storyParser.parseToScenes).not.toHaveBeenCalled();
+  });
+
+  it('should throw when source is a file path without documentText', async () => {
+    const stage = createParseStoryboardStage({
+      structuredStoryPlanner: { plan: vi.fn().mockResolvedValue(undefined) },
+      storyParser: { parseToScenes: vi.fn() },
+      llmAnalyzer: { extractScenes: vi.fn() },
+    });
+
+    await expect(
+      stage.execute({ source: '/path/to/script.fountain', sourceFormat: 'fountain' }),
+    ).rejects.toThrow('source appears to be a file path');
+  });
 });
 
 // =============================================================================

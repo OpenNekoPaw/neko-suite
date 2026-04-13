@@ -41,7 +41,10 @@ interface StorySceneStatePersistence {
 
 export interface StoryPipelineEventPayload {
   readonly scriptPath: string;
-  readonly sceneId: string;
+  /** Single scene (backward-compatible) */
+  readonly sceneId?: string;
+  /** Multiple scenes (batch mode) */
+  readonly sceneIds?: readonly string[];
 }
 
 export class StorySceneStateStore implements vscode.Disposable {
@@ -143,83 +146,105 @@ export class StorySceneStateStore implements vscode.Disposable {
     event: { type: string; [key: string]: unknown },
   ): void {
     const documentUri = vscode.Uri.parse(scriptIndex.uri);
-    const sceneId = payload.sceneId;
+    // Resolve affected scene IDs — supports both single and batch mode
+    const sceneIds = resolveSceneIds(payload);
+    if (sceneIds.length === 0) return;
+
     const stage = event['stage'] as string | undefined;
 
     switch (event.type) {
       case 'pipeline_start':
-        this.updateSceneState(documentUri, scriptIndex, sceneId, {
-          pipelineId,
-          agentStatus: 'parsing',
-          canvasStatus: 'queued',
-          generationStatus: 'idle',
-          timelineStatus: 'not-arranged',
-          lastError: undefined,
-        });
+        for (const sid of sceneIds) {
+          this.updateSceneState(documentUri, scriptIndex, sid, {
+            pipelineId,
+            agentStatus: 'parsing',
+            canvasStatus: 'queued',
+            generationStatus: 'idle',
+            timelineStatus: 'not-arranged',
+            lastError: undefined,
+          });
+        }
         return;
 
       case 'stage_start':
         if (stage === 'parseStoryboard') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'parsing',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'parsing',
+            });
+          }
         }
         return;
 
       case 'gate_waiting':
         if (stage === 'generatePrompts') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'prompt-review',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'prompt-review',
+            });
+          }
         } else if (stage === 'generatePilot') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'pilot-review',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'pilot-review',
+            });
+          }
         }
         return;
 
       case 'gate_confirmed':
         if (stage === 'generatePilot') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'generating',
-            generationStatus: 'generating',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'generating',
+              generationStatus: 'generating',
+            });
+          }
         }
         return;
 
       case 'stage_complete':
         if (stage === 'importStoryboardToCanvas') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            canvasStatus: 'sent',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              canvasStatus: 'sent',
+            });
+          }
         } else if (stage === 'parseStoryboard') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'prompt-review',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'prompt-review',
+            });
+          }
         } else if (stage === 'batchGenerate') {
-          const failedScenes = event['failedScenes'] as number[] | undefined;
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            generationStatus: failedScenes && failedScenes.length > 0 ? 'partial-fail' : 'done',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              generationStatus: 'generating',
+            });
+          }
         } else if (stage === 'arrangeOnTimeline') {
-          this.updateSceneState(documentUri, scriptIndex, sceneId, {
-            pipelineId,
-            agentStatus: 'timeline-arranged',
-            timelineStatus: 'arranged',
-          });
+          for (const sid of sceneIds) {
+            this.updateSceneState(documentUri, scriptIndex, sid, {
+              pipelineId,
+              agentStatus: 'timeline-arranged',
+              timelineStatus: 'arranged',
+            });
+          }
         }
         return;
 
       case 'pipeline_complete': {
         const result = event['result'] as
           | {
+              failedScenes?: number[];
+              scenes?: Array<{ sceneId?: string; index: number }>;
               canvasStoryboard?: {
                 scenes?: Array<{
                   sourceSceneId: string;
@@ -229,32 +254,51 @@ export class StorySceneStateStore implements vscode.Disposable {
               };
             }
           | undefined;
-        const importedScene = result?.canvasStoryboard?.scenes?.find(
-          (scene) => scene.sourceSceneId === sceneId,
-        );
-        if (importedScene) {
-          this.recordCanvasImport(documentUri, scriptIndex, importedScene, {
-            pipelineId,
-            agentStatus: 'sent',
-          });
-          return;
-        }
 
-        this.updateSceneState(documentUri, scriptIndex, sceneId, {
-          pipelineId,
-          agentStatus: 'sent',
-          canvasStatus: 'queued',
-        });
+        // Determine which scene indices failed
+        const failedSet = new Set(result?.failedScenes ?? []);
+        const hasPartialFail = failedSet.size > 0;
+
+        // Canvas import handling
+        const canvasScenes = result?.canvasStoryboard?.scenes;
+
+        for (const sid of sceneIds) {
+          // Check canvas import for this scene
+          const importedScene = canvasScenes?.find((s) => s.sourceSceneId === sid);
+          if (importedScene) {
+            this.recordCanvasImport(documentUri, scriptIndex, importedScene, {
+              pipelineId,
+              agentStatus: 'sent',
+              generationStatus: hasPartialFail ? 'partial-fail' : 'done',
+            });
+            continue;
+          }
+
+          // Determine generation status for this specific scene
+          const sceneEntry = result?.scenes?.find((s) => s.sceneId === sid);
+          const sceneIdx = sceneEntry?.index;
+          const sceneFailed = sceneIdx !== undefined && failedSet.has(sceneIdx);
+
+          this.updateSceneState(documentUri, scriptIndex, sid, {
+            pipelineId,
+            agentStatus: sceneFailed ? 'failed' : 'sent',
+            canvasStatus: 'queued',
+            generationStatus: sceneFailed ? 'partial-fail' : 'done',
+            lastError: sceneFailed ? 'Scene generation failed' : undefined,
+          });
+        }
         return;
       }
 
       case 'pipeline_error':
-        this.updateSceneState(documentUri, scriptIndex, sceneId, {
-          pipelineId,
-          agentStatus: 'failed',
-          canvasStatus: 'not-sent',
-          lastError: (event['error'] as string) ?? 'Unknown pipeline error',
-        });
+        for (const sid of sceneIds) {
+          this.updateSceneState(documentUri, scriptIndex, sid, {
+            pipelineId,
+            agentStatus: 'failed',
+            canvasStatus: 'not-sent',
+            lastError: (event['error'] as string) ?? 'Unknown pipeline error',
+          });
+        }
         return;
 
       default:
@@ -378,6 +422,17 @@ export class StorySceneStateStore implements vscode.Disposable {
     const serialized = Object.fromEntries(this.statesByDocument.entries());
     void this.persistence.update(StorySceneStateStore.storageKey, serialized);
   }
+}
+
+/** Resolve the set of scene IDs affected by a pipeline event */
+function resolveSceneIds(payload: StoryPipelineEventPayload): string[] {
+  if (payload.sceneIds && payload.sceneIds.length > 0) {
+    return [...payload.sceneIds];
+  }
+  if (payload.sceneId) {
+    return [payload.sceneId];
+  }
+  return [];
 }
 
 function normalizeDocumentKey(uriOrPath: string): string {

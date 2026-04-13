@@ -191,4 +191,73 @@ Alice waits.`),
       canvasStatus: 'opened',
     });
   });
+
+  it('updates all scenes in batch mode via sceneIds', () => {
+    const uri = vscode.Uri.file('/project/demo.fountain') as never;
+    const scriptIndex = buildScriptIndex(
+      uri,
+      parse(`INT. OFFICE - DAY
+
+Alice waits.
+
+INT. PARK - AFTERNOON
+
+Bob walks.`),
+    );
+    const scene1 = scriptIndex.scenes[0]!.sceneId;
+    const scene2 = scriptIndex.scenes[1]!.sceneId;
+    const store = new StorySceneStateStore(createPersistence());
+
+    store.handlePipelineEvent(
+      scriptIndex,
+      { scriptPath: '/project/demo.fountain', sceneIds: [scene1, scene2] },
+      'pipeline-batch',
+      { type: 'pipeline_start' },
+    );
+
+    const states = store.getSceneStates(uri, scriptIndex);
+    expect(states[scene1]).toMatchObject({ agentStatus: 'parsing' });
+    expect(states[scene2]).toMatchObject({ agentStatus: 'parsing' });
+  });
+
+  it('propagates partial-fail from pipeline_complete result', () => {
+    const uri = vscode.Uri.file('/project/demo.fountain') as never;
+    const scriptIndex = buildScriptIndex(
+      uri,
+      parse(`INT. OFFICE - DAY
+
+Alice waits.
+
+INT. PARK - AFTERNOON
+
+Bob walks.`),
+    );
+    const scene1 = scriptIndex.scenes[0]!.sceneId;
+    const scene2 = scriptIndex.scenes[1]!.sceneId;
+    const store = new StorySceneStateStore(createPersistence());
+    store.getSceneStates(uri, scriptIndex);
+
+    store.handlePipelineEvent(
+      scriptIndex,
+      { scriptPath: '/project/demo.fountain', sceneIds: [scene1, scene2] },
+      'pipeline-pf',
+      {
+        type: 'pipeline_complete',
+        result: {
+          failedScenes: [1],
+          scenes: [
+            { sceneId: scene1, index: 0 },
+            { sceneId: scene2, index: 1 },
+          ],
+        },
+      },
+    );
+
+    const states = store.getSceneStates(uri, scriptIndex);
+    expect(states[scene1]).toMatchObject({ agentStatus: 'sent', generationStatus: 'done' });
+    expect(states[scene2]).toMatchObject({
+      agentStatus: 'failed',
+      generationStatus: 'partial-fail',
+    });
+  });
 });

@@ -57,6 +57,17 @@ function isSkipResult(
   return result !== undefined && 'skipped' in result && result.skipped === true;
 }
 
+/**
+ * Check whether ctx.source is a file path that ended up as the only "text".
+ * True when documentText is absent and source is a single-line path-like string.
+ */
+function isFilePathWithoutDocumentText(ctx: PipelineContext): boolean {
+  if (ctx.documentText) return false;
+  const src = ctx.source;
+  if (!src || src.includes('\n')) return false;
+  return src.includes('/') || src.includes('\\') || /\.\w{1,10}$/.test(src);
+}
+
 export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPipelineStage {
   return {
     name: 'parseStoryboard',
@@ -71,7 +82,6 @@ export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPip
 
       let scenes: StoryboardScene[];
       let scenePlans: readonly StoryScenePlan[] | undefined;
-      let structuredSkipReason: string | undefined;
 
       if (ctx.sourceFormat === 'fountain') {
         const planned = await deps.structuredStoryPlanner?.plan(ctx);
@@ -79,16 +89,22 @@ export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPip
         if (planned && !isSkipResult(planned)) {
           scenes = planned.scenes;
           scenePlans = planned.scenePlans;
+        } else if (isSkipResult(planned)) {
+          // Structured planner gave a specific reason — this is a hard failure
+          // for Fountain files, not a cue to fall back to text parsing.
+          throw new Error(`parseStoryboard: ${planned.reason}`);
+        } else if (isFilePathWithoutDocumentText(ctx)) {
+          // ctx.source is a file path, not script content — no documentText loaded.
+          // Parsing a path string would produce garbage. Fail fast.
+          throw new Error(
+            'parseStoryboard: source appears to be a file path but no document text was loaded. ' +
+              'Ensure the screenplay file is open or add a readDocument stage before parseStoryboard.',
+          );
+        } else if (deps.storyParser) {
+          // Have actual text content — try parser fallback
+          scenes = deps.storyParser.parseToScenes(text);
         } else {
-          if (isSkipResult(planned)) {
-            structuredSkipReason = planned.reason;
-          }
-
-          if (deps.storyParser) {
-            scenes = deps.storyParser.parseToScenes(text);
-          } else {
-            scenes = await deps.llmAnalyzer.extractScenes(text, ctx.globalStyle);
-          }
+          scenes = await deps.llmAnalyzer.extractScenes(text, ctx.globalStyle);
         }
       } else {
         // Free-form text: use LLM to extract scenes
@@ -96,10 +112,7 @@ export function createParseStoryboardStage(deps: ParseStoryboardStageDeps): IPip
       }
 
       if (scenes.length === 0) {
-        const detail = structuredSkipReason
-          ? ` Structured planning was skipped: ${structuredSkipReason}`
-          : '';
-        throw new Error(`parseStoryboard: No scenes extracted from input.${detail}`);
+        throw new Error('parseStoryboard: No scenes extracted from input.');
       }
 
       return { ...ctx, scenes, scenePlans };

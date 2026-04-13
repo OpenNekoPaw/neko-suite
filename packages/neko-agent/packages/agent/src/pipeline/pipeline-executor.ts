@@ -128,31 +128,6 @@ export class PipelineExecutor implements IPipelineExecutor {
           continue;
         }
 
-        // Gate check — pause for confirmation
-        if (stage.gate === 'confirm') {
-          emit({ type: 'gate_waiting', stage: stage.name, preview: ctx });
-
-          const gateResult = await new Promise<{
-            confirmed: boolean;
-            modifications?: Partial<PipelineContext>;
-          }>((resolve) => {
-            gateResolve = resolve;
-          });
-          gateResolve = null;
-
-          if (!gateResult.confirmed) {
-            emit({ type: 'gate_cancelled', stage: stage.name });
-            throw new Error(`Pipeline cancelled at gate: ${stage.name}`);
-          }
-
-          emit({ type: 'gate_confirmed', stage: stage.name });
-
-          // Apply modifications from user
-          if (gateResult.modifications) {
-            ctx = { ...ctx, ...gateResult.modifications };
-          }
-        }
-
         // Run before hooks
         ctx = await runHooks(hooks, stage.name, 'before', ctx, this.hookRegistry);
 
@@ -177,6 +152,33 @@ export class PipelineExecutor implements IPipelineExecutor {
         }
 
         emit({ type: 'stage_complete', stage: stage.name });
+
+        // Post-execution gate — pause for user review after stage produces output.
+        // This means generatePrompts runs first, then the user reviews the prompts;
+        // generatePilot runs first, then the user reviews the pilot media.
+        if (stage.gate === 'confirm') {
+          emit({ type: 'gate_waiting', stage: stage.name, preview: ctx });
+
+          const gateResult = await new Promise<{
+            confirmed: boolean;
+            modifications?: Partial<PipelineContext>;
+          }>((resolve) => {
+            gateResolve = resolve;
+          });
+          gateResolve = null;
+
+          if (!gateResult.confirmed) {
+            emit({ type: 'gate_cancelled', stage: stage.name });
+            throw new Error(`Pipeline cancelled at gate: ${stage.name}`);
+          }
+
+          emit({ type: 'gate_confirmed', stage: stage.name });
+
+          // Apply modifications from user (e.g. edited prompts)
+          if (gateResult.modifications) {
+            ctx = { ...ctx, ...gateResult.modifications };
+          }
+        }
 
         // Run after hooks
         ctx = await runHooks(hooks, stage.name, 'after', ctx, this.hookRegistry);

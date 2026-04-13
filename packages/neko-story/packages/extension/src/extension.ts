@@ -322,7 +322,7 @@ export function activate(context: vscode.ExtensionContext) {
               eventCommand: 'neko.story.handlePipelineEvent',
               eventPayload: {
                 scriptPath,
-                sceneId: firstScene.sceneId,
+                sceneIds: targetSceneIds,
               },
               stageParams: {
                 parseStoryboard: { sceneIds: targetSceneIds },
