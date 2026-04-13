@@ -82,9 +82,7 @@ export function HistoryMenu({
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setShowMenu(!showMenu)}
-        className={`p-1.5 hover:bg-[var(--vscode-list-hoverBackground)] rounded transition-colors ${
-          showMenu ? 'bg-[var(--vscode-button-background)]/20' : ''
-        }`}
+        className={`agent-header-action ${showMenu ? 'is-active' : ''}`}
         title={t('history.title')}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -99,14 +97,14 @@ export function HistoryMenu({
 
       {showMenu && (
         <div
-          className="absolute top-full right-0 mt-1 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[250px] max-h-[400px] overflow-hidden py-1 z-50 flex flex-col"
+          className="neko-glass-dropdown absolute right-0 top-full z-50 mt-1 flex max-h-[400px] min-w-[250px] flex-col py-1"
           onKeyDown={handleKeyDown}
         >
           {/* Search Input */}
-          <div className="px-2 py-1.5 border-b border-[var(--vscode-dropdown-border)]">
-            <div className="flex items-center gap-2 px-2 py-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded">
+          <div className="border-b border-[var(--agent-divider)] px-2 py-1.5">
+            <div className="agent-search-shell">
               <svg
-                className="w-3.5 h-3.5 text-[var(--vscode-descriptionForeground)]"
+                className="h-3.5 w-3.5 text-[var(--agent-fg-secondary)]"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -124,12 +122,12 @@ export function HistoryMenu({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('history.search')}
-                className="flex-1 bg-transparent text-[11px] outline-none text-[var(--vscode-foreground)] placeholder:text-[var(--vscode-descriptionForeground)]"
+                className="agent-search-input"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)]"
+                  className="agent-header-action min-h-0 min-w-0 p-0.5"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -145,7 +143,7 @@ export function HistoryMenu({
           </div>
 
           {/* Header */}
-          <div className="px-3 py-1.5 text-[10px] text-[var(--vscode-descriptionForeground)] uppercase tracking-wider border-b border-[var(--vscode-dropdown-border)]">
+          <div className="agent-menu-section border-b border-[var(--agent-divider)] px-3 py-1.5 text-[10px]">
             {searchQuery
               ? t('history.results', { count: filteredConversations.length })
               : t('history.recentConversations')}
@@ -154,18 +152,14 @@ export function HistoryMenu({
           {/* Conversation List */}
           <div className="overflow-y-auto flex-1">
             {filteredConversations.length === 0 ? (
-              <div className="px-3 py-3 text-[11px] text-[var(--vscode-descriptionForeground)] text-center">
+              <div className="px-3 py-3 text-center text-[11px] text-[var(--agent-fg-secondary)]">
                 {searchQuery ? t('history.noMatching') : t('history.noConversations')}
               </div>
             ) : (
               filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
-                  className={`group px-3 py-1.5 hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer transition-colors ${
-                    conv.id === activeConversationId
-                      ? 'bg-[var(--vscode-button-background)]/20'
-                      : ''
-                  }`}
+                  className={`vscode-list-item group px-3 py-1.5 ${conv.id === activeConversationId ? 'active' : ''}`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div
@@ -177,7 +171,7 @@ export function HistoryMenu({
                       }}
                     >
                       <div className="text-[11px] truncate">{conv.title}</div>
-                      <div className="text-[9px] text-[var(--vscode-descriptionForeground)] flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-[9px] text-[var(--agent-fg-secondary)]">
                         <span>{t('history.messageCount', { count: conv.messageCount })}</span>
                         <span>•</span>
                         <span>{formatRelativeTime(conv.updatedAt, t)}</span>
@@ -188,7 +182,7 @@ export function HistoryMenu({
                         e.stopPropagation();
                         onDeleteConversation(conv.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-opacity flex-shrink-0"
+                      className="agent-header-action opacity-0 group-hover:opacity-100 min-h-0 min-w-0 p-0.5 transition-opacity flex-shrink-0"
                       title={t('common.delete')}
                     >
                       <svg
@@ -213,9 +207,9 @@ export function HistoryMenu({
 
           {/* Footer with clear all button */}
           {conversations.length > 0 && (
-            <div className="px-2 py-1.5 border-t border-[var(--vscode-dropdown-border)] flex items-center justify-between">
+            <div className="flex items-center justify-between border-t border-[var(--agent-divider)] px-2 py-1.5">
               {conversations.length > 10 && !searchQuery && (
-                <span className="text-[9px] text-[var(--vscode-descriptionForeground)]">
+                <span className="text-[9px] text-[var(--agent-fg-secondary)]">
                   {t('history.searchHint', { count: conversations.length })}
                 </span>
               )}
@@ -227,7 +221,7 @@ export function HistoryMenu({
                     setShowMenu(false);
                     setSearchQuery('');
                   }}
-                  className="text-[9px] text-[var(--vscode-errorForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] px-1.5 py-0.5 rounded transition-colors"
+                  className="agent-danger-link px-1.5 py-0.5 text-[9px]"
                   title={t('history.clearAll')}
                 >
                   {t('history.clearAll')}

@@ -122,6 +122,9 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   const isSuccess = toolCall.result?.success === true;
   const isFailed = toolCall.result?.success === false;
   const needsConfirmation = toolCall.pendingConfirmation === true;
+  const toneClass = isFailed ? 'is-danger' : isSuccess ? 'is-success' : isPending ? 'is-info' : '';
+  const compactActionClass =
+    'inline-flex items-center gap-1 rounded-md border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] transition-colors hover:bg-[var(--agent-hover)]';
 
   // Confirmation UI
   if (needsConfirmation) {
@@ -130,71 +133,73 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
       toolName: toolCall.name,
     });
     return (
-      <div className="my-2 border border-[var(--vscode-inputValidation-warningBorder)] rounded-md overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--vscode-inputValidation-warningBackground)]">
-          <WarningIcon className="w-4 h-4 text-[var(--vscode-inputValidation-warningBorder)] shrink-0" />
-          <span className="font-medium text-[12px] text-[var(--vscode-foreground)]">
-            Tool Confirmation Required
-          </span>
-        </div>
-        <div className="px-3 py-2 bg-[var(--vscode-editor-background)]">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-mono text-[11px] px-1.5 py-0.5 bg-[var(--vscode-textBlockQuote-background)] rounded">
-              {toolCall.name}
+      <div className="my-2">
+        <div className="agent-inline-card is-warning">
+          <div className="agent-inline-header flex items-center gap-2 px-3 py-2">
+            <WarningIcon className="h-4 w-4 shrink-0 text-[var(--agent-warning-fg)]" />
+            <span className="text-[12px] font-medium text-[var(--agent-fg)]">
+              Tool Confirmation Required
             </span>
-            {toolCall.confirmation?.action && (
-              <span className="text-[11px] text-[var(--vscode-descriptionForeground)]">
-                {toolCall.confirmation.action}
-              </span>
-            )}
           </div>
-          {toolCall.confirmation?.description && (
-            <p className="text-[11px] text-[var(--vscode-foreground)] mb-2">
-              {toolCall.confirmation.description}
-            </p>
-          )}
-          {summary && (
-            <div className="text-[10px] font-mono text-[var(--vscode-descriptionForeground)] mb-2 truncate">
-              {summary}
-            </div>
-          )}
-          {hasExpandableContent && (
-            <div className="mb-2">
-              <button
-                onClick={toggleExpand}
-                className="flex items-center gap-1 text-[10px] text-[var(--vscode-textLink-foreground)] hover:underline"
-              >
-                <ChevronIcon
-                  className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                />
-                {isExpanded ? 'Hide details' : 'Show details'}
-              </button>
-              {isExpanded && (
-                <div className="mt-1 pl-2 border-l border-[var(--vscode-panel-border)]">
-                  <pre className="p-1.5 bg-[var(--vscode-textBlockQuote-background)] rounded overflow-x-auto font-mono text-[10px] max-h-[100px] w-full max-w-full">
-                    {argsJson}
-                  </pre>
-                </div>
+          <div className="px-3 py-2 text-[var(--agent-fg)]">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="agent-badge font-mono text-[11px] text-[var(--agent-fg)]">
+                {toolCall.name}
+              </span>
+              {toolCall.confirmation?.action && (
+                <span className="text-[11px] text-[var(--agent-fg-secondary)]">
+                  {toolCall.confirmation.action}
+                </span>
               )}
             </div>
-          )}
-          <div className="flex items-center gap-2 pt-2 border-t border-[var(--vscode-panel-border)]">
-            <button
-              onClick={() => handleConfirm(true)}
-              className="px-3 py-1 text-[11px] font-medium rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors"
-            >
-              Allow
-            </button>
-            <button
-              onClick={() => handleConfirm(false)}
-              className="px-3 py-1 text-[11px] font-medium rounded bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] transition-colors"
-            >
-              Deny
-            </button>
-            <span className="flex-1" />
-            <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-              Press Enter to allow, Esc to deny
-            </span>
+            {toolCall.confirmation?.description && (
+              <p className="mb-2 text-[11px] text-[var(--agent-fg)]">
+                {toolCall.confirmation.description}
+              </p>
+            )}
+            {summary && (
+              <div className="mb-2 truncate font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+                {summary}
+              </div>
+            )}
+            {hasExpandableContent && (
+              <div className="mb-2">
+                <button
+                  onClick={toggleExpand}
+                  className="flex items-center gap-1 text-[10px] text-[var(--agent-accent)] hover:underline"
+                >
+                  <ChevronIcon
+                    className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  />
+                  {isExpanded ? 'Hide details' : 'Show details'}
+                </button>
+                {isExpanded && (
+                  <div className="mt-1 border-l border-[var(--agent-divider)] pl-2">
+                    <pre className="agent-code-block max-h-[100px] w-full max-w-full overflow-x-auto p-1.5 font-mono text-[10px]">
+                      {argsJson}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] pt-2">
+              <button
+                onClick={() => handleConfirm(true)}
+                className="vscode-button px-3 py-1 text-[11px] leading-4"
+              >
+                Allow
+              </button>
+              <button
+                onClick={() => handleConfirm(false)}
+                className="vscode-button vscode-button-secondary px-3 py-1 text-[11px] leading-4"
+              >
+                Deny
+              </button>
+              <span className="flex-1" />
+              <span className="text-[10px] text-[var(--agent-fg-secondary)]">
+                Press Enter to allow, Esc to deny
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -204,94 +209,86 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   // Normal display
   return (
     <div className="my-1">
-      {/* Compact single-line header */}
-      <div
-        className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] cursor-pointer transition-colors
-          ${isPending ? 'bg-[var(--vscode-textBlockQuote-background)]' : ''}
-          ${isSuccess ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]' : ''}
-          ${isFailed ? 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]' : ''}
-          hover:bg-[var(--vscode-list-hoverBackground)]
-        `}
-        onClick={hasExpandableContent ? toggleExpand : undefined}
-      >
-        {isPending && (
-          <ToolLoadingSpinner className="w-3 h-3 text-[var(--vscode-textLink-foreground)] shrink-0" />
-        )}
-        {isSuccess && (
-          <SuccessIcon className="w-3 h-3 text-[var(--vscode-charts-green)] shrink-0" />
-        )}
-        {isFailed && <ErrorIcon className="w-3 h-3 text-[var(--vscode-charts-red)] shrink-0" />}
+      <div className={`agent-inline-card ${toneClass}`}>
+        {/* Compact single-line header */}
+        <div
+          className="agent-inline-header flex items-center gap-1.5 px-2 py-1.5 text-[11px] transition-colors"
+          onClick={hasExpandableContent ? toggleExpand : undefined}
+          role={hasExpandableContent ? 'button' : undefined}
+        >
+          {isPending && (
+            <ToolLoadingSpinner className="h-3 w-3 shrink-0 text-[var(--agent-info)]" />
+          )}
+          {isSuccess && <SuccessIcon className="h-3 w-3 shrink-0 text-[var(--agent-success)]" />}
+          {isFailed && <ErrorIcon className="h-3 w-3 shrink-0 text-[var(--agent-danger)]" />}
 
-        <span className="font-medium text-[var(--vscode-foreground)] shrink-0">
-          {toolCall.name}
-        </span>
+          <span className="shrink-0 font-medium text-[var(--agent-fg)]">{toolCall.name}</span>
 
-        {summary && (
-          <span className="text-[var(--vscode-descriptionForeground)] font-mono truncate">
-            {summary}
-          </span>
+          {summary && (
+            <span className="truncate font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+              {summary}
+            </span>
+          )}
+          <span className="flex-1" />
+
+          {isFileTool && filePath && isSuccess && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenFile(filePath);
+              }}
+              className={compactActionClass}
+              title={`Open ${filePath}`}
+            >
+              <FileIcon className="h-3 w-3" />
+              <span>Open</span>
+            </button>
+          )}
+
+          {toolCall.result?.duration && (
+            <span className="shrink-0 text-[10px] text-[var(--agent-fg-secondary)]">
+              {toolCall.result.duration}ms
+            </span>
+          )}
+
+          {hasExpandableContent && (
+            <ChevronIcon
+              className={`h-3 w-3 shrink-0 text-[var(--agent-fg-secondary)] transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            />
+          )}
+        </div>
+
+        {/* Error message */}
+        {isFailed && toolCall.result?.error && (
+          <div className="border-t border-[color-mix(in_srgb,var(--agent-danger)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1 text-[10px] text-[var(--agent-danger)]">
+            {toolCall.result.error}
+          </div>
         )}
-        <span className="flex-1" />
 
-        {isFileTool && filePath && isSuccess && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenFile(filePath);
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1 shrink-0"
-            title={`Open ${filePath}`}
-          >
-            <FileIcon className="w-3 h-3" />
-            <span>Open</span>
-          </button>
-        )}
-
-        {toolCall.result?.duration && (
-          <span className="text-[var(--vscode-descriptionForeground)] text-[10px] shrink-0">
-            {toolCall.result.duration}ms
-          </span>
-        )}
-
-        {hasExpandableContent && (
-          <ChevronIcon
-            className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-          />
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="border-t border-[var(--agent-divider)] px-3 py-2 text-[10px]">
+            {Object.keys(toolCall.arguments).length > 0 && (
+              <div className="mb-2">
+                <div className="mb-0.5 text-[var(--agent-fg-secondary)] opacity-80">
+                  {t('chat.toolCall.args')}
+                </div>
+                <pre className="agent-code-block max-h-[150px] w-full max-w-full overflow-x-auto p-1.5 font-mono">
+                  {argsJson}
+                </pre>
+              </div>
+            )}
+            {resultJson && (
+              <div>
+                <div className="mb-0.5 text-[var(--agent-fg-secondary)] opacity-80">Result</div>
+                <pre className="agent-code-block max-h-[150px] w-full max-w-full overflow-x-auto p-1.5 font-mono">
+                  {resultJson}
+                </pre>
+              </div>
+            )}
+          </div>
         )}
       </div>
-
-      {/* Error message */}
-      {isFailed && toolCall.result?.error && (
-        <div className="px-2 py-1 text-[10px] text-[var(--vscode-charts-red)] bg-[var(--vscode-inputValidation-errorBackground)]">
-          {toolCall.result.error}
-        </div>
-      )}
-
-      {/* Expanded content */}
-      {isExpanded && (
-        <div className="mt-1 ml-4 pl-2 border-l border-[var(--vscode-panel-border)] text-[10px]">
-          {Object.keys(toolCall.arguments).length > 0 && (
-            <div className="mb-2">
-              <div className="text-[var(--vscode-descriptionForeground)] opacity-70 mb-0.5">
-                {t('chat.toolCall.args')}
-              </div>
-              <pre className="p-1.5 bg-[var(--vscode-editor-background)] rounded overflow-x-auto font-mono border border-[var(--vscode-panel-border)] max-h-[150px] w-full max-w-full">
-                {argsJson}
-              </pre>
-            </div>
-          )}
-          {resultJson && (
-            <div>
-              <div className="text-[var(--vscode-descriptionForeground)] opacity-70 mb-0.5">
-                Result
-              </div>
-              <pre className="p-1.5 bg-[var(--vscode-editor-background)] rounded overflow-x-auto font-mono border border-[var(--vscode-panel-border)] max-h-[150px] w-full max-w-full">
-                {resultJson}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Inline task progress card for background media tasks */}
       {isBackgroundMode && liveTask && (

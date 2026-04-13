@@ -80,29 +80,26 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
   void _language; // Reserved for future syntax highlighting
 
   // Status styling
-  const statusColors = {
-    pending: '',
-    accepted: 'border-l-[var(--vscode-charts-green)]',
-    rejected: 'border-l-[var(--vscode-charts-red)] opacity-50',
-  };
+  const toneClass =
+    diff.status === 'accepted' ? 'is-success' : diff.status === 'rejected' ? 'is-danger' : '';
 
   return (
     <div
-      className={`my-1 rounded border border-[var(--vscode-panel-border)] overflow-hidden ${statusColors[diff.status]}`}
+      className={`agent-inline-card my-1 ${toneClass} ${diff.status === 'rejected' ? 'opacity-70' : ''}`}
     >
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-2 py-1 bg-[var(--vscode-editor-lineHighlightBackground)] cursor-pointer"
+        className="agent-inline-header flex cursor-pointer items-center gap-2 px-2 py-1"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Expand/Collapse icon */}
         <ChevronIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
 
         {/* File icon */}
-        <FileIcon className="w-3 h-3 text-[var(--vscode-descriptionForeground)]" />
+        <FileIcon className="w-3 h-3 text-[var(--agent-fg-secondary)]" />
 
         {/* File name */}
-        <span className="text-[11px] font-mono text-[var(--vscode-foreground)] truncate flex-1">
+        <span className="flex-1 truncate font-mono text-[11px] text-[var(--agent-fg)]">
           {getFileName(diff.filePath)}
         </span>
 
@@ -117,11 +114,7 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
         {/* Status badge */}
         {diff.status !== 'pending' && (
           <span
-            className={`text-[9px] px-1 rounded ${
-              diff.status === 'accepted'
-                ? 'bg-[var(--vscode-charts-green)]/20 text-[var(--vscode-charts-green)]'
-                : 'bg-[var(--vscode-charts-red)]/20 text-[var(--vscode-charts-red)]'
-            }`}
+            className={`agent-badge ${diff.status === 'accepted' ? 'is-success' : 'is-danger'} text-[9px]`}
           >
             {diff.status === 'accepted' ? t('chat.diff.accepted') : t('chat.diff.rejected')}
           </span>
@@ -145,10 +138,10 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
                   }`}
                 >
                   {/* Line numbers */}
-                  <span className="w-8 px-1 text-right text-[10px] text-[var(--vscode-descriptionForeground)] select-none border-r border-[var(--vscode-panel-border)]">
+                  <span className="w-8 select-none border-r border-[var(--agent-divider)] px-1 text-right text-[10px] text-[var(--agent-fg-secondary)]">
                     {line.oldLineNum || ''}
                   </span>
-                  <span className="w-8 px-1 text-right text-[10px] text-[var(--vscode-descriptionForeground)] select-none border-r border-[var(--vscode-panel-border)]">
+                  <span className="w-8 select-none border-r border-[var(--agent-divider)] px-1 text-right text-[10px] text-[var(--agent-fg-secondary)]">
                     {line.newLineNum || ''}
                   </span>
 
@@ -159,7 +152,7 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
                         ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
                         : line.type === 'remove'
                           ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                          : 'text-[var(--vscode-descriptionForeground)]'
+                          : 'text-[var(--agent-fg-secondary)]'
                     }`}
                   >
                     {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
@@ -172,7 +165,7 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
                         ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
                         : line.type === 'remove'
                           ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                          : 'text-[var(--vscode-foreground)]'
+                          : 'text-[var(--agent-fg)]'
                     }`}
                   >
                     {line.content}
@@ -184,11 +177,11 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
 
           {/* Action buttons (only for pending status) */}
           {diff.status === 'pending' && (onAccept || onReject) && (
-            <div className="flex items-center gap-2 px-2 py-1.5 border-t border-[var(--vscode-panel-border)] bg-[var(--vscode-editor-background)]">
+            <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] px-2 py-1.5">
               {onAccept && (
                 <button
                   onClick={() => onAccept(diff.filePath)}
-                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded transition-colors"
+                  className="vscode-button flex items-center gap-1 px-2 py-0.5 text-[11px] leading-4"
                 >
                   <CheckIcon className="w-3 h-3" />
                   {t('diff.accept')}
@@ -197,16 +190,14 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
               {onReject && (
                 <button
                   onClick={() => onReject(diff.filePath)}
-                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] rounded transition-colors"
+                  className="vscode-button vscode-button-secondary flex items-center gap-1 px-2 py-0.5 text-[11px] leading-4"
                 >
                   <XIcon className="w-3 h-3" />
                   {t('diff.reject')}
                 </button>
               )}
               <span className="flex-1" />
-              <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
-                {diff.filePath}
-              </span>
+              <span className="text-[10px] text-[var(--agent-fg-secondary)]">{diff.filePath}</span>
             </div>
           )}
         </>

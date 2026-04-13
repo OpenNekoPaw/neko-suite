@@ -24,13 +24,13 @@ interface PlanReviewProps {
 function StatusIcon({ status }: { status: PlanStep['status'] }) {
   switch (status) {
     case 'approved':
-      return <span className="text-[var(--vscode-charts-green)]">✓</span>;
+      return <span className="text-[var(--agent-success)]">✓</span>;
     case 'rejected':
-      return <span className="text-[var(--vscode-charts-red)]">✗</span>;
+      return <span className="text-[var(--agent-danger)]">✗</span>;
     case 'modified':
-      return <span className="text-[var(--vscode-charts-yellow)]">✎</span>;
+      return <span className="text-[var(--agent-warning-fg)]">✎</span>;
     default:
-      return <span className="text-[var(--vscode-descriptionForeground)]">○</span>;
+      return <span className="text-[var(--agent-fg-secondary)]">○</span>;
   }
 }
 
@@ -74,13 +74,13 @@ function PlanStepItem({
 
   return (
     <div
-      className={`flex items-start gap-2 py-1.5 border-b border-[var(--vscode-panel-border)] last:border-b-0 ${
+      className={`flex items-start gap-2 border-b border-[var(--agent-divider)] py-1.5 last:border-b-0 ${
         step.status === 'rejected' ? 'opacity-50' : ''
       }`}
     >
       {/* Step number and status */}
       <div className="flex items-center gap-1 flex-shrink-0 w-10">
-        <span className="text-[11px] text-[var(--vscode-descriptionForeground)]">{index + 1}.</span>
+        <span className="text-[11px] text-[var(--agent-fg-secondary)]">{index + 1}.</span>
         <StatusIcon status={step.status} />
       </div>
 
@@ -93,7 +93,7 @@ function PlanStepItem({
             onKeyDown={handleKeyDown}
             onBlur={handleSaveEdit}
             autoFocus
-            className="w-full px-1.5 py-0.5 text-[12px] bg-[var(--vscode-input-background)] border border-[var(--vscode-focusBorder)] rounded resize-none outline-none"
+            className="vscode-input min-h-[52px] w-full resize-none px-2 py-1 text-[12px]"
             rows={2}
           />
         ) : (
@@ -101,14 +101,14 @@ function PlanStepItem({
             <p
               className={`text-[12px] leading-relaxed ${
                 step.status === 'modified'
-                  ? 'text-[var(--vscode-charts-yellow)]'
-                  : 'text-[var(--vscode-foreground)]'
+                  ? 'text-[var(--agent-warning-fg)]'
+                  : 'text-[var(--agent-fg)]'
               }`}
             >
               {step.description}
             </p>
             {step.status === 'modified' && step.originalDescription && (
-              <p className="text-[11px] text-[var(--vscode-descriptionForeground)] line-through mt-0.5">
+              <p className="mt-0.5 text-[11px] text-[var(--agent-fg-secondary)] line-through">
                 {step.originalDescription}
               </p>
             )}
@@ -122,7 +122,7 @@ function PlanStepItem({
           {/* Edit button */}
           <button
             onClick={() => setIsEditing(true)}
-            className="w-5 h-5 flex items-center justify-center text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
+            className="agent-header-action min-h-0 min-w-0 p-1"
             title={t('chat.plan.edit')}
           >
             <EditIcon className="w-3 h-3" />
@@ -130,7 +130,7 @@ function PlanStepItem({
           {/* Approve button */}
           <button
             onClick={onApprove}
-            className="w-5 h-5 flex items-center justify-center text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-charts-green)] hover:bg-[var(--vscode-charts-green)]/10 rounded transition-colors"
+            className="agent-header-action min-h-0 min-w-0 p-1 hover:text-[var(--agent-success)]"
             title={t('chat.plan.approve')}
           >
             <CheckIcon className="w-3 h-3" />
@@ -138,7 +138,7 @@ function PlanStepItem({
           {/* Reject button */}
           <button
             onClick={onReject}
-            className="w-5 h-5 flex items-center justify-center text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-charts-red)] hover:bg-[var(--vscode-charts-red)]/10 rounded transition-colors"
+            className="agent-header-action min-h-0 min-w-0 p-1 hover:text-[var(--agent-danger)]"
             title={t('chat.plan.reject')}
           >
             <XIcon className="w-3 h-3" />
@@ -170,49 +170,37 @@ function PlanReviewComponent({
   // Determine overall status display
   const getStatusBadge = () => {
     if (plan.status === 'approved' || (pendingCount === 0 && rejectedCount === 0)) {
-      return (
-        <span className="text-[9px] px-1 rounded bg-[var(--vscode-charts-green)]/20 text-[var(--vscode-charts-green)]">
-          {t('chat.plan.approved')}
-        </span>
-      );
+      return <span className="agent-badge is-success text-[9px]">{t('chat.plan.approved')}</span>;
     }
     if (plan.status === 'rejected' || (pendingCount === 0 && approvedCount === 0)) {
-      return (
-        <span className="text-[9px] px-1 rounded bg-[var(--vscode-charts-red)]/20 text-[var(--vscode-charts-red)]">
-          {t('chat.plan.rejected')}
-        </span>
-      );
+      return <span className="agent-badge is-danger text-[9px]">{t('chat.plan.rejected')}</span>;
     }
     if (pendingCount === 0 && approvedCount > 0 && rejectedCount > 0) {
-      return (
-        <span className="text-[9px] px-1 rounded bg-[var(--vscode-charts-yellow)]/20 text-[var(--vscode-charts-yellow)]">
-          {t('chat.plan.partial')}
-        </span>
-      );
+      return <span className="agent-badge is-warning text-[9px]">{t('chat.plan.partial')}</span>;
     }
     return null;
   };
 
   return (
-    <div className="my-1 rounded border border-[var(--vscode-panel-border)] overflow-hidden">
+    <div className="agent-inline-card my-1">
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-2 py-1.5 bg-[var(--vscode-textBlockQuote-background)] cursor-pointer"
+        className="agent-inline-header flex cursor-pointer items-center gap-2 px-2 py-1.5"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Expand/Collapse icon */}
         <ChevronIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
 
         {/* Plan icon */}
-        <PlanIcon className="w-3 h-3 text-[var(--vscode-descriptionForeground)]" />
+        <PlanIcon className="w-3 h-3 text-[var(--agent-fg-secondary)]" />
 
         {/* Title */}
-        <span className="text-[11px] font-medium text-[var(--vscode-foreground)] flex-1">
+        <span className="flex-1 text-[11px] font-medium text-[var(--agent-fg)]">
           {plan.title || t('chat.plan.title')}
         </span>
 
         {/* Stats */}
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+        <span className="text-[10px] text-[var(--agent-fg-secondary)]">
           {plan.steps.length} {t('chat.plan.steps')}
         </span>
 
@@ -223,7 +211,7 @@ function PlanReviewComponent({
       {/* Steps list */}
       {isExpanded && (
         <>
-          <div className="px-2 py-1 max-h-[300px] overflow-y-auto">
+          <div className="max-h-[300px] overflow-y-auto px-2 py-1">
             {plan.steps.map((step, index) => (
               <PlanStepItem
                 key={step.id}
@@ -238,11 +226,11 @@ function PlanReviewComponent({
 
           {/* Footer with bulk actions */}
           {pendingCount > 0 && (onApproveAll || onRejectAll) && (
-            <div className="flex items-center gap-2 px-2 py-1.5 border-t border-[var(--vscode-panel-border)] bg-[var(--vscode-editor-background)]">
+            <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] px-2 py-1.5">
               {onApproveAll && (
                 <button
                   onClick={onApproveAll}
-                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] text-[var(--vscode-button-foreground)] rounded transition-colors"
+                  className="vscode-button flex items-center gap-1 px-2 py-0.5 text-[11px] leading-4"
                 >
                   <CheckIcon className="w-3 h-3" />
                   {t('chat.plan.approveAll')}
@@ -251,14 +239,14 @@ function PlanReviewComponent({
               {onRejectAll && (
                 <button
                   onClick={onRejectAll}
-                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] rounded transition-colors"
+                  className="vscode-button vscode-button-secondary flex items-center gap-1 px-2 py-0.5 text-[11px] leading-4"
                 >
                   <XIcon className="w-3 h-3" />
                   {t('chat.plan.rejectAll')}
                 </button>
               )}
               <span className="flex-1" />
-              <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+              <span className="text-[10px] text-[var(--agent-fg-secondary)]">
                 {pendingCount} {t('chat.plan.pending')}
               </span>
             </div>

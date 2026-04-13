@@ -60,10 +60,7 @@ export const LUTPanel = memo(function LUTPanel({ lut, onChange }: LUTPanelProps)
   return (
     <div className="space-y-3">
       {/* Load button */}
-      <button
-        className="w-full px-3 py-1.5 text-[11px] bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] rounded hover:bg-[var(--vscode-button-hoverBackground)] transition-colors"
-        onClick={handleLoadLut}
-      >
+      <button className="nk-btn-primary w-full justify-center text-[11px]" onClick={handleLoadLut}>
         {t('colorCorrection.lut.loadLut')}
       </button>
 
@@ -76,14 +73,12 @@ export const LUTPanel = memo(function LUTPanel({ lut, onChange }: LUTPanelProps)
                 type="checkbox"
                 checked={lut.enabled}
                 onChange={handleToggle}
-                className="accent-[var(--vscode-button-background)]"
+                className="accent-[var(--nk-accent)]"
               />
-              <span className="text-[var(--vscode-foreground)] truncate max-w-[120px]">
-                {lut.lutId}
-              </span>
+              <span className="max-w-[120px] truncate text-[var(--nk-fg)]">{lut.lutId}</span>
             </label>
             <button
-              className="text-[10px] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-errorForeground)] transition-colors"
+              className="text-[10px] text-[var(--nk-fg-secondary)] transition-colors hover:text-[var(--nk-red)]"
               onClick={handleRemove}
             >
               ✕
@@ -92,7 +87,7 @@ export const LUTPanel = memo(function LUTPanel({ lut, onChange }: LUTPanelProps)
 
           {/* Intensity slider */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-14 shrink-0">
+            <span className="w-14 shrink-0 text-[10px] text-[var(--nk-fg-secondary)]">
               {t('colorCorrection.lut.intensity')}
             </span>
             <input
@@ -103,15 +98,15 @@ export const LUTPanel = memo(function LUTPanel({ lut, onChange }: LUTPanelProps)
               value={lut.intensity}
               onChange={(e) => handleIntensityChange(Number(e.target.value))}
               disabled={!lut.enabled}
-              className="flex-1 h-1 accent-[var(--vscode-button-background)]"
+              className="nk-prop-slider"
             />
-            <span className="text-[10px] text-[var(--vscode-descriptionForeground)] w-8 text-right tabular-nums">
+            <span className="w-8 text-right text-[10px] tabular-nums text-[var(--nk-fg-secondary)]">
               {lut.intensity}%
             </span>
           </div>
         </div>
       ) : (
-        <p className="text-[10px] text-[var(--vscode-descriptionForeground)] text-center py-2">
+        <p className="py-2 text-center text-[10px] text-[var(--nk-fg-secondary)]">
           {t('colorCorrection.lut.noLut')}
           <br />
           <span className="text-[9px]">{t('colorCorrection.lut.supportedFormats')}</span>

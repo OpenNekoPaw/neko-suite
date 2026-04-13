@@ -44,7 +44,7 @@ export function Header({
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-between px-1 py-1 border-b border-[var(--vscode-panel-border)] flex-shrink-0 gap-2">
+    <div className="agent-header flex flex-shrink-0 items-center justify-between gap-2 px-1 py-1">
       {/* Left: Tabs */}
       <TabBar
         tabs={tabs}
@@ -57,11 +57,7 @@ export function Header({
       {/* Right: Action buttons */}
       <div className="flex items-center gap-0.5 flex-shrink-0">
         {/* + New button */}
-        <button
-          onClick={onNewChat}
-          className="p-1.5 hover:bg-[var(--vscode-list-hoverBackground)] rounded transition-colors"
-          title={t('header.newChat')}
-        >
+        <button onClick={onNewChat} className="agent-header-action" title={t('header.newChat')}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>

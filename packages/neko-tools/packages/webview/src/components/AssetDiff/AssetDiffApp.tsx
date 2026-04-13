@@ -5,15 +5,15 @@ import type { AssetDiffAttributeDiff, AssetDiffTab, AssetDiffViewMode } from './
 
 function getSimilarityBadgeClass(similarity: number | null): string {
   if (similarity === null) {
-    return 'bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)]';
+    return 'tools-pill px-3 py-1 text-xs font-medium';
   }
   if (similarity >= 0.9) {
-    return 'bg-[var(--vscode-testing-iconPassed)] text-white';
+    return 'tools-pill is-success px-3 py-1 text-xs font-medium';
   }
   if (similarity >= 0.5) {
-    return 'bg-[var(--vscode-editorWarning-foreground)] text-black';
+    return 'tools-pill is-warning px-3 py-1 text-xs font-medium';
   }
-  return 'bg-[var(--vscode-testing-iconFailed)] text-white';
+  return 'tools-pill is-danger px-3 py-1 text-xs font-medium';
 }
 
 function SimilarityBadge({ similarity }: { similarity: number | null }): JSX.Element {
@@ -42,22 +42,20 @@ function ImagePanel({
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded border border-[var(--vscode-panel-border)]">
-      <div className="border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)] px-3 py-2 text-center">
+    <div className="tools-card flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="tools-card-header px-3 py-2 text-center">
         <div className="text-xs font-medium">{title}</div>
         {fileName ? (
-          <div className="mt-1 truncate text-[10px] text-[var(--vscode-descriptionForeground)]">
+          <div className="mt-1 truncate text-[10px] text-[var(--tools-fg-secondary)]">
             {fileName}
           </div>
         ) : null}
       </div>
-      <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--vscode-editor-background)] p-3">
+      <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--tools-bg)] p-3">
         {imageUri ? (
           <img src={imageUri} alt={title} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-            {t('assetDiff.noFile')}
-          </span>
+          <span className="text-xs text-[var(--tools-fg-secondary)]">{t('assetDiff.noFile')}</span>
         )}
       </div>
     </div>
@@ -132,15 +130,17 @@ function SliderPreview({
           />
         </div>
         <div
-          className="absolute inset-y-0 z-10 w-1 -translate-x-1/2 cursor-ew-resize bg-[var(--vscode-button-background)]"
+          className="absolute inset-y-0 z-10 w-1 -translate-x-1/2 cursor-ew-resize bg-[var(--tools-accent)]"
           style={{ left: `${position * 100}%` }}
         >
-          <div className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--vscode-button-background)] shadow" />
+          <div className="absolute left-1/2 top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[var(--tools-accent)] shadow-lg">
+            <span className="text-xs text-[var(--tools-accent-fg)]">↔</span>
+          </div>
         </div>
-        <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-[11px] text-white">
+        <span className="tools-overlay-chip absolute bottom-2 left-2 px-2 py-1 text-[11px]">
           {labelA}
         </span>
-        <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-1 text-[11px] text-white">
+        <span className="tools-overlay-chip absolute bottom-2 right-2 px-2 py-1 text-[11px]">
           {labelB}
         </span>
       </div>
@@ -172,7 +172,7 @@ function OverlayPreview({
           style={{ opacity }}
         />
       </div>
-      <div className="flex items-center gap-3 rounded bg-[var(--vscode-sideBar-background)] px-4 py-2 text-xs">
+      <div className="tools-card flex items-center gap-3 px-4 py-2 text-xs">
         <span className="max-w-[180px] truncate" title={labelA}>
           {labelA}
         </span>
@@ -213,7 +213,7 @@ function MediaTab({
 
   if (!imageUriA && !imageUriB) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[var(--vscode-descriptionForeground)]">
+      <div className="flex h-full items-center justify-center text-sm text-[var(--tools-fg-secondary)]">
         {t('assetDiff.noFile')}
       </div>
     );
@@ -252,15 +252,15 @@ function MediaTab({
 function AttributeRow({ diff }: { diff: AssetDiffAttributeDiff }): JSX.Element {
   const valueA = diff.valueA ?? '-';
   const valueB = diff.valueB ?? '-';
-  const classA = !diff.valueA ? 'line-through text-[var(--vscode-testing-iconFailed)]' : '';
+  const classA = !diff.valueA ? 'line-through text-[var(--tools-danger)]' : '';
   const classB = !diff.valueB
-    ? 'text-[var(--vscode-testing-iconPassed)]'
+    ? 'text-[var(--tools-success)]'
     : diff.valueA !== diff.valueB
-      ? 'text-[var(--vscode-editorWarning-foreground)]'
+      ? 'text-[var(--tools-warning)]'
       : '';
 
   return (
-    <tr className="border-b border-[var(--vscode-panel-border)]">
+    <tr className="border-b border-[var(--tools-divider)]">
       <td className="px-3 py-2 text-left font-medium">{diff.attribute}</td>
       <td className={`px-3 py-2 text-left ${classA}`}>{valueA}</td>
       <td className={`px-3 py-2 text-left ${classB}`}>{valueB}</td>
@@ -281,16 +281,16 @@ function AttributesTab({
 
   if (attributeDiffs.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[var(--vscode-descriptionForeground)]">
+      <div className="flex h-full items-center justify-center text-sm text-[var(--tools-fg-secondary)]">
         {t('assetDiff.noChanges')}
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl overflow-auto rounded border border-[var(--vscode-panel-border)]">
+    <div className="tools-card w-full max-w-5xl overflow-auto">
       <table className="w-full border-collapse text-xs">
-        <thead className="bg-[var(--vscode-sideBar-background)]">
+        <thead className="tools-card-header">
           <tr>
             <th className="px-3 py-2 text-left">{t('assetDiff.attributes')}</th>
             <th className="px-3 py-2 text-left">{variantAName}</th>
@@ -320,8 +320,8 @@ function AiTab({
 
   if (aiLoading) {
     return (
-      <div className="flex flex-col items-center gap-3 text-sm text-[var(--vscode-descriptionForeground)]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--vscode-button-background)] border-t-transparent" />
+      <div className="flex flex-col items-center gap-3 text-sm text-[var(--tools-fg-secondary)]">
+        <div className="tools-spinner h-8 w-8 animate-spin" />
         <div>{t('assetDiff.analyzing')}</div>
       </div>
     );
@@ -329,7 +329,7 @@ function AiTab({
 
   if (aiSummary) {
     return (
-      <div className="w-full max-w-3xl rounded border border-[var(--vscode-panel-border)] bg-[var(--vscode-editorWidget-background)] p-4 text-sm leading-6 whitespace-pre-wrap">
+      <div className="tools-card w-full max-w-3xl bg-[var(--tools-elevated)] p-4 text-sm leading-6 whitespace-pre-wrap">
         {aiSummary}
       </div>
     );
@@ -337,14 +337,8 @@ function AiTab({
 
   return (
     <div className="flex flex-col items-center gap-4 text-center">
-      <p className="text-sm text-[var(--vscode-descriptionForeground)]">
-        {t('assetDiff.aiAnalysis')}
-      </p>
-      <button
-        type="button"
-        className="rounded bg-[var(--vscode-button-background)] px-4 py-2 text-sm text-[var(--vscode-button-foreground)] transition-colors hover:bg-[var(--vscode-button-hoverBackground)]"
-        onClick={onRequestAi}
-      >
+      <p className="text-sm text-[var(--tools-fg-secondary)]">{t('assetDiff.aiAnalysis')}</p>
+      <button type="button" className="tools-button px-4 py-2 text-sm" onClick={onRequestAi}>
         {t('assetDiff.requestAI')}
       </button>
     </div>
@@ -382,12 +376,8 @@ export default function AssetDiffApp(): JSX.Element {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
           <div className="text-3xl">⚠️</div>
-          <div className="max-w-xl text-sm text-[var(--vscode-errorForeground)]">{error}</div>
-          <button
-            type="button"
-            className="rounded bg-[var(--vscode-button-background)] px-4 py-2 text-sm text-[var(--vscode-button-foreground)] transition-colors hover:bg-[var(--vscode-button-hoverBackground)]"
-            onClick={sendInit}
-          >
+          <div className="max-w-xl text-sm text-[var(--tools-danger)]">{error}</div>
+          <button type="button" className="tools-button px-4 py-2 text-sm" onClick={sendInit}>
             {t('assetDiff.retry')}
           </button>
         </div>
@@ -396,8 +386,8 @@ export default function AssetDiffApp(): JSX.Element {
 
     if (isLoading && similarity === null) {
       return (
-        <div className="flex flex-col items-center gap-3 text-sm text-[var(--vscode-descriptionForeground)]">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--vscode-button-background)] border-t-transparent" />
+        <div className="flex flex-col items-center gap-3 text-sm text-[var(--tools-fg-secondary)]">
+          <div className="tools-spinner h-8 w-8 animate-spin" />
           <div>{t('assetDiff.analyzing')}</div>
         </div>
       );
@@ -444,17 +434,17 @@ export default function AssetDiffApp(): JSX.Element {
   ]);
 
   return (
-    <div className="flex h-full flex-col bg-[var(--vscode-editor-background)]">
-      <div className="flex items-center gap-4 border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)] px-4 py-3">
+    <div className="flex h-full flex-col bg-[var(--tools-bg)]">
+      <div className="flex items-center gap-4 border-b border-[var(--tools-divider)] bg-[var(--tools-panel)] px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{initialState.entity.name}</div>
-          <div className="truncate text-xs text-[var(--vscode-descriptionForeground)]">
+          <div className="truncate text-xs text-[var(--tools-fg-secondary)]">
             {initialState.variantA.name} ↔ {initialState.variantB.name}
           </div>
         </div>
         <SimilarityBadge similarity={similarity} />
         <select
-          className="rounded border border-[var(--vscode-dropdown-border)] bg-[var(--vscode-dropdown-background)] px-2 py-1 text-xs text-[var(--vscode-dropdown-foreground)]"
+          className="tools-select text-xs"
           value={viewMode}
           onChange={(event) => setViewMode(event.target.value as AssetDiffViewMode)}
         >
@@ -464,21 +454,17 @@ export default function AssetDiffApp(): JSX.Element {
         </select>
       </div>
 
-      <div className="flex border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)]">
+      <div className="flex border-b border-[var(--tools-divider)] bg-[var(--tools-panel)]">
         {(['media', 'attributes', 'ai'] as AssetDiffTab[]).map((tab) => (
           <button
             key={tab}
             type="button"
-            className={`border-b-2 px-4 py-2 text-xs transition-colors ${
-              activeTab === tab
-                ? 'border-[var(--vscode-textLink-foreground)] text-[var(--vscode-textLink-foreground)]'
-                : 'border-transparent text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]'
-            }`}
+            className={`tools-tab text-xs ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
             {t(TAB_LABELS[tab])}
             {tab === 'attributes' ? (
-              <span className="ml-2 rounded-full bg-[var(--vscode-badge-background)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-badge-foreground)]">
+              <span className="tools-pill ml-2 px-1.5 py-0.5 text-[10px]">
                 {attributeDiffs.length}
               </span>
             ) : null}

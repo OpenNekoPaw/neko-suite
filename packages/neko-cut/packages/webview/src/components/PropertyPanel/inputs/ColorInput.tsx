@@ -14,8 +14,11 @@ export const ColorInput = memo(function ColorInput({
   disabled,
 }: ColorInputProps) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="w-20 text-[11px] text-[var(--vscode-descriptionForeground)] truncate">
+    <div className="nk-prop-row">
+      <label
+        className="truncate text-[11px] text-[var(--nk-fg-secondary)]"
+        style={{ width: '80px', flexShrink: 0 }}
+      >
         {label}
       </label>
       <div className="flex-1 flex items-center gap-2">
@@ -24,14 +27,14 @@ export const ColorInput = memo(function ColorInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          className="w-6 h-6 p-0 border border-[var(--vscode-input-border)] rounded cursor-pointer disabled:opacity-50"
+          className="h-6 w-6 cursor-pointer rounded border border-[var(--nk-input-border)] p-0 disabled:opacity-50"
         />
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          className="flex-1 px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded disabled:opacity-50"
+          className="nk-prop-input flex-1 disabled:opacity-50"
         />
       </div>
     </div>

@@ -16,15 +16,12 @@ export const CollapsibleSection = memo(function CollapsibleSection({
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   return (
-    <div className="border-b border-[var(--vscode-panel-border)]">
-      <button
-        className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        {t(titleKey)}
+    <div className="nk-prop-group">
+      <button className="nk-prop-group-header" onClick={() => setExpanded(!expanded)}>
+        <span className={`nk-prop-group-chevron ${expanded ? 'expanded' : ''}`}>▶</span>
+        <span className="nk-prop-group-title">{t(titleKey)}</span>
       </button>
-      {expanded && <div className="px-2 pb-2 space-y-1.5">{children}</div>}
+      {expanded && <div className="nk-prop-group-body">{children}</div>}
     </div>
   );
 });

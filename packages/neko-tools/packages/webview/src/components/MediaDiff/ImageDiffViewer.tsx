@@ -25,10 +25,10 @@ const SideBySideView = memo(function SideBySideView({
   return (
     <div className="flex flex-1 gap-2 p-2 overflow-auto">
       <div className="flex-1 flex flex-col items-center">
-        <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-2 font-medium">
+        <div className="mb-2 text-xs font-medium text-[var(--tools-fg-secondary)]">
           Previous (HEAD)
         </div>
-        <div className="flex-1 flex items-center justify-center overflow-auto bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
+        <div className="tools-card flex flex-1 items-center justify-center overflow-auto">
           <img
             src={previousSrc}
             alt="Previous version"
@@ -39,10 +39,10 @@ const SideBySideView = memo(function SideBySideView({
         </div>
       </div>
       <div className="flex-1 flex flex-col items-center">
-        <div className="text-xs text-[var(--vscode-descriptionForeground)] mb-2 font-medium">
+        <div className="mb-2 text-xs font-medium text-[var(--tools-fg-secondary)]">
           Current (Working)
         </div>
-        <div className="flex-1 flex items-center justify-center overflow-auto bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
+        <div className="tools-card flex flex-1 items-center justify-center overflow-auto">
           <img
             src={currentSrc}
             alt="Current version"
@@ -107,7 +107,7 @@ const SliderView = memo(function SliderView({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 m-2 overflow-hidden bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)] cursor-col-resize select-none"
+      className="tools-card relative m-2 flex-1 cursor-col-resize select-none overflow-hidden"
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
@@ -132,19 +132,15 @@ const SliderView = memo(function SliderView({
         />
       </div>
       <div
-        className="absolute top-0 bottom-0 w-1 bg-white shadow-lg cursor-col-resize z-10"
+        className="absolute top-0 bottom-0 z-10 w-1 cursor-col-resize bg-[var(--tools-accent)] shadow-lg"
         style={{ left: `${sliderPosition * 100}%`, transform: 'translateX(-50%)' }}
       >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-white rounded-full shadow-lg flex items-center justify-center">
-          <span className="text-black text-xs">↔</span>
+        <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[var(--tools-accent)] shadow-lg">
+          <span className="text-xs text-[var(--tools-accent-fg)]">↔</span>
         </div>
       </div>
-      <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
-        Previous
-      </div>
-      <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
-        Current
-      </div>
+      <div className="tools-overlay-chip absolute top-2 left-2 px-2 py-1 text-xs">Previous</div>
+      <div className="tools-overlay-chip absolute top-2 right-2 px-2 py-1 text-xs">Current</div>
     </div>
   );
 });
@@ -167,7 +163,7 @@ const OverlayView = memo(function OverlayView({
   zoom,
 }: OverlayViewProps) {
   return (
-    <div className="relative flex-1 m-2 overflow-hidden bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
+    <div className="tools-card relative m-2 flex-1 overflow-hidden">
       <img
         src={previousSrc}
         alt="Previous version"
@@ -186,7 +182,7 @@ const OverlayView = memo(function OverlayView({
         }}
         draggable={false}
       />
-      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+      <div className="tools-overlay-chip absolute bottom-2 right-2 px-2 py-1 text-xs">
         Opacity: {Math.round(opacity * 100)}%
       </div>
     </div>
@@ -213,7 +209,7 @@ const OnionSkinView = memo(function OnionSkinView({
   const [showHeatmap, setShowHeatmap] = useState(true);
 
   return (
-    <div className="relative flex-1 m-2 overflow-hidden bg-[var(--vscode-input-background)] rounded border border-[var(--vscode-panel-border)]">
+    <div className="tools-card relative m-2 flex-1 overflow-hidden">
       <img
         src={currentSrc}
         alt="Current version"
@@ -236,13 +232,13 @@ const OnionSkinView = memo(function OnionSkinView({
       )}
       <button
         type="button"
-        className="absolute top-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded hover:bg-black/70 transition-colors"
+        className="tools-overlay-chip absolute top-2 right-2 px-2 py-1 text-xs transition-[filter] hover:brightness-110"
         onClick={() => setShowHeatmap(!showHeatmap)}
       >
         {showHeatmap ? 'Hide' : 'Show'} Heatmap
       </button>
       {showHeatmap && (
-        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded flex items-center gap-2">
+        <div className="tools-overlay-chip absolute bottom-2 left-2 flex items-center gap-2 px-2 py-1 text-xs">
           <span>Difference:</span>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-500 rounded-sm" />
@@ -276,10 +272,10 @@ const ImageDetails = memo(function ImageDetails({ details }: ImageDetailsProps) 
   const { dimensions, pixelDifference } = details;
 
   return (
-    <div className="p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
+    <div className="border-t border-[var(--tools-divider)] bg-[var(--tools-panel)] p-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Dimensions</div>
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">Dimensions</div>
           <div className="flex items-center gap-2">
             <span className="text-red-400">
               {dimensions.previous.width}×{dimensions.previous.height}
@@ -291,15 +287,15 @@ const ImageDetails = memo(function ImageDetails({ details }: ImageDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Pixel Difference</div>
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">Pixel Difference</div>
           <div className="text-yellow-400">{(pixelDifference * 100).toFixed(2)}%</div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Similarity</div>
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">Similarity</div>
           <div className="text-blue-400">{(details.structuralSimilarity * 100).toFixed(2)}%</div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">Color Diff</div>
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">Color Diff</div>
           <div className="text-purple-400">{(details.colorHistogramDiff * 100).toFixed(2)}%</div>
         </div>
       </div>
@@ -333,7 +329,7 @@ export const ImageDiffViewer = memo(function ImageDiffViewer({
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-red-400">
+      <div className="flex flex-1 items-center justify-center text-[var(--tools-danger)]">
         <div className="text-center">
           <div className="text-2xl mb-2">⚠️</div>
           <div>{error}</div>
@@ -344,12 +340,10 @@ export const ImageDiffViewer = memo(function ImageDiffViewer({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <div className="text-sm text-[var(--vscode-descriptionForeground)]">
-            Loading images...
-          </div>
+          <div className="tools-spinner mx-auto mb-2 h-8 w-8 animate-spin" />
+          <div className="text-sm text-[var(--tools-fg-secondary)]">Loading images...</div>
         </div>
       </div>
     );

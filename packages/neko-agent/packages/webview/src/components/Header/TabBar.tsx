@@ -18,23 +18,19 @@ export function TabBar({ tabs, activeTabId, activeView, onSwitchTab, onCloseTab 
         <div
           key={tab.id}
           onClick={() => onSwitchTab(tab.id)}
-          className={`group flex items-center gap-1 px-2 py-1 text-[11px] rounded cursor-pointer transition-colors max-w-[120px] flex-shrink-0 ${
-            activeTabId === tab.id && activeView === 'chat'
-              ? 'bg-[var(--vscode-tab-activeBackground)] text-[var(--vscode-tab-activeForeground)]'
-              : 'hover:bg-[var(--vscode-list-hoverBackground)] text-[var(--vscode-tab-inactiveForeground)]'
-          }`}
+          className={`agent-tab group text-[11px] ${activeTabId === tab.id && activeView === 'chat' ? 'agent-tab-active' : ''}`}
         >
           <span className="truncate">{tab.title}</span>
           <button
             onClick={(e) => onCloseTab(tab.id, e)}
-            className="opacity-0 group-hover:opacity-100 hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded p-0.5 transition-opacity flex-shrink-0"
+            className="agent-header-action opacity-0 group-hover:opacity-100 min-h-0 min-w-0 p-0.5 transition-opacity flex-shrink-0"
           >
             <CloseIcon className="w-3 h-3" />
           </button>
         </div>
       ))}
       {tabs.length === 0 && (
-        <div className="px-2 py-1 text-[11px] text-[var(--vscode-descriptionForeground)]">
+        <div className="px-2 py-1 text-[11px] text-[var(--agent-fg-secondary)]">
           {t('header.newChat')}
         </div>
       )}

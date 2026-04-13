@@ -29,27 +29,27 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
       {/* Steps header */}
       <button
         onClick={toggleExpand}
-        className="w-full flex items-center gap-2 text-[10px] text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] transition-colors"
+        className="flex w-full items-center gap-2 text-[10px] text-[var(--agent-fg-secondary)] transition-colors hover:text-[var(--agent-fg)]"
       >
         <ChevronIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
         <span>
           Steps: {completedSteps}/{steps.length}
         </span>
         {currentStepId && currentStepIndex >= 0 && (
-          <span className="text-[var(--vscode-foreground)]">- {steps[currentStepIndex]!.name}</span>
+          <span className="text-[var(--agent-fg)]">- {steps[currentStepIndex]!.name}</span>
         )}
       </button>
 
       {/* Steps list (expanded) */}
       {isExpanded && (
-        <div className="mt-2 pl-2 border-l-2 border-[var(--vscode-panel-border)] space-y-1">
+        <div className="mt-2 space-y-1 border-l-2 border-[var(--agent-divider)] pl-2">
           {steps.map((step, index) => (
             <div
               key={step.id}
               className={`flex items-start gap-2 text-[10px] ${
                 step.id === currentStepId
-                  ? 'text-[var(--vscode-foreground)]'
-                  : 'text-[var(--vscode-descriptionForeground)]'
+                  ? 'text-[var(--agent-fg)]'
+                  : 'text-[var(--agent-fg-secondary)]'
               }`}
             >
               {/* Status icon */}
@@ -67,15 +67,13 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
                     {index + 1}. {step.name}
                   </span>
                   {step.startTime && step.endTime && (
-                    <span className="text-[var(--vscode-descriptionForeground)]">
+                    <span className="text-[var(--agent-fg-secondary)]">
                       ({formatDuration(Math.round((step.endTime - step.startTime) / 1000))})
                     </span>
                   )}
                 </div>
                 {step.message && (
-                  <div className="text-[var(--vscode-descriptionForeground)] truncate">
-                    {step.message}
-                  </div>
+                  <div className="truncate text-[var(--agent-fg-secondary)]">{step.message}</div>
                 )}
               </div>
             </div>

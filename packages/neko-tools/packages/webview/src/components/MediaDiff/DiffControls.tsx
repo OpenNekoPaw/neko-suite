@@ -34,16 +34,7 @@ const ViewModeButton = memo(function ViewModeButton({
   return (
     <button
       type="button"
-      className={`
-        flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium
-        transition-colors duration-150
-        ${
-          isActive
-            ? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
-            : 'bg-[var(--vscode-input-background)] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]'
-        }
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-      `}
+      className={`${isActive ? 'tools-button' : 'tools-button-secondary'} px-3 py-1.5 text-xs font-medium ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
       onClick={() => !disabled && onClick(mode)}
       disabled={disabled}
       title={label}
@@ -67,7 +58,7 @@ const SimilarityBadge = memo(function SimilarityBadge({ similarity }: Similarity
   // Files are identical
   if (similarity >= 1.0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
+      <div className="tools-pill px-3 py-1.5">
         <span className="text-sm font-bold text-green-400">{t('mediaDiff.identical')}</span>
       </div>
     );
@@ -81,10 +72,8 @@ const SimilarityBadge = memo(function SimilarityBadge({ similarity }: Similarity
   else if (percentage >= 50) colorClass = 'text-orange-400';
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--vscode-input-background)] rounded">
-      <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-        {t('mediaDiff.similarity')}
-      </span>
+    <div className="tools-pill px-3 py-1.5">
+      <span className="text-xs text-[var(--tools-fg-secondary)]">{t('mediaDiff.similarity')}</span>
       <span className={`text-sm font-bold ${colorClass}`}>{percentage}%</span>
     </div>
   );
@@ -115,9 +104,7 @@ const SliderControl = memo(function SliderControl({
 }: SliderControlProps) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-[var(--vscode-descriptionForeground)] min-w-[60px]">
-        {label}:
-      </span>
+      <span className="min-w-[60px] text-xs text-[var(--tools-fg-secondary)]">{label}:</span>
       <input
         type="range"
         min={min}
@@ -125,9 +112,9 @@ const SliderControl = memo(function SliderControl({
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-24 h-1 bg-[var(--vscode-input-background)] rounded-lg appearance-none cursor-pointer"
+        className="tools-range h-1 w-24 cursor-pointer appearance-none rounded-lg bg-[var(--tools-elevated)]"
       />
-      <span className="text-xs text-[var(--vscode-foreground)] min-w-[40px] text-right">
+      <span className="min-w-[40px] text-right text-xs text-[var(--tools-fg)]">
         {formatValue ? formatValue(value) : value.toFixed(0)}
       </span>
     </div>
@@ -197,38 +184,29 @@ const TimeRangeControl = memo(function TimeRangeControl({
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-        {t('mediaDiff.range')}
-      </span>
+      <span className="text-xs text-[var(--tools-fg-secondary)]">{t('mediaDiff.range')}</span>
       <input
         type="text"
         placeholder={formatTime(0)}
         value={startInput}
         onChange={(e) => setStartInput(e.target.value)}
-        className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
+        className="tools-input w-14 px-1 py-0.5 text-center text-xs"
         title={t('mediaDiff.startTimeHint')}
       />
-      <span className="text-xs text-[var(--vscode-descriptionForeground)]">–</span>
+      <span className="text-xs text-[var(--tools-fg-secondary)]">–</span>
       <input
         type="text"
         placeholder={formatTime(duration)}
         value={endInput}
         onChange={(e) => setEndInput(e.target.value)}
-        className="w-14 px-1 py-0.5 text-xs bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded text-center"
+        className="tools-input w-14 px-1 py-0.5 text-center text-xs"
         title={t('mediaDiff.endTimeHint')}
       />
       <button
         type="button"
         onClick={handleApply}
         disabled={isLoading}
-        className={`
-          px-2 py-0.5 text-xs rounded font-medium transition-colors
-          ${
-            isLoading
-              ? 'opacity-50 cursor-not-allowed bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)]'
-              : 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer'
-          }
-        `}
+        className={`${isLoading ? 'tools-button-secondary opacity-50' : 'tools-button'} px-2 py-0.5 text-xs font-medium`}
         title={t('mediaDiff.applyRange')}
       >
         {t('mediaDiff.apply')}
@@ -238,7 +216,7 @@ const TimeRangeControl = memo(function TimeRangeControl({
           type="button"
           onClick={handleReset}
           disabled={isLoading}
-          className="px-1.5 py-0.5 text-xs text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] cursor-pointer"
+          className="px-1.5 py-0.5 text-xs text-[var(--tools-fg-secondary)] transition-colors hover:text-[var(--tools-fg)]"
           title={t('mediaDiff.resetRange')}
         >
           {t('mediaDiff.reset')}
@@ -277,7 +255,7 @@ export const DiffControls = memo(function DiffControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-b border-[var(--vscode-panel-border)]">
+    <div className="flex flex-wrap items-center gap-4 border-b border-[var(--tools-divider)] bg-[var(--tools-bg)] p-3">
       {/* View Mode Buttons */}
       <div className="flex items-center gap-1">
         {viewModes.map(({ mode, label, icon }) => (
@@ -293,13 +271,13 @@ export const DiffControls = memo(function DiffControls({
         ))}
       </div>
 
-      <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+      <div className="tools-divider-v" />
 
       {similarity !== undefined && <SimilarityBadge similarity={similarity} />}
 
       {mediaType === 'image' && zoom !== undefined && onZoomChange && (
         <>
-          <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+          <div className="tools-divider-v" />
           <SliderControl
             label={t('mediaDiff.zoom')}
             value={zoom}
@@ -314,7 +292,7 @@ export const DiffControls = memo(function DiffControls({
 
       {viewMode === 'overlay' && opacity !== undefined && onOpacityChange && (
         <>
-          <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+          <div className="tools-divider-v" />
           <SliderControl
             label={t('mediaDiff.opacity')}
             value={opacity}
@@ -332,13 +310,13 @@ export const DiffControls = memo(function DiffControls({
         duration > 0 &&
         onSetTimeRange && (
           <>
-            <div className="w-px h-6 bg-[var(--vscode-panel-border)]" />
+            <div className="tools-divider-v" />
             <TimeRangeControl duration={duration} isLoading={isLoading} onApply={onSetTimeRange} />
           </>
         )}
 
       {isLoading && (
-        <div className="flex items-center gap-2 text-xs text-[var(--vscode-descriptionForeground)]">
+        <div className="flex items-center gap-2 text-xs text-[var(--tools-fg-secondary)]">
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
           <span>{t('mediaDiff.analyzing')}</span>
         </div>

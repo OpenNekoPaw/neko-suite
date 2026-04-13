@@ -69,6 +69,63 @@
   --fallback-scrollbar-bg: rgba(121, 121, 121, 0.4);
   --fallback-scrollbar-hover-bg: rgba(121, 121, 121, 0.7);
   --fallback-scrollbar-active-bg: rgba(121, 121, 121, 0.8);
+
+  /* Agent semantic tokens */
+  --agent-bg: var(--vscode-editor-background, var(--fallback-editor-bg));
+  --agent-elevated: color-mix(
+    in srgb,
+    var(--neko-elevated, var(--vscode-panel-background, var(--fallback-panel-bg))) 88%,
+    var(--agent-bg) 12%
+  );
+  --agent-surface: color-mix(
+    in srgb,
+    var(--neko-surface, rgba(255, 255, 255, 0.05)) 78%,
+    var(--agent-elevated) 22%
+  );
+  --agent-border: var(--neko-border, rgba(255, 255, 255, 0.08));
+  --agent-divider: var(--neko-divider, rgba(255, 255, 255, 0.06));
+  --agent-fg: var(--neko-fg, var(--vscode-editor-foreground, var(--fallback-editor-fg)));
+  --agent-fg-secondary: var(
+    --neko-fg-secondary,
+    var(--vscode-descriptionForeground, var(--fallback-description-fg))
+  );
+  --agent-fg-muted: var(--neko-fg-muted, rgba(232, 232, 237, 0.38));
+  --agent-hover: var(--neko-hover, rgba(255, 255, 255, 0.06));
+  --agent-accent: var(--neko-accent, var(--vscode-button-background, var(--fallback-button-bg)));
+  --agent-accent-soft: var(
+    --neko-accent-soft,
+    color-mix(in srgb, var(--agent-accent) 16%, transparent)
+  );
+  --agent-accent-fg: var(--vscode-button-foreground, var(--fallback-button-fg));
+  --agent-input-bg: color-mix(in srgb, var(--agent-elevated) 84%, var(--agent-bg) 16%);
+  --agent-input-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
+  --agent-tab-active-bg: color-mix(in srgb, var(--agent-accent) 18%, transparent);
+  --agent-menu-bg: color-mix(
+    in srgb,
+    var(--vscode-menu-background, var(--fallback-menu-bg)) 86%,
+    var(--agent-elevated) 14%
+  );
+  --agent-danger: var(--neko-danger, var(--vscode-errorForeground, var(--fallback-error-fg)));
+  --agent-success: var(--vscode-charts-green, #89d185);
+  --agent-info: var(--vscode-charts-blue, #3794ff);
+  --agent-warning-bg: color-mix(
+    in srgb,
+    var(--vscode-inputValidation-warningBackground, #5c4b1c) 72%,
+    transparent
+  );
+  --agent-warning-fg: var(--vscode-inputValidation-warningForeground, #ffd60a);
+}
+
+body.vscode-high-contrast,
+body[data-vscode-theme-kind='vscode-high-contrast'] {
+  --agent-elevated: var(--vscode-panel-background, var(--fallback-panel-bg));
+  --agent-surface: var(--agent-elevated);
+  --agent-border: var(--vscode-contrastBorder, #ffffff);
+  --agent-divider: var(--agent-border);
+  --agent-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.12));
+  --agent-accent-soft: var(--vscode-list-activeSelectionBackground, rgba(255, 255, 255, 0.18));
+  --agent-input-bg: var(--agent-elevated);
+  --agent-input-border: var(--agent-border);
 }
 
 * {
@@ -78,10 +135,10 @@
 }
 
 body {
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  background-color: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family, var(--fallback-font-family));
+  font-size: var(--vscode-font-size, var(--fallback-font-size));
+  background-color: var(--agent-bg);
+  color: var(--agent-fg);
   overflow: hidden;
 }
 
@@ -94,65 +151,81 @@ body {
 
 /* VSCode-style buttons */
 .vscode-button {
-  background-color: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border: none;
-  padding: 4px 14px;
+  background-color: var(--agent-accent);
+  color: var(--agent-accent-fg);
+  border: 1px solid transparent;
+  padding: 5px 14px;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 8px;
   font-size: 13px;
   line-height: 18px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--agent-accent) 22%, transparent);
 }
 
 .vscode-button:hover {
-  background-color: var(--vscode-button-hoverBackground);
+  background-color: color-mix(in srgb, var(--agent-accent) 88%, #ffffff 12%);
 }
 
 .vscode-button:focus {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  outline: 2px solid var(--agent-accent);
+  outline-offset: 1px;
+}
+
+.vscode-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .vscode-button-secondary {
-  background-color: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
+  background-color: color-mix(in srgb, var(--agent-fg) 8%, transparent);
+  color: var(--agent-fg);
+  border-color: var(--agent-input-border);
+  box-shadow: none;
 }
 
 .vscode-button-secondary:hover {
-  background-color: var(--vscode-button-secondaryHoverBackground);
+  background-color: color-mix(in srgb, var(--agent-fg) 12%, transparent);
 }
 
 /* VSCode-style inputs */
 .vscode-input {
-  background-color: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border);
+  background-color: var(--agent-input-bg);
+  color: var(--agent-fg);
+  border: 1px solid var(--agent-input-border);
   padding: 4px 8px;
   font-size: 13px;
   line-height: 18px;
   outline: none;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .vscode-input:focus {
-  border-color: var(--vscode-focusBorder);
+  border-color: var(--agent-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent-accent) 20%, transparent);
 }
 
 .vscode-input::placeholder {
-  color: var(--vscode-input-placeholderForeground, #9d9d9d);
+  color: var(--agent-fg-secondary);
 }
 
 /* VSCode-style dropdowns */
 .vscode-dropdown {
-  background-color: var(--vscode-dropdown-background);
-  color: var(--vscode-dropdown-foreground);
-  border: 1px solid var(--vscode-dropdown-border);
+  background-color: var(--agent-input-bg);
+  color: var(--agent-fg);
+  border: 1px solid var(--agent-input-border);
   padding: 4px 8px;
   font-size: 13px;
   outline: none;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .vscode-dropdown:focus {
-  border-color: var(--vscode-focusBorder);
+  border-color: var(--agent-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent-accent) 20%, transparent);
 }
 
 /* VSCode-style list items */
@@ -160,15 +233,17 @@ body {
   padding: 4px 8px;
   cursor: pointer;
   transition: background-color 0.1s ease;
+  color: var(--agent-fg);
+  border-radius: 8px;
 }
 
 .vscode-list-item:hover {
-  background-color: var(--vscode-list-hoverBackground);
+  background-color: var(--agent-hover);
 }
 
 .vscode-list-item.active {
-  background-color: color-mix(in srgb, var(--vscode-button-background) 20%, transparent);
-  color: var(--vscode-list-activeSelectionForeground);
+  background-color: var(--agent-accent-soft);
+  color: var(--agent-fg);
 }
 
 /* Scrollbar styles - thin overlay style to avoid content obstruction */
@@ -277,34 +352,36 @@ body {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+  color: var(--agent-fg-secondary);
   opacity: 0.8;
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
 
 .icon-button:hover {
-  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+  background-color: var(--agent-hover);
+  color: var(--agent-fg);
   opacity: 1;
 }
 
 .icon-button:active {
-  background-color: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31));
+  background-color: var(--agent-accent-soft);
 }
 
 .icon-button:focus {
-  outline: 1px solid var(--vscode-focusBorder);
+  outline: 1px solid var(--agent-accent);
   outline-offset: -1px;
 }
 
 /* Tooltip styling */
 .vscode-tooltip {
   position: absolute;
-  background-color: var(--vscode-editorWidget-background, #252526);
-  border: 1px solid var(--vscode-editorWidget-border, #454545);
-  color: var(--vscode-editorWidget-foreground, #cccccc);
+  background-color: var(--agent-elevated);
+  border: 1px solid var(--agent-border);
+  color: var(--agent-fg);
   padding: 4px 8px;
   font-size: 12px;
-  border-radius: 3px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+  border-radius: 8px;
+  box-shadow: var(--neko-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.44));
   z-index: 1000;
   white-space: nowrap;
   pointer-events: none;
@@ -312,19 +389,20 @@ body {
 
 /* Description/secondary text */
 .vscode-description {
-  color: var(--vscode-descriptionForeground);
+  color: var(--agent-fg-secondary);
   font-size: 12px;
 }
 
 /* Badge styling */
 .vscode-badge {
   display: inline-block;
-  background-color: var(--vscode-badge-background, #4d4d4d);
-  color: var(--vscode-badge-foreground, #ffffff);
+  background-color: color-mix(in srgb, var(--agent-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--agent-accent) 80%, var(--agent-fg) 20%);
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 10px;
   font-weight: 500;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 28%, transparent);
 }
 
 /* Toast notification animations */
@@ -366,26 +444,214 @@ body {
 
 /* Elevated floating card — deep shadow + large radius for modals/overlays */
 .neko-float-card {
-  background-color: var(--vscode-panel-background);
-  border: 1px solid var(--vscode-panel-border);
+  background-color: var(--agent-elevated);
+  border: 1px solid var(--agent-border);
   border-radius: 16px;
-  box-shadow:
-    0 24px 48px rgba(0, 0, 0, 0.28),
-    0 8px 16px rgba(0, 0, 0, 0.14),
-    0 2px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--neko-shadow-xl, 0 24px 48px rgba(0, 0, 0, 0.28));
   overflow: hidden;
 }
 
 /* Glass dropdown — frosted glass panel for menus/dropdowns */
 .neko-glass-dropdown {
-  background-color: color-mix(in srgb, var(--vscode-menu-background, #252526) 92%, transparent);
+  background-color: color-mix(in srgb, var(--agent-menu-bg) 92%, transparent);
   backdrop-filter: blur(12px) saturate(1.4);
   -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--vscode-menu-border, #454545) 80%, transparent);
+  border: 1px solid var(--agent-border);
   border-radius: 12px;
   box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.24),
-    0 4px 8px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    var(--neko-shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.24)),
+    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 6%, transparent);
   overflow: hidden;
+}
+
+/* Agent UI helpers */
+.agent-header {
+  background: color-mix(in srgb, var(--agent-elevated) 94%, transparent);
+  border-bottom: 1px solid var(--agent-divider);
+}
+
+.agent-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 6px;
+  background: transparent;
+  color: var(--agent-fg-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-header-action:hover {
+  background: var(--agent-hover);
+  color: var(--agent-fg);
+}
+
+.agent-header-action.is-active {
+  background: var(--agent-accent-soft);
+  color: var(--agent-fg);
+  border-color: color-mix(in srgb, var(--agent-accent) 28%, transparent);
+}
+
+.agent-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 120px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--agent-fg-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-tab:hover {
+  background: var(--agent-hover);
+  color: var(--agent-fg);
+}
+
+.agent-tab-active {
+  background: var(--agent-tab-active-bg);
+  color: var(--agent-fg);
+  border-color: color-mix(in srgb, var(--agent-accent) 24%, transparent);
+}
+
+.agent-card {
+  background: color-mix(in srgb, var(--agent-elevated) 92%, transparent);
+  border: 1px solid var(--agent-border);
+  border-radius: 16px;
+  box-shadow: var(--neko-shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.24));
+}
+
+.agent-inline-card {
+  background: var(--agent-surface);
+  border: 1px solid var(--agent-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.agent-inline-card.is-info {
+  background: color-mix(in srgb, var(--agent-info) 8%, var(--agent-surface));
+  border-color: color-mix(in srgb, var(--agent-info) 24%, transparent);
+}
+
+.agent-inline-card.is-success {
+  background: color-mix(in srgb, var(--agent-success) 8%, var(--agent-surface));
+  border-color: color-mix(in srgb, var(--agent-success) 24%, transparent);
+}
+
+.agent-inline-card.is-warning {
+  background: color-mix(in srgb, var(--agent-warning-fg) 8%, var(--agent-surface));
+  border-color: color-mix(in srgb, var(--agent-warning-fg) 24%, transparent);
+}
+
+.agent-inline-card.is-danger {
+  background: color-mix(in srgb, var(--agent-danger) 8%, var(--agent-surface));
+  border-color: color-mix(in srgb, var(--agent-danger) 24%, transparent);
+}
+
+.agent-inline-header {
+  background: color-mix(in srgb, var(--agent-elevated) 94%, transparent);
+}
+
+.agent-code-block {
+  background: color-mix(in srgb, var(--agent-elevated) 88%, var(--agent-bg) 12%);
+  border: 1px solid var(--agent-border);
+  border-radius: 10px;
+  color: var(--agent-fg);
+}
+
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--agent-border);
+  background: color-mix(in srgb, var(--agent-elevated) 88%, transparent);
+  color: var(--agent-fg-secondary);
+}
+
+.agent-badge.is-info {
+  background: color-mix(in srgb, var(--agent-info) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-info) 28%, transparent);
+  color: var(--agent-info);
+}
+
+.agent-badge.is-success {
+  background: color-mix(in srgb, var(--agent-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-success) 28%, transparent);
+  color: var(--agent-success);
+}
+
+.agent-badge.is-warning {
+  background: color-mix(in srgb, var(--agent-warning-fg) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-warning-fg) 28%, transparent);
+  color: var(--agent-warning-fg);
+}
+
+.agent-badge.is-danger {
+  background: color-mix(in srgb, var(--agent-danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-danger) 28%, transparent);
+  color: var(--agent-danger);
+}
+
+.agent-search-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--agent-input-bg);
+  border: 1px solid var(--agent-input-border);
+  border-radius: 10px;
+}
+
+.agent-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--agent-fg);
+  border: none;
+  font-size: 11px;
+  outline: none;
+}
+
+.agent-search-input::placeholder {
+  color: var(--agent-fg-secondary);
+}
+
+.agent-menu-section {
+  color: var(--agent-fg-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-warning-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--agent-warning-fg) 28%, transparent);
+  background: var(--agent-warning-bg);
+  color: var(--agent-warning-fg);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.agent-danger-link {
+  color: var(--agent-danger);
+  border-radius: 6px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-danger-link:hover {
+  background: color-mix(in srgb, var(--agent-danger) 14%, transparent);
 }

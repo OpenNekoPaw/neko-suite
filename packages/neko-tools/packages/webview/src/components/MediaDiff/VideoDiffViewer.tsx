@@ -90,14 +90,14 @@ const SeekControls = memo(function SeekControls({
   };
 
   return (
-    <div className="flex items-center gap-4 p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
+    <div className="flex items-center gap-4 border-t border-[var(--tools-divider)] bg-[var(--tools-bg)] p-3">
       {/* Play/Pause button — disabled while previous version is being fetched */}
       <button
         type="button"
-        className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+        className={`h-8 w-8 rounded-full p-0 text-base ${
           isFetchingPrevious
-            ? 'opacity-40 cursor-not-allowed text-[var(--vscode-foreground)]'
-            : 'hover:bg-[var(--vscode-list-hoverBackground)] text-[var(--vscode-foreground)]'
+            ? 'tools-button-secondary cursor-not-allowed opacity-40'
+            : 'tools-button-secondary'
         }`}
         onClick={isFetchingPrevious ? undefined : onPlayPause}
         disabled={isFetchingPrevious}
@@ -107,7 +107,7 @@ const SeekControls = memo(function SeekControls({
       >
         {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
-      <span className="text-xs text-[var(--vscode-foreground)] font-mono min-w-[100px]">
+      <span className="min-w-[100px] font-mono text-xs text-[var(--tools-fg)]">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
       <div className="flex-1 relative">
@@ -134,7 +134,7 @@ const SeekControls = memo(function SeekControls({
           step={0.01}
           value={currentTime}
           onChange={(e) => onSeek(parseFloat(e.target.value))}
-          className="w-full h-1 bg-[var(--vscode-input-background)] rounded-lg appearance-none cursor-pointer relative z-10"
+          className="tools-range relative z-10 h-1 w-full cursor-pointer appearance-none rounded-lg bg-[var(--tools-elevated)]"
         />
       </div>
     </div>
@@ -175,10 +175,10 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
   );
 
   return (
-    <div className="p-3 bg-[var(--vscode-editor-background)] border-t border-[var(--vscode-panel-border)]">
+    <div className="border-t border-[var(--tools-divider)] bg-[var(--tools-panel)] p-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">
             {t('mediaDiff.video.duration')}
           </div>
           <div className="flex items-center gap-2">
@@ -188,7 +188,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">
             {t('mediaDiff.video.resolution')}
           </div>
           <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
           </div>
         </div>
         <div>
-          <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+          <div className="mb-1 text-[var(--tools-fg-secondary)]">
             {t('mediaDiff.video.frameRate')}
           </div>
           <div className="flex items-center gap-2">
@@ -213,7 +213,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
         </div>
         {details.codec && (
           <div>
-            <div className="text-[var(--vscode-descriptionForeground)] mb-1">
+            <div className="mb-1 text-[var(--tools-fg-secondary)]">
               {t('mediaDiff.video.codec')}
             </div>
             <div className="flex items-center gap-2">
@@ -225,8 +225,8 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
         )}
       </div>
       {displayKeyframeDiffs.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-[var(--vscode-panel-border)]">
-          <div className="text-[var(--vscode-descriptionForeground)] mb-2 text-xs">
+        <div className="mt-3 border-t border-[var(--tools-divider)] pt-3">
+          <div className="mb-2 text-xs text-[var(--tools-fg-secondary)]">
             {t('mediaDiff.video.keyframeSimilarities')}
             {details.keyframeDiffs && details.keyframeDiffs.length > 500 && (
               <span className="ml-2 text-[10px] opacity-60">
@@ -382,7 +382,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-red-400">
+      <div className="flex flex-1 items-center justify-center text-[var(--tools-danger)]">
         <div className="text-center">
           <div className="text-2xl mb-2">{'\u26A0\uFE0F'}</div>
           <div>{error}</div>
@@ -393,10 +393,10 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+          <div className="tools-spinner mx-auto mb-2 h-8 w-8 animate-spin" />
+          <div className="text-sm text-[var(--tools-fg-secondary)]">
             {t('mediaDiff.video.analyzing')}
           </div>
         </div>
@@ -409,27 +409,27 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
   if (!streamConfig) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
-        <div className="flex-1 flex items-center justify-center bg-black">
+        <div className="flex flex-1 items-center justify-center bg-[var(--tools-bg)]">
           {isFetchingPrevious ? (
             // git show in progress — previous version not yet available
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+              <div className="tools-spinner mx-auto mb-2 h-8 w-8 animate-spin" />
+              <div className="text-sm text-[var(--tools-fg-secondary)]">
                 {t('mediaDiff.video.fetchingPrevious')}
               </div>
             </div>
           ) : isPlaying ? (
             // Streams being created after Play click
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-[var(--vscode-button-background)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+              <div className="tools-spinner mx-auto mb-2 h-8 w-8 animate-spin" />
+              <div className="text-sm text-[var(--tools-fg-secondary)]">
                 {t('mediaDiff.video.startingStreams')}
               </div>
             </div>
           ) : (
             <button
               type="button"
-              className="w-16 h-16 flex items-center justify-center rounded-full bg-[var(--vscode-button-background)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors text-[var(--vscode-button-foreground)] text-2xl"
+              className="tools-button h-16 w-16 rounded-full p-0 text-2xl"
               onClick={handlePlayPause}
               title={t('mediaDiff.video.playTitle')}
             >
@@ -466,7 +466,7 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
         onStreamEnd={handleStreamEnd}
       />
       {streamError && (
-        <div className="px-3 py-2 text-xs text-red-400 bg-red-900/20 border-t border-red-500/30">
+        <div className="border-t border-[color-mix(in_srgb,var(--tools-danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--tools-danger)_12%,transparent)] px-3 py-2 text-xs text-[var(--tools-danger)]">
           Stream error: {streamError}
         </div>
       )}

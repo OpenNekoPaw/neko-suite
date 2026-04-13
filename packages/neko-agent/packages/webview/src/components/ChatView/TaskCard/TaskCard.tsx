@@ -28,6 +28,9 @@ interface TaskCardProps {
   plugins?: PluginsAvailable;
 }
 
+const compactActionClass =
+  'inline-flex items-center gap-1 rounded-md border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] transition-colors hover:bg-[var(--agent-hover)]';
+
 export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -39,178 +42,157 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
   const toggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
-
-  const getStatusBgClass = () => {
-    if (isCompleted)
-      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#22c55e)]';
-    if (isFailed)
-      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#ef4444)]';
-    if (isActive)
-      return 'bg-[color-mix(in_srgb,var(--vscode-textBlockQuote-background)_95%,#3b82f6)]';
-    return 'bg-[var(--vscode-textBlockQuote-background)]';
-  };
+  const toneClass = isCompleted ? 'is-success' : isFailed ? 'is-danger' : isActive ? 'is-info' : '';
 
   return (
     <div className="my-1">
-      {/* Compact header */}
-      <div
-        className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] cursor-pointer transition-colors
-          ${getStatusBgClass()}
-          hover:bg-[var(--vscode-list-hoverBackground)]
-          ${isExpanded ? 'rounded-b-none' : ''}
-        `}
-        onClick={toggleExpand}
-      >
-        {/* Status indicator */}
-        {isActive && (
-          <LoadingSpinner className="w-3 h-3 text-[var(--vscode-charts-blue)] shrink-0" />
-        )}
-        {isCompleted && (
-          <SuccessIcon className="w-3 h-3 text-[var(--vscode-charts-green)] shrink-0" />
-        )}
-        {isFailed && <ErrorIcon className="w-3 h-3 text-[var(--vscode-charts-red)] shrink-0" />}
+      <div className={`agent-inline-card ${toneClass}`}>
+        {/* Compact header */}
+        <div
+          className="agent-inline-header flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px]"
+          onClick={toggleExpand}
+        >
+          {/* Status indicator */}
+          {isActive && <LoadingSpinner className="h-3 w-3 shrink-0 text-[var(--agent-info)]" />}
+          {isCompleted && <SuccessIcon className="h-3 w-3 shrink-0 text-[var(--agent-success)]" />}
+          {isFailed && <ErrorIcon className="h-3 w-3 shrink-0 text-[var(--agent-danger)]" />}
 
-        {/* Task type icon + name */}
-        <span className="shrink-0">{getTypeIcon(task.type)}</span>
-        <span className="font-medium text-[var(--vscode-foreground)] truncate">
-          {task.type === 'video'
-            ? t('tasks.videoGeneration')
-            : task.type === 'audio'
-              ? t('tasks.audioGeneration')
-              : t('tasks.imageGeneration')}
-        </span>
-
-        {/* Progress or status */}
-        {isActive && task.progress > 0 && (
-          <span className="text-[var(--vscode-descriptionForeground)] shrink-0">
-            {task.progress}%
+          {/* Task type icon + name */}
+          <span className="shrink-0">{getTypeIcon(task.type)}</span>
+          <span className="truncate font-medium text-[var(--agent-fg)]">
+            {task.type === 'video'
+              ? t('tasks.videoGeneration')
+              : task.type === 'audio'
+                ? t('tasks.audioGeneration')
+                : t('tasks.imageGeneration')}
           </span>
-        )}
 
-        <span className="flex-1" />
+          {/* Progress or status */}
+          {isActive && task.progress > 0 && (
+            <span className="shrink-0 text-[var(--agent-fg-secondary)]">{task.progress}%</span>
+          )}
 
-        {/* Provider badge */}
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] shrink-0 hidden sm:inline">
-          {task.providerName}
-        </span>
+          <span className="flex-1" />
 
-        {/* Action buttons */}
-        {isActive && onCancel && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel(task.id);
-            }}
-            className="px-1.5 py-0.5 rounded text-[var(--vscode-errorForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors shrink-0"
-            title={t('tasks.cancel')}
-          >
-            ✕
-          </button>
-        )}
+          {/* Provider badge */}
+          <span className="agent-badge hidden shrink-0 text-[10px] sm:inline-flex">
+            {task.providerName}
+          </span>
 
-        {isFailed && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              vscode?.postMessage({ type: 'retryTask', taskId: task.id });
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors shrink-0"
-            title={t('tasks.retry')}
-          >
-            ↻
-          </button>
-        )}
+          {/* Action buttons */}
+          {isActive && onCancel && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel(task.id);
+              }}
+              className="agent-danger-link rounded-md px-1.5 py-0.5 text-[10px] shrink-0"
+              title={t('tasks.cancel')}
+            >
+              ✕
+            </button>
+          )}
 
-        {isCompleted && onViewResult && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewResult(task.id);
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors shrink-0"
-            title={t('tasks.viewResult')}
-          >
-            {t('common.view')}
-          </button>
-        )}
+          {isFailed && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                vscode?.postMessage({ type: 'retryTask', taskId: task.id });
+              }}
+              className={compactActionClass}
+              title={t('tasks.retry')}
+            >
+              ↻
+            </button>
+          )}
 
-        <ChevronIcon
-          className={`w-3 h-3 text-[var(--vscode-descriptionForeground)] transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-        />
-      </div>
+          {isCompleted && onViewResult && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewResult(task.id);
+              }}
+              className={compactActionClass}
+              title={t('tasks.viewResult')}
+            >
+              {t('common.view')}
+            </button>
+          )}
 
-      {/* Error message (always show if failed) */}
-      {isFailed && task.error && !isExpanded && (
-        <div className="px-2 py-1 text-[10px] text-[var(--vscode-charts-red)] bg-[var(--vscode-inputValidation-errorBackground)] rounded-b">
-          {task.error}
+          <ChevronIcon
+            className={`h-3 w-3 shrink-0 text-[var(--agent-fg-secondary)] transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          />
         </div>
-      )}
 
-      {/* Expanded content */}
-      {isExpanded && (
-        <div className="border border-t-0 border-[var(--vscode-panel-border)] rounded-b bg-[var(--vscode-editor-background)] p-2 text-[10px]">
-          {/* Prompt */}
-          <div className="text-[var(--vscode-descriptionForeground)] mb-2 line-clamp-2">
-            {task.prompt}
+        {/* Error message (always show if failed) */}
+        {isFailed && task.error && !isExpanded && (
+          <div className="border-t border-[color-mix(in_srgb,var(--agent-danger)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1 text-[10px] text-[var(--agent-danger)]">
+            {task.error}
           </div>
+        )}
 
-          {/* Progress Bar (for active tasks) */}
-          {isActive && (
-            <div className="mb-2">
-              {task.progress > 0 && (
-                <div className="flex items-center justify-between text-[var(--vscode-descriptionForeground)] mb-1">
-                  <span>{t('tasks.progress')}</span>
-                  <div className="flex items-center gap-2">
-                    <span>{task.progress}%</span>
-                    {task.eta && task.eta > 0 && (
-                      <span className="text-[var(--vscode-charts-blue)]">
-                        ETA: {formatETA(task.eta)}
-                      </span>
-                    )}
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="border-t border-[var(--agent-divider)] p-2 text-[10px] text-[var(--agent-fg)]">
+            {/* Prompt */}
+            <div className="mb-2 line-clamp-2 text-[var(--agent-fg-secondary)]">{task.prompt}</div>
+
+            {/* Progress Bar (for active tasks) */}
+            {isActive && (
+              <div className="mb-2">
+                {task.progress > 0 && (
+                  <div className="mb-1 flex items-center justify-between text-[var(--agent-fg-secondary)]">
+                    <span>{t('tasks.progress')}</span>
+                    <div className="flex items-center gap-2">
+                      <span>{task.progress}%</span>
+                      {task.eta && task.eta > 0 && (
+                        <span className="text-[var(--agent-info)]">ETA: {formatETA(task.eta)}</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-              <div className="h-1.5 bg-[var(--vscode-progressBar-background)] rounded-full overflow-hidden">
-                {task.progress > 0 ? (
-                  <div
-                    className="h-full rounded-full transition-all duration-500 ease-out"
-                    style={{
-                      width: `${task.progress}%`,
-                      backgroundColor: getStatusColor(task.status),
-                    }}
-                  />
-                ) : (
-                  // Indeterminate animation for models without progress reporting
-                  <div
-                    className="h-full w-1/3 rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]"
-                    style={{ backgroundColor: getStatusColor(task.status) }}
-                  />
                 )}
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--agent-input-bg)]">
+                  {task.progress > 0 ? (
+                    <div
+                      className="h-full rounded-full transition-all duration-500 ease-out"
+                      style={{
+                        width: `${task.progress}%`,
+                        backgroundColor: getStatusColor(task.status),
+                      }}
+                    />
+                  ) : (
+                    // Indeterminate animation for models without progress reporting
+                    <div
+                      className="h-full w-1/3 animate-[indeterminate_1.5s_ease-in-out_infinite] rounded-full"
+                      style={{ backgroundColor: getStatusColor(task.status) }}
+                    />
+                  )}
+                </div>
               </div>
+            )}
+
+            {/* Task Steps */}
+            {task.steps && task.steps.length > 0 && (
+              <TaskSteps steps={task.steps} currentStepId={task.currentStepId} />
+            )}
+
+            {/* Error message */}
+            {isFailed && task.error && (
+              <div className="mb-2 rounded-md bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1.5 text-[var(--agent-danger)]">
+                ⚠️ {task.error}
+              </div>
+            )}
+
+            {/* Result preview (for completed tasks) — ADR-3 enhanced */}
+            {isCompleted && task.result && <ResultPreview task={task} plugins={plugins} />}
+
+            {/* Provider info */}
+            <div className="border-t border-[var(--agent-divider)] pt-1 text-[var(--agent-fg-secondary)]">
+              {t('tasks.provider')}: {task.providerName}
             </div>
-          )}
-
-          {/* Task Steps */}
-          {task.steps && task.steps.length > 0 && (
-            <TaskSteps steps={task.steps} currentStepId={task.currentStepId} />
-          )}
-
-          {/* Error message */}
-          {isFailed && task.error && (
-            <div className="text-[var(--vscode-errorForeground)] bg-[color-mix(in_srgb,var(--vscode-errorForeground)_10%,transparent)] px-2 py-1.5 rounded mb-2">
-              ⚠️ {task.error}
-            </div>
-          )}
-
-          {/* Result preview (for completed tasks) — ADR-3 enhanced */}
-          {isCompleted && task.result && <ResultPreview task={task} plugins={plugins} />}
-
-          {/* Provider info */}
-          <div className="text-[var(--vscode-descriptionForeground)] pt-1 border-t border-[var(--vscode-panel-border)]">
-            {t('tasks.provider')}: {task.providerName}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -265,19 +247,19 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
       {/* Result info badges + download */}
       <div className="flex flex-wrap items-center gap-1 mt-2">
         {displayWidth && displayHeight && (
-          <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
+          <span className="agent-badge text-[10px] text-[var(--agent-fg)]">
             {displayWidth}×{displayHeight}
           </span>
         )}
         {displayDuration && displayDuration > 0 && (
-          <span className="px-1.5 py-0.5 bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)] rounded">
+          <span className="agent-badge text-[10px] text-[var(--agent-fg)]">
             {formatDuration(displayDuration)}
           </span>
         )}
         <span className="flex-1" />
         {firstLocalPath && (
           <span
-            className="text-[var(--vscode-descriptionForeground)] text-xs truncate max-w-[140px]"
+            className="max-w-[140px] truncate text-xs text-[var(--agent-fg-secondary)]"
             title={firstLocalPath}
           >
             {firstLocalPath.split(/[\\/]/).pop()}
@@ -291,10 +273,10 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
                 filePath: firstLocalPath,
               });
             }}
-            className="px-1.5 py-0.5 rounded bg-[var(--vscode-button-secondaryBackground)] hover:bg-[var(--vscode-button-secondaryHoverBackground)] text-[var(--vscode-button-secondaryForeground)] transition-colors flex items-center gap-1"
+            className={compactActionClass}
             title={t('tasks.revealInExplorer')}
           >
-            <DownloadIcon className="w-3 h-3" />
+            <DownloadIcon className="h-3 w-3" />
             <span>{t('tasks.revealInExplorer')}</span>
           </button>
         )}

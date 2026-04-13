@@ -22,8 +22,11 @@ export const NumberInput = memo(function NumberInput({
   disabled,
 }: NumberInputProps) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="w-20 text-[11px] text-[var(--vscode-descriptionForeground)] truncate">
+    <div className="nk-prop-row">
+      <label
+        className="truncate text-[11px] text-[var(--nk-fg-secondary)]"
+        style={{ width: '80px', flexShrink: 0 }}
+      >
         {label}
       </label>
       <div className="flex-1 flex items-center gap-1">
@@ -35,11 +38,9 @@ export const NumberInput = memo(function NumberInput({
           max={max}
           step={step}
           disabled={disabled}
-          className="w-full px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded disabled:opacity-50"
+          className="nk-prop-input flex-1 disabled:opacity-50"
         />
-        {unit && (
-          <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{unit}</span>
-        )}
+        {unit && <span className="nk-prop-unit">{unit}</span>}
       </div>
     </div>
   );

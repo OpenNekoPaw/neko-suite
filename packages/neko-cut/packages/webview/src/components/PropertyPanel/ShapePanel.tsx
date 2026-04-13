@@ -209,14 +209,12 @@ export const ShapePanel = memo(function ShapePanel({
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="nk-prop-panel">
       {/* Shape Info Header */}
-      <div className="p-2 border-b border-[var(--vscode-panel-border)] flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-[var(--nk-border)] p-2">
         <div>
-          <div className="text-[11px] font-medium text-[var(--vscode-foreground)]">
-            {shape.name}
-          </div>
-          <div className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+          <div className="text-[11px] font-medium text-[var(--nk-fg)]">{shape.name}</div>
+          <div className="text-[10px] text-[var(--nk-fg-secondary)]">
             {t(`shape.type.${shape.shape.shapeType}`)}
           </div>
         </div>
@@ -224,7 +222,7 @@ export const ShapePanel = memo(function ShapePanel({
           <button
             onClick={() => onDuplicateShape(shape.id)}
             disabled={disabled}
-            className="p-1 text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] rounded"
+            className="icon-button"
             title={t('shape.duplicateShape')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -239,7 +237,7 @@ export const ShapePanel = memo(function ShapePanel({
           <button
             onClick={() => onRemoveShape(shape.id)}
             disabled={disabled}
-            className="p-1 text-[var(--vscode-errorForeground)] hover:bg-[var(--vscode-list-hoverBackground)] rounded"
+            className="icon-button text-[var(--nk-red)]"
             title={t('shape.removeShape')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -255,7 +253,7 @@ export const ShapePanel = memo(function ShapePanel({
       </div>
 
       {/* Visibility and Lock */}
-      <div className="p-2 border-b border-[var(--vscode-panel-border)] flex gap-4">
+      <div className="flex gap-4 border-b border-[var(--nk-border)] p-2">
         <CheckboxInput
           label="Visible"
           checked={shape.visible}
@@ -300,16 +298,14 @@ export const ShapePanel = memo(function ShapePanel({
 
       {/* Add Shape */}
       <div className="p-2">
-        <div className="text-[10px] text-[var(--vscode-descriptionForeground)] mb-2">
-          {t('shape.addShape')}
-        </div>
+        <div className="mb-2 text-[10px] text-[var(--nk-fg-secondary)]">{t('shape.addShape')}</div>
         <div className="flex flex-wrap gap-1">
           {shapeTypes.map((type) => (
             <button
               key={type.value}
               onClick={() => onAddShape(type.value)}
               disabled={disabled}
-              className="px-2 py-1 text-[10px] bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] rounded hover:bg-[var(--vscode-button-secondaryHoverBackground)] disabled:opacity-50"
+              className="nk-btn-secondary px-2 py-1 text-[10px] disabled:opacity-50"
             >
               {t(type.labelKey)}
             </button>

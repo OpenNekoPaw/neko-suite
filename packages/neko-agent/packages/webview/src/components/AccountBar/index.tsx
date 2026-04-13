@@ -49,7 +49,7 @@ export function AccountBar({
     return (
       <button
         onClick={onOpenOnboarding}
-        className="flex items-center gap-1 px-2 py-1 text-[11px] rounded bg-[var(--vscode-inputValidation-warningBackground)] text-[var(--vscode-inputValidation-warningForeground)] hover:opacity-90 transition-opacity"
+        className="agent-warning-chip"
         title={t('accountBar.connectTitle')}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-yellow)] flex-shrink-0" />
@@ -63,7 +63,7 @@ export function AccountBar({
       {/* Trigger button */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 p-1.5 hover:bg-[var(--vscode-list-hoverBackground)] rounded transition-colors"
+        className={`agent-header-action h-auto w-auto gap-1.5 px-1.5 py-1.5 ${open ? 'is-active' : ''}`}
         title={ssoSession ? ssoSession.user : activeProvider?.name}
       >
         {ssoSession ? (
@@ -78,13 +78,13 @@ export function AccountBar({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 neko-glass-dropdown z-50 py-1.5">
+        <div className="neko-glass-dropdown absolute right-0 top-full z-50 mt-1.5 w-52 py-1.5">
           {ssoSession ? (
             <>
-              <div className="px-3 py-2 border-b border-[var(--vscode-menu-separatorBackground)]">
+              <div className="border-b border-[var(--agent-divider)] px-3 py-2">
                 <div className="text-[11px] font-medium truncate">{ssoSession.user}</div>
                 {ssoSession.plan && (
-                  <div className="text-[10px] text-[var(--vscode-descriptionForeground)] mt-0.5">
+                  <div className="mt-0.5 text-[10px] text-[var(--agent-fg-secondary)]">
                     {ssoSession.plan}
                     {ssoSession.usage !== undefined &&
                       ` · ${ssoSession.usage.toLocaleString()} tokens`}
@@ -96,17 +96,17 @@ export function AccountBar({
                   setOpen(false);
                   postMessage({ type: 'ssoLogout' });
                 }}
-                className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+                className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
               >
                 {t('accountBar.signOut')}
               </button>
             </>
           ) : (
             <>
-              <div className="px-3 py-2 border-b border-[var(--vscode-menu-separatorBackground)]">
+              <div className="border-b border-[var(--agent-divider)] px-3 py-2">
                 <div className="text-[11px] font-medium">{activeProvider?.name}</div>
                 {selectedModelId && (
-                  <div className="text-[10px] text-[var(--vscode-descriptionForeground)] mt-0.5 truncate">
+                  <div className="mt-0.5 truncate text-[10px] text-[var(--agent-fg-secondary)]">
                     {selectedModelId}
                   </div>
                 )}
@@ -116,7 +116,7 @@ export function AccountBar({
                   setOpen(false);
                   postMessage({ type: 'openConfigFile' });
                 }}
-                className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+                className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
               >
                 {t('accountBar.changeKey')}
               </button>

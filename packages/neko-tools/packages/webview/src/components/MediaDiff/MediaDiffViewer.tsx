@@ -46,11 +46,11 @@ const DiffHeader = memo(function DiffHeader({ filePath, gitRef, mediaType }: Dif
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-[var(--vscode-titleBar-activeBackground)] text-[var(--vscode-titleBar-activeForeground)] border-b border-[var(--vscode-panel-border)]">
+    <div className="flex items-center gap-3 border-b border-[var(--tools-divider)] bg-[var(--tools-panel)] px-4 py-2 text-[var(--tools-fg)]">
       <span className="text-lg">{getMediaTypeIcon()}</span>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{filePath || 'Unknown File'}</div>
-        <div className="text-xs text-[var(--vscode-descriptionForeground)]">
+        <div className="text-xs text-[var(--tools-fg-secondary)]">
           Comparing with {gitRef || 'HEAD'}
         </div>
       </div>
@@ -132,8 +132,8 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="text-4xl mb-4 opacity-40">{'='}</div>
-            <div className="text-lg text-[var(--vscode-foreground)] mb-2">Files are identical</div>
-            <div className="text-sm text-[var(--vscode-descriptionForeground)]">
+            <div className="mb-2 text-lg text-[var(--tools-fg)]">Files are identical</div>
+            <div className="text-sm text-[var(--tools-fg-secondary)]">
               No differences detected (MD5 match)
             </div>
           </div>
@@ -214,7 +214,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
 
       default:
         return (
-          <div className="flex-1 flex items-center justify-center text-[var(--vscode-descriptionForeground)]">
+          <div className="flex-1 flex items-center justify-center text-[var(--tools-fg-secondary)]">
             Unsupported media type
           </div>
         );
@@ -222,7 +222,7 @@ export const MediaDiffViewer = memo(function MediaDiffViewer({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--vscode-editor-background)]">
+    <div className="flex h-full flex-col bg-[var(--tools-bg)]">
       <DiffHeader filePath={filePath} gitRef={gitRef} mediaType={mediaType} />
       <DiffControls
         viewMode={viewMode}

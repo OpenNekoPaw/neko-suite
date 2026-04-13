@@ -16,15 +16,18 @@ export const SelectInput = memo(function SelectInput({
   disabled,
 }: SelectInputProps) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="w-20 text-[11px] text-[var(--vscode-descriptionForeground)] truncate">
+    <div className="nk-prop-row">
+      <label
+        className="truncate text-[11px] text-[var(--nk-fg-secondary)]"
+        style={{ width: '80px', flexShrink: 0 }}
+      >
         {label}
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex-1 px-2 py-1 text-[11px] bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded disabled:opacity-50"
+        className="nk-select flex-1 text-[11px] disabled:opacity-50"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>

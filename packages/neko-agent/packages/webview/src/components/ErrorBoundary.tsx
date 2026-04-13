@@ -29,36 +29,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render(): ReactNode {
     if (this.state.hasError && this.state.error) {
       return (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '1rem',
-            color: 'var(--vscode-editor-foreground)',
-            backgroundColor: 'var(--vscode-editor-background)',
-          }}
-        >
-          <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#x26A0;&#xFE0F;</div>
-          <h2 style={{ marginBottom: '0.5rem' }}>Something went wrong</h2>
-          <p style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '1rem' }}>
-            {this.state.error.message}
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--vscode-button-background)',
-              color: 'var(--vscode-button-foreground)',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Try again
-          </button>
+        <div className="flex h-full items-center justify-center bg-[var(--agent-bg)] p-4">
+          <div className="agent-card flex max-w-md flex-col items-center gap-3 px-6 py-7 text-center text-[var(--agent-fg)]">
+            <div className="text-3xl">&#x26A0;&#xFE0F;</div>
+            <h2 className="text-base font-semibold">Something went wrong</h2>
+            <p className="text-sm text-[var(--agent-fg-secondary)]">{this.state.error.message}</p>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="vscode-button"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       );
     }

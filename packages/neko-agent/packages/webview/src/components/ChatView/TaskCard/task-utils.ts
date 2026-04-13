@@ -7,17 +7,17 @@ import type { TaskStatus, TaskStepStatus } from '@/components/TaskListView';
 export function getStatusColor(status: TaskStatus): string {
   switch (status) {
     case 'queued':
-      return 'var(--vscode-charts-yellow, #cca700)';
+      return 'var(--agent-warning-fg, var(--vscode-charts-yellow, #cca700))';
     case 'processing':
-      return 'var(--vscode-charts-blue, #3794ff)';
+      return 'var(--agent-info, var(--vscode-charts-blue, #3794ff))';
     case 'completed':
-      return 'var(--vscode-charts-green, #89d185)';
+      return 'var(--agent-success, var(--vscode-charts-green, #89d185))';
     case 'failed':
-      return 'var(--vscode-charts-red, #f14c4c)';
+      return 'var(--agent-danger, var(--vscode-charts-red, #f14c4c))';
     case 'cancelled':
-      return 'var(--vscode-descriptionForeground)';
+      return 'var(--agent-fg-secondary, var(--vscode-descriptionForeground))';
     default:
-      return 'var(--vscode-foreground)';
+      return 'var(--agent-fg, var(--vscode-foreground))';
   }
 }
 
@@ -58,12 +58,12 @@ export function getStepStatusIcon(status: TaskStepStatus): string {
 export function getStepStatusColor(status: TaskStepStatus): string {
   switch (status) {
     case 'completed':
-      return 'var(--vscode-charts-green, #89d185)';
+      return 'var(--agent-success, var(--vscode-charts-green, #89d185))';
     case 'running':
-      return 'var(--vscode-charts-blue, #3794ff)';
+      return 'var(--agent-info, var(--vscode-charts-blue, #3794ff))';
     case 'failed':
-      return 'var(--vscode-charts-red, #f14c4c)';
+      return 'var(--agent-danger, var(--vscode-charts-red, #f14c4c))';
     default:
-      return 'var(--vscode-descriptionForeground)';
+      return 'var(--agent-fg-secondary, var(--vscode-descriptionForeground))';
   }
 }

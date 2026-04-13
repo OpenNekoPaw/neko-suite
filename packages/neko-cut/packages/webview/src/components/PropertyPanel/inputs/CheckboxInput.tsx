@@ -20,9 +20,9 @@ export const CheckboxInput = memo(function CheckboxInput({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         disabled={disabled}
-        className="w-4 h-4"
+        className="h-4 w-4 accent-[var(--nk-accent)]"
       />
-      <label className="text-[11px] text-[var(--vscode-foreground)]">{label}</label>
+      <label className="text-[11px] text-[var(--nk-fg)]">{label}</label>
     </div>
   );
 });

@@ -32,8 +32,11 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--vscode-editor-background)]/90 backdrop-blur-sm">
-      <div className="w-80 neko-float-card">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+      style={{ background: 'color-mix(in srgb, var(--agent-bg) 90%, transparent)' }}
+    >
+      <div className="agent-card w-80 overflow-hidden">
         {/* Animated gradient accent bar */}
         <div className="neko-gradient-bar" />
 
@@ -42,25 +45,25 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           {step === 'choose' && (
             <>
               <h2 className="text-[13px] font-semibold mb-1">{t('onboarding.title')}</h2>
-              <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-5">
+              <p className="mb-5 text-[11px] text-[var(--agent-fg-secondary)]">
                 {t('onboarding.subtitle')}
               </p>
               <button
                 onClick={handleSsoLogin}
-                className="w-full py-2 mb-3 text-[12px] rounded-lg bg-gradient-to-r from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-white hover:opacity-90 transition-opacity font-medium"
+                className="vscode-button mb-3 flex w-full justify-center py-2 text-[12px] font-medium"
               >
                 {t('onboarding.ssoButton')}
               </button>
               <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1 h-px bg-[var(--vscode-panel-border)]" />
-                <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">
+                <div className="h-px flex-1 bg-[var(--agent-divider)]" />
+                <span className="text-[10px] text-[var(--agent-fg-secondary)]">
                   {t('onboarding.or')}
                 </span>
-                <div className="flex-1 h-px bg-[var(--vscode-panel-border)]" />
+                <div className="h-px flex-1 bg-[var(--agent-divider)]" />
               </div>
               <button
                 onClick={handleOpenConfigFile}
-                className="w-full py-2 text-[12px] rounded-lg border border-[var(--vscode-button-border,var(--vscode-panel-border))] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+                className="vscode-button vscode-button-secondary flex w-full justify-center py-2 text-[12px] font-medium"
               >
                 {t('onboarding.openConfigButton')}
               </button>
@@ -71,12 +74,12 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           {step === 'fileOpened' && (
             <>
               <h2 className="text-[13px] font-semibold mb-3">{t('onboarding.fileOpenedTitle')}</h2>
-              <p className="text-[11px] text-[var(--vscode-descriptionForeground)] mb-5">
+              <p className="mb-5 text-[11px] text-[var(--agent-fg-secondary)]">
                 {t('onboarding.fileOpenedHint')}
               </p>
               <button
                 onClick={onComplete}
-                className="w-full py-2 text-[12px] rounded-lg bg-gradient-to-r from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-white hover:opacity-90 transition-opacity font-medium"
+                className="vscode-button flex w-full justify-center py-2 text-[12px] font-medium"
               >
                 {t('onboarding.gotIt')}
               </button>
