@@ -24,6 +24,9 @@ import type {
   CanvasTimelineSyncPayload,
   CanvasStoryboardPayload,
   CreatedCanvasStoryboard,
+  NekoStoryAPI,
+  NekoStoryScriptIndex,
+  ScriptScene,
 } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
@@ -33,6 +36,19 @@ import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
+
+function mapStoryScriptIndexToCanvasScenes(index: NekoStoryScriptIndex | undefined): ScriptScene[] {
+  if (!index) {
+    return [];
+  }
+
+  return Array.from(index.scenes, (scene) => ({
+    id: scene.sceneId,
+    title: scene.sceneTitle || scene.heading,
+    lineStart: scene.line_start,
+    lineEnd: scene.line_end,
+  }));
+}
 
 function mapOperationToCanvasChangeEvent(operation: {
   type?: string;
@@ -1108,15 +1124,30 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         // Fetch scene TOC from neko-story
         const scriptPath = message.scriptPath as string;
         const requestNodeId = message.nodeId as string;
-        try {
-          const index = await vscode.commands.executeCommand(
-            'neko.story.getScriptIndex',
-            scriptPath,
-          );
+        const storyExt = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
+
+        if (!storyExt) {
           webviewPanel.webview.postMessage({
             type: 'scriptIndexResult',
             nodeId: requestNodeId,
-            scenes: index,
+            scenes: null,
+            error: 'neko-story not available',
+          });
+          break;
+        }
+
+        try {
+          const storyApi = storyExt.isActive
+            ? storyExt.exports
+            : ((await storyExt.activate()) as NekoStoryAPI);
+          const resolvedScriptPath = await this.resolveAssetPath(scriptPath, document.uri);
+          const index = storyApi.getScriptIndex(resolvedScriptPath);
+
+          webviewPanel.webview.postMessage({
+            type: 'scriptIndexResult',
+            nodeId: requestNodeId,
+            scenes: mapStoryScriptIndexToCanvasScenes(index),
+            error: index ? undefined : 'script index unavailable',
           });
         } catch {
           webviewPanel.webview.postMessage({

@@ -11,11 +11,13 @@ import type {
   CanvasDroppedAsset,
   CanvasNode,
   CanvasNodeType,
+  ScriptScene,
   CanvasTimelineSyncPayload,
   OperationSource,
 } from '@neko/shared';
 import { setLocale } from '../i18n';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
+import { normalizeScriptScenes } from '../utils/scriptScenes';
 
 // =============================================================================
 // Types
@@ -46,7 +48,7 @@ export interface UseVSCodeMessagesOptions {
   /** Called with the AI-built prompt string for AutoPrompt */
   onBuildPromptResult?: (prompt: string) => void;
   /** Called when scene TOC is available for a ScriptNode */
-  onScriptIndexResult?: (nodeId: string, scenes: unknown[]) => void;
+  onScriptIndexResult?: (nodeId: string, scenes: ScriptScene[]) => void;
   /** Called when model install status is known */
   onModelInstalledResult?: (nodeId: string, installedVersion: string | null) => void;
   /** Called when cut syncs minimal operational metadata back into canvas */
@@ -189,7 +191,10 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             onBuildPromptResultRef.current?.(message.prompt as string);
             break;
           case 'scriptIndexResult':
-            onScriptIndexResultRef.current?.(message.nodeId as string, message.scenes as unknown[]);
+            onScriptIndexResultRef.current?.(
+              message.nodeId as string,
+              normalizeScriptScenes(message.scenes),
+            );
             break;
           case 'modelInstalledResult':
             onModelInstalledResultRef.current?.(

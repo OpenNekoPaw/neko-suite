@@ -64,13 +64,28 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-002: scriptIndexResult scenes field', () => {
-    it('sends scenes field on success', () => {
-      // After NKV-002 fix: must use "scenes" not "index"
-      expect(providerSource).toContain('scenes: index,');
+    it('maps script index scenes into canvas ScriptScene payloads', () => {
+      expect(providerSource).toContain('scenes: mapStoryScriptIndexToCanvasScenes(index),');
     });
 
     it('sends scenes: null on error', () => {
       expect(providerSource).toContain('scenes: null,');
+    });
+
+    it('resolves the contracted script path before querying neko-story', () => {
+      expect(providerSource).toContain(
+        'const resolvedScriptPath = await this.resolveAssetPath(scriptPath, document.uri);',
+      );
+    });
+
+    it('uses NekoStoryAPI instead of a non-existent command bridge', () => {
+      expect(providerSource).toContain(
+        "vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story')",
+      );
+      expect(providerSource).toContain(
+        'const index = storyApi.getScriptIndex(resolvedScriptPath);',
+      );
+      expect(providerSource).not.toContain("'neko.story.getScriptIndex'");
     });
 
     it('does not use bare index as field name in scriptIndexResult', () => {
