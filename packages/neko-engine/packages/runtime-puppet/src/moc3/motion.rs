@@ -180,6 +180,9 @@ fn easing_to_bezier(easing: &EasingType) -> Option<(f32, f32, f32, f32)> {
         EasingType::EaseInQuart => Some((0.895, 0.03, 0.685, 0.22)),
         EasingType::EaseOutQuart => Some((0.165, 0.84, 0.44, 1.0)),
         EasingType::EaseInOutQuart => Some((0.77, 0.0, 0.175, 1.0)),
+        EasingType::EaseInQuint => Some((0.755, 0.05, 0.855, 0.06)),
+        EasingType::EaseOutQuint => Some((0.23, 1.0, 0.32, 1.0)),
+        EasingType::EaseInOutQuint => Some((0.86, 0.0, 0.07, 1.0)),
         EasingType::EaseInSine => Some((0.47, 0.0, 0.745, 0.715)),
         EasingType::EaseOutSine => Some((0.39, 0.575, 0.565, 1.0)),
         EasingType::EaseInOutSine => Some((0.445, 0.05, 0.55, 0.95)),
@@ -195,9 +198,16 @@ fn easing_to_bezier(easing: &EasingType) -> Option<(f32, f32, f32, f32)> {
         EasingType::CubicBezier(x1, y1, x2, y2) => {
             Some((*x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32))
         }
-        // Elastic/Bounce can't be perfectly represented as single cubic-bezier;
-        // fall back to linear (acceptable approximation for motion3 format)
-        _ => None,
+        // Elastic and Bounce are multi-segment curves that can't be represented
+        // as a single cubic-bezier. Fall back to linear — acceptable approximation
+        // for motion3 format. If precise fidelity is needed, the caller should
+        // pre-sample these keyframes at a higher rate before export.
+        EasingType::EaseInElastic
+        | EasingType::EaseOutElastic
+        | EasingType::EaseInOutElastic
+        | EasingType::EaseInBounce
+        | EasingType::EaseOutBounce
+        | EasingType::EaseInOutBounce => None,
     }
 }
 

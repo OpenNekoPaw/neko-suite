@@ -158,7 +158,7 @@
 - [ ] AI MCP Tools: `face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] Phase 3.5: Blender MCP bridge / 3DGS loader / rapier3d physics
 - [x] **glTF animation 回写**: `exporter.rs` animation channel 导出 (samplers + channels + accessors, 覆盖 Translation/Rotation/Scale/MorphWeights)
-- [x] **VRM BlendShape preset 回写**: `build_vrm_extensions()` VRMC_vrm 1.0 (preset + custom classification, extras.defaultWeight)
+- [x] **VRM BlendShape preset 元数据导出**: `build_vrm_extensions()` VRMC_vrm 1.0 (preset/custom 分类 + extras.defaultWeight); morphTargetBinds 为空 — 需 loader 扩展存储 morph target name→index 映射后补全
 - [ ] **3D 可复用动作资产**: 独立动画资产格式 (存 VRM Humanoid bone name 而非 node ID) + 骨骼重定向 retargeting — 支持动作跨 VRM 模型复用 + marketplace 分享
 
 ### neko-engine (Engine Plugin Expansion)
