@@ -83,6 +83,7 @@ impl NkmProject {
         scene_snapshot: SceneSnapshot,
         node_mesh_map: HashMap<String, String>,
         editor_state: serde_json::Value,
+        face_params: HashMap<String, f32>,
     ) -> Self {
         Self {
             version: CURRENT_VERSION,
@@ -91,7 +92,7 @@ impl NkmProject {
             scene_snapshot,
             node_mesh_map,
             editor_state,
-            face_params: HashMap::new(),
+            face_params,
             custom_clips: Vec::new(),
             camera: None,
         }
@@ -145,6 +146,7 @@ mod tests {
                 map
             },
             serde_json::json!({ "selectedNode": "node_0" }),
+            HashMap::new(),
         )
     }
 

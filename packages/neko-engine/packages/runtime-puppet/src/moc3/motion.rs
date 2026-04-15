@@ -8,6 +8,7 @@
 //! to avoid modifying the existing EasingType system.
 
 use crate::animation::{AnimationClip, Keyframe, ParameterCurve};
+use neko_engine_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
 // ─── .motion3.json format ────────────────────────────────────────────────────
@@ -95,8 +96,8 @@ pub fn parse_motion(name: &str, json_str: &str) -> Result<AnimationClip, String>
 
 /// Serialize an AnimationClip back to .motion3.json format.
 ///
-/// Keyframes are emitted as linear segments (type 0). Original Bezier curves
-/// that were sampled during import are exported as their sampled linear points.
+/// Non-linear easings are mapped to Bezier segments (type 1) using standard
+/// CSS cubic-bezier control points. Linear easing uses type 0 segments.
 pub fn serialize_motion3(clip: &AnimationClip) -> Result<String, String> {
     let duration = clip.duration_ms / 1000.0;
 
@@ -111,11 +112,33 @@ pub fn serialize_motion3(clip: &AnimationClip) -> Result<String, String> {
             segments.push(first.time_ms / 1000.0);
             segments.push(first.value);
 
-            // Subsequent keyframes as linear segments: [0.0(type), time, value]
-            for kf in &curve.keyframes[1..] {
-                segments.push(SEGMENT_LINEAR as f32);
-                segments.push(kf.time_ms / 1000.0);
-                segments.push(kf.value);
+            // Build segments from consecutive keyframe pairs
+            for pair in curve.keyframes.windows(2) {
+                let prev = &pair[0];
+                let next = &pair[1];
+                let t0 = prev.time_ms / 1000.0;
+                let v0 = prev.value;
+                let t1 = next.time_ms / 1000.0;
+                let v1 = next.value;
+
+                if let Some((cx1, cy1, cx2, cy2)) = easing_to_bezier(&prev.easing) {
+                    // Bezier segment: [type, cx1, cy1, cx2, cy2, end_time, end_value]
+                    // Control points in time-value domain
+                    let dt = t1 - t0;
+                    let dv = v1 - v0;
+                    segments.push(SEGMENT_BEZIER as f32);
+                    segments.push(t0 + dt * cx1);
+                    segments.push(v0 + dv * cy1);
+                    segments.push(t0 + dt * cx2);
+                    segments.push(v0 + dv * cy2);
+                    segments.push(t1);
+                    segments.push(v1);
+                } else {
+                    // Linear segment: [type, end_time, end_value]
+                    segments.push(SEGMENT_LINEAR as f32);
+                    segments.push(t1);
+                    segments.push(v1);
+                }
             }
 
             Motion3Curve {
@@ -140,6 +163,42 @@ pub fn serialize_motion3(clip: &AnimationClip) -> Result<String, String> {
     };
 
     serde_json::to_string_pretty(&motion).map_err(|e| format!("Failed to serialize motion3: {e}"))
+}
+
+/// Map an EasingType to cubic-bezier control points (cx1, cy1, cx2, cy2).
+/// Returns None for Linear (use type 0 segment instead).
+fn easing_to_bezier(easing: &EasingType) -> Option<(f32, f32, f32, f32)> {
+    match easing {
+        EasingType::Linear => None,
+        // Standard CSS cubic-bezier values
+        EasingType::EaseInQuad => Some((0.55, 0.085, 0.68, 0.53)),
+        EasingType::EaseOutQuad => Some((0.25, 0.46, 0.45, 0.94)),
+        EasingType::EaseInOutQuad => Some((0.455, 0.03, 0.515, 0.955)),
+        EasingType::EaseInCubic => Some((0.55, 0.055, 0.675, 0.19)),
+        EasingType::EaseOutCubic => Some((0.215, 0.61, 0.355, 1.0)),
+        EasingType::EaseInOutCubic => Some((0.645, 0.045, 0.355, 1.0)),
+        EasingType::EaseInQuart => Some((0.895, 0.03, 0.685, 0.22)),
+        EasingType::EaseOutQuart => Some((0.165, 0.84, 0.44, 1.0)),
+        EasingType::EaseInOutQuart => Some((0.77, 0.0, 0.175, 1.0)),
+        EasingType::EaseInSine => Some((0.47, 0.0, 0.745, 0.715)),
+        EasingType::EaseOutSine => Some((0.39, 0.575, 0.565, 1.0)),
+        EasingType::EaseInOutSine => Some((0.445, 0.05, 0.55, 0.95)),
+        EasingType::EaseInExpo => Some((0.95, 0.05, 0.795, 0.035)),
+        EasingType::EaseOutExpo => Some((0.19, 1.0, 0.22, 1.0)),
+        EasingType::EaseInOutExpo => Some((1.0, 0.0, 0.0, 1.0)),
+        EasingType::EaseInCirc => Some((0.6, 0.04, 0.98, 0.335)),
+        EasingType::EaseOutCirc => Some((0.075, 0.82, 0.165, 1.0)),
+        EasingType::EaseInOutCirc => Some((0.785, 0.135, 0.15, 0.86)),
+        EasingType::EaseInBack => Some((0.6, -0.28, 0.735, 0.045)),
+        EasingType::EaseOutBack => Some((0.175, 0.885, 0.32, 1.275)),
+        EasingType::EaseInOutBack => Some((0.68, -0.55, 0.265, 1.55)),
+        EasingType::CubicBezier(x1, y1, x2, y2) => {
+            Some((*x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32))
+        }
+        // Elastic/Bounce can't be perfectly represented as single cubic-bezier;
+        // fall back to linear (acceptable approximation for motion3 format)
+        _ => None,
+    }
 }
 
 /// Parse the flat segments array into keyframes.
@@ -377,6 +436,34 @@ mod tests {
         let re = &re_parsed.curves[0].keyframes;
         assert!((orig[0].value - re[0].value).abs() < 1e-3);
         assert!((orig.last().unwrap().value - re.last().unwrap().value).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_serialize_motion3_preserves_easing_as_bezier() {
+        use crate::animation::{AnimationClip, Keyframe, ParameterCurve};
+        use neko_engine_types::easing::EasingType;
+
+        let mut clip = AnimationClip::create("eased", 1000.0);
+        let mut kf0 = Keyframe::new(0.0, 0.0);
+        kf0.easing = EasingType::EaseInOutCubic;
+        let kf1 = Keyframe::new(1000.0, 1.0);
+        clip.curves.push(ParameterCurve {
+            param_name: "ParamTest".to_string(),
+            keyframes: vec![kf0, kf1],
+        });
+
+        let exported = serialize_motion3(&clip).unwrap();
+        // Should contain a Bezier segment (type 1)
+        assert!(exported.contains("1.0,"), "Expected Bezier segment type");
+        // Verify the exported JSON can be re-parsed
+        let re_parsed = parse_motion("eased", &exported).unwrap();
+        assert_eq!(re_parsed.curves.len(), 1);
+        // Bezier curve will be sampled to multiple points
+        assert!(re_parsed.curves[0].keyframes.len() > 2);
+        // Endpoints should match
+        let kfs = &re_parsed.curves[0].keyframes;
+        assert!((kfs[0].value - 0.0).abs() < 1e-3);
+        assert!((kfs.last().unwrap().value - 1.0).abs() < 1e-3);
     }
 
     #[test]

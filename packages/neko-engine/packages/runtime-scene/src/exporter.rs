@@ -467,6 +467,11 @@ fn write_float_accessor(
 ///
 /// Standard VRM preset names (happy, sad, blink, etc.) go into `expressions.preset`,
 /// all others go into `expressions.custom`. Each entry stores the default weight in extras.
+///
+/// **Known limitation**: `morphTargetBinds` is always empty because the loader does not
+/// currently store morph target names per mesh. Downstream VRM consumers will see the
+/// expression names and default weights but cannot drive actual morph target deformation
+/// until the loader is extended to preserve morph target name → index mappings.
 fn build_vrm_extensions(face_params: &HashMap<String, f32>) -> serde_json::Value {
     const PRESET_NAMES: &[&str] = &[
         "happy", "angry", "sad", "relaxed", "surprised",
@@ -659,6 +664,82 @@ mod tests {
         assert_eq!(channels.len(), 1);
         assert_eq!(channels[0]["target"]["node"], 0);
         assert_eq!(channels[0]["target"]["path"], "translation");
+    }
+
+    #[test]
+    fn export_with_rotation_animation() {
+        use crate::components::{
+            AnimationChannel, AnimationClipData, AnimationProperty, SceneKeyframe,
+        };
+        let nodes = vec![make_node("bone", "Bone")];
+        let meshes = HashMap::new();
+        let clip = AnimationClipData {
+            name: "Spin".to_string(),
+            duration: 1.0,
+            channels: vec![AnimationChannel {
+                target_node: "bone".to_string(),
+                property: AnimationProperty::Rotation,
+                keyframes: vec![
+                    SceneKeyframe::new(0.0, vec![0.0, 0.0, 0.0, 1.0]),
+                    SceneKeyframe::new(1.0, vec![0.0, 0.707, 0.0, 0.707]),
+                ],
+            }],
+        };
+        let glb = export_glb(&nodes, &meshes, Some(&[clip]), None).unwrap();
+        let root = parse_glb_json(&glb);
+        let ch = &root["animations"][0]["channels"][0];
+        assert_eq!(ch["target"]["path"], "rotation");
+    }
+
+    #[test]
+    fn export_with_scale_animation() {
+        use crate::components::{
+            AnimationChannel, AnimationClipData, AnimationProperty, SceneKeyframe,
+        };
+        let nodes = vec![make_node("obj", "Object")];
+        let meshes = HashMap::new();
+        let clip = AnimationClipData {
+            name: "Grow".to_string(),
+            duration: 1.0,
+            channels: vec![AnimationChannel {
+                target_node: "obj".to_string(),
+                property: AnimationProperty::Scale,
+                keyframes: vec![
+                    SceneKeyframe::new(0.0, vec![1.0, 1.0, 1.0]),
+                    SceneKeyframe::new(1.0, vec![2.0, 2.0, 2.0]),
+                ],
+            }],
+        };
+        let glb = export_glb(&nodes, &meshes, Some(&[clip]), None).unwrap();
+        let root = parse_glb_json(&glb);
+        let ch = &root["animations"][0]["channels"][0];
+        assert_eq!(ch["target"]["path"], "scale");
+    }
+
+    #[test]
+    fn export_with_morph_weights_animation() {
+        use crate::components::{
+            AnimationChannel, AnimationClipData, AnimationProperty, SceneKeyframe,
+        };
+        let nodes = vec![make_node("face", "Face")];
+        let meshes = HashMap::new();
+        let clip = AnimationClipData {
+            name: "Blink".to_string(),
+            duration: 0.5,
+            channels: vec![AnimationChannel {
+                target_node: "face".to_string(),
+                property: AnimationProperty::MorphWeights,
+                keyframes: vec![
+                    SceneKeyframe::new(0.0, vec![0.0, 0.0]),
+                    SceneKeyframe::new(0.25, vec![1.0, 0.5]),
+                    SceneKeyframe::new(0.5, vec![0.0, 0.0]),
+                ],
+            }],
+        };
+        let glb = export_glb(&nodes, &meshes, Some(&[clip]), None).unwrap();
+        let root = parse_glb_json(&glb);
+        let ch = &root["animations"][0]["channels"][0];
+        assert_eq!(ch["target"]["path"], "weights");
     }
 
     #[test]

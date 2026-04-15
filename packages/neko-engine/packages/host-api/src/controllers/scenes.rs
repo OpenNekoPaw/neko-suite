@@ -626,6 +626,28 @@ impl Controller for ScenesController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "set_face_params" => {
+                let params: std::collections::HashMap<String, f32> =
+                    serde_json::from_value(options)
+                        .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+                let service = self.service()?;
+                service
+                    .set_face_params(params)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "get_face_params" => {
+                let service = self.service()?;
+                let params = service
+                    .get_face_params()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(params).unwrap_or_default(),
+                ))
+            }
+
             "update_material" => {
                 #[derive(Debug, Deserialize)]
                 struct UpdateMaterialOptions {

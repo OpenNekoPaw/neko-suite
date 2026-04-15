@@ -441,12 +441,18 @@ impl ISceneService for SceneService {
             .lock()
             .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
 
+        let fp = self
+            .face_params
+            .lock()
+            .map_err(|e| Error::Other(format!("Face params lock poisoned: {}", e)))?;
+
         let project = NkmProject::from_scene(
             vec![], // TODO(P2): track source model paths
             pm.clone(),
             snapshot,
             node_mesh_map,
             editor_state,
+            fp.clone(),
         );
 
         project
@@ -687,6 +693,23 @@ impl ISceneService for SceneService {
         world
             .set_morph_weights(node_id, weights)
             .map_err(Error::Other)
+    }
+
+    fn set_face_params(&self, params: HashMap<String, f32>) -> Result<()> {
+        let mut fp = self
+            .face_params
+            .lock()
+            .map_err(|e| Error::Other(format!("Face params lock poisoned: {}", e)))?;
+        *fp = params;
+        Ok(())
+    }
+
+    fn get_face_params(&self) -> Result<HashMap<String, f32>> {
+        let fp = self
+            .face_params
+            .lock()
+            .map_err(|e| Error::Other(format!("Face params lock poisoned: {}", e)))?;
+        Ok(fp.clone())
     }
 
     fn update_material(

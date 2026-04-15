@@ -8,6 +8,7 @@ use neko_runtime_scene::components::AnimationChannelInfo;
 use neko_runtime_scene::ik::IkChainInfo;
 use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
 use neko_engine_types::easing::EasingType;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Service interface for 3D scene management
@@ -156,6 +157,12 @@ pub trait ISceneService: Send + Sync {
 
     /// Set morph target weights on a mesh node
     fn set_morph_weights(&self, node_id: &str, weights: Vec<f32>) -> crate::error::Result<()>;
+
+    /// Update VRM face parameter presets (for export to VRMC_vrm extension)
+    fn set_face_params(&self, params: HashMap<String, f32>) -> crate::error::Result<()>;
+
+    /// Get current VRM face parameter presets
+    fn get_face_params(&self) -> crate::error::Result<HashMap<String, f32>>;
 
     /// Update material parameters on a node. Only provided fields are changed.
     fn update_material(

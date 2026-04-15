@@ -179,6 +179,8 @@ pub mod actions {
         "morph_weights",
         "update_material",
         "delete_node",
+        "set_face_params",
+        "get_face_params",
     ];
 
     pub const PUPPETS: &[&str] = &[
