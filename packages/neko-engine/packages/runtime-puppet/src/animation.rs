@@ -1,11 +1,9 @@
-//! Animation bridge — bevy_animation-style ParameterCurves driving inox2d parameters
+//! Animation bridge — bevy_animation-style ParameterCurves driving puppet parameters
 //!
-//! Provides a keyframe animation system that maps named animation clips to
-//! inox2d parameter values. Each clip contains a set of ParameterCurves;
+//! Provides a format-agnostic keyframe animation system that maps named animation
+//! clips to puppet parameter values. Each clip contains a set of ParameterCurves;
 //! the animation_tick system evaluates them at the current elapsed time
 //! and writes results to PuppetParameters before parameter_update runs.
-//!
-//! This is the bevy_animation ParameterCurve bridge described in ADR-2D-005.
 
 use bevy_ecs::prelude::*;
 use neko_engine_types::easing::{Easing, EasingType};
@@ -65,11 +63,11 @@ impl Keyframe {
     }
 }
 
-/// Animation curve for a single inox2d parameter — a sorted list of keyframes
+/// Animation curve for a single puppet parameter — a sorted list of keyframes
 /// evaluated via eased interpolation.
 #[derive(Debug, Clone)]
 pub struct ParameterCurve {
-    /// Name of the inox2d parameter this curve drives
+    /// Name of the puppet parameter this curve drives
     pub param_name: String,
     /// Keyframes sorted by time_ms (ascending)
     pub keyframes: Vec<Keyframe>,

@@ -7,6 +7,6 @@
   "neko.puppet.template.humanoid": "简单人形",
   "neko.puppet.template.humanoid.desc": "预制人形骨架（头/身体/四肢）",
   "neko.puppet.template.import": "导入现有文件",
-  "neko.puppet.template.import.desc": "从磁盘导入 .inp 文件",
-  "neko.puppet.import.filter": "Inochi2D Puppet"
+  "neko.puppet.template.import.desc": "从磁盘导入 .inp 或 .moc3 文件",
+  "neko.puppet.import.filter": "2D Puppet 文件"
 }

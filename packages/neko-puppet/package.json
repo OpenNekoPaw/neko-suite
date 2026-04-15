@@ -43,6 +43,9 @@
           },
           {
             "filenamePattern": "*.inp"
+          },
+          {
+            "filenamePattern": "*.moc3"
           }
         ],
         "priority": "default"

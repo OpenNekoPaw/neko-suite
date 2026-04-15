@@ -32,7 +32,7 @@ class PuppetDocument implements vscode.CustomDocument {
 
   constructor(uri: vscode.Uri) {
     this.uri = uri;
-    this._isInpFile = uri.fsPath.endsWith('.inp');
+    this._isInpFile = uri.fsPath.endsWith('.inp') || uri.fsPath.endsWith('.moc3');
   }
 
   get isInpFile(): boolean {
@@ -281,7 +281,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
           canSelectFolders: false,
           canSelectMany: false,
           filters: {
-            [vscode.l10n.t('neko.puppet.import.filter')]: ['inp'],
+            [vscode.l10n.t('neko.puppet.import.filter')]: ['inp', 'moc3'],
           },
         });
 
@@ -299,7 +299,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
           // Notify webview that puppet was imported
           webviewPanel.webview.postMessage({
             type: 'puppetImported',
-            name: path.basename(uris[0].fsPath, '.inp'),
+            name: path.basename(uris[0].fsPath).replace(/\.(inp|moc3)$/, ''),
           });
         }
         break;
@@ -351,7 +351,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         await this.loadInpFromProject(document, webviewPanel);
         webviewPanel.webview.postMessage({
           type: 'puppetImported',
-          name: path.basename(fileName, '.inp'),
+          name: path.basename(fileName).replace(/\.(inp|moc3)$/, ''),
         });
         break;
       }

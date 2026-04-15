@@ -10,6 +10,7 @@ use crate::animation_blend::{AnimationBlendState, BlendLayer, BlendLayerInfo, Cr
 use crate::components::*;
 use crate::hierarchy;
 use crate::loader::{self, LoadError};
+use crate::moc3;
 use crate::systems;
 use bevy_ecs::prelude::*;
 use neko_engine_types::easing::EasingType;
@@ -82,7 +83,7 @@ pub struct DeformedMesh {
 
 /// Abstraction for puppet management operations
 pub trait PuppetWorld: Send + Sync {
-    /// Load a puppet from INP binary data
+    /// Load a puppet from binary data (auto-detects INP or MOC3 format)
     fn load_puppet(&mut self, data: &[u8]) -> Result<PuppetSnapshot, LoadError>;
 
     /// Get the current full snapshot
@@ -167,6 +168,23 @@ pub trait PuppetWorld: Send + Sync {
 
     /// Set texture index for a specific puppet node (hot-swap textures)
     fn set_texture(&mut self, node_id: &str, texture_index: usize) -> Result<(), String>;
+
+    /// Get available expression names
+    fn get_expressions(&mut self) -> Vec<moc3::expression::ExpressionInfo>;
+
+    /// Activate an expression by name (with fade-in)
+    fn set_expression(&mut self, name: &str) -> Result<(), String>;
+
+    /// Clear the active expression (triggers fade-out, then removal)
+    fn clear_expression(&mut self);
+
+    /// Load auxiliary MOC3 files (expressions, motions, physics) from JSON strings
+    fn load_moc3_auxiliary(
+        &mut self,
+        expressions: &[(String, String)],
+        motions: &[(String, String)],
+        physics_json: Option<&str>,
+    ) -> Result<(), String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -199,7 +217,12 @@ impl PuppetWorld for BevyPuppetWorld {
         // Clear previous world state
         self.world = World::new();
 
-        let load_result = loader::load_inp(&mut self.world, data)?;
+        // Auto-detect format by magic bytes
+        let load_result = if moc3::parser::is_moc3(data) {
+            moc3::loader::load_moc3(&mut self.world, data)?
+        } else {
+            loader::load_inp(&mut self.world, data)?
+        };
 
         // Attach animation components to the puppet root entity
         {
@@ -313,7 +336,10 @@ impl PuppetWorld for BevyPuppetWorld {
             return Err(format!("Parameter not found: {}", name));
         }
 
-        // Recompute deformations
+        // Recompute deformations (both INP and MOC3 paths)
+        systems::multi_key_deformation_update(&mut self.world);
+        systems::rotation_deformer_update(&mut self.world);
+        systems::warp_deformer_update(&mut self.world);
         systems::parameter_update(&mut self.world);
         systems::transform_propagation_2d(&mut self.world);
 
@@ -349,6 +375,9 @@ impl PuppetWorld for BevyPuppetWorld {
                 .unwrap_or(false)
         };
 
+        // 0. Reset parameters to defaults — prevents expression Add/Multiply accumulation
+        systems::parameter_reset(&mut self.world);
+
         if has_blend_layers {
             // 1. Multi-layer blend animation
             systems::animation_blend_tick(&mut self.world, delta_ms);
@@ -357,13 +386,24 @@ impl PuppetWorld for BevyPuppetWorld {
             systems::animation_tick(&mut self.world, delta_ms);
         }
 
-        // 2. Run physics step
+        // 2. Expression fade + parameter override
+        systems::expression_update(&mut self.world, delta_ms);
+
+        // 3. Run physics step
         systems::physics_tick(&mut self.world, delta_ms);
 
-        // 3. Apply parameter-driven deformation
+        // 4. Apply parameter-driven deformation
+        //    Execution order:
+        //    a. multi_key_deformation_update — MOC3 leaf node key form interpolation (base vertices)
+        //    b. rotation_deformer_update — rotates child DeformedVertices
+        //    c. warp_deformer_update — warps child DeformedVertices through grid
+        //    d. parameter_update — INP ParameterBinding deformation
+        systems::multi_key_deformation_update(&mut self.world);
+        systems::rotation_deformer_update(&mut self.world);
+        systems::warp_deformer_update(&mut self.world);
         systems::parameter_update(&mut self.world);
 
-        // 4. Read animation playback state for the delta
+        // 5. Read animation playback state for the delta
         let (animation_time_ms, animation_playing) = {
             let mut q = self
                 .world
@@ -789,6 +829,168 @@ impl PuppetWorld for BevyPuppetWorld {
                 .entity_mut(entity)
                 .insert(TextureRef { texture_index });
         }
+        Ok(())
+    }
+
+    fn get_expressions(&mut self) -> Vec<moc3::expression::ExpressionInfo> {
+        let root = match self.find_root() {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
+        self.world
+            .get::<ExpressionLibrary>(root)
+            .map(|lib| {
+                lib.expressions
+                    .iter()
+                    .map(|e| moc3::expression::ExpressionInfo {
+                        name: e.name.clone(),
+                        parameter_count: e.parameters.len(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn set_expression(&mut self, name: &str) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+
+        let expr_index = {
+            let lib = self
+                .world
+                .get::<ExpressionLibrary>(root)
+                .ok_or("No expression library")?;
+            lib.expressions
+                .iter()
+                .position(|e| e.name == name)
+                .ok_or_else(|| format!("Expression '{}' not found", name))?
+        };
+
+        let fade_in_ms = {
+            let lib = self
+                .world
+                .get::<ExpressionLibrary>(root)
+                .ok_or("No expression library")?;
+            lib.expressions[expr_index].fade_in_time * 1000.0
+        };
+
+        // Set or replace active expression
+        // expression_update() in the tick pipeline will advance the fade and apply
+        self.world.entity_mut(root).insert(ActiveExpression {
+            expression_index: expr_index,
+            weight: if fade_in_ms <= 0.0 { 1.0 } else { 0.0 },
+            fade_elapsed_ms: 0.0,
+            fading_in: true,
+        });
+
+        // If instant fade, apply immediately via expression_update(0)
+        if fade_in_ms <= 0.0 {
+            systems::expression_update(&mut self.world, 0.0);
+        }
+
+        Ok(())
+    }
+
+    fn clear_expression(&mut self) {
+        let root = match self.find_root() {
+            Some(r) => r,
+            None => return,
+        };
+
+        // Read fade-out duration from the expression definition
+        let fade_out_ms = self
+            .world
+            .get::<ActiveExpression>(root)
+            .and_then(|ae| {
+                self.world
+                    .get::<ExpressionLibrary>(root)
+                    .and_then(|lib| lib.expressions.get(ae.expression_index))
+                    .map(|expr| expr.fade_out_time * 1000.0)
+            })
+            .unwrap_or(0.0);
+
+        if fade_out_ms <= 0.0 {
+            // Instant removal
+            self.world.entity_mut(root).remove::<ActiveExpression>();
+        } else {
+            // Transition to fade-out: reset elapsed timer, flip fading_in to false
+            if let Some(mut ae) = self.world.get_mut::<ActiveExpression>(root) {
+                ae.fading_in = false;
+                ae.fade_elapsed_ms = 0.0;
+                // weight stays at current value — expression_update will decay it
+            }
+        }
+    }
+
+    fn load_moc3_auxiliary(
+        &mut self,
+        expressions: &[(String, String)],
+        motions: &[(String, String)],
+        physics_json: Option<&str>,
+    ) -> Result<(), String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+
+        // Parse expressions
+        if !expressions.is_empty() {
+            let mut expr_defs = Vec::new();
+            for (name, json_str) in expressions {
+                match moc3::expression::parse_expression(name, json_str) {
+                    Ok(expr) => expr_defs.push(expr),
+                    Err(e) => tracing::warn!("Failed to parse expression '{}': {}", name, e),
+                }
+            }
+            self.world
+                .entity_mut(root)
+                .insert(ExpressionLibrary {
+                    expressions: expr_defs,
+                });
+        }
+
+        // Parse motions → add to AnimationLibrary
+        if !motions.is_empty() {
+            let mut new_clips = Vec::new();
+            for (name, json_str) in motions {
+                match moc3::motion::parse_motion(name, json_str) {
+                    Ok(clip) => new_clips.push(clip),
+                    Err(e) => tracing::warn!("Failed to parse motion '{}': {}", name, e),
+                }
+            }
+            if !new_clips.is_empty() {
+                if let Some(mut lib) =
+                    self.world.get_mut::<crate::animation::AnimationLibrary>(root)
+                {
+                    lib.clips.extend(new_clips);
+                } else {
+                    self.world.entity_mut(root).insert(
+                        crate::animation::AnimationLibrary { clips: new_clips },
+                    );
+                }
+            }
+        }
+
+        // Parse physics → create SimplePhysics entities
+        if let Some(physics_str) = physics_json {
+            match moc3::physics::parse_physics(physics_str) {
+                Ok(result) => {
+                    for (param_name, physics) in result.physics_nodes {
+                        let entity = self.world.spawn((
+                            PuppetNodeId(format!("physics_{}", param_name)),
+                            NodeName(format!("Physics: {}", param_name)),
+                            PuppetNodeType::Group,
+                            Transform2D::default(),
+                            GlobalTransform2D::default(),
+                            ZOrder(0.0),
+                            Opacity::default(),
+                            BlendMode::default(),
+                            physics,
+                            crate::components::PhysicsState::default(),
+                        )).id();
+                        crate::hierarchy::set_parent(&mut self.world, entity, root);
+                    }
+                }
+                Err(e) => tracing::warn!("Failed to parse physics: {}", e),
+            }
+        }
+
         Ok(())
     }
 }

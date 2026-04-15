@@ -1,16 +1,16 @@
 /**
- * Maps ARKit-compatible blend shape names (from VMC) to inochi2d parameter names.
+ * Maps ARKit-compatible blend shape names (from VMC) to puppet parameter names.
  *
- * Inochi2d models use Japanese parameter naming conventions.
- * This mapping covers the common parameter names used by Live2D-compatible models.
+ * Supports both Inochi2D (.inp) and Live2D (.moc3) parameter naming conventions.
+ * Live2D models use standardized names (ParamAngleX, ParamEyeLOpen, etc.).
  *
  * The mapping is applied when avatarType is 'puppet' to translate VMC tracking
  * data into puppet parameter updates sent to the engine.
  */
 
-/** Standard inochi2d ↔ ARKit mapping */
+/** Standard puppet ↔ ARKit mapping (covers both INP and MOC3 naming) */
 const ARKIT_TO_PUPPET: Record<string, string> = {
-  // Eyes
+  // Eyes — openness
   eyeBlinkLeft: 'ParamEyeLOpen',
   eyeBlinkRight: 'ParamEyeROpen',
   eyeLookUpLeft: 'ParamEyeBallY',
@@ -18,10 +18,16 @@ const ARKIT_TO_PUPPET: Record<string, string> = {
   eyeLookInLeft: 'ParamEyeBallX',
   eyeLookOutLeft: 'ParamEyeBallX',
 
+  // Eyes — smile (squint)
+  eyeSquintLeft: 'ParamEyeLSmile',
+  eyeSquintRight: 'ParamEyeRSmile',
+
   // Eyebrows
   browDownLeft: 'ParamBrowLY',
   browDownRight: 'ParamBrowRY',
   browInnerUp: 'ParamBrowLY',
+  browOuterUpLeft: 'ParamBrowLAngle',
+  browOuterUpRight: 'ParamBrowRAngle',
 
   // Mouth
   jawOpen: 'ParamMouthOpenY',
@@ -29,8 +35,11 @@ const ARKIT_TO_PUPPET: Record<string, string> = {
   mouthSmileRight: 'ParamMouthForm',
   mouthFunnel: 'ParamMouthOpenY',
 
-  // Head rotation (mapped separately via bone transforms)
-  // These are tracked by VMC Ext/Bone/Pos Head
+  // Cheek
+  cheekPuff: 'ParamCheek',
+
+  // Body
+  // Body angle is typically driven by head tracking with reduced scale
 };
 
 /** Inverted blend shapes (1 - value) for parameters like eye openness */
@@ -40,6 +49,46 @@ const INVERTED_PARAMS = new Set(['eyeBlinkLeft', 'eyeBlinkRight']);
 const AVERAGED_PARAMS: Record<string, [string, string]> = {
   ParamMouthForm: ['mouthSmileLeft', 'mouthSmileRight'],
 };
+
+/**
+ * Live2D standard parameter name aliases.
+ *
+ * Maps common alternative names to the canonical Live2D parameter names.
+ * Used to auto-detect and map parameters regardless of naming convention
+ * in the loaded model (INP models may use different names).
+ */
+export const LIVE2D_PARAM_ALIASES: Readonly<Record<string, string>> = {
+  // Head angles
+  ParamAngleX: 'ParamAngleX',
+  ParamAngleY: 'ParamAngleY',
+  ParamAngleZ: 'ParamAngleZ',
+  // Body angles
+  ParamBodyAngleX: 'ParamBodyAngleX',
+  ParamBodyAngleY: 'ParamBodyAngleY',
+  ParamBodyAngleZ: 'ParamBodyAngleZ',
+  // Eyes
+  ParamEyeLOpen: 'ParamEyeLOpen',
+  ParamEyeROpen: 'ParamEyeROpen',
+  ParamEyeBallX: 'ParamEyeBallX',
+  ParamEyeBallY: 'ParamEyeBallY',
+  ParamEyeLSmile: 'ParamEyeLSmile',
+  ParamEyeRSmile: 'ParamEyeRSmile',
+  // Eyebrows
+  ParamBrowLY: 'ParamBrowLY',
+  ParamBrowRY: 'ParamBrowRY',
+  ParamBrowLAngle: 'ParamBrowLAngle',
+  ParamBrowRAngle: 'ParamBrowRAngle',
+  // Mouth
+  ParamMouthOpenY: 'ParamMouthOpenY',
+  ParamMouthForm: 'ParamMouthForm',
+  // Extras
+  ParamCheek: 'ParamCheek',
+  ParamBreath: 'ParamBreath',
+  // INP-style aliases → Live2D canonical
+  eye_open_l: 'ParamEyeLOpen',
+  eye_open_r: 'ParamEyeROpen',
+  mouth_open: 'ParamMouthOpenY',
+} as const;
 
 /**
  * Convert ARKit blend shapes to puppet parameter updates.
@@ -109,6 +158,13 @@ export function headRotationToPuppetAngles(
   if (availableParams.has('ParamAngleX')) result['ParamAngleX'] = clamp(yaw, -30, 30);
   if (availableParams.has('ParamAngleY')) result['ParamAngleY'] = clamp(pitch, -30, 30);
   if (availableParams.has('ParamAngleZ')) result['ParamAngleZ'] = clamp(roll, -30, 30);
+
+  // Body angle: reduced scale from head rotation (common in Live2D models)
+  if (availableParams.has('ParamBodyAngleX')) result['ParamBodyAngleX'] = clamp(yaw * 0.3, -10, 10);
+  if (availableParams.has('ParamBodyAngleY'))
+    result['ParamBodyAngleY'] = clamp(pitch * 0.3, -10, 10);
+  if (availableParams.has('ParamBodyAngleZ'))
+    result['ParamBodyAngleZ'] = clamp(roll * 0.3, -10, 10);
 
   return result;
 }

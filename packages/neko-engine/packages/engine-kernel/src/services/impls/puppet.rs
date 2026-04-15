@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::services::puppet::IPuppetService;
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
+use neko_runtime_puppet::moc3::expression::ExpressionInfo;
 use neko_runtime_puppet::world::{
     BevyPuppetWorld, DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot, PuppetWorld,
 };
@@ -247,6 +248,50 @@ impl IPuppetService for PuppetService {
 
         world
             .set_texture(node_id, texture_index)
+            .map_err(Error::Other)
+    }
+
+    fn get_expressions(&self) -> Result<Vec<ExpressionInfo>> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        Ok(world.get_expressions())
+    }
+
+    fn set_expression(&self, name: &str) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world.set_expression(name).map_err(Error::Other)
+    }
+
+    fn clear_expression(&self) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world.clear_expression();
+        Ok(())
+    }
+
+    fn load_moc3_auxiliary(
+        &self,
+        expressions: &[(String, String)],
+        motions: &[(String, String)],
+        physics_json: Option<&str>,
+    ) -> Result<()> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+
+        world
+            .load_moc3_auxiliary(expressions, motions, physics_json)
             .map_err(Error::Other)
     }
 }

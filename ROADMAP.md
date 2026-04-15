@@ -46,7 +46,7 @@
 
 | Module | Status | Progress | Description |
 |--------|--------|----------|-------------|
-| **neko-puppet** | Alpha | 82% | **6.5K LOC** + 38 Rust tests; INP loading + parameter deformation + animation blending + 60fps streaming + Canvas rendering; remaining: export / advanced physics |
+| **neko-puppet** | Alpha | 92% | **8.5K LOC** + 104 Rust tests; INP + **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + parameter deformation + animation blending + 60fps streaming + Canvas rendering; remaining: AI tools (Phase 6) / VTS API (Phase 7) / export |
 | **neko-model** | Alpha | 85% | **12.6K LOC** + 49 Rust tests; glTF/VRM + PBR/IBL + CSG + face sculpting + particles + keyframes; remaining: IK UI / Undo / Blender bridging |
 | **neko-live** | Alpha | 55% | **2.6K LOC** + 0 tests; VMC+VRM + Puppet integration + recording; **blocked**: nokhwa crate / MediaPipe / streaming |
 
@@ -391,29 +391,42 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 ### neko-puppet Long-term Roadmap
 
-**Current state**: Core functionality complete, 6,534 lines of production code (570 extension + 2,771 webview + 3,193 Rust), 38 Rust tests.
+**Current state**: ~8,500 lines of production code, 104 Rust tests. Supports both INP (.inp) and **Live2D MOC3 (.moc3)** formats.
 
 | Completed Capability | LOC | Quality |
 |---------------------|-----|---------|
 | INP binary parsing (JSON + TEX_SECT texture extraction) | 704 lines Rust + 65 lines TS | Production |
+| **MOC3 binary parser** (clean-room, zero unsafe, OpenL2D spec) | ~570 lines Rust | Production |
+| **MOC3 loader** (→ format-agnostic ECS entities) | ~370 lines Rust | Production |
+| **Key form interpolation** (1D linear) | ~170 lines Rust | Production |
+| **Warp deformer** (grid bilinear interpolation) | ~180 lines Rust | Production |
+| **Rotation deformer** (pivot rotation) | ~100 lines Rust | Production |
+| **Expression** (.exp3.json → 3 blend modes + crossfade) | ~200 lines Rust | Production |
+| **Motion** (.motion3.json → AnimationClip, Bezier 30fps sampling) | ~270 lines Rust | Production |
+| **Physics** (.physics3.json → SimplePhysics chained pendulum) | ~280 lines Rust | Production |
 | bevy_ecs skeletal world (parameter-driven deformation) | 840+226 lines Rust | Production |
 | Animation system (11 easing types + blending + keyframe CRUD) | 401+84 lines Rust | Production |
 | Physics simulation (spring/rigid pendulum) | System 815 lines incl. physics tick | Production |
 | WebSocket 60fps streaming | Controller layer | Production |
 | Canvas 2D texture rendering (affine UV + blend modes + zoom/pan) | 346 lines TS | Production |
 | Parameter panel + facial parameter categories + animation panel + node tree + keyframe timeline | ~800 lines TS | Production |
+| **Face tracking**: ParamBody/Breath/Cheek/EyeSmile + LIVE2D_PARAM_ALIASES | ~120 lines TS | Production |
+
+**Phase P.next: MOC3 Enhancement (Near-term)**
+- [ ] Phase 6: AI-assisted puppet creation — `PuppetListExpressions`/`PuppetSetExpression` agent tools + "Import .moc3 model" template UI
+- [ ] Phase 7: VTube Studio API compatibility — WebSocket endpoint accepting VTS plugin protocol subset (AuthToken, InjectParameterData, ExpressionState)
+- [ ] 2D bilinear interpolation (dual-axis key form interpolation for complex parameter bindings)
+- [ ] Real .moc3 model E2E testing (validate parser against production models from VTube Studio)
 
 **Phase P.1: Enhanced Editing (Mid-term)**
-- [ ] Puppet export (INP writer → save modified puppets; currently read-only)
+- [ ] Puppet export (INP/MOC3 writer → save modified puppets; currently read-only)
 - [ ] Puppet creation from scratch (drawing tools → mesh → parameter binding, high effort, can delegate to neko-sketch collaboration)
 - [ ] Advanced physics (cloth constraints + collision detection; currently spring/pendulum only)
 - [ ] Video export (currently WebSocket streaming only, lacks H.264 recording to file)
-- [ ] inox2d MeshGroup support (certain models may crash, needs load-time detection + skip)
 
 **Phase P.2: Cross-Module Integration (Long-term)**
 - [ ] neko-live deep integration (Puppet as VTuber avatar, tracking data → real-time parameter mapping)
 - [ ] neko-cut timeline integration (Puppet animation clips → video elements)
-- [ ] Spine/Live2D format support evaluation (current ADR-2D-004 is inox2d only; Spine license restricted)
 
 **TS frontend test gap**: 0 test files.
 

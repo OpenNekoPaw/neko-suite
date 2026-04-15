@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
-/// Controller for 2D puppet operations (Inochi2D/inox2d)
+/// Controller for 2D puppet operations
 pub struct PuppetsController {
     puppet_service: Option<Arc<PuppetService>>,
 }
@@ -45,13 +45,13 @@ impl Controller for PuppetsController {
 
         match action {
             "load" => {
-                // Body should contain base64-encoded INP data
+                // Body should contain base64-encoded puppet data (INP or MOC3, auto-detected)
                 #[derive(Debug, Deserialize)]
                 struct LoadBody {
-                    data: String, // base64-encoded INP file
+                    data: String, // base64-encoded puppet file
                 }
                 let body = body.ok_or_else(|| {
-                    ApiError::InvalidRequest("request body with INP data required".to_string())
+                    ApiError::InvalidRequest("request body with puppet data required".to_string())
                 })?;
                 let load_body: LoadBody = serde_json::from_value(body)
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
@@ -378,6 +378,72 @@ impl Controller for PuppetsController {
                 let service = self.service()?;
                 service
                     .set_node_opacity(&opts.node_id, opts.opacity)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "expressions" => {
+                let service = self.service()?;
+                let expressions = service
+                    .get_expressions()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(expressions)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
+            "set_expression" => {
+                #[derive(Debug, Deserialize)]
+                struct SetExpressionOptions {
+                    name: String,
+                }
+                let opts: SetExpressionOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .set_expression(&opts.name)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "clear_expression" => {
+                let service = self.service()?;
+                service
+                    .clear_expression()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "load_auxiliary" => {
+                #[derive(Debug, Deserialize)]
+                struct AuxiliaryBody {
+                    #[serde(default)]
+                    expressions: Vec<(String, String)>,
+                    #[serde(default)]
+                    motions: Vec<(String, String)>,
+                    #[serde(default)]
+                    physics: Option<String>,
+                }
+                let body = body.ok_or_else(|| {
+                    ApiError::InvalidRequest("request body required".to_string())
+                })?;
+                let aux: AuxiliaryBody = serde_json::from_value(body)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service
+                    .load_moc3_auxiliary(
+                        &aux.expressions,
+                        &aux.motions,
+                        aux.physics.as_deref(),
+                    )
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 
                 Ok(ActionResponse::ok("", Value::Null))

@@ -1,9 +1,7 @@
 //! INP file loader — converts Inochi2D puppet files into ECS entities
 //!
 //! Manually parses the INP binary container format and extracts the embedded
-//! JSON payload directly with serde_json. This is necessary because the
-//! inox2d 0.3.0 crate keeps `puppet.nodes`, `puppet.node_comps`, and
-//! `puppet.params` as `pub(crate)` — inaccessible from external crates.
+//! JSON payload directly with serde_json.
 //!
 //! INP binary layout:
 //!   [0..8]     magic: "TRNSRTS\0"
@@ -47,6 +45,9 @@ pub enum LoadError {
 
     #[error("Unsupported puppet version: {0}")]
     UnsupportedVersion(String),
+
+    #[error("Failed to parse MOC3 file: {0}")]
+    Moc3Error(String),
 }
 
 // ─── INP binary extraction ────────────────────────────────────────────────────
@@ -246,6 +247,7 @@ fn extract_simple_physics(
         length_damping: json_f32(node, "length_damping"),
         output_scale: [output_scale_x, output_scale_y],
         local_only: json_bool(node, "local_only"),
+        inputs: Vec::new(),
     })
 }
 

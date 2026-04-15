@@ -137,7 +137,16 @@
 ## 🔴 Phase 3 — Professional Editing Capabilities
 
 ### neko-puppet (2D Skeletal Animation)
-- [ ] Export functionality: INP writer (currently read-only editor)
+- [x] **Live2D (.moc3) import support** — clean-room implementation (Phase 0-5 complete, 2026-04-14)
+  - [x] Phase 0: Remove inox2d ghost dependency (RUSTSEC-2022-0081 resolved)
+  - [x] Phase 1: Self-built MOC3 binary parser + loader + 1D key form interpolation
+  - [x] Phase 2: WarpDeformer (bilinear grid) + RotationDeformer (pivot rotation)
+  - [x] Phase 3: Expression (.exp3.json) + Motion (.motion3.json → AnimationClip) + Physics (.physics3.json → SimplePhysics)
+  - [x] Phase 4: Extension .moc3 file type registration + webview drag-drop + i18n
+  - [x] Phase 5: Face tracking mapping enhancement (ParamBody/Breath/Cheek/EyeSmile + LIVE2D_PARAM_ALIASES)
+- [ ] **Phase 6**: AI-assisted puppet creation — `PuppetListExpressions` + `PuppetSetExpression` agent tools, template import UI ([plan](./docs/development/neko-puppet-moc3-support.md#phase-6))
+- [ ] **Phase 7**: VTube Studio API compatibility — WebSocket endpoint for VTS plugin interop ([plan](./docs/development/neko-puppet-moc3-support.md#phase-7))
+- [ ] Export functionality: INP/MOC3 writer (currently read-only editor)
 - [ ] Advanced physics: cloth constraints + collision detection
 - [ ] × neko-live deep integration: Puppet as real-time VTuber avatar driver
 

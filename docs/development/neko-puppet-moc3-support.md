@@ -1,8 +1,34 @@
 # neko-puppet Live2D (.moc3) 支持开发方案
 
 > Date: 2026-04-13
-> Status: Design Complete
+> Updated: 2026-04-15
+> Status: Phase 0-5 Implemented, Phase 6-7 Pending
 > Related: [许可证分析](../analysis/live2d-license-analysis-2026-04-13.md) | ADR-2D-001
+
+---
+
+## 0. 实施状态
+
+| Phase | 状态 | 内容 | 关键指标 |
+|-------|------|------|---------|
+| 0 | ✅ 完成 | 移除 inox2d | RUSTSEC-2022-0081 消除 |
+| 1 | ✅ 完成 | MOC3 解析器 + Loader + 1D 插值 | 自研 parser (zero unsafe) |
+| 2 | ✅ 完成 | WarpDeformer + RotationDeformer | 双线性网格 + 枢轴旋转 |
+| 3 | ✅ 完成 | Expression + Motion + Physics | .exp3/.motion3/.physics3.json |
+| 4 | ✅ 完成 | Extension + Webview + i18n | .moc3 文件类型注册 + 拖放 |
+| 5 | ✅ 完成 | 面部追踪增强 | ParamBody/Breath/Cheek/EyeSmile |
+| 6 | 📋 待实施 | AI 辅助 Puppet 创作 | Agent 工具 + 模板 UI |
+| 7 | 📋 待实施 | VTube Studio API 兼容 | WebSocket VTS 协议子集 |
+
+**验证**: 107 Rust 单元测试, clippy 0 warnings, pnpm build 29/29 tasks
+
+**实现要点**:
+- 未使用 `live2d-parser` crate（API 缺少顶点/UV/索引/deformer 数据），完全自研
+- Expression 支持 Add/Multiply/Override 混合 + fade-in/fade-out
+- Motion Bezier 曲线按 30fps 采样为线性关键帧
+- Physics 支持 input 参数驱动（anchor 位移），非静态摆锤
+- Deformer 与 keyform 正确叠加（非覆盖），执行顺序: keyform → rotation → warp
+- Part 层级完整解析（art_mesh_parent_part_indices @ 0xDC）
 
 ---
 

@@ -82,7 +82,7 @@ function PuppetEmptyState() {
     e.stopPropagation();
     setIsDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.inp')) {
+    if (file && (file.name.endsWith('.inp') || file.name.endsWith('.moc3'))) {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;

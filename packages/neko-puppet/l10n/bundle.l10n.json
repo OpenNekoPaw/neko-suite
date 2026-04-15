@@ -7,6 +7,6 @@
   "neko.puppet.template.humanoid": "Simple Humanoid",
   "neko.puppet.template.humanoid.desc": "Pre-built skeleton (head, body, limbs)",
   "neko.puppet.template.import": "Import Existing File",
-  "neko.puppet.template.import.desc": "Import an .inp file from disk",
-  "neko.puppet.import.filter": "Inochi2D Puppet"
+  "neko.puppet.template.import.desc": "Import an .inp or .moc3 file from disk",
+  "neko.puppet.import.filter": "2D Puppet Files"
 }

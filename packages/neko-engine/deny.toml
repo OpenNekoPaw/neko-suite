@@ -1,7 +1,5 @@
 [advisories]
 ignore = [
-    # json crate — unmaintained, transitive dep from inox2d (2D puppet library)
-    "RUSTSEC-2022-0081",
     # number_prefix — unmaintained, transitive dep from indicatif (progress bars)
     "RUSTSEC-2025-0119",
     # paste — unmaintained, no replacement available yet
@@ -31,8 +29,7 @@ allow = [
 ]
 
 [sources]
-# Allow inox2d git dependency (no crates.io release available)
-allow-git = ["https://github.com/Inochi2D/inox2d"]
+allow-git = []
 
 [bans]
 # base64 v0.13 (gltf) + v0.22 (ours) — transitive, can't unify

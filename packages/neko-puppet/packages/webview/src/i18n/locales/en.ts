@@ -29,11 +29,11 @@ export const en: MessageBundle = {
   'puppet.morph.stopped': 'Stopped',
 
   // Import
-  'puppet.import.title': 'Import Puppet (.inp)',
-  'puppet.import.dropHint': 'Drop .inp file or click to import',
+  'puppet.import.title': 'Import Puppet (.inp / .moc3)',
+  'puppet.import.dropHint': 'Drop .inp or .moc3 file or click to import',
 
   // Empty state
-  'puppet.empty.hint': 'Drop .inp file here or choose an option below',
+  'puppet.empty.hint': 'Drop .inp or .moc3 file here or choose an option below',
   'puppet.empty.import': 'Import File',
   'puppet.empty.templateBlank': 'Blank Skeleton',
   'puppet.empty.templateHumanoid': 'Simple Humanoid',

@@ -1,7 +1,7 @@
-//! ECS systems for 2D puppet deformation and physics
+//! ECS systems for 2D puppet deformation and physics (format-agnostic)
 //!
 //! Called manually (not via a scheduler) — mirrors runtime-scene pattern.
-//! Systems operate on bevy_ecs::World directly.
+//! Systems operate on bevy_ecs::World directly. Supports both INP and MOC3 formats.
 
 use crate::animation::{AnimationLibrary, AnimationPlayback};
 use crate::animation_blend::{AnimationBlendState, BlendLayer, CrossfadeRequest};
@@ -10,6 +10,21 @@ use crate::hierarchy;
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
 use neko_engine_types::easing::{Easing, EasingType};
+
+/// Reset all puppet parameters to their default values.
+///
+/// Must run at the start of each tick, before animation and expression systems.
+/// This ensures that Add/Multiply expressions always operate on a clean base
+/// (the default or animation-output value), rather than accumulating on top of
+/// the previous frame's expression output.
+pub fn parameter_reset(world: &mut World) {
+    let mut q = world.query::<&mut PuppetParameters>();
+    for mut params in q.iter_mut(world) {
+        for p in &mut params.params {
+            p.current = p.default;
+        }
+    }
+}
 
 /// Deformation entity data: (entity, vertices, binding_param, binding_strength, control_points)
 type DeformEntityData = (Entity, Vec<Vec2>, String, f32, Vec<[f32; 2]>);
@@ -160,6 +175,288 @@ pub fn parameter_update(world: &mut World) {
             dv.0 = deformed;
         } else {
             world.entity_mut(entity).insert(DeformedVertices(deformed));
+        }
+    }
+}
+
+/// Advance expression fade and apply expression parameter overrides.
+///
+/// Each tick: advance fade_elapsed_ms, recompute weight, and apply expression
+/// blend modes to PuppetParameters. Removes ActiveExpression when fade-out completes.
+pub fn expression_update(world: &mut World, delta_ms: f32) {
+    // Find root entity
+    let root_entity: Option<Entity> = {
+        let mut q = world.query_filtered::<Entity, With<PuppetRoot>>();
+        q.iter(world).next()
+    };
+    let root_entity = match root_entity {
+        Some(e) => e,
+        None => return,
+    };
+
+    // Read active expression data
+    let active = match world.get::<ActiveExpression>(root_entity) {
+        Some(ae) => ae.clone(),
+        None => return,
+    };
+
+    // Read the expression definition
+    let expression = match world.get::<ExpressionLibrary>(root_entity) {
+        Some(lib) => match lib.expressions.get(active.expression_index) {
+            Some(e) => e.clone(),
+            None => return,
+        },
+        None => return,
+    };
+
+    // Compute new fade state
+    let fade_duration_ms = if active.fading_in {
+        expression.fade_in_time * 1000.0
+    } else {
+        expression.fade_out_time * 1000.0
+    };
+
+    let new_elapsed = active.fade_elapsed_ms + delta_ms;
+    let new_weight = if fade_duration_ms <= 0.0 {
+        if active.fading_in { 1.0 } else { 0.0 }
+    } else {
+        let t = (new_elapsed / fade_duration_ms).clamp(0.0, 1.0);
+        if active.fading_in { t } else { 1.0 - t }
+    };
+
+    // Check if fade-out completed → remove
+    let fade_out_done = !active.fading_in && new_weight <= 0.0;
+
+    if fade_out_done {
+        world.entity_mut(root_entity).remove::<ActiveExpression>();
+        return;
+    }
+
+    // Update active expression state
+    if let Some(mut ae) = world.get_mut::<ActiveExpression>(root_entity) {
+        ae.fade_elapsed_ms = new_elapsed;
+        ae.weight = new_weight;
+    }
+
+    // Collect current parameter values
+    let current_params: Vec<(String, f32)> = {
+        let mut q = world.query::<&PuppetParameters>();
+        q.iter(world)
+            .flat_map(|params| params.params.iter().map(|p| (p.name.clone(), p.current)))
+            .collect()
+    };
+
+    // Apply expression with current weight
+    let updated =
+        crate::moc3::expression::apply_expression(&expression, &current_params, new_weight);
+
+    // Write back
+    let mut q = world.query::<&mut PuppetParameters>();
+    for mut params in q.iter_mut(world) {
+        for p in &mut params.params {
+            if let Some((_, val)) = updated.iter().find(|(n, _)| n == &p.name) {
+                p.current = val.clamp(p.min, p.max);
+            }
+        }
+    }
+}
+
+/// Apply multi-key-form deformation driven by parameter values (MOC3 models).
+///
+/// For each entity with MultiKeyDeformation + MeshData, look up the current
+/// parameter value and interpolate between the surrounding key forms to produce
+/// DeformedVertices. This runs after animation/physics ticks write parameter
+/// values and before transform propagation.
+pub fn multi_key_deformation_update(world: &mut World) {
+    // Collect current parameter values
+    let param_values: Vec<(String, f32)> = {
+        let mut query = world.query::<&PuppetParameters>();
+        let mut values = Vec::new();
+        for params in query.iter(world) {
+            for p in &params.params {
+                values.push((p.name.clone(), p.current));
+            }
+        }
+        values
+    };
+
+    // Collect entities with MultiKeyDeformation
+    let entities: Vec<(Entity, String, Vec<crate::components::KeyFormData>)> = {
+        let mut query = world.query::<(Entity, &MultiKeyDeformation)>();
+        query
+            .iter(world)
+            .map(|(e, mkd)| (e, mkd.param_name.clone(), mkd.key_forms.clone()))
+            .collect()
+    };
+
+    for (entity, param_name, key_forms) in entities {
+        let param_value = param_values
+            .iter()
+            .find(|(name, _)| *name == param_name)
+            .map(|(_, v)| *v)
+            .unwrap_or(0.0);
+
+        if let Some(deformed) = crate::moc3::interpolation::interpolate_1d(&key_forms, param_value) {
+            if let Some(mut dv) = world.get_mut::<DeformedVertices>(entity) {
+                dv.0 = deformed;
+            } else {
+                world.entity_mut(entity).insert(DeformedVertices(deformed));
+            }
+        }
+    }
+}
+
+/// Apply warp deformation to child drawables (MOC3 models).
+///
+/// For each entity with WarpDeformer, interpolate its control points from key forms
+/// based on the current parameter value, then warp all child mesh vertices.
+pub fn warp_deformer_update(world: &mut World) {
+    // Collect current parameter values
+    let param_values: Vec<(String, f32)> = {
+        let mut query = world.query::<&PuppetParameters>();
+        let mut values = Vec::new();
+        for params in query.iter(world) {
+            for p in &params.params {
+                values.push((p.name.clone(), p.current));
+            }
+        }
+        values
+    };
+
+    // Collect warp deformers with their data
+    let deformers: Vec<(Entity, WarpDeformer)> = {
+        let mut query = world.query::<(Entity, &WarpDeformer)>();
+        query
+            .iter(world)
+            .map(|(e, wd)| (e, wd.clone()))
+            .collect()
+    };
+
+    for (deformer_entity, wd) in &deformers {
+        let param_value = param_values
+            .iter()
+            .find(|(name, _)| *name == wd.param_name)
+            .map(|(_, v)| *v)
+            .unwrap_or(0.0);
+
+        // Interpolate control points from key forms
+        let deformed_cps =
+            match crate::moc3::interpolation::interpolate_1d(&wd.key_forms, param_value) {
+                Some(cps) => cps,
+                None => continue,
+            };
+
+        // Rest-state control points = first key form (or zeros)
+        let rest_cps = match wd.key_forms.first() {
+            Some(kf) => &kf.vertices,
+            None => continue,
+        };
+
+        // Find child meshes — use DeformedVertices (from key form) if available,
+        // otherwise fall back to MeshData.vertices. This ensures deformer effects
+        // stack on top of key form interpolation rather than overwriting.
+        let children: Vec<(Entity, Vec<Vec2>)> = {
+            let mut query =
+                world.query::<(Entity, &ParentDeformerRef, &MeshData, Option<&DeformedVertices>)>();
+            query
+                .iter(world)
+                .filter(|(_, pdr, _, _)| pdr.0 == *deformer_entity)
+                .map(|(e, _, mesh, dv)| {
+                    let verts = dv.map(|d| d.0.clone()).unwrap_or_else(|| mesh.vertices.clone());
+                    (e, verts)
+                })
+                .collect()
+        };
+
+        for (child_entity, child_verts) in children {
+            let warped = crate::moc3::warp_deformer::apply_warp(
+                rest_cps,
+                &deformed_cps,
+                wd.rows,
+                wd.columns,
+                &child_verts,
+            );
+            if let Some(mut dv) = world.get_mut::<DeformedVertices>(child_entity) {
+                dv.0 = warped;
+            } else {
+                world
+                    .entity_mut(child_entity)
+                    .insert(DeformedVertices(warped));
+            }
+        }
+    }
+}
+
+/// Apply rotation deformation to child drawables (MOC3 models).
+///
+/// For each entity with RotationDeformer, interpolate the rotation angle
+/// from key forms, then rotate all child mesh vertices around the deformer's
+/// world-space position.
+pub fn rotation_deformer_update(world: &mut World) {
+    // Collect current parameter values
+    let param_values: Vec<(String, f32)> = {
+        let mut query = world.query::<&PuppetParameters>();
+        let mut values = Vec::new();
+        for params in query.iter(world) {
+            for p in &params.params {
+                values.push((p.name.clone(), p.current));
+            }
+        }
+        values
+    };
+
+    // Collect rotation deformers
+    let deformers: Vec<(Entity, RotationDeformer, Vec2)> = {
+        let mut query = world.query::<(Entity, &RotationDeformer, &GlobalTransform2D)>();
+        query
+            .iter(world)
+            .map(|(e, rd, gt)| {
+                let pivot = Vec2::new(gt.0.col(2).x, gt.0.col(2).y);
+                (e, rd.clone(), pivot)
+            })
+            .collect()
+    };
+
+    for (deformer_entity, rd, pivot) in &deformers {
+        let param_value = param_values
+            .iter()
+            .find(|(name, _)| *name == rd.param_name)
+            .map(|(_, v)| *v)
+            .unwrap_or(0.0);
+
+        // Interpolate angle from key forms
+        let angle = match crate::moc3::interpolation::interpolate_1d_scalar(
+            &rd.key_forms,
+            param_value,
+        ) {
+            Some(a) => a + rd.base_angle,
+            None => rd.base_angle,
+        };
+
+        // Find child meshes — use DeformedVertices if available (stacks on key forms)
+        let children: Vec<(Entity, Vec<Vec2>)> = {
+            let mut query =
+                world.query::<(Entity, &ParentDeformerRef, &MeshData, Option<&DeformedVertices>)>();
+            query
+                .iter(world)
+                .filter(|(_, pdr, _, _)| pdr.0 == *deformer_entity)
+                .map(|(e, _, mesh, dv)| {
+                    let verts = dv.map(|d| d.0.clone()).unwrap_or_else(|| mesh.vertices.clone());
+                    (e, verts)
+                })
+                .collect()
+        };
+
+        for (child_entity, child_verts) in children {
+            let rotated =
+                crate::moc3::rotation_deformer::apply_rotation(*pivot, angle, &child_verts);
+            if let Some(mut dv) = world.get_mut::<DeformedVertices>(child_entity) {
+                dv.0 = rotated;
+            } else {
+                world
+                    .entity_mut(child_entity)
+                    .insert(DeformedVertices(rotated));
+            }
         }
     }
 }
@@ -470,13 +767,25 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
 /// Run a single physics simulation step.
 ///
 /// Simulates spring/pendulum physics for hair, accessories, etc.
-/// Ported from inox2d SimplePhysics (rigid pendulum + spring pendulum).
+/// Implements SimplePhysics (rigid pendulum + spring pendulum).
 pub fn physics_tick(world: &mut World, delta_ms: f32) {
     let dt = (delta_ms / 1000.0).min(10.0);
     if dt <= 0.0 {
         transform_propagation_2d(world);
         return;
     }
+
+    // Collect current parameter values for input driving
+    let param_values: Vec<(String, f32)> = {
+        let mut query = world.query::<&PuppetParameters>();
+        let mut values = Vec::new();
+        for params in query.iter(world) {
+            for p in &params.params {
+                values.push((p.name.clone(), p.current));
+            }
+        }
+        values
+    };
 
     // Collect physics nodes with their data
     let physics_nodes: Vec<(Entity, SimplePhysics, PhysicsState, Vec2)> = {
@@ -485,7 +794,6 @@ pub fn physics_tick(world: &mut World, delta_ms: f32) {
         query
             .iter(world)
             .map(|(e, sp, ps, gt)| {
-                // Anchor is the node's world position (parent drives the "hook")
                 let anchor = Vec2::new(gt.0.col(2).x, gt.0.col(2).y);
                 (e, sp.clone(), ps.clone(), anchor)
             })
@@ -495,7 +803,27 @@ pub fn physics_tick(world: &mut World, delta_ms: f32) {
     // Simulate each physics node
     let mut param_updates: Vec<(String, f32)> = Vec::new();
 
-    for (entity, sp, mut state, anchor) in physics_nodes {
+    for (entity, sp, mut state, mut anchor) in physics_nodes {
+        // Apply input parameter driving: displace anchor based on input params
+        for input in &sp.inputs {
+            let input_value = param_values
+                .iter()
+                .find(|(n, _)| *n == input.param_name)
+                .map(|(_, v)| *v)
+                .unwrap_or(0.0);
+            let weighted = input_value * input.weight;
+            match input.input_type.as_str() {
+                "X" => anchor.x += weighted,
+                "Y" => anchor.y += weighted,
+                "Angle" => {
+                    // Convert angle to XY displacement for the pendulum
+                    let rad = weighted.to_radians();
+                    anchor.x += rad.sin() * sp.length;
+                    anchor.y += rad.cos() * sp.length;
+                }
+                _ => {}
+            }
+        }
         let gravity = sp.gravity * 9.81 * 100.0; // pixels/s²
         let rest_length = sp.length.max(1.0);
         let freq = sp.frequency.max(0.01);
@@ -791,5 +1119,491 @@ mod tests {
         // t = 1.0, weight = 1.0 → full displacement
         assert!((dv.0[0].x - 5.0).abs() < 1e-6);
         assert!((dv.0[0].y - 3.0).abs() < 1e-6);
+    }
+
+    // ── Fix 1 integration test: expression fade-in via expression_update ──
+
+    #[test]
+    fn test_expression_update_fade_in() {
+        let mut world = World::new();
+
+        let root = world
+            .spawn((
+                PuppetRoot,
+                PuppetParameters {
+                    params: vec![ParameterDef {
+                        name: "ParamAngleX".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 0.0,
+                    }],
+                },
+                ExpressionLibrary {
+                    expressions: vec![crate::moc3::expression::ExpressionDef {
+                        name: "smile".to_string(),
+                        fade_in_time: 0.5, // 500ms
+                        fade_out_time: 0.3,
+                        parameters: vec![crate::moc3::expression::ExpressionParameter {
+                            id: "ParamAngleX".to_string(),
+                            value: 20.0,
+                            blend: crate::moc3::expression::ExpressionBlendMode::Override,
+                        }],
+                    }],
+                },
+                ActiveExpression {
+                    expression_index: 0,
+                    weight: 0.0,
+                    fade_elapsed_ms: 0.0,
+                    fading_in: true,
+                },
+            ))
+            .id();
+
+        // After 250ms (half of 500ms fade), weight should be ~0.5
+        expression_update(&mut world, 250.0);
+
+        let ae = world.get::<ActiveExpression>(root).unwrap();
+        assert!((ae.weight - 0.5).abs() < 1e-3);
+
+        // Parameter should be partially applied: 0 + (20 - 0) * 0.5 = 10
+        let params = world.get::<PuppetParameters>(root).unwrap();
+        assert!((params.params[0].current - 10.0).abs() < 1.0);
+
+        // After another 250ms, weight should be 1.0
+        expression_update(&mut world, 250.0);
+        let ae = world.get::<ActiveExpression>(root).unwrap();
+        assert!((ae.weight - 1.0).abs() < 1e-3);
+    }
+
+    // ── Add/Multiply accumulation regression tests ──
+
+    #[test]
+    fn test_expression_add_does_not_accumulate_across_frames() {
+        let mut world = World::new();
+
+        world.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![ParameterDef {
+                    name: "ParamAngleX".to_string(),
+                    min: -30.0,
+                    max: 30.0,
+                    default: 0.0,
+                    current: 0.0,
+                }],
+            },
+            ExpressionLibrary {
+                expressions: vec![crate::moc3::expression::ExpressionDef {
+                    name: "tilt".to_string(),
+                    fade_in_time: 0.0, // instant
+                    fade_out_time: 0.0,
+                    parameters: vec![crate::moc3::expression::ExpressionParameter {
+                        id: "ParamAngleX".to_string(),
+                        value: 10.0,
+                        blend: crate::moc3::expression::ExpressionBlendMode::Add,
+                    }],
+                }],
+            },
+            ActiveExpression {
+                expression_index: 0,
+                weight: 1.0,
+                fade_elapsed_ms: 0.0,
+                fading_in: true,
+            },
+        ));
+
+        // Simulate multiple ticks with parameter_reset before each expression_update
+        for _ in 0..5 {
+            parameter_reset(&mut world);
+            expression_update(&mut world, 16.0);
+        }
+
+        let mut q = world.query::<&PuppetParameters>();
+        let params = q.iter(&world).next().unwrap();
+        // Add 10 to default 0 = 10, NOT 50 (accumulated over 5 frames)
+        assert!(
+            (params.params[0].current - 10.0).abs() < 1e-6,
+            "Add expression should not accumulate: expected 10.0, got {}",
+            params.params[0].current
+        );
+    }
+
+    #[test]
+    fn test_expression_multiply_does_not_compound_across_frames() {
+        let mut world = World::new();
+
+        world.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![ParameterDef {
+                    name: "Param".to_string(),
+                    min: 0.0,
+                    max: 100.0,
+                    default: 10.0,
+                    current: 10.0,
+                }],
+            },
+            ExpressionLibrary {
+                expressions: vec![crate::moc3::expression::ExpressionDef {
+                    name: "half".to_string(),
+                    fade_in_time: 0.0,
+                    fade_out_time: 0.0,
+                    parameters: vec![crate::moc3::expression::ExpressionParameter {
+                        id: "Param".to_string(),
+                        value: 0.5,
+                        blend: crate::moc3::expression::ExpressionBlendMode::Multiply,
+                    }],
+                }],
+            },
+            ActiveExpression {
+                expression_index: 0,
+                weight: 1.0,
+                fade_elapsed_ms: 0.0,
+                fading_in: true,
+            },
+        ));
+
+        // Simulate multiple ticks
+        for _ in 0..5 {
+            parameter_reset(&mut world);
+            expression_update(&mut world, 16.0);
+        }
+
+        let mut q = world.query::<&PuppetParameters>();
+        let params = q.iter(&world).next().unwrap();
+        // Multiply 10 * 0.5 = 5, NOT 10 * 0.5^5 (compounded)
+        assert!(
+            (params.params[0].current - 5.0).abs() < 1e-6,
+            "Multiply expression should not compound: expected 5.0, got {}",
+            params.params[0].current
+        );
+    }
+
+    // ── Fade-out lifecycle tests ──
+
+    #[test]
+    fn test_expression_fade_out_removes_active_expression() {
+        let mut world = World::new();
+
+        let root = world
+            .spawn((
+                PuppetRoot,
+                PuppetParameters {
+                    params: vec![ParameterDef {
+                        name: "Param".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 0.0,
+                    }],
+                },
+                ExpressionLibrary {
+                    expressions: vec![crate::moc3::expression::ExpressionDef {
+                        name: "smile".to_string(),
+                        fade_in_time: 0.0,
+                        fade_out_time: 0.3, // 300ms fade-out
+                        parameters: vec![crate::moc3::expression::ExpressionParameter {
+                            id: "Param".to_string(),
+                            value: 20.0,
+                            blend: crate::moc3::expression::ExpressionBlendMode::Override,
+                        }],
+                    }],
+                },
+                // Start in fade-out state
+                ActiveExpression {
+                    expression_index: 0,
+                    weight: 1.0,
+                    fade_elapsed_ms: 0.0,
+                    fading_in: false,
+                },
+            ))
+            .id();
+
+        // Halfway through fade-out (150ms of 300ms)
+        parameter_reset(&mut world);
+        expression_update(&mut world, 150.0);
+
+        let ae = world.get::<ActiveExpression>(root).unwrap();
+        assert!((ae.weight - 0.5).abs() < 1e-3, "Weight at 50% fade-out should be ~0.5, got {}", ae.weight);
+        // Parameter should be partially faded: 0 + (20 - 0) * 0.5 = 10
+        let params = world.get::<PuppetParameters>(root).unwrap();
+        assert!((params.params[0].current - 10.0).abs() < 1.0);
+
+        // Complete fade-out (another 200ms, total 350ms > 300ms)
+        parameter_reset(&mut world);
+        expression_update(&mut world, 200.0);
+
+        // ActiveExpression should be removed
+        assert!(
+            world.get::<ActiveExpression>(root).is_none(),
+            "ActiveExpression should be removed after fade-out completes"
+        );
+    }
+
+    #[test]
+    fn test_expression_instant_fade_out_removes_immediately() {
+        let mut world = World::new();
+
+        let root = world
+            .spawn((
+                PuppetRoot,
+                PuppetParameters {
+                    params: vec![ParameterDef {
+                        name: "Param".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 0.0,
+                    }],
+                },
+                ExpressionLibrary {
+                    expressions: vec![crate::moc3::expression::ExpressionDef {
+                        name: "smile".to_string(),
+                        fade_in_time: 0.0,
+                        fade_out_time: 0.0, // instant fade-out
+                        parameters: vec![crate::moc3::expression::ExpressionParameter {
+                            id: "Param".to_string(),
+                            value: 20.0,
+                            blend: crate::moc3::expression::ExpressionBlendMode::Override,
+                        }],
+                    }],
+                },
+                ActiveExpression {
+                    expression_index: 0,
+                    weight: 1.0,
+                    fade_elapsed_ms: 0.0,
+                    fading_in: false, // fade-out with zero duration
+                },
+            ))
+            .id();
+
+        parameter_reset(&mut world);
+        expression_update(&mut world, 16.0);
+
+        assert!(
+            world.get::<ActiveExpression>(root).is_none(),
+            "Instant fade-out should remove ActiveExpression immediately"
+        );
+    }
+
+    // ── Fix 2 integration test: physics input driving ──
+
+    #[test]
+    fn test_physics_input_driving_displaces_anchor() {
+        // Verify that input parameters actually change the anchor position
+        // that feeds into the physics simulation. We test this by comparing
+        // simulation results with and without input driving.
+        let mut world_with_input = World::new();
+
+        world_with_input.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![
+                    ParameterDef {
+                        name: "ParamAngleX".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 20.0, // Large input
+                    },
+                    ParameterDef {
+                        name: "ParamHairFront".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 0.0,
+                    },
+                ],
+            },
+        ));
+
+        world_with_input.spawn((
+            SimplePhysics {
+                param_name: "ParamHairFront".to_string(),
+                model: PhysicsModel::SpringPendulum, // spring responds to anchor shift
+                map_mode: PhysicsMapMode::XY,
+                gravity: 0.1,
+                length: 50.0,
+                frequency: 2.0,
+                angle_damping: 0.3,
+                length_damping: 0.3,
+                output_scale: [1.0, 1.0],
+                local_only: false,
+                inputs: vec![PhysicsInput {
+                    param_name: "ParamAngleX".to_string(),
+                    weight: 5.0, // Strong weight
+                    input_type: "X".to_string(), // Direct X displacement
+                }],
+            },
+            PhysicsState::default(),
+            Transform2D::default(),
+            GlobalTransform2D::default(),
+        ));
+
+        // Also create a world without input for comparison
+        let mut world_without_input = World::new();
+        world_without_input.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![
+                    ParameterDef {
+                        name: "ParamAngleX".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 20.0,
+                    },
+                    ParameterDef {
+                        name: "ParamHairFront".to_string(),
+                        min: -30.0,
+                        max: 30.0,
+                        default: 0.0,
+                        current: 0.0,
+                    },
+                ],
+            },
+        ));
+        world_without_input.spawn((
+            SimplePhysics {
+                param_name: "ParamHairFront".to_string(),
+                model: PhysicsModel::SpringPendulum,
+                map_mode: PhysicsMapMode::XY,
+                gravity: 0.1,
+                length: 50.0,
+                frequency: 2.0,
+                angle_damping: 0.3,
+                length_damping: 0.3,
+                output_scale: [1.0, 1.0],
+                local_only: false,
+                inputs: Vec::new(), // No input driving
+            },
+            PhysicsState::default(),
+            Transform2D::default(),
+            GlobalTransform2D::default(),
+        ));
+
+        // Run several ticks
+        for _ in 0..20 {
+            physics_tick(&mut world_with_input, 16.0);
+            physics_tick(&mut world_without_input, 16.0);
+        }
+
+        // Get output values
+        let hair_with = {
+            let mut q = world_with_input.query::<&PuppetParameters>();
+            let params = q.iter(&world_with_input).next().unwrap();
+            params.params.iter().find(|p| p.name == "ParamHairFront").unwrap().current
+        };
+        let hair_without = {
+            let mut q = world_without_input.query::<&PuppetParameters>();
+            let params = q.iter(&world_without_input).next().unwrap();
+            params.params.iter().find(|p| p.name == "ParamHairFront").unwrap().current
+        };
+
+        // With input driving, the result should differ from without input
+        assert!((hair_with - hair_without).abs() > 0.001,
+            "Input-driven physics should differ from non-driven: with={}, without={}",
+            hair_with, hair_without);
+    }
+
+    // ── Fix 3 integration test: deformer + keyform stacking ──
+
+    #[test]
+    fn test_deformer_keyform_stacking() {
+        let mut world = World::new();
+
+        world.spawn((
+            PuppetRoot,
+            PuppetParameters {
+                params: vec![
+                    ParameterDef {
+                        name: "ParamAngleX".to_string(),
+                        min: 0.0,
+                        max: 1.0,
+                        default: 0.0,
+                        current: 1.0,
+                    },
+                    ParameterDef {
+                        name: "ParamWarp".to_string(),
+                        min: 0.0,
+                        max: 1.0,
+                        default: 0.0,
+                        current: 1.0,
+                    },
+                ],
+            },
+        ));
+
+        // Create a warp deformer
+        let deformer = world
+            .spawn((
+                WarpDeformer {
+                    rows: 1,
+                    columns: 1,
+                    key_forms: vec![
+                        KeyFormData {
+                            param_value: 0.0,
+                            vertices: vec![
+                                Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0),
+                                Vec2::new(0.0, 10.0), Vec2::new(10.0, 10.0),
+                            ],
+                        },
+                        KeyFormData {
+                            param_value: 1.0,
+                            vertices: vec![
+                                Vec2::new(5.0, 0.0), Vec2::new(15.0, 0.0),
+                                Vec2::new(5.0, 10.0), Vec2::new(15.0, 10.0),
+                            ],
+                        },
+                    ],
+                    param_name: "ParamWarp".to_string(),
+                },
+                Transform2D::default(),
+                GlobalTransform2D::default(),
+            ))
+            .id();
+
+        // Create a child mesh with its own key form deformation + parent deformer
+        let child = world
+            .spawn((
+                MeshData {
+                    vertices: vec![Vec2::new(5.0, 5.0)],
+                    uvs: vec![Vec2::ZERO],
+                    indices: vec![0],
+                },
+                MultiKeyDeformation {
+                    param_name: "ParamAngleX".to_string(),
+                    key_forms: vec![
+                        KeyFormData {
+                            param_value: 0.0,
+                            vertices: vec![Vec2::new(5.0, 5.0)],
+                        },
+                        KeyFormData {
+                            param_value: 1.0,
+                            vertices: vec![Vec2::new(5.0, 8.0)], // moves Y from 5→8
+                        },
+                    ],
+                },
+                ParentDeformerRef(deformer),
+            ))
+            .id();
+
+        // Step 1: key form interpolation sets DeformedVertices
+        multi_key_deformation_update(&mut world);
+
+        let dv = world.get::<DeformedVertices>(child).unwrap();
+        // At ParamAngleX=1.0, should be (5.0, 8.0)
+        assert!((dv.0[0].y - 8.0).abs() < 1e-5, "Key form Y should be 8.0, got {}", dv.0[0].y);
+
+        // Step 2: warp deformer applies on top of key form result
+        warp_deformer_update(&mut world);
+
+        let dv = world.get::<DeformedVertices>(child).unwrap();
+        // The warp shifts everything +5 in X at param=1.0,
+        // so the key-form result (5.0, 8.0) should be warped.
+        // Exact value depends on bilinear interpolation, but X should be > 5.0
+        assert!(dv.0[0].x > 5.0,
+            "Warp should shift X beyond 5.0, got {}", dv.0[0].x);
     }
 }

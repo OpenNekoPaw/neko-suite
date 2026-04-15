@@ -18,7 +18,7 @@ neko-runtime-scene = { path = "../runtime-scene" }
 # ECS (for querying scene World in PBR renderer)
 bevy_ecs.workspace = true
 
-# 2D puppet management (Inochi2D/inox2d)
+# 2D puppet management
 neko-runtime-puppet = { path = "../runtime-puppet" }
 
 # Math (re-export from runtime-scene)

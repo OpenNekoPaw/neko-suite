@@ -5,10 +5,11 @@
 
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
+use neko_runtime_puppet::moc3::expression::ExpressionInfo;
 use neko_runtime_puppet::world::{DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot};
 use neko_engine_types::easing::EasingType;
 
-/// Service interface for 2D puppet management (Inochi2D/inox2d)
+/// Service interface for 2D puppet management
 #[allow(async_fn_in_trait)]
 pub trait IPuppetService: Send + Sync {
     /// Load a puppet from INP binary data and return a snapshot
@@ -95,4 +96,21 @@ pub trait IPuppetService: Send + Sync {
 
     /// Set texture index for a specific puppet node (hot-swap textures)
     fn set_texture(&self, node_id: &str, texture_index: usize) -> crate::error::Result<()>;
+
+    /// Get available expression names (MOC3)
+    fn get_expressions(&self) -> crate::error::Result<Vec<ExpressionInfo>>;
+
+    /// Activate an expression by name (MOC3)
+    fn set_expression(&self, name: &str) -> crate::error::Result<()>;
+
+    /// Clear the active expression (triggers fade-out, then removal)
+    fn clear_expression(&self) -> crate::error::Result<()>;
+
+    /// Load auxiliary MOC3 files (expressions, motions, physics)
+    fn load_moc3_auxiliary(
+        &self,
+        expressions: &[(String, String)],
+        motions: &[(String, String)],
+        physics_json: Option<&str>,
+    ) -> crate::error::Result<()>;
 }
