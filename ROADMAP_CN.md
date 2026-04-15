@@ -46,7 +46,7 @@
 
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
-| **neko-puppet** | Alpha | 82% | **6.5K LOC** + 38 Rust tests；INP 加载 + 参数变形 + 动画混合 + 60fps 流 + Canvas 渲染；剩余：导出 / 高级物理 |
+| **neko-puppet** | Alpha | 92% | **8.5K LOC** + 104 Rust tests；**MOC3 加载**（clean-room 解析器/变形器/表情/动作/物理）+ INP 遗留只读 + 参数变形 + 动画混合 + 60fps 流 + Canvas 渲染；剩余：AI 工具(Phase 6) / VTS API(Phase 7) / MOC3 导出 |
 | **neko-model** | Alpha | 85% | **12.6K LOC** + 49 Rust tests；glTF/VRM + PBR/IBL + CSG + 捏脸 + 粒子 + 关键帧；剩余：IK UI / Undo / Blender 桥接 |
 | **neko-live** | Alpha | 55% | **2.6K LOC** + 0 tests；VMC+VRM + Puppet 联动 + 录制；**阻塞**：nokhwa crate / MediaPipe / 推流 |
 
@@ -407,7 +407,7 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 | 参数面板 + 面部参数分类 + 动画面板 + 节点树 + 关键帧时间线 | ~800 行 TS | 生产级 |
 
 **Phase P.1：增强编辑（中期）**
-- [ ] Puppet 导出（INP 写入器 → 允许保存修改后的 puppet，当前只读）
+- [ ] Puppet 导出（MOC3 写入器 → 允许保存修改后的 puppet，当前只读；INP 已弃用）
 - [ ] Puppet 从零创建（绘图工具 → 网格 → 参数绑定，高工作量，可委托 neko-sketch 协作）
 - [ ] 高级物理（布料约束 + 碰撞检测，当前仅 spring/pendulum）
 - [ ] 视频导出（当前仅 WebSocket 流，缺少 H.264 录制到文件）

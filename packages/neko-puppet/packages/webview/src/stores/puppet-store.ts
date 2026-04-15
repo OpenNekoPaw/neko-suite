@@ -1,7 +1,7 @@
 /**
  * Puppet Store - standalone Zustand store for puppet editor state
  *
- * Manages Inochi2D puppet loading, parameter control, and playback state.
+ * Manages puppet loading (INP/MOC3), parameter control, and playback state.
  * Separated from the sketch store to keep the puppet editor independent.
  */
 import { create } from 'zustand';

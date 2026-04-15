@@ -3,16 +3,16 @@
  *
  * Connects puppet-store state (tracks, currentTimeMs, selectedKeyframeIds)
  * to the shared KeyframeTimeline component. Delegates CRUD operations
- * to the IInochi2DController for engine dispatch.
+ * to the IPuppetController for engine dispatch.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { KeyframeTimeline } from '@neko/shared/components';
 import type { EasingType } from '@neko/shared';
-import type { IInochi2DController } from '../animation';
+import type { IPuppetController } from '../animation';
 import { usePuppetStore } from '../stores/puppet-store';
 
 interface PuppetKeyframeTimelineProps {
-  controller: IInochi2DController | null;
+  controller: IPuppetController | null;
 }
 
 export function PuppetKeyframeTimeline({ controller }: PuppetKeyframeTimelineProps) {

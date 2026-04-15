@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import type { IInochi2DController } from '../animation';
+import type { IPuppetController } from '../animation';
 import { usePuppetStore } from '../stores/puppet-store';
 
 export interface PuppetPlaybackCallbacks {
@@ -21,7 +21,7 @@ export interface PuppetPlaybackCallbacks {
  * Hook that wires up animation playback to the WebSocket preview stream.
  * Returns callbacks for AnimationPanel props.
  */
-export function usePuppetPlayback(controller: IInochi2DController | null): PuppetPlaybackCallbacks {
+export function usePuppetPlayback(controller: IPuppetController | null): PuppetPlaybackCallbacks {
   const controllerRef = useRef(controller);
   controllerRef.current = controller;
 

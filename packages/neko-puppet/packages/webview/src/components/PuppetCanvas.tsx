@@ -1,5 +1,5 @@
 /**
- * PuppetCanvas — 2D Canvas renderer for Inochi2D puppet meshes.
+ * PuppetCanvas — 2D Canvas renderer for puppet meshes (INP/MOC3).
  *
  * Draws deformed triangle meshes with texture mapping using Canvas 2D API.
  * Supports zoom/pan via mouse wheel and drag.

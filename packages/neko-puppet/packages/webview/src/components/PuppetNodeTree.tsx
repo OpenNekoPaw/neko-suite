@@ -1,5 +1,5 @@
 /**
- * PuppetNodeTree - collapsible tree view of Inochi2D puppet nodes
+ * PuppetNodeTree - collapsible tree view of puppet nodes
  *
  * Renders the puppet's node hierarchy using parent_id relationships.
  * Displays node type icons, names, and allows selection.

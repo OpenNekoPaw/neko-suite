@@ -1,5 +1,5 @@
 /**
- * NekoPuppet Extension - Inochi2D puppet animation editor
+ * NekoPuppet Extension - 2D skeletal puppet animation editor (INP/MOC3)
  *
  * Main entry point for the NekoPuppet extension.
  * Provides custom editor for .nkp and .inp files.

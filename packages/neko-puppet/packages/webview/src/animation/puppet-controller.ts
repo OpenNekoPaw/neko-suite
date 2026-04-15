@@ -1,12 +1,12 @@
 /**
- * Inochi2DController — drives 2D puppet rendering via neko-engine HTTP API
+ * PuppetController — drives 2D puppet rendering via neko-engine HTTP API
  *
- * Loads INP files through the engine backend (native-puppet crate),
+ * Loads puppet files (INP legacy / MOC3) through the engine backend (runtime-puppet crate),
  * manages parameter-driven deformation, and provides vertex data
  * for WebGL2 rendering in the puppet editor.
  *
  * Data flow:
- *   INP file → EngineClient.loadPuppet() → PuppetSnapshot (textures, meshes, params)
+ *   Puppet file → EngineClient.loadPuppet() → PuppetSnapshot (textures, meshes, params)
  *   Parameter change → EngineClient.setPuppetParameter() → recomputed vertices
  *   Tick → EngineClient.tickPuppet() → PuppetDelta (deformed meshes)
  */
@@ -22,7 +22,7 @@ import type {
 } from './types';
 
 /** Interface for puppet controller (enables testing/mocking) */
-export interface IInochi2DController {
+export interface IPuppetController {
   /** Load an INP puppet file */
   load(data: ArrayBuffer): Promise<PuppetSnapshot>;
 
@@ -110,7 +110,7 @@ export interface IInochi2DController {
 }
 
 /** Concrete implementation using EngineClient HTTP dispatch */
-export class Inochi2DController implements IInochi2DController {
+export class PuppetController implements IPuppetController {
   private snapshot: PuppetSnapshot | null = null;
   private activeStream: WebSocket | null = null;
   private previewActive = false;

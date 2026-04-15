@@ -1,8 +1,8 @@
 /**
  * AnimationPanel - animation clip list + playback controls for puppet animation
  *
- * Shows available animation clips from the loaded Inochi2D puppet and provides
- * play/stop/seek controls. Connects to the engine backend via IInochi2DController.
+ * Shows available animation clips from the loaded puppet (INP/MOC3) and provides
+ * play/stop/seek controls. Connects to the engine backend via IPuppetController.
  */
 import { useCallback, useState } from 'react';
 import { usePuppetStore } from '../stores/puppet-store';

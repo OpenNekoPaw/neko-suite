@@ -55,4 +55,4 @@
 - [ ] 2D bilinear interpolation (dual-axis key form interpolation for complex parameter bindings)
 - [ ] Real .moc3 model E2E testing (validate parser against production models)
 - [ ] MOC3 texture loading via model3.json (base64 external PNG → ImageBitmap)
-- [ ] Puppet export (INP/MOC3 writer — currently read-only)
+- [ ] Puppet export (MOC3 writer — currently read-only; INP format deprecated, legacy read-only retained)

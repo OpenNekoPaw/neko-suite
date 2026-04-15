@@ -146,7 +146,9 @@
   - [x] Phase 5: Face tracking mapping enhancement (ParamBody/Breath/Cheek/EyeSmile + LIVE2D_PARAM_ALIASES)
 - [ ] **Phase 6**: AI-assisted puppet creation — `PuppetListExpressions` + `PuppetSetExpression` agent tools, template import UI ([plan](./docs/development/neko-puppet-moc3-support.md#phase-6))
 - [ ] **Phase 7**: VTube Studio API compatibility — WebSocket endpoint for VTS plugin interop ([plan](./docs/development/neko-puppet-moc3-support.md#phase-7))
-- [ ] Export functionality: INP/MOC3 writer (currently read-only editor)
+- [ ] Export functionality: MOC3 writer (currently read-only editor; INP format deprecated — legacy read-only support retained)
+- [ ] **motion3/exp3 标准格式导出**: 将 .nkp 自定义动画/表情反向序列化为 .motion3.json / .exp3.json (覆盖 Unity/Unreal Cubism SDK)
+- [ ] **2D 可复用动作资产**: 独立表情/动作预设集 (存 Live2D 标准参数名) — 支持跨 MOC3 模型复用 + marketplace 分享
 - [ ] Advanced physics: cloth constraints + collision detection
 - [ ] × neko-live deep integration: Puppet as real-time VTuber avatar driver
 
@@ -155,6 +157,9 @@
 - [ ] Undo/Redo state machine
 - [ ] AI MCP Tools: `face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] Phase 3.5: Blender MCP bridge / 3DGS loader / rapier3d physics
+- [ ] **glTF animation 回写**: `exporter.rs` 补 animation channel 导出 — 将 .nkm customClips 写回 .glb (覆盖全部 3D 引擎)
+- [ ] **VRM BlendShape preset 回写**: 将 faceParams 写入 VRM extensions JSON (覆盖 VRM 生态)
+- [ ] **3D 可复用动作资产**: 独立动画资产格式 (存 VRM Humanoid bone name 而非 node ID) + 骨骼重定向 retargeting — 支持动作跨 VRM 模型复用 + marketplace 分享
 
 ### neko-engine (Engine Plugin Expansion)
 > [ADR](./docs/architecture/engine-plugin-rfc.md) + [Runtime Layering](./docs/architecture/engine-runtime-layering.md)

@@ -1,7 +1,7 @@
 /**
  * PuppetApp - Root component for the puppet editor
  *
- * Manages Inochi2D puppet loading, parameter control, and animation playback.
+ * Manages puppet loading (INP/MOC3), parameter control, and animation playback.
  * Communicates with the extension host via postMessage protocol.
  */
 import React, { useEffect, useCallback, useRef, useState } from 'react';
@@ -13,7 +13,7 @@ import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { PuppetCanvas } from './components/PuppetCanvas';
 import { parseInpTextures } from './utils/inp-parser';
-import { Inochi2DController } from './animation';
+import { PuppetController } from './animation';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
@@ -129,7 +129,7 @@ function PuppetEmptyState() {
 }
 
 export function PuppetApp() {
-  const controllerRef = useRef<Inochi2DController | null>(null);
+  const controllerRef = useRef<PuppetController | null>(null);
   const { onPlay, onStop, onSeek, onCrossfade } = usePuppetPlayback(controllerRef.current);
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const noPuppetSource = usePuppetStore((s) => s.noPuppetSource);
@@ -150,7 +150,7 @@ export function PuppetApp() {
     switch (msg.type) {
       case 'enginePort': {
         const engine = new EngineClient(msg.port);
-        controllerRef.current = new Inochi2DController(engine);
+        controllerRef.current = new PuppetController(engine);
         break;
       }
 

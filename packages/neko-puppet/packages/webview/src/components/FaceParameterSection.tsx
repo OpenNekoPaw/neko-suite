@@ -2,7 +2,7 @@
  * FaceParameterSection — Groups puppet parameters by standard face categories.
  *
  * Matches the puppet's ParameterInfo[] against the PUPPET_FACE_PARAMETERS
- * template by Inochi2D parameter name. Matched parameters display in
+ * template by standard parameter name. Matched parameters display in
  * categorized collapsible sections. Unmatched parameters display in "Other".
  */
 import { useMemo, useCallback } from 'react';

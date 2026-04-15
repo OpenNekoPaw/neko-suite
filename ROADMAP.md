@@ -46,7 +46,7 @@
 
 | Module | Status | Progress | Description |
 |--------|--------|----------|-------------|
-| **neko-puppet** | Alpha | 92% | **8.5K LOC** + 104 Rust tests; INP + **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + parameter deformation + animation blending + 60fps streaming + Canvas rendering; remaining: AI tools (Phase 6) / VTS API (Phase 7) / export |
+| **neko-puppet** | Alpha | 92% | **8.5K LOC** + 104 Rust tests; **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + INP legacy read-only + parameter deformation + animation blending + 60fps streaming + Canvas rendering; remaining: AI tools (Phase 6) / VTS API (Phase 7) / MOC3 export |
 | **neko-model** | Alpha | 85% | **12.6K LOC** + 49 Rust tests; glTF/VRM + PBR/IBL + CSG + face sculpting + particles + keyframes; remaining: IK UI / Undo / Blender bridging |
 | **neko-live** | Alpha | 55% | **2.6K LOC** + 0 tests; VMC+VRM + Puppet integration + recording; **blocked**: nokhwa crate / MediaPipe / streaming |
 
@@ -391,7 +391,7 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 ### neko-puppet Long-term Roadmap
 
-**Current state**: ~8,500 lines of production code, 104 Rust tests. Supports both INP (.inp) and **Live2D MOC3 (.moc3)** formats.
+**Current state**: ~8,500 lines of production code, 104 Rust tests. Primary format: **Live2D MOC3 (.moc3)** clean-room implementation. INP (.inp) legacy read-only support retained.
 
 | Completed Capability | LOC | Quality |
 |---------------------|-----|---------|
@@ -419,7 +419,7 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 - [ ] Real .moc3 model E2E testing (validate parser against production models from VTube Studio)
 
 **Phase P.1: Enhanced Editing (Mid-term)**
-- [ ] Puppet export (INP/MOC3 writer → save modified puppets; currently read-only)
+- [ ] Puppet export (MOC3 writer → save modified puppets; currently read-only; INP deprecated)
 - [ ] Puppet creation from scratch (drawing tools → mesh → parameter binding, high effort, can delegate to neko-sketch collaboration)
 - [ ] Advanced physics (cloth constraints + collision detection; currently spring/pendulum only)
 - [ ] Video export (currently WebSocket streaming only, lacks H.264 recording to file)

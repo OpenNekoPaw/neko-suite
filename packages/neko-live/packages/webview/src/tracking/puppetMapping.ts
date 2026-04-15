@@ -1,7 +1,7 @@
 /**
  * Maps ARKit-compatible blend shape names (from VMC) to puppet parameter names.
  *
- * Supports both Inochi2D (.inp) and Live2D (.moc3) parameter naming conventions.
+ * Supports INP (legacy) and Live2D (.moc3) parameter naming conventions.
  * Live2D models use standardized names (ParamAngleX, ParamEyeLOpen, etc.).
  *
  * The mapping is applied when avatarType is 'puppet' to translate VMC tracking

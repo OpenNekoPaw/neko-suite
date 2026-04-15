@@ -1,5 +1,5 @@
 /**
- * ParameterPanel - interactive sliders for Inochi2D puppet parameters
+ * ParameterPanel - interactive sliders for puppet parameters
  *
  * Displays all parameters from the loaded puppet with min/max/current values.
  * Slider changes are sent to the engine backend via the controller.
@@ -9,10 +9,10 @@ import { usePuppetStore } from '../stores/puppet-store';
 import { useTranslation } from '../i18n/I18nContext';
 import { FaceParameterSection } from './FaceParameterSection';
 import { PUPPET_FACE_PARAMETERS } from '@neko/shared';
-import type { IInochi2DController } from '../animation';
+import type { IPuppetController } from '../animation';
 
 interface ParameterPanelProps {
-  controller: IInochi2DController | null;
+  controller: IPuppetController | null;
 }
 
 export function ParameterPanel({ controller }: ParameterPanelProps) {
