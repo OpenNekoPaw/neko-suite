@@ -294,6 +294,24 @@ impl IPuppetService for PuppetService {
             .load_moc3_auxiliary(expressions, motions, physics_json)
             .map_err(Error::Other)
     }
+
+    fn export_motion3(&self, clip_name: &str) -> Result<String> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+        world.export_motion3(clip_name).map_err(Error::Other)
+    }
+
+    fn export_expression3(&self, expression_name: &str) -> Result<String> {
+        let mut world = self
+            .world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+        world
+            .export_expression3(expression_name)
+            .map_err(Error::Other)
+    }
 }
 
 #[cfg(test)]

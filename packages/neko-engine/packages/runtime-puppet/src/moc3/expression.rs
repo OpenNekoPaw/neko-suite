@@ -45,10 +45,9 @@ pub struct ExpressionInfo {
 // ─── .exp3.json format ───────────────────────────────────────────────────────
 
 /// Raw .exp3.json file structure
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Exp3Json {
     #[serde(rename = "Type")]
-    #[allow(dead_code)]
     r#type: Option<String>,
     #[serde(rename = "FadeInTime", default = "default_fade_time")]
     fade_in_time: f32,
@@ -58,7 +57,7 @@ struct Exp3Json {
     parameters: Vec<Exp3Parameter>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Exp3Parameter {
     #[serde(rename = "Id")]
     id: String,
@@ -101,6 +100,32 @@ pub fn parse_expression(name: &str, json_str: &str) -> Result<ExpressionDef, Str
         fade_out_time: raw.fade_out_time,
         parameters,
     })
+}
+
+/// Serialize an ExpressionDef back to .exp3.json format.
+pub fn serialize_expression3(expr: &ExpressionDef) -> Result<String, String> {
+    let parameters: Vec<Exp3Parameter> = expr
+        .parameters
+        .iter()
+        .map(|p| Exp3Parameter {
+            id: p.id.clone(),
+            value: p.value,
+            blend: match p.blend {
+                ExpressionBlendMode::Add => "Add".to_string(),
+                ExpressionBlendMode::Multiply => "Multiply".to_string(),
+                ExpressionBlendMode::Override => "Override".to_string(),
+            },
+        })
+        .collect();
+
+    let raw = Exp3Json {
+        r#type: Some("Live2D Expression".to_string()),
+        fade_in_time: expr.fade_in_time,
+        fade_out_time: expr.fade_out_time,
+        parameters,
+    };
+
+    serde_json::to_string_pretty(&raw).map_err(|e| format!("Failed to serialize exp3: {e}"))
 }
 
 /// Apply an expression to parameter values.
@@ -164,6 +189,51 @@ mod tests {
         assert_eq!(expr.fade_in_time, 0.5);
         assert_eq!(expr.fade_out_time, 0.5);
         assert_eq!(expr.parameters[0].blend, ExpressionBlendMode::Add);
+    }
+
+    #[test]
+    fn test_serialize_expression3_round_trip() {
+        let json = r#"{
+            "Type": "Live2D Expression",
+            "FadeInTime": 0.5,
+            "FadeOutTime": 0.3,
+            "Parameters": [
+                { "Id": "ParamEyeLOpen", "Value": 0.0, "Blend": "Add" },
+                { "Id": "ParamMouthForm", "Value": 1.0, "Blend": "Override" }
+            ]
+        }"#;
+        let expr = parse_expression("smile", json).unwrap();
+        let exported = serialize_expression3(&expr).unwrap();
+        let re_parsed = parse_expression("smile", &exported).unwrap();
+
+        assert_eq!(re_parsed.fade_in_time, 0.5);
+        assert_eq!(re_parsed.fade_out_time, 0.3);
+        assert_eq!(re_parsed.parameters.len(), 2);
+        assert_eq!(re_parsed.parameters[0].id, "ParamEyeLOpen");
+        assert!((re_parsed.parameters[0].value - 0.0).abs() < 1e-6);
+        assert_eq!(re_parsed.parameters[0].blend, ExpressionBlendMode::Add);
+        assert_eq!(re_parsed.parameters[1].id, "ParamMouthForm");
+        assert!((re_parsed.parameters[1].value - 1.0).abs() < 1e-6);
+        assert_eq!(re_parsed.parameters[1].blend, ExpressionBlendMode::Override);
+    }
+
+    #[test]
+    fn test_serialize_expression3_defaults_round_trip() {
+        let expr = ExpressionDef {
+            name: "test".to_string(),
+            fade_in_time: 0.5,
+            fade_out_time: 0.5,
+            parameters: vec![ExpressionParameter {
+                id: "Param1".to_string(),
+                value: 0.5,
+                blend: ExpressionBlendMode::Add,
+            }],
+        };
+        let exported = serialize_expression3(&expr).unwrap();
+        let re_parsed = parse_expression("test", &exported).unwrap();
+        assert_eq!(re_parsed.parameters.len(), 1);
+        assert_eq!(re_parsed.parameters[0].blend, ExpressionBlendMode::Add);
+        assert!((re_parsed.parameters[0].value - 0.5).abs() < 1e-6);
     }
 
     #[test]

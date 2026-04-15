@@ -113,4 +113,10 @@ pub trait IPuppetService: Send + Sync {
         motions: &[(String, String)],
         physics_json: Option<&str>,
     ) -> crate::error::Result<()>;
+
+    /// Export an animation clip to .motion3.json format string
+    fn export_motion3(&self, clip_name: &str) -> crate::error::Result<String>;
+
+    /// Export an expression to .exp3.json format string
+    fn export_expression3(&self, expression_name: &str) -> crate::error::Result<String>;
 }

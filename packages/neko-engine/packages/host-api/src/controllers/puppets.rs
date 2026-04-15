@@ -466,6 +466,32 @@ impl Controller for PuppetsController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "export_motion3" => {
+                let clip_name = options
+                    .get("clip_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ApiError::InvalidRequest("clip_name required".to_string()))?;
+                let service = self.service()?;
+                let json_str = service
+                    .export_motion3(clip_name)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                Ok(ActionResponse::ok("", serde_json::json!({ "json": json_str })))
+            }
+
+            "export_expression3" => {
+                let expression_name = options
+                    .get("expression_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest("expression_name required".to_string())
+                    })?;
+                let service = self.service()?;
+                let json_str = service
+                    .export_expression3(expression_name)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                Ok(ActionResponse::ok("", serde_json::json!({ "json": json_str })))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),

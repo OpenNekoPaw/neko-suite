@@ -8,11 +8,11 @@
 //! to avoid modifying the existing EasingType system.
 
 use crate::animation::{AnimationClip, Keyframe, ParameterCurve};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // ─── .motion3.json format ────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Motion3Json {
     #[serde(rename = "Meta")]
     meta: Motion3Meta,
@@ -20,8 +20,7 @@ struct Motion3Json {
     curves: Vec<Motion3Curve>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Motion3Meta {
     #[serde(rename = "Duration")]
     duration: f32,
@@ -35,8 +34,7 @@ struct Motion3Meta {
     fade_out_time: f32,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Motion3Curve {
     #[serde(rename = "Target")]
     target: String,
@@ -93,6 +91,55 @@ pub fn parse_motion(name: &str, json_str: &str) -> Result<AnimationClip, String>
     }
 
     Ok(clip)
+}
+
+/// Serialize an AnimationClip back to .motion3.json format.
+///
+/// Keyframes are emitted as linear segments (type 0). Original Bezier curves
+/// that were sampled during import are exported as their sampled linear points.
+pub fn serialize_motion3(clip: &AnimationClip) -> Result<String, String> {
+    let duration = clip.duration_ms / 1000.0;
+
+    let curves: Vec<Motion3Curve> = clip
+        .curves
+        .iter()
+        .filter(|c| !c.keyframes.is_empty())
+        .map(|curve| {
+            let mut segments = Vec::new();
+            // First point: [time, value]
+            let first = &curve.keyframes[0];
+            segments.push(first.time_ms / 1000.0);
+            segments.push(first.value);
+
+            // Subsequent keyframes as linear segments: [0.0(type), time, value]
+            for kf in &curve.keyframes[1..] {
+                segments.push(SEGMENT_LINEAR as f32);
+                segments.push(kf.time_ms / 1000.0);
+                segments.push(kf.value);
+            }
+
+            Motion3Curve {
+                target: "Parameter".to_string(),
+                id: curve.param_name.clone(),
+                segments,
+                fade_in_time: 0.0,
+                fade_out_time: 0.0,
+            }
+        })
+        .collect();
+
+    let motion = Motion3Json {
+        meta: Motion3Meta {
+            duration,
+            fps: 30.0,
+            r#loop: clip.loop_default,
+            fade_in_time: 0.0,
+            fade_out_time: 0.0,
+        },
+        curves,
+    };
+
+    serde_json::to_string_pretty(&motion).map_err(|e| format!("Failed to serialize motion3: {e}"))
 }
 
 /// Parse the flat segments array into keyframes.
@@ -304,6 +351,41 @@ mod tests {
     #[test]
     fn test_parse_motion_invalid() {
         assert!(parse_motion("bad", "not json").is_err());
+    }
+
+    #[test]
+    fn test_serialize_motion3_round_trip_linear() {
+        let json = r#"{
+            "Meta": { "Duration": 2.0, "Fps": 30, "Loop": true },
+            "Curves": [{
+                "Target": "Parameter",
+                "Id": "ParamAngleX",
+                "Segments": [0.0, 0.0, 0, 1.0, 30.0, 0, 2.0, 0.0],
+                "FadeInTime": 0, "FadeOutTime": 0
+            }]
+        }"#;
+        let clip = parse_motion("wave", json).unwrap();
+        let exported = serialize_motion3(&clip).unwrap();
+        let re_parsed = parse_motion("wave", &exported).unwrap();
+
+        assert_eq!(re_parsed.name, "wave");
+        assert!((re_parsed.duration_ms - clip.duration_ms).abs() < 1.0);
+        assert_eq!(re_parsed.curves.len(), clip.curves.len());
+        assert_eq!(re_parsed.curves[0].param_name, "ParamAngleX");
+        // First and last keyframe values should match
+        let orig = &clip.curves[0].keyframes;
+        let re = &re_parsed.curves[0].keyframes;
+        assert!((orig[0].value - re[0].value).abs() < 1e-3);
+        assert!((orig.last().unwrap().value - re.last().unwrap().value).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_serialize_motion3_empty_clip() {
+        let clip = AnimationClip::create("empty", 1000.0);
+        let exported = serialize_motion3(&clip).unwrap();
+        let re_parsed = parse_motion("empty", &exported).unwrap();
+        assert_eq!(re_parsed.curves.len(), 0);
+        assert!((re_parsed.duration_ms - 1000.0).abs() < 1.0);
     }
 
     #[test]

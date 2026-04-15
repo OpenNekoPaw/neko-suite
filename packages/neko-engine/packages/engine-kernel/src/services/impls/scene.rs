@@ -32,6 +32,8 @@ pub struct SceneService {
     asset_cache: Option<Mutex<AssetCache>>,
     /// CPU-side mesh cache for procedural meshes (needed for CSG lookups)
     procedural_meshes: Mutex<HashMap<String, ProceduralMesh>>,
+    /// VRM face parameter presets (populated from NkmProject on load)
+    face_params: Mutex<HashMap<String, f32>>,
 }
 
 impl SceneService {
@@ -42,6 +44,7 @@ impl SceneService {
             renderer: None,
             asset_cache: None,
             procedural_meshes: Mutex::new(HashMap::new()),
+            face_params: Mutex::new(HashMap::new()),
         }
     }
 
@@ -55,6 +58,7 @@ impl SceneService {
             renderer: Some(Mutex::new(renderer)),
             asset_cache: Some(Mutex::new(asset_cache)),
             procedural_meshes: Mutex::new(HashMap::new()),
+            face_params: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -383,12 +387,34 @@ impl ISceneService for SceneService {
                 .collect()
         };
 
+        // Query animation clips from ECS
+        let animation_clips: Vec<neko_runtime_scene::components::AnimationClipData> = {
+            let ecs = world.ecs_world_mut();
+            let mut query = ecs.query::<&neko_runtime_scene::components::AnimationTarget>();
+            query
+                .iter(ecs)
+                .flat_map(|target| target.clips.iter().cloned())
+                .collect()
+        };
+
         let pm = self
             .procedural_meshes
             .lock()
             .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
 
-        exporter::export_glb(&export_nodes, &pm)
+        let fp = self
+            .face_params
+            .lock()
+            .map_err(|e| Error::Other(format!("Face params lock poisoned: {}", e)))?;
+
+        let clips_ref = if animation_clips.is_empty() {
+            None
+        } else {
+            Some(animation_clips.as_slice())
+        };
+        let fp_ref = if fp.is_empty() { None } else { Some(&*fp) };
+
+        exporter::export_glb(&export_nodes, &pm, clips_ref, fp_ref)
             .map_err(|e| Error::Other(format!("GLB export failed: {}", e)))
     }
 
@@ -478,6 +504,15 @@ impl ISceneService for SceneService {
                     });
                 }
             }
+        }
+
+        // Restore face params for VRM export
+        {
+            let mut fp = self
+                .face_params
+                .lock()
+                .map_err(|e| Error::Other(format!("Face params lock poisoned: {}", e)))?;
+            *fp = project.face_params.clone();
         }
 
         let final_snapshot = world.get_snapshot();

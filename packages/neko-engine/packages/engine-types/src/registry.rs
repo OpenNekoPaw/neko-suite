@@ -205,6 +205,8 @@ pub mod actions {
         "expressions",
         "set_expression",
         "load_auxiliary",
+        "export_motion3",
+        "export_expression3",
     ];
 
     pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];

@@ -185,6 +185,12 @@ pub trait PuppetWorld: Send + Sync {
         motions: &[(String, String)],
         physics_json: Option<&str>,
     ) -> Result<(), String>;
+
+    /// Export an animation clip to .motion3.json format string
+    fn export_motion3(&mut self, clip_name: &str) -> Result<String, String>;
+
+    /// Export an expression to .exp3.json format string
+    fn export_expression3(&mut self, expression_name: &str) -> Result<String, String>;
 }
 
 /// Implementation using bevy_ecs::World
@@ -992,6 +998,34 @@ impl PuppetWorld for BevyPuppetWorld {
         }
 
         Ok(())
+    }
+
+    fn export_motion3(&mut self, clip_name: &str) -> Result<String, String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let lib = self
+            .world
+            .get::<crate::animation::AnimationLibrary>(root)
+            .ok_or("No animation library")?;
+        let clip = lib
+            .clips
+            .iter()
+            .find(|c| c.name == clip_name)
+            .ok_or_else(|| format!("Clip '{}' not found", clip_name))?;
+        moc3::motion::serialize_motion3(clip)
+    }
+
+    fn export_expression3(&mut self, expression_name: &str) -> Result<String, String> {
+        let root = self.find_root().ok_or("No puppet loaded")?;
+        let lib = self
+            .world
+            .get::<ExpressionLibrary>(root)
+            .ok_or("No expression library")?;
+        let expr = lib
+            .expressions
+            .iter()
+            .find(|e| e.name == expression_name)
+            .ok_or_else(|| format!("Expression '{}' not found", expression_name))?;
+        moc3::expression::serialize_expression3(expr)
     }
 }
 
