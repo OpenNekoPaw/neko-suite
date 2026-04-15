@@ -10,9 +10,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
-
-// Get vscode API for postMessage
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+import { VSCodeMessages } from '@/messages';
 
 interface AudioPlayerProps {
   src: string;
@@ -70,9 +68,9 @@ function InlineAudioCard({
   const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
+      VSCodeMessages.openFile(pathToOpen);
     } else {
-      vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
+      VSCodeMessages.openUrl(pathToOpen);
     }
   }, [localPath, src]);
 
@@ -153,10 +151,9 @@ function AudioPlayerComponent({
     const pathToOpen = localPath || src;
     // Check if it's a local file path → open with neko-preview
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
+      VSCodeMessages.openFile(pathToOpen);
     } else {
-      // For URLs, open in browser
-      vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
+      VSCodeMessages.openUrl(pathToOpen);
     }
   }, [localPath, src]);
 

@@ -6,8 +6,7 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+import { VSCodeMessages } from '@/messages';
 
 interface ImageGridCardProps {
   /** Webview-safe image URIs */
@@ -29,9 +28,9 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
       if (!src) return;
 
       if (src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src)) {
-        vscode?.postMessage({ type: 'openFile', filePath: src });
+        VSCodeMessages.openFile(src);
       } else {
-        vscode?.postMessage({ type: 'openUrl', url: src });
+        VSCodeMessages.openUrl(src);
       }
     },
     [localPaths, urls],
@@ -43,10 +42,7 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
       const localPath = localPaths?.[index];
       if (!localPath) return;
       const fileName = localPath.split(/[\\/]/).pop() ?? 'image';
-      vscode?.postMessage({
-        type: 'dnd:start',
-        asset: { path: localPath, mediaType: 'image' as const, name: fileName },
-      });
+      VSCodeMessages.dndStart({ path: localPath, mediaType: 'image', name: fileName });
     },
     [localPaths],
   );

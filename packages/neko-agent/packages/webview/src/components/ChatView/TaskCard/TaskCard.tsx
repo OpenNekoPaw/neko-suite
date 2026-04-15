@@ -6,8 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+import { VSCodeMessages } from '@/messages';
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
@@ -97,7 +96,7 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                vscode?.postMessage({ type: 'retryTask', taskId: task.id });
+                VSCodeMessages.retryTask(task.id);
               }}
               className={compactActionClass}
               title={t('tasks.retry')}
@@ -268,10 +267,7 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
         {firstLocalPath && (
           <button
             onClick={() => {
-              vscode?.postMessage({
-                type: 'revealFile',
-                filePath: firstLocalPath,
-              });
+              VSCodeMessages.revealFile(firstLocalPath);
             }}
             className={compactActionClass}
             title={t('tasks.revealInExplorer')}

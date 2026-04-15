@@ -5,6 +5,12 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  TasksUpdatedMessage,
+  TaskCreatedMessage,
+  TaskUpdatedMessage,
+  TaskRemovedMessage,
+} from './messages';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskHandlers');
@@ -12,21 +18,21 @@ const logger = getLogger('TaskHandlers');
 /**
  * Handle 'tasksUpdated' message - Background tasks list updated
  */
-const handleTasksUpdated: MessageHandler = (message, context) => {
+const handleTasksUpdated: MessageHandler = (message: TasksUpdatedMessage, context) => {
   context.setBackgroundTasks(message.tasks || []);
 };
 
 /**
  * Handle 'taskCreated' message - New background task created
  */
-const handleTaskCreated: MessageHandler = (message, context) => {
+const handleTaskCreated: MessageHandler = (message: TaskCreatedMessage, context) => {
   context.setBackgroundTasks((prev) => [message.task, ...prev]);
 };
 
 /**
  * Handle 'taskUpdated' message - Background task updated
  */
-const handleTaskUpdated: MessageHandler = (message, context) => {
+const handleTaskUpdated: MessageHandler = (message: TaskUpdatedMessage, context) => {
   logger.info('Task updated:', message.task);
   context.setBackgroundTasks((prev) =>
     prev.map((t) =>
@@ -40,7 +46,7 @@ const handleTaskUpdated: MessageHandler = (message, context) => {
 /**
  * Handle 'taskRemoved' message - Background task removed
  */
-const handleTaskRemoved: MessageHandler = (message, context) => {
+const handleTaskRemoved: MessageHandler = (message: TaskRemovedMessage, context) => {
   context.setBackgroundTasks((prev) => prev.filter((t) => t.id !== message.taskId));
 };
 

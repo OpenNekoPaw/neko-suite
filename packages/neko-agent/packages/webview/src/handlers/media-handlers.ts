@@ -9,6 +9,7 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type { MediaTaskCreatedMessage, MediaTaskProgressMessage } from './messages';
 import type { BackgroundTask, TaskStatus, TaskType } from '@/components/TaskListView';
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,7 @@ function mediaTaskToBackgroundTask(task: MediaTask): BackgroundTask {
  * Stops the thinking indicator, adds a BackgroundTask, and appends a
  * synthetic assistant message so the TaskCard renders inline.
  */
-const handleMediaTaskCreated: MessageHandler = (message, context) => {
+const handleMediaTaskCreated: MessageHandler = (message: MediaTaskCreatedMessage, context) => {
   const rawTask = message.task as MediaTask;
   const conversationId = message.conversationId as string | undefined;
 
@@ -169,7 +170,7 @@ const handleMediaTaskCreated: MessageHandler = (message, context) => {
  * Handle 'mediaTaskProgress' — task status/progress updated.
  * Only updates backgroundTasks; TaskCard re-renders automatically.
  */
-const handleMediaTaskProgress: MessageHandler = (message, context) => {
+const handleMediaTaskProgress: MessageHandler = (message: MediaTaskProgressMessage, context) => {
   const rawTask = message.task as MediaTask;
   if (!rawTask) return;
 

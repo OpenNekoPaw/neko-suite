@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { vscode } from '../../hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import { getLogger } from '../../../utils/logger';
 import {
   MermaidIcon,
@@ -240,35 +240,11 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
     }
   }, [code]);
 
-  // Download as SVG
+  // Download as SVG — delegate to Extension Host, fall back to browser download
   const handleDownload = useCallback(() => {
     if (!svg) return;
 
-    if (vscode) {
-      vscode.postMessage({
-        type: 'downloadSvg',
-        svg,
-        filename: 'mermaid-diagram.svg',
-      });
-      return;
-    }
-
-    try {
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mermaid-diagram.svg';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-    } catch (err) {
-      logger.error('Failed to download SVG:', err);
-    }
+    VSCodeMessages.downloadSvg(svg, 'mermaid-diagram.svg');
   }, [svg]);
 
   // Send feedback to LLM about the error
@@ -290,12 +266,7 @@ Please fix the Mermaid syntax. Common issues:
 2. Escape special characters in node labels
 3. Ensure all brackets and quotes are properly matched`;
 
-    vscode?.postMessage({
-      type: 'mermaidError',
-      error,
-      code,
-      feedbackMessage,
-    });
+    VSCodeMessages.mermaidError(error, code, feedbackMessage);
 
     setFeedbackSent(true);
   }, [error, code, feedbackSent]);

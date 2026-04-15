@@ -8,6 +8,16 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  ThinkingMessage,
+  StreamTextMessage,
+  StreamCompleteMessage,
+  StreamThinkingMessage,
+  MessageCancelledMessage,
+  MessageQueuedMessage,
+  AgentPhaseMessage,
+  AgentStateSnapshotMessage,
+} from './messages';
 import type { ContentBlock, AgentPhase, AgentState } from '@/components/types';
 import { updateConversation } from './message-updater';
 
@@ -47,7 +57,7 @@ function findOrCreateContentBlock(
 /**
  * Handle 'thinking' message - AI is processing (indicator only, no content)
  */
-const handleThinking: MessageHandler = (message, context) => {
+const handleThinking: MessageHandler = (message: ThinkingMessage, context) => {
   updateConversation(context, message.conversationId, (msgs) => ({
     messages: msgs,
     isThinking: true,
@@ -57,7 +67,7 @@ const handleThinking: MessageHandler = (message, context) => {
 /**
  * Handle 'streamText' message - Streaming text chunk
  */
-const handleStreamText: MessageHandler = (message, context) => {
+const handleStreamText: MessageHandler = (message: StreamTextMessage, context) => {
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const targetMessageId = message.messageId || streamingId;
     const hasExistingMessage = targetMessageId && streamingId === targetMessageId;
@@ -115,7 +125,7 @@ const handleStreamText: MessageHandler = (message, context) => {
 /**
  * Handle 'streamComplete' message - Streaming finished
  */
-const handleStreamComplete: MessageHandler = (message, context) => {
+const handleStreamComplete: MessageHandler = (message: StreamCompleteMessage, context) => {
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const targetMessageId = message.messageId || streamingId;
 
@@ -149,7 +159,7 @@ const handleStreamComplete: MessageHandler = (message, context) => {
 /**
  * Handle 'streamThinking' message - Stream AI thinking content
  */
-const handleStreamThinking: MessageHandler = (message, context) => {
+const handleStreamThinking: MessageHandler = (message: StreamThinkingMessage, context) => {
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const targetMessageId = message.messageId || streamingId;
     const hasExistingMessage = targetMessageId && streamingId === targetMessageId;
@@ -210,7 +220,7 @@ const handleStreamThinking: MessageHandler = (message, context) => {
 /**
  * Handle 'messageQueued' message - Message was queued while agent is running
  */
-const handleMessageQueued: MessageHandler = (message, context) => {
+const handleMessageQueued: MessageHandler = (message: MessageQueuedMessage, context) => {
   if (context.isCurrentConversation(message.conversationId)) {
     const newId = `queued-${Date.now()}`;
     context.setMessages((prev) => [
@@ -229,7 +239,7 @@ const handleMessageQueued: MessageHandler = (message, context) => {
 /**
  * Handle 'messageCancelled' message - User cancelled message generation
  */
-const handleMessageCancelled: MessageHandler = (message, context) => {
+const handleMessageCancelled: MessageHandler = (message: MessageCancelledMessage, context) => {
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     if (!streamingId) {
       return { messages: msgs, isThinking: false };
@@ -264,7 +274,7 @@ const handleMessageCancelled: MessageHandler = (message, context) => {
 /**
  * Handle 'agentPhase' message - Agent execution phase change
  */
-const handleAgentPhase: MessageHandler = (message, context) => {
+const handleAgentPhase: MessageHandler = (message: AgentPhaseMessage, context) => {
   const phase = message.phase as AgentPhase;
   const toolName = message.toolName as string | undefined;
   const timestamp = (message.timestamp as number) || Date.now();
@@ -304,7 +314,7 @@ const handleAgentPhase: MessageHandler = (message, context) => {
 /**
  * Handle 'agentStateSnapshot' message - restore agent states after webview reload
  */
-const handleAgentStateSnapshot: MessageHandler = (message, context) => {
+const handleAgentStateSnapshot: MessageHandler = (message: AgentStateSnapshotMessage, context) => {
   const agentStates = Array.isArray(message.agentStates) ? message.agentStates : [];
   const nextMap = new Map<string, AgentState>();
 

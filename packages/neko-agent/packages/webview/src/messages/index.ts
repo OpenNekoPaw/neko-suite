@@ -403,4 +403,43 @@ export const VSCodeMessages = {
   openMarketplace: () => {
     postMessage({ type: 'openMarketplace' });
   },
+
+  // -------------------------------------------------------------------------
+  // Outbound actions previously sent via direct vscode.postMessage
+  // -------------------------------------------------------------------------
+
+  /** Open an external URL in the default browser */
+  openUrl: (url: string) => {
+    postMessage({ type: 'openUrl', url });
+  },
+
+  /** Send an asset to another extension (canvas, cut, sketch) */
+  sendToPlugin: (target: string, assetPath: string, mediaType: string) => {
+    postMessage({ type: 'sendToPlugin', target, assetPath, mediaType });
+  },
+
+  /** Retry a failed background task */
+  retryTask: (taskId: string) => {
+    postMessage({ type: 'retryTask', taskId });
+  },
+
+  /** Download a Mermaid diagram as SVG file */
+  downloadSvg: (svg: string, filename: string) => {
+    postMessage({ type: 'downloadSvg', svg, filename });
+  },
+
+  /** Report a Mermaid rendering error — sends feedback as user message to AI */
+  mermaidError: (error: string, code: string, feedbackMessage: string) => {
+    postMessage({ type: 'mermaidError', error, code, feedbackMessage });
+  },
+
+  /** Reveal a file in the OS file manager */
+  revealFile: (filePath: string) => {
+    postMessage({ type: 'revealFile', filePath });
+  },
+
+  /** Notify Extension Host that a drag operation started (DnD) */
+  dndStart: (asset: { path: string; mediaType: string; name: string }) => {
+    postMessage({ type: 'dnd:start', asset });
+  },
 };

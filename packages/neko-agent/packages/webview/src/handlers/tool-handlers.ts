@@ -8,6 +8,13 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  ToolCallMessage,
+  ToolResultMessage,
+  ToolConfirmationMessage,
+  PlanStepStatusUpdateMessage,
+  PlanStatusUpdateMessage,
+} from './messages';
 import type { ContentBlock, ToolCall, Plan, PlanStep, Message } from '@/components/types';
 import { updateConversation } from './message-updater';
 import {
@@ -101,7 +108,7 @@ function findTargetMessageIndex(
  * Handle 'toolCall' message - Tool invocation
  * Creates a tool_call content block; toolCalls[] is auto-derived
  */
-const handleToolCall: MessageHandler = (message, context) => {
+const handleToolCall: MessageHandler = (message: ToolCallMessage, context) => {
   logger.info('handleToolCall received:', {
     conversationId: message.conversationId,
     messageId: message.messageId,
@@ -168,7 +175,7 @@ const handleToolCall: MessageHandler = (message, context) => {
  * Handle 'toolResult' message - Tool execution result
  * Updates the corresponding tool_call content block; toolCalls[] is auto-derived
  */
-const handleToolResult: MessageHandler = (message, context) => {
+const handleToolResult: MessageHandler = (message: ToolResultMessage, context) => {
   const resultData = message.data as Record<string, unknown> | undefined;
 
   logger.info('toolResult received:', {
@@ -269,7 +276,7 @@ const handleToolResult: MessageHandler = (message, context) => {
  * Handle 'toolConfirmation' message - Tool requires user confirmation (ask mode)
  * Updates the corresponding tool_call to show confirmation UI
  */
-const handleToolConfirmation: MessageHandler = (message, context) => {
+const handleToolConfirmation: MessageHandler = (message: ToolConfirmationMessage, context) => {
   const toolCallId = message.toolCallId as string;
 
   logger.info('toolConfirmation received:', {
@@ -320,7 +327,10 @@ const handleToolConfirmation: MessageHandler = (message, context) => {
 /**
  * Handle plan step status update from Extension
  */
-const handlePlanStepStatusUpdate: MessageHandler = (message, context) => {
+const handlePlanStepStatusUpdate: MessageHandler = (
+  message: PlanStepStatusUpdateMessage,
+  context,
+) => {
   const { planId, stepId, status, newDescription, conversationId } = message;
 
   updateConversation(context, conversationId, (msgs) => ({
@@ -331,7 +341,7 @@ const handlePlanStepStatusUpdate: MessageHandler = (message, context) => {
 /**
  * Handle overall plan status update from Extension
  */
-const handlePlanStatusUpdate: MessageHandler = (message, context) => {
+const handlePlanStatusUpdate: MessageHandler = (message: PlanStatusUpdateMessage, context) => {
   const { planId, status, conversationId } = message;
 
   updateConversation(context, conversationId, (msgs) => ({

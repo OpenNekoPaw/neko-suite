@@ -5,12 +5,20 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  SettingsDataMessage,
+  ProjectFilesMessage,
+  ConfigStateMessage,
+  ConfigChangedMessage,
+  McpServerTestResultMessage,
+  PluginCommandsMessage,
+} from './messages';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 
 /**
  * Handle 'settingsData' message - Settings from extension
  */
-const handleSettingsData: MessageHandler = (message, context) => {
+const handleSettingsData: MessageHandler = (message: SettingsDataMessage, context) => {
   // NOTE: Do NOT set configuredProviders here.
   // The complete providers list comes from 'configState' message via handleConfigState.
   // settingsData.configuredProviders only contains providers with apiKey configured,
@@ -51,7 +59,7 @@ const handleSettingsData: MessageHandler = (message, context) => {
 /**
  * Handle 'projectFiles' message - Project file list + optional canvas/story mention extras
  */
-const handleProjectFiles: MessageHandler = (message, context) => {
+const handleProjectFiles: MessageHandler = (message: ProjectFilesMessage, context) => {
   const files: Array<{ path: string; name: string; type: 'file' | 'folder'; icon?: string }> =
     message.files || [];
   context.setProjectFiles(files);
@@ -92,7 +100,7 @@ const handleProjectFiles: MessageHandler = (message, context) => {
  * Handle 'configState' message - Configuration from Platform
  * Only extracts providers (used by AccountBar for isAiConfigured check)
  */
-const handleConfigState: MessageHandler = (message, context) => {
+const handleConfigState: MessageHandler = (message: ConfigStateMessage, context) => {
   if (message.config) {
     const mappedProviders = (message.config.providers || []).map(
       (p: import('@neko/shared').ProviderConfig) => ({
@@ -116,7 +124,7 @@ const handleConfigState: MessageHandler = (message, context) => {
 /**
  * Handle 'configChanged' message - Configuration changed
  */
-const handleConfigChanged: MessageHandler = (_message, _context) => {
+const handleConfigChanged: MessageHandler = (_message: ConfigChangedMessage, _context) => {
   // Refresh both config AND settings when configuration changes
   // getConfig() updates configuredProviders, models, etc.
   // getSettings() updates chatModelOptions (model selector dropdown)
@@ -129,14 +137,17 @@ const handleConfigChanged: MessageHandler = (_message, _context) => {
  * Note: Actual handling is done via addEventListener in index.tsx
  * This handler just marks the message as handled for the registry
  */
-const handleMCPServerTestResult: MessageHandler = (_message, _context) => {
+const handleMCPServerTestResult: MessageHandler = (
+  _message: McpServerTestResultMessage,
+  _context,
+) => {
   // Handled by dedicated listener in index.tsx
 };
 
 /**
  * Handle 'pluginCommands' message - Plugin slash commands from external extensions
  */
-const handlePluginCommands: MessageHandler = (message, context) => {
+const handlePluginCommands: MessageHandler = (message: PluginCommandsMessage, context) => {
   const commands: Array<{
     id: string;
     name: string;

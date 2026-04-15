@@ -208,3 +208,8 @@ export function renderCanvasNode(
   const renderer = registry[context.node.type];
   return renderer ? renderer(context) : null;
 }
+
+// Re-export descriptor types and factory for consumers migrating to the unified registry
+export { createBuiltInNodeTypeDescriptors } from './nodeTypeDescriptors';
+export type { NodeTypeDescriptor, NodeTypeDescriptorRegistry } from './nodeTypeDescriptor';
+export { getNodeLabel, getNodeIcon, getNodeDefaultSize } from './nodeTypeDescriptor';

@@ -10,9 +10,8 @@
  */
 
 import { useState, useCallback, memo } from 'react';
+import { VSCodeMessages } from '@/messages';
 import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
-
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
 
 /** A single shot within a scene */
 interface StoryboardShot {
@@ -82,21 +81,16 @@ function SceneGroup({
   const handleOpenShot = useCallback((shot: StoryboardShot) => {
     const pathToOpen = shot.localPath ?? shot.url;
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
+      VSCodeMessages.openFile(pathToOpen);
     } else {
-      vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
+      VSCodeMessages.openUrl(pathToOpen);
     }
   }, []);
 
   const handleSendToCanvas = useCallback(() => {
     const firstShot = scene.shots[0];
     if (firstShot?.localPath) {
-      vscode?.postMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        assetPath: firstShot.localPath,
-        mediaType: 'image',
-      });
+      VSCodeMessages.sendToPlugin('canvas', firstShot.localPath, 'image');
     }
   }, [scene.shots]);
 

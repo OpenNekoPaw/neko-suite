@@ -4,10 +4,13 @@
  * Manages registration and dispatch of message handlers.
  */
 
+import type { ExtensionToWebviewMessage } from './messages';
 import type { MessageHandler, MessageHandlerContext, HandlerRegistration } from './types';
 
 /**
  * Message handler registry
+ *
+ * Dispatches typed ExtensionToWebviewMessage to registered handlers.
  */
 export class MessageHandlerRegistry {
   private handlers: Map<string, MessageHandler> = new Map();
@@ -29,11 +32,10 @@ export class MessageHandlerRegistry {
   }
 
   /**
-   * Handle a message
+   * Handle a typed message from the Extension Host.
    * @returns true if handled, false if no handler found
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handle(message: any, context: MessageHandlerContext): boolean {
+  handle(message: ExtensionToWebviewMessage, context: MessageHandlerContext): boolean {
     const handler = this.handlers.get(message.type);
     if (handler) {
       handler(message, context);

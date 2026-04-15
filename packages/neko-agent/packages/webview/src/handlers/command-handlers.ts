@@ -5,11 +5,29 @@
  */
 
 import type { MessageHandler, HandlerRegistration, MessageHandlerContext } from './types';
+import type { SlashCommandResultMessage, HistoryClearedMessage } from './messages';
 
 /**
  * Handle 'slashCommandResult' message - Result from slash command execution
  */
-const handleSlashCommandResult: MessageHandler = (message, context) => {
+const handleSlashCommandResult: MessageHandler = (message: SlashCommandResultMessage, context) => {
+  const msgText = message.message ?? '';
+  const msgData = message.data;
+
+  /** Append an assistant message to the chat. */
+  function appendAssistantMessage(content: string, isError?: boolean) {
+    context.setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: 'assistant' as const,
+        content,
+        timestamp: Date.now(),
+        ...(isError ? { isError: true } : {}),
+      },
+    ]);
+  }
+
   if (message.success) {
     // Handle specific actions that require UI state updates
     switch (message.action) {
@@ -17,62 +35,39 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         // Close current conversation tab
         closeCurrentTab(context);
         // Show goodbye message (optional, tab might be closed)
-        if (message.message) {
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: message.message,
-              timestamp: Date.now(),
-            },
-          ]);
+        if (msgText) {
+          appendAssistantMessage(msgText);
         }
         break;
 
       case 'togglePlanMode':
         // Update plan mode in settings
-        if (message.data && typeof message.data.planMode === 'boolean') {
+        if (msgData && typeof msgData.planMode === 'boolean') {
+          const planMode = msgData.planMode;
           context.setSettings((prev) => ({
             ...prev,
-            promptMode: message.data.planMode ? 'plan' : 'default',
+            promptMode: planMode ? 'plan' : 'default',
           }));
         }
         // Show confirmation message
-        if (message.message) {
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: message.message,
-              timestamp: Date.now(),
-            },
-          ]);
+        if (msgText) {
+          appendAssistantMessage(msgText);
         }
         break;
 
       case 'showStatus':
         // Display status information
-        if (message.data) {
+        if (msgData) {
           const statusContent = `**Status:**
-- Provider: ${message.data.provider || 'Not set'}
-- Model: ${message.data.model || 'Not set'}
-- Conversations: ${message.data.conversationCount || 0}
-- Messages in current: ${message.data.messageCount || 0}
-- Context tokens: ${message.data.tokenCount || 0}
-- Active skill: ${message.data.activeSkill || 'None'}
-- Plan mode: ${message.data.planMode ? 'Enabled' : 'Disabled'}
-- Execution mode: ${message.data.executionMode || 'normal'}`;
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: statusContent,
-              timestamp: Date.now(),
-            },
-          ]);
+- Provider: ${msgData.provider || 'Not set'}
+- Model: ${msgData.model || 'Not set'}
+- Conversations: ${msgData.conversationCount || 0}
+- Messages in current: ${msgData.messageCount || 0}
+- Context tokens: ${msgData.tokenCount || 0}
+- Active skill: ${msgData.activeSkill || 'None'}
+- Plan mode: ${msgData.planMode ? 'Enabled' : 'Disabled'}
+- Execution mode: ${msgData.executionMode || 'normal'}`;
+          appendAssistantMessage(statusContent);
         }
         break;
 
@@ -107,13 +102,7 @@ const handleSlashCommandResult: MessageHandler = (message, context) => {
         break;
 
       case 'initProject':
-        // Show project initialization message
-        context.setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: `**Project Initialization**
+        appendAssistantMessage(`**Project Initialization**
 
 To initialize your project, you can:
 1. Create a \`.neko/\` directory in your project root
@@ -121,75 +110,39 @@ To initialize your project, you can:
 3. Add commands in \`.neko/commands/\` directory
 4. Configure hooks in \`.neko/hooks/\` directory
 
-Or use the Settings panel to configure providers and models.`,
-            timestamp: Date.now(),
-          },
-        ]);
+Or use the Settings panel to configure providers and models.`);
         break;
 
       case 'resumeConversation':
         // Show conversation list for resuming
-        if (message.data?.conversations && Array.isArray(message.data.conversations)) {
-          const conversationList = message.data.conversations
+        if (msgData?.conversations && Array.isArray(msgData.conversations)) {
+          const conversationList = (
+            msgData.conversations as Array<{ title: string; messageCount: number }>
+          )
             .slice(0, 5)
-            .map(
-              (c: { title: string; messageCount: number }, i: number) =>
-                `${i + 1}. **${c.title}** (${c.messageCount} messages)`,
-            )
+            .map((c, i) => `${i + 1}. **${c.title}** (${c.messageCount} messages)`)
             .join('\n');
 
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: conversationList
-                ? `**Recent Conversations:**\n${conversationList}\n\nClick on a conversation in the sidebar to resume it.`
-                : 'No conversations to resume. Start a new chat!',
-              timestamp: Date.now(),
-            },
-          ]);
+          appendAssistantMessage(
+            conversationList
+              ? `**Recent Conversations:**\n${conversationList}\n\nClick on a conversation in the sidebar to resume it.`
+              : 'No conversations to resume. Start a new chat!',
+          );
         } else {
-          // Fallback: show generic message
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content:
-                'Use the conversation list in the sidebar to resume a previous conversation.',
-              timestamp: Date.now(),
-            },
-          ]);
+          appendAssistantMessage(
+            'Use the conversation list in the sidebar to resume a previous conversation.',
+          );
         }
         break;
 
       default:
         // Show success message if provided
-        if (message.message) {
-          context.setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: message.message,
-              timestamp: Date.now(),
-            },
-          ]);
+        if (msgText) {
+          appendAssistantMessage(msgText);
         }
     }
   } else {
-    // Show error message
-    context.setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: message.error || 'Command failed',
-        timestamp: Date.now(),
-        isError: true,
-      },
-    ]);
+    appendAssistantMessage(message.error || 'Command failed', true);
   }
 };
 
@@ -228,7 +181,7 @@ function closeCurrentTab(context: MessageHandlerContext): void {
 /**
  * Handle 'historyCleared' message - Conversation history cleared
  */
-const handleHistoryCleared: MessageHandler = (_message, context) => {
+const handleHistoryCleared: MessageHandler = (_message: HistoryClearedMessage, context) => {
   // Clear messages in UI
   context.setMessages([]);
 };

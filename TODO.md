@@ -41,14 +41,14 @@
 - [ ] Continue converging peripheral bridge interfaces (keep `nodes.update/create` unified contract stable)
 - [ ] Message semantic refinement (new message types extend tool layer first, not direct global object access)
 - [ ] Batch candidate comparator + stronger review UI experience
-- [ ] `NodeRendererRegistry` extension: metadata, icons, default sizes, property panel schema converge into registry
+- [x] `NodeRendererRegistry` extension: metadata, icons, default sizes, property panel schema converge into registry
 - [ ] `asset` namespace boundary cleanup: push `neko-assets` to provide formal extension API, replace command-level proxy
 
 ### neko-agent (AI Assistant) — P0-2: Webview Architecture
 > [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10. Top-level controller bloat + weak message contracts.
-- [ ] **Decompose `AIAssistant` component** (~589 lines) → `AppShell` + `ConversationController` + `ChatWorkspace`
-- [ ] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
-- [ ] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
+- [x] **Decompose `AIAssistant` component** (~589 lines) → `AppShell` + `ConversationController` + `ChatWorkspace`
+- [x] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
+- [x] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
 
 ### neko-engine (Engine)
 - [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
@@ -338,4 +338,4 @@
 
 ---
 
-*Last updated: 2026-04-09 (Sprint 2 convergence: canvas P0 fully closed + story state persistence + semantic storyboard pipeline end-to-end)*
+*Last updated: 2026-04-15 (neko-agent Webview P0 complete: AppShell/ConversationController/ChatWorkspace split + typed message protocol + unified outbound gateway; neko-canvas NodeTypeDescriptor unified registry)*

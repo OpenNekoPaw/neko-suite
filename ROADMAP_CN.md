@@ -18,10 +18,10 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
-| **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估；剩余：MCP 重连退避 + **Webview 架构优化**（[ADR](./docs/architecture/neko-agent-webview-optimization.md)） |
+| **neko-agent** | Alpha | 99% | **0 TODO**，108 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + **Webview P0 完成** ✅（AppShell/ConversationController/ChatWorkspace 三层拆分 + 类型化消息协议 + 统一出站网关）；剩余：MCP 重连退避 + P1 Zustand 迁移（[ADR](./docs/architecture/neko-agent-webview-optimization.md)） |
 | **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
 | **neko-story** | Alpha | 95% | **0 TODO(P0)**，155+ 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore 跨会话持久化；Story→Agent→Canvas 语义流水线已贯通（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
-| **neko-canvas** | Alpha | 90% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅（协议统一 + 消息封装 + 审查闭环 + SceneGroupNode 语义容器 + 创作入口覆盖）+ P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry；剩余 P1 增强（[ADR](./docs/architecture/canvas-role-boundary.md)） |
+| **neko-canvas** | Alpha | 92% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor 注册表** ✅（标签/图标/默认尺寸收敛；属性面板因循环依赖仍独立）；剩余 P1 增强（[ADR](./docs/architecture/canvas-role-boundary.md)） |
 | **neko-preview** | Alpha | 86% | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅**；一期剩余：FDX；二期：XLSX/PPTX |
 | **neko-assets** | Alpha | 88% | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：L1-L3 缓存（依赖 Engine 新 action） |
 | **neko-market** | Alpha | 88% | **~4.4K LOC**；React Webview 完整实现（Browse/Installed/Updates + Zustand + i18n）+ market-core 58 tests；剩余：Registry Server 对接（neko-hub） |
@@ -162,7 +162,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ **P1-4：NodeRendererRegistry** — 替代核心渲染分发硬编码，新节点通过注册表扩展
 - ✅ **P1：asset 代理边界** — 收敛为 `neko-assets` 受限代理 + `timelineSync` 最小回流契约
 - ✅ `.nkc-ops` 操作历史持久化 + AI 来源过滤
-- [ ] P1：`NodeRendererRegistry` 扩展（metadata/图标/属性面板 schema 收敛到注册表）
+- ✅ **P1：`NodeTypeDescriptor` 统一注册表** — 标签/图标/默认尺寸收敛为每节点类型单一描述符；PropertyPanel 标签 + nodeFactory 尺寸已迁移；属性面板渲染器因循环依赖约束仍留在 PropertyPanel
 - [ ] P1：`asset` 命名空间清理（推动 `neko-assets` 提供正式扩展 API）
 - [ ] P2：批量候选对比器 + 更强审阅 UI
 - [ ] P2：角色一致性（@引用素材 → IP-Adapter reference 注入）
@@ -184,11 +184,11 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P2：导出往返测试套件
 - [ ] 底层原生 composite 协议扩展（当前 text/subtitle/shape 走 Webview overlay）
 
-### neko-agent — Webview 架构优化待做
-> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10
-- [ ] **P0：拆分 `AIAssistant`**（~589 LOC）→ `AppShell` + `ConversationController` + `ChatWorkspace`
-- [ ] **P0：统一出站消息网关** — 所有 Webview→Extension 通过 `VSCodeMessages` 构建器
-- [ ] **P0：强化入站类型** — `ExtensionToWebviewMessage` 区分联合类型 + 类型化处理器
+### neko-agent — Webview 架构优化（P0 完成 ✅）
+> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10 → P0 已解决
+- ✅ **P0：拆分 `AIAssistant`**（~589 LOC）→ `AppShell` + `ConversationController` + `ChatWorkspace`
+- ✅ **P0：统一出站消息网关** — 所有 Webview→Extension 通过 `VSCodeMessages` 构建器；9 个文件已迁移，组件零直接 postMessage
+- ✅ **P0：强化入站类型** — `ExtensionToWebviewMessage` 判别联合（38 种类型）+ 10 个领域文件类型化处理器
 - [ ] P1：Zustand 状态管理迁移（对齐 cut/canvas/model Webview 模式）
 - [ ] P1：拆分 `InputAreaContext` → `ModelContext` + `MentionContext` + `GenerationContext`
 - [ ] P2：消息追踪（trace ID 注入 + 结构化审计链路）
@@ -612,4 +612,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新：2026-04-09（Sprint 2 收敛：canvas P0 全部闭环 + story 状态持久化 + 语义分镜流水线贯通；Phase 3 ~88%）*
+*最后更新：2026-04-15（neko-agent Webview P0 完成 + neko-canvas NodeTypeDescriptor 统一注册表；Phase 3 ~89%）*

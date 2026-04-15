@@ -5,9 +5,7 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-
-// Get vscode API for postMessage
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+import { VSCodeMessages } from '@/messages';
 
 interface ImagePreviewProps {
   src: string;
@@ -65,10 +63,9 @@ function ImagePreviewComponent({
     const pathToOpen = localPath || src;
     // Check if it's a local file path
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      vscode?.postMessage({ type: 'openFile', filePath: pathToOpen });
+      VSCodeMessages.openFile(pathToOpen);
     } else {
-      // For URLs, open in browser
-      vscode?.postMessage({ type: 'openUrl', url: pathToOpen });
+      VSCodeMessages.openUrl(pathToOpen);
     }
   }, [localPath, src]);
 

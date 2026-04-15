@@ -5,6 +5,11 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  ContextTokenCountMessage,
+  CompressionResultMessage,
+  CompressionErrorMessage,
+} from './messages';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ContextHandlers');
@@ -12,7 +17,7 @@ const logger = getLogger('ContextHandlers');
 /**
  * Handle 'contextTokenCount' - Token count update for a conversation
  */
-const handleContextTokenCount: MessageHandler = (message, context) => {
+const handleContextTokenCount: MessageHandler = (message: ContextTokenCountMessage, context) => {
   if (message.conversationId) {
     context.conversationTokenCountRef.current.set(message.conversationId, message.tokenCount || 0);
     // Trigger re-render if it's the current conversation
@@ -25,7 +30,7 @@ const handleContextTokenCount: MessageHandler = (message, context) => {
 /**
  * Handle 'compressionResult' - Compression completed for a conversation
  */
-const handleCompressionResult: MessageHandler = (message, context) => {
+const handleCompressionResult: MessageHandler = (message: CompressionResultMessage, context) => {
   if (message.conversationId) {
     context.conversationCompressingRef.current.set(message.conversationId, false);
     context.conversationTokenCountRef.current.set(
@@ -42,7 +47,7 @@ const handleCompressionResult: MessageHandler = (message, context) => {
 /**
  * Handle 'compressionError' - Compression failed for a conversation
  */
-const handleCompressionError: MessageHandler = (message, context) => {
+const handleCompressionError: MessageHandler = (message: CompressionErrorMessage, context) => {
   if (message.conversationId) {
     context.conversationCompressingRef.current.set(message.conversationId, false);
     if (message.conversationId === context.activeConversationIdRef.current) {

@@ -41,14 +41,14 @@
 - [ ] 继续收敛周边桥接接口（保持 `nodes.update/create` 统一契约不分叉）
 - [ ] 消息语义细化（新增消息类型优先扩展工具层，而非直接访问全局对象）
 - [ ] 批量候选对比器 + 更强的审阅 UI 体验
-- [ ] `NodeRendererRegistry` 扩展：metadata、图标、默认尺寸、属性面板 schema 收敛到注册表
+- [x] `NodeRendererRegistry` 扩展：metadata、图标、默认尺寸、属性面板 schema 收敛到注册表
 - [ ] `asset` 命名空间边界清理：推动 `neko-assets` 提供正式扩展 API，替代 command 级代理
 
-### neko-agent（AI 助手）— P0-2：Webview 架构
-> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10。顶层控制器膨胀 + 消息契约薄弱。
-- [ ] **拆分 `AIAssistant` 组件**（~589 行）→ `AppShell` + `ConversationController` + `ChatWorkspace`
-- [ ] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
-- [ ] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
+### neko-agent（AI 助手）— P0-2：Webview 架构（P0 完成 ✅）
+> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10 → P0 已解决。
+- [x] **拆分 `AIAssistant` 组件**（~589 行）→ `AppShell` + `ConversationController` + `ChatWorkspace`
+- [x] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
+- [x] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
 
 ### neko-engine（引擎）
 - [ ] 新增 action：`documents:text-extract` / `models:clip-embed` / `text:stats`（action registry 中不存在）
@@ -321,4 +321,4 @@
 
 ---
 
-*最后更新：2026-04-09（Sprint 2 收敛：canvas P0 全部闭环 + story 状态持久化 + 语义分镜流水线贯通）*
+*最后更新：2026-04-15（neko-agent Webview P0 完成：AppShell/ConversationController/ChatWorkspace 三层拆分 + 类型化消息协议 + 统一出站网关；neko-canvas NodeTypeDescriptor 统一注册表）*

@@ -5,11 +5,12 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type { TabStateMessage } from './messages';
 
 /**
  * Handle 'tabState' message - Restore tab state from extension
  */
-const handleTabState: MessageHandler = (message, context) => {
+const handleTabState: MessageHandler = (message: TabStateMessage, context) => {
   if (message.tabState) {
     const { openTabs, activeTabId } = message.tabState;
 

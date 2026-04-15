@@ -1,7 +1,7 @@
 # neko-agent Webview 设计评估与优化建议
 
-**状态**: 分析文档  
-**日期**: 2026-04-08  
+**状态**: P0 已实现 | P1/P2 待做  
+**日期**: 2026-04-08（评估）/ 2026-04-15（P0 实现）  
 **范围**: `packages/neko-agent/packages/webview`
 
 ---
@@ -295,48 +295,38 @@ Webview 不是把所有来自 Extension 的消息堆进一个大 `switch`，而�
 
 ## 四、优化路线图
 
-### P0：先做架构收口
+### P0：架构收口 ✅（2026-04-15 完成）
 
-#### 1. 拆分 `AIAssistant`
+#### 1. 拆分 `AIAssistant` ✅
 
-建议拆为三层：
+已拆为三层：
 
-- `AppShell`
-- `ConversationController`
-- `ChatWorkspace`
+- `AppShell`（~80 LOC）— 全局 config/resource hooks + onboarding 生命周期
+- `ConversationController`（~350 LOC）— 会话状态 + per-conversation ref Maps + 消息处理器 + Tab/会话 CRUD
+- `ChatWorkspace`（~300 LOC）— UI 状态 + 模型推导 + 行为 hooks + InputArea+ChatView 组合
 
-目标：
+关键文件：
+- `src/components/AppShell.tsx`
+- `src/components/ConversationController.tsx`
+- `src/components/ChatWorkspace.tsx`
+- `src/components/index.tsx`（薄层 re-export）
 
-- 根组件只保留装配职责
-- 会话编排和消息路由独立
-- 视图组合与状态装配解耦
+#### 2. 统一出站消息入口 ✅
 
-#### 2. 统一出站消息入口
+已完成：
 
-要求：
+- `VSCodeMessages` 新增 7 个方法（`openUrl`/`sendToPlugin`/`retryTask`/`saveDiagram`/`mermaidError`/`revealFile`/`dndStart`）
+- 9 个组件文件（20+ 调用点）已迁移：`SendToMenu`、`TaskCard`、`ToolCallDisplay`、`ImagePreview`、`ImageGridCard`、`VideoCard`、`AudioCard`、`StoryboardMessage`、`MermaidBlock`
+- 组件目录内零直接 `vscode?.postMessage(...)` 调用
 
-- 所有 Webview → Extension 消息统一走 `VSCodeMessages`
-- 禁止组件直接 `vscode?.postMessage(...)`
+#### 3. 强化入站消息类型 ✅
 
-收益：
+已完成：
 
-- 协议统一
-- 更容易加日志、追踪、兼容层
-- 更容易批量重构
-
-#### 3. 强化入站消息类型
-
-要求：
-
-- 定义 `ExtensionToWebviewMessage` 判别联合类型
-- `MessageHandler` 不再接受 `any`
-- `registry.handle()` 改为强类型
-
-收益：
-
-- 协议变更更安全
-- handler 更可维护
-- 编译期即可发现 drift
+- `ExtensionToWebviewMessage` 判别联合类型（38 种消息接口）定义于 `src/handlers/messages.ts`
+- `MessageHandlerRegistry.handle()` 参数从 `any` 改为 `ExtensionToWebviewMessage`
+- 10 个 handler 领域文件全部添加显式消息参数类型
+- 新增 `TypedMessageHandler<T>` 泛型 + `MessageOfType<T>` 工具类型
 
 ### P1：收敛状态管理方案
 

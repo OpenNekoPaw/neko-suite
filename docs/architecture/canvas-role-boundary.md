@@ -404,21 +404,27 @@ Agent 擅长理解的对象是：
 - 只有前者才允许进入 `cut -> canvas` 契约
 - 下一步如需扩展，优先考虑：选中镜头、导出视频缩略图、渲染产物引用
 
-### P1-4 节点渲染注册表已完成首轮落地
+### P1-4 节点渲染注册表 — 两轮落地完成 ✅
 
-现状：
+**首轮**（2026-04-09）：
+- `NodeRendererRegistry` 替代核心渲染分发硬编码
+- 新节点类型可通过注册表扩展渲染入口
 
-- `NodeRendererRegistry` 已替代核心渲染分发硬编码
-- 新节点类型已可通过注册表扩展渲染入口
+**二轮**（2026-04-15）：
+- `NodeTypeDescriptor` 统一描述符接口：将 renderer / labelKey / icon / defaultSize / propertiesRenderer 收敛为每节点类型单一注册项
+- `createBuiltInNodeTypeDescriptors()` 工厂覆盖全部 13 种节点类型
+- `PropertyPanel` 标签从 `getNodeTypeLabel()` 硬编码 → `getNodeLabel(descriptors, type, t)` 注册表查找
+- `nodeFactory.ts` 13 处默认尺寸从 switch 硬编码 → `getNodeDefaultSize(descriptors, type)`
+- 访问器函数：`getNodeLabel` / `getNodeIcon` / `getNodeDefaultSize` / `getNodePropertiesRenderer`
 
-风险：
+关键文件：
+- `src/components/nodes/nodeTypeDescriptor.ts` — 接口 + 访问器
+- `src/components/nodes/nodeTypeDescriptors.tsx` — 13 节点描述符注册
+- `src/components/panels/PropertyPanel.tsx` — 消费者已迁移
+- `src/utils/nodeFactory.ts` — 消费者已迁移
 
-- 当前注册表主要覆盖渲染分发
-- metadata、属性面板 schema 等扩展点仍未完全外置
-
-建议：
-
-- 继续把节点 metadata、图标、默认尺寸、属性面板 schema 收敛到注册表周边
+剩余：
+- CanvasToolbar 图标仍为内联 emoji（可选迁移，不影响功能）
 - 为后续插件化节点扩展预留更稳定的声明式接口
 
 ### P1-5 事件契约已细化到可支撑主链路

@@ -5,6 +5,12 @@
  */
 
 import type { MessageHandler, HandlerRegistration } from './types';
+import type {
+  ErrorMessage,
+  HistoryClearedMessage,
+  ConversationListMessage,
+  ActiveConversationMessage,
+} from './messages';
 import type { OpenTab, Message } from '@/components/types';
 import type { BackgroundTask } from '@/components/TaskListView';
 import {
@@ -140,7 +146,7 @@ function rehydrateBackgroundTasks(messages: Message[]): BackgroundTask[] {
 /**
  * Handle 'error' message - Error occurred
  */
-const handleError: MessageHandler = (message, context) => {
+const handleError: MessageHandler = (message: ErrorMessage, context) => {
   const errorMsg = message.message || 'An error occurred';
   if (context.isCurrentConversation(message.conversationId)) {
     context.setIsThinking(false);
@@ -175,7 +181,7 @@ const handleError: MessageHandler = (message, context) => {
 /**
  * Handle 'historyCleared' message - Conversation cleared
  */
-const handleHistoryCleared: MessageHandler = (_message, context) => {
+const handleHistoryCleared: MessageHandler = (_message: HistoryClearedMessage, context) => {
   context.setMessages([]);
   context.setStreamingMessageId(null);
   context.setIsThinking(false);
@@ -189,14 +195,14 @@ const handleHistoryCleared: MessageHandler = (_message, context) => {
 /**
  * Handle 'conversationList' message - List of conversations
  */
-const handleConversationList: MessageHandler = (message, context) => {
+const handleConversationList: MessageHandler = (message: ConversationListMessage, context) => {
   context.setConversations(message.conversations || []);
 };
 
 /**
  * Handle 'activeConversation' message - Active conversation changed
  */
-const handleActiveConversation: MessageHandler = (message, context) => {
+const handleActiveConversation: MessageHandler = (message: ActiveConversationMessage, context) => {
   if (message.conversation) {
     const convId = message.conversation.id;
 
@@ -230,12 +236,13 @@ const handleActiveConversation: MessageHandler = (message, context) => {
 
     context.setActiveConversationId(convId);
 
-    const existingTab = context.openTabs.find((t) => t.conversationId === message.conversation.id);
+    const convTitle = message.conversation.title || 'New Chat';
+    const existingTab = context.openTabs.find((t) => t.conversationId === convId);
     if (!existingTab) {
       const newTab: OpenTab = {
         id: `tab-${Date.now()}`,
-        title: message.conversation.title || 'New Chat',
-        conversationId: message.conversation.id,
+        title: convTitle,
+        conversationId: convId,
       };
       context.setOpenTabs((prev) => [...prev, newTab]);
       context.setActiveTabId(newTab.id);

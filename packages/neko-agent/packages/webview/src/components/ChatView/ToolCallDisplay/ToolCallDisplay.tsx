@@ -37,7 +37,6 @@ import {
 } from './icons';
 
 const logger = getLogger('ToolCallDisplay');
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall;
@@ -53,7 +52,7 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
   }, []);
 
   const handleOpenFile = useCallback((filePath: string) => {
-    vscode?.postMessage({ type: 'openFile', filePath });
+    VSCodeMessages.openFile(filePath);
   }, []);
 
   const handleConfirm = useCallback(

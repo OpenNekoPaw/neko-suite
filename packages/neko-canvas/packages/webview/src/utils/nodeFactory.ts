@@ -9,6 +9,10 @@ import type {
   ShotCharacter,
 } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
+import { createBuiltInNodeTypeDescriptors } from '../components/nodes/nodeTypeDescriptors';
+import { getNodeDefaultSize } from '../components/nodes/nodeTypeDescriptor';
+
+const NODE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
 
 interface BuildCanvasNodeOptions {
   type: CanvasNodeType;
@@ -91,7 +95,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 200, height: 100 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           content: asString(data.content, ''),
@@ -115,7 +119,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 240, height: 160 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           title: asString(data.title, ''),
@@ -128,7 +132,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 260, height: 120 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           content: asString(data.content, ''),
@@ -140,7 +144,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 640, height: 360 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           name: asString(data.name, 'Artboard'),
@@ -161,7 +165,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 220, height: 200 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           shotNumber: asNumber(data.shotNumber, zIndex + 1),
@@ -230,7 +234,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 600, height: 300 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           sceneTitle: asString(data.sceneTitle, 'Scene'),
@@ -295,7 +299,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 280, height: 220 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           scriptPath: asString(data.scriptPath, ''),
@@ -308,7 +312,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 220, height: 280 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           docPath: asString(data.docPath, ''),
@@ -321,7 +325,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 240, height: 160 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         ports:
           inferModelRole(data.role) === 'workflow'
@@ -347,7 +351,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 220, height: 180 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           canvasPath: asString(data.canvasPath, ''),
@@ -359,7 +363,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: { width: 320, height: 220 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
         zIndex,
         data: {
           childIds: asStringArray(data.childIds),
@@ -371,7 +375,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type: 'annotation',
         position,
-        size: { width: 200, height: 100 },
+        size: getNodeDefaultSize(NODE_DESCRIPTORS, 'annotation'),
         zIndex,
         data: { content: '' },
       };

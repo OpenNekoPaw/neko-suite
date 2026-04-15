@@ -13,6 +13,8 @@ import type { CanvasNode, CanvasConnection, CanvasNodeType, ConnectionType } fro
 import { CollapsibleSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
+import { getNodeLabel } from '../nodes/nodeTypeDescriptor';
+import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 
 // =============================================================================
 // Types
@@ -112,7 +114,7 @@ export function PropertyPanel({
         title={
           isMulti
             ? t('panel.multiSelected', { count: selectedNodes.length })
-            : getNodeTypeLabel(node.type)
+            : getNodeLabel(NODE_TYPE_DESCRIPTORS, node.type as CanvasNodeType, t)
         }
       />
 
@@ -317,7 +319,7 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
             className="flex items-center justify-between text-xs"
             style={{ color: 'var(--neko-fg)' }}
           >
-            <span>{getNodeTypeLabel(type)}</span>
+            <span>{getNodeLabel(NODE_TYPE_DESCRIPTORS, type as CanvasNodeType, t)}</span>
             <span style={{ color: 'var(--neko-fg-secondary)' }}>×{count}</span>
           </div>
         ))}
@@ -330,7 +332,7 @@ function NodeSpecificProperties({ node, onUpdateData }: NodeSpecificPropertiesPr
   return renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData });
 }
 
-function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+export function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
   return (
     <CollapsibleSection title={t('panel.content')}>
@@ -355,7 +357,7 @@ function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificProperties
   );
 }
 
-function StoryboardNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+export function StoryboardNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
   return (
     <CollapsibleSection title={t('panel.storyboard')}>
@@ -397,7 +399,7 @@ function StoryboardNodeProperties({ node, onUpdateData }: NodeSpecificProperties
   );
 }
 
-function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+export function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
   const textStyle = (data.style as Record<string, unknown>) ?? {};
   return (
@@ -505,7 +507,7 @@ function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps)
   );
 }
 
-function GroupNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
+export function GroupNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
   const childIds = (data.childIds as string[]) ?? [];
   return (
@@ -568,7 +570,7 @@ function GroupNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps
   );
 }
 
-function MediaNodeProperties({ node }: NodeSpecificPropertiesProps) {
+export function MediaNodeProperties({ node }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
   return (
     <CollapsibleSection title={t('panel.media')}>
@@ -623,6 +625,7 @@ export function renderNodeSpecificProperties(
 }
 
 const NODE_PROPERTIES_RENDERERS = createBuiltInNodePropertiesRendererRegistry();
+const NODE_TYPE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
 
 // =============================================================================
 // Creator node property panels
@@ -801,7 +804,7 @@ function SelectField({
   );
 }
 
-function ShotProperties({
+export function ShotProperties({
   data,
   onUpdateData,
 }: {
@@ -884,7 +887,7 @@ function ShotProperties({
   );
 }
 
-function SceneProperties({
+export function SceneProperties({
   data,
   onUpdateData,
 }: {
@@ -925,7 +928,7 @@ function SceneProperties({
   );
 }
 
-function GalleryProperties({
+export function GalleryProperties({
   data,
   onUpdateData,
 }: {
@@ -1035,24 +1038,7 @@ function ConnectionProperties({
 // Helpers
 // =============================================================================
 
-function getNodeTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    media: t('node.media'),
-    storyboard: t('node.storyboard'),
-    annotation: t('toolbar.annotation'),
-    group: t('node.group'),
-    text: t('toolbar.text'),
-    artboard: t('node.artboard'),
-    shot: t('node.shot'),
-    scene: t('node.sceneGroup'),
-    gallery: t('node.gallery'),
-    script: t('node.script'),
-    document: t('node.document'),
-    model: t('node.model'),
-    'canvas-embed': t('node.canvasEmbed'),
-  };
-  return labels[type] ?? type;
-}
+// getNodeTypeLabel removed — now sourced from NodeTypeDescriptorRegistry via getNodeLabel()
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);

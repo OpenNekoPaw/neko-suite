@@ -9,8 +9,7 @@
  */
 
 import { memo, useCallback } from 'react';
-
-const vscode = (window as { vscode?: { postMessage: (msg: unknown) => void } }).vscode;
+import { VSCodeMessages } from '@/messages';
 
 /** Which plugins are installed */
 export interface PluginsAvailable {
@@ -69,12 +68,7 @@ const TARGETS: TargetConfig[] = [
 function SendToMenuComponent({ assetPath, mediaType, plugins, className }: SendToMenuProps) {
   const handleSendTo = useCallback(
     (target: SendToTarget) => {
-      vscode?.postMessage({
-        type: 'sendToPlugin',
-        target,
-        assetPath,
-        mediaType,
-      });
+      VSCodeMessages.sendToPlugin(target, assetPath, mediaType);
     },
     [assetPath, mediaType],
   );

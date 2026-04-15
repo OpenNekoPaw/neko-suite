@@ -5,6 +5,7 @@
  */
 
 import type { MutableRefObject } from 'react';
+import type { ExtensionToWebviewMessage, MessageOfType } from './messages';
 import type {
   Message,
   ConversationSummary,
@@ -155,11 +156,25 @@ export interface MessageHandlerContext
 }
 
 /**
- * Message handler function signature
+ * Message handler function signature.
+ *
+ * @deprecated Prefer TypedMessageHandler for new handlers.
+ * Retained for backward compatibility during incremental migration.
  */
 export type MessageHandler = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   message: any,
+  context: MessageHandlerContext,
+) => void;
+
+/**
+ * Type-safe message handler that receives a narrowed message type.
+ *
+ * Usage: `const handler: TypedMessageHandler<'streamText'> = (message, ctx) => { ... }`
+ * The `message` parameter is automatically narrowed to `StreamTextMessage`.
+ */
+export type TypedMessageHandler<T extends ExtensionToWebviewMessage['type']> = (
+  message: MessageOfType<T>,
   context: MessageHandlerContext,
 ) => void;
 

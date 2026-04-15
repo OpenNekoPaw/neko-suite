@@ -18,10 +18,10 @@
 | Module | Status | Progress | Description |
 |--------|--------|----------|-------------|
 | **neko-engine** | Alpha | 98% | GPU rendering + codec + export + HTTP/WS + device proxy + ONNX ML inference + full color/keying pipeline + keyframe/animation blending + character editing API + **concurrency guard Semaphore(8/4/2) ✅** |
-| **neko-agent** | Alpha | 99% | **0 TODOs**, 108 tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment; remaining: MCP reconnection backoff + **Webview architecture optimization** ([ADR](./docs/architecture/neko-agent-webview-optimization.md)) |
+| **neko-agent** | Alpha | 99% | **0 TODOs**, 108 tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment + **Webview P0 complete** ✅ (AppShell/ConversationController/ChatWorkspace split + typed message protocol + unified outbound gateway); remaining: MCP reconnection backoff + P1 Zustand migration ([ADR](./docs/architecture/neko-agent-webview-optimization.md)) |
 | **neko-cut** | Alpha | 95% | **~65K LOC**, 50+ commands; AI Handler 14/16 actions; **P0 closed**; subtitle/ripple editing/playback speed/effects export complete; remaining: export round-trip tests + ai-auto-edit/ai-match-music + advanced time editing ([ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)) |
 | **neko-story** | Alpha | 95% | **0 TODO(P0)**, 155+ tests; 8 LSP Providers + Fountain parser + 3 preview views + ScenePlan/ShotPlan planners + StorySceneStateStore cross-session persistence; Story→Agent→Canvas semantic pipeline fully operational ([ADR](./docs/architecture/story-agent-canvas-boundary.md)) |
-| **neko-canvas** | Alpha | 90% | 13 node types + BatchGenerationScheduler + 7 MCP Tools; **P0 fully converged** ✅ (protocol unified + message encapsulation + review closed loop + SceneGroupNode semantic container + creation entry coverage) + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry; remaining P1 enhancements ([ADR](./docs/architecture/canvas-role-boundary.md)) |
+| **neko-canvas** | Alpha | 92% | 13 node types + BatchGenerationScheduler + 7 MCP Tools; **P0 fully converged** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor registry** ✅ (labels/icons/defaultSize converged; property panels remain separate); remaining P1 enhancements ([ADR](./docs/architecture/canvas-role-boundary.md)) |
 | **neko-preview** | Alpha | 86% | 6 editor types + waterfall layout + Content→Agent + **EPUB outline TreeView ✅**; Phase 1 remaining: FDX; Phase 2: XLSX/PPTX |
 | **neko-assets** | Alpha | 88% | Pure TreeView architecture + ThumbnailService + **search L0 persistent index + type filtering + 200 limit ✅**; remaining: L1-L3 cache (depends on new Engine actions) |
 | **neko-market** | Alpha | 88% | **~4.4K LOC**; full React Webview implementation (Browse/Installed/Updates + Zustand + i18n) + market-core 58 tests; remaining: Registry Server integration (neko-hub) |
@@ -162,7 +162,7 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - ✅ **P1-4: NodeRendererRegistry** — replaced core render dispatch hardcoding; new nodes extensible via registry
 - ✅ **P1: Asset proxy boundary** — converged to `neko-assets` restricted proxy + `timelineSync` minimal write-back contract
 - ✅ `.nkc-ops` operation history persistence + AI source filter
-- [ ] P1: `NodeRendererRegistry` extension (metadata/icons/property panel schema converge into registry)
+- ✅ **P1: `NodeTypeDescriptor` unified registry** — labels/icons/defaultSize converged into single descriptor per node type; PropertyPanel labels + nodeFactory sizes migrated; property panel renderers remain in PropertyPanel (circular dep constraint)
 - [ ] P1: `asset` namespace cleanup (push `neko-assets` to provide formal extension API)
 - [ ] P2: Batch candidate comparator + stronger review UI
 - [ ] P2: Character consistency (@reference assets → IP-Adapter reference injection)
@@ -184,11 +184,11 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - [ ] P2: Export round-trip test suite
 - [ ] Native composite protocol extension (current text/subtitle/shape use Webview overlay)
 
-### neko-agent — Webview Architecture Optimization TODO
-> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10
-- [ ] **P0: Decompose `AIAssistant`** (~589 LOC) → `AppShell` + `ConversationController` + `ChatWorkspace`
-- [ ] **P0: Unify outbound message gateway** — all Webview→Extension through `VSCodeMessages` builder
-- [ ] **P0: Strengthen inbound types** — `ExtensionToWebviewMessage` discriminated union + typed handlers
+### neko-agent — Webview Architecture Optimization (P0 Complete ✅)
+> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10 → P0 resolved
+- ✅ **P0: Decompose `AIAssistant`** (~589 LOC) → `AppShell` + `ConversationController` + `ChatWorkspace`
+- ✅ **P0: Unify outbound message gateway** — all Webview→Extension through `VSCodeMessages` builder; 9 files migrated, zero direct postMessage
+- ✅ **P0: Strengthen inbound types** — `ExtensionToWebviewMessage` discriminated union (38 types) + typed handlers across 10 domain files
 - [ ] P1: Zustand state management migration (align with cut/canvas/model Webview pattern)
 - [ ] P1: Subdivide `InputAreaContext` → `ModelContext` + `MentionContext` + `GenerationContext`
 - [ ] P2: Message tracing (trace ID injection + structured audit trail)
@@ -647,4 +647,4 @@ agent/market are included in core; scenario sub-packs stack with zero duplicatio
 
 ---
 
-*Last updated: 2026-04-09 (Sprint 2 convergence: canvas P0 fully closed + story state persistence + semantic storyboard pipeline end-to-end; Phase 3 ~88%)*
+*Last updated: 2026-04-15 (neko-agent Webview P0 complete + neko-canvas NodeTypeDescriptor unified registry; Phase 3 ~89%)*
