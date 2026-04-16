@@ -17,7 +17,8 @@ import {
   VSCodeErrorHandler,
   createNewFile,
 } from '@neko/shared/vscode/extension';
-import type { AssetEntity, AssetFile } from '@neko/shared';
+import type { AssetEntity, AssetFile, NekoAssetsAPI } from '@neko/shared';
+import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { getRootLogger, setRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { CanvasEditorProvider } from './editor';
@@ -31,8 +32,24 @@ let canvasEditorProvider: CanvasEditorProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
 
+/** Cached assets API reference (resolved once, reused across calls). */
+let assetsAPI: NekoAssetsAPI | undefined;
+
+async function getAssetsAPI(): Promise<NekoAssetsAPI | undefined> {
+  if (assetsAPI) return assetsAPI;
+  const ext = vscode.extensions.getExtension<NekoAssetsAPI>(NEKO_EXTENSION_IDS.NEKO_ASSETS);
+  if (!ext) return undefined;
+  if (!ext.isActive) await ext.activate();
+  assetsAPI = ext.exports;
+  return assetsAPI;
+}
+
 async function getAssetEntities(): Promise<AssetEntity[]> {
   try {
+    // Prefer typed API when available
+    const api = await getAssetsAPI();
+    if (api) return api.getAllEntities();
+    // Fallback: command-level proxy (backward compat with older neko-assets)
     const entities = await vscode.commands.executeCommand<AssetEntity[]>(
       'neko.assets.getAllEntities',
     );

@@ -53,6 +53,9 @@
 ### neko-engine (Engine)
 - [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
 - [ ] Integrate `effects:register` / `models:register` into unified plugin lifecycle (PluginManager P1 follow-up)
+- [ ] **Headless CLI export**: `host-cli export --input a.nkv --output a.mp4 --format mp4 --resolution 1080p` (CI/CD 基础, host-cli 已有入口)
+- [ ] **Batch render API**: `POST /v1/batch/render` — 模板 + 数据实例数组 → 队列并行渲染 → N 个视频输出
+- [ ] **.nkv 模板变量绑定**: `{{variable}}` 槽位标记 + JSON 数据源替换 + 校验 — 支持 text/media/puppet/scene3d/emotion 变量
 
 ### neko-assets (Asset Management)
 - [ ] Search enhancement follow-ups:
@@ -64,6 +67,21 @@
 - [ ] `neko://` protocol (ADR design only; depends on server-side)
 - [ ] Git LFS integration
 - [ ] **Remove `CreativeGridView` from neko-story** (ADR-1: image generation belongs entirely in canvas)
+- [ ] **SceneSpec 统一场景描述**: @neko/shared 定义 SceneSpec 类型 (environment + characters + props + camera + effects) — 替代 Scene3DElement 碎片字段, 所有 Stage 共用
+- [ ] **EffectSpec 统一特效描述**: @neko/shared 定义 EffectSpec 类型 (layers + params + scope + emotionBinding) — 替代 EffectInstance, 支持多渲染后端 (wgpu/Three.js/CSS)
+- [ ] **ExpressionSpec 统一表情描述**: @neko/shared 定义 ExpressionSpec 类型 (原子通道 + 复合预设 ~30 个 + blendMode + micro noise) — 统一 VRM/Live2D/ARKit 表情, 支持 EmotionArc 连续混合
+- [ ] **LightSpec 光照标准**: 嵌入 SceneSpec (ambient IBL + directional/point/spot + shadow + postProcess AO/Bloom/Fog + emotionBinding)
+- [ ] **格式兼容 P0 — BVH 动捕适配**: bvh_adapter (BVH ↔ SemanticMotion, 骨骼名映射) — 解锁 Mixamo/CMU/专业动捕生态
+- [ ] **格式兼容 P0 — LUT 色彩预设**: cube_adapter (.cube/.3dl ↔ EffectSpec LUT) — 解锁 DaVinci/调色生态
+- [ ] **格式兼容 P0 — HDR 环境贴图**: hdr_adapter (.hdr/.exr → LightSpec IBL texture) — 解锁 PBR 光照生态
+- [ ] **格式兼容 P1 — VMD 动画**: vmd_adapter (.vmd ↔ SemanticMotion + ExpressionSpec + CameraKeyframe) — 解锁 MMD 社区动作库
+- [ ] **视频→动作/表情提取**: 视频逐帧 MediaPipe Pose + FaceMesh (ONNX) → SemanticMotion + ExpressionSpec[] → .nkmotion 保存 — "拍一段视频→驱动任何角色"
+- [ ] **图片→2.5D 分层场景**: Depth Anything v2 + SAM 分割 (ONNX) → 前景/中景/背景分层 → SceneSpec + parallaxFactor → 单张图片变可运镜场景
+- [ ] **视频→场景全分解**: SceneDetect 分镜 + Demucs 音频分轨 + Whisper 字幕 + 动作/表情/运镜提取 → 一段视频→完整结构化项目
+- [ ] **VoiceSpec + TTS viseme 驱动**: VoiceSpec 类型 (ttsProvider + voiceId + visemeMode) 绑定角色; TTS 输出 viseme 时间戳 → ExpressionSpec viseme 通道 additive 叠加
+- [ ] **CharacterAgent 人设框架**: 基于 neko-agent SubAgent — persona + 独立 memory + 结构化 LLM 输出 (emotion/action/text) + VoiceSpec + ExpressionStyle 绑定
+- [ ] **CharacterBundle 角色打包**: .nkchar 格式 (model + motions{} + expressions{} + voice + agent) — 可发布 marketplace, 拖入场景即用
+- [ ] **StoryBinding 剧本绑定**: .nkbind 格式 (角色名→CharacterBundle + 场景标题→SceneSpec + 情绪词→ExpressionSpec + 动作词→SemanticMotion + 运镜/配乐默认规则) — 松耦合 ID 引用, 资产可独立替换
 
 ### Waiting on Backend
 - [ ] neko-market: Registry Server integration (client UI 100% ready)
@@ -90,6 +108,10 @@
 - [ ] Scene background consistency — ControlNet injection
 
 ### neko-cut
+- [x] **PuppetElement + puppet track**: PuppetElement 类型 (src/animationClip/expression/parameterOverrides) + 'puppet' TrackType + Rust ElementType::Puppet + TimelineElementContent UI
+- [ ] **runtime-puppet → GpuLayer 桥接**: engine-kernel 中 runtime-puppet 渲染到 RGBA 纹理 → GpuLayer, 插入 gpu_export_pipeline ③④ 之间 — 实现 2D+3D+视频同管线合成
+- [ ] **Camera Keyframe Track**: 摄像机关键帧轨道 (position/target/fov 随时间插值) + 预设运镜模板 (推拉摇移跟升降) — 支持 3D 场景运镜直出视频
+- [ ] **NPR 后处理 (3 渲 2)**: Cel Shading (色阶化光照) + Outline (描边, 法线/深度边缘检测) compute shader — 支持 3D 人物 + 2D 场景风格统一
 - [ ] AI action `ai-auto-edit` (needs to define "auto-edit" semantics)
 - [ ] AI action `ai-match-music` (needs beat detection + scene matching)
 - [x] **Subtitle system consolidation**: subtitle track/element unified data model; PropertyPanel + inline SubtitlePanel dual entry; .srt/.vtt/.ass drag-in creates subtitle track

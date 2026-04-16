@@ -49,6 +49,9 @@ const logger = getLogger('Extension');
 let library: AssetLibrary | null = null;
 let diffService: AssetDiffService | null = null;
 let thumbnailService: ThumbnailService | null = null;
+let mediaSettingsService:
+  | import('./services/MediaLibrarySettingsService').MediaLibrarySettingsService
+  | null = null;
 let healthMonitor: AssetHealthMonitor | null = null;
 
 // =============================================================================
@@ -81,7 +84,9 @@ const nodeFileSystem: IFileSystem = {
 // Activation
 // =============================================================================
 
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<import('@neko/shared').NekoAssetsAPI> {
   const rootLogger = createVSCodeLogger('Neko Assets', 'NekoAssets', context);
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
@@ -205,6 +210,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // 4. Initialize Media Library Settings (P1)
   if (library && workspaceRoot) {
     const settingsService = new MediaLibrarySettingsService(workspaceRoot);
+    mediaSettingsService = settingsService;
     await settingsService.load();
     context.subscriptions.push(settingsService);
 
@@ -1205,6 +1211,45 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
       return library.resolvePath(storedPath);
     }),
   );
+
+  // ---- Typed Extension API (replaces command-level proxy for consumers) ----
+  const _onDidChangeEntities = new vscode.EventEmitter<void>();
+  context.subscriptions.push(_onDidChangeEntities);
+
+  // Fire change event when media library settings change (libraries added/removed/refreshed)
+  if (mediaSettingsService) {
+    context.subscriptions.push(mediaSettingsService.onDidChange(() => _onDidChangeEntities.fire()));
+  }
+
+  const api: import('@neko/shared').NekoAssetsAPI = {
+    getAllEntities: async () => (library ? library.getAllEntities() : []),
+    importFile: async (uri) => {
+      if (!library) return undefined;
+      try {
+        await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(uri.fsPath));
+        // Return the most recently added entity (import is async, entity is created by the command)
+        const entities = library.getAllEntities();
+        return entities[entities.length - 1];
+      } catch {
+        return undefined;
+      }
+    },
+    getThumbnailPath: async (filePath) => {
+      try {
+        const result = await vscode.commands.executeCommand<string>(
+          'neko.assets.getThumbnailPath',
+          filePath,
+        );
+        return result ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    onDidChangeEntities: _onDidChangeEntities.event,
+  };
+
+  logger.info('Extension activated, API exported');
+  return api;
 }
 
 // =============================================================================

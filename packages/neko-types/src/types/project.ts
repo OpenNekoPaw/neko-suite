@@ -167,6 +167,7 @@ export function sortTracksByType(tracks: TimelineTrack[]): TimelineTrack[] {
       video: 2,
       media: 2,
       scene3d: 2,
+      puppet: 2,
       effect: 3,
       audio: 4,
       subtitle: 5,

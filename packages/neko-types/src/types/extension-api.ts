@@ -573,6 +573,32 @@ export interface NekoPuppetAPI {
 }
 
 // =============================================================================
+// NekoAssets API
+// =============================================================================
+
+/**
+ * NekoAssets Extension API
+ * Exported by neko-assets extension for programmatic asset library access.
+ * Replaces the former command-level proxy pattern (neko.assets.getAllEntities etc.).
+ */
+export interface NekoAssetsAPI {
+  /** Get all asset entities in the library. */
+  getAllEntities(): Promise<import('./asset/entity').AssetEntity[]>;
+
+  /**
+   * Import a file into the asset library.
+   * Returns the newly created entity, or undefined on failure.
+   */
+  importFile(uri: { fsPath: string }): Promise<import('./asset/entity').AssetEntity | undefined>;
+
+  /** Get the thumbnail file path for a given asset file path. */
+  getThumbnailPath(filePath: string): Promise<string | undefined>;
+
+  /** Fired when asset entities are added, removed, or modified. */
+  onDidChangeEntities: { (listener: () => void): { dispose(): void } };
+}
+
+// =============================================================================
 // Extension Discovery Constants
 // =============================================================================
 
@@ -587,6 +613,7 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_SKETCH: 'neko.neko-sketch',
   NEKO_PUPPET: 'neko.neko-puppet',
   NEKO_AUTH: 'neko.neko-auth',
+  NEKO_ASSETS: 'neko.neko-assets',
 } as const;
 
 // =============================================================================

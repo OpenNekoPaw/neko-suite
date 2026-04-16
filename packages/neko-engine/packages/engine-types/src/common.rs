@@ -65,6 +65,8 @@ pub enum TrackType {
     Shape,
     /// 3D scene element (glTF/GLB model)
     Scene3d,
+    /// 2D puppet element (Live2D/MOC3)
+    Puppet,
     /// Alias for Video (used in JVI files)
     #[serde(alias = "media")]
     Media,

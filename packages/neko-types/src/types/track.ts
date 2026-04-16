@@ -14,6 +14,7 @@ export type TrackType =
   | 'subtitle'
   | 'shape'
   | 'scene3d'
+  | 'puppet'
   | 'media';
 
 /**

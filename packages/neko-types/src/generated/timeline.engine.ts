@@ -599,6 +599,15 @@ export const ENGINE_SCENE3D_KEYS = [
   'cameraOverride',
 ] as const;
 
+export const ENGINE_PUPPET_KEYS = [
+  'src',
+  'animationClip',
+  'animationLoop',
+  'animationSpeed',
+  'expression',
+  'parameterOverrides',
+] as const;
+
 export const ENGINE_TRACK_KEYS = [
   'id',
   'name',

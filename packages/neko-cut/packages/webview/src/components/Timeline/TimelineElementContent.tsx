@@ -563,6 +563,9 @@ const SimpleElementContent = memo(function SimpleElementContent({
     if (trackType === 'scene3d' || element.type === 'scene3d') {
       return 'bg-indigo-700/80'; // Indigo for 3D scenes
     }
+    if (trackType === 'puppet' || element.type === 'puppet') {
+      return 'bg-pink-700/80'; // Pink for 2D puppets
+    }
     // Media - check if video or image
     if ('src' in element) {
       const ext = (element as MediaElement).src.toLowerCase().split('.').pop() || '';
@@ -644,6 +647,16 @@ export const TimelineElementContent = memo(function TimelineElementContent({
     return (
       <div className="absolute inset-0 flex items-center gap-1.5 px-2 overflow-hidden pointer-events-none">
         <span className="text-xs opacity-60 select-none">3D</span>
+        <span className="text-xs text-white truncate select-none">{element.name}</span>
+      </div>
+    );
+  }
+
+  // Puppet track or puppet element — show puppet icon + name
+  if (trackType === 'puppet' || element.type === 'puppet') {
+    return (
+      <div className="absolute inset-0 flex items-center gap-1.5 px-2 overflow-hidden pointer-events-none">
+        <span className="text-[13px] opacity-60 select-none leading-none">&#x1F3AD;</span>
         <span className="text-xs text-white truncate select-none">{element.name}</span>
       </div>
     );

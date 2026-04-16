@@ -32,6 +32,8 @@ export type AssetType =
   | 'lut'
   // 3D 模型
   | '3d-model'
+  // 2D Puppet 动作 / 表情预设
+  | 'puppet-motion'
   // 文档
   | 'document';
 

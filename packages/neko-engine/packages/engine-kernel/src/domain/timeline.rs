@@ -503,6 +503,7 @@ impl Element {
             ElementType::Media(m) => Some(m.src.clone()),
             ElementType::Audio(a) => Some(a.src.clone()),
             ElementType::Scene3D(s) => Some(s.src.clone()),
+            ElementType::Puppet(p) => Some(p.src.clone()),
             _ => None,
         }
     }
@@ -525,6 +526,11 @@ impl Element {
     /// Check if this is a 3D scene element
     pub fn is_scene3d(&self) -> bool {
         matches!(self.element_type, ElementType::Scene3D(_))
+    }
+
+    /// Check if this is a 2D puppet element
+    pub fn is_puppet(&self) -> bool {
+        matches!(self.element_type, ElementType::Puppet(_))
     }
 
     /// Check if this is a shape element
@@ -662,6 +668,9 @@ pub enum ElementType {
     /// 3D scene element (glTF/GLB model)
     #[serde(rename = "scene3d")]
     Scene3D(Scene3DElementData),
+    /// 2D puppet element (Live2D/MOC3)
+    #[serde(rename = "puppet")]
+    Puppet(PuppetElementData),
 }
 
 /// Media element data (video/image)
@@ -1026,6 +1035,29 @@ pub struct Scene3DElementData {
     /// Override camera parameters (instead of using model camera)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera_override: Option<CameraOverride>,
+}
+
+/// 2D puppet element data (Live2D/MOC3)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PuppetElementData {
+    /// Source puppet file path (.moc3 or .inp)
+    pub src: String,
+    /// Active animation clip name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation_clip: Option<String>,
+    /// Loop animation playback
+    #[serde(default)]
+    pub animation_loop: bool,
+    /// Animation playback speed multiplier
+    #[serde(default = "default_animation_speed")]
+    pub animation_speed: f64,
+    /// Active expression name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+    /// Parameter value overrides: param_name → value
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter_overrides: Option<std::collections::HashMap<String, f32>>,
 }
 
 fn default_shape_opacity() -> f32 {

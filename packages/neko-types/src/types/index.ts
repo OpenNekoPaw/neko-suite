@@ -156,6 +156,7 @@ export * from './sketch';
 
 // Puppet types (.nkp project format)
 export * from './puppet';
+export * from './puppet-motion-preset';
 
 // Puppet face parameter template (standard 32-param face model)
 export * from './puppet-face-params';
