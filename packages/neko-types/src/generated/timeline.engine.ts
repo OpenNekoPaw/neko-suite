@@ -329,7 +329,7 @@ export interface EnginePuppetElementData {
   /** default: 1.0 */
   animationSpeed: number;
   expression?: string;
-  parameterOverrides: number;
+  parameterOverrides: Record<string, number>;
 }
 
 export interface EngineElement {

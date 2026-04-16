@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/diff.proto
-// Source hash: 49392c6f88731d64
+// Source hash: 07a442e88f0bb432
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -13,6 +13,8 @@
 export type EngineDiffCategory = 'image' | 'audio' | 'video' | 'timeline' | 'canvas' | 'model';
 
 export type EngineTimelineChangeType = 'added' | 'removed' | 'modified' | 'moved' | 'unchanged';
+
+export type EngineCanvasChangeType = 'added' | 'removed' | 'modified' | 'unchanged';
 
 // =============================================================================
 // Messages
@@ -247,6 +249,94 @@ export interface EngineElementContentDiff {
   audioDiff?: EngineAudioContentDiff;
   videoDiff?: EngineVideoContentDiff;
   errorMessage?: string;
+}
+
+export interface EngineCanvasPropertyChange {
+  /** Property name (e.g. "position", "size", "rotation", "label") */
+  property: string;
+  /** JSON-encoded previous value */
+  previous: string;
+  /** JSON-encoded current value */
+  current: string;
+}
+
+export interface EngineCanvasNodeChange {
+  nodeId: string;
+  /** Node type ("media" | "storyboard" | "annotation" | "group") */
+  nodeType: string;
+  /** Optional label or title for display */
+  label?: string;
+  changeType: EngineCanvasChangeType;
+  propertyChanges: EngineCanvasPropertyChange[];
+  /** For group nodes: child IDs added/removed */
+  childIdsAdded: string[];
+  childIdsRemoved: string[];
+}
+
+export interface EngineCanvasConnectionChange {
+  connectionId: string;
+  changeType: EngineCanvasChangeType;
+  /** Source/target node IDs */
+  sourceId: string;
+  targetId: string;
+  /** Connection type ("default" | "sequence" | "reference") */
+  connectionType?: string;
+  label?: string;
+}
+
+export interface EngineCanvasDiffSummary {
+  nodesAdded: number;
+  nodesRemoved: number;
+  nodesModified: number;
+  connectionsAdded: number;
+  connectionsRemoved: number;
+  connectionsModified: number;
+}
+
+export interface EngineCanvasContentDiff {
+  /** Canvas metadata comparison */
+  nameCurrent?: string;
+  namePrevious?: string;
+  /** Node-level changes */
+  nodeChanges: EngineCanvasNodeChange[];
+  /** Connection-level changes */
+  connectionChanges: EngineCanvasConnectionChange[];
+  /** Summary statistics */
+  summary?: EngineCanvasDiffSummary;
+  /** Total node counts */
+  totalNodesCurrent: number;
+  totalNodesPrevious: number;
+}
+
+export interface EngineSilenceRegion {
+  /** Silence start time (seconds) */
+  start: number;
+  /** Silence end time (seconds) */
+  end: number;
+  /** Duration of the silence region (seconds) */
+  duration: number;
+  /** RMS level in this region (dB, negative values) */
+  rmsDb: number;
+}
+
+export interface EngineAudioSilenceDetection {
+  /** Silence threshold used for detection (dB) */
+  thresholdDb: number;
+  /** Minimum duration to be classified as silence (seconds) */
+  minSilenceDuration: number;
+  /** Total number of silence regions detected */
+  silenceRegionCount: number;
+  /** Total silence duration (seconds) */
+  totalSilenceDuration: number;
+  /** Total audio duration (seconds) */
+  totalDuration: number;
+  /** Silence percentage (0.0 - 1.0) */
+  silencePercent: number;
+  /** Detected silence regions */
+  silenceRegionsA: EngineSilenceRegion[];
+  silenceRegionsB: EngineSilenceRegion[];
+  /** Regions where silence pattern differs between A and B */
+  diffRegions: EngineSilenceRegion[];
 }
 
 export interface EngineDiffResult {

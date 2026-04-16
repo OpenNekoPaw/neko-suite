@@ -49,6 +49,8 @@ const PROTO_CONFIG = {
       ['TextElementData', 'ENGINE_TEXT_KEYS'],
       ['ShapeElementData', 'ENGINE_SHAPE_KEYS'],
       ['SubtitleElementData', 'ENGINE_SUBTITLE_KEYS'],
+      ['Scene3DElementData', 'ENGINE_SCENE3D_KEYS'],
+      ['PuppetElementData', 'ENGINE_PUPPET_KEYS'],
       ['Track', 'ENGINE_TRACK_KEYS'],
     ],
   },
@@ -329,9 +331,20 @@ function generateMessage(msgType, knownEnums, commentMap) {
 
     const camelName = snakeToCamel(field.name);
     const optional = isFieldOptional(field, knownEnums);
-    const isRepeated = field.repeated;
-    const tsType = mapType(field.type);
-    const suffix = isRepeated ? '[]' : '';
+
+    let tsType;
+    let suffix = '';
+
+    if (field.map) {
+      // Map fields: map<keyType, valueType> → Record<K, V>
+      const keyType = mapType(field.keyType);
+      const valueType = mapType(field.type);
+      tsType = `Record<${keyType}, ${valueType}>`;
+    } else {
+      tsType = mapType(field.type);
+      suffix = field.repeated ? '[]' : '';
+    }
+
     const opt = optional ? '?' : '';
 
     // Add JSDoc comment if available
