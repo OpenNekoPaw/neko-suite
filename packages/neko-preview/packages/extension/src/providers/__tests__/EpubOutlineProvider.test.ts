@@ -78,4 +78,18 @@ describe('EpubOutlineProvider', () => {
     expect((item.iconPath as { id: string }).id).toBe('circle-filled');
     expect(item.tooltip).toContain('Current chapter');
   });
+
+  it('does not emit tree refresh when the active href is unchanged', () => {
+    const provider = new EpubOutlineProvider();
+    const onDidChange = vi.fn();
+    provider.onDidChangeTreeData(onDidChange);
+    provider.update([{ label: 'Chapter 1', href: 'Text/ch1.xhtml', depth: 0 }]);
+
+    onDidChange.mockClear();
+
+    provider.setActiveHref('Text/ch1.xhtml');
+    provider.setActiveHref('Text/ch1.xhtml');
+
+    expect(onDidChange).toHaveBeenCalledTimes(1);
+  });
 });

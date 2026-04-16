@@ -47,7 +47,12 @@ vi.mock('vscode', () => {
         hide: vi.fn(),
         dispose: vi.fn(),
       })),
-      createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+      createTreeView: vi.fn(() => ({
+        visible: false,
+        reveal: vi.fn(),
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+        dispose: vi.fn(),
+      })),
       onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() })),
       createOutputChannel: vi.fn(() => ({
         append: vi.fn(),

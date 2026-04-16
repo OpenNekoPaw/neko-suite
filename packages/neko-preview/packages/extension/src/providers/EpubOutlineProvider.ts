@@ -45,8 +45,10 @@ export class EpubOutlineProvider implements vscode.TreeDataProvider<TocNode>, vs
 
   /** Mark the current chapter href and return the matching node if found. */
   setActiveHref(href: string | null): TocNode | undefined {
-    this.activeHref = href;
-    this._onDidChangeTreeData.fire(undefined);
+    if (this.activeHref !== href) {
+      this.activeHref = href;
+      this._onDidChangeTreeData.fire(undefined);
+    }
     return href ? findNodeByHref(this.roots, href) : undefined;
   }
 

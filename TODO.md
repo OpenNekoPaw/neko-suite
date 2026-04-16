@@ -82,6 +82,12 @@
 - [ ] **CharacterAgent 人设框架**: 基于 neko-agent SubAgent — persona + 独立 memory + 结构化 LLM 输出 (emotion/action/text) + VoiceSpec + ExpressionStyle 绑定
 - [ ] **CharacterBundle 角色打包**: .nkchar 格式 (model + motions{} + expressions{} + voice + agent) — 可发布 marketplace, 拖入场景即用
 - [ ] **StoryBinding 剧本绑定**: .nkbind 格式 (角色名→CharacterBundle + 场景标题→SceneSpec + 情绪词→ExpressionSpec + 动作词→SemanticMotion + 运镜/配乐默认规则) — 松耦合 ID 引用, 资产可独立替换
+- [ ] **SeriesSpec 连载系列**: .nkseries 格式 (sharedAssets + stateContract 跨集变量契约 + episodes[] 依赖 DAG) — 支持增量发布/跨集蝴蝶效应/向后兼容
+- [ ] **PlayerSave 存档系统**: 每玩家×每系列独立存档 (progress + currentState + characterMemories) — 跨集状态持久化 + 角色 Agent 记忆保留
+- [ ] **MemoryAnchor 记忆锚点系统**: 不可回溯的经历节点 (fact Ground Truth + 多角色 perspectives + anchor_rules) + 信息分层解锁 (Layer 0-5) + NPC 对话发掘 + 记忆衰退/重构 — CharacterAgent perspectiveFilter 注入 LLM, 角色只知道自己的视角
+- [ ] **SemanticMotion 录制**: neko-live VMC/MediaPipe 数据 → 逐帧缓冲 → smooth/denoise → 保存为 .nkmotion + 同步 WAV 音频 — 动捕从"实时驱动"升级为"可编辑资产"
+- [ ] **动捕曲线编辑**: .nkmotion 在时间线上逐通道曲线编辑 (平滑/裁剪/循环/多段拼接 crossfade)
+- [ ] **.nkmotion → 时间线**: 拖入 puppet/scene3d track → 角色按动捕表演 + 叠加 ExpressionSpec + viseme
 
 ### Waiting on Backend
 - [ ] neko-market: Registry Server integration (client UI 100% ready)

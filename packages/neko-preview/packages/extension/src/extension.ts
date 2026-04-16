@@ -232,9 +232,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   });
   context.subscriptions.push(epubOutlineView, epubOutlineProvider);
 
-  const syncEpubOutlineLocation = async (location: EpubActiveLocation | null): Promise<void> => {
+  let lastEpubOutlineLocationKey: string | null = null;
+
+  const getEpubOutlineLocationKey = (location: EpubActiveLocation | null): string | null => {
+    if (!location?.chapterHref) {
+      return null;
+    }
+    return `${location.uri.toString()}::${location.chapterHref}`;
+  };
+
+  const syncEpubOutlineLocation = async (
+    location: EpubActiveLocation | null,
+    options?: { forceReveal?: boolean },
+  ): Promise<void> => {
+    const nextLocationKey = getEpubOutlineLocationKey(location);
     const node = epubOutlineProvider.setActiveHref(location?.chapterHref ?? null);
+    if (!nextLocationKey) {
+      lastEpubOutlineLocationKey = null;
+      return;
+    }
     if (!node) return;
+    const shouldReveal =
+      epubOutlineView.visible &&
+      (options?.forceReveal === true || nextLocationKey !== lastEpubOutlineLocationKey);
+    lastEpubOutlineLocationKey = nextLocationKey;
+    if (!shouldReveal) return;
     try {
       await epubOutlineView.reveal(node, {
         select: true,
@@ -263,6 +285,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
         epubOutlineProvider.clear();
       }
     } else {
+      lastEpubOutlineLocationKey = null;
       await vscode.commands.executeCommand('setContext', 'neko.epubEditorActive', false);
       epubOutlineProvider.clear();
     }
@@ -284,6 +307,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   context.subscriptions.push(
     epubProvider.onDidChangeActiveLocation((location) => {
       void syncEpubOutlineLocation(location);
+    }),
+  );
+  context.subscriptions.push(
+    epubOutlineView.onDidChangeVisibility(() => {
+      if (!epubOutlineView.visible) return;
+      void syncEpubOutlineLocation(epubProvider.getActiveLocation(), { forceReveal: true });
     }),
   );
 

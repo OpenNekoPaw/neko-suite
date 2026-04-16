@@ -183,6 +183,12 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - [ ] P2: Advanced time editing (slip/slide/roll edit + visual speed curve/time remap UI)
 - [ ] P2: Export round-trip test suite
 - [ ] Native composite protocol extension (current text/subtitle/shape use Webview overlay)
+- [ ] **P2: 2D+3D+Video 联动合成**:
+  - [ ] `PuppetElement` + `puppet` track type — Live2D/MOC3 角色作为时间线图层
+  - [ ] runtime-puppet → GpuLayer 桥接 (渲染到 RGBA 纹理 → gpu_export_pipeline 合成)
+  - [ ] Camera Keyframe Track (position/target/fov 关键帧插值 + 运镜预设模板)
+  - [ ] NPR 后处理 shader (Cel Shading + Outline 描边) — 3 渲 2 风格化渲染
+  - [ ] 支持 4 种组合：2D角色+3D场景 / 3D角色+2D场景 / 2D+3D+视频混合 / 3D 运镜直出视频
 
 ### neko-agent — Webview Architecture Optimization (P0 Complete ✅)
 > [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10 → P0 resolved
@@ -587,12 +593,17 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 > Prerequisites: Phase 3 + Phase 5
 
-Hybrid strategy: VSCode in-editor editing/export + Electron external app for immersive preview + MCP bridging to Unity/Unreal.
+Hybrid strategy: VSCode in-editor editing/export + Electron WebXR app for immersive preview + Native OpenXR for high-perf + MCP bridging to Unity/Unreal.
 
-- 7.1: Stereoscopic rendering + XR endpoints — 2-3 weeks
-- 7.2: Electron WebXR App + hand tracking — 3-4 weeks
-- 7.3: AR (plane detection + lighting estimation) — 4-6 weeks
-- 7.4: AI-assisted XR — TBD
+- 7.1: Stereoscopic rendering (instanced stereo / wgpu multiview) + OpenXR session management — 2-3 weeks
+- 7.2: Electron WebXR App + Three.js WebXRManager + hand tracking (SpatialInput abstraction) — 3-4 weeks
+- 7.3: AR plane detection + light estimation + depth occlusion (MR) — 4-6 weeks
+- 7.4: HRTF spatial audio (oddio/kira-spatial + ECS entity sound sources) — 2-3 weeks
+- 7.5: AI-assisted XR (voice-driven scene manipulation + spatial layout suggestions) — TBD
+
+Reuses from Phase 3 (interactive cinema): runtime-stage scene orchestration, ScriptEngine, DynamicDialogue, InteractionHandler (→ SpatialInput mapping), SemanticMotion + retarget maps, billboard 2D+3D compositing, Level 1 light matching, Depth-Aware compositing.
+
+Publishing channels: Path A Electron+WebXR (primary) → Path B Native OpenXR (performance) → Path C Streaming (remote/demo).
 
 ---
 
