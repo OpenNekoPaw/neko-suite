@@ -282,6 +282,13 @@ export async function activate(
 
   // 8. Build typed extension API (returned to VSCode as exports)
   const _onDidChangeEntities = new vscode.EventEmitter<void>();
+
+  // Bridge command for components that can't import entityChangeEmitter directly
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.entityChanged', () => {
+      _onDidChangeEntities.fire();
+    }),
+  );
   entityChangeEmitter = _onDidChangeEntities;
   context.subscriptions.push(_onDidChangeEntities);
 
@@ -304,7 +311,7 @@ export async function activate(
     },
     getThumbnailPath: async (filePath) => {
       if (!thumbnailService) return undefined;
-      return thumbnailService.getPath(filePath) ?? undefined;
+      return (await thumbnailService.getCached(filePath)) ?? undefined;
     },
     onDidChangeEntities: _onDidChangeEntities.event,
   };

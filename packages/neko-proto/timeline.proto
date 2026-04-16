@@ -386,7 +386,10 @@ message Scene3DElementData {
   bool animation_loop = 4;
   double animation_speed = 5;  // default: 1.0
   repeated float background_color = 6;  // [r,g,b,a]
-  // Camera override fields omitted (complex nested, handled by JSON fallback)
+  // NOTE: cameraOverride (position/target/up/fovY) intentionally omitted from proto.
+  // Rust domain model (timeline.rs) and generated TS (timeline.engine.ts) include it as
+  // a nested struct/interface. Proto is not SSOT for this field — JSON serde handles it
+  // directly. Proto covers the streaming/diff protocol; file format uses JSON Schema.
 }
 
 message PuppetElementData {

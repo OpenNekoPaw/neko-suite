@@ -169,8 +169,10 @@ export class AssetHealthMonitor implements vscode.Disposable {
     try {
       const result = await this.library.relocateFile(variantId, fileId, newUri[0].fsPath);
       if (result) {
+        await this.library.flush();
         vscode.window.showInformationMessage(`File relocated: ${path.basename(result.path)}`);
         vscode.commands.executeCommand('neko.assets.refreshViews');
+        vscode.commands.executeCommand('neko.assets.entityChanged');
       }
     } catch (error) {
       void handleError(error instanceof Error ? error : new Error(String(error)), {
