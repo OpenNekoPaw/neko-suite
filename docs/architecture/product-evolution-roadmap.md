@@ -2574,6 +2574,70 @@ Single camera drives all layer types simultaneously:
     → All affect 2D+3D+video simultaneously via unified camera
 ```
 
+#### Camera Drive Modes (Video vs Game vs Interactive)
+
+```
+Three fundamentally different camera behaviors, sharing one UnifiedCamera struct:
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ Mode             Driver              Deterministic  Use Case        │
+  │─────────────────────────────────────────────────────────────────────│
+  │ Cinematic        Keyframe curves     Yes (same     Video export,   │
+  │ (Video)          (time → position)   every play)   neko-cut preview│
+  │                                                                     │
+  │ Gameplay         Player input        No (depends   Stage 4 game,   │
+  │ (Game)           + spring-damper     on player)    free exploration │
+  │                  + collision avoidance                              │
+  │                                                                     │
+  │ Hybrid           Auto-switch by      Mixed         Stage 3 interact│
+  │ (Interactive)    InteractionMode                   cinema           │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  Cinematic camera (keyframe-driven):
+    CameraKeyframeTrack: [{time, position, target, fov, easing}]
+    Interpolation: cubic bezier between keyframes
+    AI: CameraDirector translates shot semantics → keyframes
+    Use: scripted scenes, dialogue, cutscenes, video export
+    Language: push/pull/pan/tilt/orbit/crane/zoom (film grammar)
+
+  Gameplay camera (input-driven):
+    CameraController {
+      mode: ThirdPerson | FirstPerson | FreeLook | OrbitalLocked,
+      followTarget: Entity,
+      distance: f32,              // spring target distance
+      springStiffness: f32,       // how quickly camera catches up
+      dampingFactor: f32,         // smoothing (reduce jitter)
+      collisionLayers: u32,       // raycast to avoid walls
+      inputSensitivity: f32,      // mouse/stick sensitivity
+    }
+    Each frame: read input → update desired position → spring solve → collision check
+    Use: exploration, gameplay, player-controlled sections
+
+  Hybrid camera (Stage 3 interactive cinema):
+    Switches mode based on InteractionMode:
+      Director mode   → cinematic (editing in VSCode)
+      Novel mode      → cinematic (auto shot/reverse-shot during dialogue)
+      Cinema mode     → cinematic (scripted camera + video segments)
+      Explore mode    → gameplay (player walks around, looks around)
+
+    Transition between modes:
+      cinematic → gameplay: smooth blend (1s lerp from keyframe end to follow position)
+      gameplay → cinematic: smooth blend (1s lerp from current to keyframe start)
+
+    AI involvement:
+      During dialogue: CameraDirector auto-selects shot type
+        say(alice) → over_the_shoulder(from_player)
+        say(bob) → over_the_shoulder(from_alice)
+        emotional moment → close_up(speaker_face)
+        group scene → establishing_shot → medium_shot
+      During exploration: gameplay camera, no AI
+      Transition: AI detects dialogue start/end → triggers mode switch
+
+  All three modes output the same UnifiedCamera { position, target, fov }
+    → drives 3D render, 2D parallax, video layer offset identically
+    → RenderProfile doesn't care which mode produced the camera state
+```
+
 #### 2.5D Parallax
 
 ```
@@ -3049,6 +3113,278 @@ Render Pipelines (3 paths):
 Data Flows (5 paths):
   Script→output / Realtime dialogue / EmotionArc cascade /
   Asset extraction / Serialized memory
+```
+
+### AI Edit Protocol (Cross-Stage)
+
+#### Current EditOperation System
+
+```
+56 operation types across 6 domains (timeline/canvas/sketch/audio/batch/project).
+Each operation carries OperationMeta { id, timestamp, source: 'user'|'ai'|'system', description }.
+Each operation includes `before` field for pure-function inversion (undo).
+
+Current AI editing flow:
+  AI tool → raw result → hand-coded operation construction → applyOperation()
+  Problem: each AI tool manually constructs operations. Not scalable.
+```
+
+#### AIEditResult (Standardized AI Output)
+
+```
+Every AI tool should return AIEditResult, not raw data:
+
+  AIEditResult {
+    source: string,             // which AI tool produced this
+    intent: string,             // user intent description
+
+    generatedAssets: [{         // assets to persist
+      type: 'image'|'audio'|'video'|'motion'|'expression'|'scene',
+      data: Buffer | string,
+      suggestedPath: string,
+      assetId?: string          // register in AssetRegistry
+    }],
+
+    operations: EditOperation[], // operations to apply (in order)
+
+    rollback: {                 // if any operation fails
+      operations: EditOperation[],
+      assetsToDelete: string[]
+    },
+
+    preconditions: [{           // pre-checks before applying
+      type: 'asset_exists'|'element_exists'|'track_exists',
+      id: string,
+      failAction: 'abort'|'create'|'skip'
+    }]
+  }
+
+  Framework auto-handles: precondition check → apply operations → register assets.
+  No per-tool custom logic needed.
+```
+
+#### Extended EditOperation Types (Unified Asset Editing)
+
+```
+New operation domains for unified asset standards:
+
+  expression.set     → set character expression (ExpressionSpec)
+  expression.blend   → blend multiple expressions
+
+  motion.apply       → apply motion to character (SemanticMotion)
+  motion.record      → start/stop mocap recording
+
+  scene.configure    → modify scene parameters (Partial<SceneSpec>)
+  scene.addCharacter → place character in scene
+  scene.addProp      → place prop in scene
+
+  light.adjust       → modify lighting (Partial<LightSpec>)
+  light.setIBL       → set environment map
+
+  effect.bind        → bind effect to EmotionArc (EmotionBinding)
+  effect.configure   → modify effect parameters
+
+  voice.generate     → TTS generation (text + VoiceSpec → audio + visemes)
+
+  camera.preset      → apply camera preset (shot type → keyframes)
+  camera.keyframe    → add camera keyframe at time
+
+  emotion.set        → set EmotionArc value at time
+  emotion.curve      → set EmotionArc curve segment
+
+  memory.anchor      → create MemoryAnchor
+  memory.discover    → unlock discovery fragment
+
+  binding.character  → bind script character → CharacterBundle
+  binding.scene      → bind script scene heading → SceneSpec
+
+  Each operation: domain + type + payload + before (for undo).
+  All domains share one OperationHistory → unified cross-domain undo/redo.
+```
+
+#### AIWorkflow (Multi-Step AI Orchestration)
+
+```
+AI intent → multiple operations that must succeed atomically:
+
+  AIWorkflow {
+    steps: AIWorkflowStep[],
+    atomic: boolean,            // all-or-nothing
+    rollbackOnFailure: boolean
+  }
+
+  AIWorkflowStep {
+    id: string,
+    operation: EditOperation,
+    dependsOn: string[],        // DAG dependencies
+    condition?: string,         // conditional execution
+    retryCount?: number
+  }
+
+  Example: "Alice anxiously says a line"
+    step 1: expression.set('anxious')      dependsOn: []     ← parallel
+    step 2: voice.generate(text, voice)    dependsOn: []     ← parallel
+    step 3: motion.apply('fidget')         dependsOn: []     ← parallel
+    step 4: camera.preset('close_up')      dependsOn: [1]    ← after expression
+    step 5: light.adjust(temperature: -500) dependsOn: [4]   ← after camera
+
+  Workflow Executor:
+    1. Topological sort steps (DAG)
+    2. Execute independent steps in parallel
+    3. Execute dependent steps sequentially
+    4. Any failure + atomic=true → rollback all
+    5. All success → merge into single batch EditOperation → commit
+    6. Undo reverses entire batch
+
+  MCP tool integration:
+    Tools declare resultType: 'AIEditResult' + operationDomains[].
+    Agent calls tool → AIEditResult → Workflow Executor auto-applies.
+    Zero per-tool custom application logic.
+```
+
+#### AI Edit Architecture
+
+```
+  User intent
+      ↓ LLM (Level 1)
+  SceneDirective { character, emotion, dialogue, camera, mood }
+      ↓ AI Workflow Generator (Level 2, deterministic)
+  AIWorkflow { steps: [expression, voice, motion, camera, light] }
+      ↓ Workflow Executor
+  Topological sort → parallel execute → validate → commit
+      ↓ Operation Apply Layer (Level 4)
+  EditOperation → route by domain:
+    timeline  → applyOperation(projectData, op)
+    canvas    → canvasOperationStore.apply(op)
+    expression → puppetService.setExpression(op)
+    scene     → sceneService.configure(op)
+    light     → sceneService.setLight(op)
+    camera    → timelineService.setCameraKeyframe(op)
+    voice     → audioService.addTTSResult(op)
+    emotion   → emotionArcController.setValue(op)
+    memory    → playerSave.createAnchor(op)
+    binding   → storyBinding.setCharacter(op)
+      ↓
+  Unified OperationHistory (all domains, cross-domain undo/redo)
+```
+
+### AI Perceive-Edit-Verify Loop (Cross-Stage)
+
+```
+Problem: AI currently "edits blind" — doesn't see the current state, doesn't
+verify the result. User must manually iterate ("too dark" → "still too dark" → ...).
+
+Solution: Closed-loop with perception, planning, execution, and verification.
+```
+
+#### Perception System
+
+```
+Two perception paths, used together:
+
+  Path A — Structured Perception (milliseconds, no ML):
+    Read data directly:
+      timeline → ProjectData → tracks, elements, keyframe values
+      character → PuppetParameters → current parameter values
+      scene → SceneSpec → light/camera/effect parameters
+      audio → FFmpeg → waveform, spectrum, loudness
+      EmotionArc → current value and trend
+
+  Path B — Visual Perception (seconds, requires VLM):
+    Render current frame → screenshot → send to VLM:
+      gpu_export_pipeline.render_frame(time) → JPEG
+      → Claude/GPT-4V: "Describe mood, composition, lighting, issues"
+
+  Output: PerceptionContext {
+    structured: { timeline stats, character params, scene params, audio stats },
+    visual: { description, mood, composition, colorPalette, issues, aestheticScore },
+    temporal: { previousShot comparison, continuity issues },
+    narrative: { script requirements, expected emotion, story beat }
+  }
+
+  Strategy: structured first (fast values) → visual when deeper understanding needed.
+```
+
+#### Five-Level Validation Pipeline
+
+```
+After each edit, results pass through progressive validation:
+
+  Level 1 — Technical (ms, no ML):
+    Parameter range checks, format completeness, reference integrity, render feasibility.
+    → Pass/Fail + error details.
+
+  Level 2 — Numerical (ms, no ML):
+    Before/after value comparison, target achievement check, extreme value detection.
+    → Modification summary + anomaly warnings.
+
+  Level 3 — Visual (seconds, render + VLM):
+    Render modified frame → VLM analysis: "Does it match 'melancholic' description?"
+    Before/after screenshot comparison. Aesthetic score delta.
+    Issue detection: "Character face too dark to see expression."
+    → Visual assessment report + suggested fixes.
+
+  Level 4 — Consistency (seconds, context-aware):
+    Compare with previous/next shots (color temperature diff < 500K?).
+    Character appearance consistency (CLIP embedding similarity > 0.8).
+    Style consistency with project Aesthetic Memory.
+    → Consistency score + deviation items.
+
+  Level 5 — Narrative (seconds, LLM):
+    Visual mood vs script requirement ("script says anxious, does frame convey it?").
+    Character performance vs persona ("Alice wouldn't smile here").
+    Pacing vs narrative beat (climax shouldn't feel slow).
+    → Narrative match score + mismatches.
+
+  Scoring and auto-refinement:
+    score >= 0.8: auto-pass (result satisfactory)
+    score 0.5-0.8: auto-refine (apply suggestedFix, re-verify, max 3 iterations)
+    score < 0.5: report to user (AI uncertain, request human confirmation)
+```
+
+#### Complete Perceive-Edit-Verify Flow
+
+```
+  User: "Make this shot more melancholic, Alice should be more anxious"
+      ↓
+  Step 1 PERCEIVE:
+    Structured: temperature 5500K, brightness 0.8, expression neutral, emotion 0.2
+    Visual (VLM): "Bright café, character looks calm, warm tones"
+    Narrative: Script requires "anxious" → current "calm" = mismatch
+      ↓
+  Step 2 PLAN:
+    Gap: warm+bright+neutral → need cold+dim+anxious
+    → AIWorkflow: expression.set + emotion.set + light.adjust + effect + camera (5 steps)
+      ↓
+  Step 3 EDIT:
+    Execute AIWorkflow → all 5 operations succeed → batch commit
+      ↓
+  Step 4 VERIFY:
+    L1 technical: ✅ all params in range
+    L2 numerical: ✅ temperature -1300K, brightness -0.3
+    L3 visual: VLM → "Dark café, character frowning, cold tones, vignette focus"
+               ⚠️ "Character face too dark, expression details unclear"
+               score = 0.75 → needs refinement
+    L4 consistency: ✅ color diff with previous shot acceptable
+    L5 narrative: ✅ "Frame conveys anxiety, matches script"
+      ↓
+  Step 5 REFINE:
+    Apply suggestedFix: brightness +0.1 (face slightly brighter)
+    Re-verify: score = 0.88 → ✅ pass
+      ↓
+  Step 6 REPORT:
+    "Adjusted to melancholic atmosphere:
+     - Temperature 5500K → 4200K (cooler)
+     - Brightness reduced 30%, vignette added
+     - Alice expression → anxious, camera → close-up
+     [Before] [After] comparison screenshots
+     Aesthetic score: 7.2 → 8.4"
+
+  Reuses existing infrastructure:
+    Quality Assessment (neko-agent) → upgrade to Level 3-4 validators
+    CLIP scoring (runtime-ml) → style consistency detection
+    gpu_export_pipeline.render_frame() → screenshot for visual perception
+    engine probe API → structured metadata perception
 ```
 
 ### Progressive ECS Expansion

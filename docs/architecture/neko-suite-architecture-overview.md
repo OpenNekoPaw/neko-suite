@@ -218,6 +218,38 @@
 
 ---
 
+## RenderProfile (One Engine, Multiple Behaviors)
+
+```
+Not 3 engines (rendering + game + simulation). One wgpu pipeline + dynamic profiles.
+
+  Profile          Target              Budget    Shadow   PostFX    Physics   Determinism
+  ───────────────────────────────────────────────────────────────────────────────────────
+  Video            Max quality          Unlimited Full     All       None      No
+  Interactive      60fps + good quality 16ms      Medium   Essential None      No
+  XR               90fps × 2 eyes       11ms      Minimal  Color only Basic   No
+  Game             60fps + physics      16ms      CSM      Full+LOD  Rapier   No
+  Simulation       Throughput + accuracy Variable  Off      None (raw)Rapier det. Yes
+  Web              60fps in browser     16ms      Basic    TSL light WASM     No
+
+Same SceneSpec → different profile → different rendering.
+Assets are profile-agnostic. Profile is the consumer's concern.
+
+Parallel QA profiles (creation-time, not runtime):
+  QualityProfile::Video         aesthetic + continuity + narrative + audio_sync
+  QualityProfile::Interactive   framerate + branch_coverage + state + persona
+  QualityProfile::Serialized    state_compat + save_compat + butterfly (strictest)
+  QualityProfile::XR            framerate(90) + comfort + spatial_reach + stereo
+  QualityProfile::Game          framerate + physics + playable + balance
+  QualityProfile::Simulation    determinism + physics_accuracy + data_distribution
+
+WorkflowTemplate per scene type: ordered stages with quality gates.
+Three aligned configs per scene: RenderProfile + QualityProfile + WorkflowTemplate.
+See neko-engine-architecture.md for full definitions.
+```
+
+---
+
 ## VSCode Extension Architecture
 
 ```
@@ -329,6 +361,193 @@ Flow 5: Serialized + Memory (cross-episode state)
   SeriesSpec → episode load → PlayerSave restore → runtime execute
   → MemoryAnchor create → CharacterAgent perspective inject
   → DiscoverySystem → fragment release → save → next episode
+```
+
+---
+
+## AI Edit Protocol
+
+```
+AI tools produce AIEditResult → Workflow Executor auto-applies → unified undo/redo.
+
+  AIEditResult { generatedAssets[], operations: EditOperation[], rollback, preconditions }
+  AIWorkflow { steps: AIWorkflowStep[] (DAG), atomic: boolean }
+
+Extended operation domains (beyond current 56 timeline/canvas/sketch/audio ops):
+  expression.set/blend    → ExpressionSpec on character
+  motion.apply/record     → SemanticMotion on character
+  scene.configure/addChar → SceneSpec modification
+  light.adjust/setIBL     → LightSpec modification
+  effect.bind/configure   → EffectSpec + EmotionBinding
+  voice.generate          → TTS + visemes
+  camera.preset/keyframe  → CameraKeyframe
+  emotion.set/curve       → EmotionArc value
+  memory.anchor/discover  → MemoryAnchor + DiscoverySystem
+  binding.character/scene → StoryBinding
+
+Flow: User intent → LLM → SceneDirective → AIWorkflow → Executor → EditOperations
+     → route by domain → apply → unified OperationHistory (cross-domain undo/redo)
+```
+
+---
+
+## AI Perceive-Edit-Verify Loop
+
+```
+Closed-loop: AI sees current state → plans edits → executes → verifies → auto-refines.
+
+Perception (two paths):
+  Structured (ms): read params/SceneSpec/timeline/audio directly → numerical values
+  Visual (sec): render frame → screenshot → VLM analysis → semantic understanding
+  → PerceptionContext { structured, visual, temporal, narrative }
+
+Five-level validation after every edit:
+  L1 Technical (ms):  parameter ranges, format integrity, reference validity
+  L2 Numerical (ms):  before/after delta, target achievement, extreme detection
+  L3 Visual (sec):    render → VLM → mood match + aesthetic score + issue detection
+  L4 Consistency (sec): CLIP cross-shot similarity, style drift, continuity
+  L5 Narrative (sec):  LLM script-vs-visual mood alignment, character fidelity
+
+Auto-refinement: score ≥ 0.8 pass | 0.5-0.8 auto-fix (max 3 rounds) | < 0.5 ask user
+Report: before/after screenshots + parameter deltas + aesthetic score change
+```
+
+---
+
+## Unified Asset Standard (Cross-Scene)
+
+### Four-Layer Standard System
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                   NEKO UNIFIED ASSET STANDARD                        │
+│                                                                      │
+│  Identity Layer (WHO)                                                │
+│  ┌───────────────────────────────────────────────────────────────┐   │
+│  │ CharacterBundle (.nkchar)                                     │   │
+│  │   model + motions{} + expressions{} + voice + agent + metadata│   │
+│  │   One character definition, invariant across all scenes.      │   │
+│  └───────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  Performance Layer (HOW THEY MOVE)                                   │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────────┐  │
+│  │SemanticMotion    │ │ExpressionSpec    │ │VoiceSpec            │  │
+│  │(.nkmotion)       │ │(.nkexpr)         │ │(in Character)       │  │
+│  │                  │ │                  │ │                     │  │
+│  │~20 body channels │ │~16 atomic face   │ │ttsProvider + voiceId│  │
+│  │dimension-agnostic│ │~30 compound      │ │+ visemeMode         │  │
+│  │+ RetargetMap     │ │+ blendMode/micro │ │                     │  │
+│  └──────────────────┘ └──────────────────┘ └─────────────────────┘  │
+│                                                                      │
+│  World Layer (WHERE)                                                 │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────────┐  │
+│  │SceneSpec         │ │LightSpec         │ │EffectSpec           │  │
+│  │(.nkscene)        │ │(in SceneSpec)    │ │(.nkeffect)          │  │
+│  │                  │ │                  │ │                     │  │
+│  │environment       │ │ambient IBL       │ │layers[] + params    │  │
+│  │+ characters[]    │ │+ lights[]        │ │+ scope[]            │  │
+│  │+ props[] + camera│ │+ shadow + post   │ │+ emotionBinding     │  │
+│  │+ effects[]       │ │+ emotionBinding  │ │+ multi-backend      │  │
+│  └──────────────────┘ └──────────────────┘ └─────────────────────┘  │
+│                                                                      │
+│  Narrative Layer (WHAT STORY)                                        │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌─────────────────────┐  │
+│  │StoryBinding      │ │SeriesSpec        │ │MemoryAnchor         │  │
+│  │(.nkbind)         │ │(.nkseries)       │ │(in PlayerSave)      │  │
+│  │                  │ │                  │ │                     │  │
+│  │character→Bundle  │ │episodes[] DAG    │ │fact (ground truth)  │  │
+│  │scene→SceneSpec   │ │stateContract     │ │+ perspectives{}     │  │
+│  │emotion→Expression│ │sharedAssets      │ │+ discovery layers   │  │
+│  │action→Motion     │ │+ PlayerSave      │ │+ anchor_rules       │  │
+│  └──────────────────┘ └──────────────────┘ └─────────────────────┘  │
+│                                                                      │
+│  All assets referenced by ID (loose coupling).                       │
+│  AssetRegistry resolves ID → file path at runtime.                   │
+│  All specs versioned (specVersion + migrator + validator).           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Cross-Scene Consumption Matrix
+
+```
+1 CharacterBundle → consumed by ALL scenes (zero per-scene adaptation code):
+
+  Scene           How Character Is Used                  Consumed Via
+  ─────────────────────────────────────────────────────────────────────
+  Video editing   puppet/scene3d track + motion + TTS    TimelineLoader
+  2D animation    parameter editing + keyframes          PuppetEditor
+  3D editing      transform + morph + IK                 SceneEditor
+  VTuber live     ARKit → SemanticMotion → drive         LiveDriver
+  Interactive     CharacterAgent AI dialogue + emotion   StageLoader
+  XR preview      billboard in 3D + spatial audio        XrLoader
+  Game            SceneSpec placement + physics           GameLoader
+  Simulation      sensor-visible entity                   SimLoader
+  Web export      Three.js VRM / PixiJS Live2D           WebLoader
+  Audiobook       VoiceSpec → TTS only                   AudioExporter
+  Digital human   Web Viewer + DynamicDialogue           WebComponent
+```
+
+### Consumer Interface Pattern
+
+```
+Each scene consumes unified assets through typed Loader/Applier traits:
+
+  trait SceneLoader     { fn load(spec: &SceneSpec) → LoadedScene }
+  trait MotionApplier   { fn apply(motion: &SemanticMotion, time, world) }
+  trait ExpressionApplier { fn apply(expr: &ExpressionSpec, weight, world) }
+  trait EffectRenderer  { fn render(spec: &EffectSpec, input, params) → Texture }
+
+  Per-scene implementations:
+    Timeline:  TimelineSceneLoader → GpuLayer[]
+    Stage 3:   StageSceneLoader → bevy_ecs World
+    XR:        XrSceneLoader → bevy_ecs World + XrSession
+    Game:      GameSceneLoader → bevy_ecs World + Rapier
+    Sim:       SimSceneLoader → bevy_ecs World + Deterministic
+    Web:       WebSceneLoader → Three.js Scene + PixiJS
+
+  Standard defines WHAT. Loader/Applier decides HOW for each target.
+```
+
+### Format Compatibility
+
+```
+External ecosystem ←→ Neko Unified Standard ←→ External export
+
+  Import Adapters (7 P0):
+    .bvh ↔ SemanticMotion           (motion capture ecosystem)
+    .vmd ↔ SemanticMotion+Expr+Cam  (MMD community)
+    .cube ↔ EffectSpec LUT          (color grading ecosystem)
+    .hdr/.exr → LightSpec IBL       (PBR lighting ecosystem)
+    .exp3.json ↔ ExpressionSpec     (Live2D ecosystem)
+    .motion3.json ↔ SemanticMotion  (Live2D ecosystem)
+    glTF anim ↔ SemanticMotion      (3D ecosystem)
+
+  Native formats (no conversion needed):
+    .vrm → CharacterBundle (3D)
+    .moc3 → CharacterBundle (2D)
+    .glb → SceneSpec environment
+
+  MCP bridge (private formats):
+    .fbx → Blender MCP → .glb
+    .psd → Photoshop MCP → .png layers
+```
+
+### Asset Registry as Knowledge Hub
+
+```
+AssetRegistry stores capability metadata per asset:
+
+  3d-model:    { hasBlendShapes, humanoidBones, animationNames, memoryMB }
+  puppet:      { parameterNames, parameterCount, expressionCount }
+  motion:      { boneNames, duration, fps }
+  environment: { colorSpace, resolution, bitDepth }
+  lut:         { gridSize, inputColorSpace }
+
+  Consumers query registry for intelligent behavior:
+    StoryBinding editor → query character capabilities → auto-suggest mappings
+    SceneSpec editor → filter by AssetType → show only compatible assets
+    RetargetMap builder → query bone/parameter names → auto-generate mapping
+    AI SceneAssembler → query available assets → intelligent selection
 ```
 
 ---

@@ -61,21 +61,38 @@
 - [ ] Search enhancement follow-ups:
   - [ ] P0: Project directory resource search
   - *L1-L3 cache + P1/P2 search features depend on new Engine actions; will proceed once engine work is done*
+- [ ] **扩展名→AssetType 映射补全**: EXTENSION_TO_MEDIA_TYPE 补充 .glb/.vrm/.moc3/.hdr/.exr/.bvh/.vmd/.cube/.3dl/.exp3.json/.motion3.json + neko 自有格式 (.nkmotion/.nkexpr/.nkscene/.nkeffect/.nkchar/.nkbind/.nkseries)
+- [ ] **能力元数据提取 Handler**: Model3DHandler (glb/vrm 骨骼+动画+morph) + PuppetHandler (moc3 参数列表) + MotionHandler (bvh 骨骼名+时长) + LUTHandler (.cube 网格大小) + EnvironmentHandler (.hdr 分辨率+色深) — 简单格式 TS 解析, 复杂格式引擎 probe
 
 ### Cross-module
 - [ ] **Cross-domain linking**: Script→media references / asset path completion
 - [ ] `neko://` protocol (ADR design only; depends on server-side)
+- [ ] **AIEditResult 标准格式**: AI 工具统一返回 (generatedAssets + operations + rollback + preconditions) — 替代当前每个工具手写应用逻辑
+- [ ] **扩展 EditOperation 类型 (~10 新 domain)**: expression.set/blend + motion.apply + scene.configure + light.adjust + effect.bind + voice.generate + camera.preset + emotion.set + memory.anchor + binding.character — 覆盖统一资产标准的全部编辑操作
+- [ ] **AIWorkflow 多步编排**: DAG 步骤依赖 + 并行执行 + 原子提交 + 自动回滚 — "让 Alice 焦虑地说一句话" = 表情+语音+动作+运镜+光影 5 步原子操作
+- [ ] **MCP 工具 → AIEditResult 对接**: 工具声明 resultType + operationDomains → 框架自动 apply, 零逐工具定制
+- [ ] **AI 感知 PerceptionContext**: 结构化感知 (读 params/SceneSpec/timeline, 毫秒级) + 视觉感知 (render_frame→截图→VLM, 秒级) → 聚合为 PerceptionContext (数值+语义+时序+叙事)
+- [ ] **5 级验证管线 ValidationPipeline**: L1 技术校验 + L2 数值对比 + L3 视觉验证 (渲染→VLM→美学评分) + L4 一致性 (CLIP 跨镜头) + L5 叙事匹配 (LLM 剧本↔画面)
+- [ ] **自动微调 AutoRefine**: score≥0.8 通过 / 0.5-0.8 应用 suggestedFix→重新验证 (最多 3 轮) / <0.5 报告用户 + Before/After 对比截图报告
+- [ ] **QualityProfile 场景质量配置**: 每场景类型定义 checks[] + weights + passThreshold + autoRefine — Video (美学+连续性+叙事) / Interactive (帧率+分支覆盖+状态一致) / Serialized (存档兼容+状态契约) / XR (舒适度+90fps+立体) / Game (物理+可玩+平衡) / Simulation (确定性+精度+分布)
+- [ ] **场景专属 Checker**: branch_coverage (分支遍历) + state_consistency (幂等性) + save_compat (旧存档加载新集) + comfort (XR 眩晕检测) + physics_valid (穿模/浮空) + determinism (确定性校验) — Checker trait 注册, 按 QualityProfile 按需加载
+- [ ] **WorkflowTemplate 场景工作流**: 每场景类型定义有序阶段 + 质量门禁 — Video (7 阶段) / Interactive (8 阶段含分支测试+AI 对话测试) / Serialized (6 阶段含兼容性检查+蝴蝶效应测试)
 - [ ] Git LFS integration
 - [ ] **Remove `CreativeGridView` from neko-story** (ADR-1: image generation belongs entirely in canvas)
 - [ ] **SceneSpec 统一场景描述**: @neko/shared 定义 SceneSpec 类型 (environment + characters + props + camera + effects) — 替代 Scene3DElement 碎片字段, 所有 Stage 共用
 - [ ] **EffectSpec 统一特效描述**: @neko/shared 定义 EffectSpec 类型 (layers + params + scope + emotionBinding) — 替代 EffectInstance, 支持多渲染后端 (wgpu/Three.js/CSS)
 - [ ] **ExpressionSpec 统一表情描述**: @neko/shared 定义 ExpressionSpec 类型 (原子通道 + 复合预设 ~30 个 + blendMode + micro noise) — 统一 VRM/Live2D/ARKit 表情, 支持 EmotionArc 连续混合
+- [ ] **EmotionArc 情绪时间线**: @neko/shared 定义 EmotionArc 类型 (关键帧: time + EmotionVector[joy/sadness/anger/fear/surprise + intensity] + trigger 文本) — 驱动 ExpressionSpec (面部) + SemanticMotion (体态) + VoiceSpec (语气) + LightSpec (氛围) + MusicSpec (配乐) 五维同步; LLM 从剧本自动生成
+- [ ] **CameraDirector AI 运镜**: neko-agent 工具 — LLM 根据场景内容 + EmotionArc 生成 CameraKeyframe[] (对话→近景交替 / 紧张→慢推 / 全景→慢摇); 输出到 Camera Keyframe Track
 - [ ] **LightSpec 光照标准**: 嵌入 SceneSpec (ambient IBL + directional/point/spot + shadow + postProcess AO/Bloom/Fog + emotionBinding)
 - [ ] **格式兼容 P0 — BVH 动捕适配**: bvh_adapter (BVH ↔ SemanticMotion, 骨骼名映射) — 解锁 Mixamo/CMU/专业动捕生态
 - [ ] **格式兼容 P0 — LUT 色彩预设**: cube_adapter (.cube/.3dl ↔ EffectSpec LUT) — 解锁 DaVinci/调色生态
 - [ ] **格式兼容 P0 — HDR 环境贴图**: hdr_adapter (.hdr/.exr → LightSpec IBL texture) — 解锁 PBR 光照生态
 - [ ] **格式兼容 P1 — VMD 动画**: vmd_adapter (.vmd ↔ SemanticMotion + ExpressionSpec + CameraKeyframe) — 解锁 MMD 社区动作库
-- [ ] **视频→动作/表情提取**: 视频逐帧 MediaPipe Pose + FaceMesh (ONNX) → SemanticMotion + ExpressionSpec[] → .nkmotion 保存 — "拍一段视频→驱动任何角色"
+- [ ] **RetargetMap 骨骼/参数重定向**: @neko/shared 定义 RetargetMap 类型 (SMPL→VRM Humanoid / SMPL→Live2D / BVH→VRM 骨骼名映射) — 所有 AI 动作提取的前置基础设施
+- [ ] **HMR2 ONNX 视频→3D 动作**: runtime-ml 集成 HMR2 (~100MB ONNX) → 逐帧 SMPL body params + 3D joints → RetargetMap → SemanticMotion (.nkmotion) — P0 优先级，ONNX 基础设施已就绪
+- [ ] **视频→表情提取**: 视频逐帧 MediaPipe FaceMesh (ONNX) → ARKit 52 BlendShapes → ExpressionSpec[] → .nkmotion 保存
+- [ ] **Demucs ONNX 音频分轨**: runtime-ml 集成 Demucs (~200MB ONNX) → 人声/鼓/贝斯/其他 四轨分离 — 解锁 ai-match-music + Media Diff Phase 4 + neko-audio 混音
 - [ ] **图片→2.5D 分层场景**: Depth Anything v2 + SAM 分割 (ONNX) → 前景/中景/背景分层 → SceneSpec + parallaxFactor → 单张图片变可运镜场景
 - [ ] **视频→场景全分解**: SceneDetect 分镜 + Demucs 音频分轨 + Whisper 字幕 + 动作/表情/运镜提取 → 一段视频→完整结构化项目
 - [ ] **VoiceSpec + TTS viseme 驱动**: VoiceSpec 类型 (ttsProvider + voiceId + visemeMode) 绑定角色; TTS 输出 viseme 时间戳 → ExpressionSpec viseme 通道 additive 叠加
@@ -118,8 +135,10 @@
 - [ ] **runtime-puppet → GpuLayer 桥接**: engine-kernel 中 runtime-puppet 渲染到 RGBA 纹理 → GpuLayer, 插入 gpu_export_pipeline ③④ 之间 — 实现 2D+3D+视频同管线合成
 - [ ] **Camera Keyframe Track**: 摄像机关键帧轨道 (position/target/fov 随时间插值) + 预设运镜模板 (推拉摇移跟升降) — 支持 3D 场景运镜直出视频
 - [ ] **NPR 后处理 (3 渲 2)**: Cel Shading (色阶化光照) + Outline (描边, 法线/深度边缘检测) compute shader — 支持 3D 人物 + 2D 场景风格统一
-- [ ] AI action `ai-auto-edit` (needs to define "auto-edit" semantics)
-- [ ] AI action `ai-match-music` (needs beat detection + scene matching)
+- [ ] AI action `ai-auto-edit`: SceneDetect 分镜检测 + LLM 场景语义分析 + 自动拼接/调色/转场 — [技术路径](./docs/architecture/ai-technology-landscape.md#neko-cut-video-editing)
+- [ ] AI action `ai-match-music`: FFT 峰值检测 + onset strength 节拍分析 → 剪辑点自动对齐音乐节拍 — [技术路径](./docs/architecture/ai-technology-landscape.md#neko-cut-video-editing)
+- [ ] **Slip / Slide / Roll edit**: professional-grade ripple editing (cross-track rules + mode toggle)
+- [ ] **Native composite protocol**: text / subtitle / shape currently use Webview overlay; migrate to engine composite pipeline
 - [x] **Subtitle system consolidation**: subtitle track/element unified data model; PropertyPanel + inline SubtitlePanel dual entry; .srt/.vtt/.ass drag-in creates subtitle track
 - [x] **Pause-time composite expansion**: text/subtitle/shape via Webview overlay; scene3d retains engine seek frame
 - [x] **Asset library integration**: main workspace left dock panel (Assets + Subtitles tabs)
@@ -148,17 +167,98 @@
 - [ ] **Fix Context Chip consumption**: distinguish file-level vs content-level chips in `InputArea.tsx`
 - [ ] **Unify Explorer "Send to Agent"**: replace 4 existing implementations with unified `sendFileChip(uri, intent, typeOverride?)`
 - [ ] **`parse_script_to_shots` refactor** (ADR-2): extract as agent-internal step (zero canvas deps), separate from `create_canvas_storyboard`
+- [ ] **Creative Context Compression** ([ADR](./docs/architecture/creative-context-compression.md)): implement `IMessageClassifier` (7-level priority tagger) + `CreativeSummarizer` (structured output with version anchors / iteration chains / aesthetic preferences) + integrate into existing `ConversationCompressor` pipeline
+- [ ] **DragDropBroker Extension Host proxy** ([ADR §5](./docs/architecture/agent-media-architecture.md)): ~100-line proxy layer so Webview drag events reach Extension Host for cross-extension DnD
+- [ ] **`.neko/generated/` disk space management**: TTL / LRU eviction / manual cleanup UI for AI-generated asset cache
 
 ### neko-tools
 - [ ] Whisper ASR Diff + Demucs source separation
 - [ ] Detail polish + theme refinements
 
+### neko-tools — DI Refactoring
+> [ADR](./docs/architecture/neko-tools-di-refactor.md)
+- [ ] **Phase 2**: MediaDiff Host full DI restructuring (EngineMediaService / GitMediaService / MediaDiffService)
+- [ ] **Phase 3**: Media LSP Provider DI (workspace I/O / scheduler / probe service across LSP providers)
+- [ ] **Phase 4**: Webview DI (`IWebviewBridge` / `IBlobUrlRegistry` / `IStreamClientFactory` formal interfaces)
+- [ ] **Phase 5**: Unified extension i18n (consolidate all command/dialog/quick-pick text into `vscode.l10n`)
+
+### ControlNet Pipeline
+> [ADR](./docs/architecture/controlnet-pipeline.md)
+- [ ] **P0**: Fix 5 command bridge gaps (G1-G4: parameter forwarding + input type extension + API call corrections)
+- [ ] **P1**: E5 preprocessor in `runtime-ml` (depth / normal / pose / canny extraction via ONNX models)
+- [ ] **P2**: Auto-preprocessing workflow (canvas selects controlMode → auto-extract conditioning image from existing shot)
+
+### Media Diff — AI Semantic Phases
+> [ADR](./docs/architecture/diff.md)
+- [ ] **Phase 2B**: Complete Video H.264+PCM streaming (WebSocket protocol + H.264 decoder + PCM audio sync + seek sync; ~60% done)
+- [ ] **Phase 4**: AI semantic analysis — CLIP scoring + Whisper ASR comparison + Demucs audio source separation + Grounding DINO object-change localization
+- [ ] **Phase 5**: AI generative screening — deepfake / AI-artifact forensic ML detection
+- [ ] **Phase 6**: End-to-end quality scoring (SSIM/PSNR thresholds + semantic analysis combined)
+
+### Format Strategy
+> [ADR](./docs/architecture/format-strategy.md)
+- [ ] `.nkc` (canvas) and `.nka` (audio) format validator / migrator / codec — types exist, no Format SDK implementation
+- [ ] `.nkv-ops` operation history sidecar serialization — designed but not integrated
+- [ ] Fountain asset reference extensions: `[[IMAGE:path]]` / `[[ASSET:id]]` syntax in neko-story parser
+
 ### neko-audio (Audio Workstation)
 - [ ] Enhanced test coverage (currently 78 tests; core features complete)
+
+### neko-audio — P0 Multi-Track Editing
+> [ADR](./docs/architecture/neko-audio-workstation-assessment.md)
+- [ ] Marker lane UI and editing
+- [ ] Clip drag / move / trim handles
+- [ ] Inspector panel integration
+- [ ] Track Header Strip (arm / solo / monitor / meter / routing)
+- [ ] Recording closure (auto-insert to track with review dialog)
+- [ ] Split / range selection / fade handles
+- [ ] Snap / grid / loop controls
+
+### neko-audio — P1 Light Workstation
+- [ ] Mixer Lite (channel strips + pan / gain)
+- [ ] Solo / Arm / Monitor buttons + Track Meter display
+- [ ] Automation Lane
+- [ ] Asset Browser (search, filter, preview)
+- [ ] Render Queue (batch export progress)
+
+### neko-audio — P2 Professional Features
+- [ ] Bus / Send / Return routing
+- [ ] Master Meter Suite (LUFS / peak / RMS / phase)
+- [ ] Spectrogram analysis
+- [ ] Stem Export
+- [ ] Take Lanes and Comping workflow
+- [ ] Tempo / Beat Grid (music-oriented)
 
 ### neko-sketch (2D Painting)
 - [ ] **Transform tool implementation**: rotation/scale/skew (currently UI shell only)
 - [ ] S.4 P2: `style_transfer` / enhanced cross-module integration
+
+### neko-sketch — P0 Core Tool Gaps
+> [ADR](./docs/architecture/sketch-feature-gap-analysis.md)
+- [ ] **Adjustment layers**: Curves / Levels / White Balance / Vibrance — types exist, no render logic
+- [ ] **Layer masks + clipping masks**: data model exists, `compositeLayerStack()` not updated
+- [ ] **Lasso + magic wand selection**: ToolType enum present, SelectionManager only implements rect
+- [ ] **Alpha Lock**: fully absent (no type, no UI, no blend function modification)
+
+### neko-sketch — P1 Professional Tools
+- [ ] Symmetry painting (vertical / horizontal / multi-axis)
+- [ ] Gradient tool (linear / radial)
+- [ ] Text tool (`LayerType` stub only)
+- [ ] Reference image floating window
+- [ ] Clone stamp + healing brush
+- [ ] Hardness slider exposure + tilt influence (hardness hardcoded 0.7, tilt data unused)
+- [ ] Ruler / guide lines / grid snap (neko-canvas has snapEngine but it is not shared)
+
+### neko-sketch — 2D Lighting System
+> [ADR](./docs/architecture/sketch-2d-lighting.md)
+- [ ] **Phase 0**: flat point light + environment light + light tool UI
+- [ ] **Phase 1**: normal-map lighting + Blinn-Phong specular + RNM compositing shaders
+- [ ] **Phase 2**: spotlight / directional light / soft shadows / SSAO (deferred)
+- [ ] **AI normal-map generation**: Sobel-inferred shader → neko-agent integration
+
+### neko-puppet — 2D 法线打光 (Stage 3)
+- [ ] **PuppetElement normal map 通道**: 2D 角色支持法线贴图，fragment shader 实现伪 3D 光照（Blinn-Phong）；动态光源位置联动角色情绪/场景氛围（Stage 3 互动电影差异化功能）
+- [ ] **Spring Bone 布料模拟**: runtime-puppet/runtime-scene 中驱动 Spring Bone 链（stiffness/gravity/drag 参数化）；`ClothQuality` 字段进 `RenderProfile`（Video: 离线多帧迭代 / Interactive: 限制迭代次数）
 
 ---
 
@@ -188,12 +288,30 @@
 - [x] **glTF animation 回写**: `exporter.rs` animation channel 导出 (samplers + channels + accessors, 覆盖 Translation/Rotation/Scale/MorphWeights)
 - [x] **VRM BlendShape preset 元数据导出**: `build_vrm_extensions()` VRMC_vrm 1.0 (preset/custom 分类 + extras.defaultWeight); morphTargetBinds 为空 — 需 loader 扩展存储 morph target name→index 映射后补全
 - [ ] **3D 可复用动作资产**: 独立动画资产格式 (存 VRM Humanoid bone name 而非 node ID) + 骨骼重定向 retargeting — 支持动作跨 VRM 模型复用 + marketplace 分享
+- [ ] **PBR 材质体系完善**: `CharacterBundle.textures` 字段支持 albedo/normal/roughness/emission/subsurface 通道；`materialOverrides` 运行时参数覆盖（不修改原始文件）
+- [ ] **PBD 布料 compute shader** (Stage 4+): engine-kernel wgpu compute pass，distance + bend + collision constraints，mesh vertices GPU buffer 直接更新，插在 GPU Skinning pass 之前
 
 ### neko-engine (Engine Plugin Expansion)
 > [ADR](./docs/architecture/engine-plugin-rfc.md) + [Runtime Layering](./docs/architecture/engine-runtime-layering.md)
 - [ ] Extract `runtime-format` crate (decouple file format probing from engine-kernel)
 - [ ] Create FormatRegistry / DeviceRegistry / ExporterRegistry / PreviewRegistry (plugin-extensible registries)
 - [ ] Connector plugin support (external sidecar/remote runtime declarations + health check + state sync)
+- [ ] Plugin validation and signing chain (for marketplace distribution)
+
+### neko-engine — Future Runtime Stages
+> [ADR](./docs/architecture/neko-engine-architecture.md) — Stages 2-5
+- [ ] **runtime-xr** (Stage 2): OpenXR session + stereo instanced rendering + spatial input abstraction
+- [ ] **runtime-stage** (Stage 3): ScriptEngine + interactive orchestration + QTE / hotspot system
+- [ ] **runtime-game** (Stage 4): rapier3d physics + NavMesh + visual scripting
+- [ ] **runtime-sim** (Stage 5): deterministic playback + sensor MRT + Gym API
+
+### Canvas-Agent Integration — Phase 6
+> [ADR](./docs/architecture/canvas-agent-integration.md)
+- [ ] First/last keyframe video generation (`canvas_generate_video_with_keyframes`)
+- [ ] Style transfer (`canvas_apply_style_transfer` + IP-Adapter reference injection)
+- [ ] neko-sketch integration tool (`sketch_generate` from canvas)
+- [ ] Storyboard export enhancements: PDF / ZIP / neko-cut timeline export formats
+- [ ] Story inline diff editor rendering (Agent suggestion acceptance UI in editor)
 
 ### neko-live (VTuber Livestreaming)
 - [ ] Phase 5.1.3: Camera + MediaPipe (needs nokhwa crate)
@@ -305,6 +423,11 @@
 - [ ] `apply_custom_tex_fallback()` CPU round-trip → GPU compute
 - [ ] E5 Engine-aware modules: depth/normal/pose/edge local ONNX extraction
 - [ ] Quality assessment enhancements: VMAF / FFT / long-video segmentation / semantic audio
+- [ ] **UI shared components** ([ADR](./docs/architecture/ui-modernization-design.md) Phase 6): extract `ContextMenu` + `CollapsibleSection` + `TimelineRuler` to `@neko/shared` when a third package needs them (trigger-dependent)
+- [ ] **Panel Placement** ([ADR](./docs/architecture/panel-placement.md)): migrate neko-cut PropertyPanel from VSCode Activity Bar to internal Webview (`PropertyPanelViewProvider` removal + IPC bridge cleanup)
+- [ ] **LSP Phase 3**: Whisper.cpp audio transcription alignment (ASR Diff) + CLIP/Whisper prompt semantic alignment for `FindAllReferences` across media ([ADR](./docs/architecture/lsp.md))
+- [ ] **Ablation Framework wiring** ([ADR](./docs/architecture/ablation-experiment-framework.md)): session-init layer reads `AblationMarkerHook` and passes `disableHooks`/`disableCompression`/`disableSessionMemory` + Skill sub-switches (skillDiscovery / skillInjection / dynamicToolSets); unit tests for apply-toggles / metrics-hooks / experiment-runner
+- [ ] **project-data**: `neko-diff` CLI git diff driver (media-aware format summaries) + pHash perceptual hashing for media deduplication ([ADR](./docs/architecture/project-data-management.md))
 - [ ] neko-types: 54 remaining `any` type occurrences
 
 ### Content Provenance (C2PA) — Deferred
@@ -371,4 +494,4 @@
 
 ---
 
-*Last updated: 2026-04-15 (neko-agent Webview P0 complete: AppShell/ConversationController/ChatWorkspace split + typed message protocol + unified outbound gateway; neko-canvas NodeTypeDescriptor unified registry)*
+*Last updated: 2026-04-16 (AI technology integration: RetargetMap + HMR2 ONNX + Demucs ONNX + EmotionArc + CameraDirector AI + ai-auto-edit/ai-match-music 技术路径; see [ai-technology-landscape.md](./docs/architecture/ai-technology-landscape.md))*
