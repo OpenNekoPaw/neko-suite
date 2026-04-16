@@ -14,11 +14,9 @@
 
 import * as vscode from 'vscode';
 import { getLogger } from '../../utils/logger';
+import { hasPathVariable, resolvePreviewPath } from './workspacePathResolver';
 
 const logger = getLogger('PreviewFileServer');
-
-/** Extract ${VAR} from a path like /${VAR}/rest or ${VAR}/rest */
-const PATH_VARIABLE_RE = /\/?\$\{([^}]+)\}/;
 
 /**
  * Error thrown when a path contains an unresolved media/asset library variable.
@@ -49,22 +47,16 @@ class PreviewFileServer {
    * Throws UnresolvedPathVariableError if the variable cannot be expanded.
    */
   private async resolvePath(filePath: string): Promise<string> {
-    // Try resolving via neko-assets
-    try {
-      const resolved = await vscode.commands.executeCommand<string>(
-        'neko.assets.resolvePath',
-        filePath,
-      );
-      if (resolved && resolved !== filePath) {
+    const resolved = await resolvePreviewPath(filePath);
+    if (!hasPathVariable(resolved)) {
+      if (resolved !== filePath) {
         logger.info(`Resolved path: ${filePath} → ${resolved}`);
-        return resolved;
       }
-    } catch {
-      // neko-assets not active
+      return resolved;
     }
 
     // If path still contains a variable, it wasn't resolved — fail early
-    const match = filePath.match(PATH_VARIABLE_RE);
+    const match = filePath.match(/\/?\$\{([^}]+)\}/);
     if (match) {
       throw new UnresolvedPathVariableError(match[1]!, filePath);
     }

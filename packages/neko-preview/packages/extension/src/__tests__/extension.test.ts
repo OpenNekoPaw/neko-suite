@@ -224,6 +224,14 @@ describe('extension', () => {
       expect(registeredCommands).toContain('neko.preview.openAudio');
     });
 
+    it('should not depend on active text editor events for EPUB outline sync', async () => {
+      const context = createMockContext();
+
+      await activate(context);
+
+      expect(vscode.window.onDidChangeActiveTextEditor).not.toHaveBeenCalled();
+    });
+
     it('should inject shared PreviewService into providers', async () => {
       const context = createMockContext();
 

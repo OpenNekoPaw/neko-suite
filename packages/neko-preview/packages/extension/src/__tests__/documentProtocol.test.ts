@@ -4,6 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock vscode module
 // ============================================================================
 
+const { executeCommand, showWarningMessage, workspaceFolders, readFile } = vi.hoisted(() => ({
+  executeCommand: vi.fn(),
+  showWarningMessage: vi.fn(),
+  workspaceFolders: [] as Array<{ uri: { fsPath: string } }>,
+  readFile: vi.fn(),
+}));
+
 vi.mock('vscode', () => ({
   Uri: {
     file: (p: string) => ({ scheme: 'file', fsPath: p, path: p }),
@@ -13,9 +20,15 @@ vi.mock('vscode', () => ({
       path: [base.path, ...s].join('/'),
     }),
   },
-  commands: { executeCommand: vi.fn() },
-  window: { showWarningMessage: vi.fn() },
+  commands: { executeCommand },
+  window: { showWarningMessage },
+  workspace: { workspaceFolders },
   EventEmitter: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  default: { readFile },
+  readFile,
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -30,6 +43,13 @@ import {
   previewFileServer,
   UnresolvedPathVariableError,
 } from '../providers/document/PreviewFileServer';
+
+beforeEach(() => {
+  executeCommand.mockReset();
+  showWarningMessage.mockReset();
+  readFile.mockReset();
+  workspaceFolders.length = 0;
+});
 
 // ============================================================================
 // Tests: HTML escaping (real production functions)
@@ -133,6 +153,53 @@ describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
     vi.mocked(commands.executeCommand).mockResolvedValueOnce(null);
 
     await expect(previewFileServer.getPort()).rejects.toThrow('Neko Engine is not running');
+  });
+});
+
+describe('PreviewFileServer path resolution fallback', () => {
+  it('falls back to workspace media library settings when neko-assets does not resolve', async () => {
+    workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
+    executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
+    readFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace-a/.neko/settings.json') {
+        return JSON.stringify({
+          mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
+        });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+
+    const resolved = await (
+      previewFileServer as unknown as { resolvePath: (filePath: string) => Promise<string> }
+    ).resolvePath('/${A}/epub/book.epub');
+
+    expect(resolved).toBe('/Volumes/LibraryA/epub/book.epub');
+  });
+
+  it('prefers settings.local.json overrides when resolving workspace media library paths', async () => {
+    workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
+    executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
+    readFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace-a/.neko/settings.json') {
+        return JSON.stringify({
+          mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
+        });
+      }
+      if (filePath === '/workspace-a/.neko/settings.local.json') {
+        return JSON.stringify({
+          mediaLibraryOverrides: { A: '/Users/feng/LibraryA' },
+        });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+
+    const resolved = await (
+      previewFileServer as unknown as { resolvePath: (filePath: string) => Promise<string> }
+    ).resolvePath('/${A}/epub/book.epub');
+
+    expect(resolved).toBe('/Users/feng/LibraryA/epub/book.epub');
   });
 });
 

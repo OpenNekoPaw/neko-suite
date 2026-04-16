@@ -74,6 +74,10 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
         this._activeUri = document.uri;
         this._onDidChangeActiveEpub.fire(document.uri);
         emitActiveLocation();
+      } else if (this._activeUri?.fsPath === key) {
+        this._activeUri = null;
+        this._onDidChangeActiveEpub.fire(null);
+        this._onDidChangeActiveLocation.fire(null);
       }
     });
 

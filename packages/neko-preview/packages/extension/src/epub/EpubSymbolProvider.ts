@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { readEpubToc, type TocEntry } from './EpubParser';
+import { resolvePreviewPath } from '../providers/document/workspacePathResolver';
 
 interface CacheEntry {
   mtime: number;
@@ -17,18 +18,23 @@ interface CacheEntry {
 export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
   private readonly cache = new Map<string, CacheEntry>();
 
+  private async resolveFilePath(filePath: string): Promise<string> {
+    return resolvePreviewPath(filePath);
+  }
+
   async provideDocumentSymbols(
     document: vscode.TextDocument,
     token: vscode.CancellationToken,
   ): Promise<vscode.DocumentSymbol[]> {
-    const path = document.uri.fsPath;
+    const sourcePath = document.uri.fsPath;
+    const path = await this.resolveFilePath(sourcePath);
 
     // Check cache validity
     const stat = await fs.stat(path).catch(() => null);
     if (!stat) return [];
     const mtime = stat.mtimeMs;
 
-    const cached = this.cache.get(path);
+    const cached = this.cache.get(sourcePath);
     if (cached && cached.mtime === mtime) return cached.symbols;
 
     if (token.isCancellationRequested) return [];
@@ -37,13 +43,13 @@ export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
     if (token.isCancellationRequested) return [];
 
     const symbols = buildSymbolTree(toc);
-    this.cache.set(path, { mtime, symbols });
+    this.cache.set(sourcePath, { mtime, symbols });
     return symbols;
   }
 
   /** Retrieve cached TOC entries for a given file path (used by goToChapter command). */
   async getToc(filePath: string): Promise<TocEntry[]> {
-    return readEpubToc(filePath);
+    return readEpubToc(await this.resolveFilePath(filePath));
   }
 
   clearCache(filePath: string): void {

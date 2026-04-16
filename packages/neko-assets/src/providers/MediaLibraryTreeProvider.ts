@@ -28,6 +28,7 @@ import type { ThumbnailService } from '../services/ThumbnailService';
 import type { MediaMetadataCache } from '../services/MediaMetadataCache';
 import { formatDuration, formatResolution, buildMetadataTooltipLines } from '../utils/formatters';
 import { createThumbnailTooltip } from '../utils/thumbnailTooltip';
+import { getPreviewViewType } from '../utils/preview';
 import { t } from '../i18n';
 
 // =============================================================================
@@ -108,42 +109,26 @@ class MediaFileItem extends vscode.TreeItem {
     // filter menu items precisely (e.g. don't show "Add to Timeline" for documents).
     this.contextValue = `mediaLibrary:file:${mediaType}`;
     const uri = vscode.Uri.file(filePath);
+    const viewType = getPreviewViewType(filePath);
 
-    // Command: open with the appropriate neko-preview custom editor when available,
-    // or fall back to VSCode's default handler for unsupported types.
-    if (mediaType === 'video') {
-      this.command = {
-        command: 'vscode.openWith',
-        title: t('command.previewVideo'),
-        arguments: [uri, 'neko.videoPreview'],
-      };
-    } else if (mediaType === 'audio') {
-      this.command = {
-        command: 'vscode.openWith',
-        title: t('command.previewAudio'),
-        arguments: [uri, 'neko.audioPreview'],
-      };
-    } else if (mediaType === 'document') {
-      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-      const documentViewTypes: Record<string, string> = {
-        epub: 'neko.epubPreview',
-        cbz: 'neko.cbzPreview',
-        cbr: 'neko.cbzPreview',
-        pdf: 'neko.pdfPreview',
-        docx: 'neko.docxPreview',
-        doc: 'neko.docxPreview',
-      };
-      const viewType = documentViewTypes[ext];
-      this.command = viewType
-        ? { command: 'vscode.openWith', title: t('command.openFile'), arguments: [uri, viewType] }
-        : { command: 'vscode.open', title: t('command.openFile'), arguments: [uri] };
-    } else {
-      this.command = {
-        command: 'vscode.open',
-        title: t('command.openFile'),
-        arguments: [uri],
-      };
-    }
+    // Command: route to the registered preview editor when one exists, otherwise
+    // fall back to VS Code's default file opener.
+    this.command = viewType
+      ? {
+          command: 'vscode.openWith',
+          title:
+            mediaType === 'video'
+              ? t('command.previewVideo')
+              : mediaType === 'audio'
+                ? t('command.previewAudio')
+                : t('command.openFile'),
+          arguments: [uri, viewType],
+        }
+      : {
+          command: 'vscode.open',
+          title: t('command.openFile'),
+          arguments: [uri],
+        };
 
     // Icon: thumbnail or image preview when available; otherwise let
     // resourceUri + active file icon theme resolve the correct icon.

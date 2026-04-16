@@ -39,6 +39,7 @@ import { VscodeGitService } from './services/VscodeGitService';
 import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
+import { openAssetPreview } from './utils/preview';
 
 const logger = getLogger('Extension');
 
@@ -372,7 +373,7 @@ function registerAssetManagerCommands(
       if (!entity) return;
       const filePath = primaryFilePath(entity);
       if (!filePath) return;
-      await vscode.commands.executeCommand('neko.assets.previewMedia', vscode.Uri.file(filePath));
+      await openAssetPreview(vscode.Uri.file(filePath));
     }),
 
     vscode.commands.registerCommand('neko.assets.entity.addToTimeline', async (item?: unknown) => {
@@ -457,7 +458,7 @@ function registerAssetManagerCommands(
       const storedPath = result.variant.files[0]?.path;
       if (!storedPath) return;
       const filePath = lib.resolvePath(storedPath);
-      await vscode.commands.executeCommand('neko.assets.previewMedia', vscode.Uri.file(filePath));
+      await openAssetPreview(vscode.Uri.file(filePath));
     }),
 
     vscode.commands.registerCommand('neko.assets.variant.addFile', async (item?: unknown) => {
@@ -827,16 +828,7 @@ function registerMediaLibraryCommands(
         if (items.length === 0) return;
 
         const filePath = items[0].filePath;
-        const mediaType = detectMediaType(filePath);
-        const uri = vscode.Uri.file(filePath);
-
-        if (mediaType === 'video') {
-          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
-        } else if (mediaType === 'audio') {
-          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
-        } else {
-          await vscode.commands.executeCommand('vscode.open', uri);
-        }
+        await openAssetPreview(vscode.Uri.file(filePath));
       },
     ),
   );
@@ -1098,7 +1090,7 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
           canSelectFiles: true,
           canSelectMany: false,
           filters: {
-            'Media Files': [
+            'Preview Files': [
               'mp4',
               'mov',
               'avi',
@@ -1116,6 +1108,12 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
               'm4a',
               'wma',
               'opus',
+              'pdf',
+              'epub',
+              'cbz',
+              'cbr',
+              'docx',
+              'doc',
             ],
           },
         });
@@ -1123,14 +1121,8 @@ function registerLegacyCommands(context: vscode.ExtensionContext): void {
         uri = fileUri[0];
       }
 
-      const mediaType = detectMediaType(uri.fsPath);
-
       try {
-        if (mediaType === 'video') {
-          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
-        } else if (mediaType === 'audio') {
-          await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
-        }
+        await openAssetPreview(uri);
       } catch (error) {
         await handleError(error, { showToUser: true });
       }

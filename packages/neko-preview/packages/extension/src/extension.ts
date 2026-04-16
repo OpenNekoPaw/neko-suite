@@ -26,7 +26,6 @@ import { DocxPreviewProvider } from './providers/document/DocxPreviewProvider';
 import { registerOpenCommand } from './providers/document/documentProviderHelper';
 import { EpubSymbolProvider } from './epub/EpubSymbolProvider';
 import { EpubOutlineProvider } from './providers/EpubOutlineProvider';
-import { readEpubToc } from './epub/EpubParser';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
@@ -275,7 +274,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
     if (uri && uri.fsPath.endsWith('.epub')) {
       await vscode.commands.executeCommand('setContext', 'neko.epubEditorActive', true);
       try {
-        const toc = await readEpubToc(uri.fsPath);
+        const toc = await epubSymbolProvider.getToc(uri.fsPath);
         epubOutlineProvider.update(toc);
         await syncEpubOutlineLocation(epubProvider.getActiveLocation());
       } catch (err) {
@@ -290,13 +289,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
       epubOutlineProvider.clear();
     }
   };
-
-  // Listen for active text editor changes — clear outline when a non-EPUB editor gains focus
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(() => {
-      void refreshEpubOutline(null);
-    }),
-  );
 
   // Listen for EPUB custom editor activation/deactivation
   context.subscriptions.push(
