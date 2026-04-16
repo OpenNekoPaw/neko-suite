@@ -165,7 +165,10 @@ export async function normalizePathsForSave(
       elements: await Promise.all(
         track.elements.map(async (element) => {
           if (
-            (element.type === 'media' || element.type === 'audio' || element.type === 'scene3d') &&
+            (element.type === 'media' ||
+              element.type === 'audio' ||
+              element.type === 'scene3d' ||
+              element.type === 'puppet') &&
             typeof element.src === 'string' &&
             path.isAbsolute(element.src)
           ) {

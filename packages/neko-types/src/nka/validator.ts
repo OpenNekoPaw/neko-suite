@@ -43,10 +43,19 @@ const ALLOWED_TRACK_TYPES = new Set([
   'subtitle',
   'shape',
   'scene3d',
+  'puppet',
   'media',
 ]);
 
-const ALLOWED_ELEMENT_TYPES = new Set(['media', 'audio', 'text', 'shape', 'subtitle', 'scene3d']);
+const ALLOWED_ELEMENT_TYPES = new Set([
+  'media',
+  'audio',
+  'text',
+  'shape',
+  'subtitle',
+  'scene3d',
+  'puppet',
+]);
 
 // =============================================================================
 // Validate options

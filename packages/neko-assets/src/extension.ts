@@ -53,6 +53,8 @@ let mediaSettingsService:
   | import('./services/MediaLibrarySettingsService').MediaLibrarySettingsService
   | null = null;
 let healthMonitor: AssetHealthMonitor | null = null;
+/** Entity change event emitter — module-level so command handlers + API can both fire */
+let entityChangeEmitter: import('vscode').EventEmitter<void> | null = null;
 
 // =============================================================================
 // Node.js IFileSystem Adapter
@@ -571,6 +573,7 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
       try {
         const result = await library.importFile(uri.fsPath);
         await library.flush();
+        entityChangeEmitter?.fire();
         vscode.window.showInformationMessage(
           `Imported: ${result.entity.name} (${result.isNewEntity ? 'new entity' : 'existing entity'})`,
         );
@@ -1214,6 +1217,7 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 
   // ---- Typed Extension API (replaces command-level proxy for consumers) ----
   const _onDidChangeEntities = new vscode.EventEmitter<void>();
+  entityChangeEmitter = _onDidChangeEntities;
   context.subscriptions.push(_onDidChangeEntities);
 
   // Fire change event when media library settings change (libraries added/removed/refreshed)
@@ -1226,24 +1230,17 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
     importFile: async (uri) => {
       if (!library) return undefined;
       try {
-        await vscode.commands.executeCommand('neko.assets.importFile', vscode.Uri.file(uri.fsPath));
-        // Return the most recently added entity (import is async, entity is created by the command)
-        const entities = library.getAllEntities();
-        return entities[entities.length - 1];
+        const result = await library.importFile(uri.fsPath);
+        await library.flush();
+        _onDidChangeEntities.fire();
+        return result.entity;
       } catch {
         return undefined;
       }
     },
     getThumbnailPath: async (filePath) => {
-      try {
-        const result = await vscode.commands.executeCommand<string>(
-          'neko.assets.getThumbnailPath',
-          filePath,
-        );
-        return result ?? undefined;
-      } catch {
-        return undefined;
-      }
+      if (!thumbnailService) return undefined;
+      return thumbnailService.getPath(filePath) ?? undefined;
     },
     onDidChangeEntities: _onDidChangeEntities.event,
   };

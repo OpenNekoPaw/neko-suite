@@ -71,7 +71,17 @@
         },
         "type": {
           "type": "string",
-          "enum": ["video", "audio", "text", "effect", "subtitle", "shape", "scene3d", "media"],
+          "enum": [
+            "video",
+            "audio",
+            "text",
+            "effect",
+            "subtitle",
+            "shape",
+            "scene3d",
+            "puppet",
+            "media"
+          ],
           "description": "Track type determining what elements it can contain"
         },
         "elements": {
@@ -107,7 +117,8 @@
         { "$ref": "#/$defs/TextElement" },
         { "$ref": "#/$defs/ShapeElement" },
         { "$ref": "#/$defs/SubtitleElement" },
-        { "$ref": "#/$defs/Scene3dElement" }
+        { "$ref": "#/$defs/Scene3dElement" },
+        { "$ref": "#/$defs/PuppetElement" }
       ]
     },
     "TimelineElementBase": {
@@ -520,6 +531,29 @@
                   "description": "Vertical field of view in degrees"
                 }
               }
+            }
+          }
+        }
+      ]
+    },
+    "PuppetElement": {
+      "description": "A 2D puppet element (Live2D/MOC3)",
+      "allOf": [
+        { "$ref": "#/$defs/TimelineElementBase" },
+        {
+          "type": "object",
+          "required": ["type", "src"],
+          "properties": {
+            "type": { "const": "puppet" },
+            "src": { "type": "string", "description": "Source puppet file path (.moc3 or .inp)" },
+            "animationClip": { "type": "string", "description": "Active animation clip name" },
+            "animationLoop": { "type": "boolean", "description": "Loop animation playback" },
+            "animationSpeed": { "type": "number", "description": "Animation speed multiplier" },
+            "expression": { "type": "string", "description": "Active expression name" },
+            "parameterOverrides": {
+              "type": "object",
+              "description": "Parameter name to value overrides",
+              "additionalProperties": { "type": "number" }
             }
           }
         }
