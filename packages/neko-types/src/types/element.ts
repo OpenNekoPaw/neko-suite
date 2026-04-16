@@ -37,7 +37,7 @@ type AssertKeysSubset<A, B> =
 // Omit oneof fields (media/audio/text/shape/subtitle) — these are
 // element-type-specific data, not base element properties.
 type _CheckBaseElement = AssertKeysSubset<
-  Omit<EngineElement, 'media' | 'audio' | 'text' | 'shape' | 'subtitle' | 'scene3d'>,
+  Omit<EngineElement, 'media' | 'audio' | 'text' | 'shape' | 'subtitle' | 'scene3d' | 'puppet'>,
   BaseTimelineElement
 >;
 type _CheckSubtitle = AssertKeysSubset<EngineSubtitleElementData, SubtitleElement>;

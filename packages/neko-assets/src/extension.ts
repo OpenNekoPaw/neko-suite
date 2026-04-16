@@ -280,7 +280,37 @@ export async function activate(
   // 7. Register internal API commands (for cross-extension access)
   registerInternalCommands(context);
 
-  logger.info('Extension activated');
+  // 8. Build typed extension API (returned to VSCode as exports)
+  const _onDidChangeEntities = new vscode.EventEmitter<void>();
+  entityChangeEmitter = _onDidChangeEntities;
+  context.subscriptions.push(_onDidChangeEntities);
+
+  if (mediaSettingsService) {
+    context.subscriptions.push(mediaSettingsService.onDidChange(() => _onDidChangeEntities.fire()));
+  }
+
+  const api: import('@neko/shared').NekoAssetsAPI = {
+    getAllEntities: async () => (library ? library.getAllEntities() : []),
+    importFile: async (uri) => {
+      if (!library) return undefined;
+      try {
+        const result = await library.importFile(uri.fsPath);
+        await library.flush();
+        _onDidChangeEntities.fire();
+        return result.entity;
+      } catch {
+        return undefined;
+      }
+    },
+    getThumbnailPath: async (filePath) => {
+      if (!thumbnailService) return undefined;
+      return thumbnailService.getPath(filePath) ?? undefined;
+    },
+    onDidChangeEntities: _onDidChangeEntities.event,
+  };
+
+  logger.info('Extension activated, API exported');
+  return api;
 }
 
 // =============================================================================
@@ -366,6 +396,7 @@ function registerAssetManagerCommands(
       try {
         await lib.updateEntity(entity.id, { name: newName });
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -383,6 +414,7 @@ function registerAssetManagerCommands(
       try {
         await lib.addVariant(entity.id, { name: variantName });
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -401,6 +433,7 @@ function registerAssetManagerCommands(
       try {
         await lib.deleteEntity(entity.id);
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -432,6 +465,7 @@ function registerAssetManagerCommands(
       try {
         await lib.addFile(result.variant.id, uris[0].fsPath);
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -450,6 +484,7 @@ function registerAssetManagerCommands(
       try {
         await lib.updateVariant(result.entity.id, result.variant.id, { name: newName });
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -468,6 +503,7 @@ function registerAssetManagerCommands(
       try {
         await lib.deleteVariant(result.entity.id, result.variant.id);
         await lib.flush();
+        entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
         await handleError(error, { showToUser: true });
@@ -737,6 +773,7 @@ function registerMediaLibraryCommands(
             results.push(result.entity.name);
           }
           await library.flush();
+          entityChangeEmitter?.fire();
 
           if (results.length === 1) {
             vscode.window.showInformationMessage(
@@ -1214,39 +1251,6 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
       return library.resolvePath(storedPath);
     }),
   );
-
-  // ---- Typed Extension API (replaces command-level proxy for consumers) ----
-  const _onDidChangeEntities = new vscode.EventEmitter<void>();
-  entityChangeEmitter = _onDidChangeEntities;
-  context.subscriptions.push(_onDidChangeEntities);
-
-  // Fire change event when media library settings change (libraries added/removed/refreshed)
-  if (mediaSettingsService) {
-    context.subscriptions.push(mediaSettingsService.onDidChange(() => _onDidChangeEntities.fire()));
-  }
-
-  const api: import('@neko/shared').NekoAssetsAPI = {
-    getAllEntities: async () => (library ? library.getAllEntities() : []),
-    importFile: async (uri) => {
-      if (!library) return undefined;
-      try {
-        const result = await library.importFile(uri.fsPath);
-        await library.flush();
-        _onDidChangeEntities.fire();
-        return result.entity;
-      } catch {
-        return undefined;
-      }
-    },
-    getThumbnailPath: async (filePath) => {
-      if (!thumbnailService) return undefined;
-      return thumbnailService.getPath(filePath) ?? undefined;
-    },
-    onDidChangeEntities: _onDidChangeEntities.event,
-  };
-
-  logger.info('Extension activated, API exported');
-  return api;
 }
 
 // =============================================================================

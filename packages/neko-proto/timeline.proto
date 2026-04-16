@@ -61,6 +61,8 @@ enum TrackType {
   TRACK_TYPE_SUBTITLE = 4;
   TRACK_TYPE_SHAPE = 5;
   TRACK_TYPE_MEDIA = 6;  // Alias for Video (used in JVI files)
+  TRACK_TYPE_SCENE3D = 7;
+  TRACK_TYPE_PUPPET = 8;
 }
 
 // =============================================================================
@@ -377,6 +379,25 @@ message SubtitleElementData {
   optional TextShadow shadow = 9;
 }
 
+message Scene3DElementData {
+  string src = 1;
+  optional string camera_node_id = 2;
+  optional string animation_clip = 3;
+  bool animation_loop = 4;
+  double animation_speed = 5;  // default: 1.0
+  repeated float background_color = 6;  // [r,g,b,a]
+  // Camera override fields omitted (complex nested, handled by JSON fallback)
+}
+
+message PuppetElementData {
+  string src = 1;
+  optional string animation_clip = 2;
+  bool animation_loop = 3;
+  double animation_speed = 4;  // default: 1.0
+  optional string expression = 5;
+  map<string, float> parameter_overrides = 6;
+}
+
 // =============================================================================
 // Element (domain/timeline.rs)
 // =============================================================================
@@ -393,6 +414,8 @@ message Element {
     TextElementData text = 5;
     ShapeElementData shape = 6;
     SubtitleElementData subtitle = 7;
+    Scene3DElementData scene3d = 30;
+    PuppetElementData puppet = 31;
   }
   // Start time on timeline (seconds)
   double start_time = 8;

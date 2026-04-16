@@ -18,6 +18,7 @@ export type EngineTrackType =
   | 'subtitle'
   | 'shape'
   | 'scene3d'
+  | 'puppet'
   | 'media';
 
 export type EngineBlendMode =
@@ -320,6 +321,21 @@ export interface EngineScene3DElementData {
   };
 }
 
+export interface EnginePuppetElementData {
+  /** Source puppet file path (.moc3 or .inp) */
+  src: string;
+  /** Active animation clip name */
+  animationClip?: string;
+  /** Loop animation playback (default: false) */
+  animationLoop?: boolean;
+  /** Animation playback speed multiplier (default: 1.0) */
+  animationSpeed?: number;
+  /** Active expression name */
+  expression?: string;
+  /** Parameter value overrides */
+  parameterOverrides?: Record<string, number>;
+}
+
 export interface EngineElement {
   /** Element ID */
   id: string;
@@ -345,6 +361,7 @@ export interface EngineElement {
   shape?: EngineShapeElementData;
   subtitle?: EngineSubtitleElementData;
   scene3d?: EngineScene3DElementData;
+  puppet?: EnginePuppetElementData;
 }
 
 export interface EngineSpeedProperties {
