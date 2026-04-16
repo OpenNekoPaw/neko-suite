@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/timeline.proto
-// Source hash: 1e3923b4831dbb2b
+// Source hash: 8a141dc2196b9bf4
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -17,9 +17,9 @@ export type EngineTrackType =
   | 'effect'
   | 'subtitle'
   | 'shape'
+  | 'media'
   | 'scene3d'
-  | 'puppet'
-  | 'media';
+  | 'puppet';
 
 export type EngineBlendMode =
   | 'normal'
@@ -299,41 +299,37 @@ export interface EngineSubtitleElementData {
   shadow?: EngineTextShadow;
 }
 
+export interface EngineCameraOverride {
+  /** [x, y, z] */
+  position: number[];
+  /** [x, y, z] */
+  target: number[];
+  /** [x, y, z] default: [0, 1, 0] */
+  up: number[];
+  /** degrees, default: 45.0 */
+  fovY: number;
+}
+
 export interface EngineScene3DElementData {
-  /** Source glTF/GLB/VRM file path */
   src: string;
-  /** Camera node ID from model */
   cameraNodeId?: string;
-  /** Active animation clip name */
   animationClip?: string;
-  /** Loop animation playback (default: false) */
-  animationLoop?: boolean;
-  /** Animation playback speed multiplier (default: 1.0) */
-  animationSpeed?: number;
-  /** Background color [r,g,b,a] — null = transparent */
-  backgroundColor?: [number, number, number, number];
-  /** Camera override parameters */
-  cameraOverride?: {
-    position: [number, number, number];
-    target: [number, number, number];
-    up?: [number, number, number];
-    fovY?: number;
-  };
+  animationLoop: boolean;
+  /** default: 1.0 */
+  animationSpeed: number;
+  /** [r,g,b,a] */
+  backgroundColor: number[];
+  cameraOverride?: EngineCameraOverride;
 }
 
 export interface EnginePuppetElementData {
-  /** Source puppet file path (.moc3 or .inp) */
   src: string;
-  /** Active animation clip name */
   animationClip?: string;
-  /** Loop animation playback (default: false) */
-  animationLoop?: boolean;
-  /** Animation playback speed multiplier (default: 1.0) */
-  animationSpeed?: number;
-  /** Active expression name */
+  animationLoop: boolean;
+  /** default: 1.0 */
+  animationSpeed: number;
   expression?: string;
-  /** Parameter value overrides */
-  parameterOverrides?: Record<string, number>;
+  parameterOverrides: number;
 }
 
 export interface EngineElement {
