@@ -1,6 +1,6 @@
 # Workflow Orchestration 实施计划
 
-> Status: **Phase 1 + 1.5 已完成**（2026-04-18）；Phase 2-6 待启动
+> Status: **Phase 1 + 1.5 + 2（核心）已完成**（2026-04-18）；Phase 2 剩余 UI + Phase 3-6 待启动
 > Date: 2026-04-18
 > Owner: TBD
 > Related ADRs: [workflow-orchestration.md](../architecture/workflow-orchestration.md)（umbrella）
@@ -10,9 +10,10 @@
 | 阶段 | 状态 | 备注 |
 |------|------|------|
 | Phase 0: ADR 重构 | ✅ 完成 | 16 节 → 5 份聚焦 ADR + umbrella |
-| Phase 1 MVP: Router + AssetLib + Matching + LitePlan | ✅ 完成 | 86 条单测通过 |
-| Phase 1.5: 交互 Plan Mode + Webview 卡片 | ✅ 完成 | 91 条单测通过；feature flag `neko.workflow.orchestrator.enabled` 默认关 |
-| Phase 2: `.nkplan` 持久化 + 状态机 + 矩阵编辑 + ConsistencyChecker v1 | ⏳ 待启动 | 6-10 周 |
+| Phase 1 MVP: Router + AssetLib + Matching + LitePlan | ✅ 完成 | 86 条单测 |
+| Phase 1.5: 交互 Plan Mode + Webview 卡片 | ✅ 完成 | +5 条单测；feature flag `neko.workflow.orchestrator.enabled` 默认关 |
+| Phase 2 core: `.nkplan` + PlanStore + 状态机 + ConsistencyChecker v1 + 生命周期转换 | ✅ 完成 | +57 条单测（148 total） |
+| Phase 2 remainder: 矩阵编辑 + Plan fork + Checkpoint pause + diff viewer | ⏳ 待启动 | 2-4 周 |
 | Phase 3: LLM Router + 记忆闭环 | ⏳ 待启动 | 8-12 周 |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
@@ -41,6 +42,40 @@
 
 **Agent-types 层**：
 - `workflow-plan.ts` — postMessage-safe `WorkflowLitePlan` + 6 个消息类型
+
+### Phase 2 core 交付物（已合并）
+
+**Format SDK (`@neko/shared/nkplan`)**：
+- `types.ts` — `NkPlan` 持久化根类型 + 所有枚举 + 生命周期 (`NkplanStatus`)
+- `validator.ts` — 零依赖 pure 校验器（构造错误 + 警告）
+- `migrator.ts` — 版本迁移链（v1.0 baseline，为未来 v2+ 做好 scaffold）
+- `codec.ts` — `loadNkplan` / `saveNkplan` / `isValidNkplan`（组合 validator + migrator）
+- 22 条单测
+
+**Platform Plan 层扩展**：
+- `plan/persistence-types.ts` — LitePlan ↔ NkPlan 转换（`toNkPlan` / `toLitePlan`）
+- `plan/plan-state-machine.ts` — 严格转换表 (pending→approved→executing→paused/completed/failed/aborted，edited→pending) + `IllegalPlanTransitionError`
+- `plan/plan-store.ts` — 文件系统适配器，持久化 `<workDir>/.neko/plans/<id>.nkplan`，安全 id 校验，transition API
+- LitePlan 扩展 `constraints?: readonly Constraint[]` + `violations?: readonly Violation[]`
+- 28 条新单测
+
+**ConsistencyChecker v1**：
+- `consistency/types.ts` — Constraint / Violation / ViolationFix / ConsistencyRule 契约
+- `consistency/character-lock.ts` — 同角色跨镜资产锁定（respect `scene-change` / `character-change` 标签）
+- `consistency/time-progression.ts` — dawn<morning<noon<dusk<night 单调推进
+- `consistency/consistency-checker.ts` — facade 组合规则
+- 10 条单测
+
+**Agent-types 扩展**：
+- `WorkflowConstraint` / `WorkflowViolation` / `WorkflowViolationFix` 线上类型
+
+**Extension 扩展**：
+- `orchestrator-bootstrap.ts` 注入 `consistencyChecker` + `planStore`（带 `tryCreatePlanStore`）
+- `workflow-plan-handler.ts`：持久化生命周期（`persistInitial` + `transitionIfStored`），covered by 6 条新 handler 测试
+- 6 条 PlanStore 生命周期测试：pending→approved→executing 全链路、abort、override→edited、load round-trip、无 store 时降级
+
+**Webview 扩展**：
+- `WorkflowPlanCard.tsx` 增加 Consistency 违规栏（severity 色彩 + fix suggestions）
 
 本文档是 Workflow Orchestration ADR 家族的**可执行实施计划**。按新的分层 ADR 结构组织，支持并行 track 推进。
 
