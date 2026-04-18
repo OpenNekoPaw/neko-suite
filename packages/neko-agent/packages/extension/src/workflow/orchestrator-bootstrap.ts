@@ -31,6 +31,7 @@ import { getLogger } from '../base';
 type AssetLibrary = Workflow.AssetLibrary;
 type LitePlan = Workflow.LitePlan;
 type MatchingEngine = Workflow.MatchingEngine;
+type PlanStore = Workflow.PlanStore;
 type RawInput = Workflow.RawInput;
 type Route = Workflow.Route;
 type Router = Workflow.Router;
@@ -73,6 +74,8 @@ export interface Orchestrator {
   readonly assetLibrary: AssetLibrary | undefined;
   readonly matchingEngine: MatchingEngine;
   readonly planBuilder: Workflow.PlanBuilder;
+  /** Optional persistent store (available when a workspace folder exists). */
+  readonly planStore: PlanStore | undefined;
 
   /**
    * Build a plan from a raw input and dispatch it to the pipeline.
@@ -99,13 +102,16 @@ export async function bootstrapOrchestrator(
 ): Promise<Orchestrator> {
   const router = Workflow.createRouter();
   const matchingEngine = Workflow.createMatchingEngine();
+  const consistencyChecker = Workflow.createConsistencyChecker();
 
   // AssetLibrary is optional in Phase 1 — only load when a workspace dir exists
   // AND the required data files are readable. A missing library still allows
   // routing / plan generation; bindings will be empty.
   const assetLibrary = await tryCreateAssetLibrary(options.workDir);
+  const planStore = await tryCreatePlanStore(options.workDir);
 
   const planBuilder = Workflow.createPlanBuilder({
+    consistencyChecker,
     ...(assetLibrary !== undefined && {
       matchingEngine,
       assetLibrary,
@@ -117,6 +123,7 @@ export async function bootstrapOrchestrator(
     assetLibrary,
     matchingEngine,
     planBuilder,
+    planStore,
 
     async startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult> {
       const route = await router.decide(req.input, req.routerOverrides);
@@ -174,6 +181,19 @@ async function tryCreateAssetLibrary(
     });
   } catch (err) {
     logger.warn('AssetLibrary bootstrap failed — continuing without it', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  }
+}
+
+async function tryCreatePlanStore(workDir: string | undefined): Promise<PlanStore | undefined> {
+  if (!workDir) return undefined;
+  try {
+    const fileIO = await Workflow.createNodeFileIO();
+    return new Workflow.PlanStore({ workDir, fileIO });
+  } catch (err) {
+    logger.warn('PlanStore bootstrap failed — continuing without persistence', {
       error: err instanceof Error ? err.message : String(err),
     });
     return undefined;

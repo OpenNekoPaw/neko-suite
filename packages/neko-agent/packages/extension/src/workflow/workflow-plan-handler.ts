@@ -16,12 +16,14 @@ import type {
   WorkflowLitePlan,
   WorkflowRoute,
   WorkflowBindingCandidate,
+  WorkflowConstraint,
   WorkflowShotBindingSummary,
+  WorkflowViolation,
   WorkflowPlanAbortMessage,
   WorkflowPlanApproveMessage,
   WorkflowPlanOverrideMessage,
 } from '@neko-agent/types';
-import type { Workflow } from '@neko/platform';
+import { Workflow } from '@neko/platform';
 import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
 import { subscribePipelineProgress } from '../pipeline/pipeline-progress-bridge';
 import { getLogger } from '../base';
@@ -62,12 +64,17 @@ export interface PresentPlanOptions {
 export interface WorkflowPlanHandlerDeps {
   orchestrator: Orchestrator;
   getWebview: () => vscode.Webview | undefined;
+  /** Optional PlanStore override (defaults to orchestrator.planStore). */
+  planStore?: Workflow.PlanStore;
 }
 
 export class WorkflowPlanHandler {
   private readonly pending = new Map<string, PendingPlan>();
+  private readonly planStore: Workflow.PlanStore | undefined;
 
-  constructor(private readonly deps: WorkflowPlanHandlerDeps) {}
+  constructor(private readonly deps: WorkflowPlanHandlerDeps) {
+    this.planStore = deps.planStore ?? deps.orchestrator.planStore;
+  }
 
   /**
    * Build a plan, present it to the webview, and dispatch on user approval.
@@ -83,6 +90,9 @@ export class WorkflowPlanHandler {
       options.routerOverrides,
     );
 
+    // Persist the initial 'pending' plan so refreshes / crashes don't lose it.
+    await this.persistInitial(plan);
+
     // Auto-approve path: confidence clears the threshold and no shots need review.
     const threshold = options.autoApproveThreshold ?? 1.1; // default: never auto-approve
     if (route.confidence >= threshold && this.planHasNoRedCells(plan)) {
@@ -91,10 +101,18 @@ export class WorkflowPlanHandler {
         level: route.level,
         confidence: route.confidence,
       });
+      await this.transitionIfStored(plan.id, 'approved', {
+        reason: 'auto-approve (threshold met)',
+        by: 'system',
+      });
       const result = await this.deps.orchestrator.startRoutedPipeline({
         input: options.input,
         ...(options.routerOverrides !== undefined && { routerOverrides: options.routerOverrides }),
         ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
+      });
+      await this.transitionIfStored(plan.id, 'executing', {
+        pipelineId: result.handle.id,
+        by: 'system',
       });
       this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
       return { route, plan, result };
@@ -123,11 +141,20 @@ export class WorkflowPlanHandler {
     switch (decision.kind) {
       case 'abort':
         logger.info('Plan aborted by user', { planId: plan.id });
+        await this.transitionIfStored(plan.id, 'aborted', {
+          reason: 'user-abort',
+          by: 'user',
+        });
         this.postStatus(plan.id, 'aborted');
         return { route, plan, result: undefined };
 
       case 'override': {
-        // Re-run with forced level; recurse so the user can review the new plan
+        // Mark the original as 'edited' (→ pending) so the history shows
+        // the replacement lineage, then recurse.
+        await this.transitionIfStored(plan.id, 'edited', {
+          reason: `override to ${decision.forceLevel}`,
+          by: 'user',
+        });
         const overriddenOptions: PresentPlanOptions = {
           input: options.input,
           routerOverrides: {
@@ -144,6 +171,10 @@ export class WorkflowPlanHandler {
 
       case 'approve': {
         logger.info('Plan approved by user', { planId: plan.id });
+        await this.transitionIfStored(plan.id, 'approved', {
+          reason: 'user-approve',
+          by: 'user',
+        });
         const result = await this.deps.orchestrator.startRoutedPipeline({
           input: options.input,
           ...(options.routerOverrides !== undefined && {
@@ -151,10 +182,23 @@ export class WorkflowPlanHandler {
           }),
           ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
         });
+        await this.transitionIfStored(plan.id, 'executing', {
+          pipelineId: result.handle.id,
+          by: 'system',
+        });
         this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
         return { route, plan, result };
       }
     }
+  }
+
+  /**
+   * Load a previously persisted plan from disk. Returns undefined when no
+   * store is configured or the id is unknown.
+   */
+  async loadPersistedPlan(planId: string): Promise<Workflow.PersistentPlan | undefined> {
+    if (!this.planStore) return undefined;
+    return this.planStore.load(planId);
   }
 
   /**
@@ -231,11 +275,18 @@ export class WorkflowPlanHandler {
       ...(progressEventCommand !== undefined && { eventCommand: progressEventCommand }),
     });
 
-    // Best-effort status updates
+    // Best-effort status updates — propagate to webview and to PlanStore.
     result.handle.result
-      .then(() => this.postStatus(planId, 'completed'))
-      .catch((err: unknown) => {
+      .then(async () => {
+        await this.transitionIfStored(planId, 'completed', { by: 'system' });
+        this.postStatus(planId, 'completed');
+      })
+      .catch(async (err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
+        await this.transitionIfStored(planId, 'failed', {
+          errorMessage: message,
+          by: 'system',
+        });
         const webview = this.deps.getWebview();
         if (webview) {
           webview.postMessage({
@@ -246,6 +297,43 @@ export class WorkflowPlanHandler {
           });
         }
       });
+  }
+
+  // ---------------------------------------------------------------------------
+  // PlanStore integration (Phase 2)
+  // ---------------------------------------------------------------------------
+
+  private async persistInitial(plan: Workflow.LitePlan): Promise<void> {
+    if (!this.planStore) return;
+    try {
+      const persistent = Workflow.toNkPlan(plan);
+      await this.planStore.save(persistent);
+    } catch (err) {
+      logger.warn('Failed to persist initial plan', {
+        planId: plan.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async transitionIfStored(
+    planId: string,
+    to: Workflow.PlanStatus,
+    options: Workflow.PlanTransitionOptions = {},
+  ): Promise<void> {
+    if (!this.planStore) return;
+    try {
+      await this.planStore.transition(planId, to, options);
+    } catch (err) {
+      // Illegal-transition errors are expected if the store is already in a
+      // later state (e.g. auto-approve path also calls transition). Swallow
+      // these so best-effort persistence doesn't break the happy path.
+      logger.debug('Plan transition skipped', {
+        planId,
+        to,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private planHasNoRedCells(plan: Workflow.LitePlan): boolean {
@@ -272,6 +360,38 @@ export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
     })),
     ...(plan.shots !== undefined && { shots: plan.shots.map(toWireShot) }),
     ...(plan.notes !== undefined && { notes: [...plan.notes] }),
+    ...(plan.constraints !== undefined &&
+      plan.constraints.length > 0 && { constraints: plan.constraints.map(toWireConstraint) }),
+    ...(plan.violations !== undefined &&
+      plan.violations.length > 0 && { violations: plan.violations.map(toWireViolation) }),
+  };
+}
+
+function toWireConstraint(c: Workflow.Constraint): WorkflowConstraint {
+  return {
+    id: c.id,
+    kind: c.kind,
+    entity: c.entity,
+    shots: [...c.shots],
+    payload: { ...c.payload },
+    ...(c.severity !== undefined && { severity: c.severity }),
+  };
+}
+
+function toWireViolation(v: Workflow.Violation): WorkflowViolation {
+  return {
+    id: v.id,
+    kind: v.kind,
+    severity: v.severity,
+    constraintId: v.constraintId,
+    shotIds: [...v.shotIds],
+    entity: v.entity,
+    ...(v.slot !== undefined && { slot: v.slot }),
+    message: v.message,
+    ...(v.suggestions !== undefined &&
+      v.suggestions.length > 0 && {
+        suggestions: v.suggestions.map((s) => ({ ...s })),
+      }),
   };
 }
 

@@ -164,6 +164,37 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
         </div>
       )}
 
+      {/* Consistency violations (Phase 2 ConsistencyChecker) */}
+      {plan.violations && plan.violations.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-[11px] font-semibold text-[var(--agent-fg-secondary)]">
+            Consistency ({plan.violations.length})
+          </div>
+          <ul className="space-y-1 text-[11px]">
+            {plan.violations.map((v) => (
+              <li
+                key={v.id}
+                className={`rounded px-2 py-1 ${
+                  v.severity === 'error'
+                    ? 'bg-[var(--agent-danger-bg, rgba(230,70,70,0.12))] text-[var(--agent-danger)]'
+                    : v.severity === 'warning'
+                      ? 'bg-[var(--agent-warning-bg, rgba(230,180,40,0.12))] text-[var(--agent-warning-fg)]'
+                      : 'text-[var(--agent-fg-secondary)]'
+                }`}
+              >
+                <div className="font-medium">
+                  {v.severity === 'error' ? '❌' : v.severity === 'warning' ? '⚠️' : 'ℹ️'}{' '}
+                  {v.message}
+                </div>
+                <div className="mt-0.5 text-[10px] opacity-80">
+                  {v.kind} · shots {v.shotIds.join(', ')} · entity {v.entity}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Actions */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--agent-divider)] pt-2">

@@ -76,6 +76,46 @@ export interface WorkflowShotBindingSummary {
 // LitePlan (postMessage-safe)
 // =============================================================================
 
+export type WorkflowConstraintKind =
+  | 'character_lock'
+  | 'time_progression'
+  | 'costume_continuity'
+  | 'style_lock'
+  | 'prop_consistency';
+
+export type WorkflowViolationSeverity = 'error' | 'warning' | 'info';
+
+export interface WorkflowConstraint {
+  id: string;
+  kind: WorkflowConstraintKind;
+  entity: string;
+  shots: string[];
+  payload: Record<string, unknown>;
+  severity?: WorkflowViolationSeverity;
+}
+
+export type WorkflowViolationFix =
+  | {
+      kind: 'replace-binding';
+      shotId: string;
+      slot: WorkflowBindingSlot;
+      assetId: string;
+    }
+  | { kind: 'add-scene-break'; beforeShot: string }
+  | { kind: 'accept-as-intentional'; note: string };
+
+export interface WorkflowViolation {
+  id: string;
+  kind: WorkflowConstraintKind;
+  severity: WorkflowViolationSeverity;
+  constraintId: string;
+  shotIds: string[];
+  entity: string;
+  slot?: WorkflowBindingSlot;
+  message: string;
+  suggestions?: WorkflowViolationFix[];
+}
+
 export interface WorkflowLitePlan {
   id: string;
   createdAt: number;
@@ -84,6 +124,10 @@ export interface WorkflowLitePlan {
   stages: WorkflowPlannedStage[];
   shots?: WorkflowShotBindingSummary[];
   notes?: string[];
+  /** Consistency constraints discovered during build (Phase 2) */
+  constraints?: WorkflowConstraint[];
+  /** Ephemeral violations — recomputed each build; not persisted in .nkplan */
+  violations?: WorkflowViolation[];
 }
 
 // =============================================================================
