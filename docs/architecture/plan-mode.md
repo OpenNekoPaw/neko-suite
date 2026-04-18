@@ -1,6 +1,6 @@
 # Plan Mode：创作计划工件
 
-> ADR Status: Proposed
+> ADR Status: Accepted（Phase 1 + 2 全部已实现，见文末实现索引）
 > Date: 2026-04-18
 > Scope: `.nkplan` 持久化工件 + Plan Builder + 状态机 + 审查 UI
 > Layer: **Plan**（区别于 Workflow 层 / Pipeline 层）
@@ -163,9 +163,10 @@ Plan 展示为**镜头 × 素材类型矩阵**，三色高亮：
 
 ## 8. Plan 迭代与分叉
 
-- **编辑**：用户修改后 `status` 回到 `pending`，重新 review
-- **分叉**：同一输入生成多个 `.nkplan`（L1 快出 vs L3 精修），对比成本/质量
-- **Diff viewer**：对比两个 plan 的 bindings 差异
+- **编辑**：用户修改后 `status` 回到 `pending`，重新 review — 见 [plan-editor.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-editor.ts)
+- **分叉**：fork 产生新 plan（`parentPlanId` 保留线缆）；同一输入可产生多个 `.nkplan`（L1 快出 vs L3 精修），对比成本/质量 — 见 [plan-forker.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-forker.ts)
+- **Diff viewer**：对比两个 plan 的 route/stages/shots/constraints 差异；webview 内嵌展示 — 见 [plan-diff.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts) + [PlanDiffView.tsx](../../packages/neko-agent/packages/webview/src/components/ChatView/PlanDiffView.tsx)
+- **Checkpoint**：用户在 matrix 列表可给任意未 skipped 的 stage 打 `userCheckpoint`；调度时 pipeline 在该 stage 完成后 gate 暂停（与原 `gate: 'confirm'` 合流），见 [pipeline-executor.ts](../../packages/neko-agent/packages/agent/src/pipeline/pipeline-executor.ts) 的 `userCheckpoints` 处理
 
 ## 9. 与 Workflow 层集成
 
@@ -246,3 +247,26 @@ PlanBuilder 内部调用：
 | [creative-consistency.md](./creative-consistency.md) | PlanBuilder 生成 constraints |
 | [format-strategy.md](./format-strategy.md) | `.nkplan` 格式定义（本 ADR 前置）|
 | [agent-media-architecture.md](./agent-media-architecture.md) | Plan 的 artifacts 引用 GeneratedAsset |
+
+## 15. 实现索引（更新于 2026-04-18）
+
+### Phase 1 — LitePlan + PlanBuilder + 交互卡片（已完成）
+- [plan/plan-builder.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-builder.ts) — Route → stages + shots + constraints
+- [plan/types.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/types.ts) — `LitePlan` 在内存态的 shape
+- webview `WorkflowPlanCard` / `PlanMatrix`（chat 卡片 + 可编辑 shot 矩阵）
+
+### Phase 2 core — `.nkplan` 持久化 + 状态机 + ConsistencyChecker（已完成）
+- [@neko/shared/nkplan](../../packages/neko-types/src/nkplan/) — Format SDK（codec + validator + migrator）
+- [plan/plan-store.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-store.ts) — FS adapter，写 `<workDir>/.neko/plans/<id>.nkplan`
+- [plan/plan-state-machine.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-state-machine.ts) — `pending → approved → executing → paused/completed/failed/aborted`
+- [consistency/consistency-checker.ts](../../packages/neko-agent/packages/platform/src/workflow/consistency/consistency-checker.ts) — character_lock / time_progression
+
+### Phase 2 matrix editing（已完成）
+- [plan/plan-editor.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-editor.ts) — `editBinding` / `applyToAll` / `toggleStageCheckpoint`
+- 用户挑选替代素材 → live 重跑 ConsistencyChecker
+
+### Phase 2 remainder — Fork + Diff + Checkpoint pause（已完成）
+- [plan/plan-forker.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-forker.ts) — 新 id + `parentPlanId` + 可选 `resetToOriginal`
+- [plan/plan-diff.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts) — route / stages / shots / constraints 4 类差异
+- [pipeline/types.ts](../../packages/neko-agent/packages/agent/src/pipeline/types.ts) 加 `PipelineConfig.userCheckpoints`；executor 合流到现有 gate 机制
+- webview `PlanDiffView.tsx`、`CheckpointToggle`、终态 Fork/Diff 按钮

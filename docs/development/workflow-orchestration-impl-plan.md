@@ -1,6 +1,6 @@
 # Workflow Orchestration 实施计划
 
-> Status: **Phase 1 + 1.5 + 2（核心）已完成**（2026-04-18）；Phase 2 剩余 UI + Phase 3-6 待启动
+> Status: **Phase 1 + 1.5 + 2 + 3（MVP）已完成**（2026-04-18）；Phase 4-6 待启动
 > Date: 2026-04-18
 > Owner: TBD
 > Related ADRs: [workflow-orchestration.md](../architecture/workflow-orchestration.md)（umbrella）
@@ -14,8 +14,9 @@
 | Phase 1.5: 交互 Plan Mode + Webview 卡片 | ✅ 完成 | +5 条单测；feature flag `neko.workflow.orchestrator.enabled` 默认关 |
 | Phase 2 core: `.nkplan` + PlanStore + 状态机 + ConsistencyChecker v1 + 生命周期转换 | ✅ 完成 | +57 条单测（148 total） |
 | Phase 2 matrix editing: plan-editor + alternative dropdown + apply-to-all + live re-check | ✅ 完成 | +10 条单测（158 total） |
-| Phase 2 remainder: Plan fork + Checkpoint pause + diff viewer | ⏳ 待启动 | 1-2 周 |
-| Phase 3: LLM Router + 记忆闭环 | ⏳ 待启动 | 8-12 周 |
+| Phase 2 remainder: Plan fork + diff viewer + Checkpoint pause | ✅ 完成 | +24 条单测（182 total） |
+| Phase 3 MVP: LLMRouter（tool-use） + RouterMemory + 成本估算 + 输入 hash 缓存 | ✅ 完成 | +35 条单测（217 total）；feature flag `neko.workflow.router.llm.enabled` 默认关 |
+| Phase 3.5: ask_user 交互式兜底（webview） | ⏳ 待启动 | 1-2 周 |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
 | Phase 6: `.nkproj` + Lossless Upgrade | ⏳ 待启动 | 8-12 周 |
@@ -77,6 +78,64 @@
 
 **Webview 扩展**：
 - `WorkflowPlanCard.tsx` 增加 Consistency 违规栏（severity 色彩 + fix suggestions）
+
+### Phase 3 MVP 交付物（已合并）
+
+**Platform Router 层**（`packages/neko-agent/packages/platform/src/workflow/`）：
+- `router/input-hash.ts` — 纯 sha256 hex 哈希器；工作目录盐；多文件顺序无关
+- `router/cost-estimator.ts` — 按 route level 聚合 stage tokens/credits/durationSec（镜像 plan-builder STAGE_META）
+- `router/llm-router-tools.ts` — 5 个 OpenAI 兼容 ToolDefinition + 4 个纯 runner（commit_route 是终结态）
+- `router/llm-router.ts` — `LLMRouter` 类：有界 tool-use 循环（max 5 iter，2s 硬预算 + `AbortController` 降级）+ in-session Map 缓存 + memory 持久化
+- `memory/router-memory.ts` — `.neko/memory.md` H2 section `workflow-router`；JSON-per-line 条目 + LRU trim + 容错解析
+- `router/index.ts` facade 扩展：`memory` 优先 > user override > FastProbe committable > LLMRouter > 低置信 fallback；新 options: `llmRouter`, `memory`, `workDir`
+
+**Extension 层**：
+- `orchestrator-bootstrap.ts` 新增 `tryCreateRouterMemory` + `tryCreateLLMRouter` + `isLLMRouterEnabled()`；flag `neko.workflow.router.llm.enabled` 默认关
+- Router 实例在 bootstrap 时获得 LLM + memory 依赖（存在时）
+
+**测试**：
+- `input-hash.test.ts` — 5 条（确定性、工作目录盐、顺序无关、kind 区分、截断）
+- `cost-estimator.test.ts` — 3 条（每 level 正数、L0<L3、skip 生效）
+- `router-memory.test.ts` — 10 条（序列化/解析/extractSection + 记录/查找/过滤/LRU/重复键取新）
+- `llm-router-tools.test.ts` — 8 条（fountain 标题、markdown、CJK、asset 聚合、kind 过滤、无 AssetLibrary 降级、cost 估算、ask_user deferred）
+- `llm-router.test.ts` — 9 条（首轮提交、tool 循环、缓存命中、clearCache、无提交、chat 异常、iteration 耗尽、memory 记录 + textLength）
+- `router.test.ts` 新增 6 条集成：LLM ambiguous 路由、committable 跳过 LLM、disableLlmRouter 覆盖、LLM undefined 降级、memory 命中（provenance: memory）、memory miss 降级
+
+**范围裁剪**（Phase 3.5 补上）：
+- `ask_user` 工具返回 `{ status: 'deferred' }`，Phase 3 MVP 不弹 webview 问用户；Phase 3.5 接入交互 UI
+- LLMRouter modelId 默认未指定 → 走 ModelSelector 首个可用 chat 模型；后续可加 "fast" capability 标签专选 Haiku
+
+### Phase 2 remainder 交付物（已合并）
+
+**Platform Plan 层**：
+- `plan/plan-forker.ts` — pure `forkPlan(source, options)`；新 id + `parentPlanId` 线缆 + `resetToOriginal` 选项清除 `userConfirmed`
+- `plan/plan-diff.ts` — pure `diffPlans(left, right)`；按 route / stages / shots / constraints 分类
+- `plan-editor.ts` 新 `toggleStageCheckpoint(plan, input)` — 翻转 `userCheckpoint`，忽略 skipped stages
+- LitePlan 扩展 `parentPlanId?`，PlannedStage 扩展 `userCheckpoint?`
+- `persistence-types.ts` 双向保留两字段
+- 15 条新单测（5 forker + 5 diff + 5 checkpoint）
+
+**Pipeline 层**：
+- `PipelineConfig.userCheckpoints?: string[]` — 显式 gate override
+- `PipelineExecutor` 合并 `userCheckpoints` ∪ `gate === 'confirm'` 判定暂停
+- 2 条新 executor 单测（强制 checkpoint、skipped stage 跳过）
+
+**Extension 层**：
+- `OrchestratorBootstrapOptions.startPipeline` 接收 `userCheckpoints`；`startRoutedPipeline` 从 `plan.stages[].userCheckpoint` 聚合并下发
+- `RoutedPipelineRequest.plan` 支持直接调度已有 plan（forked 场景）
+- `workflow-plan-handler.ts` 新增 `handleToggleCheckpoint` / `handleFork` / `handleDiffRequest`；`toWirePlan` 传递 `userCheckpoint` + `parentPlanId`；`toWireDiff` 转换 diff 负载
+- 6 条新 handler 单测
+
+**Agent-types 层**：
+- 新消息：`workflow/planToggleCheckpoint`、`workflow/planFork`、`workflow/planDiffRequest`（webview → ext）
+- 新消息：`workflow/planDiff`（ext → webview）
+- 新 payload：`WorkflowPlanDiffPayload` + 4 组 diff 变更类型
+
+**Webview 层**：
+- `PlanDiffView.tsx` — 折叠式 route/stages/shots/constraints 差异视图
+- `WorkflowPlanCard.tsx` 新增每-stage `CheckpointToggle` + 终态 Fork/Diff 按钮
+- `WorkflowPlanPanel.tsx` 在终态渲染 Fork/Diff 按钮并嵌入 `PlanDiffView`
+- `useWorkflowPlan` 增加 `diff` / `diffError` / `dismissDiff`
 
 本文档是 Workflow Orchestration ADR 家族的**可执行实施计划**。按新的分层 ADR 结构组织，支持并行 track 推进。
 

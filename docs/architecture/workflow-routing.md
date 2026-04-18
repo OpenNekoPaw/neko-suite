@@ -1,6 +1,6 @@
 # 创作工作流路由（Workflow Routing）
 
-> ADR Status: Proposed
+> ADR Status: Accepted（Phase 1 + 3 MVP 已实现，见 §12）
 > Date: 2026-04-18
 > Scope: 决定「输入素材走哪条创作路径」的 Router 子系统
 > Layer: **Workflow**（区别于 Plan 层 / Pipeline 层）
@@ -125,19 +125,24 @@ input is .nkv                          → 仅 cut
 
 ### LLM Router：Tool-Using Agent（非黑盒分类器）
 
-给 LLM 工具让它**多步推理**：
+给 LLM 工具让它**多步推理**。实现落在 [llm-router-tools.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts)：
 
 ```typescript
 const routerTools = [
-  { name: 'analyze_text_structure', input: { text: string } },
-  { name: 'check_existing_assets', input: { workDir: string } },
-  { name: 'estimate_duration', input: { input: unknown } },
-  { name: 'ask_user', input: { question: string, options: string[] } },
-  { name: 'commit_route', input: { level: RouteLevel, reason: string } },
-]
+  { name: 'analyze_text_structure', args: { excerpt: string } },         // 纯函数
+  { name: 'check_existing_assets',  args: { kind?: AssetKind } },        // 读 AssetLibrary
+  { name: 'estimate_duration',      args: { level: RouteLevel } },       // 复用 cost-estimator
+  { name: 'ask_user',               args: { question, options? } },      // Phase 3 MVP 返回 deferred
+  { name: 'commit_route',           args: { level, reason, skipStages?, entryExtension? } }, // 终结
+];
 ```
 
-**关键**：路由预算 < 2s，超时降级到 FastProbe 默认值 + 异步反问。
+**实现约束**（见 [llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts)）：
+- **Budget**: 2s 硬墙钟 via `AbortController`；超时则 router 返回 `undefined`，facade 降级到 FastProbe
+- **Iterations**: 最多 5 轮 tool-use；超过则降级
+- **Cache**: 会话内 Map 缓存 `hashInput(input, workDir) → LLMRouterResult`
+- **Memory**: 提交后 fire-and-forget 写 `.neko/memory.md` 的 `workflow-router` H2 section
+- **Fallback**: 任何异常（network / parse / model stops without committing）均 → `undefined`
 
 ### 路由作为对话（非黑盒决策）
 
@@ -212,3 +217,28 @@ Pipeline 层 (pipeline-execution.md，基于已有 PipelineExecutor)
 | [asset-knowledge-graph.md](./asset-knowledge-graph.md) | LLMRouter 的 `check_existing_assets` 工具查询对象 |
 | [creative-context-compression.md](./creative-context-compression.md) | Router 的文本结构分析可复用其语义分类 |
 | [ablation-experiment-framework.md](./ablation-experiment-framework.md) | Router 功能通过 AblationToggles 灰度发布 |
+
+## 12. 实现状态（更新于 2026-04-18）
+
+### Phase 1 — FastProbe 规则层（已完成）
+- [router/input-probe.ts](../../packages/neko-agent/packages/platform/src/workflow/router/input-probe.ts) — 纯 ProbeContext 提取
+- [router/fast-probe.ts](../../packages/neko-agent/packages/platform/src/workflow/router/fast-probe.ts) — 表驱动规则层
+- [router/route-registry.ts](../../packages/neko-agent/packages/platform/src/workflow/router/route-registry.ts) — L0-L4 recipe
+- [router/index.ts](../../packages/neko-agent/packages/platform/src/workflow/router/index.ts) — facade
+
+### Phase 3 MVP — LLMRouter + Memory（已完成）
+- [router/llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts) — 有界 tool-use 循环、2s budget、cache
+- [router/llm-router-tools.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts) — 5 个 tool 定义 + 4 个 runner
+- [router/input-hash.ts](../../packages/neko-agent/packages/platform/src/workflow/router/input-hash.ts) — 稳定 sha256 hasher
+- [router/cost-estimator.ts](../../packages/neko-agent/packages/platform/src/workflow/router/cost-estimator.ts) — per-level 成本聚合
+- [memory/router-memory.ts](../../packages/neko-agent/packages/platform/src/workflow/memory/router-memory.ts) — `.neko/memory.md` H2 section `workflow-router`
+- Feature flag: `neko.workflow.router.llm.enabled`（默认关）
+
+### Router facade 决策优先级（实现版）
+```
+user-override > memory lookup > FastProbe committable > LLMRouter (ambiguous) > 低置信 fallback
+```
+
+### Phase 3.5 — 待启动
+- `ask_user` 接入 webview 交互（当前返回 `deferred`）
+- AblationToggles 接管 feature flag（当前直读 VSCode settings）
