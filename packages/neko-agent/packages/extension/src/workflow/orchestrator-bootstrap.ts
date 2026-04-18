@@ -22,11 +22,14 @@
  * See docs/development/workflow-orchestration-impl-plan.md §4.
  */
 
-import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
 import { Workflow } from '@neko/platform';
 import type { FlowId, PipelineContext, PipelineHandle } from '@neko/agent/pipeline';
 import { getLogger } from '../base';
+import {
+  isLLMRouterEnabled as _isLLMRouterEnabled,
+  readWorkflowSettings,
+} from './workflow-settings';
 
 type AssetLibrary = Workflow.AssetLibrary;
 type LitePlan = Workflow.LitePlan;
@@ -123,9 +126,10 @@ export async function bootstrapOrchestrator(
 
   // Phase 3: optional LLMRouter + RouterMemory behind the
   // `neko.workflow.router.llm.enabled` flag.
+  const settings = readWorkflowSettings();
   const routerMemory = await tryCreateRouterMemory(options.workDir);
-  const llmRouter = isLLMRouterEnabled()
-    ? tryCreateLLMRouter(options.platform, routerMemory, assetLibrary)
+  const llmRouter = _isLLMRouterEnabled()
+    ? tryCreateLLMRouter(options.platform, routerMemory, assetLibrary, settings)
     : undefined;
 
   const router = Workflow.createRouter({
@@ -266,6 +270,7 @@ function tryCreateLLMRouter(
   platform: Platform,
   memory: Workflow.RouterMemory | undefined,
   assetLibrary: AssetLibrary | undefined,
+  settings: { routerLlmBudgetMs: number; routerAskTimeoutMs: number },
 ): Workflow.LLMRouter | undefined {
   try {
     const service = platform.createService();
@@ -279,6 +284,8 @@ function tryCreateLLMRouter(
     };
     return new Workflow.LLMRouter({
       chat,
+      budgetMs: settings.routerLlmBudgetMs,
+      askTimeoutMs: settings.routerAskTimeoutMs,
       ...(memory !== undefined && { memory }),
       ...(assetLibrary !== undefined && { assetLibrary }),
     });
@@ -333,22 +340,20 @@ function inferFormat(path: string): PipelineContext['sourceFormat'] {
 // Feature flag helper (placeholder until Ablation framework wiring lands)
 // =============================================================================
 
-const FLAG_ID = 'workflow.orchestrator.enabled';
-const LLM_ROUTER_FLAG_ID = 'workflow.router.llm.enabled';
+// Settings are centralised in workflow-settings.ts so the package.json
+// `contributes.configuration` and runtime defaults stay in one place.
+export {
+  isOrchestratorEnabled,
+  isLLMRouterEnabled,
+  readWorkflowSettings,
+  WORKFLOW_SETTING_KEYS,
+  WORKFLOW_SETTING_DEFAULTS,
+  WORKFLOW_SETTINGS_SECTION,
+  type WorkflowSettings,
+  type WorkflowSettingKey,
+} from './workflow-settings';
 
-/**
- * Reads the workflow.orchestrator.enabled flag from VSCode settings.
- * Phase 1: simple settings lookup; Phase 2 will route through AblationToggles.
- */
-export function isOrchestratorEnabled(): boolean {
-  const cfg = vscode.workspace.getConfiguration('neko.workflow');
-  return cfg.get<boolean>('orchestrator.enabled', false);
-}
-
-/** Phase 3: LLM Router gate. Default off so the feature is opt-in. */
-export function isLLMRouterEnabled(): boolean {
-  const cfg = vscode.workspace.getConfiguration('neko.workflow');
-  return cfg.get<boolean>('router.llm.enabled', false);
-}
-
-export { FLAG_ID as ORCHESTRATOR_FLAG_ID, LLM_ROUTER_FLAG_ID };
+/** Deprecated — kept for backward compat with older callers. */
+export const ORCHESTRATOR_FLAG_ID = 'workflow.orchestrator.enabled';
+/** Deprecated — kept for backward compat with older callers. */
+export const LLM_ROUTER_FLAG_ID = 'workflow.router.llm.enabled';

@@ -19,6 +19,7 @@
 | Phase 2 tail: Checkpoint pause UI（pipelineGate confirm/cancel） | ✅ 完成 | +0 单测（已有 executor 覆盖）；webview `PipelineGatePanel` |
 | Phase 3.5: ask_user 交互式兜底（RouterAskBroker + RouterAskModal + budget 暂停） | ✅ 完成 | +4 单测（221 workflow total） |
 | Horizontal #5: PlanStore 列举 API + PlanBrowser UI | ✅ 完成 | `listPlans` / `listForks` + `readdir` on FileIOAdapter；+11 单测（223 workflow total） |
+| Horizontal: 统一 flag 读取 + VSCode settings 注册 + autoApproveThreshold 接入 | ✅ 完成 | `workflow-settings.ts` 统一 + package.json `contributes.configuration` + 7 个 flag 可从 UI 配置；+7 单测（230 total） |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
 | Phase 6: `.nkproj` + Lossless Upgrade | ⏳ 待启动 | 8-12 周 |

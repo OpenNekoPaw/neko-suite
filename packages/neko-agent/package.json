@@ -313,6 +313,47 @@
           "default": true,
           "description": "Show a notification when generated media is saved to disk"
         },
+        "neko.workflow.orchestrator.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the Workflow Orchestrator (routed pipelines + Plan mode). When disabled the legacy `neko.pipeline.start` path is used."
+        },
+        "neko.workflow.router.llm.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the LLM-powered router for ambiguous inputs. Requires `neko.workflow.orchestrator.enabled`. Hard 2s budget via AbortController; falls back to FastProbe on timeout or error."
+        },
+        "neko.workflow.router.llm.budgetMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 250,
+          "maximum": 60000,
+          "description": "Wall-clock budget for the LLM router tool-use loop in milliseconds. Exceeding this aborts the in-flight call and falls back to FastProbe."
+        },
+        "neko.workflow.router.askTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 1000,
+          "maximum": 600000,
+          "description": "Timeout for the LLM router's `ask_user` clarifying question, in milliseconds. Pauses the overall router budget while the user decides."
+        },
+        "neko.workflow.plan.autoApproveThreshold": {
+          "type": "number",
+          "default": 1.1,
+          "minimum": 0,
+          "maximum": 1.1,
+          "description": "Route-confidence threshold at which the Plan is dispatched without user review. 1.1 (default) disables auto-approve; set to e.g. 0.95 to auto-approve only very confident routes."
+        },
+        "neko.workflow.consistency.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the ConsistencyChecker (character-lock + time-progression) during plan build. Disable to suppress violation warnings in the Plan card."
+        },
+        "neko.workflow.matching.continuity.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the L5 continuity matcher — reuses bindings from earlier shots of the same scene group."
+        },
         "neko.agent.mcp.servers": {
           "type": "array",
           "default": [],

@@ -510,10 +510,13 @@ function registerCommands(
         }
 
         // Interactive flow: build → preview in chat webview → await user decision.
+        const { getPlanAutoApproveThreshold } = await import('./workflow/workflow-settings');
+        const autoApproveThreshold = getPlanAutoApproveThreshold();
         const presentation = await workflowPlanHandler.presentAndDispatch({
           input: params.input,
           ...(params.routerOverrides !== undefined && { routerOverrides: params.routerOverrides }),
           ...(params.globalStyle !== undefined && { globalStyle: params.globalStyle }),
+          autoApproveThreshold,
         });
 
         if (!presentation.result) {
