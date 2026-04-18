@@ -1,9 +1,46 @@
 # Workflow Orchestration 实施计划
 
-> Status: Proposed
+> Status: **Phase 1 + 1.5 已完成**（2026-04-18）；Phase 2-6 待启动
 > Date: 2026-04-18
 > Owner: TBD
 > Related ADRs: [workflow-orchestration.md](../architecture/workflow-orchestration.md)（umbrella）
+
+## 当前进度
+
+| 阶段 | 状态 | 备注 |
+|------|------|------|
+| Phase 0: ADR 重构 | ✅ 完成 | 16 节 → 5 份聚焦 ADR + umbrella |
+| Phase 1 MVP: Router + AssetLib + Matching + LitePlan | ✅ 完成 | 86 条单测通过 |
+| Phase 1.5: 交互 Plan Mode + Webview 卡片 | ✅ 完成 | 91 条单测通过；feature flag `neko.workflow.orchestrator.enabled` 默认关 |
+| Phase 2: `.nkplan` 持久化 + 状态机 + 矩阵编辑 + ConsistencyChecker v1 | ⏳ 待启动 | 6-10 周 |
+| Phase 3: LLM Router + 记忆闭环 | ⏳ 待启动 | 8-12 周 |
+| Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
+| Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
+| Phase 6: `.nkproj` + Lossless Upgrade | ⏳ 待启动 | 8-12 周 |
+
+### Phase 1 + 1.5 交付物（已合并）
+
+**Platform 层**（`packages/neko-agent/packages/platform/src/workflow/`）：
+- Router：FastProbe 规则层 + InputProbe + RouteRegistry + facade
+- AssetLibrary：CharacterRegistry/EntityGraph/Manifest 三 adapter + BindingHistory + facade
+- MatchingEngine：L1 Explicit + L2 Name + L5 Continuity 匹配器 + facade
+- PlanBuilder：LitePlan + stage 映射
+
+**Extension 层**：
+- `workflow/orchestrator-bootstrap.ts` — 组装 Router/AssetLibrary/Matching/PlanBuilder
+- `workflow/workflow-plan-handler.ts` — 交互式 PLAN → REVIEW → EXECUTE 协调器
+- `chatProvider.ts` 扩展 `setWorkflowPlanHandler` + `workflow/*` 消息路由
+- `index.ts` 新增命令 `neko.agent.startRoutedPipeline`（feature flag 门控）
+
+**Webview 层**：
+- `hooks/useWorkflowPlan.ts` — 订阅 `workflow/*` 消息的 React hook
+- `components/ChatView/WorkflowPlanCard.tsx` — L0-L4 徽章 + 路由理由 + 阶段清单 + Start/Override/Abort
+- `components/ChatView/PlanMatrix.tsx` — 只读 shot × 素材绑定矩阵（✅/⚠️/❓ + L5 `*`）
+- `components/ChatView/WorkflowPlanPanel.tsx` — Panel 容器 + status badge + dismiss
+- `ChatView` / `ChatWorkspace` 挂载点
+
+**Agent-types 层**：
+- `workflow-plan.ts` — postMessage-safe `WorkflowLitePlan` + 6 个消息类型
 
 本文档是 Workflow Orchestration ADR 家族的**可执行实施计划**。按新的分层 ADR 结构组织，支持并行 track 推进。
 
