@@ -194,4 +194,11 @@ export interface FileIOAdapter {
   read(path: string): Promise<string | undefined>;
   write(path: string, content: string): Promise<void>;
   mkdirp(dir: string): Promise<void>;
+  /**
+   * List file names in a directory (non-recursive).  Returns undefined when
+   * the directory does not exist, an empty array when it exists but is
+   * empty.  Optional because early consumers (BindingHistory) never needed
+   * directory enumeration — PlanStore.listPlans uses it.
+   */
+  readdir?(dir: string): Promise<string[] | undefined>;
 }

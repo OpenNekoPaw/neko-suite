@@ -104,6 +104,10 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
     vscode?.postMessage({ type: 'workflow/planDiffRequest', planId: plan.id });
   }, [plan.id]);
 
+  const handleBrowse = useCallback(() => {
+    vscode?.postMessage({ type: 'workflow/planListRequest', limit: 50 });
+  }, []);
+
   const meta = LEVEL_META[plan.route.level];
   const effectiveStages = plan.stages.filter((s) => !s.skipped);
   const skippedStages = plan.stages.filter((s) => s.skipped);
@@ -263,7 +267,7 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
         </div>
       )}
 
-      {/* Terminal actions — Fork + Diff against parent */}
+      {/* Terminal actions — Fork + Diff against parent + Browse */}
       {terminal && (
         <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] pt-2">
           <button
@@ -282,6 +286,13 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
               Diff vs parent
             </button>
           )}
+          <button
+            className="vscode-button-secondary px-3 py-1 text-[12px]"
+            onClick={handleBrowse}
+            title="Open the plan browser"
+          >
+            Browse plans
+          </button>
         </div>
       )}
     </div>

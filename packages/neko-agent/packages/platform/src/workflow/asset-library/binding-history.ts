@@ -262,6 +262,14 @@ export async function createNodeFileIO(): Promise<FileIOAdapter> {
     async mkdirp(dir: string): Promise<void> {
       await fs.mkdir(dir, { recursive: true });
     },
+    async readdir(dir: string): Promise<string[] | undefined> {
+      try {
+        return await fs.readdir(dir);
+      } catch (err: unknown) {
+        if (isErrnoException(err) && err.code === 'ENOENT') return undefined;
+        throw err;
+      }
+    },
   };
 }
 
@@ -284,6 +292,27 @@ export function createMemoryFileIO(): FileIOAdapter & { store: Map<string, strin
     },
     async mkdirp() {
       // No-op for in-memory
+    },
+    async readdir(dir: string) {
+      const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+      const matches: string[] = [];
+      let anyMatch = false;
+      for (const key of store.keys()) {
+        if (key === dir) {
+          // A file stored AT the dir path (not inside it) — treat as a
+          // pseudo-directory being empty in the normal case; keep scanning.
+          anyMatch = true;
+          continue;
+        }
+        if (!key.startsWith(prefix)) continue;
+        anyMatch = true;
+        const rest = key.slice(prefix.length);
+        // Non-recursive: skip entries that contain further separators.
+        if (rest.includes('/')) continue;
+        matches.push(rest);
+      }
+      if (!anyMatch) return undefined;
+      return matches;
     },
   };
 }

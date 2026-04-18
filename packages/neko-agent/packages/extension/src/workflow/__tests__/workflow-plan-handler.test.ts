@@ -668,4 +668,75 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     expect(diffPost?.errorMessage).toBeDefined();
     expect(diffPost?.diff).toBeUndefined();
   });
+
+  it('listRequest posts a list of persisted plans', async () => {
+    const { handler, planStore, posts } = makeHandlerWithStoreAndStages();
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+
+    posts.length = 0;
+    const entries = await handler.handleListRequest({ type: 'workflow/planListRequest' });
+    expect(entries?.length ?? 0).toBeGreaterThan(0);
+    const listPost = posts.find((p) => (p as { type: string }).type === 'workflow/planList') as
+      | { entries: unknown[]; errorMessage?: string }
+      | undefined;
+    expect(listPost?.entries.length ?? 0).toBeGreaterThan(0);
+    expect(listPost?.errorMessage).toBeUndefined();
+  });
+
+  it('listRequest honours status filter', async () => {
+    const { handler, planStore } = makeHandlerWithStoreAndStages();
+    // Save two distinct plans in different terminal states.
+    const basePlan = await (async () => {
+      const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'x' } });
+      await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+      handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+      await promise;
+    })();
+    void basePlan;
+
+    const abortedOnly = await handler.handleListRequest({
+      type: 'workflow/planListRequest',
+      status: 'aborted',
+    });
+    expect(abortedOnly?.every((e) => e.status === 'aborted')).toBe(true);
+
+    const pendingOnly = await handler.handleListRequest({
+      type: 'workflow/planListRequest',
+      status: 'pending',
+    });
+    expect(pendingOnly?.every((e) => e.status === 'pending')).toBe(true);
+  });
+
+  it('listRequest posts errorMessage when no PlanStore is configured', async () => {
+    const orchestrator = makeOrchestrator({
+      planFactory: (level) => ({
+        id: `plan_nostore_${level}`,
+        createdAt: 100,
+        status: 'pending' as const,
+        route: buildRoute(level),
+        stages: [],
+      }),
+    });
+    const posts: unknown[] = [];
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      getWebview: () =>
+        ({
+          postMessage: (m: unknown) => {
+            posts.push(m);
+            return true;
+          },
+        }) as unknown as never,
+    });
+    const result = await handler.handleListRequest({ type: 'workflow/planListRequest' });
+    expect(result).toBeUndefined();
+    const listPost = posts.find((p) => (p as { type: string }).type === 'workflow/planList') as
+      | { errorMessage?: string; entries: unknown[] }
+      | undefined;
+    expect(listPost?.errorMessage).toContain('No PlanStore');
+    expect(listPost?.entries).toEqual([]);
+  });
 });

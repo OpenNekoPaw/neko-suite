@@ -57,6 +57,9 @@ export type {
   WorkflowRouterAskMessage,
   WorkflowRouterAskResponseMessage,
   WorkflowRouterAskResponseStatus,
+  WorkflowPlanListEntry,
+  WorkflowPlanListRequestMessage,
+  WorkflowPlanListMessage,
   WorkflowIncomingMessage,
   WorkflowOutgoingMessage,
 } from './workflow-plan';

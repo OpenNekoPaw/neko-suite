@@ -141,6 +141,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       planId: string;
       againstPlanId?: string;
     }): Promise<unknown>;
+    handleListRequest(msg: {
+      type: 'workflow/planListRequest';
+      status?: string;
+      parentPlanId?: string;
+      limit?: number;
+    }): Promise<unknown>;
   };
   private readonly _dndBroker = new DragDropBroker();
 
@@ -563,6 +569,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             planId: string;
             againstPlanId?: string;
           }): Promise<unknown>;
+          handleListRequest(msg: {
+            type: 'workflow/planListRequest';
+            status?: string;
+            parentPlanId?: string;
+            limit?: number;
+          }): Promise<unknown>;
         }
       | undefined,
   ): void {
@@ -763,6 +775,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             type: 'workflow/planDiffRequest';
             planId: string;
             againstPlanId?: string;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/planListRequest') {
+        await this._workflowPlanHandler?.handleListRequest(
+          message as {
+            type: 'workflow/planListRequest';
+            status?: string;
+            parentPlanId?: string;
+            limit?: number;
           },
         );
         return;

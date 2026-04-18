@@ -79,6 +79,48 @@ export class PlanStore {
   }
 
   // ---------------------------------------------------------------------------
+  // Enumeration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List persisted plans.  Skips corrupt files (surfaces as `undefined` from
+   * `loadNkplan`) and files with unsafe names.  Sorted by `updatedAt`
+   * descending so "most recent" shows up first in UIs.
+   *
+   * Requires the injected FileIOAdapter to support `readdir`.  When it
+   * doesn't, this returns an empty array (rather than throwing) so the
+   * method is safe to call from UI code.
+   */
+  async listPlans(options: ListPlansOptions = {}): Promise<PlanListEntry[]> {
+    const readdir = this.options.fileIO.readdir?.bind(this.options.fileIO);
+    if (!readdir) return [];
+
+    const entries = (await readdir(this.dir)) ?? [];
+    const loaded: PlanListEntry[] = [];
+    for (const filename of entries) {
+      if (!filename.endsWith('.nkplan')) continue;
+      const id = filename.slice(0, -'.nkplan'.length);
+      if (!isSafeId(id)) continue;
+      const plan = await this.load(id);
+      if (!plan) continue;
+      if (options.status !== undefined && plan.status !== options.status) continue;
+      if (options.parentPlanId !== undefined && plan.parentPlanId !== options.parentPlanId)
+        continue;
+      loaded.push(summarise(plan));
+    }
+    loaded.sort((a, b) => b.updatedAt - a.updatedAt);
+    if (options.limit !== undefined && options.limit > 0) {
+      return loaded.slice(0, options.limit);
+    }
+    return loaded;
+  }
+
+  /** Convenience: list forks of a given parent plan id. */
+  async listForks(parentPlanId: string): Promise<PlanListEntry[]> {
+    return this.listPlans({ parentPlanId });
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 
@@ -86,6 +128,51 @@ export class PlanStore {
     if (!isSafeId(id)) throw new Error(`Invalid plan id: ${id}`);
     return joinPath(this.dir, `${id}.nkplan`);
   }
+}
+
+// =============================================================================
+// Enumeration types
+// =============================================================================
+
+/**
+ * Lightweight row for the plan-browser UI.  Strips the full shot/stage
+ * payload so we don't post megabytes of data to the webview.
+ */
+export interface PlanListEntry {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  status: PlanStatus;
+  routeLevel: PersistentPlan['route']['level'];
+  flowId: string;
+  reason: string;
+  parentPlanId: string | undefined;
+  shotCount: number;
+  pipelineId: string | undefined;
+  errorMessage: string | undefined;
+}
+
+export interface ListPlansOptions {
+  status?: PlanStatus;
+  parentPlanId?: string;
+  /** Clamp the number of rows returned. Newest first. */
+  limit?: number;
+}
+
+function summarise(plan: PersistentPlan): PlanListEntry {
+  return {
+    id: plan.id,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
+    status: plan.status,
+    routeLevel: plan.route.level,
+    flowId: plan.route.flowId,
+    reason: plan.route.reason,
+    parentPlanId: plan.parentPlanId,
+    shotCount: plan.shots?.length ?? 0,
+    pipelineId: plan.pipelineId,
+    errorMessage: plan.errorMessage,
+  };
 }
 
 // =============================================================================

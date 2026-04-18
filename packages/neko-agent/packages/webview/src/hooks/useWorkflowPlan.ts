@@ -13,6 +13,7 @@ import type {
   WorkflowIncomingMessage,
   WorkflowLitePlan,
   WorkflowPlanDiffPayload,
+  WorkflowPlanListEntry,
 } from '@neko-agent/types';
 
 export type WorkflowPlanStatus =
@@ -35,6 +36,16 @@ export interface PendingRouterAsk {
   timeoutMs: number | undefined;
 }
 
+export interface PlanBrowserState {
+  entries: readonly WorkflowPlanListEntry[];
+  /** Echo of the request's filter so the UI can label the result. */
+  filterStatus: WorkflowPlanListEntry['status'] | undefined;
+  filterParentPlanId: string | undefined;
+  errorMessage: string | undefined;
+  /** When true the browser is open; a `planList` response refreshes entries. */
+  open: boolean;
+}
+
 export interface WorkflowPlanState {
   /** Plan currently being previewed or executed. Undefined when no plan is active. */
   plan: WorkflowLitePlan | undefined;
@@ -51,7 +62,17 @@ export interface WorkflowPlanState {
   pendingGate: PendingGate | undefined;
   /** Outstanding routerAsk awaiting user response */
   pendingAsk: PendingRouterAsk | undefined;
+  /** Persistent plan browser (list of fork candidates etc.) */
+  browser: PlanBrowserState;
 }
+
+const INITIAL_BROWSER: PlanBrowserState = {
+  entries: [],
+  filterStatus: undefined,
+  filterParentPlanId: undefined,
+  errorMessage: undefined,
+  open: false,
+};
 
 const INITIAL: WorkflowPlanState = {
   plan: undefined,
@@ -62,6 +83,7 @@ const INITIAL: WorkflowPlanState = {
   diffError: undefined,
   pendingGate: undefined,
   pendingAsk: undefined,
+  browser: INITIAL_BROWSER,
 };
 
 export function useWorkflowPlan(): WorkflowPlanState & {
@@ -69,6 +91,8 @@ export function useWorkflowPlan(): WorkflowPlanState & {
   dismissDiff: () => void;
   clearPendingGate: () => void;
   clearPendingAsk: () => void;
+  openBrowser: () => void;
+  closeBrowser: () => void;
 } {
   const [state, setState] = useState<WorkflowPlanState>(INITIAL);
 
@@ -80,7 +104,8 @@ export function useWorkflowPlan(): WorkflowPlanState & {
       switch (msg.type) {
         case 'workflow/planPreview':
           // Preserve pendingAsk — the ask fired during route decision and
-          // stays relevant even after the plan arrives.
+          // stays relevant even after the plan arrives.  Browser state is
+          // also preserved so the browser isn't closed by a preview arrival.
           setState((prev) => ({
             plan: msg.plan,
             status: 'pending',
@@ -90,6 +115,7 @@ export function useWorkflowPlan(): WorkflowPlanState & {
             diffError: undefined,
             pendingGate: undefined,
             pendingAsk: prev.pendingAsk,
+            browser: prev.browser,
           }));
           break;
         case 'workflow/planDispatched':
@@ -146,6 +172,21 @@ export function useWorkflowPlan(): WorkflowPlanState & {
             },
           }));
           break;
+        case 'workflow/planList':
+          setState((prev) => ({
+            ...prev,
+            browser: {
+              entries: msg.entries,
+              filterStatus: msg.status,
+              filterParentPlanId: msg.parentPlanId,
+              errorMessage: msg.errorMessage,
+              // Open the panel on any response even if the user hadn't
+              // opened it — this lets "Browse plans" trigger the initial
+              // request without a separate open-state flag.
+              open: true,
+            },
+          }));
+          break;
         default:
           break;
       }
@@ -160,6 +201,12 @@ export function useWorkflowPlan(): WorkflowPlanState & {
     dismissDiff: () => setState((prev) => ({ ...prev, diff: undefined, diffError: undefined })),
     clearPendingGate: () => setState((prev) => ({ ...prev, pendingGate: undefined })),
     clearPendingAsk: () => setState((prev) => ({ ...prev, pendingAsk: undefined })),
+    openBrowser: () =>
+      setState((prev) => ({
+        ...prev,
+        browser: { ...prev.browser, open: true, errorMessage: undefined },
+      })),
+    closeBrowser: () => setState((prev) => ({ ...prev, browser: INITIAL_BROWSER })),
   };
 }
 

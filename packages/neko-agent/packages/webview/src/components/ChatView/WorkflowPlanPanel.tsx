@@ -12,6 +12,7 @@ import { WorkflowPlanCard } from './WorkflowPlanCard';
 import { PlanDiffView } from './PlanDiffView';
 import { PipelineGatePanel } from './PipelineGatePanel';
 import { RouterAskModal } from './RouterAskModal';
+import { PlanBrowser } from './PlanBrowser';
 
 export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
   const {
@@ -22,10 +23,12 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
     diffError,
     pendingGate,
     pendingAsk,
+    browser,
     dismiss,
     dismissDiff,
     clearPendingGate,
     clearPendingAsk,
+    closeBrowser,
   } = useWorkflowPlan();
 
   // The router's ask_user fires during route decision, before any plan
@@ -81,6 +84,15 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
         >
           {errorMessage}
         </div>
+      )}
+      {browser.open && (
+        <PlanBrowser
+          entries={browser.entries}
+          filterStatus={browser.filterStatus}
+          filterParentPlanId={browser.filterParentPlanId}
+          errorMessage={browser.errorMessage}
+          onClose={closeBrowser}
+        />
       )}
       {(diff !== undefined || diffError !== undefined) && (
         <PlanDiffView

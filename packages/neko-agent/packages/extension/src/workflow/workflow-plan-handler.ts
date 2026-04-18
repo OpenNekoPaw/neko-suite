@@ -28,6 +28,9 @@ import type {
   WorkflowPlanDiffRequestMessage,
   WorkflowPlanEditBindingMessage,
   WorkflowPlanForkMessage,
+  WorkflowPlanListEntry,
+  WorkflowPlanListMessage,
+  WorkflowPlanListRequestMessage,
   WorkflowPlanOverrideMessage,
   WorkflowPlanToggleCheckpointMessage,
 } from '@neko-agent/types';
@@ -404,6 +407,50 @@ export class WorkflowPlanHandler {
   }
 
   /**
+   * List persisted plans for the webview's plan-browser UI.  Posts a
+   * `workflow/planList` response with the same filter fields echoed back.
+   * Returns the list for test assertions.
+   */
+  async handleListRequest(
+    msg: WorkflowPlanListRequestMessage,
+  ): Promise<WorkflowPlanListEntry[] | undefined> {
+    if (!this.planStore) {
+      this.postList({
+        entries: [],
+        ...(msg.status !== undefined && { status: msg.status }),
+        ...(msg.parentPlanId !== undefined && { parentPlanId: msg.parentPlanId }),
+        ...(msg.limit !== undefined && { limit: msg.limit }),
+        errorMessage: 'No PlanStore configured',
+      });
+      return undefined;
+    }
+    try {
+      const entries = await this.planStore.listPlans({
+        ...(msg.status !== undefined && { status: msg.status }),
+        ...(msg.parentPlanId !== undefined && { parentPlanId: msg.parentPlanId }),
+        ...(msg.limit !== undefined && { limit: msg.limit }),
+      });
+      const wire = entries.map(toWirePlanListEntry);
+      this.postList({
+        entries: wire,
+        ...(msg.status !== undefined && { status: msg.status }),
+        ...(msg.parentPlanId !== undefined && { parentPlanId: msg.parentPlanId }),
+        ...(msg.limit !== undefined && { limit: msg.limit }),
+      });
+      return wire;
+    } catch (err) {
+      this.postList({
+        entries: [],
+        ...(msg.status !== undefined && { status: msg.status }),
+        ...(msg.parentPlanId !== undefined && { parentPlanId: msg.parentPlanId }),
+        ...(msg.limit !== undefined && { limit: msg.limit }),
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
+    }
+  }
+
+  /**
    * Propagate an edit to every other shot whose binding references the same entity.
    */
   async handleApplyToAll(
@@ -474,6 +521,12 @@ export class WorkflowPlanHandler {
     const webview = this.deps.getWebview();
     if (!webview) return;
     webview.postMessage({ type: 'workflow/planDiff', ...params });
+  }
+
+  private postList(params: Omit<WorkflowPlanListMessage, 'type'>): void {
+    const webview = this.deps.getWebview();
+    if (!webview) return;
+    webview.postMessage({ type: 'workflow/planList', ...params });
   }
 
   private async persistEdit(plan: Workflow.LitePlan): Promise<void> {
@@ -679,6 +732,22 @@ function toWireViolation(v: Workflow.Violation): WorkflowViolation {
       v.suggestions.length > 0 && {
         suggestions: v.suggestions.map((s) => ({ ...s })),
       }),
+  };
+}
+
+function toWirePlanListEntry(entry: Workflow.PlanListEntry): WorkflowPlanListEntry {
+  return {
+    id: entry.id,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    status: entry.status,
+    routeLevel: entry.routeLevel,
+    flowId: entry.flowId,
+    reason: entry.reason,
+    ...(entry.parentPlanId !== undefined && { parentPlanId: entry.parentPlanId }),
+    shotCount: entry.shotCount,
+    ...(entry.pipelineId !== undefined && { pipelineId: entry.pipelineId }),
+    ...(entry.errorMessage !== undefined && { errorMessage: entry.errorMessage }),
   };
 }
 

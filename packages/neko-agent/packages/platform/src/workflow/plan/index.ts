@@ -12,7 +12,12 @@ export type {
 } from './types';
 
 // Phase 2: persistence + state machine
-export { PlanStore, type PlanStoreOptions } from './plan-store';
+export {
+  PlanStore,
+  type PlanStoreOptions,
+  type PlanListEntry,
+  type ListPlansOptions,
+} from './plan-store';
 export {
   editBinding as editPlanBinding,
   applyToAll as applyBindingToAll,

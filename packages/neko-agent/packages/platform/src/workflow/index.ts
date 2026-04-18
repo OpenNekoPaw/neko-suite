@@ -81,6 +81,8 @@ export {
   type PlanBuilderOptions,
   type PlannedStage,
   type PlanStoreOptions,
+  type PlanListEntry,
+  type ListPlansOptions,
   type PlanStatus,
   type PlanStatusEvent,
   type PlanTransitionOptions,

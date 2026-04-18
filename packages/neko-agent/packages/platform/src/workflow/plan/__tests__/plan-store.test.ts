@@ -78,6 +78,94 @@ describe('PlanStore — save/load round-trip', () => {
   });
 });
 
+describe('PlanStore — listPlans', () => {
+  function seed(id: string, overrides: Partial<PersistentPlan> = {}): PersistentPlan {
+    return { ...makePlan(id), ...overrides };
+  }
+
+  it('returns all plans sorted by updatedAt (newest first)', async () => {
+    const io = createMemoryFileIO();
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    await store.save(seed('a', { updatedAt: 100 }));
+    await store.save(seed('b', { updatedAt: 300 }));
+    await store.save(seed('c', { updatedAt: 200 }));
+
+    const list = await store.listPlans();
+    expect(list.map((p) => p.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('filters by status', async () => {
+    const io = createMemoryFileIO();
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    await store.save(seed('p1', { status: 'pending' }));
+    await store.save(
+      seed('p2', { status: 'approved', statusHistory: [{ status: 'approved', at: 100 }] }),
+    );
+    const pending = await store.listPlans({ status: 'pending' });
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.id).toBe('p1');
+  });
+
+  it('filters by parentPlanId (listForks)', async () => {
+    const io = createMemoryFileIO();
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    await store.save(seed('root'));
+    await store.save(seed('fork1', { parentPlanId: 'root' }));
+    await store.save(seed('fork2', { parentPlanId: 'root' }));
+    await store.save(seed('unrelated'));
+
+    const forks = await store.listForks('root');
+    expect(forks).toHaveLength(2);
+    expect(forks.map((p) => p.id).sort()).toEqual(['fork1', 'fork2']);
+  });
+
+  it('skips corrupt files', async () => {
+    const io = createMemoryFileIO();
+    await io.write('/w/.neko/plans/broken.nkplan', '{ not json');
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    await store.save(seed('good'));
+    const list = await store.listPlans();
+    expect(list.map((p) => p.id)).toEqual(['good']);
+  });
+
+  it('skips files with non-.nkplan extensions', async () => {
+    const io = createMemoryFileIO();
+    await io.write('/w/.neko/plans/stray.txt', 'nope');
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    await store.save(seed('p1'));
+    const list = await store.listPlans();
+    expect(list.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('returns [] when the plans dir does not exist yet', async () => {
+    const store = new PlanStore({ workDir: '/w', fileIO: createMemoryFileIO() });
+    expect(await store.listPlans()).toEqual([]);
+  });
+
+  it('honours limit', async () => {
+    const io = createMemoryFileIO();
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    for (let i = 0; i < 5; i++) {
+      await store.save(seed(`p${i}`, { updatedAt: i * 10 }));
+    }
+    const top2 = await store.listPlans({ limit: 2 });
+    expect(top2.map((p) => p.id)).toEqual(['p4', 'p3']);
+  });
+
+  it('returns [] when the adapter has no readdir', async () => {
+    const baseIO = createMemoryFileIO();
+    // Drop the readdir method to simulate an older adapter implementation.
+    const ioWithoutReaddir = {
+      read: baseIO.read,
+      write: baseIO.write,
+      mkdirp: baseIO.mkdirp,
+    };
+    const store = new PlanStore({ workDir: '/w', fileIO: ioWithoutReaddir });
+    await store.save(seed('p'));
+    expect(await store.listPlans()).toEqual([]);
+  });
+});
+
 describe('PlanStore — transition', () => {
   it('applies transition + persists', async () => {
     const store = new PlanStore({ workDir: '/w', fileIO: createMemoryFileIO() });

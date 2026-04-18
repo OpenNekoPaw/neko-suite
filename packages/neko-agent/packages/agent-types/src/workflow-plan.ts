@@ -371,6 +371,60 @@ export interface PipelineGateCancelMessage {
 }
 
 // =============================================================================
+// Plan browser messages (list persisted plans — used by fork/diff pickers)
+// =============================================================================
+
+/**
+ * Plan summary row posted to the webview.  Mirrors
+ * `@neko/platform` `PlanListEntry` but keeps a separate wire type so the
+ * webview doesn't need a platform dependency.
+ */
+export interface WorkflowPlanListEntry {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  status:
+    | 'pending'
+    | 'approved'
+    | 'executing'
+    | 'paused'
+    | 'edited'
+    | 'completed'
+    | 'aborted'
+    | 'failed';
+  routeLevel: WorkflowRouteLevel;
+  flowId: string;
+  reason: string;
+  parentPlanId?: string;
+  shotCount: number;
+  pipelineId?: string;
+  errorMessage?: string;
+}
+
+/** Webview → Extension: request a list of persisted plans for the browser UI. */
+export interface WorkflowPlanListRequestMessage {
+  type: 'workflow/planListRequest';
+  /** Optional status filter (e.g. "pending" to show only plans needing review). */
+  status?: WorkflowPlanListEntry['status'];
+  /** Optional parent filter — when set, the handler returns only direct forks. */
+  parentPlanId?: string;
+  /** Clamp the number of rows returned.  Newest first. */
+  limit?: number;
+}
+
+/** Extension → Webview: list result, paired with the originating request's filters. */
+export interface WorkflowPlanListMessage {
+  type: 'workflow/planList';
+  entries: WorkflowPlanListEntry[];
+  /** Echoed for correlation when the webview issues multiple requests. */
+  status?: WorkflowPlanListEntry['status'];
+  parentPlanId?: string;
+  limit?: number;
+  /** Populated when the handler couldn't produce a list (no store configured, etc.) */
+  errorMessage?: string;
+}
+
+// =============================================================================
 // Router ask_user messages (Phase 3.5 — LLMRouter clarifying question)
 //
 // Wire protocol for the LLMRouter's `ask_user` tool.  Extension posts
@@ -410,6 +464,7 @@ export type WorkflowIncomingMessage =
   | WorkflowPlanStatusMessage
   | WorkflowPlanUpdatedMessage
   | WorkflowPlanDiffMessage
+  | WorkflowPlanListMessage
   | PipelineGateWaitingMessage
   | WorkflowRouterAskMessage;
 
@@ -422,6 +477,7 @@ export type WorkflowOutgoingMessage =
   | WorkflowPlanToggleCheckpointMessage
   | WorkflowPlanForkMessage
   | WorkflowPlanDiffRequestMessage
+  | WorkflowPlanListRequestMessage
   | PipelineGateConfirmMessage
   | PipelineGateCancelMessage
   | WorkflowRouterAskResponseMessage;
