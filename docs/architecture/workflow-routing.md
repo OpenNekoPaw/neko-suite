@@ -132,17 +132,18 @@ const routerTools = [
   { name: 'analyze_text_structure', args: { excerpt: string } },         // 纯函数
   { name: 'check_existing_assets',  args: { kind?: AssetKind } },        // 读 AssetLibrary
   { name: 'estimate_duration',      args: { level: RouteLevel } },       // 复用 cost-estimator
-  { name: 'ask_user',               args: { question, options? } },      // Phase 3 MVP 返回 deferred
+  { name: 'ask_user',               args: { question, options? } },      // Phase 3.5 接 webview modal
   { name: 'commit_route',           args: { level, reason, skipStages?, entryExtension? } }, // 终结
 ];
 ```
 
 **实现约束**（见 [llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts)）：
-- **Budget**: 2s 硬墙钟 via `AbortController`；超时则 router 返回 `undefined`，facade 降级到 FastProbe
+- **Budget**: 2s 硬墙钟 via `AbortController`；ask_user 期间**自动暂停**，返回后恢复剩余预算
 - **Iterations**: 最多 5 轮 tool-use；超过则降级
 - **Cache**: 会话内 Map 缓存 `hashInput(input, workDir) → LLMRouterResult`
 - **Memory**: 提交后 fire-and-forget 写 `.neko/memory.md` 的 `workflow-router` H2 section
-- **Fallback**: 任何异常（network / parse / model stops without committing）均 → `undefined`
+- **Ask broker**: Phase 3.5 `RouterAskBroker` 通过 webview `RouterAskModal` 交互式问用户（60s 超时→dismissed→LLM 自行决策），无 webview 时返回 `deferred`
+- **Fallback**: 任何异常（network / parse / model stops without committing）均 → `undefined`，facade 降级到 FastProbe
 
 ### 路由作为对话（非黑盒决策）
 
@@ -227,18 +228,25 @@ Pipeline 层 (pipeline-execution.md，基于已有 PipelineExecutor)
 - [router/index.ts](../../packages/neko-agent/packages/platform/src/workflow/router/index.ts) — facade
 
 ### Phase 3 MVP — LLMRouter + Memory（已完成）
-- [router/llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts) — 有界 tool-use 循环、2s budget、cache
+- [router/llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts) — 有界 tool-use 循环、2s 可暂停 budget、cache
 - [router/llm-router-tools.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts) — 5 个 tool 定义 + 4 个 runner
 - [router/input-hash.ts](../../packages/neko-agent/packages/platform/src/workflow/router/input-hash.ts) — 稳定 sha256 hasher
 - [router/cost-estimator.ts](../../packages/neko-agent/packages/platform/src/workflow/router/cost-estimator.ts) — per-level 成本聚合
 - [memory/router-memory.ts](../../packages/neko-agent/packages/platform/src/workflow/memory/router-memory.ts) — `.neko/memory.md` H2 section `workflow-router`
 - Feature flag: `neko.workflow.router.llm.enabled`（默认关）
 
+### Phase 3.5 — ask_user 交互兜底（已完成）
+- [extension/src/workflow/router-ask-broker.ts](../../packages/neko-agent/packages/extension/src/workflow/router-ask-broker.ts) — `RouterAskBroker` 实现 platform `AskUserBroker`：posts `workflow/routerAsk` + 等 `routerAskResponse`，支持 signal/timeout
+- [webview `RouterAskModal`](../../packages/neko-agent/packages/webview/src/components/ChatView/RouterAskModal.tsx) — 多选按钮 + 自由输入 + 倒计时 + Skip
+- LLMRouter budget 在 ask 期间自动 pause/resume，避免用户思考时间蚕食 LLM 思考时间
+- 默认超时 60s（`neko.workflow.router.askTimeoutMs`），超时按 `dismissed` 处理
+
 ### Router facade 决策优先级（实现版）
 ```
 user-override > memory lookup > FastProbe committable > LLMRouter (ambiguous) > 低置信 fallback
 ```
 
-### Phase 3.5 — 待启动
-- `ask_user` 接入 webview 交互（当前返回 `deferred`）
-- AblationToggles 接管 feature flag（当前直读 VSCode settings）
+### 设置集中化（已完成）
+- [extension/src/workflow/workflow-settings.ts](../../packages/neko-agent/packages/extension/src/workflow/workflow-settings.ts) — 7 个 flag 统一读取 + clamping + 默认值
+- package.json `contributes.configuration` 已注册全部 flag（用户可在 VSCode 设置 UI 中配置）
+- Flags 列表：`orchestrator.enabled` / `router.llm.enabled` / `router.llm.budgetMs` / `router.askTimeoutMs` / `plan.autoApproveThreshold` / `consistency.enabled` / `matching.continuity.enabled`

@@ -1,8 +1,9 @@
 # 创作工作流编排（Umbrella / Index）
 
-> Status: Proposed (restructured 2026-04-18)
+> Status: Accepted (Phase 1-3.5 已实现；Phase 4-6 规划中)
 > Scope: 总览 + ADR 家族索引
 > 原 16 节大 ADR 已按三层分拆（见 §3 重构说明）
+> 进度跟踪：[docs/development/workflow-orchestration-impl-plan.md](../development/workflow-orchestration-impl-plan.md)
 
 ---
 
@@ -126,18 +127,26 @@ interface PipelineDispatch {
 ## 6. 实施优先级总览
 
 ```
-Phase 0 (本次)         → ADR 重构（已完成本文档）
-Phase 1 MVP (4-8 周)   → Router 规则层 + LitePlan + AssetLibrary facade + Matching L1/L2/L5
-Phase 2 (6-10 周)      → .nkplan 持久化 + Plan 状态机 + 矩阵编辑 + ConsistencyChecker v1
-Phase 3 (8-12 周)      → LLM Router + 记忆闭环 + 成本估算
-Phase 4 (10-14 周)     → CLIP TS binding + MatchingEngine L3/L4
-Phase 5 (10-14 周)     → Reference Chain + 2D/3D 模型集成（3 模式）
-Phase 6 (8-12 周)      → .nkproj 容器 + Lossless Upgrade + Clip.lineage
+Phase 0    ✅   ADR 重构（已完成）
+Phase 1    ✅   Router 规则层 + LitePlan + AssetLibrary facade + Matching L1/L2/L5
+Phase 1.5  ✅   交互 Plan Mode + Webview 卡片
+Phase 2    ✅   .nkplan 持久化 + Plan 状态机 + ConsistencyChecker v1
+Phase 2.5  ✅   Fork + Diff + Checkpoint pause + PlanBrowser
+Phase 3    ✅   LLM Router + 记忆闭环 + 成本估算
+Phase 3.5  ✅   ask_user 交互兜底（webview modal + 可暂停 budget）
+Phase 4    ⏳   CLIP TS binding + MatchingEngine L3/L4
+Phase 5    ⏳   Reference Chain + 2D/3D 模型集成（3 模式）
+Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
+
+**已完成横向任务**：
+- 统一 flag 读取 + VSCode settings 注册（`neko.workflow.*` 7 项）
+- 编排器集成测试（E2E-1..5 + 持久化 + fork/diff + consistency，10 条）
+- BatchGenerationScheduler 订阅 orchestrator 事件（canvas quiet mode）
 
 **并行度**：Phase 1 之后，Workflow / Plan / AssetLibrary / Matching / Consistency 可**独立 track** 推进，不互相阻塞。
 
-详细实施计划见单独文档（`docs/plans/` 或 PR 描述）。
+详细实施计划见 [`docs/development/workflow-orchestration-impl-plan.md`](../development/workflow-orchestration-impl-plan.md)。
 
 ## 7. 关键设计原则
 

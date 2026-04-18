@@ -270,3 +270,16 @@ PlanBuilder 内部调用：
 - [plan/plan-diff.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts) — route / stages / shots / constraints 4 类差异
 - [pipeline/types.ts](../../packages/neko-agent/packages/agent/src/pipeline/types.ts) 加 `PipelineConfig.userCheckpoints`；executor 合流到现有 gate 机制
 - webview `PlanDiffView.tsx`、`CheckpointToggle`、终态 Fork/Diff 按钮
+- webview `PipelineGatePanel.tsx` — 暂停态场景卡片 + Resume/Cancel；`useWorkflowPlan.pendingGate` 状态
+- `pipelineTools.ts` 暴露 `registerActivePipeline` + `confirmPipelineGate` + `cancelPipelineGate` 给 webview 回调使用
+
+### Plan 浏览器 + 列举（已完成）
+- [plan/plan-store.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-store.ts) `listPlans(options)` / `listForks(parentId)` — 过滤 status/parentPlanId/limit，按 updatedAt 降序
+- FileIOAdapter 可选 `readdir(dir)`；Node 用 `fs.readdir`，memory 扫 Map 键
+- 线路消息：`workflow/planListRequest` ↔ `workflow/planList`；Handler `handleListRequest` + `toWirePlanListEntry`
+- webview `PlanBrowser.tsx` — status chips + 每行 Fork/Diff；`WorkflowPlanCard` terminal 态加 "Browse plans" 按钮
+
+### 编排器跨扩展协调（已完成）
+- `neko.canvas.orchestrator.planStateChanged` 命令：agent `broadcastPlanState` 在 executing/paused/completed/aborted/failed 触发
+- Canvas `BatchGenerationScheduler.setQuietMode(reason?)` 暂停 pump；live-scheduler registry 让多编辑器同步
+- 目标：避免 canvas 批生成队列与 orchestrator 的 `batchGenerate` stage 重复消耗 credits
