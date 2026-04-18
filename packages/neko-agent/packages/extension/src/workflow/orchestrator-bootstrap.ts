@@ -86,6 +86,8 @@ export interface Orchestrator {
   readonly consistencyChecker: Workflow.ConsistencyChecker;
   /** Optional persistent store (available when a workspace folder exists). */
   readonly planStore: PlanStore | undefined;
+  /** Phase 3 LLM router, undefined when the feature flag is off. */
+  readonly llmRouter: Workflow.LLMRouter | undefined;
 
   /**
    * Build a plan from a raw input and dispatch it to the pipeline.
@@ -147,6 +149,7 @@ export async function bootstrapOrchestrator(
     planBuilder,
     consistencyChecker,
     planStore,
+    llmRouter,
 
     async startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult> {
       let route: Route;

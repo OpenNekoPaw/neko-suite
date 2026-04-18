@@ -307,6 +307,41 @@ export function getActivePipeline(pipelineId: string): PipelineHandle | undefine
 }
 
 /**
+ * Register a pipeline handle produced outside the `StartPipeline` tool
+ * (e.g. by the Workflow Orchestrator's routed pipeline).  Needed so that
+ * later webview messages like `pipelineGateConfirm` can look it up.
+ */
+export function registerActivePipeline(pipelineId: string, handle: PipelineHandle): void {
+  activePipelines.set(pipelineId, handle);
+}
+
+/**
+ * Confirm the currently-pending gate on an active pipeline.
+ * No-op when the id is unknown.
+ */
+export function confirmPipelineGate(
+  pipelineId: string,
+  modifications?: Partial<PipelineContext>,
+): boolean {
+  const handle = activePipelines.get(pipelineId);
+  if (!handle) return false;
+  handle.confirmGate(modifications);
+  return true;
+}
+
+/**
+ * Cancel the currently-pending gate on an active pipeline. Removes it
+ * from the registry.
+ */
+export function cancelPipelineGate(pipelineId: string): boolean {
+  const handle = activePipelines.get(pipelineId);
+  if (!handle) return false;
+  handle.cancelGate();
+  activePipelines.delete(pipelineId);
+  return true;
+}
+
+/**
  * Clean up completed pipeline
  */
 export function removePipeline(pipelineId: string): void {

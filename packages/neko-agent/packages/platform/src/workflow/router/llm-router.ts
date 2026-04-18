@@ -36,10 +36,11 @@ import {
   runCheckExistingAssets,
   runEstimateDuration,
   type AnalyzeTextStructureArgs,
+  type AskUserArgs,
+  type AskUserBroker,
   type CheckExistingAssetsArgs,
   type CommitRouteArgs,
   type EstimateDurationArgs,
-  type AskUserArgs,
 } from './llm-router-tools';
 
 // =============================================================================
@@ -60,13 +61,21 @@ export interface LLMRouterOptions {
   /** Optional AssetLibrary; enables the `check_existing_assets` tool */
   assetLibrary?: AssetLibrary;
   /**
+   * Optional ask-user broker; enables interactive clarifying questions from
+   * the `ask_user` tool. When omitted, the tool returns `deferred` and the
+   * LLM has to commit from the data it already has.
+   */
+  askBroker?: AskUserBroker;
+  /** How long to wait for the user's answer before giving up. Default 60s. */
+  askTimeoutMs?: number;
+  /**
    * `providerId:modelId` override (passed through as ServiceOptions.modelId).
    * When omitted, the platform's default fast model is used.
    */
   modelId?: string;
   /** Maximum tool-use iterations before giving up. Default 5 */
   maxIterations?: number;
-  /** Wall-clock budget in ms. Default 2000 */
+  /** Wall-clock budget in ms. Default 2000 — paused during `ask_user` */
   budgetMs?: number;
   /** Clock (for tests) */
   now?: () => number;
@@ -101,6 +110,7 @@ export class LLMRouter {
   private readonly modelId: string | undefined;
   private readonly maxIterations: number;
   private readonly budgetMs: number;
+  private readonly askTimeoutMs: number;
   private readonly now: () => number;
   private readonly cache = new Map<string, LLMRouterResult>();
 
@@ -108,7 +118,20 @@ export class LLMRouter {
     this.modelId = options.modelId;
     this.maxIterations = options.maxIterations ?? 5;
     this.budgetMs = options.budgetMs ?? 2000;
+    this.askTimeoutMs = options.askTimeoutMs ?? 60_000;
     this.now = options.now ?? (() => Date.now());
+  }
+
+  /**
+   * Attach an `ask_user` broker after construction.  Useful when the broker
+   * depends on state that isn't available at router-construction time (e.g.
+   * the chat webview, which boots asynchronously).
+   */
+  setAskBroker(broker: AskUserBroker | undefined): void {
+    // We mutate `options.askBroker` in-place so any in-flight `decide()`
+    // call that hasn't yet reached the ask_user branch picks up the new
+    // broker.  Already-pending asks retain the broker they started with.
+    (this.options as { askBroker?: AskUserBroker }).askBroker = broker;
   }
 
   /**
@@ -128,11 +151,39 @@ export class LLMRouter {
 
     const controller = new AbortController();
     const composedSignal = composeSignals(input.signal, controller.signal);
-    const deadline = this.now() + this.budgetMs;
-    const budgetTimer = setTimeout(() => controller.abort(), this.budgetMs);
+
+    // Pausable budget — `ask_user` waits on human input and shouldn't consume
+    // the LLM thinking budget.  The timer fires `controller.abort()` when the
+    // remaining ms elapses; pausing clears the timer and recomputes on
+    // resume.
+    let remainingMs = this.budgetMs;
+    let segmentStartedAt = this.now();
+    let budgetTimer: ReturnType<typeof setTimeout> | null = setTimeout(
+      () => controller.abort(),
+      remainingMs,
+    );
+    const budget: BudgetControls = {
+      pause: () => {
+        if (budgetTimer) {
+          clearTimeout(budgetTimer);
+          budgetTimer = null;
+        }
+        const elapsed = this.now() - segmentStartedAt;
+        remainingMs = Math.max(0, remainingMs - elapsed);
+      },
+      resume: () => {
+        if (remainingMs <= 0) {
+          controller.abort();
+          return;
+        }
+        segmentStartedAt = this.now();
+        budgetTimer = setTimeout(() => controller.abort(), remainingMs);
+      },
+      isExhausted: () => remainingMs <= 0 && budgetTimer === null,
+    };
 
     try {
-      const result = await this.runLoop(input, hash, deadline, composedSignal);
+      const result = await this.runLoop(input, hash, composedSignal, budget);
       if (!result) return undefined;
       this.cache.set(hash, { ...result, fromCache: false });
 
@@ -154,7 +205,7 @@ export class LLMRouter {
     } catch {
       return undefined;
     } finally {
-      clearTimeout(budgetTimer);
+      if (budgetTimer) clearTimeout(budgetTimer);
     }
   }
 
@@ -175,8 +226,8 @@ export class LLMRouter {
   private async runLoop(
     input: LLMRouterDecideInput,
     hash: string,
-    deadline: number,
     signal: AbortSignal,
+    budget: BudgetControls,
   ): Promise<LLMRouterResult | undefined> {
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt() },
@@ -184,7 +235,7 @@ export class LLMRouter {
     ];
 
     for (let iter = 0; iter < this.maxIterations; iter++) {
-      if (this.now() >= deadline || signal.aborted) return undefined;
+      if (signal.aborted || budget.isExhausted()) return undefined;
       const response = await this.options.chat(messages, {
         ...(this.modelId !== undefined && { modelId: this.modelId }),
         tools: ROUTER_TOOL_DEFS as ToolDefinition[],
@@ -218,7 +269,12 @@ export class LLMRouter {
           };
         }
 
-        const toolResult = this.runTool(call.function.name, call.function.arguments);
+        const toolResult = await this.runTool(
+          call.function.name,
+          call.function.arguments,
+          signal,
+          budget,
+        );
         messages.push({
           role: 'tool',
           content: JSON.stringify(toolResult),
@@ -229,7 +285,12 @@ export class LLMRouter {
     return undefined;
   }
 
-  private runTool(name: string, argsRaw: string): unknown {
+  private async runTool(
+    name: string,
+    argsRaw: string,
+    signal: AbortSignal,
+    budget: BudgetControls,
+  ): Promise<unknown> {
     const parsed = safeJsonParse<Record<string, unknown>>(argsRaw) ?? {};
     switch (name) {
       case ROUTER_TOOL_NAMES.analyzeTextStructure:
@@ -242,12 +303,30 @@ export class LLMRouter {
         });
       case ROUTER_TOOL_NAMES.estimateDuration:
         return runEstimateDuration(parsed as unknown as EstimateDurationArgs);
-      case ROUTER_TOOL_NAMES.askUser:
-        return runAskUser(parsed as unknown as AskUserArgs);
+      case ROUTER_TOOL_NAMES.askUser: {
+        // Pause the LLM-thinking budget while the user decides.  The
+        // ask_user broker has its own timeout (askTimeoutMs).
+        budget.pause();
+        try {
+          return await runAskUser(parsed as unknown as AskUserArgs, {
+            ...(this.options.askBroker !== undefined && { broker: this.options.askBroker }),
+            timeoutMs: this.askTimeoutMs,
+            signal,
+          });
+        } finally {
+          budget.resume();
+        }
+      }
       default:
         return { error: `Unknown tool: ${name}` };
     }
   }
+}
+
+interface BudgetControls {
+  pause(): void;
+  resume(): void;
+  isExhausted(): boolean;
 }
 
 // =============================================================================

@@ -10,9 +10,39 @@ import { memo } from 'react';
 import { useWorkflowPlan } from '@/hooks/useWorkflowPlan';
 import { WorkflowPlanCard } from './WorkflowPlanCard';
 import { PlanDiffView } from './PlanDiffView';
+import { PipelineGatePanel } from './PipelineGatePanel';
+import { RouterAskModal } from './RouterAskModal';
 
 export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
-  const { plan, status, errorMessage, diff, diffError, dismiss, dismissDiff } = useWorkflowPlan();
+  const {
+    plan,
+    status,
+    errorMessage,
+    diff,
+    diffError,
+    pendingGate,
+    pendingAsk,
+    dismiss,
+    dismissDiff,
+    clearPendingGate,
+    clearPendingAsk,
+  } = useWorkflowPlan();
+
+  // The router's ask_user fires during route decision, before any plan
+  // exists.  Render the modal standalone in that case.
+  if (!plan && pendingAsk) {
+    return (
+      <div className="px-2 pt-1">
+        <RouterAskModal
+          askId={pendingAsk.askId}
+          question={pendingAsk.question}
+          {...(pendingAsk.options !== undefined && { options: pendingAsk.options })}
+          {...(pendingAsk.timeoutMs !== undefined && { timeoutMs: pendingAsk.timeoutMs })}
+          onResolved={clearPendingAsk}
+        />
+      </div>
+    );
+  }
 
   if (!plan) return null;
 
@@ -28,6 +58,22 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
         terminal={terminal}
         {...(statusLabel !== undefined && { statusLabel })}
       />
+      {pendingGate && (
+        <PipelineGatePanel
+          pipelineId={pendingGate.pipelineId}
+          preview={pendingGate.preview}
+          onResolved={clearPendingGate}
+        />
+      )}
+      {pendingAsk && (
+        <RouterAskModal
+          askId={pendingAsk.askId}
+          question={pendingAsk.question}
+          {...(pendingAsk.options !== undefined && { options: pendingAsk.options })}
+          {...(pendingAsk.timeoutMs !== undefined && { timeoutMs: pendingAsk.timeoutMs })}
+          onResolved={clearPendingAsk}
+        />
+      )}
       {errorMessage && (
         <div
           className="mt-1 rounded border border-[var(--agent-danger)] bg-[var(--agent-bg-secondary)] p-2 text-[11px] text-[var(--agent-danger)]"

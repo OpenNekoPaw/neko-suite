@@ -82,9 +82,25 @@ export interface AskUserArgs {
   options?: string[];
 }
 
-export interface AskUserResult {
-  status: 'deferred';
-  note: string;
+/**
+ * Result of `ask_user`. The tool always returns one of these shapes — the
+ * LLM reads `status` and decides whether to continue reasoning.
+ */
+export type AskUserResult =
+  | { status: 'answered'; choice?: string; freeformAnswer?: string }
+  | { status: 'dismissed'; note: string }
+  | { status: 'deferred'; note: string };
+
+/**
+ * Optional broker that routes the question to the user (e.g. via webview)
+ * and awaits an answer. When not configured the tool returns `deferred`
+ * and the LLM is expected to commit without user input.
+ *
+ * Implementations should respect `opts.signal` and time out on their own
+ * schedule (defaults to 60s in the router).
+ */
+export interface AskUserBroker {
+  ask(args: AskUserArgs, opts: { signal?: AbortSignal; timeoutMs: number }): Promise<AskUserResult>;
 }
 
 export interface CommitRouteArgs {
@@ -293,12 +309,37 @@ export function runEstimateDuration(args: EstimateDurationArgs): EstimateDuratio
   return { level: args.level, ...cost };
 }
 
-/** Run `ask_user` — deferred in Phase 3 MVP. */
-export function runAskUser(_args: AskUserArgs): AskUserResult {
-  return {
-    status: 'deferred',
-    note:
-      'Phase 3 MVP does not surface the question to the user. Commit your ' +
-      'best-guess route or return control to FastProbe.',
-  };
+/**
+ * Run `ask_user`. When a broker is provided (Phase 3.5), the question is
+ * forwarded to the user and this function awaits the answer.  Without a
+ * broker, the tool returns a `deferred` placeholder so the LLM is forced
+ * to commit from the information it already has.
+ */
+export async function runAskUser(
+  args: AskUserArgs,
+  opts: {
+    broker?: AskUserBroker;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<AskUserResult> {
+  if (!opts.broker) {
+    return {
+      status: 'deferred',
+      note:
+        'No ask broker configured — commit your best-guess route or return ' +
+        'control to FastProbe.',
+    };
+  }
+  try {
+    return await opts.broker.ask(args, {
+      timeoutMs: opts.timeoutMs ?? 60_000,
+      ...(opts.signal !== undefined && { signal: opts.signal }),
+    });
+  } catch (err) {
+    return {
+      status: 'dismissed',
+      note: err instanceof Error ? err.message : 'ask dismissed',
+    };
+  }
 }

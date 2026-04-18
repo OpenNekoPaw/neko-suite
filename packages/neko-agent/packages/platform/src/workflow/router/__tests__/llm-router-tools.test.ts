@@ -74,8 +74,39 @@ describe('runEstimateDuration', () => {
 });
 
 describe('runAskUser', () => {
-  it('returns deferred placeholder in Phase 3 MVP', () => {
-    const r = runAskUser({ question: 'Which style?' });
+  it('returns deferred when no broker is configured', async () => {
+    const r = await runAskUser({ question: 'Which style?' });
     expect(r.status).toBe('deferred');
+  });
+
+  it('awaits the broker answer when one is provided', async () => {
+    const r = await runAskUser(
+      { question: 'L1 or L3?', options: ['L1', 'L3'] },
+      {
+        broker: {
+          ask: async (args) => ({ status: 'answered', choice: args.options?.[1] }),
+        },
+        timeoutMs: 1000,
+      },
+    );
+    expect(r.status).toBe('answered');
+    if (r.status === 'answered') {
+      expect(r.choice).toBe('L3');
+    }
+  });
+
+  it('returns dismissed when the broker throws', async () => {
+    const r = await runAskUser(
+      { question: 'anything' },
+      {
+        broker: {
+          ask: async () => {
+            throw new Error('timeout');
+          },
+        },
+        timeoutMs: 1000,
+      },
+    );
+    expect(r.status).toBe('dismissed');
   });
 });

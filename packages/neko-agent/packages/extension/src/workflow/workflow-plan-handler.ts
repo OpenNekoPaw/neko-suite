@@ -34,6 +34,7 @@ import type {
 import { Workflow } from '@neko/platform';
 import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
 import { subscribePipelineProgress } from '../pipeline/pipeline-progress-bridge';
+import { registerActivePipeline, removePipeline } from '../tools/pipelineTools';
 import { getLogger } from '../base';
 
 const logger = getLogger('WorkflowPlanHandler');
@@ -508,6 +509,11 @@ export class WorkflowPlanHandler {
     chatWebview: vscode.Webview,
     progressEventCommand?: string,
   ): void {
+    // Register the handle so webview messages (pipelineGateConfirm /
+    // pipelineGateCancel) can reach it.  The progress bridge will call
+    // removePipeline() on completion/error.
+    registerActivePipeline(result.handle.id, result.handle);
+
     subscribePipelineProgress(chatWebview, result.handle.id, result.handle, {
       ...(progressEventCommand !== undefined && { eventCommand: progressEventCommand }),
     });
@@ -524,6 +530,8 @@ export class WorkflowPlanHandler {
           errorMessage: message,
           by: 'system',
         });
+        // Defensive cleanup — removePipeline is idempotent.
+        removePipeline(result.handle.id);
         const webview = this.deps.getWebview();
         if (webview) {
           webview.postMessage({

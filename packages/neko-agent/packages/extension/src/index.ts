@@ -213,6 +213,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     dispose: () => chatViewProvider.setWorkflowPlanHandler(undefined),
   });
 
+  // Phase 3.5: attach the RouterAskBroker so the LLM router's `ask_user`
+  // tool can surface interactive clarifying questions to the webview. Only
+  // meaningful when the LLM router is enabled by flag.
+  if (orchestrator.llmRouter) {
+    const { RouterAskBroker } = await import('./workflow/router-ask-broker');
+    const askBroker = new RouterAskBroker({
+      getWebview: () => chatViewProvider.webview,
+    });
+    orchestrator.llmRouter.setAskBroker(askBroker);
+    chatViewProvider.setRouterAskBroker(askBroker);
+    context.subscriptions.push({
+      dispose: () => {
+        orchestrator.llmRouter?.setAskBroker(undefined);
+        chatViewProvider.setRouterAskBroker(undefined);
+      },
+    });
+  }
+
   // Register commands
   registerCommands(
     context,

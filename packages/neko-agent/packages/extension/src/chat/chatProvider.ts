@@ -96,6 +96,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _platform?: Platform;
   private _taskManager?: TaskManager;
   private _configBridge?: ConfigBridge;
+  private _routerAskBroker?: {
+    handleResponse(msg: {
+      type: 'workflow/routerAskResponse';
+      askId: string;
+      status: 'answered' | 'dismissed';
+      choice?: string;
+      freeformAnswer?: string;
+    }): boolean;
+  };
   private _workflowPlanHandler?: {
     handleIncoming(msg: {
       type: 'workflow/planApprove' | 'workflow/planOverride' | 'workflow/planAbort';
@@ -560,6 +569,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._workflowPlanHandler = handler;
   }
 
+  /**
+   * Register the RouterAskBroker (Phase 3.5) so `workflow/routerAskResponse`
+   * webview messages can resolve the corresponding pending ask. Duck-typed
+   * to avoid a circular import.
+   */
+  public setRouterAskBroker(
+    broker:
+      | {
+          handleResponse(msg: {
+            type: 'workflow/routerAskResponse';
+            askId: string;
+            status: 'answered' | 'dismissed';
+            choice?: string;
+            freeformAnswer?: string;
+          }): boolean;
+        }
+      | undefined,
+  ): void {
+    this._routerAskBroker = broker;
+  }
+
   public get webview(): vscode.Webview | undefined {
     return this._view?.webview;
   }
@@ -735,6 +765,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             againstPlanId?: string;
           },
         );
+        return;
+      }
+
+      // Router ask_user response (Phase 3.5) — routes back into the broker
+      // so the pending LLMRouter promise can resolve.
+      if (message.type === 'workflow/routerAskResponse') {
+        const handled = this._routerAskBroker?.handleResponse(
+          message as {
+            type: 'workflow/routerAskResponse';
+            askId: string;
+            status: 'answered' | 'dismissed';
+            choice?: string;
+            freeformAnswer?: string;
+          },
+        );
+        if (!handled) {
+          logger.debug('routerAskResponse dropped (no broker attached)');
+        }
+        return;
+      }
+
+      // Pipeline gate confirm/cancel — loops back into the active pipeline
+      // registered by the Workflow Orchestrator.  Routed here (rather than
+      // through workflowPlanHandler) because gates are a pipeline-layer
+      // concept that can exist without an enclosing Plan.
+      if (message.type === 'pipelineGateConfirm' || message.type === 'pipelineGateCancel') {
+        const { confirmPipelineGate, cancelPipelineGate } = await import('../tools/pipelineTools');
+        const pipelineId = (message as { pipelineId?: string }).pipelineId;
+        if (typeof pipelineId !== 'string') {
+          logger.debug('pipelineGate* message missing pipelineId', { type: message.type });
+          return;
+        }
+        if (message.type === 'pipelineGateConfirm') {
+          const modifications = (message as { modifications?: Record<string, unknown> })
+            .modifications;
+          confirmPipelineGate(pipelineId, modifications);
+        } else {
+          cancelPipelineGate(pipelineId);
+        }
         return;
       }
 

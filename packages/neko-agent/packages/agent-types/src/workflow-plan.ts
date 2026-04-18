@@ -318,12 +318,100 @@ export interface WorkflowPlanDiffMessage {
   errorMessage?: string;
 }
 
+// =============================================================================
+// Pipeline gate messages (checkpoint pause UI)
+//
+// The executor already emits `gate_waiting` events; pipeline-progress-bridge
+// forwards them as `pipelineGateWaiting` posts (see that file).  These types
+// document the wire shape so webview + extension agree, and add the two
+// back-channels (resume / cancel) needed to complete the loop.
+// =============================================================================
+
+/**
+ * Per-scene review card included in the gate preview (populated by
+ * pipeline-progress-bridge.buildGatePreview for batch-generate gates).
+ */
+export interface PipelineGateSceneCard {
+  sceneIndex: number;
+  heading: string;
+  description: string;
+  mediaPath: string;
+  mediaType: 'image' | 'video';
+  failed: boolean;
+}
+
+export interface PipelineGatePreview {
+  stage: string;
+  scenes: PipelineGateSceneCard[];
+  globalStyle?: string;
+  failedIndices?: number[];
+  totalScenes?: number;
+  generatedCount?: number;
+}
+
+/** Extension → Webview: executor is paused at a gate, awaiting resume. */
+export interface PipelineGateWaitingMessage {
+  type: 'pipelineGateWaiting';
+  pipelineId: string;
+  data: PipelineGatePreview;
+}
+
+/** Webview → Extension: user resumed the pipeline past the current gate. */
+export interface PipelineGateConfirmMessage {
+  type: 'pipelineGateConfirm';
+  pipelineId: string;
+  /** Optional context patch applied before the next stage runs */
+  modifications?: Record<string, unknown>;
+}
+
+/** Webview → Extension: user cancelled — pipeline should abort at the gate. */
+export interface PipelineGateCancelMessage {
+  type: 'pipelineGateCancel';
+  pipelineId: string;
+}
+
+// =============================================================================
+// Router ask_user messages (Phase 3.5 — LLMRouter clarifying question)
+//
+// Wire protocol for the LLMRouter's `ask_user` tool.  Extension posts
+// `workflow/routerAsk` with an askId; webview responds with
+// `workflow/routerAskResponse`.  The router pauses its budget while
+// the ask is outstanding.
+// =============================================================================
+
+export type WorkflowRouterAskResponseStatus = 'answered' | 'dismissed';
+
+/** Extension → Webview: the LLM router wants the user to answer a question. */
+export interface WorkflowRouterAskMessage {
+  type: 'workflow/routerAsk';
+  /** Correlation id; include in the response. */
+  askId: string;
+  question: string;
+  /** Optional multiple-choice options; freeform is allowed when absent. */
+  options?: string[];
+  /** Soft deadline in ms; webview can render a countdown if it wants. */
+  timeoutMs?: number;
+}
+
+/** Webview → Extension: user's answer (or dismissal) for a routerAsk. */
+export interface WorkflowRouterAskResponseMessage {
+  type: 'workflow/routerAskResponse';
+  askId: string;
+  status: WorkflowRouterAskResponseStatus;
+  /** One of the options (for answered + multiple-choice). */
+  choice?: string;
+  /** Freeform typed answer. */
+  freeformAnswer?: string;
+}
+
 export type WorkflowIncomingMessage =
   | WorkflowPlanPreviewMessage
   | WorkflowPlanDispatchedMessage
   | WorkflowPlanStatusMessage
   | WorkflowPlanUpdatedMessage
-  | WorkflowPlanDiffMessage;
+  | WorkflowPlanDiffMessage
+  | PipelineGateWaitingMessage
+  | WorkflowRouterAskMessage;
 
 export type WorkflowOutgoingMessage =
   | WorkflowPlanApproveMessage
@@ -333,4 +421,7 @@ export type WorkflowOutgoingMessage =
   | WorkflowPlanApplyToAllMessage
   | WorkflowPlanToggleCheckpointMessage
   | WorkflowPlanForkMessage
-  | WorkflowPlanDiffRequestMessage;
+  | WorkflowPlanDiffRequestMessage
+  | PipelineGateConfirmMessage
+  | PipelineGateCancelMessage
+  | WorkflowRouterAskResponseMessage;

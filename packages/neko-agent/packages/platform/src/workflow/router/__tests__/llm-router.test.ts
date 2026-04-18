@@ -138,6 +138,60 @@ describe('LLMRouter — failure modes', () => {
   });
 });
 
+describe('LLMRouter — ask_user broker', () => {
+  function askCall(args: { question: string; options?: string[] }): LLMToolCall {
+    return {
+      id: 'call_ask',
+      type: 'function',
+      function: { name: ROUTER_TOOL_NAMES.askUser, arguments: JSON.stringify(args) },
+    };
+  }
+
+  it('routes ask_user through the broker and feeds the answer back to the LLM', async () => {
+    let turn = 0;
+    const chat: LLMChatFn = vi.fn(async () => {
+      turn++;
+      if (turn === 1) return makeResponse([askCall({ question: 'L1 or L3?' })]);
+      return makeResponse([commitCall({ level: 'L3', reason: 'user picked L3' })]);
+    });
+    const brokerAsk = vi.fn(async () => ({
+      status: 'answered' as const,
+      choice: 'L3',
+    }));
+    const router = new LLMRouter({
+      chat,
+      askBroker: { ask: brokerAsk },
+      // Large enough that ask doesn't eat the budget
+      budgetMs: 100_000,
+      askTimeoutMs: 5_000,
+    });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r?.level).toBe('L3');
+    expect(brokerAsk).toHaveBeenCalledOnce();
+  });
+
+  it('falls back gracefully when the broker throws', async () => {
+    let turn = 0;
+    const chat: LLMChatFn = vi.fn(async () => {
+      turn++;
+      if (turn === 1) return makeResponse([askCall({ question: 'Which?' })]);
+      return makeResponse([commitCall({ level: 'L0', reason: 'gave up asking' })]);
+    });
+    const router = new LLMRouter({
+      chat,
+      askBroker: {
+        ask: async () => {
+          throw new Error('user dismissed');
+        },
+      },
+    });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    // The router still commits — broker failures are surfaced to the LLM
+    // as `dismissed`, not rethrown.
+    expect(r?.level).toBe('L0');
+  });
+});
+
 describe('LLMRouter — memory persistence', () => {
   it('records the committed route to memory', async () => {
     const chat: LLMChatFn = vi.fn(async () =>
@@ -147,7 +201,7 @@ describe('LLMRouter — memory persistence', () => {
     const router = new LLMRouter({
       chat,
       memory: {
-        record: async (entry) => {
+        record: async (entry: unknown) => {
           recorded.push(entry);
         },
         // Unused in commit path — minimal stub

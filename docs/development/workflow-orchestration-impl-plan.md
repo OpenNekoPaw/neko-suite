@@ -16,7 +16,8 @@
 | Phase 2 matrix editing: plan-editor + alternative dropdown + apply-to-all + live re-check | ✅ 完成 | +10 条单测（158 total） |
 | Phase 2 remainder: Plan fork + diff viewer + Checkpoint pause | ✅ 完成 | +24 条单测（182 total） |
 | Phase 3 MVP: LLMRouter（tool-use） + RouterMemory + 成本估算 + 输入 hash 缓存 | ✅ 完成 | +35 条单测（217 total）；feature flag `neko.workflow.router.llm.enabled` 默认关 |
-| Phase 3.5: ask_user 交互式兜底（webview） | ⏳ 待启动 | 1-2 周 |
+| Phase 2 tail: Checkpoint pause UI（pipelineGate confirm/cancel） | ✅ 完成 | +0 单测（已有 executor 覆盖）；webview `PipelineGatePanel` |
+| Phase 3.5: ask_user 交互式兜底（RouterAskBroker + RouterAskModal + budget 暂停） | ✅ 完成 | +4 单测（221 workflow total） |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
 | Phase 6: `.nkproj` + Lossless Upgrade | ⏳ 待启动 | 8-12 周 |

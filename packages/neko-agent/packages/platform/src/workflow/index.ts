@@ -41,6 +41,9 @@ export {
   type LLMRouterDecideInput,
   type LLMRouterOptions,
   type LLMRouterResult,
+  type AskUserArgs,
+  type AskUserBroker,
+  type AskUserResult,
   type RouterToolContext,
   type RouterToolName,
 } from './router';
