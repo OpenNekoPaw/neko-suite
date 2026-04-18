@@ -9,13 +9,15 @@
 import { memo } from 'react';
 import { useWorkflowPlan } from '@/hooks/useWorkflowPlan';
 import { WorkflowPlanCard } from './WorkflowPlanCard';
+import { PlanDiffView } from './PlanDiffView';
 
 export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
-  const { plan, status, errorMessage, dismiss } = useWorkflowPlan();
+  const { plan, status, errorMessage, diff, diffError, dismiss, dismissDiff } = useWorkflowPlan();
 
   if (!plan) return null;
 
   const readOnly = status !== 'pending';
+  const terminal = status === 'completed' || status === 'aborted' || status === 'failed';
   const statusLabel = mapStatusLabel(status);
 
   return (
@@ -23,6 +25,7 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
       <WorkflowPlanCard
         plan={plan}
         readOnly={readOnly}
+        terminal={terminal}
         {...(statusLabel !== undefined && { statusLabel })}
       />
       {errorMessage && (
@@ -33,7 +36,24 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
           {errorMessage}
         </div>
       )}
-      {(status === 'completed' || status === 'aborted' || status === 'failed') && (
+      {(diff !== undefined || diffError !== undefined) && (
+        <PlanDiffView
+          diff={
+            diff ?? {
+              leftId: '',
+              rightId: '',
+              route: [],
+              stages: [],
+              shots: [],
+              constraints: [],
+              unchanged: true,
+            }
+          }
+          {...(diffError !== undefined && { errorMessage: diffError })}
+          onDismiss={dismissDiff}
+        />
+      )}
+      {terminal && (
         <div className="mt-1 flex justify-end">
           <button className="vscode-button-secondary px-2 py-0.5 text-[11px]" onClick={dismiss}>
             Dismiss

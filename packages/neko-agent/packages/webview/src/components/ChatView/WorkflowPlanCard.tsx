@@ -19,6 +19,12 @@ interface WorkflowPlanCardProps {
   readOnly?: boolean;
   /** Status override (shown in header badge) */
   statusLabel?: string;
+  /**
+   * When true, adds secondary actions (Fork / Diff) that are only meaningful
+   * on terminal plans (completed / aborted / failed). The Panel sets this
+   * flag based on the active status.
+   */
+  terminal?: boolean;
 }
 
 // =============================================================================
@@ -66,6 +72,7 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
   plan,
   readOnly = false,
   statusLabel,
+  terminal = false,
 }: WorkflowPlanCardProps) {
   const [isOverriding, setIsOverriding] = useState(false);
 
@@ -88,6 +95,14 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
     },
     [plan.id],
   );
+
+  const handleFork = useCallback(() => {
+    vscode?.postMessage({ type: 'workflow/planFork', planId: plan.id });
+  }, [plan.id]);
+
+  const handleDiff = useCallback(() => {
+    vscode?.postMessage({ type: 'workflow/planDiffRequest', planId: plan.id });
+  }, [plan.id]);
 
   const meta = LEVEL_META[plan.route.level];
   const effectiveStages = plan.stages.filter((s) => !s.skipped);
@@ -152,6 +167,18 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
               <span className="w-4 text-right text-[var(--agent-fg-secondary)]">{i + 1}.</span>
               <span className="flex-1">{stage.label}</span>
               {stage.estimate && <StageEstimate estimate={stage.estimate} />}
+              {!readOnly && !stage.skipped && (
+                <CheckpointToggle
+                  planId={plan.id}
+                  stageId={stage.id}
+                  checked={stage.userCheckpoint === true}
+                />
+              )}
+              {readOnly && stage.userCheckpoint === true && (
+                <span className="text-[10px] text-[var(--vscode-charts-orange)]" title="Checkpoint">
+                  🛑
+                </span>
+              )}
             </li>
           ))}
         </ol>
@@ -235,9 +262,71 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
           </button>
         </div>
       )}
+
+      {/* Terminal actions — Fork + Diff against parent */}
+      {terminal && (
+        <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] pt-2">
+          <button
+            className="vscode-button-secondary px-3 py-1 text-[12px]"
+            onClick={handleFork}
+            title="Create a new plan from this one"
+          >
+            Fork
+          </button>
+          {plan.parentPlanId && (
+            <button
+              className="vscode-button-secondary px-3 py-1 text-[12px]"
+              onClick={handleDiff}
+              title={`Compare against parent ${plan.parentPlanId}`}
+            >
+              Diff vs parent
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 });
+
+// =============================================================================
+// Checkpoint toggle
+// =============================================================================
+
+function CheckpointToggle({
+  planId,
+  stageId,
+  checked,
+}: {
+  planId: string;
+  stageId: string;
+  checked: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`rounded px-1 text-[10px] ${
+        checked
+          ? 'text-[var(--vscode-charts-orange)]'
+          : 'text-[var(--agent-fg-secondary)] opacity-50 hover:opacity-100'
+      }`}
+      title={
+        checked
+          ? 'Pause the pipeline after this stage'
+          : 'Click to pause the pipeline after this stage'
+      }
+      onClick={() =>
+        vscode?.postMessage({
+          type: 'workflow/planToggleCheckpoint',
+          planId,
+          stageId,
+          value: !checked,
+        })
+      }
+    >
+      {checked ? '🛑' : '○'}
+    </button>
+  );
+}
 
 // =============================================================================
 // Sub-components

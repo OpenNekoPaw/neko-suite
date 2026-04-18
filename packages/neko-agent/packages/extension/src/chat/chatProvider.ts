@@ -116,6 +116,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       slot: string;
       assetId: string;
     }): Promise<unknown>;
+    handleToggleCheckpoint(msg: {
+      type: 'workflow/planToggleCheckpoint';
+      planId: string;
+      stageId: string;
+      value?: boolean;
+    }): Promise<unknown>;
+    handleFork(msg: {
+      type: 'workflow/planFork';
+      planId: string;
+      resetToOriginal?: boolean;
+    }): Promise<unknown>;
+    handleDiffRequest(msg: {
+      type: 'workflow/planDiffRequest';
+      planId: string;
+      againstPlanId?: string;
+    }): Promise<unknown>;
   };
   private readonly _dndBroker = new DragDropBroker();
 
@@ -522,6 +538,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             slot: string;
             assetId: string;
           }): Promise<unknown>;
+          handleToggleCheckpoint(msg: {
+            type: 'workflow/planToggleCheckpoint';
+            planId: string;
+            stageId: string;
+            value?: boolean;
+          }): Promise<unknown>;
+          handleFork(msg: {
+            type: 'workflow/planFork';
+            planId: string;
+            resetToOriginal?: boolean;
+          }): Promise<unknown>;
+          handleDiffRequest(msg: {
+            type: 'workflow/planDiffRequest';
+            planId: string;
+            againstPlanId?: string;
+          }): Promise<unknown>;
         }
       | undefined,
   ): void {
@@ -667,6 +699,40 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             entityId: string;
             slot: string;
             assetId: string;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/planToggleCheckpoint') {
+        await this._workflowPlanHandler?.handleToggleCheckpoint(
+          message as {
+            type: 'workflow/planToggleCheckpoint';
+            planId: string;
+            stageId: string;
+            value?: boolean;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/planFork') {
+        await this._workflowPlanHandler?.handleFork(
+          message as {
+            type: 'workflow/planFork';
+            planId: string;
+            resetToOriginal?: boolean;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/planDiffRequest') {
+        await this._workflowPlanHandler?.handleDiffRequest(
+          message as {
+            type: 'workflow/planDiffRequest';
+            planId: string;
+            againstPlanId?: string;
           },
         );
         return;

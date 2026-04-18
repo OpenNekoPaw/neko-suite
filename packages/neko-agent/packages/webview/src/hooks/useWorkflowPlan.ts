@@ -8,7 +8,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import type { WorkflowIncomingMessage, WorkflowLitePlan } from '@neko-agent/types';
+import type {
+  WorkflowIncomingMessage,
+  WorkflowLitePlan,
+  WorkflowPlanDiffPayload,
+} from '@neko-agent/types';
 
 export type WorkflowPlanStatus =
   | 'pending'
@@ -26,6 +30,10 @@ export interface WorkflowPlanState {
   pipelineId: string | undefined;
   /** Last error message, if the plan execution failed */
   errorMessage: string | undefined;
+  /** Latest diff payload returned by handleDiffRequest */
+  diff: WorkflowPlanDiffPayload | undefined;
+  /** Error text if the most recent diff request failed */
+  diffError: string | undefined;
 }
 
 const INITIAL: WorkflowPlanState = {
@@ -33,9 +41,14 @@ const INITIAL: WorkflowPlanState = {
   status: 'pending',
   pipelineId: undefined,
   errorMessage: undefined,
+  diff: undefined,
+  diffError: undefined,
 };
 
-export function useWorkflowPlan(): WorkflowPlanState & { dismiss: () => void } {
+export function useWorkflowPlan(): WorkflowPlanState & {
+  dismiss: () => void;
+  dismissDiff: () => void;
+} {
   const [state, setState] = useState<WorkflowPlanState>(INITIAL);
 
   useEffect(() => {
@@ -50,6 +63,8 @@ export function useWorkflowPlan(): WorkflowPlanState & { dismiss: () => void } {
             status: 'pending',
             pipelineId: undefined,
             errorMessage: undefined,
+            diff: undefined,
+            diffError: undefined,
           });
           break;
         case 'workflow/planDispatched':
@@ -76,6 +91,13 @@ export function useWorkflowPlan(): WorkflowPlanState & { dismiss: () => void } {
             prev.plan && prev.plan.id === msg.plan.id ? { ...prev, plan: msg.plan } : prev,
           );
           break;
+        case 'workflow/planDiff':
+          setState((prev) => ({
+            ...prev,
+            diff: msg.diff,
+            diffError: msg.errorMessage,
+          }));
+          break;
         default:
           break;
       }
@@ -87,6 +109,7 @@ export function useWorkflowPlan(): WorkflowPlanState & { dismiss: () => void } {
   return {
     ...state,
     dismiss: () => setState(INITIAL),
+    dismissDiff: () => setState((prev) => ({ ...prev, diff: undefined, diffError: undefined })),
   };
 }
 

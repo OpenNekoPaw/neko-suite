@@ -154,11 +154,18 @@ export function bootstrapPipeline(
   const startPipeline = (
     flowId: FlowId,
     ctx: PipelineContext,
-    overrides?: { skipStages?: string[]; globalStyle?: string },
+    overrides?: {
+      skipStages?: string[];
+      globalStyle?: string;
+      userCheckpoints?: string[];
+    },
   ): PipelineHandle => {
     return resolver.startFlow(flowId, ctx, {
       skipStages: overrides?.skipStages,
       globalStyle: overrides?.globalStyle,
+      ...(overrides?.userCheckpoints !== undefined && {
+        userCheckpoints: overrides.userCheckpoints,
+      }),
     });
   };
 

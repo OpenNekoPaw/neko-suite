@@ -522,3 +522,150 @@ describe('WorkflowPlanHandler — PlanStore lifecycle', () => {
     expect(await handler.loadPersistedPlan('plan_none_L2')).toBeUndefined();
   });
 });
+
+// =============================================================================
+// Phase 2 remainder — checkpoint + fork + diff
+// =============================================================================
+
+describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
+  function makeHandlerWithStoreAndStages() {
+    const planFactory = (level: Workflow.RouteLevel): Workflow.LitePlan => ({
+      id: `plan_cp_${level}`,
+      createdAt: 100,
+      status: 'pending',
+      route: buildRoute(level),
+      stages: [
+        { id: 'parseStoryboard', label: 'Parse', skipped: false },
+        { id: 'generatePrompts', label: 'Prompts', skipped: false },
+      ],
+    });
+    const orchestrator = makeOrchestrator({ planFactory });
+    const fileIO = Workflow.createMemoryFileIO();
+    const planStore = new Workflow.PlanStore({ workDir: '/w', fileIO });
+    const posts: unknown[] = [];
+    const webview = {
+      postMessage: vi.fn((m: unknown) => {
+        posts.push(m);
+        return true;
+      }),
+    };
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+      planStore,
+    });
+    return { handler, planStore, orchestrator, posts, fileIO };
+  }
+
+  it('toggleCheckpoint flips the userCheckpoint flag and re-broadcasts', async () => {
+    const { handler, planStore, posts } = makeHandlerWithStoreAndStages();
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+
+    const updated = await handler.handleToggleCheckpoint({
+      type: 'workflow/planToggleCheckpoint',
+      planId: 'plan_cp_L2',
+      stageId: 'parseStoryboard',
+    });
+    expect(updated?.stages.find((s) => s.id === 'parseStoryboard')?.userCheckpoint).toBe(true);
+    expect(posts.some((p) => (p as { type: string }).type === 'workflow/planUpdated')).toBe(true);
+
+    const reloaded = await planStore.load('plan_cp_L2');
+    expect(reloaded?.stages.find((s) => s.id === 'parseStoryboard')?.userCheckpoint).toBe(true);
+
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+  });
+
+  it('toggleCheckpoint is a no-op when the plan is no longer pending', async () => {
+    const { handler } = makeHandlerWithStoreAndStages();
+    const updated = await handler.handleToggleCheckpoint({
+      type: 'workflow/planToggleCheckpoint',
+      planId: 'plan_cp_missing',
+      stageId: 'parseStoryboard',
+    });
+    expect(updated).toBeUndefined();
+  });
+
+  it('fork creates a new plan with parentPlanId and posts a preview', async () => {
+    const { handler, planStore, posts } = makeHandlerWithStoreAndStages();
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+    // Abort so the source plan ends up in a terminal-ish status (still on disk).
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+
+    posts.length = 0;
+    const fork = await handler.handleFork({
+      type: 'workflow/planFork',
+      planId: 'plan_cp_L2',
+    });
+    expect(fork?.parentPlanId).toBe('plan_cp_L2');
+    expect(fork?.status).toBe('pending');
+    expect(posts.some((p) => (p as { type: string }).type === 'workflow/planPreview')).toBe(true);
+
+    // The fork is persisted.
+    const reloaded = await planStore.load(fork!.id);
+    expect(reloaded?.parentPlanId).toBe('plan_cp_L2');
+  });
+
+  it('fork is a no-op when the source plan is missing', async () => {
+    const { handler } = makeHandlerWithStoreAndStages();
+    const fork = await handler.handleFork({
+      type: 'workflow/planFork',
+      planId: 'nope',
+    });
+    expect(fork).toBeUndefined();
+  });
+
+  it('diffRequest posts a diff result for a fork against its parent', async () => {
+    const { handler, planStore, posts } = makeHandlerWithStoreAndStages();
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+    // Toggle a checkpoint on the source so the fork/source differ structurally.
+    await handler.handleToggleCheckpoint({
+      type: 'workflow/planToggleCheckpoint',
+      planId: 'plan_cp_L2',
+      stageId: 'generatePrompts',
+      value: true,
+    });
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+
+    const fork = await handler.handleFork({
+      type: 'workflow/planFork',
+      planId: 'plan_cp_L2',
+    });
+    // Edit the fork so we see diff entries.
+    await handler.handleToggleCheckpoint({
+      type: 'workflow/planToggleCheckpoint',
+      planId: fork!.id,
+      stageId: 'parseStoryboard',
+      value: true,
+    });
+    posts.length = 0;
+    const diff = await handler.handleDiffRequest({
+      type: 'workflow/planDiffRequest',
+      planId: fork!.id,
+    });
+    expect(diff?.unchanged).toBe(false);
+    const diffPost = posts.find((p) => (p as { type: string }).type === 'workflow/planDiff') as
+      | { diff?: { unchanged: boolean } }
+      | undefined;
+    expect(diffPost?.diff?.unchanged).toBe(false);
+  });
+
+  it('diffRequest posts an error when the plan is missing', async () => {
+    const { handler, posts } = makeHandlerWithStoreAndStages();
+    await handler.handleDiffRequest({
+      type: 'workflow/planDiffRequest',
+      planId: 'nope',
+    });
+    const diffPost = posts.find((p) => (p as { type: string }).type === 'workflow/planDiff') as
+      | { errorMessage?: string; diff?: unknown }
+      | undefined;
+    expect(diffPost?.errorMessage).toBeDefined();
+    expect(diffPost?.diff).toBeUndefined();
+  });
+});

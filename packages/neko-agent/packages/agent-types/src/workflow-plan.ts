@@ -50,6 +50,8 @@ export interface WorkflowPlannedStage {
     credits?: number;
     durationSec?: number;
   };
+  /** When true, the pipeline pauses after this stage for user confirmation */
+  userCheckpoint?: boolean;
 }
 
 // =============================================================================
@@ -128,6 +130,8 @@ export interface WorkflowLitePlan {
   constraints?: WorkflowConstraint[];
   /** Ephemeral violations — recomputed each build; not persisted in .nkplan */
   violations?: WorkflowViolation[];
+  /** Parent plan id when this plan was forked from another */
+  parentPlanId?: string;
 }
 
 // =============================================================================
@@ -202,15 +206,131 @@ export interface WorkflowPlanUpdatedMessage {
   plan: WorkflowLitePlan;
 }
 
+// =============================================================================
+// Checkpoint + fork + diff messages (Phase 2 remainder)
+// =============================================================================
+
+/**
+ * Webview → Extension: toggle the `userCheckpoint` flag on a stage. When the
+ * plan is later dispatched, the pipeline will pause after that stage.
+ */
+export interface WorkflowPlanToggleCheckpointMessage {
+  type: 'workflow/planToggleCheckpoint';
+  planId: string;
+  stageId: string;
+  /** Omit to flip the current value. */
+  value?: boolean;
+}
+
+/**
+ * Webview → Extension: fork the given plan into a new pending plan. Typically
+ * used after a pipeline finishes (or aborts) to kick off a new run with the
+ * same bindings + different edits.
+ */
+export interface WorkflowPlanForkMessage {
+  type: 'workflow/planFork';
+  planId: string;
+  /**
+   * When true, the fork clears user-confirmed bindings so continuity
+   * matching can re-choose. Defaults to false.
+   */
+  resetToOriginal?: boolean;
+}
+
+/** Webview → Extension: ask for a diff between the given plan id and its parent (or explicit left). */
+export interface WorkflowPlanDiffRequestMessage {
+  type: 'workflow/planDiffRequest';
+  /** Plan whose diff we want to see */
+  planId: string;
+  /**
+   * Optional left-hand plan id. When omitted, the handler loads
+   * `<planId>.parentPlanId` — useful after a fork.
+   */
+  againstPlanId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Diff payload (kept structurally aligned with platform's PlanDiff)
+// ---------------------------------------------------------------------------
+
+export type WorkflowPlanDiffRouteChangeKind = 'level' | 'flowId' | 'skipStages' | 'entryExtension';
+
+export interface WorkflowPlanDiffRouteChange {
+  kind: WorkflowPlanDiffRouteChangeKind;
+  from: string | string[];
+  to: string | string[];
+}
+
+export type WorkflowPlanDiffStageChangeKind =
+  | 'added'
+  | 'removed'
+  | 'skippedToggled'
+  | 'checkpointToggled';
+
+export interface WorkflowPlanDiffStageChange {
+  kind: WorkflowPlanDiffStageChangeKind;
+  stageId: string;
+  value?: boolean;
+}
+
+export type WorkflowPlanDiffShotChangeKind =
+  | 'primarySwapped'
+  | 'unmatchedChanged'
+  | 'confirmedToggled'
+  | 'shotAdded'
+  | 'shotRemoved';
+
+export interface WorkflowPlanDiffShotChange {
+  kind: WorkflowPlanDiffShotChangeKind;
+  shotId: string;
+  slot?: WorkflowBindingSlot;
+  fromAssetId?: string;
+  toAssetId?: string;
+  value?: boolean;
+}
+
+export type WorkflowPlanDiffConstraintChangeKind = 'added' | 'removed';
+
+export interface WorkflowPlanDiffConstraintChange {
+  kind: WorkflowPlanDiffConstraintChangeKind;
+  constraintId: string;
+  constraintKind: string;
+}
+
+export interface WorkflowPlanDiffPayload {
+  leftId: string;
+  rightId: string;
+  route: WorkflowPlanDiffRouteChange[];
+  stages: WorkflowPlanDiffStageChange[];
+  shots: WorkflowPlanDiffShotChange[];
+  constraints: WorkflowPlanDiffConstraintChange[];
+  unchanged: boolean;
+}
+
+/** Extension → Webview: diff result for a prior DiffRequest */
+export interface WorkflowPlanDiffMessage {
+  type: 'workflow/planDiff';
+  /** Unique request handle — matches the triggering request's planId/againstPlanId */
+  planId: string;
+  againstPlanId: string | undefined;
+  diff: WorkflowPlanDiffPayload | undefined;
+  /** Populated when the diff can't be computed (e.g., missing persisted plan) */
+  errorMessage?: string;
+}
+
 export type WorkflowIncomingMessage =
   | WorkflowPlanPreviewMessage
   | WorkflowPlanDispatchedMessage
   | WorkflowPlanStatusMessage
-  | WorkflowPlanUpdatedMessage;
+  | WorkflowPlanUpdatedMessage
+  | WorkflowPlanDiffMessage;
 
 export type WorkflowOutgoingMessage =
   | WorkflowPlanApproveMessage
   | WorkflowPlanOverrideMessage
   | WorkflowPlanAbortMessage
   | WorkflowPlanEditBindingMessage
-  | WorkflowPlanApplyToAllMessage;
+  | WorkflowPlanApplyToAllMessage
+  | WorkflowPlanToggleCheckpointMessage
+  | WorkflowPlanForkMessage
+  | WorkflowPlanDiffRequestMessage;

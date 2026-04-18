@@ -25,8 +25,36 @@ export {
   getRouteRecipe,
   listRouteLevels,
   listRouteRecipes,
+  hashInput,
+  estimateRouteCost,
+  LLMRouter,
+  ROUTER_TOOL_DEFS,
+  ROUTER_TOOL_NAMES,
+  runAnalyzeTextStructure,
+  runCheckExistingAssets,
+  runEstimateDuration,
+  runAskUser,
   type RouterOptions,
+  type HashInputOptions,
+  type RouteCostEstimate,
+  type LLMChatFn,
+  type LLMRouterDecideInput,
+  type LLMRouterOptions,
+  type LLMRouterResult,
+  type RouterToolContext,
+  type RouterToolName,
 } from './router';
+
+// Router memory (Phase 3)
+export {
+  RouterMemory,
+  ROUTER_MEMORY_SECTION_KEY,
+  type RouterMemoryEntry,
+  type RouterMemoryOptions,
+  type RouterMemoryQuery,
+  type RouterMemorySource,
+  type RouterMemoryBackingStore,
+} from './memory/router-memory';
 
 // Plan layer
 export {
@@ -41,6 +69,9 @@ export {
   toLitePlan,
   editPlanBinding,
   applyBindingToAll,
+  togglePlanStageCheckpoint,
+  forkPlan,
+  diffPlans,
   type LitePlan,
   type LitePlanStatus,
   type PlanBuildInput,
@@ -54,7 +85,18 @@ export {
   type ShotBindingSummary,
   type EditBindingInput,
   type ApplyToAllInput,
+  type ToggleCheckpointInput,
   type PlanEditContext,
+  type PlanForkOptions,
+  type PlanDiff,
+  type PlanDiffRouteChange,
+  type PlanDiffRouteChangeKind,
+  type PlanDiffStageChange,
+  type PlanDiffStageChangeKind,
+  type PlanDiffShotChange,
+  type PlanDiffShotChangeKind,
+  type PlanDiffConstraintChange,
+  type PlanDiffConstraintChangeKind,
 } from './plan';
 
 // Horizontal subsystem: ConsistencyChecker

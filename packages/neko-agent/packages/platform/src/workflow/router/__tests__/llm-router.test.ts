@@ -1,0 +1,173 @@
+import { describe, expect, it, vi } from 'vitest';
+import { LLMRouter } from '../llm-router';
+import type { LLMChatFn } from '../llm-router';
+import { ROUTER_TOOL_NAMES } from '../llm-router-tools';
+import type { ChatResponse, LLMToolCall } from '../../../types/adapter';
+import type { FastProbeResult, ProbeContext, RawInput } from '../../types';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+const INPUT: RawInput = { kind: 'prompt', text: 'Write a short video about a cat' };
+const CTX: ProbeContext = { inputType: 'prompt', textLength: 30, raw: INPUT };
+const FAST: FastProbeResult = {
+  confidence: 0.55,
+  route: 'L1',
+  skipStages: [],
+  reason: 'ambiguous',
+};
+
+function commitCall(args: {
+  level: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+  reason: string;
+  skipStages?: string[];
+}): LLMToolCall {
+  return {
+    id: 'call_commit',
+    type: 'function',
+    function: { name: ROUTER_TOOL_NAMES.commitRoute, arguments: JSON.stringify(args) },
+  };
+}
+
+function analyzeCall(args: { excerpt: string }): LLMToolCall {
+  return {
+    id: 'call_analyze',
+    type: 'function',
+    function: {
+      name: ROUTER_TOOL_NAMES.analyzeTextStructure,
+      arguments: JSON.stringify(args),
+    },
+  };
+}
+
+function makeResponse(calls: LLMToolCall[]): ChatResponse {
+  return {
+    id: 'r1',
+    model: 'test',
+    finishReason: calls.length > 0 ? 'tool_calls' : 'stop',
+    message: {
+      role: 'assistant',
+      content: '',
+      toolCalls: calls,
+    },
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  };
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+describe('LLMRouter — happy paths', () => {
+  it('commits on the first turn', async () => {
+    const chat: LLMChatFn = vi.fn(async () =>
+      makeResponse([commitCall({ level: 'L1', reason: 'short prompt, batch ok' })]),
+    );
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r?.level).toBe('L1');
+    expect(r?.reason).toBe('short prompt, batch ok');
+    expect(r?.iterations).toBe(1);
+    expect(chat).toHaveBeenCalledOnce();
+  });
+
+  it('walks one tool call then commits', async () => {
+    let turn = 0;
+    const chat: LLMChatFn = vi.fn(async () => {
+      turn++;
+      if (turn === 1) return makeResponse([analyzeCall({ excerpt: 'line1\nline2' })]);
+      return makeResponse([commitCall({ level: 'L2', reason: 'after analyze' })]);
+    });
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r?.level).toBe('L2');
+    expect(r?.iterations).toBe(2);
+    expect(chat).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('LLMRouter — cache', () => {
+  it('serves a second identical input from cache', async () => {
+    const chat: LLMChatFn = vi.fn(async () =>
+      makeResponse([commitCall({ level: 'L1', reason: 'cached' })]),
+    );
+    const router = new LLMRouter({ chat });
+    const first = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    const second = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(first?.fromCache).toBe(false);
+    expect(second?.fromCache).toBe(true);
+    expect(chat).toHaveBeenCalledOnce();
+  });
+
+  it('clearCache forces a re-query', async () => {
+    const chat: LLMChatFn = vi.fn(async () =>
+      makeResponse([commitCall({ level: 'L1', reason: 'again' })]),
+    );
+    const router = new LLMRouter({ chat });
+    await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    router.clearCache();
+    await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(chat).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('LLMRouter — failure modes', () => {
+  it('returns undefined when the model stops without committing', async () => {
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([]));
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+  });
+
+  it('returns undefined when the chat throws', async () => {
+    const chat: LLMChatFn = vi.fn(async () => {
+      throw new Error('network');
+    });
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+  });
+
+  it('gives up after maxIterations without commit', async () => {
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([analyzeCall({ excerpt: 'loop' })]));
+    const router = new LLMRouter({ chat, maxIterations: 3 });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+    expect(chat).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('LLMRouter — memory persistence', () => {
+  it('records the committed route to memory', async () => {
+    const chat: LLMChatFn = vi.fn(async () =>
+      makeResponse([commitCall({ level: 'L3', reason: 'long story' })]),
+    );
+    const recorded: unknown[] = [];
+    const router = new LLMRouter({
+      chat,
+      memory: {
+        record: async (entry) => {
+          recorded.push(entry);
+        },
+        // Unused in commit path — minimal stub
+        lookup: () => undefined,
+        listRecent: () => [],
+      } as never,
+    });
+    const r = await router.decide({
+      input: INPUT,
+      ctx: { ...CTX, textLength: 3000 },
+      fastHint: FAST,
+    });
+    expect(r?.level).toBe('L3');
+    // Memory write is fire-and-forget — give the microtask queue a beat
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(recorded).toHaveLength(1);
+    const entry = recorded[0] as { level: string; source: string; textLength: number };
+    expect(entry.level).toBe('L3');
+    expect(entry.source).toBe('llm');
+    expect(entry.textLength).toBe(3000);
+  });
+});

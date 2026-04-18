@@ -23,8 +23,13 @@ import type {
   WorkflowPlanAbortMessage,
   WorkflowPlanApproveMessage,
   WorkflowPlanApplyToAllMessage,
+  WorkflowPlanDiffMessage,
+  WorkflowPlanDiffPayload,
+  WorkflowPlanDiffRequestMessage,
   WorkflowPlanEditBindingMessage,
+  WorkflowPlanForkMessage,
   WorkflowPlanOverrideMessage,
+  WorkflowPlanToggleCheckpointMessage,
 } from '@neko-agent/types';
 import { Workflow } from '@neko/platform';
 import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
@@ -283,6 +288,121 @@ export class WorkflowPlanHandler {
   }
 
   /**
+   * Toggle the `userCheckpoint` flag on one of the plan's stages. No-op when
+   * the plan is no longer pending or the stage is skipped.
+   */
+  async handleToggleCheckpoint(
+    msg: WorkflowPlanToggleCheckpointMessage,
+  ): Promise<Workflow.LitePlan | undefined> {
+    const pending = this.pending.get(msg.planId);
+    if (!pending) return undefined;
+    const updated = Workflow.togglePlanStageCheckpoint(pending.plan, {
+      stageId: msg.stageId,
+      ...(msg.value !== undefined && { value: msg.value }),
+    });
+    if (updated === pending.plan) return pending.plan;
+    pending.plan = updated;
+    await this.persistEdit(updated);
+    this.postUpdated(updated);
+    return updated;
+  }
+
+  /**
+   * Fork a persisted plan into a new pending plan. Typically invoked after a
+   * pipeline finishes (or aborts) to kick off a new run while preserving the
+   * parent's bindings. The fork is persisted with status='pending' and a
+   * fresh `workflow/planPreview` is posted so the user can approve / edit it.
+   *
+   * Returns the forked plan for test assertions.
+   */
+  async handleFork(msg: WorkflowPlanForkMessage): Promise<Workflow.LitePlan | undefined> {
+    if (!this.planStore) {
+      logger.warn('Fork ignored — no PlanStore configured', { planId: msg.planId });
+      return undefined;
+    }
+    const source = await this.planStore.load(msg.planId);
+    if (!source) {
+      logger.warn('Fork ignored — source plan not found', { planId: msg.planId });
+      return undefined;
+    }
+    const fork = Workflow.forkPlan(source, {
+      reason: 'user-fork',
+      by: 'user',
+      ...(msg.resetToOriginal === true && { resetToOriginal: true }),
+    });
+    await this.planStore.save(fork);
+    const lite = Workflow.toLitePlan(fork);
+    // Register the fork as pending so edit/approve/abort messages route to it.
+    const pending: PendingPlan = {
+      plan: lite,
+      resolve: () => undefined,
+      reject: () => undefined,
+      input: { kind: 'prompt', text: 'fork' }, // placeholder — approve path uses plan directly
+      request: {},
+    };
+    this.pending.set(lite.id, pending);
+
+    // Post a fresh preview so the UI shows the forked plan.
+    this.postPreview(lite);
+    return lite;
+  }
+
+  /**
+   * Compute a diff between two persisted plans and post the result back to the
+   * webview. If `againstPlanId` is omitted, uses the plan's `parentPlanId`.
+   */
+  async handleDiffRequest(
+    msg: WorkflowPlanDiffRequestMessage,
+  ): Promise<Workflow.PlanDiff | undefined> {
+    if (!this.planStore) {
+      this.postDiff({
+        planId: msg.planId,
+        againstPlanId: msg.againstPlanId,
+        diff: undefined,
+        errorMessage: 'No PlanStore configured',
+      });
+      return undefined;
+    }
+    const right = await this.planStore.load(msg.planId);
+    if (!right) {
+      this.postDiff({
+        planId: msg.planId,
+        againstPlanId: msg.againstPlanId,
+        diff: undefined,
+        errorMessage: `Plan not found: ${msg.planId}`,
+      });
+      return undefined;
+    }
+    const leftId = msg.againstPlanId ?? right.parentPlanId;
+    if (!leftId) {
+      this.postDiff({
+        planId: msg.planId,
+        againstPlanId: msg.againstPlanId,
+        diff: undefined,
+        errorMessage: 'No plan to compare against (no parentPlanId and no againstPlanId given)',
+      });
+      return undefined;
+    }
+    const left = await this.planStore.load(leftId);
+    if (!left) {
+      this.postDiff({
+        planId: msg.planId,
+        againstPlanId: msg.againstPlanId,
+        diff: undefined,
+        errorMessage: `Plan not found: ${leftId}`,
+      });
+      return undefined;
+    }
+    const diff = Workflow.diffPlans(left, right);
+    this.postDiff({
+      planId: msg.planId,
+      againstPlanId: leftId,
+      diff: toWireDiff(diff),
+    });
+    return diff;
+  }
+
+  /**
    * Propagate an edit to every other shot whose binding references the same entity.
    */
   async handleApplyToAll(
@@ -347,6 +467,12 @@ export class WorkflowPlanHandler {
     const webview = this.deps.getWebview();
     if (!webview) return;
     webview.postMessage({ type: 'workflow/planUpdated', plan: toWirePlan(plan) });
+  }
+
+  private postDiff(params: Omit<WorkflowPlanDiffMessage, 'type'>): void {
+    const webview = this.deps.getWebview();
+    if (!webview) return;
+    webview.postMessage({ type: 'workflow/planDiff', ...params });
   }
 
   private async persistEdit(plan: Workflow.LitePlan): Promise<void> {
@@ -468,6 +594,7 @@ export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
       label: s.label,
       skipped: s.skipped,
       ...(s.estimate !== undefined && { estimate: { ...s.estimate } }),
+      ...(s.userCheckpoint !== undefined && { userCheckpoint: s.userCheckpoint }),
     })),
     ...(plan.shots !== undefined && { shots: plan.shots.map(toWireShot) }),
     ...(plan.notes !== undefined && { notes: [...plan.notes] }),
@@ -475,6 +602,7 @@ export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
       plan.constraints.length > 0 && { constraints: plan.constraints.map(toWireConstraint) }),
     ...(plan.violations !== undefined &&
       plan.violations.length > 0 && { violations: plan.violations.map(toWireViolation) }),
+    ...(plan.parentPlanId !== undefined && { parentPlanId: plan.parentPlanId }),
   };
 }
 
@@ -543,6 +671,38 @@ function toWireViolation(v: Workflow.Violation): WorkflowViolation {
       v.suggestions.length > 0 && {
         suggestions: v.suggestions.map((s) => ({ ...s })),
       }),
+  };
+}
+
+function toWireDiff(diff: Workflow.PlanDiff): WorkflowPlanDiffPayload {
+  return {
+    leftId: diff.leftId,
+    rightId: diff.rightId,
+    route: diff.route.map((r) => ({
+      kind: r.kind,
+      // from/to can be string or readonly string[] — normalise for the wire
+      from: Array.isArray(r.from) ? [...(r.from as readonly string[])] : (r.from as string),
+      to: Array.isArray(r.to) ? [...(r.to as readonly string[])] : (r.to as string),
+    })),
+    stages: diff.stages.map((s) => ({
+      kind: s.kind,
+      stageId: s.stageId,
+      ...(s.value !== undefined && { value: s.value }),
+    })),
+    shots: diff.shots.map((s) => ({
+      kind: s.kind,
+      shotId: s.shotId,
+      ...(s.slot !== undefined && { slot: s.slot as WorkflowBindingSlot }),
+      ...(s.fromAssetId !== undefined && { fromAssetId: s.fromAssetId }),
+      ...(s.toAssetId !== undefined && { toAssetId: s.toAssetId }),
+      ...(s.value !== undefined && { value: s.value }),
+    })),
+    constraints: diff.constraints.map((c) => ({
+      kind: c.kind,
+      constraintId: c.constraintId,
+      constraintKind: c.constraintKind,
+    })),
+    unchanged: diff.unchanged,
   };
 }
 

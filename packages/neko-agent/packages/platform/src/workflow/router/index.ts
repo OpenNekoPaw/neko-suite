@@ -14,6 +14,9 @@ import type { IRouter, RawInput, Route, RouteLevel, RouterOverrides } from '../t
 import { fastProbe, isCommittable } from './fast-probe';
 import { probe as runInputProbe, type InputProbeOptions } from './input-probe';
 import { getRouteRecipe } from './route-registry';
+import type { LLMRouter } from './llm-router';
+import type { RouterMemory } from '../memory/router-memory';
+import { hashInput } from './input-hash';
 
 // =============================================================================
 // Router options
@@ -24,6 +27,16 @@ export interface RouterOptions {
   probeOptions?: InputProbeOptions;
   /** Default route level when FastProbe can't decide (Phase 1 fallback) */
   defaultFallbackLevel?: RouteLevel;
+  /** Phase 3 LLM router, invoked when FastProbe confidence is ambiguous */
+  llmRouter?: LLMRouter;
+  /**
+   * Phase 3 memory cache — checked *before* FastProbe / LLMRouter. When the
+   * same input hash has a prior committed decision, the router reuses it
+   * (provenance: 'memory').
+   */
+  memory?: RouterMemory;
+  /** Optional workspace dir (used to salt memory hashes) */
+  workDir?: string;
 }
 
 // =============================================================================
@@ -55,10 +68,16 @@ export class Router implements IRouter {
       };
     }
 
-    // 2) Input probe (pure, deterministic)
+    // 2) Memory lookup — a prior identical input's committed decision.
+    //    Checked before FastProbe so the user sees consistent routes when
+    //    they repeat an input (e.g., drag the same file twice).
+    const memoryHit = this.lookupMemory(input);
+    if (memoryHit) return memoryHit;
+
+    // 3) Input probe (pure, deterministic)
     const ctx = await runInputProbe(input, this.options.probeOptions);
 
-    // 3) FastProbe rules
+    // 4) FastProbe rules
     const fast = fastProbe(ctx);
 
     if (isCommittable(fast) && fast.route !== undefined) {
@@ -79,8 +98,35 @@ export class Router implements IRouter {
       };
     }
 
-    // 4) Low confidence → Phase 1 falls back to a safe default;
-    //    Phase 3 will invoke LLMRouter here instead.
+    // 5) Ambiguous — consult the LLMRouter when available and not disabled.
+    if (this.options.llmRouter && !overrides?.disableLlmRouter) {
+      const llmResult = await this.options.llmRouter.decide({
+        input,
+        ctx,
+        fastHint: fast,
+        ...(this.options.workDir !== undefined && { workDir: this.options.workDir }),
+      });
+      if (llmResult) {
+        const recipe = getRouteRecipe(llmResult.level);
+        const skip =
+          llmResult.skipStages.length > 0 ? [...llmResult.skipStages] : recipe.skipStages;
+        return {
+          level: llmResult.level,
+          flowId: recipe.flowId,
+          entryExtension: llmResult.entryExtension ?? recipe.entryExtension,
+          skipStages: skip,
+          ...(recipe.defaultStageParams !== undefined && {
+            stageParams: recipe.defaultStageParams,
+          }),
+          reason: llmResult.reason,
+          confidence: llmResult.confidence,
+          provenance: 'llm',
+        };
+      }
+      // Fall through — LLMRouter returned undefined (budget exceeded / error)
+    }
+
+    // 6) Low confidence and no LLM help → safe fallback.
     const fallbackLevel = fast.route ?? this.defaultFallback;
     const recipe = getRouteRecipe(fallbackLevel);
     return {
@@ -91,9 +137,32 @@ export class Router implements IRouter {
       ...(recipe.defaultStageParams !== undefined && {
         stageParams: recipe.defaultStageParams,
       }),
-      reason: `${fast.reason} (low confidence — Phase 1 fallback to ${fallbackLevel})`,
+      reason: `${fast.reason} (low confidence — fallback to ${fallbackLevel})`,
       confidence: fast.confidence,
       provenance: 'rules',
+    };
+  }
+
+  private lookupMemory(input: RawInput): Route | undefined {
+    if (!this.options.memory) return undefined;
+    const hash = hashInput(
+      input,
+      this.options.workDir !== undefined ? { workDir: this.options.workDir } : {},
+    );
+    const prior = this.options.memory.lookup(hash);
+    if (!prior) return undefined;
+    const recipe = getRouteRecipe(prior.level);
+    return {
+      level: prior.level,
+      flowId: recipe.flowId,
+      entryExtension: recipe.entryExtension,
+      skipStages: recipe.skipStages,
+      ...(recipe.defaultStageParams !== undefined && {
+        stageParams: recipe.defaultStageParams,
+      }),
+      reason: `Prior decision: ${prior.reason}`,
+      confidence: 0.95,
+      provenance: 'memory',
     };
   }
 }
@@ -109,3 +178,32 @@ export function createRouter(options: RouterOptions = {}): Router {
 export { fastProbe, isCommittable } from './fast-probe';
 export { probe as runInputProbe } from './input-probe';
 export { getRouteRecipe, listRouteLevels, listRouteRecipes } from './route-registry';
+export { hashInput, type HashInputOptions } from './input-hash';
+export { estimateRouteCost, type RouteCostEstimate } from './cost-estimator';
+export {
+  LLMRouter,
+  type LLMChatFn,
+  type LLMRouterDecideInput,
+  type LLMRouterOptions,
+  type LLMRouterResult,
+} from './llm-router';
+export {
+  ROUTER_TOOL_DEFS,
+  ROUTER_TOOL_NAMES,
+  runAnalyzeTextStructure,
+  runCheckExistingAssets,
+  runEstimateDuration,
+  runAskUser,
+  type AnalyzeTextStructureArgs,
+  type AnalyzeTextStructureResult,
+  type CheckExistingAssetsArgs,
+  type CheckExistingAssetsResult,
+  type EstimateDurationArgs,
+  type EstimateDurationResult,
+  type AskUserArgs,
+  type AskUserResult,
+  type CommitRouteArgs,
+  type CommitRouteResult,
+  type RouterToolContext,
+  type RouterToolName,
+} from './llm-router-tools';
