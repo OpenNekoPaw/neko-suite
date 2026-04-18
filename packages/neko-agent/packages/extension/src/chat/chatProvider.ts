@@ -96,6 +96,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _platform?: Platform;
   private _taskManager?: TaskManager;
   private _configBridge?: ConfigBridge;
+  private _workflowPlanHandler?: {
+    handleIncoming(msg: {
+      type: 'workflow/planApprove' | 'workflow/planOverride' | 'workflow/planAbort';
+      planId: string;
+      forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+    }): boolean;
+  };
   private readonly _dndBroker = new DragDropBroker();
 
   constructor(
@@ -474,6 +481,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage(message);
   }
 
+  /**
+   * Register the WorkflowPlanHandler so incoming workflow/* messages from the
+   * webview can be routed to it. Kept as a lightweight duck-typed interface to
+   * avoid a circular import between chatProvider and workflow/*.
+   */
+  public setWorkflowPlanHandler(
+    handler:
+      | {
+          handleIncoming(msg: {
+            type: 'workflow/planApprove' | 'workflow/planOverride' | 'workflow/planAbort';
+            planId: string;
+            forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+          }): boolean;
+        }
+      | undefined,
+  ): void {
+    this._workflowPlanHandler = handler;
+  }
+
   public get webview(): vscode.Webview | undefined {
     return this._view?.webview;
   }
@@ -571,7 +597,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (handled) return;
       }
 
-      // 2. Handle chat-specific messages
+      // 2. Route workflow orchestration messages (Router/Plan layer)
+      if (
+        message.type === 'workflow/planApprove' ||
+        message.type === 'workflow/planOverride' ||
+        message.type === 'workflow/planAbort'
+      ) {
+        const handled = this._workflowPlanHandler?.handleIncoming(
+          message as {
+            type: 'workflow/planApprove' | 'workflow/planOverride' | 'workflow/planAbort';
+            planId: string;
+            forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+          },
+        );
+        if (!handled) {
+          logger.debug('Workflow plan message ignored (no handler attached)', {
+            type: message.type,
+          });
+        }
+        return;
+      }
+
+      // 3. Handle chat-specific messages
       switch (message.type) {
         // Message handling
         case 'sendMessage':

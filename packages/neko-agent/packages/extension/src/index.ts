@@ -36,6 +36,7 @@ import {
   isOrchestratorEnabled,
   type Orchestrator,
 } from './workflow/orchestrator-bootstrap';
+import { WorkflowPlanHandler } from './workflow/workflow-plan-handler';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
@@ -201,8 +202,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),
   );
 
+  // Plan-layer handler bridges orchestrator → chat webview (Phase 1.5).
+  // Must be wired AFTER chatViewProvider exists.
+  const workflowPlanHandler = new WorkflowPlanHandler({
+    orchestrator,
+    getWebview: () => chatViewProvider.webview,
+  });
+  chatViewProvider.setWorkflowPlanHandler(workflowPlanHandler);
+  context.subscriptions.push({
+    dispose: () => chatViewProvider.setWorkflowPlanHandler(undefined),
+  });
+
   // Register commands
-  registerCommands(context, chatViewProvider, services, pipelineBootstrap, orchestrator);
+  registerCommands(
+    context,
+    chatViewProvider,
+    services,
+    pipelineBootstrap,
+    orchestrator,
+    workflowPlanHandler,
+  );
 
   // Register pipeline commands
   registerPipelineCommands(context, chatViewProvider);
@@ -351,6 +370,7 @@ function registerCommands(
   services: ServiceCollection,
   pipelineBootstrap: PipelineBootstrapResult,
   orchestrator: Orchestrator,
+  workflowPlanHandler: WorkflowPlanHandler,
 ): void {
   // Open AI Chat
   context.subscriptions.push(
@@ -471,22 +491,40 @@ function registerCommands(
           };
         }
 
-        const result = await orchestrator.startRoutedPipeline({
+        // Interactive flow: build → preview in chat webview → await user decision.
+        const presentation = await workflowPlanHandler.presentAndDispatch({
           input: params.input,
           ...(params.routerOverrides !== undefined && { routerOverrides: params.routerOverrides }),
           ...(params.globalStyle !== undefined && { globalStyle: params.globalStyle }),
         });
 
-        subscribePipelineProgress(chatViewProvider.webview, result.handle.id, result.handle, {
-          ...(params.eventCommand !== undefined && { eventCommand: params.eventCommand }),
-          ...(params.eventPayload !== undefined && { eventPayload: params.eventPayload }),
-        });
+        if (!presentation.result) {
+          // User aborted — return the plan metadata without dispatch info
+          return {
+            route: presentation.route,
+            plan: presentation.plan,
+            pipelineId: undefined,
+            flowId: undefined,
+            aborted: true,
+          };
+        }
+
+        const chatWebview = chatViewProvider.webview;
+        if (chatWebview) {
+          workflowPlanHandler.attachProgressForwarder(
+            presentation.plan.id,
+            presentation.result,
+            chatWebview,
+            params.eventCommand,
+          );
+        }
 
         return {
-          route: result.route,
-          plan: result.plan,
-          pipelineId: result.handle.id,
-          flowId: result.handle.flowId,
+          route: presentation.route,
+          plan: presentation.plan,
+          pipelineId: presentation.result.handle.id,
+          flowId: presentation.result.handle.flowId,
+          aborted: false,
         };
       },
     ),

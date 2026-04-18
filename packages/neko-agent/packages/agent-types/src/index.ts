@@ -10,6 +10,28 @@ export type { Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff } from
 // Plan
 export type { Plan, PlanStep } from './plan';
 
+// Workflow Plan (Router + Plan layer — distinct from agent step-review Plan)
+export type {
+  WorkflowRouteLevel,
+  WorkflowExtensionId,
+  WorkflowBindingSlot,
+  WorkflowBindingProvenance,
+  WorkflowLitePlanStatus,
+  WorkflowRoute,
+  WorkflowPlannedStage,
+  WorkflowBindingCandidate,
+  WorkflowShotBindingSummary,
+  WorkflowLitePlan,
+  WorkflowPlanPreviewMessage,
+  WorkflowPlanDispatchedMessage,
+  WorkflowPlanStatusMessage,
+  WorkflowPlanApproveMessage,
+  WorkflowPlanOverrideMessage,
+  WorkflowPlanAbortMessage,
+  WorkflowIncomingMessage,
+  WorkflowOutgoingMessage,
+} from './workflow-plan';
+
 // Provider
 export type { ConfiguredProvider } from './provider';
 
