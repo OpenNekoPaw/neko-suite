@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import * as vscode from 'vscode';
 import { WorkflowPlanHandler } from '../workflow-plan-handler';
 import type { Orchestrator } from '../orchestrator-bootstrap';
 import { Workflow } from '@neko/platform';
@@ -738,5 +739,80 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
       | undefined;
     expect(listPost?.errorMessage).toContain('No PlanStore');
     expect(listPost?.entries).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Cross-extension plan-state broadcast (BatchGenerationScheduler quiet mode)
+// =============================================================================
+
+describe('WorkflowPlanHandler — broadcastPlanState', () => {
+  beforeEach(() => {
+    vi.mocked(vscode.commands.executeCommand).mockClear();
+  });
+
+  function broadcastsOfStatus(status: string): number {
+    const calls = vi.mocked(vscode.commands.executeCommand).mock.calls;
+    return calls.filter(
+      (c) =>
+        c[0] === 'neko.canvas.orchestrator.planStateChanged' &&
+        (c[1] as { status?: string })?.status === status,
+    ).length;
+  }
+
+  it('fires `executing` when auto-approve dispatches', async () => {
+    const { webview, posts } = makeWebview();
+    void posts;
+    const planFactory = (level: Workflow.RouteLevel) =>
+      buildPlan(`plan_exec_${level}`, buildRoute(level));
+    const orchestrator = makeOrchestrator({ planFactory });
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    await handler.presentAndDispatch({
+      input: { kind: 'prompt', text: 'hi' },
+      autoApproveThreshold: 0.5,
+    });
+    expect(broadcastsOfStatus('executing')).toBe(1);
+  });
+
+  it('fires `aborted` when the user aborts the preview', async () => {
+    const { webview, posts } = makeWebview();
+    void posts;
+    const planFactory = (level: Workflow.RouteLevel) =>
+      buildPlan(`plan_abort_${level}`, buildRoute(level));
+    const orchestrator = makeOrchestrator({ planFactory });
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await Promise.resolve();
+    await Promise.resolve();
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_abort_L2' });
+    await promise;
+    expect(broadcastsOfStatus('aborted')).toBe(1);
+  });
+
+  it('fires `executing` when the user approves', async () => {
+    const { webview, posts } = makeWebview();
+    void posts;
+    const planFactory = (level: Workflow.RouteLevel) =>
+      buildPlan(`plan_approve_${level}`, buildRoute(level));
+    const orchestrator = makeOrchestrator({ planFactory });
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await Promise.resolve();
+    await Promise.resolve();
+    handler.handleIncoming({ type: 'workflow/planApprove', planId: 'plan_approve_L2' });
+    await promise;
+    expect(broadcastsOfStatus('executing')).toBe(1);
   });
 });

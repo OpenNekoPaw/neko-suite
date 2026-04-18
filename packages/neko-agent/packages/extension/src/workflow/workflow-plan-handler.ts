@@ -128,6 +128,7 @@ export class WorkflowPlanHandler {
         pipelineId: result.handle.id,
         by: 'system',
       });
+      this.broadcastPlanState('executing', plan.id, result.handle.id);
       this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
       return { route, plan, result };
     }
@@ -159,6 +160,7 @@ export class WorkflowPlanHandler {
           reason: 'user-abort',
           by: 'user',
         });
+        this.broadcastPlanState('aborted', plan.id);
         this.postStatus(plan.id, 'aborted');
         return { route, plan, result: undefined };
 
@@ -200,6 +202,7 @@ export class WorkflowPlanHandler {
           pipelineId: result.handle.id,
           by: 'system',
         });
+        this.broadcastPlanState('executing', plan.id, result.handle.id);
         this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
         return { route, plan, result };
       }
@@ -487,6 +490,35 @@ export class WorkflowPlanHandler {
   }
 
   // ---------------------------------------------------------------------------
+  // Cross-extension plan-state broadcast
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Tell sibling extensions (currently neko-canvas) when a plan enters or
+   * leaves an "actively working" state.  This lets e.g. the canvas
+   * BatchGenerationScheduler enter quiet mode so it doesn't double-queue
+   * with the orchestrator's batchGenerate pipeline stage.
+   *
+   * Fire-and-forget; if no extension registers the command the call is a
+   * silent no-op (command-not-found is swallowed by the promise catch).
+   */
+  private broadcastPlanState(
+    status: 'executing' | 'paused' | 'completed' | 'aborted' | 'failed',
+    planId: string,
+    pipelineId?: string,
+  ): void {
+    vscode.commands
+      .executeCommand('neko.canvas.orchestrator.planStateChanged', {
+        status,
+        planId,
+        ...(pipelineId !== undefined && { pipelineId }),
+      })
+      .then(undefined, () => {
+        // neko-canvas not installed or not yet activated — fine.
+      });
+  }
+
+  // ---------------------------------------------------------------------------
   // Posting helpers
   // ---------------------------------------------------------------------------
 
@@ -575,6 +607,7 @@ export class WorkflowPlanHandler {
     result.handle.result
       .then(async () => {
         await this.transitionIfStored(planId, 'completed', { by: 'system' });
+        this.broadcastPlanState('completed', planId, result.handle.id);
         this.postStatus(planId, 'completed');
       })
       .catch(async (err: unknown) => {
@@ -585,6 +618,7 @@ export class WorkflowPlanHandler {
         });
         // Defensive cleanup — removePipeline is idempotent.
         removePipeline(result.handle.id);
+        this.broadcastPlanState('failed', planId, result.handle.id);
         const webview = this.deps.getWebview();
         if (webview) {
           webview.postMessage({

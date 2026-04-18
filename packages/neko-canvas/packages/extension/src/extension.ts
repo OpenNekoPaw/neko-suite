@@ -22,6 +22,7 @@ import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { getRootLogger, setRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { CanvasEditorProvider } from './editor';
+import { broadcastQuietMode } from './services/batchGenerationScheduler';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
@@ -509,6 +510,30 @@ function registerCommands(
             { showToUser: true, severity: 'warning' },
           );
         }
+      },
+    ),
+  );
+
+  // Orchestrator coordination — neko-agent's Workflow Plan handler fires
+  // this command on plan state transitions.  We route it to all live
+  // BatchGenerationSchedulers so their pump pauses while a plan is
+  // executing (avoids double-queue with the orchestrator's batchGenerate
+  // stage running the same generateForNode requests).
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.orchestrator.planStateChanged',
+      (payload?: {
+        status?: 'executing' | 'paused' | 'completed' | 'aborted' | 'failed';
+        planId?: string;
+        pipelineId?: string;
+      }) => {
+        if (!payload || typeof payload.status !== 'string') return;
+        // Any non-terminal "work is active" state pauses canvas generation.
+        const quiet =
+          payload.status === 'executing' || payload.status === 'paused'
+            ? `workflow plan ${payload.planId ?? ''}`.trim()
+            : undefined;
+        broadcastQuietMode(quiet);
       },
     ),
   );

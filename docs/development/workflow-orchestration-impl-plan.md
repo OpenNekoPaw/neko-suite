@@ -21,6 +21,7 @@
 | Horizontal #5: PlanStore 列举 API + PlanBrowser UI | ✅ 完成 | `listPlans` / `listForks` + `readdir` on FileIOAdapter；+11 单测（223 workflow total） |
 | Horizontal: 统一 flag 读取 + VSCode settings 注册 + autoApproveThreshold 接入 | ✅ 完成 | `workflow-settings.ts` 统一 + package.json `contributes.configuration` + 7 个 flag 可从 UI 配置；+7 单测（230 total） |
 | Horizontal #2: 编排器集成测试 (E2E-1..5 + 持久化 + fork/diff + consistency) | ✅ 完成 | +10 集成测试（240 total）；`test-fixtures/workflow/` 附 sample.fountain + novel.txt |
+| Horizontal #3: BatchGenerationScheduler 订阅 orchestrator 事件 | ✅ 完成 | canvas `setQuietMode` + `broadcastQuietMode` 模块级 registry；`neko.canvas.orchestrator.planStateChanged` 命令；handler broadcastPlanState on executing/paused/completed/aborted/failed；+3 handler 单测 + 7 canvas 契约测试（243 + 7 = 250） |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
 | Phase 6: `.nkproj` + Lossless Upgrade | ⏳ 待启动 | 8-12 周 |

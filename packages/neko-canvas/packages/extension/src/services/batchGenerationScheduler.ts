@@ -48,6 +48,30 @@ interface GenerationTask extends EnqueueOptions {
 // Scheduler
 // =============================================================================
 
+// Module-level registry of live schedulers so the orchestrator's cross-
+// extension plan-state commands can fan out to all of them.  Entries are
+// added on construction and removed on dispose.
+const liveSchedulers = new Set<BatchGenerationScheduler>();
+
+/**
+ * Broadcast quiet mode to every live scheduler.  Called by the VSCode
+ * command `neko.canvas.orchestrator.planStateChanged` (registered in
+ * canvasEditorProvider bootstrap) when neko-agent signals a workflow
+ * plan transition.
+ *
+ * `reason = undefined` clears quiet mode and resumes pumping.
+ */
+export function broadcastQuietMode(reason: string | undefined): void {
+  for (const scheduler of liveSchedulers) {
+    scheduler.setQuietMode(reason);
+  }
+}
+
+/** Test-only: inspect the current registry size. */
+export function getLiveSchedulerCount(): number {
+  return liveSchedulers.size;
+}
+
 export class BatchGenerationScheduler implements vscode.Disposable {
   readonly maxConcurrent = 2;
   private readonly maxRetries = 3;
@@ -55,6 +79,36 @@ export class BatchGenerationScheduler implements vscode.Disposable {
   private queue: GenerationTask[] = [];
   private running = new Map<string, GenerationTask>();
   private disposed = false;
+  /**
+   * When set, the pump will not drain the queue.  Enqueue still works so
+   * tasks accumulate, and `pump()` resumes as soon as quiet mode clears.
+   * Used to coordinate with the neko-agent Workflow Orchestrator so the
+   * canvas batch queue and the orchestrator's `batchGenerate` stage don't
+   * run concurrently over the same nodes.
+   */
+  private quietReason: string | undefined;
+
+  constructor() {
+    liveSchedulers.add(this);
+  }
+
+  /**
+   * Set or clear quiet mode.  While quiet, the pump will not start new
+   * tasks; already-running tasks are allowed to finish.
+   */
+  setQuietMode(reason: string | undefined): void {
+    const was = this.quietReason;
+    this.quietReason = reason;
+    if (!reason && was) {
+      // Quiet mode just cleared — drain whatever queued up.
+      void this.pump();
+    }
+  }
+
+  /** Test-only: peek the current quiet reason. */
+  getQuietReason(): string | undefined {
+    return this.quietReason;
+  }
 
   /** Add a generation task to the queue and start it if a slot is free. */
   enqueue(options: EnqueueOptions): string {
@@ -96,6 +150,7 @@ export class BatchGenerationScheduler implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    liveSchedulers.delete(this);
     this.cancelAll();
   }
 
@@ -104,6 +159,9 @@ export class BatchGenerationScheduler implements vscode.Disposable {
   // ---------------------------------------------------------------------------
 
   private async pump(): Promise<void> {
+    // Quiet mode — hold off starting new tasks until the orchestrator plan
+    // reaches a terminal state.  Already-running tasks continue.
+    if (this.quietReason !== undefined) return;
     while (this.running.size < this.maxConcurrent && this.queue.length > 0) {
       const task = this.queue.shift();
       if (!task) break;
