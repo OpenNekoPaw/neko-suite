@@ -160,7 +160,7 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
       {/* Shot × binding matrix */}
       {plan.shots && plan.shots.length > 0 && (
         <div className="mb-3">
-          <PlanMatrix shots={plan.shots} />
+          <PlanMatrix planId={plan.id} shots={plan.shots} readOnly={readOnly} />
         </div>
       )}
 

@@ -336,6 +336,169 @@ describe('WorkflowPlanHandler — PlanStore lifecycle', () => {
     expect(await planStore.load('plan_stored_L2')).toBeDefined();
   });
 
+  it('handleEditBinding replaces primary with an alternative and posts planUpdated', async () => {
+    // Build an orchestrator that returns a plan WITH shots + alternatives
+    const casual: Workflow.BindingCandidate = {
+      slot: 'character',
+      entityId: 'alice',
+      assetId: 'casual',
+      provenance: 'L1',
+      confidence: 0.95,
+    };
+    const formal: Workflow.BindingCandidate = {
+      slot: 'character',
+      entityId: 'alice',
+      assetId: 'formal',
+      provenance: 'L2',
+      confidence: 0.85,
+    };
+    const planFactory = (level: Workflow.RouteLevel): Workflow.LitePlan => ({
+      id: `plan_edit_${level}`,
+      createdAt: 100,
+      status: 'pending',
+      route: buildRoute(level),
+      stages: [],
+      shots: [
+        {
+          shotId: 's1',
+          primary: { character: casual },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+      ],
+    });
+    const orchestrator = makeOrchestrator({ planFactory });
+    // Inject a real checker so violations re-compute
+    (
+      orchestrator as unknown as { consistencyChecker: Workflow.ConsistencyChecker }
+    ).consistencyChecker = Workflow.createConsistencyChecker();
+    const fileIO = Workflow.createMemoryFileIO();
+    const planStore = new Workflow.PlanStore({ workDir: '/w', fileIO });
+    const posts: unknown[] = [];
+    const webview = {
+      postMessage: vi.fn((m: unknown) => {
+        posts.push(m);
+        return true;
+      }),
+    };
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+      planStore,
+    });
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(() => planStore.exists('plan_edit_L2'), 50);
+
+    const updated = await handler.handleEditBinding({
+      type: 'workflow/planEditBinding',
+      planId: 'plan_edit_L2',
+      shotId: 's1',
+      slot: 'character',
+      assetId: 'formal',
+    });
+    expect(updated?.shots?.[0]?.primary.character?.assetId).toBe('formal');
+
+    // Webview received a workflow/planUpdated broadcast
+    expect(posts.some((p) => (p as { type: string }).type === 'workflow/planUpdated')).toBe(true);
+
+    // Persisted plan also reflects the edit
+    const reloaded = await planStore.load('plan_edit_L2');
+    expect(reloaded?.shots?.[0]?.primary.character?.assetId).toBe('formal');
+
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_edit_L2' });
+    await promise;
+  });
+
+  it('handleEditBinding is a no-op when the plan is no longer pending', async () => {
+    const planFactory = (level: Workflow.RouteLevel): Workflow.LitePlan => ({
+      id: `plan_gone_${level}`,
+      createdAt: 100,
+      status: 'pending',
+      route: buildRoute(level),
+      stages: [],
+    });
+    const orchestrator = makeOrchestrator({ planFactory });
+    (
+      orchestrator as unknown as { consistencyChecker: Workflow.ConsistencyChecker }
+    ).consistencyChecker = Workflow.createConsistencyChecker();
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      getWebview: () => ({ postMessage: vi.fn(() => true) }) as unknown as never,
+    });
+    const updated = await handler.handleEditBinding({
+      type: 'workflow/planEditBinding',
+      planId: 'plan_gone_L2',
+      shotId: 's1',
+      slot: 'character',
+      assetId: 'anything',
+    });
+    expect(updated).toBeUndefined();
+  });
+
+  it('handleApplyToAll propagates to every shot sharing the entity', async () => {
+    const casual: Workflow.BindingCandidate = {
+      slot: 'character',
+      entityId: 'alice',
+      assetId: 'casual',
+      provenance: 'L1',
+      confidence: 0.95,
+    };
+    const formal: Workflow.BindingCandidate = {
+      slot: 'character',
+      entityId: 'alice',
+      assetId: 'formal',
+      provenance: 'L2',
+      confidence: 0.85,
+    };
+    const planFactory = (level: Workflow.RouteLevel): Workflow.LitePlan => ({
+      id: `plan_all_${level}`,
+      createdAt: 100,
+      status: 'pending',
+      route: buildRoute(level),
+      stages: [],
+      shots: [
+        {
+          shotId: 's1',
+          primary: { character: casual },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+        {
+          shotId: 's2',
+          primary: { character: casual },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+      ],
+    });
+    const orchestrator = makeOrchestrator({ planFactory });
+    (
+      orchestrator as unknown as { consistencyChecker: Workflow.ConsistencyChecker }
+    ).consistencyChecker = Workflow.createConsistencyChecker();
+    const handler = new WorkflowPlanHandler({
+      orchestrator,
+      getWebview: () => ({ postMessage: vi.fn(() => true) }) as unknown as never,
+    });
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(
+      () => (handler as unknown as { pending: Map<string, unknown> }).pending.has('plan_all_L2'),
+      50,
+    );
+    const updated = await handler.handleApplyToAll({
+      type: 'workflow/planApplyToAll',
+      planId: 'plan_all_L2',
+      entityId: 'alice',
+      slot: 'character',
+      assetId: 'formal',
+    });
+    expect(updated?.shots?.[0]?.primary.character?.assetId).toBe('formal');
+    expect(updated?.shots?.[1]?.primary.character?.assetId).toBe('formal');
+
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_all_L2' });
+    await promise;
+  });
+
   it('no-op when no planStore configured (falls back to in-memory only)', async () => {
     const planFactory = (level: Workflow.RouteLevel) => ({
       id: `plan_none_${level}`,

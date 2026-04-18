@@ -102,6 +102,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       planId: string;
       forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
     }): boolean;
+    handleEditBinding(msg: {
+      type: 'workflow/planEditBinding';
+      planId: string;
+      shotId: string;
+      slot: string;
+      assetId: string;
+    }): Promise<unknown>;
+    handleApplyToAll(msg: {
+      type: 'workflow/planApplyToAll';
+      planId: string;
+      entityId: string;
+      slot: string;
+      assetId: string;
+    }): Promise<unknown>;
   };
   private readonly _dndBroker = new DragDropBroker();
 
@@ -494,6 +508,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             planId: string;
             forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
           }): boolean;
+          handleEditBinding(msg: {
+            type: 'workflow/planEditBinding';
+            planId: string;
+            shotId: string;
+            slot: string;
+            assetId: string;
+          }): Promise<unknown>;
+          handleApplyToAll(msg: {
+            type: 'workflow/planApplyToAll';
+            planId: string;
+            entityId: string;
+            slot: string;
+            assetId: string;
+          }): Promise<unknown>;
         }
       | undefined,
   ): void {
@@ -615,6 +643,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             type: message.type,
           });
         }
+        return;
+      }
+
+      if (message.type === 'workflow/planEditBinding') {
+        await this._workflowPlanHandler?.handleEditBinding(
+          message as {
+            type: 'workflow/planEditBinding';
+            planId: string;
+            shotId: string;
+            slot: string;
+            assetId: string;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/planApplyToAll') {
+        await this._workflowPlanHandler?.handleApplyToAll(
+          message as {
+            type: 'workflow/planApplyToAll';
+            planId: string;
+            entityId: string;
+            slot: string;
+            assetId: string;
+          },
+        );
         return;
       }
 

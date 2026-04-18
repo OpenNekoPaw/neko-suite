@@ -177,12 +177,40 @@ export interface WorkflowPlanAbortMessage {
   planId: string;
 }
 
+/** Webview → Extension: user overrode a shot binding in the matrix */
+export interface WorkflowPlanEditBindingMessage {
+  type: 'workflow/planEditBinding';
+  planId: string;
+  shotId: string;
+  slot: WorkflowBindingSlot;
+  /** Choose one of the shot's existing alternatives by assetId */
+  assetId: string;
+}
+
+/** Webview → Extension: propagate a binding to every other shot of the same entity */
+export interface WorkflowPlanApplyToAllMessage {
+  type: 'workflow/planApplyToAll';
+  planId: string;
+  entityId: string;
+  slot: WorkflowBindingSlot;
+  assetId: string;
+}
+
+/** Extension → Webview: re-broadcast an updated plan after an edit */
+export interface WorkflowPlanUpdatedMessage {
+  type: 'workflow/planUpdated';
+  plan: WorkflowLitePlan;
+}
+
 export type WorkflowIncomingMessage =
   | WorkflowPlanPreviewMessage
   | WorkflowPlanDispatchedMessage
-  | WorkflowPlanStatusMessage;
+  | WorkflowPlanStatusMessage
+  | WorkflowPlanUpdatedMessage;
 
 export type WorkflowOutgoingMessage =
   | WorkflowPlanApproveMessage
   | WorkflowPlanOverrideMessage
-  | WorkflowPlanAbortMessage;
+  | WorkflowPlanAbortMessage
+  | WorkflowPlanEditBindingMessage
+  | WorkflowPlanApplyToAllMessage;

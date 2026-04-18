@@ -33,6 +33,9 @@ export type {
   WorkflowPlanApproveMessage,
   WorkflowPlanOverrideMessage,
   WorkflowPlanAbortMessage,
+  WorkflowPlanEditBindingMessage,
+  WorkflowPlanApplyToAllMessage,
+  WorkflowPlanUpdatedMessage,
   WorkflowIncomingMessage,
   WorkflowOutgoingMessage,
 } from './workflow-plan';

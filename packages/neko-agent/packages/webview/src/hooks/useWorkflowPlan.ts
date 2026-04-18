@@ -69,6 +69,13 @@ export function useWorkflowPlan(): WorkflowPlanState & { dismiss: () => void } {
             };
           });
           break;
+        case 'workflow/planUpdated':
+          // Replace the plan wholesale — the extension has just
+          // applied a user edit and re-run the consistency checker.
+          setState((prev) =>
+            prev.plan && prev.plan.id === msg.plan.id ? { ...prev, plan: msg.plan } : prev,
+          );
+          break;
         default:
           break;
       }

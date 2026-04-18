@@ -74,6 +74,7 @@ export interface Orchestrator {
   readonly assetLibrary: AssetLibrary | undefined;
   readonly matchingEngine: MatchingEngine;
   readonly planBuilder: Workflow.PlanBuilder;
+  readonly consistencyChecker: Workflow.ConsistencyChecker;
   /** Optional persistent store (available when a workspace folder exists). */
   readonly planStore: PlanStore | undefined;
 
@@ -123,6 +124,7 @@ export async function bootstrapOrchestrator(
     assetLibrary,
     matchingEngine,
     planBuilder,
+    consistencyChecker,
     planStore,
 
     async startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult> {

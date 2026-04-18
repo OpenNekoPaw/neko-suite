@@ -16,11 +16,14 @@ import type {
   WorkflowLitePlan,
   WorkflowRoute,
   WorkflowBindingCandidate,
+  WorkflowBindingSlot,
   WorkflowConstraint,
   WorkflowShotBindingSummary,
   WorkflowViolation,
   WorkflowPlanAbortMessage,
   WorkflowPlanApproveMessage,
+  WorkflowPlanApplyToAllMessage,
+  WorkflowPlanEditBindingMessage,
   WorkflowPlanOverrideMessage,
 } from '@neko-agent/types';
 import { Workflow } from '@neko/platform';
@@ -42,6 +45,8 @@ interface PendingPlan {
   input: Workflow.RawInput;
   /** Original request options (for re-dispatch) */
   request: Omit<PresentPlanOptions, 'input'>;
+  /** Shot list used during matching — kept around so edits can re-run the consistency checker */
+  shots?: readonly Workflow.Shot[];
 }
 
 type PlanDecision =
@@ -226,6 +231,93 @@ export class WorkflowPlanHandler {
     }
   }
 
+  /**
+   * Apply a user-driven matrix edit to a pending plan: override a single
+   * shot × slot binding with the chosen alternative asset.
+   *
+   * Returns the updated plan so tests can assert on it; the handler also
+   * posts `workflow/planUpdated` to the webview and re-persists.
+   */
+  async handleEditBinding(
+    msg: WorkflowPlanEditBindingMessage,
+  ): Promise<Workflow.LitePlan | undefined> {
+    const pending = this.pending.get(msg.planId);
+    if (!pending) {
+      logger.debug('Edit ignored — plan no longer pending', { planId: msg.planId });
+      return undefined;
+    }
+
+    const candidate = pickAlternative(
+      pending.plan,
+      msg.shotId,
+      msg.slot as Workflow.BindingSlot,
+      msg.assetId,
+    );
+    if (!candidate) {
+      logger.debug('Edit ignored — asset not found among alternatives', {
+        planId: msg.planId,
+        shotId: msg.shotId,
+        slot: msg.slot,
+        assetId: msg.assetId,
+      });
+      return undefined;
+    }
+
+    const updated = Workflow.editPlanBinding(
+      pending.plan,
+      {
+        shotId: msg.shotId,
+        slot: msg.slot as Workflow.BindingSlot,
+        candidate: { ...candidate, provenance: 'user', confidence: 1.0 },
+        userConfirm: true,
+      },
+      {
+        shots: pending.shots ?? [],
+        consistencyChecker: this.deps.orchestrator.consistencyChecker,
+      },
+    );
+    pending.plan = updated;
+    await this.persistEdit(updated);
+    this.postUpdated(updated);
+    return updated;
+  }
+
+  /**
+   * Propagate an edit to every other shot whose binding references the same entity.
+   */
+  async handleApplyToAll(
+    msg: WorkflowPlanApplyToAllMessage,
+  ): Promise<Workflow.LitePlan | undefined> {
+    const pending = this.pending.get(msg.planId);
+    if (!pending) return undefined;
+
+    // Pick the candidate once — it must be a current binding for the entity.
+    const candidate = findCandidateForEntity(
+      pending.plan,
+      msg.entityId,
+      msg.slot as Workflow.BindingSlot,
+      msg.assetId,
+    );
+    if (!candidate) return undefined;
+
+    const updated = Workflow.applyBindingToAll(
+      pending.plan,
+      {
+        entityId: msg.entityId,
+        slot: msg.slot as Workflow.BindingSlot,
+        candidate: { ...candidate, provenance: 'user', confidence: 1.0 },
+      },
+      {
+        shots: pending.shots ?? [],
+        consistencyChecker: this.deps.orchestrator.consistencyChecker,
+      },
+    );
+    pending.plan = updated;
+    await this.persistEdit(updated);
+    this.postUpdated(updated);
+    return updated;
+  }
+
   // ---------------------------------------------------------------------------
   // Posting helpers
   // ---------------------------------------------------------------------------
@@ -249,6 +341,25 @@ export class WorkflowPlanHandler {
       pipelineId,
       flowId,
     });
+  }
+
+  private postUpdated(plan: Workflow.LitePlan): void {
+    const webview = this.deps.getWebview();
+    if (!webview) return;
+    webview.postMessage({ type: 'workflow/planUpdated', plan: toWirePlan(plan) });
+  }
+
+  private async persistEdit(plan: Workflow.LitePlan): Promise<void> {
+    if (!this.planStore) return;
+    try {
+      const persistent = Workflow.toNkPlan(plan);
+      await this.planStore.save(persistent);
+    } catch (err) {
+      logger.warn('Failed to persist plan edit', {
+        planId: plan.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private postStatus(
@@ -367,6 +478,46 @@ export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
   };
 }
 
+// =============================================================================
+// Edit helpers — pure lookups over the in-memory LitePlan
+// =============================================================================
+
+function pickAlternative(
+  plan: Workflow.LitePlan,
+  shotId: string,
+  slot: Workflow.BindingSlot,
+  assetId: string,
+): Workflow.BindingCandidate | undefined {
+  const shot = plan.shots?.find((s) => s.shotId === shotId);
+  if (!shot) return undefined;
+  const alts = shot.alternatives[slot] ?? [];
+  const fromAlt = alts.find((c) => c.assetId === assetId);
+  if (fromAlt) return fromAlt;
+  // Fall back to the current primary (idempotent edit) so re-selecting the
+  // already-chosen asset is a no-op with defined behaviour.
+  const primary = shot.primary[slot];
+  if (primary && primary.assetId === assetId) return primary;
+  return undefined;
+}
+
+function findCandidateForEntity(
+  plan: Workflow.LitePlan,
+  entityId: string,
+  slot: Workflow.BindingSlot,
+  assetId: string,
+): Workflow.BindingCandidate | undefined {
+  if (!plan.shots) return undefined;
+  for (const shot of plan.shots) {
+    const primary = shot.primary[slot];
+    if (primary && primary.entityId === entityId && primary.assetId === assetId) return primary;
+    const alt = (shot.alternatives[slot] ?? []).find(
+      (c) => c.entityId === entityId && c.assetId === assetId,
+    );
+    if (alt) return alt;
+  }
+  return undefined;
+}
+
 function toWireConstraint(c: Workflow.Constraint): WorkflowConstraint {
   return {
     id: c.id,
@@ -426,19 +577,16 @@ function toWireShot(shot: Workflow.ShotBindingSummary): WorkflowShotBindingSumma
   };
 }
 
-function toWireCandidate(c: {
-  slot: string;
-  entityId: string;
-  assetId: string;
-  provenance: 'L1' | 'L2' | 'L3' | 'L4' | 'L5';
-  confidence: number;
-  reason?: string;
-}): WorkflowBindingCandidate {
+function toWireCandidate(c: Workflow.BindingCandidate): WorkflowBindingCandidate {
+  // Wire type only carries L1..L5; 'user' edits round-trip as 'L1' for the
+  // webview's rendering purposes (the semantic difference is persisted
+  // server-side via Binding.provenance in .nkplan but isn't displayed).
+  const provenance = c.provenance === 'user' ? 'L1' : c.provenance;
   return {
     slot: c.slot as WorkflowBindingCandidate['slot'],
     entityId: c.entityId,
     assetId: c.assetId,
-    provenance: c.provenance,
+    provenance,
     confidence: c.confidence,
     ...(c.reason !== undefined && { reason: c.reason }),
   };
