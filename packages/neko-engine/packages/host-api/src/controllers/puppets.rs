@@ -431,19 +431,14 @@ impl Controller for PuppetsController {
                     #[serde(default)]
                     physics: Option<String>,
                 }
-                let body = body.ok_or_else(|| {
-                    ApiError::InvalidRequest("request body required".to_string())
-                })?;
+                let body = body
+                    .ok_or_else(|| ApiError::InvalidRequest("request body required".to_string()))?;
                 let aux: AuxiliaryBody = serde_json::from_value(body)
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
                 service
-                    .load_moc3_auxiliary(
-                        &aux.expressions,
-                        &aux.motions,
-                        aux.physics.as_deref(),
-                    )
+                    .load_moc3_auxiliary(&aux.expressions, &aux.motions, aux.physics.as_deref())
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 
                 Ok(ActionResponse::ok("", Value::Null))
@@ -475,7 +470,10 @@ impl Controller for PuppetsController {
                 let json_str = service
                     .export_motion3(clip_name)
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
-                Ok(ActionResponse::ok("", serde_json::json!({ "json": json_str })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "json": json_str }),
+                ))
             }
 
             "export_expression3" => {
@@ -489,7 +487,10 @@ impl Controller for PuppetsController {
                 let json_str = service
                     .export_expression3(expression_name)
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
-                Ok(ActionResponse::ok("", serde_json::json!({ "json": json_str })))
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({ "json": json_str }),
+                ))
             }
 
             _ => Err(ApiError::UnknownAction {

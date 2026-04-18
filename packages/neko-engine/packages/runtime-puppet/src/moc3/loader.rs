@@ -125,8 +125,7 @@ pub fn load_moc3(world: &mut World, data: &[u8]) -> Result<LoadResult, LoadError
         };
 
         // Build key forms for this art mesh from keyform positions
-        let key_forms =
-            build_art_mesh_key_forms(&moc3, mesh_idx, vc);
+        let key_forms = build_art_mesh_key_forms(&moc3, mesh_idx, vc);
 
         // Default vertices: use first key form or zeros
         let default_vertices = if let Some(first_kf) = key_forms.first() {
@@ -267,9 +266,8 @@ fn create_deformer_entities(
                         1, // 1 value per key form (angle)
                         rd.keyform_binding_sources_index,
                     );
-                    let param_name =
-                        find_binding_parameter(moc3, rd.keyform_binding_sources_index)
-                            .unwrap_or_default();
+                    let param_name = find_binding_parameter(moc3, rd.keyform_binding_sources_index)
+                        .unwrap_or_default();
                     world.entity_mut(entity).insert(RotationDeformer {
                         base_angle: rd.base_angle,
                         key_forms,
@@ -288,11 +286,7 @@ fn create_deformer_entities(
         if deformer.parent_deformer_index >= 0 {
             let parent_idx = deformer.parent_deformer_index as usize;
             if parent_idx < deformer_entities.len() {
-                hierarchy::set_parent(
-                    world,
-                    deformer_entities[i],
-                    deformer_entities[parent_idx],
-                );
+                hierarchy::set_parent(world, deformer_entities[i], deformer_entities[parent_idx]);
             }
         } else if deformer.parent_part_index >= 0 {
             let part_idx = deformer.parent_part_index as usize;
@@ -370,8 +364,7 @@ fn build_art_mesh_key_forms(
     let kf_count = kf_count as usize;
 
     // Get the key values for this art mesh's binding
-    let binding_key_values =
-        get_binding_key_values(moc3, art_mesh.keyform_binding_sources_index);
+    let binding_key_values = get_binding_key_values(moc3, art_mesh.keyform_binding_sources_index);
 
     let mut key_forms = Vec::with_capacity(kf_count);
     for kf_idx in 0..kf_count {
@@ -398,7 +391,11 @@ fn build_art_mesh_key_forms(
     }
 
     // Ensure sorted by param_value
-    key_forms.sort_by(|a, b| a.param_value.partial_cmp(&b.param_value).unwrap_or(std::cmp::Ordering::Equal));
+    key_forms.sort_by(|a, b| {
+        a.param_value
+            .partial_cmp(&b.param_value)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     key_forms
 }
 

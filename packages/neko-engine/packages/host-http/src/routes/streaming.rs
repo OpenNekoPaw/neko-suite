@@ -8,8 +8,8 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
-use neko_host_api::EngineApi;
 use neko_engine_types::StreamId;
+use neko_host_api::EngineApi;
 use std::sync::Arc;
 
 /// GET /v1/streams/:stream_id

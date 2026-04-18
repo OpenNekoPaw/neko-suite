@@ -967,7 +967,10 @@ impl IVideoService for VideoService {
 
         let proxy_options = TranscodeOptions {
             video_codec: neko_engine_types::VideoCodec::H264,
-            resolution: Some(neko_engine_types::Resolution::new(proxy_width, proxy_height)),
+            resolution: Some(neko_engine_types::Resolution::new(
+                proxy_width,
+                proxy_height,
+            )),
             bitrate: Some(1_000_000), // 1 Mbps
             hw_encoder: neko_engine_types::HwEncoderType::Auto,
             preset: neko_engine_types::EncoderPreset::Fast,

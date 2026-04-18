@@ -695,7 +695,12 @@ mod tests {
 
         // Get sender and push a frame through it
         let tx = registry.get_sender(&stream_id).await.unwrap();
-        let frame = FrameData::new(vec![42u8; 100], 1920, 1080, neko_engine_types::FrameFormat::Rgba);
+        let frame = FrameData::new(
+            vec![42u8; 100],
+            1920,
+            1080,
+            neko_engine_types::FrameFormat::Rgba,
+        );
         tx.send(frame).unwrap();
 
         let received = rx.try_recv().unwrap();

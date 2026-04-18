@@ -196,8 +196,7 @@ pub fn parse_physics(json_str: &str) -> Result<PhysicsResult, String> {
         let avg_mobility: f32 = if setting.vertices.is_empty() {
             1.0
         } else {
-            setting.vertices.iter().map(|v| v.mobility).sum::<f32>()
-                / setting.vertices.len() as f32
+            setting.vertices.iter().map(|v| v.mobility).sum::<f32>() / setting.vertices.len() as f32
         };
         let frequency = avg_mobility.clamp(0.01, 10.0);
 
@@ -341,7 +340,10 @@ mod tests {
         }"#;
         let result = parse_physics(json).unwrap();
         assert_eq!(result.physics_nodes.len(), 2);
-        assert_eq!(result.physics_nodes[0].1.map_mode, PhysicsMapMode::AngleLength);
+        assert_eq!(
+            result.physics_nodes[0].1.map_mode,
+            PhysicsMapMode::AngleLength
+        );
         assert_eq!(result.physics_nodes[1].1.map_mode, PhysicsMapMode::XY);
     }
 }

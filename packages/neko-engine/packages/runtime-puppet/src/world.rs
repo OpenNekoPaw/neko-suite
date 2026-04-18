@@ -944,11 +944,9 @@ impl PuppetWorld for BevyPuppetWorld {
                     Err(e) => tracing::warn!("Failed to parse expression '{}': {}", name, e),
                 }
             }
-            self.world
-                .entity_mut(root)
-                .insert(ExpressionLibrary {
-                    expressions: expr_defs,
-                });
+            self.world.entity_mut(root).insert(ExpressionLibrary {
+                expressions: expr_defs,
+            });
         }
 
         // Parse motions → add to AnimationLibrary
@@ -961,14 +959,15 @@ impl PuppetWorld for BevyPuppetWorld {
                 }
             }
             if !new_clips.is_empty() {
-                if let Some(mut lib) =
-                    self.world.get_mut::<crate::animation::AnimationLibrary>(root)
+                if let Some(mut lib) = self
+                    .world
+                    .get_mut::<crate::animation::AnimationLibrary>(root)
                 {
                     lib.clips.extend(new_clips);
                 } else {
-                    self.world.entity_mut(root).insert(
-                        crate::animation::AnimationLibrary { clips: new_clips },
-                    );
+                    self.world
+                        .entity_mut(root)
+                        .insert(crate::animation::AnimationLibrary { clips: new_clips });
                 }
             }
         }
@@ -978,18 +977,21 @@ impl PuppetWorld for BevyPuppetWorld {
             match moc3::physics::parse_physics(physics_str) {
                 Ok(result) => {
                     for (param_name, physics) in result.physics_nodes {
-                        let entity = self.world.spawn((
-                            PuppetNodeId(format!("physics_{}", param_name)),
-                            NodeName(format!("Physics: {}", param_name)),
-                            PuppetNodeType::Group,
-                            Transform2D::default(),
-                            GlobalTransform2D::default(),
-                            ZOrder(0.0),
-                            Opacity::default(),
-                            BlendMode::default(),
-                            physics,
-                            crate::components::PhysicsState::default(),
-                        )).id();
+                        let entity = self
+                            .world
+                            .spawn((
+                                PuppetNodeId(format!("physics_{}", param_name)),
+                                NodeName(format!("Physics: {}", param_name)),
+                                PuppetNodeType::Group,
+                                Transform2D::default(),
+                                GlobalTransform2D::default(),
+                                ZOrder(0.0),
+                                Opacity::default(),
+                                BlendMode::default(),
+                                physics,
+                                crate::components::PhysicsState::default(),
+                            ))
+                            .id();
                         crate::hierarchy::set_parent(&mut self.world, entity, root);
                     }
                 }

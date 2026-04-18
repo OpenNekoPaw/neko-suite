@@ -67,8 +67,8 @@ const SEGMENT_INVERSE_STEPPED: i32 = 3;
 
 /// Parse a .motion3.json string into an AnimationClip.
 pub fn parse_motion(name: &str, json_str: &str) -> Result<AnimationClip, String> {
-    let raw: Motion3Json =
-        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse motion3.json: {}", e))?;
+    let raw: Motion3Json = serde_json::from_str(json_str)
+        .map_err(|e| format!("Failed to parse motion3.json: {}", e))?;
 
     let duration_ms = raw.meta.duration * 1000.0;
     let mut clip = AnimationClip::create(name, duration_ms);

@@ -12,8 +12,8 @@ use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
-use neko_host_api::EngineApi;
 use neko_engine_types::{ActionRequest, EngineConfig};
+use neko_host_api::EngineApi;
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
@@ -32,7 +32,9 @@ pub(crate) fn shared_engine_cell() -> &'static OnceCell<Arc<EngineApi>> {
 }
 
 /// Get or initialize the global engine instance with optional config path
-pub(crate) async fn get_engine_with_config(config_path: Option<String>) -> napi::Result<Arc<EngineApi>> {
+pub(crate) async fn get_engine_with_config(
+    config_path: Option<String>,
+) -> napi::Result<Arc<EngineApi>> {
     shared_engine_cell()
         .get_or_try_init(|| async {
             let config = EngineConfig::load(

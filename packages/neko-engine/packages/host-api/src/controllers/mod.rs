@@ -26,13 +26,13 @@ mod image;
 mod midi;
 mod models;
 mod node;
+mod plugins;
 mod puppets;
 mod scenes;
 mod stream;
 mod task;
 mod timeline;
 pub(crate) mod utils;
-mod plugins;
 mod video;
 
 pub use audio::AudioController;
@@ -46,12 +46,12 @@ pub use image::ImageController;
 pub use midi::MidiController;
 pub use models::ModelsController;
 pub use node::NodeController;
+pub use plugins::PluginsController;
 pub use puppets::PuppetsController;
 pub use scenes::ScenesController;
 pub use stream::StreamController;
 pub use task::TaskController;
 pub use timeline::TimelineController;
-pub use plugins::PluginsController;
 pub use video::VideoController;
 
 use crate::error::ApiResult;

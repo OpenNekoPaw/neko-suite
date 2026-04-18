@@ -36,9 +36,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::audio_diff::{diff_audio_content, AudioContentDiff};
+use crate::error::{MediaError as Error, Result};
 use crate::ffmpeg_parser::{parse_psnr_log, parse_ssim_log};
 use crate::probe::global_probe_cache;
-use crate::error::{MediaError as Error, Result};
 
 /// SSIM threshold below which a frame is considered "different"
 const DEFAULT_SSIM_THRESHOLD: f64 = 0.95;
@@ -355,8 +355,8 @@ pub fn diff_video_content<P: AsRef<Path>>(
 // FFmpeg library-based filter runners (no external CLI dependency)
 // ─────────────────────────────────────────────────────────────
 
-use ffmpeg_next as ffmpeg;
 use ffmpeg::{codec, filter, format, media, Rational};
+use ffmpeg_next as ffmpeg;
 
 static FFMPEG_INIT: std::sync::Once = std::sync::Once::new();
 
@@ -437,7 +437,11 @@ fn run_two_input_metric_filter(
         "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
         decoder_a.width(),
         decoder_a.height(),
-        decoder_a.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
+        decoder_a
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
         tb_a.numerator(),
         tb_a.denominator(),
         decoder_a.aspect_ratio().numerator().max(1),
@@ -447,7 +451,11 @@ fn run_two_input_metric_filter(
         "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
         decoder_b.width(),
         decoder_b.height(),
-        decoder_b.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
+        decoder_b
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
         tb_b.numerator(),
         tb_b.denominator(),
         decoder_b.aspect_ratio().numerator().max(1),
@@ -527,8 +535,8 @@ fn run_two_input_metric_filter(
         }
         if let Some(end) = end_ts {
             if let Some(pts) = packet.pts() {
-                let pts_us = pts * 1_000_000 * i64::from(tb_a.numerator())
-                    / i64::from(tb_a.denominator());
+                let pts_us =
+                    pts * 1_000_000 * i64::from(tb_a.numerator()) / i64::from(tb_a.denominator());
                 if pts_us > end {
                     break;
                 }
@@ -542,8 +550,8 @@ fn run_two_input_metric_filter(
         }
         if let Some(end) = end_ts {
             if let Some(pts) = packet.pts() {
-                let pts_us = pts * 1_000_000 * i64::from(tb_b.numerator())
-                    / i64::from(tb_b.denominator());
+                let pts_us =
+                    pts * 1_000_000 * i64::from(tb_b.numerator()) / i64::from(tb_b.denominator());
                 if pts_us > end {
                     break;
                 }
@@ -553,45 +561,27 @@ fn run_two_input_metric_filter(
     }
 
     // Feed decoded frames to the filter graph
-    let feed_frames =
-        |decoder: &mut codec::decoder::Video,
-         packets: &[(usize, ffmpeg::Packet)],
-         frame: &mut ffmpeg::frame::Video,
-         graph: &mut filter::Graph,
-         src_name: &str| {
-            for (_idx, packet) in packets {
-                decoder.send_packet(packet).ok();
-                while decoder.receive_frame(frame).is_ok() {
-                    graph.get(src_name).unwrap().source().add(frame).ok();
-                }
-            }
-            decoder.send_eof().ok();
+    let feed_frames = |decoder: &mut codec::decoder::Video,
+                       packets: &[(usize, ffmpeg::Packet)],
+                       frame: &mut ffmpeg::frame::Video,
+                       graph: &mut filter::Graph,
+                       src_name: &str| {
+        for (_idx, packet) in packets {
+            decoder.send_packet(packet).ok();
             while decoder.receive_frame(frame).is_ok() {
                 graph.get(src_name).unwrap().source().add(frame).ok();
             }
-            // Signal EOF on this source
-            graph
-                .get(src_name)
-                .unwrap()
-                .source()
-                .flush()
-                .ok();
-        };
+        }
+        decoder.send_eof().ok();
+        while decoder.receive_frame(frame).is_ok() {
+            graph.get(src_name).unwrap().source().add(frame).ok();
+        }
+        // Signal EOF on this source
+        graph.get(src_name).unwrap().source().flush().ok();
+    };
 
-    feed_frames(
-        &mut decoder_a,
-        &packets_a,
-        &mut frame_a,
-        &mut graph,
-        "in0",
-    );
-    feed_frames(
-        &mut decoder_b,
-        &packets_b,
-        &mut frame_b,
-        &mut graph,
-        "in1",
-    );
+    feed_frames(&mut decoder_a, &packets_a, &mut frame_a, &mut graph, "in0");
+    feed_frames(&mut decoder_b, &packets_b, &mut frame_b, &mut graph, "in1");
 
     // Drain the sink (ssim/psnr filters process frames and write stats)
     while graph
@@ -686,7 +676,11 @@ fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()
         "video_size={}x{}:pix_fmt={}:time_base={}/{}",
         decoder_a.width(),
         decoder_a.height(),
-        decoder_a.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
+        decoder_a
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
         tb_a.numerator(),
         tb_a.denominator(),
     );
@@ -694,7 +688,11 @@ fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()
         "video_size={}x{}:pix_fmt={}:time_base={}/{}",
         decoder_b.width(),
         decoder_b.height(),
-        decoder_b.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
+        decoder_b
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
         tb_b.numerator(),
         tb_b.denominator(),
     );
@@ -724,8 +722,8 @@ fn generate_diff_video(path_a: &Path, path_b: &Path, output: &Path) -> Result<()
         .map_err(|e| Error::Ffmpeg(format!("Graph validate: {e}")))?;
 
     // Set up output
-    let mut octx = format::output(&output)
-        .map_err(|e| Error::Ffmpeg(format!("Output context: {e}")))?;
+    let mut octx =
+        format::output(&output).map_err(|e| Error::Ffmpeg(format!("Output context: {e}")))?;
 
     // Add video stream to output (copy params from decoder A)
     {

@@ -15,10 +15,10 @@ use neko_engine_kernel::services::{
 };
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
 
-#[cfg(feature = "onnx")]
-use neko_runtime_ml::IMlService;
 use neko_engine_types::registry::{self, groups};
 use neko_engine_types::{ActionRequest, ActionResponse};
+#[cfg(feature = "onnx")]
+use neko_runtime_ml::IMlService;
 use std::sync::Arc;
 
 /// Action router that dispatches requests to controllers

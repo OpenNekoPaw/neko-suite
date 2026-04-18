@@ -15,8 +15,8 @@
 //! GPU processing functions migration
 
 use napi_derive::napi;
-use serde_json::json;
 use neko_engine_types::ActionRequest;
+use serde_json::json;
 
 /// Get or initialize the global engine instance for bridge functions
 async fn get_bridge_engine() -> napi::Result<std::sync::Arc<neko_host_api::EngineApi>> {
@@ -25,7 +25,8 @@ async fn get_bridge_engine() -> napi::Result<std::sync::Arc<neko_host_api::Engin
 }
 
 #[cfg(test)]
-fn bridge_engine_cell() -> &'static tokio::sync::OnceCell<std::sync::Arc<neko_host_api::EngineApi>> {
+fn bridge_engine_cell() -> &'static tokio::sync::OnceCell<std::sync::Arc<neko_host_api::EngineApi>>
+{
     crate::engine::shared_engine_cell()
 }
 

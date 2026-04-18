@@ -26,11 +26,7 @@ pub trait PluginActivationHandler: Send + Sync {
     ) -> std::result::Result<(), String>;
 
     /// Called when a plugin is disabled. Should unregister capabilities.
-    fn on_deactivate(
-        &self,
-        plugin_id: &str,
-        kind: PluginKind,
-    ) -> std::result::Result<(), String>;
+    fn on_deactivate(&self, plugin_id: &str, kind: PluginKind) -> std::result::Result<(), String>;
 }
 
 /// Plugin runtime state.
@@ -270,8 +266,7 @@ impl PluginManager {
     // =========================================================================
 
     fn load_manifest(path: &Path) -> Result<EnginePluginManifest, String> {
-        let content =
-            std::fs::read_to_string(path).map_err(|e| format!("Read error: {e}"))?;
+        let content = std::fs::read_to_string(path).map_err(|e| format!("Read error: {e}"))?;
         serde_json::from_str(&content).map_err(|e| format!("Parse error: {e}"))
     }
 

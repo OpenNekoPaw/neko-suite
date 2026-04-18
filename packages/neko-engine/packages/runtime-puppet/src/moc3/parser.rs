@@ -305,9 +305,8 @@ impl<'a> SafeReader<'a> {
         }
         let slice = &self.data[offset..offset + max_len];
         let end = slice.iter().position(|&b| b == 0).unwrap_or(max_len);
-        String::from_utf8(slice[..end].to_vec()).map_err(|e| {
-            LoadError::Moc3Error(format!("Invalid UTF-8 at 0x{:X}: {}", offset, e))
-        })
+        String::from_utf8(slice[..end].to_vec())
+            .map_err(|e| LoadError::Moc3Error(format!("Invalid UTF-8 at 0x{:X}: {}", offset, e)))
     }
 
     /// Read a u32 value that is itself a pointer (address) stored at `ptr_offset`
@@ -411,7 +410,10 @@ fn read_element_counts(r: &SafeReader, addr: usize) -> Result<ElementCounts, Loa
     })
 }
 
-fn read_parameters(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Moc3Parameter>, LoadError> {
+fn read_parameters(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<Moc3Parameter>, LoadError> {
     let n = counts.parameters as usize;
     let ids_addr = r.read_ptr(offsets::PARAMETER_IDS)? as usize;
     let max_addr = r.read_ptr(offsets::PARAMETER_MAX_VALUES)? as usize;
@@ -493,12 +495,9 @@ fn read_warp_deformers(
     let vertex_counts_addr = r.read_ptr(offsets::WARP_DEFORMER_VERTEX_COUNTS)? as usize;
     let rows_addr = r.read_ptr(offsets::WARP_DEFORMER_ROWS)? as usize;
     let cols_addr = r.read_ptr(offsets::WARP_DEFORMER_COLUMNS)? as usize;
-    let begin_addr =
-        r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
-    let count_addr =
-        r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
-    let binding_addr =
-        r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
+    let begin_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
+    let count_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
+    let binding_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
 
     let mut warps = Vec::with_capacity(n);
     for i in 0..n {
@@ -520,10 +519,8 @@ fn read_rotation_deformers(
 ) -> Result<Vec<Moc3RotationDeformer>, LoadError> {
     let n = counts.rotation_deformers as usize;
     let angle_addr = r.read_ptr(offsets::ROTATION_DEFORMER_BASE_ANGLES)? as usize;
-    let begin_addr =
-        r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
-    let count_addr =
-        r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
+    let begin_addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
+    let count_addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
     let binding_addr =
         r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
 
@@ -539,10 +536,7 @@ fn read_rotation_deformers(
     Ok(rotations)
 }
 
-fn read_art_meshes(
-    r: &SafeReader,
-    counts: &ElementCounts,
-) -> Result<Vec<Moc3ArtMesh>, LoadError> {
+fn read_art_meshes(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Moc3ArtMesh>, LoadError> {
     let n = counts.art_meshes as usize;
     let ids_addr = r.read_ptr(offsets::ART_MESH_IDS)? as usize;
     let tex_addr = r.read_ptr(offsets::ART_MESH_TEXTURE_INDICES)? as usize;
@@ -551,19 +545,13 @@ fn read_art_meshes(
     let visible_addr = r.read_ptr(offsets::ART_MESH_IS_VISIBLE)? as usize;
     let enabled_addr = r.read_ptr(offsets::ART_MESH_IS_ENABLED)? as usize;
     let parent_part_addr = r.read_ptr(offsets::ART_MESH_PARENT_PART_INDICES)? as usize;
-    let parent_deformer_addr =
-        r.read_ptr(offsets::ART_MESH_PARENT_DEFORMER_INDICES)? as usize;
+    let parent_deformer_addr = r.read_ptr(offsets::ART_MESH_PARENT_DEFORMER_INDICES)? as usize;
     let uv_begin_addr = r.read_ptr(offsets::ART_MESH_UV_SOURCES_BEGIN)? as usize;
-    let idx_begin_addr =
-        r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_BEGIN)? as usize;
-    let idx_count_addr =
-        r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_COUNT)? as usize;
-    let kf_begin_addr =
-        r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_BEGIN)? as usize;
-    let kf_count_addr =
-        r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_COUNT)? as usize;
-    let kf_binding_addr =
-        r.read_ptr(offsets::ART_MESH_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
+    let idx_begin_addr = r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_BEGIN)? as usize;
+    let idx_count_addr = r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_COUNT)? as usize;
+    let kf_begin_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_BEGIN)? as usize;
+    let kf_count_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_COUNT)? as usize;
+    let kf_binding_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
 
     let mut meshes = Vec::with_capacity(n);
     for i in 0..n {
@@ -592,10 +580,8 @@ fn read_parameter_bindings(
     counts: &ElementCounts,
 ) -> Result<Vec<Moc3ParameterBinding>, LoadError> {
     let n = counts.parameter_bindings as usize;
-    let begin_addr =
-        r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_BEGIN)? as usize;
-    let count_addr =
-        r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_COUNT)? as usize;
+    let begin_addr = r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_BEGIN)? as usize;
+    let count_addr = r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_COUNT)? as usize;
 
     let mut bindings = Vec::with_capacity(n);
     for i in 0..n {
@@ -639,10 +625,7 @@ fn read_position_indices(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<u
     Ok(indices)
 }
 
-fn read_keyform_positions(
-    r: &SafeReader,
-    counts: &ElementCounts,
-) -> Result<Vec<Vec2>, LoadError> {
+fn read_keyform_positions(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Vec2>, LoadError> {
     let n = counts.keyform_positions as usize;
     let addr = r.read_ptr(offsets::KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
     let mut positions = Vec::with_capacity(n);
@@ -718,10 +701,7 @@ mod tests {
             blend_mode_from_flags(0),
             crate::components::BlendMode::Normal
         );
-        assert_eq!(
-            blend_mode_from_flags(1),
-            crate::components::BlendMode::Add
-        );
+        assert_eq!(blend_mode_from_flags(1), crate::components::BlendMode::Add);
         assert_eq!(
             blend_mode_from_flags(2),
             crate::components::BlendMode::Multiply

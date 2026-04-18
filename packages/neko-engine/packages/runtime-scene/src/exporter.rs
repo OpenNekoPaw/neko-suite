@@ -199,11 +199,15 @@ fn build_gltf_json_and_bin(
                 let sampler_index = json_samplers.len();
 
                 // Input accessor: timestamps (SCALAR float)
-                let timestamps: Vec<f32> =
-                    channel.keyframes.iter().map(|k| k.timestamp).collect();
+                let timestamps: Vec<f32> = channel.keyframes.iter().map(|k| k.timestamp).collect();
                 let input_idx = write_float_accessor(
-                    &timestamps, 1, "SCALAR", true,
-                    &mut bin, &mut json_accessors, &mut json_buffer_views,
+                    &timestamps,
+                    1,
+                    "SCALAR",
+                    true,
+                    &mut bin,
+                    &mut json_accessors,
+                    &mut json_buffer_views,
                 );
 
                 // Output accessor: values (VEC3/VEC4/SCALAR depending on property)
@@ -218,8 +222,13 @@ fn build_gltf_json_and_bin(
                     AnimationProperty::MorphWeights => ("SCALAR", 1),
                 };
                 let output_idx = write_float_accessor(
-                    &values, component_count, accessor_type, false,
-                    &mut bin, &mut json_accessors, &mut json_buffer_views,
+                    &values,
+                    component_count,
+                    accessor_type,
+                    false,
+                    &mut bin,
+                    &mut json_accessors,
+                    &mut json_buffer_views,
                 );
 
                 // glTF interpolation (approximate non-linear as LINEAR)
@@ -474,10 +483,23 @@ fn write_float_accessor(
 /// until the loader is extended to preserve morph target name → index mappings.
 fn build_vrm_extensions(face_params: &HashMap<String, f32>) -> serde_json::Value {
     const PRESET_NAMES: &[&str] = &[
-        "happy", "angry", "sad", "relaxed", "surprised",
-        "aa", "ih", "ou", "ee", "oh",
-        "blink", "blinkLeft", "blinkRight",
-        "lookUp", "lookDown", "lookLeft", "lookRight",
+        "happy",
+        "angry",
+        "sad",
+        "relaxed",
+        "surprised",
+        "aa",
+        "ih",
+        "ou",
+        "ee",
+        "oh",
+        "blink",
+        "blinkLeft",
+        "blinkRight",
+        "lookUp",
+        "lookDown",
+        "lookLeft",
+        "lookRight",
         "neutral",
     ];
 
@@ -606,9 +628,7 @@ mod tests {
 
     fn parse_glb_json(glb: &[u8]) -> serde_json::Value {
         let json_len = u32::from_le_bytes([glb[12], glb[13], glb[14], glb[15]]) as usize;
-        let json_str = std::str::from_utf8(&glb[20..20 + json_len])
-            .unwrap()
-            .trim();
+        let json_str = std::str::from_utf8(&glb[20..20 + json_len]).unwrap().trim();
         serde_json::from_str(json_str).unwrap()
     }
 

@@ -5,13 +5,13 @@
 
 use crate::error::{Error, Result};
 use crate::services::puppet::IPuppetService;
+use neko_engine_types::easing::EasingType;
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
 use neko_runtime_puppet::moc3::expression::ExpressionInfo;
 use neko_runtime_puppet::world::{
     BevyPuppetWorld, DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot, PuppetWorld,
 };
-use neko_engine_types::easing::EasingType;
 use std::sync::Mutex;
 
 /// Concrete puppet service backed by bevy_ecs

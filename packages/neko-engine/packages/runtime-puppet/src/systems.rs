@@ -218,10 +218,18 @@ pub fn expression_update(world: &mut World, delta_ms: f32) {
 
     let new_elapsed = active.fade_elapsed_ms + delta_ms;
     let new_weight = if fade_duration_ms <= 0.0 {
-        if active.fading_in { 1.0 } else { 0.0 }
+        if active.fading_in {
+            1.0
+        } else {
+            0.0
+        }
     } else {
         let t = (new_elapsed / fade_duration_ms).clamp(0.0, 1.0);
-        if active.fading_in { t } else { 1.0 - t }
+        if active.fading_in {
+            t
+        } else {
+            1.0 - t
+        }
     };
 
     // Check if fade-out completed → remove
@@ -296,7 +304,8 @@ pub fn multi_key_deformation_update(world: &mut World) {
             .map(|(_, v)| *v)
             .unwrap_or(0.0);
 
-        if let Some(deformed) = crate::moc3::interpolation::interpolate_1d(&key_forms, param_value) {
+        if let Some(deformed) = crate::moc3::interpolation::interpolate_1d(&key_forms, param_value)
+        {
             if let Some(mut dv) = world.get_mut::<DeformedVertices>(entity) {
                 dv.0 = deformed;
             } else {
@@ -326,10 +335,7 @@ pub fn warp_deformer_update(world: &mut World) {
     // Collect warp deformers with their data
     let deformers: Vec<(Entity, WarpDeformer)> = {
         let mut query = world.query::<(Entity, &WarpDeformer)>();
-        query
-            .iter(world)
-            .map(|(e, wd)| (e, wd.clone()))
-            .collect()
+        query.iter(world).map(|(e, wd)| (e, wd.clone())).collect()
     };
 
     for (deformer_entity, wd) in &deformers {
@@ -356,13 +362,19 @@ pub fn warp_deformer_update(world: &mut World) {
         // otherwise fall back to MeshData.vertices. This ensures deformer effects
         // stack on top of key form interpolation rather than overwriting.
         let children: Vec<(Entity, Vec<Vec2>)> = {
-            let mut query =
-                world.query::<(Entity, &ParentDeformerRef, &MeshData, Option<&DeformedVertices>)>();
+            let mut query = world.query::<(
+                Entity,
+                &ParentDeformerRef,
+                &MeshData,
+                Option<&DeformedVertices>,
+            )>();
             query
                 .iter(world)
                 .filter(|(_, pdr, _, _)| pdr.0 == *deformer_entity)
                 .map(|(e, _, mesh, dv)| {
-                    let verts = dv.map(|d| d.0.clone()).unwrap_or_else(|| mesh.vertices.clone());
+                    let verts = dv
+                        .map(|d| d.0.clone())
+                        .unwrap_or_else(|| mesh.vertices.clone());
                     (e, verts)
                 })
                 .collect()
@@ -425,23 +437,27 @@ pub fn rotation_deformer_update(world: &mut World) {
             .unwrap_or(0.0);
 
         // Interpolate angle from key forms
-        let angle = match crate::moc3::interpolation::interpolate_1d_scalar(
-            &rd.key_forms,
-            param_value,
-        ) {
-            Some(a) => a + rd.base_angle,
-            None => rd.base_angle,
-        };
+        let angle =
+            match crate::moc3::interpolation::interpolate_1d_scalar(&rd.key_forms, param_value) {
+                Some(a) => a + rd.base_angle,
+                None => rd.base_angle,
+            };
 
         // Find child meshes — use DeformedVertices if available (stacks on key forms)
         let children: Vec<(Entity, Vec<Vec2>)> = {
-            let mut query =
-                world.query::<(Entity, &ParentDeformerRef, &MeshData, Option<&DeformedVertices>)>();
+            let mut query = world.query::<(
+                Entity,
+                &ParentDeformerRef,
+                &MeshData,
+                Option<&DeformedVertices>,
+            )>();
             query
                 .iter(world)
                 .filter(|(_, pdr, _, _)| pdr.0 == *deformer_entity)
                 .map(|(e, _, mesh, dv)| {
-                    let verts = dv.map(|d| d.0.clone()).unwrap_or_else(|| mesh.vertices.clone());
+                    let verts = dv
+                        .map(|d| d.0.clone())
+                        .unwrap_or_else(|| mesh.vertices.clone());
                     (e, verts)
                 })
                 .collect()
@@ -1325,7 +1341,11 @@ mod tests {
         expression_update(&mut world, 150.0);
 
         let ae = world.get::<ActiveExpression>(root).unwrap();
-        assert!((ae.weight - 0.5).abs() < 1e-3, "Weight at 50% fade-out should be ~0.5, got {}", ae.weight);
+        assert!(
+            (ae.weight - 0.5).abs() < 1e-3,
+            "Weight at 50% fade-out should be ~0.5, got {}",
+            ae.weight
+        );
         // Parameter should be partially faded: 0 + (20 - 0) * 0.5 = 10
         let params = world.get::<PuppetParameters>(root).unwrap();
         assert!((params.params[0].current - 10.0).abs() < 1.0);
@@ -1432,7 +1452,7 @@ mod tests {
                 local_only: false,
                 inputs: vec![PhysicsInput {
                     param_name: "ParamAngleX".to_string(),
-                    weight: 5.0, // Strong weight
+                    weight: 5.0,                 // Strong weight
                     input_type: "X".to_string(), // Direct X displacement
                 }],
             },
@@ -1493,18 +1513,31 @@ mod tests {
         let hair_with = {
             let mut q = world_with_input.query::<&PuppetParameters>();
             let params = q.iter(&world_with_input).next().unwrap();
-            params.params.iter().find(|p| p.name == "ParamHairFront").unwrap().current
+            params
+                .params
+                .iter()
+                .find(|p| p.name == "ParamHairFront")
+                .unwrap()
+                .current
         };
         let hair_without = {
             let mut q = world_without_input.query::<&PuppetParameters>();
             let params = q.iter(&world_without_input).next().unwrap();
-            params.params.iter().find(|p| p.name == "ParamHairFront").unwrap().current
+            params
+                .params
+                .iter()
+                .find(|p| p.name == "ParamHairFront")
+                .unwrap()
+                .current
         };
 
         // With input driving, the result should differ from without input
-        assert!((hair_with - hair_without).abs() > 0.001,
+        assert!(
+            (hair_with - hair_without).abs() > 0.001,
             "Input-driven physics should differ from non-driven: with={}, without={}",
-            hair_with, hair_without);
+            hair_with,
+            hair_without
+        );
     }
 
     // ── Fix 3 integration test: deformer + keyform stacking ──
@@ -1545,15 +1578,19 @@ mod tests {
                         KeyFormData {
                             param_value: 0.0,
                             vertices: vec![
-                                Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0),
-                                Vec2::new(0.0, 10.0), Vec2::new(10.0, 10.0),
+                                Vec2::new(0.0, 0.0),
+                                Vec2::new(10.0, 0.0),
+                                Vec2::new(0.0, 10.0),
+                                Vec2::new(10.0, 10.0),
                             ],
                         },
                         KeyFormData {
                             param_value: 1.0,
                             vertices: vec![
-                                Vec2::new(5.0, 0.0), Vec2::new(15.0, 0.0),
-                                Vec2::new(5.0, 10.0), Vec2::new(15.0, 10.0),
+                                Vec2::new(5.0, 0.0),
+                                Vec2::new(15.0, 0.0),
+                                Vec2::new(5.0, 10.0),
+                                Vec2::new(15.0, 10.0),
                             ],
                         },
                     ],
@@ -1594,7 +1631,11 @@ mod tests {
 
         let dv = world.get::<DeformedVertices>(child).unwrap();
         // At ParamAngleX=1.0, should be (5.0, 8.0)
-        assert!((dv.0[0].y - 8.0).abs() < 1e-5, "Key form Y should be 8.0, got {}", dv.0[0].y);
+        assert!(
+            (dv.0[0].y - 8.0).abs() < 1e-5,
+            "Key form Y should be 8.0, got {}",
+            dv.0[0].y
+        );
 
         // Step 2: warp deformer applies on top of key form result
         warp_deformer_update(&mut world);
@@ -1603,7 +1644,10 @@ mod tests {
         // The warp shifts everything +5 in X at param=1.0,
         // so the key-form result (5.0, 8.0) should be warped.
         // Exact value depends on bilinear interpolation, but X should be > 5.0
-        assert!(dv.0[0].x > 5.0,
-            "Warp should shift X beyond 5.0, got {}", dv.0[0].x);
+        assert!(
+            dv.0[0].x > 5.0,
+            "Warp should shift X beyond 5.0, got {}",
+            dv.0[0].x
+        );
     }
 }

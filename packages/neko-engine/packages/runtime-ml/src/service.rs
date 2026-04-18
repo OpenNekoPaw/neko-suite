@@ -1,9 +1,9 @@
 //! ML service implementation — wraps ModelRegistry + inference pipelines.
 
-use neko_engine_kernel::error::Result;
 use crate::ml::onnx_runtime::DeviceSelection;
 use crate::ml::{self, ModelInfo, ModelRegistry};
 use crate::service_trait::IMlService;
+use neko_engine_kernel::error::Result;
 
 /// Idle threshold: sessions unused for 5 minutes are evicted after each inference.
 const IDLE_EVICT_SECS: u64 = 300;

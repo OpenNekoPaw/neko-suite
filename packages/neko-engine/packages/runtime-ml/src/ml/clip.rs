@@ -11,8 +11,8 @@
 //! Token IDs must be provided by the caller (use an external BPE tokeniser or
 //! the CLIP tokeniser bundled with the model package).
 
-use neko_engine_kernel::error::{Error, Result};
 use ndarray::{Array3, Array4};
+use neko_engine_kernel::error::{Error, Result};
 use ort::value::Tensor as OrtTensor;
 
 // ImageNet normalisation constants.

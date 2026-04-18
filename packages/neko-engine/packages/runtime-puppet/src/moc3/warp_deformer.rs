@@ -166,9 +166,15 @@ mod tests {
     fn test_apply_warp_2x2_grid() {
         // 2x2 grid = 3x3 control points
         let rest = vec![
-            Vec2::new(0.0, 0.0), Vec2::new(5.0, 0.0), Vec2::new(10.0, 0.0),
-            Vec2::new(0.0, 5.0), Vec2::new(5.0, 5.0), Vec2::new(10.0, 5.0),
-            Vec2::new(0.0, 10.0), Vec2::new(5.0, 10.0), Vec2::new(10.0, 10.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(5.0, 0.0),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(0.0, 5.0),
+            Vec2::new(5.0, 5.0),
+            Vec2::new(10.0, 5.0),
+            Vec2::new(0.0, 10.0),
+            Vec2::new(5.0, 10.0),
+            Vec2::new(10.0, 10.0),
         ];
         // Move center control point
         let mut deformed = rest.clone();

@@ -40,8 +40,8 @@ use super::ffmpeg_parser::{parse_psnr_log, parse_ssim_log};
 use super::probe::global_probe_cache;
 use crate::error::{Error, Result};
 
-use ffmpeg_next as ffmpeg;
 use ffmpeg::{codec, filter, format, media};
+use ffmpeg_next as ffmpeg;
 
 /// SSIM threshold below which a frame is considered "different"
 const DEFAULT_SSIM_THRESHOLD: f64 = 0.95;
@@ -393,9 +393,13 @@ fn run_two_input_metric_filter(
     let mut ictx_b = format::input(&path_b)
         .map_err(|e| Error::Other(format!("Failed to open {}: {}", path_b.display(), e)))?;
 
-    let stream_a = ictx_a.streams().best(media::Type::Video)
+    let stream_a = ictx_a
+        .streams()
+        .best(media::Type::Video)
         .ok_or_else(|| Error::Other(format!("No video stream in {}", path_a.display())))?;
-    let stream_b = ictx_b.streams().best(media::Type::Video)
+    let stream_b = ictx_b
+        .streams()
+        .best(media::Type::Video)
         .ok_or_else(|| Error::Other(format!("No video stream in {}", path_b.display())))?;
 
     let stream_a_idx = stream_a.index();
@@ -405,12 +409,16 @@ fn run_two_input_metric_filter(
 
     let ctx_a = codec::context::Context::from_parameters(stream_a.parameters())
         .map_err(|e| Error::Other(format!("Decoder A context: {e}")))?;
-    let mut decoder_a = ctx_a.decoder().video()
+    let mut decoder_a = ctx_a
+        .decoder()
+        .video()
         .map_err(|e| Error::Other(format!("Decoder A: {e}")))?;
 
     let ctx_b = codec::context::Context::from_parameters(stream_b.parameters())
         .map_err(|e| Error::Other(format!("Decoder B context: {e}")))?;
-    let mut decoder_b = ctx_b.decoder().video()
+    let mut decoder_b = ctx_b
+        .decoder()
+        .video()
         .map_err(|e| Error::Other(format!("Decoder B: {e}")))?;
 
     // Build filter graph
@@ -418,24 +426,41 @@ fn run_two_input_metric_filter(
 
     let args_a = format!(
         "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
-        decoder_a.width(), decoder_a.height(),
-        decoder_a.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
-        tb_a.numerator(), tb_a.denominator(),
-        decoder_a.aspect_ratio().numerator().max(1), decoder_a.aspect_ratio().denominator().max(1),
+        decoder_a.width(),
+        decoder_a.height(),
+        decoder_a
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
+        tb_a.numerator(),
+        tb_a.denominator(),
+        decoder_a.aspect_ratio().numerator().max(1),
+        decoder_a.aspect_ratio().denominator().max(1),
     );
     let args_b = format!(
         "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
-        decoder_b.width(), decoder_b.height(),
-        decoder_b.format().descriptor().map(|d| d.name().to_string()).unwrap_or_else(|| "yuv420p".to_string()),
-        tb_b.numerator(), tb_b.denominator(),
-        decoder_b.aspect_ratio().numerator().max(1), decoder_b.aspect_ratio().denominator().max(1),
+        decoder_b.width(),
+        decoder_b.height(),
+        decoder_b
+            .format()
+            .descriptor()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|| "yuv420p".to_string()),
+        tb_b.numerator(),
+        tb_b.denominator(),
+        decoder_b.aspect_ratio().numerator().max(1),
+        decoder_b.aspect_ratio().denominator().max(1),
     );
 
-    graph.add(&filter::find("buffer").unwrap(), "in0", &args_a)
+    graph
+        .add(&filter::find("buffer").unwrap(), "in0", &args_a)
         .map_err(|e| Error::Other(format!("Add buffer in0: {e}")))?;
-    graph.add(&filter::find("buffer").unwrap(), "in1", &args_b)
+    graph
+        .add(&filter::find("buffer").unwrap(), "in1", &args_b)
         .map_err(|e| Error::Other(format!("Add buffer in1: {e}")))?;
-    graph.add(&filter::find("buffersink").unwrap(), "out", "")
+    graph
+        .add(&filter::find("buffersink").unwrap(), "out", "")
         .map_err(|e| Error::Other(format!("Add buffersink: {e}")))?;
 
     let filter_spec = if let Some(fps) = sample_fps {
@@ -450,12 +475,19 @@ fn run_two_input_metric_filter(
         )
     };
 
-    graph.output("in0", 0).map_err(|e| Error::Other(format!("Graph output in0: {e}")))?
-        .output("in1", 0).map_err(|e| Error::Other(format!("Graph output in1: {e}")))?
-        .input("out", 0).map_err(|e| Error::Other(format!("Graph input out: {e}")))?
-        .parse(&filter_spec).map_err(|e| Error::Other(format!("Graph parse: {e}")))?;
+    graph
+        .output("in0", 0)
+        .map_err(|e| Error::Other(format!("Graph output in0: {e}")))?
+        .output("in1", 0)
+        .map_err(|e| Error::Other(format!("Graph output in1: {e}")))?
+        .input("out", 0)
+        .map_err(|e| Error::Other(format!("Graph input out: {e}")))?
+        .parse(&filter_spec)
+        .map_err(|e| Error::Other(format!("Graph parse: {e}")))?;
 
-    graph.validate().map_err(|e| Error::Other(format!("Graph validate: {e}")))?;
+    graph
+        .validate()
+        .map_err(|e| Error::Other(format!("Graph validate: {e}")))?;
 
     // Seek if start_time specified
     if let Some(t) = start_time {
@@ -470,21 +502,31 @@ fn run_two_input_metric_filter(
     let mut packets_b = Vec::new();
 
     for (stream, packet) in ictx_a.packets() {
-        if stream.index() != stream_a_idx { continue; }
+        if stream.index() != stream_a_idx {
+            continue;
+        }
         if let Some(end) = end_ts {
             if let Some(pts) = packet.pts() {
-                let pts_us = pts * 1_000_000 * i64::from(tb_a.numerator()) / i64::from(tb_a.denominator());
-                if pts_us > end { break; }
+                let pts_us =
+                    pts * 1_000_000 * i64::from(tb_a.numerator()) / i64::from(tb_a.denominator());
+                if pts_us > end {
+                    break;
+                }
             }
         }
         packets_a.push(packet);
     }
     for (stream, packet) in ictx_b.packets() {
-        if stream.index() != stream_b_idx { continue; }
+        if stream.index() != stream_b_idx {
+            continue;
+        }
         if let Some(end) = end_ts {
             if let Some(pts) = packet.pts() {
-                let pts_us = pts * 1_000_000 * i64::from(tb_b.numerator()) / i64::from(tb_b.denominator());
-                if pts_us > end { break; }
+                let pts_us =
+                    pts * 1_000_000 * i64::from(tb_b.numerator()) / i64::from(tb_b.denominator());
+                if pts_us > end {
+                    break;
+                }
             }
         }
         packets_b.push(packet);
@@ -519,11 +561,20 @@ fn run_two_input_metric_filter(
 
     // Drain sink
     let mut filtered = ffmpeg::frame::Video::empty();
-    while graph.get("out").unwrap().sink().frame(&mut filtered).is_ok() {}
+    while graph
+        .get("out")
+        .unwrap()
+        .sink()
+        .frame(&mut filtered)
+        .is_ok()
+    {}
 
     // Read stats file
     if !tmp.exists() {
-        return Err(Error::Other(format!("FFmpeg {} filter produced no stats file", metric_name)));
+        return Err(Error::Other(format!(
+            "FFmpeg {} filter produced no stats file",
+            metric_name
+        )));
     }
     let content = std::fs::read_to_string(&tmp)
         .map_err(|e| Error::Other(format!("Failed to read {} log: {}", metric_name, e)))?;
@@ -532,12 +583,24 @@ fn run_two_input_metric_filter(
 }
 
 /// Run FFmpeg SSIM filter via library API
-fn run_ffmpeg_ssim(path_a: &Path, path_b: &Path, start_time: Option<f64>, end_time: Option<f64>, sample_fps: Option<f64>) -> Result<String> {
+fn run_ffmpeg_ssim(
+    path_a: &Path,
+    path_b: &Path,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+    sample_fps: Option<f64>,
+) -> Result<String> {
     run_two_input_metric_filter(path_a, path_b, "ssim", start_time, end_time, sample_fps)
 }
 
 /// Run FFmpeg PSNR filter via library API
-fn run_ffmpeg_psnr(path_a: &Path, path_b: &Path, start_time: Option<f64>, end_time: Option<f64>, sample_fps: Option<f64>) -> Result<String> {
+fn run_ffmpeg_psnr(
+    path_a: &Path,
+    path_b: &Path,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+    sample_fps: Option<f64>,
+) -> Result<String> {
     run_two_input_metric_filter(path_a, path_b, "psnr", start_time, end_time, sample_fps)
 }
 

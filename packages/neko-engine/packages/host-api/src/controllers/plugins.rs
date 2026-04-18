@@ -45,9 +45,10 @@ impl Controller for PluginsController {
                     .id
                     .ok_or_else(|| ApiError::InvalidRequest("id required".to_string()))?;
 
-                let plugin = self.plugin_manager.get(&id).ok_or_else(|| {
-                    ApiError::NotFound(format!("Plugin not found: {id}"))
-                })?;
+                let plugin = self
+                    .plugin_manager
+                    .get(&id)
+                    .ok_or_else(|| ApiError::NotFound(format!("Plugin not found: {id}")))?;
 
                 let response = serde_json::to_value(&plugin)?;
                 Ok(ActionResponse::ok("", response))
@@ -58,9 +59,9 @@ impl Controller for PluginsController {
                     .id
                     .ok_or_else(|| ApiError::InvalidRequest("id required".to_string()))?;
 
-                self.plugin_manager.enable(&id).map_err(|e| {
-                    ApiError::ServiceError(format!("Failed to enable plugin: {e}"))
-                })?;
+                self.plugin_manager
+                    .enable(&id)
+                    .map_err(|e| ApiError::ServiceError(format!("Failed to enable plugin: {e}")))?;
 
                 Ok(ActionResponse::ok(
                     "",

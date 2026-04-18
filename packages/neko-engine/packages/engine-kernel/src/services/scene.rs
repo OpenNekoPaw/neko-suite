@@ -3,11 +3,11 @@
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
 use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
+use neko_engine_types::easing::EasingType;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::components::AnimationChannelInfo;
 use neko_runtime_scene::ik::IkChainInfo;
 use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
-use neko_engine_types::easing::EasingType;
 use std::collections::HashMap;
 use std::path::Path;
 

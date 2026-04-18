@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::{AssetCache, CameraParams, PbrRenderer, SceneRenderOutput};
 use crate::gpu::GpuContext;
 use crate::services::scene::ISceneService;
+use neko_engine_types::easing::EasingType;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::components::{
     AnimationChannelInfo, GlobalTransform, MeshRef, NodeName, SceneNodeId, Transform,
@@ -18,7 +19,6 @@ use neko_runtime_scene::project::NkmProject;
 use neko_runtime_scene::world::{
     AnimationClipInfo, BevySceneWorld, SceneDelta, SceneSnapshot, SceneWorld,
 };
-use neko_engine_types::easing::EasingType;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
