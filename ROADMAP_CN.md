@@ -254,6 +254,23 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P2：提取 `runtime-format` crate（将文件格式探测从 engine-kernel 解耦）
 - [ ] P3：Connector 插件支持（外部 sidecar/远程 runtime 声明 + 健康检查）
 
+### AI 视频参考系统
+> [ADR](./docs/architecture/ai-video-reference-system.md) — 运镜/机位/光影 + 2D/3D 参考 + 角色一致性的统一框架，含显式运镜翻译管道
+
+**动机**：AI 视频生成的参考处理散落多处（IP-Adapter 仅单镜头 / 无跨镜头角色绑定 / 无自动化 3D→2D 参考渲染 / 各 provider 适配器中的运镜词汇不一致）。2026-04 商业模型（Seedance 2.0 / Veo 3.1 / Sora 2 / Runway Gen-4 / Kling O3）已原生支持 L1-L2 参考 + 运镜控制，本系统是**适配层收敛**而非重造能力。**所有 provider 无原生 3D input**，3D 相机轨迹必须经三路径产物转换（提示词 / 首末帧 / 深度序列）。
+
+**分期推进**：
+- [ ] **P1 类型 + Resolver + Path A**：`ReferenceStrategy`（L0-L5）+ `CameraKeyframe` + `CameraMotionAnalysis` 类型 + `ReferenceStrategyResolver`（**双轴能力矩阵**：参考层次 × 运镜通道）+ Agent MCP 工具 + Seedance/Veo 适配器 + **`CameraMotionAnalyzer`**（Path A：3D → 电影语言提示词，L1 语法层感知，每次生成）
+- [ ] **P2 3D→2D Turnaround + Path B + ControlNet Producer**：runtime-scene `render_views` 离屏 action + GalleryNode "从 3D 模型填充" 自动填充 + turnaround 缓存 + 适配器层 L4 → L2 降级 + **`KeyframeRenderer` + `CameraPayloadBuilder`**（Path B：3D → 首/末帧，L2 构图层感知）+ **`ControlNetAssetProducer` 接口 + `Image2DControlProducer`**（@neko/shared 源无关 ControlNet 产物接口，收编 controlnet-pipeline.md §E5）
+- [ ] **P3 跨镜头一致性 + Path C + 3D/Puppet Producers**：`CharacterBundle.referenceSet` 持久化绑定 + 通过 characterId 查找自动注入 `ImageGenerationRequest.characterBindings[]` + **`MotionSequenceRenderer`**（Path C：depth/normal/低分 RGB 序列供 Kling O3 + ControlNet-video 使用，L3 空间层感知，可选）+ **`Scene3DControlProducer`**（wgpu 深度/法线/骨骼投影 — 真值控制图）+ **`PuppetControlProducer`**（可选；Live2D/INP 2D 骨骼 + 轮廓）+ PayloadBuilder 补齐 Provider ControlNet 能力矩阵
+- [ ] **P4 质量门禁**：CLIP 身份一致性 + 机位 LLM 评分 + HSV 光影连续性 + 轨迹与 3D 真值保真度指标
+
+**感知决策**：L1 提示词规范化默认每次生成都执行（成本低，受益普适）。L2 首末帧渲染推荐给多镜头制作（跨镜头一致性是核心痛点）。L3 深度/运动序列仅当绑定 3D 场景时启用（避免概念镜头的过度工程）。
+
+**ControlNet 源头决策**：统一 `ControlNetAssetProducer` 接口；有 3D 场景时首选 3D 渲染路径（真值 depth/normal/骨骼）；无 3D 场景或仅图片参考时回退 2D ONNX 路径（Depth Anything v2 / OpenPose / Canny）。对外输出始终为 PNG（provider 通用兼容）；raw float buffer 仅引擎内部保留供质量门禁使用。
+
+**交叉引用**：构建在 [controlnet-pipeline.md](./docs/architecture/controlnet-pipeline.md)（预处理器）+ [ai-technology-landscape.md](./docs/architecture/ai-technology-landscape.md)（HMR2 / Depth Anything ONNX）+ [canvas-agent-integration.md](./docs/architecture/canvas-agent-integration.md)（GenerationPromptPanel）+ [adr-character-unified-index.md](./docs/architecture/adr-character-unified-index.md)（characters.json 契约）+ [media-quality-assessment.md](./docs/architecture/media-quality-assessment.md)（验证）之上；依赖 **Camera Keyframe Track**（TODO.md line 136，neko-cut P2）作为相机轨迹数据源
+
 ---
 
 ## Phase 3.6：跨扩展语义层
@@ -612,4 +629,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新：2026-04-15（neko-agent Webview P0 完成 + neko-canvas NodeTypeDescriptor 统一注册表；Phase 3 ~89%）*
+*最后更新：2026-04-17（AI 视频参考系统：L0-L5 分层 + 双轴 Provider 能力矩阵（参考 × 运镜）+ 3D→2D turnaround 自动化 + `CharacterBundle.referenceSet` 跨镜头绑定 + 运镜翻译 §11 Path A/B/C（L1-L3 感知）+ 统一 §12 ControlNet 产物 producer 接口（2D ONNX / 3D 渲染 / Puppet）收编 controlnet-pipeline.md E5；详见 [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md)）*

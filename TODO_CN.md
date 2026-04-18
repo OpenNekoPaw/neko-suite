@@ -132,6 +132,41 @@
 - [ ] **变换工具实现**：旋转/缩放/倾斜（当前仅 UI 壳）
 - [ ] S.4 P2：`style_transfer` / 跨模块集成增强
 
+### AI 生成链路 — 战术级修复（2026-04-17 分析）
+> 素材 → 剧本/画布 → AI 视频 链路短板修复。独立于下方"AI 视频参考系统"的战略框架；以下为可在 1 周内完成的代码级修复，是后续统一框架的 enabler。
+- [ ] **P0：FAL 多图 IP-Adapter**（S，2h）— `fal-media-adapter.ts:268-277` 改用 `request.ipAdapterRefs.map()` 构建 `input.ip_adapters[{image, scale}]` 数组（FAL flux-general/ip-adapter 原生支持），解锁三视图多参考融合
+- [ ] **P0：取消 IP-Adapter strength 硬编码**（S，1h）— `neko-agent/extension/src/index.ts:766` 的 `strength: 0.6` 改为读 `input.ipAdapterStrength`；`ImageGenerationRequest` 加 `ipAdapterStrength?: number` 字段，贯通到 adapter
+- [ ] **P0：Story `@CHARACTER` → characterId 自动映射**（S，2-4h）— `storyScenePlanner.ts` 注入 `ICharacterWorkspaceIndex`，`buildShotPlansForScene` 内调 `resolveCharacter(name)` 填 `ShotPlan.characters[].characterId`；剧本语法零改动；依赖 Phase 3.6 `characters.json` P1（可并行推进）
+- [ ] **P1：视频 Adapter 结构化相机参数**（S，1-2h）— `runway-media-adapter.ts` / `luma-media-adapter.ts` 将 `cameraMovement/Angle/ShotScale` 从 prompt 拼接移到 body 字段（Luma 无原生字段时降级为 prompt 增强）；为后续 Motion Brush UI 预留接口
+- [ ] **P1：LoRA URL 通道**（M，4-6h）— `ImageGenerationRequest` 加 `loraUrl?` + `loraScale?`；`fal-media-adapter.ts` 构建 `input.loras = [{path, scale}]` 走 `fal-ai/flux-lora`；Canvas `GenerationPromptPanel` 加 LoRA URL 可选栏位
+- [ ] **P1：图→视频首帧自动衔接**（M，4-6h）— `neko.agent.generateForNode` image 结果 payload 补 `generatedImagePath`；Canvas ShotNode 加 `autoGenerateVideoAfterImage` 选项；Cut `generateVideoForClip` 加 `extractFirstFrame` 参数（调 engine `extractFrame(sourceUrl, 0)`）
+- [ ] **P2：生成物反向溯源**（M，1d）— `GeneratedAsset` 加 `inputs?: { ipAdapterRefs?, controlMode?, controlImageUrl? }` + `parentAssets?: string[]`；`GeneratedAssetIndex` 加 `reverseIndex` + `getReferencedBy(id)`；`media-task-executor.ts` 成功返回时回写 task metadata；`index.json` version 1→2 迁移脚本
+- [ ] ~~**暂不做**：Motion Brush UI~~ — Provider API 端未成熟（Luma 仅吃 prompt、Runway 相机字段未公开），自建 UI 只能降级为文字；待 Provider 升级
+- [ ] ~~**暂不做**：内置 LoRA 训练~~ — fal/replicate 已提供 5 分钟出 LoRA，neko 侧应做"入库 + 调用"而非训练流水线
+
+### AI 视频参考系统
+> [ADR](./docs/architecture/ai-video-reference-system.md) — P2 统一框架（运镜/机位/光影 + 2D/3D 参考 + 角色一致性）；L0-L5 分层决策 + Provider 能力矩阵 + 运镜翻译管道
+- [ ] **P1：`ReferenceStrategy` 类型**（@neko/shared）：level L0-L5 + `ReferenceSource[]` + provider 偏好/排除 + rationale
+- [ ] **P1：`ReferenceStrategyResolver` 服务**：ShotNode + 角色注册表 + provider 能力 → 推荐策略；Agent MCP 工具 `resolve_reference_strategy`
+- [ ] **P1：Provider 能力矩阵（双轴）**：参考轴（L0-L5）+ 运镜轴（prompt / keyframes / video-ref / depth-control）声明 Seedance 2.0 / Veo 3.1 / Sora 2 / Runway Gen-4 / Kling O3 / Flux+LoRA；Resolver 按 provider 过滤不可行策略（例：Sora 2 禁第三方人脸）
+- [ ] **P1：Seedance + Veo 适配器**：新增 `SeedanceMediaAdapter` + `VeoMediaAdapter`（现有 DashScope/Kling/OpenAICompat 未覆盖）
+- [ ] **P1：运镜类型 + Path A 分析器**（@neko/shared + @neko/agent）：`CameraKeyframe` / `CameraMotionAnalysis` 类型 + `CameraMotionAnalyzer` 启发式（dolly/pan/tilt/zoom/crane + 机位角度 + FOV→镜头焦距 + 景别）→ `CinematicPromptFragments`；L1 语法层感知（每次生成都规范化提示词）
+- [ ] **P2：3D→2D Turnaround 渲染**：`scene:render_views` action（runtime-scene 离屏渲染）+ `NekoModelAPI.renderTurnaround` + GalleryNode "从 3D 模型填充" 右键入口
+- [ ] **P2：Turnaround 缓存**：`.neko/.cache/turnarounds/<modelHash>/` + 模型 mtime 变化自动失效
+- [ ] **P2：L4 → L2 降级管道**：所有商业模型无原生 3D input，3D 渲染序列自动喂给 provider 多图通道（Runway ≤3 / Veo ≤4）
+- [ ] **P2：Path B `KeyframeRenderer` + `CameraPayloadBuilder`**：3D 相机轨迹 → 首/末帧 PNG（复用引擎离屏渲染）；Builder 按 provider 能力选最丰富 payload（prompt + 首末帧 + 可选 video-ref）；L2 构图层感知
+- [ ] **P2：`ControlNetAssetProducer` 接口**（@neko/shared）：`ControlAsset` / `ControlChannel` 类型（depth/normal/pose/canny/seg/lineart）+ 统一 producer 接口；源无关 `produce(channel, context)` 返回 PNG + 可选 raw buffer + sidecar metadata
+- [ ] **P2：`Image2DControlProducer`**（runtime-ml）：收编 controlnet-pipeline.md §E5 工作；Depth Anything v2 / OpenPose / Canny / DIS / SAM ONNX 后端；输出 `ControlAsset { source: '2d-onnx', confidence }`
+- [ ] **P3：`Scene3DControlProducer`**（runtime-scene）：wgpu 深度缓冲 + 几何法线 render pass + 骨骼正向投影；输出 `ControlAsset { source: '3d-render', depthRange, cameraIntrinsics }`；与 §11 Path C 共享离屏渲染目标
+- [ ] **P3：`PuppetControlProducer`**（runtime-puppet，可选）：2D 骨骼投影 + 网格轮廓（Live2D/INP 角色）；仅输出 `pose` + `seg` 通道
+- [ ] **P3：ControlNet 缓存布局**：`.neko/.cache/controlnet/<2d|3d|puppet>/<hash>/<channel>.png` + `<channel>.json` sidecar + 可选 `.bin` raw buffer（受 `qualityGate.keepRawControlBuffers` 控制）
+- [ ] **P3：Provider ControlNet 矩阵**：PayloadBuilder 扩展 `ControlPayloadHint`（Flux/ComfyUI 一等支持 / Seedance-Veo-Runway 隐式通过参考图 / Kling O3 走 video-ref / Sora 2 不支持）
+- [ ] **P3：`CharacterBundle.referenceSet`**：`{ gallery / lora / turnaround }` 持久化绑定；依赖 adr-character-unified-index.md P1（characters.json 契约）
+- [ ] **P3：自动参考注入**：Agent 读 `ShotCharacter[].characterId` → 查 Bundle.referenceSet → 自动填充 `ImageGenerationRequest.characterBindings[]`；GenerationPromptPanel 显示"来自 Bundle X"可覆盖
+- [ ] **P3：`ImageGenerationRequest.characterBindings[]`**：平台适配器实现 `bindingsToPayload(strategy, capability)` — 商业 provider 走多图参考 / 开源生态走 LoRA + IP-Adapter
+- [ ] **P3：Path C `MotionSequenceRenderer`**：逐帧 depth/normal/低分 RGB 序列，供 Kling O3 video-ref + ControlNet-video 使用；L3 空间层感知（可选，需绑定 3D 场景）
+- [ ] **P4：参考质量门禁**：CLIP 人脸相似度（跨镜头身份）+ 机位 LLM 评分 + HSV 直方图连续性 + 轨迹与 3D 真值保真度（对接 media-quality-assessment.md）
+
 ---
 
 ## 🔴 三期 — 专业编辑能力
@@ -321,4 +356,4 @@
 
 ---
 
-*最后更新：2026-04-15（neko-agent Webview P0 完成：AppShell/ConversationController/ChatWorkspace 三层拆分 + 类型化消息协议 + 统一出站网关；neko-canvas NodeTypeDescriptor 统一注册表）*
+*最后更新：2026-04-17（AI 视频参考系统：L0-L5 分层 + 双轴 Provider 能力矩阵 + 3D→2D turnaround + 跨镜头角色绑定 + 运镜翻译 §11 Path A/B/C + 统一 §12 ControlNet 产物 producer（2D ONNX + 3D 渲染 + Puppet，PNG 主输出）收编 controlnet-pipeline.md E5；详见 [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md）。同步新增：AI 生成链路战术级修复 — 7 项代码级缺口修复，日级工作量，作为战略框架的前置 enabler。）*

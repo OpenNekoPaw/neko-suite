@@ -182,11 +182,46 @@
 - [ ] **Phase 4**: Webview DI (`IWebviewBridge` / `IBlobUrlRegistry` / `IStreamClientFactory` formal interfaces)
 - [ ] **Phase 5**: Unified extension i18n (consolidate all command/dialog/quick-pick text into `vscode.l10n`)
 
+### AI Generation Pipeline — Tactical Fixes (2026-04-17)
+> 素材 → 剧本/画布 → AI 视频 链路短板修复。独立于 AI Video Reference System 的战略框架；以下为可在 1 周内完成的代码级修复，作为后续统一框架的 enabler。
+- [ ] **P0: FAL 多图 IP-Adapter** (S, 2h) — `fal-media-adapter.ts:268-277` 改用 `request.ipAdapterRefs.map()` 构建 `input.ip_adapters[{image, scale}]` 数组（FAL flux-general/ip-adapter 原生支持），解锁三视图多参考融合
+- [ ] **P0: 取消 IP-Adapter strength 硬编码** (S, 1h) — `neko-agent/extension/src/index.ts:766` 的 `strength: 0.6` 改为读 `input.ipAdapterStrength`；`ImageGenerationRequest` 加 `ipAdapterStrength?: number` 字段，贯通到 adapter
+- [ ] **P0: Story `@CHARACTER` → characterId 自动映射** (S, 2-4h) — `storyScenePlanner.ts` 注入 `ICharacterWorkspaceIndex`，`buildShotPlansForScene` 内调 `resolveCharacter(name)` 填 `ShotPlan.characters[].characterId`；剧本语法零改动；依赖 Phase 3.6 `characters.json` P1（可与其同步推进）
+- [ ] **P1: 视频 Adapter 结构化相机参数** (S, 1-2h) — `runway-media-adapter.ts` / `luma-media-adapter.ts` 将 `cameraMovement/Angle/ShotScale` 从 prompt 拼接移到 body 字段（Luma 无原生字段时降级为 prompt 增强）；为后续 Motion Brush UI 预留接口
+- [ ] **P1: LoRA URL 通道** (M, 4-6h) — `ImageGenerationRequest` 加 `loraUrl?` + `loraScale?`；`fal-media-adapter.ts` 构建 `input.loras = [{path, scale}]` 走 `fal-ai/flux-lora`；Canvas `GenerationPromptPanel` 加 LoRA URL 可选栏位
+- [ ] **P1: 图→视频首帧自动衔接** (M, 4-6h) — `neko.agent.generateForNode` image 结果 payload 补 `generatedImagePath`；Canvas ShotNode 加 `autoGenerateVideoAfterImage` 选项；Cut `generateVideoForClip` 加 `extractFirstFrame` 参数（调 engine `extractFrame(sourceUrl, 0)`）
+- [ ] **P2: 生成物反向溯源** (M, 1d) — `GeneratedAsset` 加 `inputs?: { ipAdapterRefs?, controlMode?, controlImageUrl? }` + `parentAssets?: string[]`；`GeneratedAssetIndex` 加 `reverseIndex` + `getReferencedBy(id)`；`media-task-executor.ts` 成功返回时回写 task metadata；`index.json` version 1→2 迁移脚本
+- [ ] ~~**暂不做**: Motion Brush UI~~ — Provider API 端未成熟（Luma 仅吃 prompt、Runway 相机字段未公开），自建 UI 只能降级为文字；待 Provider 升级
+- [ ] ~~**暂不做**: 内置 LoRA 训练~~ — fal/replicate 已提供 5 分钟出 LoRA，neko 侧应做"入库 + 调用"而非训练流水线
+
 ### ControlNet Pipeline
 > [ADR](./docs/architecture/controlnet-pipeline.md)
 - [ ] **P0**: Fix 5 command bridge gaps (G1-G4: parameter forwarding + input type extension + API call corrections)
 - [ ] **P1**: E5 preprocessor in `runtime-ml` (depth / normal / pose / canny extraction via ONNX models)
 - [ ] **P2**: Auto-preprocessing workflow (canvas selects controlMode → auto-extract conditioning image from existing shot)
+
+### AI Video Reference System
+> [ADR](./docs/architecture/ai-video-reference-system.md) — P2 unified framework (camera/angle/lighting + 2D/3D references + character consistency); L0-L5 tier model + provider capability matrix + camera translation pipeline
+- [ ] **P1: `ReferenceStrategy` types** (@neko/shared): level L0-L5 + `ReferenceSource[]` + provider preferences/exclusions + rationale
+- [ ] **P1: `ReferenceStrategyResolver` service**: ShotNode + character registry + provider capability → suggested strategy; Agent MCP tool `resolve_reference_strategy`
+- [ ] **P1: Provider Capability Matrix (dual axis)**: reference axis (L0-L5) + camera axis (prompt / keyframes / video-ref / depth-control) declarations for Seedance 2.0 / Veo 3.1 / Sora 2 / Runway Gen-4 / Kling O3 / Flux+LoRA; resolver filters non-viable strategies (e.g. Sora 2 third-party face ban)
+- [ ] **P1: Seedance + Veo adapters**: new `SeedanceMediaAdapter` + `VeoMediaAdapter` (current DashScope/Kling/OpenAICompat don't cover these)
+- [ ] **P1: Camera types + Path A Analyzer** (@neko/shared + @neko/agent): `CameraKeyframe` / `CameraMotionAnalysis` types + `CameraMotionAnalyzer` heuristics (dolly/pan/tilt/zoom/crane + angle + lens from FOV + shot scale) → `CinematicPromptFragments`; Tier L1 syntax perception (normalize prompt for every generation)
+- [ ] **P2: 3D→2D Turnaround renderer**: `scene:render_views` action (runtime-scene offscreen render) + `NekoModelAPI.renderTurnaround` + GalleryNode "Fill from 3D model" right-click entry
+- [ ] **P2: Turnaround cache**: `.neko/.cache/turnarounds/<modelHash>/` + invalidation on model mtime change
+- [ ] **P2: L4 → L2 downgrade pipeline**: no provider has native 3D input; rendered sequence auto-fed into provider multi-ref channel (Runway ≤3 / Veo ≤4)
+- [ ] **P2: Path B `KeyframeRenderer` + `CameraPayloadBuilder`**: 3D camera path → start/end frame PNGs via engine offscreen render; builder selects richest provider payload (prompt + keyframes + optional video-ref); Tier L2 composition perception
+- [ ] **P2: `ControlNetAssetProducer` interface** (@neko/shared): `ControlAsset` / `ControlChannel` types (depth/normal/pose/canny/seg/lineart) + unified producer interface; source-agnostic `produce(channel, context)` returning PNG + optional raw buffer + sidecar metadata
+- [ ] **P2: `Image2DControlProducer`** (runtime-ml): absorbs controlnet-pipeline.md §E5 scope; Depth Anything v2 / OpenPose / Canny / DIS / SAM ONNX backends; output `ControlAsset { source: '2d-onnx', confidence }`
+- [ ] **P3: `Scene3DControlProducer`** (runtime-scene): wgpu depth buffer + geometric normal render pass + skeleton forward projection; output `ControlAsset { source: '3d-render', depthRange, cameraIntrinsics }`; shares offscreen render target with §11 Path C
+- [ ] **P3: `PuppetControlProducer`** (runtime-puppet, optional): 2D bone projection + mesh silhouette for Live2D/INP characters; emits `pose` + `seg` channels
+- [ ] **P3: ControlNet cache layout**: `.neko/.cache/controlnet/<2d|3d|puppet>/<hash>/<channel>.png` + `<channel>.json` sidecar + opt-in `.bin` raw buffer via `qualityGate.keepRawControlBuffers`
+- [ ] **P3: Provider ControlNet matrix**: extend payload builder with `ControlPayloadHint` per provider (Flux/ComfyUI first-class / Seedance-Veo-Runway implicit via ref images / Kling O3 via video-ref / Sora 2 unsupported)
+- [ ] **P3: `CharacterBundle.referenceSet`**: `{ gallery / lora / turnaround }` persistent binding; depends on adr-character-unified-index.md P1 (characters.json contract)
+- [ ] **P3: Auto reference injection**: Agent reads `ShotCharacter[].characterId` → looks up Bundle.referenceSet → fills `ImageGenerationRequest.characterBindings[]` automatically; GenerationPromptPanel shows "auto-referenced from Bundle X" with override
+- [ ] **P3: `ImageGenerationRequest.characterBindings[]`**: platform adapters implement `bindingsToPayload(strategy, capability)` — commercial providers route to multi-ref; OSS ecosystem routes to LoRA + IP-Adapter
+- [ ] **P3: Path C `MotionSequenceRenderer`**: per-frame depth/normal/low-res RGB sequence for Kling O3 video-ref + ControlNet-video; Tier L3 spatial perception (opt-in, 3D scene required)
+- [ ] **P4: Reference quality gate**: CLIP face similarity (cross-shot identity) + camera angle LLM scoring + HSV histogram continuity + trajectory fidelity vs 3D ground truth (integrate with media-quality-assessment.md)
 
 ### Media Diff — AI Semantic Phases
 > [ADR](./docs/architecture/diff.md)
@@ -494,4 +529,4 @@
 
 ---
 
-*Last updated: 2026-04-16 (AI technology integration: RetargetMap + HMR2 ONNX + Demucs ONNX + EmotionArc + CameraDirector AI + ai-auto-edit/ai-match-music 技术路径; see [ai-technology-landscape.md](./docs/architecture/ai-technology-landscape.md))*
+*Last updated: 2026-04-17 (AI Video Reference System: L0-L5 tier framework + dual-axis provider matrix + 3D→2D turnaround + cross-shot character binding + camera motion translation §11 Path A/B/C + unified §12 ControlNet asset producer (2D ONNX + 3D render + Puppet, PNG-primary output) absorbing controlnet-pipeline.md E5; see [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md). Plus: AI Generation Pipeline Tactical Fixes — 7 code-level gap fixes for asset→script/canvas→video flow, day-level work as enabler for the strategic framework.)*

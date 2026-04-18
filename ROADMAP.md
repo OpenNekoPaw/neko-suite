@@ -288,6 +288,23 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - [ ] **P1**: E5 preprocessor in `runtime-ml` (depth / normal / pose / canny extraction via ONNX)
 - [ ] **P2**: Auto-preprocessing workflow (canvas selects controlMode → auto-extract conditioning image from shot)
 
+### AI Video Reference System
+> [ADR](./docs/architecture/ai-video-reference-system.md) — Unified framework for camera/angle/lighting + 2D/3D references + character consistency, with explicit camera motion translation pipeline
+
+**Motivation**: AI video generation has fragmented reference handling (IP-Adapter per-shot only, no cross-shot character binding, no automated 3D→2D reference rendering, camera vocabulary inconsistent across provider adapters). Commercial models (Seedance 2.0 / Veo 3.1 / Sora 2 / Runway Gen-4 / Kling O3) already support L1-L2 reference + camera control natively; this system is a thin adaptation layer, not a reimplementation. **No provider accepts native 3D input**, so 3D camera paths must be translated through three artifact paths (prompt / keyframes / depth-seq).
+
+**Phased rollout**:
+- [ ] **P1 Types + Resolver + Path A**: `ReferenceStrategy` (L0-L5) + `CameraKeyframe` + `CameraMotionAnalysis` types + `ReferenceStrategyResolver` with **dual-axis capability matrix** (reference tier × camera channel) + Agent MCP tool + Seedance/Veo adapters + **`CameraMotionAnalyzer`** (Path A: 3D → cinematic prompt, Tier L1 syntax perception, every generation)
+- [ ] **P2 3D→2D Turnaround + Path B + ControlNet Producer**: runtime-scene `render_views` offscreen action + GalleryNode "Fill from 3D" auto-fill + turnaround cache + L4 → L2 downgrade in adapters + **`KeyframeRenderer` + `CameraPayloadBuilder`** (Path B: 3D → start/end frame, Tier L2 composition perception) + **`ControlNetAssetProducer` interface + `Image2DControlProducer`** (source-agnostic ControlNet asset interface in @neko/shared, absorbs controlnet-pipeline.md §E5)
+- [ ] **P3 Cross-shot Consistency + Path C + 3D/Puppet Producers**: `CharacterBundle.referenceSet` persistent binding + auto injection into `ImageGenerationRequest.characterBindings[]` via characterId lookup + **`MotionSequenceRenderer`** (Path C: depth/normal/RGB-low sequence for Kling O3 + ControlNet-video, Tier L3 spatial perception, opt-in) + **`Scene3DControlProducer`** (wgpu depth/normal/skeleton projection — ground-truth control maps) + **`PuppetControlProducer`** (optional; 2D bone + silhouette for Live2D/INP) + provider ControlNet capability matrix in payload builder
+- [ ] **P4 Quality Gate**: CLIP identity consistency + camera angle LLM scoring + HSV lighting continuity + trajectory fidelity vs 3D ground truth metrics
+
+**Perception decision**: L1 prompt normalization ships with every generation (cheap, universal benefit). L2 keyframe rendering is recommended for multi-shot productions (the main consistency pain point). L3 depth/motion sequence is opt-in only when a 3D scene is bound (avoids over-engineering for concept shots).
+
+**ControlNet source decision**: unified `ControlNetAssetProducer` interface; 3D render path (ground-truth depth/normal/skeleton) preferred when shot is bound to a 3D scene; 2D ONNX path (Depth Anything v2 / OpenPose / Canny) fallback for photo references and concept shots. Output is always PNG (universal provider compatibility); raw float buffers stay engine-internal for quality gates.
+
+**Cross-reference**: builds on [controlnet-pipeline.md](./docs/architecture/controlnet-pipeline.md) (preprocessors) + [ai-technology-landscape.md](./docs/architecture/ai-technology-landscape.md) (HMR2 / Depth Anything ONNX) + [canvas-agent-integration.md](./docs/architecture/canvas-agent-integration.md) (GenerationPromptPanel) + [adr-character-unified-index.md](./docs/architecture/adr-character-unified-index.md) (characters.json contract) + [media-quality-assessment.md](./docs/architecture/media-quality-assessment.md) (validation); depends on **Camera Keyframe Track** (TODO.md line 136, neko-cut P2) for camera path data source
+
 ### Media Diff — AI Semantic Phases
 > [ADR](./docs/architecture/diff.md)
 - ⏳ **Phase 2B**: Video H.264+PCM streaming completion (WebSocket protocol + H.264 decoder + PCM audio sync; ~60% done)
@@ -798,4 +815,4 @@ agent/market are included in core; scenario sub-packs stack with zero duplicatio
 
 ---
 
-*Last updated: 2026-04-16 (AI Technology Integration roadmap: HMR2/Demucs/Depth Anything ONNX + RetargetMap + EmotionArc + CameraDirector + CharacterAgent + ai-auto-edit/ai-match-music + local model tiers; see [ai-technology-landscape.md](./docs/architecture/ai-technology-landscape.md))*
+*Last updated: 2026-04-17 (AI Video Reference System: L0-L5 tier framework + dual-axis provider capability matrix (reference × camera) + 3D→2D turnaround automation + `CharacterBundle.referenceSet` cross-shot binding + camera motion translation §11 Path A/B/C (L1-L3 perception) + unified §12 ControlNet asset producer interface (2D ONNX / 3D render / Puppet) absorbing controlnet-pipeline.md E5; see [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md))*

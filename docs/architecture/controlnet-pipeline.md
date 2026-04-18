@@ -4,8 +4,11 @@
 
 Proposed
 
+> **2026-04-17 更新**：本 ADR 的 §E5 预处理器工作已被 [ai-video-reference-system.md §12](./ai-video-reference-system.md) 的统一 `ControlNetAssetProducer` 接口收编。本文件继续作为 E5 ONNX 实现细节与命令桥接层 G1-G4 修复的权威来源；新的 2D/3D/Puppet 三源 producer 架构、`ControlAsset` 数据形状标准化、Provider ControlNet 能力矩阵在 §12 定义。新模块应 import `@neko/shared` 的 `ControlAsset` / `ControlChannel` / `ControlNetAssetProducer`，不要从本 ADR 的内联 TS 片段抄。
+
 ## 关联
 
+- [ai-video-reference-system.md](./ai-video-reference-system.md) — **统一 ControlNet producer 接口**（本 ADR E5 的上层抽象）+ 3D 源 producer 对偶实现
 - [sketch-2d-lighting.md](./sketch-2d-lighting.md) — 法线贴图生成与 E5 normal 提取共享能力
 - [agent-media-architecture.md](./agent-media-architecture.md) — GeneratedAsset 存储与资产索引
 - [canvas-agent-integration.md](./canvas-agent-integration.md) — Canvas × Agent 生成流程
