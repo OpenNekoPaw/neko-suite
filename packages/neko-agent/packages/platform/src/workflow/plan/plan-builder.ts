@@ -12,6 +12,7 @@
  */
 
 import type { AssetLibrary } from '../asset-library/types';
+import type { ConsistencyChecker, Constraint, Violation } from '../consistency/types';
 import type { MatchingEngine, Shot, ShotBindings } from '../matching/types';
 import type { Route } from '../types';
 
@@ -103,6 +104,8 @@ export interface PlanBuilderOptions {
   matchingEngine?: MatchingEngine;
   /** AssetLibrary needed alongside matchingEngine. */
   assetLibrary?: AssetLibrary;
+  /** Optional ConsistencyChecker — runs after matching to populate constraints/violations. */
+  consistencyChecker?: ConsistencyChecker;
   /** Override id generator for deterministic tests */
   generateId?: () => string;
   /** Override clock for deterministic tests */
@@ -120,7 +123,7 @@ export class PlanBuilder {
 
   async build(input: PlanBuildInput): Promise<LitePlan> {
     const stages = this.buildStages(input.route);
-    const shots = await this.buildShots(input);
+    const shotResult = await this.buildShots(input);
 
     return {
       id: this.generateId(),
@@ -128,7 +131,15 @@ export class PlanBuilder {
       status: 'pending' satisfies LitePlanStatus,
       route: input.route,
       stages,
-      ...(shots !== undefined && { shots }),
+      ...(shotResult !== undefined && { shots: shotResult.shots }),
+      ...(shotResult !== undefined &&
+        shotResult.constraints.length > 0 && {
+          constraints: shotResult.constraints,
+        }),
+      ...(shotResult !== undefined &&
+        shotResult.violations.length > 0 && {
+          violations: shotResult.violations,
+        }),
       ...(input.notes !== undefined && input.notes.length > 0 && { notes: input.notes }),
     };
   }
@@ -150,24 +161,44 @@ export class PlanBuilder {
     });
   }
 
-  private async buildShots(
-    input: PlanBuildInput,
-  ): Promise<ReadonlyArray<ShotBindingSummary> | undefined> {
+  private async buildShots(input: PlanBuildInput): Promise<
+    | {
+        shots: ReadonlyArray<ShotBindingSummary>;
+        constraints: ReadonlyArray<Constraint>;
+        violations: ReadonlyArray<Violation>;
+      }
+    | undefined
+  > {
     if (!input.shots || input.shots.length === 0) return undefined;
 
-    const { matchingEngine, assetLibrary } = this.options;
+    const { matchingEngine, assetLibrary, consistencyChecker } = this.options;
+    let rawBindings: ShotBindings[];
+
     if (!matchingEngine || !assetLibrary) {
       // No matching configured — surface the raw shots without bindings
-      return input.shots.map((s) => ({
+      rawBindings = input.shots.map((s) => ({
         shotId: s.id,
         primary: {},
         alternatives: {},
         unmatched: [],
       }));
+    } else {
+      rawBindings = [...(await matchingEngine.matchShots(input.shots, assetLibrary))];
     }
 
-    const results = await matchingEngine.matchShots(input.shots, assetLibrary);
-    return results.map((r) => toSummary(r));
+    const summaries = rawBindings.map((r) => toSummary(r));
+    if (!consistencyChecker) {
+      return { shots: summaries, constraints: [], violations: [] };
+    }
+    const report = consistencyChecker.check({
+      shots: input.shots,
+      bindings: rawBindings,
+    });
+    return {
+      shots: summaries,
+      constraints: report.constraints,
+      violations: report.violations,
+    };
   }
 }
 

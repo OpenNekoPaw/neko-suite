@@ -32,13 +32,42 @@ export {
 export {
   PlanBuilder,
   createPlanBuilder,
+  PlanStore,
+  transitionPlan,
+  canTransitionPlan,
+  nextPlanStatuses,
+  IllegalPlanTransitionError,
+  toNkPlan,
+  toLitePlan,
   type LitePlan,
   type LitePlanStatus,
   type PlanBuildInput,
   type PlanBuilderOptions,
   type PlannedStage,
+  type PlanStoreOptions,
+  type PlanStatus,
+  type PlanStatusEvent,
+  type PlanTransitionOptions,
+  type PersistentPlan,
   type ShotBindingSummary,
 } from './plan';
+
+// Horizontal subsystem: ConsistencyChecker
+export {
+  ConsistencyCheckerImpl,
+  createConsistencyChecker,
+  characterLockRule,
+  timeProgressionRule,
+  type CheckContext,
+  type ConsistencyChecker,
+  type ConsistencyCheckResult,
+  type ConsistencyRule,
+  type Constraint,
+  type ConstraintKind,
+  type Violation,
+  type ViolationFix,
+  type ViolationSeverity,
+} from './consistency/consistency-checker';
 
 // Horizontal subsystem: MatchingEngine
 export {

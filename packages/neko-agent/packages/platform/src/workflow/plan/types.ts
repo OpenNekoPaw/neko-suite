@@ -6,6 +6,7 @@
  */
 
 import type { BindingSlot } from '../asset-library/types';
+import type { Constraint, Violation } from '../consistency/types';
 import type { BindingCandidate } from '../matching/types';
 import type { Route } from '../types';
 
@@ -69,6 +70,13 @@ export interface LitePlan {
   readonly shots?: ReadonlyArray<ShotBindingSummary>;
   /** Free-form notes from PlanBuilder for the UI */
   readonly notes?: ReadonlyArray<string>;
+  /** Consistency constraints discovered during build (Phase 2 ConsistencyChecker) */
+  readonly constraints?: ReadonlyArray<Constraint>;
+  /**
+   * Violations of constraints — ephemeral UI hints. Recomputed by the checker
+   * on every build; not stored in the persistent `.nkplan`.
+   */
+  readonly violations?: ReadonlyArray<Violation>;
 }
 
 // =============================================================================
