@@ -38,14 +38,21 @@ export class LegacyImageModel implements ImageModelV3 {
     response: { timestamp: Date; modelId: string; headers: Record<string, string> | undefined };
     usage?: ImageModelV3Usage;
   }> {
+    // Extra fields forwarded by MediaTaskExecutor under the `neko` namespace.
+    // Carries ControlNet / IP-Adapter / inpaint / edit instruction parameters
+    // so legacy adapters (fal.ai, DashScope, Kling) receive them unchanged.
+    const nekoExtras =
+      (options.providerOptions?.['neko'] as Record<string, unknown> | undefined) ?? {};
+
     // Convert AI SDK options to legacy adapter request
-    const request = {
+    const request: Record<string, unknown> = {
       prompt: options.prompt ?? '',
       width: options.size ? parseInt(options.size.split('x')[0]) : undefined,
       height: options.size ? parseInt(options.size.split('x')[1]) : undefined,
-      aspectRatio: options.aspectRatio,
+      aspectRatio: (nekoExtras['aspectRatio'] as string | undefined) ?? options.aspectRatio,
       count: options.n,
       seed: options.seed,
+      ...nekoExtras,
     };
 
     const model = { name: this.modelId, id: this.modelId };

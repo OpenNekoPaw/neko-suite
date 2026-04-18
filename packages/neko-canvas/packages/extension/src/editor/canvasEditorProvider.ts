@@ -37,6 +37,89 @@ import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
 
+/**
+ * Extract prompt-building fields from a shot node for batch generation paths
+ * (e.g. `canvas_apply_style_transfer` → `generateBatch` → `generateImageForNode`)
+ * where no explicit prompt is supplied by the caller. Returns `undefined` when
+ * the node is not a shot so the caller can fall back to empty prompt.
+ */
+function extractShotPromptFields(node: CanvasNode):
+  | {
+      prompt: string;
+      shotScale?: string;
+      cameraMovement?: string;
+      cameraAngle?: string;
+    }
+  | undefined {
+  if (node.type !== 'shot') return undefined;
+  const data = node.data as {
+    visualDescription?: unknown;
+    shotScale?: unknown;
+    cameraMovement?: unknown;
+    cameraAngle?: unknown;
+    characterAction?: unknown;
+    emotion?: unknown;
+    sceneTags?: unknown;
+    characters?: Array<{ characterName?: unknown; emotion?: unknown }>;
+  };
+  const parts: string[] = [];
+  if (typeof data.visualDescription === 'string' && data.visualDescription.trim()) {
+    parts.push(data.visualDescription.trim());
+  }
+  if (Array.isArray(data.characters) && data.characters.length > 0) {
+    const names = data.characters
+      .map((c) => (typeof c?.characterName === 'string' ? c.characterName : ''))
+      .filter((n) => n.length > 0);
+    if (names.length > 0) parts.push(`Characters: ${names.join(', ')}`);
+  }
+  if (typeof data.characterAction === 'string' && data.characterAction.trim()) {
+    parts.push(`Action: ${data.characterAction.trim()}`);
+  }
+  if (Array.isArray(data.emotion) && data.emotion.length > 0) {
+    const emotions = data.emotion.filter((e): e is string => typeof e === 'string' && e.length > 0);
+    if (emotions.length > 0) parts.push(`Emotion: ${emotions.join(', ')}`);
+  }
+  if (Array.isArray(data.sceneTags) && data.sceneTags.length > 0) {
+    const tags = data.sceneTags.filter((t): t is string => typeof t === 'string' && t.length > 0);
+    if (tags.length > 0) parts.push(`Tags: ${tags.join(', ')}`);
+  }
+  const result: {
+    prompt: string;
+    shotScale?: string;
+    cameraMovement?: string;
+    cameraAngle?: string;
+  } = { prompt: parts.join('. ') };
+  if (typeof data.shotScale === 'string') result.shotScale = data.shotScale;
+  if (typeof data.cameraMovement === 'string') result.cameraMovement = data.cameraMovement;
+  if (typeof data.cameraAngle === 'string') result.cameraAngle = data.cameraAngle;
+  return result;
+}
+
+/**
+ * Extract IP-Adapter reference IDs from a canvas node.
+ * Shot nodes may have a top-level `referenceNodeId` and/or per-character
+ * `characters[i].referenceNodeId`. Returns `undefined` if the node has no refs.
+ */
+function extractReferenceRefs(node: CanvasNode): string[] | undefined {
+  if (node.type !== 'shot') return undefined;
+  const data = node.data as {
+    referenceNodeId?: unknown;
+    characters?: Array<{ referenceNodeId?: unknown }>;
+  };
+  const refs = new Set<string>();
+  if (typeof data.referenceNodeId === 'string' && data.referenceNodeId) {
+    refs.add(data.referenceNodeId);
+  }
+  if (Array.isArray(data.characters)) {
+    for (const c of data.characters) {
+      if (typeof c?.referenceNodeId === 'string' && c.referenceNodeId) {
+        refs.add(c.referenceNodeId);
+      }
+    }
+  }
+  return refs.size > 0 ? Array.from(refs) : undefined;
+}
+
 function mapStoryScriptIndexToCanvasScenes(index: NekoStoryScriptIndex | undefined): ScriptScene[] {
   if (!index) {
     return [];
@@ -372,14 +455,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   async generateImageForNode(nodeId: string, cellId?: string): Promise<void> {
     const node = await this.getNode(nodeId);
     const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
+    const referenceRefs = node ? extractReferenceRefs(node) : undefined;
+    const shotFields = node ? extractShotPromptFields(node) : undefined;
 
     this.scheduler.enqueue({
       nodeId,
       cellId,
       params: {
-        prompt: '',
+        prompt: shotFields?.prompt ?? '',
+        shotScale: shotFields?.shotScale,
+        cameraMovement: shotFields?.cameraMovement,
+        cameraAngle: shotFields?.cameraAngle,
         sourceNodeId: lineage?.sourceNodeId ?? nodeId,
         characterIds: lineage?.characterIds ? [...lineage.characterIds] : undefined,
+        referenceRefs,
       },
       onProgress: (status, dataUrl) => {
         this.activeWebviewPanel?.webview.postMessage({
@@ -1063,8 +1152,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!nodeId || typeof rawParams['prompt'] !== 'string') break;
         const node = await this.getNode(nodeId);
         const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
+        // Strip any nodeId/cellId injected by webview — use trusted scheduler params only
+        const {
+          nodeId: _nId,
+          cellId: _cId,
+          ...sanitized
+        } = rawParams as Record<string, unknown> & { nodeId?: unknown; cellId?: unknown };
+        const refsFromNode = node ? extractReferenceRefs(node) : undefined;
         const params = {
-          ...rawParams,
+          ...sanitized,
           prompt: rawParams['prompt'],
           sourceNodeId:
             typeof rawParams['sourceNodeId'] === 'string'
@@ -1077,6 +1173,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             : lineage?.characterIds
               ? [...lineage.characterIds]
               : undefined,
+          referenceRefs: Array.isArray(rawParams['referenceRefs'])
+            ? rawParams['referenceRefs'].filter(
+                (value): value is string => typeof value === 'string' && value.length > 0,
+              )
+            : refsFromNode,
         };
 
         this.scheduler.enqueue({

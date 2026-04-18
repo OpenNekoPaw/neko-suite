@@ -538,6 +538,11 @@ impl Element {
         matches!(self.element_type, ElementType::Shape(_))
     }
 
+    /// Check if this is a subtitle element
+    pub fn is_subtitle(&self) -> bool {
+        matches!(self.element_type, ElementType::Subtitle(_))
+    }
+
     /// Convert element transform to GPU Transform2D
     pub fn to_transform_2d(&self) -> Transform2D {
         Transform2D {

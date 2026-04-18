@@ -264,11 +264,44 @@ export class MediaTaskExecutor {
         const size =
           imgReq.width && imgReq.height ? (`${imgReq.width}x${imgReq.height}` as const) : undefined;
 
+        // Carry ControlNet / IP-Adapter / inpaint / edit fields through providerOptions
+        // so the legacy bridge (LegacyImageModel) can forward them to the adapter.
+        // Native AI SDK providers ignore unknown namespaces, so this is safe.
+        const nekoProviderOptions: Record<string, unknown> = {};
+        if (imgReq.negativePrompt !== undefined)
+          nekoProviderOptions['negativePrompt'] = imgReq.negativePrompt;
+        if (imgReq.controlImageBase64 !== undefined)
+          nekoProviderOptions['controlImageBase64'] = imgReq.controlImageBase64;
+        if (imgReq.controlMode !== undefined)
+          nekoProviderOptions['controlMode'] = imgReq.controlMode;
+        if (imgReq.controlStrength !== undefined)
+          nekoProviderOptions['controlStrength'] = imgReq.controlStrength;
+        if (imgReq.ipAdapterRefs !== undefined)
+          nekoProviderOptions['ipAdapterRefs'] = imgReq.ipAdapterRefs;
+        if (imgReq.referenceImageBase64 !== undefined)
+          nekoProviderOptions['referenceImageBase64'] = imgReq.referenceImageBase64;
+        if (imgReq.referenceImageUrl !== undefined)
+          nekoProviderOptions['referenceImageUrl'] = imgReq.referenceImageUrl;
+        if (imgReq.maskBase64 !== undefined) nekoProviderOptions['maskBase64'] = imgReq.maskBase64;
+        if (imgReq.inpaintStrength !== undefined)
+          nekoProviderOptions['inpaintStrength'] = imgReq.inpaintStrength;
+        if (imgReq.editInstruction !== undefined)
+          nekoProviderOptions['editInstruction'] = imgReq.editInstruction;
+        if (imgReq.style !== undefined) nekoProviderOptions['style'] = imgReq.style;
+        if (imgReq.aspectRatio !== undefined)
+          nekoProviderOptions['aspectRatio'] = imgReq.aspectRatio;
+        if (imgReq.quality !== undefined) nekoProviderOptions['quality'] = imgReq.quality;
+
         const result = await generateImage({
           model: imageModel,
           prompt: imgReq.prompt,
           n: imgReq.count ?? 1,
           size: size as `${number}x${number}` | undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(Object.keys(nekoProviderOptions).length > 0
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ({ providerOptions: { neko: nekoProviderOptions } } as any)
+            : {}),
         });
 
         onProgress(100);

@@ -10,6 +10,7 @@ import type {
   AudioElement,
   TextElement,
   ShapeElement,
+  SubtitleElement,
 } from '../../types/element';
 import type { ShapeInstance, ShapeStyle, RectangleShape } from '../../types/shape';
 import type { OperationMeta } from '../types';
@@ -123,6 +124,36 @@ export function createTestShapeElement(overrides: Partial<ShapeElement> = {}): S
     trimStart: 0,
     trimEnd: 0,
     transform: { x: 0.5, y: 0.5, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: false,
+    hidden: false,
+    locked: false,
+    ...overrides,
+  };
+}
+
+export function createTestSubtitleElement(
+  overrides: Partial<SubtitleElement> = {},
+): SubtitleElement {
+  return {
+    id: `elem-${++counter}`,
+    type: 'subtitle',
+    name: 'Test Subtitle',
+    text: 'Hello World',
+    fontSize: 48,
+    color: '#ffffff',
+    fontFamily: 'Arial',
+    backgroundColor: 'transparent',
+    textAlign: 'center',
+    strokeColor: 'transparent',
+    strokeWidth: 0,
+    duration: 5,
+    startTime: 0,
+    trimStart: 0,
+    trimEnd: 0,
+    transform: { x: 0.5, y: 0.85, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
     opacity: 1,
     blendMode: 'normal',
     effects: [],

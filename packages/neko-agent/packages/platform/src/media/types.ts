@@ -57,8 +57,10 @@ export type ControlMode =
  * IP-Adapter reference for style/subject transfer
  */
 export interface IPAdapterReference {
-  /** Reference image as base64-encoded PNG */
+  /** Reference image as base64-encoded bytes (no data: prefix) */
   imageBase64: string;
+  /** MIME type of `imageBase64` (e.g. `image/jpeg`, `image/webp`); defaults to `image/png` when omitted */
+  mimeType?: string;
   /** Influence strength 0.0–1.0 */
   strength?: number;
   /** Focus on style vs subject */

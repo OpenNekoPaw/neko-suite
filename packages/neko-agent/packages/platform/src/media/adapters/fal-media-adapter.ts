@@ -264,11 +264,12 @@ export class FalMediaAdapter extends BaseMediaAdapter {
       }
     }
 
-    // IP-Adapter references
+    // IP-Adapter references (respect per-ref MIME when provided)
     if (request.ipAdapterRefs?.length) {
       const ref = request.ipAdapterRefs[0];
       if (ref) {
-        input.ip_adapter_image = `data:image/png;base64,${ref.imageBase64}`;
+        const mime = ref.mimeType ?? 'image/png';
+        input.ip_adapter_image = `data:${mime};base64,${ref.imageBase64}`;
         if (ref.strength != null) {
           input.ip_adapter_scale = ref.strength;
         }

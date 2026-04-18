@@ -1,12 +1,24 @@
 /**
  * NewAPI Chat Image Model - ImageModelV3 implementation using Chat Completions
  *
- * For multimodal LLMs that generate images via chat (Gemini, GPT-image):
- * - POST /v1/chat/completions with modalities: ['text', 'image']
- * - Response content includes base64 image parts
+ * ⚠ EXPERIMENTAL / PROVIDER-SPECIFIC.
  *
- * This model implements ImageModelV3 so it can be used interchangeably
- * with NewAPIImageModel (which uses /v1/images/generations).
+ * The OpenAI-compatible Chat Completions spec documents `modalities: ['text']`
+ * and `modalities: ['text','audio']` for output; `['text','image']` is NOT part
+ * of the documented contract. Standard NewAPI/OneAPI proxies may reject this
+ * request shape or return text-only responses (which this model treats as an
+ * error — see `doGenerate`).
+ *
+ * This implementation targets a narrow set of providers that **are** known to
+ * return images in chat responses under provider-specific extensions:
+ *   - Gemini 2.0+ native image generation (via direct Google endpoint)
+ *   - GPT-image in chat mode (where available via proxy)
+ *   - Some NewAPI deployments that route to image-capable backends
+ *
+ * For spec-compliant image generation, prefer `NewAPIImageModel`, which uses
+ * `/v1/images/generations` for text-to-image and `/v1/images/edits` for
+ * inpainting. This chat path is retained for multimodal LLMs where image
+ * output is intertwined with reasoning.
  */
 
 import type {
@@ -80,9 +92,81 @@ export class NewAPIChatImageModel implements ImageModelV3 {
     const baseUrl = this.getBaseUrl();
     const url = `${baseUrl}/v1/chat/completions`;
 
+    // Forward ControlNet / IP-Adapter / reference / mask / edit fields as multimodal
+    // content parts so chat-style image models (Gemini, GPT-image) receive the visual
+    // context along with the text prompt.
+    const nekoExtras =
+      (options.providerOptions?.['neko'] as Record<string, unknown> | undefined) ?? {};
+
+    // ── Text: prompt + edit/negative/style/control semantics ────────────────
+    const textPieces: string[] = [options.prompt];
+    const editInstruction = nekoExtras['editInstruction'] as string | undefined;
+    const negativePrompt = nekoExtras['negativePrompt'] as string | undefined;
+    const style = nekoExtras['style'] as string | undefined;
+    const controlMode = nekoExtras['controlMode'] as string | undefined;
+    const controlStrength = nekoExtras['controlStrength'] as number | undefined;
+    const inpaintStrength = nekoExtras['inpaintStrength'] as number | undefined;
+    if (style) textPieces.push(`Style: ${style}`);
+    if (editInstruction) textPieces.push(`Edit: ${editInstruction}`);
+    if (negativePrompt) textPieces.push(`Avoid: ${negativePrompt}`);
+    if (controlMode) {
+      const strength = typeof controlStrength === 'number' ? ` (strength ${controlStrength})` : '';
+      textPieces.push(`ControlNet: ${controlMode}${strength}`);
+    }
+    if (inpaintStrength !== undefined) {
+      textPieces.push(`Inpaint strength: ${inpaintStrength} (white mask = repaint area)`);
+    }
+
+    // ── Image parts: each image carries an explicit role label so the model
+    // can bind semantics (mask vs control vs reference vs IP-Adapter) rather
+    // than relying on positional order.
+    const parts: Array<Record<string, unknown>> = [];
+    parts.push({ type: 'text', text: textPieces.join('\n') });
+
+    const pushLabeledImage = (label: string, base64OrUrl: string, mimeHint = 'image/png'): void => {
+      const url = base64OrUrl.startsWith('data:')
+        ? base64OrUrl
+        : base64OrUrl.startsWith('http')
+          ? base64OrUrl
+          : `data:${mimeHint};base64,${base64OrUrl}`;
+      parts.push({ type: 'text', text: `[${label}]` });
+      parts.push({ type: 'image_url', image_url: { url } });
+    };
+
+    const referenceImageBase64 = nekoExtras['referenceImageBase64'] as string | undefined;
+    if (referenceImageBase64) pushLabeledImage('Reference image', referenceImageBase64);
+    const referenceImageUrl = nekoExtras['referenceImageUrl'] as string | undefined;
+    if (referenceImageUrl) pushLabeledImage('Reference image', referenceImageUrl);
+    const controlImageBase64 = nekoExtras['controlImageBase64'] as string | undefined;
+    if (controlImageBase64) {
+      const label = controlMode
+        ? `ControlNet conditioning (${controlMode})`
+        : 'ControlNet conditioning';
+      pushLabeledImage(label, controlImageBase64);
+    }
+    const maskBase64 = nekoExtras['maskBase64'] as string | undefined;
+    if (maskBase64) pushLabeledImage('Inpaint mask (white = repaint)', maskBase64);
+    const ipAdapterRefs = nekoExtras['ipAdapterRefs'] as
+      | Array<{ imageBase64?: string; mimeType?: string; mode?: string }>
+      | undefined;
+    if (ipAdapterRefs) {
+      ipAdapterRefs.forEach((ref, i) => {
+        if (ref?.imageBase64) {
+          const modeSuffix = ref.mode ? ` (${ref.mode})` : '';
+          const indexSuffix = ipAdapterRefs.length > 1 ? ` ${i + 1}` : '';
+          pushLabeledImage(
+            `IP-Adapter${indexSuffix}${modeSuffix}`,
+            ref.imageBase64,
+            ref.mimeType ?? 'image/png',
+          );
+        }
+      });
+    }
+
+    const userContent = parts.length > 1 ? parts : options.prompt;
     const body: Record<string, unknown> = {
       model: this.modelId,
-      messages: [{ role: 'user', content: options.prompt }],
+      messages: [{ role: 'user', content: userContent }],
       modalities: ['text', 'image'],
     };
 
@@ -118,7 +202,12 @@ export class NewAPIChatImageModel implements ImageModelV3 {
 
     if (images.length === 0) {
       throw new Error(
-        'Chat image generation: no images found in response. The model may not support image generation.',
+        `Chat image generation (${this.modelId}): no images in response. ` +
+          `This path relies on the non-standard 'modalities: ["text","image"]' extension; ` +
+          `your proxy may have stripped the modalities field or the selected model does ` +
+          `not generate images in chat mode. ` +
+          `Use NewAPIImageModel (/v1/images/generations) for spec-compliant text-to-image, ` +
+          `or select a model with native chat-image support (Gemini 2.0+ native, GPT-image).`,
       );
     }
 

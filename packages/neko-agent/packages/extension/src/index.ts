@@ -6,6 +6,7 @@
  */
 
 import * as path from 'path';
+import * as fsp from 'node:fs/promises';
 import * as vscode from 'vscode';
 import {
   ServiceCollection,
@@ -30,6 +31,11 @@ import {
 } from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
 import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
+import {
+  bootstrapOrchestrator,
+  isOrchestratorEnabled,
+  type Orchestrator,
+} from './workflow/orchestrator-bootstrap';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
@@ -38,6 +44,98 @@ import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
 import type { PipelineBootstrapResult } from './pipeline/pipeline-bootstrap';
 import { subscribePipelineProgress } from './pipeline/pipeline-progress-bridge';
+
+/** Infer an image MIME type from a file path extension; defaults to image/png. */
+function inferImageMime(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    case '.bmp':
+      return 'image/bmp';
+    case '.avif':
+      return 'image/avif';
+    default:
+      return 'image/png';
+  }
+}
+
+/**
+ * Convert a `file://` URL to a native filesystem path. Handles three cases:
+ *   1. POSIX absolute:    `file:///abs/path` → `/abs/path`
+ *   2. Windows drive:     `file:///C:/path`  → `C:/path` (strip leading `/`)
+ *   3. Windows UNC:       `file://server/share/a.png` → `\\server\share\a.png`
+ *
+ * UNC paths have a non-empty `host`; drive-letter and POSIX paths have an
+ * empty host. Without this branching, UNC URLs collapse to just the pathname
+ * and silently fail to read from network shares.
+ */
+function fileUrlToPath(url: string): string {
+  const parsed = new URL(url);
+  const pathname = decodeURIComponent(parsed.pathname);
+  const host = parsed.host;
+  if (host) {
+    // UNC: construct `\\server\share\...` (preserve backslashes for Windows APIs).
+    return `\\\\${host}${pathname.replace(/\//g, '\\')}`;
+  }
+  // Windows drive-letter paths come back as "/C:/foo" — strip the leading slash.
+  if (/^\/[A-Za-z]:[\\/]/.test(pathname)) {
+    return pathname.slice(1);
+  }
+  return pathname;
+}
+
+/**
+ * Resolve an image reference (data URL / file path / http URL) to a
+ * `{ base64, mimeType }` pair for downstream IP-Adapter / multimodal use.
+ *
+ * Accepted inputs:
+ *   - `data:image/png;base64,XXX`       → strips prefix, preserves declared MIME
+ *   - `/abs/path/to/image.jpg`          → reads file, infers MIME from extension
+ *   - `file:///abs/path/to/image.webp`  → reads file (Windows-safe), infers MIME
+ *   - `http(s)://...`                   → fetches, uses response content-type
+ *   - bare base64 string                → returned as-is with `image/png` default
+ */
+async function resolveImageToBase64(
+  source: string,
+): Promise<{ base64: string; mimeType: string } | undefined> {
+  if (!source) return undefined;
+  if (source.startsWith('data:')) {
+    const match = /^data:([^;]+);base64,(.*)$/s.exec(source);
+    if (!match) return undefined;
+    return { base64: match[2] ?? '', mimeType: match[1] ?? 'image/png' };
+  }
+  try {
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      const response = await fetch(source);
+      if (!response.ok) return undefined;
+      const buffer = await response.arrayBuffer();
+      const mimeType = response.headers.get('content-type') ?? inferImageMime(source);
+      return { base64: Buffer.from(buffer).toString('base64'), mimeType };
+    }
+    const filePath = source.startsWith('file://') ? fileUrlToPath(source) : source;
+    // POSIX absolute `/...`, Windows drive `C:\...` / `C:/...`, or UNC `\\server\share\...`
+    if (
+      filePath.startsWith('/') ||
+      /^[A-Za-z]:[\\/]/.test(filePath) ||
+      filePath.startsWith('\\\\')
+    ) {
+      const buffer = await fsp.readFile(filePath);
+      return { base64: buffer.toString('base64'), mimeType: inferImageMime(filePath) };
+    }
+    // Relative paths or unrecognized schemes (neko://, asset://): fall back to
+    // treating the string as already-base64 PNG. Adapters that accept bare
+    // base64 will continue to work; callers may override MIME if known.
+    return { base64: source, mimeType: 'image/png' };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Activate the extension
@@ -71,6 +169,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     bootstrapResult.toolRegistry,
   );
 
+  // Initialize Workflow Orchestrator (Phase 1 MVP — see
+  // docs/architecture/workflow-routing.md / plan-mode.md).
+  // Behind the `neko.workflow.orchestrator.enabled` setting; when disabled
+  // the extension keeps the legacy `neko.agent.startPipeline` path untouched.
+  const orchestrator: Orchestrator = await bootstrapOrchestrator({
+    platform: bootstrapResult.platform,
+    workDir: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    startPipeline: pipelineBootstrap.startPipeline,
+  });
+  context.subscriptions.push({ dispose: () => orchestrator.dispose() });
+
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
@@ -93,7 +202,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // Register commands
-  registerCommands(context, chatViewProvider, services, pipelineBootstrap);
+  registerCommands(context, chatViewProvider, services, pipelineBootstrap, orchestrator);
 
   // Register pipeline commands
   registerPipelineCommands(context, chatViewProvider);
@@ -241,6 +350,7 @@ function registerCommands(
   chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
   pipelineBootstrap: PipelineBootstrapResult,
+  orchestrator: Orchestrator,
 ): void {
   // Open AI Chat
   context.subscriptions.push(
@@ -315,6 +425,69 @@ function registerCommands(
         });
 
         return { pipelineId: handle.id, flowId: handle.flowId };
+      },
+    ),
+  );
+
+  // Routed Pipeline (Phase 1 MVP — Workflow/Plan/Pipeline glue).
+  // See docs/architecture/workflow-routing.md + plan-mode.md.
+  // Feature-flagged behind neko.workflow.orchestrator.enabled.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.agent.startRoutedPipeline',
+      async (params: {
+        /** The raw input to route; one of prompt/file/files/project */
+        input:
+          | { kind: 'prompt'; text: string }
+          | { kind: 'file'; path: string; size?: number }
+          | { kind: 'files'; paths: string[]; totalSize?: number }
+          | { kind: 'project'; path: string; workflow?: string };
+        /** Optional user override (forceLevel, etc.) */
+        routerOverrides?: {
+          forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+          skipPlanMode?: boolean;
+          disableLlmRouter?: boolean;
+        };
+        /** Optional global style / aspect ratio */
+        globalStyle?: string;
+        /** Whether to only build a plan (preview) and skip dispatch */
+        previewOnly?: boolean;
+        /** Optional progress event bridge */
+        eventCommand?: string;
+        eventPayload?: Record<string, unknown>;
+      }) => {
+        if (!isOrchestratorEnabled()) {
+          throw new Error(
+            'Workflow orchestrator is disabled. Enable it via the ' +
+              '"neko.workflow.orchestrator.enabled" setting (Phase 1 preview).',
+          );
+        }
+
+        if (params.previewOnly) {
+          const preview = await orchestrator.buildPlan(params.input, params.routerOverrides);
+          return {
+            route: preview.route,
+            plan: preview.plan,
+          };
+        }
+
+        const result = await orchestrator.startRoutedPipeline({
+          input: params.input,
+          ...(params.routerOverrides !== undefined && { routerOverrides: params.routerOverrides }),
+          ...(params.globalStyle !== undefined && { globalStyle: params.globalStyle }),
+        });
+
+        subscribePipelineProgress(chatViewProvider.webview, result.handle.id, result.handle, {
+          ...(params.eventCommand !== undefined && { eventCommand: params.eventCommand }),
+          ...(params.eventPayload !== undefined && { eventPayload: params.eventPayload }),
+        });
+
+        return {
+          route: result.route,
+          plan: result.plan,
+          pipelineId: result.handle.id,
+          flowId: result.handle.flowId,
+        };
       },
     ),
   );
@@ -577,6 +750,23 @@ function registerCommands(
         count?: number;
         characterIds?: string[];
         sourceNodeId?: string;
+        // ControlNet fields
+        controlMode?: string;
+        controlStrength?: number;
+        controlImageBase64?: string;
+        negativePrompt?: string;
+        // IP-Adapter fields
+        ipAdapterRefs?: Array<{
+          imageBase64: string;
+          mimeType?: string;
+          strength?: number;
+          mode?: string;
+        }>;
+        // Inpaint fields
+        maskBase64?: string;
+        inpaintStrength?: number;
+        // Edit instruction
+        editInstruction?: string;
       }): Promise<{ dataUrl: string } | undefined> => {
         try {
           const platform = services.get(IPlatform);
@@ -605,11 +795,97 @@ function registerCommands(
             metadata['characterIds'] = input.characterIds;
           }
 
+          // Resolve referenceRefs → IP-Adapter references (load gallery/shot images)
+          let resolvedIpAdapterRefs = input.ipAdapterRefs;
+          if (!resolvedIpAdapterRefs?.length && input.referenceRefs?.length) {
+            const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+            if (canvasExt?.isActive) {
+              const canvasApi = canvasExt.exports;
+              const refs: Array<{
+                imageBase64: string;
+                mimeType?: string;
+                strength?: number;
+                mode?: string;
+              }> = [];
+              for (const refStr of input.referenceRefs) {
+                const [refNodeId, refCellId] = refStr.split(':');
+                if (!refNodeId) continue;
+                try {
+                  const refNode = await canvasApi.nodes.get(refNodeId);
+                  if (!refNode) continue;
+                  // Prefer ADR-4 `generatedAsset.path` (absolute file path) over
+                  // the deprecated `generatedImage` (data URL / path string).
+                  let imageSource: string | undefined;
+                  if (refNode.type === 'gallery') {
+                    const data = refNode.data as {
+                      cells?: Array<{
+                        id: string;
+                        image?: string;
+                        generatedAsset?: { path?: string };
+                      }>;
+                    };
+                    if (data.cells) {
+                      const cell = refCellId
+                        ? data.cells.find((c) => c.id === refCellId)
+                        : data.cells.find((c) => c.generatedAsset?.path || c.image);
+                      imageSource = cell?.generatedAsset?.path ?? cell?.image;
+                    }
+                  } else if (refNode.type === 'shot') {
+                    const data = refNode.data as {
+                      generatedAsset?: { path?: string };
+                      generatedImage?: string;
+                    };
+                    imageSource = data.generatedAsset?.path ?? data.generatedImage;
+                  }
+                  if (!imageSource) continue;
+                  const resolved = await resolveImageToBase64(imageSource);
+                  if (resolved) {
+                    refs.push({
+                      imageBase64: resolved.base64,
+                      mimeType: resolved.mimeType,
+                      strength: 0.6,
+                      mode: 'both',
+                    });
+                  }
+                } catch {
+                  getRootLogger().warn(`Failed to resolve IP-Adapter reference: ${refStr}`);
+                }
+              }
+              if (refs.length > 0) {
+                resolvedIpAdapterRefs = refs;
+              }
+            }
+          }
+
           const task = await platform.media.generateImage({
             prompt: parts.join(', '),
-            ratio: (input.ratio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined) ?? '16:9',
+            aspectRatio:
+              (input.ratio as '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | undefined) ?? '16:9',
             count: input.count ?? 1,
             metadata,
+            style: input.style,
+            negativePrompt: input.negativePrompt,
+            controlImageBase64: input.controlImageBase64,
+            controlMode: input.controlMode as
+              | 'canny'
+              | 'depth'
+              | 'pose'
+              | 'normal'
+              | 'segment'
+              | 'lineart'
+              | 'softedge'
+              | 'scribble'
+              | undefined,
+            controlStrength: input.controlStrength,
+            ipAdapterRefs: resolvedIpAdapterRefs as Array<{
+              imageBase64: string;
+              mimeType?: string;
+              strength?: number;
+              mode?: 'style' | 'subject' | 'both';
+            }>,
+            maskBase64: input.maskBase64,
+            inpaintStrength: input.inpaintStrength,
+            editInstruction: input.editInstruction,
           });
 
           // Report generating status to the webview

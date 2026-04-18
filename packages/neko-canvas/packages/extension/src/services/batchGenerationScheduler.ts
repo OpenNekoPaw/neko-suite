@@ -172,20 +172,15 @@ export class BatchGenerationScheduler implements vscode.Disposable {
   private async callAgent(task: GenerationTask, signal: AbortSignal): Promise<string> {
     if (signal.aborted) throw new Error('Aborted');
 
-    // Build generation context from task params + node/cell IDs
+    // Build generation context — spread all params so ControlNet/IP-Adapter
+    // fields from the webview (controlMode, controlStrength, etc.) pass through.
+    // nodeId/cellId are applied AFTER the spread so params cannot redirect the
+    // request to a different target node.
     const generationInput = {
+      ...task.params,
       nodeId: task.nodeId,
       cellId: task.cellId,
-      prompt: task.params.prompt,
-      style: task.params.style,
-      ratio: task.params.ratio,
-      shotScale: task.params.shotScale,
-      cameraMovement: task.params.cameraMovement,
-      cameraAngle: task.params.cameraAngle,
-      referenceRefs: task.params.referenceRefs,
       count: task.params.count ?? 1,
-      characterIds: task.params.characterIds,
-      sourceNodeId: task.params.sourceNodeId,
     };
 
     const result = await vscode.commands.executeCommand<{ dataUrl: string } | undefined>(

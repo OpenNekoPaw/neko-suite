@@ -973,8 +973,25 @@ impl GpuExportPipeline {
             }
         }
 
+        // Render subtitle elements (after text, before scene3d)
+        let subtitle_z_start = (media_elements.len() + text_elements.len()) as i32;
+        let subtitle_elements = self.collect_visible_subtitles(time, subtitle_z_start);
+        if !subtitle_elements.is_empty() {
+            tracing::debug!(
+                "Rendering {} subtitle elements at time {:.2}s",
+                subtitle_elements.len(),
+                time
+            );
+            for (subtitle, z_idx) in &subtitle_elements {
+                if let Some(layer) = self.render_subtitle_to_gpu_layer(subtitle, *z_idx) {
+                    gpu_layers.push(layer);
+                }
+            }
+        }
+
         // Render 3D scene elements
-        let scene3d_z_start = (media_elements.len() + text_elements.len()) as i32;
+        let scene3d_z_start =
+            (media_elements.len() + text_elements.len() + subtitle_elements.len()) as i32;
         let scene3d_elements = self.collect_visible_scene3d(time, scene3d_z_start);
         if !scene3d_elements.is_empty() {
             tracing::debug!(
@@ -990,8 +1007,10 @@ impl GpuExportPipeline {
         }
 
         // Render shape elements (vector graphics)
-        let shape_z_start =
-            (media_elements.len() + text_elements.len() + scene3d_elements.len()) as i32;
+        let shape_z_start = (media_elements.len()
+            + text_elements.len()
+            + subtitle_elements.len()
+            + scene3d_elements.len()) as i32;
         let shape_elements = self.collect_visible_shapes(time, shape_z_start);
         if !shape_elements.is_empty() {
             tracing::debug!(
@@ -1350,6 +1369,31 @@ impl GpuExportPipeline {
         result
     }
 
+    /// Collect visible subtitle elements at a given time
+    fn collect_visible_subtitles(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
+        let mut result = Vec::new();
+        let mut z_index = z_index_start;
+
+        for track in &self.timeline.tracks {
+            if track.muted {
+                continue;
+            }
+
+            for element in &track.elements {
+                if !element.is_visible_at(time) {
+                    continue;
+                }
+
+                if element.is_subtitle() {
+                    result.push((element.clone(), z_index));
+                    z_index += 1;
+                }
+            }
+        }
+
+        result
+    }
+
     /// Collect visible 3D scene elements at a given time
     fn collect_visible_scene3d(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
         let mut result = Vec::new();
@@ -1396,6 +1440,43 @@ impl GpuExportPipeline {
         }
 
         result
+    }
+
+    /// Match webview preview semantics: values in [0, 1] are normalized project
+    /// coordinates, otherwise treat them as absolute pixels.
+    fn project_coord_to_pixels(value: f32, axis_size: u32) -> f32 {
+        if (0.0..=1.0).contains(&value) {
+            value * axis_size as f32
+        } else {
+            value
+        }
+    }
+
+    /// Resolve text-like element transforms using the same normalized-coordinate
+    /// rules as the webview preview overlay.
+    fn resolve_text_like_transform(
+        &self,
+        element: &Element,
+        default_x: f32,
+        default_y: f32,
+    ) -> crate::gpu::Transform2D {
+        if !element.transform.is_identity() {
+            let mut transform = element.to_transform_2d();
+            transform.x = Self::project_coord_to_pixels(transform.x, self.output_width);
+            transform.y = Self::project_coord_to_pixels(transform.y, self.output_height);
+            transform
+        } else {
+            crate::gpu::Transform2D {
+                x: default_x,
+                y: default_y,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+                anchor_x: 0.5,
+                anchor_y: 0.5,
+                _padding: 0.0,
+            }
+        }
     }
 
     /// Render a shape element to a GpuLayer via CPU rasterization
@@ -1500,22 +1581,11 @@ impl GpuExportPipeline {
         // Upload to GPU texture
         let texture = renderer.upload_to_texture(&rasterized);
 
-        // Build transform: use element transform, or center text in output
-        let transform = if !element.transform.is_identity() {
-            element.to_transform_2d()
-        } else {
-            // Default: center the text in the output
-            crate::gpu::Transform2D {
-                x: self.output_width as f32 / 2.0,
-                y: self.output_height as f32 / 2.0,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                rotation: 0.0,
-                anchor_x: 0.5,
-                anchor_y: 0.5,
-                _padding: 0.0,
-            }
-        };
+        let transform = self.resolve_text_like_transform(
+            element,
+            self.output_width as f32 / 2.0,
+            self.output_height as f32 / 2.0,
+        );
 
         let layer = GpuLayerBuilder::new()
             .transform(transform)
@@ -1526,6 +1596,79 @@ impl GpuExportPipeline {
         tracing::debug!(
             "Rendered text '{}' to {}x{} texture (z_index={})",
             text_data.content,
+            width,
+            height,
+            z_index
+        );
+
+        Some(layer)
+    }
+
+    /// Render a subtitle element to a GpuLayer (reuses TextRenderer)
+    fn render_subtitle_to_gpu_layer(
+        &mut self,
+        element: &Element,
+        z_index: i32,
+    ) -> Option<GpuLayer> {
+        let sub_data = match &element.element_type {
+            ElementType::Subtitle(s) => s,
+            _ => return None,
+        };
+
+        // Lazy-initialize text renderer (shared with render_text_to_gpu_layer)
+        if self.text_renderer.is_none() {
+            self.text_renderer = Some(TextRenderer::new(self.ctx.clone()));
+        }
+        let renderer = self.text_renderer.as_mut().unwrap();
+
+        // Map SubtitleElementData fields → TextStyle
+        let style_opts = crate::gpu::TextStyle {
+            line_height: Some(1.4), // Subtitles use wider line spacing for readability
+            text_decoration: None,
+            stroke_color: Some(sub_data.stroke_color.clone()),
+            stroke_width: Some(sub_data.stroke_width),
+            shadow: sub_data
+                .shadow
+                .as_ref()
+                .map(|s| crate::gpu::TextShadowStyle {
+                    color: s.color.clone(),
+                    offset_x: s.offset_x,
+                    offset_y: s.offset_y,
+                    blur: s.blur,
+                }),
+            background_color: Some(sub_data.background_color.clone()),
+        };
+
+        let rasterized = renderer.rasterize_styled(
+            &sub_data.text,
+            &sub_data.font_family,
+            sub_data.font_size,
+            &sub_data.color,
+            "normal", // Subtitles have no font_weight field
+            "normal", // Subtitles have no font_style field
+            Some(self.output_width as f32),
+            &style_opts,
+        )?;
+
+        let width = rasterized.width;
+        let height = rasterized.height;
+        let texture = renderer.upload_to_texture(&rasterized);
+
+        let transform = self.resolve_text_like_transform(
+            element,
+            self.output_width as f32 / 2.0,
+            self.output_height as f32 * 0.85,
+        );
+
+        let layer = GpuLayerBuilder::new()
+            .transform(transform)
+            .opacity(element.opacity as f32)
+            .z_index(z_index)
+            .build_from_rgba(texture, width, height);
+
+        tracing::debug!(
+            "Rendered subtitle '{}' to {}x{} texture (z_index={})",
+            sub_data.text,
             width,
             height,
             z_index
