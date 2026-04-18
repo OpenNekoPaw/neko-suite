@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createConsistencyChecker } from '../../consistency/consistency-checker';
-import { applyBindingToAll, editPlanBinding, type LitePlan } from '../index';
+import {
+  applyBindingToAll,
+  editPlanBinding,
+  togglePlanStageCheckpoint,
+  type LitePlan,
+} from '../index';
 import type { BindingCandidate, Shot } from '../../matching/types';
 
 function candidate(
@@ -207,5 +212,68 @@ describe('applyBindingToAll', () => {
     );
     // Unchanged because there was no existing alice binding on this shot
     expect(next.shots?.[0]?.primary.character).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// toggleStageCheckpoint
+// =============================================================================
+
+describe('togglePlanStageCheckpoint', () => {
+  const planWithStages = (): LitePlan => ({
+    id: 'plan_cp',
+    createdAt: 100,
+    status: 'pending',
+    route: {
+      level: 'L2',
+      flowId: 'flowE',
+      entryExtension: 'story',
+      skipStages: [],
+      reason: 'rule',
+      confidence: 0.9,
+      provenance: 'rules',
+    },
+    stages: [
+      { id: 'parseStoryboard', label: 'Parse', skipped: false },
+      { id: 'generatePrompts', label: 'Prompts', skipped: false, userCheckpoint: true },
+      { id: 'batchGenerate', label: 'Batch', skipped: true },
+    ],
+    shots: [],
+  });
+
+  it('flips the checkpoint when value is omitted', () => {
+    const plan = planWithStages();
+    const next = togglePlanStageCheckpoint(plan, { stageId: 'parseStoryboard' });
+    expect(next.stages[0]?.userCheckpoint).toBe(true);
+    const next2 = togglePlanStageCheckpoint(next, { stageId: 'generatePrompts' });
+    expect(next2.stages[1]?.userCheckpoint).toBeUndefined();
+  });
+
+  it('honours explicit value', () => {
+    const plan = planWithStages();
+    const next = togglePlanStageCheckpoint(plan, {
+      stageId: 'parseStoryboard',
+      value: true,
+    });
+    expect(next.stages[0]?.userCheckpoint).toBe(true);
+  });
+
+  it('no-ops on skipped stages', () => {
+    const plan = planWithStages();
+    const next = togglePlanStageCheckpoint(plan, { stageId: 'batchGenerate', value: true });
+    expect(next.stages[2]?.userCheckpoint).toBeUndefined();
+  });
+
+  it('no-ops on unknown stage id', () => {
+    const plan = planWithStages();
+    const next = togglePlanStageCheckpoint(plan, { stageId: 'nope', value: true });
+    expect(next).toEqual(plan);
+  });
+
+  it('leaves other stages untouched', () => {
+    const plan = planWithStages();
+    const next = togglePlanStageCheckpoint(plan, { stageId: 'parseStoryboard', value: true });
+    expect(next.stages[1]?.userCheckpoint).toBe(true); // generatePrompts unchanged
+    expect(next.stages[2]?.skipped).toBe(true);
   });
 });

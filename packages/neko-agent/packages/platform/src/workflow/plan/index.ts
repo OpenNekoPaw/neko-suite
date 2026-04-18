@@ -16,8 +16,10 @@ export { PlanStore, type PlanStoreOptions } from './plan-store';
 export {
   editBinding as editPlanBinding,
   applyToAll as applyBindingToAll,
+  toggleStageCheckpoint as togglePlanStageCheckpoint,
   type EditBindingInput,
   type ApplyToAllInput,
+  type ToggleCheckpointInput,
   type EditContext as PlanEditContext,
 } from './plan-editor';
 export {
@@ -34,3 +36,16 @@ export {
   type PlanStatus,
   type PlanStatusEvent,
 } from './persistence-types';
+export { forkPlan, type ForkOptions as PlanForkOptions } from './plan-forker';
+export {
+  diffPlans,
+  type PlanDiff,
+  type RouteChange as PlanDiffRouteChange,
+  type RouteChangeKind as PlanDiffRouteChangeKind,
+  type StageChange as PlanDiffStageChange,
+  type StageChangeKind as PlanDiffStageChangeKind,
+  type ShotChange as PlanDiffShotChange,
+  type ShotChangeKind as PlanDiffShotChangeKind,
+  type ConstraintChange as PlanDiffConstraintChange,
+  type ConstraintChangeKind as PlanDiffConstraintChangeKind,
+} from './plan-diff';

@@ -43,6 +43,12 @@ export interface ApplyToAllInput {
   candidate: BindingCandidate;
 }
 
+export interface ToggleCheckpointInput {
+  stageId: string;
+  /** When omitted, the current value is inverted; set explicitly to force. */
+  value?: boolean;
+}
+
 // =============================================================================
 // Context needed to re-run the consistency check after an edit
 // =============================================================================
@@ -79,6 +85,27 @@ export function applyToAll(plan: LitePlan, input: ApplyToAllInput, ctx: EditCont
     return applyCandidate(s, input.slot, input.candidate);
   });
   return rerunConsistency({ ...plan, shots: nextShots }, ctx);
+}
+
+// =============================================================================
+// toggleStageCheckpoint
+// =============================================================================
+
+/**
+ * Toggle the `userCheckpoint` flag on a stage. Does NOT re-run the consistency
+ * checker (checkpoints don't affect bindings). Returns the plan unchanged when
+ * the stage id is unknown or the stage is skipped.
+ */
+export function toggleStageCheckpoint(plan: LitePlan, input: ToggleCheckpointInput): LitePlan {
+  const nextStages = plan.stages.map((s) => {
+    if (s.id !== input.stageId) return s;
+    if (s.skipped) return s;
+    const nextValue = input.value ?? !s.userCheckpoint;
+    if ((s.userCheckpoint === true) === nextValue) return s;
+    const { userCheckpoint: _drop, ...rest } = s;
+    return nextValue ? { ...rest, userCheckpoint: true } : rest;
+  });
+  return { ...plan, stages: nextStages };
 }
 
 // =============================================================================

@@ -201,6 +201,42 @@ describe('PipelineExecutor', () => {
     await expect(handle.result).rejects.toThrow('Stage failed');
   });
 
+  it('should pause at a userCheckpoint even when the stage gate is auto', async () => {
+    const executor = new PipelineExecutor();
+    const stages = [linearStage('pre'), linearStage('gated', 'auto'), linearStage('post')];
+
+    const handle = executor.execute(stages, defaultConfig({ userCheckpoints: ['gated'] }), {});
+
+    let paused = false;
+    for await (const event of handle.events) {
+      if (event.type === 'gate_waiting') {
+        paused = true;
+        expect(event.stage).toBe('gated');
+        handle.confirmGate();
+      }
+      if (event.type === 'pipeline_complete') break;
+    }
+
+    expect(paused).toBe(true);
+    const result = await handle.result;
+    expect(result['post_done']).toBe(true);
+  });
+
+  it('should not pause when userCheckpoint stage was skipped', async () => {
+    const executor = new PipelineExecutor();
+    const stages = [linearStage('a'), linearStage('b')];
+
+    const handle = executor.execute(
+      stages,
+      defaultConfig({ userCheckpoints: ['a'], skipStages: ['a'] }),
+      {},
+    );
+
+    const result = await handle.result;
+    expect(result['a_done']).toBeUndefined();
+    expect(result['b_done']).toBe(true);
+  });
+
   it('should cancel pipeline mid-execution', async () => {
     const executor = new PipelineExecutor();
     const stages = [

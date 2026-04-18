@@ -37,6 +37,11 @@ export interface PlannedStage {
     readonly credits?: number;
     readonly durationSec?: number;
   };
+  /**
+   * When true, the executor pauses after this stage for user confirmation —
+   * even if the stage itself declares `gate: 'auto'`. Persisted in `.nkplan`.
+   */
+  readonly userCheckpoint?: boolean;
 }
 
 // =============================================================================
@@ -77,6 +82,8 @@ export interface LitePlan {
    * on every build; not stored in the persistent `.nkplan`.
    */
   readonly violations?: ReadonlyArray<Violation>;
+  /** Id of the plan this one forked from (see plan-forker.ts). */
+  readonly parentPlanId?: string;
 }
 
 // =============================================================================

@@ -41,6 +41,7 @@ export class PipelineExecutor implements IPipelineExecutor {
     const id = `pipeline-${nextPipelineId++}-${Date.now()}`;
     const skipSet = new Set(config.skipStages ?? []);
     const hooks = config.hooks ?? [];
+    const userCheckpointSet = new Set(config.userCheckpoints ?? []);
 
     // Gate control channel
     type GateResult = { confirmed: boolean; modifications?: Partial<PipelineContext> };
@@ -156,7 +157,12 @@ export class PipelineExecutor implements IPipelineExecutor {
         // Post-execution gate — pause for user review after stage produces output.
         // This means generatePrompts runs first, then the user reviews the prompts;
         // generatePilot runs first, then the user reviews the pilot media.
-        if (stage.gate === 'confirm') {
+        //
+        // A stage may pause either because it declares `gate: 'confirm'` or
+        // because the plan's `userCheckpoints` list includes its name
+        // (checkpoint-aware pause — see plan-mode.md §6.2).
+        const pauseForGate = stage.gate === 'confirm' || userCheckpointSet.has(stage.name);
+        if (pauseForGate) {
           emit({ type: 'gate_waiting', stage: stage.name, preview: ctx });
 
           const gateResult = await new Promise<{

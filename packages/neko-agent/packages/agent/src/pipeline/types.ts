@@ -228,6 +228,14 @@ export interface PipelineConfig {
   hooks?: StageHookConfig[];
   /** Global style override */
   globalStyle?: string;
+  /**
+   * Stage names after which the executor must pause for user confirmation,
+   * overriding the stage's default `gate` setting.
+   *
+   * Populated by WorkflowPlanHandler from the plan's per-stage
+   * `userCheckpoint` flags (see platform/workflow/plan/types.ts).
+   */
+  userCheckpoints?: string[];
 }
 
 // =============================================================================
