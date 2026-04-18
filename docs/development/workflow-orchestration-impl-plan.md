@@ -13,7 +13,8 @@
 | Phase 1 MVP: Router + AssetLib + Matching + LitePlan | ✅ 完成 | 86 条单测 |
 | Phase 1.5: 交互 Plan Mode + Webview 卡片 | ✅ 完成 | +5 条单测；feature flag `neko.workflow.orchestrator.enabled` 默认关 |
 | Phase 2 core: `.nkplan` + PlanStore + 状态机 + ConsistencyChecker v1 + 生命周期转换 | ✅ 完成 | +57 条单测（148 total） |
-| Phase 2 remainder: 矩阵编辑 + Plan fork + Checkpoint pause + diff viewer | ⏳ 待启动 | 2-4 周 |
+| Phase 2 matrix editing: plan-editor + alternative dropdown + apply-to-all + live re-check | ✅ 完成 | +10 条单测（158 total） |
+| Phase 2 remainder: Plan fork + Checkpoint pause + diff viewer | ⏳ 待启动 | 1-2 周 |
 | Phase 3: LLM Router + 记忆闭环 | ⏳ 待启动 | 8-12 周 |
 | Phase 4: CLIP TS binding + L3/L4 | ⏳ 待启动 | 10-14 周 |
 | Phase 5: Reference Chain + 2D/3D 三模式 | ⏳ 待启动 | 10-14 周 |
