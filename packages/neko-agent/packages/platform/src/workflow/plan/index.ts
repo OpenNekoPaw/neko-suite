@@ -14,6 +14,13 @@ export type {
 // Phase 2: persistence + state machine
 export { PlanStore, type PlanStoreOptions } from './plan-store';
 export {
+  editBinding as editPlanBinding,
+  applyToAll as applyBindingToAll,
+  type EditBindingInput,
+  type ApplyToAllInput,
+  type EditContext as PlanEditContext,
+} from './plan-editor';
+export {
   transition as transitionPlan,
   canTransition as canTransitionPlan,
   nextStatuses as nextPlanStatuses,

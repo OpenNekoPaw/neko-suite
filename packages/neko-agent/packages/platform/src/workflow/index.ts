@@ -39,6 +39,8 @@ export {
   IllegalPlanTransitionError,
   toNkPlan,
   toLitePlan,
+  editPlanBinding,
+  applyBindingToAll,
   type LitePlan,
   type LitePlanStatus,
   type PlanBuildInput,
@@ -50,6 +52,9 @@ export {
   type PlanTransitionOptions,
   type PersistentPlan,
   type ShotBindingSummary,
+  type EditBindingInput,
+  type ApplyToAllInput,
+  type PlanEditContext,
 } from './plan';
 
 // Horizontal subsystem: ConsistencyChecker

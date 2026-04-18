@@ -50,7 +50,11 @@ export interface BindingCandidate {
   readonly slot: BindingSlot;
   readonly entityId: string;
   readonly assetId: string;
-  readonly provenance: 'L1' | 'L2' | 'L3' | 'L4' | 'L5';
+  /**
+   * 'L1'..'L5' — MatchingEngine layer that proposed this candidate.
+   * 'user' — candidate introduced by a user edit (matrix override).
+   */
+  readonly provenance: 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'user';
   readonly confidence: number;
   readonly reason?: string;
 }
