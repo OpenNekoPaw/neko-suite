@@ -33,6 +33,21 @@ describe('readWorkflowSettings', () => {
     expect(settings.matchingContinuityEnabled).toBe(
       WORKFLOW_SETTING_DEFAULTS.matchingContinuityEnabled,
     );
+    expect(settings.matchingSemanticEnabled).toBe(
+      WORKFLOW_SETTING_DEFAULTS.matchingSemanticEnabled,
+    );
+    expect(settings.matchingLlmEnabled).toBe(WORKFLOW_SETTING_DEFAULTS.matchingLlmEnabled);
+  });
+
+  it('phase-4 matcher flags default off and can be flipped', () => {
+    const on = readWorkflowSettings({
+      getConfiguration: fakeConfig({
+        [WORKFLOW_SETTING_KEYS.matchingSemanticEnabled]: true,
+        [WORKFLOW_SETTING_KEYS.matchingLlmEnabled]: true,
+      }),
+    });
+    expect(on.matchingSemanticEnabled).toBe(true);
+    expect(on.matchingLlmEnabled).toBe(true);
   });
 
   it('reflects user overrides', () => {

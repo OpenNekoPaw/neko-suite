@@ -1,7 +1,7 @@
 # 跨模态素材匹配（MatchingEngine）
 
-> ADR Status: Proposed
-> Date: 2026-04-18
+> ADR Status: Accepted（Phase 1 规则层已实现；Phase 4 TS 契约 stub 已落地，Rust napi 绑定待实施）
+> Date: 2026-04-18 / Updated 2026-04-19
 > Scope: 剧本实体 ↔ 素材的自动绑定算法
 > Layer: **横向子系统**（被 Plan 层的 PlanBuilder 消费）
 
@@ -251,12 +251,25 @@ interface MatchContext {
 
 ## 14. 实施分阶段
 
-| 阶段 | 层级 | 依赖 |
-|------|-----|------|
-| Phase A | L1 + L2 + L5（规则层）| AssetLibrary Level B |
-| Phase B | L3 CLIP 启用 | CLIP TS binding 完成 |
-| Phase C | L4 LLMMatcher | LLM 预算基建 |
-| Phase D | 权重学习 / 反馈优化 | BindingHistory 数据积累 |
+| 阶段 | 层级 | 依赖 | 状态 |
+|------|-----|------|------|
+| Phase A | L1 + L2 + L5（规则层）| AssetLibrary Level B | ✅ 已完成 |
+| Phase B.1 | TS 契约 stub（`ClipProvider` / `EmbeddingCache` / L3 / L4） | — | ✅ 已完成（2026-04-19）|
+| Phase B.2 | Rust napi 绑定（clip_bridge.rs + host-api/ml/clip.ts） | runtime-ml clip.rs 已就绪 | ⏳ 待实施 |
+| Phase B.3 | L3 CLIP 端到端启用（模型分发 + 持久化缓存）| Phase B.2 + Registry 条目 | ⏳ 待实施 |
+| Phase C | L4 LLMMatcher 生产 broker | LLM 预算基建 + Phase 3.5 ask 框架 | ⏳ 待实施 |
+| Phase D | 权重学习 / 反馈优化 | BindingHistory 数据积累 | ⏳ 规划中 |
+
+### Phase B.1 实现索引
+
+- [matching/clip-provider.ts](../../packages/neko-agent/packages/platform/src/workflow/matching/clip-provider.ts) — `ClipProvider` 接口 + `UnimplementedClipProvider` / `InMemoryClipProvider` + `cosineSimilarity`
+- [matching/embedding-cache.ts](../../packages/neko-agent/packages/platform/src/workflow/matching/embedding-cache.ts) — `EmbeddingCache` 接口 + `InMemoryEmbeddingCache`（LRU）
+- [matching/semantic-matcher.ts](../../packages/neko-agent/packages/platform/src/workflow/matching/semantic-matcher.ts) — L3 实现，读 Asset.embeddings.clip → cache → provider
+- [matching/llm-matcher.ts](../../packages/neko-agent/packages/platform/src/workflow/matching/llm-matcher.ts) — L4 实现 + `LLMMatchBroker` 契约 + `DisabledLLMMatchBroker`
+- [matching/index.ts](../../packages/neko-agent/packages/platform/src/workflow/matching/index.ts) `createFullMatchingEngine()` — 可选装 L3/L4 的 builder
+- Feature flags：`neko.workflow.matching.semantic.enabled` / `.llm.enabled`（默认关）
+
+详见 [clip-ts-binding.md](./clip-ts-binding.md)。
 
 ## 15. 相关 ADR
 
@@ -266,3 +279,4 @@ interface MatchContext {
 | [plan-mode.md](./plan-mode.md) | PlanBuilder 调用 MatchingEngine 填充 bindings |
 | [creative-consistency.md](./creative-consistency.md) | 基于 MatchingEngine 输出做一致性校验 |
 | [workflow-routing.md](./workflow-routing.md) | Router 的 LLM 工具 `check_existing_assets` 间接用 AssetLibrary |
+| [clip-ts-binding.md](./clip-ts-binding.md) | L3 依赖的 Rust/TS 桥接契约与分阶段落地方案 |

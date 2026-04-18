@@ -30,6 +30,8 @@ import type {
 import { continuityMatcher } from './continuity-matcher';
 import { explicitMatcher, parseExplicitRefs } from './explicit-matcher';
 import { nameMatcher } from './name-matcher';
+import { createSemanticMatcher, type SemanticMatcherOptions } from './semantic-matcher';
+import { createLLMMatcher, type LLMMatcherOptions } from './llm-matcher';
 
 // =============================================================================
 // Default matcher chain
@@ -54,7 +56,8 @@ export class MatchingEngineImpl implements MatchingEngine {
     context: MatchContext = {},
   ): Promise<ShotBindings> {
     const refs = collectRefs(shot);
-    const enable = new Set<MatchLayer>(context.enableLayers ?? ['L1', 'L2', 'L5']);
+    const defaultLayers = this.chain.map((m) => m.layer);
+    const enable = new Set<MatchLayer>(context.enableLayers ?? defaultLayers);
 
     const primary: Partial<Record<BindingSlot, BindingCandidate>> = {};
     const alternatives: Partial<Record<BindingSlot, BindingCandidate[]>> = {};
@@ -129,6 +132,21 @@ export class MatchingEngineImpl implements MatchingEngine {
 }
 
 export function createMatchingEngine(chain?: ReadonlyArray<IMatcher>): MatchingEngine {
+  return new MatchingEngineImpl(chain);
+}
+
+/**
+ * Convenience builder for a fully-configured engine with optional L3/L4.
+ * Layers fire in order: L1 → L5 → L2 → L3 → L4.  Omit options to get the
+ * Phase 1 MVP chain (L1/L2/L5 only).
+ */
+export function createFullMatchingEngine(opts?: {
+  semantic?: SemanticMatcherOptions;
+  llm?: LLMMatcherOptions;
+}): MatchingEngine {
+  const chain: IMatcher[] = [explicitMatcher, continuityMatcher, nameMatcher];
+  if (opts?.semantic) chain.push(createSemanticMatcher(opts.semantic));
+  if (opts?.llm) chain.push(createLLMMatcher(opts.llm));
   return new MatchingEngineImpl(chain);
 }
 
@@ -209,3 +227,21 @@ export type {
 export { explicitMatcher, parseExplicitRefs } from './explicit-matcher';
 export { nameMatcher, dice } from './name-matcher';
 export { continuityMatcher } from './continuity-matcher';
+export {
+  cosineSimilarity,
+  ClipUnavailableError,
+  InMemoryClipProvider,
+  UnimplementedClipProvider,
+} from './clip-provider';
+export type { ClipEmbedding, ClipEncodeOptions, ClipProvider } from './clip-provider';
+export { InMemoryEmbeddingCache } from './embedding-cache';
+export type { EmbeddingCache } from './embedding-cache';
+export { createSemanticMatcher } from './semantic-matcher';
+export type { SemanticMatcherOptions } from './semantic-matcher';
+export { createLLMMatcher, DisabledLLMMatchBroker } from './llm-matcher';
+export type {
+  LLMMatchBroker,
+  LLMMatchBrokerRequest,
+  LLMMatchDecision,
+  LLMMatcherOptions,
+} from './llm-matcher';

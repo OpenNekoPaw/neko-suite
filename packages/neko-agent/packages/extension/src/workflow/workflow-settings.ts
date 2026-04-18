@@ -35,6 +35,10 @@ export const WORKFLOW_SETTING_KEYS = {
   consistencyEnabled: 'consistency.enabled',
   /** Phase 1: L5 continuity matcher on/off */
   matchingContinuityEnabled: 'matching.continuity.enabled',
+  /** Phase 4: L3 semantic (CLIP) matcher on/off */
+  matchingSemanticEnabled: 'matching.semantic.enabled',
+  /** Phase 4: L4 LLM tie-breaker on/off */
+  matchingLlmEnabled: 'matching.llm.enabled',
 } as const;
 
 export type WorkflowSettingKey = (typeof WORKFLOW_SETTING_KEYS)[keyof typeof WORKFLOW_SETTING_KEYS];
@@ -52,6 +56,8 @@ export const WORKFLOW_SETTING_DEFAULTS = {
   planAutoApproveThreshold: 1.1,
   consistencyEnabled: true,
   matchingContinuityEnabled: true,
+  matchingSemanticEnabled: false,
+  matchingLlmEnabled: false,
 } as const;
 
 // =============================================================================
@@ -66,6 +72,8 @@ export interface WorkflowSettings {
   planAutoApproveThreshold: number;
   consistencyEnabled: boolean;
   matchingContinuityEnabled: boolean;
+  matchingSemanticEnabled: boolean;
+  matchingLlmEnabled: boolean;
 }
 
 /**
@@ -117,6 +125,14 @@ export function readWorkflowSettings(override?: {
     matchingContinuityEnabled: cfg.get<boolean>(
       WORKFLOW_SETTING_KEYS.matchingContinuityEnabled,
       WORKFLOW_SETTING_DEFAULTS.matchingContinuityEnabled,
+    ),
+    matchingSemanticEnabled: cfg.get<boolean>(
+      WORKFLOW_SETTING_KEYS.matchingSemanticEnabled,
+      WORKFLOW_SETTING_DEFAULTS.matchingSemanticEnabled,
+    ),
+    matchingLlmEnabled: cfg.get<boolean>(
+      WORKFLOW_SETTING_KEYS.matchingLlmEnabled,
+      WORKFLOW_SETTING_DEFAULTS.matchingLlmEnabled,
     ),
   };
 }

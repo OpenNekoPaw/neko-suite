@@ -354,6 +354,16 @@
           "default": true,
           "description": "Enable the L5 continuity matcher — reuses bindings from earlier shots of the same scene group."
         },
+        "neko.workflow.matching.semantic.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the L3 semantic (CLIP) matcher. Requires the engine-side CLIP binding (Phase 4); off until the binding ships."
+        },
+        "neko.workflow.matching.llm.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the L4 LLM tie-breaker for ambiguous bindings. Consumes tokens on every low-confidence shot — leave off until the LLM budget knobs are finalised."
+        },
         "neko.agent.mcp.servers": {
           "type": "array",
           "default": [],

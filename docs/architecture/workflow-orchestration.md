@@ -65,7 +65,7 @@
 |---------|------|
 | [format-strategy.md](./format-strategy.md) | `.nkplan` / `.nkproj` 格式定义 |
 | [agent-media-architecture.md](./agent-media-architecture.md) | Reference Chain + 三种生成模式（render / render+AI / reference-only）|
-| *runtime-ml TS binding*（新）| CLIP `clip_image()` / `clip_text()` TS 包装 |
+| [clip-ts-binding.md](./clip-ts-binding.md)（新）| `ClipProvider` / `EmbeddingCache` TS 契约 + Rust napi 分阶段落地 |
 
 ## 3. 分层职责边界（不可混淆）
 
@@ -134,7 +134,9 @@ Phase 2    ✅   .nkplan 持久化 + Plan 状态机 + ConsistencyChecker v1
 Phase 2.5  ✅   Fork + Diff + Checkpoint pause + PlanBrowser
 Phase 3    ✅   LLM Router + 记忆闭环 + 成本估算
 Phase 3.5  ✅   ask_user 交互兜底（webview modal + 可暂停 budget）
-Phase 4    ⏳   CLIP TS binding + MatchingEngine L3/L4
+Phase 4.1  ✅   L3/L4 TS 契约 stub + feature flags（ClipProvider / EmbeddingCache / SemanticMatcher / LLMMatcher）
+Phase 4.2  ⏳   CLIP Rust napi 绑定 + host-api TS wrapper
+Phase 4.3  ⏳   模型分发 + 持久化 embeddings.idx + 导入时预计算
 Phase 5    ⏳   Reference Chain + 2D/3D 模型集成（3 模式）
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
