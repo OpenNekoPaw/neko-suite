@@ -144,7 +144,9 @@ Phase 5.2b ✅   Canvas ShotCharacter.referenceChain 字段（与 nkplan 同步�
 Phase 5.3  ✅   PipelineContext 透传 chain + batch-generate stage + MediaGenerateOptions.referenceShotIds
 Phase 5.4a ✅   resolveReferencePath hook + referenceImagePaths → referenceImageUrl / ipAdapterRefs / referenceImages
 Phase 5.4b ✅   batch-generate in-batch deferred map，dependent shots 等 anchor 完成再 resolve paths
-Phase 5.4c ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
+Phase 5.4c-stub ✅  RenderMode / PuppetRenderAdapter / SceneRenderAdapter TS 契约 + selectRenderMode + disabled defaults
+Phase 5.4c-rust ⏳  runtime-puppet / runtime-scene Rust adapter 实现（host-napi binding）
+Phase 5.4d ⏳   render-engine pipeline stage（消费 RenderAdapter 产生 referenceChain 的第一帧）
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
 
