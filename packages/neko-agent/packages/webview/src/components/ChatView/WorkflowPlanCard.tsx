@@ -226,44 +226,52 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
         </div>
       )}
 
-      {/* Actions */}
+      {/* Actions — capability-gated.  A plan without `capabilities` (older
+          handler versions) is treated as all-capable for back-compat; new
+          handlers populate every flag explicitly. */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--agent-divider)] pt-2">
-          <button className="vscode-button-primary px-3 py-1 text-[12px]" onClick={handleApprove}>
-            Start
-          </button>
-
-          <div className="relative">
-            <button
-              className="vscode-button-secondary px-3 py-1 text-[12px]"
-              onClick={() => setIsOverriding((v) => !v)}
-            >
-              Override ▾
+          {(plan.capabilities?.canApprove ?? true) && (
+            <button className="vscode-button-primary px-3 py-1 text-[12px]" onClick={handleApprove}>
+              Start
             </button>
-            {isOverriding && (
-              <div className="absolute z-10 mt-1 flex flex-col rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] p-1 shadow">
-                {ALL_LEVELS.filter((l) => l !== plan.route.level).map((level) => {
-                  const m = LEVEL_META[level];
-                  return (
-                    <button
-                      key={level}
-                      className="whitespace-nowrap rounded px-2 py-1 text-left text-[12px] hover:bg-[var(--vscode-list-hoverBackground)]"
-                      onClick={() => handleOverride(level)}
-                    >
-                      <span className="mr-2 font-semibold" style={{ color: m.color }}>
-                        {m.label}
-                      </span>
-                      {m.description}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          )}
 
-          <button className="vscode-button-secondary px-3 py-1 text-[12px]" onClick={handleAbort}>
-            Abort
-          </button>
+          {(plan.capabilities?.canOverride ?? true) && (
+            <div className="relative">
+              <button
+                className="vscode-button-secondary px-3 py-1 text-[12px]"
+                onClick={() => setIsOverriding((v) => !v)}
+              >
+                Override ▾
+              </button>
+              {isOverriding && (
+                <div className="absolute z-10 mt-1 flex flex-col rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] p-1 shadow">
+                  {ALL_LEVELS.filter((l) => l !== plan.route.level).map((level) => {
+                    const m = LEVEL_META[level];
+                    return (
+                      <button
+                        key={level}
+                        className="whitespace-nowrap rounded px-2 py-1 text-left text-[12px] hover:bg-[var(--vscode-list-hoverBackground)]"
+                        onClick={() => handleOverride(level)}
+                      >
+                        <span className="mr-2 font-semibold" style={{ color: m.color }}>
+                          {m.label}
+                        </span>
+                        {m.description}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(plan.capabilities?.canAbort ?? true) && (
+            <button className="vscode-button-secondary px-3 py-1 text-[12px]" onClick={handleAbort}>
+              Abort
+            </button>
+          )}
         </div>
       )}
 

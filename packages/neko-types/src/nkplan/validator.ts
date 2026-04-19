@@ -232,6 +232,11 @@ export function validateNkplan(
     errors.push({ field: 'errorMessage', message: 'Must be a string', severity: 'error' });
   }
 
+  // input (optional) — discriminated union by `kind`
+  if (data['input'] !== undefined) {
+    validateInput(data['input'], 'input', errors);
+  }
+
   if (options.strict) {
     errors.push(...warnings);
     warnings.length = 0;
@@ -562,6 +567,73 @@ function validateReferenceChainEntry(
         });
       }
     });
+  }
+}
+
+// =============================================================================
+// RawInput snapshot — discriminated by `kind`
+// =============================================================================
+
+function validateInput(input: unknown, field: string, errors: ValidationError[]): void {
+  if (!isRecord(input)) {
+    errors.push({ field, message: 'Must be an object', severity: 'error' });
+    return;
+  }
+  const kind = input['kind'];
+  switch (kind) {
+    case 'prompt':
+      requireString(input, 'text', errors, `${field}.text`);
+      return;
+    case 'file':
+      requireString(input, 'path', errors, `${field}.path`);
+      if (input['size'] !== undefined && typeof input['size'] !== 'number') {
+        errors.push({ field: `${field}.size`, message: 'Must be a number', severity: 'error' });
+      }
+      return;
+    case 'files': {
+      const paths = input['paths'];
+      if (!isArray(paths)) {
+        errors.push({
+          field: `${field}.paths`,
+          message: 'Must be an array of strings',
+          severity: 'error',
+        });
+      } else {
+        paths.forEach((p, i) => {
+          if (!isString(p)) {
+            errors.push({
+              field: `${field}.paths[${i}]`,
+              message: 'Must be a string',
+              severity: 'error',
+            });
+          }
+        });
+      }
+      if (input['totalSize'] !== undefined && typeof input['totalSize'] !== 'number') {
+        errors.push({
+          field: `${field}.totalSize`,
+          message: 'Must be a number',
+          severity: 'error',
+        });
+      }
+      return;
+    }
+    case 'project':
+      requireString(input, 'path', errors, `${field}.path`);
+      if (input['workflow'] !== undefined && !isString(input['workflow'])) {
+        errors.push({
+          field: `${field}.workflow`,
+          message: 'Must be a string',
+          severity: 'error',
+        });
+      }
+      return;
+    default:
+      errors.push({
+        field: `${field}.kind`,
+        message: `Invalid input kind ${String(kind)}`,
+        severity: 'error',
+      });
   }
 }
 

@@ -118,6 +118,37 @@ export interface WorkflowViolation {
   suggestions?: WorkflowViolationFix[];
 }
 
+/**
+ * Capability flags for a previewable plan — tells the webview which
+ * buttons are wired end-to-end by the current extension handler.
+ *
+ * Decouples UI surface from handler support so new plan shapes (forks,
+ * plans restored from disk, plans whose input is missing) don't expose
+ * buttons that silently fail.  All fields default to `false` on the
+ * wire; the handler populates truthy values only for operations it can
+ * actually run.
+ */
+export interface WorkflowPlanCapabilities {
+  /** User can click Start → handler dispatches to the pipeline */
+  canApprove?: boolean;
+  /** User can change the route level → handler re-runs with forceLevel */
+  canOverride?: boolean;
+  /** User can click Abort → handler transitions the plan to aborted */
+  canAbort?: boolean;
+  /** User can drag/drop alternatives in the matrix → handler re-runs matching */
+  canEditBinding?: boolean;
+  /** User can propagate an edit to all shots sharing an entity */
+  canApplyToAll?: boolean;
+  /** User can flip `userCheckpoint` on stages */
+  canToggleCheckpoint?: boolean;
+  /**
+   * Editing a binding will re-run the ConsistencyChecker.  When false the
+   * handler preserves prior violations but cannot discover new ones
+   * (e.g. forks lose access to the original Shot[] input).
+   */
+  canRecheckConsistency?: boolean;
+}
+
 export interface WorkflowLitePlan {
   id: string;
   createdAt: number;
@@ -132,6 +163,13 @@ export interface WorkflowLitePlan {
   violations?: WorkflowViolation[];
   /** Parent plan id when this plan was forked from another */
   parentPlanId?: string;
+  /**
+   * Capability flags telling the webview which buttons are actually
+   * supported by the handler for this particular plan.  Populated by
+   * `toWirePlan` in the extension; omitted = treat as all-capable
+   * (legacy behaviour for older webview versions).
+   */
+  capabilities?: WorkflowPlanCapabilities;
 }
 
 // =============================================================================

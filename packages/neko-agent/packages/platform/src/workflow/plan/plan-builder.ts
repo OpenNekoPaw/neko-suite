@@ -156,6 +156,10 @@ export class PlanBuilder {
         }),
       ...(referenceChain.length > 0 && { referenceChain }),
       ...(input.notes !== undefined && input.notes.length > 0 && { notes: input.notes }),
+      // Phase 2.5+ — capture the originating RawInput so the plan is
+      // self-sufficient for dispatch (forks / approvals don't need the
+      // caller to pass input alongside).
+      ...(input.input !== undefined && { input: input.input }),
     };
   }
 

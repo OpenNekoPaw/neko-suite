@@ -40,6 +40,9 @@ export function toNkPlan(lite: LitePlan, opts: { now?: number } = {}): Persisten
     ...(lite.referenceChain !== undefined &&
       lite.referenceChain.length > 0 && { referenceChain: lite.referenceChain }),
     ...(lite.notes !== undefined && lite.notes.length > 0 && { notes: lite.notes }),
+    // Phase 2.5+ — persist the RawInput snapshot so fork/approve can
+    // dispatch without re-plumbing it through the caller.
+    ...(lite.input !== undefined && { input: lite.input }),
   };
 }
 
@@ -60,6 +63,9 @@ export function toLitePlan(plan: PersistentPlan): LitePlan {
     ...(plan.referenceChain !== undefined &&
       plan.referenceChain.length > 0 && { referenceChain: plan.referenceChain }),
     ...(plan.notes !== undefined && plan.notes.length > 0 && { notes: plan.notes }),
+    // Phase 2.5+ — round-trip input so forks reloaded from disk can
+    // still dispatch without re-plumbing the original RawInput.
+    ...(plan.input !== undefined && { input: plan.input }),
   } as LitePlan;
 }
 

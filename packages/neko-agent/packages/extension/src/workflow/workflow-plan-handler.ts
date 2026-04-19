@@ -18,6 +18,7 @@ import type {
   WorkflowBindingCandidate,
   WorkflowBindingSlot,
   WorkflowConstraint,
+  WorkflowPlanCapabilities,
   WorkflowShotBindingSummary,
   WorkflowViolation,
   WorkflowPlanAbortMessage,
@@ -408,25 +409,38 @@ export class WorkflowPlanHandler {
     await this.planStore.save(fork);
     const lite = Workflow.toLitePlan(fork);
 
-    // Synthesise a minimal input so downstream stages receive a sane
-    // PipelineContext.source.  Forks inherit route + stages + shots +
-    // reference chain from the parent plan; most pipeline stages will
-    // populate scene-level context from those (not from ctx.source).
-    // The `freeform` format means the pipeline skips readDocument by
-    // default — matching the fork's "re-run this plan" intent.
-    const forkInput: Workflow.RawInput = {
-      kind: 'prompt',
-      text: source.route.reason,
-    };
+    // Fork self-sufficiency contract — `source.input` is required for
+    // honest fork execution (fountain/file-based inputs break when we
+    // synthesise a `{kind:'prompt', text: route.reason}` placeholder
+    // because downstream stages read ctx.source / ctx.sourceFormat).
+    // Pre-Phase-2.5 plans lack `input`; we log + abort the fork rather
+    // than dispatch against a fake source.
+    const forkInput = source.input;
+    if (!forkInput) {
+      logger.warn('Fork has no persisted RawInput (pre-Phase-2.5 plan); cannot dispatch honestly', {
+        planId: lite.id,
+        parentPlanId: msg.planId,
+      });
+      await this.transitionIfStored(lite.id, 'aborted', {
+        reason: 'fork-missing-input (source plan predates input persistence)',
+        by: 'system',
+      });
+      this.postStatus(lite.id, 'aborted');
+      this.postPreview(lite);
+      return lite;
+    }
 
     // Register the fork as pending with a real dispatcher.  When the user
     // clicks Start, handleIncoming resolves this promise with the (possibly
     // edited) plan and we dispatch it via the same
     // `dispatchApprovedPlan` path used by the initial preview.
-    // Fork shot input: we only persist per-shot *bindings* on NkPlan, not
-    // the original Shot[] that matching ran against, so `pending.shots`
-    // stays undefined for forks.  Edit-binding on a forked plan falls
-    // back to skipping the consistency re-check — documented limitation.
+    //
+    // Note on pending.shots: we intentionally leave it undefined because
+    // the original Shot[] matching ran against is NOT persisted on
+    // NkPlan (only the derived bindings).  editPlanBinding /
+    // applyBindingToAll on a forked plan therefore go through the
+    // fail-safe branch in rerunConsistency — preserving prior violations
+    // instead of silently clearing them.
     const decision = new Promise<PlanDecision>((resolve, reject) => {
       this.pending.set(lite.id, {
         plan: lite,
@@ -452,19 +466,18 @@ export class WorkflowPlanHandler {
         return;
       }
       if (d.kind === 'override') {
-        // Overriding a fork is equivalent to aborting the fork and
-        // starting a fresh preview at the chosen level — but that needs
-        // an input we don't have.  Log + abort so the user gets feedback.
-        logger.warn('Fork override is not supported; aborting fork', {
-          planId: planNow.id,
-          forceLevel: d.forceLevel,
-        });
-        await this.transitionIfStored(planNow.id, 'aborted', {
-          reason: `override-unsupported (wanted ${d.forceLevel})`,
+        // With persisted input, override is a legitimate operation on a
+        // fork: abandon the fork, run Router.decide(source.input) with
+        // forceLevel, rebuild, and re-present.  We recurse through
+        // presentAndDispatch which manages the full lifecycle.
+        await this.transitionIfStored(planNow.id, 'edited', {
+          reason: `override to ${d.forceLevel}`,
           by: 'user',
         });
-        this.broadcastPlanState('aborted', planNow.id);
-        this.postStatus(planNow.id, 'aborted');
+        await this.presentAndDispatch({
+          input: forkInput,
+          routerOverrides: { forceLevel: d.forceLevel },
+        });
         return;
       }
       // Approve path.
@@ -708,11 +721,40 @@ export class WorkflowPlanHandler {
   private postPreview(plan: Workflow.LitePlan): void {
     const webview = this.deps.getWebview();
     if (!webview) return;
-    const wirePlan = toWirePlan(plan);
+    const wirePlan = toWirePlan(plan, this.computeCapabilities(plan));
     webview.postMessage({
       type: 'workflow/planPreview',
       plan: wirePlan,
     });
+  }
+
+  /**
+   * Compute which webview actions are actually wired end-to-end for the
+   * given plan.  Callers include this alongside the wire plan so the
+   * WorkflowPlanCard can hide buttons that would silently fail (e.g. the
+   * Override button on forks created from pre-Phase-2.5 plans where
+   * `plan.input` is absent).
+   */
+  private computeCapabilities(plan: Workflow.LitePlan): WorkflowPlanCapabilities {
+    const pending = this.pending.get(plan.id);
+    const hasShots = (plan.shots?.length ?? 0) > 0;
+    const hasInput = plan.input !== undefined;
+    const hasPendingShots = (pending?.shots?.length ?? 0) > 0;
+    const hasActiveStages = plan.stages.some((s) => !s.skipped);
+    return {
+      canApprove: true,
+      canAbort: true,
+      // Override requires the original input to re-run Router.decide with
+      // forceLevel.  Forks from pre-Phase-2.5 plans have no input.
+      canOverride: hasInput,
+      canEditBinding: hasShots,
+      canApplyToAll: hasShots,
+      canToggleCheckpoint: hasActiveStages,
+      // ConsistencyChecker needs the original Shot[] input (held on
+      // PendingPlan.shots).  Forks never have it — editing still works
+      // but won't re-run the checker.
+      canRecheckConsistency: hasShots && hasPendingShots,
+    };
   }
 
   private postDispatched(planId: string, pipelineId: string, flowId: string): void {
@@ -729,7 +771,10 @@ export class WorkflowPlanHandler {
   private postUpdated(plan: Workflow.LitePlan): void {
     const webview = this.deps.getWebview();
     if (!webview) return;
-    webview.postMessage({ type: 'workflow/planUpdated', plan: toWirePlan(plan) });
+    webview.postMessage({
+      type: 'workflow/planUpdated',
+      plan: toWirePlan(plan, this.computeCapabilities(plan)),
+    });
   }
 
   private postDiff(params: Omit<WorkflowPlanDiffMessage, 'type'>): void {
@@ -867,7 +912,10 @@ export class WorkflowPlanHandler {
 // Conversion: internal LitePlan → wire WorkflowLitePlan
 // =============================================================================
 
-export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
+export function toWirePlan(
+  plan: Workflow.LitePlan,
+  capabilities?: WorkflowPlanCapabilities,
+): WorkflowLitePlan {
   return {
     id: plan.id,
     createdAt: plan.createdAt,
@@ -887,6 +935,7 @@ export function toWirePlan(plan: Workflow.LitePlan): WorkflowLitePlan {
     ...(plan.violations !== undefined &&
       plan.violations.length > 0 && { violations: plan.violations.map(toWireViolation) }),
     ...(plan.parentPlanId !== undefined && { parentPlanId: plan.parentPlanId }),
+    ...(capabilities !== undefined && { capabilities }),
   };
 }
 

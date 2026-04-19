@@ -183,6 +183,53 @@ describe('editPlanBinding', () => {
     expect(after.shots?.[1]?.primary.character?.assetId).toBe('formal');
     expect(after.violations?.some((v) => v.kind === 'character_lock')).toBe(true);
   });
+
+  // Second-round review fix-C — when the original Shot[] is unavailable
+  // (typical for forks) rerunConsistency must NOT compute against an
+  // empty shot list (which silently erases prior violations).  Instead
+  // it preserves whatever violations were already attached to the plan.
+  it('preserves prior violations when ctx.shots is empty (fork scenario)', () => {
+    const alice = candidate({ slot: 'character', entityId: 'alice', assetId: 'casual' });
+    const formal = candidate({ slot: 'character', entityId: 'alice', assetId: 'formal' });
+    const priorViolation = {
+      id: 'v1',
+      kind: 'character_lock' as const,
+      severity: 'warning' as const,
+      constraintId: 'c1',
+      shotIds: ['s1', 's2'],
+      entity: 'alice',
+      message: 'prior — must be preserved',
+    };
+    const plan = basePlan({
+      violations: [priorViolation],
+      shots: [
+        {
+          shotId: 's1',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+        {
+          shotId: 's2',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+      ],
+    });
+
+    const checker = createConsistencyChecker();
+    const after = editPlanBinding(
+      plan,
+      { shotId: 's2', slot: 'character', candidate: formal },
+      { shots: [], consistencyChecker: checker },
+    );
+
+    // Key assertion: prior violations are preserved verbatim.
+    expect(after.violations).toEqual([priorViolation]);
+    // And the edit itself still took effect.
+    expect(after.shots?.[1]?.primary.character?.assetId).toBe('formal');
+  });
 });
 
 // =============================================================================

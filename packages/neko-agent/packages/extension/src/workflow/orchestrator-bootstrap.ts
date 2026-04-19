@@ -174,7 +174,7 @@ export async function bootstrapOrchestrator(
         route = req.plan.route;
       } else {
         route = await router.decide(req.input, req.routerOverrides);
-        plan = await planBuilder.build({ route });
+        plan = await planBuilder.build({ route, input: req.input });
       }
 
       const userCheckpoints = plan.stages
@@ -189,8 +189,14 @@ export async function bootstrapOrchestrator(
         userCheckpoints,
       });
 
+      // Phase 2.5+ — prefer plan.input when available so dispatched forks
+      // carry the ORIGINAL ctx.source / sourceFormat, not a synthesized
+      // prompt derived from route.reason.  Falls back to req.input for
+      // pre-fix plans or the direct (non-routed) legacy path.
+      const effectiveInput = plan.input ?? req.input;
+
       const ctx: PipelineContext = {
-        ...buildBaseContext(req.input),
+        ...buildBaseContext(effectiveInput),
         ...req.contextOverrides,
         // Thread the plan's reference chain through so downstream
         // generation stages can surface ancestor shot ids to the
@@ -224,6 +230,7 @@ export async function bootstrapOrchestrator(
       const route = await router.decide(input, overrides);
       const plan = await planBuilder.build({
         route,
+        input,
         ...(shots !== undefined && shots.length > 0 && { shots }),
       });
       return {

@@ -91,6 +91,13 @@ export interface LitePlan {
    * listed shot ids' generated output back in as reference images.
    */
   readonly referenceChain?: ReadonlyArray<ReferenceChainEntry>;
+  /**
+   * The RawInput snapshot that produced this plan.  Optional for backwards
+   * compatibility, but always populated on freshly built plans so
+   * fork / approve can dispatch without re-plumbing the caller's original
+   * input.  Mirrors NkPlan.input — see workflow-plan-handler.ts.
+   */
+  readonly input?: import('../types').RawInput;
 }
 
 // =============================================================================
@@ -103,4 +110,10 @@ export interface PlanBuildInput {
   readonly shots?: ReadonlyArray<import('../matching/types').Shot>;
   /** Free-form notes captured during probe/match */
   readonly notes?: ReadonlyArray<string>;
+  /**
+   * Capture the RawInput so the emitted LitePlan is self-sufficient for
+   * dispatch (forks / approvals don't need the caller to pass input
+   * alongside).  Pure pass-through — PlanBuilder does not inspect this.
+   */
+  readonly input?: import('../types').RawInput;
 }

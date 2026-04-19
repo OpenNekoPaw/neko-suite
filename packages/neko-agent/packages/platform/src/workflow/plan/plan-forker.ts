@@ -75,6 +75,12 @@ export function forkPlan(source: PersistentPlan, options: ForkOptions = {}): Per
     ...(source.notes !== undefined && { notes: source.notes }),
     ...(source.project !== undefined && { project: source.project }),
     ...(source.stageParams !== undefined && { stageParams: source.stageParams }),
+    // Preserve the input snapshot so the fork is self-sufficient: approve
+    // dispatches into a real pipeline with correct ctx.source /
+    // sourceFormat, and override can re-run router.decide against the
+    // original input.  Synthesising an input from route.reason (the
+    // pre-Phase-2.5 behaviour) breaks fountain / file-based inputs.
+    ...(source.input !== undefined && { input: source.input }),
   };
   return fork;
 }

@@ -154,6 +154,19 @@ export interface NkplanStatusEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Input — the RawInput snapshot that produced this plan.  Persisting lets a
+// fork / approve run without re-plumbing RawInput through the caller: the
+// plan is self-sufficient, the pipeline derives ctx.source / ctx.sourceFormat
+// from plan.input rather than a bag passed alongside.
+// ---------------------------------------------------------------------------
+
+export type NkplanInput =
+  | { readonly kind: 'prompt'; readonly text: string }
+  | { readonly kind: 'file'; readonly path: string; readonly size?: number }
+  | { readonly kind: 'files'; readonly paths: readonly string[]; readonly totalSize?: number }
+  | { readonly kind: 'project'; readonly path: string; readonly workflow?: string };
+
+// ---------------------------------------------------------------------------
 // NkPlan — the persistent root
 // ---------------------------------------------------------------------------
 
@@ -183,6 +196,14 @@ export interface NkPlan {
   /** Ancestor references per chained (shot, slot) — Phase 5 reference chain */
   readonly referenceChain?: readonly NkplanReferenceChainEntry[];
   readonly notes?: readonly string[];
+  /**
+   * The RawInput snapshot that produced this plan (prompt text, file path,
+   * etc.).  Optional for backwards compatibility with plans created before
+   * the field existed, but freshly built plans always populate it so that
+   * forks / approvals don't need the caller to re-plumb the original
+   * request through.  See workflow-plan-handler.ts `presentInteractive`.
+   */
+  readonly input?: NkplanInput;
 
   /** Arbitrary stage-scoped parameters (e.g. user-tuned globalStyle) */
   readonly stageParams?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;

@@ -78,10 +78,13 @@ function makeOrchestrator(opts: {
   );
 
   const buildPlan = vi.fn(
-    async (_input: Workflow.RawInput, routerOverrides?: Workflow.RouterOverrides) => {
+    async (input: Workflow.RawInput, routerOverrides?: Workflow.RouterOverrides) => {
       const level = routerOverrides?.forceLevel ?? 'L2';
       const route = buildRoute(level);
-      return { route, plan: opts.planFactory(level) };
+      // Mirror production PlanBuilder.build: plans carry the RawInput
+      // snapshot so forks / approvals can dispatch without re-plumbing.
+      const plan: Workflow.LitePlan = { ...opts.planFactory(level), input };
+      return { route, plan };
     },
   );
 
@@ -749,6 +752,121 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     expect(orchestrator.startRoutedPipeline).not.toHaveBeenCalled();
     const reloaded = await planStore.load(fork!.id);
     expect(reloaded?.status).toBe('aborted');
+  });
+
+  // ==========================================================================
+  // Second-round review fixes (2026-04-19) — Fix A / B / C
+  // ==========================================================================
+
+  it('Fix-A: fork → approve dispatches with plan.input preserved (not synthetic)', async () => {
+    const { handler, planStore, orchestrator } = makeHandlerWithStoreAndStages();
+    // Seed with a FILE-based input so we can detect if dispatch falls
+    // back to the synthesised prompt (it would lose sourceFormat).
+    const fileInput: Workflow.RawInput = { kind: 'file', path: '/tmp/story.fountain' };
+    const promise = handler.presentAndDispatch({ input: fileInput });
+    await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+
+    // Source plan on disk should carry input (persistence-types round-trip)
+    const source = await planStore.load('plan_cp_L2');
+    expect(source?.input).toEqual(fileInput);
+
+    orchestrator.startRoutedPipeline.mockClear();
+
+    const fork = await handler.handleFork({
+      type: 'workflow/planFork',
+      planId: 'plan_cp_L2',
+    });
+    // Fork on disk preserves input
+    const forkStored = await planStore.load(fork!.id);
+    expect(forkStored?.input).toEqual(fileInput);
+
+    handler.handleIncoming({ type: 'workflow/planApprove', planId: fork!.id });
+    await flushUntil(() => orchestrator.startRoutedPipeline.mock.calls.length > 0, 50);
+
+    const dispatchArg = orchestrator.startRoutedPipeline.mock.calls[0]?.[0] as {
+      input: Workflow.RawInput;
+      plan?: Workflow.LitePlan;
+    };
+    // Key assertion: dispatch uses the REAL source input (file), not a
+    // prompt-wrapped synthetic.
+    expect(dispatchArg.input).toEqual(fileInput);
+    expect(dispatchArg.plan?.id).toBe(fork!.id);
+    expect(dispatchArg.plan?.input).toEqual(fileInput);
+  });
+
+  it('Fix-A: pre-Phase-2.5 fork without input → aborted (no fake dispatch)', async () => {
+    const { handler, planStore, orchestrator } = makeHandlerWithStoreAndStages();
+    // Manually save a source plan WITHOUT input (simulates legacy .nkplan)
+    const legacy = {
+      version: '1.0' as const,
+      id: 'legacy_plan',
+      createdAt: 100,
+      updatedAt: 100,
+      status: 'completed' as const,
+      statusHistory: [{ status: 'completed' as const, at: 100 }],
+      route: buildRoute('L2'),
+      stages: [{ id: 'parseStoryboard', label: 'Parse', skipped: false }],
+    };
+    await planStore.save(legacy);
+
+    orchestrator.startRoutedPipeline.mockClear();
+
+    const fork = await handler.handleFork({
+      type: 'workflow/planFork',
+      planId: 'legacy_plan',
+    });
+    expect(fork).toBeDefined();
+    // Fork was immediately aborted (no input → cannot dispatch honestly)
+    await flushUntil(async () => (await planStore.load(fork!.id))?.status === 'aborted', 50);
+    expect(orchestrator.startRoutedPipeline).not.toHaveBeenCalled();
+  });
+
+  it('Fix-B: capability flags gate Override/Edit based on plan state', async () => {
+    const { handler, planStore, posts } = makeHandlerWithStoreAndStages();
+
+    // 1. Fresh preview: plan has input but no shots.
+    const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+    await flushUntil(
+      () => posts.some((p) => (p as { type: string }).type === 'workflow/planPreview'),
+      50,
+    );
+    const preview = posts.find((p) => (p as { type: string }).type === 'workflow/planPreview') as {
+      plan: { capabilities?: Record<string, boolean> };
+    };
+    const caps = preview.plan.capabilities ?? {};
+    expect(caps['canApprove']).toBe(true);
+    expect(caps['canAbort']).toBe(true);
+    expect(caps['canOverride']).toBe(true); // plan.input present
+    // No shots on this fixture → edit-binding + apply-to-all + recheck
+    // are all disabled.
+    expect(caps['canEditBinding']).toBe(false);
+    expect(caps['canApplyToAll']).toBe(false);
+    expect(caps['canRecheckConsistency']).toBe(false);
+
+    handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
+    await promise;
+
+    // 2. Legacy-plan fork (no persisted input) → Override disabled.
+    const legacy = {
+      version: '1.0' as const,
+      id: 'legacy2',
+      createdAt: 200,
+      updatedAt: 200,
+      status: 'completed' as const,
+      statusHistory: [{ status: 'completed' as const, at: 200 }],
+      route: buildRoute('L2'),
+      stages: [{ id: 'parseStoryboard', label: 'Parse', skipped: false }],
+    };
+    await planStore.save(legacy);
+    posts.length = 0;
+    await handler.handleFork({ type: 'workflow/planFork', planId: 'legacy2' });
+    const forkPreview = posts.find(
+      (p) => (p as { type: string }).type === 'workflow/planPreview',
+    ) as { plan: { capabilities?: Record<string, boolean> } };
+    const forkCaps = forkPreview.plan.capabilities ?? {};
+    expect(forkCaps['canOverride']).toBe(false); // legacy fork has no input
   });
 
   it('diffRequest posts a diff result for a fork against its parent', async () => {

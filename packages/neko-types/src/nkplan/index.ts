@@ -31,6 +31,7 @@ export type {
   NkplanReferenceChainEntry,
   NkplanStatusEvent,
   NkplanProjectRef,
+  NkplanInput,
   NkPlan,
   // SDK shapes
   NkplanLoadResult,
