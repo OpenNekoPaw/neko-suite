@@ -283,3 +283,10 @@ PlanBuilder 内部调用：
 - `neko.canvas.orchestrator.planStateChanged` 命令：agent `broadcastPlanState` 在 executing/paused/completed/aborted/failed 触发
 - Canvas `BatchGenerationScheduler.setQuietMode(reason?)` 暂停 pump；live-scheduler registry 让多编辑器同步
 - 目标：避免 canvas 批生成队列与 orchestrator 的 `batchGenerate` stage 重复消耗 credits
+
+### PlanMatrix 虚拟滚动（已完成 2026-04-19）
+- `useVirtualizedRows` 自研最小虚拟化 hook — 固定行高 + overscan + rAF 节流的 scroll listener（[useVirtualizedRows.ts](../../packages/neko-agent/packages/webview/src/hooks/useVirtualizedRows.ts)）
+- [PlanMatrix.tsx](../../packages/neko-agent/packages/webview/src/components/ChatView/PlanMatrix.tsx) — 超过 `virtualizeThreshold`（默认 40 个镜头）切换为带 spacer 行的虚拟化视口，保留 `<table>` 语义
+- 默认 `rowHeightPx=28`、`maxViewportPx=420`；header 显示 "Shot bindings (N · virtualized)" 标识
+- 低于阈值时行为不变（完整表格），避免小 plan 引入不必要的滚动容器
+- 目标：100+ 镜头矩阵不再触发 React 渲染长列表的性能悬崖

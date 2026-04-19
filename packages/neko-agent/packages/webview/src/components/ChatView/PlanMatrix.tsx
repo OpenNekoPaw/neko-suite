@@ -16,21 +16,26 @@
  * docs/architecture/creative-consistency.md §7.
  */
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import type {
   WorkflowBindingCandidate,
   WorkflowBindingSlot,
   WorkflowShotBindingSummary,
 } from '@neko-agent/types';
 import { vscode } from '@/messages';
+import { useVirtualizedRows } from '@/hooks/useVirtualizedRows';
 
 interface PlanMatrixProps {
   planId: string;
   shots: readonly WorkflowShotBindingSummary[];
   /** Disable editing (e.g. once the plan is executing) */
   readOnly?: boolean;
-  /** Maximum rows to render inline; rest collapsed behind a "show more" toggle */
-  maxRows?: number;
+  /** Shot count threshold above which virtualization kicks in. */
+  virtualizeThreshold?: number;
+  /** Pixel height used when virtualizing — must match the actual row height. */
+  rowHeightPx?: number;
+  /** Max pixel height of the scrollable region when virtualizing. */
+  maxViewportPx?: number;
 }
 
 const SLOT_ORDER: WorkflowBindingSlot[] = ['character', 'scene', 'action', 'prop', 'style'];
@@ -47,10 +52,19 @@ export const PlanMatrix = memo(function PlanMatrix({
   planId,
   shots,
   readOnly = false,
-  maxRows = 20,
+  virtualizeThreshold = 40,
+  rowHeightPx = 28,
+  maxViewportPx = 420,
 }: PlanMatrixProps) {
   // Track which (shotId, slot) currently has its popover open
   const [openCell, setOpenCell] = useState<string | undefined>(undefined);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const virtualize = shots.length > virtualizeThreshold;
+  const { range, paddingTop, paddingBottom } = useVirtualizedRows({
+    container: scrollContainerRef,
+    itemCount: virtualize ? shots.length : 0,
+    rowHeight: rowHeightPx,
+  });
 
   const cellKey = (shotId: string, slot: WorkflowBindingSlot) => `${shotId}::${slot}`;
 
@@ -107,69 +121,102 @@ export const PlanMatrix = memo(function PlanMatrix({
     );
   }
 
-  const visibleShots = shots.slice(0, maxRows);
-  const hidden = shots.length - visibleShots.length;
+  // When virtualizing, only render the shots the hook says are in range;
+  // the `paddingTop` / `paddingBottom` spacer cells keep the scrollbar
+  // correct.  Without virtualization, render everything (small plans).
+  const renderStart = virtualize ? range.start : 0;
+  const renderEnd = virtualize ? range.end : shots.length;
+  const visibleShots = shots.slice(renderStart, renderEnd);
+
+  const renderRow = (shot: WorkflowShotBindingSummary, globalIndex: number) => (
+    <tr
+      key={shot.shotId}
+      className="border-b border-[var(--agent-divider)] last:border-b-0"
+      style={virtualize ? { height: rowHeightPx } : undefined}
+    >
+      <td className="py-1 pr-2 text-[var(--agent-fg-secondary)]">{globalIndex + 1}</td>
+      {activeSlots.map((slot) => {
+        const candidate = shot.primary[slot];
+        const alternatives = shot.alternatives[slot] ?? [];
+        const unmatched = shot.unmatched.includes(slot);
+        const isOpen = openCell === cellKey(shot.shotId, slot);
+        return (
+          <td key={slot} className="relative py-1 pr-2 align-top">
+            <BindingCell
+              candidate={candidate}
+              unmatched={unmatched}
+              hasAlternatives={alternatives.length > 0}
+              readOnly={readOnly}
+              onClick={() => handleCellClick(shot.shotId, slot, alternatives)}
+            />
+            {isOpen && !readOnly && (
+              <BindingPopover
+                candidates={candidates(candidate, alternatives)}
+                currentAssetId={candidate?.assetId}
+                onPick={(assetId) => handlePick(shot.shotId, slot, assetId)}
+                onApplyToAll={
+                  candidate
+                    ? (assetId) => handleApplyToAll(candidate.entityId, slot, assetId)
+                    : undefined
+                }
+              />
+            )}
+          </td>
+        );
+      })}
+    </tr>
+  );
+
+  const header = (
+    <thead>
+      <tr className="border-b border-[var(--agent-divider)] text-left text-[var(--agent-fg-secondary)]">
+        <th className="py-1 pr-2 font-normal">#</th>
+        {activeSlots.map((slot) => (
+          <th key={slot} className="py-1 pr-2 font-normal">
+            {SLOT_LABEL[slot]}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+
+  const bodyRows = visibleShots.map((shot, i) => renderRow(shot, renderStart + i));
 
   return (
     <div className="overflow-x-auto">
       <div className="mb-1 text-[11px] font-semibold text-[var(--agent-fg-secondary)]">
-        Shot bindings ({shots.length})
+        Shot bindings ({shots.length}
+        {virtualize ? ' · virtualized' : ''})
       </div>
-      <table className="w-full border-collapse text-[11px]">
-        <thead>
-          <tr className="border-b border-[var(--agent-divider)] text-left text-[var(--agent-fg-secondary)]">
-            <th className="py-1 pr-2 font-normal">#</th>
-            {activeSlots.map((slot) => (
-              <th key={slot} className="py-1 pr-2 font-normal">
-                {SLOT_LABEL[slot]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {visibleShots.map((shot, i) => (
-            <tr
-              key={shot.shotId}
-              className="border-b border-[var(--agent-divider)] last:border-b-0"
-            >
-              <td className="py-1 pr-2 text-[var(--agent-fg-secondary)]">{i + 1}</td>
-              {activeSlots.map((slot) => {
-                const candidate = shot.primary[slot];
-                const alternatives = shot.alternatives[slot] ?? [];
-                const unmatched = shot.unmatched.includes(slot);
-                const isOpen = openCell === cellKey(shot.shotId, slot);
-                return (
-                  <td key={slot} className="relative py-1 pr-2 align-top">
-                    <BindingCell
-                      candidate={candidate}
-                      unmatched={unmatched}
-                      hasAlternatives={alternatives.length > 0}
-                      readOnly={readOnly}
-                      onClick={() => handleCellClick(shot.shotId, slot, alternatives)}
-                    />
-                    {isOpen && !readOnly && (
-                      <BindingPopover
-                        candidates={candidates(candidate, alternatives)}
-                        currentAssetId={candidate?.assetId}
-                        onPick={(assetId) => handlePick(shot.shotId, slot, assetId)}
-                        onApplyToAll={
-                          candidate
-                            ? (assetId) => handleApplyToAll(candidate.entityId, slot, assetId)
-                            : undefined
-                        }
-                      />
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {hidden > 0 && (
-        <div className="mt-1 text-[10px] text-[var(--agent-fg-secondary)]">
-          … {hidden} more shot(s) hidden
+      {virtualize ? (
+        <div
+          ref={scrollContainerRef}
+          className="overflow-y-auto"
+          style={{ maxHeight: maxViewportPx }}
+          data-testid="plan-matrix-virtual-viewport"
+        >
+          <table className="w-full border-collapse text-[11px]">
+            {header}
+            <tbody>
+              {paddingTop > 0 && (
+                <tr aria-hidden="true" style={{ height: paddingTop }}>
+                  <td colSpan={activeSlots.length + 1} />
+                </tr>
+              )}
+              {bodyRows}
+              {paddingBottom > 0 && (
+                <tr aria-hidden="true" style={{ height: paddingBottom }}>
+                  <td colSpan={activeSlots.length + 1} />
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <table className="w-full border-collapse text-[11px]">
+          {header}
+          <tbody>{bodyRows}</tbody>
+        </table>
       )}
     </div>
   );
