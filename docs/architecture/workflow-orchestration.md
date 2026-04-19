@@ -150,13 +150,15 @@ Phase 5.4d ✅   render-engine pipeline stage + ctx.renderedAnchorPaths + batch-
 Phase 5.4e ⏳   bootstrap 注册 render-engine（需要 runtime-puppet/runtime-scene adapter 实例落地）
 Phase 6.1  ✅   .nkproj Format SDK（types + validator + migrator + codec + barrel，对齐 nkv/nkplan 模式）
 Phase 6.2  ✅   Lossless Upgrade 原语（addArtifacts / removeArtifacts / appendUpgradeEvent / recordLosslessUpgrade）
-Phase 6.3  ⏳   Clip.lineage（proto regenerate）+ ShotNode.workflowPlanId + 输入 handler registry
+Phase 6.3  ⏳   Clip.lineage（proto regenerate，写入 timeline.engine.ts）+ ShotNode.workflowPlanId（写入 canvas.ts）+ 输入 handler registry — **不再向 `.nkproj` 新增字段**，见 [format-strategy.md §六](./format-strategy.md#六项目状态分层nkproj-vs-neko-vs-git)
 ```
 
 **已完成横向任务**：
 - 统一 flag 读取 + VSCode settings 注册（`neko.workflow.*` 7 项）
 - 编排器集成测试（E2E-1..5 + 持久化 + fork/diff + consistency，10 条）
 - BatchGenerationScheduler 订阅 orchestrator 事件（canvas quiet mode）
+
+**项目状态分层约定**（2026-04-19 评审）：`.nkproj` 保持最小表面积，新增项目级元数据优先进 `.neko/`（配置/记忆/缓存/plans），git 负责文件时间线。三者正交职责见 [format-strategy.md §六](./format-strategy.md#六项目状态分层nkproj-vs-neko-vs-git)。
 
 **并行度**：Phase 1 之后，Workflow / Plan / AssetLibrary / Matching / Consistency 可**独立 track** 推进，不互相阻塞。
 

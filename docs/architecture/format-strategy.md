@@ -28,7 +28,7 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 | `.nkp` | Neko Puppet | neko-sketch | 骨骼动画/Live2D 项目 |
 | `.nka` | Neko Audio | neko-audio | 音频编辑项目 |
 | `.nkplan` | Neko Plan | neko-agent | Workflow Orchestration Plan Mode 工件 |
-| `.nkproj` | Neko Project | neko-agent | 顶层项目容器（引用 .nks/.nkc/.nkv/.nkplan，支持 Lossless Upgrade） |
+| `.nkproj` | Neko Project | neko-agent | 顶层项目容器（引用 .nks/.nkc/.nkv/.nkplan，支持 Lossless Upgrade）— 最小表面积，见 §六 |
 | `.fountain` | Fountain | neko-story | 行业标准剧本格式（不自定义，支持资产引用扩展） |
 
 **命名规则**：`nk` + 英文名首字母小写。`.fountain` 是行业标准，保持原样不改名。
@@ -378,3 +378,49 @@ project.nkv-ops   ← 操作历史（可选，独立文件）
 - 大型二进制数据（如 sketch `RegionSnapshot.data`）不序列化
 - 关闭编辑器时可选保存历史，重新打开时恢复 undo/redo stack
 - 历史文件与快照文件版本必须匹配（通过 projectVersion 字段校验）
+
+---
+
+## 六、项目状态分层（`.nkproj` vs `.neko/` vs git）
+
+Workflow Orchestration 引入 `.nkproj` 顶层容器时曾纠结"为什么不复用 `.neko/` 目录或 git"——经 2026-04-19 评审，结论：**`.nkproj` 保持最小表面积，`.neko/` 是真正的 SSOT**。
+
+### 三者正交职责
+
+| 关注 | 载体 | 示例 |
+|------|------|------|
+| "创作产出了什么（工件 DAG + 路由溯源）" | `.nkproj` | `artifacts[].derivedFromArtifactId` / `upgradeHistory` |
+| "这个工作区怎么行为（配置 / 记忆 / 缓存 / 计划）" | `.neko/` | `settings.json` / `memory.md` / `.cache/` / `plans/*.nkplan` |
+| "文件何时变成今天这样（时间旅行）" | git | commit history / branches |
+
+### `.nkproj` 的最小化原则
+
+经字段级拆解，`.nkproj` 绝大多数字段**在 `.neko/` 都有自然家**：
+
+| `.nkproj` 字段 | `.neko/` 自然替代 |
+|--------------|---------------|
+| `workflow` prefs | `.neko/settings.json` |
+| `notes[]` | `.neko/memory.md` |
+| `parentProjectId` / `id` / `name` | `.neko/metadata.json`（未建） |
+| `artifacts[]` | glob `**/*.nk?` + `.neko/artifact-graph.json`（未建） |
+
+`.nkproj` 真正**独占**的价值仅有**单文件原子写**：`recordLosslessUpgrade` 一次 save 同时落 artifact + upgradeEvent。其他字段是为对称性和"一眼看到项目"的 UX 冗余。
+
+### 落地策略
+
+1. **Phase 6.1/6.2 保留**：32 测试绿、API 已稳定，沉没成本合理。
+2. **Phase 6.3 不再扩充 `.nkproj`**：Clip.lineage 写入 proto（timeline.engine.ts），ShotNode.workflowPlanId 写入 canvas.ts，两者都不需要进 `.nkproj`。
+3. **`.neko/` 优先**：新增项目级元数据（activity log / preference / 缓存）都先问"能不能进 `.neko/`"。只有需要与 `upgradeHistory` 原子协同时才进 `.nkproj`。
+4. **观察期（6 个月）**：若实际消费端（PlanBuilder / AssetLibrary / LLM context）从未读过 `.nkproj` 的新字段，标记为 deprecated 并迁移到 `.neko/`。
+
+### 为什么不是 git
+
+git 是**补充**不是替代：
+
+- **自动追加 vs 手动 commit**：Lossless Upgrade 机器触发，不能等用户 `git commit`。
+- **语义 DAG 不在 tree 里**：`derivedFromArtifactId` / `producedByRouteLevel` 是工件之间的关系，git 只记文件快照。
+- **跨扩展 API 查询**：webview 沙箱不能 shell out；`.nkproj.artifacts` 是 O(1) JSON 字段访问。
+- **不强制 git**：速写项目 / 素材 dump 不是每个都入库。
+- **二进制工件 git-hostile**：生成的视频/图片要 LFS 或 gitignore，`.nkproj` 追踪引用与二进制是否入库正交。
+
+核心判定：**git 管"文件时间线"，`.nkproj` 管"创作工件 DAG + 路由溯源"，`.neko/` 管"工作区行为"**——三层正交，混一层都出问题。
