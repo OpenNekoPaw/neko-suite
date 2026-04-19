@@ -71,12 +71,14 @@ export function parseOscMessage(buf: Buffer, start = 0): OscMessage | undefined 
         break;
       }
       case 'f': {
+        if (offset + 4 > buf.length) return { address, args };
         const [val, next] = readFloat32(buf, offset);
         args.push({ type: 'f', value: val });
         offset = next;
         break;
       }
       case 'i': {
+        if (offset + 4 > buf.length) return { address, args };
         const [val, next] = readInt32(buf, offset);
         args.push({ type: 'i', value: val });
         offset = next;

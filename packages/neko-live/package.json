@@ -120,7 +120,7 @@
     "copy:dist": "mkdir -p dist/extension dist/webview && cp packages/extension/dist/extension.js dist/extension/ && cp -r packages/webview/dist/* dist/webview/",
     "watch": "cd packages/extension && pnpm run watch",
     "lint": "eslint packages --ext ts,tsx",
-    "test": "vitest --passWithNoTests",
+    "test": "vitest",
     "package": "pnpm run compile && vsce package --no-dependencies"
   },
   "devDependencies": {
