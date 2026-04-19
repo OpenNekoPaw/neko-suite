@@ -111,6 +111,26 @@ export class RouterMemory {
     await this.store.upsertEntry(ROUTER_MEMORY_SECTION_KEY, body);
   }
 
+  /** Remove a single entry by hash.  No-op if not found. */
+  async deleteByHash(hash: string): Promise<boolean> {
+    const entries = this.readAll();
+    const next = entries.filter((e) => e.hash !== hash);
+    if (next.length === entries.length) return false;
+    const body = next.map(serialiseEntry).join('\n');
+    await this.store.upsertEntry(ROUTER_MEMORY_SECTION_KEY, body);
+    return true;
+  }
+
+  /** Drop every entry (section body reset to empty).  Preserves the H2 header. */
+  async clearAll(): Promise<void> {
+    await this.store.upsertEntry(ROUTER_MEMORY_SECTION_KEY, '');
+  }
+
+  /** Count entries currently stored. */
+  count(): number {
+    return this.readAll().length;
+  }
+
   // ---------------------------------------------------------------------------
 
   private readAll(): RouterMemoryEntry[] {

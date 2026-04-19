@@ -14,6 +14,7 @@ import type {
   WorkflowLitePlan,
   WorkflowPlanDiffPayload,
   WorkflowPlanListEntry,
+  WorkflowRouterMemoryEntry,
 } from '@neko-agent/types';
 
 export type WorkflowPlanStatus =
@@ -46,6 +47,16 @@ export interface PlanBrowserState {
   open: boolean;
 }
 
+export interface RouterMemoryState {
+  entries: readonly WorkflowRouterMemoryEntry[];
+  total: number;
+  errorMessage: string | undefined;
+  /** True once a response has landed — lets the UI distinguish "not loaded" from "empty". */
+  loaded: boolean;
+  /** Drawer visibility. */
+  open: boolean;
+}
+
 export interface WorkflowPlanState {
   /** Plan currently being previewed or executed. Undefined when no plan is active. */
   plan: WorkflowLitePlan | undefined;
@@ -64,6 +75,8 @@ export interface WorkflowPlanState {
   pendingAsk: PendingRouterAsk | undefined;
   /** Persistent plan browser (list of fork candidates etc.) */
   browser: PlanBrowserState;
+  /** Router memory inspector (recent routing decisions). */
+  routerMemory: RouterMemoryState;
 }
 
 const INITIAL_BROWSER: PlanBrowserState = {
@@ -71,6 +84,14 @@ const INITIAL_BROWSER: PlanBrowserState = {
   filterStatus: undefined,
   filterParentPlanId: undefined,
   errorMessage: undefined,
+  open: false,
+};
+
+const INITIAL_ROUTER_MEMORY: RouterMemoryState = {
+  entries: [],
+  total: 0,
+  errorMessage: undefined,
+  loaded: false,
   open: false,
 };
 
@@ -84,6 +105,7 @@ const INITIAL: WorkflowPlanState = {
   pendingGate: undefined,
   pendingAsk: undefined,
   browser: INITIAL_BROWSER,
+  routerMemory: INITIAL_ROUTER_MEMORY,
 };
 
 export function useWorkflowPlan(): WorkflowPlanState & {
@@ -93,6 +115,8 @@ export function useWorkflowPlan(): WorkflowPlanState & {
   clearPendingAsk: () => void;
   openBrowser: () => void;
   closeBrowser: () => void;
+  openRouterMemory: () => void;
+  closeRouterMemory: () => void;
 } {
   const [state, setState] = useState<WorkflowPlanState>(INITIAL);
 
@@ -116,6 +140,7 @@ export function useWorkflowPlan(): WorkflowPlanState & {
             pendingGate: undefined,
             pendingAsk: prev.pendingAsk,
             browser: prev.browser,
+            routerMemory: prev.routerMemory,
           }));
           break;
         case 'workflow/planDispatched':
@@ -187,6 +212,18 @@ export function useWorkflowPlan(): WorkflowPlanState & {
             },
           }));
           break;
+        case 'workflow/routerMemory':
+          setState((prev) => ({
+            ...prev,
+            routerMemory: {
+              entries: msg.entries,
+              total: msg.total,
+              errorMessage: msg.errorMessage,
+              loaded: true,
+              open: true,
+            },
+          }));
+          break;
         default:
           break;
       }
@@ -207,6 +244,16 @@ export function useWorkflowPlan(): WorkflowPlanState & {
         browser: { ...prev.browser, open: true, errorMessage: undefined },
       })),
     closeBrowser: () => setState((prev) => ({ ...prev, browser: INITIAL_BROWSER })),
+    openRouterMemory: () =>
+      setState((prev) => ({
+        ...prev,
+        routerMemory: { ...prev.routerMemory, open: true },
+      })),
+    closeRouterMemory: () =>
+      setState((prev) => ({
+        ...prev,
+        routerMemory: INITIAL_ROUTER_MEMORY,
+      })),
   };
 }
 

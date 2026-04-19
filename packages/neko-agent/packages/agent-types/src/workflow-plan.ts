@@ -458,6 +458,51 @@ export interface WorkflowRouterAskResponseMessage {
   freeformAnswer?: string;
 }
 
+// =============================================================================
+// Router memory inspection (Phase 3 collage tool)
+//
+// Lets the user peek at what the router has learned about their workspace
+// and clear individual / all entries.  Read-only list + delete hash + clear.
+// =============================================================================
+
+/**
+ * A single router-memory entry as surfaced to the webview.  Mirrors the
+ * platform-level `RouterMemoryEntry` shape but keeps extension-side concerns
+ * (logger / store) out.
+ */
+export interface WorkflowRouterMemoryEntry {
+  hash: string;
+  level: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+  reason: string;
+  at: number;
+  source: 'rules' | 'llm' | 'user-override' | 'memory';
+  textLength?: number;
+}
+
+/** Webview → Extension: fetch recent router-memory entries. */
+export interface WorkflowRouterMemoryRequestMessage {
+  type: 'workflow/routerMemoryRequest';
+  limit?: number;
+  level?: WorkflowRouterMemoryEntry['level'];
+  source?: WorkflowRouterMemoryEntry['source'];
+}
+
+/** Extension → Webview: current entries snapshot. */
+export interface WorkflowRouterMemoryMessage {
+  type: 'workflow/routerMemory';
+  entries: WorkflowRouterMemoryEntry[];
+  total: number;
+  /** Populated when memory isn't wired (no workspace folder). */
+  errorMessage?: string;
+}
+
+/** Webview → Extension: delete a single entry by hash, or clear everything. */
+export interface WorkflowRouterMemoryDeleteMessage {
+  type: 'workflow/routerMemoryDelete';
+  /** When provided, remove all entries with this hash.  Otherwise clear all. */
+  hash?: string;
+}
+
 export type WorkflowIncomingMessage =
   | WorkflowPlanPreviewMessage
   | WorkflowPlanDispatchedMessage
@@ -466,7 +511,8 @@ export type WorkflowIncomingMessage =
   | WorkflowPlanDiffMessage
   | WorkflowPlanListMessage
   | PipelineGateWaitingMessage
-  | WorkflowRouterAskMessage;
+  | WorkflowRouterAskMessage
+  | WorkflowRouterMemoryMessage;
 
 export type WorkflowOutgoingMessage =
   | WorkflowPlanApproveMessage
@@ -480,4 +526,6 @@ export type WorkflowOutgoingMessage =
   | WorkflowPlanListRequestMessage
   | PipelineGateConfirmMessage
   | PipelineGateCancelMessage
-  | WorkflowRouterAskResponseMessage;
+  | WorkflowRouterAskResponseMessage
+  | WorkflowRouterMemoryRequestMessage
+  | WorkflowRouterMemoryDeleteMessage;

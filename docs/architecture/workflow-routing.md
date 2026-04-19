@@ -235,6 +235,15 @@ Pipeline 层 (pipeline-execution.md，基于已有 PipelineExecutor)
 - [memory/router-memory.ts](../../packages/neko-agent/packages/platform/src/workflow/memory/router-memory.ts) — `.neko/memory.md` H2 section `workflow-router`
 - Feature flag: `neko.workflow.router.llm.enabled`（默认关）
 
+### Phase 3 — Router memory inspector UI（已完成 2026-04-19）
+- `RouterMemory` 新增 `deleteByHash(hash)` / `clearAll()` / `count()` API（[router-memory.ts](../../packages/neko-agent/packages/platform/src/workflow/memory/router-memory.ts)）
+- 新 wire 消息：`workflow/routerMemoryRequest` / `workflow/routerMemory` / `workflow/routerMemoryDelete`（[workflow-plan.ts](../../packages/neko-agent/packages/agent-types/src/workflow-plan.ts)）
+- Handler 方法：`handleRouterMemoryRequest` / `handleRouterMemoryDelete`（[workflow-plan-handler.ts](../../packages/neko-agent/packages/extension/src/workflow/workflow-plan-handler.ts)）— 过滤 level/source/limit、hash 删除或清空，删后自动重 post
+- Orchestrator 暴露 `routerMemory` 实例便于 handler 访问
+- Webview `RouterMemoryView.tsx` — level/source chips 过滤 + 逐条 Forget + Clear all，支持 `plan` 存在与不存在两种布局
+- `useWorkflowPlan.routerMemory` 状态 + `openRouterMemory / closeRouterMemory` 操作；`workflow/planPreview` 保留现有 routerMemory 不清零
+- WorkflowPlanPanel terminal state 增加 **Router history** 按钮打开 drawer
+
 ### Phase 3.5 — ask_user 交互兜底（已完成）
 - [extension/src/workflow/router-ask-broker.ts](../../packages/neko-agent/packages/extension/src/workflow/router-ask-broker.ts) — `RouterAskBroker` 实现 platform `AskUserBroker`：posts `workflow/routerAsk` + 等 `routerAskResponse`，支持 signal/timeout
 - [webview `RouterAskModal`](../../packages/neko-agent/packages/webview/src/components/ChatView/RouterAskModal.tsx) — 多选按钮 + 自由输入 + 倒计时 + Skip

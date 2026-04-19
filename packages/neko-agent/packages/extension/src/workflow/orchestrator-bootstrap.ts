@@ -91,6 +91,8 @@ export interface Orchestrator {
   readonly planStore: PlanStore | undefined;
   /** Phase 3 LLM router, undefined when the feature flag is off. */
   readonly llmRouter: Workflow.LLMRouter | undefined;
+  /** Phase 3 router memory (recent decisions), undefined when no workDir / file IO. */
+  readonly routerMemory: Workflow.RouterMemory | undefined;
 
   /**
    * Build a plan from a raw input and dispatch it to the pipeline.
@@ -154,6 +156,7 @@ export async function bootstrapOrchestrator(
     consistencyChecker,
     planStore,
     llmRouter,
+    routerMemory,
 
     async startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult> {
       let route: Route;

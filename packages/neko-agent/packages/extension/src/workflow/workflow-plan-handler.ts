@@ -33,6 +33,10 @@ import type {
   WorkflowPlanListRequestMessage,
   WorkflowPlanOverrideMessage,
   WorkflowPlanToggleCheckpointMessage,
+  WorkflowRouterMemoryDeleteMessage,
+  WorkflowRouterMemoryEntry,
+  WorkflowRouterMemoryMessage,
+  WorkflowRouterMemoryRequestMessage,
 } from '@neko-agent/types';
 import { Workflow } from '@neko/platform';
 import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
@@ -453,6 +457,62 @@ export class WorkflowPlanHandler {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Router memory inspection (Phase 3 tool)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Return recent router-memory entries.  Posts `workflow/routerMemory` with
+   * the entries + total; when no memory is wired the message still posts
+   * (empty entries + errorMessage).
+   */
+  handleRouterMemoryRequest(msg: WorkflowRouterMemoryRequestMessage): WorkflowRouterMemoryEntry[] {
+    const memory = this.deps.orchestrator.routerMemory;
+    if (!memory) {
+      this.postRouterMemory({
+        entries: [],
+        total: 0,
+        errorMessage: 'Router memory is not available (no workspace folder or file IO).',
+      });
+      return [];
+    }
+    const entries = memory.listRecent({
+      ...(msg.limit !== undefined && { limit: msg.limit }),
+      ...(msg.level !== undefined && { level: msg.level }),
+      ...(msg.source !== undefined && { source: msg.source }),
+    });
+    const wire = entries.map(toWireRouterMemoryEntry);
+    this.postRouterMemory({ entries: wire, total: memory.count() });
+    return wire;
+  }
+
+  /**
+   * Delete a single entry by hash, or clear all entries when `hash` is
+   * omitted.  After mutating, re-post the updated list so the webview
+   * re-renders without a separate request.
+   */
+  async handleRouterMemoryDelete(msg: WorkflowRouterMemoryDeleteMessage): Promise<boolean> {
+    const memory = this.deps.orchestrator.routerMemory;
+    if (!memory) {
+      this.postRouterMemory({
+        entries: [],
+        total: 0,
+        errorMessage: 'Router memory is not available.',
+      });
+      return false;
+    }
+    let changed = false;
+    if (msg.hash !== undefined) {
+      changed = await memory.deleteByHash(msg.hash);
+    } else {
+      await memory.clearAll();
+      changed = true;
+    }
+    const entries = memory.listRecent().map(toWireRouterMemoryEntry);
+    this.postRouterMemory({ entries, total: memory.count() });
+    return changed;
+  }
+
   /**
    * Propagate an edit to every other shot whose binding references the same entity.
    */
@@ -559,6 +619,12 @@ export class WorkflowPlanHandler {
     const webview = this.deps.getWebview();
     if (!webview) return;
     webview.postMessage({ type: 'workflow/planList', ...params });
+  }
+
+  private postRouterMemory(params: Omit<WorkflowRouterMemoryMessage, 'type'>): void {
+    const webview = this.deps.getWebview();
+    if (!webview) return;
+    webview.postMessage({ type: 'workflow/routerMemory', ...params });
   }
 
   private async persistEdit(plan: Workflow.LitePlan): Promise<void> {
@@ -766,6 +832,17 @@ function toWireViolation(v: Workflow.Violation): WorkflowViolation {
       v.suggestions.length > 0 && {
         suggestions: v.suggestions.map((s) => ({ ...s })),
       }),
+  };
+}
+
+function toWireRouterMemoryEntry(entry: Workflow.RouterMemoryEntry): WorkflowRouterMemoryEntry {
+  return {
+    hash: entry.hash,
+    level: entry.level,
+    reason: entry.reason,
+    at: entry.at,
+    source: entry.source,
+    ...(entry.textLength !== undefined && { textLength: entry.textLength }),
   };
 }
 

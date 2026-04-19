@@ -13,6 +13,7 @@ import { PlanDiffView } from './PlanDiffView';
 import { PipelineGatePanel } from './PipelineGatePanel';
 import { RouterAskModal } from './RouterAskModal';
 import { PlanBrowser } from './PlanBrowser';
+import { RouterMemoryView } from './RouterMemoryView';
 
 export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
   const {
@@ -24,11 +25,14 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
     pendingGate,
     pendingAsk,
     browser,
+    routerMemory,
     dismiss,
     dismissDiff,
     clearPendingGate,
     clearPendingAsk,
     closeBrowser,
+    openRouterMemory,
+    closeRouterMemory,
   } = useWorkflowPlan();
 
   // The router's ask_user fires during route decision, before any plan
@@ -42,6 +46,22 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
           {...(pendingAsk.options !== undefined && { options: pendingAsk.options })}
           {...(pendingAsk.timeoutMs !== undefined && { timeoutMs: pendingAsk.timeoutMs })}
           onResolved={clearPendingAsk}
+        />
+      </div>
+    );
+  }
+
+  // Router-memory inspector can be opened when no plan is active — useful for
+  // auditing past decisions between sessions.
+  if (!plan && routerMemory.open) {
+    return (
+      <div className="px-2 pt-1">
+        <RouterMemoryView
+          entries={routerMemory.entries}
+          total={routerMemory.total}
+          errorMessage={routerMemory.errorMessage}
+          loaded={routerMemory.loaded}
+          onClose={closeRouterMemory}
         />
       </div>
     );
@@ -94,6 +114,15 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
           onClose={closeBrowser}
         />
       )}
+      {routerMemory.open && (
+        <RouterMemoryView
+          entries={routerMemory.entries}
+          total={routerMemory.total}
+          errorMessage={routerMemory.errorMessage}
+          loaded={routerMemory.loaded}
+          onClose={closeRouterMemory}
+        />
+      )}
       {(diff !== undefined || diffError !== undefined) && (
         <PlanDiffView
           diff={
@@ -112,7 +141,14 @@ export const WorkflowPlanPanel = memo(function WorkflowPlanPanel() {
         />
       )}
       {terminal && (
-        <div className="mt-1 flex justify-end">
+        <div className="mt-1 flex justify-end gap-1.5">
+          <button
+            className="vscode-button-secondary px-2 py-0.5 text-[11px]"
+            onClick={openRouterMemory}
+            title="Review what the router has learned about your inputs"
+          >
+            Router history
+          </button>
           <button className="vscode-button-secondary px-2 py-0.5 text-[11px]" onClick={dismiss}>
             Dismiss
           </button>

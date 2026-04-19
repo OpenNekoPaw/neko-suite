@@ -147,6 +147,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       parentPlanId?: string;
       limit?: number;
     }): Promise<unknown>;
+    handleRouterMemoryRequest(msg: {
+      type: 'workflow/routerMemoryRequest';
+      limit?: number;
+      level?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+      source?: 'rules' | 'llm' | 'user-override' | 'memory';
+    }): unknown;
+    handleRouterMemoryDelete(msg: {
+      type: 'workflow/routerMemoryDelete';
+      hash?: string;
+    }): Promise<boolean>;
   };
   private readonly _dndBroker = new DragDropBroker();
 
@@ -575,6 +585,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             parentPlanId?: string;
             limit?: number;
           }): Promise<unknown>;
+          handleRouterMemoryRequest(msg: {
+            type: 'workflow/routerMemoryRequest';
+            limit?: number;
+            level?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+            source?: 'rules' | 'llm' | 'user-override' | 'memory';
+          }): unknown;
+          handleRouterMemoryDelete(msg: {
+            type: 'workflow/routerMemoryDelete';
+            hash?: string;
+          }): Promise<boolean>;
         }
       | undefined,
   ): void {
@@ -787,6 +807,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             status?: string;
             parentPlanId?: string;
             limit?: number;
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/routerMemoryRequest') {
+        this._workflowPlanHandler?.handleRouterMemoryRequest(
+          message as {
+            type: 'workflow/routerMemoryRequest';
+            limit?: number;
+            level?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+            source?: 'rules' | 'llm' | 'user-override' | 'memory';
+          },
+        );
+        return;
+      }
+
+      if (message.type === 'workflow/routerMemoryDelete') {
+        await this._workflowPlanHandler?.handleRouterMemoryDelete(
+          message as {
+            type: 'workflow/routerMemoryDelete';
+            hash?: string;
           },
         );
         return;

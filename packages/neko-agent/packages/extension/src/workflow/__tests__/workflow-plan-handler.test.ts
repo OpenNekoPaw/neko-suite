@@ -743,6 +743,163 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
 });
 
 // =============================================================================
+// Router memory inspection (Phase 3 tool)
+// =============================================================================
+
+describe('WorkflowPlanHandler — router memory inspection', () => {
+  function makeOrchestratorWithMemory(memory: Workflow.RouterMemory | undefined) {
+    return {
+      router: {} as unknown as Orchestrator['router'],
+      assetLibrary: undefined,
+      matchingEngine: {} as unknown as Orchestrator['matchingEngine'],
+      planBuilder: {} as unknown as Orchestrator['planBuilder'],
+      planStore: undefined,
+      consistencyChecker: {} as unknown as Orchestrator['consistencyChecker'],
+      llmRouter: undefined,
+      routerMemory: memory,
+      dispose: () => undefined,
+      startRoutedPipeline: vi.fn(),
+      buildPlan: vi.fn(),
+    } as unknown as Orchestrator;
+  }
+
+  function makeInMemoryRouterMemory(): Workflow.RouterMemory {
+    let content: string | null = null;
+    return new Workflow.RouterMemory({
+      getContent: () => content,
+      upsertEntry: async (key, body) => {
+        content = `## ${key}\n${body}\n`;
+      },
+    });
+  }
+
+  it('posts an empty list with an errorMessage when memory is absent', () => {
+    const { webview, posts } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const result = handler.handleRouterMemoryRequest({ type: 'workflow/routerMemoryRequest' });
+    expect(result).toEqual([]);
+    const post = posts.find((p) => (p as { type: string }).type === 'workflow/routerMemory') as
+      | { errorMessage?: string; entries: unknown[] }
+      | undefined;
+    expect(post?.errorMessage).toContain('not available');
+  });
+
+  it('returns recent entries in newest-first order', async () => {
+    const mem = makeInMemoryRouterMemory();
+    await mem.record({
+      hash: 'a',
+      level: 'L2',
+      reason: 'first',
+      at: 100,
+      source: 'rules',
+    });
+    await mem.record({
+      hash: 'b',
+      level: 'L3',
+      reason: 'second',
+      at: 200,
+      source: 'llm',
+    });
+    const { webview, posts } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(mem),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const result = handler.handleRouterMemoryRequest({ type: 'workflow/routerMemoryRequest' });
+    expect(result.map((e) => e.hash)).toEqual(['b', 'a']);
+    const post = posts.find((p) => (p as { type: string }).type === 'workflow/routerMemory') as
+      | { total: number; entries: { hash: string }[] }
+      | undefined;
+    expect(post?.total).toBe(2);
+    expect(post?.entries.length).toBe(2);
+  });
+
+  it('applies level filter', async () => {
+    const mem = makeInMemoryRouterMemory();
+    await mem.record({ hash: 'a', level: 'L0', reason: 'r', at: 1, source: 'rules' });
+    await mem.record({ hash: 'b', level: 'L3', reason: 'r', at: 2, source: 'llm' });
+    const { webview } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(mem),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const result = handler.handleRouterMemoryRequest({
+      type: 'workflow/routerMemoryRequest',
+      level: 'L3',
+    });
+    expect(result.map((e) => e.hash)).toEqual(['b']);
+  });
+
+  it('deletes a single entry by hash and re-posts the list', async () => {
+    const mem = makeInMemoryRouterMemory();
+    await mem.record({ hash: 'a', level: 'L2', reason: 'r', at: 1, source: 'rules' });
+    await mem.record({ hash: 'b', level: 'L3', reason: 'r', at: 2, source: 'llm' });
+    const { webview, posts } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(mem),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const changed = await handler.handleRouterMemoryDelete({
+      type: 'workflow/routerMemoryDelete',
+      hash: 'a',
+    });
+    expect(changed).toBe(true);
+    const latest = posts.filter(
+      (p) => (p as { type: string }).type === 'workflow/routerMemory',
+    ) as { entries: { hash: string }[] }[];
+    const last = latest[latest.length - 1];
+    expect(last?.entries.map((e) => e.hash)).toEqual(['b']);
+  });
+
+  it('clearAll removes every entry when no hash is provided', async () => {
+    const mem = makeInMemoryRouterMemory();
+    await mem.record({ hash: 'a', level: 'L2', reason: 'r', at: 1, source: 'rules' });
+    await mem.record({ hash: 'b', level: 'L3', reason: 'r', at: 2, source: 'llm' });
+    const { webview, posts } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(mem),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const changed = await handler.handleRouterMemoryDelete({
+      type: 'workflow/routerMemoryDelete',
+    });
+    expect(changed).toBe(true);
+    const latest = posts.filter(
+      (p) => (p as { type: string }).type === 'workflow/routerMemory',
+    ) as { entries: unknown[]; total: number }[];
+    const last = latest[latest.length - 1];
+    expect(last?.entries).toEqual([]);
+    expect(last?.total).toBe(0);
+  });
+
+  it('delete is a no-op with errorMessage when memory is absent', async () => {
+    const { webview, posts } = makeWebview();
+    const handler = new WorkflowPlanHandler({
+      orchestrator: makeOrchestratorWithMemory(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getWebview: () => webview as any,
+    });
+    const changed = await handler.handleRouterMemoryDelete({
+      type: 'workflow/routerMemoryDelete',
+      hash: 'a',
+    });
+    expect(changed).toBe(false);
+    const post = posts.find((p) => (p as { type: string }).type === 'workflow/routerMemory') as
+      | { errorMessage?: string }
+      | undefined;
+    expect(post?.errorMessage).toContain('not available');
+  });
+});
+
+// =============================================================================
 // Cross-extension plan-state broadcast (BatchGenerationScheduler quiet mode)
 // =============================================================================
 

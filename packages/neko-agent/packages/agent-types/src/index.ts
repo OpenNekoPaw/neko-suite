@@ -60,6 +60,10 @@ export type {
   WorkflowPlanListEntry,
   WorkflowPlanListRequestMessage,
   WorkflowPlanListMessage,
+  WorkflowRouterMemoryEntry,
+  WorkflowRouterMemoryRequestMessage,
+  WorkflowRouterMemoryMessage,
+  WorkflowRouterMemoryDeleteMessage,
   WorkflowIncomingMessage,
   WorkflowOutgoingMessage,
 } from './workflow-plan';

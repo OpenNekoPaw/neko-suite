@@ -135,4 +135,59 @@ describe('RouterMemory', () => {
     const hit = reloaded.lookup('dup');
     expect(hit?.level).toBe('L3');
   });
+
+  it('deleteByHash removes all entries with that hash', async () => {
+    const store = makeStore();
+    const mem = new RouterMemory(store);
+    await mem.record({ ...ENTRY, hash: 'a' });
+    await mem.record({ ...ENTRY, hash: 'b' });
+    await mem.record({ ...ENTRY, hash: 'a', at: 200 });
+
+    const reloaded = new RouterMemory({
+      getContent: () => store.getWrittenContent(),
+      upsertEntry: store.upsertEntry,
+    });
+    const removed = await reloaded.deleteByHash('a');
+    expect(removed).toBe(true);
+
+    const finalMem = new RouterMemory({
+      getContent: () => store.getWrittenContent(),
+      upsertEntry: store.upsertEntry,
+    });
+    expect(finalMem.lookup('a')).toBeUndefined();
+    expect(finalMem.lookup('b')).toBeDefined();
+  });
+
+  it('deleteByHash returns false on unknown hash', async () => {
+    const mem = new RouterMemory(makeStore());
+    const removed = await mem.deleteByHash('never');
+    expect(removed).toBe(false);
+  });
+
+  it('clearAll empties the section', async () => {
+    const store = makeStore();
+    const mem = new RouterMemory(store);
+    await mem.record({ ...ENTRY, hash: 'a' });
+    await mem.record({ ...ENTRY, hash: 'b' });
+    await mem.clearAll();
+
+    const reloaded = new RouterMemory({
+      getContent: () => store.getWrittenContent(),
+      upsertEntry: store.upsertEntry,
+    });
+    expect(reloaded.count()).toBe(0);
+    expect(reloaded.listRecent()).toEqual([]);
+  });
+
+  it('count reflects current entry total', async () => {
+    const store = makeStore();
+    const mem = new RouterMemory(store);
+    expect(mem.count()).toBe(0);
+    await mem.record({ ...ENTRY, hash: 'a' });
+    const reloaded = new RouterMemory({
+      getContent: () => store.getWrittenContent(),
+      upsertEntry: store.upsertEntry,
+    });
+    expect(reloaded.count()).toBe(1);
+  });
 });
