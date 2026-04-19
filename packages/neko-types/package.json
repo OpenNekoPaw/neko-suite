@@ -15,6 +15,7 @@
     "./nkc": "./src/nkc/index.ts",
     "./nka": "./src/nka/index.ts",
     "./nkplan": "./src/nkplan/index.ts",
+    "./nkproj": "./src/nkproj/index.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
     "./*": "./src/*"
   },

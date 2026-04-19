@@ -148,7 +148,9 @@ Phase 5.4c-stub ✅  RenderMode / PuppetRenderAdapter / SceneRenderAdapter TS �
 Phase 5.4c-rust ⏳  runtime-puppet / runtime-scene Rust adapter 实现（host-napi binding）
 Phase 5.4d ✅   render-engine pipeline stage + ctx.renderedAnchorPaths + batch-generate 默认 resolver 优先读 rendered anchors
 Phase 5.4e ⏳   bootstrap 注册 render-engine（需要 runtime-puppet/runtime-scene adapter 实例落地）
-Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
+Phase 6.1  ✅   .nkproj Format SDK（types + validator + migrator + codec + barrel，对齐 nkv/nkplan 模式）
+Phase 6.2  ✅   Lossless Upgrade 原语（addArtifacts / removeArtifacts / appendUpgradeEvent / recordLosslessUpgrade）
+Phase 6.3  ⏳   Clip.lineage（proto regenerate）+ ShotNode.workflowPlanId + 输入 handler registry
 ```
 
 **已完成横向任务**：

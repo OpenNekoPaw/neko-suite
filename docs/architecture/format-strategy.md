@@ -27,6 +27,8 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 | `.nks` | Neko Sketch | neko-sketch | 2D 绘画项目 |
 | `.nkp` | Neko Puppet | neko-sketch | 骨骼动画/Live2D 项目 |
 | `.nka` | Neko Audio | neko-audio | 音频编辑项目 |
+| `.nkplan` | Neko Plan | neko-agent | Workflow Orchestration Plan Mode 工件 |
+| `.nkproj` | Neko Project | neko-agent | 顶层项目容器（引用 .nks/.nkc/.nkv/.nkplan，支持 Lossless Upgrade） |
 | `.fountain` | Fountain | neko-story | 行业标准剧本格式（不自定义，支持资产引用扩展） |
 
 **命名规则**：`nk` + 英文名首字母小写。`.fountain` 是行业标准，保持原样不改名。
