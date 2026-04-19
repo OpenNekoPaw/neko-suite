@@ -241,12 +241,15 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - ✅ **Phase 6.3a/b** — Clip lineage (proto regen) + ShotNode.workflowPlanId + wiring (PipelineContext.planId + applyStoryboardPayloadToCanvas + arrange-on-timeline lineage)
 - ⏸ **Phase 6.3c** — Input handler registry (deferred; current inline switch in fast-probe adequate)
 - ✅ **Governance C1/C2** — `orchestrator.enabled` default `true`; legacy `neko.pipeline.start` / `generateForNode` JSDoc `@deprecated`
+- ✅ **R1-R6 Decoupling review** (6 rounds, 2026-04-19) — approve dispatches user-reviewed plan; plan.input + plan.matchingShots persisted for self-sufficient fork/reload; `WorkflowPlanCapabilities` contract gates UI buttons on actual handler support; legacy-fork clean rejection (no zombie preview); `WorkflowPlanHandler` split into facade + `PlanReviewSession` / `PlanQueryController` / `PipelineLifecycleBridge` / `RouterMemoryController` + `plan-wire/` module folder; `ReviewOrchestrator` narrow port + Shot↔NkplanShot compile-time compat check
 - [ ] **Governance C3/C4** — `.nkproj` observation telemetry + legacy command usage funnel (needs telemetry infra)
 - [ ] **Governance C5** — Plan Diff viewer webview menu entry (infra exists at [plan-diff.ts](./packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts))
 - [ ] **Testing D4/D5/D6** — `.nkproj` real-project round-trip + multi-workspace concurrent FileIO + 6.3 wiring integration test
+- [ ] **Webview state rewrite** — `useWorkflowPlan` single-slot → reducer/store keyed by sessionId (enables concurrent plan panels)
+- [ ] **Cross-ext typed contract** — replace `neko.canvas.orchestrator.planStateChanged` string command with shared typed extension-API (KNOWN COUPLING note inline at plan-wire/broadcast.ts)
 - ⏭ **Rust Milestone (4.2 + 4.3b + 5.4c-rust + 5.4e)** — ~8-12 person-days, requires Rust toolchain + cross-platform CI
 
-**Test coverage**: 127+ nkproj/nkplan/nkv unit; 422 workflow/pipeline integration; 9 fallback/DAG invariant tests (D2 commit_route validator + D3 reference chain DAG). Zero pre-existing tests touched across the sprint.
+**Test coverage**: 914 green (437 workflow/pipeline + 477 neko-types). Six review rounds zero-regression; accumulated regression tests span commit_route validator (D2), reference-chain DAG invariants (D3), fork → approve dispatch (R1-Fix-2), plan.input fork-dispatch (R2-Fix-A), legacy-fork rejection (R4-Fix-D), capability timing (R4-Fix-F), fork-recheck via matchingShots (R5-Fix-I), Shot↔NkplanShot structural compat (R6-Fix-M).
 
 ### neko-model (3D) + neko-puppet (2D) — Character Editing Rust Engine ✅
 - Phase 3.1-3.3 ✅ (basic 3D + AI face sculpting + CSG + PBR + particles + timeline integration)

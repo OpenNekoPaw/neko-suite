@@ -35,6 +35,20 @@ import type {
 import { Workflow } from '@neko/platform';
 import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
 import type { PipelineLifecycleBridge } from './pipeline-lifecycle-bridge';
+
+/**
+ * Narrow review port over Orchestrator — exposes only what
+ * PlanReviewSession actually calls.  Full Orchestrator structurally
+ * satisfies this, so existing injection sites work unchanged.  Future
+ * review implementations (e.g. a test double, a remote-plan preview
+ * session) can provide just these three surfaces without fabricating a
+ * full orchestrator.
+ */
+export interface ReviewOrchestrator {
+  readonly buildPlan: Orchestrator['buildPlan'];
+  readonly startRoutedPipeline: Orchestrator['startRoutedPipeline'];
+  readonly consistencyChecker: Workflow.ConsistencyChecker;
+}
 import {
   computeCapabilities,
   postDispatched,
@@ -84,7 +98,13 @@ export interface PresentPlanOptions {
 }
 
 export interface PlanReviewSessionDeps {
-  orchestrator: Orchestrator;
+  /**
+   * Narrow port over Orchestrator — see ReviewOrchestrator above.  The
+   * full Orchestrator type structurally satisfies this so existing
+   * injection sites keep working; tests can now inject a minimal stub
+   * without fabricating router / assetLibrary / planStore / llmRouter.
+   */
+  orchestrator: ReviewOrchestrator;
   /**
    * PlanStoreWriter — owns all read/write to the persistent plan store.
    * The session no longer holds a direct PlanStore reference; all disk

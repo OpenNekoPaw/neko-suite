@@ -166,6 +166,14 @@ Phase 6.3c ⏸   输入 handler registry — 推迟（当前 fast-probe.ts 内�
 
 治理  C1   ✅   `neko.workflow.orchestrator.enabled` 默认 `true`（workflow-settings.ts + package.json 同步）
 治理  C2   ✅   Legacy `neko.pipeline.start` / `neko.agent.generateForNode` JSDoc `@deprecated` 标记，保留可用
+
+解耦  R1-R5 ✅   六轮增量评审修复（2026-04-19 集中推进）：
+           ✅   R1：approve/fork/edit 现在派发"用户审过的那份 plan"（plan 驱动，不再复吃 input）
+           ✅   R2：plan 持久化 `input` + `matchingShots`→ fork / reload 完全自足（可执行 + 可复审）
+           ✅   R3：能力契约（`WorkflowPlanCapabilities`）从 "猜 handler 支不支持" 里解开
+           ✅   R4：Legacy fork 明确拒绝（不造 zombie preview；vscode toast 通知）
+           ✅   R5：`WorkflowPlanHandler` 拆为 facade + 4 sub-controllers（Review / Query / Lifecycle / RouterMemory）+ `plan-wire/` 目录按关注点分拆
+           ✅   R6：`ReviewOrchestrator` 窄端口 + Shot↔NkplanShot 编译期形状断言
 ```
 
 **代码锚点速查**（每 Phase 的主要落地文件）：
@@ -195,6 +203,39 @@ Phase 6.3c ⏸   输入 handler registry — 推迟（当前 fast-probe.ts 内�
 - BatchGenerationScheduler 订阅 orchestrator 事件（canvas quiet mode）
 
 **项目状态分层约定**（2026-04-19 评审）：`.nkproj` 保持最小表面积，新增项目级元数据优先进 `.neko/`（配置/记忆/缓存/plans），git 负责文件时间线。三者正交职责见 [format-strategy.md §六](./format-strategy.md#六项目状态分层nkproj-vs-neko-vs-git)。
+
+**Handler 解耦现状**（2026-04-19 R1-R6 六轮评审后）：
+
+```
+WorkflowPlanHandler (facade, 188 行)
+  ├─ PlanReviewSession       (512 行 — owns pending map, review state machine)
+  │    deps: ReviewOrchestrator (窄端口) + PlanStoreWriter + PipelineLifecycleBridge
+  │          + getWebview + UserNotifier
+  ├─ PlanQueryController     (137 行 — diff / list / load，只读)
+  │    deps: PlanStore + getWebview
+  ├─ PipelineLifecycleBridge (102 行 — attachProgressForwarder + markApproved/Executing/Aborted/Edited)
+  │    deps: PlanStoreWriter + getWebview
+  └─ RouterMemoryController  (79 行 — 正交)
+       deps: routerMemory + getWebview
+
+共享库 plan-wire/
+  ├─ converters.ts     pure LitePlan → wire
+  ├─ capabilities.ts   pure capability derivation
+  ├─ messenger.ts      webview postMessage
+  ├─ broadcast.ts      cross-extension + KNOWN COUPLING note
+  ├─ store-writer.ts   PlanStore R/W facade
+  └─ notifier.ts       UserNotifier 接缝（VSCode default / test stub）
+
+Plan 自足性：
+  ├─ `plan.input`        — RawInput 快照，approve/fork/override 无需复吃
+  ├─ `plan.matchingShots` — 原 Shot[]，fork/reload 后可真实 recheck consistency
+  └─ `plan.referenceChain` / `plan.parentPlanId` — Phase 5 锚点 + 派生链
+```
+
+**已持续推迟的 3 项**（都是长期结构债，无当前 bug）：
+1. `useWorkflowPlan` 单槽状态 → 按 sessionId 的 reducer/store（webview refactor，独立 scope）
+2. `neko.canvas.orchestrator.planStateChanged` 字符串 command 契约 → typed extension-API（[broadcast.ts](packages/neko-agent/packages/extension/src/workflow/plan-wire/broadcast.ts) 内 KNOWN COUPLING 标注）
+3. `WorkflowPlanHandler.pending` 测试访问 getter（已 `@internal` 标注）
 
 **并行度**：Phase 1 之后，Workflow / Plan / AssetLibrary / Matching / Consistency 可**独立 track** 推进，不互相阻塞。
 

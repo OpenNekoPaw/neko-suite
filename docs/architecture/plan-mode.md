@@ -290,3 +290,45 @@ PlanBuilder 内部调用：
 - 默认 `rowHeightPx=28`、`maxViewportPx=420`；header 显示 "Shot bindings (N · virtualized)" 标识
 - 低于阈值时行为不变（完整表格），避免小 plan 引入不必要的滚动容器
 - 目标：100+ 镜头矩阵不再触发 React 渲染长列表的性能悬崖
+
+### 六轮评审增量解耦（已完成 2026-04-19）
+
+评审序列把 WorkflowPlanHandler 从 1100+ 行 god-class 逐步解成单一职责模块 + 自足 plan 工件。按 R1 运行时 → R5 god-class 拆分 → R6 端口收束顺序推进，每轮都零生产回归：
+
+**R1 — approve/fork/edit 派发用户审过的那份 plan**（commits `c68c6b3a`, `28fc2227`）
+- `handleIncoming` 把 `pending.plan` 随 PlanDecision 传出，避免 handler 用空 input 重走 Router→PlanBuilder
+- `dispatchApprovedPlan` 通过 `req.plan` 复用，保持 plan id / bindings / checkpoints 穿过执行链
+
+**R2 — Plan 自足性：`input` + `matchingShots` 持久化**（commits `ec3a5e5e`, `fc4c72f4`）
+- `NkPlan.input` 持久原始 RawInput：fork / approve / override 不再需要调用方重吃
+- `NkPlan.matchingShots` 持久 Shot[] 匹配输入：fork → edit 可真实 recheck 一致性（之前只能 fail-safe 保原 violations）
+- forkPlan / toNkPlan / toLitePlan 全链路 round-trip；computeCapabilities 的 `canRecheckConsistency` 从"pending 侧车是否存在"升级到"plan 本体是否带 matchingShots"
+
+**R3 — 能力契约 `WorkflowPlanCapabilities`**（commit `ec3a5e5e`）
+- 新 wire 字段：canApprove / canOverride / canAbort / canEditBinding / canApplyToAll / canToggleCheckpoint / canRecheckConsistency
+- Handler 派生，webview 按契约显示按钮——不再靠 `readOnly` 猜 handler 支不支持
+- Fork preview 带 `canRecheckConsistency=true`（只要有 matchingShots）
+
+**R4 — Legacy fork 明确拒绝**（commit `28fc2227`）
+- source 缺 `input` 时，handleFork 在 forkPlan 之前返回 undefined
+- 通过 `UserNotifier` 发 vscode toast："Cannot fork legacy plan..."
+- 不再写半拉 zombie fork 到盘 + post 能交互但 resolve 无效的 preview
+
+**R5 — WorkflowPlanHandler 拆成 4 sub-controllers**（commit `e1bd383c`）
+- Facade（188 行）构造 + 委派；chatProvider / index.ts 零修改
+- `PlanReviewSession`（512 行）— pending map + 交互流 + edits + fork
+- `PlanQueryController`（137 行）— diff / list / load，只读
+- `PipelineLifecycleBridge`（102 行）— attachProgressForwarder + markApproved/Executing/Aborted/Edited
+- `RouterMemoryController`（79 行）— 正交
+- 共享库 `plan-wire/` 目录（converters / capabilities / messenger / broadcast / store-writer / notifier），每文件单一职责
+
+**R6 — ReviewOrchestrator 窄端口 + Shot↔NkplanShot 编译断言**（commit 待提交）
+- `ReviewOrchestrator` 接口暴露 `buildPlan / startRoutedPipeline / consistencyChecker` 三个 surface；full Orchestrator 结构可赋值，测试可注最小 stub
+- `shot-shape-compat.test.ts` 编译期断言 platform `Shot` 与 `NkplanShot` 结构互相可赋值，防止未来 Shot 演进时出现"内存可用、落盘或校验漂移"的双维护风险
+
+**测试累计**：437 workflow/pipeline + 477 neko-types = 914 green
+
+**已持续推迟（都是长期债，非 bug）**：
+1. `useWorkflowPlan` 单槽状态 → 按 sessionId reducer/store（webview refactor，独立 scope）
+2. `broadcast.ts` 的字符串 command 契约 → typed extension-API（文件内 KNOWN COUPLING 注释）
+3. `WorkflowPlanHandler.pending` 测试 getter（已 `@internal`）

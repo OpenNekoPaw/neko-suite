@@ -235,12 +235,15 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ✅ **Phase 6.3a/b** — Clip lineage（proto regen）+ ShotNode.workflowPlanId + 接线（PipelineContext.planId + applyStoryboardPayloadToCanvas + arrange-on-timeline lineage）
 - ⏸ **Phase 6.3c** — 输入 handler registry（推迟；当前 fast-probe 内联 switch 够用）
 - ✅ **治理 C1/C2** — `orchestrator.enabled` 默认 `true`；legacy `neko.pipeline.start` / `generateForNode` JSDoc `@deprecated`
+- ✅ **R1-R6 解耦评审**（六轮，2026-04-19）— approve 派发用户审过的 plan；plan.input + plan.matchingShots 持久化让 fork/reload 完全自足；`WorkflowPlanCapabilities` 契约把 UI 按钮显示与 handler 支持对齐；Legacy fork 明确拒绝（无 zombie preview）；`WorkflowPlanHandler` 拆为 facade + `PlanReviewSession` / `PlanQueryController` / `PipelineLifecycleBridge` / `RouterMemoryController` + `plan-wire/` 目录；`ReviewOrchestrator` 窄端口 + Shot↔NkplanShot 编译期形状断言
 - [ ] **治理 C3/C4** — `.nkproj` 观察 telemetry + legacy 命令使用漏斗（需 telemetry 基建）
 - [ ] **治理 C5** — Plan Diff viewer webview 菜单入口（[plan-diff.ts](./packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts) 已就绪）
 - [ ] **测试 D4/D5/D6** — `.nkproj` 真实项目 round-trip + 多工作区并发 FileIO + 6.3 wiring 集成测试
+- [ ] **Webview 状态重写** — `useWorkflowPlan` 单槽 → 按 sessionId 的 reducer/store（允许并发 plan 面板）
+- [ ] **跨扩展 typed 契约** — 把 `neko.canvas.orchestrator.planStateChanged` 字符串命令替换为共享 typed extension-API（plan-wire/broadcast.ts 内 KNOWN COUPLING 注释）
 - ⏭ **Rust Milestone（4.2 + 4.3b + 5.4c-rust + 5.4e）** — ~8-12 人天；需 Rust toolchain + 跨平台 CI
 
-**测试覆盖**：127+ nkproj/nkplan/nkv 单测；422 workflow/pipeline 集成；9 条 fallback/DAG 不变式测试（D2 commit_route 验证 + D3 reference chain DAG）。
+**测试覆盖**：914 green（437 workflow/pipeline + 477 neko-types）。六轮评审零生产回归；累计回归测试覆盖 commit_route 验证（D2）、reference-chain DAG 不变式（D3）、fork→approve 派发（R1-Fix-2）、plan.input fork 派发（R2-Fix-A）、Legacy fork 拒绝（R4-Fix-D）、能力首帧时序（R4-Fix-F）、fork 经 matchingShots 重校验（R5-Fix-I）、Shot↔NkplanShot 结构兼容（R6-Fix-M）。
 
 ### neko-model (3D) + neko-puppet (2D) — 角色编辑 Rust 引擎 ✅
 

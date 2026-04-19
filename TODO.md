@@ -50,7 +50,7 @@
 - [x] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
 - [x] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
 
-### neko-agent — Workflow Orchestration (Phase 1-6 mostly complete ✅)
+### neko-agent — Workflow Orchestration (Phase 1-6 complete ✅; 6 rounds of decoupling review ✅)
 > [Umbrella](./docs/architecture/workflow-orchestration.md) · progress see ROADMAP neko-agent section
 - [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
 - [x] **Phase 2** `.nkplan` persistence + Plan state machine + ConsistencyChecker v1
@@ -60,11 +60,14 @@
 - [x] **Phase 5.1-5.4b, 5.4c-stub, 5.4d** Reference chain end-to-end (builder → nkplan → canvas → pipeline → batch-generate + render-engine stage)
 - [x] **Phase 6.1/6.2/6.3a/6.3b** `.nkproj` Format SDK + Lossless Upgrade primitives + Clip.lineage (proto) + ShotNode.workflowPlanId (canvas) + bootstrap wiring
 - [x] **Governance C1/C2** orchestrator flag default on + legacy `@deprecated` markers
+- [x] **R1-R6 Decoupling** (6 review rounds, 2026-04-19): approve dispatches user-reviewed plan; plan.input + plan.matchingShots persisted for self-sufficient fork/reload; WorkflowPlanCapabilities contract; legacy-fork clean rejection; WorkflowPlanHandler split into 4 sub-controllers + plan-wire/; ReviewOrchestrator narrow port + Shot/NkplanShot compile-time compat check
 - [ ] **P2 Rust milestone**: Phase 4.2 CLIP napi + 4.3b model distribution + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap registration (~8-12 person-days; requires Rust toolchain)
 - [ ] **P2 Governance C3/C4**: `.nkproj` observation telemetry + legacy command usage funnel
 - [ ] **P2 Governance C5**: Plan Diff viewer webview menu entry
 - [ ] **P2 Testing D4/D5/D6**: `.nkproj` real-project round-trip + multi-workspace concurrent FileIO + 6.3 wiring integration test
 - [ ] **P2 Cut API extension**: `NekoCutAPI.timeline.addElement` accepts `lineage` field → forward to `EngineElement.lineage` (currently logged as breadcrumb in TimelineArrangerAdapter)
+- [ ] **P3 Webview state rewrite**: `useWorkflowPlan` single-slot → reducer/store keyed by sessionId (enables concurrent plan panels)
+- [ ] **P3 Cross-ext typed contract**: replace `neko.canvas.orchestrator.planStateChanged` string command with shared typed extension-API (KNOWN COUPLING note in plan-wire/broadcast.ts)
 - [ ] **P3 Phase 6.3c deferred**: input handler registry — extract from `fast-probe.ts` inline switch when a consumer actually needs it
 
 ### neko-engine (Engine)
