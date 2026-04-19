@@ -1,9 +1,10 @@
 # 创作工作流编排（Umbrella / Index）
 
-> Status: Accepted (Phase 1-3.5 已实现；Phase 4-6 规划中)
+> Status: Accepted（Phase 1-3.5 + 4.1 + 4.3a + 5.1-5.4d + 6.1/6.2 已实现；Phase 4.2/4.3b / 5.4c-rust/5.4e / 6.3 进行中）
 > Scope: 总览 + ADR 家族索引
 > 原 16 节大 ADR 已按三层分拆（见 §3 重构说明）
 > 进度跟踪：[docs/development/workflow-orchestration-impl-plan.md](../development/workflow-orchestration-impl-plan.md)
+> 项目状态分层：`.nkproj` / `.neko/` / git 三者正交，见 [format-strategy.md §六](./format-strategy.md)（2026-04-19 评审）
 
 ---
 
@@ -49,7 +50,7 @@
 |----|-----|------|
 | Workflow | [workflow-routing.md](./workflow-routing.md) | Router + Route Registry + Memory |
 | Plan | [plan-mode.md](./plan-mode.md) | `.nkplan` + Plan Builder + State Machine + UI |
-| Pipeline | *pipeline-execution.md*（待补，基于已有 PipelineExecutor）| 执行器 + Stage 契约 |
+| Pipeline | [pipeline-execution.md](./pipeline-execution.md) | Executor + Stage 契约 + 事件协议 + Gate 协议 |
 
 ### 2.2 横向子系统
 
@@ -88,17 +89,26 @@ Workflow.Router.decide(input)
 Plan.PlanBuilder.fromRoute(route, probe)
     ├── 调用 AssetLibrary 查可用素材
     ├── 调用 MatchingEngine 生成 bindings
-    └── 调用 ConsistencyChecker 验证 constraints
+    ├── 调用 ConsistencyChecker 验证 constraints
+    └── 计算 referenceChain（Phase 5）
     ↓ LitePlan (P1) / .nkplan (P2+)
 用户 review 矩阵视图，批准或编辑
     ↓ Plan.status = approved
-PipelineExecutor.startPipeline(flowId, ctx, stageConfig)
+PipelineExecutor.execute(flowId, ctx, stageConfig)
     ↓
-Stages 按 Plan.bindings 执行
-    ├── MediaGenerationService 生成（带 referenceChain）
+Stages 按 Plan.bindings 执行（见 pipeline-execution.md）
+    ├── render-engine stage（Phase 5.4d，前置：渲染 anchor shot）
+    │   └── 选择 RenderMode：
+    │       ├── pure-render      — 纯 puppet/scene 渲染（无 AI）
+    │       ├── render-then-ai   — 渲染 + AI 增强
+    │       └── reference-only   — 仅生成 reference 图，不出终稿
+    ├── batch-generate stage（Phase 5.4a-b）
+    │   ├── 读 ctx.renderedAnchorPaths 作为 anchor reference
+    │   ├── 读 referenceChain 解析 per-shot reference paths
+    │   └── MediaGenerationService 生成（带 reference）
     └── 回写 GeneratedAsset 到 AssetLibrary
     ↓
-输出视频 / 资产
+输出视频 / 资产（可选：Lossless Upgrade 记入 .nkproj.upgradeHistory）
 ```
 
 ## 5. 三层之间的数据契约
@@ -152,6 +162,27 @@ Phase 6.1  ✅   .nkproj Format SDK（types + validator + migrator + codec + bar
 Phase 6.2  ✅   Lossless Upgrade 原语（addArtifacts / removeArtifacts / appendUpgradeEvent / recordLosslessUpgrade）
 Phase 6.3  ⏳   Clip.lineage（proto regenerate，写入 timeline.engine.ts）+ ShotNode.workflowPlanId（写入 canvas.ts）+ 输入 handler registry — **不再向 `.nkproj` 新增字段**，见 [format-strategy.md §六](./format-strategy.md#六项目状态分层nkproj-vs-neko-vs-git)
 ```
+
+**代码锚点速查**（每 Phase 的主要落地文件）：
+
+| Phase | 主要文件 |
+|-------|---------|
+| 1 Router | [router/fast-probe.ts](packages/neko-agent/packages/platform/src/workflow/router/fast-probe.ts) · [router/route-registry.ts](packages/neko-agent/packages/platform/src/workflow/router/route-registry.ts) · [router/index.ts](packages/neko-agent/packages/platform/src/workflow/router/index.ts) |
+| 1 AssetLibrary | [asset-library/](packages/neko-agent/packages/platform/src/workflow/asset-library/) · [binding-history.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/binding-history.ts) |
+| 1 Matching L1/L2/L5 | [matching/explicit-matcher.ts](packages/neko-agent/packages/platform/src/workflow/matching/explicit-matcher.ts) · [name-matcher.ts](packages/neko-agent/packages/platform/src/workflow/matching/name-matcher.ts) · [continuity-matcher.ts](packages/neko-agent/packages/platform/src/workflow/matching/continuity-matcher.ts) |
+| 2 Plan 持久化 | [plan/plan-store.ts](packages/neko-agent/packages/platform/src/workflow/plan/plan-store.ts) · [plan/plan-state-machine.ts](packages/neko-agent/packages/platform/src/workflow/plan/plan-state-machine.ts) · [nkplan codec](packages/neko-types/src/nkplan/codec.ts) |
+| 3 LLM Router | [router/llm-router.ts](packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts) · [router/llm-router-tools.ts](packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts) · [memory/router-memory.ts](packages/neko-agent/packages/platform/src/workflow/memory/router-memory.ts) |
+| 3.5 ask_user | [router-ask-broker.ts](packages/neko-agent/packages/extension/src/workflow/router-ask-broker.ts) · [RouterAskModal.tsx](packages/neko-agent/packages/webview/src/components/ChatView/RouterAskModal.tsx) |
+| 4.1 Matching L3/L4 stub | [matching/semantic-matcher.ts](packages/neko-agent/packages/platform/src/workflow/matching/semantic-matcher.ts) · [matching/llm-matcher.ts](packages/neko-agent/packages/platform/src/workflow/matching/llm-matcher.ts) |
+| 4.3a Embedding cache | [matching/embedding-cache.ts](packages/neko-agent/packages/platform/src/workflow/matching/embedding-cache.ts) |
+| 5.1-5.2 Reference chain | [plan/reference-chain.ts](packages/neko-agent/packages/platform/src/workflow/plan/reference-chain.ts) · [nkplan types](packages/neko-types/src/nkplan/types.ts) |
+| 5.2b Canvas 字段 | [types/canvas.ts](packages/neko-types/src/types/canvas.ts) |
+| 5.3-5.4b Pipeline 集成 | [pipeline/types.ts](packages/neko-agent/packages/agent/src/pipeline/types.ts) · [stages/batch-generate.ts](packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) |
+| 5.4c RenderMode | [render-modes/](packages/neko-agent/packages/platform/src/workflow/render-modes/) |
+| 5.4d render-engine stage | [stages/render-engine.ts](packages/neko-agent/packages/agent/src/pipeline/stages/render-engine.ts) |
+| 6.1/6.2 .nkproj | [nkproj/](packages/neko-types/src/nkproj/) |
+| Consistency v1 | [consistency/consistency-checker.ts](packages/neko-agent/packages/platform/src/workflow/consistency/consistency-checker.ts) |
+| Settings 集中化 | [workflow-settings.ts](packages/neko-agent/packages/extension/src/workflow/workflow-settings.ts) |
 
 **已完成横向任务**：
 - 统一 flag 读取 + VSCode settings 注册（`neko.workflow.*` 7 项）
@@ -215,4 +246,4 @@ AssetLibrary / Matching / Consistency **各自独立**，可被其他模块复�
 
 ## 9. 一句话总结
 
-> **Workflow 选「哪种流程」，Plan 定「这次做什么」，Pipeline 跑「正在做什么」；AssetLibrary / Matching / Consistency 是横向能力，被 Plan 层消费，不归属三层中任何一层。**
+> **Workflow 选「哪种流程」，Plan 定「这次做什么」，Pipeline 跑「正在做什么」；AssetLibrary / Matching / Consistency 是横向能力，被 Plan 层消费，不归属三层中任何一层。项目状态分层正交：`.nkproj` 管创作工件 DAG，`.neko/` 管工作区行为，git 管文件时间线。**

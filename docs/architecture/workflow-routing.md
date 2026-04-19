@@ -1,9 +1,13 @@
 # 创作工作流路由（Workflow Routing）
 
-> ADR Status: Accepted（Phase 1 + 3 MVP 已实现，见 §12）
-> Date: 2026-04-18
+> ADR Status: Accepted（Phase 1 + 3 + 3.5 + router-memory inspector 已实现，见 §12）
+> Date: 2026-04-18 / Updated 2026-04-19
 > Scope: 决定「输入素材走哪条创作路径」的 Router 子系统
 > Layer: **Workflow**（区别于 Plan 层 / Pipeline 层）
+
+**术语约定**（避免与 L0-L4 路径分级混淆）：
+- **L0-L4**（本文 §3）：**路径级别**，指"输入→输出"走哪条创作模板
+- **Tier A/B/C**（本文 §4）：**决策层级**，指 Router 内部的三段决策漏斗（规则 → LLM → 用户）
 
 ---
 
@@ -94,11 +98,13 @@ Neko Suite 已覆盖从素材到视频的完整创作链路（`neko-preview → 
 **结论：规则兜底 + LLM 补位 + 用户可见可推翻**。
 
 ```
-输入 → [L1 FastProbe 规则]        ← 90% 明确情况直接命中
-     → [L2 LLM Router 工具链]      ← 模糊 10% 补位（Haiku）
-     → [L3 用户确认/覆盖]           ← 始终可见可推翻
+输入 → [Tier A FastProbe 规则]     ← 90% 明确情况直接命中
+     → [Tier B LLM Router 工具链]   ← 模糊 10% 补位（Haiku）
+     → [Tier C 用户确认/覆盖]        ← 始终可见可推翻
      → 交付给 Plan 层（见 plan-mode.md）
 ```
+
+**注意**：Tier A/B/C 是 Router 内部三段漏斗，与 §3 的 L0-L4 **路径级别**无关——别混。
 
 ## 5. Router 架构
 
@@ -119,31 +125,104 @@ input is .fountain file                → L2 skip story
 input is .nkc canvas                   → 从 canvas 起步
 input is 10+ images drop               → L1 batch
 input is .nkv                          → 仅 cut
-已有 .nkproj 且指定 workflow           → 锁定路径
+已有 project prefs（.neko/settings.json
+  或 .nkproj.workflow.pinnedRouteLevel）→ 锁定路径
 用户 drag-drop 到特定扩展              → 意图显式，锁定入口
+```
+
+### RouteRegistry recipe 示例
+
+`RouteLevel → { flowId, skipStages, defaultStageParams }`（[route-registry.ts](packages/neko-agent/packages/platform/src/workflow/router/route-registry.ts)）：
+
+```typescript
+// L0：prompt 直出
+{
+  flowId: 'flowA',
+  skipStages: ['readDocument', 'parseStoryboard', 'generatePrompts',
+               'importStoryboardToCanvas', 'batchGenerate', 'arrangeOnTimeline'],
+  defaultStageParams: { generatePilot: { useRaw: true } },
+}
+
+// L2：素材结构化 → 分镜 → 生成 → 拼接
+{
+  flowId: 'flowB',
+  skipStages: ['readDocument'],                    // 输入已结构化
+  defaultStageParams: {
+    parseStoryboard: { respectExisting: true },    // 保留已有分镜
+    batchGenerate: { unit: 'shot' },
+  },
+}
+
+// L3：长文本全链路
+{
+  flowId: 'flowB',
+  skipStages: [],                                  // 全 stage 跑
+  defaultStageParams: {
+    readDocument: { chunkSize: 3200 },
+    batchGenerate: { unit: 'scene' },
+  },
+}
 ```
 
 ### LLM Router：Tool-Using Agent（非黑盒分类器）
 
-给 LLM 工具让它**多步推理**。实现落在 [llm-router-tools.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts)：
+给 LLM 工具让它**多步推理**。实现落在 [llm-router-tools.ts](packages/neko-agent/packages/platform/src/workflow/router/llm-router-tools.ts)：
 
 ```typescript
+type RouteLevel = 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
+type AssetKind = 'character' | 'style' | 'prop' | 'scene' | 'audio';
+type ExtensionId = 'agent' | 'story' | 'canvas' | 'sketch' | 'cut';
+type Stage =
+  | 'readDocument' | 'parseStoryboard' | 'generatePrompts'
+  | 'importStoryboardToCanvas' | 'generatePilot' | 'batchGenerate'
+  | 'arrangeOnTimeline' | 'renderEngine' | 'qualityGate';
+
 const routerTools = [
-  { name: 'analyze_text_structure', args: { excerpt: string } },         // 纯函数
-  { name: 'check_existing_assets',  args: { kind?: AssetKind } },        // 读 AssetLibrary
-  { name: 'estimate_duration',      args: { level: RouteLevel } },       // 复用 cost-estimator
-  { name: 'ask_user',               args: { question, options? } },      // Phase 3.5 接 webview modal
-  { name: 'commit_route',           args: { level, reason, skipStages?, entryExtension? } }, // 终结
+  // 纯函数：跑本地启发式（段落数/对白密度/场景切换词）
+  { name: 'analyze_text_structure',
+    args: { excerpt: string } },
+
+  // 读 AssetLibrary：不拉全表，返回 count + 样本 id
+  { name: 'check_existing_assets',
+    args: { kind?: AssetKind } },
+
+  // 复用 cost-estimator：返回 per-stage token/credit 预测
+  { name: 'estimate_duration',
+    args: { level: RouteLevel } },
+
+  // Phase 3.5：经 RouterAskBroker 接 webview modal；budget 自动暂停
+  { name: 'ask_user',
+    args: { question: string, options?: string[] } },
+
+  // 终结工具：LLM 必须调用此工具才算 commit，否则走 fallback
+  { name: 'commit_route',
+    args: {
+      level: RouteLevel,
+      reason: string,                       // 必填：人类可读路由理由
+      skipStages?: Stage[],                 // 可选覆盖 RouteRegistry 的默认
+      entryExtension?: ExtensionId,         // 可选：入口扩展 override
+    }},
 ];
 ```
 
-**实现约束**（见 [llm-router.ts](../../packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts)）：
+**实现约束**（见 [llm-router.ts](packages/neko-agent/packages/platform/src/workflow/router/llm-router.ts)）：
 - **Budget**: 2s 硬墙钟 via `AbortController`；ask_user 期间**自动暂停**，返回后恢复剩余预算
 - **Iterations**: 最多 5 轮 tool-use；超过则降级
 - **Cache**: 会话内 Map 缓存 `hashInput(input, workDir) → LLMRouterResult`
 - **Memory**: 提交后 fire-and-forget 写 `.neko/memory.md` 的 `workflow-router` H2 section
 - **Ask broker**: Phase 3.5 `RouterAskBroker` 通过 webview `RouterAskModal` 交互式问用户（60s 超时→dismissed→LLM 自行决策），无 webview 时返回 `deferred`
-- **Fallback**: 任何异常（network / parse / model stops without committing）均 → `undefined`，facade 降级到 FastProbe
+
+**Fallback 分级**（facade 统一降级到 FastProbe）：
+
+| 失败分类 | 触发条件 | 处理 |
+|---------|---------|------|
+| network | model 调用抛 / timeout | budget 记已耗尽；cache miss 标记；fallback 到 FastProbe |
+| parse | tool 返回 JSON schema 不符 | 该 tool 视为失败，LLM 可继续尝试其他 tool（不立即降级）|
+| iterations | 5 轮未调 `commit_route` | 视为无结论，fallback |
+| budget exhausted | 2s 预算耗尽且未 commit | fallback |
+| hallucinated level | `commit_route.args.level` ∉ L0-L4 | 校验失败，fallback |
+| no commit at end | model 正常停止但没调 `commit_route` | fallback |
+| user dismissed ask_user | 60s 超时 | LLM 继续决策但上下文里注入 "user dismissed"，可再试一轮 |
 
 ### 路由作为对话（非黑盒决策）
 
@@ -164,7 +243,7 @@ Agent: 识别到 3,200 字短篇，4 个场景、2 个角色。
 | 用户说"帮我做 MV" | 跳过路由，按 hint 锁定 |
 | 用户说"帮我规划下" | 直接 L2 + 主动对话 |
 | 会话内重复操作 | 缓存上次决策 |
-| 已有 `.nkproj` 且指定 workflow | 读取 project workflow 字段 |
+| 已有 project prefs | 读 `.neko/settings.json` 或 `.nkproj.workflow.pinnedRouteLevel` |
 
 ## 7. 路由记忆
 
@@ -213,11 +292,13 @@ Pipeline 层 (pipeline-execution.md，基于已有 PipelineExecutor)
 
 | 文档 | 关系 |
 |------|-----|
-| [plan-mode.md](./plan-mode.md) | Router 输出的下游消费者 |
-| [pipeline-execution.md](./pipeline-execution.md) | Plan 批准后执行 |
+| [workflow-orchestration.md](./workflow-orchestration.md) | 三层 umbrella，本 ADR 是 Workflow 层 |
+| [plan-mode.md](./plan-mode.md) | Router 输出 Route 的下游消费者 |
+| [pipeline-execution.md](./pipeline-execution.md) | Plan 翻译后交付 Pipeline 执行 |
 | [asset-knowledge-graph.md](./asset-knowledge-graph.md) | LLMRouter 的 `check_existing_assets` 工具查询对象 |
 | [creative-context-compression.md](./creative-context-compression.md) | Router 的文本结构分析可复用其语义分类 |
 | [ablation-experiment-framework.md](./ablation-experiment-framework.md) | Router 功能通过 AblationToggles 灰度发布 |
+| [format-strategy.md](./format-strategy.md) §六 | `.nkproj` / `.neko/` 分层，FastProbe 读 project prefs 的位置 |
 
 ## 12. 实现状态（更新于 2026-04-18）
 
@@ -259,3 +340,18 @@ user-override > memory lookup > FastProbe committable > LLMRouter (ambiguous) > 
 - [extension/src/workflow/workflow-settings.ts](../../packages/neko-agent/packages/extension/src/workflow/workflow-settings.ts) — 7 个 flag 统一读取 + clamping + 默认值
 - package.json `contributes.configuration` 已注册全部 flag（用户可在 VSCode 设置 UI 中配置）
 - Flags 列表：`orchestrator.enabled` / `router.llm.enabled` / `router.llm.budgetMs` / `router.askTimeoutMs` / `plan.autoApproveThreshold` / `consistency.enabled` / `matching.continuity.enabled`
+
+## 13. 下一步展望
+
+Router 层核心功能（规则 + LLM + 记忆 + 交互兜底）已 terminal。下一步方向按优先级：
+
+| 优先级 | 方向 | 说明 |
+|-------|------|------|
+| P1 | **Flag 默认开** | 对新工作区默认 `orchestrator.enabled = true`；老工作区 opt-in |
+| P1 | **Legacy 命令 deprecation** | `neko.pipeline.start` / `neko.agent.generateForNode` JSDoc `@deprecated` + 遥测漏斗 |
+| P1 | **Router golden tests 固化** | FastProbe 决策固化为表驱动 golden；LLM fallback 各失败模式单测 |
+| P2 | **视觉相似度补强 `check_existing_assets`** | Phase 4.2 CLIP 落地后，工具可返回 top-k 视觉相似资产，减少用户重复上传 |
+| P2 | **Consistency 前置校验** | LLMRouter 提交前跑 ConsistencyChecker dry-run，提前 flag 可能的跨镜冲突 |
+| P3 | **Route Telemetry Dashboard** | 采集决策 provenance 比例（rules/memory/LLM/ask/fallback），用于判断灰度 rollout 是否可推全 |
+| P3 | **多工作区并发 RouterMemory** | 当前 `FileProjectMemoryManager` 单写锁；若并发增多需乐观并发 / 文件锁升级 |
+| 观察 | **`.nkproj` 读写频率** | `.neko/settings.json` vs `.nkproj.workflow` 的实际使用占比，决定 `.nkproj.workflow` 是否迁移到 `.neko/` |
