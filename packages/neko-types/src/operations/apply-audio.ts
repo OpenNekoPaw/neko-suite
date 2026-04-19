@@ -69,6 +69,8 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
     }
 
     default:
-      throw OperationError.invalidOperation(`Unknown audio operation: ${(op as any).type}`);
+      throw OperationError.invalidOperation(
+        `Unknown audio operation: ${(op as unknown as Record<string, unknown>).type}`,
+      );
   }
 }

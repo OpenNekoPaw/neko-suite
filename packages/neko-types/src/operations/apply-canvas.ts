@@ -81,6 +81,8 @@ export function applyCanvasOperation(data: CanvasData, op: CanvasOperation): Can
     }
 
     default:
-      throw OperationError.invalidOperation(`Unknown canvas operation: ${(op as any).type}`);
+      throw OperationError.invalidOperation(
+        `Unknown canvas operation: ${(op as unknown as Record<string, unknown>).type}`,
+      );
   }
 }

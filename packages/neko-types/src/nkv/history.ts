@@ -6,7 +6,7 @@
 // history files compact.
 // =============================================================================
 
-import type { EditOperation } from '../operations/types';
+import type { BatchOperation, EditOperation } from '../operations/types';
 import type { ProjectData } from '../types/project';
 
 // =============================================================================
@@ -117,35 +117,40 @@ export function loadHistory(json: string): OperationHistorySnapshot | null {
 // =============================================================================
 
 function serializeOperation(op: EditOperation): SerializedOperation {
+  let payload: Record<string, unknown>;
+  if (op.type === 'batch') {
+    payload = { operations: (op as BatchOperation).payload.operations.map(serializeOperation) };
+  } else {
+    payload =
+      (op as Exclude<EditOperation, BatchOperation> & { payload: Record<string, unknown> })
+        .payload ?? {};
+  }
+
   const result: SerializedOperation = {
     type: op.type,
     meta: { ...op.meta },
-    payload: stripBinaryData(
-      op.type === 'batch'
-        ? { operations: (op as any).payload.operations.map(serializeOperation) }
-        : ((op as any).payload ?? {}),
-    ),
+    payload: stripBinaryData(payload),
   };
 
   if ('before' in op && op.before !== undefined) {
-    result.before = stripBinaryData((op as any).before);
+    result.before = stripBinaryData(op.before as Record<string, unknown>);
   }
 
   return result;
 }
 
 function deserializeOperation(serialized: SerializedOperation): EditOperation {
-  const op: any = {
+  const base: Record<string, unknown> = {
     type: serialized.type,
     meta: { ...serialized.meta },
     payload: serialized.payload,
   };
 
   if (serialized.before !== undefined) {
-    op.before = serialized.before;
+    base.before = serialized.before;
   }
 
-  return op as EditOperation;
+  return base as unknown as EditOperation;
 }
 
 /**

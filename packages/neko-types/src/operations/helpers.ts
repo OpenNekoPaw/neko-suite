@@ -134,7 +134,10 @@ export function setShapes(element: TimelineElement, shapes: ShapeInstance[]): Ti
 /**
  * 提取对象中指定 keys 的子集（用于构建 before 快照）
  */
-export function pickKeys<T extends Record<string, any>>(obj: T, updates: Partial<T>): Partial<T> {
+export function pickKeys<T extends Record<string, unknown>>(
+  obj: T,
+  updates: Partial<T>,
+): Partial<T> {
   const result: Partial<T> = {};
   for (const key of Object.keys(updates) as Array<keyof T>) {
     if (key in obj) {

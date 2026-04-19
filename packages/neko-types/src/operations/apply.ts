@@ -162,7 +162,7 @@ function applyProjectUpdate(project: ProjectData, op: ProjectUpdateOperation): P
 
 function applyBatch(data: unknown, op: BatchOperation): unknown {
   return op.payload.operations.reduce(
-    (current, childOp) => applyOperation(current as any, childOp),
+    (current, childOp) => applyOperation(current as unknown as ProjectData, childOp),
     data,
   );
 }

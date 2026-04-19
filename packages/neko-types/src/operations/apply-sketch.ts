@@ -210,6 +210,8 @@ export function applySketchOperation(
     }
 
     default:
-      throw OperationError.invalidOperation(`Unknown sketch operation: ${(op as any).type}`);
+      throw OperationError.invalidOperation(
+        `Unknown sketch operation: ${(op as unknown as Record<string, unknown>).type}`,
+      );
   }
 }
