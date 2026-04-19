@@ -8,6 +8,18 @@
 
 import type { IPipelineStage, PipelineContext } from '../types';
 
+/** Phase 6.3 — Lossless Upgrade provenance for a newly-arranged element */
+export interface ArrangedElementLineage {
+  /** Canvas ShotCanvasNode.id — empty when arranging a scene-level clip */
+  shotNodeId: string;
+  /** Generation task id (MediaGenerationService) — empty if non-AI */
+  generationId: string;
+  /** NkPlan.id that orchestrated this run — empty if legacy path */
+  planId: string;
+  /** Route level L0..L4 — empty if unset */
+  routeLevel: string;
+}
+
 /** Dependency: timeline manipulation API */
 export interface ITimelineArranger {
   /** Add a media element to the timeline */
@@ -17,6 +29,13 @@ export interface ITimelineArranger {
     startTime: number;
     duration?: number;
     trackName?: string;
+    /**
+     * Phase 6.3 — provenance back to the canvas shot / generation task /
+     * plan that produced this element.  Adapter is free to forward to
+     * EngineElement.lineage when the underlying API supports it or stash
+     * it in a side table until full wire lands.
+     */
+    lineage?: ArrangedElementLineage;
   }): Promise<string>;
 
   /** Set transition between two elements */
@@ -25,6 +44,28 @@ export interface ITimelineArranger {
 
 export interface ArrangeOnTimelineStageDeps {
   timelineArranger: ITimelineArranger;
+}
+
+/**
+ * Phase 6.3 — build lineage metadata from pipeline context + per-element data.
+ * Returns `undefined` when there's nothing worth recording (no plan id, no
+ * task id, no shot node) so adapters don't persist empty breadcrumbs.
+ */
+function buildLineage(
+  ctx: PipelineContext,
+  shotNodeId: string,
+  generationId: string | undefined,
+): ArrangedElementLineage | undefined {
+  const planId = ctx.planId ?? '';
+  const routeLevel = ctx.routeLevel ?? '';
+  const genId = generationId ?? '';
+  if (!planId && !shotNodeId && !genId) return undefined;
+  return {
+    shotNodeId,
+    generationId: genId,
+    planId,
+    routeLevel,
+  };
 }
 
 export function createArrangeOnTimelineStage(deps: ArrangeOnTimelineStageDeps): IPipelineStage {
@@ -74,6 +115,9 @@ async function arrangeSceneLevel(
     }
 
     const duration = scenes?.[i]?.estimatedDuration;
+    // Phase 6.3 — scene-level lineage: no shot node (scenes aren't
+    // canvas shots); still carry plan/task provenance.
+    const lineage = buildLineage(ctx, '', ctx.taskIds?.[i]);
 
     const elementId = await deps.timelineArranger.addElement({
       type: 'video',
@@ -81,6 +125,7 @@ async function arrangeSceneLevel(
       startTime: currentTime,
       duration,
       trackName,
+      ...(lineage !== undefined && { lineage }),
     });
 
     elementIds.push(elementId);
@@ -150,6 +195,7 @@ async function arrangeShotLevel(
 
     for (const shot of shots) {
       const path = paths[pathIndex];
+      const taskId = ctx.taskIds?.[pathIndex];
       pathIndex++;
 
       const shotDuration = shot.duration ?? 3;
@@ -159,12 +205,17 @@ async function arrangeShotLevel(
         continue;
       }
 
+      // Phase 6.3 — shot-level lineage: the StoryShotPlan.id maps 1:1
+      // to the ShotCanvasNode.id created by applyStoryboardPayloadToCanvas.
+      const lineage = buildLineage(ctx, (shot as { id?: string }).id ?? '', taskId);
+
       const elementId = await deps.timelineArranger.addElement({
         type: 'video',
         source: path,
         startTime: currentTime,
         duration: shotDuration,
         trackName,
+        ...(lineage !== undefined && { lineage }),
       });
 
       elementIds.push(elementId);

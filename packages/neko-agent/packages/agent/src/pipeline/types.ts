@@ -209,6 +209,24 @@ export interface PipelineContext {
    * When empty / undefined, stages behave exactly as before.
    */
   referenceChain?: readonly PipelineReferenceChainEntry[];
+
+  // — Phase 6.3 Lossless Upgrade provenance —
+  /**
+   * NkPlan id that orchestrated this run.  Set by orchestrator-bootstrap
+   * when `startRoutedPipeline` dispatches a routed pipeline.  Stamped
+   * onto:
+   *   - ShotCanvasNode.data.workflowPlanId during storyboard→canvas import
+   *   - EngineElement.lineage.planId during arrange-on-timeline
+   * Empty string / undefined = pipeline started without a plan (legacy
+   * `neko.pipeline.start` path).
+   */
+  planId?: string;
+  /**
+   * Route level (L0..L4) the plan committed to.  Mirrored into
+   * EngineElement.lineage.routeLevel so timeline clips carry a breadcrumb
+   * back to "which pipeline shape produced me".
+   */
+  routeLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
   /**
    * Phase 5.4d — paths produced by the `renderEngine` stage for shots
    * that serve as chain anchors.  Keyed by shot id; each entry carries

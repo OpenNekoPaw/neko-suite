@@ -50,6 +50,22 @@
 - [x] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
 - [x] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
 
+### neko-agent — 工作流编排（Phase 1-6 大部分完成 ✅）
+> [Umbrella](./docs/architecture/workflow-orchestration.md)
+- [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
+- [x] **Phase 2 + 2.5** `.nkplan` 持久化 + 状态机 + ConsistencyChecker v1 + Fork/Diff/Checkpoint + PlanBrowser
+- [x] **Phase 3 + 3.5** LLM Router + ask_user broker + router-memory 审查 UI
+- [x] **Phase 4.1 + 4.3a** L3/L4 TS stub + NodeEmbeddingCache（JSON+base64 Float32+LRU）
+- [x] **Phase 5.1-5.4b, 5.4c-stub, 5.4d** Reference chain 端到端（builder → nkplan → canvas → pipeline → batch-generate + render-engine stage）
+- [x] **Phase 6.1/6.2/6.3a/6.3b** `.nkproj` Format SDK + Lossless Upgrade + Clip.lineage (proto) + ShotNode.workflowPlanId + bootstrap 接线
+- [x] **治理 C1/C2** orchestrator flag 默认开 + legacy `@deprecated` 标记
+- [ ] **P2 Rust milestone**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap（~8-12 人天；需 Rust toolchain）
+- [ ] **P2 治理 C3/C4**：`.nkproj` 观察 telemetry + legacy 命令使用漏斗
+- [ ] **P2 治理 C5**：Plan Diff viewer webview 菜单入口
+- [ ] **P2 测试 D4/D5/D6**：`.nkproj` 真实项目 round-trip + 多工作区并发 FileIO + 6.3 wiring 集成测试
+- [ ] **P2 Cut API 扩展**：`NekoCutAPI.timeline.addElement` 接受 `lineage` 字段 → 落到 `EngineElement.lineage`（当前 TimelineArrangerAdapter 仅日志记录）
+- [ ] **P3 Phase 6.3c 推迟**：input handler registry——从 `fast-probe.ts` 内联 switch 抽取，待有消费端需要时再做
+
 ### neko-engine（引擎）
 - [ ] 新增 action：`documents:text-extract` / `models:clip-embed` / `text:stats`（action registry 中不存在）
 - [ ] 将 `effects:register` / `models:register` 集成到统一插件生命周期（PluginManager P1 后续）

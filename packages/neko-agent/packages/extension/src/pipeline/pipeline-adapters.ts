@@ -125,6 +125,18 @@ export interface ITimelineArranger {
     startTime: number;
     duration?: number;
     trackName?: string;
+    /**
+     * Phase 6.3 — provenance back to the canvas shot / generation task /
+     * plan.  Mirrors the field on the stage-side ArrangedElementLineage.
+     * Forwarded to EngineElement.lineage once NekoCutAPI.timeline.addElement
+     * accepts the field (follow-up); logged as breadcrumb in the meantime.
+     */
+    lineage?: {
+      shotNodeId: string;
+      generationId: string;
+      planId: string;
+      routeLevel: string;
+    };
   }): Promise<string>;
   setTransition?(config: { elementId: string; type: string; duration: number }): Promise<void>;
 }
@@ -371,6 +383,9 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
     sourceFormat?: 'fountain' | 'freeform' | 'document';
     scenePlans?: readonly StoryScenePlan[];
     stageParams?: Record<string, Record<string, unknown>>;
+    // Phase 6.3 — plan id threaded from orchestrator-bootstrap so each
+    // imported shot node can be stamped with workflowPlanId.
+    planId?: string;
   }): Promise<CreatedCanvasStoryboard | undefined> {
     if (
       ctx.sourceFormat !== 'fountain' ||
@@ -430,6 +445,9 @@ export class CanvasStoryboardSinkAdapter implements IStoryboardCanvasSink {
     return canvasApi.storyboard.import(payload, {
       startX: stageParams['startX'] as number | undefined,
       startY: stageParams['startY'] as number | undefined,
+      // Phase 6.3 — pass plan id so every shot node gets its
+      // data.workflowPlanId stamped (applyStoryboardPayloadToCanvas).
+      ...(ctx.planId !== undefined && ctx.planId.length > 0 && { workflowPlanId: ctx.planId }),
     });
   }
 }
@@ -638,6 +656,12 @@ export class TimelineArrangerAdapter implements ITimelineArranger {
     startTime: number;
     duration?: number;
     trackName?: string;
+    lineage?: {
+      shotNodeId: string;
+      generationId: string;
+      planId: string;
+      routeLevel: string;
+    };
   }): Promise<string> {
     const api = await this.getAPI();
 
@@ -645,13 +669,29 @@ export class TimelineArrangerAdapter implements ITimelineArranger {
     const elements = await api.timeline.listElements();
     const trackId = ((elements[0] as Record<string, unknown>)?.['trackId'] as string) ?? 'track-0';
 
-    return api.timeline.addElement({
+    const elementId = await api.timeline.addElement({
       type: config.type === 'video' ? 'video' : config.type,
       trackId,
       startTime: config.startTime,
       duration: config.duration ?? 4,
       source: config.source,
     });
+
+    // Phase 6.3 — provenance breadcrumb.  NekoCutAPI.timeline.addElement
+    // does not yet accept a lineage field; follow-up extends the Cut API
+    // to forward into EngineElement.lineage.  Until then we log the
+    // association so operators can reconstruct provenance from diagnostics.
+    if (config.lineage) {
+      logger.info('timeline.addElement lineage', {
+        elementId,
+        shotNodeId: config.lineage.shotNodeId,
+        generationId: config.lineage.generationId,
+        planId: config.lineage.planId,
+        routeLevel: config.lineage.routeLevel,
+      });
+    }
+
+    return elementId;
   }
 
   async setTransition(config: {

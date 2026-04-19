@@ -1,7 +1,7 @@
 # 创作一致性约束（ConsistencyChecker）
 
-> ADR Status: Proposed
-> Date: 2026-04-18
+> ADR Status: Accepted（ConsistencyChecker v1 + Reference Chain Phase 5.1-5.4d 已实现；见文末实现索引）
+> Date: 2026-04-18 / Updated 2026-04-19
 > Scope: 跨镜一致性规则引擎 + Reference Chain 机制
 > Layer: **横向子系统**（被 Plan 层消费）
 
@@ -277,3 +277,20 @@ Plan 矩阵视图基础上增加**约束栏**：
 | [cross-modal-matching.md](./cross-modal-matching.md) | 本组件校验 MatchingEngine 的输出 |
 | [agent-media-architecture.md](./agent-media-architecture.md) | Reference Chain 传递给 MediaGenerationService |
 | [ai-video-reference-system.md](./ai-video-reference-system.md) | 视频参考系统（本 ADR 的视频域延展） |
+| [pipeline-execution.md](./pipeline-execution.md) | referenceChain 透传 PipelineContext + batch-generate deferred map |
+
+## 12. 实现索引（Phase 5 落地）
+
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| ConsistencyChecker v1 | [consistency/consistency-checker.ts](packages/neko-agent/packages/platform/src/workflow/consistency/consistency-checker.ts) | character_lock / time_progression / costume_continuity 规则 |
+| Types | [consistency/types.ts](packages/neko-agent/packages/platform/src/workflow/consistency/types.ts) | Violation / Constraint 契约 |
+| Reference Chain builder | [reference-chain/reference-chain-builder.ts](packages/neko-agent/packages/platform/src/workflow/reference-chain/reference-chain-builder.ts) | sequential / anchored / hybrid 三策略 + 边界断点 |
+| nkplan 契约 | [nkplan/types.ts](packages/neko-types/src/nkplan/types.ts) | `NkplanReferenceChainEntry` / `NkplanReferenceChainStrategy` |
+| Canvas 字段 | [types/canvas.ts](packages/neko-types/src/types/canvas.ts) | `ShotCharacter.referenceChain?: string[]` 同步 nkplan |
+| Pipeline 透传 | [pipeline/types.ts](packages/neko-agent/packages/agent/src/pipeline/types.ts) | `PipelineContext.referenceChain` + `renderedAnchorPaths` |
+| batch-generate 消费 | [stages/batch-generate.ts](packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) | Phase 5.4a-b in-batch deferred map + resolveReferencePath hook |
+| render-engine stage | [stages/render-engine.ts](packages/neko-agent/packages/agent/src/pipeline/stages/render-engine.ts) | Phase 5.4d anchor 预渲染 → ctx.renderedAnchorPaths |
+| DAG 不变式测试 | [reference-chain/__tests__/reference-chain-builder.test.ts](packages/neko-agent/packages/platform/src/workflow/reference-chain/__tests__/reference-chain-builder.test.ts) | no self-loop / backward-only / no cycle (Phase 5 D3) |
+
+**未竟**：Phase 5.4c-rust / 5.4e（Puppet/Scene Rust adapters + bootstrap 注册）待 Rust milestone。

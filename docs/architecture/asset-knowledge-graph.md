@@ -1,7 +1,7 @@
 # 素材知识图谱（AssetLibrary）
 
-> ADR Status: Proposed
-> Date: 2026-04-18
+> ADR Status: Accepted（Phase 1 AssetLibrary facade + BindingHistory 已实现；见文末实现索引）
+> Date: 2026-04-18 / Updated 2026-04-19
 > Scope: 统一的素材实体图谱 facade，wrap CharacterRegistry + CreativeEntityGraph + AssetManifest
 > Layer: **横向子系统**（被 Plan / Matching / Consistency 消费）
 
@@ -221,3 +221,17 @@ interface AssetLibrary {
 | [adr-character-unified-index.md](./adr-character-unified-index.md) | AssetLibrary 复用 CharacterRegistry 作为 character 实体源 |
 | [agent-media-architecture.md](./agent-media-architecture.md) | GeneratedAsset 索引入 AssetLibrary |
 | [format-strategy.md](./format-strategy.md) | AssetManifest 格式定义 |
+
+## 14. 实现索引（Phase 1 落地）
+
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| AssetLibrary facade | [asset-library/index.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/index.ts) | `createAssetLibrary(deps)` 组合 4 个 adapter |
+| Types | [asset-library/types.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/types.ts) | Entity / Asset / Relation / Binding 契约 |
+| Character adapter | [asset-library/character-adapter.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/character-adapter.ts) | wrap NekoStoryAPI.getCharacterRegistry + resolveCharacter |
+| Entity graph adapter | [asset-library/entity-graph-adapter.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/entity-graph-adapter.ts) | 读 `.neko/.cache/asset-graph.json` |
+| Manifest adapter | [asset-library/manifest-adapter.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/manifest-adapter.ts) | 遍历 AssetManifest registry |
+| BindingHistory | [asset-library/binding-history.ts](packages/neko-agent/packages/platform/src/workflow/asset-library/binding-history.ts) | `.neko/.cache/bindings.json` append-only + LRU 500/entity |
+| Tests | [asset-library/__tests__/](packages/neko-agent/packages/platform/src/workflow/asset-library/__tests__/) | 各 adapter 独立 fixture 测试 |
+
+消费方：`PlanBuilder` / `MatchingEngine` (L2/L5) / `ConsistencyChecker` / `LLMRouter.check_existing_assets` 工具。

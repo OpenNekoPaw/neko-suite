@@ -196,6 +196,11 @@ export async function bootstrapOrchestrator(
               strategy: e.strategy,
             })),
           }),
+        // Phase 6.3 — stamp plan / route provenance so downstream stages
+        // can attach lineage to generated artifacts (canvas nodes +
+        // timeline elements).
+        planId: plan.id,
+        routeLevel: route.level,
       };
 
       const handle = options.startPipeline(route.flowId, ctx, {

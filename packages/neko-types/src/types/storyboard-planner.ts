@@ -61,6 +61,13 @@ export interface CanvasStoryboardPayload {
 export interface ApplyCanvasStoryboardOptions {
   readonly startX?: number;
   readonly startY?: number;
+  /**
+   * Phase 6.3 — Workflow Orchestration plan id.  When provided, every
+   * imported shot node gets its `data.workflowPlanId` stamped so timeline
+   * import downstream can populate `EngineElement.lineage.planId`.  Omit
+   * for manual / non-orchestrated imports.
+   */
+  readonly workflowPlanId?: string;
 }
 
 export interface CreateStoryboardPayloadOptions {

@@ -113,6 +113,10 @@ export async function applyStoryboardPayloadToCanvas(
           dialogue: shot.dialogue,
           voiceOver: shot.voiceOver,
           soundCue: shot.soundCue,
+          // Phase 6.3 — stamp plan provenance when orchestrated
+          ...(options.workflowPlanId !== undefined && {
+            workflowPlanId: options.workflowPlanId,
+          }),
         },
       );
       shotIds.push(shotNodeId);

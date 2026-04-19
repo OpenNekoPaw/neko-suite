@@ -220,6 +220,34 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - [ ] P1: Pipeline media landing unification (`MediaGeneratorAdapter` → local save + asset index)
 - [ ] P2: Extension Host DragDropBroker enhancement (~100 lines)
 
+### neko-agent — Workflow Orchestration (Phase 1-6 mostly complete, Rust milestone pending)
+> [Umbrella ADR](./docs/architecture/workflow-orchestration.md) · [Routing](./docs/architecture/workflow-routing.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
+
+- ✅ **Phase 1** — Router (FastProbe + InputProbe) + RouteRegistry + LitePlan + AssetLibrary facade + Matching L1/L2/L5
+- ✅ **Phase 1.5** — Interactive Plan Mode + PlanCard webview
+- ✅ **Phase 2** — `.nkplan` persistence + Plan state machine + ConsistencyChecker v1
+- ✅ **Phase 2.5** — Fork + Diff + Checkpoint pause + PlanBrowser
+- ✅ **Phase 3** — LLM Router (Haiku + 5 tools) + memory loop + cost estimator
+- ✅ **Phase 3.5** — `ask_user` interactive broker (webview modal + pausable budget)
+- ✅ **Phase 4.1** — L3/L4 TS contract stubs (ClipProvider / EmbeddingCache / SemanticMatcher / LLMMatcher) + feature flags
+- ⏳ **Phase 4.2** — CLIP Rust napi binding + host-api TS wrapper (Rust milestone)
+- ✅ **Phase 4.3a** — NodeEmbeddingCache (JSON + base64 Float32 + LRU)
+- ⏳ **Phase 4.3b** — Model distribution + binary mmap + import-time preprocessing (Rust milestone)
+- ✅ **Phase 5.1-5.2** — Reference chain builder (3 strategies + break tags) + PlanBuilder auto-compute + canvas field sync
+- ✅ **Phase 5.3-5.4b** — PipelineContext threading + batch-generate in-batch deferred map + per-task reference path resolution
+- ✅ **Phase 5.4c-stub / 5.4d** — RenderMode contracts (pure-render / render-then-ai / reference-only) + render-engine pipeline stage + `ctx.renderedAnchorPaths` priority
+- ⏳ **Phase 5.4c-rust / 5.4e** — runtime-puppet / runtime-scene Rust adapters + bootstrap registration (Rust milestone)
+- ✅ **Phase 6.1/6.2** — `.nkproj` Format SDK + Lossless Upgrade primitives
+- ✅ **Phase 6.3a/b** — Clip lineage (proto regen) + ShotNode.workflowPlanId + wiring (PipelineContext.planId + applyStoryboardPayloadToCanvas + arrange-on-timeline lineage)
+- ⏸ **Phase 6.3c** — Input handler registry (deferred; current inline switch in fast-probe adequate)
+- ✅ **Governance C1/C2** — `orchestrator.enabled` default `true`; legacy `neko.pipeline.start` / `generateForNode` JSDoc `@deprecated`
+- [ ] **Governance C3/C4** — `.nkproj` observation telemetry + legacy command usage funnel (needs telemetry infra)
+- [ ] **Governance C5** — Plan Diff viewer webview menu entry (infra exists at [plan-diff.ts](./packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts))
+- [ ] **Testing D4/D5/D6** — `.nkproj` real-project round-trip + multi-workspace concurrent FileIO + 6.3 wiring integration test
+- ⏭ **Rust Milestone (4.2 + 4.3b + 5.4c-rust + 5.4e)** — ~8-12 person-days, requires Rust toolchain + cross-platform CI
+
+**Test coverage**: 127+ nkproj/nkplan/nkv unit; 422 workflow/pipeline integration; 9 fallback/DAG invariant tests (D2 commit_route validator + D3 reference chain DAG). Zero pre-existing tests touched across the sprint.
+
 ### neko-model (3D) + neko-puppet (2D) — Character Editing Rust Engine ✅
 - Phase 3.1-3.3 ✅ (basic 3D + AI face sculpting + CSG + PBR + particles + timeline integration)
 - Phase 2 Rust Engine ✅ (keyframe CRUD + animation blending + EasingType 30+ variants + project v2):

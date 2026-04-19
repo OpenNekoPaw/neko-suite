@@ -214,6 +214,34 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P1：Pipeline 媒体落地统一（`MediaGeneratorAdapter` → 本地保存 + 资产索引）
 - [ ] P2：Extension Host DragDropBroker 增强（~100 行）
 
+### neko-agent — 工作流编排（Phase 1-6 大部分完成，Rust milestone 待做）
+> [Umbrella ADR](./docs/architecture/workflow-orchestration.md) · [Routing](./docs/architecture/workflow-routing.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
+
+- ✅ **Phase 1** — Router（FastProbe + InputProbe）+ RouteRegistry + LitePlan + AssetLibrary facade + Matching L1/L2/L5
+- ✅ **Phase 1.5** — 交互 Plan Mode + PlanCard webview
+- ✅ **Phase 2** — `.nkplan` 持久化 + Plan 状态机 + ConsistencyChecker v1
+- ✅ **Phase 2.5** — Fork + Diff + Checkpoint pause + PlanBrowser
+- ✅ **Phase 3** — LLM Router（Haiku + 5 工具）+ 记忆闭环 + 成本估算
+- ✅ **Phase 3.5** — `ask_user` 交互兜底（webview modal + 可暂停 budget）
+- ✅ **Phase 4.1** — L3/L4 TS 契约 stub + feature flag
+- ⏳ **Phase 4.2** — CLIP Rust napi 绑定 + host-api TS wrapper（Rust milestone）
+- ✅ **Phase 4.3a** — NodeEmbeddingCache（JSON + base64 Float32 + LRU）
+- ⏳ **Phase 4.3b** — 模型分发 + binary mmap + 导入时预计算（Rust milestone）
+- ✅ **Phase 5.1-5.2** — Reference chain builder（3 策略 + 边界断点）+ PlanBuilder 自动计算 + canvas 字段同步
+- ✅ **Phase 5.3-5.4b** — PipelineContext 透传 + batch-generate in-batch deferred map + per-task 引用路径解析
+- ✅ **Phase 5.4c-stub / 5.4d** — RenderMode 契约（pure-render / render-then-ai / reference-only）+ render-engine pipeline stage + `ctx.renderedAnchorPaths` 优先
+- ⏳ **Phase 5.4c-rust / 5.4e** — runtime-puppet / runtime-scene Rust adapters + bootstrap 注册（Rust milestone）
+- ✅ **Phase 6.1/6.2** — `.nkproj` Format SDK + Lossless Upgrade 原语
+- ✅ **Phase 6.3a/b** — Clip lineage（proto regen）+ ShotNode.workflowPlanId + 接线（PipelineContext.planId + applyStoryboardPayloadToCanvas + arrange-on-timeline lineage）
+- ⏸ **Phase 6.3c** — 输入 handler registry（推迟；当前 fast-probe 内联 switch 够用）
+- ✅ **治理 C1/C2** — `orchestrator.enabled` 默认 `true`；legacy `neko.pipeline.start` / `generateForNode` JSDoc `@deprecated`
+- [ ] **治理 C3/C4** — `.nkproj` 观察 telemetry + legacy 命令使用漏斗（需 telemetry 基建）
+- [ ] **治理 C5** — Plan Diff viewer webview 菜单入口（[plan-diff.ts](./packages/neko-agent/packages/platform/src/workflow/plan/plan-diff.ts) 已就绪）
+- [ ] **测试 D4/D5/D6** — `.nkproj` 真实项目 round-trip + 多工作区并发 FileIO + 6.3 wiring 集成测试
+- ⏭ **Rust Milestone（4.2 + 4.3b + 5.4c-rust + 5.4e）** — ~8-12 人天；需 Rust toolchain + 跨平台 CI
+
+**测试覆盖**：127+ nkproj/nkplan/nkv 单测；422 workflow/pipeline 集成；9 条 fallback/DAG 不变式测试（D2 commit_route 验证 + D3 reference chain DAG）。
+
 ### neko-model (3D) + neko-puppet (2D) — 角色编辑 Rust 引擎 ✅
 
 - Phase 3.1-3.3 ✅（基础 3D + AI 捏脸 + CSG + PBR + 粒子 + 时间线集成）
