@@ -186,13 +186,25 @@ Plan 矩阵视图基础上增加**约束栏**：
 
 ## 8. 实施分阶段
 
-| 阶段 | 内容 |
-|------|-----|
-| Phase A | character_lock 检测（最高价值） |
-| Phase B | time_progression + costume_continuity |
-| Phase C | Reference Chain 机制（ShotCharacter.referenceChain） |
-| Phase D | style_lock + prop_consistency |
-| Phase E | 自动推导（从剧本/场景自动生成约束） |
+| 阶段 | 内容 | 状态 |
+|------|-----|------|
+| Phase A | character_lock 检测（最高价值） | ✅ 已完成 |
+| Phase B | time_progression + costume_continuity | ✅ 已完成 |
+| Phase C.1 | Reference Chain TS 契约 stub（`buildReferenceChain` + 三种策略 + 边界断点） | ✅ 已完成（2026-04-19）|
+| Phase C.2 | Canvas `ShotCharacter.referenceChain` 字段 + `.nkplan.stages[].referenceChain` | ⏳ 待实施 |
+| Phase C.3 | PipelineExecutor 消费 chain + MediaGenerationService 传参 | ⏳ 待实施 |
+| Phase D | style_lock + prop_consistency | ⏳ 规划中 |
+| Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
+
+### Phase C.1 实现索引
+
+- [reference-chain/types.ts](../../packages/neko-agent/packages/platform/src/workflow/reference-chain/types.ts) — `ReferenceChainStrategy` (`sequential` / `anchored` / `hybrid`) + `ReferenceChainShot` + `ReferenceChainEntry` + `ReferenceChainBuilder`
+- [reference-chain/reference-chain-builder.ts](../../packages/neko-agent/packages/platform/src/workflow/reference-chain/reference-chain-builder.ts) — pure `buildReferenceChain(shots, options)`
+- 边界断点：`sceneGroupId` 切换 / `scene-change` tag / entity 切换 / 缺失 binding → 都会重启 anchor
+- 每个 slot 独立成链（角色链与场景链互不影响）
+- 契约已冻结：Phase C.2/C.3 可对着稳定类型实现，不会再回改 builder 接口
+
+详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 
 ## 9. 与 Pipeline 执行的集成
 

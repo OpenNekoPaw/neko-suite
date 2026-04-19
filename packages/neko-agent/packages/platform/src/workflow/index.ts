@@ -180,3 +180,14 @@ export {
   type Relation,
   type RelationKind,
 } from './asset-library';
+
+// Phase 5 stub: Reference Chain builder (see creative-consistency.md §4).
+export {
+  buildReferenceChain,
+  createReferenceChainBuilder,
+  type BuildReferenceChainOptions,
+  type ReferenceChainBuilder,
+  type ReferenceChainEntry,
+  type ReferenceChainShot,
+  type ReferenceChainStrategy,
+} from './reference-chain';
