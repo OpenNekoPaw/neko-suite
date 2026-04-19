@@ -205,3 +205,88 @@ describe('buildReferenceChain — ordering', () => {
     expect(result[0]?.strategy).toBe('anchored');
   });
 });
+
+// ============================================================================
+// Phase 5 D3 — structural invariants (guard against circular / self-reference)
+//
+// The builder walks index-sorted shots forward and can only emit references
+// to anchor/previous shots that have already passed.  These tests pin the
+// invariant that the output graph is a strict DAG with edges always pointing
+// backward in index order — so "circular reference chain" is structurally
+// impossible through the public API, regardless of input order.
+// ============================================================================
+
+describe('buildReferenceChain — DAG invariants', () => {
+  function resolveIndex(
+    shots: ReadonlyArray<ReferenceChainShot>,
+    shotId: string,
+  ): number | undefined {
+    return shots.find((s) => s.shotId === shotId)?.index;
+  }
+
+  it('no entry ever references its own shotId (no self-loop)', () => {
+    const shots = [shot('s1', 0), shot('s2', 1), shot('s3', 2), shot('s4', 3)];
+    for (const strategy of ['sequential', 'anchored', 'hybrid'] as const) {
+      const result = buildReferenceChain(shots, { strategy });
+      for (const entry of result) {
+        expect(entry.references).not.toContain(entry.shotId);
+      }
+    }
+  });
+
+  it('every reference points to a shot with strictly lower index (backward-only edges)', () => {
+    const shots = [shot('s1', 0), shot('s2', 1), shot('s3', 2), shot('s4', 3)];
+    for (const strategy of ['sequential', 'anchored', 'hybrid'] as const) {
+      const result = buildReferenceChain(shots, { strategy });
+      for (const entry of result) {
+        const currentIdx = resolveIndex(shots, entry.shotId);
+        expect(currentIdx).toBeDefined();
+        for (const refId of entry.references) {
+          const refIdx = resolveIndex(shots, refId);
+          expect(refIdx).toBeDefined();
+          expect(refIdx!).toBeLessThan(currentIdx!);
+        }
+      }
+    }
+  });
+
+  it('out-of-order input still produces backward-only edges', () => {
+    // Scrambled input — asserts the builder sorts internally before walking.
+    const shots = [shot('s3', 2), shot('s1', 0), shot('s4', 3), shot('s2', 1)];
+    const result = buildReferenceChain(shots, { strategy: 'hybrid' });
+    for (const entry of result) {
+      const currentIdx = resolveIndex(shots, entry.shotId);
+      for (const refId of entry.references) {
+        const refIdx = resolveIndex(shots, refId);
+        expect(refIdx!).toBeLessThan(currentIdx!);
+      }
+    }
+  });
+
+  it('output forms a DAG: no shot id appears in both sides of a cycle', () => {
+    const shots = [
+      shot('s1', 0),
+      shot('s2', 1),
+      shot('s3', 2, { sceneGroupId: 'sg2' }),
+      shot('s4', 3, { sceneGroupId: 'sg2' }),
+    ];
+    const result = buildReferenceChain(shots, { strategy: 'hybrid' });
+
+    // Build adjacency map and BFS-detect cycles.
+    const adj = new Map<string, readonly string[]>();
+    for (const e of result) adj.set(e.shotId, e.references);
+
+    function hasCycle(from: string, seen = new Set<string>()): boolean {
+      if (seen.has(from)) return true;
+      seen.add(from);
+      for (const next of adj.get(from) ?? []) {
+        if (hasCycle(next, new Set(seen))) return true;
+      }
+      return false;
+    }
+
+    for (const shotId of adj.keys()) {
+      expect(hasCycle(shotId)).toBe(false);
+    }
+  });
+});

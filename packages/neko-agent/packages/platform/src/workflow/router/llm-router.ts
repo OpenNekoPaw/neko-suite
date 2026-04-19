@@ -256,7 +256,12 @@ export class LLMRouter {
       for (const call of toolCalls) {
         if (call.function.name === ROUTER_TOOL_NAMES.commitRoute) {
           const args = safeJsonParse<CommitRouteArgs>(call.function.arguments);
-          if (!args) return undefined;
+          // Defensive: the LLM can hallucinate an out-of-range level
+          // (L5/lowercase/number), emit a non-string reason, or return
+          // garbage shape entirely.  Treat any of these as "no commit"
+          // so the facade falls back to FastProbe rather than surface
+          // bogus data downstream.  See workflow-routing.md §5 Fallback.
+          if (!isValidCommitArgs(args)) return undefined;
           return {
             level: args.level,
             reason: args.reason,
@@ -398,4 +403,29 @@ function safeJsonParse<T>(raw: string): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+const VALID_ROUTE_LEVELS: ReadonlySet<RouteLevel> = new Set<RouteLevel>([
+  'L0',
+  'L1',
+  'L2',
+  'L3',
+  'L4',
+]);
+
+/**
+ * Guard against LLM hallucinations in commit_route arguments.  The tool
+ * schema sent to the model already lists the valid levels, but models
+ * can still emit "L5", lowercase "l2", or drop fields entirely.  Anything
+ * that fails this check falls through to FastProbe downstream.
+ */
+function isValidCommitArgs(args: CommitRouteArgs | undefined): args is CommitRouteArgs {
+  if (!args || typeof args !== 'object') return false;
+  if (!VALID_ROUTE_LEVELS.has(args.level)) return false;
+  if (typeof args.reason !== 'string' || args.reason.length === 0) return false;
+  if (args.skipStages !== undefined && !Array.isArray(args.skipStages)) return false;
+  if (args.entryExtension !== undefined && typeof args.entryExtension !== 'string') {
+    return false;
+  }
+  return true;
 }

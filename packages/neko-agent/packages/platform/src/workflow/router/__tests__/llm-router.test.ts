@@ -136,6 +136,129 @@ describe('LLMRouter — failure modes', () => {
     expect(r).toBeUndefined();
     expect(chat).toHaveBeenCalledTimes(3);
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase 3 D2 — routing.md §5 Fallback matrix coverage
+  // ---------------------------------------------------------------------------
+
+  it('rejects a hallucinated route level (commit with L5)', async () => {
+    // The model calls commit_route but with a level outside {L0..L4}.
+    // Build a raw tool call so we can escape the type-level guard.
+    const invalidCommit: LLMToolCall = {
+      id: 'call_bad',
+      type: 'function',
+      function: {
+        name: ROUTER_TOOL_NAMES.commitRoute,
+        arguments: JSON.stringify({ level: 'L5', reason: 'way too excited' }),
+      },
+    };
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([invalidCommit]));
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    // Validator treats invalid level as "no commit" → undefined so the
+    // facade can fall back to FastProbe.
+    expect(r).toBeUndefined();
+  });
+
+  it('rejects lowercase level (l2) — validator is case-sensitive', async () => {
+    const invalidCommit: LLMToolCall = {
+      id: 'call_lower',
+      type: 'function',
+      function: {
+        name: ROUTER_TOOL_NAMES.commitRoute,
+        arguments: JSON.stringify({ level: 'l2', reason: 'casing slipped' }),
+      },
+    };
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([invalidCommit]));
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+  });
+
+  it('rejects commit with empty reason (schema violation)', async () => {
+    const invalidCommit: LLMToolCall = {
+      id: 'call_noreason',
+      type: 'function',
+      function: {
+        name: ROUTER_TOOL_NAMES.commitRoute,
+        arguments: JSON.stringify({ level: 'L1', reason: '' }),
+      },
+    };
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([invalidCommit]));
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+  });
+
+  it('rejects commit with wrong-typed skipStages (non-array)', async () => {
+    const invalidCommit: LLMToolCall = {
+      id: 'call_badskip',
+      type: 'function',
+      function: {
+        name: ROUTER_TOOL_NAMES.commitRoute,
+        arguments: JSON.stringify({
+          level: 'L2',
+          reason: 'wants to skip stages but as a string',
+          skipStages: 'readDocument',
+        }),
+      },
+    };
+    const chat: LLMChatFn = vi.fn(async () => makeResponse([invalidCommit]));
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r).toBeUndefined();
+  });
+
+  it('returns undefined immediately when the caller signal is pre-aborted', async () => {
+    // Simulates "budget already exhausted" / upstream cancellation: the
+    // first signal check in runLoop() aborts before chat() is called.
+    const chat: LLMChatFn = vi.fn(async () =>
+      makeResponse([commitCall({ level: 'L1', reason: 'would-be commit' })]),
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const router = new LLMRouter({ chat });
+    const r = await router.decide({
+      input: INPUT,
+      ctx: CTX,
+      fastHint: FAST,
+      signal: controller.signal,
+    });
+    expect(r).toBeUndefined();
+    // chat() is skipped when the loop's initial abort check trips.
+    expect(chat).not.toHaveBeenCalled();
+  });
+});
+
+describe('LLMRouter — ask_user dismissed via status (not throw)', () => {
+  it('surfaces explicit { status: "dismissed" } to the LLM and lets it continue', async () => {
+    function askCall(args: { question: string }): LLMToolCall {
+      return {
+        id: 'call_ask',
+        type: 'function',
+        function: { name: ROUTER_TOOL_NAMES.askUser, arguments: JSON.stringify(args) },
+      };
+    }
+    let turn = 0;
+    const chat: LLMChatFn = vi.fn(async () => {
+      turn++;
+      if (turn === 1) return makeResponse([askCall({ question: 'L1 or L3?' })]);
+      // After seeing "dismissed", model falls back to a conservative L1.
+      return makeResponse([commitCall({ level: 'L1', reason: 'user skipped; going safe' })]);
+    });
+    // Broker returns the dismissed status natively (60s timeout in prod).
+    const brokerAsk = vi.fn(async () => ({
+      status: 'dismissed' as const,
+      note: 'user idle 60s',
+    }));
+    const router = new LLMRouter({
+      chat,
+      askBroker: { ask: brokerAsk },
+    });
+    const r = await router.decide({ input: INPUT, ctx: CTX, fastHint: FAST });
+    expect(r?.level).toBe('L1');
+    expect(brokerAsk).toHaveBeenCalledOnce();
+  });
 });
 
 describe('LLMRouter — ask_user broker', () => {
