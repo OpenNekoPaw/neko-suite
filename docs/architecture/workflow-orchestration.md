@@ -136,7 +136,8 @@ Phase 3    ✅   LLM Router + 记忆闭环 + 成本估算
 Phase 3.5  ✅   ask_user 交互兜底（webview modal + 可暂停 budget）
 Phase 4.1  ✅   L3/L4 TS 契约 stub + feature flags（ClipProvider / EmbeddingCache / SemanticMatcher / LLMMatcher）
 Phase 4.2  ⏳   CLIP Rust napi 绑定 + host-api TS wrapper
-Phase 4.3  ⏳   模型分发 + 持久化 embeddings.idx + 导入时预计算
+Phase 4.3a ✅   NodeEmbeddingCache（JSON+base64 Float32+LRU）
+Phase 4.3b ⏳   模型分发 + binary mmap 替换 JSON + 导入时预计算
 Phase 5.1  ✅   Reference Chain TS 契约 stub（buildReferenceChain + 3 策略 + 边界断点）
 Phase 5.2a ✅   PlanBuilder 自动计算 chain + LitePlan/.nkplan 持久化 + 验证器
 Phase 5.2b ✅   Canvas ShotCharacter.referenceChain 字段（与 nkplan 同步）

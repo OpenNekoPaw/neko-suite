@@ -234,8 +234,8 @@ export {
   UnimplementedClipProvider,
 } from './clip-provider';
 export type { ClipEmbedding, ClipEncodeOptions, ClipProvider } from './clip-provider';
-export { InMemoryEmbeddingCache } from './embedding-cache';
-export type { EmbeddingCache } from './embedding-cache';
+export { InMemoryEmbeddingCache, NodeEmbeddingCache } from './embedding-cache';
+export type { EmbeddingCache, NodeEmbeddingCacheOptions } from './embedding-cache';
 export { createSemanticMatcher } from './semantic-matcher';
 export type { SemanticMatcherOptions } from './semantic-matcher';
 export { createLLMMatcher, DisabledLLMMatchBroker } from './llm-matcher';

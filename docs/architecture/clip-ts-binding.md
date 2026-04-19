@@ -202,8 +202,18 @@ export interface LLMMatchBroker {
 | ⏳ **2. host-napi napi 绑定** | clip_bridge.rs + index.d.ts | neko-engine 侧（单独 PR） |
 | ⏳ **3. host-api TS wrapper** | ml/clip.ts 实现 ClipProvider | neko-engine 侧 |
 | ⏳ **4. 模型分发** | Registry 条目 + onPostInstall hook | model-runtime 集成 |
-| ⏳ **5. 持久化 embeddings.idx** | disk-backed EmbeddingCache | workflow 侧（Rust 就绪后） |
-| ⏳ **6. 导入时预计算** | AssetManifest 写入 `embeddings.clip` | asset pipeline 集成 |
+| ✅ **5. 持久化 embedding 缓存** | `NodeEmbeddingCache`（JSON + base64 Float32 + LRU） | workflow 侧（已完成 2026-04-19）|
+| ⏳ **6. 二进制 mmap 替换 JSON** | `<workDir>/.neko/.cache/embeddings.idx` 真正的 Float32 mmap | 后续优化 |
+| ⏳ **7. 导入时预计算** | AssetManifest 写入 `embeddings.clip` | asset pipeline 集成 |
+
+### NodeEmbeddingCache 设计
+
+- 单一 JSON 索引文件 + base64 编码的 Float32 payload（每条 entry ~3 KB for 512-dim）
+- LRU：`get` 触发 O(1) 重排但不立即落盘；`put` / `delete` / `clear` 才 flush；`flushPending()` 给 dispose 做兜底
+- Dim pinning：第一次 `put` 把 dim 钉住；后续不一致 dim 抛错
+- 损坏文件：parse 失败时返回空 cache 让上游重新 hydrate
+- 路径：`<workDir>/.neko/.cache/embeddings.json`（典型 < 100 KB / 500 entries）
+- 注入点：构造接 `FileIOAdapter`（与 asset-library 同一接口），方便 in-memory 测试与 Node fs 共用
 
 ## 10. 反对的做法
 

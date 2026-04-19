@@ -137,6 +137,7 @@ export {
   UnimplementedClipProvider,
   cosineSimilarity,
   InMemoryEmbeddingCache,
+  NodeEmbeddingCache,
   createSemanticMatcher,
   createLLMMatcher,
   DisabledLLMMatchBroker,
@@ -154,6 +155,7 @@ export {
   type MatchContext,
   type MatchLayer,
   type MatchingEngine,
+  type NodeEmbeddingCacheOptions,
   type SemanticMatcherOptions,
   type Shot,
   type ShotBindings,
@@ -191,3 +193,26 @@ export {
   type ReferenceChainShot,
   type ReferenceChainStrategy,
 } from './reference-chain';
+
+// Phase 5.4c stub: three-mode render adapters (puppet-2d / scene-3d).
+export {
+  DEFAULT_RENDER_MODE_COSTS,
+  DisabledPuppetRenderAdapter,
+  DisabledSceneRenderAdapter,
+  StaticRenderAdapterRegistry,
+  createDisabledRenderRegistry,
+  selectRenderMode,
+  type PuppetRenderAdapter,
+  type RenderAdapter,
+  type RenderAdapterRegistry,
+  type RenderAnimation,
+  type RenderMode,
+  type RenderModeCostHint,
+  type RenderRequest,
+  type RenderResult,
+  type RenderSource,
+  type RenderSourceKind,
+  type SceneRenderAdapter,
+  type SelectRenderModeOptions,
+  type SelectRenderModeResult,
+} from './render-modes';
