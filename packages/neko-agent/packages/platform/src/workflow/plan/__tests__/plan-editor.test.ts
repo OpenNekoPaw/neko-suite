@@ -137,6 +137,52 @@ describe('editPlanBinding', () => {
     );
     expect(after.violations?.some((v) => v.kind === 'character_lock')).toBe(true);
   });
+
+  // Review regression — rerunConsistency() used to rebuild the LitePlan
+  // without copying parentPlanId / referenceChain, so fork+edit silently
+  // dropped parent lineage and Phase 5 continuity anchors.
+  it('preserves parentPlanId and referenceChain across edits', () => {
+    const alice = candidate({ slot: 'character', entityId: 'alice', assetId: 'casual' });
+    const formal = candidate({ slot: 'character', entityId: 'alice', assetId: 'formal' });
+    const plan = basePlan({
+      parentPlanId: 'plan_parent',
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'character',
+          references: ['s1'],
+          strategy: 'anchored',
+        },
+      ],
+      shots: [
+        {
+          shotId: 's1',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+        {
+          shotId: 's2',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+      ],
+    });
+
+    const checker = createConsistencyChecker();
+    const after = editPlanBinding(
+      plan,
+      { shotId: 's2', slot: 'character', candidate: formal },
+      { shots: SHOTS, consistencyChecker: checker },
+    );
+
+    expect(after.parentPlanId).toBe('plan_parent');
+    expect(after.referenceChain).toEqual(plan.referenceChain);
+    // and the edit itself still took effect + consistency re-ran
+    expect(after.shots?.[1]?.primary.character?.assetId).toBe('formal');
+    expect(after.violations?.some((v) => v.kind === 'character_lock')).toBe(true);
+  });
 });
 
 // =============================================================================

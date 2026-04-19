@@ -156,7 +156,10 @@ function rerunConsistency(plan: LitePlan, ctx: EditContext): LitePlan {
     bindings,
   });
 
-  // Strip empty arrays so optional fields round-trip cleanly
+  // Rebuild carefully: preserve every optional field that was on the
+  // input plan (parentPlanId / referenceChain in particular).  Earlier
+  // versions of this function dropped both silently — fork → edit would
+  // lose parent lineage and Phase 5 continuity anchors.
   return {
     id: plan.id,
     createdAt: plan.createdAt,
@@ -167,6 +170,9 @@ function rerunConsistency(plan: LitePlan, ctx: EditContext): LitePlan {
     ...(plan.notes !== undefined && plan.notes.length > 0 && { notes: plan.notes }),
     ...(constraints.length > 0 && { constraints }),
     ...(violations.length > 0 && { violations }),
+    ...(plan.parentPlanId !== undefined && { parentPlanId: plan.parentPlanId }),
+    ...(plan.referenceChain !== undefined &&
+      plan.referenceChain.length > 0 && { referenceChain: plan.referenceChain }),
   };
 }
 

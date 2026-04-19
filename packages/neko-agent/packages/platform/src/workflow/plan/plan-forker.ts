@@ -66,6 +66,12 @@ export function forkPlan(source: PersistentPlan, options: ForkOptions = {}): Per
     stages: source.stages,
     ...(shots !== undefined && { shots }),
     ...(source.constraints !== undefined && { constraints: source.constraints }),
+    // Preserve the reference chain so Phase 5 continuity anchors survive
+    // the fork.  Without this, a forked plan re-runs without any
+    // prior-shot context, defeating the point of forking instead of
+    // re-routing.
+    ...(source.referenceChain !== undefined &&
+      source.referenceChain.length > 0 && { referenceChain: source.referenceChain }),
     ...(source.notes !== undefined && { notes: source.notes }),
     ...(source.project !== undefined && { project: source.project }),
     ...(source.stageParams !== undefined && { stageParams: source.stageParams }),

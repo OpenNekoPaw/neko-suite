@@ -93,4 +93,31 @@ describe('forkPlan', () => {
     const fork = forkPlan(source, { now: 200, generateId: (s) => `${s.id}_custom` });
     expect(fork.id).toBe('plan_src_custom');
   });
+
+  // Review regression — Phase 5 continuity anchors must survive fork.
+  // Before this fix, forkPlan() dropped source.referenceChain so every
+  // fork re-ran without any prior-shot context.
+  it('preserves source.referenceChain on fork', () => {
+    const source: PersistentPlan = {
+      ...persistent(),
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'character',
+          references: ['s1'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+    const fork = forkPlan(source, { now: 200 });
+    expect(fork.referenceChain).toEqual(source.referenceChain);
+  });
+
+  it('omits referenceChain when source has none', () => {
+    const source = persistent();
+    // sanity — fixture has no referenceChain
+    expect(source.referenceChain).toBeUndefined();
+    const fork = forkPlan(source, { now: 200 });
+    expect(fork.referenceChain).toBeUndefined();
+  });
 });

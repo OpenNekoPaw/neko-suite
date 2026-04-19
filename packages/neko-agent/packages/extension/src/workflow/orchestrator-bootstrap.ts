@@ -101,11 +101,19 @@ export interface Orchestrator {
    */
   startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult>;
 
-  /** Probe an input to get a plan WITHOUT dispatching. Useful for UI previews. */
+  /**
+   * Probe an input to get a plan WITHOUT dispatching. Useful for UI previews.
+   * Callers that already hold a shot list (e.g., storyboard pre-parse) can
+   * pass it in so the plan's shots + bindings + consistency report are
+   * populated; the `shots` returned alongside the plan is the same array
+   * forwarded here, kept so downstream edit flows can re-run ConsistencyChecker
+   * against the original matching input.
+   */
   buildPlan(
     input: RawInput,
     overrides?: RouterOverrides,
-  ): Promise<{ route: Route; plan: LitePlan }>;
+    shots?: ReadonlyArray<Workflow.Shot>,
+  ): Promise<{ route: Route; plan: LitePlan; shots?: ReadonlyArray<Workflow.Shot> }>;
 
   dispose(): void;
 }
@@ -212,10 +220,17 @@ export async function bootstrapOrchestrator(
       return { route, plan, handle };
     },
 
-    async buildPlan(input, overrides) {
+    async buildPlan(input, overrides, shots) {
       const route = await router.decide(input, overrides);
-      const plan = await planBuilder.build({ route });
-      return { route, plan };
+      const plan = await planBuilder.build({
+        route,
+        ...(shots !== undefined && shots.length > 0 && { shots }),
+      });
+      return {
+        route,
+        plan,
+        ...(shots !== undefined && shots.length > 0 && { shots }),
+      };
     },
 
     dispose() {

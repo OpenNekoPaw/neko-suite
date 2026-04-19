@@ -63,9 +63,9 @@ interface PendingPlan {
 }
 
 type PlanDecision =
-  | { kind: 'approve' }
-  | { kind: 'override'; forceLevel: Workflow.RouteLevel }
-  | { kind: 'abort' };
+  | { kind: 'approve'; plan: Workflow.LitePlan }
+  | { kind: 'override'; forceLevel: Workflow.RouteLevel; plan: Workflow.LitePlan }
+  | { kind: 'abort'; plan: Workflow.LitePlan };
 
 // =============================================================================
 // Public API
@@ -77,6 +77,13 @@ export interface PresentPlanOptions {
   globalStyle?: string;
   /** Auto-approve if confidence ≥ this threshold (Phase 1 default: always prompt) */
   autoApproveThreshold?: number;
+  /**
+   * Shot list that matching + consistency were run against.  Stored on the
+   * PendingPlan so post-preview edits (edit-binding / apply-to-all) can
+   * re-run the ConsistencyChecker against the original matching input
+   * rather than an empty shot set (which would silently clear violations).
+   */
+  shots?: ReadonlyArray<Workflow.Shot>;
 }
 
 export interface WorkflowPlanHandlerDeps {
@@ -96,7 +103,15 @@ export class WorkflowPlanHandler {
 
   /**
    * Build a plan, present it to the webview, and dispatch on user approval.
-   * Phase 1 MVP: single-plan flow (no multi-plan forks yet).
+   *
+   * Important: after the user approves (or auto-approve fires), dispatch uses
+   * **the current in-memory plan** — the one the user actually reviewed +
+   * edited — not a re-generated copy.  Auto-approve re-uses the initial
+   * build result; the interactive path re-uses `pending.plan`, which
+   * handleEditBinding / handleToggleCheckpoint / handleApplyToAll have
+   * already mutated in place.  Passing the plan into `startRoutedPipeline`
+   * skips the Router + PlanBuilder re-run and keeps plan id / bindings /
+   * checkpoints / reference chain stable through execution.
    */
   async presentAndDispatch(options: PresentPlanOptions): Promise<{
     route: Workflow.Route;
@@ -106,6 +121,7 @@ export class WorkflowPlanHandler {
     const { route, plan } = await this.deps.orchestrator.buildPlan(
       options.input,
       options.routerOverrides,
+      options.shots,
     );
 
     // Persist the initial 'pending' plan so refreshes / crashes don't lose it.
@@ -123,17 +139,10 @@ export class WorkflowPlanHandler {
         reason: 'auto-approve (threshold met)',
         by: 'system',
       });
-      const result = await this.deps.orchestrator.startRoutedPipeline({
-        input: options.input,
+      const result = await this.dispatchApprovedPlan(plan, options.input, {
         ...(options.routerOverrides !== undefined && { routerOverrides: options.routerOverrides }),
         ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
       });
-      await this.transitionIfStored(plan.id, 'executing', {
-        pipelineId: result.handle.id,
-        by: 'system',
-      });
-      this.broadcastPlanState('executing', plan.id, result.handle.id);
-      this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
       return { route, plan, result };
     }
 
@@ -147,6 +156,7 @@ export class WorkflowPlanHandler {
         ...(options.autoApproveThreshold !== undefined && {
           autoApproveThreshold: options.autoApproveThreshold,
         }),
+        ...(options.shots !== undefined && { shots: options.shots }),
       };
       this.pending.set(plan.id, {
         plan,
@@ -154,24 +164,35 @@ export class WorkflowPlanHandler {
         reject,
         input: options.input,
         request,
+        // Retain the original shot list so edit-binding / apply-to-all can
+        // re-run ConsistencyChecker against the same input matching saw.
+        // Falls back to undefined (not empty array) when no shots flowed in,
+        // so downstream code can distinguish "never had shots" from "had an
+        // empty list of shots".
+        ...(options.shots !== undefined && { shots: options.shots }),
       });
     });
 
+    // `decision.plan` carries the in-memory plan at the moment of approval
+    // — this is the plan mutated by edit-binding / toggle-checkpoint
+    // messages, not the initial build result.  See handleIncoming.
+    const currentPlan = decision.plan;
+
     switch (decision.kind) {
       case 'abort':
-        logger.info('Plan aborted by user', { planId: plan.id });
-        await this.transitionIfStored(plan.id, 'aborted', {
+        logger.info('Plan aborted by user', { planId: currentPlan.id });
+        await this.transitionIfStored(currentPlan.id, 'aborted', {
           reason: 'user-abort',
           by: 'user',
         });
-        this.broadcastPlanState('aborted', plan.id);
-        this.postStatus(plan.id, 'aborted');
-        return { route, plan, result: undefined };
+        this.broadcastPlanState('aborted', currentPlan.id);
+        this.postStatus(currentPlan.id, 'aborted');
+        return { route, plan: currentPlan, result: undefined };
 
       case 'override': {
         // Mark the original as 'edited' (→ pending) so the history shows
         // the replacement lineage, then recurse.
-        await this.transitionIfStored(plan.id, 'edited', {
+        await this.transitionIfStored(currentPlan.id, 'edited', {
           reason: `override to ${decision.forceLevel}`,
           by: 'user',
         });
@@ -185,32 +206,59 @@ export class WorkflowPlanHandler {
           ...(options.autoApproveThreshold !== undefined && {
             autoApproveThreshold: options.autoApproveThreshold,
           }),
+          ...(options.shots !== undefined && { shots: options.shots }),
         };
         return this.presentAndDispatch(overriddenOptions);
       }
 
       case 'approve': {
-        logger.info('Plan approved by user', { planId: plan.id });
-        await this.transitionIfStored(plan.id, 'approved', {
+        logger.info('Plan approved by user', { planId: currentPlan.id });
+        await this.transitionIfStored(currentPlan.id, 'approved', {
           reason: 'user-approve',
           by: 'user',
         });
-        const result = await this.deps.orchestrator.startRoutedPipeline({
-          input: options.input,
+        const result = await this.dispatchApprovedPlan(currentPlan, options.input, {
           ...(options.routerOverrides !== undefined && {
             routerOverrides: options.routerOverrides,
           }),
           ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
         });
-        await this.transitionIfStored(plan.id, 'executing', {
-          pipelineId: result.handle.id,
-          by: 'system',
-        });
-        this.broadcastPlanState('executing', plan.id, result.handle.id);
-        this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
-        return { route, plan, result };
+        return { route, plan: currentPlan, result };
       }
     }
+  }
+
+  /**
+   * Common "plan is approved → hand off to the pipeline" path shared by the
+   * auto-approve branch, the user-approve branch, and fork-dispatch.
+   *
+   * Passes `plan` to `startRoutedPipeline` so the orchestrator reuses it
+   * instead of re-running Router + PlanBuilder (which would produce a new
+   * plan id and drop the user's matrix edits / checkpoint toggles / fork
+   * lineage).  Keeps plan-id ↔ pipeline-id binding consistent with what
+   * attachProgressForwarder and the PlanStore track.
+   */
+  private async dispatchApprovedPlan(
+    plan: Workflow.LitePlan,
+    input: Workflow.RawInput,
+    request: {
+      routerOverrides?: Workflow.RouterOverrides;
+      globalStyle?: string;
+    },
+  ): Promise<RoutedPipelineResult> {
+    const result = await this.deps.orchestrator.startRoutedPipeline({
+      input,
+      plan,
+      ...(request.routerOverrides !== undefined && { routerOverrides: request.routerOverrides }),
+      ...(request.globalStyle !== undefined && { globalStyle: request.globalStyle }),
+    });
+    await this.transitionIfStored(plan.id, 'executing', {
+      pipelineId: result.handle.id,
+      by: 'system',
+    });
+    this.broadcastPlanState('executing', plan.id, result.handle.id);
+    this.postDispatched(plan.id, result.handle.id, result.handle.flowId);
+    return result;
   }
 
   /**
@@ -234,15 +282,22 @@ export class WorkflowPlanHandler {
 
     this.pending.delete(msg.planId);
 
+    // Always pass `pending.plan` (the in-memory plan mutated by earlier
+    // edit-binding / toggle-checkpoint messages) so `presentAndDispatch`
+    // dispatches the exact plan the user reviewed.  See Fix-1 rationale.
     switch (msg.type) {
       case 'workflow/planApprove':
-        pending.resolve({ kind: 'approve' });
+        pending.resolve({ kind: 'approve', plan: pending.plan });
         return true;
       case 'workflow/planOverride':
-        pending.resolve({ kind: 'override', forceLevel: msg.forceLevel });
+        pending.resolve({
+          kind: 'override',
+          forceLevel: msg.forceLevel,
+          plan: pending.plan,
+        });
         return true;
       case 'workflow/planAbort':
-        pending.resolve({ kind: 'abort' });
+        pending.resolve({ kind: 'abort', plan: pending.plan });
         return true;
     }
   }
@@ -324,7 +379,16 @@ export class WorkflowPlanHandler {
    * parent's bindings. The fork is persisted with status='pending' and a
    * fresh `workflow/planPreview` is posted so the user can approve / edit it.
    *
-   * Returns the forked plan for test assertions.
+   * The fork's Start / Edit / Abort buttons go through the same interactive
+   * flow as the initial preview: `handleIncoming` resolves the pending
+   * promise, and the internal resolver below either dispatches via
+   * `dispatchApprovedPlan` (Start) or emits an aborted status (Abort).
+   * Before Fix-2 the fork had a placeholder resolver that did nothing —
+   * clicking Start was silently a no-op.
+   *
+   * Returns the forked plan for test assertions; does NOT await the
+   * eventual dispatch because forks are user-initiated on a webview
+   * timeline.
    */
   async handleFork(msg: WorkflowPlanForkMessage): Promise<Workflow.LitePlan | undefined> {
     if (!this.planStore) {
@@ -343,15 +407,74 @@ export class WorkflowPlanHandler {
     });
     await this.planStore.save(fork);
     const lite = Workflow.toLitePlan(fork);
-    // Register the fork as pending so edit/approve/abort messages route to it.
-    const pending: PendingPlan = {
-      plan: lite,
-      resolve: () => undefined,
-      reject: () => undefined,
-      input: { kind: 'prompt', text: 'fork' }, // placeholder — approve path uses plan directly
-      request: {},
+
+    // Synthesise a minimal input so downstream stages receive a sane
+    // PipelineContext.source.  Forks inherit route + stages + shots +
+    // reference chain from the parent plan; most pipeline stages will
+    // populate scene-level context from those (not from ctx.source).
+    // The `freeform` format means the pipeline skips readDocument by
+    // default — matching the fork's "re-run this plan" intent.
+    const forkInput: Workflow.RawInput = {
+      kind: 'prompt',
+      text: source.route.reason,
     };
-    this.pending.set(lite.id, pending);
+
+    // Register the fork as pending with a real dispatcher.  When the user
+    // clicks Start, handleIncoming resolves this promise with the (possibly
+    // edited) plan and we dispatch it via the same
+    // `dispatchApprovedPlan` path used by the initial preview.
+    // Fork shot input: we only persist per-shot *bindings* on NkPlan, not
+    // the original Shot[] that matching ran against, so `pending.shots`
+    // stays undefined for forks.  Edit-binding on a forked plan falls
+    // back to skipping the consistency re-check — documented limitation.
+    const decision = new Promise<PlanDecision>((resolve, reject) => {
+      this.pending.set(lite.id, {
+        plan: lite,
+        resolve,
+        reject,
+        input: forkInput,
+        request: {},
+      });
+    });
+
+    // Fire-and-forget — the fork flow is user-paced; returning immediately
+    // lets the caller post a planPreview and wait for the button press.
+    void (async () => {
+      const d = await decision;
+      const planNow = d.plan;
+      if (d.kind === 'abort') {
+        await this.transitionIfStored(planNow.id, 'aborted', {
+          reason: 'user-abort',
+          by: 'user',
+        });
+        this.broadcastPlanState('aborted', planNow.id);
+        this.postStatus(planNow.id, 'aborted');
+        return;
+      }
+      if (d.kind === 'override') {
+        // Overriding a fork is equivalent to aborting the fork and
+        // starting a fresh preview at the chosen level — but that needs
+        // an input we don't have.  Log + abort so the user gets feedback.
+        logger.warn('Fork override is not supported; aborting fork', {
+          planId: planNow.id,
+          forceLevel: d.forceLevel,
+        });
+        await this.transitionIfStored(planNow.id, 'aborted', {
+          reason: `override-unsupported (wanted ${d.forceLevel})`,
+          by: 'user',
+        });
+        this.broadcastPlanState('aborted', planNow.id);
+        this.postStatus(planNow.id, 'aborted');
+        return;
+      }
+      // Approve path.
+      logger.info('Forked plan approved by user', { planId: planNow.id });
+      await this.transitionIfStored(planNow.id, 'approved', {
+        reason: 'user-approve (fork)',
+        by: 'user',
+      });
+      await this.dispatchApprovedPlan(planNow, forkInput, {});
+    })();
 
     // Post a fresh preview so the UI shows the forked plan.
     this.postPreview(lite);
