@@ -76,6 +76,23 @@ describe('PlanStore — save/load round-trip', () => {
     expect(() => store.pathFor('../etc/passwd')).toThrow();
     expect(() => store.pathFor('spaces in name')).toThrow();
   });
+
+  it('round-trips the referenceChain field through save/load', async () => {
+    const io = createMemoryFileIO();
+    const store = new PlanStore({ workDir: '/w', fileIO: io });
+    const plan: PersistentPlan = {
+      ...makePlan('plan_chain'),
+      referenceChain: [
+        { shotId: 's2', slot: 'character', references: ['s1'], strategy: 'hybrid' },
+        { shotId: 's3', slot: 'character', references: ['s1', 's2'], strategy: 'hybrid' },
+      ],
+    };
+    await store.save(plan);
+    const reloaded = await store.load('plan_chain');
+    expect(reloaded?.referenceChain).toHaveLength(2);
+    expect(reloaded?.referenceChain?.[0]?.references).toEqual(['s1']);
+    expect(reloaded?.referenceChain?.[1]?.strategy).toBe('hybrid');
+  });
 });
 
 describe('PlanStore — listPlans', () => {

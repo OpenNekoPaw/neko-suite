@@ -88,6 +88,26 @@ export interface NkplanShotBindings {
 }
 
 // ---------------------------------------------------------------------------
+// Reference chain (populated by Phase 5 reference-chain builder — see
+// docs/architecture/creative-consistency.md §4).  Consumers (PipelineExecutor /
+// MediaGenerationService) use this to feed ancestor-shot outputs back in as
+// references, reducing per-shot drift in diffusion-based generators.
+// ---------------------------------------------------------------------------
+
+export type NkplanReferenceChainStrategy = 'sequential' | 'anchored' | 'hybrid';
+
+export interface NkplanReferenceChainEntry {
+  /** Target shot that should receive the listed references. */
+  readonly shotId: string;
+  /** Slot whose chain this entry belongs to (character / scene / prop / ...). */
+  readonly slot: NkplanBindingSlot;
+  /** Ordered list of *prior* shot ids whose generated output should be reused. */
+  readonly references: readonly string[];
+  /** Strategy that produced the entry — retained for explainability. */
+  readonly strategy: NkplanReferenceChainStrategy;
+}
+
+// ---------------------------------------------------------------------------
 // Consistency constraints (populated by ConsistencyChecker — see
 // docs/architecture/creative-consistency.md §2)
 // ---------------------------------------------------------------------------
@@ -160,6 +180,8 @@ export interface NkPlan {
   readonly stages: readonly NkplanStage[];
   readonly shots?: readonly NkplanShotBindings[];
   readonly constraints?: readonly NkplanConstraint[];
+  /** Ancestor references per chained (shot, slot) — Phase 5 reference chain */
+  readonly referenceChain?: readonly NkplanReferenceChainEntry[];
   readonly notes?: readonly string[];
 
   /** Arbitrary stage-scoped parameters (e.g. user-tuned globalStyle) */

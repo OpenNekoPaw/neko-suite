@@ -8,6 +8,7 @@
 import type { BindingSlot } from '../asset-library/types';
 import type { Constraint, Violation } from '../consistency/types';
 import type { BindingCandidate } from '../matching/types';
+import type { ReferenceChainEntry } from '../reference-chain/types';
 import type { Route } from '../types';
 
 // =============================================================================
@@ -84,6 +85,12 @@ export interface LitePlan {
   readonly violations?: ReadonlyArray<Violation>;
   /** Id of the plan this one forked from (see plan-forker.ts). */
   readonly parentPlanId?: string;
+  /**
+   * Ancestor references per (shot, slot) — Phase 5 reference chain.  When
+   * present, PipelineExecutor / MediaGenerationService should thread the
+   * listed shot ids' generated output back in as reference images.
+   */
+  readonly referenceChain?: ReadonlyArray<ReferenceChainEntry>;
 }
 
 // =============================================================================

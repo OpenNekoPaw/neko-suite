@@ -132,3 +132,114 @@ describe('PlanBuilder — shot bindings integration', () => {
     lib.dispose();
   });
 });
+
+describe('PlanBuilder — reference chain integration', () => {
+  async function fixtureShots(lib: Awaited<ReturnType<typeof makeLib>>) {
+    const engine = createMatchingEngine();
+    const router = createRouter();
+    const route = await router.decide({ kind: 'prompt', text: 'x' });
+    const builder = createPlanBuilder({ matchingEngine: engine, assetLibrary: lib });
+    const shots: Shot[] = [
+      {
+        id: 'shot_1',
+        index: 0,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+      {
+        id: 'shot_2',
+        index: 1,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+      {
+        id: 'shot_3',
+        index: 2,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+    ];
+    return { builder, route, shots };
+  }
+
+  it('populates referenceChain for multi-shot contiguous runs', async () => {
+    const lib = await makeLib();
+    const { builder, route, shots } = await fixtureShots(lib);
+    const plan = await builder.build({ route, shots });
+    expect(plan.referenceChain).toBeDefined();
+    // Hybrid default → shot_2 references [shot_1]; shot_3 references [shot_1, shot_2]
+    const byShot = Object.fromEntries(
+      (plan.referenceChain ?? []).map((e) => [e.shotId, [...e.references]]),
+    );
+    expect(byShot['shot_2']).toEqual(['shot_1']);
+    expect(byShot['shot_3']).toEqual(['shot_1', 'shot_2']);
+    lib.dispose();
+  });
+
+  it('omits referenceChain when no shots are provided', async () => {
+    const router = createRouter();
+    const route = await router.decide({ kind: 'prompt', text: 'quick' });
+    const builder = createPlanBuilder();
+    const plan = await builder.build({ route });
+    expect(plan.referenceChain).toBeUndefined();
+  });
+
+  it('honours `disabled: true` option for tests that do not need a chain', async () => {
+    const lib = await makeLib();
+    const engine = createMatchingEngine();
+    const router = createRouter();
+    const route = await router.decide({ kind: 'prompt', text: 'x' });
+    const builder = createPlanBuilder({
+      matchingEngine: engine,
+      assetLibrary: lib,
+      referenceChain: { disabled: true },
+    });
+    const shots: Shot[] = [
+      { id: 'shot_1', entityRefs: [{ slot: 'character', name: 'Alice' }], sceneGroupId: 'sg' },
+      { id: 'shot_2', entityRefs: [{ slot: 'character', name: 'Alice' }], sceneGroupId: 'sg' },
+    ];
+    const plan = await builder.build({ route, shots });
+    expect(plan.referenceChain).toBeUndefined();
+    lib.dispose();
+  });
+
+  it('forwards a custom strategy to the builder', async () => {
+    const lib = await makeLib();
+    const engine = createMatchingEngine();
+    const router = createRouter();
+    const route = await router.decide({ kind: 'prompt', text: 'x' });
+    const builder = createPlanBuilder({
+      matchingEngine: engine,
+      assetLibrary: lib,
+      referenceChain: { strategy: 'anchored' },
+    });
+    const shots: Shot[] = [
+      {
+        id: 'shot_1',
+        index: 0,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+      {
+        id: 'shot_2',
+        index: 1,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+      {
+        id: 'shot_3',
+        index: 2,
+        entityRefs: [{ slot: 'character', name: 'Alice' }],
+        sceneGroupId: 'sg',
+      },
+    ];
+    const plan = await builder.build({ route, shots });
+    const entries = plan.referenceChain ?? [];
+    expect(entries.every((e) => e.strategy === 'anchored')).toBe(true);
+    // Anchored → every non-first shot references only shot_1
+    expect(entries.every((e) => e.references.length === 1 && e.references[0] === 'shot_1')).toBe(
+      true,
+    );
+    lib.dispose();
+  });
+});

@@ -164,6 +164,72 @@ describe('validateNkplan', () => {
     const strict = validateNkplan(plan, { strict: true });
     expect(strict.valid).toBe(false);
   });
+
+  it('accepts an optional referenceChain array', () => {
+    const plan = goodPlan({
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'character',
+          references: ['s1'],
+          strategy: 'hybrid',
+        },
+      ],
+    });
+    const res = validateNkplan(plan);
+    expect(res.valid).toBe(true);
+  });
+
+  it('flags invalid reference-chain strategy', () => {
+    const plan = {
+      ...goodPlan(),
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'character',
+          references: ['s1'],
+          strategy: 'nonsense',
+        },
+      ],
+    } as unknown as NkPlan;
+    const res = validateNkplan(plan);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.field === 'referenceChain[0].strategy')).toBe(true);
+  });
+
+  it('flags non-array references', () => {
+    const plan = {
+      ...goodPlan(),
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'character',
+          references: 'not-an-array',
+          strategy: 'hybrid',
+        },
+      ],
+    } as unknown as NkPlan;
+    const res = validateNkplan(plan);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.field === 'referenceChain[0].references')).toBe(true);
+  });
+
+  it('flags invalid slot', () => {
+    const plan = {
+      ...goodPlan(),
+      referenceChain: [
+        {
+          shotId: 's2',
+          slot: 'not-a-slot',
+          references: ['s1'],
+          strategy: 'hybrid',
+        },
+      ],
+    } as unknown as NkPlan;
+    const res = validateNkplan(plan);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.field === 'referenceChain[0].slot')).toBe(true);
+  });
 });
 
 // =============================================================================

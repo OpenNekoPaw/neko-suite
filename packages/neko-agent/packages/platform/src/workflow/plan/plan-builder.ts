@@ -11,9 +11,15 @@
  * See docs/architecture/plan-mode.md §9.
  */
 
-import type { AssetLibrary } from '../asset-library/types';
+import type { AssetLibrary, BindingSlot } from '../asset-library/types';
 import type { ConsistencyChecker, Constraint, Violation } from '../consistency/types';
 import type { MatchingEngine, Shot, ShotBindings } from '../matching/types';
+import { buildReferenceChain } from '../reference-chain/reference-chain-builder';
+import type {
+  BuildReferenceChainOptions,
+  ReferenceChainEntry,
+  ReferenceChainShot,
+} from '../reference-chain/types';
 import type { Route } from '../types';
 
 import type {
@@ -106,6 +112,12 @@ export interface PlanBuilderOptions {
   assetLibrary?: AssetLibrary;
   /** Optional ConsistencyChecker — runs after matching to populate constraints/violations. */
   consistencyChecker?: ConsistencyChecker;
+  /**
+   * Reference-chain options forwarded to `buildReferenceChain`.  When omitted,
+   * the hybrid strategy is used on the 'character' slot.  Pass `{ disabled:
+   * true }` to suppress chain computation entirely (useful for tests).
+   */
+  referenceChain?: BuildReferenceChainOptions & { disabled?: boolean };
   /** Override id generator for deterministic tests */
   generateId?: () => string;
   /** Override clock for deterministic tests */
@@ -124,6 +136,8 @@ export class PlanBuilder {
   async build(input: PlanBuildInput): Promise<LitePlan> {
     const stages = this.buildStages(input.route);
     const shotResult = await this.buildShots(input);
+    const referenceChain =
+      shotResult && input.shots ? this.computeReferenceChain(input.shots, shotResult.bindings) : [];
 
     return {
       id: this.generateId(),
@@ -140,6 +154,7 @@ export class PlanBuilder {
         shotResult.violations.length > 0 && {
           violations: shotResult.violations,
         }),
+      ...(referenceChain.length > 0 && { referenceChain }),
       ...(input.notes !== undefined && input.notes.length > 0 && { notes: input.notes }),
     };
   }
@@ -164,6 +179,7 @@ export class PlanBuilder {
   private async buildShots(input: PlanBuildInput): Promise<
     | {
         shots: ReadonlyArray<ShotBindingSummary>;
+        bindings: ReadonlyArray<ShotBindings>;
         constraints: ReadonlyArray<Constraint>;
         violations: ReadonlyArray<Violation>;
       }
@@ -188,7 +204,7 @@ export class PlanBuilder {
 
     const summaries = rawBindings.map((r) => toSummary(r));
     if (!consistencyChecker) {
-      return { shots: summaries, constraints: [], violations: [] };
+      return { shots: summaries, bindings: rawBindings, constraints: [], violations: [] };
     }
     const report = consistencyChecker.check({
       shots: input.shots,
@@ -196,9 +212,50 @@ export class PlanBuilder {
     });
     return {
       shots: summaries,
+      bindings: rawBindings,
       constraints: report.constraints,
       violations: report.violations,
     };
+  }
+
+  /**
+   * Build the reference chain from the matched bindings.  Pure mapping —
+   * takes the shot metadata + per-shot entity ids and hands them to the
+   * Phase 5 `buildReferenceChain` helper.
+   *
+   * Returns an empty array when the option is explicitly disabled or when
+   * no shots end up with a binding.
+   */
+  private computeReferenceChain(
+    shots: ReadonlyArray<Shot>,
+    bindings: ReadonlyArray<ShotBindings>,
+  ): ReadonlyArray<ReferenceChainEntry> {
+    const opts = this.options.referenceChain;
+    if (opts?.disabled) return [];
+
+    const byId = new Map(bindings.map((b) => [b.shotId, b]));
+    const chainShots: ReferenceChainShot[] = shots.map((shot, i) => {
+      const boundEntities: Partial<Record<BindingSlot, string>> = {};
+      const binding = byId.get(shot.id);
+      if (binding) {
+        for (const [slot, candidate] of Object.entries(binding.primary) as [
+          BindingSlot,
+          { entityId: string } | undefined,
+        ][]) {
+          if (candidate?.entityId) boundEntities[slot] = candidate.entityId;
+        }
+      }
+      return {
+        shotId: shot.id,
+        index: shot.index ?? i,
+        ...(shot.sceneGroupId !== undefined && { sceneGroupId: shot.sceneGroupId }),
+        ...(shot.tags !== undefined && { tags: shot.tags }),
+        boundEntities,
+      };
+    });
+
+    const { disabled: _disabled, ...builderOpts } = opts ?? {};
+    return buildReferenceChain(chainShots, builderOpts);
   }
 }
 

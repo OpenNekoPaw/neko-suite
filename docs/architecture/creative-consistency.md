@@ -191,7 +191,8 @@ Plan 矩阵视图基础上增加**约束栏**：
 | Phase A | character_lock 检测（最高价值） | ✅ 已完成 |
 | Phase B | time_progression + costume_continuity | ✅ 已完成 |
 | Phase C.1 | Reference Chain TS 契约 stub（`buildReferenceChain` + 三种策略 + 边界断点） | ✅ 已完成（2026-04-19）|
-| Phase C.2 | Canvas `ShotCharacter.referenceChain` 字段 + `.nkplan.stages[].referenceChain` | ⏳ 待实施 |
+| Phase C.2a | PlanBuilder 自动计算 chain + 落入 `LitePlan.referenceChain` + `.nkplan` 持久化 | ✅ 已完成（2026-04-19）|
+| Phase C.2b | Canvas `ShotCharacter.referenceChain` 字段（与 nkplan 同步） | ⏳ 待实施 |
 | Phase C.3 | PipelineExecutor 消费 chain + MediaGenerationService 传参 | ⏳ 待实施 |
 | Phase D | style_lock + prop_consistency | ⏳ 规划中 |
 | Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
@@ -203,6 +204,15 @@ Plan 矩阵视图基础上增加**约束栏**：
 - 边界断点：`sceneGroupId` 切换 / `scene-change` tag / entity 切换 / 缺失 binding → 都会重启 anchor
 - 每个 slot 独立成链（角色链与场景链互不影响）
 - 契约已冻结：Phase C.2/C.3 可对着稳定类型实现，不会再回改 builder 接口
+
+### Phase C.2a 实现索引
+
+- [plan-builder.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/plan-builder.ts) `computeReferenceChain()` — 每次 `build()` 自动从 bindings 推导 chain
+- [plan/types.ts](../../packages/neko-agent/packages/platform/src/workflow/plan/types.ts) `LitePlan.referenceChain?` — UI / downstream 消费入口
+- [nkplan/types.ts](../../packages/neko-types/src/nkplan/types.ts) `NkPlan.referenceChain?` + `NkplanReferenceChainEntry` + `NkplanReferenceChainStrategy`
+- [nkplan/validator.ts](../../packages/neko-types/src/nkplan/validator.ts) — 验证 entry.slot / strategy / references[]
+- `toNkPlan / toLitePlan` 现在完整 round-trip 新字段
+- `PlanBuilderOptions.referenceChain?: { disabled?, strategy?, slots?, breakTags?, maxReferences? }` — 可在 bootstrap 或测试里关闭 / 调参
 
 详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 

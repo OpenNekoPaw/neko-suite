@@ -67,6 +67,7 @@ const CONSTRAINT_KINDS = new Set<string>([
   'style_lock',
   'prop_consistency',
 ]);
+const REFERENCE_CHAIN_STRATEGIES = new Set<string>(['sequential', 'anchored', 'hybrid']);
 
 // =============================================================================
 // Entry
@@ -188,6 +189,21 @@ export function validateNkplan(
       errors.push({ field: 'constraints', message: 'Must be an array', severity: 'error' });
     } else {
       data['constraints'].forEach((c, i) => validateConstraint(c, `constraints[${i}]`, errors));
+    }
+  }
+
+  // referenceChain (optional)
+  if (data['referenceChain'] !== undefined) {
+    if (!isArray(data['referenceChain'])) {
+      errors.push({
+        field: 'referenceChain',
+        message: 'Must be an array',
+        severity: 'error',
+      });
+    } else {
+      data['referenceChain'].forEach((e, i) =>
+        validateReferenceChainEntry(e, `referenceChain[${i}]`, errors),
+      );
     }
   }
 
@@ -499,6 +515,52 @@ function validateConstraint(c: unknown, field: string, errors: ValidationError[]
       field: `${field}.payload`,
       message: 'Must be an object',
       severity: 'error',
+    });
+  }
+}
+
+function validateReferenceChainEntry(
+  entry: unknown,
+  field: string,
+  errors: ValidationError[],
+): void {
+  if (!isRecord(entry)) {
+    errors.push({ field, message: 'Must be an object', severity: 'error' });
+    return;
+  }
+  requireString(entry, 'shotId', errors, `${field}.shotId`);
+  const slot = entry['slot'];
+  if (!isString(slot) || !BINDING_SLOTS.has(slot)) {
+    errors.push({
+      field: `${field}.slot`,
+      message: `Invalid slot ${String(slot)}`,
+      severity: 'error',
+    });
+  }
+  const strategy = entry['strategy'];
+  if (!isString(strategy) || !REFERENCE_CHAIN_STRATEGIES.has(strategy)) {
+    errors.push({
+      field: `${field}.strategy`,
+      message: `Invalid reference-chain strategy ${String(strategy)}`,
+      severity: 'error',
+    });
+  }
+  const refs = entry['references'];
+  if (!isArray(refs)) {
+    errors.push({
+      field: `${field}.references`,
+      message: 'Must be an array of shot ids',
+      severity: 'error',
+    });
+  } else {
+    refs.forEach((r, i) => {
+      if (!isString(r)) {
+        errors.push({
+          field: `${field}.references[${i}]`,
+          message: 'Must be a string',
+          severity: 'error',
+        });
+      }
     });
   }
 }

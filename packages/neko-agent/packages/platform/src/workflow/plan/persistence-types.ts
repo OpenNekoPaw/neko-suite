@@ -37,6 +37,8 @@ export function toNkPlan(lite: LitePlan, opts: { now?: number } = {}): Persisten
     route: lite.route,
     stages: lite.stages,
     ...(lite.shots !== undefined && { shots: lite.shots }),
+    ...(lite.referenceChain !== undefined &&
+      lite.referenceChain.length > 0 && { referenceChain: lite.referenceChain }),
     ...(lite.notes !== undefined && lite.notes.length > 0 && { notes: lite.notes }),
   };
 }
@@ -55,6 +57,8 @@ export function toLitePlan(plan: PersistentPlan): LitePlan {
     route: plan.route,
     stages: plan.stages,
     ...(plan.shots !== undefined && { shots: plan.shots }),
+    ...(plan.referenceChain !== undefined &&
+      plan.referenceChain.length > 0 && { referenceChain: plan.referenceChain }),
     ...(plan.notes !== undefined && plan.notes.length > 0 && { notes: plan.notes }),
   } as LitePlan;
 }

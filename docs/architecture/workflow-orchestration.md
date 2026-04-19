@@ -138,8 +138,10 @@ Phase 4.1  ✅   L3/L4 TS 契约 stub + feature flags（ClipProvider / Embedding
 Phase 4.2  ⏳   CLIP Rust napi 绑定 + host-api TS wrapper
 Phase 4.3  ⏳   模型分发 + 持久化 embeddings.idx + 导入时预计算
 Phase 5.1  ✅   Reference Chain TS 契约 stub（buildReferenceChain + 3 策略 + 边界断点）
-Phase 5.2  ⏳   Canvas ShotCharacter.referenceChain 字段 + PipelineExecutor 消费
-Phase 5.3  ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
+Phase 5.2a ✅   PlanBuilder 自动计算 chain + LitePlan/.nkplan 持久化 + 验证器
+Phase 5.2b ⏳   Canvas ShotCharacter.referenceChain 字段（与 nkplan 同步）
+Phase 5.3  ⏳   PipelineExecutor 消费 chain + MediaGenerationService 传参
+Phase 5.4  ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
 
