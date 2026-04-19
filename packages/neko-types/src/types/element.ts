@@ -15,7 +15,11 @@ import { AudioProperties } from './audio';
 import { EffectInstance } from './effects';
 import { SpeedProperties } from './speed';
 import { Transition } from './transition';
-import type { EngineElement, EngineSubtitleElementData } from '../generated/timeline.engine';
+import type {
+  EngineClipLineage,
+  EngineElement,
+  EngineSubtitleElementData,
+} from '../generated/timeline.engine';
 
 // =============================================================================
 // Compile-time drift detection
@@ -88,6 +92,16 @@ interface BaseTimelineElement {
   transitionIn?: Transition;
   /** Transition to next element (Phase 2: engine field) */
   transitionOut?: Transition;
+  /**
+   * Workflow-Orchestration lineage (Phase 6.3: engine field).
+   *
+   * Provenance breadcrumb back to the canvas shot / generation task /
+   * plan that produced this element.  Populated by the arrange-on-timeline
+   * stage when the pipeline is orchestrator-driven; empty for clips
+   * authored directly on the timeline.  Uses the generated type as-is
+   * (no UI rename needed — fields are already camelCase + user-meaningful).
+   */
+  lineage?: EngineClipLineage;
 }
 
 // =============================================================================
