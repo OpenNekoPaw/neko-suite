@@ -252,10 +252,8 @@ function BindingCell({
   }
 
   const icon = confidenceIcon(candidate.confidence);
-  const continuityFlag = candidate.provenance === 'L5' ? '*' : '';
-  const title = candidate.reason
-    ? `${candidate.reason}\nConfidence: ${(candidate.confidence * 100).toFixed(0)}%`
-    : `Confidence: ${(candidate.confidence * 100).toFixed(0)}%`;
+  const provenanceMark = provenanceBadge(candidate.provenance);
+  const title = buildTitle(candidate);
 
   const clickable = !readOnly && hasAlternatives;
 
@@ -272,9 +270,13 @@ function BindingCell({
       <span aria-label="confidence">{icon}</span>
       <span className="truncate" style={{ maxWidth: 140 }}>
         {candidate.assetId}
-        {continuityFlag && (
-          <span className="ml-0.5 text-[var(--vscode-charts-blue)]" title="Continuity reuse">
-            {continuityFlag}
+        {provenanceMark && (
+          <span
+            className={`ml-0.5 ${provenanceMark.className}`}
+            title={provenanceMark.title}
+            aria-label={provenanceMark.title}
+          >
+            {provenanceMark.glyph}
           </span>
         )}
         {clickable && <span className="ml-1 opacity-60">▾</span>}
@@ -322,7 +324,7 @@ function BindingPopover({
               >
                 {confidenceIcon(c.confidence)} {c.assetId}
                 <span className="ml-1 text-[9px] opacity-60">
-                  {c.provenance} · {(c.confidence * 100).toFixed(0)}%
+                  {provenanceLabel(c.provenance)} · {(c.confidence * 100).toFixed(0)}%
                 </span>
               </button>
               {onApplyToAll && !selected && (
@@ -364,4 +366,74 @@ function confidenceIcon(c: number): string {
   if (c >= 0.9) return '✅';
   if (c >= 0.6) return '⚠️';
   return '❓';
+}
+
+interface ProvenanceBadge {
+  glyph: string;
+  title: string;
+  className: string;
+}
+
+/**
+ * A small secondary glyph that surfaces *why* the matcher picked this
+ * candidate: continuity (L5), semantic (L3), LLM (L4), or user override.
+ * Returning undefined for L1/L2 keeps the "explicit tag" / "fuzzy name"
+ * cases uncluttered — those are already the common case and don't need
+ * a callout.
+ */
+function provenanceBadge(
+  provenance: WorkflowBindingCandidate['provenance'],
+): ProvenanceBadge | undefined {
+  // NOTE: the wire type narrows 'user' → 'L1' (see toWireCandidate in the
+  // extension), so the 'user' case is unreachable here.  L1 / L2 stay
+  // unbadged because they're the common path and don't need a callout.
+  switch (provenance) {
+    case 'L5':
+      return {
+        glyph: '*',
+        title: 'Continuity reuse from an earlier shot',
+        className: 'text-[var(--vscode-charts-blue)]',
+      };
+    case 'L3':
+      return {
+        glyph: '🔍',
+        title: 'Semantic match (CLIP)',
+        className: 'text-[var(--vscode-charts-orange)]',
+      };
+    case 'L4':
+      return {
+        glyph: '🤖',
+        title: 'LLM tie-breaker',
+        className: 'text-[var(--vscode-charts-purple)]',
+      };
+    case 'L1':
+    case 'L2':
+    default:
+      return undefined;
+  }
+}
+
+/** Human-readable provenance shown in the alternatives popover. */
+function provenanceLabel(provenance: WorkflowBindingCandidate['provenance']): string {
+  switch (provenance) {
+    case 'L1':
+      return 'L1 explicit';
+    case 'L2':
+      return 'L2 name';
+    case 'L3':
+      return 'L3 semantic';
+    case 'L4':
+      return 'L4 LLM';
+    case 'L5':
+      return 'L5 continuity';
+    default:
+      return provenance;
+  }
+}
+
+function buildTitle(candidate: WorkflowBindingCandidate): string {
+  const pct = (candidate.confidence * 100).toFixed(0);
+  const prov = provenanceLabel(candidate.provenance);
+  const head = candidate.reason ?? `${prov} match`;
+  return `${head}\nProvenance: ${prov}\nConfidence: ${pct}%`;
 }

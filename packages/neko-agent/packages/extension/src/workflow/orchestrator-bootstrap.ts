@@ -117,7 +117,8 @@ export interface Orchestrator {
 export async function bootstrapOrchestrator(
   options: OrchestratorBootstrapOptions,
 ): Promise<Orchestrator> {
-  const matchingEngine = Workflow.createMatchingEngine();
+  const settings = readWorkflowSettings();
+  const matchingEngine = createMatchingEngineFromSettings(settings);
   const consistencyChecker = Workflow.createConsistencyChecker();
 
   // AssetLibrary is optional in Phase 1 — only load when a workspace dir exists
@@ -128,7 +129,6 @@ export async function bootstrapOrchestrator(
 
   // Phase 3: optional LLMRouter + RouterMemory behind the
   // `neko.workflow.router.llm.enabled` flag.
-  const settings = readWorkflowSettings();
   const routerMemory = await tryCreateRouterMemory(options.workDir);
   const llmRouter = _isLLMRouterEnabled()
     ? tryCreateLLMRouter(options.platform, routerMemory, assetLibrary, settings)
@@ -210,6 +210,39 @@ export async function bootstrapOrchestrator(
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Build the matching engine chain based on live workflow settings.
+ *
+ * Phase 1 default: L1 / L5 / L2 (no options → `createMatchingEngine()`).
+ *
+ * Phase 4.1: when `matching.semantic.enabled` is true we plug in an L3
+ * SemanticMatcher with an `UnimplementedClipProvider` — the matcher
+ * short-circuits silently via `ClipUnavailableError`, so enabling the
+ * flag is harmless until the engine-side CLIP binding ships.  At that
+ * point the production wire-up can swap the provider (and an embedding
+ * cache) without touching the chain topology.
+ *
+ * Similarly, `matching.llm.enabled` installs an L4 LLMMatcher backed by
+ * `DisabledLLMMatchBroker` so the flag can be flipped on without the
+ * chain actually calling any LLM until a real broker is injected.
+ */
+export function createMatchingEngineFromSettings(settings: {
+  matchingSemanticEnabled: boolean;
+  matchingLlmEnabled: boolean;
+}): MatchingEngine {
+  const semanticEnabled = settings.matchingSemanticEnabled;
+  const llmEnabled = settings.matchingLlmEnabled;
+  if (!semanticEnabled && !llmEnabled) return Workflow.createMatchingEngine();
+  return Workflow.createFullMatchingEngine({
+    ...(semanticEnabled && {
+      semantic: { clip: new Workflow.UnimplementedClipProvider() },
+    }),
+    ...(llmEnabled && {
+      llm: { broker: Workflow.DisabledLLMMatchBroker },
+    }),
+  });
+}
 
 async function tryCreateAssetLibrary(
   workDir: string | undefined,
