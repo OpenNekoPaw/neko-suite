@@ -452,6 +452,34 @@ message Element {
   optional Transition transition_in = 20;
   // Transition to next element (Phase 2)
   optional Transition transition_out = 21;
+  // Workflow lineage (Phase 6.3) — provenance back to the canvas shot /
+  // generation task / plan that produced this element.  All fields
+  // optional; empty string = "unset".
+  optional ClipLineage lineage = 22;
+}
+
+// =============================================================================
+// ClipLineage (Phase 6.3) — Workflow Orchestration provenance
+// =============================================================================
+
+// Links a timeline element back to its creation context so users can
+// answer "where did this clip come from?" and agents can safely re-run
+// the generating flow with the same inputs.
+message ClipLineage {
+  // Source ShotCanvasNode.id (canvas shot that produced this clip).
+  // Empty string when clip was authored directly in the timeline.
+  string shot_node_id = 1;
+  // Generation task id (MediaGenerationService.generate -> taskId).
+  // Empty string when no AI generation was involved (pure render / import).
+  string generation_id = 2;
+  // NkPlan id that orchestrated the generation.
+  // Empty string when the shot was generated outside a workflow plan.
+  string plan_id = 3;
+  // RouteLevel the plan ran at (L0..L4, see workflow-routing.md).
+  // Empty string when unset.
+  string route_level = 4;
+  // Unix millis — when this lineage was recorded.
+  int64 recorded_at = 5;
 }
 
 // =============================================================================

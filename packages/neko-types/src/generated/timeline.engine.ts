@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/timeline.proto
-// Source hash: 8a141dc2196b9bf4
+// Source hash: 938513bc1f90e4ea
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -351,6 +351,7 @@ export interface EngineElement {
   speed?: EngineSpeedProperties;
   transitionIn?: EngineTransition;
   transitionOut?: EngineTransition;
+  lineage?: EngineClipLineage;
   media?: EngineMediaElementData;
   audio?: EngineAudioElementData;
   text?: EngineTextElementData;
@@ -358,6 +359,36 @@ export interface EngineElement {
   subtitle?: EngineSubtitleElementData;
   scene3d?: EngineScene3DElementData;
   puppet?: EnginePuppetElementData;
+}
+
+/**
+ * Links a timeline element back to its creation context so users can
+ * answer "where did this clip come from?" and agents can safely re-run
+ * the generating flow with the same inputs.
+ */
+export interface EngineClipLineage {
+  /**
+   * Source ShotCanvasNode.id (canvas shot that produced this clip).
+   * Empty string when clip was authored directly in the timeline.
+   */
+  shotNodeId: string;
+  /**
+   * Generation task id (MediaGenerationService.generate -> taskId).
+   * Empty string when no AI generation was involved (pure render / import).
+   */
+  generationId: string;
+  /**
+   * NkPlan id that orchestrated the generation.
+   * Empty string when the shot was generated outside a workflow plan.
+   */
+  planId: string;
+  /**
+   * RouteLevel the plan ran at (L0..L4, see workflow-routing.md).
+   * Empty string when unset.
+   */
+  routeLevel: string;
+  /** Unix millis — when this lineage was recorded. */
+  recordedAt: number;
 }
 
 export interface EngineSpeedProperties {
@@ -548,6 +579,7 @@ export const ENGINE_BASE_ELEMENT_KEYS = [
   'speed',
   'transitionIn',
   'transitionOut',
+  'lineage',
 ] as const;
 
 export const ENGINE_MEDIA_KEYS = [

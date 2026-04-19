@@ -315,8 +315,8 @@
         },
         "neko.workflow.orchestrator.enabled": {
           "type": "boolean",
-          "default": false,
-          "description": "Enable the Workflow Orchestrator (routed pipelines + Plan mode). When disabled the legacy `neko.pipeline.start` path is used."
+          "default": true,
+          "description": "Enable the Workflow Orchestrator (routed pipelines + Plan mode). Default changed to true in Phase 6.3 — the legacy `neko.pipeline.start` path remains available but is @deprecated. Set to false to force legacy behaviour."
         },
         "neko.workflow.router.llm.enabled": {
           "type": "boolean",

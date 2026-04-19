@@ -160,7 +160,12 @@ Phase 5.4d ✅   render-engine pipeline stage + ctx.renderedAnchorPaths + batch-
 Phase 5.4e ⏳   bootstrap 注册 render-engine（需要 runtime-puppet/runtime-scene adapter 实例落地）
 Phase 6.1  ✅   .nkproj Format SDK（types + validator + migrator + codec + barrel，对齐 nkv/nkplan 模式）
 Phase 6.2  ✅   Lossless Upgrade 原语（addArtifacts / removeArtifacts / appendUpgradeEvent / recordLosslessUpgrade）
-Phase 6.3  ⏳   Clip.lineage（proto regenerate，写入 timeline.engine.ts）+ ShotNode.workflowPlanId（写入 canvas.ts）+ 输入 handler registry — **不再向 `.nkproj` 新增字段**，见 [format-strategy.md §六](./format-strategy.md#六项目状态分层nkproj-vs-neko-vs-git)
+Phase 6.3a ✅   Clip.lineage — timeline.proto 新增 ClipLineage message + regen timeline.engine.ts（shotNodeId / generationId / planId / routeLevel / recordedAt）
+Phase 6.3b ✅   ShotCanvasNode.data.workflowPlanId — 可选字段，手工建的 shot 仍兼容
+Phase 6.3c ⏸   输入 handler registry — 推迟（当前 fast-probe.ts 内联 switch 够用，无消费端要求抽取）
+
+治理  C1   ✅   `neko.workflow.orchestrator.enabled` 默认 `true`（workflow-settings.ts + package.json 同步）
+治理  C2   ✅   Legacy `neko.pipeline.start` / `neko.agent.generateForNode` JSDoc `@deprecated` 标记，保留可用
 ```
 
 **代码锚点速查**（每 Phase 的主要落地文件）：

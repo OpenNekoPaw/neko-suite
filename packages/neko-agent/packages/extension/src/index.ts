@@ -793,6 +793,17 @@ function registerCommands(
   // Called by neko-canvas BatchGenerationScheduler (callAgent).
   // Executes a text-to-image generation via the configured platform media service
   // and returns the result as a base64 data URL.
+  //
+  // @deprecated since Phase 6.3 (2026-04-19).  New code should go through the
+  // Workflow Orchestrator (routed pipelines + Plan mode) which produces the
+  // same generation via batch-generate stage + MediaGenerationService while
+  // recording provenance into NkPlan / .nkproj.upgradeHistory.  This command
+  // stays alive for:
+  //   (1) BatchGenerationScheduler legacy call path
+  //   (2) Programmatic callers that have not migrated to
+  //       `neko.agent.startRoutedPipeline`
+  // Removal timeline: earliest next major release once orchestrator telemetry
+  // shows < 5% of generations flowing through this command.
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.agent.generateForNode',
@@ -1041,6 +1052,13 @@ function registerPipelineCommands(
   chatViewProvider: ChatViewProvider,
 ): void {
   // Start Creative Pipeline — QuickPick for intent, then send to Agent
+  //
+  // @deprecated since Phase 6.3 (2026-04-19).  Prefer
+  // `neko.agent.startRoutedPipeline` which routes through the Workflow
+  // Orchestrator (FastProbe + Plan Mode) instead of an intent QuickPick.
+  // Both paths produce the same pipeline execution; the routed path adds
+  // provenance, reference chain, and render-mode selection.  Retained for
+  // users who disable `neko.workflow.orchestrator.enabled`.
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.pipeline.start', async () => {
       const intent = await vscode.window.showQuickPick(

@@ -288,6 +288,14 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     lastImportedToTimelineAt?: number;
     /** Target project name used during the last storyboard import */
     lastImportedToTimelineProject?: string;
+    /**
+     * Phase 6.3 — NkPlan id that produced or currently owns this shot.
+     * Set when the shot was created through Workflow Orchestration
+     * (PlanBuilder → batch-generate / render-engine stage).  Optional so
+     * manually-authored shots remain schema-compatible.  Read by timeline
+     * import to stamp EngineElement.lineage.planId.
+     */
+    workflowPlanId?: string;
   };
 }
 

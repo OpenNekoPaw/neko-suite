@@ -48,7 +48,16 @@ export type WorkflowSettingKey = (typeof WORKFLOW_SETTING_KEYS)[keyof typeof WOR
 // =============================================================================
 
 export const WORKFLOW_SETTING_DEFAULTS = {
-  orchestratorEnabled: false,
+  /**
+   * Phase 6.3 — flipped to `true` by default.  Workflow Orchestration
+   * (Router + Plan + Pipeline) is now the primary entry point; the legacy
+   * `neko.pipeline.start` and direct `neko.agent.generateForNode` calls
+   * remain available but are @deprecated — see index.ts command registry.
+   *
+   * Existing workspaces that explicitly set this to `false` keep the old
+   * behaviour.  New workspaces get the orchestrator.
+   */
+  orchestratorEnabled: true,
   routerLlmEnabled: false,
   routerLlmBudgetMs: 2000,
   routerAskTimeoutMs: 60_000,
