@@ -390,6 +390,127 @@ describe('batchGenerate stage', () => {
 
     expect(stage.tasks({})).toHaveLength(0);
   });
+
+  it('passes ctx.referenceChain down to the generator as referenceShotIds', async () => {
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (prompt, options) => {
+          calls.push({ prompt, options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+    }) as IParallelStage;
+
+    const shotScenes: StoryboardScene[] = [
+      {
+        index: 0,
+        heading: 'S0',
+        description: '',
+        dialogue: [],
+        estimatedDuration: 3,
+        suggestedPrompt: 'prompt-0',
+        shotPlans: [
+          // Shot 0 matches an entry by task id; shot 1 has no matching entry.
+          { shotNumber: 1, visualDescription: 'opening' },
+          { shotNumber: 2, visualDescription: 'closeup' },
+        ],
+      },
+    ];
+
+    const ctx: PipelineContext = {
+      scenes: shotScenes,
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'character',
+          references: ['anchor'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+    const tasks = stage.tasks(ctx);
+    expect(tasks).toHaveLength(2);
+    await tasks[0]!.execute();
+    await tasks[1]!.execute();
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.options['referenceShotIds']).toEqual(['anchor']);
+    // No matching chain entry for the second shot → no referenceShotIds set.
+    expect(calls[1]?.options['referenceShotIds']).toBeUndefined();
+  });
+
+  it('prefers the character-slot chain when multiple entries share a shot id', async () => {
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (_prompt, options) => {
+          calls.push({ options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'p',
+          shotPlans: [{ shotNumber: 1 }],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'scene',
+          references: ['scene-ref'],
+          strategy: 'anchored',
+        },
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'character',
+          references: ['character-ref'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+    await stage.tasks(ctx)[0]!.execute();
+    expect(calls[0]?.options['referenceShotIds']).toEqual(['character-ref']);
+  });
+
+  it('omits referenceShotIds when ctx.referenceChain is empty', async () => {
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (_prompt, options) => {
+          calls.push({ options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'p',
+          shotPlans: [{ shotNumber: 1 }],
+        },
+      ],
+      generationUnit: 'shot',
+    };
+    await stage.tasks(ctx)[0]!.execute();
+    expect(calls[0]?.options['referenceShotIds']).toBeUndefined();
+  });
 });
 
 // =============================================================================

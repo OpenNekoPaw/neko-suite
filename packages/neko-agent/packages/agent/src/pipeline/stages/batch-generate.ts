@@ -9,6 +9,7 @@
 import type {
   IParallelStage,
   PipelineContext,
+  PipelineReferenceChainEntry,
   ParallelTask,
   ParallelTaskResult,
   StoryboardScene,
@@ -29,6 +30,16 @@ export interface MediaGenerateOptions {
   resolution?: string;
   style?: string;
   aspectRatio?: string;
+  /**
+   * Phase 5 reference chain — ordered list of *prior shot ids* whose
+   * generated output the caller should thread in as additional reference
+   * images.  Resolution (shot id → local file path) is the adapter's
+   * responsibility because the pipeline doesn't own the storage layout.
+   *
+   * The list is always ordered anchor-first, then previous shots in
+   * descending recency.  See docs/architecture/creative-consistency.md §4.
+   */
+  referenceShotIds?: readonly string[];
 }
 
 export interface BatchGenerateStageDeps {
@@ -141,6 +152,15 @@ function buildShotTasks(
       const taskId = `scene-${scene.index}-shot-${j}`;
       const prompt =
         (shot as { suggestedPrompt?: string }).suggestedPrompt ?? scene.suggestedPrompt;
+      // Look up any reference-chain entry matching this shot — when
+      // PlanBuilder's shot ids align with the pipeline's task ids the
+      // chain is threaded through; otherwise this is just undefined.
+      const shotIdCandidates = [
+        taskId,
+        (shot as { id?: string }).id,
+        (shot as { shotId?: string }).shotId,
+      ].filter((v): v is string => typeof v === 'string' && v.length > 0);
+      const referenceShotIds = pickReferenceShotIds(ctx.referenceChain, shotIdCandidates);
 
       tasks.push({
         id: taskId,
@@ -153,6 +173,7 @@ function buildShotTasks(
               resolution: (ctx.resolution as string) ?? (stageParams['resolution'] as string),
               style: ctx.globalStyle ?? (stageParams['style'] as string),
               aspectRatio: ctx.aspectRatio ?? (stageParams['aspectRatio'] as string),
+              ...(referenceShotIds !== undefined && { referenceShotIds }),
             });
             return { id: taskId, success: true, data: result };
           } catch (error) {
@@ -168,6 +189,35 @@ function buildShotTasks(
   }
 
   return tasks;
+}
+
+/**
+ * Find the first reference-chain entry whose `shotId` matches one of the
+ * candidate ids for the current task.  Returns the shots referenced by
+ * that entry (or undefined if no match is found / the chain is empty).
+ *
+ * Preference: earlier candidates beat later ones so the pipeline task id
+ * is tried before the raw shot id from the story plan.  Within entries
+ * for the same shot, priority goes to the 'character' slot (the most
+ * important chain for drift prevention).
+ */
+function pickReferenceShotIds(
+  chain: readonly PipelineReferenceChainEntry[] | undefined,
+  shotIdCandidates: readonly string[],
+): readonly string[] | undefined {
+  if (!chain || chain.length === 0 || shotIdCandidates.length === 0) return undefined;
+  const slotPriority: Record<PipelineReferenceChainEntry['slot'], number> = {
+    character: 0,
+    scene: 1,
+    prop: 2,
+    action: 3,
+    style: 4,
+  };
+  const candidateSet = new Set(shotIdCandidates);
+  const matches = chain.filter((e) => candidateSet.has(e.shotId));
+  if (matches.length === 0) return undefined;
+  matches.sort((a, b) => slotPriority[a.slot] - slotPriority[b.slot]);
+  return matches[0]?.references;
 }
 
 function mergeSceneResults(ctx: PipelineContext, results: ParallelTaskResult[]): PipelineContext {

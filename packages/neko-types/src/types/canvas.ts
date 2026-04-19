@@ -236,6 +236,14 @@ export interface ShotCharacter {
   characterName: string;
   /** GalleryNode id used for IP-Adapter reference */
   referenceNodeId?: string;
+  /**
+   * Phase 5 reference chain — ordered list of *prior* shot ids whose
+   * generated output should also be threaded in as reference images.
+   * Populated by PlanBuilder; consumed by PipelineExecutor.
+   *
+   * See docs/architecture/creative-consistency.md §4.
+   */
+  referenceChain?: string[];
   emotion?: string;
 }
 

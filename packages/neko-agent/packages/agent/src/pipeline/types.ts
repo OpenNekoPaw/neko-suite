@@ -133,6 +133,20 @@ export interface StoryboardScene {
 }
 
 /**
+ * Single entry of the Phase 5 reference chain — carried through the
+ * pipeline so generation stages can thread prior shots' outputs back in
+ * as reference images.  Shape intentionally duplicates the nkplan wire
+ * type (see @neko/shared/nkplan NkplanReferenceChainEntry) to keep the
+ * pipeline package free of workflow-layer imports.
+ */
+export interface PipelineReferenceChainEntry {
+  readonly shotId: string;
+  readonly slot: 'character' | 'scene' | 'action' | 'prop' | 'style';
+  readonly references: readonly string[];
+  readonly strategy: 'sequential' | 'anchored' | 'hybrid';
+}
+
+/**
  * Pipeline context — mutable data bag passed between stages.
  * Each stage reads what it needs and writes its outputs.
  */
@@ -186,6 +200,15 @@ export interface PipelineContext {
   resolution?: string;
   /** Aspect ratio */
   aspectRatio?: string;
+
+  // — Phase 5 reference chain —
+  /**
+   * Per-shot reference chain produced by PlanBuilder.  Generation stages
+   * match `entry.shotId` against the current task's shot id to decide
+   * which prior shots' outputs should be threaded in as reference images.
+   * When empty / undefined, stages behave exactly as before.
+   */
+  referenceChain?: readonly PipelineReferenceChainEntry[];
 
   // — Extensible —
   /** Stage-specific parameters (from Skill frontmatter pipeline-params) */

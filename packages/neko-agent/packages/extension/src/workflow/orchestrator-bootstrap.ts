@@ -184,6 +184,18 @@ export async function bootstrapOrchestrator(
       const ctx: PipelineContext = {
         ...buildBaseContext(req.input),
         ...req.contextOverrides,
+        // Thread the plan's reference chain through so downstream
+        // generation stages can surface ancestor shot ids to the
+        // MediaGenerator adapter (Phase 5.3).
+        ...(plan.referenceChain &&
+          plan.referenceChain.length > 0 && {
+            referenceChain: plan.referenceChain.map((e) => ({
+              shotId: e.shotId,
+              slot: e.slot,
+              references: [...e.references],
+              strategy: e.strategy,
+            })),
+          }),
       };
 
       const handle = options.startPipeline(route.flowId, ctx, {

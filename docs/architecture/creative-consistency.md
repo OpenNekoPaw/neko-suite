@@ -192,8 +192,9 @@ Plan 矩阵视图基础上增加**约束栏**：
 | Phase B | time_progression + costume_continuity | ✅ 已完成 |
 | Phase C.1 | Reference Chain TS 契约 stub（`buildReferenceChain` + 三种策略 + 边界断点） | ✅ 已完成（2026-04-19）|
 | Phase C.2a | PlanBuilder 自动计算 chain + 落入 `LitePlan.referenceChain` + `.nkplan` 持久化 | ✅ 已完成（2026-04-19）|
-| Phase C.2b | Canvas `ShotCharacter.referenceChain` 字段（与 nkplan 同步） | ⏳ 待实施 |
-| Phase C.3 | PipelineExecutor 消费 chain + MediaGenerationService 传参 | ⏳ 待实施 |
+| Phase C.2b | Canvas `ShotCharacter.referenceChain?: string[]` 字段（与 nkplan 同步） | ✅ 已完成（2026-04-19）|
+| Phase C.3 | PipelineContext 透传 chain + batch-generate stage 按任务查找 + MediaGenerateOptions.referenceShotIds | ✅ 已完成（2026-04-19）|
+| Phase C.4 | 实际的 shotId → generated 路径解析（目前 adapter stub） | ⏳ 待实施 |
 | Phase D | style_lock + prop_consistency | ⏳ 规划中 |
 | Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
 
@@ -213,6 +214,16 @@ Plan 矩阵视图基础上增加**约束栏**：
 - [nkplan/validator.ts](../../packages/neko-types/src/nkplan/validator.ts) — 验证 entry.slot / strategy / references[]
 - `toNkPlan / toLitePlan` 现在完整 round-trip 新字段
 - `PlanBuilderOptions.referenceChain?: { disabled?, strategy?, slots?, breakTags?, maxReferences? }` — 可在 bootstrap 或测试里关闭 / 调参
+
+### Phase C.2b + C.3 实现索引
+
+- [canvas.ts](../../packages/neko-types/src/types/canvas.ts) `ShotCharacter.referenceChain?: string[]` — 附加字段，与 nkplan 持久化字段对齐
+- [pipeline/types.ts](../../packages/neko-agent/packages/agent/src/pipeline/types.ts) — 新增 `PipelineReferenceChainEntry` + `PipelineContext.referenceChain?`
+- [pipeline/stages/batch-generate.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) — `pickReferenceShotIds()` 按 `scene-{i}-shot-{j}` / shot.id / shot.shotId 逐级匹配；character 槽优先
+- [pipeline/pipeline-adapters.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-adapters.ts) `MediaGenerateOptions.referenceShotIds?: readonly string[]` — 路径解析交给 adapter 层
+- [orchestrator-bootstrap.ts](../../packages/neko-agent/packages/extension/src/workflow/orchestrator-bootstrap.ts) — `startRoutedPipeline` 把 `plan.referenceChain` 复制到 `ctx.referenceChain` 进入 pipeline
+- 已完成的数据流：PlanBuilder → LitePlan → `.nkplan` → PipelineContext → shot task → `MediaGenerateOptions.referenceShotIds`
+- Phase C.4 缺口：`MediaGeneratorAdapter` 目前只透传 shot ids；把 shot id 解析成 `GeneratedAsset` 路径并真正传给 `MediaGenerationService.generateImage({ referenceImages })` 是下一步工作
 
 详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 

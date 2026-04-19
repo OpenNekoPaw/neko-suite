@@ -181,6 +181,41 @@ describe('Orchestrator integration — core routing scenarios', () => {
     expect(route.provenance).toBe('user-override');
     expect(route.confidence).toBe(1.0);
   });
+
+  it('E2E-6: multi-shot plan carries a reference chain end-to-end', async () => {
+    const { router, planBuilder, assetLibrary } = await makeStack({
+      registry: {
+        version: 1,
+        characters: [
+          { id: 'alice', canonicalName: 'Alice', aliases: ['Alice'], status: 'confirmed' },
+        ],
+      },
+      manifest: [{ id: 'alice_casual', type: 'image', path: '/a.png', entityId: 'alice' }],
+    });
+    expect(assetLibrary).toBeDefined();
+
+    const route = await router.decide({ kind: 'prompt', text: 'x' });
+    const shots = [0, 1, 2].map((i) => ({
+      id: `shot_${i}`,
+      index: i,
+      entityRefs: [{ slot: 'character' as const, name: 'Alice' }],
+      sceneGroupId: 'scene_A',
+    }));
+    const plan = await planBuilder.build({ route, shots });
+    expect(plan.referenceChain).toBeDefined();
+    // Hybrid default: shot_1 refs [shot_0]; shot_2 refs [shot_0, shot_1].
+    const byShot = Object.fromEntries(
+      (plan.referenceChain ?? []).map((e) => [e.shotId, [...e.references]]),
+    );
+    expect(byShot['shot_1']).toEqual(['shot_0']);
+    expect(byShot['shot_2']).toEqual(['shot_0', 'shot_1']);
+
+    // Round-trip preserves the chain.
+    const persistent = Workflow.toNkPlan(plan);
+    const liteReloaded = Workflow.toLitePlan(persistent);
+    expect(liteReloaded.referenceChain).toHaveLength(2);
+    assetLibrary!.dispose();
+  });
 });
 
 // =============================================================================
