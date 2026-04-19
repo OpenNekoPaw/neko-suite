@@ -153,12 +153,18 @@ export function bootstrapPipeline(
   registry.registerStage(
     createBatchGenerateStage({
       mediaGenerator,
-      // Default shotId → path resolver: look up by task index.  Only
-      // resolves references whose generation has already completed in
-      // the current run — parallel execution means most anchor refs
-      // will be empty in the MVP scheduler; Phase 5.4b will add
-      // topological ordering so dependent shots wait for their anchors.
+      // Default shotId → path resolver.  Lookup order:
+      //   1. Pre-rendered anchor frames from the `renderEngine` stage
+      //      (Phase 5.4d — puppet/scene output that isn't an AI task).
+      //   2. Task index → generatedPaths from this batch (MVP fallback).
+      // Phase 5.4b's in-batch deferred map already handles the
+      // "dependent shot waits for anchor AI task" case ahead of this.
       resolveReferencePath: (shotId, ctx) => {
+        const rendered = ctx.renderedAnchorPaths?.[shotId];
+        if (rendered && rendered.length > 0) {
+          const first = rendered[0];
+          if (typeof first === 'string' && first.length > 0) return first;
+        }
         const taskIds = ctx.taskIds ?? [];
         const idx = taskIds.indexOf(shotId);
         if (idx < 0) return undefined;

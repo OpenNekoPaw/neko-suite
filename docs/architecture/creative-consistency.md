@@ -196,6 +196,7 @@ Plan 矩阵视图基础上增加**约束栏**：
 | Phase C.3 | PipelineContext 透传 chain + batch-generate stage 按任务查找 + MediaGenerateOptions.referenceShotIds | ✅ 已完成（2026-04-19）|
 | Phase C.4a | resolveReferencePath hook + referenceImagePaths + MediaGenerationService.referenceImageUrl/ipAdapterRefs 完整路径 | ✅ 已完成（2026-04-19）|
 | Phase C.4b | 拓扑排序 batch-generate（dependent shots wait for anchors） | ✅ 已完成（2026-04-19）|
+| Phase C.4d | render-engine stage 预渲染 puppet/scene anchor 帧 + ctx.renderedAnchorPaths | ✅ 已完成（2026-04-19）|
 | Phase D | style_lock + prop_consistency | ⏳ 规划中 |
 | Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
 
@@ -237,6 +238,15 @@ Plan 矩阵视图基础上增加**约束栏**：
 - `buildShotTasks` 先走一轮把所有 deferred 按 task id / shot.id / shot.shotId 建表；dependent task 在 execute 里 `await` 自己 referenceShotIds 对应的 deferred，再调 resolver
 - `resolveReferencePaths` 新增 `inBatchDepPaths` 参数 — in-batch 解析优先于 ctx-backed resolver，anchor 刚生成的路径第一时间可见
 - 失败降级：anchor throw / 无输出时 deferred resolve(undefined)；dependent 仍会跑，只是丢 referenceImagePaths 字段
+
+### Phase C.4d 实现索引
+
+- [render-engine.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/render-engine.ts) — 新 stage `renderEngine`，按 `ctx.referenceChain` 的 references 集合反推 anchor shot ids，对每个 anchor 调 `renderAnchor(shotId, ctx)` 拿帧路径
+- `collectAnchorShotIds(ctx)` 纯函数 — Set 语义去重 + 防自引用 + 防空字符串
+- 异常吞掉：adapter throw 时 logger.warn + 跳过该 anchor，dependent 仍会跑只是少了 reference
+- ctx 注入新字段 `renderedAnchorPaths?: Record<string, readonly string[]>`
+- pipeline-bootstrap 默认 resolver 现在按 `renderedAnchorPaths` → `taskIds/generatedPaths` 顺序查 — puppet/scene 输出的 anchor 帧优先于 in-batch AI 生成结果
+- 与 Phase 5.4c stub 对接：runtime-puppet / runtime-scene adapter 落地后只需把 `RenderAdapter.render()` 包装成 `renderAnchor` 闭包传给 stage
 
 详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 

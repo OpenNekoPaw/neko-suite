@@ -146,7 +146,8 @@ Phase 5.4a ✅   resolveReferencePath hook + referenceImagePaths → referenceIm
 Phase 5.4b ✅   batch-generate in-batch deferred map，dependent shots 等 anchor 完成再 resolve paths
 Phase 5.4c-stub ✅  RenderMode / PuppetRenderAdapter / SceneRenderAdapter TS 契约 + selectRenderMode + disabled defaults
 Phase 5.4c-rust ⏳  runtime-puppet / runtime-scene Rust adapter 实现（host-napi binding）
-Phase 5.4d ⏳   render-engine pipeline stage（消费 RenderAdapter 产生 referenceChain 的第一帧）
+Phase 5.4d ✅   render-engine pipeline stage + ctx.renderedAnchorPaths + batch-generate 默认 resolver 优先读 rendered anchors
+Phase 5.4e ⏳   bootstrap 注册 render-engine（需要 runtime-puppet/runtime-scene adapter 实例落地）
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
 

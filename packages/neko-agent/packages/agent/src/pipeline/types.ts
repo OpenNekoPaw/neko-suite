@@ -209,6 +209,15 @@ export interface PipelineContext {
    * When empty / undefined, stages behave exactly as before.
    */
   referenceChain?: readonly PipelineReferenceChainEntry[];
+  /**
+   * Phase 5.4d — paths produced by the `renderEngine` stage for shots
+   * that serve as chain anchors.  Keyed by shot id; each entry carries
+   * one or more frame paths (single-frame for keyframes, multi-frame for
+   * puppet/scene animations).  Read by batch-generate's default path
+   * resolver with higher priority than taskIds/generatedPaths so a
+   * rendered anchor wins over "hasn't been generated yet".
+   */
+  renderedAnchorPaths?: Record<string, readonly string[]>;
 
   // — Extensible —
   /** Stage-specific parameters (from Skill frontmatter pipeline-params) */

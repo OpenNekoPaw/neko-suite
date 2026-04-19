@@ -674,6 +674,54 @@ describe('batchGenerate stage', () => {
     expect(depCall?.options['referenceImagePaths']).toEqual(['/out/anchor.png']);
   });
 
+  it('Phase 5.4d: renderedAnchorPaths feed a custom resolver for non-AI anchor shots', async () => {
+    // The resolver consults ctx.renderedAnchorPaths first — mirroring the
+    // pipeline-bootstrap default resolver.  Even when the anchor isn't an
+    // in-batch task, a pre-rendered path still flows into the dependent.
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (_prompt, options) => {
+          calls.push({ options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+      resolveReferencePath: (shotId, ctx) => {
+        const rendered = ctx.renderedAnchorPaths?.[shotId];
+        if (rendered && rendered.length > 0) return rendered[0];
+        return undefined;
+      },
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'p',
+          shotPlans: [{ shotNumber: 1 } as never],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'character',
+          references: ['puppet_anchor'],
+          strategy: 'anchored',
+        },
+      ],
+      renderedAnchorPaths: {
+        puppet_anchor: ['/rendered/puppet_anchor.png'],
+      },
+    };
+    await stage.tasks(ctx)[0]!.execute();
+    expect(calls[0]?.options['referenceImagePaths']).toEqual(['/rendered/puppet_anchor.png']);
+  });
+
   it('Phase 5.4b: dependent still runs when its anchor fails; skips the reference payload', async () => {
     const calls: Array<{ taskId: string; options: Record<string, unknown> }> = [];
     const stage = createBatchGenerateStage({
