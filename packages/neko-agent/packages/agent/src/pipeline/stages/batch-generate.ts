@@ -33,17 +33,40 @@ export interface MediaGenerateOptions {
   /**
    * Phase 5 reference chain — ordered list of *prior shot ids* whose
    * generated output the caller should thread in as additional reference
-   * images.  Resolution (shot id → local file path) is the adapter's
-   * responsibility because the pipeline doesn't own the storage layout.
-   *
-   * The list is always ordered anchor-first, then previous shots in
-   * descending recency.  See docs/architecture/creative-consistency.md §4.
+   * images.  Kept alongside `referenceImagePaths` so adapters that want
+   * the raw ids (for custom resolution, logging, or telemetry) still have
+   * them.  The list is always ordered anchor-first, then previous shots
+   * in descending recency.  See docs/architecture/creative-consistency.md §4.
    */
   referenceShotIds?: readonly string[];
+  /**
+   * Phase 5.4 — resolved reference-image paths aligned with
+   * `referenceShotIds`.  Pre-resolved by the batch-generate stage when
+   * a `resolveReferencePath` resolver is supplied.  Undefined entries
+   * from the resolver are dropped; the resulting list can be shorter
+   * than (or absent from) `referenceShotIds`.
+   *
+   * When present, adapters should feed this list into
+   * `MediaGenerationService.generateImage / generateVideo` as
+   * `referenceImageUrl` (first) + `ipAdapterRefs` / `referenceImages`
+   * (rest).
+   */
+  referenceImagePaths?: readonly string[];
 }
 
 export interface BatchGenerateStageDeps {
   mediaGenerator: IMediaGenerator;
+  /**
+   * Optional resolver that maps a reference `shotId` to the local path
+   * of its generated asset.  Called once per entry in the chain at
+   * task-creation time; entries that resolve to `undefined` are dropped
+   * so the adapter never sees dangling ids.
+   *
+   * Providing this hook is what turns Phase 5.3's shot-id threading
+   * into Phase 5.4's actual reference-image payload.  Leave it unset
+   * during tests to retain the id-only behaviour.
+   */
+  resolveReferencePath?: (shotId: string, ctx: PipelineContext) => string | undefined;
 }
 
 export function createBatchGenerateStage(deps: BatchGenerateStageDeps): IParallelStage {
@@ -161,6 +184,11 @@ function buildShotTasks(
         (shot as { shotId?: string }).shotId,
       ].filter((v): v is string => typeof v === 'string' && v.length > 0);
       const referenceShotIds = pickReferenceShotIds(ctx.referenceChain, shotIdCandidates);
+      const referenceImagePaths = resolveReferencePaths(
+        referenceShotIds,
+        deps.resolveReferencePath,
+        ctx,
+      );
 
       tasks.push({
         id: taskId,
@@ -174,6 +202,7 @@ function buildShotTasks(
               style: ctx.globalStyle ?? (stageParams['style'] as string),
               aspectRatio: ctx.aspectRatio ?? (stageParams['aspectRatio'] as string),
               ...(referenceShotIds !== undefined && { referenceShotIds }),
+              ...(referenceImagePaths !== undefined && { referenceImagePaths }),
             });
             return { id: taskId, success: true, data: result };
           } catch (error) {
@@ -201,6 +230,30 @@ function buildShotTasks(
  * for the same shot, priority goes to the 'character' slot (the most
  * important chain for drift prevention).
  */
+/**
+ * Map a list of reference shot ids to concrete file paths using the
+ * caller-supplied resolver.  Unresolvable ids are dropped (logged on
+ * warning would require a logger injection — skip for now and let the
+ * adapter surface its own warnings when a chain unexpectedly collapses).
+ *
+ * Returns `undefined` when nothing was resolved so the task spread
+ * omits the field entirely — keeping the generator call identical to
+ * pre-chain behaviour.
+ */
+function resolveReferencePaths(
+  shotIds: readonly string[] | undefined,
+  resolver: ((shotId: string, ctx: PipelineContext) => string | undefined) | undefined,
+  ctx: PipelineContext,
+): readonly string[] | undefined {
+  if (!shotIds || shotIds.length === 0 || !resolver) return undefined;
+  const resolved: string[] = [];
+  for (const id of shotIds) {
+    const path = resolver(id, ctx);
+    if (typeof path === 'string' && path.length > 0) resolved.push(path);
+  }
+  return resolved.length > 0 ? resolved : undefined;
+}
+
 function pickReferenceShotIds(
   chain: readonly PipelineReferenceChainEntry[] | undefined,
   shotIdCandidates: readonly string[],

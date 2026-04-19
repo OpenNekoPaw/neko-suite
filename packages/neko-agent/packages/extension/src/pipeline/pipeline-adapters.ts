@@ -103,12 +103,19 @@ export interface MediaGenerateOptions {
   style?: string;
   aspectRatio?: string;
   /**
-   * Phase 5 reference chain — shot ids whose generated output should
-   * be threaded in as reference images.  Resolution (shot id → file
-   * path) happens here because the extension-side adapter owns the
-   * generation storage layout.
+   * Phase 5 reference chain — raw shot ids kept alongside the resolved
+   * `referenceImagePaths` for logging and telemetry; adapters that
+   * want to short-circuit the stage's resolution can consume these
+   * directly.
    */
   referenceShotIds?: readonly string[];
+  /**
+   * Phase 5.4 — resolved reference-image file paths, ordered with the
+   * anchor first.  Adapters should feed the first entry into
+   * `referenceImageUrl` and any additional entries into
+   * `ipAdapterRefs` / `referenceImages`.
+   */
+  referenceImagePaths?: readonly string[];
 }
 
 export interface ITimelineArranger {

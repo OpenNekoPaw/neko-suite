@@ -141,8 +141,9 @@ Phase 5.1  ✅   Reference Chain TS 契约 stub（buildReferenceChain + 3 策略
 Phase 5.2a ✅   PlanBuilder 自动计算 chain + LitePlan/.nkplan 持久化 + 验证器
 Phase 5.2b ✅   Canvas ShotCharacter.referenceChain 字段（与 nkplan 同步）
 Phase 5.3  ✅   PipelineContext 透传 chain + batch-generate stage + MediaGenerateOptions.referenceShotIds
-Phase 5.4a ⏳   MediaGeneratorAdapter 将 shotId 解析成 GeneratedAsset 路径，调 MediaGenerationService.generateImage({ referenceImages })
-Phase 5.4b ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
+Phase 5.4a ✅   resolveReferencePath hook + referenceImagePaths → referenceImageUrl / ipAdapterRefs / referenceImages
+Phase 5.4b ⏳   batch-generate 按 chain 依赖做拓扑排序（dependent shots wait for anchors）
+Phase 5.4c ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```
 

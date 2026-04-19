@@ -194,7 +194,8 @@ Plan 矩阵视图基础上增加**约束栏**：
 | Phase C.2a | PlanBuilder 自动计算 chain + 落入 `LitePlan.referenceChain` + `.nkplan` 持久化 | ✅ 已完成（2026-04-19）|
 | Phase C.2b | Canvas `ShotCharacter.referenceChain?: string[]` 字段（与 nkplan 同步） | ✅ 已完成（2026-04-19）|
 | Phase C.3 | PipelineContext 透传 chain + batch-generate stage 按任务查找 + MediaGenerateOptions.referenceShotIds | ✅ 已完成（2026-04-19）|
-| Phase C.4 | 实际的 shotId → generated 路径解析（目前 adapter stub） | ⏳ 待实施 |
+| Phase C.4a | resolveReferencePath hook + referenceImagePaths + MediaGenerationService.referenceImageUrl/ipAdapterRefs 完整路径 | ✅ 已完成（2026-04-19）|
+| Phase C.4b | 拓扑排序 batch-generate（dependent shots wait for anchors） | ⏳ 待实施 |
 | Phase D | style_lock + prop_consistency | ⏳ 规划中 |
 | Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
 
@@ -223,7 +224,14 @@ Plan 矩阵视图基础上增加**约束栏**：
 - [pipeline/pipeline-adapters.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-adapters.ts) `MediaGenerateOptions.referenceShotIds?: readonly string[]` — 路径解析交给 adapter 层
 - [orchestrator-bootstrap.ts](../../packages/neko-agent/packages/extension/src/workflow/orchestrator-bootstrap.ts) — `startRoutedPipeline` 把 `plan.referenceChain` 复制到 `ctx.referenceChain` 进入 pipeline
 - 已完成的数据流：PlanBuilder → LitePlan → `.nkplan` → PipelineContext → shot task → `MediaGenerateOptions.referenceShotIds`
-- Phase C.4 缺口：`MediaGeneratorAdapter` 目前只透传 shot ids；把 shot id 解析成 `GeneratedAsset` 路径并真正传给 `MediaGenerationService.generateImage({ referenceImages })` 是下一步工作
+
+### Phase C.4a 实现索引
+
+- [batch-generate.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) — `BatchGenerateStageDeps.resolveReferencePath?: (shotId, ctx) => string | undefined`；内部 `resolveReferencePaths()` 把 ids 映射成路径，drop 掉 undefined/空串
+- [batch-generate.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) `MediaGenerateOptions.referenceImagePaths?: readonly string[]` — 解析后的路径；raw `referenceShotIds` 继续共存方便 telemetry / 自定义 adapter
+- [pipeline-adapters.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-adapters.ts) `MediaGenerateOptions.referenceImagePaths?` — 同名字段镜像
+- [pipeline-bootstrap.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-bootstrap.ts) — 默认 resolver: `ctx.taskIds.indexOf(shotId) → ctx.generatedPaths[i]`；`MediaGeneratorAdapter` 把路径拆成 `referenceImageUrl`（首个）+ `ipAdapterRefs`（图像）或 `referenceImages`（视频）喂给 `MediaGenerationService`
+- Phase C.4b 缺口：当前 batch-generate 并行调度；如果 shot B 依赖 shot A 的输出，A 可能还没 pump 完，resolver 会返回 undefined → reference chain 对并行 run 只部分生效。拓扑排序 / 按 chain 深度分批是下一步。
 
 详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 

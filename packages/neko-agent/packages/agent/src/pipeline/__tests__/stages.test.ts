@@ -511,6 +511,99 @@ describe('batchGenerate stage', () => {
     await stage.tasks(ctx)[0]!.execute();
     expect(calls[0]?.options['referenceShotIds']).toBeUndefined();
   });
+
+  it('Phase 5.4: resolves referenceShotIds into referenceImagePaths when a resolver is supplied', async () => {
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    const fakePaths: Record<string, string> = {
+      anchor: '/generated/anchor.png',
+      previous: '/generated/previous.png',
+      orphan: '',
+    };
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (_prompt, options) => {
+          calls.push({ options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+      resolveReferencePath: (shotId) => fakePaths[shotId],
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'p',
+          shotPlans: [{ shotNumber: 1 }],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'character',
+          references: ['anchor', 'previous', 'orphan', 'missing'],
+          strategy: 'hybrid',
+        },
+      ],
+    };
+    await stage.tasks(ctx)[0]!.execute();
+    // `orphan` resolves to empty string; `missing` has no entry → both dropped.
+    expect(calls[0]?.options['referenceImagePaths']).toEqual([
+      '/generated/anchor.png',
+      '/generated/previous.png',
+    ]);
+    // Raw ids still surface so adapters can log / telemetry them.
+    expect(calls[0]?.options['referenceShotIds']).toEqual([
+      'anchor',
+      'previous',
+      'orphan',
+      'missing',
+    ]);
+  });
+
+  it('Phase 5.4: omits referenceImagePaths when the resolver returns nothing', async () => {
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (_prompt, options) => {
+          calls.push({ options: options as unknown as Record<string, unknown> });
+          return { path: '/out.mp4' };
+        },
+      },
+      resolveReferencePath: () => undefined,
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'p',
+          shotPlans: [{ shotNumber: 1 }],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-0',
+          slot: 'character',
+          references: ['anchor'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+    await stage.tasks(ctx)[0]!.execute();
+    expect(calls[0]?.options['referenceImagePaths']).toBeUndefined();
+    expect(calls[0]?.options['referenceShotIds']).toEqual(['anchor']);
+  });
 });
 
 // =============================================================================

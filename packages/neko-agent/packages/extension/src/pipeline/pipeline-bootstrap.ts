@@ -95,11 +95,23 @@ export function bootstrapPipeline(
         throw new Error('Media generation service not available');
       }
 
+      // Phase 5.4 — split resolved reference paths into primary +
+      // additional IP-Adapter refs.  When the list is empty this
+      // behaves exactly as pre-chain generation (no reference fields
+      // set at all).
+      const refPaths = options.referenceImagePaths ?? [];
+      const primaryRef = refPaths[0];
+      const extraRefs = refPaths.slice(1);
+
       if (genType === 'text-to-image') {
         const task = await mediaService.generateImage({
           prompt,
           width: 1024,
           height: 1024,
+          ...(primaryRef !== undefined && { referenceImageUrl: primaryRef }),
+          ...(extraRefs.length > 0 && {
+            ipAdapterRefs: extraRefs.map((url) => ({ url, weight: 1 })),
+          }),
         });
         // Wait for completion and get output path
         const completed = await mediaService.waitForTask(task.id, 120_000);
@@ -113,6 +125,10 @@ export function bootstrapPipeline(
           prompt,
           duration: options.duration,
           resolution: options.resolution,
+          ...(primaryRef !== undefined && { referenceImageUrl: primaryRef }),
+          ...(extraRefs.length > 0 && {
+            referenceImages: extraRefs.map((url) => ({ url, weight: 1 })),
+          }),
         });
         const completed = await mediaService.waitForTask(task.id, 300_000);
         const output = completed.outputs?.[0];
@@ -134,7 +150,24 @@ export function bootstrapPipeline(
   registry.registerStage(createImportStoryboardToCanvasStage({ storyboardCanvasSink }));
   registry.registerStage(createGeneratePromptsStage({ promptOptimizer }));
   registry.registerStage(createGeneratePilotStage({ mediaGenerator }));
-  registry.registerStage(createBatchGenerateStage({ mediaGenerator }));
+  registry.registerStage(
+    createBatchGenerateStage({
+      mediaGenerator,
+      // Default shotId → path resolver: look up by task index.  Only
+      // resolves references whose generation has already completed in
+      // the current run — parallel execution means most anchor refs
+      // will be empty in the MVP scheduler; Phase 5.4b will add
+      // topological ordering so dependent shots wait for their anchors.
+      resolveReferencePath: (shotId, ctx) => {
+        const taskIds = ctx.taskIds ?? [];
+        const idx = taskIds.indexOf(shotId);
+        if (idx < 0) return undefined;
+        const paths = ctx.generatedPaths ?? [];
+        const path = paths[idx];
+        return typeof path === 'string' && path.length > 0 ? path : undefined;
+      },
+    }),
+  );
   registry.registerStage(createArrangeOnTimelineStage({ timelineArranger }));
 
   // Register quality gate stage (opt-in via stageParams.qualityGate.enabled)
