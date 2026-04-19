@@ -41,7 +41,8 @@ function buildParameterSchemaPrompt(): string {
   return lines.join('\n');
 }
 
-function validateAndClampParams(raw: Record<string, unknown>): Record<string, number> {
+/** @internal Exported for testing */
+export function validateAndClampParams(raw: Record<string, unknown>): Record<string, number> {
   const paramMap = new Map<string, PuppetFaceParameter>();
   for (const p of PUPPET_FACE_PARAMETERS) {
     paramMap.set(p.id, p);
@@ -50,14 +51,54 @@ function validateAndClampParams(raw: Record<string, unknown>): Record<string, nu
   for (const [key, value] of Object.entries(raw)) {
     const param = paramMap.get(key);
     if (!param) continue;
-    const num = typeof value === 'number' ? value : Number(value);
-    if (Number.isNaN(num)) continue;
+    // Only accept number or numeric string — reject boolean, null, empty string, objects
+    let num: number;
+    if (typeof value === 'number') {
+      num = value;
+    } else if (typeof value === 'string' && value.trim() !== '') {
+      num = Number(value);
+    } else {
+      continue;
+    }
+    if (!Number.isFinite(num)) continue;
     result[key] = Math.max(param.min, Math.min(param.max, num));
   }
   return result;
 }
 
-function parseJsonFromLLMResponse(text: string): Record<string, unknown> | null {
+/**
+ * Try to extract a JSON object from text by scanning each '{' start and each '}'
+ * end position. For each '{', try closing at progressively earlier '}' positions
+ * so trailing noise braces don't break parsing.
+ */
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  let searchFrom = 0;
+  while (searchFrom < text.length) {
+    const braceIdx = text.indexOf('{', searchFrom);
+    if (braceIdx === -1) break;
+
+    // Try every '}' from the last one backwards until we find valid JSON
+    let endPos = text.lastIndexOf('}');
+    while (endPos > braceIdx) {
+      const candidate = text.slice(braceIdx, endPos + 1);
+      try {
+        const parsed: unknown = JSON.parse(candidate);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Shrink: try the next '}' to the left
+      }
+      endPos = text.lastIndexOf('}', endPos - 1);
+    }
+
+    searchFrom = braceIdx + 1;
+  }
+  return null;
+}
+
+/** @internal Exported for testing */
+export function parseJsonFromLLMResponse(text: string): Record<string, unknown> | null {
   const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const jsonStr = fenceMatch ? fenceMatch[1]!.trim() : text.trim();
   try {
@@ -66,17 +107,10 @@ function parseJsonFromLLMResponse(text: string): Record<string, unknown> | null 
       return parsed as Record<string, unknown>;
     }
   } catch {
-    const objectMatch = /\{[\s\S]*\}/.exec(jsonStr);
-    if (objectMatch) {
-      try {
-        const parsed: unknown = JSON.parse(objectMatch[0]);
-        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Fall through
-      }
-    }
+    // Fence content failed — fall back to extracting {...} from the FULL original text,
+    // not just the fence content. LLMs often emit a broken fence then a corrected object later.
+    const result = extractJsonObject(fenceMatch ? text : jsonStr);
+    if (result) return result;
   }
   return null;
 }
