@@ -160,6 +160,10 @@ export class PlanBuilder {
       // self-sufficient for dispatch (forks / approvals don't need the
       // caller to pass input alongside).
       ...(input.input !== undefined && { input: input.input }),
+      // Phase 3.5+ — persist the matching input so the ConsistencyChecker
+      // can re-run on edit / fork without the caller holding onto a
+      // session-side-table.  See plan-review-session.ts handleEditBinding.
+      ...(input.shots !== undefined && input.shots.length > 0 && { matchingShots: input.shots }),
     };
   }
 

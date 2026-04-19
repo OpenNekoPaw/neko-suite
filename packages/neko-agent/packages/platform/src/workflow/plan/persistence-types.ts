@@ -43,6 +43,10 @@ export function toNkPlan(lite: LitePlan, opts: { now?: number } = {}): Persisten
     // Phase 2.5+ — persist the RawInput snapshot so fork/approve can
     // dispatch without re-plumbing it through the caller.
     ...(lite.input !== undefined && { input: lite.input }),
+    // Phase 3.5+ — persist the Shot[] matching input so forks/reloaded
+    // plans can re-run ConsistencyChecker without a session side-table.
+    ...(lite.matchingShots !== undefined &&
+      lite.matchingShots.length > 0 && { matchingShots: lite.matchingShots }),
   };
 }
 
@@ -66,6 +70,10 @@ export function toLitePlan(plan: PersistentPlan): LitePlan {
     // Phase 2.5+ — round-trip input so forks reloaded from disk can
     // still dispatch without re-plumbing the original RawInput.
     ...(plan.input !== undefined && { input: plan.input }),
+    // Phase 3.5+ — round-trip matchingShots so ConsistencyChecker can
+    // re-run on edits against the original input.
+    ...(plan.matchingShots !== undefined &&
+      plan.matchingShots.length > 0 && { matchingShots: plan.matchingShots }),
   } as LitePlan;
 }
 

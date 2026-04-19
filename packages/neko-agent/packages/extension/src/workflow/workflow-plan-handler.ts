@@ -38,7 +38,7 @@ import { PlanReviewSession, type PresentPlanOptions } from './plan-review-sessio
 import { PlanQueryController } from './plan-query-controller';
 import { PipelineLifecycleBridge } from './pipeline-lifecycle-bridge';
 import { RouterMemoryController } from './router-memory-controller';
-import { PlanStoreWriter, toWirePlan } from './plan-wire';
+import { PlanStoreWriter, toWirePlan, VSCodeUserNotifier, type UserNotifier } from './plan-wire';
 
 // Re-export types the broader codebase has historically imported from
 // this module.
@@ -50,6 +50,11 @@ export interface WorkflowPlanHandlerDeps {
   getWebview: () => vscode.Webview | undefined;
   /** Optional PlanStore override (defaults to orchestrator.planStore). */
   planStore?: Workflow.PlanStore;
+  /**
+   * User-facing notifier (defaults to `vscode.window.showWarningMessage`).
+   * Inject a silent stub in tests.
+   */
+  notifier?: UserNotifier;
 }
 
 /**
@@ -66,6 +71,7 @@ export class WorkflowPlanHandler {
   constructor(deps: WorkflowPlanHandlerDeps) {
     const planStore = deps.planStore ?? deps.orchestrator.planStore;
     const planStoreWriter = new PlanStoreWriter(planStore);
+    const notifier = deps.notifier ?? VSCodeUserNotifier;
 
     this.lifecycleBridge = new PipelineLifecycleBridge({
       planStoreWriter,
@@ -73,10 +79,10 @@ export class WorkflowPlanHandler {
     });
     this.reviewSession = new PlanReviewSession({
       orchestrator: deps.orchestrator,
-      planStore,
       planStoreWriter,
       pipelineLifecycle: this.lifecycleBridge,
       getWebview: deps.getWebview,
+      notifier,
     });
     this.queryController = new PlanQueryController({
       planStore,

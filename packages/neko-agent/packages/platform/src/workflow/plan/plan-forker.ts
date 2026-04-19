@@ -81,6 +81,12 @@ export function forkPlan(source: PersistentPlan, options: ForkOptions = {}): Per
     // original input.  Synthesising an input from route.reason (the
     // pre-Phase-2.5 behaviour) breaks fountain / file-based inputs.
     ...(source.input !== undefined && { input: source.input }),
+    // Preserve the Shot[] matching input so forks can re-run
+    // ConsistencyChecker against the original data.  Without this the
+    // fork's edit-binding goes through the fail-safe branch and
+    // silently preserves stale violations.
+    ...(source.matchingShots !== undefined &&
+      source.matchingShots.length > 0 && { matchingShots: source.matchingShots }),
   };
   return fork;
 }

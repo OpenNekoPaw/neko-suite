@@ -230,6 +230,46 @@ describe('editPlanBinding', () => {
     // And the edit itself still took effect.
     expect(after.shots?.[1]?.primary.character?.assetId).toBe('formal');
   });
+
+  // Fifth-round review Fix-I — plans that persist their original Shot[]
+  // input MUST use it for consistency recheck even when ctx.shots is
+  // empty.  This covers forks + reloaded plans: the session no longer
+  // needs a side-table of shots because the plan is self-sufficient.
+  it('re-runs consistency using plan.matchingShots when ctx.shots is empty', () => {
+    const alice = candidate({ slot: 'character', entityId: 'alice', assetId: 'casual' });
+    const formal = candidate({ slot: 'character', entityId: 'alice', assetId: 'formal' });
+    const plan = basePlan({
+      // Original matching input persisted on the plan body — simulates
+      // a fork / reloaded plan where pending.shots was never populated.
+      matchingShots: SHOTS,
+      shots: [
+        {
+          shotId: 's1',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+        {
+          shotId: 's2',
+          primary: { character: alice },
+          alternatives: { character: [formal] },
+          unmatched: [],
+        },
+      ],
+    });
+
+    const checker = createConsistencyChecker();
+    const after = editPlanBinding(
+      plan,
+      { shotId: 's2', slot: 'character', candidate: formal },
+      { shots: [], consistencyChecker: checker }, // empty side-table
+    );
+
+    // Checker ran (against matchingShots), produced new violation.
+    expect(after.violations?.some((v) => v.kind === 'character_lock')).toBe(true);
+    // matchingShots survives the rebuild so subsequent edits also work.
+    expect(after.matchingShots).toEqual(SHOTS);
+  });
 });
 
 // =============================================================================

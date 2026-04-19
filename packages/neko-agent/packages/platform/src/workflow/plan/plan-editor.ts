@@ -151,19 +151,20 @@ function key(c: BindingCandidate): string {
 function rerunConsistency(plan: LitePlan, ctx: EditContext): LitePlan {
   if (!ctx.consistencyChecker || !plan.shots) return plan;
 
-  // Fail-safe: when the original Shot[] matching input is unavailable
-  // (typical for forks — NkPlan only persists derived bindings) we MUST
-  // NOT run the checker against an empty shot list, because the checker
-  // will produce an empty constraint/violation set and silently "clear"
-  // real violations that were computed at build time.  Returning the
-  // plan unchanged preserves previously-computed constraints/violations;
-  // the capability flag `canRecheckConsistency` on the wire plan tells
-  // the webview this limitation so it can render a stale-marker badge.
-  if (ctx.shots.length === 0) return plan;
+  // Prefer the matching input persisted on the plan body (Phase 3.5+);
+  // fall back to the ctx-supplied side-table for callers that haven't
+  // migrated.  Either way, if we still end up with an empty shot list
+  // we SKIP the checker rather than running against [] — the empty
+  // result would silently clear prior violations.  capability flag
+  // `canRecheckConsistency` on the wire plan signals this limitation
+  // to the UI so it can render a stale-marker badge.
+  const effectiveShots =
+    plan.matchingShots && plan.matchingShots.length > 0 ? plan.matchingShots : ctx.shots;
+  if (effectiveShots.length === 0) return plan;
 
   const bindings = plan.shots.map((s) => summaryToShotBindings(s));
   const { constraints, violations } = ctx.consistencyChecker.check({
-    shots: ctx.shots,
+    shots: effectiveShots,
     bindings,
   });
 
@@ -186,6 +187,8 @@ function rerunConsistency(plan: LitePlan, ctx: EditContext): LitePlan {
     ...(plan.referenceChain !== undefined &&
       plan.referenceChain.length > 0 && { referenceChain: plan.referenceChain }),
     ...(plan.input !== undefined && { input: plan.input }),
+    ...(plan.matchingShots !== undefined &&
+      plan.matchingShots.length > 0 && { matchingShots: plan.matchingShots }),
   };
 }
 

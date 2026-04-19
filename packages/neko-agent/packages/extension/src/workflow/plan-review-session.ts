@@ -21,7 +21,7 @@
  * forwarded to the webview.
  */
 
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import type {
   WorkflowPlanAbortMessage,
   WorkflowPlanApplyToAllMessage,
@@ -42,6 +42,7 @@ import {
   postStatus,
   postUpdated,
   type PlanStoreWriter,
+  type UserNotifier,
 } from './plan-wire';
 import { getLogger } from '../base';
 
@@ -84,10 +85,22 @@ export interface PresentPlanOptions {
 
 export interface PlanReviewSessionDeps {
   orchestrator: Orchestrator;
-  planStore: Workflow.PlanStore | undefined;
+  /**
+   * PlanStoreWriter — owns all read/write to the persistent plan store.
+   * The session no longer holds a direct PlanStore reference; all disk
+   * I/O goes through the writer so persistence errors are swallowed
+   * consistently and the session stays focused on review semantics.
+   */
   planStoreWriter: PlanStoreWriter;
   pipelineLifecycle: PipelineLifecycleBridge;
   getWebview: () => vscode.Webview | undefined;
+  /**
+   * User-facing notifier.  PlanReviewSession uses this to surface
+   * "can't fork legacy plan" toasts without coupling to vscode.window
+   * directly — tests inject a silent stub, future UI channels plug in
+   * cleanly.
+   */
+  notifier: UserNotifier;
 }
 
 export class PlanReviewSession {
@@ -278,7 +291,13 @@ export class PlanReviewSession {
         userConfirm: true,
       },
       {
-        shots: pending.shots ?? [],
+        // Phase 3.5+ — prefer plan.matchingShots (self-sufficient
+        // review) and fall back to the session side-table for reviews
+        // built before the field was populated.  plan-editor will
+        // internally use plan.matchingShots when non-empty; this
+        // fallback covers the edge case where the in-flight plan
+        // hasn't reached the refreshed builder yet.
+        shots: pending.plan.matchingShots ?? pending.shots ?? [],
         consistencyChecker: this.deps.orchestrator.consistencyChecker,
       },
     );
@@ -332,7 +351,13 @@ export class PlanReviewSession {
         candidate: { ...candidate, provenance: 'user', confidence: 1.0 },
       },
       {
-        shots: pending.shots ?? [],
+        // Phase 3.5+ — prefer plan.matchingShots (self-sufficient
+        // review) and fall back to the session side-table for reviews
+        // built before the field was populated.  plan-editor will
+        // internally use plan.matchingShots when non-empty; this
+        // fallback covers the edge case where the in-flight plan
+        // hasn't reached the refreshed builder yet.
+        shots: pending.plan.matchingShots ?? pending.shots ?? [],
         consistencyChecker: this.deps.orchestrator.consistencyChecker,
       },
     );
@@ -348,11 +373,11 @@ export class PlanReviewSession {
    * zombie forks on disk (see Fix-D review history).
    */
   async handleFork(msg: WorkflowPlanForkMessage): Promise<Workflow.LitePlan | undefined> {
-    if (!this.deps.planStore) {
+    if (!this.deps.planStoreWriter.enabled) {
       logger.warn('Fork ignored — no PlanStore configured', { planId: msg.planId });
       return undefined;
     }
-    const source = await this.deps.planStore.load(msg.planId);
+    const source = await this.deps.planStoreWriter.loadPlan(msg.planId);
     if (!source) {
       logger.warn('Fork ignored — source plan not found', { planId: msg.planId });
       return undefined;
@@ -361,7 +386,7 @@ export class PlanReviewSession {
       logger.warn('Fork rejected — source plan has no persisted RawInput (pre-Phase-2.5)', {
         planId: msg.planId,
       });
-      void vscode.window.showWarningMessage(
+      this.deps.notifier.warn(
         `Cannot fork plan ${msg.planId}: it predates input persistence. ` +
           'Re-run from scratch instead.',
       );
@@ -374,7 +399,7 @@ export class PlanReviewSession {
       by: 'user',
       ...(msg.resetToOriginal === true && { resetToOriginal: true }),
     });
-    await this.deps.planStore.save(fork);
+    await this.deps.planStoreWriter.savePersistent(fork);
     const lite = Workflow.toLitePlan(fork);
 
     // Register the fork as pending.  Shots aren't persisted on NkPlan

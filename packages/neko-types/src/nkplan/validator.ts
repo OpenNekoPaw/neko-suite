@@ -237,6 +237,22 @@ export function validateNkplan(
     validateInput(data['input'], 'input', errors);
   }
 
+  // matchingShots (optional) — the Shot[] input persisted for fork/reload
+  // consistency recheck.  Each entry mirrors the platform Shot shape.
+  if (data['matchingShots'] !== undefined) {
+    if (!isArray(data['matchingShots'])) {
+      errors.push({
+        field: 'matchingShots',
+        message: 'Must be an array',
+        severity: 'error',
+      });
+    } else {
+      data['matchingShots'].forEach((s, i) =>
+        validateMatchingShot(s, `matchingShots[${i}]`, errors),
+      );
+    }
+  }
+
   if (options.strict) {
     errors.push(...warnings);
     warnings.length = 0;
@@ -567,6 +583,91 @@ function validateReferenceChainEntry(
         });
       }
     });
+  }
+}
+
+// =============================================================================
+// MatchingShot — structural check for persisted Shot[] input
+// =============================================================================
+
+function validateMatchingShot(shot: unknown, field: string, errors: ValidationError[]): void {
+  if (!isRecord(shot)) {
+    errors.push({ field, message: 'Must be an object', severity: 'error' });
+    return;
+  }
+  requireString(shot, 'id', errors, `${field}.id`);
+  if (shot['scriptLine'] !== undefined && !isString(shot['scriptLine'])) {
+    errors.push({
+      field: `${field}.scriptLine`,
+      message: 'Must be a string',
+      severity: 'error',
+    });
+  }
+  if (shot['sceneGroupId'] !== undefined && !isString(shot['sceneGroupId'])) {
+    errors.push({
+      field: `${field}.sceneGroupId`,
+      message: 'Must be a string',
+      severity: 'error',
+    });
+  }
+  if (shot['index'] !== undefined && typeof shot['index'] !== 'number') {
+    errors.push({ field: `${field}.index`, message: 'Must be a number', severity: 'error' });
+  }
+  if (shot['tags'] !== undefined) {
+    if (!isArray(shot['tags'])) {
+      errors.push({
+        field: `${field}.tags`,
+        message: 'Must be an array of strings',
+        severity: 'error',
+      });
+    } else {
+      shot['tags'].forEach((t, i) => {
+        if (!isString(t)) {
+          errors.push({
+            field: `${field}.tags[${i}]`,
+            message: 'Must be a string',
+            severity: 'error',
+          });
+        }
+      });
+    }
+  }
+  if (shot['entityRefs'] !== undefined) {
+    if (!isArray(shot['entityRefs'])) {
+      errors.push({
+        field: `${field}.entityRefs`,
+        message: 'Must be an array',
+        severity: 'error',
+      });
+    } else {
+      shot['entityRefs'].forEach((ref, i) => {
+        if (!isRecord(ref)) {
+          errors.push({
+            field: `${field}.entityRefs[${i}]`,
+            message: 'Must be an object',
+            severity: 'error',
+          });
+          return;
+        }
+        const slot = ref['slot'];
+        if (!isString(slot) || !BINDING_SLOTS.has(slot)) {
+          errors.push({
+            field: `${field}.entityRefs[${i}].slot`,
+            message: `Invalid slot ${String(slot)}`,
+            severity: 'error',
+          });
+        }
+        for (const k of ['entityId', 'name', 'variant'] as const) {
+          if (ref[k] !== undefined && !isString(ref[k])) {
+            errors.push({
+              field: `${field}.entityRefs[${i}].${k}`,
+              message: 'Must be a string',
+              severity: 'error',
+            });
+          }
+        }
+      });
+    }
   }
 }
 

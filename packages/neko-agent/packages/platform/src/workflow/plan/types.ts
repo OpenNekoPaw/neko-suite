@@ -98,6 +98,14 @@ export interface LitePlan {
    * input.  Mirrors NkPlan.input — see workflow-plan-handler.ts.
    */
   readonly input?: import('../types').RawInput;
+  /**
+   * The original Shot[] MatchingEngine + ConsistencyChecker ran against.
+   * Persisted so fork / edit flows can re-run the checker without
+   * needing access to an out-of-band session side-table.  Pre-Phase-3.5
+   * reviews relied on in-memory `pending.shots`; now the plan body
+   * carries its own recheck input.
+   */
+  readonly matchingShots?: ReadonlyArray<import('../matching/types').Shot>;
 }
 
 // =============================================================================

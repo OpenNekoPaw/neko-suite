@@ -167,6 +167,36 @@ export type NkplanInput =
   | { readonly kind: 'project'; readonly path: string; readonly workflow?: string };
 
 // ---------------------------------------------------------------------------
+// MatchingShot — the Shot[] input that MatchingEngine + ConsistencyChecker
+// ran against.  Persisted so forks / reloaded plans can re-run the checker
+// without losing access to the original matching input.  Shape mirrors
+// packages/platform/.../matching/types.ts Shot, kept inlined to avoid a
+// cross-package import.
+// ---------------------------------------------------------------------------
+
+export interface NkplanEntityRef {
+  readonly slot: NkplanBindingSlot;
+  readonly entityId?: string;
+  readonly name?: string;
+  /** Optional variant hint ("dawn", "casual") */
+  readonly variant?: string;
+}
+
+export interface NkplanShot {
+  readonly id: string;
+  /** Script line / description text (used by L1/L2/L3 matchers) */
+  readonly scriptLine?: string;
+  /** Pre-extracted entity references (e.g., from NekoStoryAPI) */
+  readonly entityRefs?: readonly NkplanEntityRef[];
+  /** Scene group for continuity grouping */
+  readonly sceneGroupId?: string;
+  /** Shot index in the story/canvas (for sequential continuity) */
+  readonly index?: number;
+  /** Optional free-form tags (e.g., 'scene-change' breaks continuity) */
+  readonly tags?: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
 // NkPlan — the persistent root
 // ---------------------------------------------------------------------------
 
@@ -204,6 +234,15 @@ export interface NkPlan {
    * request through.  See workflow-plan-handler.ts `presentInteractive`.
    */
   readonly input?: NkplanInput;
+  /**
+   * Original Shot[] that MatchingEngine + ConsistencyChecker ran against.
+   * Persisted so forks / reloaded plans can re-run the checker without
+   * losing access to the original matching input (pre-Phase-3 reviews
+   * had to fail-safe on empty shots, silently preserving prior
+   * violations; with this field the checker runs honestly).  Optional
+   * for backwards compatibility.
+   */
+  readonly matchingShots?: readonly NkplanShot[];
 
   /** Arbitrary stage-scoped parameters (e.g. user-tuned globalStyle) */
   readonly stageParams?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
