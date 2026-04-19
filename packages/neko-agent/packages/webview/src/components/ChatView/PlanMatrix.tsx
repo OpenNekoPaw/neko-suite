@@ -30,6 +30,26 @@ interface PlanMatrixProps {
   shots: readonly WorkflowShotBindingSummary[];
   /** Disable editing (e.g. once the plan is executing) */
   readOnly?: boolean;
+  /**
+   * Capability flag from the handler: can the binding popover post
+   * `workflow/planEditBinding`?  Defaults to true so older handlers
+   * without capability flags keep working.  Hides the popover + makes
+   * cells unclickable when false.
+   */
+  canEditBinding?: boolean;
+  /**
+   * Capability flag for the "Apply to all" action inside the popover.
+   * When false the button is hidden but individual picks remain
+   * available (gated by `canEditBinding`).
+   */
+  canApplyToAll?: boolean;
+  /**
+   * Whether editing will re-run ConsistencyChecker.  When false, an
+   * informational marker tells the user their edit won't recompute
+   * violations (typical for forks — the original Shot[] is not
+   * persisted, so the checker would see an empty input).
+   */
+  canRecheckConsistency?: boolean;
   /** Shot count threshold above which virtualization kicks in. */
   virtualizeThreshold?: number;
   /** Pixel height used when virtualizing — must match the actual row height. */
@@ -52,10 +72,17 @@ export const PlanMatrix = memo(function PlanMatrix({
   planId,
   shots,
   readOnly = false,
+  canEditBinding = true,
+  canApplyToAll = true,
+  canRecheckConsistency = true,
   virtualizeThreshold = 40,
   rowHeightPx = 28,
   maxViewportPx = 420,
 }: PlanMatrixProps) {
+  // Edits are disabled whenever the card is read-only OR the handler has
+  // said this plan shape doesn't support binding edits (e.g. legacy
+  // plans without original Shot[]).
+  const editable = !readOnly && canEditBinding;
   // Track which (shotId, slot) currently has its popover open
   const [openCell, setOpenCell] = useState<string | undefined>(undefined);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -74,11 +101,11 @@ export const PlanMatrix = memo(function PlanMatrix({
       slot: WorkflowBindingSlot,
       alternatives: readonly WorkflowBindingCandidate[],
     ) => {
-      if (readOnly) return;
+      if (!editable) return;
       if (alternatives.length === 0) return;
       setOpenCell((prev) => (prev === cellKey(shotId, slot) ? undefined : cellKey(shotId, slot)));
     },
-    [readOnly],
+    [editable],
   );
 
   const handlePick = useCallback(
@@ -146,16 +173,17 @@ export const PlanMatrix = memo(function PlanMatrix({
               candidate={candidate}
               unmatched={unmatched}
               hasAlternatives={alternatives.length > 0}
-              readOnly={readOnly}
+              readOnly={!editable}
               onClick={() => handleCellClick(shot.shotId, slot, alternatives)}
             />
-            {isOpen && !readOnly && (
+            {isOpen && editable && (
               <BindingPopover
                 candidates={candidates(candidate, alternatives)}
                 currentAssetId={candidate?.assetId}
+                staleWarning={!canRecheckConsistency}
                 onPick={(assetId) => handlePick(shot.shotId, slot, assetId)}
                 onApplyToAll={
-                  candidate
+                  canApplyToAll && candidate
                     ? (assetId) => handleApplyToAll(candidate.entityId, slot, assetId)
                     : undefined
                 }
@@ -288,11 +316,19 @@ function BindingCell({
 function BindingPopover({
   candidates,
   currentAssetId,
+  staleWarning,
   onPick,
   onApplyToAll,
 }: {
   candidates: readonly WorkflowBindingCandidate[];
   currentAssetId: string | undefined;
+  /**
+   * When true, an info line warns the user that picking an alternative
+   * will NOT re-run the consistency checker (typical for forks — the
+   * original Shot[] is not persisted, so previous violations are
+   * preserved but new ones can't be detected until the plan runs).
+   */
+  staleWarning?: boolean;
   onPick: (assetId: string) => void;
   onApplyToAll?: (assetId: string) => void;
 }) {
@@ -302,6 +338,14 @@ function BindingPopover({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="mb-1 px-1 text-[10px] text-[var(--agent-fg-secondary)]">Alternatives</div>
+      {staleWarning && (
+        <div
+          className="mb-1 rounded bg-[var(--agent-warning-bg,rgba(230,180,40,0.12))] px-2 py-1 text-[10px] text-[var(--agent-warning-fg)]"
+          title="This plan's original shot input is not available; editing will preserve existing violations but cannot recompute them."
+        >
+          ⚠️ edits won't re-check consistency
+        </div>
+      )}
       {candidates.length === 0 ? (
         <div className="px-2 py-1 text-[11px] italic text-[var(--agent-fg-secondary)]">(none)</div>
       ) : (

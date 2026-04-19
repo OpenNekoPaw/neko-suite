@@ -147,18 +147,21 @@ export class WorkflowPlanHandler {
       return { route, plan, result };
     }
 
-    // Interactive path — post preview, wait for the user's decision.
-    this.postPreview(plan);
-
-    const decision = await new Promise<PlanDecision>((resolve, reject) => {
-      const request: Omit<PresentPlanOptions, 'input'> = {
-        ...(options.routerOverrides !== undefined && { routerOverrides: options.routerOverrides }),
-        ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
-        ...(options.autoApproveThreshold !== undefined && {
-          autoApproveThreshold: options.autoApproveThreshold,
-        }),
-        ...(options.shots !== undefined && { shots: options.shots }),
-      };
+    // Interactive path — pending.set MUST happen before postPreview so
+    // the first-frame capability snapshot (computeCapabilities reads
+    // pending.shots) reflects the same truth the handler will use later
+    // when routing webview messages.  Splitting Promise construction
+    // lets us keep the executor-based resolve/reject wiring while still
+    // ordering the pending registration before the outgoing message.
+    const request: Omit<PresentPlanOptions, 'input'> = {
+      ...(options.routerOverrides !== undefined && { routerOverrides: options.routerOverrides }),
+      ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
+      ...(options.autoApproveThreshold !== undefined && {
+        autoApproveThreshold: options.autoApproveThreshold,
+      }),
+      ...(options.shots !== undefined && { shots: options.shots }),
+    };
+    const decision = new Promise<PlanDecision>((resolve, reject) => {
       this.pending.set(plan.id, {
         plan,
         resolve,
@@ -173,13 +176,18 @@ export class WorkflowPlanHandler {
         ...(options.shots !== undefined && { shots: options.shots }),
       });
     });
+    // Promise constructor runs synchronously, so pending is populated
+    // before this line.  postPreview → computeCapabilities now reads
+    // the correct pending.shots.
+    this.postPreview(plan);
 
-    // `decision.plan` carries the in-memory plan at the moment of approval
-    // — this is the plan mutated by edit-binding / toggle-checkpoint
-    // messages, not the initial build result.  See handleIncoming.
-    const currentPlan = decision.plan;
+    // `resolved.plan` carries the in-memory plan at the moment of
+    // approval — mutated by edit-binding / toggle-checkpoint messages,
+    // not the initial build result.  See handleIncoming.
+    const resolved = await decision;
+    const currentPlan = resolved.plan;
 
-    switch (decision.kind) {
+    switch (resolved.kind) {
       case 'abort':
         logger.info('Plan aborted by user', { planId: currentPlan.id });
         await this.transitionIfStored(currentPlan.id, 'aborted', {
@@ -194,14 +202,14 @@ export class WorkflowPlanHandler {
         // Mark the original as 'edited' (→ pending) so the history shows
         // the replacement lineage, then recurse.
         await this.transitionIfStored(currentPlan.id, 'edited', {
-          reason: `override to ${decision.forceLevel}`,
+          reason: `override to ${resolved.forceLevel}`,
           by: 'user',
         });
         const overriddenOptions: PresentPlanOptions = {
           input: options.input,
           routerOverrides: {
             ...(options.routerOverrides ?? {}),
-            forceLevel: decision.forceLevel,
+            forceLevel: resolved.forceLevel,
           },
           ...(options.globalStyle !== undefined && { globalStyle: options.globalStyle }),
           ...(options.autoApproveThreshold !== undefined && {
@@ -401,6 +409,26 @@ export class WorkflowPlanHandler {
       logger.warn('Fork ignored — source plan not found', { planId: msg.planId });
       return undefined;
     }
+    // Fork self-sufficiency contract — `source.input` is required for
+    // honest fork execution (fountain/file-based inputs break when we
+    // synthesise a `{kind:'prompt', text: route.reason}` placeholder
+    // because downstream stages read ctx.source / ctx.sourceFormat).
+    // Pre-Phase-2.5 plans lack `input`; reject the fork request BEFORE
+    // calling forkPlan so we don't leave a zombie plan on disk or post
+    // a misleading preview (webview would reset status → pending, but
+    // there's no pending entry to approve / abort against).
+    if (!source.input) {
+      logger.warn('Fork rejected — source plan has no persisted RawInput (pre-Phase-2.5)', {
+        planId: msg.planId,
+      });
+      void vscode.window.showWarningMessage(
+        `Cannot fork plan ${msg.planId}: it predates input persistence. ` +
+          'Re-run from scratch instead.',
+      );
+      return undefined;
+    }
+    const forkInput = source.input;
+
     const fork = Workflow.forkPlan(source, {
       reason: 'user-fork',
       by: 'user',
@@ -408,27 +436,6 @@ export class WorkflowPlanHandler {
     });
     await this.planStore.save(fork);
     const lite = Workflow.toLitePlan(fork);
-
-    // Fork self-sufficiency contract — `source.input` is required for
-    // honest fork execution (fountain/file-based inputs break when we
-    // synthesise a `{kind:'prompt', text: route.reason}` placeholder
-    // because downstream stages read ctx.source / ctx.sourceFormat).
-    // Pre-Phase-2.5 plans lack `input`; we log + abort the fork rather
-    // than dispatch against a fake source.
-    const forkInput = source.input;
-    if (!forkInput) {
-      logger.warn('Fork has no persisted RawInput (pre-Phase-2.5 plan); cannot dispatch honestly', {
-        planId: lite.id,
-        parentPlanId: msg.planId,
-      });
-      await this.transitionIfStored(lite.id, 'aborted', {
-        reason: 'fork-missing-input (source plan predates input persistence)',
-        by: 'system',
-      });
-      this.postStatus(lite.id, 'aborted');
-      this.postPreview(lite);
-      return lite;
-    }
 
     // Register the fork as pending with a real dispatcher.  When the user
     // clicks Start, handleIncoming resolves this promise with the (possibly

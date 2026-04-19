@@ -171,13 +171,19 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
               <span className="w-4 text-right text-[var(--agent-fg-secondary)]">{i + 1}.</span>
               <span className="flex-1">{stage.label}</span>
               {stage.estimate && <StageEstimate estimate={stage.estimate} />}
-              {!readOnly && !stage.skipped && (
-                <CheckpointToggle
-                  planId={plan.id}
-                  stageId={stage.id}
-                  checked={stage.userCheckpoint === true}
-                />
-              )}
+              {!readOnly &&
+                !stage.skipped &&
+                // Capability gate — even when the card is editable, the
+                // handler may have disabled checkpoint toggling for this
+                // plan shape (fallback to all-capable when the field is
+                // missing, for back-compat with older handlers).
+                (plan.capabilities?.canToggleCheckpoint ?? true) && (
+                  <CheckpointToggle
+                    planId={plan.id}
+                    stageId={stage.id}
+                    checked={stage.userCheckpoint === true}
+                  />
+                )}
               {readOnly && stage.userCheckpoint === true && (
                 <span className="text-[10px] text-[var(--vscode-charts-orange)]" title="Checkpoint">
                   🛑
@@ -188,10 +194,19 @@ export const WorkflowPlanCard = memo(function WorkflowPlanCard({
         </ol>
       </div>
 
-      {/* Shot × binding matrix */}
+      {/* Shot × binding matrix — edit & apply-to-all are capability-gated
+          by the handler, which knows whether ConsistencyChecker can
+          re-run (pending.shots available) for this particular plan. */}
       {plan.shots && plan.shots.length > 0 && (
         <div className="mb-3">
-          <PlanMatrix planId={plan.id} shots={plan.shots} readOnly={readOnly} />
+          <PlanMatrix
+            planId={plan.id}
+            shots={plan.shots}
+            readOnly={readOnly}
+            canEditBinding={plan.capabilities?.canEditBinding ?? true}
+            canApplyToAll={plan.capabilities?.canApplyToAll ?? true}
+            canRecheckConsistency={plan.capabilities?.canRecheckConsistency ?? true}
+          />
         </div>
       )}
 
