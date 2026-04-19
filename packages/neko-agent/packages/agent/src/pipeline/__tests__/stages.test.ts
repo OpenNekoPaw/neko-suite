@@ -604,6 +604,128 @@ describe('batchGenerate stage', () => {
     expect(calls[0]?.options['referenceImagePaths']).toBeUndefined();
     expect(calls[0]?.options['referenceShotIds']).toEqual(['anchor']);
   });
+
+  it('Phase 5.4b: dependent shot awaits its anchor and receives the anchor path', async () => {
+    // Anchor generate() takes a short delay; dependent resolves instantly.
+    // Without in-batch dependency waiting, the dependent would call the
+    // generator before the anchor finished and miss the reference.
+    const events: string[] = [];
+    const calls: Array<{ taskId: string; options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (prompt, options) => {
+          // Prompt itself is not distinctive — correlate via caller spy.
+          const isAnchor = prompt === 'anchor-prompt';
+          events.push(isAnchor ? 'anchor:start' : 'dep:start');
+          if (isAnchor) {
+            await new Promise((r) => setTimeout(r, 15));
+          }
+          const path = isAnchor ? '/out/anchor.png' : '/out/dep.png';
+          events.push(isAnchor ? 'anchor:done' : 'dep:done');
+          calls.push({
+            taskId: isAnchor ? 'anchor' : 'dep',
+            options: options as unknown as Record<string, unknown>,
+          });
+          return { path };
+        },
+      },
+      resolveReferencePath: () => undefined, // default resolver disabled — only in-batch deps should feed paths
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'fallback',
+          shotPlans: [
+            { shotNumber: 1, suggestedPrompt: 'anchor-prompt' } as never,
+            { shotNumber: 2, suggestedPrompt: 'dep-prompt' } as never,
+          ],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-1',
+          slot: 'character',
+          references: ['scene-0-shot-0'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+
+    const tasks = stage.tasks(ctx);
+    expect(tasks).toHaveLength(2);
+    // Fire them concurrently to simulate TaskManager behaviour.
+    await Promise.all(tasks.map((t) => t.execute()));
+
+    // anchor must finish before the dep's generator call starts.
+    const anchorDoneIdx = events.indexOf('anchor:done');
+    const depStartIdx = events.indexOf('dep:start');
+    expect(anchorDoneIdx).toBeGreaterThan(-1);
+    expect(depStartIdx).toBeGreaterThan(anchorDoneIdx);
+
+    // The dep call should carry the anchor's generated path.
+    const depCall = calls.find((c) => c.taskId === 'dep');
+    expect(depCall?.options['referenceImagePaths']).toEqual(['/out/anchor.png']);
+  });
+
+  it('Phase 5.4b: dependent still runs when its anchor fails; skips the reference payload', async () => {
+    const calls: Array<{ taskId: string; options: Record<string, unknown> }> = [];
+    const stage = createBatchGenerateStage({
+      mediaGenerator: {
+        generate: async (prompt, options) => {
+          if (prompt === 'anchor-prompt') {
+            throw new Error('anchor blew up');
+          }
+          calls.push({
+            taskId: 'dep',
+            options: options as unknown as Record<string, unknown>,
+          });
+          return { path: '/out/dep.png' };
+        },
+      },
+      resolveReferencePath: () => undefined,
+    }) as IParallelStage;
+
+    const ctx: PipelineContext = {
+      scenes: [
+        {
+          index: 0,
+          heading: 'S0',
+          description: '',
+          dialogue: [],
+          estimatedDuration: 3,
+          suggestedPrompt: 'x',
+          shotPlans: [
+            { shotNumber: 1, suggestedPrompt: 'anchor-prompt' } as never,
+            { shotNumber: 2, suggestedPrompt: 'dep-prompt' } as never,
+          ],
+        },
+      ],
+      generationUnit: 'shot',
+      referenceChain: [
+        {
+          shotId: 'scene-0-shot-1',
+          slot: 'character',
+          references: ['scene-0-shot-0'],
+          strategy: 'anchored',
+        },
+      ],
+    };
+    const tasks = stage.tasks(ctx);
+    const results = await Promise.all(tasks.map((t) => t.execute()));
+    const byId = Object.fromEntries(results.map((r) => [r.id, r]));
+    expect(byId['scene-0-shot-0']?.success).toBe(false);
+    expect(byId['scene-0-shot-1']?.success).toBe(true);
+    // Dep ran without the reference payload because the anchor produced none.
+    expect(calls[0]?.options['referenceImagePaths']).toBeUndefined();
+    expect(calls[0]?.options['referenceShotIds']).toEqual(['scene-0-shot-0']);
+  });
 });
 
 // =============================================================================

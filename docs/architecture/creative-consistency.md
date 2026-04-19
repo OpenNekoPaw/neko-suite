@@ -195,7 +195,7 @@ Plan 矩阵视图基础上增加**约束栏**：
 | Phase C.2b | Canvas `ShotCharacter.referenceChain?: string[]` 字段（与 nkplan 同步） | ✅ 已完成（2026-04-19）|
 | Phase C.3 | PipelineContext 透传 chain + batch-generate stage 按任务查找 + MediaGenerateOptions.referenceShotIds | ✅ 已完成（2026-04-19）|
 | Phase C.4a | resolveReferencePath hook + referenceImagePaths + MediaGenerationService.referenceImageUrl/ipAdapterRefs 完整路径 | ✅ 已完成（2026-04-19）|
-| Phase C.4b | 拓扑排序 batch-generate（dependent shots wait for anchors） | ⏳ 待实施 |
+| Phase C.4b | 拓扑排序 batch-generate（dependent shots wait for anchors） | ✅ 已完成（2026-04-19）|
 | Phase D | style_lock + prop_consistency | ⏳ 规划中 |
 | Phase E | 自动推导（从剧本/场景自动生成约束） | ⏳ 规划中 |
 
@@ -231,7 +231,12 @@ Plan 矩阵视图基础上增加**约束栏**：
 - [batch-generate.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) `MediaGenerateOptions.referenceImagePaths?: readonly string[]` — 解析后的路径；raw `referenceShotIds` 继续共存方便 telemetry / 自定义 adapter
 - [pipeline-adapters.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-adapters.ts) `MediaGenerateOptions.referenceImagePaths?` — 同名字段镜像
 - [pipeline-bootstrap.ts](../../packages/neko-agent/packages/extension/src/pipeline/pipeline-bootstrap.ts) — 默认 resolver: `ctx.taskIds.indexOf(shotId) → ctx.generatedPaths[i]`；`MediaGeneratorAdapter` 把路径拆成 `referenceImageUrl`（首个）+ `ipAdapterRefs`（图像）或 `referenceImages`（视频）喂给 `MediaGenerationService`
-- Phase C.4b 缺口：当前 batch-generate 并行调度；如果 shot B 依赖 shot A 的输出，A 可能还没 pump 完，resolver 会返回 undefined → reference chain 对并行 run 只部分生效。拓扑排序 / 按 chain 深度分批是下一步。
+### Phase C.4b 实现索引
+
+- [batch-generate.ts](../../packages/neko-agent/packages/agent/src/pipeline/stages/batch-generate.ts) `ShotDeferred` — 每个 shot task 持有一个 `Promise<string | undefined>`（resolve 到生成路径或 undefined）
+- `buildShotTasks` 先走一轮把所有 deferred 按 task id / shot.id / shot.shotId 建表；dependent task 在 execute 里 `await` 自己 referenceShotIds 对应的 deferred，再调 resolver
+- `resolveReferencePaths` 新增 `inBatchDepPaths` 参数 — in-batch 解析优先于 ctx-backed resolver，anchor 刚生成的路径第一时间可见
+- 失败降级：anchor throw / 无输出时 deferred resolve(undefined)；dependent 仍会跑，只是丢 referenceImagePaths 字段
 
 详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
 

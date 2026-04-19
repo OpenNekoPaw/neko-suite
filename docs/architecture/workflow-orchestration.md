@@ -142,7 +142,7 @@ Phase 5.2a ✅   PlanBuilder 自动计算 chain + LitePlan/.nkplan 持久化 + �
 Phase 5.2b ✅   Canvas ShotCharacter.referenceChain 字段（与 nkplan 同步）
 Phase 5.3  ✅   PipelineContext 透传 chain + batch-generate stage + MediaGenerateOptions.referenceShotIds
 Phase 5.4a ✅   resolveReferencePath hook + referenceImagePaths → referenceImageUrl / ipAdapterRefs / referenceImages
-Phase 5.4b ⏳   batch-generate 按 chain 依赖做拓扑排序（dependent shots wait for anchors）
+Phase 5.4b ✅   batch-generate in-batch deferred map，dependent shots 等 anchor 完成再 resolve paths
 Phase 5.4c ⏳   2D puppet / 3D gltf 集成 + 三模式 stage
 Phase 6    ⏳   .nkproj 容器 + Lossless Upgrade + Clip.lineage
 ```

@@ -133,6 +133,27 @@ function buildSceneTasks(
   }));
 }
 
+/**
+ * Phase 5.4b deferred used to serialise dependent shots behind their
+ * anchor's completion.  Each shot task owns one deferred; dependent
+ * tasks await the anchor's promise before calling the generator.
+ *
+ * `path` is undefined when the anchor failed or produced no usable
+ * output — dependents still run, just without the reference paylaod.
+ */
+interface ShotDeferred {
+  readonly promise: Promise<string | undefined>;
+  resolve(path: string | undefined): void;
+}
+
+function createDeferred(): ShotDeferred {
+  let resolve!: (path: string | undefined) => void;
+  const promise = new Promise<string | undefined>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 function buildShotTasks(
   deps: BatchGenerateStageDeps,
   ctx: PipelineContext,
@@ -140,6 +161,29 @@ function buildShotTasks(
 ): ParallelTask[] {
   const stageParams = ctx.stageParams?.['batchGenerate'] ?? {};
   const tasks: ParallelTask[] = [];
+
+  // Pre-walk the batch so every shot task has a deferred its dependents
+  // can await before execution begins.  Keyed by task id AND by the
+  // plan-level shot id / storyboard shot id so either lookup works.
+  const deferredByKey = new Map<string, ShotDeferred>();
+  for (const scene of scenes) {
+    const shots = scene.shotPlans;
+    if (!shots || shots.length === 0) continue;
+    for (let j = 0; j < shots.length; j++) {
+      const shot = shots[j]!;
+      const taskId = `scene-${scene.index}-shot-${j}`;
+      const deferred = createDeferred();
+      deferredByKey.set(taskId, deferred);
+      const rawId = (shot as { id?: string }).id;
+      if (typeof rawId === 'string' && rawId.length > 0 && !deferredByKey.has(rawId)) {
+        deferredByKey.set(rawId, deferred);
+      }
+      const altId = (shot as { shotId?: string }).shotId;
+      if (typeof altId === 'string' && altId.length > 0 && !deferredByKey.has(altId)) {
+        deferredByKey.set(altId, deferred);
+      }
+    }
+  }
 
   for (const scene of scenes) {
     const shots = scene.shotPlans;
@@ -184,16 +228,37 @@ function buildShotTasks(
         (shot as { shotId?: string }).shotId,
       ].filter((v): v is string => typeof v === 'string' && v.length > 0);
       const referenceShotIds = pickReferenceShotIds(ctx.referenceChain, shotIdCandidates);
-      const referenceImagePaths = resolveReferencePaths(
-        referenceShotIds,
-        deps.resolveReferencePath,
-        ctx,
+      // In-batch dependencies — drop self-references defensively.
+      const inBatchDeps = (referenceShotIds ?? []).filter(
+        (id) => deferredByKey.has(id) && !shotIdCandidates.includes(id),
       );
+      const ownDeferred = deferredByKey.get(taskId);
 
       tasks.push({
         id: taskId,
         name: `Generate scene ${scene.index} shot ${j + 1}: ${shot.visualDescription?.slice(0, 50) ?? ''}`,
         async execute(): Promise<ParallelTaskResult> {
+          // Phase 5.4b: wait for in-batch anchors to finish before we
+          // resolve refs — ensures the default ctx-backed resolver sees
+          // their paths, and lets custom resolvers read live state too.
+          const resolvedDepPaths = new Map<string, string>();
+          if (inBatchDeps.length > 0) {
+            const results = await Promise.all(
+              inBatchDeps.map((id) => deferredByKey.get(id)!.promise),
+            );
+            for (let i = 0; i < inBatchDeps.length; i++) {
+              const p = results[i];
+              if (typeof p === 'string' && p.length > 0) resolvedDepPaths.set(inBatchDeps[i]!, p);
+            }
+          }
+
+          const referenceImagePaths = resolveReferencePaths(
+            referenceShotIds,
+            deps.resolveReferencePath,
+            ctx,
+            resolvedDepPaths,
+          );
+
           try {
             const result = await deps.mediaGenerator.generate(prompt, {
               type: (stageParams['type'] as 'image' | 'video') ?? 'video',
@@ -204,8 +269,10 @@ function buildShotTasks(
               ...(referenceShotIds !== undefined && { referenceShotIds }),
               ...(referenceImagePaths !== undefined && { referenceImagePaths }),
             });
+            ownDeferred?.resolve(result.path);
             return { id: taskId, success: true, data: result };
           } catch (error) {
+            ownDeferred?.resolve(undefined);
             return {
               id: taskId,
               success: false,
@@ -231,23 +298,32 @@ function buildShotTasks(
  * important chain for drift prevention).
  */
 /**
- * Map a list of reference shot ids to concrete file paths using the
- * caller-supplied resolver.  Unresolvable ids are dropped (logged on
- * warning would require a logger injection — skip for now and let the
- * adapter surface its own warnings when a chain unexpectedly collapses).
+ * Map a list of reference shot ids to concrete file paths.  In-batch
+ * dependencies (those resolved via the per-task deferred map) take
+ * priority — the anchor's just-generated path is freshest and the
+ * external resolver may not yet see it because ctx merging happens
+ * post-stage.
  *
- * Returns `undefined` when nothing was resolved so the task spread
- * omits the field entirely — keeping the generator call identical to
- * pre-chain behaviour.
+ * Falls back to the caller-supplied resolver when an id isn't in the
+ * in-batch map.  Unresolvable ids are dropped; an empty result yields
+ * `undefined` so the spread omits the field entirely (pre-chain
+ * generator behaviour preserved).
  */
 function resolveReferencePaths(
   shotIds: readonly string[] | undefined,
   resolver: ((shotId: string, ctx: PipelineContext) => string | undefined) | undefined,
   ctx: PipelineContext,
+  inBatchDepPaths?: ReadonlyMap<string, string>,
 ): readonly string[] | undefined {
-  if (!shotIds || shotIds.length === 0 || !resolver) return undefined;
+  if (!shotIds || shotIds.length === 0) return undefined;
   const resolved: string[] = [];
   for (const id of shotIds) {
+    const fromBatch = inBatchDepPaths?.get(id);
+    if (typeof fromBatch === 'string' && fromBatch.length > 0) {
+      resolved.push(fromBatch);
+      continue;
+    }
+    if (!resolver) continue;
     const path = resolver(id, ctx);
     if (typeof path === 'string' && path.length > 0) resolved.push(path);
   }
