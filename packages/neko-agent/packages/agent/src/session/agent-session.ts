@@ -16,9 +16,17 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type { FlowKind, FlowContext } from '@neko-agent/types';
+import type {
+  FlowKind,
+  FlowContext,
+  PrimitiveActivationDecision,
+  WorkflowRun,
+} from '@neko-agent/types';
 import type { SkillInjection, IFlowBinding } from '../skill';
 import { SkillInjectionCoordinator, FlowSwitcher, createFlowBinding } from '../skill';
+import type { L2Mode } from '../skill/activation/mode-activation-matrix';
+import type { IWorkflowRunStore, ReActLoopRunnerState } from '../executor';
+import { createReActLoopRunner, createWorkflowRunStore } from '../executor';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -102,6 +110,11 @@ export class AgentSession implements IAgentSession {
   private _flowSwitcher: FlowSwitcher | null = null;
   private _flowBinding: IFlowBinding | null = null;
 
+  // Dual-flow (P1.6): ReAct-loop primitive-activation orchestrator.
+  private _runStore: IWorkflowRunStore | null = null;
+  private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
+  private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
+
   // Meta tools (for ISkillProvider wiring)
   private _metaTools: Tool[] = [];
 
@@ -170,6 +183,26 @@ export class AgentSession implements IAgentSession {
         coordinator: this._skillCoordinator,
       });
       void this._flowBinding.syncInitial();
+
+      // P1.6: install ReAct-loop primitive-activation runner.
+      this._runStore = createWorkflowRunStore();
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: this._flowSwitcher,
+        runStore: this._runStore,
+        getMode: () => this._executionMode as L2Mode,
+      });
+      this._runnerHooks = hooks;
+      this._reactRunnerState = state;
+
+      // Register on the already-built executor + on any re-builds after configure().
+      if (this._executor) {
+        this._executor.addHook(hooks);
+      }
+
+      // Record flow transitions into the active run for later audit.
+      this._flowSwitcher.onTransition((event) => {
+        this._runStore?.recordTransition(event);
+      });
     }
   }
 
@@ -508,6 +541,30 @@ export class AgentSession implements IAgentSession {
     return this._flowSwitcher.transitionTo(target, reason);
   }
 
+  /**
+   * Begin a WorkflowRun — the ReAct-loop runner appends rounds into the
+   * active run. Returns null if dual-flow is not configured. No-op if a
+   * run is already active (the runner closes it on onExecuteEnd).
+   */
+  startWorkflowRun(workflowId: string, runId?: string): string | null {
+    if (!this._runStore) return null;
+    return this._runStore.startRun({ workflowId, runId });
+  }
+
+  /**
+   * Snapshot of the active WorkflowRun (or null if none).
+   */
+  getActiveWorkflowRun(): WorkflowRun | null {
+    return this._runStore?.getActive() ?? null;
+  }
+
+  /**
+   * Last primitive activation decision made by the runner.
+   */
+  getLastActivationDecision(): PrimitiveActivationDecision | null {
+    return this._reactRunnerState?.lastDecision ?? null;
+  }
+
   clearHistory(): void {
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
@@ -555,6 +612,9 @@ export class AgentSession implements IAgentSession {
     this._flowSwitcher?.dispose();
     this._flowBinding = null;
     this._flowSwitcher = null;
+    this._runStore = null;
+    this._reactRunnerState = null;
+    this._runnerHooks = null;
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.request.confirmationToken && this._permissionHooks) {
@@ -611,6 +671,11 @@ export class AgentSession implements IAgentSession {
 
     this._permissionHooks = permissionHooks;
     this._executor = executor;
+
+    // Dual-flow: re-register the ReAct-loop runner on the fresh executor.
+    if (this._runnerHooks) {
+      this._executor.addHook(this._runnerHooks);
+    }
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {
