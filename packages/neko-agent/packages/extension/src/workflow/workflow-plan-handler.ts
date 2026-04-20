@@ -55,6 +55,16 @@ export interface WorkflowPlanHandlerDeps {
    * Inject a silent stub in tests.
    */
   notifier?: UserNotifier;
+  /**
+   * Optional P4 plan-approval adapter. When supplied, the review
+   * session consults the unified ApprovalEngine for the auto-approve
+   * decision instead of the legacy confidence threshold.
+   *
+   * Shape intentionally matches the output of
+   * `createPlanReviewApprovalAdapter` from @neko/agent/approval so
+   * extension activation can pass the adapter through as-is.
+   */
+  evaluatePlanApproval?: import('./plan-review-session').PlanReviewSessionDeps['evaluatePlanApproval'];
 }
 
 /**
@@ -83,6 +93,7 @@ export class WorkflowPlanHandler {
       pipelineLifecycle: this.lifecycleBridge,
       getWebview: deps.getWebview,
       notifier,
+      ...(deps.evaluatePlanApproval ? { evaluatePlanApproval: deps.evaluatePlanApproval } : {}),
     });
     this.queryController = new PlanQueryController({
       planStore,

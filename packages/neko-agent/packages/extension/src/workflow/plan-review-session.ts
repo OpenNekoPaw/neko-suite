@@ -121,6 +121,31 @@ export interface PlanReviewSessionDeps {
    * cleanly.
    */
   notifier: UserNotifier;
+  /**
+   * Optional P4 approval adapter. When supplied, the session consults
+   * the unified ApprovalEngine before applying the legacy
+   * `confidence >= threshold && planHasNoRedCells` auto-approve path.
+   *
+   *   auto-accept  → treat as auto-approve (skip interactive review)
+   *   auto-reject  → abort the plan (mark aborted, do not dispatch)
+   *   escalate     → fall through to the interactive review UI
+   *   user-*       → treat as if the user decided directly
+   *
+   * Omit the adapter to preserve the pre-P4 behaviour (confidence
+   * threshold only).
+   */
+  evaluatePlanApproval?: (request: {
+    plan: {
+      id: string;
+      confidence: number;
+      level?: string;
+      hasReviewableIssues: boolean;
+    };
+  }) => Promise<{
+    resolution: 'auto-accept' | 'auto-reject' | 'user-accept' | 'user-reject' | 'escalate';
+    reason: string;
+    note?: string;
+  }>;
 }
 
 export class PlanReviewSession {
@@ -155,16 +180,36 @@ export class PlanReviewSession {
     // Persist the initial 'pending' plan so refreshes / crashes don't lose it.
     await this.deps.planStoreWriter.persistInitial(plan);
 
-    // Auto-approve path: confidence clears the threshold and no shots need review.
-    const threshold = options.autoApproveThreshold ?? 1.1; // default: never auto-approve
-    if (route.confidence >= threshold && planHasNoRedCells(plan)) {
+    // Auto-approve decision.
+    //
+    // Two paths:
+    //  1. Modern: ApprovalEngine adapter supplied (P4). Call the adapter
+    //     and act on the resolution: auto-accept → dispatch, auto-reject
+    //     → mark aborted, escalate → fall through to interactive review.
+    //  2. Legacy fallback: confidence threshold + planHasNoRedCells.
+    //     Preserves exact pre-P4 behaviour for call sites that haven't
+    //     wired the engine yet.
+    //
+    // Only await when the adapter is actually wired — preserves the
+    // microtask timing existing interactive-path tests depend on.
+    const autoDecision: 'accept' | 'reject' | 'escalate' = this.deps.evaluatePlanApproval
+      ? await this.decideAutoApproval({
+          plan,
+          confidence: route.confidence,
+          level: route.level,
+          legacyThreshold: options.autoApproveThreshold ?? 1.1,
+        })
+      : route.confidence >= (options.autoApproveThreshold ?? 1.1) && planHasNoRedCells(plan)
+        ? 'accept'
+        : 'escalate';
+    if (autoDecision === 'accept') {
       logger.info('Plan auto-approved', {
         planId: plan.id,
         level: route.level,
         confidence: route.confidence,
       });
       await this.deps.planStoreWriter.transition(plan.id, 'approved', {
-        reason: 'auto-approve (threshold met)',
+        reason: 'auto-approve (engine/threshold)',
         by: 'system',
       });
       const result = await this.dispatchApprovedPlan(plan, options.input, {
@@ -173,6 +218,12 @@ export class PlanReviewSession {
       });
       return { route, plan, result };
     }
+    if (autoDecision === 'reject') {
+      logger.info('Plan auto-rejected by approval engine', { planId: plan.id });
+      await this.deps.pipelineLifecycle.markAborted(plan.id, 'engine-reject');
+      return { route, plan, result: undefined };
+    }
+    // autoDecision === 'escalate' → fall through to interactive review.
 
     // Interactive path — pending.set MUST happen before postPreview so
     // the first-frame capability snapshot reflects the same truth the
@@ -471,6 +522,59 @@ export class PlanReviewSession {
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * P4 auto-approval decision. When the ApprovalEngine adapter is
+   * injected, its resolution drives the decision; otherwise we fall
+   * back to the legacy `confidence >= threshold && planHasNoRedCells`
+   * rule for zero behaviour change on un-migrated call sites.
+   */
+  private async decideAutoApproval(input: {
+    plan: Workflow.LitePlan;
+    confidence: number;
+    level: string;
+    legacyThreshold: number;
+  }): Promise<'accept' | 'reject' | 'escalate'> {
+    // Modern path: adapter is wired.
+    if (this.deps.evaluatePlanApproval) {
+      try {
+        const response = await this.deps.evaluatePlanApproval({
+          plan: {
+            id: input.plan.id,
+            confidence: input.confidence,
+            level: input.level,
+            hasReviewableIssues: !planHasNoRedCells(input.plan),
+          },
+        });
+        switch (response.resolution) {
+          case 'auto-accept':
+          case 'user-accept':
+            return 'accept';
+          case 'auto-reject':
+            // 'no-decision' lands as auto-reject with reason 'no-decision'
+            // — fall through to interactive review instead of aborting
+            // silently. Plans are business-level decisions; a user
+            // should see the plan card before anything destructive.
+            if (response.reason === 'no-decision') return 'escalate';
+            return 'reject';
+          case 'user-reject':
+            return 'reject';
+          case 'escalate':
+            return 'escalate';
+        }
+      } catch (err) {
+        // Adapter itself threw — escalate to user instead of silently
+        // auto-approving or auto-rejecting.
+        logger.warn('Plan approval adapter threw; escalating to user', { error: err });
+        return 'escalate';
+      }
+    }
+
+    // Legacy fallback.
+    return input.confidence >= input.legacyThreshold && planHasNoRedCells(input.plan)
+      ? 'accept'
+      : 'escalate';
+  }
 
   /**
    * Common "plan is approved → hand off to the pipeline" path shared by

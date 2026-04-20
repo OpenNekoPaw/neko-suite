@@ -1255,4 +1255,164 @@ describe('WorkflowPlanHandler — broadcastPlanState', () => {
     await promise;
     expect(broadcastsOfStatus('executing')).toBe(1);
   });
+
+  // ===========================================================================
+  // P4 — ApprovalEngine adapter wiring (plan-review channel)
+  // ===========================================================================
+
+  describe('evaluatePlanApproval adapter', () => {
+    it('auto-accept resolution dispatches without posting a preview', async () => {
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_p4_accept`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview, posts } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+        evaluatePlanApproval: async () => ({
+          resolution: 'auto-accept',
+          reason: 'preview-only-plan',
+        }),
+      });
+
+      const result = await handler.presentAndDispatch({
+        input: { kind: 'prompt', text: 'hi' },
+      });
+      expect(result.result?.handle.id).toBe('pipe_x');
+      expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
+      const preview = posts.find((m) => (m as { type: string }).type === 'workflow/planPreview');
+      expect(preview).toBeUndefined();
+    });
+
+    it('auto-reject (non no-decision) aborts the plan without dispatch', async () => {
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_p4_reject`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+        evaluatePlanApproval: async () => ({
+          resolution: 'auto-reject',
+          reason: 'policy-reject',
+        }),
+      });
+
+      const result = await handler.presentAndDispatch({
+        input: { kind: 'prompt', text: 'hi' },
+      });
+      expect(result.result).toBeUndefined();
+      expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
+    });
+
+    it('no-decision auto-reject escalates to interactive review (fall-through)', async () => {
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_p4_nodecision`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview, posts } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+        evaluatePlanApproval: async () => ({
+          resolution: 'auto-reject',
+          reason: 'no-decision',
+        }),
+      });
+
+      const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+      await flushUntil(
+        () => posts.some((m) => (m as { type: string }).type === 'workflow/planPreview'),
+        50,
+      );
+      // The interactive preview was posted — user must approve to dispatch.
+      handler.handleIncoming({
+        type: 'workflow/planApprove',
+        planId: 'plan_p4_nodecision',
+      });
+      await promise;
+      expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
+    });
+
+    it('escalate resolution posts the preview for user review', async () => {
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_p4_escalate`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview, posts } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+        evaluatePlanApproval: async () => ({
+          resolution: 'escalate',
+          reason: 'need-review',
+        }),
+      });
+
+      const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+      await flushUntil(
+        () => posts.some((m) => (m as { type: string }).type === 'workflow/planPreview'),
+        50,
+      );
+      handler.handleIncoming({
+        type: 'workflow/planAbort',
+        planId: 'plan_p4_escalate',
+      });
+      await promise;
+      expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
+    });
+
+    it('adapter throw escalates to user (never silent accept/reject)', async () => {
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_p4_throw`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview, posts } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+        evaluatePlanApproval: async () => {
+          throw new Error('adapter boom');
+        },
+      });
+
+      const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
+      await flushUntil(
+        () => posts.some((m) => (m as { type: string }).type === 'workflow/planPreview'),
+        50,
+      );
+      handler.handleIncoming({
+        type: 'workflow/planAbort',
+        planId: 'plan_p4_throw',
+      });
+      await promise;
+      expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
+    });
+
+    it('legacy threshold still works when no adapter is supplied', async () => {
+      // Regression check — the pre-P4 fast-path (confidence >= threshold)
+      // remains intact for call sites that don't wire the adapter yet.
+      const planFactory = (level: Workflow.RouteLevel) =>
+        buildPlan(`plan_legacy`, buildRoute(level));
+      const orchestrator = makeOrchestrator({ planFactory });
+      const { webview, posts } = makeWebview();
+      const handler = new WorkflowPlanHandler({
+        orchestrator,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getWebview: () => webview as any,
+      });
+      const result = await handler.presentAndDispatch({
+        input: { kind: 'prompt', text: 'hi' },
+        autoApproveThreshold: 0.5,
+      });
+      expect(result.result?.handle.id).toBe('pipe_x');
+      expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
+      const preview = posts.find(
+        (m: unknown) => (m as { type: string }).type === 'workflow/planPreview',
+      );
+      expect(preview).toBeUndefined();
+    });
+  });
 });
