@@ -39,3 +39,9 @@ export {
   type QualityGateThresholds,
   type QualityVerdict,
 } from './adapters/quality-gate-approval-adapter';
+export {
+  createPlanReviewApprovalAdapter,
+  type PlanReviewApprovalAdapterDeps,
+  type PlanReviewApprovalRequest,
+  type PlanReviewPlanSummary,
+} from './adapters/plan-review-approval-adapter';
