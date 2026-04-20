@@ -634,6 +634,70 @@ Subagent **不是独立的业务 Agent**，而是**上下文隔离的临时工**
 | 日期       | 变更                                                           | 作者              |
 | ---------- | -------------------------------------------------------------- | ----------------- |
 | 2026-04-20 | 初版 Proposed，整合双流架构 + 术语体系 + Skill 切换 + GAP 分析 | Architecture Team |
+| 2026-04-20 | v2 ReAct 编排化修订：原语能力池 + L2 模式激活 + §3 重写        | Architecture Team |
+| 2026-04-20 | P1–P5 全部 epic 落地（20 commits）；三通道 ApprovalEngine live | Implementation    |
+
+---
+
+## 15. 实施进度（Implementation Status）
+
+v2 计划（`~/.claude/plans/idempotent-splashing-puddle.md`）的 **全部 P-级 epic** 已交付并接入。
+
+### 15.1 Epic 完成矩阵
+
+| Epic                 | 代码状态 | 真 live 消费者                                                         |
+| -------------------- | -------- | ---------------------------------------------------------------------- |
+| P1 Skill 双流        | ✅       | `FlowSwitcher` + 3 persona skills（creation / execution / iteration）  |
+| P1.5 激活规划器      | ✅       | 每轮 `plan(mode, flow, taskShape, lastObserveHint)` 由 runner 调用     |
+| P1.6 ReAct 编排器    | ✅       | `react-loop-runner` ExecutorHooks，AgentSession 自动注入               |
+| P2 W4 改名           | ✅       | `pipeline/` → `workflow/`（52 文件，含 identifiers + subpath）         |
+| P2 W5 数据模型       | ✅       | `WorkflowRun` + `TodoList` + `creation-events` / `execution-events`    |
+| P2 W6 原语抽象       | ✅       | `apply-primitive` + `TOOL_NAMES_{CREATION,EXECUTION}` 命名空间         |
+| P3 五级自愈链        | ✅       | `AutohealChain` 接 runner `afterAct`，事件经 EventBus 发出             |
+| P4 Approval 统一     | ✅       | 三通道 live（Permission / QualityGate / PlanReview）                   |
+| P5 EventBus + Memory | ✅       | EventBus + SharedMemoryStore + MilestoneTracker + ProgressNarrator     |
+
+### 15.2 关键模块位置
+
+| 模块                       | 路径                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| FlowSwitcher + Binding     | `packages/neko-agent/packages/agent/src/skill/flow-*.ts`                        |
+| 激活规划器 + DAG           | `packages/neko-agent/packages/agent/src/skill/activation/`                      |
+| ReAct runner + 调度器      | `packages/neko-agent/packages/agent/src/executor/react-loop-runner.ts` 等       |
+| AutohealChain              | `packages/neko-agent/packages/agent/src/autoheal/`                              |
+| ApprovalEngine + 三适配器  | `packages/neko-agent/packages/agent/src/approval/`                              |
+| EventBus                   | `packages/neko-agent/packages/agent/src/events/event-bus.ts`                    |
+| SharedMemoryStore          | `packages/neko-agent/packages/agent/src/memory/shared-memory-store.ts`          |
+| Narrator + Tracker         | `packages/neko-agent/packages/agent/src/narrator/`                              |
+| 三 persona skills          | `packages/neko-agent/packages/agent/src/skill/builtins/{creation,execution,iteration}-flow.ts` |
+| QualityGate stage 接入     | `packages/neko-agent/packages/agent/src/workflow/stages/quality-gate.ts`        |
+| PlanReviewSession 接入     | `packages/neko-agent/packages/extension/src/workflow/plan-review-session.ts`    |
+| Extension activation glue  | `packages/neko-agent/packages/extension/src/index.ts`（engine 单例）            |
+
+### 15.3 测试基线
+
+- 148 / 149 test files pass
+- 2 276 / 2 281 tests pass（5 个失败是 pre-existing `fileOperationHandler.test.ts` 既有基线，与本次工作无关）
+- 全量 `pnpm build` 29 / 29 green
+
+### 15.4 设计保留项（明确未做）
+
+| 项目                                   | 理由                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| AgentSession engine 与 extension 单例共享 | lifecycle 差异大（per-turn vs 常驻）；策略包相同 ⇒ 决策一致，先放着               |
+| workflow 车道接入 FlowSwitcher         | 当前 `getFlowKind: () => 'creation'` 硬编码；Plan Review + QualityGate 永远在外环 |
+| L4 RecoverySubagent 真实实现           | AutohealChain 已留注入点，等 Q3 RecoverySubagent 合并交付（R1）                   |
+| Iteration Skill 的 partialRerun 工具   | Skill 就绪，但 `PipelineAction.partialRerun` 真实体属于 Q3                        |
+| 感知工具 (Q2) / Puppet/Model (Q4)      | perception-first ADR 的独立 epic                                                  |
+
+### 15.5 下一步
+
+按 `plan v2` 关键路径，余下大块：
+
+1. **Q3** PipelineAction + partialRerun（激活 Iteration Skill 真实使用路径，纯 TS，2–3w）
+2. **Q2** 感知工具骨架（Rust `perception.rs` + 12 TS tools，3w，跨栈）
+3. **Q4** Puppet/Model Operations（27 工具 + export adapters，12w）
+4. **2027Q1** neko-comic + flowC + Motion（4w+）
 
 ---
 
