@@ -31,6 +31,8 @@ import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
+import type { IApprovalEngine } from '../approval';
+import { createApprovalEngine, executionStrategyPack, creationStrategyPack } from '../approval';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -125,6 +127,10 @@ export class AgentSession implements IAgentSession {
   // Dual-flow (P3 ↔ P1.6 wiring): 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
 
+  // Dual-flow (P4 wiring): unified approval engine — permission channel
+  // consults it before delegating to the user onConfirmTool callback.
+  private _approvalEngine: IApprovalEngine | null = null;
+
   // Meta tools (for ISkillProvider wiring)
   private _metaTools: Tool[] = [];
 
@@ -198,9 +204,14 @@ export class AgentSession implements IAgentSession {
       // P5: wire the EventBus so the runner emits compacted round events.
       // P3: autoheal chain routes tool errors through L1-L5 — the chain
       // itself emits execution.autoheal.* on the same bus.
+      // P4: approval engine pre-filters ask-mode tool calls via strategy
+      // packs before the user's onConfirmTool is invoked.
       this._runStore = createWorkflowRunStore();
       this._eventBus = createEventBus();
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
+      this._approvalEngine = createApprovalEngine({
+        strategyPacks: [creationStrategyPack, executionStrategyPack],
+      });
       const { hooks, state } = createReActLoopRunner({
         flowSwitcher: this._flowSwitcher,
         runStore: this._runStore,
@@ -590,6 +601,15 @@ export class AgentSession implements IAgentSession {
     return this._eventBus;
   }
 
+  /**
+   * Shared ApprovalEngine — permission, plan-review, and quality-gate
+   * channels consult it. Callers may register custom strategy packs
+   * or set a user prompt. Returns null if dual-flow is not configured.
+   */
+  getApprovalEngine(): IApprovalEngine | null {
+    return this._approvalEngine;
+  }
+
   clearHistory(): void {
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
@@ -643,6 +663,7 @@ export class AgentSession implements IAgentSession {
     this._eventBus?.clear();
     this._eventBus = null;
     this._autohealChain = null;
+    this._approvalEngine = null;
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.request.confirmationToken && this._permissionHooks) {
@@ -711,18 +732,71 @@ export class AgentSession implements IAgentSession {
     // Store pending confirmation (resolve is handled by onConfirmTool callback)
     this._pendingConfirmations.set(toolCallId, { request });
 
-    // Call user callback if provided
-    if (this._config.onConfirmTool) {
-      this._config
-        .onConfirmTool(request)
-        .then((approved) => {
-          this.confirmTool(toolCallId, approved);
-        })
-        .catch((err) => {
-          // Deny on error and clean up pending state
-          this.confirmTool(toolCallId, false);
-          logger.error('Tool confirmation failed', { error: err });
+    void this._resolveToolConfirmation(request);
+  }
+
+  /**
+   * Resolve a tool confirmation request. When the approval engine is
+   * live (dualFlow configured), consult it first; only fall through to
+   * the user's onConfirmTool callback on 'escalate' or no-decision
+   * cases where a user prompt is still warranted.
+   */
+  private async _resolveToolConfirmation(request: ToolConfirmationRequest): Promise<void> {
+    const toolCallId = request.toolCall.id;
+
+    // P4: consult the approval engine if dualFlow is wired.
+    if (this._approvalEngine && this._flowSwitcher) {
+      try {
+        const decision = await this._approvalEngine.evaluate({
+          channel: 'permission',
+          flow: this._flowSwitcher.kind,
+          subject: {
+            label: request.description ?? request.toolCall.name,
+            kind: `tool:${request.toolCall.name}`,
+          },
+          context: {
+            arguments: request.toolCall.arguments,
+            toolCallId,
+          },
+          id: request.confirmationToken ?? `${toolCallId}-${Date.now()}`,
+          at: Date.now(),
         });
+        if (decision.resolution === 'auto-accept' || decision.resolution === 'user-accept') {
+          this.confirmTool(toolCallId, true);
+          return;
+        }
+        if (decision.resolution === 'auto-reject' || decision.resolution === 'user-reject') {
+          // 'no-decision' lands here. Skip the user prompt — the engine's
+          // contract is that no-decision = reject. Sites that want the
+          // user asked anyway can wire an onConfirmTool AND register a
+          // pack that escalates explicitly.
+          if (decision.reason !== 'no-decision') {
+            this.confirmTool(toolCallId, false);
+            return;
+          }
+          // Fall through to user prompt when no pack decided — safer
+          // default than a silent auto-reject for destructive operations.
+        }
+        // 'escalate' → user prompt.
+      } catch (err) {
+        logger.warn('Approval engine threw; falling back to user onConfirmTool', {
+          error: err,
+        });
+      }
+    }
+
+    // Fallback: existing user callback path.
+    if (!this._config.onConfirmTool) {
+      // No user prompt + no decisive engine answer → safe default: reject.
+      this.confirmTool(toolCallId, false);
+      return;
+    }
+    try {
+      const approved = await this._config.onConfirmTool(request);
+      this.confirmTool(toolCallId, approved);
+    } catch (err) {
+      this.confirmTool(toolCallId, false);
+      logger.error('Tool confirmation failed', { error: err });
     }
   }
 }

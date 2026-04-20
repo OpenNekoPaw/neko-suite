@@ -24,3 +24,9 @@ export type {
 
 export { creationStrategyPack } from './strategies/creation-strategy-pack';
 export { executionStrategyPack } from './strategies/execution-strategy-pack';
+
+// Adapters bridging existing channels into the engine.
+export {
+  createPermissionApprovalAdapter,
+  type PermissionApprovalAdapterDeps,
+} from './adapters/permission-approval-adapter';
