@@ -37,6 +37,12 @@ import {
   type Orchestrator,
 } from './workflow/orchestrator-bootstrap';
 import { WorkflowPlanHandler } from './workflow/workflow-plan-handler';
+import {
+  createApprovalEngine,
+  creationStrategyPack,
+  executionStrategyPack,
+  createPlanReviewApprovalAdapter,
+} from '@neko/agent/approval';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
@@ -164,10 +170,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register tools from other Neko extensions
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
 
+  // P4 — extension-scoped ApprovalEngine shared across the workflow
+  // lane (QualityGate + Plan Review). AgentSession instances in the AI
+  // lane still build their own private engine with the same strategy
+  // packs; the two lanes don't share state today, but they share
+  // policy (strategy packs) so decisions stay consistent.
+  //
+  // Flow accessor is pinned to 'creation' here because the workflow
+  // lane (Plan Review + QualityGate) always runs on the outer ring.
+  // When the AI lane wires its own FlowSwitcher into its session the
+  // engine it sees is separate (per-session) and reads live flow.
+  const approvalEngine = createApprovalEngine({
+    strategyPacks: [creationStrategyPack, executionStrategyPack],
+  });
+  const planReviewAdapter = createPlanReviewApprovalAdapter({ engine: approvalEngine });
+
   // Initialize Pipeline orchestration layer (L2)
   const pipelineBootstrap = bootstrapWorkflow(
     bootstrapResult.platform,
     bootstrapResult.toolRegistry,
+    {
+      approval: {
+        engine: approvalEngine,
+        getFlowKind: () => 'creation',
+      },
+    },
   );
 
   // Initialize Workflow Orchestrator (Phase 1 MVP — see
@@ -207,6 +234,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const workflowPlanHandler = new WorkflowPlanHandler({
     orchestrator,
     getWebview: () => chatViewProvider.webview,
+    // P4 — route auto-approve through the unified ApprovalEngine.
+    evaluatePlanApproval: planReviewAdapter,
   });
   chatViewProvider.setWorkflowPlanHandler(workflowPlanHandler);
   context.subscriptions.push({
