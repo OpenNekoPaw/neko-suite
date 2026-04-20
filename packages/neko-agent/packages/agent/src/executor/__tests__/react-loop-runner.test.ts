@@ -8,12 +8,13 @@
  * - onExecuteEnd closes the run with completed/failed status
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentContext, AgentResult, ToolResultWithMeta } from '@neko/shared';
 import type { ToolCallInfo } from '@neko/shared';
 import { FlowSwitcher } from '../../skill/flow-switcher';
 import { createWorkflowRunStore } from '../workflow-run-store';
 import { createReActLoopRunner } from '../react-loop-runner';
+import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
 
 function ctx(iteration: number): AgentContext {
   return { messages: [], iteration, metadata: {} } as unknown as AgentContext;
@@ -163,5 +164,66 @@ describe('ReActLoopRunner hooks', () => {
     // Dummy — ensures the test file compiles with the shared type import.
     const _probe: ToolCallInfo | undefined = undefined;
     expect(_probe).toBeUndefined();
+  });
+
+  describe('EventBus integration (P5)', () => {
+    it('emits execution.round.activation.decided per round when a bus is supplied', async () => {
+      const bus = createEventBus();
+      const onRound = vi.fn();
+      bus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, onRound);
+
+      const { hooks } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+        now: () => 777,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await hooks.beforeThink?.(ctx(1));
+
+      expect(onRound).toHaveBeenCalledTimes(1);
+      const emitted = onRound.mock.calls[0][0];
+      expect(emitted.channel).toBe(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED);
+      expect(emitted.summary.round).toBe(0);
+      expect(emitted.summary.activatedPrimitives.length).toBeGreaterThan(0);
+      expect(emitted.runId).toBe(store.getActive()!.id);
+    });
+
+    it('emits creation.run.ended on onExecuteEnd', async () => {
+      const bus = createEventBus();
+      const onEnd = vi.fn();
+      bus.on(CREATION_CHANNELS.RUN_ENDED, onEnd);
+
+      const { hooks } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      const result: AgentResult = {
+        success: false,
+        response: 'bad',
+        steps: [],
+        iterations: 1,
+        error: new Error('x'),
+        timing: { startTime: 0, endTime: 1, duration: 1 },
+      };
+      await hooks.onExecuteEnd?.(result);
+
+      expect(onEnd).toHaveBeenCalledTimes(1);
+      expect(onEnd.mock.calls[0][0].status).toBe('failed');
+    });
+
+    it('no bus → no emission + no errors', async () => {
+      // Identical to the happy-path test above but without a bus.
+      const { hooks } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await expect(hooks.beforeThink?.(ctx(1))).resolves.not.toThrow();
+    });
   });
 });

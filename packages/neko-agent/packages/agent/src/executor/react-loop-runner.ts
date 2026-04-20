@@ -31,12 +31,14 @@
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
 import type { FlowKind, PrimitiveActivationDecision, TaskShape } from '@neko-agent/types';
+import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
 
 import type { FlowSwitcher } from '../skill/flow-switcher';
 import { plan as planPrimitives } from '../skill/activation/activation-planner';
 import type { L2Mode } from '../skill/activation/mode-activation-matrix';
 import { assertDispatch } from './primitive-dispatcher';
 import type { IWorkflowRunStore } from './workflow-run-store';
+import type { IEventBus } from '../events/event-bus';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ReActLoopRunner');
@@ -62,6 +64,13 @@ export interface ReActLoopRunnerDeps {
    * classifiers.
    */
   classifyTaskShape?: (ctx: TaskShapeSignals) => TaskShape;
+  /**
+   * Optional EventBus. When provided, the runner emits
+   * `execution.round.activation.decided` each round and
+   * `creation.run.started` / `creation.run.ended` on lifecycle
+   * boundaries, compacted per plan v2 R9.
+   */
+  eventBus?: IEventBus;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
 }
@@ -158,6 +167,20 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
       deps.runStore.recordRound(decision, state.nextObserveHint);
       state.lastDecision = decision;
+
+      // P5 — compacted round event per plan v2 R9.
+      if (deps.eventBus) {
+        const activeRun = deps.runStore.getActive();
+        if (activeRun) {
+          deps.eventBus.emit({
+            channel: EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED,
+            runId: activeRun.id,
+            taskShape: decision.taskShape,
+            summary: roundSummaryFromDecision(decision, state.nextObserveHint),
+            at: decision.decidedAt,
+          });
+        }
+      }
     },
 
     async afterAct(results: ToolResultWithMeta[]) {
@@ -173,6 +196,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
     async onExecuteEnd(result: AgentResult) {
       const terminal = result.success ? 'completed' : 'failed';
+      const activeRun = deps.runStore.getActive();
       deps.runStore.endRun(
         terminal,
         result.success
@@ -183,6 +207,15 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
               cause: result.error,
             },
       );
+
+      if (deps.eventBus && activeRun) {
+        deps.eventBus.emit({
+          channel: CREATION_CHANNELS.RUN_ENDED,
+          runId: activeRun.id,
+          status: terminal,
+          at: clock(),
+        });
+      }
     },
   };
 

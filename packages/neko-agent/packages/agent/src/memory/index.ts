@@ -26,3 +26,13 @@ export type { MemoryRecallOptions, RecalledMemory } from './memory-recall';
 // Creative memory hooks (auto recall + extraction)
 export { CreativeMemoryHooks } from './creative-memory-hooks';
 export type { CreativeMemoryHooksOptions } from './creative-memory-hooks';
+
+// Shared memory store (P5 — cross-ring scratchpad for dual-flow)
+export {
+  createSharedMemoryStore,
+  type ISharedMemoryStore,
+  type SharedMemoryStoreConfig,
+  type MemoryScope,
+  type MemoryEntry,
+  type MemoryListener,
+} from './shared-memory-store';
