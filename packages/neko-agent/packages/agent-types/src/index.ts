@@ -93,6 +93,47 @@ export type {
   TaskShape,
 } from './primitive';
 
+// TodoList primitive (P2 W5 — downshifted L1 primitive)
+export type { TodoStatus, TodoStatusCamel, TodoItem, TodoList } from './todo-list';
+export { toTodoStatusCamel, toTodoStatusSnake } from './todo-list';
+
+// WorkflowRun (P2 W5 — run record carrying primitive activation summaries)
+export type { WorkflowRunStatus, WorkflowRunRoundSummary, WorkflowRun } from './workflow-run';
+export { roundSummaryFromDecision } from './workflow-run';
+
+// Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
+export type {
+  CreationChannel,
+  CreationEvent,
+  CreationRunStartedEvent,
+  CreationMilestoneEvent,
+  CreationProposalPresentedEvent,
+  CreationReviewDecidedEvent,
+  CreationStatusUpdatedEvent,
+  CreationRunEndedEvent,
+  ReviewDecision,
+} from './creation-events';
+export { CREATION_CHANNELS } from './creation-events';
+
+export type {
+  ExecutionChannel,
+  ExecutionEvent,
+  ExecutionRoundActivationDecidedEvent,
+  ExecutionPlanProducedEvent,
+  ExecutionTodoUpdatedEvent,
+  ExecutionApproveDecidedEvent,
+  ExecutionApplyCommittedEvent,
+  ExecutionStepCompletedEvent,
+  ExecutionAutohealEvent,
+  ExecutionAutohealL1RetryEvent,
+  ExecutionAutohealL2DegradeEvent,
+  ExecutionAutohealL3SubstituteEvent,
+  ExecutionAutohealL4TriggeredEvent,
+  ExecutionAutohealL5EscalatedEvent,
+  ExecutionQualityEvaluatedEvent,
+} from './execution-events';
+export { EXECUTION_CHANNELS } from './execution-events';
+
 // UI types
 export type {
   ConversationSummary,
