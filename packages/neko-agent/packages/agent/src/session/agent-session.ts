@@ -29,6 +29,8 @@ import type { IWorkflowRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createWorkflowRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
+import type { IAutohealChain } from '../autoheal';
+import { createAutohealChain } from '../autoheal';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -120,6 +122,9 @@ export class AgentSession implements IAgentSession {
   // Dual-flow (P5): typed event bus for creation.* / execution.* channels.
   private _eventBus: IEventBus | null = null;
 
+  // Dual-flow (P3 ↔ P1.6 wiring): 5-level autoheal chain fed by afterAct.
+  private _autohealChain: IAutohealChain | null = null;
+
   // Meta tools (for ISkillProvider wiring)
   private _metaTools: Tool[] = [];
 
@@ -191,13 +196,17 @@ export class AgentSession implements IAgentSession {
 
       // P1.6: install ReAct-loop primitive-activation runner.
       // P5: wire the EventBus so the runner emits compacted round events.
+      // P3: autoheal chain routes tool errors through L1-L5 — the chain
+      // itself emits execution.autoheal.* on the same bus.
       this._runStore = createWorkflowRunStore();
       this._eventBus = createEventBus();
+      this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       const { hooks, state } = createReActLoopRunner({
         flowSwitcher: this._flowSwitcher,
         runStore: this._runStore,
         getMode: () => this._executionMode as L2Mode,
         eventBus: this._eventBus,
+        autohealChain: this._autohealChain,
       });
       this._runnerHooks = hooks;
       this._reactRunnerState = state;
@@ -633,6 +642,7 @@ export class AgentSession implements IAgentSession {
     this._runnerHooks = null;
     this._eventBus?.clear();
     this._eventBus = null;
+    this._autohealChain = null;
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.request.confirmationToken && this._permissionHooks) {

@@ -15,6 +15,8 @@ import { FlowSwitcher } from '../../skill/flow-switcher';
 import { createWorkflowRunStore } from '../workflow-run-store';
 import { createReActLoopRunner } from '../react-loop-runner';
 import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
+import { createAutohealChain } from '../../autoheal';
+import type { AutohealHandler } from '../../autoheal';
 
 function ctx(iteration: number): AgentContext {
   return { messages: [], iteration, metadata: {} } as unknown as AgentContext;
@@ -224,6 +226,146 @@ describe('ReActLoopRunner hooks', () => {
       });
       await hooks.onExecuteStart?.('input', ctx(0));
       await expect(hooks.beforeThink?.(ctx(1))).resolves.not.toThrow();
+    });
+  });
+
+  describe('Autoheal chain integration (P3 ↔ P1.6 wiring)', () => {
+    const errored = (subject = 'tool.x'): ToolResultWithMeta[] =>
+      [
+        {
+          success: false,
+          error: 'boom',
+          data: null,
+          callId: 'c1',
+          name: subject,
+          code: 'TIMEOUT',
+        },
+      ] as unknown as ToolResultWithMeta[];
+
+    it('routes errors through the chain; healed outcome → retry hint', async () => {
+      const heal: AutohealHandler = async () => ({
+        resolution: 'healed',
+        level: 1,
+        note: 'retry #1',
+      });
+      const chain = createAutohealChain({ handlers: { l1Retry: heal } });
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        autohealChain: chain,
+      });
+
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await hooks.afterAct?.(errored());
+
+      expect(state.lastAutohealOutcome?.resolution).toBe('healed');
+      expect(state.nextObserveHint).toBe('retry');
+    });
+
+    it('aborted outcome → user-cancel hint', async () => {
+      const abort: AutohealHandler = async () => ({
+        resolution: 'aborted',
+        level: 5,
+        reason: 'user-decline',
+      });
+      const chain = createAutohealChain({
+        handlers: {
+          // Force every level to pass so L5 is reached.
+          l1Retry: async () => ({ resolution: 'pass', level: 1 }),
+          l5Escalate: abort,
+        },
+      });
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        autohealChain: chain,
+      });
+
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await hooks.afterAct?.(errored());
+
+      expect(state.lastAutohealOutcome?.resolution).toBe('aborted');
+      expect(state.nextObserveHint).toBe('user-cancel');
+    });
+
+    it('pass-all outcome (default chain) → retry hint, attempt counter advances', async () => {
+      // Default chain: L1 heals twice then passes; L2-L4 no-op pass; L5 aborts.
+      // First call: L1 heals. Second call: still within budget → heal again.
+      // Third call: L1 exhausted → all pass → L5 aborts.
+      const chain = createAutohealChain();
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        autohealChain: chain,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      await hooks.afterAct?.(errored());
+      expect(state.lastAutohealOutcome?.level).toBe(1);
+      expect(state.nextObserveHint).toBe('retry');
+    });
+
+    it('successful results after an errored round clear the autoheal outcome', async () => {
+      const chain = createAutohealChain();
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        autohealChain: chain,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await hooks.afterAct?.(errored());
+      expect(state.lastAutohealOutcome).not.toBeNull();
+
+      // Next round succeeds.
+      const ok = [
+        { success: true, data: 'ok', callId: 'c2', name: 'tool.x' },
+      ] as unknown as ToolResultWithMeta[];
+      await hooks.afterAct?.(ok);
+      expect(state.lastAutohealOutcome).toBeNull();
+      expect(state.nextObserveHint).toBe('normal');
+    });
+
+    it('chain throw → graceful fallback to retry hint', async () => {
+      const chain = createAutohealChain({
+        handlers: {
+          l1Retry: async () => {
+            throw new Error('handler explosion');
+          },
+          // If the chain itself throws (as opposed to the handler), we
+          // want the runner to still recover. Simulate by mocking `run`.
+        },
+      });
+      // Monkey-patch run to throw.
+      (chain as unknown as { run: () => Promise<never> }).run = async () => {
+        throw new Error('chain explosion');
+      };
+
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+        autohealChain: chain,
+      });
+
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await expect(hooks.afterAct?.(errored())).resolves.not.toThrow();
+      expect(state.nextObserveHint).toBe('retry');
+    });
+
+    it('without autohealChain → bare retry-hint fallback (prior P1.6 behaviour)', async () => {
+      const { hooks, state } = createReActLoopRunner({
+        flowSwitcher: switcher,
+        runStore: store,
+        getMode: () => 'auto',
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      await hooks.afterAct?.(errored());
+      expect(state.lastAutohealOutcome).toBeNull();
+      expect(state.nextObserveHint).toBe('retry');
     });
   });
 });

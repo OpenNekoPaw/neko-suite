@@ -39,6 +39,7 @@ import type { L2Mode } from '../skill/activation/mode-activation-matrix';
 import { assertDispatch } from './primitive-dispatcher';
 import type { IWorkflowRunStore } from './workflow-run-store';
 import type { IEventBus } from '../events/event-bus';
+import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ReActLoopRunner');
@@ -71,6 +72,15 @@ export interface ReActLoopRunnerDeps {
    * boundaries, compacted per plan v2 R9.
    */
   eventBus?: IEventBus;
+  /**
+   * Optional autoheal chain. When provided, errored tool results in
+   * `afterAct` are routed through the chain so L1-L5 strategies can
+   * decide whether the next round retries (healed), proceeds normally
+   * (all levels passed without a resolution), or aborts (user-cancel).
+   * Without this dep, the runner falls back to the bare retry-hint
+   * behaviour (just flip hint to 'retry' on any tool error).
+   */
+  autohealChain?: IAutohealChain;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
 }
@@ -95,6 +105,8 @@ export interface ReActLoopRunnerState {
   nextObserveHint: 'retry' | 'user-cancel' | 'normal';
   /** Current round counter (0-based). */
   round: number;
+  /** Most recent autoheal outcome for the current subject; null if never fired. */
+  lastAutohealOutcome: AutohealOutcome | null;
 }
 
 // =============================================================================
@@ -121,11 +133,15 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
     lastDecision: null,
     nextObserveHint: 'normal',
     round: 0,
+    lastAutohealOutcome: null,
   };
 
   let lastToolResults: readonly ToolResultWithMeta[] = [];
   let lastHadError = false;
   let lastHadToolCalls = false;
+  // Per-subject retry attempts across rounds so the L1 retry budget holds
+  // when the same tool keeps failing on successive rounds.
+  const subjectAttempts = new Map<string, number>();
 
   const hooks: ExecutorHooks = {
     name: 'react-loop-runner',
@@ -134,9 +150,11 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       state.lastDecision = null;
       state.nextObserveHint = 'normal';
       state.round = 0;
+      state.lastAutohealOutcome = null;
       lastToolResults = [];
       lastHadError = false;
       lastHadToolCalls = false;
+      subjectAttempts.clear();
     },
 
     async beforeThink(_ctx: AgentContext) {
@@ -187,7 +205,54 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       lastToolResults = results;
       lastHadToolCalls = results.length > 0;
       lastHadError = results.some((r) => ('success' in r ? !r.success : false));
-      state.nextObserveHint = lastHadError ? 'retry' : 'normal';
+
+      if (!lastHadError) {
+        state.nextObserveHint = 'normal';
+        state.lastAutohealOutcome = null;
+        return;
+      }
+
+      // Without a chain, fall back to the bare retry hint behaviour (P1.6).
+      if (!deps.autohealChain) {
+        state.nextObserveHint = 'retry';
+        return;
+      }
+
+      // Route the first failure of the batch through the chain. We pick
+      // the first failure deterministically — real multi-failure batches
+      // will be surfaced as individual rounds when the chain heals the
+      // first and the loop re-runs.
+      const failed = results.find((r) => ('success' in r ? !r.success : false));
+      if (!failed) {
+        state.nextObserveHint = 'retry';
+        return;
+      }
+
+      const subject = getSubject(failed);
+      const attempt = subjectAttempts.get(subject) ?? 0;
+      subjectAttempts.set(subject, attempt + 1);
+
+      const errorCode = getErrorCode(failed);
+      const message = getErrorMessage(failed);
+      const runId = deps.runStore.getActive()?.id;
+      try {
+        const outcome = await deps.autohealChain.run(
+          { subject, errorCode, message, attempt, cause: failed },
+          { round: state.round, ...(runId ? { runId } : {}) },
+        );
+        state.lastAutohealOutcome = outcome;
+        state.nextObserveHint = autohealOutcomeToHint(outcome);
+        if (outcome.resolution === 'healed') {
+          // Reset retry budget for this subject — the chain decided we
+          // can try again cleanly with a new plan.
+          subjectAttempts.delete(subject);
+        }
+      } catch (err) {
+        // Chain itself failed — very unusual. Fall back to simple retry
+        // hint and log; do not abort the run.
+        logger.warn(`Autoheal chain threw during afterAct: ${String(err)}`);
+        state.nextObserveHint = 'retry';
+      }
     },
 
     async onIterationComplete(_iteration, _ctx) {
@@ -242,4 +307,65 @@ export function defaultClassifyTaskShape(s: TaskShapeSignals): TaskShape {
   if (s.round === 0) return 'multi-step';
   if (!s.lastHadToolCalls) return 'pure-think';
   return 'multi-step';
+}
+
+// =============================================================================
+// Autoheal helpers
+// =============================================================================
+
+/**
+ * Extract a stable subject string from a ToolResultWithMeta. Tool
+ * results carry their name under `name` by convention; fall back to
+ * 'unknown' when missing so the chain always gets something to key on.
+ */
+function getSubject(result: ToolResultWithMeta): string {
+  const r = result as ToolResultWithMeta & { name?: string };
+  return r.name && r.name.length > 0 ? r.name : 'unknown';
+}
+
+/**
+ * Derive an error code for the autoheal chain. Tool results vary —
+ * some carry a `code`, some a `kind`, some only a freeform error
+ * message. We check in priority order and default to 'TOOL_ERROR'.
+ */
+function getErrorCode(result: ToolResultWithMeta): string {
+  const r = result as ToolResultWithMeta & {
+    code?: string;
+    kind?: string;
+    error?: unknown;
+  };
+  if (typeof r.code === 'string' && r.code.length > 0) return r.code;
+  if (typeof r.kind === 'string' && r.kind.length > 0) return r.kind;
+  return 'TOOL_ERROR';
+}
+
+function getErrorMessage(result: ToolResultWithMeta): string {
+  const r = result as ToolResultWithMeta & {
+    error?: unknown;
+    message?: string;
+  };
+  if (typeof r.message === 'string' && r.message.length > 0) return r.message;
+  const err: unknown = r.error;
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  return 'tool reported failure';
+}
+
+/**
+ * Map an AutohealOutcome to the observe hint consumed by the next
+ * beforeThink:
+ *   - healed  → 'retry'       (next round reuses Plan with the fix)
+ *   - pass    → 'retry'       (nothing fixed it, but loop continues)
+ *   - aborted → 'user-cancel' (chain exited; runner should not retry
+ *                              silently — the classifier may emit a
+ *                              pure-think round instead)
+ */
+function autohealOutcomeToHint(outcome: AutohealOutcome): 'retry' | 'user-cancel' | 'normal' {
+  switch (outcome.resolution) {
+    case 'healed':
+    case 'pass':
+      return 'retry';
+    case 'aborted':
+      return 'user-cancel';
+  }
 }
