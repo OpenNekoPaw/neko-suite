@@ -64,10 +64,24 @@ export {
   comicToStoryboardSkill,
   pipelineRetrySkill,
   qualityAssessmentSkill,
+  // Dual-flow persona skills
+  creationFlowSkill,
+  executionFlowSkill,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
 } from './builtins';
+
+// Flow Switcher (dual-flow architecture)
+export {
+  FlowSwitcher,
+  createFlowSwitcher,
+  skillNameForFlow,
+  CREATION_FLOW_SKILL_NAME,
+  EXECUTION_FLOW_SKILL_NAME,
+  type FlowSwitcherConfig,
+  type FlowTransitionListener,
+} from './flow-switcher';
 
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';

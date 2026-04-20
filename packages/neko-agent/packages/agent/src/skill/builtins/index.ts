@@ -15,6 +15,8 @@ import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
 import { scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
+import { creationFlowSkill } from './creation-flow';
+import { executionFlowSkill } from './execution-flow';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
@@ -23,6 +25,10 @@ export { aiGenerateSkill, aiGenerateToolDefinitions };
 export { comicToStoryboardSkill } from './comic-to-storyboard';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
+
+// Dual-flow persona skills (docs/architecture/dual-flow-architecture.md)
+export { creationFlowSkill } from './creation-flow';
+export { executionFlowSkill } from './execution-flow';
 
 // Re-export ToolGroups
 export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
@@ -701,6 +707,9 @@ When the user says "this scene doesn't look right" or "场景不对":
  * have been removed as they are too generic.
  */
 export const builtinSkills: Skill[] = [
+  // Dual-flow persona (outer ring + inner ring)
+  creationFlowSkill,
+  executionFlowSkill,
   // AI Generation
   aiGenerateSkill,
   sceneToMusicSkill,

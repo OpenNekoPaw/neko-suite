@@ -78,6 +78,21 @@ export { DEFAULT_SETTINGS } from './settings';
 // Agent phase
 export type { AgentPhase, AgentState } from './phase';
 
+// Dual-flow architecture (Creation Flow / Execution Flow)
+export type { FlowKind, FlowTransitionReason, FlowContext, FlowTransitionEvent } from './flow';
+export { DEFAULT_FLOW_CONTEXT } from './flow';
+
+// Primitive pool (P1.5 — activation planner inputs/outputs)
+export type {
+  CreationPrimitive,
+  ExecutionPrimitive,
+  Primitive,
+  PrimitiveSet,
+  PrimitiveActivationDecision,
+  PrimitiveSkipReason,
+  TaskShape,
+} from './primitive';
+
 // UI types
 export type {
   ConversationSummary,
