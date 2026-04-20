@@ -172,6 +172,34 @@ export const TOOL_NAMES_SYSTEM = {
 // Unified TOOL_NAMES — Flat export for convenience
 // =============================================================================
 
+// =============================================================================
+// Dual-Flow — Creation ring tools (P2 W6)
+// =============================================================================
+// Outer-ring tools that operate at the business-semantic layer
+// (Orchestration / Proposal / Review / Execution / Status).
+//
+// Slots are reserved for later sub-packages to fill. Empty is
+// intentional — the namespace is a registration surface, not a
+// pre-populated list.
+
+export const TOOL_NAMES_CREATION = {
+  // Slots reserved for business-layer tools — e.g. 'creation.proposal.compose',
+  // 'creation.review.request', 'creation.status.narrate'. Fill in as
+  // creation-flow persona skills are authored.
+} as const;
+
+// =============================================================================
+// Dual-Flow — Execution ring tools (P2 W6)
+// =============================================================================
+// Inner-ring tools that operate at the technical-semantic layer
+// (Plan / TODO / Approve / Apply / Step).
+
+export const TOOL_NAMES_EXECUTION = {
+  // Slots reserved — e.g. 'execution.plan.produce', 'execution.todo.update',
+  // 'execution.apply.commit'. Fill in as execution-flow machinery comes
+  // online (P3 autoheal, P4 approval, Q3 partialRerun).
+} as const;
+
 /**
  * All registered tool names as a flat constant object.
  * Use individual category objects (TOOL_NAMES_TIMELINE, etc.) for category-scoped access.
@@ -188,6 +216,8 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_ASSETS,
   ...TOOL_NAMES_TRANSCRIBE,
   ...TOOL_NAMES_SYSTEM,
+  ...TOOL_NAMES_CREATION,
+  ...TOOL_NAMES_EXECUTION,
 } as const;
 
 /** Union type of all registered tool name strings */
