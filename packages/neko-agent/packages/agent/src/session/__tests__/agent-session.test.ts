@@ -367,4 +367,113 @@ describe('AgentSession', () => {
       expect(session.getPendingConfirmations()).toEqual([]);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Dual-Flow (W3)
+  // -------------------------------------------------------------------------
+
+  describe('dual-flow', () => {
+    it('without dualFlow config: getFlowKind() returns null', () => {
+      const session = new AgentSession(createConfig());
+      expect(session.getFlowKind()).toBeNull();
+      expect(session.getFlowContext()).toBeNull();
+      expect(session.transitionFlow('execution', 'apply-triggered')).toBe(false);
+    });
+
+    it('with dualFlow config: initial kind is creation and transitions swap persona', async () => {
+      const creation = {
+        name: 'flow-creation',
+        description: 'creation persona',
+        type: 'skill',
+        source: 'builtin',
+        allowedTools: [],
+        content: '# flow-creation',
+      };
+      const execution = {
+        name: 'flow-execution',
+        description: 'execution persona',
+        type: 'skill',
+        source: 'builtin',
+        allowedTools: [],
+        content: '# flow-execution',
+      };
+      const registry = {
+        getSkill: (n: string) =>
+          n === 'flow-creation' ? creation : n === 'flow-execution' ? execution : undefined,
+        listSkills: () => [creation, execution],
+        getSkillByCommand: () => undefined,
+        skillCount: 2,
+      };
+      const applyCalls: string[] = [];
+      const service = {
+        apply: vi.fn(async (s: { name: string }) => {
+          applyCalls.push(s.name);
+          return { name: s.name, systemPrompt: `prompt:${s.name}`, allowedTools: [] };
+        }),
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          dualFlow: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+
+      // Initial sync is fire-and-forget; wait for it.
+      await session.syncFlowPersona();
+
+      expect(session.getFlowKind()).toBe('creation');
+      expect(applyCalls[0]).toBe('flow-creation');
+
+      const changed = session.transitionFlow('execution', 'apply-triggered');
+      expect(changed).toBe(true);
+      await new Promise((r) => setImmediate(r));
+
+      expect(session.getFlowKind()).toBe('execution');
+      expect(applyCalls).toContain('flow-execution');
+      expect(session.getFlowContext()?.reason).toBe('apply-triggered');
+    });
+
+    it('dispose unsubscribes the binding', async () => {
+      const creation = {
+        name: 'flow-creation',
+        description: '',
+        type: 'skill',
+        source: 'builtin',
+        allowedTools: [],
+        content: '',
+      };
+      const registry = {
+        getSkill: (n: string) => (n === 'flow-creation' ? creation : undefined),
+        listSkills: () => [creation],
+        getSkillByCommand: () => undefined,
+        skillCount: 1,
+      };
+      const service = {
+        apply: vi.fn(async (s: { name: string }) => ({
+          name: s.name,
+          systemPrompt: '',
+          allowedTools: [],
+        })),
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          dualFlow: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+      await session.syncFlowPersona();
+
+      session.dispose();
+
+      // After dispose, flow context is null — even transition requests no-op.
+      expect(session.getFlowKind()).toBeNull();
+      expect(session.transitionFlow('execution', 'apply-triggered')).toBe(false);
+    });
+  });
 });

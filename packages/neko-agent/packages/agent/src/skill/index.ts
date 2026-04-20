@@ -83,6 +83,9 @@ export {
   type FlowTransitionListener,
 } from './flow-switcher';
 
+// Flow Binding (FlowSwitcher ↔ Coordinator persona swap)
+export { createFlowBinding, type IFlowBinding, type FlowBindingDeps } from './flow-binding';
+
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';
 

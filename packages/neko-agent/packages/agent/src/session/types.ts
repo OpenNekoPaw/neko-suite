@@ -167,6 +167,26 @@ export interface AgentSessionConfig {
    * Without this, auto mode unconditionally allows (backward compatible).
    */
   traitsRegistry?: ToolTraitsRegistry;
+
+  /**
+   * Dual-flow architecture binding (W3 of dual-flow plan).
+   *
+   * When provided, AgentSession maintains a FlowSwitcher and auto-applies
+   * the matching persona Skill (`flow-creation` / `flow-execution`) via the
+   * injection coordinator on every transition.
+   *
+   * Both `skillRegistry` and `skillService` must be supplied together — the
+   * binding needs the registry to resolve the persona Skill by name and the
+   * service to prepare the SkillInjection payload. Omitted = dual-flow is
+   * dormant, preserving pre-P1 session behaviour for callers that don't
+   * use the skill system.
+   */
+  dualFlow?: {
+    skillRegistry: import('@neko/shared').ISkillRegistry;
+    skillService: import('../skill/skill-service').SkillService;
+    /** Initial flow kind (default: 'creation'). */
+    initialKind?: import('@neko-agent/types').FlowKind;
+  };
 }
 
 // =============================================================================

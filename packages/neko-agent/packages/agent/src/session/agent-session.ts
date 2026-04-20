@@ -16,8 +16,9 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type { SkillInjection } from '../skill';
-import { SkillInjectionCoordinator } from '../skill';
+import type { FlowKind, FlowContext } from '@neko-agent/types';
+import type { SkillInjection, IFlowBinding } from '../skill';
+import { SkillInjectionCoordinator, FlowSwitcher, createFlowBinding } from '../skill';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -97,6 +98,10 @@ export class AgentSession implements IAgentSession {
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
 
+  // Dual-flow (W3): optional FlowSwitcher + auto-swap binding.
+  private _flowSwitcher: FlowSwitcher | null = null;
+  private _flowBinding: IFlowBinding | null = null;
+
   // Meta tools (for ISkillProvider wiring)
   private _metaTools: Tool[] = [];
 
@@ -151,6 +156,21 @@ export class AgentSession implements IAgentSession {
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
     });
+
+    // Dual-flow binding: when the caller supplies a skill registry + service,
+    // spin up a FlowSwitcher and auto-swap the persona Skill on each
+    // transition. The initial persona sync is async; fire-and-forget here —
+    // callers that need determinism should call syncInitialPersona() directly.
+    if (config.dualFlow) {
+      this._flowSwitcher = new FlowSwitcher({ initialKind: config.dualFlow.initialKind });
+      this._flowBinding = createFlowBinding({
+        flowSwitcher: this._flowSwitcher,
+        skillRegistry: config.dualFlow.skillRegistry,
+        skillService: config.dualFlow.skillService,
+        coordinator: this._skillCoordinator,
+      });
+      void this._flowBinding.syncInitial();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -447,6 +467,47 @@ export class AgentSession implements IAgentSession {
     return this._skillCoordinator.isToolAllowed(toolName);
   }
 
+  // ---------------------------------------------------------------------------
+  // Dual-Flow (W3)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Current flow kind, or null if dual-flow was not configured.
+   */
+  getFlowKind(): FlowKind | null {
+    return this._flowSwitcher?.kind ?? null;
+  }
+
+  /**
+   * Full flow context (kind + enteredAt + reason) if dual-flow is configured.
+   */
+  getFlowContext(): FlowContext | null {
+    return this._flowSwitcher?.context ?? null;
+  }
+
+  /**
+   * Explicitly apply the persona Skill for the current flow. Useful for
+   * tests and for callers that need deterministic initialization (the
+   * constructor fires this as a background task).
+   */
+  async syncFlowPersona(): Promise<void> {
+    if (this._flowBinding) {
+      await this._flowBinding.syncInitial();
+    }
+  }
+
+  /**
+   * Transition the current flow. No-op if dual-flow is not configured, or
+   * if already in the target kind.
+   */
+  transitionFlow(
+    target: FlowKind,
+    reason: import('@neko-agent/types').FlowTransitionReason,
+  ): boolean {
+    if (!this._flowSwitcher) return false;
+    return this._flowSwitcher.transitionTo(target, reason);
+  }
+
   clearHistory(): void {
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
@@ -489,6 +550,11 @@ export class AgentSession implements IAgentSession {
     this._isRunning = false;
     // Flush journal writer
     void this._journalWriter?.dispose();
+    // Dual-flow: unsubscribe binding listener + clear switcher listeners.
+    this._flowBinding?.dispose();
+    this._flowSwitcher?.dispose();
+    this._flowBinding = null;
+    this._flowSwitcher = null;
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.request.confirmationToken && this._permissionHooks) {
