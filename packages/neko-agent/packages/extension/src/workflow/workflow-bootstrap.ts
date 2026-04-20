@@ -24,8 +24,15 @@ import {
   type FlowId,
   type WorkflowHandle,
   type MediaGenerateOptions,
+  type QualityGateStageDeps,
 } from '@neko/agent/workflow';
 import { createConsistencyEvaluator } from '@neko/agent/validation';
+import {
+  createQualityGateApprovalAdapter,
+  type IApprovalEngine,
+  type QualityGateThresholds,
+} from '@neko/agent/approval';
+import type { FlowKind } from '@neko-agent/types';
 import { createWorkflowTools } from '../tools/pipelineTools';
 import { createQualityCheckTools } from '../tools/qualityCheckTools';
 import { createConsistencyCheckTools } from '../tools/consistencyCheckTools';
@@ -58,14 +65,38 @@ export interface WorkflowBootstrapResult {
 }
 
 /**
+ * Optional P4 hookup — lets the QualityGate stage route consistency
+ * reports through the unified ApprovalEngine.  When both
+ * `approvalEngine` and `getFlowKind` are provided, the stage will
+ * consult the engine after each ConsistencyEvaluator run and publish
+ * the resulting decision onto `ctx.qualityDecision`.
+ */
+export interface WorkflowApprovalHookup {
+  engine: IApprovalEngine;
+  /** Live accessor for the current flow — reads the AgentSession switcher. */
+  getFlowKind: () => FlowKind;
+  /** Optional runId accessor for correlation. */
+  getRunId?: () => string | undefined;
+  /** Optional threshold overrides (default 80 pass / 60 warn). */
+  thresholds?: QualityGateThresholds;
+}
+
+export interface WorkflowBootstrapOptions {
+  /** Optional approval hookup for QualityGate (and future stages). */
+  approval?: WorkflowApprovalHookup;
+}
+
+/**
  * Initialize the Pipeline orchestration layer
  *
  * @param platform - Platform instance for media generation
  * @param toolRegistry - Tool registry to register pipeline tools
+ * @param options - Optional wiring (e.g. ApprovalEngine hookup)
  */
 export function bootstrapWorkflow(
   platform: Platform,
   toolRegistry: { register: (tool: unknown) => void },
+  options: WorkflowBootstrapOptions = {},
 ): WorkflowBootstrapResult {
   // Create core infrastructure
   const hookRegistry = createWorkflowHookRegistry();
@@ -177,17 +208,29 @@ export function bootstrapWorkflow(
   registry.registerStage(createArrangeOnTimelineStage({ timelineArranger }));
 
   // Register quality gate stage (opt-in via stageParams.qualityGate.enabled)
-  registry.registerStage(
-    createQualityGateStage({
-      evaluateConsistency: async (inputs, globalStyle) => {
-        const evaluator = createConsistencyEvaluator({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
-          createService: () => platform.createService() as any,
-        });
-        return evaluator.evaluate(inputs, { globalStyle });
-      },
-    }),
-  );
+  // When an ApprovalEngine hookup is supplied, the stage also routes the
+  // ConsistencyReport through the unified engine and surfaces the
+  // decision on ctx.qualityDecision for downstream Gate preview / UI.
+  const qualityGateDeps: QualityGateStageDeps = {
+    evaluateConsistency: async (inputs, globalStyle) => {
+      const evaluator = createConsistencyEvaluator({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-package type boundary
+        createService: () => platform.createService() as any,
+      });
+      return evaluator.evaluate(inputs, { globalStyle });
+    },
+  };
+  if (options.approval) {
+    qualityGateDeps.evaluateApproval = createQualityGateApprovalAdapter({
+      engine: options.approval.engine,
+      getFlow: options.approval.getFlowKind,
+      ...(options.approval.thresholds ? { thresholds: options.approval.thresholds } : {}),
+    });
+    if (options.approval.getRunId) {
+      qualityGateDeps.getRunId = options.approval.getRunId;
+    }
+  }
+  registry.registerStage(createQualityGateStage(qualityGateDeps));
 
   // Create the startPipeline function for pipeline tools
   const startPipeline = (

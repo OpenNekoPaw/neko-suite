@@ -8,6 +8,7 @@
     "./workflow": "./src/workflow/index.ts",
     "./pipeline": "./src/workflow/index.ts",
     "./validation": "./src/validation/index.ts",
+    "./approval": "./src/approval/index.ts",
     "./*": "./src/*"
   },
   "scripts": {
