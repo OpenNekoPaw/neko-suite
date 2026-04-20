@@ -67,6 +67,7 @@ export {
   // Dual-flow persona skills
   creationFlowSkill,
   executionFlowSkill,
+  iterationFlowSkill,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
