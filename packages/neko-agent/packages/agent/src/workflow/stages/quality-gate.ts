@@ -5,12 +5,19 @@
  * When enabled (via ctx.stageParams.qualityGate.enabled), runs ConsistencyEvaluator
  * and writes the ConsistencyReport to ctx.qualityReport.
  *
+ * P4 wiring: when a QualityGate approval adapter is supplied via
+ * `evaluateApproval`, the stage also publishes the engine's decision
+ * onto `ctx.qualityDecision` so downstream consumers (gate preview,
+ * run report) can surface pass/warn/fail verdicts without redoing the
+ * threshold math.
+ *
  * Supports both scene-level and shot-level granularity via ctx.generationUnit.
  * When disabled (default), passes through without any evaluation or side effects.
  */
 
 import type { IWorkflowStage, WorkflowContext, StoryboardScene } from '../types';
 import type { ConsistencyReport } from '../qa-types';
+import type { QualityGateApprovalRequest, ApprovalResponse } from '../../approval';
 
 // =============================================================================
 // Dependencies
@@ -30,6 +37,19 @@ export interface QualityGateStageDeps {
     inputs: QualityGateInput[],
     globalStyle?: string,
   ) => Promise<ConsistencyReport>;
+
+  /**
+   * Optional ApprovalEngine-backed adapter. When supplied, the stage
+   * feeds the ConsistencyReport through it and surfaces the resulting
+   * decision on `ctx.qualityDecision` for downstream stages and UI.
+   *
+   * Returning undefined or throwing leaves `qualityDecision` unset —
+   * callers that only care about the raw report are unaffected.
+   */
+  evaluateApproval?: (request: QualityGateApprovalRequest) => Promise<ApprovalResponse>;
+
+  /** Optional runId for correlation on the emitted ApprovalRequest. */
+  getRunId?: () => string | undefined;
 }
 
 // =============================================================================
@@ -70,7 +90,26 @@ export function createQualityGateStage(deps: QualityGateStageDeps): IWorkflowSta
 
       const report = await deps.evaluateConsistency(inputs, ctx.globalStyle);
 
-      return { ...ctx, qualityReport: report };
+      let qualityDecision: ApprovalResponse | undefined;
+      if (deps.evaluateApproval) {
+        try {
+          qualityDecision = await deps.evaluateApproval({
+            runId: deps.getRunId?.(),
+            stageName: 'qualityGate',
+            report,
+          });
+        } catch {
+          // Approval-adapter failure must not crash the stage. The raw
+          // report is still valid and downstream Gate preview can use it.
+          qualityDecision = undefined;
+        }
+      }
+
+      return {
+        ...ctx,
+        qualityReport: report,
+        ...(qualityDecision ? { qualityDecision } : {}),
+      };
     },
   };
 }
