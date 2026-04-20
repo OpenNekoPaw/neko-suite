@@ -10,7 +10,7 @@
  *   Pipeline layer (@neko/agent pipeline)   → "execute it"
  */
 
-import type { FlowId, PipelineConfig } from '@neko/agent/pipeline';
+import type { FlowId, WorkflowConfig } from '@neko/agent/workflow';
 
 // =============================================================================
 // Route Level (L0..L4)
@@ -173,4 +173,4 @@ export interface IRouter {
 // Re-export of pipeline config (convenience for consumers)
 // =============================================================================
 
-export type { FlowId, PipelineConfig };
+export type { FlowId, WorkflowConfig };

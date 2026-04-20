@@ -30,7 +30,7 @@ import {
   recordCanvasChange,
 } from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
-import { bootstrapPipeline } from './pipeline/pipeline-bootstrap';
+import { bootstrapWorkflow } from './workflow/workflow-bootstrap';
 import {
   bootstrapOrchestrator,
   isOrchestratorEnabled,
@@ -43,8 +43,8 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
-import type { PipelineBootstrapResult } from './pipeline/pipeline-bootstrap';
-import { subscribePipelineProgress } from './pipeline/pipeline-progress-bridge';
+import type { WorkflowBootstrapResult } from './workflow/workflow-bootstrap';
+import { subscribeWorkflowProgress } from './workflow/workflow-progress-bridge';
 
 /** Infer an image MIME type from a file path extension; defaults to image/png. */
 function inferImageMime(filePath: string): string {
@@ -165,7 +165,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
 
   // Initialize Pipeline orchestration layer (L2)
-  const pipelineBootstrap = bootstrapPipeline(
+  const pipelineBootstrap = bootstrapWorkflow(
     bootstrapResult.platform,
     bootstrapResult.toolRegistry,
   );
@@ -386,7 +386,7 @@ function registerCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
-  pipelineBootstrap: PipelineBootstrapResult,
+  pipelineBootstrap: WorkflowBootstrapResult,
   orchestrator: Orchestrator,
   workflowPlanHandler: WorkflowPlanHandler,
 ): void {
@@ -457,7 +457,7 @@ function registerCommands(
           },
         );
 
-        subscribePipelineProgress(chatViewProvider.webview, handle.id, handle, {
+        subscribeWorkflowProgress(chatViewProvider.webview, handle.id, handle, {
           eventCommand: params.eventCommand,
           eventPayload: params.eventPayload,
         });
@@ -472,7 +472,7 @@ function registerCommands(
   // Feature-flagged behind neko.workflow.orchestrator.enabled.
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'neko.agent.startRoutedPipeline',
+      'neko.agent.startRoutedWorkflow',
       async (params: {
         /** The raw input to route; one of prompt/file/files/project */
         input:
@@ -801,7 +801,7 @@ function registerCommands(
   // stays alive for:
   //   (1) BatchGenerationScheduler legacy call path
   //   (2) Programmatic callers that have not migrated to
-  //       `neko.agent.startRoutedPipeline`
+  //       `neko.agent.startRoutedWorkflow`
   // Removal timeline: earliest next major release once orchestrator telemetry
   // shows < 5% of generations flowing through this command.
   context.subscriptions.push(
@@ -1054,7 +1054,7 @@ function registerPipelineCommands(
   // Start Creative Pipeline — QuickPick for intent, then send to Agent
   //
   // @deprecated since Phase 6.3 (2026-04-19).  Prefer
-  // `neko.agent.startRoutedPipeline` which routes through the Workflow
+  // `neko.agent.startRoutedWorkflow` which routes through the Workflow
   // Orchestrator (FastProbe + Plan Mode) instead of an intent QuickPick.
   // Both paths produce the same pipeline execution; the routed path adds
   // provenance, reference chain, and render-mode selection.  Retained for

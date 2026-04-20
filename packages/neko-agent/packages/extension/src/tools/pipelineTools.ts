@@ -7,12 +7,12 @@
  */
 
 import type { Tool } from './extensionTools';
-import type { PipelineRunReport } from '@neko/agent/pipeline';
+import type { WorkflowRunReport } from '@neko/agent/workflow';
 // Pipeline types are defined in the agent package
 // Using inline types to avoid cross-package import issues at build time
 type FlowId = 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
 
-interface PipelineContext {
+interface WorkflowContext {
   source?: string;
   sourceFormat?: 'fountain' | 'freeform' | 'document';
   globalStyle?: string;
@@ -20,10 +20,10 @@ interface PipelineContext {
   [key: string]: unknown;
 }
 
-interface PipelineHandle {
+interface WorkflowHandle {
   readonly id: string;
   readonly flowId: FlowId;
-  confirmGate(modifications?: Partial<PipelineContext>): void;
+  confirmGate(modifications?: Partial<WorkflowContext>): void;
   cancelGate(): void;
   cancel(): void;
 }
@@ -32,20 +32,20 @@ import { getLogger } from '../base';
 const logger = getLogger('PipelineTools');
 
 /** Active pipeline handles keyed by pipeline ID */
-const activePipelines = new Map<string, PipelineHandle>();
+const activeWorkflows = new Map<string, WorkflowHandle>();
 
 export interface PipelineToolsDeps {
   startPipeline: (
     flowId: FlowId,
-    ctx: PipelineContext,
+    ctx: WorkflowContext,
     overrides?: { skipStages?: string[]; globalStyle?: string },
-  ) => PipelineHandle;
+  ) => WorkflowHandle;
 }
 
 /**
  * Create pipeline control tools
  */
-export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
+export function createWorkflowTools(deps: PipelineToolsDeps): Tool[] {
   return [
     {
       name: 'StartPipeline',
@@ -99,7 +99,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
       async execute(args: Record<string, unknown>): Promise<unknown> {
         const flowId = args['flowId'] as FlowId;
         const source = args['source'] as string;
-        const sourceFormat = args['sourceFormat'] as PipelineContext['sourceFormat'];
+        const sourceFormat = args['sourceFormat'] as WorkflowContext['sourceFormat'];
         const style = args['style'] as string | undefined;
         const skipStagesStr = args['skipStages'] as string | undefined;
         const importToCanvas = args['importToCanvas'] === true;
@@ -111,7 +111,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
               .filter(Boolean)
           : undefined;
 
-        const ctx: PipelineContext = {
+        const ctx: WorkflowContext = {
           source,
           sourceFormat,
           globalStyle: style,
@@ -127,7 +127,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         };
 
         const handle = deps.startPipeline(flowId, ctx, { skipStages, globalStyle: style });
-        activePipelines.set(handle.id, handle);
+        activeWorkflows.set(handle.id, handle);
 
         logger.info('Pipeline started', { id: handle.id, flow: flowId });
 
@@ -163,7 +163,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         const pipelineId = args['pipelineId'] as string;
         const action = args['action'] as 'confirm' | 'cancel';
 
-        const handle = activePipelines.get(pipelineId);
+        const handle = activeWorkflows.get(pipelineId);
         if (!handle) {
           return { error: `No active pipeline found with ID: ${pipelineId}` };
         }
@@ -173,7 +173,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
           return { status: 'confirmed', message: 'Pipeline gate confirmed, continuing execution.' };
         } else {
           handle.cancelGate();
-          activePipelines.delete(pipelineId);
+          activeWorkflows.delete(pipelineId);
           return { status: 'cancelled', message: 'Pipeline cancelled.' };
         }
       },
@@ -203,7 +203,7 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
         const sceneIndicesStr = args['sceneIndices'] as string | undefined;
 
         // Look up completed pipeline result in history
-        const handle = completedPipelines.get(pipelineId);
+        const handle = completedWorkflows.get(pipelineId);
         if (!handle) {
           return {
             error:
@@ -233,10 +233,10 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
 
         const newHandle = deps.startPipeline(
           (result['flowId'] as FlowId) ?? 'flowF',
-          ctx as PipelineContext,
+          ctx as WorkflowContext,
           { skipStages: ['readDocument', 'parseStoryboard', 'importStoryboardToCanvas'] },
         );
-        activePipelines.set(newHandle.id, newHandle);
+        activeWorkflows.set(newHandle.id, newHandle);
 
         return {
           pipelineId: newHandle.id,
@@ -250,42 +250,42 @@ export function createPipelineTools(deps: PipelineToolsDeps): Tool[] {
 }
 
 /** Store completed pipeline results + run reports for retry/diagnostics */
-const completedPipelines = new Map<string, CompletedPipelineRecord>();
+const completedWorkflows = new Map<string, CompletedWorkflowRecord>();
 
 /** Internal record combining retry data and run report */
-export interface CompletedPipelineRecord {
+export interface CompletedWorkflowRecord {
   /** Original pipeline result for retry support */
   result: Record<string, unknown>;
   /** Structured run report (populated by progress bridge) */
-  report?: PipelineRunReport;
+  report?: WorkflowRunReport;
 }
 
 /**
  * Record a completed pipeline result (called from progress bridge)
  */
-export function recordCompletedPipeline(
+export function recordCompletedWorkflow(
   pipelineId: string,
   result: Record<string, unknown>,
-  report?: PipelineRunReport,
+  report?: WorkflowRunReport,
 ): void {
-  completedPipelines.set(pipelineId, { result, report });
+  completedWorkflows.set(pipelineId, { result, report });
   // Auto-cleanup after 1 hour
-  setTimeout(() => completedPipelines.delete(pipelineId), 60 * 60 * 1000);
+  setTimeout(() => completedWorkflows.delete(pipelineId), 60 * 60 * 1000);
 }
 
 /**
  * Get a run report by pipeline ID (for report query tools)
  */
-export function getPipelineReport(pipelineId: string): PipelineRunReport | undefined {
-  return completedPipelines.get(pipelineId)?.report;
+export function getPipelineReport(pipelineId: string): WorkflowRunReport | undefined {
+  return completedWorkflows.get(pipelineId)?.report;
 }
 
 /**
  * List all available run reports (newest first, limited)
  */
-export function listPipelineReports(limit: number = 10): PipelineRunReport[] {
-  const reports: PipelineRunReport[] = [];
-  completedPipelines.forEach((record) => {
+export function listPipelineReports(limit: number = 10): WorkflowRunReport[] {
+  const reports: WorkflowRunReport[] = [];
+  completedWorkflows.forEach((record) => {
     if (record.report) {
       reports.push(record.report);
     }
@@ -302,8 +302,8 @@ export function listPipelineReports(limit: number = 10): PipelineRunReport[] {
 /**
  * Get an active pipeline handle (for event consumption)
  */
-export function getActivePipeline(pipelineId: string): PipelineHandle | undefined {
-  return activePipelines.get(pipelineId);
+export function getActiveWorkflow(pipelineId: string): WorkflowHandle | undefined {
+  return activeWorkflows.get(pipelineId);
 }
 
 /**
@@ -311,8 +311,8 @@ export function getActivePipeline(pipelineId: string): PipelineHandle | undefine
  * (e.g. by the Workflow Orchestrator's routed pipeline).  Needed so that
  * later webview messages like `pipelineGateConfirm` can look it up.
  */
-export function registerActivePipeline(pipelineId: string, handle: PipelineHandle): void {
-  activePipelines.set(pipelineId, handle);
+export function registerActiveWorkflow(pipelineId: string, handle: WorkflowHandle): void {
+  activeWorkflows.set(pipelineId, handle);
 }
 
 /**
@@ -321,9 +321,9 @@ export function registerActivePipeline(pipelineId: string, handle: PipelineHandl
  */
 export function confirmPipelineGate(
   pipelineId: string,
-  modifications?: Partial<PipelineContext>,
+  modifications?: Partial<WorkflowContext>,
 ): boolean {
-  const handle = activePipelines.get(pipelineId);
+  const handle = activeWorkflows.get(pipelineId);
   if (!handle) return false;
   handle.confirmGate(modifications);
   return true;
@@ -334,10 +334,10 @@ export function confirmPipelineGate(
  * from the registry.
  */
 export function cancelPipelineGate(pipelineId: string): boolean {
-  const handle = activePipelines.get(pipelineId);
+  const handle = activeWorkflows.get(pipelineId);
   if (!handle) return false;
   handle.cancelGate();
-  activePipelines.delete(pipelineId);
+  activeWorkflows.delete(pipelineId);
   return true;
 }
 
@@ -345,5 +345,5 @@ export function cancelPipelineGate(pipelineId: string): boolean {
  * Clean up completed pipeline
  */
 export function removePipeline(pipelineId: string): void {
-  activePipelines.delete(pipelineId);
+  activeWorkflows.delete(pipelineId);
 }

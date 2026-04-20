@@ -1,11 +1,11 @@
 /**
  * Run Report Tools — Agent tools for querying pipeline execution reports
  *
- * Reads from the in-memory completedPipelines Map in pipelineTools.
+ * Reads from the in-memory completedWorkflows Map in pipelineTools.
  * No file persistence — reports live for 1 hour (matching retry TTL).
  */
 
-import type { PipelineRunReport, StageRecord } from '@neko/agent/pipeline';
+import type { WorkflowRunReport, StageRecord } from '@neko/agent/workflow';
 import type { Tool } from './extensionTools';
 import { getPipelineReport, listPipelineReports } from './pipelineTools';
 
@@ -84,7 +84,7 @@ export function createRunReportTools(): Tool[] {
 // Formatters
 // =============================================================================
 
-function formatReport(report: PipelineRunReport): Record<string, unknown> {
+function formatReport(report: WorkflowRunReport): Record<string, unknown> {
   const totalDurationMs = report.stages.reduce((sum, s) => sum + s.durationMs, 0);
 
   return {
@@ -100,7 +100,7 @@ function formatReport(report: PipelineRunReport): Record<string, unknown> {
   };
 }
 
-function formatReportSummary(report: PipelineRunReport): Record<string, unknown> {
+function formatReportSummary(report: WorkflowRunReport): Record<string, unknown> {
   const totalDurationMs = report.stages.reduce((sum, s) => sum + s.durationMs, 0);
   const failedStage =
     report.failedStageIndex !== undefined

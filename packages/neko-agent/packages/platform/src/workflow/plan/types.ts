@@ -87,7 +87,7 @@ export interface LitePlan {
   readonly parentPlanId?: string;
   /**
    * Ancestor references per (shot, slot) — Phase 5 reference chain.  When
-   * present, PipelineExecutor / MediaGenerationService should thread the
+   * present, WorkflowExecutor / MediaGenerationService should thread the
    * listed shot ids' generated output back in as reference images.
    */
   readonly referenceChain?: ReadonlyArray<ReferenceChainEntry>;

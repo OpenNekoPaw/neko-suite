@@ -9,7 +9,7 @@
  * model-agnostic and free of vscode/extension imports.
  */
 
-import type { ConsistencyReport, StyleDriftPair, CharacterAppearance } from '../pipeline/qa-types';
+import type { ConsistencyReport, StyleDriftPair, CharacterAppearance } from '../workflow/qa-types';
 
 // =============================================================================
 // Interfaces (injected dependencies)

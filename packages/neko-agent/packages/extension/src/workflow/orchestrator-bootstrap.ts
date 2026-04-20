@@ -4,10 +4,10 @@
  *
  * Responsibilities:
  *   1. Instantiate Router / AssetLibrary / MatchingEngine / PlanBuilder once.
- *   2. Expose startRoutedPipeline(input) that ties them together:
+ *   2. Expose startRoutedWorkflow(input) that ties them together:
  *        Route ← Router.decide(input)
  *        Plan  ← PlanBuilder.build(route)
- *        PipelineHandle ← startPipeline(route.flowId, ctx, overrides)
+ *        WorkflowHandle ← startPipeline(route.flowId, ctx, overrides)
  *
  * Feature-flagged: callers should check workflow.orchestrator.enabled
  * (see docs/architecture/ablation-experiment-framework.md) before
@@ -24,7 +24,7 @@
 
 import type { Platform } from '@neko/platform';
 import { Workflow } from '@neko/platform';
-import type { FlowId, PipelineContext, PipelineHandle } from '@neko/agent/pipeline';
+import type { FlowId, WorkflowContext, WorkflowHandle } from '@neko/agent/workflow';
 import { getLogger } from '../base';
 import {
   isLLMRouterEnabled as _isLLMRouterEnabled,
@@ -51,23 +51,23 @@ export interface OrchestratorBootstrapOptions {
   workDir: string | undefined;
   startPipeline: (
     flowId: FlowId,
-    ctx: PipelineContext,
+    ctx: WorkflowContext,
     overrides?: {
       skipStages?: string[];
       globalStyle?: string;
       userCheckpoints?: string[];
     },
-  ) => PipelineHandle;
+  ) => WorkflowHandle;
 }
 
-export interface RoutedPipelineRequest {
+export interface RoutedWorkflowRequest {
   input: RawInput;
   /** Optional per-request router overrides (e.g., from user "make a short video" hint) */
   routerOverrides?: RouterOverrides;
   /** Optional global-style override passed through to the pipeline */
   globalStyle?: string;
   /** Additional pipeline context fields (source, sourceFormat, etc.) */
-  contextOverrides?: Partial<PipelineContext>;
+  contextOverrides?: Partial<WorkflowContext>;
   /**
    * Existing plan to dispatch (skipping Router+PlanBuilder). Used for
    * approved / forked plans where the caller has already staged the edits.
@@ -75,10 +75,10 @@ export interface RoutedPipelineRequest {
   plan?: LitePlan;
 }
 
-export interface RoutedPipelineResult {
+export interface RoutedWorkflowResult {
   route: Route;
   plan: LitePlan;
-  handle: PipelineHandle;
+  handle: WorkflowHandle;
 }
 
 export interface Orchestrator {
@@ -99,7 +99,7 @@ export interface Orchestrator {
    *
    * Phase 1 MVP: auto-approves the plan (no interactive UI yet).
    */
-  startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult>;
+  startRoutedWorkflow(req: RoutedWorkflowRequest): Promise<RoutedWorkflowResult>;
 
   /**
    * Probe an input to get a plan WITHOUT dispatching. Useful for UI previews.
@@ -166,7 +166,7 @@ export async function bootstrapOrchestrator(
     llmRouter,
     routerMemory,
 
-    async startRoutedPipeline(req: RoutedPipelineRequest): Promise<RoutedPipelineResult> {
+    async startRoutedWorkflow(req: RoutedWorkflowRequest): Promise<RoutedWorkflowResult> {
       let route: Route;
       let plan: LitePlan;
       if (req.plan) {
@@ -195,7 +195,7 @@ export async function bootstrapOrchestrator(
       // pre-fix plans or the direct (non-routed) legacy path.
       const effectiveInput = plan.input ?? req.input;
 
-      const ctx: PipelineContext = {
+      const ctx: WorkflowContext = {
         ...buildBaseContext(effectiveInput),
         ...req.contextOverrides,
         // Thread the plan's reference chain through so downstream
@@ -384,7 +384,7 @@ async function loadJsonIfExists<T>(workDir: string, relPath: string): Promise<T 
   }
 }
 
-function buildBaseContext(input: RawInput): PipelineContext {
+function buildBaseContext(input: RawInput): WorkflowContext {
   switch (input.kind) {
     case 'prompt':
       return { source: input.text, sourceFormat: 'freeform' };
@@ -397,7 +397,7 @@ function buildBaseContext(input: RawInput): PipelineContext {
   }
 }
 
-function inferFormat(path: string): PipelineContext['sourceFormat'] {
+function inferFormat(path: string): WorkflowContext['sourceFormat'] {
   const lower = path.toLowerCase();
   if (lower.endsWith('.fountain')) return 'fountain';
   if (

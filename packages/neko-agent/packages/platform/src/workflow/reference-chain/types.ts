@@ -8,7 +8,7 @@
  * in as references cuts drift by anchoring the chain.
  *
  * This file freezes the TypeScript contract so Phase 5 consumers
- * (PipelineExecutor, MediaGenerationService, canvas `ShotCharacter`)
+ * (WorkflowExecutor, MediaGenerationService, canvas `ShotCharacter`)
  * can be built against stable types even before the production chain
  * builder lands.
  */

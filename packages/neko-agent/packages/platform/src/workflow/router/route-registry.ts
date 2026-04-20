@@ -3,7 +3,7 @@
  *
  * See docs/architecture/workflow-routing.md §3 for route semantics.
  *
- * Flow mapping (existing flows in @neko/agent/pipeline/pipeline-registry.ts):
+ * Flow mapping (existing flows in /agent/workflow/workflow-registry.ts):
  *   flowA: read → parse → import → prompts → pilot → batch → qa → arrange (full, for long text)
  *   flowB: prompts → pilot → batch → qa → arrange (shortest; direct gen)
  *   flowC: read → prompts → pilot → batch → qa → arrange (text but no storyboard)

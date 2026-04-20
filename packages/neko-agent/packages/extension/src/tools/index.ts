@@ -17,14 +17,14 @@ export {
 export { createPuppetFaceTools } from './puppetFaceTools';
 
 export {
-  createPipelineTools,
-  getActivePipeline,
+  createWorkflowTools,
+  getActiveWorkflow,
   removePipeline,
-  recordCompletedPipeline,
+  recordCompletedWorkflow,
   getPipelineReport,
   listPipelineReports,
   type PipelineToolsDeps,
-  type CompletedPipelineRecord,
+  type CompletedWorkflowRecord,
 } from './pipelineTools';
 
 export { createRunReportTools } from './runReportTools';

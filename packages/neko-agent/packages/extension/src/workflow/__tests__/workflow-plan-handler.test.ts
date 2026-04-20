@@ -45,10 +45,10 @@ function buildPlan(
 function makeOrchestrator(opts: {
   planFactory: (level: Workflow.RouteLevel) => Workflow.LitePlan;
 }): Orchestrator & {
-  startRoutedPipeline: ReturnType<typeof vi.fn>;
+  startRoutedWorkflow: ReturnType<typeof vi.fn>;
   buildPlan: ReturnType<typeof vi.fn>;
 } {
-  const startRoutedPipeline = vi.fn(
+  const startRoutedWorkflow = vi.fn(
     async ({
       routerOverrides,
     }: {
@@ -69,7 +69,7 @@ function makeOrchestrator(opts: {
           events: (async function* () {})(),
           result: Promise.resolve({} as never),
         } as unknown as Workflow.Route extends infer _U
-          ? ReturnType<Orchestrator['startRoutedPipeline']> extends Promise<infer R>
+          ? ReturnType<Orchestrator['startRoutedWorkflow']> extends Promise<infer R>
             ? R['handle']
             : never
           : never,
@@ -95,10 +95,10 @@ function makeOrchestrator(opts: {
     planBuilder: {} as unknown as Orchestrator['planBuilder'],
     planStore: undefined,
     dispose: () => undefined,
-    startRoutedPipeline,
+    startRoutedWorkflow,
     buildPlan,
   } as unknown as Orchestrator & {
-    startRoutedPipeline: ReturnType<typeof vi.fn>;
+    startRoutedWorkflow: ReturnType<typeof vi.fn>;
     buildPlan: ReturnType<typeof vi.fn>;
   };
 }
@@ -209,7 +209,7 @@ describe('WorkflowPlanHandler', () => {
     handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_1' });
     const result = await promise;
     expect(result.result).toBeUndefined();
-    expect(orchestrator.startRoutedPipeline).not.toHaveBeenCalled();
+    expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
 
     // Status message posted
     const status = posts.find((m) => (m as { type: string }).type === 'workflow/planStatus');
@@ -232,7 +232,7 @@ describe('WorkflowPlanHandler', () => {
       autoApproveThreshold: 0.5,
     });
     expect(result.result?.handle.id).toBe('pipe_x');
-    expect(orchestrator.startRoutedPipeline).toHaveBeenCalledOnce();
+    expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
     // No preview was posted because auto-approved
     const preview = posts.find((m) => (m as { type: string }).type === 'workflow/planPreview');
     expect(preview).toBeUndefined();
@@ -243,7 +243,7 @@ describe('WorkflowPlanHandler', () => {
   // ===========================================================================
 
   it('Fix-1: approve dispatches the *current* plan, passing it via req.plan', async () => {
-    // Sanity: the previous contract called startRoutedPipeline({ input })
+    // Sanity: the previous contract called startRoutedWorkflow({ input })
     // and let the orchestrator re-run Router + PlanBuilder — losing any
     // in-review edits.  The new contract forwards the reviewed plan so
     // id / bindings / checkpoints stay stable through execution.
@@ -262,8 +262,8 @@ describe('WorkflowPlanHandler', () => {
     handler.handleIncoming({ type: 'workflow/planApprove', planId: 'plan_1' });
     await promise;
 
-    expect(orchestrator.startRoutedPipeline).toHaveBeenCalledOnce();
-    const arg = orchestrator.startRoutedPipeline.mock.calls[0]?.[0] as {
+    expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
+    const arg = orchestrator.startRoutedWorkflow.mock.calls[0]?.[0] as {
       plan?: Workflow.LitePlan;
     };
     expect(arg.plan).toBeDefined();
@@ -277,7 +277,7 @@ describe('WorkflowPlanHandler', () => {
       input: { kind: 'prompt', text: 'hi' },
       autoApproveThreshold: 0.5,
     });
-    const arg = orchestrator.startRoutedPipeline.mock.calls[0]?.[0] as {
+    const arg = orchestrator.startRoutedWorkflow.mock.calls[0]?.[0] as {
       plan?: Workflow.LitePlan;
     };
     expect(arg.plan).toBeDefined();
@@ -698,9 +698,9 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
   // Review regression Fix-2 — before the fix, fork preview's Start button
   // was wired to a placeholder resolver that did nothing.  Clicking Start
   // on a forked plan silently consumed the click without ever calling
-  // startRoutedPipeline.  This test drives the fork through approve and
+  // startRoutedWorkflow.  This test drives the fork through approve and
   // asserts dispatch actually fires.
-  it('Fix-2: fork → approve dispatches through startRoutedPipeline', async () => {
+  it('Fix-2: fork → approve dispatches through startRoutedWorkflow', async () => {
     const { handler, planStore, orchestrator } = makeHandlerWithStoreAndStages();
     const promise = handler.presentAndDispatch({ input: { kind: 'prompt', text: 'hi' } });
     await flushUntil(() => planStore.exists('plan_cp_L2'), 50);
@@ -708,7 +708,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     await promise;
 
     // Reset the spy so we only count the fork-dispatch call.
-    orchestrator.startRoutedPipeline.mockClear();
+    orchestrator.startRoutedWorkflow.mockClear();
 
     const fork = await handler.handleFork({
       type: 'workflow/planFork',
@@ -719,13 +719,13 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     handler.handleIncoming({ type: 'workflow/planApprove', planId: fork!.id });
 
     // Wait for the async fork dispatcher to complete its transition +
-    // startRoutedPipeline call.
-    await flushUntil(() => orchestrator.startRoutedPipeline.mock.calls.length > 0, 50);
-    expect(orchestrator.startRoutedPipeline).toHaveBeenCalledOnce();
+    // startRoutedWorkflow call.
+    await flushUntil(() => orchestrator.startRoutedWorkflow.mock.calls.length > 0, 50);
+    expect(orchestrator.startRoutedWorkflow).toHaveBeenCalledOnce();
 
     // The dispatch uses req.plan (the fork), preserving its id through
     // the pipeline layer.
-    const arg = orchestrator.startRoutedPipeline.mock.calls[0]?.[0] as {
+    const arg = orchestrator.startRoutedWorkflow.mock.calls[0]?.[0] as {
       plan?: Workflow.LitePlan;
     };
     expect(arg.plan?.id).toBe(fork!.id);
@@ -739,7 +739,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     handler.handleIncoming({ type: 'workflow/planAbort', planId: 'plan_cp_L2' });
     await promise;
 
-    orchestrator.startRoutedPipeline.mockClear();
+    orchestrator.startRoutedWorkflow.mockClear();
 
     const fork = await handler.handleFork({
       type: 'workflow/planFork',
@@ -749,7 +749,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
 
     // Let the fork's async resolver flush.
     await flushUntil(async () => (await planStore.load(fork!.id))?.status === 'aborted', 50);
-    expect(orchestrator.startRoutedPipeline).not.toHaveBeenCalled();
+    expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
     const reloaded = await planStore.load(fork!.id);
     expect(reloaded?.status).toBe('aborted');
   });
@@ -772,7 +772,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     const source = await planStore.load('plan_cp_L2');
     expect(source?.input).toEqual(fileInput);
 
-    orchestrator.startRoutedPipeline.mockClear();
+    orchestrator.startRoutedWorkflow.mockClear();
 
     const fork = await handler.handleFork({
       type: 'workflow/planFork',
@@ -783,9 +783,9 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     expect(forkStored?.input).toEqual(fileInput);
 
     handler.handleIncoming({ type: 'workflow/planApprove', planId: fork!.id });
-    await flushUntil(() => orchestrator.startRoutedPipeline.mock.calls.length > 0, 50);
+    await flushUntil(() => orchestrator.startRoutedWorkflow.mock.calls.length > 0, 50);
 
-    const dispatchArg = orchestrator.startRoutedPipeline.mock.calls[0]?.[0] as {
+    const dispatchArg = orchestrator.startRoutedWorkflow.mock.calls[0]?.[0] as {
       input: Workflow.RawInput;
       plan?: Workflow.LitePlan;
     };
@@ -811,7 +811,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     };
     await planStore.save(legacy);
 
-    orchestrator.startRoutedPipeline.mockClear();
+    orchestrator.startRoutedWorkflow.mockClear();
     posts.length = 0;
 
     const fork = await handler.handleFork({
@@ -824,7 +824,7 @@ describe('WorkflowPlanHandler — checkpoint / fork / diff', () => {
     // would silently return false).
     expect(fork).toBeUndefined();
     expect(posts.some((p) => (p as { type: string }).type === 'workflow/planPreview')).toBe(false);
-    expect(orchestrator.startRoutedPipeline).not.toHaveBeenCalled();
+    expect(orchestrator.startRoutedWorkflow).not.toHaveBeenCalled();
     // Pending map stays empty — nothing can be approved/aborted.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pendingMap = (handler as any).pending as Map<string, unknown>;
@@ -1041,7 +1041,7 @@ describe('WorkflowPlanHandler — router memory inspection', () => {
       llmRouter: undefined,
       routerMemory: memory,
       dispose: () => undefined,
-      startRoutedPipeline: vi.fn(),
+      startRoutedWorkflow: vi.fn(),
       buildPlan: vi.fn(),
     } as unknown as Orchestrator;
   }

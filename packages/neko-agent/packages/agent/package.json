@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./pipeline": "./src/pipeline/index.ts",
+    "./workflow": "./src/workflow/index.ts",
+    "./pipeline": "./src/workflow/index.ts",
     "./validation": "./src/validation/index.ts",
     "./*": "./src/*"
   },

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRunReportTools } from '../runReportTools';
-import type { PipelineRunReport } from '@neko/agent/pipeline';
+import type { WorkflowRunReport } from '@neko/agent/workflow';
 
 // =============================================================================
 // Mock pipelineTools (in-memory storage)
 // =============================================================================
 
-let mockReports: PipelineRunReport[] = [];
+let mockReports: WorkflowRunReport[] = [];
 
 vi.mock('../pipelineTools', () => ({
   getPipelineReport: vi.fn((id: string) => mockReports.find((r) => r.id === id)),
@@ -26,7 +26,7 @@ vi.mock('../../base', () => ({
 // Helpers
 // =============================================================================
 
-function createMockReport(overrides?: Partial<PipelineRunReport>): PipelineRunReport {
+function createMockReport(overrides?: Partial<WorkflowRunReport>): WorkflowRunReport {
   return {
     id: 'pipe-1',
     flowId: 'flowF',

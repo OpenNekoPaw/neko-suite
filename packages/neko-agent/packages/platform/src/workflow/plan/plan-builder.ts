@@ -52,7 +52,7 @@ const STAGE_META: Record<string, StageMeta> = {
 
 /**
  * Returns the canonical stage order for each flow.
- * Mirrors FLOW_DEFINITIONS in @neko/agent/pipeline/pipeline-registry.ts — kept
+ * Mirrors FLOW_DEFINITIONS in /agent/workflow/workflow-registry.ts — kept
  * in sync manually because pipeline-registry doesn't export the mapping.
  */
 function stagesForFlow(flowId: Route['flowId']): string[] {

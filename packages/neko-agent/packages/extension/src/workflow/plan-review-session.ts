@@ -16,7 +16,7 @@
  *   - handleFork          (derive a plan from a persisted one)
  *   - computeCapabilities (pure function of plan + pending state)
  *
- * Dispatch goes through PipelineLifecycleBridge for transition /
+ * Dispatch goes through WorkflowLifecycleBridge for transition /
  * broadcast so the review session doesn't know how progress is
  * forwarded to the webview.
  */
@@ -33,8 +33,8 @@ import type {
   WorkflowPlanToggleCheckpointMessage,
 } from '@neko-agent/types';
 import { Workflow } from '@neko/platform';
-import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
-import type { PipelineLifecycleBridge } from './pipeline-lifecycle-bridge';
+import type { Orchestrator, RoutedWorkflowResult } from './orchestrator-bootstrap';
+import type { WorkflowLifecycleBridge } from './workflow-lifecycle-bridge';
 
 /**
  * Narrow review port over Orchestrator — exposes only what
@@ -46,7 +46,7 @@ import type { PipelineLifecycleBridge } from './pipeline-lifecycle-bridge';
  */
 export interface ReviewOrchestrator {
   readonly buildPlan: Orchestrator['buildPlan'];
-  readonly startRoutedPipeline: Orchestrator['startRoutedPipeline'];
+  readonly startRoutedWorkflow: Orchestrator['startRoutedWorkflow'];
   readonly consistencyChecker: Workflow.ConsistencyChecker;
 }
 import {
@@ -112,7 +112,7 @@ export interface PlanReviewSessionDeps {
    * consistently and the session stays focused on review semantics.
    */
   planStoreWriter: PlanStoreWriter;
-  pipelineLifecycle: PipelineLifecycleBridge;
+  pipelineLifecycle: WorkflowLifecycleBridge;
   getWebview: () => vscode.Webview | undefined;
   /**
    * User-facing notifier.  PlanReviewSession uses this to surface
@@ -144,7 +144,7 @@ export class PlanReviewSession {
   async presentAndDispatch(options: PresentPlanOptions): Promise<{
     route: Workflow.Route;
     plan: Workflow.LitePlan;
-    result: RoutedPipelineResult | undefined;
+    result: RoutedWorkflowResult | undefined;
   }> {
     const { route, plan } = await this.deps.orchestrator.buildPlan(
       options.input,
@@ -485,8 +485,8 @@ export class PlanReviewSession {
       routerOverrides?: Workflow.RouterOverrides;
       globalStyle?: string;
     },
-  ): Promise<RoutedPipelineResult> {
-    const result = await this.deps.orchestrator.startRoutedPipeline({
+  ): Promise<RoutedWorkflowResult> {
+    const result = await this.deps.orchestrator.startRoutedWorkflow({
       input,
       plan,
       ...(request.routerOverrides !== undefined && { routerOverrides: request.routerOverrides }),

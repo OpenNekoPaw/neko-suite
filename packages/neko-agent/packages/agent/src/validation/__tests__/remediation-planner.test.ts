@@ -6,8 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRemediationPlanner } from '../remediation-planner';
-import type { QualityIssue, QualityIssueCategory } from '../../pipeline/qa-types';
-import { QUALITY_ISSUE_CATEGORIES } from '../../pipeline/qa-types';
+import type { QualityIssue, QualityIssueCategory } from '../../workflow/qa-types';
+import { QUALITY_ISSUE_CATEGORIES } from '../../workflow/qa-types';
 
 // =============================================================================
 // Helpers

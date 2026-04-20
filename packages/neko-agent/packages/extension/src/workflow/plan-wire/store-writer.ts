@@ -4,7 +4,7 @@
  * Wraps the Workflow.PlanStore SDK with swallow-on-error semantics so
  * callers don't re-implement the same try/catch / "skip-when-store-is-
  * absent" boilerplate.  Owns all I/O to the persistent plan store for
- * PlanReviewSession + PipelineLifecycleBridge.
+ * PlanReviewSession + WorkflowLifecycleBridge.
  */
 
 import { Workflow } from '@neko/platform';

@@ -4,7 +4,7 @@
  *
  *   - PlanReviewSession       (presentAndDispatch + edits + fork + capabilities)
  *   - PlanQueryController     (diff / list / loadPersistedPlan)
- *   - PipelineLifecycleBridge (attachProgressForwarder + store transitions)
+ *   - WorkflowLifecycleBridge (attachProgressForwarder + store transitions)
  *   - RouterMemoryController  (router memory inspection + mutation)
  *
  * This facade preserves the external API that chatProvider / index.ts
@@ -33,10 +33,10 @@ import type {
   WorkflowRouterMemoryRequestMessage,
 } from '@neko-agent/types';
 import { Workflow } from '@neko/platform';
-import type { Orchestrator, RoutedPipelineResult } from './orchestrator-bootstrap';
+import type { Orchestrator, RoutedWorkflowResult } from './orchestrator-bootstrap';
 import { PlanReviewSession, type PresentPlanOptions } from './plan-review-session';
 import { PlanQueryController } from './plan-query-controller';
-import { PipelineLifecycleBridge } from './pipeline-lifecycle-bridge';
+import { WorkflowLifecycleBridge } from './workflow-lifecycle-bridge';
 import { RouterMemoryController } from './router-memory-controller';
 import { PlanStoreWriter, toWirePlan, VSCodeUserNotifier, type UserNotifier } from './plan-wire';
 
@@ -65,7 +65,7 @@ export interface WorkflowPlanHandlerDeps {
 export class WorkflowPlanHandler {
   private readonly reviewSession: PlanReviewSession;
   private readonly queryController: PlanQueryController;
-  private readonly lifecycleBridge: PipelineLifecycleBridge;
+  private readonly lifecycleBridge: WorkflowLifecycleBridge;
   private readonly routerMemoryController: RouterMemoryController;
 
   constructor(deps: WorkflowPlanHandlerDeps) {
@@ -73,7 +73,7 @@ export class WorkflowPlanHandler {
     const planStoreWriter = new PlanStoreWriter(planStore);
     const notifier = deps.notifier ?? VSCodeUserNotifier;
 
-    this.lifecycleBridge = new PipelineLifecycleBridge({
+    this.lifecycleBridge = new WorkflowLifecycleBridge({
       planStoreWriter,
       getWebview: deps.getWebview,
     });
@@ -101,7 +101,7 @@ export class WorkflowPlanHandler {
   presentAndDispatch(options: PresentPlanOptions): Promise<{
     route: Workflow.Route;
     plan: Workflow.LitePlan;
-    result: RoutedPipelineResult | undefined;
+    result: RoutedWorkflowResult | undefined;
   }> {
     return this.reviewSession.presentAndDispatch(options);
   }
@@ -154,7 +154,7 @@ export class WorkflowPlanHandler {
 
   attachProgressForwarder(
     planId: string,
-    result: RoutedPipelineResult,
+    result: RoutedWorkflowResult,
     chatWebview: vscode.Webview,
     progressEventCommand?: string,
   ): void {

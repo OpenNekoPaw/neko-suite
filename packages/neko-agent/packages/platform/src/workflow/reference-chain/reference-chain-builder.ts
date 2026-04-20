@@ -6,7 +6,7 @@
  *
  * Consumed by (all pending Phase 5 wire-up):
  *   - PlanBuilder: stores the chain inside `.nkplan` for review
- *   - PipelineExecutor: threads ancestor outputs into each shot's
+ *   - WorkflowExecutor: threads ancestor outputs into each shot's
  *     generation call via MediaGenerationService
  *   - Canvas `ShotCharacter.referenceChain` field (new, Phase 5)
  *
