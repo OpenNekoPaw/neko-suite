@@ -1,20 +1,26 @@
 /**
- * validateSkill SDD metadata tests (B1)
+ * validateSkill + validateSkillManifest SDD metadata tests (B1 + B1.5)
  *
- * Covers agent-unified-workflow.md §5.2.1 frontmatter fields:
+ * Covers agent-unified-workflow.md §5.2.1 manifest fields:
  *   version, domain, requiredSubpackages, autoInvoke, phases, pipelines,
  *   referencedAssets, referencedSkills, compliance.
  *
- * The validator treats version/domain as "missing ⇒ warn, malformed ⇒
- * error"; every other field is optional but checked for shape when
- * present. Pre-existing Skill fields (name / description / content)
- * already have coverage via other surfaces; this suite focuses on the
- * new SDD block.
+ * The SDD manifest lives in a sibling `manifest.json` — separate from
+ * SKILL.md frontmatter — so configuration that only the runtime cares
+ * about stays out of the prompt window. Two surfaces to cover:
+ *
+ *   - `validateSkill(skill)`: runtime snapshot (manifest merged into Skill);
+ *     used by the loader after createSkill().
+ *   - `validateSkillManifest(manifest)`: bare manifest pass used by the
+ *     marketplace installer and by the activation guard.
+ *
+ * Missing version / domain only warn; every other field is optional but
+ * its shape is checked when present.
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateSkill } from '../skill';
-import type { Skill } from '../skill';
+import { validateSkill, validateSkillManifest } from '../skill';
+import type { Skill, SkillManifest } from '../skill';
 
 function baseSkill(overrides: Partial<Skill> = {}): Partial<Skill> {
   return {
@@ -23,6 +29,14 @@ function baseSkill(overrides: Partial<Skill> = {}): Partial<Skill> {
     content: '# my-skill\n\nSome persona content.',
     source: 'builtin',
     enabled: true,
+    version: '1.0.0',
+    domain: 'cut',
+    ...overrides,
+  };
+}
+
+function baseManifest(overrides: Partial<SkillManifest> = {}): Partial<SkillManifest> {
+  return {
     version: '1.0.0',
     domain: 'cut',
     ...overrides,
@@ -304,5 +318,95 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
       expect(r.warnings.length).toBeGreaterThanOrEqual(2);
       expect(r.errors.length).toBe(0);
     });
+  });
+});
+
+describe('validateSkillManifest — standalone manifest pass', () => {
+  it('a well-formed manifest is valid', () => {
+    const r = validateSkillManifest(baseManifest());
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('empty manifest warns on missing version + domain but does not error', () => {
+    const r = validateSkillManifest({});
+    expect(r.valid).toBe(true);
+    expect(r.warnings.length).toBeGreaterThanOrEqual(2);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('malformed version errors', () => {
+    const r = validateSkillManifest(baseManifest({ version: '1.x' }));
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes('version'))).toBe(true);
+  });
+
+  it('requiredSubpackages duplicate ids reported', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        requiredSubpackages: [
+          { id: 'neko-cut', required: true },
+          { id: 'neko-cut', required: false },
+        ],
+      }),
+    );
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes('Duplicate'))).toBe(true);
+  });
+
+  it('pipelines with non-object op are rejected', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        pipelines: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          export: { ops: ['broken' as any] },
+        },
+      }),
+    );
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes('ops[0]'))).toBe(true);
+  });
+
+  it('referencedAssets must use asset:// URIs', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        referencedAssets: [{ uri: 'file:///local/path' }],
+      }),
+    );
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.includes('asset://'))).toBe(true);
+  });
+
+  it('accepts a SDD metadata block exactly as loaded from manifest.json', () => {
+    // Mirrors the full manifest ADR §5.2.1 example — checks that every
+    // top-level key is accepted when shaped correctly.
+    const r = validateSkillManifest({
+      version: '1.2.0',
+      domain: 'cut',
+      requiredSubpackages: [
+        { id: 'neko-cut', required: true, minVersion: '1.0.0' },
+        { id: 'neko-audio', required: false, fallback: { message: 'no BGM' } },
+      ],
+      autoInvoke: true,
+      phases: [
+        { name: 'style-calibration', label: '风格校准' },
+        { name: 'shot-breakdown', label: '分镜拆解', approval: true },
+        { name: 'shot-generation', label: '镜头生成', parallel: true },
+      ],
+      pipelines: {
+        export: {
+          ops: [{ 'cut.upscale': { target: '1080p' } }, { 'cut.watermark': {} }],
+        },
+      },
+      referencedAssets: [
+        { uri: 'asset://styles/cinematic-lut', required: false, purpose: 'default LUT' },
+      ],
+      referencedSkills: [{ id: 'audio-expert', relationship: 'collaborator' }],
+      compliance: {
+        framework: 'creator-standard',
+        auditRequired: false,
+      },
+    });
+    expect(r.valid).toBe(true);
   });
 });

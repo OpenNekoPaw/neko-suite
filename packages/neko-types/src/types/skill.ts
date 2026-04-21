@@ -793,38 +793,71 @@ export interface SkillFrontmatter {
    */
   'market-id'?: string;
 
-  // ===========================================================================
-  // SDD metadata (agent-unified-workflow.md §5.2.1)
-  //
-  // Frontmatter counterparts of the runtime Skill fields of the same names.
-  // Loader maps these 1:1 into the Skill object via createSkill().
-  // ===========================================================================
+  // Note: SDD metadata (version, domain, requiredSubpackages, autoInvoke,
+  // phases, pipelines, referencedAssets, referencedSkills, compliance) lives
+  // in a sibling `manifest.json` file — see SkillManifest below. SKILL.md
+  // frontmatter is reserved for document metadata only (fields that also
+  // shape how Claude / Agent reads the document). Rationale: Skill body is
+  // consumed by the LLM as natural language; structural configuration that
+  // only the runtime cares about should not clutter the prompt window nor
+  // the author-facing YAML block.
+}
 
-  /** Semver version string. */
+// =============================================================================
+// SkillManifest — sibling `manifest.json` for SDD configuration
+// =============================================================================
+
+/**
+ * Configuration metadata that lives in `{skill-dir}/manifest.json`, not in
+ * SKILL.md frontmatter. The manifest is the program-facing contract — only
+ * runtime code (loader / marketplace installer / activation guard) reads it.
+ *
+ * See agent-unified-workflow.md §5.2.1. The split between manifest and
+ * SKILL.md matches the division of labour:
+ *
+ *   - **manifest.json** (this type): fields the runtime must inspect before
+ *     running the Skill — version compatibility, subpackage dependencies,
+ *     autoInvoke flag, compliance rules. Machine-readable JSON; validated
+ *     at market install time and at Skill activation.
+ *   - **SKILL.md body**: fields the Agent needs to understand semantically
+ *     — description, persona, phases narrative, pipeline instructions.
+ *     Natural language; consumed as a system prompt.
+ *
+ * Optional so older skills (manifest-less) keep loading; the validator
+ * emits warnings rather than errors for missing fields.
+ */
+export interface SkillManifest {
+  /** Semver version string. Required by the SDD spec for audit tracing. */
   version?: string;
 
-  /** Domain identifier (cut / story / canvas / …). */
+  /** Domain identifier (cut / story / canvas / ...). Free-form. */
   domain?: string;
 
-  /** Subpackage dependencies. */
+  /** Subpackage dependencies enforced at activation time. */
   requiredSubpackages?: RequiredSubpackage[];
 
-  /** Whether AutoMode may auto-select this Skill. Defaults to true. */
+  /**
+   * Whether AutoMode may auto-select this Skill. Defaults to true when
+   * omitted; set false for high-risk or test-only Skills.
+   */
   autoInvoke?: boolean;
 
-  /** Multi-stage orchestration (phases + approval gates). */
+  /**
+   * Multi-stage orchestration. Declares phase ordering and approval
+   * gates; StageGuardian enforces them at runtime.
+   */
   phases?: SkillPhase[];
 
-  /** Named pipelines keyed by name (e.g. export / preview). */
+  /** Named processing pipelines keyed by pipeline name. */
   pipelines?: Record<string, SkillPipeline>;
 
-  /** Asset references resolved through PathResolver. */
+  /** Assets the Skill depends on (resolved via PathResolver). */
   referencedAssets?: SkillAssetReference[];
 
-  /** Related Skills (collaborator / delegator). */
+  /** Cross-Skill relationships surfaced by the runtime. */
   referencedSkills?: RelatedSkill[];
 
-  /** Compliance metadata. */
+  /** Compliance metadata consumed by audit tooling. */
   compliance?: SkillCompliance;
 }
 
@@ -1112,42 +1145,53 @@ export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
     errors.push('Missing required field: content');
   }
 
-  validateSddMetadata(skill, errors, warnings);
+  // Runtime Skill objects carry the merged manifest + frontmatter view, so
+  // a single Skill snapshot is validated against both contracts here. The
+  // manifest validator takes the shared error/warning arrays so its
+  // findings are reported alongside content-level errors.
+  validateSkillManifest(skill, errors, warnings);
 
   return { valid: errors.length === 0, errors, warnings };
 }
 
 /**
- * Validate the SDD metadata block (agent-unified-workflow.md §5.2.1).
+ * Validate the SDD manifest fields (agent-unified-workflow.md §5.2.1).
  *
- * All fields are optional for backwards compatibility with pre-SDD
- * Skills; when present they are checked for shape and basic consistency.
- * Absent version / domain only warn — a follow-up migration can elevate
- * them to errors once existing Skills are updated.
+ * Accepts either a runtime `Skill` (where the manifest has been merged in)
+ * or a standalone `SkillManifest` loaded from `manifest.json`. All fields
+ * are optional for backwards compatibility; missing `version` / `domain`
+ * only warn so legacy skills keep loading.
+ *
+ * This function is called by both the Skill loader (runtime snapshot) and
+ * the marketplace installer (pre-install audit of the manifest alone).
  */
-function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: string[]): void {
+export function validateSkillManifest(
+  manifest: Partial<SkillManifest>,
+  errors: string[] = [],
+  warnings: string[] = [],
+): SkillValidationResult {
   // version: warn if missing, error if malformed.
-  if (skill.version === undefined) {
+  if (manifest.version === undefined) {
     warnings.push('Missing SDD metadata field: version (recommended, semver string)');
-  } else if (typeof skill.version !== 'string' || !SEMVER_RE.test(skill.version)) {
-    errors.push(`Invalid version "${skill.version}" — must be a semver string (e.g. "1.0.0")`);
+  } else if (typeof manifest.version !== 'string' || !SEMVER_RE.test(manifest.version)) {
+    errors.push(`Invalid version "${manifest.version}" — must be a semver string (e.g. "1.0.0")`);
   }
 
   // domain: warn if missing, error if empty string.
-  if (skill.domain === undefined) {
+  if (manifest.domain === undefined) {
     warnings.push('Missing SDD metadata field: domain (recommended, e.g. "cut" / "story")');
-  } else if (typeof skill.domain !== 'string' || skill.domain.trim().length === 0) {
+  } else if (typeof manifest.domain !== 'string' || manifest.domain.trim().length === 0) {
     errors.push('Field "domain" must be a non-empty string');
   }
 
   // requiredSubpackages: shape check. Duplicate ids are an error.
-  if (skill.requiredSubpackages !== undefined) {
-    if (!Array.isArray(skill.requiredSubpackages)) {
+  if (manifest.requiredSubpackages !== undefined) {
+    if (!Array.isArray(manifest.requiredSubpackages)) {
       errors.push('Field "requiredSubpackages" must be an array');
     } else {
       const seenIds: Record<string, true> = {};
-      for (let idx = 0; idx < skill.requiredSubpackages.length; idx++) {
-        const dep = skill.requiredSubpackages[idx];
+      for (let idx = 0; idx < manifest.requiredSubpackages.length; idx++) {
+        const dep = manifest.requiredSubpackages[idx];
         if (!dep || typeof dep !== 'object') {
           errors.push(`requiredSubpackages[${idx}] must be an object`);
           continue;
@@ -1170,18 +1214,18 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
   }
 
   // autoInvoke: boolean if present.
-  if (skill.autoInvoke !== undefined && typeof skill.autoInvoke !== 'boolean') {
+  if (manifest.autoInvoke !== undefined && typeof manifest.autoInvoke !== 'boolean') {
     errors.push('Field "autoInvoke" must be a boolean');
   }
 
   // phases: shape + unique names.
-  if (skill.phases !== undefined) {
-    if (!Array.isArray(skill.phases)) {
+  if (manifest.phases !== undefined) {
+    if (!Array.isArray(manifest.phases)) {
       errors.push('Field "phases" must be an array');
     } else {
       const seenNames: Record<string, true> = {};
-      for (let idx = 0; idx < skill.phases.length; idx++) {
-        const phase = skill.phases[idx];
+      for (let idx = 0; idx < manifest.phases.length; idx++) {
+        const phase = manifest.phases[idx];
         if (!phase || typeof phase !== 'object') {
           errors.push(`phases[${idx}] must be an object`);
           continue;
@@ -1207,14 +1251,14 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
   }
 
   // pipelines: ops must be arrays of single-key objects.
-  if (skill.pipelines !== undefined) {
-    if (typeof skill.pipelines !== 'object' || Array.isArray(skill.pipelines)) {
+  if (manifest.pipelines !== undefined) {
+    if (typeof manifest.pipelines !== 'object' || Array.isArray(manifest.pipelines)) {
       errors.push('Field "pipelines" must be an object keyed by pipeline name');
     } else {
-      const pipelineNames = Object.keys(skill.pipelines);
+      const pipelineNames = Object.keys(manifest.pipelines);
       for (let pIdx = 0; pIdx < pipelineNames.length; pIdx++) {
         const pipelineName = pipelineNames[pIdx]!;
-        const pipeline = skill.pipelines[pipelineName];
+        const pipeline = manifest.pipelines[pipelineName];
         if (!pipeline || typeof pipeline !== 'object' || !Array.isArray(pipeline.ops)) {
           errors.push(`pipelines.${pipelineName}.ops must be an array`);
           continue;
@@ -1230,12 +1274,12 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
   }
 
   // referencedAssets: require asset:// URI.
-  if (skill.referencedAssets !== undefined) {
-    if (!Array.isArray(skill.referencedAssets)) {
+  if (manifest.referencedAssets !== undefined) {
+    if (!Array.isArray(manifest.referencedAssets)) {
       errors.push('Field "referencedAssets" must be an array');
     } else {
-      for (let idx = 0; idx < skill.referencedAssets.length; idx++) {
-        const ref = skill.referencedAssets[idx];
+      for (let idx = 0; idx < manifest.referencedAssets.length; idx++) {
+        const ref = manifest.referencedAssets[idx];
         if (!ref || typeof ref !== 'object') {
           errors.push(`referencedAssets[${idx}] must be an object`);
           continue;
@@ -1248,12 +1292,12 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
   }
 
   // referencedSkills: require relationship enum.
-  if (skill.referencedSkills !== undefined) {
-    if (!Array.isArray(skill.referencedSkills)) {
+  if (manifest.referencedSkills !== undefined) {
+    if (!Array.isArray(manifest.referencedSkills)) {
       errors.push('Field "referencedSkills" must be an array');
     } else {
-      for (let idx = 0; idx < skill.referencedSkills.length; idx++) {
-        const ref = skill.referencedSkills[idx];
+      for (let idx = 0; idx < manifest.referencedSkills.length; idx++) {
+        const ref = manifest.referencedSkills[idx];
         if (!ref || typeof ref !== 'object') {
           errors.push(`referencedSkills[${idx}] must be an object`);
           continue;
@@ -1271,11 +1315,11 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
   }
 
   // compliance: light shape check; semantics are caller-defined.
-  if (skill.compliance !== undefined) {
-    if (typeof skill.compliance !== 'object' || Array.isArray(skill.compliance)) {
+  if (manifest.compliance !== undefined) {
+    if (typeof manifest.compliance !== 'object' || Array.isArray(manifest.compliance)) {
       errors.push('Field "compliance" must be an object');
     } else {
-      const c = skill.compliance;
+      const c = manifest.compliance;
       if (c.framework !== undefined && typeof c.framework !== 'string') {
         errors.push('compliance.framework must be a string');
       }
@@ -1290,6 +1334,8 @@ function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: 
       }
     }
   }
+
+  return { valid: errors.length === 0, errors, warnings };
 }
 
 /**
@@ -1319,14 +1365,21 @@ export function validateCommand(command: Partial<SlashCommand>): SkillValidation
 }
 
 /**
- * Create a Skill from parsed frontmatter
+ * Create a Skill from its sources.
  *
- * @param frontmatter Parsed YAML frontmatter
+ * SKILL.md frontmatter is the document-facing surface (name, description,
+ * persona fields that also shape the prompt). SDD configuration fields
+ * live in a sibling `manifest.json` loaded separately and merged here —
+ * keeping the prompt-visible YAML lean while still giving the runtime a
+ * single `Skill` snapshot to reason about.
+ *
+ * @param frontmatter Parsed YAML frontmatter from SKILL.md
  * @param content SKILL.md body content
  * @param source Skill source (builtin, personal, project)
  * @param directoryPath Skill directory path
  * @param supportFileRefs Referenced support file paths (progressive disclosure)
  * @param toolDefinitions Tool definitions loaded from tools.md
+ * @param manifest Optional manifest.json contents (SDD metadata)
  */
 export function createSkill(
   frontmatter: SkillFrontmatter,
@@ -1335,6 +1388,7 @@ export function createSkill(
   directoryPath?: string,
   supportFileRefs?: string[],
   toolDefinitions?: SkillToolDefinition[],
+  manifest?: SkillManifest,
 ): Skill {
   return {
     name: frontmatter.name,
@@ -1354,18 +1408,16 @@ export function createSkill(
     pipelineFlowId: frontmatter.pipeline,
     pipelineSkipStages: parsePipelineSkip(frontmatter['pipeline-skip']),
     pipelineParams: parsePipelineParams(frontmatter['pipeline-params']),
-    // SDD metadata (§5.2.1). Frontmatter → Skill mapping is identity —
-    // the loader's YAML parser is responsible for producing well-typed
-    // values (arrays / nested objects); we just forward them.
-    version: frontmatter.version,
-    domain: frontmatter.domain,
-    requiredSubpackages: frontmatter.requiredSubpackages,
-    autoInvoke: frontmatter.autoInvoke,
-    phases: frontmatter.phases,
-    pipelines: frontmatter.pipelines,
-    referencedAssets: frontmatter.referencedAssets,
-    referencedSkills: frontmatter.referencedSkills,
-    compliance: frontmatter.compliance,
+    // SDD metadata (§5.2.1) — pulled from manifest.json, not frontmatter.
+    version: manifest?.version,
+    domain: manifest?.domain,
+    requiredSubpackages: manifest?.requiredSubpackages,
+    autoInvoke: manifest?.autoInvoke,
+    phases: manifest?.phases,
+    pipelines: manifest?.pipelines,
+    referencedAssets: manifest?.referencedAssets,
+    referencedSkills: manifest?.referencedSkills,
+    compliance: manifest?.compliance,
   };
 }
 
