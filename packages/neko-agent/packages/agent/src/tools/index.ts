@@ -41,6 +41,8 @@ export {
   type GrepToolOptions,
   createCoreTools,
   type CoreToolsOptions,
+  TodoWriteTool,
+  type TodoWriteToolOptions,
 } from './core';
 
 // Re-export types and constants from shared for convenience

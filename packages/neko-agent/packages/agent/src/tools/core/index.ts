@@ -26,3 +26,4 @@ export { ListDirectoryTool } from './list-directory-tool';
 export { GrepTool, type GrepToolOptions } from './grep-tool';
 export { createCoreTools, type CoreToolsOptions } from './core-tools';
 export { MemoryWriteTool } from './memory-write-tool';
+export { TodoWriteTool, type TodoWriteToolOptions } from './todo-write-tool';

@@ -22,3 +22,5 @@ export {
   type NdjsonEventSinkConfig,
   type NdjsonFsOps,
 } from './ndjson-event-sink';
+
+export { serializeTodoList } from './todo-markdown';
