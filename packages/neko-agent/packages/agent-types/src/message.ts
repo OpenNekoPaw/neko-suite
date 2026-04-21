@@ -67,7 +67,7 @@ export interface ContentBlock {
   toolCall?: ToolCall;
   /** For code_diff blocks */
   codeDiff?: CodeDiff;
-  /** For plan blocks */
+  /** For plan blocks — the parsed Plan (from plan-mode markdown). */
   plan?: Plan;
 }
 

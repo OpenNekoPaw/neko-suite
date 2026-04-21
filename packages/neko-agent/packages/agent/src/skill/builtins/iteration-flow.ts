@@ -23,7 +23,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_PIPELINE, TOOL_NAMES_QUALITY, TOOL_NAMES_SYSTEM } from '@neko/shared';
+import { TOOL_NAMES_QUALITY, TOOL_NAMES_SYSTEM } from '@neko/shared';
 
 const iterationFlowContent = `# Iteration Flow Persona — Consistency Iterator
 
@@ -103,10 +103,8 @@ export const iterationFlowSkill: Skill = {
     TOOL_NAMES_SYSTEM.GLOB,
     TOOL_NAMES_QUALITY.QUALITY_CHECK,
     TOOL_NAMES_QUALITY.QUALITY_CHECK_CONSISTENCY,
-    // Partial rerun handoff — see Q3 PipelineAction.partialRerun
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.GET_PIPELINE_REPORT,
-    TOOL_NAMES_PIPELINE.LIST_PIPELINE_REPORTS,
+    // Partial rerun is now performed by the Agent composing atomic
+    // GenerateImage / timeline tools rather than re-starting a pipeline.
   ],
   icon: '♻',
   source: 'builtin',

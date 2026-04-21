@@ -88,6 +88,24 @@ export type {
 export { LengthValidator, createLengthValidator } from './length-validator';
 export type { ILengthValidator, LengthValidationOptions } from './length-validator';
 
+// QA domain types (migrated from agent/src/workflow/qa-types.ts — W1.2)
+export { QUALITY_ISSUE_CATEGORIES } from './qa-types';
+export type {
+  QualityIssue,
+  QualityIssueCategory,
+  IssueSeverity,
+  RemediationAction,
+  MediaEvaluation,
+  EvalMediaType,
+  AudioTechnicalMetrics,
+  VideoTechnicalMetrics,
+  ConsistencyReport,
+  SceneReviewCard,
+  SceneVerdict,
+  StyleDriftPair,
+  CharacterAppearance,
+} from './qa-types';
+
 // Remediation Planner
 export { RemediationPlanner, createRemediationPlanner } from './remediation-planner';
 export type { IRemediationPlanner } from './remediation-planner';

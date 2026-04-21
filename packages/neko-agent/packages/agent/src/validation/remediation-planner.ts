@@ -13,7 +13,7 @@ import type {
   QualityIssueCategory,
   EvalMediaType,
   RemediationAction,
-} from '../workflow/qa-types';
+} from './qa-types';
 
 // =============================================================================
 // Interface

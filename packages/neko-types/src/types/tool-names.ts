@@ -84,18 +84,6 @@ export const TOOL_NAMES_MEDIA = {
 } as const;
 
 // =============================================================================
-// Pipeline — Orchestration and Diagnostics
-// =============================================================================
-
-export const TOOL_NAMES_PIPELINE = {
-  START_PIPELINE: 'StartPipeline',
-  CONFIRM_PIPELINE_GATE: 'ConfirmPipelineGate',
-  RETRY_PIPELINE_SCENES: 'RetryPipelineScenes',
-  GET_PIPELINE_REPORT: 'GetPipelineReport',
-  LIST_PIPELINE_REPORTS: 'ListPipelineReports',
-} as const;
-
-// =============================================================================
 // Quality — Check and Consistency
 // =============================================================================
 
@@ -208,7 +196,6 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_TIMELINE,
   ...TOOL_NAMES_CANVAS,
   ...TOOL_NAMES_MEDIA,
-  ...TOOL_NAMES_PIPELINE,
   ...TOOL_NAMES_QUALITY,
   ...TOOL_NAMES_EFFECTS,
   ...TOOL_NAMES_STORY,

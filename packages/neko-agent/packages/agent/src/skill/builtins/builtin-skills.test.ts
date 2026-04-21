@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest';
 import {
   TOOL_NAMES_TIMELINE,
   TOOL_NAMES_MEDIA,
-  TOOL_NAMES_PIPELINE,
   TOOL_NAMES_QUALITY,
   TOOL_NAMES_SYSTEM,
 } from '@neko/shared';
@@ -18,7 +17,6 @@ import {
   scriptGenerationSkill,
   aiGenerateSkill,
   videoEditingSkill,
-  storyboardToTimelineSkill,
   qualityAssessmentSkill,
 } from '../index';
 
@@ -69,12 +67,7 @@ describe('Builtin Skills', () => {
 
     it('should have required tools', () => {
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
-    });
-
-    it('should have flowE pipeline ID', () => {
-      expect(comicToStoryboardSkill.pipelineFlowId).toBe('flowE');
     });
 
     it('should have comic icon', () => {
@@ -233,10 +226,6 @@ describe('Builtin Skills', () => {
       // Comic workflow
       expect(skillNames).toContain('comic-to-storyboard');
 
-      // Pipeline orchestration
-      expect(skillNames).toContain('storyboard-to-timeline');
-      expect(skillNames).toContain('pipeline-retry');
-
       // AI generation
       expect(skillNames).toContain('ai-generate');
 
@@ -266,30 +255,6 @@ describe('Builtin Skills', () => {
     it('should have examples or templates', () => {
       expect(comicToStoryboardSkill.content).toContain('Example');
       expect(scriptGenerationSkill.content).toContain('Template');
-    });
-  });
-
-  describe('pipeline integration', () => {
-    it('should have storyboard-to-timeline with flowF', () => {
-      expect(storyboardToTimelineSkill.pipelineFlowId).toBe('flowF');
-    });
-
-    it('should have comic-to-storyboard with flowE', () => {
-      expect(comicToStoryboardSkill.pipelineFlowId).toBe('flowE');
-    });
-
-    it('should have pipeline skills with StartPipeline tool', () => {
-      expect(storyboardToTimelineSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_PIPELINE.START_PIPELINE);
-    });
-
-    it('should have pipeline skills with ConfirmPipelineGate tool', () => {
-      expect(storyboardToTimelineSkill.allowedTools).toContain(
-        TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-      );
-      expect(comicToStoryboardSkill.allowedTools).toContain(
-        TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-      );
     });
   });
 

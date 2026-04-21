@@ -30,18 +30,10 @@ import {
   recordCanvasChange,
 } from './services/canvasAmbientContext';
 import type { NekoCanvasAPI } from '@neko/shared';
-import { bootstrapWorkflow } from './workflow/workflow-bootstrap';
-import {
-  bootstrapOrchestrator,
-  isOrchestratorEnabled,
-  type Orchestrator,
-} from './workflow/orchestrator-bootstrap';
-import { WorkflowPlanHandler } from './workflow/workflow-plan-handler';
 import {
   createApprovalEngine,
   declarativeStrategyPack,
   imperativeStrategyPack,
-  createPlanReviewApprovalAdapter,
 } from '@neko/agent/approval';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -49,8 +41,6 @@ import { createStatusBar } from './statusBar';
 import { getSlashCommandRegistry } from './services/slashCommandRegistry';
 import type { PluginSlashCommandDef } from './services/slashCommandRegistry';
 import type { Platform } from '@neko/platform';
-import type { WorkflowBootstrapResult } from './workflow/workflow-bootstrap';
-import { subscribeWorkflowProgress } from './workflow/workflow-progress-bridge';
 
 /** Infer an image MIME type from a file path extension; defaults to image/png. */
 function inferImageMime(filePath: string): string {
@@ -176,36 +166,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // packs; the two lanes don't share state today, but they share
   // policy (strategy packs) so decisions stay consistent.
   //
-  // Flow accessor is pinned to 'creation' here because the workflow
-  // lane (Plan Review + QualityGate) always runs on the outer ring.
-  // When the AI lane wires its own FlowSwitcher into its session the
-  // engine it sees is separate (per-session) and reads live flow.
+  // Approval engine (declarative + imperative strategy packs) is created
+  // here so sessions share a single instance. When per-session adapters
+  // (permission / proposal review) are needed, register them against this
+  // engine at session-construction time.
   const approvalEngine = createApprovalEngine({
     strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
   });
-  const planReviewAdapter = createPlanReviewApprovalAdapter({ engine: approvalEngine });
-
-  // Initialize Pipeline orchestration layer (L2)
-  const pipelineBootstrap = bootstrapWorkflow(
-    bootstrapResult.platform,
-    bootstrapResult.toolRegistry,
-    {
-      approval: {
-        engine: approvalEngine,
-      },
-    },
-  );
-
-  // Initialize Workflow Orchestrator (Phase 1 MVP — see
-  // docs/architecture/workflow-routing.md / plan-mode.md).
-  // Behind the `neko.workflow.orchestrator.enabled` setting; when disabled
-  // the extension keeps the legacy `neko.agent.startPipeline` path untouched.
-  const orchestrator: Orchestrator = await bootstrapOrchestrator({
-    platform: bootstrapResult.platform,
-    workDir: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
-    startPipeline: pipelineBootstrap.startPipeline,
-  });
-  context.subscriptions.push({ dispose: () => orchestrator.dispose() });
+  void approvalEngine;
 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
@@ -228,48 +196,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatViewProvider),
   );
 
-  // Plan-layer handler bridges orchestrator → chat webview (Phase 1.5).
-  // Must be wired AFTER chatViewProvider exists.
-  const workflowPlanHandler = new WorkflowPlanHandler({
-    orchestrator,
-    getWebview: () => chatViewProvider.webview,
-    // P4 — route auto-approve through the unified ApprovalEngine.
-    evaluatePlanApproval: planReviewAdapter,
-  });
-  chatViewProvider.setWorkflowPlanHandler(workflowPlanHandler);
-  context.subscriptions.push({
-    dispose: () => chatViewProvider.setWorkflowPlanHandler(undefined),
-  });
-
-  // Phase 3.5: attach the RouterAskBroker so the LLM router's `ask_user`
-  // tool can surface interactive clarifying questions to the webview. Only
-  // meaningful when the LLM router is enabled by flag.
-  if (orchestrator.llmRouter) {
-    const { RouterAskBroker } = await import('./workflow/router-ask-broker');
-    const askBroker = new RouterAskBroker({
-      getWebview: () => chatViewProvider.webview,
-    });
-    orchestrator.llmRouter.setAskBroker(askBroker);
-    chatViewProvider.setRouterAskBroker(askBroker);
-    context.subscriptions.push({
-      dispose: () => {
-        orchestrator.llmRouter?.setAskBroker(undefined);
-        chatViewProvider.setRouterAskBroker(undefined);
-      },
-    });
-  }
-
   // Register commands
-  registerCommands(
-    context,
-    chatViewProvider,
-    services,
-    pipelineBootstrap,
-    orchestrator,
-    workflowPlanHandler,
-  );
+  registerCommands(context, chatViewProvider, services);
 
-  // Register pipeline commands
+  // Pipeline quick-start commands — surface QuickPick / right-click entries
+  // that funnel user intent into the Agent chat. Agent then picks the right
+  // Skill to orchestrate (no hard-coded flowA-F routing here).
   registerPipelineCommands(context, chatViewProvider);
 
   // Register document/media context menu commands (explorer/context)
@@ -414,9 +346,6 @@ function registerCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
-  pipelineBootstrap: WorkflowBootstrapResult,
-  orchestrator: Orchestrator,
-  workflowPlanHandler: WorkflowPlanHandler,
 ): void {
   // Open AI Chat
   context.subscriptions.push(
@@ -442,142 +371,10 @@ function registerCommands(
     ),
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.agent.startPipeline',
-      async (params: {
-        flowId: 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
-        source: string;
-        sourceFormat?: 'fountain' | 'freeform' | 'document';
-        style?: string;
-        importToCanvas?: boolean;
-        canvasStartX?: number;
-        canvasStartY?: number;
-        eventCommand?: string;
-        eventPayload?: Record<string, unknown>;
-        skipStages?: string[];
-        stageParams?: Record<string, Record<string, unknown>>;
-        generationUnit?: 'scene' | 'shot';
-      }) => {
-        const handle = pipelineBootstrap.startPipeline(
-          params.flowId,
-          {
-            source: params.source,
-            sourceFormat: params.sourceFormat,
-            globalStyle: params.style,
-            generationUnit: params.generationUnit,
-            stageParams: {
-              ...(params.stageParams ?? {}),
-              ...(params.importToCanvas
-                ? {
-                    importStoryboardToCanvas: {
-                      enabled: true,
-                      startX: params.canvasStartX,
-                      startY: params.canvasStartY,
-                    },
-                  }
-                : {}),
-            },
-          },
-          {
-            skipStages: params.skipStages,
-            globalStyle: params.style,
-          },
-        );
-
-        subscribeWorkflowProgress(chatViewProvider.webview, handle.id, handle, {
-          eventCommand: params.eventCommand,
-          eventPayload: params.eventPayload,
-        });
-
-        return { pipelineId: handle.id, flowId: handle.flowId };
-      },
-    ),
-  );
-
-  // Routed Pipeline (Phase 1 MVP — Workflow/Plan/Pipeline glue).
-  // See docs/architecture/workflow-routing.md + plan-mode.md.
-  // Feature-flagged behind neko.workflow.orchestrator.enabled.
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.agent.startRoutedWorkflow',
-      async (params: {
-        /** The raw input to route; one of prompt/file/files/project */
-        input:
-          | { kind: 'prompt'; text: string }
-          | { kind: 'file'; path: string; size?: number }
-          | { kind: 'files'; paths: string[]; totalSize?: number }
-          | { kind: 'project'; path: string; workflow?: string };
-        /** Optional user override (forceLevel, etc.) */
-        routerOverrides?: {
-          forceLevel?: 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
-          skipPlanMode?: boolean;
-          disableLlmRouter?: boolean;
-        };
-        /** Optional global style / aspect ratio */
-        globalStyle?: string;
-        /** Whether to only build a plan (preview) and skip dispatch */
-        previewOnly?: boolean;
-        /** Optional progress event bridge */
-        eventCommand?: string;
-        eventPayload?: Record<string, unknown>;
-      }) => {
-        if (!isOrchestratorEnabled()) {
-          throw new Error(
-            'Workflow orchestrator is disabled. Enable it via the ' +
-              '"neko.workflow.orchestrator.enabled" setting (Phase 1 preview).',
-          );
-        }
-
-        if (params.previewOnly) {
-          const preview = await orchestrator.buildPlan(params.input, params.routerOverrides);
-          return {
-            route: preview.route,
-            plan: preview.plan,
-          };
-        }
-
-        // Interactive flow: build → preview in chat webview → await user decision.
-        const { getPlanAutoApproveThreshold } = await import('./workflow/workflow-settings');
-        const autoApproveThreshold = getPlanAutoApproveThreshold();
-        const presentation = await workflowPlanHandler.presentAndDispatch({
-          input: params.input,
-          ...(params.routerOverrides !== undefined && { routerOverrides: params.routerOverrides }),
-          ...(params.globalStyle !== undefined && { globalStyle: params.globalStyle }),
-          autoApproveThreshold,
-        });
-
-        if (!presentation.result) {
-          // User aborted — return the plan metadata without dispatch info
-          return {
-            route: presentation.route,
-            plan: presentation.plan,
-            pipelineId: undefined,
-            flowId: undefined,
-            aborted: true,
-          };
-        }
-
-        const chatWebview = chatViewProvider.webview;
-        if (chatWebview) {
-          workflowPlanHandler.attachProgressForwarder(
-            presentation.plan.id,
-            presentation.result,
-            chatWebview,
-            params.eventCommand,
-          );
-        }
-
-        return {
-          route: presentation.route,
-          plan: presentation.plan,
-          pipelineId: presentation.result.handle.id,
-          flowId: presentation.result.handle.flowId,
-          aborted: false,
-        };
-      },
-    ),
-  );
+  // Note: neko.agent.startPipeline / neko.agent.startRoutedWorkflow were
+  // removed together with the workflow/ orchestration layer. Media creation
+  // flows are now expressed as Skills that the Agent orchestrates over
+  // atomic tools (GenerateImage / AddTimelineElement / ...).
 
   // Generate Image (placeholder)
   context.subscriptions.push(

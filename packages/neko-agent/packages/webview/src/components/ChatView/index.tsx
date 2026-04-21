@@ -49,11 +49,6 @@ interface ChatViewProps {
   onAttachedFilesChange?: (files: MessageAttachment[]) => void;
   /** Current agent execution state (null when idle) */
   agentState?: AgentState | null;
-  /**
-   * Optional workflow plan card (Router/Plan layer preview). Rendered above
-   * the input area when a workflow/planPreview message is active.
-   */
-  workflowPlanPanel?: React.ReactNode;
 }
 
 export function ChatView({
@@ -82,7 +77,6 @@ export function ChatView({
   attachedFiles,
   onAttachedFilesChange,
   agentState,
-  workflowPlanPanel,
 }: ChatViewProps) {
   const isEmpty = messages.length === 0 && !isThinking;
 
@@ -147,9 +141,6 @@ export function ChatView({
             />
           </MessageActionsProvider>
         )}
-
-        {/* Workflow plan card (Router/Plan layer preview) */}
-        {workflowPlanPanel}
 
         {/* Input Area */}
         <InputArea

@@ -24,9 +24,8 @@ import type {
   EvalMediaType,
   AudioTechnicalMetrics,
   VideoTechnicalMetrics,
-} from '@neko/agent/workflow';
-import { QUALITY_ISSUE_CATEGORIES } from '@neko/agent/workflow';
-import { createRemediationPlanner } from '@neko/agent/validation';
+} from '@neko/agent/validation';
+import { QUALITY_ISSUE_CATEGORIES, createRemediationPlanner } from '@neko/agent/validation';
 
 const logger = getLogger('QualityCheckTools');
 

@@ -5,12 +5,7 @@
  */
 
 import type { Skill, ISkillRegistry } from '@neko/shared';
-import {
-  TOOL_NAMES_TIMELINE,
-  TOOL_NAMES_MEDIA,
-  TOOL_NAMES_PIPELINE,
-  TOOL_NAMES_SYSTEM,
-} from '@neko/shared';
+import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
 import { scriptGenerationSkill } from './script-generation';
@@ -434,123 +429,11 @@ Fountain is a plain-text screenplay format:
 // Exports
 // =============================================================================
 
-/**
- * Storyboard to Timeline Pipeline - Auto-convert scripts to video via AI generation
- *
- * Triggered when user mentions: storyboard to video, batch generate, script to video
- *
- * This skill activates the Pipeline orchestration layer (L2):
- *   parseStoryboard → generatePrompts (confirm gate) → batchGenerate → arrangeOnTimeline
- */
-export const storyboardToTimelineSkill: Skill = {
-  name: 'storyboard-to-timeline',
-  description:
-    'Convert scripts or storyboard descriptions into videos and arrange on timeline. ' +
-    'Use when user mentions: storyboard to video, batch generate video, script to video, ' +
-    'make video from script, 分镜, 批量生成视频, 剧本转视频, 做成视频.',
-  content: `# Storyboard → Video Timeline Pipeline
-
-You are a storyboard director assistant. When the user provides a script or scene descriptions,
-use the Pipeline system to automate the full workflow.
-
-## Workflow
-
-1. **Call StartPipeline** with the appropriate flow:
-   - \`flowF\`: Script → Storyboard → Video (most common)
-   - \`flowA\`: Document → Script → Storyboard → Video (for PDF/DOCX/MD)
-   - \`flowB\`: Quick generate → Video (simple prompts)
-   - \`flowD\`: Script → Video (skip storyboard, just add to timeline)
-
-2. **Review at confirmation gates**: The pipeline pauses after generating video prompts.
-   Review the prompts with the user, then call ConfirmPipelineGate to proceed.
-
-3. **Monitor progress**: Batch generation runs in background with progress tracking.
-
-4. **Post-pipeline suggestions**: After completion, suggest:
-   - Adding transitions between scenes
-   - Generating background music (GenerateMusic)
-   - Adding voiceover (GenerateTTS)
-   - Color grading adjustments
-
-## Source Format Detection
-
-- \`.fountain\` files → sourceFormat: "fountain"
-- \`.pdf\`, \`.docx\` files → sourceFormat: "document" (use flowA)
-- Free text / scene list → sourceFormat: "freeform"
-
-## Tips for Better Results
-
-- Emphasize visual consistency across scenes (same characters, style, color palette)
-- Use specific camera angles in prompts (wide shot, close-up, tracking)
-- Match lighting to scene mood (warm for comfort, cool for tension)
-`,
-  allowedTools: [
-    // Pipeline control
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-    // Timeline (for post-pipeline adjustments)
-    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
-    // Media generation (for individual additions)
-    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
-    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
-    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
-    TOOL_NAMES_MEDIA.GENERATE_TTS,
-    // File operations
-    TOOL_NAMES_SYSTEM.READ,
-    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
-    TOOL_NAMES_SYSTEM.GLOB,
-  ],
-  pipelineFlowId: 'flowF',
-  icon: '🎬',
-  source: 'builtin',
-  enabled: true,
-  // Also register as /pipeline slash command
-  command: 'pipeline',
-  argumentHint: '[flowId] [source file or text]',
-  supportsArguments: true,
-};
-
-/**
- * Pipeline Retry — Retry failed scenes from a completed pipeline
- *
- * Triggered by /pipeline-retry or when user mentions retry/failed scenes
- */
-export const pipelineRetrySkill: Skill = {
-  name: 'pipeline-retry',
-  description:
-    'Retry failed scenes from a completed pipeline. ' +
-    'Use when user mentions: retry failed, retry pipeline, redo failed scenes, 重试失败.',
-  content: `# Pipeline Retry Assistant
-
-When the user wants to retry failed scenes from a previous pipeline:
-
-1. Call RetryPipelineScenes with the pipeline ID
-   - If no specific pipeline ID, use the most recent one
-   - If no specific scene indices, retry all failed scenes
-2. Monitor the retry progress
-3. Report which scenes succeeded on retry
-
-If the user wants to restart the entire pipeline instead of just failed scenes,
-suggest using StartPipeline with the original parameters.
-`,
-  allowedTools: [
-    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-  ],
-  icon: '🔄',
-  source: 'builtin',
-  enabled: true,
-  // Register as /pipeline-retry slash command
-  command: 'pipeline-retry',
-  argumentHint: '[pipeline-id] [scene indices]',
-  supportsArguments: true,
-};
+// Note: storyboardToTimelineSkill / pipelineRetrySkill /
+// pipelineDiagnosticsSkill were removed together with the workflow/
+// orchestration layer. Script-to-video flows are expressed by the Agent
+// directly composing GenerateImage / GenerateVideo / AddTimelineElement
+// over a Skill's phases — no separate pipeline DSL.
 
 /**
  * Scene-to-Music Skill
@@ -627,80 +510,10 @@ Report to the user what music was generated (prompt used, duration) and where it
   supportsArguments: true,
 };
 
-/**
- * Pipeline Diagnostics — Analyze pipeline execution results on user request
- *
- * Triggered when user asks: "what went wrong", "why did it fail", "pipeline status",
- * "流水线怎么了", "哪个场景失败了", "分析执行结果"
- */
-export const pipelineDiagnosticsSkill: Skill = {
-  name: 'pipeline-diagnostics',
-  description:
-    'Diagnose pipeline execution results. ' +
-    'Use when user mentions: what went wrong, pipeline failed, why did it fail, ' +
-    'which scene failed, analyze results, diagnose pipeline, check pipeline, ' +
-    '流水线怎么了, 哪个失败了, 分析结果, 执行报告, 诊断.',
-  content: `# Pipeline Diagnostics Assistant
-
-You help users understand what happened during a pipeline execution and guide them to fix issues.
-
-## Workflow
-
-### Step 1: Get the Report
-Call **ListPipelineReports** to see recent executions.
-If the user mentions a specific pipeline, call **GetPipelineReport** with its ID.
-
-### Step 2: Analyze
-From the report, identify:
-1. **Overall status**: completed / failed / cancelled
-2. **Failed stage**: which stage broke and why (error message)
-3. **Scene summary**: how many scenes generated vs failed, which indices failed
-4. **Duration**: how long each stage took (abnormally long stages may indicate provider issues)
-
-### Step 3: Diagnose Common Issues
-
-| Symptom | Likely Cause | Suggested Fix |
-|---------|-------------|---------------|
-| readDocument failed | File not found or unsupported format | Check file path and format |
-| parseStoryboard failed | LLM couldn't parse script structure | Simplify script or use Fountain format |
-| batchGenerate partial failure | Some media providers timed out | Retry failed scenes with RetryPipelineScenes |
-| batchGenerate all failed | Provider not configured or quota exceeded | Check media provider settings |
-| arrangeOnTimeline failed | NekoCut extension not active | Open a .neko project first |
-| Cancelled at gate | User cancelled during review | Not an error — user chose to stop |
-
-### Step 4: Recommend Next Steps
-Based on diagnosis:
-- **Partial failure**: Suggest retrying specific scenes with RetryPipelineScenes
-- **Full failure**: Suggest fixing the root cause then re-running with StartPipeline
-- **Scene quality issues**: Suggest reviewing generated media and adjusting prompts/style
-- **Successful but user unhappy**: Guide user to Gate review for manual adjustment
-
-### Step 5: If User Wants Scene-Level Analysis
-When the user says "this scene doesn't look right" or "场景不对":
-- Ask which scene index they're referring to
-- Read the storyboard scene description from the report context
-- Compare with what was generated (the media path)
-- Suggest a revised prompt and offer to retry that specific scene
-
-## Important
-- Always show concrete data (stage names, error messages, scene indices) — don't be vague
-- If no reports exist, tell the user to run a pipeline first
-- Reports are kept in memory for 1 hour after completion
-`,
-  allowedTools: [
-    TOOL_NAMES_PIPELINE.GET_PIPELINE_REPORT,
-    TOOL_NAMES_PIPELINE.LIST_PIPELINE_REPORTS,
-    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-  ],
-  icon: '🔍',
-  source: 'builtin',
-  enabled: true,
-  command: 'pipeline-diagnostics',
-  argumentHint: '[pipeline-id]',
-  supportsArguments: true,
-};
+// Note: pipelineDiagnosticsSkill removed — pipeline introspection used to
+// rely on GetPipelineReport / ListPipelineReports. Post-workflow/ deletion,
+// the Agent diagnoses failures directly from tool-call error messages in
+// its own conversation history.
 
 /**
  * All builtin skills (semantic discovery)
@@ -709,7 +522,7 @@ When the user says "this scene doesn't look right" or "场景不对":
  * have been removed as they are too generic.
  */
 export const builtinSkills: Skill[] = [
-  // Dual-flow persona (outer ring + inner ring + iteration)
+  // SDD stage personas (Specify / Implement / Iteration)
   creationFlowSkill,
   executionFlowSkill,
   iterationFlowSkill,
@@ -724,12 +537,8 @@ export const builtinSkills: Skill[] = [
   // Script Creation
   scriptGenerationSkill,
   scriptToTimelineSkill,
-  // Pipeline Orchestration
-  storyboardToTimelineSkill,
+  // Multi-modal adaptation
   comicToStoryboardSkill,
-  pipelineRetrySkill,
-  // Diagnostics
-  pipelineDiagnosticsSkill,
   // Quality Assessment
   qualityAssessmentSkill,
 ];

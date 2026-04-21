@@ -28,7 +28,7 @@
  */
 
 import type { IApprovalEngine, ApprovalResponse } from '../index';
-import type { ConsistencyReport } from '../../workflow/qa-types';
+import type { ConsistencyReport } from '../../validation/qa-types';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('QualityGateApprovalAdapter');

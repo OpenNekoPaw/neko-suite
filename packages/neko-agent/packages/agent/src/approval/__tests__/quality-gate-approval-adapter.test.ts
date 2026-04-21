@@ -19,7 +19,7 @@ import {
   verdictFromReport,
   DEFAULT_QUALITY_GATE_THRESHOLDS,
 } from '../adapters/quality-gate-approval-adapter';
-import type { ConsistencyReport } from '../../workflow/qa-types';
+import type { ConsistencyReport } from '../../validation/qa-types';
 
 function report(overallConsistency: number): ConsistencyReport {
   return {

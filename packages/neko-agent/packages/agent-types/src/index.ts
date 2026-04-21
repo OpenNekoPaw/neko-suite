@@ -7,66 +7,8 @@
 // Message protocol
 export type { Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff } from './message';
 
-// Plan
+// Plan (parsed plan-mode markdown — agent / extension / webview share)
 export type { Plan, PlanStep } from './plan';
-
-// Workflow Plan (Router + Plan layer — distinct from agent step-review Plan)
-export type {
-  WorkflowRouteLevel,
-  WorkflowExtensionId,
-  WorkflowBindingSlot,
-  WorkflowBindingProvenance,
-  WorkflowLitePlanStatus,
-  WorkflowRoute,
-  WorkflowPlannedStage,
-  WorkflowBindingCandidate,
-  WorkflowShotBindingSummary,
-  WorkflowConstraint,
-  WorkflowConstraintKind,
-  WorkflowViolation,
-  WorkflowViolationFix,
-  WorkflowViolationSeverity,
-  WorkflowLitePlan,
-  WorkflowPlanPreviewMessage,
-  WorkflowPlanDispatchedMessage,
-  WorkflowPlanStatusMessage,
-  WorkflowPlanApproveMessage,
-  WorkflowPlanOverrideMessage,
-  WorkflowPlanAbortMessage,
-  WorkflowPlanEditBindingMessage,
-  WorkflowPlanApplyToAllMessage,
-  WorkflowPlanUpdatedMessage,
-  WorkflowPlanToggleCheckpointMessage,
-  WorkflowPlanForkMessage,
-  WorkflowPlanDiffRequestMessage,
-  WorkflowPlanDiffMessage,
-  WorkflowPlanDiffPayload,
-  WorkflowPlanDiffRouteChange,
-  WorkflowPlanDiffRouteChangeKind,
-  WorkflowPlanDiffStageChange,
-  WorkflowPlanDiffStageChangeKind,
-  WorkflowPlanDiffShotChange,
-  WorkflowPlanDiffShotChangeKind,
-  WorkflowPlanDiffConstraintChange,
-  WorkflowPlanDiffConstraintChangeKind,
-  PipelineGateSceneCard,
-  PipelineGatePreview,
-  PipelineGateWaitingMessage,
-  PipelineGateConfirmMessage,
-  PipelineGateCancelMessage,
-  WorkflowRouterAskMessage,
-  WorkflowRouterAskResponseMessage,
-  WorkflowRouterAskResponseStatus,
-  WorkflowPlanListEntry,
-  WorkflowPlanListRequestMessage,
-  WorkflowPlanListMessage,
-  WorkflowRouterMemoryEntry,
-  WorkflowRouterMemoryRequestMessage,
-  WorkflowRouterMemoryMessage,
-  WorkflowRouterMemoryDeleteMessage,
-  WorkflowIncomingMessage,
-  WorkflowOutgoingMessage,
-} from './workflow-plan';
 
 // Provider
 export type { ConfiguredProvider } from './provider';

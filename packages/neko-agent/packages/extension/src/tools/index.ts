@@ -16,15 +16,4 @@ export {
 
 export { createPuppetFaceTools } from './puppetFaceTools';
 
-export {
-  createWorkflowTools,
-  getActiveWorkflow,
-  removePipeline,
-  recordCompletedWorkflow,
-  getPipelineReport,
-  listPipelineReports,
-  type PipelineToolsDeps,
-  type CompletedWorkflowRecord,
-} from './pipelineTools';
-
-export { createRunReportTools } from './runReportTools';
+// pipelineTools / runReportTools were removed with the workflow/ layer.

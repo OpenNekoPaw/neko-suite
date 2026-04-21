@@ -60,9 +60,7 @@ export {
   subtitleSkill,
   scriptGenerationSkill,
   scriptToTimelineSkill,
-  storyboardToTimelineSkill,
   comicToStoryboardSkill,
-  pipelineRetrySkill,
   qualityAssessmentSkill,
   // Dual-flow persona skills
   creationFlowSkill,

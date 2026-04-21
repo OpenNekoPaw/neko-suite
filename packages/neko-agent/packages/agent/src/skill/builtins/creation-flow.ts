@@ -11,7 +11,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_PIPELINE, TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 const creationFlowContent = `# Creation Flow Persona — Co-creation Partner
 
@@ -94,11 +94,8 @@ export const creationFlowSkill: Skill = {
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
     TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
-    // Pipeline orchestration (handing off to execution flow)
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-    TOOL_NAMES_PIPELINE.GET_PIPELINE_REPORT,
-    TOOL_NAMES_PIPELINE.LIST_PIPELINE_REPORTS,
+    // Pipeline orchestration has been replaced by direct Skill composition
+    // over atomic sub-package tools. See agent-unified-workflow.md §11.1.
   ],
   icon: '🎨',
   source: 'builtin',

@@ -10,8 +10,8 @@ export { AttachmentProcessor, type ProcessedAttachments } from './attachmentProc
 export {
   AgentStreamProcessor,
   type AgentStreamProcessorDeps,
-  type ContentBlock,
   type CollectedToolCall,
   type StreamProcessingResult,
   type StreamCallbacks,
 } from './agentStreamProcessor';
+export type { ContentBlock } from '@neko-agent/types';

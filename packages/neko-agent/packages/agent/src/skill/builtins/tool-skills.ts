@@ -295,20 +295,9 @@ export const aiGenerationToolSet: ToolGroup = {
   icon: '🤖',
 };
 
-/**
- * Pipeline control tools
- */
-export const pipelineControlToolSet: ToolGroup = {
-  name: 'pipeline-control',
-  description: 'Pipeline orchestration tools for starting and controlling creative workflows',
-  tools: ['StartPipeline', 'ConfirmPipelineGate', 'RetryPipelineScenes'],
-  alwaysActive: true,
-  priority: 80,
-  loadingTier: 'eager',
-  source: 'builtin',
-  enabled: true,
-  icon: '🔄',
-};
+// Note: pipelineControlToolSet removed with the workflow/ orchestration
+// layer. Skills drive flows directly by composing atomic media + timeline
+// tools.
 
 /**
  * Media quality assessment tools
@@ -348,7 +337,6 @@ export const builtinToolGroups: ToolGroup[] = [
   gitOperationsToolSet,
   elementEditingToolSet,
   exportRenderToolSet,
-  pipelineControlToolSet,
   // Lazy
   effectsTransitionsToolSet,
   animationKeyframesToolSet,

@@ -6,12 +6,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import {
-  TOOL_NAMES_SYSTEM,
-  TOOL_NAMES_MEDIA,
-  TOOL_NAMES_PIPELINE,
-  TOOL_NAMES_TIMELINE,
-} from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 /**
  * Comic to Storyboard skill content
@@ -171,10 +166,7 @@ export const comicToStoryboardSkill: Skill = {
     // Media generation
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,
-    // Pipeline orchestration
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
+    // Agent orchestrates media generation + timeline updates directly.
     // Timeline operations
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,

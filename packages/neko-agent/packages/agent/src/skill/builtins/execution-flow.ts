@@ -11,7 +11,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_PIPELINE, TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 const executionFlowContent = `# Implement Stage Persona — System Operator
 
@@ -132,12 +132,8 @@ export const executionFlowSkill: Skill = {
     TOOL_NAMES_TIMELINE.ADD_EFFECT,
     TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
     TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
-    // Pipeline execution
-    TOOL_NAMES_PIPELINE.START_PIPELINE,
-    TOOL_NAMES_PIPELINE.CONFIRM_PIPELINE_GATE,
-    TOOL_NAMES_PIPELINE.RETRY_PIPELINE_SCENES,
-    TOOL_NAMES_PIPELINE.GET_PIPELINE_REPORT,
-    TOOL_NAMES_PIPELINE.LIST_PIPELINE_REPORTS,
+    // Pipeline tools have been retired; Agent composes atomic tools
+    // (GenerateImage / AddTimelineElement / ...) directly via Skill phases.
   ],
   icon: '⚙️',
   source: 'builtin',

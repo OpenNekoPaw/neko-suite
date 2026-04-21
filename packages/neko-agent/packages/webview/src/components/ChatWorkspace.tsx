@@ -19,7 +19,6 @@ import type { SettingsState, Message, ConversationSummary, TabType } from '@/com
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
-import { WorkflowPlanPanel } from '@/components/ChatView/WorkflowPlanPanel';
 import type {
   SkillSummary,
   MentionItem,
@@ -449,7 +448,6 @@ export function ChatWorkspace({
         onModifyPlanStep={planActions.handleModifyPlanStep}
         onApproveAllPlanSteps={planActions.handleApproveAllPlanSteps}
         onRejectAllPlanSteps={planActions.handleRejectAllPlanSteps}
-        workflowPlanPanel={<WorkflowPlanPanel />}
       />
     </InputAreaProvider>
   );
