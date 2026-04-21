@@ -181,43 +181,6 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
     });
   });
 
-  describe('pipelines', () => {
-    it('accepts a well-formed pipelines map', () => {
-      const r = validateSkill(
-        baseSkill({
-          pipelines: {
-            export: {
-              ops: [{ 'cut.upscale': { target: '1080p' } }, { 'cut.watermark': {} }],
-            },
-          },
-        }),
-      );
-      expect(r.valid).toBe(true);
-    });
-
-    it('errors when ops is not an array', () => {
-      const r = validateSkill(
-        baseSkill({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          pipelines: { export: { ops: 'nope' as any } },
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('ops'))).toBe(true);
-    });
-
-    it('errors when an op is not an object', () => {
-      const r = validateSkill(
-        baseSkill({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          pipelines: { export: { ops: ['bad' as any] } },
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('ops[0]'))).toBe(true);
-    });
-  });
-
   describe('referencedAssets', () => {
     it('accepts well-formed asset references', () => {
       const r = validateSkill(
@@ -354,19 +317,6 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     expect(r.errors.some((e) => e.includes('Duplicate'))).toBe(true);
   });
 
-  it('pipelines with non-object op are rejected', () => {
-    const r = validateSkillManifest(
-      baseManifest({
-        pipelines: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          export: { ops: ['broken' as any] },
-        },
-      }),
-    );
-    expect(r.valid).toBe(false);
-    expect(r.errors.some((e) => e.includes('ops[0]'))).toBe(true);
-  });
-
   it('referencedAssets must use asset:// URIs', () => {
     const r = validateSkillManifest(
       baseManifest({
@@ -393,11 +343,6 @@ describe('validateSkillManifest — standalone manifest pass', () => {
         { name: 'shot-breakdown', label: '分镜拆解', approval: true },
         { name: 'shot-generation', label: '镜头生成', parallel: true },
       ],
-      pipelines: {
-        export: {
-          ops: [{ 'cut.upscale': { target: '1080p' } }, { 'cut.watermark': {} }],
-        },
-      },
       referencedAssets: [
         { uri: 'asset://styles/cinematic-lut', required: false, purpose: 'default LUT' },
       ],

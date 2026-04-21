@@ -108,26 +108,6 @@ export interface SkillPhase {
 }
 
 /**
- * One operation inside a pipeline (ADR §5.2.1 `pipelines:`).
- *
- * An op is a single tool invocation expressed as a map with one key
- * (the tool id) and its parameters — mirrors the shorthand form ADR
- * examples use, e.g. `{ "cut.upscale": { "target": "1080p" } }`.
- */
-export type SkillPipelineOp = Record<string, Record<string, unknown>>;
-
-/**
- * A named pipeline declared by a Skill (ADR §5.2.1 `pipelines:`).
- *
- * Pipelines are ordered op lists that phases (or the Skill at large)
- * can reference by key — e.g. `export` / `preview`.
- */
-export interface SkillPipeline {
-  /** Ordered list of ops. */
-  ops: SkillPipelineOp[];
-}
-
-/**
  * Subpackage dependency declared by a Skill (ADR §5.2.1 `requiredSubpackages:`).
  *
  * Keeps dependency granularity at the subpackage level rather than the
@@ -411,12 +391,6 @@ export interface Skill {
    * gates at runtime.
    */
   phases?: SkillPhase[];
-
-  /**
-   * Named processing pipelines the Skill can reference from its body or
-   * phases. Keyed by pipeline name (e.g. "export", "preview").
-   */
-  pipelines?: Record<string, SkillPipeline>;
 
   /**
    * Assets (characters, styles, LoRAs, …) the Skill relies on. Resolved
@@ -848,9 +822,6 @@ export interface SkillManifest {
    */
   phases?: SkillPhase[];
 
-  /** Named processing pipelines keyed by pipeline name. */
-  pipelines?: Record<string, SkillPipeline>;
-
   /** Assets the Skill depends on (resolved via PathResolver). */
   referencedAssets?: SkillAssetReference[];
 
@@ -1250,28 +1221,12 @@ export function validateSkillManifest(
     }
   }
 
-  // pipelines: ops must be arrays of single-key objects.
-  if (manifest.pipelines !== undefined) {
-    if (typeof manifest.pipelines !== 'object' || Array.isArray(manifest.pipelines)) {
-      errors.push('Field "pipelines" must be an object keyed by pipeline name');
-    } else {
-      const pipelineNames = Object.keys(manifest.pipelines);
-      for (let pIdx = 0; pIdx < pipelineNames.length; pIdx++) {
-        const pipelineName = pipelineNames[pIdx]!;
-        const pipeline = manifest.pipelines[pipelineName];
-        if (!pipeline || typeof pipeline !== 'object' || !Array.isArray(pipeline.ops)) {
-          errors.push(`pipelines.${pipelineName}.ops must be an array`);
-          continue;
-        }
-        for (let opIdx = 0; opIdx < pipeline.ops.length; opIdx++) {
-          const op = pipeline.ops[opIdx];
-          if (!op || typeof op !== 'object' || Array.isArray(op)) {
-            errors.push(`pipelines.${pipelineName}.ops[${opIdx}] must be an object`);
-          }
-        }
-      }
-    }
-  }
+  // Note: pipelines were intentionally dropped from the SkillManifest in
+  // B1.6. Pipelines are owned by subpackages (e.g. neko-engine's flowA-F);
+  // Skills reference them via the legacy `pipelineFlowId` field on the
+  // frontmatter. If P1 surfaces a real cross-Skill sharing need, a
+  // `pipelineRefs` field (URI → subpackage pipeline) will be reintroduced
+  // — not a re-definition of ops inside the manifest.
 
   // referencedAssets: require asset:// URI.
   if (manifest.referencedAssets !== undefined) {
@@ -1414,7 +1369,6 @@ export function createSkill(
     requiredSubpackages: manifest?.requiredSubpackages,
     autoInvoke: manifest?.autoInvoke,
     phases: manifest?.phases,
-    pipelines: manifest?.pipelines,
     referencedAssets: manifest?.referencedAssets,
     referencedSkills: manifest?.referencedSkills,
     compliance: manifest?.compliance,
