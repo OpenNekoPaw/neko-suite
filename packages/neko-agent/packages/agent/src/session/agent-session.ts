@@ -132,6 +132,9 @@ export class AgentSession implements IAgentSession {
   private _nekoPaths: import('../workspace').INekoPaths | null = null;
   // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
+  // JSONL audits sink persisting approve.decided events to
+  // `.neko/logs/audits.jsonl`. Filter-predicated sibling of _eventSink.
+  private _auditsSink: import('../workspace').INdjsonEventSink | null = null;
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -236,6 +239,41 @@ export class AgentSession implements IAgentSession {
       this._approvalEngine = createApprovalEngine({
         strategyPacks: [creationStrategyPack, executionStrategyPack],
       });
+
+      // ApprovalEngine → bus bridge. Every finalised decision lands on
+      // `execution.approve.decided` so audit sinks (ADR §7.4) can
+      // consume the stream without peeking into the engine directly.
+      // Independent of StageGuardian wiring — callers without a guardian
+      // still get audit coverage.
+      {
+        const bus = this._eventBus;
+        const getRunId = (): string | undefined => this._runStore?.getActive()?.id;
+        this._approvalEngine.onDecision((request, response) => {
+          const runId = getRunId();
+          if (!runId) return; // No active run — skip (pre-execute engine use).
+          bus.emit({
+            channel: 'execution.approve.decided',
+            runId,
+            subject: request.subject.kind,
+            decision: _approvalResolutionToDecision(response.resolution),
+            at: response.decidedAt,
+          });
+        });
+      }
+
+      // Workspace audits sink — captures every approve.decided event
+      // to `<root>/.neko/logs/audits.jsonl`. Filter-predicated sibling
+      // of the events sink so ApprovalEngine decisions are separable
+      // from the general event stream for compliance reads.
+      if (this._nekoPaths && config.workspace) {
+        this._auditsSink = createNdjsonEventSink({
+          filePath: this._nekoPaths.log('audits'),
+          fsOps: config.workspace.fsOps,
+          filter: (e: { channel: string }) => e.channel === 'execution.approve.decided',
+        });
+        this._auditsSink.attach(this._eventBus);
+      }
+
       const { hooks: runnerHooks, state } = createReActLoopRunner({
         stageTracker: this._stageTracker,
         runStore: this._runStore,
@@ -706,12 +744,15 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Flush the workspace event sink. Callers that want to observe the
-   * JSONL landing before reading the file should await this between
-   * logical operations. No-op when the sink is disabled.
+   * Flush the workspace event + audits sinks. Callers that want to
+   * observe JSONL landing before reading the files should await this
+   * between logical operations. No-op when sinks are disabled.
    */
   async flushWorkspaceSink(): Promise<void> {
-    if (this._eventSink) await this._eventSink.flush();
+    await Promise.all([
+      this._eventSink ? this._eventSink.flush() : Promise.resolve(),
+      this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
+    ]);
   }
 
   clearHistory(): void {
@@ -766,11 +807,13 @@ export class AgentSession implements IAgentSession {
     this._runStore = null;
     this._reactRunnerState = null;
     this._runnerHooks = null;
-    // Flush the JSONL sink before clearing the bus so in-flight writes
-    // still reach disk. Fire-and-forget — dispose is synchronous by
-    // contract; the sink's own _pending queue tracks outstanding I/O.
+    // Flush both JSONL sinks before clearing the bus so in-flight
+    // writes still reach disk. Fire-and-forget — dispose is synchronous
+    // by contract; each sink's _pending queue tracks outstanding I/O.
     void this._eventSink?.dispose();
+    void this._auditsSink?.dispose();
     this._eventSink = null;
+    this._auditsSink = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
@@ -911,6 +954,34 @@ export class AgentSession implements IAgentSession {
       this.confirmTool(toolCallId, false);
       logger.error('Tool confirmation failed', { error: err });
     }
+  }
+}
+
+/**
+ * Map an ApprovalResponse resolution to the wire `decision` field on
+ * `execution.approve.decided`. The event schema intentionally collapses
+ * the richer engine vocabulary into three values the audit stream cares
+ * about:
+ *   - 'auto-approved' — strategy pack decided (no user ask)
+ *   - 'accept'        — user said yes
+ *   - 'reject'        — auto-reject OR user said no
+ *
+ * `escalate` is a transient state the engine resolves internally before
+ * the onDecision listener fires; it's mapped to 'accept' defensively so
+ * even if it leaks through the audit row is still meaningful.
+ */
+function _approvalResolutionToDecision(
+  resolution: import('../approval/approval-types').ApprovalResolution,
+): 'accept' | 'reject' | 'auto-approved' {
+  switch (resolution) {
+    case 'auto-accept':
+      return 'auto-approved';
+    case 'user-accept':
+    case 'escalate':
+      return 'accept';
+    case 'auto-reject':
+    case 'user-reject':
+      return 'reject';
   }
 }
 

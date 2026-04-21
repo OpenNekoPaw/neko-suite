@@ -642,6 +642,126 @@ describe('AgentSession', () => {
       expect(parsed.event.kind).toBe('tool:GenerateImage');
     });
 
+    it('ApprovalEngine decisions bridge to execution.approve.decided + land in audits.jsonl (C4)', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('test-wf', 'run-1');
+
+      const engine = session.getApprovalEngine()!;
+      await engine.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: {
+          label: 'generate',
+          kind: 'tool:GenerateImage',
+          destructive: false,
+          idempotent: true,
+        },
+        id: 'req-1',
+        at: 0,
+      });
+      await session.flushWorkspaceSink();
+
+      const auditRows = writes
+        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
+        .map((w) => JSON.parse(w.data.trim()) as { event: { channel: string; decision: string } });
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]!.event.channel).toBe('execution.approve.decided');
+      expect(auditRows[0]!.event.decision).toBe('auto-approved');
+    });
+
+    it('auto-reject (destructive + non-idempotent) maps to decision="reject"', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('test-wf', 'run-1');
+
+      await session.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: {
+          label: 'dangerous',
+          kind: 'tool:DeleteAll',
+          destructive: true,
+          idempotent: false,
+        },
+        id: 'req-1',
+        at: 0,
+      });
+      await session.flushWorkspaceSink();
+
+      const auditRows = writes
+        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
+        .map((w) => JSON.parse(w.data.trim()) as { event: { decision: string } });
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]!.event.decision).toBe('reject');
+    });
+
+    it('decisions before a run starts do NOT emit approve.decided (no runId)', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            // No initialStage — no active run yet.
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      await session.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: { label: 'x', kind: 'tool:x', destructive: false, idempotent: true },
+        id: 'req-1',
+        at: 0,
+      });
+      await session.flushWorkspaceSink();
+
+      const auditRows = writes.filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl');
+      expect(auditRows).toHaveLength(0);
+    });
+
     it('session with no workspace config exposes NekoPaths === null', () => {
       const { registry, service } = minimalStageTrackingConfig();
       const session = new AgentSession(
