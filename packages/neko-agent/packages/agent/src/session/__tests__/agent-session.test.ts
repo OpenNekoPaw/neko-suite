@@ -729,6 +729,59 @@ describe('AgentSession', () => {
       expect(auditRows[0]!.event.decision).toBe('reject');
     });
 
+    it('execution.step.completed events land in steps.jsonl', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf', 'run-1');
+
+      const bus = session.getEventBus()!;
+      bus.emit({
+        channel: 'execution.step.completed',
+        runId: 'run-1',
+        round: 0,
+        thinkOnly: false,
+        at: 1000,
+      });
+      bus.emit({
+        channel: 'execution.step.completed',
+        runId: 'run-1',
+        round: 1,
+        thinkOnly: true,
+        at: 2000,
+      });
+      await session.flushWorkspaceSink();
+
+      const stepRows = writes
+        .filter((w) => w.path === '/tmp/proj/.neko/logs/steps.jsonl')
+        .map((w) => JSON.parse(w.data.trim()) as { event: { round: number; thinkOnly: boolean } });
+      expect(stepRows).toHaveLength(2);
+      expect(stepRows[0]!.event.round).toBe(0);
+      expect(stepRows[0]!.event.thinkOnly).toBe(false);
+      expect(stepRows[1]!.event.round).toBe(1);
+      expect(stepRows[1]!.event.thinkOnly).toBe(true);
+
+      // And the audits sink should NOT have captured these — filter
+      // predicates keep the streams separate.
+      const auditRows = writes.filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl');
+      expect(auditRows).toHaveLength(0);
+    });
+
     it('decisions before a run starts do NOT emit approve.decided (no runId)', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const writes: Array<{ path: string; data: string }> = [];

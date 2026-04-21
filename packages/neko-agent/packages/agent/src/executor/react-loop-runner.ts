@@ -299,6 +299,26 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
     },
 
     async onIterationComplete(_iteration, _ctx) {
+      // Emit execution.step.completed for every ReAct round (think →
+      // act → observe) before bumping the counter. A "step" is the
+      // round as a whole — different from apply.committed which fires
+      // per successful tool call inside the act phase.
+      //
+      // `thinkOnly` distinguishes pure-think steps (model responded
+      // without calling tools) from think+act steps. Consumers of the
+      // steps.jsonl audit log use this to bucket rounds.
+      if (deps.eventBus) {
+        const activeRunId = deps.runStore.getActive()?.id;
+        if (activeRunId) {
+          deps.eventBus.emit({
+            channel: EXECUTION_CHANNELS.STEP_COMPLETED,
+            runId: activeRunId,
+            round: state.round,
+            thinkOnly: !lastHadToolCalls,
+            at: Date.now(),
+          });
+        }
+      }
       state.round += 1;
     },
 

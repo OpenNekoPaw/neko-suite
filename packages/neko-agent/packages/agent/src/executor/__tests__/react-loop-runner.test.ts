@@ -444,4 +444,46 @@ describe('ReActLoopRunner hooks', () => {
       expect(events).toEqual([]);
     });
   });
+
+  describe('execution.step.completed emission', () => {
+    it('emits one event per onIterationComplete with current round + thinkOnly flag', async () => {
+      const bus = createEventBus();
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      const events: Array<{ round: number; thinkOnly: boolean }> = [];
+      bus.on(EXECUTION_CHANNELS.STEP_COMPLETED, (e) => {
+        events.push({ round: e.round, thinkOnly: e.thinkOnly });
+      });
+
+      // Round 0: think → act → observe with tools
+      await hooks.afterAct?.([
+        { success: true, data: 'x', callId: 'c1', name: 'GenerateImage' },
+      ] as unknown as ToolResultWithMeta[]);
+      await hooks.onIterationComplete?.(0, ctx(1));
+
+      // Round 1: pure-think (no tool calls)
+      await hooks.afterAct?.([]);
+      await hooks.onIterationComplete?.(1, ctx(2));
+
+      expect(events).toEqual([
+        { round: 0, thinkOnly: false },
+        { round: 1, thinkOnly: true },
+      ]);
+    });
+
+    it('no emission without an event bus', async () => {
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      // Should not throw.
+      await hooks.onIterationComplete?.(0, ctx(1));
+    });
+  });
 });

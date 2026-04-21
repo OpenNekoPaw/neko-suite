@@ -135,6 +135,9 @@ export class AgentSession implements IAgentSession {
   // JSONL audits sink persisting approve.decided events to
   // `.neko/logs/audits.jsonl`. Filter-predicated sibling of _eventSink.
   private _auditsSink: import('../workspace').INdjsonEventSink | null = null;
+  // JSONL steps sink persisting step.completed events to
+  // `.neko/logs/steps.jsonl`. Third filter view on the bus.
+  private _stepsSink: import('../workspace').INdjsonEventSink | null = null;
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -272,6 +275,17 @@ export class AgentSession implements IAgentSession {
           filter: (e: { channel: string }) => e.channel === 'execution.approve.decided',
         });
         this._auditsSink.attach(this._eventBus);
+
+        // Workspace steps sink — per-round step records land in
+        // `<root>/.neko/logs/steps.jsonl`. Third filter view on the
+        // same bus; forms the ADR §7.4 logs/ triptych alongside
+        // events.jsonl (everything) and audits.jsonl (approvals).
+        this._stepsSink = createNdjsonEventSink({
+          filePath: this._nekoPaths.log('steps'),
+          fsOps: config.workspace.fsOps,
+          filter: (e: { channel: string }) => e.channel === 'execution.step.completed',
+        });
+        this._stepsSink.attach(this._eventBus);
       }
 
       const { hooks: runnerHooks, state } = createReActLoopRunner({
@@ -744,14 +758,16 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Flush the workspace event + audits sinks. Callers that want to
-   * observe JSONL landing before reading the files should await this
-   * between logical operations. No-op when sinks are disabled.
+   * Flush the workspace events / audits / steps sinks. Callers that
+   * want to observe JSONL landing before reading the files should
+   * await this between logical operations. No-op when sinks are
+   * disabled.
    */
   async flushWorkspaceSink(): Promise<void> {
     await Promise.all([
       this._eventSink ? this._eventSink.flush() : Promise.resolve(),
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
+      this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
     ]);
   }
 
@@ -807,13 +823,15 @@ export class AgentSession implements IAgentSession {
     this._runStore = null;
     this._reactRunnerState = null;
     this._runnerHooks = null;
-    // Flush both JSONL sinks before clearing the bus so in-flight
+    // Flush all JSONL sinks before clearing the bus so in-flight
     // writes still reach disk. Fire-and-forget — dispose is synchronous
     // by contract; each sink's _pending queue tracks outstanding I/O.
     void this._eventSink?.dispose();
     void this._auditsSink?.dispose();
+    void this._stepsSink?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
+    this._stepsSink = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
