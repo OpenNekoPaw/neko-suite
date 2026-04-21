@@ -1,18 +1,17 @@
 /**
- * WorkflowRun — per-run record of an SDD-stage execution.
+ * SddRun — per-run record of an SDD-stage execution.
  *
  * See: docs/architecture/agent-unified-workflow.md §4 (four SDD stages)
  *
- * One WorkflowRun corresponds to a single end-to-end traversal of the
+ * One SddRun corresponds to a single end-to-end traversal of the
  * Specify → Plan → Tasks → Implement DAG. The inner ReAct loop during
  * Implement produces rounds whose stage-activation decisions are stored
  * here for audit + telemetry.
  *
  * Distinct from:
- * - `WorkflowLitePlan` (workflow-plan.ts): the *pre-dispatch* plan shown
- *   to the user before Implement. Legacy, UI-focused.
  * - `Plan` (plan.ts): the generic plan/step abstraction used by
- *   step-review workflows. Legacy.
+ *   plan-mode review UI. A Plan is a markdown-parsed artifact, not a
+ *   run-lifecycle record.
  */
 
 import type { SddStage, StageActivationDecision, StageSkipReason } from './stage';
@@ -22,7 +21,7 @@ import type { TodoList } from './todo-list';
 // Status
 // =============================================================================
 
-export type WorkflowRunStatus =
+export type SddRunStatus =
   /** Created but not yet entered Implement. */
   | 'pending'
   /** Running — at least one ReAct round has begun. */
@@ -39,10 +38,10 @@ export type WorkflowRunStatus =
 // =============================================================================
 
 /**
- * One ReAct round inside a WorkflowRun. Each round is summarised here
+ * One ReAct round inside an SddRun. Each round is summarised here
  * rather than emitted as N stage-level events.
  */
-export interface WorkflowRunRoundSummary {
+export interface SddRunRoundSummary {
   /** 0-based round index within this Run. */
   round: number;
   /** Stages activated this round (DAG-ordered: specify → plan → tasks → implement). */
@@ -61,7 +60,7 @@ export interface WorkflowRunRoundSummary {
 export function roundSummaryFromDecision(
   decision: StageActivationDecision,
   lastObserveHint?: string,
-): WorkflowRunRoundSummary {
+): SddRunRoundSummary {
   return {
     round: decision.round,
     activatedStages: decision.activated,
@@ -75,13 +74,13 @@ export function roundSummaryFromDecision(
 // Run
 // =============================================================================
 
-export interface WorkflowRun {
+export interface SddRun {
   /** Stable run identifier. */
   id: string;
   /** Workflow ID (registry key) this Run belongs to. */
   workflowId: string;
   /** Current status. */
-  status: WorkflowRunStatus;
+  status: SddRunStatus;
   /** ms epoch — when the Run was created. */
   createdAt: number;
   /** ms epoch — when the Run transitioned out of `pending`, else undefined. */
@@ -92,7 +91,7 @@ export interface WorkflowRun {
    * Ordered ReAct round summaries. Appended as rounds complete.
    * Empty while `status === 'pending'`.
    */
-  rounds: readonly WorkflowRunRoundSummary[];
+  rounds: readonly SddRunRoundSummary[];
   /** Associated TODO list for the Implement stage, when one is active. */
   todos?: TodoList;
   /**

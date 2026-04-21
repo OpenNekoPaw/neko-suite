@@ -1,20 +1,20 @@
 /**
- * Creation Events — outer-ring (creation-flow) event namespace.
+ * Creation Events — pre-Implement (creation-persona) event namespace.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.2, §9.2
- *      plan v2 R9 telemetry compaction notes
+ * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
  * Channels follow `creation.<stage>.<verb>` and are **business-semantic**
- * (user-facing), not technical-semantic. Technical events belong on the
- * execution-events namespace.
+ * (user-facing), not technical-semantic. Emitted during the SDD Specify /
+ * Plan / Tasks stages while creation-persona is active. Technical,
+ * Implement-stage events belong on the execution-events namespace.
  *
- * These are type declarations only. The runtime EventBus (P5) will map
- * channel strings to these payload types; this module stays
- * zero-dependency so agent-types can remain infrastructure-free.
+ * These are type declarations only. The runtime EventBus maps channel
+ * strings to these payload types; this module stays zero-dependency so
+ * agent-types can remain infrastructure-free.
  */
 
 import type { StageSkipReason } from './stage';
-import type { WorkflowRunRoundSummary } from './workflow-run';
+import type { SddRunRoundSummary } from './sdd-run';
 
 // =============================================================================
 // Channel names (stable strings — used as bus keys)
@@ -89,7 +89,7 @@ export interface CreationStatusUpdatedEvent {
    * consumers to correlate narrative with the activation decision that
    * produced it without replaying the bus (R9 compaction).
    */
-  lastRound?: WorkflowRunRoundSummary;
+  lastRound?: SddRunRoundSummary;
   at: number;
 }
 

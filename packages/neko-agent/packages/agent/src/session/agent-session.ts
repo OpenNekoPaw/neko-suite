@@ -16,12 +16,12 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type { SddStage, StageActivationDecision, WorkflowRun } from '@neko-agent/types';
+import type { SddStage, StageActivationDecision, SddRun } from '@neko-agent/types';
 import type { SkillInjection, IStagePersonaBinding } from '../skill';
 import { SkillInjectionCoordinator, StageTracker, createStagePersonaBinding } from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
-import type { IWorkflowRunStore, ReActLoopRunnerState } from '../executor';
-import { createReActLoopRunner, createWorkflowRunStore } from '../executor';
+import type { ISddRunStore, ReActLoopRunnerState } from '../executor';
+import { createReActLoopRunner, createSddRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import type { IAutohealChain } from '../autoheal';
@@ -114,7 +114,7 @@ export class AgentSession implements IAgentSession {
   private _stagePersonaBinding: IStagePersonaBinding | null = null;
 
   // ReAct-loop stage-activation orchestrator.
-  private _runStore: IWorkflowRunStore | null = null;
+  private _runStore: ISddRunStore | null = null;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
 
@@ -203,7 +203,7 @@ export class AgentSession implements IAgentSession {
       //     execution.autoheal.* on the same bus.
       //   - Approval engine: pre-filters ask-mode tool calls via the
       //     declarative + imperative strategy packs.
-      this._runStore = createWorkflowRunStore();
+      this._runStore = createSddRunStore();
       this._eventBus = createEventBus();
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
@@ -565,9 +565,9 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Snapshot of the active WorkflowRun (or null if none).
+   * Snapshot of the active SddRun (or null if none).
    */
-  getActiveWorkflowRun(): WorkflowRun | null {
+  getActiveSddRun(): SddRun | null {
     return this._runStore?.getActive() ?? null;
   }
 

@@ -34,7 +34,7 @@ import { planStages, type StageEntrySignal } from '../skill/activation/stage-pla
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
-import type { IWorkflowRunStore } from './workflow-run-store';
+import type { ISddRunStore } from './sdd-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
@@ -55,7 +55,7 @@ export interface ReActLoopRunnerDeps {
    */
   stageTracker?: StageTracker;
   /** Where round summaries get aggregated. */
-  runStore: IWorkflowRunStore;
+  runStore: ISddRunStore;
   /**
    * Resolves the current L2 mode each time a decision is needed. Callers
    * that wire ExecutionMode → StageMode should pass a closure rather than

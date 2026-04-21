@@ -1,21 +1,20 @@
 /**
- * Execution Events — inner-ring (execution-flow) event namespace.
+ * Execution Events — SDD Implement-stage (execution-persona) event namespace.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.3, §9.2
- *      plan v2 R9 telemetry compaction notes
+ * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
  * Channels follow `execution.<phase>.<verb>` and are **technical-semantic**
- * (system-facing), not user-facing. Rendered by the progress narrator (P5)
- * into creation-flow milestones for end users.
+ * (system-facing), not user-facing. Emitted while execution-persona is
+ * active during Implement. A progress narrator renders them into
+ * creation-flow milestones for end users.
  *
- * Notable compaction (R9): one `execution.round.activation.decided` event
- * per round, not one per primitive — the payload carries the full
- * activated/skipped summary. Per-primitive detail lives on debug channels
- * only (to be added in P5).
+ * Notable compaction: one `execution.round.activation.decided` event per
+ * round, not one per primitive — the payload carries the full
+ * activated/skipped summary. Per-primitive detail lives on debug channels.
  */
 
 import type { StageSkipReason, StageTaskShape } from './stage';
-import type { WorkflowRunRoundSummary } from './workflow-run';
+import type { SddRunRoundSummary } from './sdd-run';
 
 // =============================================================================
 // Channel names
@@ -58,7 +57,7 @@ export interface ExecutionRoundActivationDecidedEvent {
   channel: typeof EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED;
   runId: string;
   taskShape: StageTaskShape;
-  summary: WorkflowRunRoundSummary;
+  summary: SddRunRoundSummary;
   at: number;
 }
 

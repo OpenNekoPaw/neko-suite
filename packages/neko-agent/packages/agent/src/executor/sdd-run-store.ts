@@ -1,13 +1,12 @@
 /**
- * Workflow Run Store — in-memory aggregator for WorkflowRun records.
+ * Sdd Run Store — in-memory aggregator for SddRun records.
  *
- * See: agent-types/workflow-run.ts
- *      plan v2 R9 (compacted telemetry: one round summary per round)
+ * See: agent-types/sdd-run.ts
+ *      docs/architecture/agent-unified-workflow.md §4
  *
- * This is the runtime companion to the WorkflowRun *type*. P5 will ship
- * a shared-memory backed implementation; this in-memory version is
- * enough for P1.6 so the ReAct loop can record rounds and surface the
- * result via AgentSession queries.
+ * Runtime companion to the SddRun *type*. In-memory implementation is
+ * enough for the current Agent loop; a shared-memory backed version can
+ * replace it later without touching callers.
  *
  * Single-writer model: one active run at a time per store instance.
  * Creating a new run while one is active closes the previous one with
@@ -17,9 +16,9 @@
 import type {
   StageActivationDecision,
   TodoList,
-  WorkflowRun,
-  WorkflowRunRoundSummary,
-  WorkflowRunStatus,
+  SddRun,
+  SddRunRoundSummary,
+  SddRunStatus,
 } from '@neko-agent/types';
 import { roundSummaryFromDecision } from '@neko-agent/types';
 
@@ -27,7 +26,7 @@ import { roundSummaryFromDecision } from '@neko-agent/types';
 // Types
 // =============================================================================
 
-export interface IWorkflowRunStore {
+export interface ISddRunStore {
   /** Start a fresh run, aborting any in-flight run. Returns the new run id. */
   startRun(input: { workflowId: string; runId?: string }): string;
   /** Append a round summary derived from the planner decision. */
@@ -35,17 +34,14 @@ export interface IWorkflowRunStore {
   /** Attach / replace the active todos reference for the current run. */
   setTodos(todos: TodoList): void;
   /** Terminal transition for the active run. */
-  endRun(
-    status: Exclude<WorkflowRunStatus, 'pending' | 'running'>,
-    error?: WorkflowRun['error'],
-  ): void;
+  endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void;
   /** Snapshot of the active run, or null if none. */
-  getActive(): WorkflowRun | null;
+  getActive(): SddRun | null;
   /** Snapshots of every past run recorded by this store. */
-  listCompleted(): readonly WorkflowRun[];
+  listCompleted(): readonly SddRun[];
 }
 
-export interface WorkflowRunStoreConfig {
+export interface SddRunStoreConfig {
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
   /** Optional id generator; defaults to a monotonic counter. */
@@ -56,14 +52,14 @@ export interface WorkflowRunStoreConfig {
 // Implementation
 // =============================================================================
 
-class WorkflowRunStore implements IWorkflowRunStore {
-  private _active: WorkflowRun | null = null;
-  private readonly _completed: WorkflowRun[] = [];
+class SddRunStore implements ISddRunStore {
+  private _active: SddRun | null = null;
+  private readonly _completed: SddRun[] = [];
   private readonly _now: () => number;
   private readonly _nextId: () => string;
   private _counter = 0;
 
-  constructor(config: WorkflowRunStoreConfig = {}) {
+  constructor(config: SddRunStoreConfig = {}) {
     this._now = config.now ?? (() => Date.now());
     this._nextId = config.nextId ?? (() => `run-${++this._counter}`);
   }
@@ -90,7 +86,7 @@ class WorkflowRunStore implements IWorkflowRunStore {
 
   recordRound(decision: StageActivationDecision, lastObserveHint?: string): void {
     if (!this._active) return;
-    const summary: WorkflowRunRoundSummary = roundSummaryFromDecision(decision, lastObserveHint);
+    const summary: SddRunRoundSummary = roundSummaryFromDecision(decision, lastObserveHint);
     this._active = {
       ...this._active,
       rounds: [...this._active.rounds, summary],
@@ -102,18 +98,15 @@ class WorkflowRunStore implements IWorkflowRunStore {
     this._active = { ...this._active, todos };
   }
 
-  endRun(
-    status: Exclude<WorkflowRunStatus, 'pending' | 'running'>,
-    error?: WorkflowRun['error'],
-  ): void {
+  endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void {
     this._closeActive(status, error);
   }
 
-  getActive(): WorkflowRun | null {
+  getActive(): SddRun | null {
     return this._active;
   }
 
-  listCompleted(): readonly WorkflowRun[] {
+  listCompleted(): readonly SddRun[] {
     return this._completed;
   }
 
@@ -122,11 +115,11 @@ class WorkflowRunStore implements IWorkflowRunStore {
   // ---------------------------------------------------------------------------
 
   private _closeActive(
-    status: Exclude<WorkflowRunStatus, 'pending' | 'running'>,
-    error?: WorkflowRun['error'],
+    status: Exclude<SddRunStatus, 'pending' | 'running'>,
+    error?: SddRun['error'],
   ): void {
     if (!this._active) return;
-    const closed: WorkflowRun = {
+    const closed: SddRun = {
       ...this._active,
       status,
       endedAt: this._now(),
@@ -141,6 +134,6 @@ class WorkflowRunStore implements IWorkflowRunStore {
 // Factory
 // =============================================================================
 
-export function createWorkflowRunStore(config?: WorkflowRunStoreConfig): IWorkflowRunStore {
-  return new WorkflowRunStore(config);
+export function createSddRunStore(config?: SddRunStoreConfig): ISddRunStore {
+  return new SddRunStore(config);
 }

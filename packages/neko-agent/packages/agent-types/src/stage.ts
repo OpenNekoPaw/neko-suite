@@ -117,10 +117,8 @@ export type StageSkipReason =
   | 'user-suppressed';
 
 /**
- * Result of the stage-planner for one ReAct round.
- *
- * Mirrors `PrimitiveActivationDecision` so WorkflowRunRoundSummary can carry
- * either during the PR2 migration window.
+ * Result of the stage-planner for one ReAct round. Consumed by
+ * SddRunRoundSummary for per-round telemetry compaction.
  */
 export interface StageActivationDecision {
   /** Task shape used to drive the decision. */

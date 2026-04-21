@@ -4,7 +4,7 @@
 
 export { AgentExecutor, createAgentExecutor, type AgentExecutorOptions } from './agent-executor';
 
-// P1.6 — ReAct Loop Orchestrator (dual-flow primitive activation)
+// ReAct Loop Orchestrator (SDD stage activation per round)
 export {
   createReActLoopRunner,
   defaultClassifyTaskShape,
@@ -12,11 +12,7 @@ export {
   type ReActLoopRunnerState,
   type TaskShapeSignals,
 } from './react-loop-runner';
-export {
-  createWorkflowRunStore,
-  type IWorkflowRunStore,
-  type WorkflowRunStoreConfig,
-} from './workflow-run-store';
+export { createSddRunStore, type ISddRunStore, type SddRunStoreConfig } from './sdd-run-store';
 export {
   validateStageDispatch,
   assertStageDispatch,

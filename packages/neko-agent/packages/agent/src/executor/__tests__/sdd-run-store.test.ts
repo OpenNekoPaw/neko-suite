@@ -1,5 +1,5 @@
 /**
- * WorkflowRunStore tests
+ * SddRunStore tests
  *
  * Covers:
  * - startRun creates a running record with stable id + timestamps
@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { StageActivationDecision, TodoList } from '@neko-agent/types';
-import { createWorkflowRunStore } from '../workflow-run-store';
+import { createSddRunStore } from '../sdd-run-store';
 
 function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
   return {
@@ -24,10 +24,10 @@ function decision(overrides: Partial<StageActivationDecision> = {}): StageActiva
   };
 }
 
-describe('WorkflowRunStore', () => {
+describe('SddRunStore', () => {
   it('startRun creates a running record with the supplied workflowId', () => {
     const t = 1000;
-    const store = createWorkflowRunStore({ now: () => t });
+    const store = createSddRunStore({ now: () => t });
     const id = store.startRun({ workflowId: 'flow-c' });
     const run = store.getActive();
     expect(run).not.toBeNull();
@@ -40,12 +40,12 @@ describe('WorkflowRunStore', () => {
   });
 
   it('uses a user-supplied runId when given', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     expect(store.startRun({ workflowId: 'f', runId: 'custom-run' })).toBe('custom-run');
   });
 
   it('recordRound appends round summaries in order', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     store.startRun({ workflowId: 'f' });
     store.recordRound(decision({ round: 0 }));
     store.recordRound(decision({ round: 1, activated: ['implement'] }), 'retry');
@@ -58,14 +58,14 @@ describe('WorkflowRunStore', () => {
   });
 
   it('recordRound is a no-op without an active run', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     store.recordRound(decision());
     expect(store.getActive()).toBeNull();
   });
 
   it('endRun transitions status + endedAt + moves run to completed list', () => {
     let t = 0;
-    const store = createWorkflowRunStore({ now: () => t });
+    const store = createSddRunStore({ now: () => t });
     t = 1;
     store.startRun({ workflowId: 'f' });
     t = 50;
@@ -78,7 +78,7 @@ describe('WorkflowRunStore', () => {
   });
 
   it('endRun carries error payload when failed', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     store.startRun({ workflowId: 'f' });
     store.endRun('failed', { code: 'oops', message: 'tool failed' });
     const done = store.listCompleted()[0];
@@ -87,7 +87,7 @@ describe('WorkflowRunStore', () => {
   });
 
   it('startRun while active auto-aborts the previous run', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     const first = store.startRun({ workflowId: 'a' });
     store.startRun({ workflowId: 'b' });
     const completed = store.listCompleted();
@@ -96,7 +96,7 @@ describe('WorkflowRunStore', () => {
   });
 
   it('setTodos attaches the todo list to the active run', () => {
-    const store = createWorkflowRunStore();
+    const store = createSddRunStore();
     store.startRun({ workflowId: 'f' });
     const todos: TodoList = { id: 'l1', items: [], createdAt: 0, updatedAt: 0 };
     store.setTodos(todos);

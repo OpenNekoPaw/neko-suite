@@ -35,9 +35,9 @@ export type {
 export type { TodoStatus, TodoStatusCamel, TodoItem, TodoList } from './todo-list';
 export { toTodoStatusCamel, toTodoStatusSnake } from './todo-list';
 
-// WorkflowRun (P2 W5 — run record carrying primitive activation summaries)
-export type { WorkflowRunStatus, WorkflowRunRoundSummary, WorkflowRun } from './workflow-run';
-export { roundSummaryFromDecision } from './workflow-run';
+// SddRun — run record carrying SDD stage-activation summaries
+export type { SddRunStatus, SddRunRoundSummary, SddRun } from './sdd-run';
+export { roundSummaryFromDecision } from './sdd-run';
 
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
