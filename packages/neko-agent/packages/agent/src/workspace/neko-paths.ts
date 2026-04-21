@@ -1,0 +1,156 @@
+/**
+ * NekoPaths — `.neko/` directory layout resolver.
+ *
+ * See: docs/architecture/agent-unified-workflow.md §7.4 (project workspace)
+ *
+ * Single source of truth for where SDD artifacts land on disk. Callers
+ * pass the project root; NekoPaths returns the canonical subpath for
+ * each artifact family. The resolver is platform-agnostic (no Node `fs`
+ * imports) — the caller's fsOps actually creates/writes files. This
+ * keeps the agent package free of vscode / node wiring at L0.
+ *
+ * Canonical layout (directories, not files):
+ *
+ *   <root>/.neko/
+ *     proposals/       AI-produced .nkproposal.md
+ *     plans/           AI-produced .nkplan.md
+ *     todos/           AI-produced .nktodo.md (TodoWrite tool output)
+ *     sessions/        AI-produced .nksession.md
+ *     logs/            Program-produced .jsonl (events / audits / steps)
+ *     cache/           Program-produced .json (indices, derivable)
+ *     state/           Program-produced concurrency + lock files
+ *     preferences.md   Project-level user preferences
+ *     settings.json    Media-library variables (already used by PathResolver)
+ *     settings.local.json  Local overrides (already used)
+ *
+ * Everything else (assets, media) lives in the media library — neko-assets
+ * owns that root. This module does **not** attempt to span both.
+ */
+
+// =============================================================================
+// Constants — subdirectory + filename conventions
+// =============================================================================
+
+export const NEKO_DIR = '.neko' as const;
+
+/** Subdirectories under `.neko/`. Values are relative paths. */
+export const NEKO_SUBDIRS = {
+  proposals: 'proposals',
+  plans: 'plans',
+  todos: 'todos',
+  sessions: 'sessions',
+  logs: 'logs',
+  cache: 'cache',
+  state: 'state',
+  archives: 'archives',
+} as const;
+
+export type NekoSubdir = keyof typeof NEKO_SUBDIRS;
+
+/**
+ * Canonical log-file names. Each is append-only JSONL.
+ *   events.jsonl — every DualFlowEvent that lands on the bus
+ *   audits.jsonl — ApprovalEngine decisions (who decided what, why)
+ *   steps.jsonl  — per-ReAct-step records (tool / params / outcome)
+ */
+export const NEKO_LOG_FILES = {
+  events: 'events.jsonl',
+  audits: 'audits.jsonl',
+  steps: 'steps.jsonl',
+} as const;
+
+export type NekoLogFile = keyof typeof NEKO_LOG_FILES;
+
+/** Canonical extensions for AI-produced markdown artifacts. */
+export const NEKO_MD_EXTENSIONS = {
+  proposal: '.nkproposal.md',
+  plan: '.nkplan.md',
+  todo: '.nktodo.md',
+  session: '.nksession.md',
+  spec: '.nkspec.md',
+  workflow: '.nkworkflow.md',
+  review: '.nkreview.md',
+  status: '.nkstatus.md',
+} as const;
+
+// =============================================================================
+// Resolver
+// =============================================================================
+
+export interface INekoPaths {
+  /** Absolute path to `<root>/.neko/`. */
+  readonly root: string;
+  /** Absolute path to `<root>/.neko/<subdir>/`. */
+  dir(subdir: NekoSubdir): string;
+  /**
+   * Absolute path to an AI-produced artifact given its family.
+   * Example: `file('proposals', 'tiktok-001')` → `<root>/.neko/proposals/tiktok-001.nkproposal.md`
+   */
+  file(subdir: 'proposals', basename: string): string;
+  file(subdir: 'plans', basename: string): string;
+  file(subdir: 'todos', basename: string): string;
+  file(subdir: 'sessions', basename: string): string;
+  file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
+  /** Absolute path to a canonical JSONL log. */
+  log(kind: NekoLogFile): string;
+}
+
+/**
+ * Join path segments using forward slashes. Callers working on Windows
+ * typically pass forward-slash project roots already (VSCode / git); if
+ * they don't, the caller should `path.resolve()` before invoking.
+ */
+function join(a: string, ...rest: string[]): string {
+  let out = a.replace(/\/+$/, '');
+  for (const seg of rest) {
+    const trimmed = seg.replace(/^\/+/, '').replace(/\/+$/, '');
+    if (trimmed) out = `${out}/${trimmed}`;
+  }
+  return out;
+}
+
+/**
+ * Create a path resolver rooted at `projectRoot`. The root is recorded
+ * but no filesystem calls happen here — resolution is pure string
+ * math. Writers / readers take fsOps and consume paths from this.
+ */
+export function createNekoPaths(projectRoot: string): INekoPaths {
+  if (!projectRoot) {
+    throw new Error('createNekoPaths: projectRoot is required');
+  }
+  const root = join(projectRoot, NEKO_DIR);
+
+  const dir = (subdir: NekoSubdir): string => join(root, NEKO_SUBDIRS[subdir]);
+
+  function extensionFor(subdir: NekoSubdir): string {
+    switch (subdir) {
+      case 'proposals':
+        return NEKO_MD_EXTENSIONS.proposal;
+      case 'plans':
+        return NEKO_MD_EXTENSIONS.plan;
+      case 'todos':
+        return NEKO_MD_EXTENSIONS.todo;
+      case 'sessions':
+        return NEKO_MD_EXTENSIONS.session;
+      case 'archives':
+        return '.md';
+      default:
+        throw new Error(`No canonical extension for subdir "${subdir}"`);
+    }
+  }
+
+  function file(subdir: NekoSubdir, basename: string): string {
+    if (!basename) throw new Error('NekoPaths.file: basename is required');
+    // Strip any accidental extension the caller already added.
+    const ext = extensionFor(subdir);
+    const clean = basename.endsWith(ext) ? basename.slice(0, -ext.length) : basename;
+    return `${dir(subdir)}/${clean}${ext}`;
+  }
+
+  return {
+    root,
+    dir,
+    file: file as INekoPaths['file'],
+    log: (kind) => `${dir('logs')}/${NEKO_LOG_FILES[kind]}`,
+  };
+}

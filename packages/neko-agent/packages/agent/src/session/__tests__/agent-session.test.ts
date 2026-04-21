@@ -592,6 +592,69 @@ describe('AgentSession', () => {
       expect(session.getStageGuardianIssues()).toEqual([]);
     });
 
+    it('workspace config provisions NekoPaths + JSONL sink that writes bus events', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const dirs: string[] = [];
+      const fsOps = {
+        async mkdir(path: string): Promise<void> {
+          dirs.push(path);
+        },
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      const paths = session.getNekoPaths();
+      expect(paths).not.toBeNull();
+      expect(paths!.root).toBe('/tmp/proj/.neko');
+      expect(paths!.log('events')).toBe('/tmp/proj/.neko/logs/events.jsonl');
+
+      const bus = session.getEventBus()!;
+      bus.emit({
+        channel: 'execution.apply.committed',
+        runId: 'run-1',
+        kind: 'tool:GenerateImage',
+        at: 42,
+      });
+      await session.flushWorkspaceSink();
+
+      expect(dirs).toContain('/tmp/proj/.neko/logs');
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.path).toBe('/tmp/proj/.neko/logs/events.jsonl');
+      const parsed = JSON.parse(writes[0]!.data.trim()) as {
+        seq: number;
+        event: { channel: string; kind: string };
+      };
+      expect(parsed.seq).toBe(1);
+      expect(parsed.event.channel).toBe('execution.apply.committed');
+      expect(parsed.event.kind).toBe('tool:GenerateImage');
+    });
+
+    it('session with no workspace config exposes NekoPaths === null', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+      expect(session.getNekoPaths()).toBeNull();
+    });
+
     it('apply-committed on the event bus feeds guardian noteApply (B4 end-to-end)', () => {
       const { registry, service } = minimalStageTrackingConfig();
       const session = new AgentSession(

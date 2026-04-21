@@ -5,10 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./workflow": "./src/workflow/index.ts",
-    "./pipeline": "./src/workflow/index.ts",
     "./validation": "./src/validation/index.ts",
     "./approval": "./src/approval/index.ts",
+    "./workspace": "./src/workspace/index.ts",
     "./*": "./src/*"
   },
   "scripts": {

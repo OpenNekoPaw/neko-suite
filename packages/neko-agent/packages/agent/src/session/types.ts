@@ -194,6 +194,24 @@ export interface AgentSessionConfig {
      */
     guardian?: false | import('../skill/stage-guardian').StageGuardianConfig;
   };
+
+  /**
+   * Workspace persistence (ADR §7.4). When supplied, AgentSession
+   * creates a NekoPaths resolver rooted at `root` and attaches an
+   * NdjsonEventSink that appends every bus event to
+   * `<root>/.neko/logs/events.jsonl`. Omitted = no disk sink; the
+   * session still runs but without persisted telemetry.
+   *
+   * Separate audit / step sinks are left for follow-up PRs (each
+   * gets its own sink with a channel-filter predicate). This PR
+   * ships the events sink only — the common case.
+   */
+  workspace?: {
+    /** Project root (not the `.neko/` subdirectory itself). */
+    root: string;
+    /** Platform fsOps (Node fs/promises wired by the extension layer). */
+    fsOps: import('../workspace').NdjsonFsOps;
+  };
 }
 
 // =============================================================================

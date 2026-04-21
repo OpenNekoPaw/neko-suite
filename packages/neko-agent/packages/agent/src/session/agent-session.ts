@@ -29,6 +29,7 @@ import type { ISddRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createSddRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
+import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -127,6 +128,10 @@ export class AgentSession implements IAgentSession {
 
   // Typed event bus for creation.* / execution.* channels.
   private _eventBus: IEventBus | null = null;
+  // `.neko/` directory resolver (only when workspace config is supplied).
+  private _nekoPaths: import('../workspace').INekoPaths | null = null;
+  // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
+  private _eventSink: import('../workspace').INdjsonEventSink | null = null;
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -212,6 +217,21 @@ export class AgentSession implements IAgentSession {
       //     declarative + imperative strategy packs.
       this._runStore = createSddRunStore();
       this._eventBus = createEventBus();
+
+      // Workspace persistence (ADR §7.4). When a project root is
+      // supplied, persist every bus event to `<root>/.neko/logs/events.jsonl`.
+      // No-op otherwise — the session still runs, just without disk
+      // telemetry. Audits / steps sinks can be added later as
+      // filter-predicated siblings.
+      if (config.workspace) {
+        this._nekoPaths = createNekoPaths(config.workspace.root);
+        this._eventSink = createNdjsonEventSink({
+          filePath: this._nekoPaths.log('events'),
+          fsOps: config.workspace.fsOps,
+        });
+        this._eventSink.attach(this._eventBus);
+      }
+
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
         strategyPacks: [creationStrategyPack, executionStrategyPack],
@@ -677,6 +697,23 @@ export class AgentSession implements IAgentSession {
     return this._approvalEngine;
   }
 
+  /**
+   * `.neko/` directory resolver (ADR §7.4). Returns null when the
+   * session was constructed without a `workspace` config block.
+   */
+  getNekoPaths(): import('../workspace').INekoPaths | null {
+    return this._nekoPaths;
+  }
+
+  /**
+   * Flush the workspace event sink. Callers that want to observe the
+   * JSONL landing before reading the file should await this between
+   * logical operations. No-op when the sink is disabled.
+   */
+  async flushWorkspaceSink(): Promise<void> {
+    if (this._eventSink) await this._eventSink.flush();
+  }
+
   clearHistory(): void {
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
@@ -729,6 +766,12 @@ export class AgentSession implements IAgentSession {
     this._runStore = null;
     this._reactRunnerState = null;
     this._runnerHooks = null;
+    // Flush the JSONL sink before clearing the bus so in-flight writes
+    // still reach disk. Fire-and-forget — dispose is synchronous by
+    // contract; the sink's own _pending queue tracks outstanding I/O.
+    void this._eventSink?.dispose();
+    this._eventSink = null;
+    this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
     this._autohealChain = null;
