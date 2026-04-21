@@ -1,8 +1,7 @@
 /**
- * Autoheal module — 5-level technical recovery chain.
+ * Autoheal module — 5-level technical recovery chain (ADR §6.4).
  *
- * See: docs/architecture/dual-flow-architecture.md §7
- *      plan v2 P3
+ * See: docs/architecture/agent-unified-workflow.md §6.4
  */
 
 export {
@@ -23,3 +22,13 @@ export {
   type AutohealOutcome,
   type AutohealPolicy,
 } from './autoheal-types';
+
+// Drop-in handler factories for the common L2 / L3 / L5 strategies.
+// Core chain stays conservative; these are opt-in composable defaults.
+export {
+  createResolutionDegradeHandler,
+  createSubstituteHandler,
+  createUserEscalationHandler,
+  type ResolutionDegradeConfig,
+  type SubstituteConfig,
+} from './example-handlers';

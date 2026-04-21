@@ -1,21 +1,32 @@
 /**
- * Autoheal Chain — 5-level recovery orchestrator.
+ * Autoheal Chain — 5-level recovery orchestrator (ADR §6.4 RetryEngine).
  *
- * See: docs/architecture/dual-flow-architecture.md §7
- *      plan v2 P3 (autoheal = ReAct "skip mode" pattern)
+ * See: docs/architecture/agent-unified-workflow.md §6.4
+ *      packages/neko-agent/packages/agent/src/autoheal/example-handlers.ts
+ *        (drop-in factories for the common L2/L3 strategies)
  *
- * Levels execute in order; each may `heal` (chain stops, caller retries
- * with the new plan), `pass` (move to next level), or `abort` (chain
- * exits). Handlers are supplied by the caller via AutohealHandlers;
- * default handlers below implement sane no-op / conservative behavior
- * so the chain can be instantiated without any wiring.
+ * Levels execute in order; each handler returns an outcome:
+ *   - `healed`   chain stops; caller should retry the tool with the
+ *                adjusted plan the handler baked into the outcome note
+ *   - `pass`     the level doesn't know how to help; move on
+ *   - `aborted`  chain exits with a terminal reason (retry-exhausted /
+ *                user-decline / policy / unsubstitutable)
  *
- * The chain does **not** re-execute the failed tool — it returns an
- * outcome. The ReAct loop runner is responsible for acting on the
- * outcome (e.g. retry same tool, substitute tool, escalate to user).
+ * Handlers are supplied by the caller via AutohealHandlers. Defaults
+ * below implement conservative no-op / pass-through behaviour so the
+ * chain is instantiable without wiring — every level can be overridden
+ * independently.
  *
- * Events are optional — when an EventBus is supplied, the chain emits
- * the matching execution.autoheal.* channel for each level it walks.
+ * The chain does **not** re-execute the failed tool. It returns an
+ * outcome; the ReAct loop runner is responsible for acting on it
+ * (retry same tool, substitute tool, escalate to user, etc.).
+ *
+ * Events: when an EventBus is supplied, the chain emits the matching
+ * `execution.autoheal.*` channel for each level it walks. L5 always
+ * emits — it's the user-facing terminal for this run's failure.
+ *
+ * Overall target (ADR §6.4): 70% auto-heal silent (L1-L2), 20%
+ * informational (L3), 5% subagent (L4), ≤ 5% user-facing (L5).
  */
 
 import type { IEventBus } from '../events/event-bus';
