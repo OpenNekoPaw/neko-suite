@@ -18,7 +18,7 @@
  *     "needs user review")
  *   - destructive + idempotent metadata: plans are preview artefacts,
  *     so defaults are `destructive: false` + `idempotent: true`. The
- *     creationStrategyPack already auto-accepts preview-only plans.
+ *     declarativeStrategyPack already auto-accepts preview-only plans.
  *
  * The adapter does NOT execute override / abort paths — those remain
  * user actions on the interactive UI. It only produces the "can we

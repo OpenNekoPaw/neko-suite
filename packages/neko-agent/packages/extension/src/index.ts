@@ -39,8 +39,8 @@ import {
 import { WorkflowPlanHandler } from './workflow/workflow-plan-handler';
 import {
   createApprovalEngine,
-  creationStrategyPack,
-  executionStrategyPack,
+  declarativeStrategyPack,
+  imperativeStrategyPack,
   createPlanReviewApprovalAdapter,
 } from '@neko/agent/approval';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
@@ -181,7 +181,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // When the AI lane wires its own FlowSwitcher into its session the
   // engine it sees is separate (per-session) and reads live flow.
   const approvalEngine = createApprovalEngine({
-    strategyPacks: [creationStrategyPack, executionStrategyPack],
+    strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
   });
   const planReviewAdapter = createPlanReviewApprovalAdapter({ engine: approvalEngine });
 
@@ -192,7 +192,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     {
       approval: {
         engine: approvalEngine,
-        getFlowKind: () => 'creation',
       },
     },
   );

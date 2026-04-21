@@ -179,6 +179,125 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
       expect(r.valid).toBe(false);
       expect(r.errors.some((e) => e.includes('label'))).toBe(true);
     });
+
+    // ------------------------------------------------------------------
+    // W1: DAG fields (dependsOn / tool / outputKey / allowedTools)
+    // ------------------------------------------------------------------
+
+    it('accepts a DAG with dependsOn references', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [
+            { name: 'parse', label: 'Parse', tool: 'parseStoryboard', outputKey: 'scenes' },
+            {
+              name: 'generate',
+              label: 'Generate',
+              dependsOn: ['parse'],
+              tool: 'generatePrompts',
+              outputKey: 'prompts',
+            },
+            {
+              name: 'batch',
+              label: 'Batch',
+              dependsOn: ['generate'],
+              tool: 'batchGenerate',
+              parallel: true,
+            },
+          ],
+        }),
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('errors when dependsOn references an unknown phase', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [
+            { name: 'parse', label: 'Parse' },
+            { name: 'generate', label: 'Generate', dependsOn: ['nonexistent'] },
+          ],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('unknown phase "nonexistent"'))).toBe(true);
+    });
+
+    it('errors on self-dependency', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [{ name: 'parse', label: 'Parse', dependsOn: ['parse'] }],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('cannot reference the phase itself'))).toBe(true);
+    });
+
+    it('detects a simple two-node cycle', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [
+            { name: 'a', label: 'A', dependsOn: ['b'] },
+            { name: 'b', label: 'B', dependsOn: ['a'] },
+          ],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('cycle'))).toBe(true);
+    });
+
+    it('detects a three-node cycle', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [
+            { name: 'a', label: 'A', dependsOn: ['c'] },
+            { name: 'b', label: 'B', dependsOn: ['a'] },
+            { name: 'c', label: 'C', dependsOn: ['b'] },
+          ],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('cycle'))).toBe(true);
+    });
+
+    it('errors when tool is empty string', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [{ name: 'parse', label: 'Parse', tool: '' }],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('tool must be'))).toBe(true);
+    });
+
+    it('errors when outputKey is empty string', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [{ name: 'parse', label: 'Parse', outputKey: '' }],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('outputKey'))).toBe(true);
+    });
+
+    it('accepts allowedTools as tool-id whitelist', () => {
+      const r = validateSkill(
+        baseSkill({
+          phases: [{ name: 'parse', label: 'Parse', allowedTools: ['cut.trim', 'cut.export'] }],
+        }),
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('errors when allowedTools contains a non-string', () => {
+      const r = validateSkill(
+        baseSkill({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          phases: [{ name: 'parse', label: 'Parse', allowedTools: [123 as any] }],
+        }),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('allowedTools[0]'))).toBe(true);
+    });
   });
 
   describe('referencedAssets', () => {

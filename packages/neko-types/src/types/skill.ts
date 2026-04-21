@@ -89,12 +89,53 @@ export const COMMAND_DIRECTORIES = {
 // =============================================================================
 
 /**
- * A phase inside a multi-stage Skill (ADR §5.2.1 `phases:`).
+ * A phase inside a multi-stage Skill (ADR §5.2.1 `phases:` + agent-unified-
+ * workflow.md §6.5 StageGuardian).
  *
  * Phases describe the Skill's internal orchestration — e.g. a TikTok
  * creation Skill might declare shot-breakdown / shot-generation / export
  * phases with approval gates between them. The fields here are declarative
  * only; the runtime StageGuardian is responsible for honouring them.
+ *
+ * ## DAG semantics (W1)
+ *
+ * Phases form a DAG when `dependsOn` is populated. Phases with no
+ * `dependsOn` are roots (can start immediately); a phase becomes runnable
+ * once all its dependencies are in a terminal state. The scheduler (W3)
+ * identifies parallel-runnable batches by topological rank.
+ *
+ *   phases:
+ *     - name: parse-storyboard
+ *       tool: parseStoryboard
+ *       outputKey: scenes
+ *     - name: generate-prompts
+ *       dependsOn: [parse-storyboard]
+ *       tool: generatePrompts
+ *       outputKey: prompts
+ *     - name: batch-generate
+ *       dependsOn: [generate-prompts]
+ *       tool: batchGenerate
+ *       parallel: true           # scheduler fans out per-prompt
+ *       outputKey: assets
+ *     - name: quality-gate
+ *       dependsOn: [batch-generate]
+ *       approval: true           # StageGuardian halts until ApprovalEngine resolves
+ *
+ * ## Tool binding (W1)
+ *
+ * When `tool` is set, the runtime knows which tool implements the phase;
+ * phases without `tool` are purely narrative (the Agent executes them by
+ * reading the Skill body). `allowedTools` narrows what the Agent may call
+ * from inside the phase — useful when the phase is scripted through the
+ * model rather than a single tool.
+ *
+ * ## Output routing (W1)
+ *
+ * `outputKey` names the slot on the run's shared context where the phase's
+ * result lands. Subsequent phases read it via the same key. Keeping this
+ * in the manifest (rather than implicit ordering) lets the scheduler
+ * build the context object deterministically without asking the Agent to
+ * memorise intermediate values.
  */
 export interface SkillPhase {
   /** Stable phase identifier, unique within a Skill. */
@@ -105,6 +146,30 @@ export interface SkillPhase {
   approval?: boolean;
   /** Whether the phase's work can run in parallel (e.g. per-shot generation). */
   parallel?: boolean;
+  /**
+   * Names of phases that must reach a terminal state before this phase may
+   * run. Each entry must match another phase's `name` within the same
+   * Skill; missing references and cycles are rejected by
+   * `validateSkillManifest`.
+   */
+  dependsOn?: string[];
+  /**
+   * Tool id the scheduler invokes for this phase. Optional — phases
+   * without a tool are narrative steps executed by the Agent interpreting
+   * the Skill body.
+   */
+  tool?: string;
+  /**
+   * Key in the run's shared context under which the phase's output is
+   * stored. Downstream phases read by the same key.
+   */
+  outputKey?: string;
+  /**
+   * Tool whitelist for Agent-driven (no explicit `tool`) phases. The
+   * runtime (StageGuardian) denies tool calls outside this list while the
+   * phase is active.
+   */
+  allowedTools?: string[];
 }
 
 /**
@@ -1073,6 +1138,73 @@ export function isToolAllowed(tool: string, allowedTools?: string[]): boolean {
 }
 
 /**
+ * DAG validator for SkillPhase[]. Checks that every `dependsOn` entry
+ * names a known phase and that the resulting graph has no cycles. Kept
+ * module-private because the only caller is validateSkillManifest, and
+ * it mutates the shared `errors` array instead of returning a result so
+ * error messages stay in phase-declaration order.
+ */
+function validatePhaseDag(phases: readonly SkillPhase[], errors: string[]): void {
+  const byName: Record<string, SkillPhase> = {};
+  for (let i = 0; i < phases.length; i++) {
+    const p = phases[i];
+    if (p && typeof p.name === 'string' && p.name.length > 0 && !byName[p.name]) {
+      byName[p.name] = p;
+    }
+  }
+
+  // Reference check.
+  for (let i = 0; i < phases.length; i++) {
+    const p = phases[i];
+    if (!p || !Array.isArray(p.dependsOn)) continue;
+    for (const dep of p.dependsOn) {
+      if (typeof dep !== 'string' || dep.length === 0) continue;
+      if (!byName[dep]) {
+        errors.push(`phases[${i}].dependsOn references unknown phase "${dep}"`);
+      }
+    }
+  }
+
+  // Cycle check via iterative DFS. `state` tracks: 'visiting' means on
+  // the current path; 'done' means fully explored.
+  const state: Record<string, 'visiting' | 'done'> = {};
+  const phaseNames = Object.keys(byName);
+  for (let i = 0; i < phaseNames.length; i++) {
+    const start = phaseNames[i]!;
+    if (state[start]) continue;
+    const stack: Array<{ name: string; depIdx: number }> = [{ name: start, depIdx: 0 }];
+    state[start] = 'visiting';
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!;
+      const phase = byName[top.name];
+      const deps = phase && Array.isArray(phase.dependsOn) ? phase.dependsOn : [];
+      if (top.depIdx >= deps.length) {
+        state[top.name] = 'done';
+        stack.pop();
+        continue;
+      }
+      const dep = deps[top.depIdx]!;
+      top.depIdx++;
+      if (!byName[dep]) continue; // already reported by the reference check
+      if (state[dep] === 'visiting') {
+        errors.push(`phases cycle detected through "${dep}" — dependsOn graph must be acyclic`);
+        // Abort this traversal; the rest of the graph will be checked
+        // on subsequent start points (cycle already reported).
+        while (stack.length > 0) {
+          state[stack[stack.length - 1]!.name] = 'done';
+          stack.pop();
+        }
+        break;
+      }
+      if (state[dep] !== 'done') {
+        state[dep] = 'visiting';
+        stack.push({ name: dep, depIdx: 0 });
+      }
+    }
+  }
+}
+
+/**
  * Semver-ish regex: major.minor.patch with optional pre-release and build
  * metadata. Deliberately not importing a full semver library — Skills
  * author-input versions are validated to catch typos, not to run complex
@@ -1217,7 +1349,52 @@ export function validateSkillManifest(
         if (phase.parallel !== undefined && typeof phase.parallel !== 'boolean') {
           errors.push(`phases[${idx}].parallel must be a boolean`);
         }
+        if (phase.dependsOn !== undefined) {
+          if (!Array.isArray(phase.dependsOn)) {
+            errors.push(`phases[${idx}].dependsOn must be an array of phase names`);
+          } else {
+            for (let depIdx = 0; depIdx < phase.dependsOn.length; depIdx++) {
+              const dep = phase.dependsOn[depIdx];
+              if (typeof dep !== 'string' || dep.length === 0) {
+                errors.push(`phases[${idx}].dependsOn[${depIdx}] must be a non-empty string`);
+              } else if (dep === phase.name) {
+                errors.push(
+                  `phases[${idx}].dependsOn cannot reference the phase itself ("${dep}")`,
+                );
+              }
+            }
+          }
+        }
+        if (
+          phase.tool !== undefined &&
+          (typeof phase.tool !== 'string' || phase.tool.length === 0)
+        ) {
+          errors.push(`phases[${idx}].tool must be a non-empty string`);
+        }
+        if (
+          phase.outputKey !== undefined &&
+          (typeof phase.outputKey !== 'string' || phase.outputKey.length === 0)
+        ) {
+          errors.push(`phases[${idx}].outputKey must be a non-empty string`);
+        }
+        if (phase.allowedTools !== undefined) {
+          if (!Array.isArray(phase.allowedTools)) {
+            errors.push(`phases[${idx}].allowedTools must be an array of tool ids`);
+          } else {
+            for (let toolIdx = 0; toolIdx < phase.allowedTools.length; toolIdx++) {
+              const tool = phase.allowedTools[toolIdx];
+              if (typeof tool !== 'string' || tool.length === 0) {
+                errors.push(`phases[${idx}].allowedTools[${toolIdx}] must be a non-empty string`);
+              }
+            }
+          }
+        }
       }
+
+      // DAG validation: every dependsOn must reference a known phase,
+      // and the graph must be acyclic. Running after the shape loop so
+      // we already know which names are valid.
+      validatePhaseDag(manifest.phases, errors);
     }
   }
 

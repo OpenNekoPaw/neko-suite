@@ -32,7 +32,6 @@ import {
   type IApprovalEngine,
   type QualityGateThresholds,
 } from '@neko/agent/approval';
-import type { FlowKind } from '@neko-agent/types';
 import { createWorkflowTools } from '../tools/pipelineTools';
 import { createQualityCheckTools } from '../tools/qualityCheckTools';
 import { createConsistencyCheckTools } from '../tools/consistencyCheckTools';
@@ -65,16 +64,17 @@ export interface WorkflowBootstrapResult {
 }
 
 /**
- * Optional P4 hookup — lets the QualityGate stage route consistency
- * reports through the unified ApprovalEngine.  When both
- * `approvalEngine` and `getFlowKind` are provided, the stage will
- * consult the engine after each ConsistencyEvaluator run and publish
+ * Optional hookup — lets the QualityGate stage route consistency
+ * reports through the unified ApprovalEngine. When supplied, the stage
+ * consults the engine after each ConsistencyEvaluator run and publishes
  * the resulting decision onto `ctx.qualityDecision`.
+ *
+ * Quality-gate requests are always tagged as the imperative paradigm
+ * (they belong to Implement-stage tool execution), so no per-call flow
+ * accessor is needed — the adapter applies it internally.
  */
 export interface WorkflowApprovalHookup {
   engine: IApprovalEngine;
-  /** Live accessor for the current flow — reads the AgentSession switcher. */
-  getFlowKind: () => FlowKind;
   /** Optional runId accessor for correlation. */
   getRunId?: () => string | undefined;
   /** Optional threshold overrides (default 80 pass / 60 warn). */
@@ -223,7 +223,6 @@ export function bootstrapWorkflow(
   if (options.approval) {
     qualityGateDeps.evaluateApproval = createQualityGateApprovalAdapter({
       engine: options.approval.engine,
-      getFlow: options.approval.getFlowKind,
       ...(options.approval.thresholds ? { thresholds: options.approval.thresholds } : {}),
     });
     if (options.approval.getRunId) {
