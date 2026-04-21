@@ -73,19 +73,27 @@ export {
   registerBuiltinToolGroups,
 } from './builtins';
 
-// Flow Switcher (dual-flow architecture)
+// Stage Tracker (SDD stage transitions — replaces FlowSwitcher)
 export {
-  FlowSwitcher,
-  createFlowSwitcher,
-  skillNameForFlow,
+  StageTracker,
+  createStageTracker,
+  type StageTrackerConfig,
+  type StageEnteredEvent,
+  type StageExitedEvent,
+  type StageEnteredListener,
+  type StageExitedListener,
+} from './stage-tracker';
+
+// Stage Persona Binding (StageTracker ↔ Coordinator persona swap —
+// replaces FlowBinding).
+export {
+  createStagePersonaBinding,
+  defaultSkillNameForStage,
   CREATION_FLOW_SKILL_NAME,
   EXECUTION_FLOW_SKILL_NAME,
-  type FlowSwitcherConfig,
-  type FlowTransitionListener,
-} from './flow-switcher';
-
-// Flow Binding (FlowSwitcher ↔ Coordinator persona swap)
-export { createFlowBinding, type IFlowBinding, type FlowBindingDeps } from './flow-binding';
+  type IStagePersonaBinding,
+  type StagePersonaBindingDeps,
+} from './stage-persona-binding';
 
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';

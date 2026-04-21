@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentContext, AgentResult, ToolResultWithMeta } from '@neko/shared';
 import type { ToolCallInfo } from '@neko/shared';
-import { FlowSwitcher } from '../../skill/flow-switcher';
+import { createStageTracker } from '../../skill';
 import { createWorkflowRunStore } from '../workflow-run-store';
 import { createReActLoopRunner } from '../react-loop-runner';
 import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
@@ -23,18 +23,17 @@ function ctx(iteration: number): AgentContext {
 }
 
 describe('ReActLoopRunner hooks', () => {
-  let switcher: FlowSwitcher;
+  let stageTracker: ReturnType<typeof createStageTracker>;
   let store: ReturnType<typeof createWorkflowRunStore>;
 
   beforeEach(() => {
-    switcher = new FlowSwitcher({ now: () => 0 });
+    stageTracker = createStageTracker({ now: () => 0 });
     store = createWorkflowRunStore();
     store.startRun({ workflowId: 'test' });
   });
 
   it('beforeThink produces a decision and records it on the store', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
       now: () => 42,
@@ -50,7 +49,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('afterAct with errored results flips the next observe hint to retry', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -65,7 +63,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('afterAct with successful results keeps hint normal', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -80,7 +77,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('onIterationComplete bumps the round counter', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -93,7 +89,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('onExecuteEnd closes the run as completed on success', async () => {
     const { hooks } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -111,7 +106,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('onExecuteEnd records failure + error code on failure', async () => {
     const { hooks } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -131,7 +125,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('multi-iteration sequence: round counter + decision.round match', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -149,7 +142,6 @@ describe('ReActLoopRunner hooks', () => {
 
   it('stage-activation decisions are produced each think round', async () => {
     const { hooks, state } = createReActLoopRunner({
-      flowSwitcher: switcher,
       runStore: store,
       getMode: () => 'auto',
     });
@@ -160,11 +152,23 @@ describe('ReActLoopRunner hooks', () => {
     expect(first!.activated.length).toBeGreaterThan(0);
 
     await hooks.onIterationComplete?.(1, ctx(1));
-    switcher.onApplyTriggered();
     await hooks.beforeThink?.(ctx(2));
     const second = state.lastDecision;
     expect(second).not.toBeNull();
     expect(second!.round).toBeGreaterThan(first!.round);
+  });
+
+  it('terminal stage of each decision is entered into the StageTracker', async () => {
+    const { hooks } = createReActLoopRunner({
+      stageTracker,
+      runStore: store,
+      getMode: () => 'auto',
+    });
+    await hooks.onExecuteStart?.('input', ctx(0));
+    await hooks.beforeThink?.(ctx(1));
+    // Default classifier + entry signal produce Implement for round 0
+    // multi-step tasks; the runner feeds that into the tracker.
+    expect(stageTracker.current).not.toBeNull();
   });
 
   it('unused ToolCallInfo type import has no effect on runtime', () => {
@@ -180,7 +184,6 @@ describe('ReActLoopRunner hooks', () => {
       bus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, onRound);
 
       const { hooks } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         eventBus: bus,
@@ -203,7 +206,6 @@ describe('ReActLoopRunner hooks', () => {
       bus.on(CREATION_CHANNELS.RUN_ENDED, onEnd);
 
       const { hooks } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         eventBus: bus,
@@ -225,7 +227,6 @@ describe('ReActLoopRunner hooks', () => {
     it('no bus → no emission + no errors', async () => {
       // Identical to the happy-path test above but without a bus.
       const { hooks } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
       });
@@ -255,7 +256,6 @@ describe('ReActLoopRunner hooks', () => {
       });
       const chain = createAutohealChain({ handlers: { l1Retry: heal } });
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         autohealChain: chain,
@@ -282,7 +282,6 @@ describe('ReActLoopRunner hooks', () => {
         },
       });
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         autohealChain: chain,
@@ -301,7 +300,6 @@ describe('ReActLoopRunner hooks', () => {
       // Third call: L1 exhausted → all pass → L5 aborts.
       const chain = createAutohealChain();
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         autohealChain: chain,
@@ -316,7 +314,6 @@ describe('ReActLoopRunner hooks', () => {
     it('successful results after an errored round clear the autoheal outcome', async () => {
       const chain = createAutohealChain();
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         autohealChain: chain,
@@ -350,7 +347,6 @@ describe('ReActLoopRunner hooks', () => {
       };
 
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
         autohealChain: chain,
@@ -363,7 +359,6 @@ describe('ReActLoopRunner hooks', () => {
 
     it('without autohealChain → bare retry-hint fallback (prior P1.6 behaviour)', async () => {
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: switcher,
         runStore: store,
         getMode: () => 'auto',
       });

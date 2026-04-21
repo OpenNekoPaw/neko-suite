@@ -124,9 +124,7 @@ describe('Structural shapes', () => {
           decidedAt: 2,
         },
       ],
-      transitions: [{ from: 'creation', to: 'execution', reason: 'apply-triggered', at: 3 }],
     };
     expect(run.rounds[0].activatedStages).toContain('implement');
-    expect(run.transitions[0].reason).toBe('apply-triggered');
   });
 });

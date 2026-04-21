@@ -369,18 +369,17 @@ describe('AgentSession', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Dual-Flow (W3)
+  // SDD stage tracking
   // -------------------------------------------------------------------------
 
-  describe('dual-flow', () => {
-    it('without dualFlow config: getFlowKind() returns null', () => {
+  describe('stage tracking', () => {
+    it('without dualFlow config: getCurrentStage() returns null', () => {
       const session = new AgentSession(createConfig());
-      expect(session.getFlowKind()).toBeNull();
-      expect(session.getFlowContext()).toBeNull();
-      expect(session.transitionFlow('execution', 'apply-triggered')).toBe(false);
+      expect(session.getCurrentStage()).toBeNull();
+      expect(session.enterStage('implement')).toBe(false);
     });
 
-    it('with dualFlow config: initial kind is creation and transitions swap persona', async () => {
+    it('with dualFlow config: initial stage applies its persona and enterStage swaps to Implement', async () => {
       const creation = {
         name: 'flow-creation',
         description: 'creation persona',
@@ -417,23 +416,23 @@ describe('AgentSession', () => {
           dualFlow: {
             skillRegistry: registry as never,
             skillService: service as never,
+            initialStage: 'specify',
           },
         }),
       );
 
       // Initial sync is fire-and-forget; wait for it.
-      await session.syncFlowPersona();
+      await session.syncStagePersona();
 
-      expect(session.getFlowKind()).toBe('creation');
+      expect(session.getCurrentStage()).toBe('specify');
       expect(applyCalls[0]).toBe('flow-creation');
 
-      const changed = session.transitionFlow('execution', 'apply-triggered');
+      const changed = session.enterStage('implement');
       expect(changed).toBe(true);
       await new Promise((r) => setImmediate(r));
 
-      expect(session.getFlowKind()).toBe('execution');
+      expect(session.getCurrentStage()).toBe('implement');
       expect(applyCalls).toContain('flow-execution');
-      expect(session.getFlowContext()?.reason).toBe('apply-triggered');
     });
 
     it('dispose unsubscribes the binding', async () => {
@@ -464,16 +463,17 @@ describe('AgentSession', () => {
           dualFlow: {
             skillRegistry: registry as never,
             skillService: service as never,
+            initialStage: 'specify',
           },
         }),
       );
-      await session.syncFlowPersona();
+      await session.syncStagePersona();
 
       session.dispose();
 
-      // After dispose, flow context is null — even transition requests no-op.
-      expect(session.getFlowKind()).toBeNull();
-      expect(session.transitionFlow('execution', 'apply-triggered')).toBe(false);
+      // After dispose, stage tracking goes dormant.
+      expect(session.getCurrentStage()).toBeNull();
+      expect(session.enterStage('implement')).toBe(false);
     });
   });
 });

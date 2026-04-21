@@ -16,10 +16,9 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type { StageActivationDecision, WorkflowRun } from '@neko-agent/types';
-import type { FlowKind, FlowContext, FlowTransitionReason } from '../skill/flow-switcher';
-import type { SkillInjection, IFlowBinding } from '../skill';
-import { SkillInjectionCoordinator, FlowSwitcher, createFlowBinding } from '../skill';
+import type { SddStage, StageActivationDecision, WorkflowRun } from '@neko-agent/types';
+import type { SkillInjection, IStagePersonaBinding } from '../skill';
+import { SkillInjectionCoordinator, StageTracker, createStagePersonaBinding } from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { IWorkflowRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createWorkflowRunStore } from '../executor';
@@ -108,23 +107,25 @@ export class AgentSession implements IAgentSession {
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
 
-  // Dual-flow (W3): optional FlowSwitcher + auto-swap binding.
-  private _flowSwitcher: FlowSwitcher | null = null;
-  private _flowBinding: IFlowBinding | null = null;
+  // SDD stage tracking: StageTracker emits stage.entered events;
+  // StagePersonaBinding subscribes and swaps the persona Skill when a new
+  // stage is reached. Replaces the legacy FlowSwitcher/FlowBinding pair.
+  private _stageTracker: StageTracker | null = null;
+  private _stagePersonaBinding: IStagePersonaBinding | null = null;
 
-  // Dual-flow (P1.6): ReAct-loop primitive-activation orchestrator.
+  // ReAct-loop stage-activation orchestrator.
   private _runStore: IWorkflowRunStore | null = null;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
 
-  // Dual-flow (P5): typed event bus for creation.* / execution.* channels.
+  // Typed event bus for creation.* / execution.* channels.
   private _eventBus: IEventBus | null = null;
 
-  // Dual-flow (P3 ↔ P1.6 wiring): 5-level autoheal chain fed by afterAct.
+  // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
 
-  // Dual-flow (P4 wiring): unified approval engine — permission channel
-  // consults it before delegating to the user onConfirmTool callback.
+  // Unified approval engine — permission channel consults it before
+  // delegating to the user onConfirmTool callback.
   private _approvalEngine: IApprovalEngine | null = null;
 
   // Meta tools (for ISkillProvider wiring)
@@ -182,26 +183,26 @@ export class AgentSession implements IAgentSession {
       syncSystemPrompt: () => this._syncSystemPrompt(),
     });
 
-    // Dual-flow binding: when the caller supplies a skill registry + service,
-    // spin up a FlowSwitcher and auto-swap the persona Skill on each
+    // Stage tracking: when the caller supplies a skill registry + service,
+    // spin up a StageTracker and auto-swap the persona Skill on each stage
     // transition. The initial persona sync is async; fire-and-forget here —
     // callers that need determinism should call syncInitialPersona() directly.
     if (config.dualFlow) {
-      this._flowSwitcher = new FlowSwitcher({ initialKind: config.dualFlow.initialKind });
-      this._flowBinding = createFlowBinding({
-        flowSwitcher: this._flowSwitcher,
+      this._stageTracker = new StageTracker({ initialStage: config.dualFlow.initialStage });
+      this._stagePersonaBinding = createStagePersonaBinding({
+        stageTracker: this._stageTracker,
         skillRegistry: config.dualFlow.skillRegistry,
         skillService: config.dualFlow.skillService,
         coordinator: this._skillCoordinator,
       });
-      void this._flowBinding.syncInitial();
+      void this._stagePersonaBinding.syncCurrent();
 
-      // P1.6: install ReAct-loop primitive-activation runner.
-      // P5: wire the EventBus so the runner emits compacted round events.
-      // P3: autoheal chain routes tool errors through L1-L5 — the chain
-      // itself emits execution.autoheal.* on the same bus.
-      // P4: approval engine pre-filters ask-mode tool calls via strategy
-      // packs before the user's onConfirmTool is invoked.
+      // Install the ReAct-loop stage-activation runner and its companions:
+      //   - EventBus: typed channel for compacted round / milestone events.
+      //   - Autoheal chain: routes tool errors through L1-L5; emits
+      //     execution.autoheal.* on the same bus.
+      //   - Approval engine: pre-filters ask-mode tool calls via the
+      //     declarative + imperative strategy packs.
       this._runStore = createWorkflowRunStore();
       this._eventBus = createEventBus();
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
@@ -209,7 +210,7 @@ export class AgentSession implements IAgentSession {
         strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
       });
       const { hooks, state } = createReActLoopRunner({
-        flowSwitcher: this._flowSwitcher,
+        stageTracker: this._stageTracker,
         runStore: this._runStore,
         getMode: () => this._executionMode as StageMode,
         eventBus: this._eventBus,
@@ -222,11 +223,6 @@ export class AgentSession implements IAgentSession {
       if (this._executor) {
         this._executor.addHook(hooks);
       }
-
-      // Record flow transitions into the active run for later audit.
-      this._flowSwitcher.onTransition((event) => {
-        this._runStore?.recordTransition(event);
-      });
     }
   }
 
@@ -525,41 +521,37 @@ export class AgentSession implements IAgentSession {
   }
 
   // ---------------------------------------------------------------------------
-  // Dual-Flow (W3)
+  // SDD stage tracking
   // ---------------------------------------------------------------------------
 
   /**
-   * Current flow kind, or null if dual-flow was not configured.
+   * Current SDD stage the agent is operating in, or null if stage tracking
+   * is not configured.
    */
-  getFlowKind(): FlowKind | null {
-    return this._flowSwitcher?.kind ?? null;
+  getCurrentStage(): SddStage | null {
+    return this._stageTracker?.current ?? null;
   }
 
   /**
-   * Full flow context (kind + enteredAt + reason) if dual-flow is configured.
-   */
-  getFlowContext(): FlowContext | null {
-    return this._flowSwitcher?.context ?? null;
-  }
-
-  /**
-   * Explicitly apply the persona Skill for the current flow. Useful for
+   * Explicitly apply the persona Skill for the current stage. Useful for
    * tests and for callers that need deterministic initialization (the
-   * constructor fires this as a background task).
+   * constructor fires the initial sync as a background task).
    */
-  async syncFlowPersona(): Promise<void> {
-    if (this._flowBinding) {
-      await this._flowBinding.syncInitial();
+  async syncStagePersona(): Promise<void> {
+    if (this._stagePersonaBinding) {
+      await this._stagePersonaBinding.syncCurrent();
     }
   }
 
   /**
-   * Transition the current flow. No-op if dual-flow is not configured, or
-   * if already in the target kind.
+   * Manually enter a stage. Normally the ReAct-loop runner drives this
+   * automatically from planner decisions; call sites that want to override
+   * (e.g. restoring a saved session) can trigger the transition explicitly.
+   * Returns true iff the stage actually changed.
    */
-  transitionFlow(target: FlowKind, reason: FlowTransitionReason): boolean {
-    if (!this._flowSwitcher) return false;
-    return this._flowSwitcher.transitionTo(target, reason);
+  enterStage(stage: SddStage): boolean {
+    if (!this._stageTracker) return false;
+    return this._stageTracker.enter(stage);
   }
 
   /**
@@ -645,11 +637,11 @@ export class AgentSession implements IAgentSession {
     this._isRunning = false;
     // Flush journal writer
     void this._journalWriter?.dispose();
-    // Dual-flow: unsubscribe binding listener + clear switcher listeners.
-    this._flowBinding?.dispose();
-    this._flowSwitcher?.dispose();
-    this._flowBinding = null;
-    this._flowSwitcher = null;
+    // Stage tracking: unsubscribe binding listener + clear tracker listeners.
+    this._stagePersonaBinding?.dispose();
+    this._stageTracker?.dispose();
+    this._stagePersonaBinding = null;
+    this._stageTracker = null;
     this._runStore = null;
     this._reactRunnerState = null;
     this._runnerHooks = null;
@@ -739,7 +731,7 @@ export class AgentSession implements IAgentSession {
 
     // Consult the approval engine if wired. Permission-channel requests
     // always belong to the imperative paradigm (Implement-stage tool calls).
-    if (this._approvalEngine && this._flowSwitcher) {
+    if (this._approvalEngine && this._stageTracker) {
       try {
         const decision = await this._approvalEngine.evaluate({
           channel: 'permission',

@@ -1,33 +1,32 @@
 /**
- * SharedMemoryStore — cross-ring scratchpad for dual-flow architecture.
+ * SharedMemoryStore — cross-scope scratchpad for SDD runs.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.5 (shared memory)
- *      plan v2 Epic P5 + "MemoryStore 缓存 ConsistencyReport 历史"
+ * See: docs/architecture/agent-unified-workflow.md §9.2 (shared memory)
  *
- * Purpose: a small in-memory key/value store scoped by FlowKind + topic
- * so the creation ring and the execution ring can observe each other's
- * working state without coupling to concrete tool types. Consumers:
+ * Purpose: a small in-memory key/value store scoped by MemoryScope +
+ * topic so Specify-stage producers and Implement-stage producers can
+ * observe each other's working state without coupling to concrete tool
+ * types. Consumers:
  *
  *   - Iteration Skill reads recent ConsistencyReport entries here.
  *   - ProgressNarrator reads last milestone labels here.
  *   - Autoheal L4 RecoverySubagent reads prior failure details here.
  *
  * Design rules:
- *   - **Scoped by ring**: keys land under `creation:<topic>` or
- *     `execution:<topic>` or `shared:<topic>`; `getScope()` queries
- *     only within a ring.
+ *   - **Scoped**: keys land under `creation:<topic>` /
+ *     `execution:<topic>` / `shared:<topic>`. The names mirror the event
+ *     bus channel namespaces (CREATION_CHANNELS / EXECUTION_CHANNELS):
+ *     'creation' labels Specify-stage writes, 'execution' labels
+ *     Implement-stage writes. They are scope tags, not flow identifiers.
  *   - **Bounded history**: each key retains at most `maxPerKey` entries
- *     (default 16). Older entries are dropped FIFO. This prevents
- *     runaway memory growth across long sessions.
+ *     (default 16). Older entries are dropped FIFO.
  *   - **Subscribable**: callers can watch a topic for new entries.
- *     Useful for UI strips that render the last 3 ConsistencyReports.
  *   - **Opt-in serialization**: `snapshot()` / `restore()` exist for
- *     session persistence — they're plain JSON, not typed.
+ *     session persistence — plain JSON, not typed.
  *
  * Intentional non-goals (deferred):
- *   - Full-text search / semantic recall (that's MemoryRecall in this
- *     module already).
- *   - LLM-based summarization / compaction (creative-memory-hooks).
+ *   - Full-text search / semantic recall.
+ *   - LLM-based summarization / compaction.
  *   - Cross-process sync.
  */
 
@@ -35,12 +34,14 @@
 // Types
 // =============================================================================
 
-// TODO(PR4): Reconsider scope taxonomy once FlowSwitcher is retired. The
-// 'creation' / 'execution' labels here are legacy dual-flow ring names kept
-// through PR3 so the memory store stays compatible with existing writers.
-type LegacyFlowKind = 'creation' | 'execution';
-
-export type MemoryScope = LegacyFlowKind | 'shared';
+/**
+ * Memory-store scope tags. The names align with the event-channel
+ * namespaces (creation.* / execution.*) so producers and consumers can
+ * reuse the same vocabulary. They are not SDD stage names — 'creation'
+ * covers all pre-Implement activity (Specify + Plan + Tasks), 'execution'
+ * covers Implement, and 'shared' is scope-agnostic.
+ */
+export type MemoryScope = 'creation' | 'execution' | 'shared';
 
 export interface MemoryEntry<T = unknown> {
   /** The topic the entry was written under. */

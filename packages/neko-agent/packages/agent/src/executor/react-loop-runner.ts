@@ -27,17 +27,12 @@
  */
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
-import type { StageActivationDecision, StageTaskShape } from '@neko-agent/types';
+import type { SddStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
 
-// TODO(PR4): Remove once FlowSwitcher is retired and TaskShapeSignals no longer
-// carries a flow field. PR3 keeps the type local so deleting agent-types/flow.ts
-// does not cascade here.
-type LegacyFlowKind = 'creation' | 'execution';
-
-import type { FlowSwitcher } from '../skill/flow-switcher';
 import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
+import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
 import type { IWorkflowRunStore } from './workflow-run-store';
 import type { IEventBus } from '../events/event-bus';
@@ -51,8 +46,14 @@ const logger = getLogger('ReActLoopRunner');
 // =============================================================================
 
 export interface ReActLoopRunnerDeps {
-  /** Source of truth for the current FlowKind. */
-  flowSwitcher: FlowSwitcher;
+  /**
+   * Tracks the current SDD stage. The runner calls `stageTracker.enter()`
+   * with the terminal stage of each round's activation decision, which lets
+   * listeners (e.g. StagePersonaBinding) swap the active persona Skill.
+   * Optional so lightweight call sites (tests, headless executions) can
+   * skip stage tracking entirely.
+   */
+  stageTracker?: StageTracker;
   /** Where round summaries get aggregated. */
   runStore: IWorkflowRunStore;
   /**
@@ -95,8 +96,6 @@ export interface ReActLoopRunnerDeps {
 }
 
 export interface TaskShapeSignals {
-  /** Current flow kind (legacy FlowSwitcher signal, removed in PR4). */
-  flow: LegacyFlowKind;
   /** 0-based iteration index (matches AgentContext.iteration - 1). */
   round: number;
   /** Tool results from the previous iteration, empty on first round. */
@@ -168,9 +167,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
     },
 
     async beforeThink(_ctx: AgentContext) {
-      const flow = deps.flowSwitcher.kind;
       const signals: TaskShapeSignals = {
-        flow,
         round: state.round,
         lastToolResults,
         lastHadError,
@@ -197,6 +194,14 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
       deps.runStore.recordRound(decision, state.nextObserveHint);
       state.lastDecision = decision;
+
+      // Tell the tracker which stage this round terminated in — persona
+      // bindings subscribe to `stage.entered` to swap Skills. We pick the
+      // terminal activated stage (already DAG-sorted by the planner).
+      if (deps.stageTracker) {
+        const terminal = terminalStage(decision.activated);
+        if (terminal) deps.stageTracker.enter(terminal);
+      }
 
       // P5 — compacted round event per plan v2 R9.
       if (deps.eventBus) {
@@ -406,4 +411,15 @@ function autohealOutcomeToHint(outcome: AutohealOutcome): 'retry' | 'user-cancel
     case 'aborted':
       return 'user-cancel';
   }
+}
+
+/**
+ * Pick the "current" stage from a decision's activated set. The planner
+ * DAG-sorts activations (specify → plan → tasks → implement), so the last
+ * element is the deepest stage the round reaches. Returns null for empty
+ * sets, which shouldn't happen post-dispatch-validation but we guard anyway.
+ */
+function terminalStage(activated: readonly SddStage[]): SddStage | null {
+  if (activated.length === 0) return null;
+  return activated[activated.length - 1] ?? null;
 }

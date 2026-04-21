@@ -95,21 +95,13 @@ describe('WorkflowRunStore', () => {
     expect(completed.find((r) => r.id === first)!.status).toBe('aborted');
   });
 
-  it('recordTransition + setTodos attach to the active run', () => {
+  it('setTodos attaches the todo list to the active run', () => {
     const store = createWorkflowRunStore();
     store.startRun({ workflowId: 'f' });
-    store.recordTransition({
-      from: 'creation',
-      to: 'execution',
-      reason: 'apply-triggered',
-      at: 77,
-    });
     const todos: TodoList = { id: 'l1', items: [], createdAt: 0, updatedAt: 0 };
     store.setTodos(todos);
 
     const run = store.getActive()!;
-    expect(run.transitions).toHaveLength(1);
-    expect(run.transitions[0].reason).toBe('apply-triggered');
     expect(run.todos).toBe(todos);
   });
 });

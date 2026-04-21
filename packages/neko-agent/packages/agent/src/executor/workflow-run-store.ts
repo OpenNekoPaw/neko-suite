@@ -22,7 +22,6 @@ import type {
   WorkflowRunStatus,
 } from '@neko-agent/types';
 import { roundSummaryFromDecision } from '@neko-agent/types';
-import type { FlowTransitionEvent } from '../skill/flow-switcher';
 
 // =============================================================================
 // Types
@@ -33,8 +32,6 @@ export interface IWorkflowRunStore {
   startRun(input: { workflowId: string; runId?: string }): string;
   /** Append a round summary derived from the planner decision. */
   recordRound(decision: StageActivationDecision, lastObserveHint?: string): void;
-  /** Record a flow transition on the active run (if any). */
-  recordTransition(event: FlowTransitionEvent): void;
   /** Attach / replace the active todos reference for the current run. */
   setTodos(todos: TodoList): void;
   /** Terminal transition for the active run. */
@@ -87,7 +84,6 @@ class WorkflowRunStore implements IWorkflowRunStore {
       createdAt: now,
       startedAt: now,
       rounds: [],
-      transitions: [],
     };
     return id;
   }
@@ -98,14 +94,6 @@ class WorkflowRunStore implements IWorkflowRunStore {
     this._active = {
       ...this._active,
       rounds: [...this._active.rounds, summary],
-    };
-  }
-
-  recordTransition(event: FlowTransitionEvent): void {
-    if (!this._active) return;
-    this._active = {
-      ...this._active,
-      transitions: [...this._active.transitions, event],
     };
   }
 
