@@ -62,10 +62,10 @@ export {
   scriptToTimelineSkill,
   comicToStoryboardSkill,
   qualityAssessmentSkill,
-  // Dual-flow persona skills
-  creationFlowSkill,
-  executionFlowSkill,
-  iterationFlowSkill,
+  // SDD stage persona skills
+  creationPersonaSkill,
+  executionPersonaSkill,
+  iterationPersonaSkill,
   // ToolGroups
   builtinToolGroups,
   registerBuiltinToolGroups,
@@ -87,8 +87,8 @@ export {
 export {
   createStagePersonaBinding,
   defaultSkillNameForStage,
-  CREATION_FLOW_SKILL_NAME,
-  EXECUTION_FLOW_SKILL_NAME,
+  CREATION_PERSONA_SKILL_NAME,
+  EXECUTION_PERSONA_SKILL_NAME,
   type IStagePersonaBinding,
   type StagePersonaBindingDeps,
 } from './stage-persona-binding';

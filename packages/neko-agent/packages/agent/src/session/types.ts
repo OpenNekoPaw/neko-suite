@@ -169,24 +169,20 @@ export interface AgentSessionConfig {
   traitsRegistry?: ToolTraitsRegistry;
 
   /**
-   * SDD stage-tracking binding (replaces the legacy dual-flow binding).
+   * SDD stage-tracking binding.
    *
    * When provided, AgentSession maintains a StageTracker and auto-applies
-   * the matching persona Skill (`flow-creation` for Specify/Plan/Tasks,
-   * `flow-execution` for Implement) via the injection coordinator on every
-   * stage transition.
+   * the matching persona Skill (`creation-persona` for Specify/Plan/Tasks,
+   * `execution-persona` for Implement) via the injection coordinator on
+   * every stage transition.
    *
    * Both `skillRegistry` and `skillService` must be supplied together — the
    * binding needs the registry to resolve the persona Skill by name and the
    * service to prepare the SkillInjection payload. Omitted = stage tracking
    * stays dormant, preserving behaviour for callers that don't use the
    * skill system.
-   *
-   * The `dualFlow` field name is retained for backwards-compatible call
-   * sites while the SDD migration lands — it will be renamed to
-   * `stageTracking` in a follow-up.
    */
-  dualFlow?: {
+  stageTracking?: {
     skillRegistry: import('@neko/shared').ISkillRegistry;
     skillService: import('../skill/skill-service').SkillService;
     /** Initial SDD stage (default: none — tracker stays uninitialised). */

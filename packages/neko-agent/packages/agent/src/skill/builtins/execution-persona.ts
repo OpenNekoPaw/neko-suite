@@ -1,5 +1,5 @@
 /**
- * Implement-stage Skill — SDD Implement persona (technical semantics)
+ * Execution Persona Skill — SDD Implement persona (technical semantics)
  *
  * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages)
  *
@@ -7,7 +7,7 @@
  * Provides the system-operator persona: tool calls, resource management,
  * state transitions, auto-healing.
  *
- * NOT activated during Specify — see creation-flow.ts for that persona.
+ * NOT activated during Specify / Plan / Tasks — see creation-persona.
  */
 
 import type { Skill } from '@neko/shared';
@@ -103,10 +103,10 @@ Tool failed?
 
 `;
 
-export const executionFlowSkill: Skill = {
-  name: 'flow-execution',
+export const executionPersonaSkill: Skill = {
+  name: 'execution-persona',
   description:
-    'Implement-stage persona for SDD technical semantics. ' +
+    'Execution persona for SDD Implement stage. ' +
     'Use when the agent is executing an approved Proposal — calling tools, committing changes, ' +
     'handling errors, or running auto-heal chains. Triggered after Specify-stage approval; ' +
     'NOT during creative discussion. Owns the 5-level auto-heal chain (retry → degrade → ' +

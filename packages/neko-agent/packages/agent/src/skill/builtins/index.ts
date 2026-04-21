@@ -10,9 +10,9 @@ import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
 import { scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
-import { creationFlowSkill } from './creation-flow';
-import { executionFlowSkill } from './execution-flow';
-import { iterationFlowSkill } from './iteration-flow';
+import { creationPersonaSkill } from './creation-persona';
+import { executionPersonaSkill } from './execution-persona';
+import { iterationPersonaSkill } from './iteration-persona';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
@@ -22,10 +22,10 @@ export { comicToStoryboardSkill } from './comic-to-storyboard';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 
-// Dual-flow persona skills (docs/architecture/dual-flow-architecture.md)
-export { creationFlowSkill } from './creation-flow';
-export { executionFlowSkill } from './execution-flow';
-export { iterationFlowSkill } from './iteration-flow';
+// SDD stage persona skills (docs/architecture/agent-unified-workflow.md §4)
+export { creationPersonaSkill } from './creation-persona';
+export { executionPersonaSkill } from './execution-persona';
+export { iterationPersonaSkill } from './iteration-persona';
 
 // Re-export ToolGroups
 export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
@@ -523,9 +523,9 @@ Report to the user what music was generated (prompt used, duration) and where it
  */
 export const builtinSkills: Skill[] = [
   // SDD stage personas (Specify / Implement / Iteration)
-  creationFlowSkill,
-  executionFlowSkill,
-  iterationFlowSkill,
+  creationPersonaSkill,
+  executionPersonaSkill,
+  iterationPersonaSkill,
   // AI Generation
   aiGenerateSkill,
   sceneToMusicSkill,

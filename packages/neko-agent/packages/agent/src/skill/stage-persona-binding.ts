@@ -9,8 +9,8 @@
  * SkillInjectionCoordinator.
  *
  * Default mapping (matches the two builtin persona Skills shipped today):
- *   specify / plan / tasks  → flow-creation  (discussion + proposal persona)
- *   implement               → flow-execution (operator persona)
+ *   specify / plan / tasks  → creation-persona  (discussion + proposal persona)
+ *   implement               → execution-persona (operator persona)
  *
  * Sites that want a different persona layout can pass a custom
  * `skillNameForStage` — e.g. the 4-persona split the ADR hints at.
@@ -37,9 +37,9 @@ const logger = getLogger('StagePersonaBinding');
 // =============================================================================
 
 /** Builtin skill name for Specify / Plan / Tasks — creative discussion persona. */
-export const CREATION_FLOW_SKILL_NAME = 'flow-creation';
+export const CREATION_PERSONA_SKILL_NAME = 'creation-persona';
 /** Builtin skill name for Implement — system-operator persona. */
-export const EXECUTION_FLOW_SKILL_NAME = 'flow-execution';
+export const EXECUTION_PERSONA_SKILL_NAME = 'execution-persona';
 
 /**
  * Default stage → persona-skill mapping. Specify / Plan / Tasks share the
@@ -47,7 +47,7 @@ export const EXECUTION_FLOW_SKILL_NAME = 'flow-execution';
  * only Implement flips to the operator persona.
  */
 export function defaultSkillNameForStage(stage: SddStage): string {
-  return stage === 'implement' ? EXECUTION_FLOW_SKILL_NAME : CREATION_FLOW_SKILL_NAME;
+  return stage === 'implement' ? EXECUTION_PERSONA_SKILL_NAME : CREATION_PERSONA_SKILL_NAME;
 }
 
 // =============================================================================
@@ -65,8 +65,8 @@ export interface StagePersonaBindingDeps {
   coordinator: SkillInjectionCoordinator;
   /**
    * Override for the stage → skill-name mapping. Defaults to
-   * `defaultSkillNameForStage` (specify/plan/tasks → flow-creation,
-   * implement → flow-execution).
+   * `defaultSkillNameForStage` (specify/plan/tasks → creation-persona,
+   * implement → execution-persona).
    */
   skillNameForStage?: (stage: SddStage) => string;
 }
@@ -127,7 +127,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
   private async _applyPersonaFor(stage: SddStage): Promise<void> {
     const skillName = this._skillNameForStage(stage);
     // If the target skill is the same as the already-active persona, no swap
-    // needed — specify→plan→tasks all map to flow-creation, so most stage
+    // needed — specify→plan→tasks all map to creation-persona, so most stage
     // transitions are actually persona no-ops.
     const currentSkillName = this._activeStage ? this._skillNameForStage(this._activeStage) : null;
     if (currentSkillName === skillName) {

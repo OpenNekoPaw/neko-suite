@@ -373,32 +373,32 @@ describe('AgentSession', () => {
   // -------------------------------------------------------------------------
 
   describe('stage tracking', () => {
-    it('without dualFlow config: getCurrentStage() returns null', () => {
+    it('without stageTracking config: getCurrentStage() returns null', () => {
       const session = new AgentSession(createConfig());
       expect(session.getCurrentStage()).toBeNull();
       expect(session.enterStage('implement')).toBe(false);
     });
 
-    it('with dualFlow config: initial stage applies its persona and enterStage swaps to Implement', async () => {
+    it('with stageTracking config: initial stage applies its persona and enterStage swaps to Implement', async () => {
       const creation = {
-        name: 'flow-creation',
+        name: 'creation-persona',
         description: 'creation persona',
         type: 'skill',
         source: 'builtin',
         allowedTools: [],
-        content: '# flow-creation',
+        content: '# creation-persona',
       };
       const execution = {
-        name: 'flow-execution',
+        name: 'execution-persona',
         description: 'execution persona',
         type: 'skill',
         source: 'builtin',
         allowedTools: [],
-        content: '# flow-execution',
+        content: '# execution-persona',
       };
       const registry = {
         getSkill: (n: string) =>
-          n === 'flow-creation' ? creation : n === 'flow-execution' ? execution : undefined,
+          n === 'creation-persona' ? creation : n === 'execution-persona' ? execution : undefined,
         listSkills: () => [creation, execution],
         getSkillByCommand: () => undefined,
         skillCount: 2,
@@ -413,7 +413,7 @@ describe('AgentSession', () => {
 
       const session = new AgentSession(
         createConfig({
-          dualFlow: {
+          stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
             initialStage: 'specify',
@@ -425,19 +425,19 @@ describe('AgentSession', () => {
       await session.syncStagePersona();
 
       expect(session.getCurrentStage()).toBe('specify');
-      expect(applyCalls[0]).toBe('flow-creation');
+      expect(applyCalls[0]).toBe('creation-persona');
 
       const changed = session.enterStage('implement');
       expect(changed).toBe(true);
       await new Promise((r) => setImmediate(r));
 
       expect(session.getCurrentStage()).toBe('implement');
-      expect(applyCalls).toContain('flow-execution');
+      expect(applyCalls).toContain('execution-persona');
     });
 
     it('dispose unsubscribes the binding', async () => {
       const creation = {
-        name: 'flow-creation',
+        name: 'creation-persona',
         description: '',
         type: 'skill',
         source: 'builtin',
@@ -445,7 +445,7 @@ describe('AgentSession', () => {
         content: '',
       };
       const registry = {
-        getSkill: (n: string) => (n === 'flow-creation' ? creation : undefined),
+        getSkill: (n: string) => (n === 'creation-persona' ? creation : undefined),
         listSkills: () => [creation],
         getSkillByCommand: () => undefined,
         skillCount: 1,
@@ -460,7 +460,7 @@ describe('AgentSession', () => {
 
       const session = new AgentSession(
         createConfig({
-          dualFlow: {
+          stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
             initialStage: 'specify',

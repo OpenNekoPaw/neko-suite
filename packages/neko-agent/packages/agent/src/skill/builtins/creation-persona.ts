@@ -1,13 +1,11 @@
 /**
- * Creation Flow Skill — Outer ring persona (business semantics)
+ * Creation Persona Skill — SDD pre-Implement persona (creative semantics)
  *
- * See: docs/architecture/dual-flow-architecture.md §2, §6.2
+ * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages)
  *
- * Activated when the agent is in the creation flow ring (Orchestration → Proposal
- * → Review → Execution → Status). Provides the industry-expert persona: camera,
- * copywriting, audiovisual language. Creative decisions, aesthetic judgment.
- *
- * NOT activated during inner execution loop — see execution-flow.ts.
+ * Activated for Specify / Plan / Tasks stages. Provides the industry-expert
+ * persona: camera, copywriting, audiovisual language. Owns creative decisions
+ * and aesthetic judgment. Hands off to execution-persona at Implement.
  */
 
 import type { Skill } from '@neko/shared';
@@ -78,13 +76,13 @@ That is why you write it here.
   (model names, API providers, retry counts) — those belong to execution flow
 `;
 
-export const creationFlowSkill: Skill = {
-  name: 'flow-creation',
+export const creationPersonaSkill: Skill = {
+  name: 'creation-persona',
   description:
-    'Creation Flow persona for outer-ring business semantics (Orchestration → Proposal → Review → Execution → Status). ' +
+    'Creation persona for SDD pre-Implement stages (Specify / Plan / Tasks). ' +
     'Use when the agent is producing proposals, discussing creative direction, collecting user feedback, ' +
     'or translating technical progress into user-facing narrative. ' +
-    'Triggered during creative ideation, shot planning, style decisions, and status reporting — NOT during Apply.',
+    'Triggered during creative ideation, shot planning, style decisions, and status reporting — NOT during Implement.',
   content: creationFlowContent,
   allowedTools: [
     // Read-only discovery + review

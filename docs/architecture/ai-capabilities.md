@@ -1,6 +1,11 @@
 # AI 能力全景分析
 
 > neko-agent AI 能力全景：基础生成 + 创作流程 + Pipeline 编排架构
+>
+> **⚠️ 历史设计文档（已过时，保留仅作参考）**
+>
+> 本文描述的 Pipeline 编排（flowA-F + `pipeline: flowA` frontmatter + `pipeline-skip` / `pipeline-params` / `pipeline-hooks` / `pipeline-stages`）在 W1.2（2026-04-21）随 `workflow/` 目录整体删除。现有架构见
+> [agent-unified-workflow.md](./agent-unified-workflow.md) §5：Skill 通过 `phases` 字段声明内嵌编排，Agent 直接组合子包的原子 Tool/Operation 执行，不再依赖独立 Pipeline DSL。本文保留用作 P0 能力矩阵历史快照。
 
 ---
 

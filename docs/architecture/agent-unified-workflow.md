@@ -1,7 +1,33 @@
 # Agent 统一工作流协议
 
-**状态**: Proposed
+**状态**: Proposed（部分落地中）
 **日期**: 2026-04-20
+
+## 落地进度快照（2026-04-21）
+
+| 动作 | ADR 章节 | 状态 | 提交 |
+|-----|--------|----|----|
+| 删除 dual-flow 5 原语池 | §14.1 | ✅ | PR1-PR3 |
+| FlowSwitcher → StageTracker | §6.5 | ✅ | PR4 |
+| Skill Schema 扩展 SDD §5.2.1 | §5.2 | ✅ | B1 |
+| manifest.json 从 frontmatter 分离 | §5.2 | ✅ | B1.5 |
+| SkillManifest.pipelines 回落子包 | §5.7 | ✅ | B1.6 |
+| SkillPhase DAG 字段 | §5.2 | ✅ | W1.1 |
+| 删除 workflow/ 编排层（163 文件） | §11.1 | ✅ | W1.2 |
+| 清理 Skill.pipeline* 残留 + neko.pipeline.* 命令 | §7.4 | ✅ | W1.2.1 |
+| Persona skill id: flow-\* → \*-persona | §5.4 | ✅ | W1.2.2 |
+| L3 Mode 两档（AutoMode/PlanMode） | §3 | ✅ | 已存在 |
+| SDD 4 阶段 StagePlanner（入口规则 §3.2） | §3.2 §4 | ✅ | 已存在 |
+| StageGuardian 巡检器 | §6.5 | ❌ | 待做 |
+| requiredSubpackages 激活校验 | §5.2.10 | ❌ 字段有/逻辑缺 | 待做 |
+| 内置 Skill prompt 原子化（W1.3） | §5.3 | ❌ | 待做 |
+| L0 ApprovalEngine 改名 + 双策略包 | §6.1 | ❌ 现 PermissionManager | 待做 |
+| L0 EventBus 统一 | §6.2 | 🟡 部分 | 待做 |
+| L0 RetryEngine 五级自愈 | §6.4 | 🟡 部分 | 待做 |
+| .neko/ 目录布局规范 | §7.4 | ❌ | 待做 |
+| preferences.md 用户偏好 | §9.3 | ❌ | 待做 |
+| CreatorTerms 术语映射 | §10 | ❌ | 待做 |
+
 **关联范围**: neko-agent · neko-market · @neko/shared · 所有子包
 **关联文档**:
 

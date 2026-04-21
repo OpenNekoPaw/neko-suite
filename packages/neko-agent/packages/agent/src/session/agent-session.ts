@@ -187,12 +187,12 @@ export class AgentSession implements IAgentSession {
     // spin up a StageTracker and auto-swap the persona Skill on each stage
     // transition. The initial persona sync is async; fire-and-forget here —
     // callers that need determinism should call syncInitialPersona() directly.
-    if (config.dualFlow) {
-      this._stageTracker = new StageTracker({ initialStage: config.dualFlow.initialStage });
+    if (config.stageTracking) {
+      this._stageTracker = new StageTracker({ initialStage: config.stageTracking.initialStage });
       this._stagePersonaBinding = createStagePersonaBinding({
         stageTracker: this._stageTracker,
-        skillRegistry: config.dualFlow.skillRegistry,
-        skillService: config.dualFlow.skillService,
+        skillRegistry: config.stageTracking.skillRegistry,
+        skillService: config.stageTracking.skillService,
         coordinator: this._skillCoordinator,
       });
       void this._stagePersonaBinding.syncCurrent();
@@ -722,7 +722,7 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Resolve a tool confirmation request. When the approval engine is
-   * live (dualFlow configured), consult it first; only fall through to
+   * live (stageTracking configured), consult it first; only fall through to
    * the user's onConfirmTool callback on 'escalate' or no-decision
    * cases where a user prompt is still warranted.
    */

@@ -1,8 +1,7 @@
 /**
- * Iteration Flow Skill — consistency-aware refinement persona
+ * Iteration Persona Skill — consistency-aware refinement persona
  *
- * See: docs/architecture/dual-flow-architecture.md §3.2 (outer-ring primitives)
- *      plan v2 Epic P5 (Iteration Skill reads ConsistencyReport history)
+ * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages)
  *
  * Activated when a run has produced at least one ConsistencyReport and
  * the user asks to iterate — "why are these shots inconsistent?",
@@ -11,15 +10,15 @@
  * The skill does NOT run a full creation flow. Its job is focused:
  * read recent ConsistencyReport entries from the shared memory store,
  * diagnose the drift, and propose a *partial* rerun. The actual rerun
- * is dispatched via the execution flow (Apply → Step); this persona
+ * is dispatched via execution-persona (Implement stage); this persona
  * just decides what to rerun and why.
  *
  * Relationship to other skills:
- *   - creation-flow: the broad creative partner (full Orchestration
- *     → Status). Iteration is narrower — skips Orchestration and
- *     starts from an existing run's Status.
- *   - execution-flow: the inner-ring operator. Iteration hands a
- *     narrowed Plan to execution; it does not commit itself.
+ *   - creation-persona: the broad creative partner (full Specify →
+ *     Plan → Tasks). Iteration is narrower — skips Specify and
+ *     starts from an existing run's status.
+ *   - execution-persona: the Implement-stage operator. Iteration
+ *     hands a narrowed Plan to execution; it does not commit itself.
  */
 
 import type { Skill } from '@neko/shared';
@@ -63,8 +62,8 @@ A **narrowed proposal**, in three layers:
    swaps, style-knob tweaks, quality thresholds. No global
    orchestration changes.
 
-Hand this off to execution-flow via the pipeline tools (partialRerun
-path, see Q3). You do not commit.
+Hand this off to execution-persona, which composes atomic regenerate /
+timeline tools for the scoped shots. You do not commit.
 
 ## How to decide what to rerun
 
@@ -78,8 +77,8 @@ path, see Q3). You do not commit.
 ## What to avoid
 
 - Do not propose "regenerate everything" — iteration means narrow
-- Do not redesign the global style — that's creation-flow's job
-- Do not call Apply / commit tools yourself — hand off to execution
+- Do not redesign the global style — that's creation-persona's job
+- Do not call Apply / commit tools yourself — hand off to execution-persona
 - Do not skip the Diagnosis layer; the user needs to see *why* before
   approving a rerun
 - Do not loop — if the last two ConsistencyReports have identical
@@ -87,14 +86,14 @@ path, see Q3). You do not commit.
   may be a global-style issue, not a shot-level issue")
 `;
 
-export const iterationFlowSkill: Skill = {
-  name: 'iteration-flow',
+export const iterationPersonaSkill: Skill = {
+  name: 'iteration-persona',
   description:
     'Iteration persona for narrow, consistency-driven reruns. ' +
     'Activated after a run produces a ConsistencyReport with drift: the skill diagnoses which shots drifted, ' +
-    'proposes a partial rerun (scoped shot list + prompt/reference edits), and hands off to execution flow. ' +
+    'proposes a partial rerun (scoped shot list + prompt/reference edits), and hands off to execution-persona. ' +
     'Triggered when user asks "why are these inconsistent", "fix just the drifted shots", "tighten style" — ' +
-    'NOT for full re-runs or global style changes (that is creation-flow).',
+    'NOT for full re-runs or global style changes (that is creation-persona).',
   content: iterationFlowContent,
   allowedTools: [
     // Read-only diagnosis — pipeline reports carry the QualityReport.
