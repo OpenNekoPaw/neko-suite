@@ -85,6 +85,121 @@ export const COMMAND_DIRECTORIES = {
 } as const;
 
 // =============================================================================
+// SDD Skill extensions — see docs/architecture/agent-unified-workflow.md §5.2.1
+// =============================================================================
+
+/**
+ * A phase inside a multi-stage Skill (ADR §5.2.1 `phases:`).
+ *
+ * Phases describe the Skill's internal orchestration — e.g. a TikTok
+ * creation Skill might declare shot-breakdown / shot-generation / export
+ * phases with approval gates between them. The fields here are declarative
+ * only; the runtime StageGuardian is responsible for honouring them.
+ */
+export interface SkillPhase {
+  /** Stable phase identifier, unique within a Skill. */
+  name: string;
+  /** Human-readable phase label for UI/logs. */
+  label: string;
+  /** Whether the phase requires user approval before advancing. */
+  approval?: boolean;
+  /** Whether the phase's work can run in parallel (e.g. per-shot generation). */
+  parallel?: boolean;
+}
+
+/**
+ * One operation inside a pipeline (ADR §5.2.1 `pipelines:`).
+ *
+ * An op is a single tool invocation expressed as a map with one key
+ * (the tool id) and its parameters — mirrors the shorthand form ADR
+ * examples use, e.g. `{ "cut.upscale": { "target": "1080p" } }`.
+ */
+export type SkillPipelineOp = Record<string, Record<string, unknown>>;
+
+/**
+ * A named pipeline declared by a Skill (ADR §5.2.1 `pipelines:`).
+ *
+ * Pipelines are ordered op lists that phases (or the Skill at large)
+ * can reference by key — e.g. `export` / `preview`.
+ */
+export interface SkillPipeline {
+  /** Ordered list of ops. */
+  ops: SkillPipelineOp[];
+}
+
+/**
+ * Subpackage dependency declared by a Skill (ADR §5.2.1 `requiredSubpackages:`).
+ *
+ * Keeps dependency granularity at the subpackage level rather than the
+ * command level (user intuition, low maintenance). Activation-time guard
+ * rejects or warns per the strict/optional flag.
+ */
+export interface RequiredSubpackage {
+  /** Subpackage id (e.g. `neko-cut`). */
+  id: string;
+  /** Required (blocks activation if missing) vs optional (warn + degrade). */
+  required: boolean;
+  /** Semver constraint the caller's installed version must satisfy. */
+  minVersion?: string;
+  /** Fallback message / behaviour when the subpackage is absent. */
+  fallback?: {
+    message: string;
+  };
+}
+
+/**
+ * Asset reference declared by a Skill (ADR §5.2.1 `referencedAssets:`).
+ *
+ * Assets live in the media library, not inside the Skill folder, so the
+ * Skill only carries an `asset://` URI. Absent required assets block
+ * activation; absent optional ones just log a warning.
+ */
+export interface SkillAssetReference {
+  /** `asset://{type}/{id}` URI resolved by PathResolver. */
+  uri: string;
+  /** Whether the asset is required for the Skill to function. */
+  required?: boolean;
+  /** Short note explaining what the asset is used for. */
+  purpose?: string;
+}
+
+/**
+ * Cross-Skill reference (ADR §5.2.1 `referencedSkills:`).
+ *
+ * Declares collaboration or delegation relationships so runtime tooling
+ * (e.g. auto-suggesting a collaborator mid-flow) can surface the link
+ * without scanning the registry.
+ *
+ * Distinct from the existing `SkillReference` (a support-document
+ * reference defined below) — this type names a related *Skill*, not a
+ * support file.
+ */
+export interface RelatedSkill {
+  /** Referenced Skill name. */
+  id: string;
+  /** Nature of the relationship. */
+  relationship: 'collaborator' | 'delegator';
+}
+
+/**
+ * Compliance metadata (ADR §5.2.1 / §9.6 `compliance:`).
+ *
+ * Purely declarative. Audit pipelines read this block to decide
+ * whether a Skill's execution must be recorded with extra evidence
+ * (e.g. the skillSha chain in audits.jsonl).
+ */
+export interface SkillCompliance {
+  /** Named compliance framework (SOC2, GDPR, "creator-standard", …). */
+  framework?: string;
+  /** Whether audit capture is mandatory when this Skill runs. */
+  auditRequired?: boolean;
+  /** Reviewer roles that signed off on the Skill definition. */
+  reviewedBy?: string[];
+  /** ISO date of the last compliance review. */
+  reviewDate?: string;
+}
+
+// =============================================================================
 // Skill Types (Semantic Discovery)
 // =============================================================================
 
@@ -250,6 +365,76 @@ export interface Skill {
    * @default false
    */
   supportsArguments?: boolean;
+
+  // ===========================================================================
+  // SDD metadata (agent-unified-workflow.md §5.2.1)
+  //
+  // These fields capture the Skill's contract beyond "what tools it may
+  // call". They are declarative: runtime components (StageGuardian,
+  // subpackage-dependency guard, compliance audit) consume them. See
+  // docs/architecture/agent-unified-workflow.md §5.2.1 for the authoritative
+  // schema.
+  // ===========================================================================
+
+  /**
+   * Semver version string. Required by the SDD spec so audit / compatibility
+   * tooling can pin to a specific Skill revision.
+   * @example "1.0.0"
+   */
+  version?: string;
+
+  /**
+   * Domain identifier — groups Skills by creative vertical (cut / story /
+   * canvas / …). Free-form for now so new domains can be added without a
+   * schema bump.
+   * @example "cut"
+   */
+  domain?: string;
+
+  /**
+   * Subpackages the Skill depends on. Activation-time guard enforces the
+   * `required` flag and optionally the `minVersion` constraint.
+   */
+  requiredSubpackages?: RequiredSubpackage[];
+
+  /**
+   * Whether AutoMode may auto-select this Skill based on description
+   * matching. Falls back to true when omitted; set false for high-risk or
+   * test Skills that should only activate on explicit user intent.
+   * @default true
+   */
+  autoInvoke?: boolean;
+
+  /**
+   * Multi-stage orchestration embedded in the Skill. Each phase is a
+   * logical checkpoint; StageGuardian can enforce ordering and approval
+   * gates at runtime.
+   */
+  phases?: SkillPhase[];
+
+  /**
+   * Named processing pipelines the Skill can reference from its body or
+   * phases. Keyed by pipeline name (e.g. "export", "preview").
+   */
+  pipelines?: Record<string, SkillPipeline>;
+
+  /**
+   * Assets (characters, styles, LoRAs, …) the Skill relies on. Resolved
+   * through PathResolver against the configured media library.
+   */
+  referencedAssets?: SkillAssetReference[];
+
+  /**
+   * Related Skills — collaborators the runtime can surface when the user
+   * crosses domain boundaries, or delegators the Skill hands off to.
+   */
+  referencedSkills?: RelatedSkill[];
+
+  /**
+   * Compliance metadata. Consumed by audit tooling; does not change
+   * runtime behaviour on its own.
+   */
+  compliance?: SkillCompliance;
 }
 
 // =============================================================================
@@ -607,6 +792,40 @@ export interface SkillFrontmatter {
    * @example "@publisher/skill-name"
    */
   'market-id'?: string;
+
+  // ===========================================================================
+  // SDD metadata (agent-unified-workflow.md §5.2.1)
+  //
+  // Frontmatter counterparts of the runtime Skill fields of the same names.
+  // Loader maps these 1:1 into the Skill object via createSkill().
+  // ===========================================================================
+
+  /** Semver version string. */
+  version?: string;
+
+  /** Domain identifier (cut / story / canvas / …). */
+  domain?: string;
+
+  /** Subpackage dependencies. */
+  requiredSubpackages?: RequiredSubpackage[];
+
+  /** Whether AutoMode may auto-select this Skill. Defaults to true. */
+  autoInvoke?: boolean;
+
+  /** Multi-stage orchestration (phases + approval gates). */
+  phases?: SkillPhase[];
+
+  /** Named pipelines keyed by name (e.g. export / preview). */
+  pipelines?: Record<string, SkillPipeline>;
+
+  /** Asset references resolved through PathResolver. */
+  referencedAssets?: SkillAssetReference[];
+
+  /** Related Skills (collaborator / delegator). */
+  referencedSkills?: RelatedSkill[];
+
+  /** Compliance metadata. */
+  compliance?: SkillCompliance;
 }
 
 /**
@@ -850,6 +1069,15 @@ export function isToolAllowed(tool: string, allowedTools?: string[]): boolean {
 }
 
 /**
+ * Semver-ish regex: major.minor.patch with optional pre-release and build
+ * metadata. Deliberately not importing a full semver library — Skills
+ * author-input versions are validated to catch typos, not to run complex
+ * range queries.
+ */
+const SEMVER_RE =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+/**
  * Validate a skill
  */
 export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
@@ -884,7 +1112,184 @@ export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
     errors.push('Missing required field: content');
   }
 
+  validateSddMetadata(skill, errors, warnings);
+
   return { valid: errors.length === 0, errors, warnings };
+}
+
+/**
+ * Validate the SDD metadata block (agent-unified-workflow.md §5.2.1).
+ *
+ * All fields are optional for backwards compatibility with pre-SDD
+ * Skills; when present they are checked for shape and basic consistency.
+ * Absent version / domain only warn — a follow-up migration can elevate
+ * them to errors once existing Skills are updated.
+ */
+function validateSddMetadata(skill: Partial<Skill>, errors: string[], warnings: string[]): void {
+  // version: warn if missing, error if malformed.
+  if (skill.version === undefined) {
+    warnings.push('Missing SDD metadata field: version (recommended, semver string)');
+  } else if (typeof skill.version !== 'string' || !SEMVER_RE.test(skill.version)) {
+    errors.push(`Invalid version "${skill.version}" — must be a semver string (e.g. "1.0.0")`);
+  }
+
+  // domain: warn if missing, error if empty string.
+  if (skill.domain === undefined) {
+    warnings.push('Missing SDD metadata field: domain (recommended, e.g. "cut" / "story")');
+  } else if (typeof skill.domain !== 'string' || skill.domain.trim().length === 0) {
+    errors.push('Field "domain" must be a non-empty string');
+  }
+
+  // requiredSubpackages: shape check. Duplicate ids are an error.
+  if (skill.requiredSubpackages !== undefined) {
+    if (!Array.isArray(skill.requiredSubpackages)) {
+      errors.push('Field "requiredSubpackages" must be an array');
+    } else {
+      const seenIds: Record<string, true> = {};
+      for (let idx = 0; idx < skill.requiredSubpackages.length; idx++) {
+        const dep = skill.requiredSubpackages[idx];
+        if (!dep || typeof dep !== 'object') {
+          errors.push(`requiredSubpackages[${idx}] must be an object`);
+          continue;
+        }
+        if (typeof dep.id !== 'string' || dep.id.length === 0) {
+          errors.push(`requiredSubpackages[${idx}].id must be a non-empty string`);
+        } else if (seenIds[dep.id]) {
+          errors.push(`Duplicate requiredSubpackages entry for id "${dep.id}"`);
+        } else {
+          seenIds[dep.id] = true;
+        }
+        if (typeof dep.required !== 'boolean') {
+          errors.push(`requiredSubpackages[${idx}].required must be a boolean`);
+        }
+        if (dep.minVersion !== undefined && !SEMVER_RE.test(String(dep.minVersion))) {
+          errors.push(`requiredSubpackages[${idx}].minVersion must be a semver string`);
+        }
+      }
+    }
+  }
+
+  // autoInvoke: boolean if present.
+  if (skill.autoInvoke !== undefined && typeof skill.autoInvoke !== 'boolean') {
+    errors.push('Field "autoInvoke" must be a boolean');
+  }
+
+  // phases: shape + unique names.
+  if (skill.phases !== undefined) {
+    if (!Array.isArray(skill.phases)) {
+      errors.push('Field "phases" must be an array');
+    } else {
+      const seenNames: Record<string, true> = {};
+      for (let idx = 0; idx < skill.phases.length; idx++) {
+        const phase = skill.phases[idx];
+        if (!phase || typeof phase !== 'object') {
+          errors.push(`phases[${idx}] must be an object`);
+          continue;
+        }
+        if (typeof phase.name !== 'string' || phase.name.length === 0) {
+          errors.push(`phases[${idx}].name must be a non-empty string`);
+        } else if (seenNames[phase.name]) {
+          errors.push(`Duplicate phase name "${phase.name}" — phase names must be unique`);
+        } else {
+          seenNames[phase.name] = true;
+        }
+        if (typeof phase.label !== 'string' || phase.label.length === 0) {
+          errors.push(`phases[${idx}].label must be a non-empty string`);
+        }
+        if (phase.approval !== undefined && typeof phase.approval !== 'boolean') {
+          errors.push(`phases[${idx}].approval must be a boolean`);
+        }
+        if (phase.parallel !== undefined && typeof phase.parallel !== 'boolean') {
+          errors.push(`phases[${idx}].parallel must be a boolean`);
+        }
+      }
+    }
+  }
+
+  // pipelines: ops must be arrays of single-key objects.
+  if (skill.pipelines !== undefined) {
+    if (typeof skill.pipelines !== 'object' || Array.isArray(skill.pipelines)) {
+      errors.push('Field "pipelines" must be an object keyed by pipeline name');
+    } else {
+      const pipelineNames = Object.keys(skill.pipelines);
+      for (let pIdx = 0; pIdx < pipelineNames.length; pIdx++) {
+        const pipelineName = pipelineNames[pIdx]!;
+        const pipeline = skill.pipelines[pipelineName];
+        if (!pipeline || typeof pipeline !== 'object' || !Array.isArray(pipeline.ops)) {
+          errors.push(`pipelines.${pipelineName}.ops must be an array`);
+          continue;
+        }
+        for (let opIdx = 0; opIdx < pipeline.ops.length; opIdx++) {
+          const op = pipeline.ops[opIdx];
+          if (!op || typeof op !== 'object' || Array.isArray(op)) {
+            errors.push(`pipelines.${pipelineName}.ops[${opIdx}] must be an object`);
+          }
+        }
+      }
+    }
+  }
+
+  // referencedAssets: require asset:// URI.
+  if (skill.referencedAssets !== undefined) {
+    if (!Array.isArray(skill.referencedAssets)) {
+      errors.push('Field "referencedAssets" must be an array');
+    } else {
+      for (let idx = 0; idx < skill.referencedAssets.length; idx++) {
+        const ref = skill.referencedAssets[idx];
+        if (!ref || typeof ref !== 'object') {
+          errors.push(`referencedAssets[${idx}] must be an object`);
+          continue;
+        }
+        if (typeof ref.uri !== 'string' || !ref.uri.startsWith('asset://')) {
+          errors.push(`referencedAssets[${idx}].uri must start with "asset://"`);
+        }
+      }
+    }
+  }
+
+  // referencedSkills: require relationship enum.
+  if (skill.referencedSkills !== undefined) {
+    if (!Array.isArray(skill.referencedSkills)) {
+      errors.push('Field "referencedSkills" must be an array');
+    } else {
+      for (let idx = 0; idx < skill.referencedSkills.length; idx++) {
+        const ref = skill.referencedSkills[idx];
+        if (!ref || typeof ref !== 'object') {
+          errors.push(`referencedSkills[${idx}] must be an object`);
+          continue;
+        }
+        if (typeof ref.id !== 'string' || ref.id.length === 0) {
+          errors.push(`referencedSkills[${idx}].id must be a non-empty string`);
+        }
+        if (ref.relationship !== 'collaborator' && ref.relationship !== 'delegator') {
+          errors.push(
+            `referencedSkills[${idx}].relationship must be "collaborator" or "delegator"`,
+          );
+        }
+      }
+    }
+  }
+
+  // compliance: light shape check; semantics are caller-defined.
+  if (skill.compliance !== undefined) {
+    if (typeof skill.compliance !== 'object' || Array.isArray(skill.compliance)) {
+      errors.push('Field "compliance" must be an object');
+    } else {
+      const c = skill.compliance;
+      if (c.framework !== undefined && typeof c.framework !== 'string') {
+        errors.push('compliance.framework must be a string');
+      }
+      if (c.auditRequired !== undefined && typeof c.auditRequired !== 'boolean') {
+        errors.push('compliance.auditRequired must be a boolean');
+      }
+      if (c.reviewedBy !== undefined && !Array.isArray(c.reviewedBy)) {
+        errors.push('compliance.reviewedBy must be an array of strings');
+      }
+      if (c.reviewDate !== undefined && typeof c.reviewDate !== 'string') {
+        errors.push('compliance.reviewDate must be an ISO date string');
+      }
+    }
+  }
 }
 
 /**
@@ -949,6 +1354,18 @@ export function createSkill(
     pipelineFlowId: frontmatter.pipeline,
     pipelineSkipStages: parsePipelineSkip(frontmatter['pipeline-skip']),
     pipelineParams: parsePipelineParams(frontmatter['pipeline-params']),
+    // SDD metadata (§5.2.1). Frontmatter → Skill mapping is identity —
+    // the loader's YAML parser is responsible for producing well-typed
+    // values (arrays / nested objects); we just forward them.
+    version: frontmatter.version,
+    domain: frontmatter.domain,
+    requiredSubpackages: frontmatter.requiredSubpackages,
+    autoInvoke: frontmatter.autoInvoke,
+    phases: frontmatter.phases,
+    pipelines: frontmatter.pipelines,
+    referencedAssets: frontmatter.referencedAssets,
+    referencedSkills: frontmatter.referencedSkills,
+    compliance: frontmatter.compliance,
   };
 }
 
