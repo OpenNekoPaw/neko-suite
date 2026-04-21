@@ -1,26 +1,22 @@
 /**
- * WorkflowRun — per-run record of a creation-flow execution.
+ * WorkflowRun — per-run record of an SDD-stage execution.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.3, §9.2 (data model)
- *      plan v2 "R9 遥测爆炸" mitigation (activation summary per round)
+ * See: docs/architecture/agent-unified-workflow.md §4 (four SDD stages)
  *
- * One WorkflowRun corresponds to a single traversal of the outer ring's
- * `execution` phase (Orchestration → Proposal → Review → **Execution** →
- * Status). The inner ReAct loop inside `execution` produces rounds whose
- * activation decisions are stored here for audit + telemetry.
+ * One WorkflowRun corresponds to a single end-to-end traversal of the
+ * Specify → Plan → Tasks → Implement DAG. The inner ReAct loop during
+ * Implement produces rounds whose stage-activation decisions are stored
+ * here for audit + telemetry.
  *
  * Distinct from:
- * - `WorkflowLitePlan` (agent-types/workflow-plan.ts): the *pre-dispatch*
- *   plan shown to the user before Apply. Legacy, focused on UI.
- * - `Plan` (agent-types/plan.ts): the generic plan/step abstraction used
- *   by step-review workflows. Legacy.
- *
- * This type exists because the v2 ADR ring-topology model treats each Run
- * as "the record of a single inner-loop traversal", not as "the plan".
+ * - `WorkflowLitePlan` (workflow-plan.ts): the *pre-dispatch* plan shown
+ *   to the user before Implement. Legacy, UI-focused.
+ * - `Plan` (plan.ts): the generic plan/step abstraction used by
+ *   step-review workflows. Legacy.
  */
 
 import type { FlowTransitionEvent } from './flow';
-import type { Primitive, PrimitiveActivationDecision, PrimitiveSkipReason } from './primitive';
+import type { SddStage, StageActivationDecision, StageSkipReason } from './stage';
 import type { TodoList } from './todo-list';
 
 // =============================================================================
@@ -28,7 +24,7 @@ import type { TodoList } from './todo-list';
 // =============================================================================
 
 export type WorkflowRunStatus =
-  /** Created but not yet entered execution. */
+  /** Created but not yet entered Implement. */
   | 'pending'
   /** Running — at least one ReAct round has begun. */
   | 'running'
@@ -40,22 +36,22 @@ export type WorkflowRunStatus =
   | 'failed';
 
 // =============================================================================
-// Per-round summary (for R9 telemetry compaction)
+// Per-round summary (telemetry compaction)
 // =============================================================================
 
 /**
  * One ReAct round inside a WorkflowRun. Each round is summarised here
- * rather than being written as N primitive-level events, per plan v2 R9.
+ * rather than emitted as N stage-level events.
  */
 export interface WorkflowRunRoundSummary {
   /** 0-based round index within this Run. */
   round: number;
-  /** Primitives activated this round (DAG-ordered). */
-  activatedPrimitives: readonly Primitive[];
-  /** Primitives considered and skipped, with reason codes. */
-  skippedPrimitives: readonly {
-    primitive: Primitive;
-    reason: PrimitiveSkipReason;
+  /** Stages activated this round (DAG-ordered: specify → plan → tasks → implement). */
+  activatedStages: readonly SddStage[];
+  /** Stages considered and skipped, with reason codes. */
+  skippedStages: readonly {
+    stage: SddStage;
+    reason: StageSkipReason;
   }[];
   /** Wall-clock when the activation decision was made. */
   decidedAt: number;
@@ -64,13 +60,13 @@ export interface WorkflowRunRoundSummary {
 }
 
 export function roundSummaryFromDecision(
-  decision: PrimitiveActivationDecision,
+  decision: StageActivationDecision,
   lastObserveHint?: string,
 ): WorkflowRunRoundSummary {
   return {
     round: decision.round,
-    activatedPrimitives: decision.activated,
-    skippedPrimitives: decision.skipped,
+    activatedStages: decision.activated,
+    skippedStages: decision.skipped,
     decidedAt: decision.decidedAt,
     lastObserveHint,
   };
@@ -98,11 +94,12 @@ export interface WorkflowRun {
    * Empty while `status === 'pending'`.
    */
   rounds: readonly WorkflowRunRoundSummary[];
-  /** Associated TODO list for the inner loop, when one is active. */
+  /** Associated TODO list for the Implement stage, when one is active. */
   todos?: TodoList;
   /**
-   * Flow transition events recorded during this Run. Populated when the
-   * Run outlives at least one creation ↔ execution transition.
+   * Flow transition events recorded during this Run. Retained through
+   * the SDD migration so existing consumers of FlowSwitcher keep working;
+   * post-migration this field collapses to a stage-transition log.
    */
   transitions: readonly FlowTransitionEvent[];
   /**

@@ -1,16 +1,18 @@
 /**
- * Creation strategy pack — outer-ring approval rules.
+ * Creation strategy pack — approval rules for Specify-stage and upstream
+ * user-facing decisions.
  *
- * See: docs/architecture/dual-flow-architecture.md §5.2
- *      plan v2 P4
+ * See: docs/architecture/agent-unified-workflow.md §9 (Approval governance)
  *
- * Default posture on the creation ring:
- *   - Plan review: user-driven; pack does NOT auto-decide unless the
- *     plan is marked idempotent + non-destructive (e.g. preview-only).
- *   - Permission (tool calls initiated during creation): allowed if
- *     non-destructive; ask user otherwise.
- *   - Quality gate: never auto-decides from the creation ring; caller
- *     escalates to execution strategy pack.
+ * Default posture:
+ *   - Proposal review (end of Specify): user-driven; pack does NOT
+ *     auto-decide unless the proposal is marked idempotent +
+ *     non-destructive (e.g. preview-only).
+ *   - Permission (tool calls initiated during Specify / Plan / Tasks —
+ *     typically read-only probing): allowed if non-destructive;
+ *     ask user otherwise.
+ *   - Quality gate: never auto-decides here; caller escalates to the
+ *     execution strategy pack.
  *
  * These are defaults — sites can swap via createApprovalEngine({ strategyPacks }).
  */
@@ -23,13 +25,13 @@ export const creationStrategyPack: StrategyPack = {
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel } = request;
 
-    if (channel === 'plan-review') {
+    if (channel === 'proposal-review') {
       if (subject.idempotent && !subject.destructive) {
         return {
           requestId: request.id,
           resolution: 'auto-accept',
-          reason: 'preview-only-plan',
-          note: 'Plan is idempotent + non-destructive; auto-accept for preview.',
+          reason: 'preview-only-proposal',
+          note: 'Proposal is idempotent + non-destructive; auto-accept for preview.',
           decidedAt: 0,
         };
       }

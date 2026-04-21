@@ -135,7 +135,7 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
         runId: event.runId,
       };
     case EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED: {
-      const activated = event.summary.activatedPrimitives.join('→');
+      const activated = event.summary.activatedStages.join('→');
       return {
         ...base,
         kind: 'round-decided',

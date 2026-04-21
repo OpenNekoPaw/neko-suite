@@ -10,16 +10,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PrimitiveActivationDecision, TodoList } from '@neko-agent/types';
+import type { StageActivationDecision, TodoList } from '@neko-agent/types';
 import { createWorkflowRunStore } from '../workflow-run-store';
 
-function decision(
-  overrides: Partial<PrimitiveActivationDecision> = {},
-): PrimitiveActivationDecision {
+function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
   return {
-    flow: 'execution',
     taskShape: 'multi-step',
-    activated: ['plan', 'apply', 'step'],
+    activated: ['plan', 'tasks', 'implement'],
     skipped: [],
     decidedAt: 100,
     round: 0,
@@ -51,12 +48,12 @@ describe('WorkflowRunStore', () => {
     const store = createWorkflowRunStore();
     store.startRun({ workflowId: 'f' });
     store.recordRound(decision({ round: 0 }));
-    store.recordRound(decision({ round: 1, activated: ['step'] }), 'retry');
+    store.recordRound(decision({ round: 1, activated: ['implement'] }), 'retry');
     const rounds = store.getActive()!.rounds;
     expect(rounds).toHaveLength(2);
     expect(rounds[0].round).toBe(0);
     expect(rounds[1].round).toBe(1);
-    expect(rounds[1].activatedPrimitives).toEqual(['step']);
+    expect(rounds[1].activatedStages).toEqual(['implement']);
     expect(rounds[1].lastObserveHint).toBe('retry');
   });
 

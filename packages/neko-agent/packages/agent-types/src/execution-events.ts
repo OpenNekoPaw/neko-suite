@@ -14,7 +14,7 @@
  * only (to be added in P5).
  */
 
-import type { Primitive, PrimitiveSkipReason, TaskShape } from './primitive';
+import type { StageSkipReason, StageTaskShape } from './stage';
 import type { WorkflowRunRoundSummary } from './workflow-run';
 
 // =============================================================================
@@ -57,7 +57,7 @@ export type ExecutionChannel = (typeof EXECUTION_CHANNELS)[keyof typeof EXECUTIO
 export interface ExecutionRoundActivationDecidedEvent {
   channel: typeof EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED;
   runId: string;
-  taskShape: TaskShape;
+  taskShape: StageTaskShape;
   summary: WorkflowRunRoundSummary;
   at: number;
 }
@@ -151,7 +151,7 @@ export interface ExecutionAutohealL4TriggeredEvent extends ExecutionAutohealEven
 export interface ExecutionAutohealL5EscalatedEvent extends ExecutionAutohealEventBase {
   channel: typeof EXECUTION_CHANNELS.AUTOHEAL_L5_ESCALATED;
   /** Reason the lower levels failed. */
-  reason: PrimitiveSkipReason | 'retry-exhausted' | 'unsubstitutable';
+  reason: StageSkipReason | 'retry-exhausted' | 'unsubstitutable';
 }
 
 export type ExecutionAutohealEvent =
@@ -170,8 +170,13 @@ export interface ExecutionQualityEvaluatedEvent {
   runId: string;
   /** Overall verdict; the full ConsistencyReport is in the memory store. */
   verdict: 'pass' | 'warn' | 'fail';
-  /** Offending primitives (empty on pass). */
-  offenders?: readonly Primitive[];
+  /**
+   * Offending subjects (empty on pass). A subject is a tool name or
+   * operation id — whatever identifies the failing unit to the autoheal
+   * chain. Free-form string so this event stays stable as tool surface
+   * evolves.
+   */
+  offenders?: readonly string[];
   at: number;
 }
 

@@ -136,14 +136,14 @@ describe('creationStrategyPack', () => {
     const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
     const res = await engine.evaluate(
       request({
-        channel: 'plan-review',
+        channel: 'proposal-review',
         flow: 'creation',
         idempotent: true,
         destructive: false,
       }),
     );
     expect(res.resolution).toBe('auto-accept');
-    expect(res.reason).toBe('preview-only-plan');
+    expect(res.reason).toBe('preview-only-proposal');
   });
 
   it('defers destructive plan reviews to the user', async () => {
@@ -153,7 +153,7 @@ describe('creationStrategyPack', () => {
     });
     const res = await engine.evaluate(
       request({
-        channel: 'plan-review',
+        channel: 'proposal-review',
         flow: 'creation',
         destructive: true,
       }),

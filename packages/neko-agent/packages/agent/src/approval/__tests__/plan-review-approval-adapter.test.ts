@@ -33,7 +33,7 @@ describe('PlanReviewApprovalAdapter', () => {
     const evaluate = createPlanReviewApprovalAdapter({ engine });
     const response = await evaluate({ plan: plan() });
     expect(response.resolution).toBe('auto-accept');
-    expect(response.reason).toBe('preview-only-plan');
+    expect(response.reason).toBe('preview-only-proposal');
   });
 
   it('plan with reviewable issues → not idempotent, no auto-accept', async () => {
@@ -80,7 +80,7 @@ describe('PlanReviewApprovalAdapter', () => {
       context: Record<string, unknown>;
       id: string;
     };
-    expect(req.channel).toBe('plan-review');
+    expect(req.channel).toBe('proposal-review');
     expect(req.flow).toBe('creation');
     expect(req.subject.kind).toBe('plan:plan-42');
     expect(req.context.confidence).toBe(0.72);

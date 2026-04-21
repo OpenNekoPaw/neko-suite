@@ -18,9 +18,9 @@ export {
   type WorkflowRunStoreConfig,
 } from './workflow-run-store';
 export {
-  validateDispatch,
-  assertDispatch,
-  type DispatchValidation,
-  type DispatchViolation,
-  type DispatchViolationCode,
-} from './primitive-dispatcher';
+  validateStageDispatch,
+  assertStageDispatch,
+  type StageDispatchValidation,
+  type StageDispatchViolation,
+  type StageDispatchViolationCode,
+} from './stage-dispatcher';

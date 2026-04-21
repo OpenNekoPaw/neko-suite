@@ -21,10 +21,10 @@ import type { FlowKind } from '@neko-agent/types';
 // =============================================================================
 
 export type ApprovalChannel =
-  /** Tool call authorization (fine-grained, frequent). */
+  /** Tool call authorization (fine-grained, frequent, Implement-stage). */
   | 'permission'
-  /** Plan Card review (coarse-grained, once per Plan). */
-  | 'plan-review'
+  /** Proposal review at end of Specify stage (coarse-grained, once per run). */
+  | 'proposal-review'
   /** Quality gate verdict (per stage). */
   | 'quality-gate';
 

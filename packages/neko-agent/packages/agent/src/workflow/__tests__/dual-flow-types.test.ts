@@ -19,7 +19,7 @@ import {
   roundSummaryFromDecision,
   toTodoStatusCamel,
   toTodoStatusSnake,
-  type PrimitiveActivationDecision,
+  type StageActivationDecision,
   type TodoList,
   type WorkflowRun,
 } from '@neko-agent/types';
@@ -44,11 +44,10 @@ describe('TodoStatus bridge helpers', () => {
 });
 
 describe('roundSummaryFromDecision', () => {
-  const baseDecision: PrimitiveActivationDecision = {
-    flow: 'execution',
+  const baseDecision: StageActivationDecision = {
     taskShape: 'multi-step',
-    activated: ['plan', 'approve', 'apply', 'step'],
-    skipped: [{ primitive: 'todo', reason: 'task-shape' }],
+    activated: ['specify', 'plan', 'tasks', 'implement'],
+    skipped: [{ stage: 'plan', reason: 'task-shape' }],
     decidedAt: 12345,
     round: 2,
   };
@@ -56,8 +55,8 @@ describe('roundSummaryFromDecision', () => {
   it('copies activated/skipped verbatim and preserves timestamps', () => {
     const summary = roundSummaryFromDecision(baseDecision);
     expect(summary.round).toBe(2);
-    expect(summary.activatedPrimitives).toEqual(['plan', 'approve', 'apply', 'step']);
-    expect(summary.skippedPrimitives).toEqual([{ primitive: 'todo', reason: 'task-shape' }]);
+    expect(summary.activatedStages).toEqual(['specify', 'plan', 'tasks', 'implement']);
+    expect(summary.skippedStages).toEqual([{ stage: 'plan', reason: 'task-shape' }]);
     expect(summary.decidedAt).toBe(12345);
     expect(summary.lastObserveHint).toBeUndefined();
   });
@@ -120,14 +119,14 @@ describe('Structural shapes', () => {
       rounds: [
         {
           round: 0,
-          activatedPrimitives: ['apply', 'step'],
-          skippedPrimitives: [],
+          activatedStages: ['tasks', 'implement'],
+          skippedStages: [],
           decidedAt: 2,
         },
       ],
       transitions: [{ from: 'creation', to: 'execution', reason: 'apply-triggered', at: 3 }],
     };
-    expect(run.rounds[0].activatedPrimitives).toContain('step');
+    expect(run.rounds[0].activatedStages).toContain('implement');
     expect(run.transitions[0].reason).toBe('apply-triggered');
   });
 });

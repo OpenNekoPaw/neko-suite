@@ -147,7 +147,7 @@ describe('ReActLoopRunner hooks', () => {
     expect(store.getActive()!.rounds).toHaveLength(3);
   });
 
-  it('flow switcher kind changes are reflected in subsequent decisions', async () => {
+  it('stage-activation decisions are produced each think round', async () => {
     const { hooks, state } = createReActLoopRunner({
       flowSwitcher: switcher,
       runStore: store,
@@ -155,11 +155,16 @@ describe('ReActLoopRunner hooks', () => {
     });
     await hooks.onExecuteStart?.('input', ctx(0));
     await hooks.beforeThink?.(ctx(1));
-    expect(state.lastDecision!.flow).toBe('creation');
+    const first = state.lastDecision;
+    expect(first).not.toBeNull();
+    expect(first!.activated.length).toBeGreaterThan(0);
 
+    await hooks.onIterationComplete?.(1, ctx(1));
     switcher.onApplyTriggered();
     await hooks.beforeThink?.(ctx(2));
-    expect(state.lastDecision!.flow).toBe('execution');
+    const second = state.lastDecision;
+    expect(second).not.toBeNull();
+    expect(second!.round).toBeGreaterThan(first!.round);
   });
 
   it('unused ToolCallInfo type import has no effect on runtime', () => {
@@ -188,7 +193,7 @@ describe('ReActLoopRunner hooks', () => {
       const emitted = onRound.mock.calls[0][0];
       expect(emitted.channel).toBe(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED);
       expect(emitted.summary.round).toBe(0);
-      expect(emitted.summary.activatedPrimitives.length).toBeGreaterThan(0);
+      expect(emitted.summary.activatedStages.length).toBeGreaterThan(0);
       expect(emitted.runId).toBe(store.getActive()!.id);
     });
 

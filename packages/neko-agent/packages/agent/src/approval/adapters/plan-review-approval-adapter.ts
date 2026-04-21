@@ -95,7 +95,7 @@ export function createPlanReviewApprovalAdapter(
     const requestId = `plan-review:${request.plan.id}`;
     try {
       return await deps.engine.evaluate({
-        channel: 'plan-review',
+        channel: 'proposal-review',
         flow: getFlow(),
         subject: {
           label: `Plan ${request.plan.id}`,

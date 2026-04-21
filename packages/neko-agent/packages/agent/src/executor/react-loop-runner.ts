@@ -1,42 +1,39 @@
 /**
- * ReAct Loop Runner — integrates the primitive activation planner with
+ * ReAct Loop Runner — integrates the SDD stage-activation planner with
  * AgentExecutor's existing think → act → observe loop.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.3, §3.4
- *      plan v2 P1.6 (ReAct Loop Orchestrator)
+ * See: docs/architecture/agent-unified-workflow.md §3 (entry rules), §4 (stages)
  *
  * Design choice: registers as ExecutorHooks instead of patching the
- * executor directly. The executor stays ReAct-pure; the dual-flow
- * machinery is bolted on as a pluggable hook that any session which
- * opts in to dual-flow can wire up.
+ * executor directly. The executor stays ReAct-pure; the SDD machinery is
+ * bolted on as a pluggable hook that any session which opts in can wire.
  *
  * Per-iteration behaviour:
  *   beforeThink:
  *     - Classify the task shape (heuristic — see classifyTaskShape)
- *     - Ask the planner for a PrimitiveActivationDecision
+ *     - Derive an entry signal from task shape + round index
+ *     - Ask the planner for a StageActivationDecision
  *     - Assert the decision passes dispatcher DAG checks
  *     - Record the round summary on the WorkflowRun store
- *     - Stash the decision so onIterationComplete can post-annotate
  *   afterAct:
  *     - Inspect tool results to decide the NEXT round's lastObserveHint
  *       (retry if any tool errored, normal otherwise)
  *
- * Intentional non-goals (kept for P3 / P4 / P5):
- *   - Does not enforce mode × primitive whitelist at the tool level
- *     (that's ActivationGuard / R8 — handled by ToolGuard + Approval).
- *   - Does not emit telemetry events (ExecutionRoundActivationDecidedEvent
- *     etc.) on the runtime bus — EventBus is P5.
- *   - Does not write autoheal rounds — that's P3's strategy packs.
+ * Intentional non-goals (kept for later phases):
+ *   - Does not enforce mode × stage whitelist at the tool level
+ *     (that's handled by ToolGuard + Approval).
+ *   - Does not emit telemetry beyond the round-activation compaction.
+ *   - Does not write autoheal rounds — autoheal chain owns that.
  */
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
-import type { FlowKind, PrimitiveActivationDecision, TaskShape } from '@neko-agent/types';
+import type { FlowKind, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
 
 import type { FlowSwitcher } from '../skill/flow-switcher';
-import { plan as planPrimitives } from '../skill/activation/activation-planner';
-import type { L2Mode } from '../skill/activation/mode-activation-matrix';
-import { assertDispatch } from './primitive-dispatcher';
+import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
+import type { StageMode } from '../skill/activation/stage-activation-matrix';
+import { assertStageDispatch } from './stage-dispatcher';
 import type { IWorkflowRunStore } from './workflow-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
@@ -55,16 +52,23 @@ export interface ReActLoopRunnerDeps {
   runStore: IWorkflowRunStore;
   /**
    * Resolves the current L2 mode each time a decision is needed. Callers
-   * that wire ExecutionMode → L2Mode should pass a closure rather than a
-   * snapshot so the runner always reads the live mode.
+   * that wire ExecutionMode → StageMode should pass a closure rather than
+   * a snapshot so the runner always reads the live mode.
    */
-  getMode: () => L2Mode;
+  getMode: () => StageMode;
   /**
-   * Resolves the TaskShape for the *next* iteration. Defaults to the
+   * Resolves the StageTaskShape for the *next* iteration. Defaults to the
    * built-in heuristic; callers can override for domain-specific
    * classifiers.
    */
-  classifyTaskShape?: (ctx: TaskShapeSignals) => TaskShape;
+  classifyTaskShape?: (ctx: TaskShapeSignals) => StageTaskShape;
+  /**
+   * Resolves the entry signal (ADR §3.2) for the *next* iteration.
+   * Defaults to deriving from task shape + round index. Callers with
+   * stronger signal (user cited @proposal, workflow template) can
+   * override.
+   */
+  classifyEntrySignal?: (ctx: TaskShapeSignals & { taskShape: StageTaskShape }) => StageEntrySignal;
   /**
    * Optional EventBus. When provided, the runner emits
    * `execution.round.activation.decided` each round and
@@ -100,7 +104,7 @@ export interface TaskShapeSignals {
 
 export interface ReActLoopRunnerState {
   /** Last decision emitted; null before first iteration. */
-  lastDecision: PrimitiveActivationDecision | null;
+  lastDecision: StageActivationDecision | null;
   /** Observe hint to feed into the NEXT decision. */
   nextObserveHint: 'retry' | 'user-cancel' | 'normal';
   /** Current round counter (0-based). */
@@ -126,6 +130,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 } {
   const clock = deps.now ?? (() => Date.now());
   const classify = deps.classifyTaskShape ?? defaultClassifyTaskShape;
+  const classifyEntry = deps.classifyEntrySignal ?? defaultClassifyEntrySignal;
 
   // Mutable state shared between hooks. `state` below is returned as a
   // Readonly handle; callers see updates because it's the same object.
@@ -159,24 +164,26 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
     async beforeThink(_ctx: AgentContext) {
       const flow = deps.flowSwitcher.kind;
-      const taskShape = classify({
+      const signals: TaskShapeSignals = {
         flow,
         round: state.round,
         lastToolResults,
         lastHadError,
         lastHadToolCalls,
-      });
-      const decision = planPrimitives({
+      };
+      const taskShape = classify(signals);
+      const entrySignal = classifyEntry({ ...signals, taskShape });
+      const decision = planStages({
         mode: deps.getMode(),
-        flowContext: { kind: flow, reason: deps.flowSwitcher.context.reason },
         taskShape,
+        entrySignal,
         round: state.round,
         now: clock,
         lastObserveHint: state.nextObserveHint,
       });
 
       try {
-        assertDispatch(decision);
+        assertStageDispatch(decision);
       } catch (err) {
         // Dispatch assertion failure is a bug. Log and continue — we
         // still record the round so operators see what went wrong.
@@ -293,20 +300,46 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
 /**
  * Default classifier. Heuristic, not final:
- *   - round 0 with outer-ring flow: multi-step (planner will prune)
  *   - lastHadError: retry
- *   - lastHadToolCalls && no error: multi-step (loop continues)
+ *   - round 0: multi-step (planner will prune based on entry signal)
  *   - no tool calls last round: pure-think (model just reasoned)
- *   - first round on execution ring: multi-step
+ *   - tool calls succeeded: multi-step (loop continues)
  *
  * Callers with better signal (e.g. tool traits, user intent) should
  * inject their own classifier via `classifyTaskShape`.
  */
-export function defaultClassifyTaskShape(s: TaskShapeSignals): TaskShape {
+export function defaultClassifyTaskShape(s: TaskShapeSignals): StageTaskShape {
   if (s.lastHadError) return 'retry';
   if (s.round === 0) return 'multi-step';
   if (!s.lastHadToolCalls) return 'pure-think';
   return 'multi-step';
+}
+
+/**
+ * Default entry-signal classifier. Conservative: treats round 0 of a
+ * multi-step task as vague-creative (full SDD path) and subsequent
+ * rounds as atomic-instruction (straight to Implement). Callers with
+ * user-intent signal — `@proposal-001` references, `/workflow` triggers,
+ * or high-risk operation hints — should override.
+ */
+export function defaultClassifyEntrySignal(
+  s: TaskShapeSignals & { taskShape: StageTaskShape },
+): StageEntrySignal {
+  // After round 0, the stage-planner reuses prior decisions anyway —
+  // atomic-instruction keeps Implement on the activation set cleanly.
+  if (s.round > 0) return 'atomic-instruction';
+  switch (s.taskShape) {
+    case 'single-read':
+    case 'single-write':
+    case 'clarification':
+      return 'atomic-instruction';
+    case 'multi-step':
+      return 'multi-step';
+    case 'pure-think':
+    case 'plan-only':
+    case 'retry':
+      return 'vague-creative';
+  }
 }
 
 // =============================================================================

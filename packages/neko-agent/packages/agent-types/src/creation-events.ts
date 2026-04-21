@@ -13,7 +13,7 @@
  * zero-dependency so agent-types can remain infrastructure-free.
  */
 
-import type { PrimitiveSkipReason } from './primitive';
+import type { StageSkipReason } from './stage';
 import type { WorkflowRunRoundSummary } from './workflow-run';
 
 // =============================================================================
@@ -98,7 +98,7 @@ export interface CreationRunEndedEvent {
   runId: string;
   status: 'completed' | 'aborted' | 'failed';
   /** When the run failed/aborted, the skip reason that triggered the end. */
-  reason?: PrimitiveSkipReason | 'user-cancel' | 'unrecoverable';
+  reason?: StageSkipReason | 'user-cancel' | 'unrecoverable';
   at: number;
 }
 

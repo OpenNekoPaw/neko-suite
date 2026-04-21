@@ -27,8 +27,8 @@ function roundEvent(round = 0, at = 1): DualFlowEvent {
     taskShape: 'multi-step',
     summary: {
       round,
-      activatedPrimitives: ['plan', 'apply', 'step'],
-      skippedPrimitives: [],
+      activatedStages: ['plan', 'tasks', 'implement'],
+      skippedStages: [],
       decidedAt: at,
     },
     at,

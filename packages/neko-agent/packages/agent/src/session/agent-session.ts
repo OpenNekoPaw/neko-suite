@@ -19,12 +19,12 @@ import type { ChatMessage, Skill, Tool } from '@neko/shared';
 import type {
   FlowKind,
   FlowContext,
-  PrimitiveActivationDecision,
+  StageActivationDecision,
   WorkflowRun,
 } from '@neko-agent/types';
 import type { SkillInjection, IFlowBinding } from '../skill';
 import { SkillInjectionCoordinator, FlowSwitcher, createFlowBinding } from '../skill';
-import type { L2Mode } from '../skill/activation/mode-activation-matrix';
+import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { IWorkflowRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createWorkflowRunStore } from '../executor';
 import type { IEventBus } from '../events';
@@ -215,7 +215,7 @@ export class AgentSession implements IAgentSession {
       const { hooks, state } = createReActLoopRunner({
         flowSwitcher: this._flowSwitcher,
         runStore: this._runStore,
-        getMode: () => this._executionMode as L2Mode,
+        getMode: () => this._executionMode as StageMode,
         eventBus: this._eventBus,
         autohealChain: this._autohealChain,
       });
@@ -587,9 +587,9 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Last primitive activation decision made by the runner.
+   * Last SDD stage-activation decision made by the runner.
    */
-  getLastActivationDecision(): PrimitiveActivationDecision | null {
+  getLastActivationDecision(): StageActivationDecision | null {
     return this._reactRunnerState?.lastDecision ?? null;
   }
 

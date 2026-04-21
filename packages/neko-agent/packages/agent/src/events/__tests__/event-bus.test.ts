@@ -34,8 +34,8 @@ function roundDecided(runId = 'r1', round = 0, at = 1): DualFlowEvent {
     taskShape: 'multi-step',
     summary: {
       round,
-      activatedPrimitives: ['step'],
-      skippedPrimitives: [],
+      activatedStages: ['implement'],
+      skippedStages: [],
       decidedAt: at,
     },
     at,

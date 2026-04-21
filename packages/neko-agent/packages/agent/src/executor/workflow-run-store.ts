@@ -16,7 +16,7 @@
 
 import type {
   FlowTransitionEvent,
-  PrimitiveActivationDecision,
+  StageActivationDecision,
   TodoList,
   WorkflowRun,
   WorkflowRunRoundSummary,
@@ -32,7 +32,7 @@ export interface IWorkflowRunStore {
   /** Start a fresh run, aborting any in-flight run. Returns the new run id. */
   startRun(input: { workflowId: string; runId?: string }): string;
   /** Append a round summary derived from the planner decision. */
-  recordRound(decision: PrimitiveActivationDecision, lastObserveHint?: string): void;
+  recordRound(decision: StageActivationDecision, lastObserveHint?: string): void;
   /** Record a flow transition on the active run (if any). */
   recordTransition(event: FlowTransitionEvent): void;
   /** Attach / replace the active todos reference for the current run. */
@@ -92,7 +92,7 @@ class WorkflowRunStore implements IWorkflowRunStore {
     return id;
   }
 
-  recordRound(decision: PrimitiveActivationDecision, lastObserveHint?: string): void {
+  recordRound(decision: StageActivationDecision, lastObserveHint?: string): void {
     if (!this._active) return;
     const summary: WorkflowRunRoundSummary = roundSummaryFromDecision(decision, lastObserveHint);
     this._active = {
