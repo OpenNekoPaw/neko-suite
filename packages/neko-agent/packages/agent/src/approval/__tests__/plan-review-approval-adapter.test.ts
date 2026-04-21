@@ -2,7 +2,7 @@
  * PlanReviewApprovalAdapter tests
  *
  * Covers:
- * - idempotent (no reviewable issues) plan → declarativeStrategyPack auto-accepts
+ * - idempotent (no reviewable issues) plan → creationStrategyPack auto-accepts
  * - plan with reviewable issues → defers to user (no-decision auto-reject path)
  * - engine throw → safe 'escalate' (never silently auto-approve)
  * - request payload carries confidence + level + threshold
@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { declarativeStrategyPack } from '../strategies/declarative-strategy-pack';
+import { creationStrategyPack } from '../strategies/creation-strategy-pack';
 import {
   createPlanReviewApprovalAdapter,
   type PlanReviewPlanSummary,
@@ -28,8 +28,8 @@ function plan(overrides: Partial<PlanReviewPlanSummary> = {}): PlanReviewPlanSum
 }
 
 describe('PlanReviewApprovalAdapter', () => {
-  it('idempotent + clean plan → declarativeStrategyPack auto-accepts', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
+  it('idempotent + clean plan → creationStrategyPack auto-accepts', async () => {
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
     const evaluate = createPlanReviewApprovalAdapter({ engine });
     const response = await evaluate({ plan: plan() });
     expect(response.resolution).toBe('auto-accept');
@@ -37,7 +37,7 @@ describe('PlanReviewApprovalAdapter', () => {
   });
 
   it('plan with reviewable issues → not idempotent, no auto-accept', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
     const evaluate = createPlanReviewApprovalAdapter({ engine });
     const response = await evaluate({
       plan: plan({ hasReviewableIssues: true }),

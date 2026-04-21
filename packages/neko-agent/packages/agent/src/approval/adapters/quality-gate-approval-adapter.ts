@@ -13,7 +13,7 @@
  *                                                ↓
  *                  auto-accept / auto-reject / escalate
  *
- * The imperativeStrategyPack already maps `context.verdict` to
+ * The executionStrategyPack already maps `context.verdict` to
  * resolutions (pass → auto-accept, warn → escalate, fail →
  * auto-reject); this adapter supplies the verdict derivation and
  * request plumbing.

@@ -1,8 +1,12 @@
 /**
- * Imperative strategy pack — approval rules for the imperative paradigm
- * (Implement-stage Plans + technical decisions).
+ * Execution strategy pack — approval rules for imperative-paradigm subjects
+ * (Implement-stage Operations + technical decisions).
  *
- * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
+ * Maps to ADR §6.1 "ExecutionStrategyPack: Operation authorization (by
+ * costProfile)". The pack operates on `paradigm: 'imperative'` subjects —
+ * i.e. tool calls and quality-gate verdicts that happen inside Implement.
+ *
+ * See: docs/architecture/agent-unified-workflow.md §6.1 (ApprovalEngine)
  *      §4.2 (declarative vs imperative split)
  *
  * Default posture:
@@ -11,13 +15,13 @@
  *     and `idempotent === false` (we can't recover from a bad apply).
  *   - quality-gate: auto-accept when context carries a 'pass' verdict,
  *     escalate on 'warn', auto-reject on 'fail'.
- *   - proposal-review: not our scope (declarative pack owns it).
+ *   - proposal-review: not our scope (creation pack owns it).
  */
 
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
-export const imperativeStrategyPack: StrategyPack = {
-  name: 'imperative-default',
+export const executionStrategyPack: StrategyPack = {
+  name: 'execution-default',
   scope: 'imperative',
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel, context } = request;

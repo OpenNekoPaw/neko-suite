@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
+import { executionStrategyPack } from '../strategies/execution-strategy-pack';
 import {
   createQualityGateApprovalAdapter,
   verdictFromReport,
@@ -63,7 +63,7 @@ describe('verdictFromReport', () => {
 
 describe('QualityGateApprovalAdapter', () => {
   function buildAdapter() {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     return createQualityGateApprovalAdapter({
       engine,
     });
@@ -140,7 +140,7 @@ describe('QualityGateApprovalAdapter', () => {
   });
 
   it('custom thresholds applied to the adapter', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const evaluate = createQualityGateApprovalAdapter({
       engine,
       thresholds: { passThreshold: 50, warnThreshold: 20 },

@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
+import { executionStrategyPack } from '../strategies/execution-strategy-pack';
 import { createPermissionApprovalAdapter } from '../adapters/permission-approval-adapter';
 import type { ToolConfirmationRequest } from '../../permission/types';
 
@@ -34,7 +34,7 @@ function request(overrides: Partial<ToolConfirmationRequest> = {}): ToolConfirma
 
 describe('PermissionApprovalAdapter', () => {
   it('auto-accepts idempotent + non-destructive tool via execution pack', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const adapter = createPermissionApprovalAdapter({
       engine,
       classifyTool: () => ({ idempotent: true, destructive: false }),
@@ -46,7 +46,7 @@ describe('PermissionApprovalAdapter', () => {
   });
 
   it('auto-rejects destructive + non-idempotent tool via execution pack', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const adapter = createPermissionApprovalAdapter({
       engine,
       classifyTool: () => ({ idempotent: false, destructive: true }),
@@ -161,7 +161,7 @@ describe('PermissionApprovalAdapter', () => {
     // means every permission request is routed to it. A declarative-only
     // engine would leave the request undecided and the userConfirm path
     // would fire — assert that doesn't happen here.
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const userConfirm = vi.fn(async () => ({
       confirmationToken: 'tok-1',
       approved: true,

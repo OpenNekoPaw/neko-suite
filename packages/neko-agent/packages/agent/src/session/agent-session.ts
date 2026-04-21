@@ -32,7 +32,7 @@ import { createEventBus } from '../events';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
-import { createApprovalEngine, imperativeStrategyPack, declarativeStrategyPack } from '../approval';
+import { createApprovalEngine, executionStrategyPack, creationStrategyPack } from '../approval';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -214,7 +214,7 @@ export class AgentSession implements IAgentSession {
       this._eventBus = createEventBus();
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
-        strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
+        strategyPacks: [creationStrategyPack, executionStrategyPack],
       });
       const { hooks: runnerHooks, state } = createReActLoopRunner({
         stageTracker: this._stageTracker,

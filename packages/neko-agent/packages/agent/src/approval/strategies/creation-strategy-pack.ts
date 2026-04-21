@@ -1,8 +1,12 @@
 /**
- * Declarative strategy pack — approval rules for the declarative paradigm
+ * Creation strategy pack — approval rules for declarative-paradigm subjects
  * (Specify-stage Proposals + upstream business decisions).
  *
- * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
+ * Maps to ADR §6.1 "CreationStrategyPack: Proposal/Review decisions". The
+ * pack operates on `paradigm: 'declarative'` subjects — proposal reviews
+ * and read-only probing done during Specify / Plan / Tasks.
+ *
+ * See: docs/architecture/agent-unified-workflow.md §6.1 (ApprovalEngine)
  *      §4.2 (declarative vs imperative split)
  *
  * Default posture:
@@ -12,15 +16,15 @@
  *     typically read-only probing): allowed if non-destructive;
  *     ask user otherwise.
  *   - quality-gate: never auto-decides here; caller routes to the
- *     imperative strategy pack.
+ *     execution strategy pack.
  *
  * These are defaults — sites can swap via createApprovalEngine({ strategyPacks }).
  */
 
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
-export const declarativeStrategyPack: StrategyPack = {
-  name: 'declarative-default',
+export const creationStrategyPack: StrategyPack = {
+  name: 'creation-default',
   scope: 'declarative',
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel } = request;

@@ -15,8 +15,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { declarativeStrategyPack } from '../strategies/declarative-strategy-pack';
-import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
+import { creationStrategyPack } from '../strategies/creation-strategy-pack';
+import { executionStrategyPack } from '../strategies/execution-strategy-pack';
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
 function request(
@@ -131,9 +131,9 @@ describe('ApprovalEngine', () => {
   });
 });
 
-describe('declarativeStrategyPack', () => {
+describe('creationStrategyPack', () => {
   it('auto-accepts idempotent + non-destructive plan reviews', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
     const res = await engine.evaluate(
       request({
         channel: 'proposal-review',
@@ -148,7 +148,7 @@ describe('declarativeStrategyPack', () => {
 
   it('defers destructive plan reviews to the user', async () => {
     const engine = createApprovalEngine({
-      strategyPacks: [declarativeStrategyPack],
+      strategyPacks: [creationStrategyPack],
       userPrompt: async () => undefined, // user declines
     });
     const res = await engine.evaluate(
@@ -163,7 +163,7 @@ describe('declarativeStrategyPack', () => {
   });
 
   it('auto-accepts non-destructive permission requests', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
     const res = await engine.evaluate(
       request({ channel: 'permission', paradigm: 'declarative', destructive: false }),
     );
@@ -172,9 +172,9 @@ describe('declarativeStrategyPack', () => {
   });
 });
 
-describe('imperativeStrategyPack', () => {
+describe('executionStrategyPack', () => {
   it('auto-accepts idempotent + non-destructive tool calls', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const res = await engine.evaluate(
       request({ channel: 'permission', paradigm: 'imperative', idempotent: true }),
     );
@@ -183,7 +183,7 @@ describe('imperativeStrategyPack', () => {
   });
 
   it('auto-rejects destructive + non-idempotent tools', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
     const res = await engine.evaluate(
       request({
         channel: 'permission',
@@ -197,7 +197,7 @@ describe('imperativeStrategyPack', () => {
   });
 
   it('quality gate: pass / warn / fail routing', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
 
     const pass = await engine.evaluate(
       request({ channel: 'quality-gate', paradigm: 'imperative', context: { verdict: 'pass' } }),

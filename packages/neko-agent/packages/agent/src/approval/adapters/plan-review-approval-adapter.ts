@@ -18,7 +18,7 @@
  *     "needs user review")
  *   - destructive + idempotent metadata: plans are preview artefacts,
  *     so defaults are `destructive: false` + `idempotent: true`. The
- *     declarativeStrategyPack already auto-accepts preview-only plans.
+ *     creationStrategyPack already auto-accepts preview-only plans.
  *
  * The adapter does NOT execute override / abort paths — those remain
  * user actions on the interactive UI. It only produces the "can we
@@ -56,7 +56,7 @@ export interface PlanReviewApprovalAdapterDeps {
   /**
    * Optional confidence threshold passed as context so custom
    * strategy packs can read it. Default 0.9 — packs may choose
-   * higher/lower bars; the default declarativeStrategyPack doesn't read
+   * higher/lower bars; the default creationStrategyPack doesn't read
    * this field today but future packs will.
    */
   confidenceThreshold?: number;

@@ -21,8 +21,8 @@ export type {
   UserApprovalPrompt,
 } from './approval-types';
 
-export { declarativeStrategyPack } from './strategies/declarative-strategy-pack';
-export { imperativeStrategyPack } from './strategies/imperative-strategy-pack';
+export { creationStrategyPack } from './strategies/creation-strategy-pack';
+export { executionStrategyPack } from './strategies/execution-strategy-pack';
 
 // Adapters bridging existing channels into the engine.
 export {

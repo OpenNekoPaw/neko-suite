@@ -32,8 +32,8 @@ import {
 import type { NekoCanvasAPI } from '@neko/shared';
 import {
   createApprovalEngine,
-  declarativeStrategyPack,
-  imperativeStrategyPack,
+  creationStrategyPack,
+  executionStrategyPack,
 } from '@neko/agent/approval';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
@@ -160,18 +160,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register tools from other Neko extensions
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
 
-  // P4 — extension-scoped ApprovalEngine shared across the workflow
-  // lane (QualityGate + Plan Review). AgentSession instances in the AI
-  // lane still build their own private engine with the same strategy
-  // packs; the two lanes don't share state today, but they share
+  // Extension-scoped ApprovalEngine shared across the agent lane.
+  // AgentSession instances still build their own private engine with the
+  // same strategy packs; the two don't share state today, but they share
   // policy (strategy packs) so decisions stay consistent.
   //
-  // Approval engine (declarative + imperative strategy packs) is created
-  // here so sessions share a single instance. When per-session adapters
+  // Approval engine (creation + execution strategy packs) is created here
+  // so sessions share a single instance. When per-session adapters
   // (permission / proposal review) are needed, register them against this
   // engine at session-construction time.
   const approvalEngine = createApprovalEngine({
-    strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
+    strategyPacks: [creationStrategyPack, executionStrategyPack],
   });
   void approvalEngine;
 
