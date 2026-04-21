@@ -187,6 +187,12 @@ export interface AgentSessionConfig {
     skillService: import('../skill/skill-service').SkillService;
     /** Initial SDD stage (default: none — tracker stays uninitialised). */
     initialStage?: import('@neko-agent/types').SddStage;
+    /**
+     * Optional StageGuardian configuration (ADR §5.4, §6.5). When
+     * omitted the guardian uses defaults (ordered-entry enforcement on,
+     * timeout disabled). Set `enabled: false` to skip installing it.
+     */
+    guardian?: false | import('../skill/stage-guardian').StageGuardianConfig;
   };
 }
 

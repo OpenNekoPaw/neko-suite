@@ -476,4 +476,120 @@ describe('AgentSession', () => {
       expect(session.enterStage('implement')).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // StageGuardian wiring
+  // -------------------------------------------------------------------------
+
+  describe('stage guardian', () => {
+    function minimalStageTrackingConfig() {
+      const skill = {
+        name: 'creation-persona',
+        description: 'creation persona',
+        type: 'skill',
+        source: 'builtin',
+        allowedTools: [],
+        content: '# creation-persona',
+      };
+      const registry = {
+        getSkill: (n: string) => (n === 'creation-persona' ? skill : undefined),
+        listSkills: () => [skill],
+        getSkillByCommand: () => undefined,
+        skillCount: 1,
+      };
+      const service = {
+        apply: vi.fn(async (s: { name: string }) => ({
+          name: s.name,
+          systemPrompt: '',
+          allowedTools: [],
+        })),
+      };
+      return { registry, service };
+    }
+
+    it('disabled when stageTracking is not configured', () => {
+      const session = new AgentSession(createConfig());
+      expect(session.getStageGuardianIssues()).toEqual([]);
+      // Subscribing when disabled returns a no-op unsubscriber.
+      const unsub = session.onStageGuardianIssue(() => {});
+      expect(typeof unsub).toBe('function');
+      unsub();
+    });
+
+    it('flags stage-out-of-order when enterStage("implement") is the first entry', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+      const issues: string[] = [];
+      session.onStageGuardianIssue((i) => issues.push(i.code));
+
+      session.enterStage('implement');
+
+      expect(issues).toContain('stage-out-of-order');
+      expect(session.getStageGuardianIssues().length).toBeGreaterThan(0);
+    });
+
+    it('no out-of-order issue when specify precedes implement', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+      const issues: string[] = [];
+      session.onStageGuardianIssue((i) => issues.push(i.code));
+
+      session.enterStage('specify');
+      session.enterStage('implement');
+
+      expect(issues.filter((c) => c === 'stage-out-of-order')).toEqual([]);
+    });
+
+    it('opt-out via guardian:false leaves session without a guardian', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            guardian: false,
+          },
+        }),
+      );
+      const issues: string[] = [];
+      session.onStageGuardianIssue((i) => issues.push(i.code));
+
+      session.enterStage('implement');
+
+      expect(issues).toEqual([]);
+      expect(session.getStageGuardianIssues()).toEqual([]);
+    });
+
+    it('dispose clears guardian state', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+        }),
+      );
+
+      session.enterStage('implement'); // raises out-of-order
+      expect(session.getStageGuardianIssues().length).toBeGreaterThan(0);
+
+      session.dispose();
+      expect(session.getStageGuardianIssues()).toEqual([]);
+    });
+  });
 });

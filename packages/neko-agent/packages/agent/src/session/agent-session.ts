@@ -17,8 +17,13 @@
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
 import type { SddStage, StageActivationDecision, SddRun } from '@neko-agent/types';
-import type { SkillInjection, IStagePersonaBinding } from '../skill';
-import { SkillInjectionCoordinator, StageTracker, createStagePersonaBinding } from '../skill';
+import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
+import {
+  SkillInjectionCoordinator,
+  StageTracker,
+  createStagePersonaBinding,
+  createStageGuardian,
+} from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { ISddRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createSddRunStore } from '../executor';
@@ -112,6 +117,8 @@ export class AgentSession implements IAgentSession {
   // stage is reached. Replaces the legacy FlowSwitcher/FlowBinding pair.
   private _stageTracker: StageTracker | null = null;
   private _stagePersonaBinding: IStagePersonaBinding | null = null;
+  /** Non-blocking inspector that rides alongside the tracker (ADR §6.5). */
+  private _stageGuardian: IStageGuardian | null = null;
 
   // ReAct-loop stage-activation orchestrator.
   private _runStore: ISddRunStore | null = null;
@@ -209,19 +216,52 @@ export class AgentSession implements IAgentSession {
       this._approvalEngine = createApprovalEngine({
         strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
       });
-      const { hooks, state } = createReActLoopRunner({
+      const { hooks: runnerHooks, state } = createReActLoopRunner({
         stageTracker: this._stageTracker,
         runStore: this._runStore,
         getMode: () => this._executionMode as StageMode,
         eventBus: this._eventBus,
         autohealChain: this._autohealChain,
       });
-      this._runnerHooks = hooks;
       this._reactRunnerState = state;
+
+      // StageGuardian — non-blocking inspector alongside the tracker.
+      // Opted out by setting `stageTracking.guardian = false`; otherwise
+      // we build it with the caller's config (or defaults). Issues stay
+      // on the guardian itself; consumers subscribe via
+      // `session.onStageGuardianIssue()` or read `getStageGuardianIssues()`.
+      // The typed EventBus is reserved for creation.*/execution.* payloads.
+      if (config.stageTracking.guardian !== false) {
+        const guardianConfig =
+          typeof config.stageTracking.guardian === 'object'
+            ? config.stageTracking.guardian
+            : undefined;
+        this._stageGuardian = createStageGuardian(this._stageTracker, guardianConfig);
+      }
+
+      // Compose runner hooks with the guardian's tick. Keep runner hooks
+      // in a single ExecutorHooks object so the executor's addHook call
+      // stays idempotent across configure() rebuilds.
+      const guardian = this._stageGuardian;
+      const composedHooks: import('@neko/shared').ExecutorHooks = guardian
+        ? {
+            ...runnerHooks,
+            name: runnerHooks.name ?? 'react-loop+stage-guardian',
+            afterAct: async (results) => {
+              if (runnerHooks.afterAct) await runnerHooks.afterAct(results);
+              // Tick drives the stage-timeout check without an internal
+              // timer — sampled on tool-batch boundaries is enough for
+              // long-running generate / render calls to surface.
+              guardian.tick();
+            },
+          }
+        : runnerHooks;
+
+      this._runnerHooks = composedHooks;
 
       // Register on the already-built executor + on any re-builds after configure().
       if (this._executor) {
-        this._executor.addHook(hooks);
+        this._executor.addHook(composedHooks);
       }
     }
   }
@@ -579,6 +619,27 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
+   * Snapshot of StageGuardian issues raised during this session
+   * (ADR §6.5). Empty array when the guardian is disabled or has not
+   * fired. Bounded by the guardian's internal history cap.
+   */
+  getStageGuardianIssues(): readonly import('../skill').StageGuardianIssue[] {
+    return this._stageGuardian?.getHistory() ?? [];
+  }
+
+  /**
+   * Subscribe to StageGuardian issues as they are raised. Returns an
+   * unsubscribe function; no-op unsubscribe when the guardian is
+   * disabled (so callers don't need to null-check).
+   */
+  onStageGuardianIssue(
+    listener: (issue: import('../skill').StageGuardianIssue) => void,
+  ): () => void {
+    if (!this._stageGuardian) return () => {};
+    return this._stageGuardian.onIssue(listener);
+  }
+
+  /**
    * Typed EventBus for dual-flow channels (creation.* / execution.*).
    * Returns null if dual-flow is not configured.
    */
@@ -639,8 +700,10 @@ export class AgentSession implements IAgentSession {
     void this._journalWriter?.dispose();
     // Stage tracking: unsubscribe binding listener + clear tracker listeners.
     this._stagePersonaBinding?.dispose();
+    this._stageGuardian?.dispose();
     this._stageTracker?.dispose();
     this._stagePersonaBinding = null;
+    this._stageGuardian = null;
     this._stageTracker = null;
     this._runStore = null;
     this._reactRunnerState = null;
