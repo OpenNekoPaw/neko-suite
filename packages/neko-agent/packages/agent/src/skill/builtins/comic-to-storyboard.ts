@@ -53,25 +53,35 @@ Panel 2: ...
 
 7. **Present storyboard plan** to user for review
 
-### Phase 3: Video Generation (via Pipeline)
+### Phase 3: Video Generation (direct atomic-tool composition)
 
-8. **Call StartPipeline** with flowE (comic variant):
-   - sourceFormat: "freeform" (structured scene list)
-   - scenes: Array of { heading, description, dialogue, suggestedPrompt }
-   - globalStyle: Match original comic art style
+Once the storyboard plan is approved, compose the generation yourself —
+there is no pipeline to start. The loop per panel:
 
-9. **Generation strategies**:
-   - **Option A**: image-to-video (preserve original art)
-     - Use comic panel as reference image
-     - Add motion: "subtle animation, slight movement"
-   - **Option B**: text-to-video (recreate in new style)
-     - Prompt: "anime style matching [original description]"
-   - **Option C**: hybrid (key frames from original, interpolate generated)
+8. **Pick a generation strategy** per panel:
+   - **Option A** — image-to-video (preserve original art): pass the
+     comic panel as reference and add motion cues
+     ("subtle animation, slight movement").
+   - **Option B** — text-to-video (recreate in new style):
+     "anime style matching [original description]".
+   - **Option C** — hybrid: key frames from original + interpolated
+     generated frames.
 
-10. **Post-generation**:
-    - Add dialogue as subtitles or TTS voiceover
-    - Add sound effects (GenerateMusic with sfx mode)
-    - Suggest comic-style transitions (wipe, page-turn)
+9. **Emit GenerateVideo** with the chosen strategy. Parallelize where
+   independent; otherwise sequence to preserve character consistency.
+   Track the returned GeneratedAsset for each panel.
+
+10. **Assemble the timeline** using the atomic editing tools:
+    - GetTimelineInfo + AddTrack (if no video / audio / subtitle track yet)
+    - AddTimelineElement for each GeneratedAsset, in reading order
+    - GenerateTTS for spoken dialogue; AddTimelineElement onto the
+      audio track
+    - GenerateMusic (sfx mode) for sound effects
+    - SetTransition between panels for comic-style wipes / page turns
+    - Walk the TodoList, flipping status as each panel lands
+
+Throughout this phase you are execution-persona — stay terse, emit
+step records, lean on the 5-level autoheal chain for transient failures.
 
 ## Comic Format Detection
 
@@ -167,11 +177,14 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     // Agent orchestrates media generation + timeline updates directly.
-    // Timeline operations
+    // Timeline operations — Agent composes these atomic tools instead of
+    // calling a pipeline. See agent-unified-workflow.md §5.3.
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
     TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
+    TOOL_NAMES_TIMELINE.ADD_TRACK,
     TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
     TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
+    TOOL_NAMES_TIMELINE.SET_TRANSITION,
     // Audio for dialogue
     TOOL_NAMES_MEDIA.GENERATE_TTS,
     TOOL_NAMES_MEDIA.GENERATE_MUSIC,

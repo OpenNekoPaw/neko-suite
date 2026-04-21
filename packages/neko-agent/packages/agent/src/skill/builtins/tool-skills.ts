@@ -6,7 +6,7 @@
  * resident in registries for AI discovery via GetContext.
  *
  * - resident: Schema always in LLM context (core system, file editing, shell)
- * - eager:    Schema injected on first ToolSet use (timeline, git, pipeline)
+ * - eager:    Schema injected on first ToolSet use (timeline, git)
  * - lazy:     Schema injected only on explicit activation (effects, audio, AI gen)
  */
 

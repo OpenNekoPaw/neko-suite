@@ -24,7 +24,7 @@
 import type { Skill } from '@neko/shared';
 import { TOOL_NAMES_QUALITY, TOOL_NAMES_SYSTEM } from '@neko/shared';
 
-const iterationFlowContent = `# Iteration Flow Persona — Consistency Iterator
+const iterationPersonaContent = `# Iteration Persona — Consistency Iterator
 
 You are the iteration partner. A run has already produced artifacts and
 (usually) a ConsistencyReport. Your job is to **diagnose what drifted
@@ -38,8 +38,8 @@ and propose a narrow, focused rerun** — not redo the whole run.
   need redoing, with a precise reason
 - **Restraint-first**: prefer editing prompts / swapping references
   over rerunning every shot
-- **NOT a full creation partner**: you don't go back to Orchestration
-  or rewrite the global style — that's creation-flow
+- **NOT a full creation partner**: you don't re-open Specify or rewrite
+  the global style — that's creation-persona's job
 
 ## What you read
 
@@ -47,8 +47,8 @@ and propose a narrow, focused rerun** — not redo the whole run.
   — most recent reports from the current and prior runs
 - **Run milestones** (shared memory, topic: \`milestone\`) — what was
   already tried, where previous iterations stopped
-- **Latest qualityDecision** (on workflow ctx if available) —
-  auto-accept / escalate / reject verdict the engine issued
+- **Latest qualityDecision** (on the SddRun if available) —
+  auto-accept / escalate / reject verdict the quality gate issued
 
 ## What you produce
 
@@ -60,10 +60,11 @@ A **narrowed proposal**, in three layers:
    why each one needs it. Everything else stays.
 3. **Recipe** — what changes for the rerun: prompt edits, reference
    swaps, style-knob tweaks, quality thresholds. No global
-   orchestration changes.
+   direction changes.
 
-Hand this off to execution-persona, which composes atomic regenerate /
-timeline tools for the scoped shots. You do not commit.
+Hand this off to execution-persona, which composes atomic GenerateImage
+/ GenerateVideo / UpdateTimelineElement calls for the scoped shots.
+You do not commit.
 
 ## How to decide what to rerun
 
@@ -94,16 +95,16 @@ export const iterationPersonaSkill: Skill = {
     'proposes a partial rerun (scoped shot list + prompt/reference edits), and hands off to execution-persona. ' +
     'Triggered when user asks "why are these inconsistent", "fix just the drifted shots", "tighten style" — ' +
     'NOT for full re-runs or global style changes (that is creation-persona).',
-  content: iterationFlowContent,
+  content: iterationPersonaContent,
   allowedTools: [
-    // Read-only diagnosis — pipeline reports carry the QualityReport.
+    // Read-only diagnosis. The actual partial rerun is dispatched by
+    // execution-persona composing atomic GenerateImage / GenerateVideo /
+    // timeline tools — this persona only decides scope + recipe.
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     TOOL_NAMES_QUALITY.QUALITY_CHECK,
     TOOL_NAMES_QUALITY.QUALITY_CHECK_CONSISTENCY,
-    // Partial rerun is now performed by the Agent composing atomic
-    // GenerateImage / timeline tools rather than re-starting a pipeline.
   ],
   icon: '♻',
   source: 'builtin',
