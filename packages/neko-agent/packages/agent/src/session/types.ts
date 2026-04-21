@@ -185,7 +185,7 @@ export interface AgentSessionConfig {
     skillRegistry: import('@neko/shared').ISkillRegistry;
     skillService: import('../skill/skill-service').SkillService;
     /** Initial flow kind (default: 'creation'). */
-    initialKind?: import('@neko-agent/types').FlowKind;
+    initialKind?: import('../skill/flow-switcher').FlowKind;
   };
 }
 

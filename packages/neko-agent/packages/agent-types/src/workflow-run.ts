@@ -15,9 +15,22 @@
  *   step-review workflows. Legacy.
  */
 
-import type { FlowTransitionEvent } from './flow';
 import type { SddStage, StageActivationDecision, StageSkipReason } from './stage';
 import type { TodoList } from './todo-list';
+
+/**
+ * Opaque transition event. PR3 dropped the dual-flow ring model from
+ * agent-types; FlowSwitcher now owns its own FlowTransitionEvent shape.
+ * This type is a structural placeholder so WorkflowRun.transitions keeps
+ * compiling while FlowSwitcher remains alive; PR4 will retire
+ * FlowSwitcher and drop this field entirely.
+ */
+interface LegacyFlowTransitionEvent {
+  from: string;
+  to: string;
+  reason: string;
+  at: number;
+}
 
 // =============================================================================
 // Status
@@ -97,11 +110,11 @@ export interface WorkflowRun {
   /** Associated TODO list for the Implement stage, when one is active. */
   todos?: TodoList;
   /**
-   * Flow transition events recorded during this Run. Retained through
-   * the SDD migration so existing consumers of FlowSwitcher keep working;
-   * post-migration this field collapses to a stage-transition log.
+   * Flow transition events recorded during this Run. PR3 kept the field
+   * as a structural placeholder; PR4 will remove it together with
+   * FlowSwitcher.
    */
-  transitions: readonly FlowTransitionEvent[];
+  transitions: readonly LegacyFlowTransitionEvent[];
   /**
    * Optional terminal error when `status === 'failed'`. Structured so
    * telemetry aggregators can bucket without parsing free-text.

@@ -1,25 +1,48 @@
 /**
  * Flow Switcher — Owns the current FlowKind and emits transitions.
  *
- * See: docs/architecture/dual-flow-architecture.md §6.3
+ * TODO(PR4): The dual-flow ring model (creation / execution) is being
+ * replaced by the SDD stage model. PR3 localised the Flow* types here so
+ * agent-types/flow.ts could be deleted; PR4 will retire FlowSwitcher
+ * entirely and drive persona swapping from stage transitions instead.
  *
- * Responsibility: single source of truth for whether the agent is currently
- * operating in the creation ring or the execution ring. Emits transition
- * events; listeners are responsible for applying the corresponding Skill
- * via SkillService + SkillInjectionCoordinator.
- *
- * This module is intentionally stateless w.r.t. Skills — it does not reach
- * into injection tracks. That separation keeps FlowSwitcher pure and testable
- * in isolation from the Skill system.
+ * Responsibility today: single source of truth for whether the agent is
+ * currently operating in the creation ring or the execution ring. Emits
+ * transition events; listeners are responsible for applying the
+ * corresponding Skill via SkillService + SkillInjectionCoordinator.
  */
 
-import type {
-  FlowContext,
-  FlowKind,
-  FlowTransitionEvent,
-  FlowTransitionReason,
-} from '@neko-agent/types';
-import { DEFAULT_FLOW_CONTEXT } from '@neko-agent/types';
+// -----------------------------------------------------------------------------
+// Local types (PR3: moved here from agent-types/flow.ts pending PR4 removal).
+// -----------------------------------------------------------------------------
+
+export type FlowKind = 'creation' | 'execution';
+
+export type FlowTransitionReason =
+  | 'apply-triggered'
+  | 'run-completed'
+  | 'macro-correction-required'
+  | 'user-requested'
+  | 'session-start';
+
+export interface FlowContext {
+  kind: FlowKind;
+  enteredAt: number;
+  reason: FlowTransitionReason;
+}
+
+export interface FlowTransitionEvent {
+  from: FlowKind;
+  to: FlowKind;
+  reason: FlowTransitionReason;
+  at: number;
+}
+
+const DEFAULT_FLOW_CONTEXT: FlowContext = {
+  kind: 'creation',
+  enteredAt: 0,
+  reason: 'session-start',
+};
 
 // =============================================================================
 // Types

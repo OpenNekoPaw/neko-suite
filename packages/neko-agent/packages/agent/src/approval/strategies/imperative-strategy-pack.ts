@@ -1,23 +1,24 @@
 /**
- * Execution strategy pack — inner-ring approval rules.
+ * Imperative strategy pack — approval rules for the imperative paradigm
+ * (Implement-stage Plans + technical decisions).
  *
- * See: docs/architecture/dual-flow-architecture.md §5.2
- *      plan v2 P4
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
+ *      §4.2 (declarative vs imperative split)
  *
- * Default posture on the execution ring:
- *   - Permission: auto-accept idempotent non-destructive tools,
+ * Default posture:
+ *   - permission: auto-accept idempotent non-destructive tools,
  *     ask user on destructive, auto-reject when both `destructive`
  *     and `idempotent === false` (we can't recover from a bad apply).
- *   - Quality gate: auto-accept when context carries a 'pass' verdict,
+ *   - quality-gate: auto-accept when context carries a 'pass' verdict,
  *     escalate on 'warn', auto-reject on 'fail'.
- *   - Plan review: not our scope (creation ring owns it).
+ *   - proposal-review: not our scope (declarative pack owns it).
  */
 
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
-export const executionStrategyPack: StrategyPack = {
-  name: 'execution-default',
-  scope: 'execution',
+export const imperativeStrategyPack: StrategyPack = {
+  name: 'imperative-default',
+  scope: 'imperative',
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel, context } = request;
 
@@ -69,7 +70,7 @@ export const executionStrategyPack: StrategyPack = {
       };
     }
 
-    // Plan review not handled here.
+    // Proposal review not handled here.
     return undefined;
   },
 };

@@ -26,7 +26,6 @@
  */
 
 import type { IApprovalEngine, ApprovalResponse } from '../index';
-import type { FlowKind } from '@neko-agent/types';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('PlanReviewApprovalAdapter');
@@ -54,13 +53,11 @@ export interface PlanReviewPlanSummary {
 export interface PlanReviewApprovalAdapterDeps {
   /** Engine to consult. */
   engine: IApprovalEngine;
-  /** Live flow accessor — Plan Review always runs in the creation ring. */
-  getFlow?: () => FlowKind;
   /**
    * Optional confidence threshold passed as context so custom
    * strategy packs can read it. Default 0.9 — packs may choose
-   * higher/lower bars; default creationStrategyPack doesn't read this
-   * field today but future packs will.
+   * higher/lower bars; the default declarativeStrategyPack doesn't read
+   * this field today but future packs will.
    */
   confidenceThreshold?: number;
   /** Clock injection. */
@@ -86,7 +83,6 @@ export function createPlanReviewApprovalAdapter(
   deps: PlanReviewApprovalAdapterDeps,
 ): (request: PlanReviewApprovalRequest) => Promise<ApprovalResponse> {
   const clock = deps.now ?? (() => Date.now());
-  const getFlow = deps.getFlow ?? (() => 'creation' as const);
   const confidenceThreshold = deps.confidenceThreshold ?? 0.9;
 
   return async function evaluatePlanReview(
@@ -96,7 +92,7 @@ export function createPlanReviewApprovalAdapter(
     try {
       return await deps.engine.evaluate({
         channel: 'proposal-review',
-        flow: getFlow(),
+        paradigm: 'declarative',
         subject: {
           label: `Plan ${request.plan.id}`,
           kind: `plan:${request.plan.id}`,

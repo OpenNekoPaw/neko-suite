@@ -15,8 +15,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { creationStrategyPack } from '../strategies/creation-strategy-pack';
-import { executionStrategyPack } from '../strategies/execution-strategy-pack';
+import { declarativeStrategyPack } from '../strategies/declarative-strategy-pack';
+import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
 function request(
@@ -26,7 +26,7 @@ function request(
   const { kind = 'tool:x', label = 'X', destructive, idempotent, ...rest } = overrides;
   return {
     channel: 'permission',
-    flow: 'execution',
+    paradigm: 'imperative',
     subject: { kind, label, destructive, idempotent },
     id: rest.id ?? 'req-1',
     at: rest.at ?? 0,
@@ -38,7 +38,7 @@ describe('ApprovalEngine', () => {
   it('ring-specific pack takes precedence over shared pack', async () => {
     const ring: StrategyPack = {
       name: 'ring',
-      scope: 'execution',
+      scope: 'imperative',
       evaluate: () => ({
         requestId: 'req-1',
         resolution: 'auto-accept',
@@ -65,7 +65,7 @@ describe('ApprovalEngine', () => {
   it('shared pack runs when ring pack returns undefined', async () => {
     const ring: StrategyPack = {
       name: 'ring',
-      scope: 'execution',
+      scope: 'imperative',
       evaluate: () => undefined,
     };
     const shared: StrategyPack = {
@@ -110,14 +110,14 @@ describe('ApprovalEngine', () => {
   it('strategy pack throw does not break the pipeline', async () => {
     const bad: StrategyPack = {
       name: 'bad',
-      scope: 'execution',
+      scope: 'imperative',
       evaluate: () => {
         throw new Error('bug');
       },
     };
     const ok: StrategyPack = {
       name: 'ok',
-      scope: 'execution',
+      scope: 'imperative',
       evaluate: () => ({
         requestId: 'req-1',
         resolution: 'auto-accept',
@@ -131,13 +131,13 @@ describe('ApprovalEngine', () => {
   });
 });
 
-describe('creationStrategyPack', () => {
+describe('declarativeStrategyPack', () => {
   it('auto-accepts idempotent + non-destructive plan reviews', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
     const res = await engine.evaluate(
       request({
         channel: 'proposal-review',
-        flow: 'creation',
+        paradigm: 'declarative',
         idempotent: true,
         destructive: false,
       }),
@@ -148,13 +148,13 @@ describe('creationStrategyPack', () => {
 
   it('defers destructive plan reviews to the user', async () => {
     const engine = createApprovalEngine({
-      strategyPacks: [creationStrategyPack],
+      strategyPacks: [declarativeStrategyPack],
       userPrompt: async () => undefined, // user declines
     });
     const res = await engine.evaluate(
       request({
         channel: 'proposal-review',
-        flow: 'creation',
+        paradigm: 'declarative',
         destructive: true,
       }),
     );
@@ -163,31 +163,31 @@ describe('creationStrategyPack', () => {
   });
 
   it('auto-accepts non-destructive permission requests', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
     const res = await engine.evaluate(
-      request({ channel: 'permission', flow: 'creation', destructive: false }),
+      request({ channel: 'permission', paradigm: 'declarative', destructive: false }),
     );
     expect(res.resolution).toBe('auto-accept');
     expect(res.reason).toBe('non-destructive-read');
   });
 });
 
-describe('executionStrategyPack', () => {
+describe('imperativeStrategyPack', () => {
   it('auto-accepts idempotent + non-destructive tool calls', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const res = await engine.evaluate(
-      request({ channel: 'permission', flow: 'execution', idempotent: true }),
+      request({ channel: 'permission', paradigm: 'imperative', idempotent: true }),
     );
     expect(res.resolution).toBe('auto-accept');
     expect(res.reason).toBe('idempotent-non-destructive');
   });
 
   it('auto-rejects destructive + non-idempotent tools', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const res = await engine.evaluate(
       request({
         channel: 'permission',
-        flow: 'execution',
+        paradigm: 'imperative',
         destructive: true,
         idempotent: false,
       }),
@@ -197,20 +197,20 @@ describe('executionStrategyPack', () => {
   });
 
   it('quality gate: pass / warn / fail routing', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
 
     const pass = await engine.evaluate(
-      request({ channel: 'quality-gate', flow: 'execution', context: { verdict: 'pass' } }),
+      request({ channel: 'quality-gate', paradigm: 'imperative', context: { verdict: 'pass' } }),
     );
     expect(pass.resolution).toBe('auto-accept');
 
     const warn = await engine.evaluate(
-      request({ channel: 'quality-gate', flow: 'execution', context: { verdict: 'warn' } }),
+      request({ channel: 'quality-gate', paradigm: 'imperative', context: { verdict: 'warn' } }),
     );
     expect(warn.resolution).toBe('escalate');
 
     const fail = await engine.evaluate(
-      request({ channel: 'quality-gate', flow: 'execution', context: { verdict: 'fail' } }),
+      request({ channel: 'quality-gate', paradigm: 'imperative', context: { verdict: 'fail' } }),
     );
     expect(fail.resolution).toBe('auto-reject');
   });

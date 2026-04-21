@@ -27,8 +27,13 @@
  */
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
-import type { FlowKind, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
+import type { StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
+
+// TODO(PR4): Remove once FlowSwitcher is retired and TaskShapeSignals no longer
+// carries a flow field. PR3 keeps the type local so deleting agent-types/flow.ts
+// does not cascade here.
+type LegacyFlowKind = 'creation' | 'execution';
 
 import type { FlowSwitcher } from '../skill/flow-switcher';
 import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
@@ -90,8 +95,8 @@ export interface ReActLoopRunnerDeps {
 }
 
 export interface TaskShapeSignals {
-  /** Current flow kind. */
-  flow: FlowKind;
+  /** Current flow kind (legacy FlowSwitcher signal, removed in PR4). */
+  flow: LegacyFlowKind;
   /** 0-based iteration index (matches AgentContext.iteration - 1). */
   round: number;
   /** Tool results from the previous iteration, empty on first round. */

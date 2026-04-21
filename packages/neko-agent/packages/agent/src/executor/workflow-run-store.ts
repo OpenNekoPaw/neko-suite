@@ -15,7 +15,6 @@
  */
 
 import type {
-  FlowTransitionEvent,
   StageActivationDecision,
   TodoList,
   WorkflowRun,
@@ -23,6 +22,7 @@ import type {
   WorkflowRunStatus,
 } from '@neko-agent/types';
 import { roundSummaryFromDecision } from '@neko-agent/types';
+import type { FlowTransitionEvent } from '../skill/flow-switcher';
 
 // =============================================================================
 // Types

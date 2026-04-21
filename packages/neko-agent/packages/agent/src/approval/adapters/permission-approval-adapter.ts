@@ -1,19 +1,17 @@
 /**
  * Permission → ApprovalEngine adapter.
  *
- * See: docs/architecture/dual-flow-architecture.md §5
- *      plan v2 P4 (Approval unification — adapter migration)
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  *
- * The existing PermissionHooks calls a user-supplied `onConfirmTool`
- * callback whenever a tool hits the 'ask' permission decision. This
- * adapter wraps that callback: an ApprovalEngine is consulted first;
- * only when no strategy pack auto-decides (or when the engine
- * escalates) does the original user callback run.
+ * PermissionHooks calls a user-supplied `onConfirmTool` callback whenever
+ * a tool hits the 'ask' permission decision. This adapter wraps the
+ * callback: ApprovalEngine is consulted first; only when no strategy pack
+ * auto-decides (or the engine escalates) does the user callback run.
  *
- * Strategy packs in execution ring already handle the common case
- * (idempotent + non-destructive auto-accept, destructive + non-
- * idempotent auto-reject). This adapter wires that logic into the
- * existing permission flow without modifying PermissionHooks.
+ * Permission requests are always imperative (Implement-stage tool calls),
+ * so the adapter tags them accordingly. The imperative strategy pack
+ * handles the common case (idempotent + non-destructive auto-accept,
+ * destructive + non-idempotent auto-reject).
  *
  * Opt-in: callers that don't pass the adapter keep the old behaviour.
  */
@@ -24,7 +22,6 @@ import type {
   ToolConfirmationResponse,
 } from '../../permission/types';
 import type { IApprovalEngine, ApprovalRequest } from '../index';
-import type { FlowKind } from '@neko-agent/types';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('PermissionApprovalAdapter');
@@ -36,8 +33,6 @@ const logger = getLogger('PermissionApprovalAdapter');
 export interface PermissionApprovalAdapterDeps {
   /** Engine to consult. */
   engine: IApprovalEngine;
-  /** Live flow accessor — determines which strategy pack runs. */
-  getFlow: () => FlowKind;
   /**
    * Fallback user callback. Invoked when the engine returns 'escalate'
    * or no pack auto-decides. If omitted, unresolved requests default
@@ -80,7 +75,7 @@ export function createPermissionApprovalAdapter(
     const traits = deps.classifyTool?.(request) ?? {};
     const approvalRequest: ApprovalRequest = {
       channel: 'permission',
-      flow: deps.getFlow(),
+      paradigm: 'imperative',
       subject: {
         label: request.description ?? request.toolCall.name,
         kind: `tool:${request.toolCall.name}`,

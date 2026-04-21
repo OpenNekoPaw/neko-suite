@@ -16,12 +16,8 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type {
-  FlowKind,
-  FlowContext,
-  StageActivationDecision,
-  WorkflowRun,
-} from '@neko-agent/types';
+import type { StageActivationDecision, WorkflowRun } from '@neko-agent/types';
+import type { FlowKind, FlowContext, FlowTransitionReason } from '../skill/flow-switcher';
 import type { SkillInjection, IFlowBinding } from '../skill';
 import { SkillInjectionCoordinator, FlowSwitcher, createFlowBinding } from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
@@ -32,7 +28,7 @@ import { createEventBus } from '../events';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
-import { createApprovalEngine, executionStrategyPack, creationStrategyPack } from '../approval';
+import { createApprovalEngine, imperativeStrategyPack, declarativeStrategyPack } from '../approval';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -210,7 +206,7 @@ export class AgentSession implements IAgentSession {
       this._eventBus = createEventBus();
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
-        strategyPacks: [creationStrategyPack, executionStrategyPack],
+        strategyPacks: [declarativeStrategyPack, imperativeStrategyPack],
       });
       const { hooks, state } = createReActLoopRunner({
         flowSwitcher: this._flowSwitcher,
@@ -561,10 +557,7 @@ export class AgentSession implements IAgentSession {
    * Transition the current flow. No-op if dual-flow is not configured, or
    * if already in the target kind.
    */
-  transitionFlow(
-    target: FlowKind,
-    reason: import('@neko-agent/types').FlowTransitionReason,
-  ): boolean {
+  transitionFlow(target: FlowKind, reason: FlowTransitionReason): boolean {
     if (!this._flowSwitcher) return false;
     return this._flowSwitcher.transitionTo(target, reason);
   }
@@ -744,12 +737,13 @@ export class AgentSession implements IAgentSession {
   private async _resolveToolConfirmation(request: ToolConfirmationRequest): Promise<void> {
     const toolCallId = request.toolCall.id;
 
-    // P4: consult the approval engine if dualFlow is wired.
+    // Consult the approval engine if wired. Permission-channel requests
+    // always belong to the imperative paradigm (Implement-stage tool calls).
     if (this._approvalEngine && this._flowSwitcher) {
       try {
         const decision = await this._approvalEngine.evaluate({
           channel: 'permission',
-          flow: this._flowSwitcher.kind,
+          paradigm: 'imperative',
           subject: {
             label: request.description ?? request.toolCall.name,
             kind: `tool:${request.toolCall.name}`,

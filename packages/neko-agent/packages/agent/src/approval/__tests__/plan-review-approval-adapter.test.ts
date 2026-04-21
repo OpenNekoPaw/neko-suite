@@ -2,7 +2,7 @@
  * PlanReviewApprovalAdapter tests
  *
  * Covers:
- * - idempotent (no reviewable issues) plan → creationStrategyPack auto-accepts
+ * - idempotent (no reviewable issues) plan → declarativeStrategyPack auto-accepts
  * - plan with reviewable issues → defers to user (no-decision auto-reject path)
  * - engine throw → safe 'escalate' (never silently auto-approve)
  * - request payload carries confidence + level + threshold
@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { creationStrategyPack } from '../strategies/creation-strategy-pack';
+import { declarativeStrategyPack } from '../strategies/declarative-strategy-pack';
 import {
   createPlanReviewApprovalAdapter,
   type PlanReviewPlanSummary,
@@ -28,8 +28,8 @@ function plan(overrides: Partial<PlanReviewPlanSummary> = {}): PlanReviewPlanSum
 }
 
 describe('PlanReviewApprovalAdapter', () => {
-  it('idempotent + clean plan → creationStrategyPack auto-accepts', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+  it('idempotent + clean plan → declarativeStrategyPack auto-accepts', async () => {
+    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
     const evaluate = createPlanReviewApprovalAdapter({ engine });
     const response = await evaluate({ plan: plan() });
     expect(response.resolution).toBe('auto-accept');
@@ -37,7 +37,7 @@ describe('PlanReviewApprovalAdapter', () => {
   });
 
   it('plan with reviewable issues → not idempotent, no auto-accept', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [declarativeStrategyPack] });
     const evaluate = createPlanReviewApprovalAdapter({ engine });
     const response = await evaluate({
       plan: plan({ hasReviewableIssues: true }),
@@ -75,13 +75,13 @@ describe('PlanReviewApprovalAdapter', () => {
     await evaluate({ plan: plan({ confidence: 0.72, level: 'L1' }) });
     const req = captured as {
       channel: string;
-      flow: string;
+      paradigm: string;
       subject: { kind: string };
       context: Record<string, unknown>;
       id: string;
     };
     expect(req.channel).toBe('proposal-review');
-    expect(req.flow).toBe('creation');
+    expect(req.paradigm).toBe('declarative');
     expect(req.subject.kind).toBe('plan:plan-42');
     expect(req.context.confidence).toBe(0.72);
     expect(req.context.level).toBe('L1');
@@ -89,20 +89,17 @@ describe('PlanReviewApprovalAdapter', () => {
     expect(req.id).toBe('plan-review:plan-42');
   });
 
-  it('custom flow accessor respected', async () => {
-    let capturedFlow: string | undefined;
+  it('proposal review always tagged as declarative paradigm', async () => {
+    let capturedParadigm: string | undefined;
     const engine = createApprovalEngine();
     const orig = engine.evaluate.bind(engine);
     engine.evaluate = async (req) => {
-      capturedFlow = req.flow;
+      capturedParadigm = req.paradigm;
       return orig(req);
     };
-    const evaluate = createPlanReviewApprovalAdapter({
-      engine,
-      getFlow: () => 'execution',
-    });
+    const evaluate = createPlanReviewApprovalAdapter({ engine });
     await evaluate({ plan: plan() });
-    expect(capturedFlow).toBe('execution');
+    expect(capturedParadigm).toBe('declarative');
   });
 
   it('destructive = false and idempotent reflects hasReviewableIssues', async () => {

@@ -1,11 +1,12 @@
 /**
  * ApprovalEngine — single entry point for all three approval channels.
  *
- * See: docs/architecture/dual-flow-architecture.md §5
- *      plan v2 P4 (Approval unification)
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  *
  * Pipeline per request:
- *   1. Ring-specific strategy pack evaluates (if registered).
+ *   1. Paradigm-specific strategy pack evaluates (if registered).
+ *      Pack scope is matched against request.paradigm (declarative /
+ *      imperative).
  *   2. 'shared' strategy pack evaluates (if registered).
  *   3. Neither auto-decided → user prompt (callback supplied by caller).
  *   4. No prompt → auto-reject ('no-decision').
@@ -69,9 +70,9 @@ class ApprovalEngine implements IApprovalEngine {
   }
 
   async evaluate(request: ApprovalRequest): Promise<ApprovalResponse> {
-    // 1. Ring-specific packs.
+    // 1. Paradigm-specific packs.
     for (const pack of this._packs) {
-      if (pack.scope !== request.flow) continue;
+      if (pack.scope !== request.paradigm) continue;
       const decision = this._safeEvaluate(pack, request);
       if (decision) return this._stamp(decision);
     }

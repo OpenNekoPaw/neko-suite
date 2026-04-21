@@ -28,7 +28,6 @@
  */
 
 import type { IApprovalEngine, ApprovalResponse } from '../index';
-import type { FlowKind } from '@neko-agent/types';
 import type { ConsistencyReport } from '../../workflow/qa-types';
 import { getLogger } from '../../utils/logger';
 
@@ -55,8 +54,6 @@ export const DEFAULT_QUALITY_GATE_THRESHOLDS: Required<QualityGateThresholds> = 
 export interface QualityGateApprovalAdapterDeps {
   /** Engine to consult. */
   engine: IApprovalEngine;
-  /** Live flow accessor — determines which strategy pack runs. */
-  getFlow: () => FlowKind;
   /** Optional overrides for the verdict thresholds. */
   thresholds?: QualityGateThresholds;
   /** Clock injection. */
@@ -118,7 +115,7 @@ export function createQualityGateApprovalAdapter(
     try {
       const response = await deps.engine.evaluate({
         channel: 'quality-gate',
-        flow: deps.getFlow(),
+        paradigm: 'imperative',
         subject: {
           label: request.stageName ? `Quality gate: ${request.stageName}` : 'Quality gate',
           kind: `quality:${request.stageName ?? 'unknown'}`,

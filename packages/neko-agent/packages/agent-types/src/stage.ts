@@ -25,6 +25,37 @@
  */
 
 // =============================================================================
+// Paradigm
+// =============================================================================
+
+/**
+ * Declarative vs imperative paradigms — a SDD artifact's fundamental nature.
+ *
+ * See: docs/architecture/agent-unified-workflow.md §4.2
+ *
+ * - declarative (What): Proposal. Business goal, user-facing approval object.
+ *   Produced by Specify. The user approves *this*; they do not approve the Plan.
+ * - imperative (How): ExecutionPlan. Technical tool-call list the agent compiles
+ *   from the Proposal. The agent may recompile it during retries without
+ *   re-asking the user.
+ *
+ * Different failure semantics: a Proposal failing means the direction is wrong
+ * (user intervention). A Plan failing is a technical issue (autoheal).
+ *
+ * Replaces the dual-flow `FlowKind = 'creation' | 'execution'` which conflated
+ * paradigm with subsystem boundaries. The new binding is:
+ *   Creation ring ≈ declarative (Specify's Proposal)
+ *   Execution ring ≈ imperative (Implement's tool calls)
+ * but the SDD model phrases it as a paradigm of the artifact, not a ring the
+ * agent lives in.
+ */
+export type Paradigm =
+  /** Specify-stage Proposals and upstream business decisions. */
+  | 'declarative'
+  /** Implement-stage Plans, tool calls, technical decisions. */
+  | 'imperative';
+
+// =============================================================================
 // Stage union
 // =============================================================================
 

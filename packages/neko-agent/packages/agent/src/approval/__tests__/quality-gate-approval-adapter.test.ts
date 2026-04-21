@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { executionStrategyPack } from '../strategies/execution-strategy-pack';
+import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
 import {
   createQualityGateApprovalAdapter,
   verdictFromReport,
@@ -63,10 +63,9 @@ describe('verdictFromReport', () => {
 
 describe('QualityGateApprovalAdapter', () => {
   function buildAdapter() {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     return createQualityGateApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
     });
   }
 
@@ -113,7 +112,6 @@ describe('QualityGateApprovalAdapter', () => {
     } as unknown as ReturnType<typeof createApprovalEngine>;
     const evaluate = createQualityGateApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
     });
     const response = await evaluate({ report: report(95) });
     expect(response.resolution).toBe('escalate');
@@ -130,12 +128,11 @@ describe('QualityGateApprovalAdapter', () => {
     };
     const evaluate = createQualityGateApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
     });
     await evaluate({ runId: 'run-1', stageName: 'qualityGate', report: report(75) });
     const [req] = calls[0]!;
     expect(req.channel).toBe('quality-gate');
-    expect(req.flow).toBe('execution');
+    expect(req.paradigm).toBe('imperative');
     expect(req.subject.kind).toBe('quality:qualityGate');
     expect(req.context?.verdict).toBe('warn');
     expect(req.context?.overallConsistency).toBe(75);
@@ -143,10 +140,9 @@ describe('QualityGateApprovalAdapter', () => {
   });
 
   it('custom thresholds applied to the adapter', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const evaluate = createQualityGateApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       thresholds: { passThreshold: 50, warnThreshold: 20 },
     });
     const response = await evaluate({ report: report(60) });

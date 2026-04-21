@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createApprovalEngine } from '../approval-engine';
-import { executionStrategyPack } from '../strategies/execution-strategy-pack';
+import { imperativeStrategyPack } from '../strategies/imperative-strategy-pack';
 import { createPermissionApprovalAdapter } from '../adapters/permission-approval-adapter';
 import type { ToolConfirmationRequest } from '../../permission/types';
 
@@ -34,10 +34,9 @@ function request(overrides: Partial<ToolConfirmationRequest> = {}): ToolConfirma
 
 describe('PermissionApprovalAdapter', () => {
   it('auto-accepts idempotent + non-destructive tool via execution pack', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       classifyTool: () => ({ idempotent: true, destructive: false }),
     });
 
@@ -47,10 +46,9 @@ describe('PermissionApprovalAdapter', () => {
   });
 
   it('auto-rejects destructive + non-idempotent tool via execution pack', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       classifyTool: () => ({ idempotent: false, destructive: true }),
     });
 
@@ -69,7 +67,6 @@ describe('PermissionApprovalAdapter', () => {
     }));
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       userConfirm,
     });
 
@@ -87,7 +84,7 @@ describe('PermissionApprovalAdapter', () => {
       strategyPacks: [
         {
           name: 'always-escalate',
-          scope: 'execution',
+          scope: 'imperative',
           evaluate: (req) => ({
             requestId: req.id,
             resolution: 'escalate',
@@ -104,7 +101,6 @@ describe('PermissionApprovalAdapter', () => {
     }));
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       userConfirm,
     });
 
@@ -118,7 +114,7 @@ describe('PermissionApprovalAdapter', () => {
       strategyPacks: [
         {
           name: 'always-escalate',
-          scope: 'execution',
+          scope: 'imperative',
           evaluate: (req) => ({
             requestId: req.id,
             resolution: 'escalate',
@@ -130,7 +126,6 @@ describe('PermissionApprovalAdapter', () => {
     });
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
     });
 
     const response = await adapter(request());
@@ -153,7 +148,6 @@ describe('PermissionApprovalAdapter', () => {
     }));
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => 'execution',
       userConfirm,
     });
 
@@ -162,10 +156,12 @@ describe('PermissionApprovalAdapter', () => {
     expect(response.approved).toBe(true);
   });
 
-  it('flow accessor is read live (creation vs execution)', async () => {
-    // Use the execution pack only; a creation-scoped request won't match.
-    const engine = createApprovalEngine({ strategyPacks: [executionStrategyPack] });
-    let flow: 'creation' | 'execution' = 'creation';
+  it('permission requests are always tagged as imperative paradigm', async () => {
+    // Use the imperative pack only; the adapter's static paradigm tag
+    // means every permission request is routed to it. A declarative-only
+    // engine would leave the request undecided and the userConfirm path
+    // would fire — assert that doesn't happen here.
+    const engine = createApprovalEngine({ strategyPacks: [imperativeStrategyPack] });
     const userConfirm = vi.fn(async () => ({
       confirmationToken: 'tok-1',
       approved: true,
@@ -173,19 +169,12 @@ describe('PermissionApprovalAdapter', () => {
     }));
     const adapter = createPermissionApprovalAdapter({
       engine,
-      getFlow: () => flow,
       classifyTool: () => ({ idempotent: true, destructive: false }),
       userConfirm,
     });
 
-    // Creation flow + no matching pack → engine no-decision → reject.
-    let response = await adapter(request());
-    expect(response.approved).toBe(false);
-    expect(userConfirm).not.toHaveBeenCalled();
-
-    // Switch to execution flow — pack now matches and auto-accepts.
-    flow = 'execution';
-    response = await adapter(request());
+    const response = await adapter(request());
     expect(response.approved).toBe(true);
+    expect(userConfirm).not.toHaveBeenCalled();
   });
 });

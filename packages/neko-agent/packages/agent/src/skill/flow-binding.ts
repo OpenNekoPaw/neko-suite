@@ -21,8 +21,7 @@
  */
 
 import type { Skill, SkillInjection, ISkillRegistry } from '@neko/shared';
-import type { FlowKind, FlowTransitionEvent } from '@neko-agent/types';
-import type { FlowSwitcher } from './flow-switcher';
+import type { FlowKind, FlowTransitionEvent, FlowSwitcher } from './flow-switcher';
 import { skillNameForFlow } from './flow-switcher';
 import type { SkillInjectionCoordinator } from './skill-injection-coordinator';
 import type { SkillService } from './skill-service';

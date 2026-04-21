@@ -17,8 +17,8 @@ import {
   skillNameForFlow,
   CREATION_FLOW_SKILL_NAME,
   EXECUTION_FLOW_SKILL_NAME,
+  type FlowTransitionEvent,
 } from '../flow-switcher';
-import type { FlowTransitionEvent } from '@neko-agent/types';
 
 describe('FlowSwitcher', () => {
   describe('initial state', () => {

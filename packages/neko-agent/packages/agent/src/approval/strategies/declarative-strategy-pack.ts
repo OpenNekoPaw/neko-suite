@@ -1,27 +1,27 @@
 /**
- * Creation strategy pack — approval rules for Specify-stage and upstream
- * user-facing decisions.
+ * Declarative strategy pack — approval rules for the declarative paradigm
+ * (Specify-stage Proposals + upstream business decisions).
  *
- * See: docs/architecture/agent-unified-workflow.md §9 (Approval governance)
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
+ *      §4.2 (declarative vs imperative split)
  *
  * Default posture:
- *   - Proposal review (end of Specify): user-driven; pack does NOT
- *     auto-decide unless the proposal is marked idempotent +
- *     non-destructive (e.g. preview-only).
- *   - Permission (tool calls initiated during Specify / Plan / Tasks —
+ *   - proposal-review: user-driven; pack does NOT auto-decide unless the
+ *     proposal is marked idempotent + non-destructive (e.g. preview-only).
+ *   - permission (tool calls initiated during Specify / Plan / Tasks —
  *     typically read-only probing): allowed if non-destructive;
  *     ask user otherwise.
- *   - Quality gate: never auto-decides here; caller escalates to the
- *     execution strategy pack.
+ *   - quality-gate: never auto-decides here; caller routes to the
+ *     imperative strategy pack.
  *
  * These are defaults — sites can swap via createApprovalEngine({ strategyPacks }).
  */
 
 import type { ApprovalRequest, ApprovalResponse, StrategyPack } from '../approval-types';
 
-export const creationStrategyPack: StrategyPack = {
-  name: 'creation-default',
-  scope: 'creation',
+export const declarativeStrategyPack: StrategyPack = {
+  name: 'declarative-default',
+  scope: 'declarative',
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel } = request;
 

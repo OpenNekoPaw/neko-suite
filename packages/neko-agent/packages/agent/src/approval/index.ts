@@ -1,8 +1,7 @@
 /**
- * Approval module — unified engine for permission / plan-review / quality-gate.
+ * Approval module — unified engine for permission / proposal-review / quality-gate.
  *
- * See: docs/architecture/dual-flow-architecture.md §5
- *      plan v2 P4
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  */
 
 export {
@@ -22,8 +21,8 @@ export type {
   UserApprovalPrompt,
 } from './approval-types';
 
-export { creationStrategyPack } from './strategies/creation-strategy-pack';
-export { executionStrategyPack } from './strategies/execution-strategy-pack';
+export { declarativeStrategyPack } from './strategies/declarative-strategy-pack';
+export { imperativeStrategyPack } from './strategies/imperative-strategy-pack';
 
 // Adapters bridging existing channels into the engine.
 export {

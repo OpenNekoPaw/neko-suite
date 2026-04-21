@@ -31,13 +31,16 @@
  *   - Cross-process sync.
  */
 
-import type { FlowKind } from '@neko-agent/types';
-
 // =============================================================================
 // Types
 // =============================================================================
 
-export type MemoryScope = FlowKind | 'shared';
+// TODO(PR4): Reconsider scope taxonomy once FlowSwitcher is retired. The
+// 'creation' / 'execution' labels here are legacy dual-flow ring names kept
+// through PR3 so the memory store stays compatible with existing writers.
+type LegacyFlowKind = 'creation' | 'execution';
+
+export type MemoryScope = LegacyFlowKind | 'shared';
 
 export interface MemoryEntry<T = unknown> {
   /** The topic the entry was written under. */

@@ -1,20 +1,22 @@
 /**
  * Approval Types — unified request/response shape for the three channels.
  *
- * See: docs/architecture/dual-flow-architecture.md §5
- *      plan v2 P4 (Approval unification)
+ * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  *
  * Three channels funnel through ApprovalEngine:
- *   - PermissionManager (tool-call-level authorization)
- *   - Plan Review (business-level Plan Card approval)
- *   - QualityGate (pipeline stage pass/fail judgment)
+ *   - permission: tool-call-level authorization (Implement)
+ *   - proposal-review: business-level Proposal approval (end of Specify)
+ *   - quality-gate: pipeline verdict (pass / warn / fail)
  *
  * Each has its own UI surface, but all three boil down to the same
  * core: "given a candidate action, decide accept / reject / escalate,
  * with optional reason and autoheal hint."
+ *
+ * Requests carry a `paradigm` field (declarative vs imperative) so strategy
+ * packs can route decisions without inspecting channel strings.
  */
 
-import type { FlowKind } from '@neko-agent/types';
+import type { Paradigm } from '@neko-agent/types';
 
 // =============================================================================
 // Request kinds
@@ -48,8 +50,12 @@ export interface ApprovalSubject {
 
 export interface ApprovalRequest {
   channel: ApprovalChannel;
-  /** Which ring the request originated from. */
-  flow: FlowKind;
+  /**
+   * Paradigm the request belongs to — declarative (Proposal / Specify-stage
+   * business decisions) vs imperative (Plan / Implement-stage tool calls).
+   * Drives strategy-pack selection.
+   */
+  paradigm: Paradigm;
   subject: ApprovalSubject;
   /**
    * Structured context the strategy pack inspects — e.g. tool args,
@@ -103,11 +109,11 @@ export interface StrategyPack {
   /** Label for telemetry. */
   name: string;
   /**
-   * Which ring this pack handles. ApprovalEngine picks the pack by
-   * request.flow; if both ring-specific packs decline, a 'shared'
+   * Which paradigm this pack handles. ApprovalEngine picks the pack by
+   * request.paradigm; if both paradigm-specific packs decline, a 'shared'
    * pack may run last.
    */
-  scope: FlowKind | 'shared';
+  scope: Paradigm | 'shared';
   /** The strategy function itself. */
   evaluate: ApprovalStrategy;
 }
