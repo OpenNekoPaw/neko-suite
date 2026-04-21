@@ -24,6 +24,7 @@ import type {
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
 import { KeywordSkillMatcher } from './skill-matcher';
+import { assertSubpackagesAvailable, type ISubpackageResolver } from './subpackage-guard';
 import { getLogger } from '../utils/logger';
 
 // =============================================================================
@@ -40,6 +41,12 @@ export interface SkillServiceConfig {
   injector?: ISkillInjector;
   /** Optional tool registry for validating skill allowedTools references */
   toolRegistry?: IToolRegistry;
+  /**
+   * Optional host resolver used by the activation-time subpackage guard
+   * (ADR §5.2.10). Omit on platforms without a subpackage registry;
+   * the guard will log once per Skill declaring deps and skip.
+   */
+  subpackageResolver?: ISubpackageResolver;
   minRelevanceThreshold?: number;
   autoApplyThreshold?: number;
 }
@@ -54,6 +61,7 @@ export class SkillService {
   private readonly _matcher: ISkillMatcher;
   private readonly _injector: ISkillInjector;
   private readonly _toolRegistry: IToolRegistry | undefined;
+  private readonly _subpackageResolver: ISubpackageResolver | null;
   private readonly _minRelevanceThreshold: number;
   private readonly _autoApplyThreshold: number;
   private readonly _logger = getLogger('SkillService');
@@ -63,6 +71,7 @@ export class SkillService {
     this._matcher = config.matcher || new KeywordSkillMatcher();
     this._injector = config.injector || new SkillInjector();
     this._toolRegistry = config.toolRegistry;
+    this._subpackageResolver = config.subpackageResolver ?? null;
     this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
     this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
   }
@@ -73,11 +82,19 @@ export class SkillService {
 
   /**
    * Apply a skill — prepare injection payload.
-   * Validates allowedTools references if toolRegistry is available.
+   *
+   * Runs two activation-time guards in order:
+   *   1. Subpackage dependency check (ADR §5.2.10) — throws
+   *      `SkillActivationError` if a required subpackage is missing or
+   *      version-incompatible. Optional subpackages only log a warn.
+   *   2. allowedTools reference validation — warn-only.
+   *
    * @param skill Skill to apply
    * @param args Optional arguments (for skills with command trigger)
+   * @throws SkillActivationError when blocking subpackage deps are unmet
    */
   async apply(skill: Skill, args?: string): Promise<SkillInjection> {
+    assertSubpackagesAvailable(skill, this._subpackageResolver);
     this._validateAllowedTools(skill);
     return this._injector.injectSkill(skill, args);
   }

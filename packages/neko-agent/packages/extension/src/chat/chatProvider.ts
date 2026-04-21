@@ -43,12 +43,18 @@ import {
   SlashCommandHandler,
   ConversationMessageHandler,
 } from './handlers';
-import { createSkillService, builtinSkills, SkillRegistry } from '@neko/agent';
+import {
+  createSkillService,
+  builtinSkills,
+  SkillRegistry,
+  type ISubpackageResolver,
+} from '@neko/agent';
 import {
   getSkillFileService,
   type SkillScanResult,
   type LazySkillScanResult,
 } from '../services/SkillFileService';
+import { getCapabilityDiscoveryService } from '../bootstrap/capabilityBootstrap';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.aiAssistant';
@@ -281,9 +287,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Wire up SkillService: create instance, populate from disk, keep in sync.
         // Inject toolRegistry so allowedTools validation warns on unregistered tool references.
+        // Inject subpackage resolver so requiredSubpackages is enforced at activation time.
         const skillFileService = getSkillFileService();
         const toolRegistry = getService(IToolRegistry);
-        const skillService = createSkillService({ toolRegistry: toolRegistry ?? undefined });
+        // CapabilityDiscoveryService is bootstrapped earlier in activation; fall
+        // back silently if something flipped the order so the chat view still opens.
+        let subpackageResolver: ISubpackageResolver | undefined;
+        try {
+          const capabilityDiscovery = getCapabilityDiscoveryService();
+          subpackageResolver = {
+            get: (id: string) => capabilityDiscovery.getSubpackage(id),
+          };
+        } catch {
+          subpackageResolver = undefined;
+        }
+        const skillService = createSkillService({
+          toolRegistry: toolRegistry ?? undefined,
+          subpackageResolver,
+        });
 
         this._providers = new ProviderManager(this._context, this._platform);
         this._messages = new MessageHandler(

@@ -307,4 +307,40 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   get providerCount(): number {
     return this._providers.size;
   }
+
+  // ---------------------------------------------------------------------------
+  // Subpackage resolution (ADR §5.2.10)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Snapshot of a subpackage from this service's perspective.
+   *
+   *   - `enabled: true` iff the provider is currently registered (i.e. the
+   *     sub-package has activated and contributed its capabilities).
+   *   - `enabled: false` when only a manifest has been discovered but
+   *     activation hasn't happened (provider not yet registered).
+   *
+   * Returns null when the id is unknown to both provider + manifest maps.
+   * Used by SkillService via the ISubpackageResolver contract to block
+   * / warn on requiredSubpackages at Skill activation time.
+   */
+  getSubpackage(id: string): { id: string; version: string; enabled: boolean } | null {
+    const registered = this._providers.get(id);
+    if (registered) {
+      return {
+        id,
+        version: registered.provider.version,
+        enabled: true,
+      };
+    }
+    const manifest = this._manifests.get(id);
+    if (manifest) {
+      return {
+        id,
+        version: manifest.version,
+        enabled: false,
+      };
+    }
+    return null;
+  }
 }

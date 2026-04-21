@@ -48,6 +48,16 @@ export {
   type SkillServiceConfig,
 } from './skill-service';
 
+// Activation-time subpackage guard (ADR §5.2.10)
+export {
+  assertSubpackagesAvailable,
+  SkillActivationError,
+  type ISubpackageResolver,
+  type SubpackageInfo,
+  type SkillActivationIssue,
+  type SkillActivationIssueCode,
+} from './subpackage-guard';
+
 // Builtin skills
 export {
   registerBuiltins,
@@ -92,6 +102,17 @@ export {
   type IStagePersonaBinding,
   type StagePersonaBindingDeps,
 } from './stage-persona-binding';
+
+// Stage Guardian — non-blocking inspector alongside StageTracker
+// (ADR §5.4, §6.5).
+export {
+  createStageGuardian,
+  type IStageGuardian,
+  type StageGuardianConfig,
+  type StageGuardianIssue,
+  type StageGuardianIssueCode,
+  type StageGuardianListener,
+} from './stage-guardian';
 
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';

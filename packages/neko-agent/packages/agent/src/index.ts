@@ -229,6 +229,13 @@ export {
   // Skill Service
   SkillService,
   createSkillService,
+  // Activation-time subpackage guard (ADR §5.2.10)
+  assertSubpackagesAvailable,
+  SkillActivationError,
+  type ISubpackageResolver,
+  type SubpackageInfo,
+  type SkillActivationIssue,
+  type SkillActivationIssueCode,
   // Builtins
   registerBuiltins,
   builtinSkills,
