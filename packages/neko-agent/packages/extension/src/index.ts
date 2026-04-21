@@ -199,10 +199,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register commands
   registerCommands(context, chatViewProvider, services);
 
-  // Pipeline quick-start commands — surface QuickPick / right-click entries
+  // Creation quick-start commands — surface QuickPick / right-click entries
   // that funnel user intent into the Agent chat. Agent then picks the right
-  // Skill to orchestrate (no hard-coded flowA-F routing here).
-  registerPipelineCommands(context, chatViewProvider);
+  // Skill to orchestrate atomic tools (no hard-coded pipeline routing).
+  registerCreationQuickStartCommands(context, chatViewProvider);
 
   // Register document/media context menu commands (explorer/context)
   registerDocumentContextCommands(context, chatViewProvider);
@@ -372,9 +372,10 @@ function registerCommands(
   );
 
   // Note: neko.agent.startPipeline / neko.agent.startRoutedWorkflow were
-  // removed together with the workflow/ orchestration layer. Media creation
-  // flows are now expressed as Skills that the Agent orchestrates over
-  // atomic tools (GenerateImage / AddTimelineElement / ...).
+  // removed together with the workflow/ orchestration layer. Creation flows
+  // are now expressed as Skills that the Agent orchestrates over atomic
+  // tools (GenerateImage / AddTimelineElement / ...). See
+  // neko.agent.startCreation for the replacement entry point.
 
   // Generate Image (placeholder)
   context.subscriptions.push(
@@ -619,16 +620,9 @@ function registerCommands(
   // Executes a text-to-image generation via the configured platform media service
   // and returns the result as a base64 data URL.
   //
-  // @deprecated since Phase 6.3 (2026-04-19).  New code should go through the
-  // Workflow Orchestrator (routed pipelines + Plan mode) which produces the
-  // same generation via batch-generate stage + MediaGenerationService while
-  // recording provenance into NkPlan / .nkproj.upgradeHistory.  This command
-  // stays alive for:
-  //   (1) BatchGenerationScheduler legacy call path
-  //   (2) Programmatic callers that have not migrated to
-  //       `neko.agent.startRoutedWorkflow`
-  // Removal timeline: earliest next major release once orchestrator telemetry
-  // shows < 5% of generations flowing through this command.
+  // Legacy call path retained for BatchGenerationScheduler. Agent-initiated
+  // generation now flows through the SkillService's atomic GenerateImage tool
+  // rather than this command.
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.agent.generateForNode',
@@ -866,26 +860,19 @@ function registerCommands(
 }
 
 /**
- * Register pipeline commands — LLM-routed via Agent chat
+ * Register creation quick-start commands.
  *
- * Commands collect context (file path, user intent) and send to Agent.
- * Agent's Skill matching + LLM understanding selects the right Pipeline.
- * This way new Skill Pipelines are auto-supported without code changes.
+ * These commands collect user intent + source context (QuickPick / file URI)
+ * and hand it to the Agent chat. The Agent matches the appropriate Skill
+ * (via SDD-stage selection + atomic tool orchestration) — no hard-coded
+ * pipeline routing.
  */
-function registerPipelineCommands(
+function registerCreationQuickStartCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
 ): void {
-  // Start Creative Pipeline — QuickPick for intent, then send to Agent
-  //
-  // @deprecated since Phase 6.3 (2026-04-19).  Prefer
-  // `neko.agent.startRoutedWorkflow` which routes through the Workflow
-  // Orchestrator (FastProbe + Plan Mode) instead of an intent QuickPick.
-  // Both paths produce the same pipeline execution; the routed path adds
-  // provenance, reference chain, and render-mode selection.  Retained for
-  // users who disable `neko.workflow.orchestrator.enabled`.
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.pipeline.start', async () => {
+    vscode.commands.registerCommand('neko.agent.startCreation', async () => {
       const intent = await vscode.window.showQuickPick(
         [
           {
@@ -909,12 +896,11 @@ function registerPipelineCommands(
             value: 'Generate videos for these scenes',
           },
         ],
-        { placeHolder: 'Choose a creative pipeline...' },
+        { placeHolder: 'Choose a creation task...' },
       );
 
       if (!intent) return;
 
-      // Ask for source file
       const fileUris = await vscode.window.showOpenDialog({
         canSelectMany: false,
         filters: {
@@ -932,16 +918,13 @@ function registerPipelineCommands(
           true,
         );
       } else {
-        // No file selected — let user describe in chat
         await chatViewProvider.sendMessageToAssistant(intent.value, true);
       }
     }),
   );
 
-  // Start from File — Right-click context menu, auto-detect file type
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.pipeline.startFromFile', async (uri?: vscode.Uri) => {
-      // Resolve file path from context menu URI or active editor
+    vscode.commands.registerCommand('neko.agent.createFromFile', async (uri?: vscode.Uri) => {
       let filePath: string | undefined;
 
       if (uri) {
@@ -958,7 +941,6 @@ function registerPipelineCommands(
         return;
       }
 
-      // Build intent message based on file extension
       const ext = filePath.split('.').pop()?.toLowerCase();
       let intent: string;
 
@@ -985,11 +967,10 @@ function registerPipelineCommands(
     }),
   );
 
-  // Retry Failed — send retry intent to Agent
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.pipeline.retryFailed', async () => {
+    vscode.commands.registerCommand('neko.agent.retryCreation', async () => {
       await chatViewProvider.sendMessageToAssistant(
-        'Retry the failed scenes from my last pipeline',
+        'Retry the failed scenes from my last creation run',
         true,
       );
     }),

@@ -357,36 +357,6 @@ export interface Skill {
   enabled: boolean;
 
   // ===========================================================================
-  // Pipeline Configuration (Neko Suite extension)
-  // ===========================================================================
-
-  /**
-   * Pipeline flow ID to execute when this skill is activated
-   * @example "flowF", "flowA"
-   */
-  pipelineFlowId?: string;
-
-  /**
-   * Stages to skip in the pipeline
-   */
-  pipelineSkipStages?: string[];
-
-  /**
-   * Per-stage parameter overrides
-   */
-  pipelineParams?: Record<string, Record<string, unknown>>;
-
-  /**
-   * Pipeline hook configurations
-   */
-  pipelineHooks?: Array<{
-    stageName: string;
-    timing: 'before' | 'after';
-    action: string;
-    params?: Record<string, unknown>;
-  }>;
-
-  // ===========================================================================
   // Optional Slash Command Integration
   // ===========================================================================
 
@@ -793,34 +763,6 @@ export interface SkillFrontmatter {
    * @example ["**\/*.fountain", "**\/*.fdx"]
    */
   paths?: string[];
-
-  // ===========================================================================
-  // Pipeline Configuration (Neko Suite extension)
-  // ===========================================================================
-
-  /**
-   * Pipeline flow to execute when this skill is activated
-   * @example "flowF", "flowA"
-   */
-  pipeline?: string;
-
-  /**
-   * Stages to skip in the pipeline
-   * Comma-separated or YAML list
-   * @example "generateMusic,addSubtitles"
-   */
-  'pipeline-skip'?: string;
-
-  /**
-   * Per-stage parameter overrides (JSON string in simple YAML)
-   * @example "batchGenerate.style=anime,batchGenerate.resolution=1080p"
-   */
-  'pipeline-params'?: string;
-
-  /**
-   * Hook configurations (JSON string in simple YAML)
-   */
-  'pipeline-hooks'?: string;
 
   // ===========================================================================
   // Marketplace (injected by market install)
@@ -1398,12 +1340,11 @@ export function validateSkillManifest(
     }
   }
 
-  // Note: pipelines were intentionally dropped from the SkillManifest in
-  // B1.6. Pipelines are owned by subpackages (e.g. neko-engine's flowA-F);
-  // Skills reference them via the legacy `pipelineFlowId` field on the
-  // frontmatter. If P1 surfaces a real cross-Skill sharing need, a
-  // `pipelineRefs` field (URI → subpackage pipeline) will be reintroduced
-  // — not a re-definition of ops inside the manifest.
+  // Note: pipeline definitions live inside subpackages that own the
+  // underlying atomic tools. Skills are orchestration prompts, not
+  // pipeline definitions — the Agent drives execution via TOOL_NAMES.
+  // If a real cross-Skill sharing need emerges, introduce a
+  // `pipelineRefs` pointer field, not inline op definitions.
 
   // referencedAssets: require asset:// URI.
   if (manifest.referencedAssets !== undefined) {
@@ -1536,10 +1477,6 @@ export function createSkill(
     source,
     directoryPath,
     enabled: frontmatter.enabled ?? true,
-    // Pipeline fields
-    pipelineFlowId: frontmatter.pipeline,
-    pipelineSkipStages: parsePipelineSkip(frontmatter['pipeline-skip']),
-    pipelineParams: parsePipelineParams(frontmatter['pipeline-params']),
     // SDD metadata (§5.2.1) — pulled from manifest.json, not frontmatter.
     version: manifest?.version,
     domain: manifest?.domain,
@@ -1576,80 +1513,30 @@ export function createCommand(
 }
 
 /**
- * Parse pipeline-skip string into array
- * Accepts comma-separated values: "generateMusic,addSubtitles"
- */
-export function parsePipelineSkip(skipStr: string | undefined): string[] | undefined {
-  if (!skipStr) return undefined;
-  const items = skipStr
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  return items.length > 0 ? items : undefined;
-}
-
-/**
- * Parse pipeline-params string into nested Record
- * Accepts dot-notation: "batchGenerate.style=anime,batchGenerate.resolution=1080p"
- */
-export function parsePipelineParams(
-  paramsStr: string | undefined,
-): Record<string, Record<string, unknown>> | undefined {
-  if (!paramsStr) return undefined;
-
-  const result: Record<string, Record<string, unknown>> = {};
-  const pairs = paramsStr.split(',').map((s) => s.trim());
-
-  for (const pair of pairs) {
-    const eqIdx = pair.indexOf('=');
-    if (eqIdx === -1) continue;
-
-    const key = pair.slice(0, eqIdx).trim();
-    const value = pair.slice(eqIdx + 1).trim();
-    const dotIdx = key.indexOf('.');
-
-    if (dotIdx === -1) continue;
-
-    const stageName = key.slice(0, dotIdx);
-    const paramName = key.slice(dotIdx + 1);
-
-    if (!result[stageName]) {
-      result[stageName] = {};
-    }
-    // Try to parse as number/boolean
-    if (value === 'true') {
-      result[stageName][paramName] = true;
-    } else if (value === 'false') {
-      result[stageName][paramName] = false;
-    } else if (!isNaN(Number(value)) && value !== '') {
-      result[stageName][paramName] = Number(value);
-    } else {
-      result[stageName][paramName] = value;
-    }
-  }
-
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-/**
  * Extract support file references from markdown content
  * Matches: [Title](file.md) where file.md is a relative path
  */
 export function extractSupportFileRefs(content: string): string[] {
   const refs: string[] = [];
-  // Match markdown links: [text](path.md)
   const linkRegex = /\[([^\]]+)\]\(([^)]+\.md)\)/g;
   let match;
 
   while ((match = linkRegex.exec(content)) !== null) {
     const path = match[2];
-    // Only include relative paths (not URLs or absolute paths)
     if (path && !path.startsWith('http') && !path.startsWith('/')) {
       refs.push(path);
     }
   }
 
-  return [...new Set(refs)]; // Remove duplicates
+  const seen: Record<string, boolean> = {};
+  const unique: string[] = [];
+  for (const r of refs) {
+    if (!seen[r]) {
+      seen[r] = true;
+      unique.push(r);
+    }
+  }
+  return unique;
 }
 
 // =============================================================================

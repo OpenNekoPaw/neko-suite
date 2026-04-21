@@ -91,7 +91,6 @@ export class SkillAssetHandler implements IAssetHandler<'skill'> {
         description: skillFm.description,
         icon: skillFm.icon,
         model: skillFm.model,
-        pipeline: skillFm.pipeline,
         hasToolsRef: !!skillFm['tools-ref'],
       };
     } catch {

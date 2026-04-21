@@ -178,7 +178,6 @@ export const comicToStoryboardSkill: Skill = {
     // TODO(P1): implement when tools are available:
     // GenerateCharacter
   ],
-  pipelineFlowId: 'flowE', // Comic variant of storyboard-to-timeline
   icon: '📚',
   source: 'builtin',
   enabled: true,
