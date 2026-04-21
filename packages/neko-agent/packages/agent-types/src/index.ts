@@ -83,6 +83,9 @@ export type { FlowKind, FlowTransitionReason, FlowContext, FlowTransitionEvent }
 export { DEFAULT_FLOW_CONTEXT } from './flow';
 
 // Primitive pool (P1.5 — activation planner inputs/outputs)
+// @deprecated Replaced by SDD four-stage model (see ./stage.ts).
+//   Kept through PR2 of the refactor to let consumers migrate incrementally.
+//   Removed in PR3.
 export type {
   CreationPrimitive,
   ExecutionPrimitive,
@@ -92,6 +95,16 @@ export type {
   PrimitiveSkipReason,
   TaskShape,
 } from './primitive';
+
+// SDD four-stage model (agent-unified-workflow.md §4)
+// Replaces the primitive pool. Co-exists with it through PR2.
+export type {
+  SddStage,
+  StageSet,
+  StageActivationDecision,
+  StageSkipReason,
+  StageTaskShape,
+} from './stage';
 
 // TodoList primitive (P2 W5 — downshifted L1 primitive)
 export type { TodoStatus, TodoStatusCamel, TodoItem, TodoList } from './todo-list';

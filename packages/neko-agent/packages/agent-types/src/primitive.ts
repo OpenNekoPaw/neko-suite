@@ -1,6 +1,12 @@
 /**
  * Primitive Types — Dual-flow primitive pool
  *
+ * @deprecated Replaced by the SDD four-stage model in `./stage.ts`
+ *   (specify / plan / tasks / implement). See
+ *   docs/architecture/agent-unified-workflow.md §4.
+ *   Kept through PR2 of the refactor so existing consumers keep building;
+ *   will be deleted in PR3 of the SDD migration.
+ *
  * See: docs/architecture/dual-flow-architecture.md §3.2, §3.3, §3.4, §4.2
  *
  * Both flows are *composable primitive pools*, not linear pipelines. Each

@@ -1,6 +1,13 @@
-# 双流架构：创作流 + 执行流 + 审批体系
+> ⚠️ **此 ADR 已被简化版替代**
+>
+> 本文档为早期设计探索。"创作流/执行流"双流术语是对称美学诱导的过度抽象，实际是"条件激活的单一流程"。
+> 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + SDD 4 阶段对齐 Speckit）
+>
+> 本文档保留作为设计思考记录。
 
-**状态**: Proposed
+# 双流架构：创作流 + 执行流 + 审批体系（设计探索，已被替代）
+
+**状态**: Superseded by [agent-unified-workflow.md](./agent-unified-workflow.md)
 **日期**: 2026-04-20
 **关联范围**: neko-agent · neko-story · neko-canvas · neko-cut · neko-puppet · neko-model
 **关联文档**:
