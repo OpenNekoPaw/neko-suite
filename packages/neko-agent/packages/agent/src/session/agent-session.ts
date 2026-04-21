@@ -237,6 +237,27 @@ export class AgentSession implements IAgentSession {
             ? config.stageTracking.guardian
             : undefined;
         this._stageGuardian = createStageGuardian(this._stageTracker, guardianConfig);
+
+        // Wire ApprovalEngine.onDecision → guardian.noteApproval so the
+        // `approval-skipped` rule has a record of every gate that fired.
+        // Any resolution counts as "the gate was consulted" — what we're
+        // catching is Apply calls that bypass the engine entirely.
+        const guardian = this._stageGuardian;
+        if (this._approvalEngine) {
+          this._approvalEngine.onDecision((request) => {
+            if (request.subject?.kind) {
+              guardian.noteApproval(request.subject.kind);
+            }
+          });
+        }
+        // Wire execution.apply.committed → guardian.noteApply. The runner
+        // emits this event with `kind` = tool name; we feed the same key
+        // to the guardian so approval ↔ apply pairing works.
+        if (this._eventBus) {
+          this._eventBus.on('execution.apply.committed', (event) => {
+            guardian.noteApply(event.kind);
+          });
+        }
       }
 
       // Compose runner hooks with the guardian's tick. Keep runner hooks

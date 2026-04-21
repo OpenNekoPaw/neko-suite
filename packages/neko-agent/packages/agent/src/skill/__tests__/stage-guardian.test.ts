@@ -180,4 +180,88 @@ describe('StageGuardian', () => {
       expect(history[0]!.code).toBe('stage-out-of-order');
     });
   });
+
+  describe('approval-skipped', () => {
+    it('flags apply without a preceding approval', () => {
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.noteApply('tool:generate_image');
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.code).toBe('approval-skipped');
+      expect(issues[0]!.detail?.subject).toBe('tool:generate_image');
+      expect(issues[0]!.stage).toBe('implement');
+    });
+
+    it('does not flag when approval precedes apply for the same subject', () => {
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.noteApproval('tool:generate_image');
+      guardian.noteApply('tool:generate_image');
+
+      expect(issues.filter((i) => i.code === 'approval-skipped')).toHaveLength(0);
+    });
+
+    it('one approval gates one apply — the second apply flags', () => {
+      // Each Apply must be preceded by its own Approve. This catches the
+      // case where a skill approves once and then performs multiple
+      // destructive applies against the same tool.
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.noteApproval('tool:generate_image');
+      guardian.noteApply('tool:generate_image'); // ok
+      guardian.noteApply('tool:generate_image'); // unauthorised
+
+      expect(issues.filter((i) => i.code === 'approval-skipped')).toHaveLength(1);
+    });
+
+    it('approvals are per-subject; apply on a different subject still flags', () => {
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.noteApproval('tool:generate_image');
+      guardian.noteApply('tool:write_file');
+
+      expect(issues.filter((i) => i.code === 'approval-skipped')).toHaveLength(1);
+      expect(issues[0]!.detail?.subject).toBe('tool:write_file');
+    });
+
+    it('opt-out via enforceApprovalGate=false silences the check', () => {
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, {
+        now: () => 0,
+        enforceApprovalGate: false,
+      });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.noteApply('tool:generate_image');
+
+      expect(issues).toEqual([]);
+    });
+
+    it('after dispose, noteApproval / noteApply become no-ops', () => {
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      guardian.dispose();
+      guardian.noteApproval('tool:x');
+      guardian.noteApply('tool:x');
+
+      expect(issues).toEqual([]);
+    });
+  });
 });

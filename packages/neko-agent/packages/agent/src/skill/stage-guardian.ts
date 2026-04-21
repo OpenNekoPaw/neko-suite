@@ -30,7 +30,17 @@ import type { StageTracker } from './stage-tracker';
 // Types
 // =============================================================================
 
-export type StageGuardianIssueCode = 'stage-out-of-order' | 'stage-timeout';
+export type StageGuardianIssueCode =
+  | 'stage-out-of-order'
+  | 'stage-timeout'
+  /**
+   * An Apply was committed for a subject that the guardian never saw an
+   * approval decision for. Indicates the approval gate was bypassed —
+   * either the ApprovalEngine wasn't consulted, or the caller skipped
+   * `noteApproval()` on purpose. Guardian cannot distinguish; it only
+   * raises the observation.
+   */
+  | 'approval-skipped';
 
 export interface StageGuardianIssue {
   code: StageGuardianIssueCode;
@@ -60,6 +70,15 @@ export interface StageGuardianConfig {
    * that intentionally dispatch Implement as the entry point.
    */
   enforceOrderedEntry?: boolean;
+  /**
+   * Whether to check `noteApply()` against previously-seen `noteApproval()`
+   * calls and raise `approval-skipped` when an Apply's subject has no
+   * prior approval record. Defaults to true when approval wiring is
+   * available. Turn off for legacy call sites that bypass the engine
+   * intentionally (e.g. the platform lane that still routes through
+   * the old PermissionHooks flow).
+   */
+  enforceApprovalGate?: boolean;
 }
 
 // =============================================================================
@@ -75,6 +94,20 @@ export interface IStageGuardian {
    * afterAct hook). Noop when stageTimeoutMs is not configured.
    */
   tick(): void;
+  /**
+   * Record an approval decision for `subject`. Subsequent `noteApply()`
+   * calls for the same subject count as gated. Caller is typically a
+   * listener on ApprovalEngine.onDecision (any resolution — accept,
+   * reject, escalate — counts; what matters is the gate *fired*).
+   */
+  noteApproval(subject: string): void;
+  /**
+   * Record an Apply for `subject` and check that we saw an approval
+   * decision for it first. Raises `approval-skipped` when not, provided
+   * `enforceApprovalGate` is on. Caller is typically a listener on the
+   * `execution.apply.committed` channel.
+   */
+  noteApply(subject: string): void;
   /** Snapshot of issues raised since construction (capped to 64 most recent). */
   getHistory(): readonly StageGuardianIssue[];
   /** Drop listeners + tracker subscription. Idempotent. */
@@ -89,7 +122,9 @@ class StageGuardian implements IStageGuardian {
   private readonly _now: () => number;
   private readonly _stageTimeoutMs: number;
   private readonly _enforceOrderedEntry: boolean;
+  private readonly _enforceApprovalGate: boolean;
   private readonly _visited: Set<SddStage> = new Set();
+  private readonly _approvedSubjects: Set<string> = new Set();
   private readonly _listeners = new Set<StageGuardianListener>();
   private readonly _history: StageGuardianIssue[] = [];
   /** Stage currently under timeout watch (null when tracker is idle). */
@@ -104,6 +139,7 @@ class StageGuardian implements IStageGuardian {
     this._now = config.now ?? (() => Date.now());
     this._stageTimeoutMs = config.stageTimeoutMs ?? 0;
     this._enforceOrderedEntry = config.enforceOrderedEntry ?? true;
+    this._enforceApprovalGate = config.enforceApprovalGate ?? true;
 
     // Seed with the tracker's current stage so guardians built mid-run
     // don't re-flag a legitimately-Implement run as out-of-order.
@@ -144,6 +180,30 @@ class StageGuardian implements IStageGuardian {
     });
   }
 
+  noteApproval(subject: string): void {
+    if (this._disposed) return;
+    this._approvedSubjects.add(subject);
+  }
+
+  noteApply(subject: string): void {
+    if (this._disposed) return;
+    if (!this._enforceApprovalGate) return;
+    // Known subject → the gate fired first; clear it so a follow-up
+    // apply of the same subject requires a fresh approval. This is a
+    // small per-call ratchet; one approval buys one apply.
+    if (this._approvedSubjects.has(subject)) {
+      this._approvedSubjects.delete(subject);
+      return;
+    }
+    this._raise({
+      code: 'approval-skipped',
+      stage: this._watchStage ?? 'implement',
+      message: `Apply committed for subject "${subject}" without a prior approval decision`,
+      at: this._now(),
+      detail: { subject },
+    });
+  }
+
   getHistory(): readonly StageGuardianIssue[] {
     return this._history;
   }
@@ -155,6 +215,7 @@ class StageGuardian implements IStageGuardian {
       this._unsubscribe();
       this._unsubscribe = null;
     }
+    this._approvedSubjects.clear();
     this._listeners.clear();
   }
 

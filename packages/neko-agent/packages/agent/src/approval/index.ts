@@ -8,6 +8,7 @@ export {
   createApprovalEngine,
   type IApprovalEngine,
   type ApprovalEngineConfig,
+  type ApprovalDecisionListener,
 } from './approval-engine';
 
 export type {

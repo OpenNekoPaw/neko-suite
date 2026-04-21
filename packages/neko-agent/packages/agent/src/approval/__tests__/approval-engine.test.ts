@@ -129,6 +129,68 @@ describe('ApprovalEngine', () => {
     const res = await engine.evaluate(request());
     expect(res.reason).toBe('ok-pick');
   });
+
+  describe('onDecision', () => {
+    it('notifies listeners on auto-accept', async () => {
+      const pack: StrategyPack = {
+        name: 'always',
+        scope: 'imperative',
+        evaluate: () => ({
+          requestId: 'req-1',
+          resolution: 'auto-accept',
+          reason: 'ok',
+          decidedAt: 0,
+        }),
+      };
+      const engine = createApprovalEngine({ strategyPacks: [pack] });
+      const seen: Array<{ req: ApprovalRequest; res: ApprovalResponse }> = [];
+      engine.onDecision((req, res) => seen.push({ req, res }));
+
+      await engine.evaluate(request({ kind: 'tool:x' }));
+      await engine.evaluate(request({ kind: 'tool:y', id: 'req-2' }));
+
+      expect(seen).toHaveLength(2);
+      expect(seen[0]!.req.subject.kind).toBe('tool:x');
+      expect(seen[0]!.res.resolution).toBe('auto-accept');
+    });
+
+    it('notifies on the no-decision auto-reject path too', async () => {
+      const engine = createApprovalEngine();
+      const seen: ApprovalResponse[] = [];
+      engine.onDecision((_, res) => seen.push(res));
+
+      await engine.evaluate(request());
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.resolution).toBe('auto-reject');
+      expect(seen[0]!.reason).toBe('no-decision');
+    });
+
+    it('unsubscribe stops further notifications', async () => {
+      const engine = createApprovalEngine();
+      const seen: ApprovalResponse[] = [];
+      const unsub = engine.onDecision((_, res) => seen.push(res));
+
+      await engine.evaluate(request());
+      unsub();
+      await engine.evaluate(request({ id: 'req-2' }));
+
+      expect(seen).toHaveLength(1);
+    });
+
+    it('listener exceptions do not break the engine', async () => {
+      const engine = createApprovalEngine();
+      engine.onDecision(() => {
+        throw new Error('boom');
+      });
+      const seen: ApprovalResponse[] = [];
+      engine.onDecision((_, res) => seen.push(res));
+
+      await engine.evaluate(request());
+
+      expect(seen).toHaveLength(1);
+    });
+  });
 });
 
 describe('creationStrategyPack', () => {
