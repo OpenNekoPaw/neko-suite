@@ -223,6 +223,32 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       lastHadToolCalls = results.length > 0;
       lastHadError = results.some((r) => ('success' in r ? !r.success : false));
 
+      // Emit execution.apply.committed for every successful tool call in the
+      // batch. Each successful tool is an Apply from the Implement-stage
+      // persona's perspective — the resource boundary crossed. Consumers
+      // (StageGuardian.approval-skipped, audit logs, UI milestones) key off
+      // this channel. Errors do NOT emit; they route through the autoheal
+      // chain and appear as execution.autoheal.* instead.
+      //
+      // The `kind` field uses the `tool:<name>` canonical subject form so
+      // it matches ApprovalSubject.kind emitted by the ApprovalEngine.
+      // StageGuardian pairs approvals and applies by exact subject match.
+      if (deps.eventBus && results.length > 0) {
+        const activeRunId = deps.runStore.getActive()?.id;
+        if (activeRunId) {
+          const at = Date.now();
+          for (const result of results) {
+            if ('success' in result && !result.success) continue;
+            deps.eventBus.emit({
+              channel: EXECUTION_CHANNELS.APPLY_COMMITTED,
+              runId: activeRunId,
+              kind: `tool:${getSubject(result)}`,
+              at,
+            });
+          }
+        }
+      }
+
       if (!lastHadError) {
         state.nextObserveHint = 'normal';
         state.lastAutohealOutcome = null;

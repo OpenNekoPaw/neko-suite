@@ -368,4 +368,80 @@ describe('ReActLoopRunner hooks', () => {
       expect(state.nextObserveHint).toBe('retry');
     });
   });
+
+  describe('execution.apply.committed emission (B4)', () => {
+    it('emits one event per successful tool result in the batch', async () => {
+      const bus = createEventBus();
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      const events: Array<{ kind: string; runId: string }> = [];
+      bus.on(EXECUTION_CHANNELS.APPLY_COMMITTED, (e) => {
+        events.push({ kind: e.kind, runId: e.runId });
+      });
+
+      const results = [
+        { success: true, data: 'a', callId: 'c1', name: 'GenerateImage' },
+        { success: true, data: 'b', callId: 'c2', name: 'AddTimelineElement' },
+      ] as unknown as ToolResultWithMeta[];
+      await hooks.afterAct?.(results);
+
+      expect(events).toHaveLength(2);
+      expect(events[0]!.kind).toBe('tool:GenerateImage');
+      expect(events[1]!.kind).toBe('tool:AddTimelineElement');
+      expect(events[0]!.runId).toBe(store.getActive()!.id);
+    });
+
+    it('skips failed tools (they route through autoheal instead)', async () => {
+      const bus = createEventBus();
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      const events: string[] = [];
+      bus.on(EXECUTION_CHANNELS.APPLY_COMMITTED, (e) => events.push(e.kind));
+
+      const mixed = [
+        { success: true, data: 'ok', callId: 'c1', name: 'GenerateImage' },
+        { success: false, error: 'oom', data: null, callId: 'c2', name: 'GenerateVideo' },
+      ] as unknown as ToolResultWithMeta[];
+      await hooks.afterAct?.(mixed);
+
+      expect(events).toEqual(['tool:GenerateImage']);
+    });
+
+    it('no emission without an event bus', async () => {
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      const ok = [
+        { success: true, data: 'a', callId: 'c1', name: 'Read' },
+      ] as unknown as ToolResultWithMeta[];
+      // Should not throw even though no event bus is configured.
+      await hooks.afterAct?.(ok);
+    });
+
+    it('no emission on empty result batches', async () => {
+      const bus = createEventBus();
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+      const events: string[] = [];
+      bus.on(EXECUTION_CHANNELS.APPLY_COMMITTED, (e) => events.push(e.kind));
+      await hooks.afterAct?.([]);
+      expect(events).toEqual([]);
+    });
+  });
 });

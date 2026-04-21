@@ -591,5 +591,34 @@ describe('AgentSession', () => {
       session.dispose();
       expect(session.getStageGuardianIssues()).toEqual([]);
     });
+
+    it('apply-committed on the event bus feeds guardian noteApply (B4 end-to-end)', () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+        }),
+      );
+
+      const bus = session.getEventBus();
+      expect(bus).not.toBeNull();
+
+      // Apply fires without a prior approval on the engine — guardian
+      // should raise approval-skipped via the session wiring.
+      bus!.emit({
+        channel: 'execution.apply.committed',
+        runId: 'run-1',
+        kind: 'tool:GenerateImage',
+        at: 0,
+      });
+
+      const skipped = session.getStageGuardianIssues().filter((i) => i.code === 'approval-skipped');
+      expect(skipped).toHaveLength(1);
+      expect(skipped[0]!.detail?.subject).toBe('tool:GenerateImage');
+    });
   });
 });
