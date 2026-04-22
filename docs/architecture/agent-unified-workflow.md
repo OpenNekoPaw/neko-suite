@@ -1,32 +1,54 @@
 # Agent 统一工作流协议
 
-**状态**: Proposed（部分落地中）
+**状态**: Proposed（大部分已落地）
 **日期**: 2026-04-20
 
-## 落地进度快照（2026-04-21）
+## 落地进度快照（2026-04-22）
 
-| 动作 | ADR 章节 | 状态 | 提交 |
+### 已完成（17 / 22）
+
+| 动作 | ADR 章节 | 提交 |
+|-----|--------|----|
+| 删除 dual-flow 5 原语池 | §14.1 | PR1-PR3 |
+| FlowSwitcher → StageTracker | §6.5 | PR4 |
+| Skill Schema 扩展 SDD §5.2.1 | §5.2 | B1 |
+| manifest.json 从 frontmatter 分离 | §5.2 | B1.5 |
+| SkillManifest.pipelines 回落子包 | §5.7 | B1.6 |
+| SkillPhase DAG 字段 | §5.2 | W1.1 |
+| 删除 workflow/ 编排层（163 文件） | §11.1 | W1.2 |
+| 清理 Skill.pipeline* 残留 + neko.pipeline.* 命令 | §7.4 | W1.2.1 |
+| Persona skill id: flow-\* → \*-persona | §5.4 | W1.2.2 |
+| WorkflowRun → SddRun | §4 | W1.2.3 |
+| 内置 Skill prompt 原子化 | §5.3 | W1.3 |
+| L3 Mode 两档（AutoMode/PlanMode） | §3 | 已存在 |
+| SDD 4 阶段 StagePlanner（6 入口规则 §3.2） | §3.2 §4 | 已存在 |
+| requiredSubpackages 激活校验 | §5.2.10 | A1 |
+| StageGuardian 巡检器（out-of-order / timeout） | §6.5 | A1+A2 |
+| StageGuardian 接入 AgentSession | §6.5 | A3 |
+| Strategy pack 改名（creation/execution） | §6.1 | B1 |
+| ApprovalEngine.onDecision + approval-skipped 规则 | §6.1 §6.5 | B3 |
+| RetryEngine 文档化 + 示例 handler | §6.4 | B2 |
+| react-loop emit execution.apply.committed | §6.2 | B4 |
+| .neko/ 布局 + NekoPaths + events.jsonl | §7.4 | C1-3 |
+| audits.jsonl sink（ApprovalEngine bridge） | §7.4 | C4 |
+| TodoWrite tool + TodoList serializer | §5 §7.4 | C5 |
+| execution.step.completed + steps.jsonl | §6.2 §7.4 | B5+C6 |
+| Proposal type + serializer + ProposalWriteTool | §5 §7.5 | C7 |
+| ExecutionPlan type + serializer + PlanWriteTool | §4.2 §7.5 | C8 |
+| session-lock.json 并发防护 | §7.4 | C9 |
+| neko-assets + asset:// URI 集成 | §8 | 已存在 |
+
+### 未完成（5 / 22）
+
+| 动作 | ADR 章节 | 状态 | 待做 |
 |-----|--------|----|----|
-| 删除 dual-flow 5 原语池 | §14.1 | ✅ | PR1-PR3 |
-| FlowSwitcher → StageTracker | §6.5 | ✅ | PR4 |
-| Skill Schema 扩展 SDD §5.2.1 | §5.2 | ✅ | B1 |
-| manifest.json 从 frontmatter 分离 | §5.2 | ✅ | B1.5 |
-| SkillManifest.pipelines 回落子包 | §5.7 | ✅ | B1.6 |
-| SkillPhase DAG 字段 | §5.2 | ✅ | W1.1 |
-| 删除 workflow/ 编排层（163 文件） | §11.1 | ✅ | W1.2 |
-| 清理 Skill.pipeline* 残留 + neko.pipeline.* 命令 | §7.4 | ✅ | W1.2.1 |
-| Persona skill id: flow-\* → \*-persona | §5.4 | ✅ | W1.2.2 |
-| L3 Mode 两档（AutoMode/PlanMode） | §3 | ✅ | 已存在 |
-| SDD 4 阶段 StagePlanner（入口规则 §3.2） | §3.2 §4 | ✅ | 已存在 |
-| StageGuardian 巡检器 | §6.5 | ❌ | 待做 |
-| requiredSubpackages 激活校验 | §5.2.10 | ❌ 字段有/逻辑缺 | 待做 |
-| 内置 Skill prompt 原子化（W1.3） | §5.3 | ❌ | 待做 |
-| L0 ApprovalEngine 改名 + 双策略包 | §6.1 | ❌ 现 PermissionManager | 待做 |
-| L0 EventBus 统一 | §6.2 | 🟡 部分 | 待做 |
-| L0 RetryEngine 五级自愈 | §6.4 | 🟡 部分 | 待做 |
-| .neko/ 目录布局规范 | §7.4 | ❌ | 待做 |
-| preferences.md 用户偏好 | §9.3 | ❌ | 待做 |
-| CreatorTerms 术语映射 | §10 | ❌ | 待做 |
+| CreatorTerms 术语映射 + 双名 slash | §10 | ❌ | @neko/shared/i18n/terms.ts + slash 注册 |
+| preferences.md 用户偏好 合并 | §9.3 | ❌ | PreferenceService + project↔global merge |
+| preferences.md → ApprovalEngine 策略包 | §9 | ❌ | 依赖前项 |
+| Tool/Operation capabilityKind 统一 | §5.1 §5.3 | 🟡 | 纯类型层 discriminant |
+| TaskQueue 命名/抽象对齐 | §6.3 | 🟡 | 现 BackgroundTaskManager 改名或加 facade |
+| .nksession.md 会话摘要 | §7.4 | ⏳ | 需先理清 Journal/ConversationRecord/compact/memory 四合一（E 波） |
+| .neko/cache/*.json 派生索引 | §7.4 | ⏳ | 按需，UI 侧提出索引需求再补 |
 
 **关联范围**: neko-agent · neko-market · @neko/shared · 所有子包
 **关联文档**:
