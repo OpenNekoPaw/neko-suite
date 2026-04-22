@@ -9,6 +9,7 @@
 
 | ADR 章节 | 动作 | 提交 |
 |-------|-----|----|
+| §2 架构总览双视角 | §2.1 职责视角（意图/编排/执行/控制）前置为主入口 + §2.2 实现视角（L3/L2/L1/L0）+ §2.3 双视角交叉引用表 + §2.4 选视角指南 | 2026-04-23 新增 |
 | §3 L3 Mode 两档 | AutoMode / PlanMode | 已存在 |
 | §3.2 | StagePlanner 6 入口规则 | 已存在 |
 | §4 SDD 3 阶段 | Draft / Plan / Apply（合并原 Specify/Plan/Tasks/Implement）| Phase A（2026-04-22） |
@@ -69,21 +70,79 @@
 
 ---
 
-## 2. 四层整合架构
+## 2. 架构总览（双视角）
+
+本章以**两个互补视角**描述 neko-agent 的整体结构。优先读 §2.1 **职责视角**——它回答 "Agent 做什么事"，语义直观，适合 PM / 用户 / 新人建立心智模型。需要代码导航、依赖拓扑、调试路径锚点时再读 §2.2 **实现视角**。更细粒度的**约束视角**（六个控制平面）见 §11.6。
+
+| 视角 | 节 | 回答 | 典型读者 |
+|----|---|----|------|
+| **职责视角** | §2.1 | Agent 做什么事 | PM / 用户 / 新人 / Review 者 |
+| **实现视角** | §2.2 | 系统由什么构成 | 实现者 / 调试者 |
+| 交叉引用 | §2.3 | 同一组件在两视角的归位 | 任何人 |
+| 选视角指南 | §2.4 | 这个讨论该用哪个视角 | 任何人 |
+| **约束视角**（六平面）| §11.6 | 每个字段/组件属于哪个控制平面 | Review / 新功能设计 |
+
+### 2.1 职责视角（Responsibility View — 主入口）
+
+从"Agent 做什么事"看，SDD 三阶段天然呈现为**意图 / 编排 / 执行**三层，加上贯穿全程的**控制**层，构成 **3+1 职责分层**：前三层是时序的，控制层是正交的。
+
+```
+时间轴 ────────────────────────────────►
+
+┌──────────────┬──────────────┬──────────────┐
+│   意图层      │   编排层      │   执行层      │   时序维度
+│   Intent     │ Orchestration│  Execution   │   （Draft→Plan→Apply 顺序切换）
+│   (Draft)    │   (Plan)     │   (Apply)    │
+├──────────────┴──────────────┴──────────────┤
+│             控制层（Control）                 │   正交维度
+│  ApprovalEngine / RetryEngine /             │   （全程介入：gate / 巡检 /
+│  StageGuardian / ArtifactWatcher /          │     自愈 / 记录 / 打分）
+│  ArtifactObservationHooks +                 │
+│  Policy（规则）+ Evaluator（质量）           │
+└─────────────────────────────────────────────┘
+```
+
+#### 2.1.1 四层职责 × SDD 阶段映射
+
+| 职责层 | 回答的问题 | 对应 SDD 阶段 | 代码落地 |
+|----|----------|----------|--------|
+| **意图层**（Intent）| 用户想做什么？审美目标是什么？参考素材是什么？ | Draft | `creation-persona` + `.neko/drafts/draft-<runId>.md`（Markdown 叙事）+ `referenceChain[]` |
+| **编排层**（Orchestration）| 用什么顺序的工具调用达成意图？用户面看到的清单是什么？ | Plan | `ExecutionPlan.steps[]` + `Task.items[]` + `.neko/plans/plan-<runId>.md` + `.neko/tasks/task-<runId>.md` |
+| **执行层**（Execution）| 真正调用工具、产生副作用、返回观测 | Apply | `execution-persona`（预留）+ Operation 工具链 + ReAct `think→act→observe` loop + `steps.jsonl` |
+| **控制层**（Control）| 这事能不能做 / 何时做 / 失败怎么办 / 做得好不好 | 正交（全程）| L0 全套（ApprovalEngine / RetryEngine / StageGuardian / ArtifactWatcher / ArtifactObservationHooks）+ Policy + Evaluator |
+
+#### 2.1.2 控制层是横切关注点，不是第 4 阶段
+
+关键区分：
+
+- 前三层是**时序分层**——按事件触发顺序切换，有明确进入/退出边界
+- 控制层是**正交分层**——全程运行，对前三层的所有行为**监听、拦截、校准、记录、打分**
+
+这对应了 §6 L0 Infrastructure 的设计原则：**"默认全局透明，业务层无感知"**。控制层不是阶段切换的第四步，而是贯穿三个阶段的**同构正交维度**。
+
+#### 2.1.3 职责四层与业界通用词汇对齐
+
+- **意图层 / 编排层 / 执行层 / 控制层** 是 AI Agent 领域通用分法（LangGraph / CrewAI / AutoGen / OpenAI Assistants 都遵循类似结构），便于迁移理解。
+- 控制层进一步分解为 Policy（规则）+ Runtime（机制）+ Evaluator（质量）+ Memory（持久化）四个子平面，详见 §11.6。
+
+### 2.2 实现视角（Implementation View）
+
+从"系统由什么构成"看，neko-agent 是四层栈式架构，每层对应代码中独立的包/目录：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ L3 模式层（Mode）— 两档切换                                  │
 │                                                             │
 │       AutoMode（默认）    │    PlanMode（显式切换）         │
-│       按任务特征自动判定  │    强制走完整 SDD 4 阶段        │
+│       按任务特征自动判定  │    强制走完整 SDD 3 阶段        │
+│                          │    (Draft → Plan → Apply)       │
 └─────────────┬───────────────────────────────────────────────┘
               │ 模式选择决定启用哪些流程
               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ L2 流程层（Flow）— 对齐 Speckit SDD                          │
 │                                                             │
-│   AutoMode 简单任务:  直接 Step 循环                        │
+│   AutoMode 简单任务:  直接 Step 循环（Apply）               │
 │   AutoMode 复杂任务:  按入口判定规则进入 SDD 对应阶段       │
 │   PlanMode:           Draft → Plan → Apply                  │
 └─────────────┬───────────────────────────────────────────────┘
@@ -92,8 +151,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ L1 能力层（Capability）— 扁平原子池                          │
 │                                                             │
-│   Tool / Operation / ProposalTemplate / ReviewGate /        │
-│   ViewRecipe / StatusNarrator / Skill / Workflow            │
+│   Skill / Tool / Operation                                  │
+│   （CapabilityKind 判别式联合，参见 §5.1）                   │
 │   全部平级注册，子包通过单一 Provider 贡献                  │
 └─────────────┬───────────────────────────────────────────────┘
               │ 所有能力调用走底层基础设施
@@ -102,17 +161,58 @@
 │ L0 基础设施层（Infrastructure）— 默认全局透明               │
 │                                                             │
 │   ApprovalEngine │ EventBus │ TaskManager │ RetryEngine      │
-│   审批引擎       │ 事件总线 │ 任务管理 │ 重试+自愈         │
+│   StageTracker   │ StageGuardian │ ArtifactWatcher           │
+│   ArtifactObservationHooks │ PreferencesStrategyPack         │
 │                                                             │
 │   所有能力调用自动享受，业务层无需显式声明                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **四层职责正交**：
-- L3 是**用户选择**（三档模式）
-- L2 是**流程骨架**（条件激活 SDD 4 阶段）
-- L1 是**能力原子**（扁平注册 + 自由组合）
-- L0 是**基础设施**（默认全局透明）
+- **L3** 是**用户选择**（两档模式：AutoMode / PlanMode）
+- **L2** 是**流程骨架**（条件激活 SDD 3 阶段：Draft / Plan / Apply）
+- **L1** 是**能力原子**（扁平注册 + 自由组合）
+- **L0** 是**基础设施**（默认全局透明）
+
+**实现视角的详细展开**：§3（L3 Mode）/ §4（L2 Flow）/ §5（L1 Capability）/ §6（L0 Infrastructure）各专章。
+
+### 2.3 两视角的交叉引用
+
+同一组件在两视角下**可以有不同归位**，都是正确的——视角回答不同的问题。以下是关键组件的双视角归位对照，第三列附约束视角（§11.6）供交叉参考：
+
+| 组件 | 实现视角（§2.2）| 职责视角（§2.1）| 约束视角（§11.6）|
+|----|-----|-----|-----|
+| `creation-persona` | L1 能力（Skill） | 意图层（激活于 Draft）| Prompt |
+| `execution-persona`（预留）| L1 能力（Skill）| 执行层（激活于 Apply）| Prompt |
+| `ExecutionPlan.steps[]` | L2 流程产物 | 编排层 | Schema（强）|
+| `Draft.md` 正文 | L2 流程产物 | 意图层 | Prompt |
+| Operation 工具（cut.trim-clip 等）| L1 能力 | 执行层 | Schema（Operation 子类）|
+| Tool 工具（Read/Write/Grep）| L1 能力 | 意图层 + 编排层 | Schema（Tool 子类）|
+| `ApprovalEngine` | L0 基础设施 | 控制层（正交）| Runtime |
+| `RetryEngine` | L0 基础设施 | 控制层（正交）| Runtime |
+| `StageGuardian` | L0 基础设施 | 控制层（正交）| Runtime |
+| `ArtifactWatcher` | L0 基础设施 | 控制层（正交）| Runtime |
+| `ArtifactObservationHooks` | L0 基础设施 | 控制层（正交）| Runtime |
+| `.neko/preferences.md` | L0 基础设施配置源 | 控制层（正交）| Policy |
+| `Skill.compliance.approvalRules[]` | L1 能力元数据 | 控制层（正交）| Policy |
+| `~/.claude/.../memory/MEMORY.md` | 外部（Claude 内置）| 意图层输入 | Memory |
+| `.neko/memory.md` | L0 基础设施产物 | 意图层输入 | Memory |
+| `CreativeMemoryHooks` | L0 基础设施 | 控制层（正交，双向读写）| Memory |
+| `ConsistencyChecker` | L0 基础设施（未来接入）| 控制层（出口闸）| Evaluator |
+| `IntentValidator`（待建）| L0 基础设施 | 控制层（出口闸）| Evaluator |
+
+**解读**：L0 基础设施 ≈ 职责视角的控制层 ≈ 约束视角的 Runtime + Policy + Evaluator + Memory 四平面并集。实现视角把它们打包在一层；职责视角把它们看作横切；约束视角按消费者再细分。
+
+### 2.4 何时用哪个视角
+
+| 讨论场景 | 用哪个视角 | 原因 |
+|-------|-----|----|
+| 向用户 / PM / 新成员讲 Agent 做什么 | 职责视角（§2.1）| 自然语言 + 时序流 + 行业通用词汇 |
+| Review PR：这个改动归哪一层 | 职责视角（§2.1）| 边界清晰，时序+正交二分直接可判 |
+| 架构演进讨论：新加一个能力归哪里 | 职责视角（§2.1）→ 约束视角（§11.6） | 先判职责 / 再判具体控制平面 |
+| 代码组织、包结构、依赖拓扑 | 实现视角（§2.2）| L3/L2/L1/L0 对应实际 import 依赖方向 |
+| 调试追踪：这个事件源头在哪 | 实现视角（§2.2）| 代码路径锚点必需 |
+| 设计新字段、新组件、新扩展点 | 约束视角（§11.6）| 六个控制平面判定归位最精细 |
 
 ---
 
@@ -2396,6 +2496,7 @@ neko-agent/packages/agent/tools/core/
 | 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 | 2026-04-22 | **Phase B 闭环（Observation loop + 运行时 runId 注入）**：Phase B 初版的 `artifact.invalid` 事件只有 watcher emit 端，没有消费端——承诺的"AI 自修复"只存在于 persona 提示词里。新增三件修补。 **(1)** `narrator/milestone-tracker.ts` 的 `defaultClassify` 补齐 `ARTIFACT_WRITTEN` / `ARTIFACT_INVALID` 两个 case；`progress-narrator.ts` 的图标表同步（✎ / ⚠）。 **(2)** 新增 `artifact/artifact-observation-hooks.ts`（ExecutorHooks），订阅 `execution.artifact.invalid`，在下一次 `beforeThink` 把 buffered issues 渲染成 system 消息追加到 `context.messages`，让 AI 真正看到 watcher 诊断并自修复。`AgentSession` 把它链到 `runnerHooks` 后面（与 `stageGuardian.tick` 组合），并在 dispose 时解订阅。 **(3)** `StagePersonaBinding` 新增 `getRunId` 可选 deps——激活 persona 时把 prompt 里的 `{runId}` / `{stage}` 字面量替换为活 SddRun 的 id / 当前 stage；`creation-persona.ts` 正文的 artifact-file 合同从 `<runId>` 改为 `{runId}`，让 AI 读到的永远是已解析好的具体路径（`.neko/drafts/draft-tiktok-001.md`），不再依赖 LLM 去会话上下文里二次检索。新增 `artifact-observation-hooks.test.ts`（8 个 case：no-op / 单事件注入 / 多事件排序 / 多 issue 展开 / 溢出截断 / 二次 drain / dispose 断链 / null bus 容错）。Phase B 闭环完成后端到端流程：AI 写 draft → watcher 300ms 后校验 → invalid 事件注入下一 beforeThink → AI 看到 issues → 重写。 | Architecture Team |
 | 2026-04-22 | **§11.6 约束分级原则（Constraint Layering by Consumer）**：把 SDD 背后隐含的分层原则形式化为四级谱系——**Schema 约束**（程序消费，承载工具使用）、**提示词约束**（AI/人消费，承载语义/灵感/风格）、**Runtime 约束**（运行时消费，承载处理过程）、**Evaluator 约束**（打分器消费，承载质量评估）。Schema 约束内部再二分为 **Tool**（提示词型工具，轻 schema 入口 + 自由文本内容，如 Write/Read/Grep）与 **Operation**（操作型工具，全量严格 schema + 副作用元数据，如 cut.trim-clip/image.generate），判定依据是"AI 产出这个字段时稳定吗"。SDD 阶段与约束层天然对齐：Draft/Plan 只用提示词型工具（creation-persona.allowedTools 全是 Read/Write/Grep/ListDirectory/Glob），Apply 阶段才解锁操作型工具。补齐 6 个反模式（语义推到 schema / 工具参数留在提示词 / 过程状态进产物 / 质量硬编码为 field / Operation 留提示词参数 / Tool 加业务 schema）、5 步决策清单、现系统合规度表。此章可作为后续任何扩展的判断标尺——多模态意图、IntentValidator、Intent drift 检测等下一阶段工作都按本原则决定约束层归属（例：用户多模态输入 → 提示词层由 LLM 自然理解；Draft 正文 → 提示词层自由 markdown；referenceChain asset:// URI → schema 层索引；ArtifactWatcher 校验 → Runtime 层；未来 IntentValidator → Evaluator 层 LLM-judge）。 | Architecture Team |
+| 2026-04-23 | **§2 重构为双视角架构（方案 B 彻底倒置）**：原 §2 "四层整合架构" 开篇直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构后 §2 升级为 **"架构总览（双视角）"**，开篇前置**职责视角**（§2.1 意图 / 编排 / 执行 / 控制）作为主入口，原 L3/L2/L1/L0 内容下移为**实现视角**（§2.2）。新增 §2.3 **双视角交叉引用表**（18 个关键组件在实现/职责/约束三视角的并行归位——例：ArtifactWatcher = L0 基础设施 / 控制层 / Runtime 平面；creation-persona = L1 能力 / 意图层 / Prompt 平面；.neko/preferences.md = L0 配置 / 控制层 / Policy 平面），让读者能按任意视角进入并跳转。新增 §2.4 **选视角指南**（按讨论场景判定用哪个视角：讲 Agent 做什么用职责 / 代码导航用实现 / 设计新字段用约束）。同步修订：§3.1 "SDD 3 阶段" 在 §2 实现视角图中从 "SDD 4 阶段" 纠正为 "SDD 3 阶段 (Draft → Plan → Apply)"；§2 L1 能力层图示从历史的 "Tool / Operation / ProposalTemplate / ReviewGate / ViewRecipe / StatusNarrator / Skill / Workflow" 八类收敛为 "Skill / Tool / Operation" 三类（CapabilityKind 联合，与 §5.1 一致）；§2 L0 层图示补齐 StageTracker / StageGuardian / ArtifactWatcher / ArtifactObservationHooks / PreferencesStrategyPack 等现代化组件。这让读者从 ADR 第一眼看到的就是"**Agent 做什么事**"而非"**代码如何分层**"，降低入门摩擦；同时保留实现视角供调试 / 代码导航使用。与 §11.6 六层约束视角形成**三视角互补体系**（实现 / 职责 / 约束），任意视角都能进入并跳转。 | Architecture Team |
 | 2026-04-23 | **§11.6 扩展到六层控制平面**：把四级谱系扩展为**六层**，补齐长期存在于代码但未被正式命名的两层——**Memory**（决定"记得什么"，消费者是 AI 读 + 人审计/编辑，跨会话累积，实现有 `~/.claude/.../memory/MEMORY.md` + `.neko/memory.md` + CreativeMemoryHooks + 7 级创意压缩 + SharedMemoryStore）、**Policy**（决定"能不能做"，消费者是 Runtime + Evaluator 读取规则，声明式配置，实现有 `preferences.md` + preferencesStrategyPack + Skill.compliance + allowedTools + requiredSubpackages + Operation.costProfile）。用四字口诀作为章节开篇：**Prompt 决定"说什么" / Schema 决定"长什么样" / Runtime 决定"什么时候做" / Policy 决定"能不能做" / Memory 决定"记得什么" / Evaluator 决定"做得好不好"**。新增六层触发时序图（Policy 前置门 → Memory 双端读写 → Prompt·Schema·Runtime 中段流水 → Evaluator 出口闸）。补 5 条反模式（Policy 硬编码进 Runtime / Memory 写进产物 frontmatter / Policy 嵌入 Prompt persona / Evaluator 读 Policy 判合规 + 原有 6 条合计 11 条）、决策清单从 5 问扩到 7 问（新增"信息要跨会话存活吗"、"谁有权改这条约束"）、合规度审计表补齐 Memory/Policy 两块（preferences / Skill.compliance / costProfile / `.neko/memory.md` / CreativeMemoryHooks / SharedMemoryStore / 7 级创意压缩）。新增 §11.6.7 Memory 层详解（Memory vs Prompt 辨析表）、§11.6.8 Policy 层详解（Policy vs Runtime 辨析表："Runtime 是机制，Policy 是规则；Runtime 消费 Policy 而非拥有 Policy"）。此次扩展让"约束分级"不再是单纯"约束"概念，而是**六个并行控制平面**，所有现有组件都能清晰归类。 | Architecture Team |
 
 ---
