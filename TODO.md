@@ -50,6 +50,18 @@
 - [x] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
 - [x] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
 
+### neko-agent — SDD Unified Workflow (Phase A + B + B-closure complete ✅, 2026-04-22)
+> [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 4-stage (specify/plan/tasks/implement) collapsed to 3-stage (draft/plan/apply); dedicated DraftWrite/PlanWrite/TaskWrite tools replaced by generic Write + ArtifactValidator + ArtifactWatcher.
+- [x] **Phase A** — stage rename (specify/implement→draft/apply; tasks merged into plan); artifact rename (Proposal→Draft, TodoList→Task); file convention (`.nkproposal.md`/`.nktodo.md` extensions → `<kind>-<runId>.md` prefix under `.neko/drafts|plans|tasks/`); ExecutionPlan.proposalId→draftId; EventBus channel proposal-review→draft-review, creation.proposal.presented→creation.draft.presented, execution.todo.updated→execution.task.updated (commit c5d6f993)
+- [x] **Phase B** — delete DraftWriteTool/PlanWriteTool/TaskWriteTool; AI uses generic Write against `.neko/drafts|plans|tasks/*.md`; add `artifact/artifact-validator.ts` (pure frontmatter schema check) + `artifact-watcher.ts` (fs.watch + 300ms debounce + EventBus emit); new events `execution.artifact.written` / `execution.artifact.invalid`; AgentSession constructor + dispose wired (commit c5d6f993)
+- [x] **Phase B closure** — `artifact-observation-hooks.ts` (ExecutorHooks subscribes to `artifact.invalid`, buffers issues, drains into system message on `beforeThink` — closes the AI self-correct loop); narrator `milestone-tracker.defaultClassify` + progress-narrator icons cover artifact.*; `StagePersonaBinding.getRunId` substitutes `{runId}`/`{stage}` in persona systemPrompt at activation (commit b1cc3f71)
+- [ ] **P1** — `ExecutionMode 'ask'` vs `StageMode 'ask'` decoupling (current: StageMode shadows ExecutionMode which has per-tool-confirm UX; need permission/SDD boundary redesign)
+- [ ] **P1** — `git rm --cached packages/neko-agent/neko` (65MB arm64 binary tracked by accident; .gitignore rule already added)
+- [ ] **P2** — `.nksession.md` session summary (§7.4 ⏳) — requires E wave: Journal/ConversationRecord/compact/memory unification
+- [ ] **P2** — `.neko/cache/*.json` derived indices (draft-index.json consuming `artifact.written` events) — gated by UI-side query need
+- [ ] **P3** — 154 pre-existing TS errors (MCPTool/BashTool parameters mismatch, ToolParameters shape drift — predates the SDD refactor, independent cleanup)
+- [ ] **P3** — 5 pre-existing `fileOperationHandler.test.ts` failures (vscode mock divergence, unrelated to SDD refactor)
+
 ### neko-agent — Workflow Orchestration (Phase 1-6 complete ✅; 6 rounds of decoupling review ✅)
 > [Umbrella](./docs/architecture/workflow-orchestration.md) · progress see ROADMAP neko-agent section
 - [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5

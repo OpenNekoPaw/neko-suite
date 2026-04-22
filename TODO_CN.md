@@ -50,6 +50,18 @@
 - [x] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
 - [x] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
 
+### neko-agent — SDD 统一工作流（Phase A + B + B 闭环完成 ✅，2026-04-22）
+> [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 四阶段（specify/plan/tasks/implement）精简为三阶段（draft/plan/apply）；专用 DraftWrite/PlanWrite/TaskWrite 下线，由通用 Write + ArtifactValidator + ArtifactWatcher 取代。
+- [x] **Phase A** — 阶段重命名（specify/implement→draft/apply；tasks 并入 plan）；产物重命名（Proposal→Draft、TodoList→Task）；文件约定（`.nkproposal.md`/`.nktodo.md` 扩展名 → `.neko/drafts|plans|tasks/` 下的 `<kind>-<runId>.md` 前缀）；ExecutionPlan.proposalId→draftId；EventBus 频道 proposal-review→draft-review、creation.proposal.presented→creation.draft.presented、execution.todo.updated→execution.task.updated（commit c5d6f993）
+- [x] **Phase B** — 删除 DraftWriteTool/PlanWriteTool/TaskWriteTool；AI 改用通用 Write 对 `.neko/drafts|plans|tasks/*.md` 直写；新增 `artifact/artifact-validator.ts`（纯 frontmatter schema 校验）+ `artifact-watcher.ts`（fs.watch + 300ms 防抖 + EventBus emit）；新增事件 `execution.artifact.written` / `execution.artifact.invalid`；AgentSession 构造 + dispose 接线（commit c5d6f993）
+- [x] **Phase B 闭环** — `artifact-observation-hooks.ts`（ExecutorHooks 订阅 `artifact.invalid`，缓冲 issues，在 `beforeThink` 时注入 system message——闭合 AI 自修复循环）；narrator `milestone-tracker.defaultClassify` + progress-narrator 图标覆盖 artifact.*；`StagePersonaBinding.getRunId` 激活 persona 时把 systemPrompt 里的 `{runId}`/`{stage}` 替换为真实值（commit b1cc3f71）
+- [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（当前 StageMode 映射自 ExecutionMode，后者有 per-tool-confirm UX 语义；需要 permission/SDD 边界重设计）
+- [ ] **P1** — `git rm --cached packages/neko-agent/neko`（65MB arm64 二进制历史误提交；.gitignore 规则已添加）
+- [ ] **P2** — `.nksession.md` 会话摘要（§7.4 ⏳）— 依赖 E 波：Journal/ConversationRecord/compact/memory 四合一
+- [ ] **P2** — `.neko/cache/*.json` 派生索引（draft-index.json 消费 `artifact.written` 事件重建）— UI 侧有查询需求时再做
+- [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配、ToolParameters 形状漂移；先于 SDD 重构存在，独立清理）
+- [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致；与 SDD 重构无关）
+
 ### neko-agent — 工作流编排（Phase 1-6 完成 ✅；六轮解耦评审 ✅）
 > [Umbrella](./docs/architecture/workflow-orchestration.md)
 - [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
