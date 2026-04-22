@@ -58,6 +58,15 @@ export type {
   PreferenceCostThresholds,
 } from './preferences';
 
+// CapabilityKind — flat capability pool discriminant (ADR §5.1, §5.3)
+export type {
+  CapabilityKind,
+  CapabilityKindInput,
+  CapabilityKindSkillLike,
+  CapabilityKindToolLike,
+} from './capability-kind';
+export { capabilityKindOf, safeCapabilityKindOf } from './capability-kind';
+
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
   CreationChannel,

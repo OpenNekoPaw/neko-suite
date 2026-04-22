@@ -1,57 +1,44 @@
 # Agent 统一工作流协议
 
-**状态**: Proposed（大部分已落地）
+**状态**: Proposed（20 / 22 ADR 章节已落地）
 **日期**: 2026-04-20
 
 ## 落地进度快照（2026-04-22）
 
-### 已完成（17 / 22）
+### 已完成（按 ADR 章节计）
 
-| 动作 | ADR 章节 | 提交 |
-|-----|--------|----|
-| 删除 dual-flow 5 原语池 | §14.1 | PR1-PR3 |
-| FlowSwitcher → StageTracker | §6.5 | PR4 |
-| Skill Schema 扩展 SDD §5.2.1 | §5.2 | B1 |
-| manifest.json 从 frontmatter 分离 | §5.2 | B1.5 |
-| SkillManifest.pipelines 回落子包 | §5.7 | B1.6 |
-| SkillPhase DAG 字段 | §5.2 | W1.1 |
-| 删除 workflow/ 编排层（163 文件） | §11.1 | W1.2 |
-| 清理 Skill.pipeline* 残留 + neko.pipeline.* 命令 | §7.4 | W1.2.1 |
-| Persona skill id: flow-\* → \*-persona | §5.4 | W1.2.2 |
-| WorkflowRun → SddRun | §4 | W1.2.3 |
-| 内置 Skill prompt 原子化 | §5.3 | W1.3 |
-| L3 Mode 两档（AutoMode/PlanMode） | §3 | 已存在 |
-| SDD 4 阶段 StagePlanner（6 入口规则 §3.2） | §3.2 §4 | 已存在 |
-| requiredSubpackages 激活校验 | §5.2.10 | A1 |
-| StageGuardian 巡检器（out-of-order / timeout） | §6.5 | A1+A2 |
-| StageGuardian 接入 AgentSession | §6.5 | A3 |
-| Strategy pack 改名（creation/execution） | §6.1 | B1 |
-| ApprovalEngine.onDecision + approval-skipped 规则 | §6.1 §6.5 | B3 |
-| RetryEngine 文档化 + 示例 handler | §6.4 | B2 |
-| react-loop emit execution.apply.committed | §6.2 | B4 |
-| .neko/ 布局 + NekoPaths + events.jsonl | §7.4 | C1-3 |
-| audits.jsonl sink（ApprovalEngine bridge） | §7.4 | C4 |
-| TodoWrite tool + TodoList serializer | §5 §7.4 | C5 |
-| execution.step.completed + steps.jsonl | §6.2 §7.4 | B5+C6 |
-| Proposal type + serializer + ProposalWriteTool | §5 §7.5 | C7 |
-| ExecutionPlan type + serializer + PlanWriteTool | §4.2 §7.5 | C8 |
-| session-lock.json 并发防护 | §7.4 | C9 |
-| neko-assets + asset:// URI 集成 | §8 | 已存在 |
+| ADR 章节 | 动作 | 提交 |
+|-------|-----|----|
+| §3 L3 Mode 两档 | AutoMode / PlanMode | 已存在 |
+| §3.2 | StagePlanner 6 入口规则 | 已存在 |
+| §4 SDD 4 阶段 | StageTracker + StagePersonaBinding | PR4 |
+| §4.2 lineage | WorkflowRun → SddRun rename | W1.2.3 |
+| §5 Skill-as-package | SDD metadata / phases / pipelines 回落子包 | B1-B1.6 |
+| §5.2.10 | requiredSubpackages 激活校验 | A1 |
+| §5.3 | 内置 Skill prompt 原子化 | W1.3 |
+| §5.4 | StageTracker + StageGuardian | A1-A3 |
+| §5.7 三级懒加载 | LazySkill registry | 已存在 |
+| §6.1 ApprovalEngine | engine + creation/execution strategy pack | B1 / B3 |
+| §6.2 EventBus | typed channels + 三端 sink（events/audits/steps） | C1-C6 |
+| §6.3 TaskManager | 已是 TaskManager（文档对齐） | 已存在 |
+| §6.4 RetryEngine | 5-level autoheal + example handlers | B2 |
+| §6.5 StageTracker/Guardian | out-of-order / timeout / approval-skipped | A1-A3 / B3 |
+| §7 产物格式二分 | MD serializers + JSONL sinks | C1-C8 |
+| §7.4 `.neko/` 布局 | NekoPaths + logs/ / state/ / proposals / plans / todos | C1-C9 |
+| §7.5 Frontmatter | 最小化 + AI 所有权 | C5 / C7 / C8 |
+| §8 资产引用 | PathResolver + asset:// URI | 已存在 |
+| §9 审批治理 | preferencesStrategyPack + L0 不降级约束 | D |
+| §9.3 preferences.md | parser + 双层合并 + auto-load | D |
+| §10 术语一致性 | 撤销双轨，统一英文命令 | F |
+| §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
+| §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
-### ADR 决策变更（文档-only）
+**小计**：22 / 22 章节全部有落地证据（§10 为撤销式落地，§6.3 为命名对齐，其余均有代码/测试）。
 
-| 动作 | ADR 章节 | 状态 | 决策 |
-|-----|--------|----|----|
-| §10 术语双轨分层 → 统一英文命令 | §10 | ✅ 文档 | F 波：撤销 CreatorTerms + 双名 slash 提议，零代码改动 |
-
-### 未完成（4 / 22）
+### 已延后（非 ADR 阻塞）
 
 | 动作 | ADR 章节 | 状态 | 待做 |
 |-----|--------|----|----|
-| preferences.md 用户偏好 合并 | §9.3 | ❌ | PreferenceService + project↔global merge |
-| preferences.md → ApprovalEngine 策略包 | §9 | ❌ | 依赖前项 |
-| Tool/Operation capabilityKind 统一 | §5.1 §5.3 | 🟡 | 纯类型层 discriminant |
-| TaskQueue 命名/抽象对齐 | §6.3 | 🟡 | 现 BackgroundTaskManager 改名或加 facade |
 | .nksession.md 会话摘要 | §7.4 | ⏳ | 需先理清 Journal/ConversationRecord/compact/memory 四合一（E 波） |
 | .neko/cache/*.json 派生索引 | §7.4 | ⏳ | 按需，UI 侧提出索引需求再补 |
 
@@ -113,7 +100,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ L0 基础设施层（Infrastructure）— 默认全局透明               │
 │                                                             │
-│   ApprovalEngine │ EventBus │ TaskQueue │ RetryEngine       │
+│   ApprovalEngine │ EventBus │ TaskManager │ RetryEngine      │
 │   审批引擎       │ 事件总线 │ 任务管理 │ 重试+自愈         │
 │                                                             │
 │   所有能力调用自动享受，业务层无需显式声明                  │
@@ -755,24 +742,37 @@ Operation {
 
 **能力侧**：return 结果即可，框架自动 emit 事件。
 
-### 6.3 TaskQueue（任务管理）
+### 6.3 TaskManager（任务管理）
 
 **职责**：长短任务统一入口，异步任务托管。
 
+**代码命名**：`TaskManager`（`packages/neko-agent/packages/agent/src/task/
+task-manager.ts`）。ADR 早期版本写作 "TaskQueue" 是功能描述性命名；代码
+落地时选择 `TaskManager` 以反映职责广度（除入队出队，还负责 persistence、
+recovery、并发池、清理策略）。文档与代码自 2026-04-22 起统一使用 `TaskManager`。
+
 ```typescript
-interface TaskQueue {
-  enqueue(task: Task): TaskId;
-  cancel(id: TaskId): void;
-  getStatus(id: TaskId): TaskStatus;
+interface ITaskManager {
+  submit(input: TaskInput): Promise<string>;          // 返回 taskId
+  get(id: string): Promise<Task | undefined>;
+  cancel(id: string): Promise<void>;
+  list(status?: TaskStatus): Promise<Task[]>;
+  onProgress(id: string, callback: ProgressCallback): void;
+  waitForCompletion(id: string, timeoutMs?: number): Promise<Task>;
 }
 
 // 自动判定
 Operation.execute() →
   短任务（< 1s）: 同步返回
-  长任务（> 1s）: 返回 TaskId，后台执行
+  长任务（> 1s）: 返回 taskId，后台执行
 ```
 
-**TodoList 是 TaskQueue 的 UI 投影**（AI 产出 MD，TaskQueue 产出 JSONL 技术日志）。
+**TodoList 是 TaskManager 的 UI 投影**（AI 产出 MD，TaskManager 产出
+JSONL 技术日志）。
+
+**与 subagent/coordinator/task-pool 的区别**：task-pool 是 subagent
+协作内部的**无状态派单池**（claim-based、依赖感知），专用于多 subagent
+之间的工作分配，不是用户面向的异步任务 API。
 
 ### 6.4 RetryEngine（重试+自愈）
 
@@ -1763,7 +1763,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
   
   Implement:
     逐 task 执行，L0:
-      - TaskQueue 管理
+      - TaskManager 管理
       - RetryEngine 处理失败
       - EventBus 广播进度 → events.jsonl
       - steps.jsonl 记录每步
@@ -1823,7 +1823,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
   
   Implement:
     Apply 前再次 Approve（双重审批：Proposal 级 + Apply 级）
-    L0.TaskQueue 长任务模式
+    L0.TaskManager 长任务模式
     L0.EventBus 每分钟广播进度
 
 用户看到：审批确认 → 长进度 → 完成通知
@@ -1841,7 +1841,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 | 能力架构 | 模板驱动 | 工具注册 | 工具注册 | **扁平能力池 + 注册协议** |
 | 审批 | 无 | Permission | 无 | **L0 默认提供** |
 | 事件 | 无 | 有 | 有 | **L0 默认提供** |
-| 任务管理 | 无 | TodoWrite | 无 | **L0 TaskQueue + AI TodoList** |
+| 任务管理 | 无 | TodoWrite | 无 | **L0 TaskManager + AI TodoList** |
 | 重试 | 无 | 有 | 有 | **L0 五级自愈** |
 | 产物格式 | 全 MD | MD + JSON | MD + JSON | **二分：AI→MD / 程序→JSON** |
 
@@ -2045,6 +2045,7 @@ neko-agent/packages/agent/tools/
 | 2026-04-20 | Skill 格式定位为 neko 原生（不兼容 Claude Skills，仅为 neko 生态服务）：核心字段统一（name/description/version/domain 必填 + allowedTools/autoInvoke/phases/pipelines/referencedAssets/referencedSkills/compliance 可选）；强制 description 含 What+When 模式支持 AutoMode 自动触发；命名规则（≤64 字符/小写连字符/`neko-` 前缀保留官方）；载体两种并存（单文件 `.skill.md` 轻量 + 文件夹 `skill.md` + scripts/references/assets 复杂场景）；三级懒加载（元数据常驻/正文激活时加载/资源按需加载）；人格声明在正文不在 frontmatter；新增 autoInvoke 字段精细控制高危 Skill 禁用自动激活 | Architecture Team |
 | 2026-04-21 | 新增子包依赖声明 requiredSubpackages（以子包粒度而非命令粒度声明依赖），激活前校验避免运行时缺失；五级失效处理（必需缺失阻止激活/可选缺失降级/fallback message/version 不兼容提示升级/执行时 L0.RetryEngine 二次校验）；对齐成熟生态依赖管理（npm dependencies / VSCode extensionDependencies）；未来场景/Tool Group 维度作为扩展点保留不 pre-build；删除 DirectMode（AutoMode 已覆盖简单任务快路径 + PlanMode 承载深度参与，两档足够；Direct 调用作为独立的 Invocation Style 概念保留供未来扩展） | Architecture Team |
 | 2026-04-22 | §10 从 "术语双轨分层 + 双名 slash" 改为 "统一英文命令原则"（F 波文档决策）。撤销 CreatorTerms 映射表、撤销 `/specify`/`/构思` 双名注册、撤销 UI 呈现层与协议层的术语分离。保留 v1 原提议在 §10.7 作决策追溯。相关地方（§3.1 PlanMode 触发命令一栏）同步清理为仅 `/plan`。理由：一套英文术语同时用于文档 / 代码 / 日志 / UI / AI prompt 比"代码英文 + UI 中文"的双轨更有价值——一致性、可教学性、可搜索性、零翻译维护。 | Architecture Team |
+| 2026-04-22 | 收尾对齐（纯机械）：§5.1/§5.3 新增 `CapabilityKind` 判别式联合类型（`'skill' \| 'tool' \| 'operation'`）+ `capabilityKindOf()` 分类器。**Operation 不是独立接口** —— 代码层 Tool 和 Operation 共用 `Tool` interface，通过 `isDestructive` trait 区分（destructive=true ⇒ 'operation'）。Skill/Tool registry 仍然分离（查询路径不同），ADR "扁平池"是 Agent 组合视角的概念框架，不是数据结构强制。§6.3 TaskQueue 改称 TaskManager 匹配现有代码（`packages/agent/src/task/task-manager.ts`），说明 TaskManager 除入队出队还承担 persistence / recovery / 并发池职责。 | Architecture Team |
 
 ---
 
@@ -2060,7 +2061,7 @@ neko-agent/packages/agent/tools/
 | 纯 Markdown | Markdown + 二分格式（+ 程序日志 JSONL）|
 | 无审批 | L0 ApprovalEngine |
 | 无事件 | L0 EventBus |
-| 无任务管理 | L0 TaskQueue |
+| 无任务管理 | L0 TaskManager |
 | 无重试 | L0 RetryEngine |
 
 **差异说明**：Speckit 专注代码任务，无需复杂基础设施；neko-suite 是创作工具，需要 L0 处理成本/审批/长任务。
