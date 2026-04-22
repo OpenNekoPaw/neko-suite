@@ -38,11 +38,16 @@
 | session-lock.json 并发防护 | §7.4 | C9 |
 | neko-assets + asset:// URI 集成 | §8 | 已存在 |
 
-### 未完成（5 / 22）
+### ADR 决策变更（文档-only）
+
+| 动作 | ADR 章节 | 状态 | 决策 |
+|-----|--------|----|----|
+| §10 术语双轨分层 → 统一英文命令 | §10 | ✅ 文档 | F 波：撤销 CreatorTerms + 双名 slash 提议，零代码改动 |
+
+### 未完成（4 / 22）
 
 | 动作 | ADR 章节 | 状态 | 待做 |
 |-----|--------|----|----|
-| CreatorTerms 术语映射 + 双名 slash | §10 | ❌ | @neko/shared/i18n/terms.ts + slash 注册 |
 | preferences.md 用户偏好 合并 | §9.3 | ❌ | PreferenceService + project↔global merge |
 | preferences.md → ApprovalEngine 策略包 | §9 | ❌ | 依赖前项 |
 | Tool/Operation capabilityKind 统一 | §5.1 §5.3 | 🟡 | 纯类型层 discriminant |
@@ -130,7 +135,7 @@
 | 模式 | 默认性 | 触发方式 | 特征 |
 |-----|-------|---------|-----|
 | **AutoMode** | ✅ **默认** | 自动 | Agent 按任务特征自动选入口阶段 + 路径 |
-| **PlanMode** | 显式覆盖 | `/构思` / `/plan` 命令 | 强制走完整 SDD 4 阶段，深度参与 |
+| **PlanMode** | 显式覆盖 | `/plan` 命令 | 强制走完整 SDD 4 阶段，深度参与 |
 
 **两档足够**：AutoMode 已覆盖简单任务的快路径（无需单独的 DirectMode），PlanMode 承载需要深度参与的场景。早期设计的 DirectMode 与 AutoMode 功能重叠（AutoMode 已能自动判定简单任务走快路径）且"强制跳过审批"承诺无法完全兑现（critical 级 L0 强制拦截），已删除。
 
@@ -1504,84 +1509,92 @@ Agent 执行 Operation 时:
 
 ---
 
-## 10. 面向创作者的术语分层
+## 10. 命令与术语一致性原则
 
-### 10.1 分层原则
+**状态变更（2026-04-22）**：本章早期版本（v1）提出"术语双轨分层"——
+架构协议层保留英文工程术语，UI 呈现层走中文创作者术语 + 双名
+slash（`/specify` 与 `/构思` 并存）。**经实施评审，双轨方案被放弃**，
+改为本章当前版本（v2）的**统一命令原则**。v1 内容作为历史记录保留
+在 §10.7。
 
-**术语分双轨呈现**：
-- **架构协议层**（代码/Schema/ADR/文件扩展名）：保留工程术语对齐业界（Speckit/Claude Code）
-- **UI 呈现层**（slash command/按钮/标签/消息）：使用创作者母语术语降低心智负担
+### 10.1 核心原则：命令一致性优先于本地化
 
-### 10.2 术语映射表
+**一套术语，一套命令**——架构协议层与 UI 呈现层共用同一个英文名字。
+这比本地化更有价值：
 
-| 工程术语 | 创作者术语（UI） | Slash Command |
-|--------|--------------|------|
-| Specify | **构思** | `/构思` 或 `/specify` |
-| Plan | **规划** | `/规划` 或 `/plan` |
-| Tasks | **任务清单** | `/任务` 或 `/tasks` |
-| Implement | **执行** | `/执行` 或 `/implement` |
-| Proposal | **方案** | - |
-| ExecutionPlan | **执行规划** | - |
-| TodoList | **任务清单** | - |
-| Review | **审核** | - |
-| Approve | **通过** | - |
-| Reject | **打回** | - |
-| Refine | **细化** | - |
-| Fork | **分叉尝试** | - |
-| PlanMode | **方案模式** | `/方案` 或 `/plan-mode` |
-| AutoMode | **智能模式** | （默认）|
+- **一致性**：用户、文档、日志、代码、AI prompt 引用同一个标识符，
+  不会出现"文档说 Specify、UI 说构思、日志写 specify"的三重表达
+- **可教学性**：新用户学一次命令就够，不用在中文 slash 和英文 slash
+  之间切换；AI 文档示例能直接复制到 UI 执行
+- **可搜索性**：bug 报告、社区讨论、Git commit 引用的命令名与 UI 中
+  看到的完全一致，降低跨语境协作摩擦
+- **零翻译维护**：无需维护 CreatorTerms 映射表、无需处理术语演进时
+  的双向同步、无需为新语言重复实现
 
-### 10.3 实施方式
+### 10.2 权威命令表
 
-```typescript
-// @neko/shared/i18n/terms.ts
-export const CreatorTerms = {
-  stages: {
-    specify: '构思',
-    plan: '规划',
-    tasks: '任务清单',
-    implement: '执行',
-  },
-  artifacts: {
-    proposal: '方案',
-    executionPlan: '执行规划',
-    todoList: '任务清单',
-  },
-  modes: {
-    autoMode: '智能模式',
-    planMode: '方案模式',
-    directMode: '直出模式',
-  },
-  actions: {
-    approve: '通过',
-    reject: '打回',
-    refine: '细化',
-    fork: '分叉尝试',
-  },
-} as const;
-```
+SDD stage slash 命令在 AutoMode 下**由 §3.2 入口判定规则自动选择**，
+用户通常不需要显式命令；仅 PlanMode 显式切换命令公开：
 
-**Slash command 双名注册**：`/specify` 和 `/构思` 都指向同一 handler。
+| 功能 | 命令 | 说明 |
+|-----|-----|-----|
+| 切换到 PlanMode | `/plan` | 强制走完整 SDD 4 阶段（§3.1）|
+| 展开 Skill | `/<skill-name>` | 通过 `Skill.command` 字段注册 |
+| 引用已有产物 | `@proposal-<id>` / `@plan-<id>` / `@todo-<id>` | §3.2 规则 2，在 AutoMode 下触发对应阶段继续 |
 
-### 10.4 文件扩展名保留英文
+**无单独的 `/specify` `/tasks` `/implement` slash**——这些是 SDD
+**阶段**（stage），不是命令。它们由 StagePlanner 根据用户输入自动
+判定（§3.2 六条规则），从而保持"一个意图，一个 slash"的心智简单。
+PlanMode 下也由 §4.1 强制从 Specify 起步，不需要用户手动命令。
 
-文件扩展名（`.nkproposal.md` 等）**不本地化**——跨系统兼容性优先，路径给开发者看，UI 标签给用户看。
+### 10.3 工程术语表（唯一标识符集合）
 
-### 10.5 i18n 扩展
+代码、日志、文档、UI、API 统一使用以下英文术语：
 
-未来国际化时，术语走 i18n key：
-```
-'flow.specify.stage' → 'Specify' (en) / '构思' (zh) / '構想' (ja)
-```
+| 概念 | 术语 | 用途 |
+|-----|-----|-----|
+| SDD 阶段 | `Specify` / `Plan` / `Tasks` / `Implement` | 阶段名 |
+| 产物（声明式）| `Proposal` | Specify 产出，业务目标 |
+| 产物（命令式）| `ExecutionPlan` | Plan 产出，tool call 列表 |
+| 产物（清单）| `TodoList` | Tasks 产出，进度投影 |
+| 模式 | `AutoMode` / `PlanMode` | L3 模式档位 |
+| 动作 | `approve` / `reject` / `refine` / `fork` | Review 决策动词 |
 
-### 10.6 替换优先级
+**禁止**：
+- ❌ 双名 slash command 注册（`/specify` 与 `/构思` 并存）
+- ❌ `CreatorTerms` 之类的术语映射表
+- ❌ UI 层使用与代码层不同的显示名（"规划模式" vs "PlanMode"）
 
-| 优先级 | 场景 | 处理 |
-|------|-----|------|
-| P0 必须 | slash command、主 UI 标签、消息气泡 | 立即本地化 |
-| P1 建议 | Status 通知、审核界面 | 渐进本地化 |
-| P2 可选 | 设置页、帮助 | 按需 |
-| P3 保留英文 | 错误日志、代码注释、API 类型 | 不本地化 |
+**允许**：
+- ✅ 用户消息气泡、错误提示等**自由文本**内容按用户语言书写（这是
+  内容，不是命令 / 术语）
+- ✅ 文档正文说明可以用中文解释 Specify 做什么，但"Specify"这个
+  **词本身**始终以英文出现
+
+### 10.4 文件扩展名
+
+`.nkproposal.md` / `.nkplan.md` / `.nktodo.md` 等扩展名不本地化，
+跨系统兼容性优先。
+
+### 10.5 未来国际化（若启用）的边界
+
+如果未来确有非汉语用户群体需要，**只本地化自由文本**（按钮提示、
+错误文案、帮助说明），命令名与术语仍然保持英文。这与 VSCode、Git、
+npm 的做法一致：命令永远是英文，翻译只改描述。
+
+### 10.6 与 §3 的交叉约束
+
+ADR §3.1 "AutoMode / PlanMode 两档" 表格中 PlanMode 触发方式一栏
+曾写 `/构思` / `/plan`。该行在本章修订后应理解为：**仅 `/plan`**。
+`/构思` 不会被注册。修订点在本轮提交中同步到 §3.1。
+
+### 10.7 历史记录：v1 双轨分层（已废弃）
+
+v1 原提议内容如下，**不再实施**，仅作决策追溯：
+
+> 原 §10.1 分层原则：
+> - 架构协议层（代码/Schema/ADR/文件扩展名）：保留工程术语对齐业界
+> - UI 呈现层（slash command/按钮/标签/消息）：使用创作者母语术语降低心智负担
 
 ---
 
@@ -2031,6 +2044,7 @@ neko-agent/packages/agent/tools/
 | 2026-04-20 | 重大简化：L1 能力 kind 从 10+ 收敛为 3 核心（Skill/Tool/Operation），Workflow/Pipeline 内嵌到 Skill frontmatter（phases+pipelines 字段），AI 原生执行通过 L0.StageTracker/Guardian 注入+巡检；neko-market 简化为 Skills+Assets 两类分发（对齐 Claude Skills 生态）；§9.6 新增 Skill 作为合规审计载体（skillSha 证据链）；§11 新增轻量化设计原则（创作者易写/丰富度高/共享简单/AI 可维护）；代码量预计降 70% | Architecture Team |
 | 2026-04-20 | Skill 格式定位为 neko 原生（不兼容 Claude Skills，仅为 neko 生态服务）：核心字段统一（name/description/version/domain 必填 + allowedTools/autoInvoke/phases/pipelines/referencedAssets/referencedSkills/compliance 可选）；强制 description 含 What+When 模式支持 AutoMode 自动触发；命名规则（≤64 字符/小写连字符/`neko-` 前缀保留官方）；载体两种并存（单文件 `.skill.md` 轻量 + 文件夹 `skill.md` + scripts/references/assets 复杂场景）；三级懒加载（元数据常驻/正文激活时加载/资源按需加载）；人格声明在正文不在 frontmatter；新增 autoInvoke 字段精细控制高危 Skill 禁用自动激活 | Architecture Team |
 | 2026-04-21 | 新增子包依赖声明 requiredSubpackages（以子包粒度而非命令粒度声明依赖），激活前校验避免运行时缺失；五级失效处理（必需缺失阻止激活/可选缺失降级/fallback message/version 不兼容提示升级/执行时 L0.RetryEngine 二次校验）；对齐成熟生态依赖管理（npm dependencies / VSCode extensionDependencies）；未来场景/Tool Group 维度作为扩展点保留不 pre-build；删除 DirectMode（AutoMode 已覆盖简单任务快路径 + PlanMode 承载深度参与，两档足够；Direct 调用作为独立的 Invocation Style 概念保留供未来扩展） | Architecture Team |
+| 2026-04-22 | §10 从 "术语双轨分层 + 双名 slash" 改为 "统一英文命令原则"（F 波文档决策）。撤销 CreatorTerms 映射表、撤销 `/specify`/`/构思` 双名注册、撤销 UI 呈现层与协议层的术语分离。保留 v1 原提议在 §10.7 作决策追溯。相关地方（§3.1 PlanMode 触发命令一栏）同步清理为仅 `/plan`。理由：一套英文术语同时用于文档 / 代码 / 日志 / UI / AI prompt 比"代码英文 + UI 中文"的双轨更有价值——一致性、可教学性、可搜索性、零翻译维护。 | Architecture Team |
 
 ---
 
