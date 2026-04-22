@@ -209,8 +209,19 @@ export interface AgentSessionConfig {
   workspace?: {
     /** Project root (not the `.neko/` subdirectory itself). */
     root: string;
-    /** Platform fsOps (Node fs/promises wired by the extension layer). */
-    fsOps: import('../workspace').NdjsonFsOps;
+    /**
+     * Platform fsOps. Must implement NdjsonFsOps; when `readFile` is
+     * also provided (widened type, `readFile(path, 'utf-8')`), the
+     * session auto-loads `.neko/preferences.md` and registers a
+     * preferences strategy pack on the ApprovalEngine (ADR §9.3).
+     */
+    fsOps: import('../workspace').NdjsonFsOps & Partial<import('../workspace').PreferencesFsOps>;
+    /**
+     * Absolute path to the global `preferences.md` (typically
+     * `~/.neko/preferences.md`). When omitted, only the project layer
+     * is loaded. When the fsOps lacks `readFile`, this is ignored.
+     */
+    globalPreferencesPath?: string;
   };
 }
 

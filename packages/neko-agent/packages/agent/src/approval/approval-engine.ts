@@ -44,7 +44,19 @@ export type ApprovalDecisionListener = (
 ) => void;
 
 export interface IApprovalEngine {
+  /**
+   * Append a strategy pack. Packs registered later evaluate after
+   * earlier ones within the same scope. Use for default built-in
+   * packs; see `registerPriority()` for user-supplied preferences
+   * that must short-circuit the defaults.
+   */
   register(pack: StrategyPack): void;
+  /**
+   * Prepend a strategy pack so it evaluates before everything already
+   * registered in the same scope. Used by preferences packs (ADR §9.3)
+   * which need to short-circuit default creation / execution packs.
+   */
+  registerPriority(pack: StrategyPack): void;
   setUserPrompt(prompt: UserApprovalPrompt | undefined): void;
   evaluate(request: ApprovalRequest): Promise<ApprovalResponse>;
   /**
@@ -78,6 +90,10 @@ class ApprovalEngine implements IApprovalEngine {
 
   register(pack: StrategyPack): void {
     this._packs.push(pack);
+  }
+
+  registerPriority(pack: StrategyPack): void {
+    this._packs.unshift(pack);
   }
 
   setUserPrompt(prompt: UserApprovalPrompt | undefined): void {

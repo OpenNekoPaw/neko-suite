@@ -33,7 +33,13 @@ import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
-import { createApprovalEngine, executionStrategyPack, creationStrategyPack } from '../approval';
+import {
+  createApprovalEngine,
+  executionStrategyPack,
+  creationStrategyPack,
+  createPreferencesStrategyPacks,
+} from '../approval';
+import { loadPreferences } from '../workspace';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
 import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
@@ -138,6 +144,10 @@ export class AgentSession implements IAgentSession {
   // JSONL steps sink persisting step.completed events to
   // `.neko/logs/steps.jsonl`. Third filter view on the bus.
   private _stepsSink: import('../workspace').INdjsonEventSink | null = null;
+  // Loaded user preferences (ADR §9.3). null when workspace.fsOps
+  // didn't provide readFile, or when both layers are absent.
+  private _preferencesReady: Promise<void> | null = null;
+  private _preferencesWarnings: readonly string[] = [];
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -242,6 +252,37 @@ export class AgentSession implements IAgentSession {
       this._approvalEngine = createApprovalEngine({
         strategyPacks: [creationStrategyPack, executionStrategyPack],
       });
+
+      // User preferences (ADR §9.3). When workspace.fsOps provides
+      // `readFile`, load `.neko/preferences.md` + optional global
+      // counterpart and prepend a preferences strategy pack so user
+      // rules short-circuit the default packs. Async — callers that
+      // need determinism await `whenPreferencesReady()`.
+      if (
+        config.workspace &&
+        this._nekoPaths &&
+        typeof config.workspace.fsOps.readFile === 'function'
+      ) {
+        const engine = this._approvalEngine;
+        const paths = this._nekoPaths;
+        const fsOps = config.workspace.fsOps as import('../workspace').PreferencesFsOps;
+        const globalPath = config.workspace.globalPreferencesPath;
+        this._preferencesReady = loadPreferences({
+          paths,
+          ...(globalPath ? { globalPath } : {}),
+          fsOps,
+        }).then(({ merged, warnings }) => {
+          this._preferencesWarnings = warnings;
+          // Register prepended so preferences evaluate before defaults.
+          // registerPriority prepends; call in reverse order so the
+          // declarative pack ends up before the imperative pack (both
+          // before the built-in packs).
+          const packs = createPreferencesStrategyPacks(merged.effective);
+          for (let i = packs.length - 1; i >= 0; i--) {
+            engine.registerPriority(packs[i]!);
+          }
+        });
+      }
 
       // ApprovalEngine → bus bridge. Every finalised decision lands on
       // `execution.approve.decided` so audit sinks (ADR §7.4) can
@@ -769,6 +810,30 @@ export class AgentSession implements IAgentSession {
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
       this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
     ]);
+  }
+
+  /**
+   * Await preferences.md load completion (ADR §9.3). Resolves when
+   * both layers have been read and the preferences strategy pack is
+   * registered on the ApprovalEngine. Returns immediately when the
+   * session was constructed without workspace readFile support.
+   *
+   * Tests and deterministic UI flows should await this before
+   * issuing approval requests that rely on user rules; production
+   * code can fire-and-forget since the defaults handle the pre-load
+   * window correctly (ADR §9.4 preferences can only strengthen, not
+   * downgrade — pre-load defaults are safe).
+   */
+  async whenPreferencesReady(): Promise<void> {
+    if (this._preferencesReady) await this._preferencesReady;
+  }
+
+  /**
+   * Diagnostics from the preferences parser (both layers). Useful for
+   * surfacing "invalid bullet" / "unknown section" warnings in the UI.
+   */
+  getPreferencesWarnings(): readonly string[] {
+    return this._preferencesWarnings;
   }
 
   clearHistory(): void {

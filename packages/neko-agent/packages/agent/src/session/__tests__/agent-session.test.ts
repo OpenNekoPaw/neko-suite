@@ -828,6 +828,141 @@ describe('AgentSession', () => {
       expect(session.getNekoPaths()).toBeNull();
     });
 
+    it('preferences.md auto-loads and forces escalation on alwaysApprove match (D4)', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        async readFile(path: string): Promise<string> {
+          if (path === '/tmp/proj/.neko/preferences.md') {
+            return `---\nkind: user-preferences\nscope: project\nversion: 1\n---\n\n## Always approve\n- tool:GenerateImage\n`;
+          }
+          const err = new Error('ENOENT') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf', 'run-1');
+
+      await session.whenPreferencesReady();
+
+      // Default execution pack would auto-accept idempotent + non-destructive.
+      // Preferences alwaysApprove now forces escalate.
+      const res = await session.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: {
+          kind: 'tool:GenerateImage',
+          label: 'Generate image',
+          destructive: false,
+          idempotent: true,
+        },
+        id: 'req-1',
+        at: 0,
+      });
+      expect(res.resolution).toBe('escalate');
+      expect(res.reason).toBe('preferences-always-approve');
+    });
+
+    it('preferences.md absent → whenPreferencesReady resolves, no pack registered', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        async readFile(): Promise<string> {
+          const err = new Error('ENOENT') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      await session.whenPreferencesReady();
+      expect(session.getPreferencesWarnings()).toEqual([]);
+    });
+
+    it('workspace without readFile → preferences disabled, whenPreferencesReady resolves', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        // no readFile
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      await session.whenPreferencesReady();
+      expect(session.getPreferencesWarnings()).toEqual([]);
+    });
+
+    it('preferences cannot downgrade L0 critical gate (destructive + non-idempotent)', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        async readFile(path: string): Promise<string> {
+          if (path === '/tmp/proj/.neko/preferences.md') {
+            return `## Auto approve\n- tool:DeleteAll\n`;
+          }
+          const err = new Error('ENOENT') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'implement',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf', 'run-1');
+      await session.whenPreferencesReady();
+
+      // User said "auto approve tool:DeleteAll" but the subject is
+      // destructive + non-idempotent. Preferences refuses to bypass
+      // the L0 gate; execution pack auto-rejects.
+      const res = await session.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: {
+          kind: 'tool:DeleteAll',
+          label: 'Delete',
+          destructive: true,
+          idempotent: false,
+        },
+        id: 'req-1',
+        at: 0,
+      });
+      expect(res.resolution).toBe('auto-reject');
+    });
+
     it('apply-committed on the event bus feeds guardian noteApply (B4 end-to-end)', () => {
       const { registry, service } = minimalStageTrackingConfig();
       const session = new AgentSession(

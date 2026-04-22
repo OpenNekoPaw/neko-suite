@@ -50,6 +50,14 @@ export type {
   ExecutionPlanStepStatus,
 } from './execution-plan';
 
+// UserPreferences — approval governance input (ADR §9.3)
+export type {
+  UserPreferences,
+  MergedPreferences,
+  PreferenceSubjectRule,
+  PreferenceCostThresholds,
+} from './preferences';
+
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
   CreationChannel,

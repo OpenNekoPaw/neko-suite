@@ -37,3 +37,17 @@ export {
 export { serializeTodoList } from './todo-markdown';
 export { serializeProposal } from './proposal-markdown';
 export { serializeExecutionPlan } from './plan-markdown';
+
+export {
+  parsePreferences,
+  emptyPreferences,
+  mergePreferences,
+  type ParseResult as PreferencesParseResult,
+} from './preferences-parser';
+
+export {
+  loadPreferences,
+  type PreferencesLoaderConfig,
+  type PreferencesFsOps,
+  type LoadResult as PreferencesLoadResult,
+} from './preferences-loader';
