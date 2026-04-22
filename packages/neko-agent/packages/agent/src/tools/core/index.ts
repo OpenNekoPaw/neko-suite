@@ -28,3 +28,4 @@ export { createCoreTools, type CoreToolsOptions } from './core-tools';
 export { MemoryWriteTool } from './memory-write-tool';
 export { TodoWriteTool, type TodoWriteToolOptions } from './todo-write-tool';
 export { ProposalWriteTool, type ProposalWriteToolOptions } from './proposal-write-tool';
+export { PlanWriteTool, type PlanWriteToolOptions } from './plan-write-tool';

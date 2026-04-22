@@ -36,3 +36,4 @@ export {
 
 export { serializeTodoList } from './todo-markdown';
 export { serializeProposal } from './proposal-markdown';
+export { serializeExecutionPlan } from './plan-markdown';

@@ -45,6 +45,8 @@ export {
   type TodoWriteToolOptions,
   ProposalWriteTool,
   type ProposalWriteToolOptions,
+  PlanWriteTool,
+  type PlanWriteToolOptions,
 } from './core';
 
 // Re-export types and constants from shared for convenience

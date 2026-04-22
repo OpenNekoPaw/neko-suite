@@ -42,6 +42,14 @@ export { roundSummaryFromDecision } from './sdd-run';
 // Proposal — Specify-stage artifact (ADR §5.2, §7.5)
 export type { Proposal, ProposalStatus } from './proposal';
 
+// ExecutionPlan — Plan-stage artifact (ADR §4.2, §5, §7.5)
+export type {
+  ExecutionPlan,
+  ExecutionPlanStatus,
+  ExecutionPlanStep,
+  ExecutionPlanStepStatus,
+} from './execution-plan';
+
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
   CreationChannel,
