@@ -31,6 +31,7 @@
 | §9.3 preferences.md | parser + 双层合并 + auto-load | D |
 | §10 术语一致性 | 撤销双轨，统一英文命令 | F |
 | §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
+| §11.6 约束分级原则 | 四级约束谱系 + Tool/Operation 二分 + 反模式 + 决策清单 | 2026-04-22 新增 |
 | §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
 **小计**：22 / 22 章节全部有落地证据。2026-04-22 Phase A 将四阶段合并为三阶段（Draft/Plan/Apply），并把 `.nk*.md` 扩展名迁移为 `<kind>-<runId>.md` 前缀方案。
@@ -1726,6 +1727,172 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 3. **MD + Frontmatter 格式**（人机共读，AI 可改）
 4. **market 以 Skill 为核心**（不碎片化分发）
 
+### 11.6 约束分级原则（Constraint Layering by Consumer）
+
+**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错约束层是 SDD 最常见的反模式。
+
+#### 11.6.1 四级约束谱系
+
+| 约束类型 | 消费者 | 承载的创作维度 | 实现工具 | 典型产物 / 组件 |
+|-------|------|------------|--------|-------------|
+| **Schema 约束** | 程序 / 工具 | 工具使用 | TypeScript types、JSON Schema | `Tool` 入口参数、`Operation` 全量参数、Draft frontmatter 索引字段、`ExecutionPlan.steps[]` |
+| **提示词约束** | AI / 人 | 语义 / 灵感 / 风格 | persona markdown、章节惯例 | Draft 正文（`## Intent` / `## References` / `## Approach`）、`ExecutionPlan.rationale`、`Task.activeForm` |
+| **Runtime 约束** | 运行时 | 处理过程 | ApprovalEngine、RetryEngine、StageGuardian、ArtifactWatcher、ArtifactObservationHooks | 执行前 gate + 执行中巡检 + 执行后自愈 |
+| **Evaluator 约束** | 质量打分器 | 质量评估 | LLM-as-judge、美学打分、ConsistencyChecker | `verdict: pass \| warn \| fail` + 结构化 issues + 修复建议 |
+
+#### 11.6.2 Schema 约束的二分（Tool vs Operation）
+
+Schema 约束内部按**载荷性格**再二分。两个子类走不同的 schema 严格度：
+
+| 子类 | 载荷性格 | Schema 严格度 | 用途 | §5.1 对应 |
+|-----|-------|-----------|----|---------|
+| **提示词型工具**（Tool）| 轻 schema（path/query）+ **自由文本内容** | 只约束入口，`content` 字段保持任意 markdown/prose | 读写 AI/人共读的产物、信息查询 | `tool` |
+| **操作型工具**（Operation）| 强 schema（严格类型化参数 + 副作用元数据）| 每个字段的类型、范围、枚举都不可降级 | 改变系统状态、产生不可逆成本 | `operation` |
+
+**具体对照**：
+
+```typescript
+// 提示词型工具 — 入口是 schema，内容是自由文本
+Write({
+  file_path: "drafts/draft-001.md",     // schema
+  content: "# TikTok Hero Cut\n\n..."   // free markdown
+})
+Read({ file_path: "..." })              // 返回文本给 AI 读
+Grep({ pattern: "asset://.*" })         // 输出是文本片段
+
+// 操作型工具 — 全量严格
+trimClip({
+  clipId: "shot-3",     // string id
+  startMs: 1500,        // number, NOT "about 1.5s"
+  durationMs: 800,      // number
+})
+exportMp4({
+  resolution: "1080p",  // enum
+  codec: "h264",        // enum
+  bitrate: 8_000_000,   // number
+  reversible: false,    // 成本锚点 → ApprovalEngine 强制拦截
+})
+```
+
+**判定依据**：*AI 产出这个字段时稳定吗？*
+- 不稳定（含创作语义 / 审美判断 / 情绪表达）→ 推向 Tool 的内容字段（提示词层）
+- 稳定（数值 / 枚举 / ID）→ 可以进 Operation schema（参数层）
+
+#### 11.6.3 SDD 阶段与约束层的天然对齐
+
+```
+阶段          主约束层                 allowedTools 子类
+──────       ────────                 ────────────────
+Draft  ────► 提示词约束（AI/人共读）   ────► 提示词型工具（Read/Write/Grep/ListDirectory/Glob + 只读查询）
+Plan   ────► 提示词约束 + schema 入口 ────► 提示词型工具（ExecutionPlan.steps 是 schema，rationale 是提示词）
+Apply  ────► Schema + Runtime 约束    ────► 操作型工具（cut.*/canvas.*/image.*/audio.* + export.*）+ 全套 L0 基础设施
+```
+
+**creation-persona 当前的 `allowedTools` 全是提示词型**（Read/Write/LIST_DIRECTORY/GLOB/GET_TIMELINE_INFO/LIST_TIMELINE_ELEMENTS/GET_ELEMENT_INFO），**没有任何 Operation**。这条边界不是偶然，是约束分级的必然结论：Draft/Plan 阶段只做"产物叙述 + 信息读取"，操作型工具全部延后到 Apply 阶段由 execution-persona 解锁。
+
+#### 11.6.4 反模式（禁止跨层越界）
+
+❌ **把语义/风格推到 schema**
+```yaml
+# 错 — intent 是 AI/人共读的创作叙事，不应拆成 YAML 字段
+intent:
+  purpose: viral-short-video
+  emotion:
+    arc: rising
+    keywords: [excited, confident]
+  success_criteria:
+    - hook_within_3s
+```
+正确做法：`intent` 保持自由 markdown 叙述，章节惯例（`## Intent` / `## Success criteria`）让人和 AI 都能快速定位。
+
+❌ **把工具使用留在提示词**
+```yaml
+# 错 — tool args 用自然语言描述，程序无法解析
+- call: trim the opening clip to about 1.5 seconds with some padding
+```
+正确做法：Operation 必须全量 JSON Schema，tool name + args 机器可 parse。
+
+❌ **把处理过程放到 schema**
+```yaml
+# 错 — retry 策略写进产物 frontmatter 是 runtime 关注越界
+---
+retryStrategy:
+  maxAttempts: 3
+  backoff: exponential
+---
+```
+正确做法：retry 属 Runtime 约束，由 RetryEngine 根据 Operation 的 `costProfile` 自动决策；产物文件不承载这类"此刻状态"。
+
+❌ **把质量评估做 field check**
+```yaml
+# 错 — 用布尔 schema 字段判定创作质量
+status:
+  hookStrong: true
+  pacingCorrect: true
+```
+正确做法：质量评估由 Evaluator 约束承担，LLM-as-judge 读 Draft + 成品，输出自然语言诊断。
+
+❌ **给 Operation 留"提示词式"参数**
+```typescript
+// 错 — style 是提示词侵入 schema
+generateImage({
+  prompt: "A cat",
+  style: "约 30% 冷色调，带轻微颗粒感",  // ← 无法程序化验证
+})
+```
+正确做法：可量化部分进 schema（`coldRatio: 0.3`），审美描述留在 `prompt` 字符串内部。
+
+❌ **给 Tool 加严格业务 schema**
+```typescript
+// 错 — 过度结构化让 AI 写起来反而不稳定
+Write({
+  file_path: "...",
+  content: {
+    title: string,
+    sections: [{ heading: string, paragraphs: string[] }],
+  }
+})
+```
+正确做法：`content: string`，约定 markdown 章节，AI 产出稳定、人类可读。
+
+#### 11.6.5 决策清单
+
+新设计产物或组件时，按顺序问：
+
+1. **谁消费这份输出？** —— 程序/AI+人/运行时/打分器
+2. **消费者需要的颗粒度？** —— 整块 markdown / 结构化字段 / 状态机位 / 诊断对象
+3. **AI 产出这个字段稳定吗？** —— 不稳定 → 提示词层；稳定 → schema 层
+4. **这个约束有可逆成本吗？** —— 有 → Runtime 约束（Approval）；无 → 可直接执行
+5. **质量能用规则判吗？** —— 能 → schema / runtime；不能 → Evaluator
+
+选错层的代价：
+- 语义被 schema 切成碎片 → AI 产出不稳 + 人类不可读
+- 参数留在提示词 → 程序不可 parse + 每轮重新解释
+- 过程状态混进产物 → 产物文件噪音 + 无法回放
+- 质量硬编码 → 创作灵活度丢失 + 新场景要改 schema
+
+#### 11.6.6 现系统合规度
+
+SDD 3-stage 在设计上已符合约束分级原则：
+
+| 产物 / 组件 | 主约束层 | 合规 |
+|---------|------|----|
+| Draft.md 正文（intent/approach/artifact）| 提示词 | ✅ 自由 markdown |
+| Draft.md frontmatter（id/kind/status/domain/ts/referenceChain）| schema（轻）| ✅ 只放索引字段 |
+| ExecutionPlan.md `steps[]` | schema（强）| ✅ tool name + args 结构化 |
+| ExecutionPlan.md rationale / notes | 提示词 | ✅ 自由文本 |
+| Task.md items[] content / activeForm | 提示词 | ✅ 叙述 |
+| Task.md items[] status | schema（轻）| ✅ 枚举 |
+| ApprovalEngine / RetryEngine / StageGuardian | Runtime | ✅ 纯运行时 |
+| ArtifactWatcher + ArtifactValidator | Runtime + schema（仅 frontmatter）| ✅ 不侵犯正文 |
+| ArtifactObservationHooks | Runtime | ✅ bus → context 桥 |
+| creation-persona.allowedTools | Schema 约束 — Tool 子类 | ✅ 全是提示词型 |
+| execution-persona.allowedTools（未来）| Schema 约束 — Operation 子类 | 设计预留 |
+| IntentValidator（待建）| Evaluator | ⏳ LLM-judge 形态 |
+| ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ |
+
+**全部合规。** 本原则可作为后续任何扩展的判断标尺。
+
 ---
 
 ## 12. 典型场景端到端走查
@@ -2053,6 +2220,7 @@ neko-agent/packages/agent/tools/core/
 | 2026-04-22 | **三阶段重命名（Phase A）**：SDD 从 `Specify/Plan/Tasks/Implement` 四阶段简化为 `Draft/Plan/Apply` 三阶段——原 Plan+Tasks 合并入单个 Plan 阶段（两者共享 persona / 工具 / guardians / 失败语义，只是产出物命名不同）；Implement 改名 Apply 借用 Terraform 成熟范式；Specify 改名 Draft 避开 `design` 在创作工具里的"视觉设计"歧义。产物 `Proposal` → `Draft`、`TodoList` → `Task`；文件命名从 `.nkproposal.md` / `.nkplan.md` / `.nktodo.md` 扩展名迁移为 `drafts/draft-<id>.md` / `plans/plan-<id>.md` / `tasks/task-<id>.md` 前缀方案（收益：ls 分组清晰、普通 MD 编辑器零配置打开、Git diff 原生识别）。ExecutionPlan 的 `proposalId` 字段改名 `draftId`；EventBus 频道 `creation.proposal.presented` → `creation.draft.presented`、`execution.todo.updated` → `execution.task.updated`；ApprovalEngine channel `proposal-review` → `draft-review`。代码改动：agent-types 新增 `draft.ts` / `task.ts`，删除 `proposal.ts` / `todo-list.ts`；agent 包内 `DraftWriteTool` / `TaskWriteTool` 替换原 `ProposalWriteTool` / `TodoWriteTool`；neko-paths 的 SUBDIRS 与 prefix 常量全面更新。工具逻辑保持不变（只改名 + 改路径），Phase B（后续 PR）将删除这 3 个 WriteTool，改为通用 Write + prompt 约束 + 后置 validator。 | Architecture Team |
 | 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 | 2026-04-22 | **Phase B 闭环（Observation loop + 运行时 runId 注入）**：Phase B 初版的 `artifact.invalid` 事件只有 watcher emit 端，没有消费端——承诺的"AI 自修复"只存在于 persona 提示词里。新增三件修补。 **(1)** `narrator/milestone-tracker.ts` 的 `defaultClassify` 补齐 `ARTIFACT_WRITTEN` / `ARTIFACT_INVALID` 两个 case；`progress-narrator.ts` 的图标表同步（✎ / ⚠）。 **(2)** 新增 `artifact/artifact-observation-hooks.ts`（ExecutorHooks），订阅 `execution.artifact.invalid`，在下一次 `beforeThink` 把 buffered issues 渲染成 system 消息追加到 `context.messages`，让 AI 真正看到 watcher 诊断并自修复。`AgentSession` 把它链到 `runnerHooks` 后面（与 `stageGuardian.tick` 组合），并在 dispose 时解订阅。 **(3)** `StagePersonaBinding` 新增 `getRunId` 可选 deps——激活 persona 时把 prompt 里的 `{runId}` / `{stage}` 字面量替换为活 SddRun 的 id / 当前 stage；`creation-persona.ts` 正文的 artifact-file 合同从 `<runId>` 改为 `{runId}`，让 AI 读到的永远是已解析好的具体路径（`.neko/drafts/draft-tiktok-001.md`），不再依赖 LLM 去会话上下文里二次检索。新增 `artifact-observation-hooks.test.ts`（8 个 case：no-op / 单事件注入 / 多事件排序 / 多 issue 展开 / 溢出截断 / 二次 drain / dispose 断链 / null bus 容错）。Phase B 闭环完成后端到端流程：AI 写 draft → watcher 300ms 后校验 → invalid 事件注入下一 beforeThink → AI 看到 issues → 重写。 | Architecture Team |
+| 2026-04-22 | **§11.6 约束分级原则（Constraint Layering by Consumer）**：把 SDD 背后隐含的分层原则形式化为四级谱系——**Schema 约束**（程序消费，承载工具使用）、**提示词约束**（AI/人消费，承载语义/灵感/风格）、**Runtime 约束**（运行时消费，承载处理过程）、**Evaluator 约束**（打分器消费，承载质量评估）。Schema 约束内部再二分为 **Tool**（提示词型工具，轻 schema 入口 + 自由文本内容，如 Write/Read/Grep）与 **Operation**（操作型工具，全量严格 schema + 副作用元数据，如 cut.trim-clip/image.generate），判定依据是"AI 产出这个字段时稳定吗"。SDD 阶段与约束层天然对齐：Draft/Plan 只用提示词型工具（creation-persona.allowedTools 全是 Read/Write/Grep/ListDirectory/Glob），Apply 阶段才解锁操作型工具。补齐 6 个反模式（语义推到 schema / 工具参数留在提示词 / 过程状态进产物 / 质量硬编码为 field / Operation 留提示词参数 / Tool 加业务 schema）、5 步决策清单、现系统合规度表。此章可作为后续任何扩展的判断标尺——多模态意图、IntentValidator、Intent drift 检测等下一阶段工作都按本原则决定约束层归属（例：用户多模态输入 → 提示词层由 LLM 自然理解；Draft 正文 → 提示词层自由 markdown；referenceChain asset:// URI → schema 层索引；ArtifactWatcher 校验 → Runtime 层；未来 IntentValidator → Evaluator 层 LLM-judge）。 | Architecture Team |
 
 ---
 
