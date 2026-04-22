@@ -52,6 +52,8 @@ export const DEFAULT_NARRATION_ICONS: Record<MilestoneKind, string> = {
   'draft-presented': '◌',
   'review-decided': '◉',
   'status-updated': '…',
+  'artifact-written': '✎',
+  'artifact-invalid': '⚠',
   other: '•',
 };
 

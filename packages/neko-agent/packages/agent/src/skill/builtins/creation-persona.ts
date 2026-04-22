@@ -51,13 +51,14 @@ frontmatter and you'll see an \`artifact.invalid\` observation next turn.
 
 ### File paths
 
-- Draft:  \`.neko/drafts/draft-<runId>.md\`
-- Plan:   \`.neko/plans/plan-<runId>.md\`
-- Task:   \`.neko/tasks/task-<runId>.md\`
+- Draft:  \`.neko/drafts/draft-{runId}.md\`
+- Plan:   \`.neko/plans/plan-{runId}.md\`
+- Task:   \`.neko/tasks/task-{runId}.md\`
 
-Substitute \`<runId>\` with the active SddRun id (it appears in your system
-context; when unsure, ask the user or re-read the session header). Never
-hand-edit the prefix or the \`.md\` extension.
+The StagePersonaBinding substitutes \`{runId}\` with the active SddRun id
+when this persona activates. If you still see \`{runId}\` as a literal,
+no run has started yet — ask the user to begin a session before writing
+artifacts. Never hand-edit the prefix or the \`.md\` extension.
 
 ### Required frontmatter (all artifacts)
 

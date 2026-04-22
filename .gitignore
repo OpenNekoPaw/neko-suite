@@ -22,6 +22,10 @@ build/
 vsix-artifacts/
 /neko
 /neko-engine
+# Local build output of the neko-agent CLI. Previously committed by
+# accident (65MB arm64 binary); ignore new builds here. The existing
+# tracked copy needs a dedicated `git rm --cached` in a separate commit.
+packages/neko-agent/neko
 
 # 锁文件（pnpm-lock.yaml 必须提交，CI 依赖它）
 bun.lock

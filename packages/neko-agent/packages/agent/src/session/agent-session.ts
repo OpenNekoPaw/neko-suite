@@ -30,7 +30,12 @@ import { createReActLoopRunner, createSddRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
-import { createArtifactWatcher, type IArtifactWatcher } from '../artifact';
+import {
+  createArtifactObservationHooks,
+  createArtifactWatcher,
+  type ArtifactObservationHooks,
+  type IArtifactWatcher,
+} from '../artifact';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -149,6 +154,9 @@ export class AgentSession implements IAgentSession {
   // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
   // validator that emits artifact.* events onto the EventBus.
   private _artifactWatcher: IArtifactWatcher | null = null;
+  // ExecutorHooks that drain watcher-reported invalid artifacts into the
+  // next think's context, so the AI can self-correct its frontmatter.
+  private _artifactObservationHooks: ArtifactObservationHooks | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
@@ -227,6 +235,9 @@ export class AgentSession implements IAgentSession {
         skillRegistry: config.stageTracking.skillRegistry,
         skillService: config.stageTracking.skillService,
         coordinator: this._skillCoordinator,
+        // Resolve `{runId}` in creation-persona's artifact-file contract
+        // lazily so re-applies after a new SddRun pick up the fresh id.
+        getRunId: () => this._runStore?.getActive()?.id ?? null,
       });
       void this._stagePersonaBinding.syncCurrent();
 
@@ -261,6 +272,13 @@ export class AgentSession implements IAgentSession {
           getRunId: () => this._runStore?.getActive()?.id ?? null,
         });
         void this._artifactWatcher.start();
+
+        // Observation-loop closure (Phase B) — subscribes to
+        // `artifact.invalid` and injects a system message before the next
+        // think, so the AI sees validator issues and self-corrects.
+        this._artifactObservationHooks = createArtifactObservationHooks({
+          eventBus: this._eventBus,
+        });
       }
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
@@ -392,7 +410,7 @@ export class AgentSession implements IAgentSession {
       // in a single ExecutorHooks object so the executor's addHook call
       // stays idempotent across configure() rebuilds.
       const guardian = this._stageGuardian;
-      const composedHooks: import('@neko/shared').ExecutorHooks = guardian
+      const withGuardian: import('@neko/shared').ExecutorHooks = guardian
         ? {
             ...runnerHooks,
             name: runnerHooks.name ?? 'react-loop+stage-guardian',
@@ -405,6 +423,28 @@ export class AgentSession implements IAgentSession {
             },
           }
         : runnerHooks;
+
+      // Chain the artifact-observation hook so `artifact.invalid` events
+      // reach the AI via a `beforeThink` system message. Kept as a final
+      // layer because it's a pure consumer of the bus; order among other
+      // `beforeThink` hooks is not significant.
+      const observationHooks = this._artifactObservationHooks;
+      const composedHooks: import('@neko/shared').ExecutorHooks = observationHooks
+        ? {
+            ...withGuardian,
+            name: `${withGuardian.name ?? 'react-loop'}+artifact-observation`,
+            beforeThink: async (ctx) => {
+              let next = ctx;
+              if (withGuardian.beforeThink) {
+                next = (await withGuardian.beforeThink(next)) || next;
+              }
+              if (observationHooks.beforeThink) {
+                next = (await observationHooks.beforeThink(next)) || next;
+              }
+              return next;
+            },
+          }
+        : withGuardian;
 
       this._runnerHooks = composedHooks;
 
@@ -912,10 +952,14 @@ export class AgentSession implements IAgentSession {
     // Close fs.watch handles + drop pending debounces before the bus goes away
     // so any last emit on settle has somewhere to land. Fire-and-forget.
     void this._artifactWatcher?.dispose();
+    // Drop the observation hook's bus subscription so it doesn't hold
+    // references after the bus clears.
+    this._artifactObservationHooks?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
     this._artifactWatcher = null;
+    this._artifactObservationHooks = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;

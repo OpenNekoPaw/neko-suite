@@ -69,6 +69,15 @@ export interface StagePersonaBindingDeps {
    * apply → execution-persona).
    */
   skillNameForStage?: (stage: SddStage) => string;
+  /**
+   * Optional provider of the active SddRun id. When supplied, the binding
+   * substitutes `{runId}` occurrences in the persona prompt at activation
+   * time so the creation-persona's artifact-file contract renders with
+   * concrete paths (e.g. `.neko/drafts/draft-tiktok-001.md`). Null → the
+   * `{runId}` literal is left in place and the AI must derive the id from
+   * the session context.
+   */
+  getRunId?: () => string | null;
 }
 
 export interface IStagePersonaBinding {
@@ -88,9 +97,11 @@ class StagePersonaBinding implements IStagePersonaBinding {
   private _unsubscribe: (() => void) | null = null;
   private _activeStage: SddStage | null = null;
   private readonly _skillNameForStage: (stage: SddStage) => string;
+  private readonly _getRunId: (() => string | null) | null;
 
   constructor(private readonly _deps: StagePersonaBindingDeps) {
     this._skillNameForStage = _deps.skillNameForStage ?? defaultSkillNameForStage;
+    this._getRunId = _deps.getRunId ?? null;
     this._unsubscribe = this._deps.stageTracker.onEntered((event) => {
       void this._onEntered(event.stage);
     });
@@ -142,8 +153,29 @@ class StagePersonaBinding implements IStagePersonaBinding {
     }
 
     const injection: SkillInjection = await this._deps.skillService.apply(skill);
-    this._applyViaCoordinator(injection, skill);
+    const resolved = this._applyRuntimeContext(injection, stage);
+    this._applyViaCoordinator(resolved, skill);
     this._activeStage = stage;
+  }
+
+  /**
+   * Substitute `{runId}` / `{stage}` in the persona prompt at activation
+   * time. Using `{ ... }` (not `$RUNID`) so the placeholders stay
+   * readable in the raw skill markdown — consumers (humans opening
+   * creation-persona.ts) see intent without having to know the
+   * interpolation convention. Missing context leaves the literal in
+   * place so the AI can fall back to session-level hints.
+   */
+  private _applyRuntimeContext(injection: SkillInjection, stage: SddStage): SkillInjection {
+    const runId = this._getRunId?.() ?? null;
+    if (!runId && !stage) return injection;
+    let prompt = injection.systemPrompt;
+    if (runId) {
+      prompt = prompt.replace(/\{runId\}/g, runId);
+    }
+    prompt = prompt.replace(/\{stage\}/g, stage);
+    if (prompt === injection.systemPrompt) return injection;
+    return { ...injection, systemPrompt: prompt };
   }
 
   private _applyViaCoordinator(injection: SkillInjection, skill: Skill): void {

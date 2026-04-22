@@ -50,6 +50,8 @@ export type MilestoneKind =
   | 'draft-presented'
   | 'review-decided'
   | 'status-updated'
+  | 'artifact-written'
+  | 'artifact-invalid'
   | 'other';
 
 export interface Milestone {
@@ -185,6 +187,25 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
         label: `Escalated: ${event.reason}`,
         runId: event.runId,
       };
+    case EXECUTION_CHANNELS.ARTIFACT_WRITTEN:
+      return {
+        ...base,
+        kind: 'artifact-written',
+        label: `${event.kind} ${event.artifactId || '<anonymous>'} written`,
+        runId: event.runId,
+      };
+    case EXECUTION_CHANNELS.ARTIFACT_INVALID: {
+      const topIssue = event.issues[0];
+      const detail = topIssue
+        ? ` (${topIssue.code}${topIssue.field ? `: ${topIssue.field}` : ''})`
+        : '';
+      return {
+        ...base,
+        kind: 'artifact-invalid',
+        label: `${event.kind} ${event.path.split('/').pop() ?? event.path} invalid${detail}`,
+        runId: event.runId,
+      };
+    }
     default:
       // task/plan/apply/step produce detailed events that are too
       // granular for milestones — skip by default. Callers that want

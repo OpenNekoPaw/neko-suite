@@ -22,3 +22,9 @@ export {
   type ArtifactWatcherFsOps,
   type ArtifactWatcherHandle,
 } from './artifact-watcher';
+
+export {
+  ArtifactObservationHooks,
+  createArtifactObservationHooks,
+  type ArtifactObservationHooksConfig,
+} from './artifact-observation-hooks';
