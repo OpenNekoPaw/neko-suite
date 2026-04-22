@@ -18,9 +18,9 @@ describe('NekoPaths', () => {
 
   it('dir() returns canonical subdir paths', () => {
     const p = createNekoPaths('/r');
-    expect(p.dir('proposals')).toBe(`/r/.neko/${NEKO_SUBDIRS.proposals}`);
+    expect(p.dir('drafts')).toBe(`/r/.neko/${NEKO_SUBDIRS.drafts}`);
     expect(p.dir('plans')).toBe(`/r/.neko/${NEKO_SUBDIRS.plans}`);
-    expect(p.dir('todos')).toBe(`/r/.neko/${NEKO_SUBDIRS.todos}`);
+    expect(p.dir('tasks')).toBe(`/r/.neko/${NEKO_SUBDIRS.tasks}`);
     expect(p.dir('sessions')).toBe(`/r/.neko/${NEKO_SUBDIRS.sessions}`);
     expect(p.dir('logs')).toBe(`/r/.neko/${NEKO_SUBDIRS.logs}`);
     expect(p.dir('cache')).toBe(`/r/.neko/${NEKO_SUBDIRS.cache}`);
@@ -28,25 +28,25 @@ describe('NekoPaths', () => {
     expect(p.dir('archives')).toBe(`/r/.neko/${NEKO_SUBDIRS.archives}`);
   });
 
-  it('file() appends the canonical extension for each AI family', () => {
+  it('file() uses the `<kind>-<runId>.md` convention for each AI family', () => {
     const p = createNekoPaths('/r');
-    expect(p.file('proposals', 'tiktok-001')).toBe('/r/.neko/proposals/tiktok-001.nkproposal.md');
-    expect(p.file('plans', 'tiktok-001')).toBe('/r/.neko/plans/tiktok-001.nkplan.md');
-    expect(p.file('todos', 'tiktok-001')).toBe('/r/.neko/todos/tiktok-001.nktodo.md');
-    expect(p.file('sessions', 'run-a')).toBe('/r/.neko/sessions/run-a.nksession.md');
+    expect(p.file('drafts', 'tiktok-001')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
+    expect(p.file('plans', 'tiktok-001')).toBe('/r/.neko/plans/plan-tiktok-001.md');
+    expect(p.file('tasks', 'tiktok-001')).toBe('/r/.neko/tasks/task-tiktok-001.md');
+    expect(p.file('sessions', 'run-a')).toBe('/r/.neko/sessions/session-run-a.md');
     expect(p.file('archives', '2026-04')).toBe('/r/.neko/archives/2026-04.md');
   });
 
-  it('file() strips a duplicate canonical extension from the basename', () => {
+  it('file() strips a duplicate prefix / extension from the basename', () => {
     const p = createNekoPaths('/r');
-    expect(p.file('proposals', 'tiktok-001.nkproposal.md')).toBe(
-      '/r/.neko/proposals/tiktok-001.nkproposal.md',
-    );
+    expect(p.file('drafts', 'draft-tiktok-001')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
+    expect(p.file('drafts', 'draft-tiktok-001.md')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
+    expect(p.file('tasks', 'task-tiktok-001.md')).toBe('/r/.neko/tasks/task-tiktok-001.md');
   });
 
   it('file() rejects empty basename', () => {
     const p = createNekoPaths('/r');
-    expect(() => p.file('proposals', '')).toThrow(/basename is required/);
+    expect(() => p.file('drafts', '')).toThrow(/basename is required/);
   });
 
   it('log() returns canonical JSONL paths', () => {

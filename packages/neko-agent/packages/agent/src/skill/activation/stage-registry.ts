@@ -1,15 +1,18 @@
 /**
- * Stage Registry — metadata + dependency DAG for the four SDD stages.
+ * Stage Registry — metadata + dependency DAG for the three SDD stages.
  *
  * See: docs/architecture/agent-unified-workflow.md §4
  *
  * Single source of truth for:
- *   - Which stages depend on which (Specify → Plan → Tasks → Implement)
- *   - Which stage is always-mandatory (Implement only)
+ *   - Which stages depend on which (Draft → Plan → Apply)
+ *   - Which stage is always-mandatory (Apply only)
  *   - Canonical execution order within a run
  *
  * Pure data + pure helpers. No executor calls, no I/O. Safe to import from
  * tests and from the stage-planner.
+ *
+ * Renamed 2026-04-22 (ADR §4 revision): specify/plan/tasks/implement →
+ * draft/plan/apply. The `tasks` stage was merged into `plan`.
  */
 
 import type { SddStage, StageSet } from '@neko-agent/types';
@@ -28,8 +31,8 @@ export interface StageMetadata {
    */
   dependsOn: readonly SddStage[];
   /**
-   * Whether the stage is always required. Only Implement is always-mandatory:
-   * even clarification / pure-think rounds produce an Implement log entry.
+   * Whether the stage is always required. Only Apply is always-mandatory:
+   * even clarification / pure-think rounds produce an Apply log entry.
    */
   defaultMandatory: boolean;
   /** Position in the canonical order. Used to sort activation sets. */
@@ -38,47 +41,39 @@ export interface StageMetadata {
   label: string;
   /**
    * Whether this stage has a default approval gate (user-facing). Only
-   * Specify has one — it approves the Proposal at stage end. Implement
-   * triggers per-operation approvals via the execution strategy pack, not
-   * at the stage boundary.
+   * Draft has one — it approves the Draft at stage end. Apply triggers
+   * per-operation approvals via the execution strategy pack, not at the
+   * stage boundary.
    */
   hasApprovalGate: boolean;
 }
 
 /**
- * Canonical order: specify → plan → tasks → implement.
+ * Canonical order: draft → plan → apply.
  */
 export const STAGE_REGISTRY: Readonly<Record<SddStage, StageMetadata>> = {
-  specify: {
-    name: 'specify',
+  draft: {
+    name: 'draft',
     dependsOn: [],
     defaultMandatory: false,
     order: 10,
-    label: 'Specify',
+    label: 'Draft',
     hasApprovalGate: true,
   },
   plan: {
     name: 'plan',
-    dependsOn: ['specify'],
+    dependsOn: ['draft'],
     defaultMandatory: false,
     order: 20,
     label: 'Plan',
     hasApprovalGate: false,
   },
-  tasks: {
-    name: 'tasks',
-    dependsOn: ['plan'],
-    defaultMandatory: false,
-    order: 30,
-    label: 'Tasks',
-    hasApprovalGate: false,
-  },
-  implement: {
-    name: 'implement',
+  apply: {
+    name: 'apply',
     dependsOn: [],
     defaultMandatory: true,
-    order: 40,
-    label: 'Implement',
+    order: 30,
+    label: 'Apply',
     hasApprovalGate: false,
   },
 };

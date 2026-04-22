@@ -35,7 +35,7 @@ describe('parsePreferences', () => {
 
   it('parses alwaysApprove bullets with prefixed subjects', () => {
     const { preferences } = parse(
-      `## Always approve\n- tool:GenerateImage\n- domain:cut\n- channel:proposal-review\n`,
+      `## Always approve\n- tool:GenerateImage\n- domain:cut\n- channel:draft-review\n`,
     );
     expect(preferences.alwaysApprove).toHaveLength(3);
     expect(preferences.alwaysApprove[0]).toMatchObject({

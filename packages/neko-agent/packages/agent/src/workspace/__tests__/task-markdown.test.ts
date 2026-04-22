@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { TodoList } from '@neko-agent/types';
-import { serializeTodoList } from '../todo-markdown';
+import type { Task } from '@neko-agent/types';
+import { serializeTask } from '../task-markdown';
 
-function list(items: TodoList['items'], overrides: Partial<TodoList> = {}): TodoList {
+function task(items: Task['items'], overrides: Partial<Task> = {}): Task {
   return {
     id: 'run-1',
     items,
@@ -12,21 +12,22 @@ function list(items: TodoList['items'], overrides: Partial<TodoList> = {}): Todo
   };
 }
 
-describe('serializeTodoList', () => {
+describe('serializeTask', () => {
   it('renders frontmatter + heading + pending item', () => {
-    const md = serializeTodoList(
-      list([{ id: 't1', content: 'Generate hero shot', status: 'pending' }]),
+    const md = serializeTask(
+      task([{ id: 't1', content: 'Generate hero shot', status: 'pending' }]),
     );
     expect(md).toContain('---\nid: run-1\n');
+    expect(md).toContain('kind: task');
     expect(md).toContain('createdAt: 2026-04-22T10:00:00.000Z');
     expect(md).toContain('updatedAt: 2026-04-22T10:30:00.000Z');
-    expect(md).toContain('# TODO');
+    expect(md).toContain('# Tasks');
     expect(md).toContain('- [ ] Generate hero shot');
   });
 
   it('uses activeForm for in_progress items, content otherwise', () => {
-    const md = serializeTodoList(
-      list([
+    const md = serializeTask(
+      task([
         {
           id: 't1',
           content: 'Generate establishing shot',
@@ -41,35 +42,33 @@ describe('serializeTodoList', () => {
   });
 
   it('renders failed items with an error line when present', () => {
-    const md = serializeTodoList(
-      list([{ id: 't1', content: 'Export 4k master', status: 'failed', error: 'OOM on encoder' }]),
+    const md = serializeTask(
+      task([{ id: 't1', content: 'Export 4k master', status: 'failed', error: 'OOM on encoder' }]),
     );
     expect(md).toMatch(/- \[!\] Export 4k master\n\s+_error: OOM on encoder_/);
   });
 
   it('renders failed items without an error line when absent', () => {
-    const md = serializeTodoList(
-      list([{ id: 't1', content: 'Export 4k master', status: 'failed' }]),
-    );
+    const md = serializeTask(task([{ id: 't1', content: 'Export 4k master', status: 'failed' }]));
     expect(md).toContain('- [!] Export 4k master');
     expect(md).not.toContain('_error:');
   });
 
   it('collapses whitespace / newlines in content so the list stays well-formed', () => {
-    const md = serializeTodoList(
-      list([{ id: 't1', content: '  multi\nline\tcontent  ', status: 'pending' }]),
+    const md = serializeTask(
+      task([{ id: 't1', content: '  multi\nline\tcontent  ', status: 'pending' }]),
     );
     expect(md).toContain('- [ ] multi line content');
   });
 
   it('empty list renders the empty-state placeholder', () => {
-    const md = serializeTodoList(list([]));
+    const md = serializeTask(task([]));
     expect(md).toContain('_No items._');
   });
 
   it('item order is preserved', () => {
-    const md = serializeTodoList(
-      list([
+    const md = serializeTask(
+      task([
         { id: 'a', content: 'First', status: 'completed' },
         { id: 'b', content: 'Second', status: 'in_progress', activeForm: 'Doing second' },
         { id: 'c', content: 'Third', status: 'pending' },

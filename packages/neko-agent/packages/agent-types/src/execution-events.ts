@@ -1,11 +1,11 @@
 /**
- * Execution Events — SDD Implement-stage (execution-persona) event namespace.
+ * Execution Events — SDD Apply-stage (execution-persona) event namespace.
  *
  * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
  * Channels follow `execution.<phase>.<verb>` and are **technical-semantic**
  * (system-facing), not user-facing. Emitted while execution-persona is
- * active during Implement. A progress narrator renders them into
+ * active during Apply. A progress narrator renders them into
  * creation-flow milestones for end users.
  *
  * Notable compaction: one `execution.round.activation.decided` event per
@@ -25,8 +25,8 @@ export const EXECUTION_CHANNELS = {
   ROUND_ACTIVATION_DECIDED: 'execution.round.activation.decided',
   /** A Plan primitive produced a structured intent list. */
   PLAN_PRODUCED: 'execution.plan.produced',
-  /** A TODO was added or updated. */
-  TODO_UPDATED: 'execution.todo.updated',
+  /** A Task checklist was added or updated. */
+  TASK_UPDATED: 'execution.task.updated',
   /** An Approve decision was recorded (manual or strategy-pack auto). */
   APPROVE_DECIDED: 'execution.approve.decided',
   /** An Apply was committed — resource boundary crossed. */
@@ -45,6 +45,10 @@ export const EXECUTION_CHANNELS = {
   AUTOHEAL_L5_ESCALATED: 'execution.autoheal.l5.escalated',
   /** Quality gate evaluation finished. */
   QUALITY_EVALUATED: 'execution.quality.evaluated',
+  /** A draft / plan / task artifact file was written and passed frontmatter validation. */
+  ARTIFACT_WRITTEN: 'execution.artifact.written',
+  /** A draft / plan / task artifact file failed frontmatter validation. */
+  ARTIFACT_INVALID: 'execution.artifact.invalid',
 } as const;
 
 export type ExecutionChannel = (typeof EXECUTION_CHANNELS)[keyof typeof EXECUTION_CHANNELS];
@@ -69,13 +73,13 @@ export interface ExecutionPlanProducedEvent {
   at: number;
 }
 
-export interface ExecutionTodoUpdatedEvent {
-  channel: typeof EXECUTION_CHANNELS.TODO_UPDATED;
+export interface ExecutionTaskUpdatedEvent {
+  channel: typeof EXECUTION_CHANNELS.TASK_UPDATED;
   runId: string;
-  todoId: string;
+  taskId: string;
   /**
-   * Snapshot of the list's counts by status. The full list is addressable
-   * by todoId in the shared memory store (P5).
+   * Snapshot of the checklist's counts by status. The full task is
+   * addressable by taskId in the shared memory store (P5).
    */
   counts: {
     pending: number;
@@ -179,6 +183,59 @@ export interface ExecutionQualityEvaluatedEvent {
   at: number;
 }
 
+// -----------------------------------------------------------------------------
+// Artifact lifecycle (Phase B — AI uses generic Write tool + post-write hooks)
+// -----------------------------------------------------------------------------
+
+/** Kind of SDD artifact a file represents. */
+export type ArtifactKind = 'draft' | 'plan' | 'task';
+
+/**
+ * A new/updated artifact file was written to `.neko/drafts/` / `.neko/plans/` /
+ * `.neko/tasks/` and its frontmatter parsed successfully against the per-kind
+ * schema. Emitted by the ArtifactWatcher once the file has settled
+ * (300ms debounce).
+ */
+export interface ExecutionArtifactWrittenEvent {
+  channel: typeof EXECUTION_CHANNELS.ARTIFACT_WRITTEN;
+  runId: string;
+  /** 'draft' | 'plan' | 'task'. */
+  kind: ArtifactKind;
+  /** Absolute path on disk. */
+  path: string;
+  /** id extracted from the frontmatter — artifact-stable identifier. */
+  artifactId: string;
+  /** ms epoch when the watcher observed the settled write. */
+  at: number;
+}
+
+/**
+ * An artifact file was written but failed frontmatter validation. Non-blocking —
+ * the file stays on disk; this event lets upstream layers surface a hint to
+ * the AI so the next turn can fix the file. Issues are structured so the UI /
+ * narrator can display a useful message without parsing free text.
+ */
+export interface ExecutionArtifactInvalidEvent {
+  channel: typeof EXECUTION_CHANNELS.ARTIFACT_INVALID;
+  runId: string;
+  kind: ArtifactKind;
+  path: string;
+  /** Ordered list of specific schema violations, worst first. */
+  issues: readonly {
+    code:
+      | 'missing-frontmatter'
+      | 'malformed-frontmatter'
+      | 'missing-field'
+      | 'wrong-kind'
+      | 'invalid-status'
+      | 'invalid-timestamp';
+    /** Offending field name (empty for structural issues). */
+    field: string;
+    message: string;
+  }[];
+  at: number;
+}
+
 // =============================================================================
 // Union
 // =============================================================================
@@ -186,9 +243,11 @@ export interface ExecutionQualityEvaluatedEvent {
 export type ExecutionEvent =
   | ExecutionRoundActivationDecidedEvent
   | ExecutionPlanProducedEvent
-  | ExecutionTodoUpdatedEvent
+  | ExecutionTaskUpdatedEvent
   | ExecutionApproveDecidedEvent
   | ExecutionApplyCommittedEvent
   | ExecutionStepCompletedEvent
   | ExecutionAutohealEvent
-  | ExecutionQualityEvaluatedEvent;
+  | ExecutionQualityEvaluatedEvent
+  | ExecutionArtifactWrittenEvent
+  | ExecutionArtifactInvalidEvent;

@@ -15,7 +15,7 @@
 
 import type {
   StageActivationDecision,
-  TodoList,
+  Task,
   SddRun,
   SddRunRoundSummary,
   SddRunStatus,
@@ -31,8 +31,8 @@ export interface ISddRunStore {
   startRun(input: { workflowId: string; runId?: string }): string;
   /** Append a round summary derived from the planner decision. */
   recordRound(decision: StageActivationDecision, lastObserveHint?: string): void;
-  /** Attach / replace the active todos reference for the current run. */
-  setTodos(todos: TodoList): void;
+  /** Attach / replace the active Task checklist for the current run. */
+  setTask(task: Task): void;
   /** Terminal transition for the active run. */
   endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void;
   /** Snapshot of the active run, or null if none. */
@@ -93,9 +93,9 @@ class SddRunStore implements ISddRunStore {
     };
   }
 
-  setTodos(todos: TodoList): void {
+  setTask(task: Task): void {
     if (!this._active) return;
-    this._active = { ...this._active, todos };
+    this._active = { ...this._active, task };
   }
 
   endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void {

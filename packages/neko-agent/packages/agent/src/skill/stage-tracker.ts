@@ -6,9 +6,9 @@
  *
  * Replaces FlowSwitcher. Whereas FlowSwitcher modelled a two-ring cycle
  * (creation ↔ execution) driven by semantic triggers (onApplyTriggered etc.),
- * StageTracker tracks position inside a linear four-stage DAG:
+ * StageTracker tracks position inside a linear three-stage DAG:
  *
- *   specify → plan → tasks → implement
+ *   draft → plan → apply
  *
  * Per ReAct round the planner decides which stages activate; the runner
  * tells the tracker which stage the round actually entered. Listeners
@@ -17,6 +17,9 @@
  *
  * Transitions are idempotent by destination: re-entering the current stage
  * is a no-op. No event is emitted when the tracker hasn't moved.
+ *
+ * Stage rename 2026-04-22: specify → draft, implement → apply, tasks
+ * merged into plan (ADR §4 revision).
  */
 
 import type { SddStage } from '@neko-agent/types';

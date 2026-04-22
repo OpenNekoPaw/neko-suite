@@ -49,7 +49,7 @@ export const DEFAULT_NARRATION_ICONS: Record<MilestoneKind, string> = {
   'round-decided': '·',
   autoheal: '↻',
   'quality-evaluated': '✓',
-  'proposal-presented': '◌',
+  'draft-presented': '◌',
   'review-decided': '◉',
   'status-updated': '…',
   other: '•',

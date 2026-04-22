@@ -1,7 +1,7 @@
 # Agent 统一工作流协议
 
-**状态**: Proposed（20 / 22 ADR 章节已落地）
-**日期**: 2026-04-20
+**状态**: Proposed（22 / 22 ADR 章节已落地；2026-04-22 精简为三阶段 + Phase B 工具下线）
+**日期**: 2026-04-20 · 三阶段重命名 2026-04-22 · Phase B 同日完成
 
 ## 落地进度快照（2026-04-22）
 
@@ -11,21 +11,21 @@
 |-------|-----|----|
 | §3 L3 Mode 两档 | AutoMode / PlanMode | 已存在 |
 | §3.2 | StagePlanner 6 入口规则 | 已存在 |
-| §4 SDD 4 阶段 | StageTracker + StagePersonaBinding | PR4 |
-| §4.2 lineage | WorkflowRun → SddRun rename | W1.2.3 |
+| §4 SDD 3 阶段 | Draft / Plan / Apply（合并原 Specify/Plan/Tasks/Implement）| Phase A（2026-04-22） |
+| §4.2 lineage | WorkflowRun → SddRun rename；proposalId → draftId | W1.2.3 / Phase A |
 | §5 Skill-as-package | SDD metadata / phases / pipelines 回落子包 | B1-B1.6 |
 | §5.2.10 | requiredSubpackages 激活校验 | A1 |
 | §5.3 | 内置 Skill prompt 原子化 | W1.3 |
 | §5.4 | StageTracker + StageGuardian | A1-A3 |
 | §5.7 三级懒加载 | LazySkill registry | 已存在 |
-| §6.1 ApprovalEngine | engine + creation/execution strategy pack | B1 / B3 |
-| §6.2 EventBus | typed channels + 三端 sink（events/audits/steps） | C1-C6 |
+| §6.1 ApprovalEngine | engine + creation/execution strategy pack；channel 改名 draft-review | B1 / B3 / Phase A |
+| §6.2 EventBus | typed channels + 三端 sink；`creation.draft.presented` / `execution.task.updated` / `execution.artifact.*` | C1-C6 / Phase A / Phase B |
 | §6.3 TaskManager | 已是 TaskManager（文档对齐） | 已存在 |
 | §6.4 RetryEngine | 5-level autoheal + example handlers | B2 |
-| §6.5 StageTracker/Guardian | out-of-order / timeout / approval-skipped | A1-A3 / B3 |
-| §7 产物格式二分 | MD serializers + JSONL sinks | C1-C8 |
-| §7.4 `.neko/` 布局 | NekoPaths + logs/ / state/ / proposals / plans / todos | C1-C9 |
-| §7.5 Frontmatter | 最小化 + AI 所有权 | C5 / C7 / C8 |
+| §6.5 StageTracker/Guardian | out-of-order / timeout / approval-skipped；Apply 为终态；ArtifactWatcher 补齐 post-write 校验 | A1-A3 / B3 / Phase A / Phase B |
+| §7 产物格式二分 | MD serializers（draft / plan / task）+ JSONL sinks | C1-C8 / Phase A |
+| §7.4 `.neko/` 布局 | NekoPaths 前缀命名：drafts/draft-*.md、plans/plan-*.md、tasks/task-*.md | C1-C9 / Phase A |
+| §7.5 Frontmatter | 最小化 + AI 所有权；kind=draft/plan/task | C5 / C7 / C8 / Phase A |
 | §8 资产引用 | PathResolver + asset:// URI | 已存在 |
 | §9 审批治理 | preferencesStrategyPack + L0 不降级约束 | D |
 | §9.3 preferences.md | parser + 双层合并 + auto-load | D |
@@ -33,7 +33,7 @@
 | §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
 | §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
-**小计**：22 / 22 章节全部有落地证据（§10 为撤销式落地，§6.3 为命名对齐，其余均有代码/测试）。
+**小计**：22 / 22 章节全部有落地证据。2026-04-22 Phase A 将四阶段合并为三阶段（Draft/Plan/Apply），并把 `.nk*.md` 扩展名迁移为 `<kind>-<runId>.md` 前缀方案。
 
 ### 已延后（非 ADR 阻塞）
 
@@ -84,7 +84,7 @@
 │                                                             │
 │   AutoMode 简单任务:  直接 Step 循环                        │
 │   AutoMode 复杂任务:  按入口判定规则进入 SDD 对应阶段       │
-│   PlanMode:           Specify → Plan → Tasks → Implement    │
+│   PlanMode:           Draft → Plan → Apply                  │
 └─────────────┬───────────────────────────────────────────────┘
               │ 流程由能力编排
               ▼
@@ -122,7 +122,7 @@
 | 模式 | 默认性 | 触发方式 | 特征 |
 |-----|-------|---------|-----|
 | **AutoMode** | ✅ **默认** | 自动 | Agent 按任务特征自动选入口阶段 + 路径 |
-| **PlanMode** | 显式覆盖 | `/plan` 命令 | 强制走完整 SDD 4 阶段，深度参与 |
+| **PlanMode** | 显式覆盖 | `/plan` 命令 | 强制走完整 SDD 3 阶段（Draft → Plan → Apply），深度参与 |
 
 **两档足够**：AutoMode 已覆盖简单任务的快路径（无需单独的 DirectMode），PlanMode 承载需要深度参与的场景。早期设计的 DirectMode 与 AutoMode 功能重叠（AutoMode 已能自动判定简单任务走快路径）且"强制跳过审批"承诺无法完全兑现（critical 级 L0 强制拦截），已删除。
 
@@ -134,12 +134,12 @@ AutoMode 下 Agent 按下列规则**判定从哪个 SDD 阶段开始**：
 
 | 优先级 | 规则 | 入口阶段 | 可被覆盖 |
 |------|-----|--------|--------|
-| 1（最高）| 含 `reversible: false` 的 Operation | Specify | ❌ 不可（强制审批）|
-| 2 | 用户引用已有产物（`@todo-001` / `@plan-001` / `@proposal-001`）| 对应阶段（继续）| ✅ |
+| 1（最高）| 含 `reversible: false` 的 Operation | Draft | ❌ 不可（强制审批）|
+| 2 | 用户引用已有产物（`@task-001` / `@plan-001` / `@draft-001`）| 对应阶段（继续）| ✅ |
 | 3 | 用户匹配 Workflow 模板（`/tiktok-15s`）| 由 Workflow 定义 | ✅ |
-| 4 | 用户给原子指令（"调音量 +3dB"）| Implement | ✅ |
+| 4 | 用户给原子指令（"调音量 +3dB"）| Apply | ✅ |
 | 5 | 用户给明确多步任务（"生成 3 张 16:9 封面"）| Plan | ✅ |
-| 6（兜底）| 用户给模糊创作意图（"做个 TikTok 视频"）| Specify | ✅ |
+| 6（兜底）| 用户给模糊创作意图（"做个 TikTok 视频"）| Draft | ✅ |
 
 **实现要点**：
 - 规则 1（高风险）由 L0.ApprovalEngine 强制执行，**不依赖 LLM 判断**
@@ -152,7 +152,7 @@ AutoMode 下 Agent 按下列规则**判定从哪个 SDD 阶段开始**：
 | 模式 | 入口判定 | 可跳过阶段 | 高风险拦截 |
 |-----|---------|---------|---------|
 | **AutoMode** | 按 §3.2 规则 | 跳过判定结果之前的阶段 | ✅ 强制 |
-| **PlanMode** | 永远从 Specify 开始 | 不跳过 | ✅ 强制 |
+| **PlanMode** | 永远从 Draft 开始 | 不跳过 | ✅ 强制 |
 
 **永不可降级的硬约束**：
 - 高成本 Operation（`reversible=false` 或超用户阈值）**必须经 Approve**
@@ -161,41 +161,43 @@ AutoMode 下 Agent 按下列规则**判定从哪个 SDD 阶段开始**：
 
 ---
 
-## 4. L2 流程层（SDD 对齐 Speckit）
+## 4. L2 流程层（SDD 三阶段）
 
-### 4.1 PlanMode 激活时的 4 阶段
+### 4.1 PlanMode 激活时的 3 阶段
 
-对齐 [GitHub Spec Kit](https://github.com/github/spec-kit) 的四阶段：
+2026-04-22 从 Speckit 四阶段简化为三阶段。合并理由：原 Plan + Tasks 两阶段共享 persona / 工具 / guardians / 失败语义，差异仅在产出物命名，合并消除状态机中的空转环节。动词阶梯"松→紧→动"借用 Terraform 的 `plan` / `apply` 范式，避开 `design` 在创作工具里与"视觉设计"的歧义。
 
 | 阶段 | 产出物 | 生成者 | 用户角色 |
 |-----|-------|-------|--------|
-| **Specify** | Proposal（业务声明式）| AI | 审批对象 |
-| **Plan** | ExecutionPlan（技术命令式）| AI（从 Proposal 编译）| 通常不看 |
-| **Tasks** | TodoList（任务清单）| AI | 看进度 |
-| **Implement** | Step Loop（tool call 执行）| AI + L0 基础设施 | 看结果 |
+| **Draft** | Draft（业务声明式 `.md`）| AI | 审批对象 |
+| **Plan** | ExecutionPlan（技术命令式）+ Task（用户可见清单）| AI（从 Draft 编译）| Plan 通常不看；Task 看进度 |
+| **Apply** | Step Loop（tool call 执行）| AI + L0 基础设施 | 看结果 |
+
+**阶段名与产出物同根**：Draft 阶段产出 Draft，Plan 阶段产出 ExecutionPlan（简称 Plan）+ Task。Apply 阶段不产独立产物，消费前两阶段的产物执行 tool call。
 
 ### 4.2 声明式与命令式分层
 
 ```
-Specify（声明式 What）──► Plan（命令式 How）──► Tasks（派生）──► Implement
-  业务目标                     tool call 列表        状态清单        实际执行
-  用户审批对象                 Agent 自用           UI 进度         L0 接管
+Draft（声明式 What）──► Plan（命令式 How + Task 派生）──► Apply
+  业务目标                tool call 列表 + UI 进度清单         实际执行
+  用户审批对象            Agent 自用 + UI 看进度              L0 接管
 ```
 
 **核心原则**：
-- **用户审批 Proposal**（声明式业务目标），不审批 Plan（命令式技术步骤）
-- **Agent 重试时重编译 Plan**（目标不变），不重新定义 Proposal
-- **Proposal 失败 = 方向错**（用户介入），Plan 失败 = 技术问题（自愈）
+- **用户审批 Draft**（声明式业务目标），不审批 Plan（命令式技术步骤）
+- **Agent 重试时重编译 Plan**（目标不变），不重新定义 Draft
+- **Draft 失败 = 方向错**（用户介入），Plan 失败 = 技术问题（自愈）
+- **lineage**：ExecutionPlan 通过 `draftId` 指向源 Draft（原 `proposalId` 字段已重命名）
 
 ### 4.3 AutoMode 简单任务的极简流程
 
-AutoMode 判定为简单任务时**跳过 Specify/Plan/Tasks**，直接进入 Step 循环：
+AutoMode 判定为简单任务时**跳过 Draft / Plan**，直接进入 Apply 阶段的 Step 循环：
 
 ```
 用户输入 → Step（think → act → observe）→ 返回结果
 ```
 
-无 Proposal 产出物，无 Plan 编译，无 TodoList 呈现。
+无 Draft 产出物，无 Plan 编译，无 Task 清单呈现。
 
 ---
 
@@ -882,14 +884,16 @@ L0（guardian）    ──► 巡检 + 注入 + 强制审批
 
 #### AI 产出 → Markdown
 
+SDD 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 扩展名迁移；收益：ls 输出按 kind 分组、普通 MD 编辑器零配置打开、Git diff 原生识别 YAML frontmatter）。其余非 SDD 核心产物保留原扩展名直至独立迁移。
+
 | 产物 | 文件模式 |
 |-----|--------|
-| Proposal | `.nkproposal.md` |
-| ExecutionPlan | `.nkplan.md` |
+| Draft | `drafts/draft-<runId>.md` |
+| ExecutionPlan | `plans/plan-<runId>.md` |
+| Task（用户可见清单）| `tasks/task-<runId>.md` |
+| Session 摘要 | `sessions/session-<runId>.md` |
 | Review Record | `.nkreview.md` |
 | Status Report | `.nkstatus.md` |
-| TodoList | `.nktodo.md` |
-| Session 摘要 | `.nksession.md` |
 | Skill / Persona | `.skill.md` |
 | Spec | `.nkspec.md` |
 | Workflow | `.nkworkflow.md` |
@@ -906,7 +910,7 @@ L0（guardian）    ──► 巡检 + 注入 + 强制审批
 | Audit Log | `audits.jsonl` | ApprovalEngine 记录，合规/哈希链 |
 | Step 原始日志 | `steps.jsonl` | Step 执行器采集，毫秒级 |
 | Capability 索引 | `capability-index.json` | 从 MD 派生的查询缓存 |
-| Proposal 索引 | `proposal-index.json` | 从 MD 派生的查询缓存 |
+| Draft 索引 | `draft-index.json` | 从 MD 派生的查询缓存 |
 | Session Lock | `session-lock.json` | 并发控制 |
 
 **共同特征**：代码逻辑产出，AI 不感知，程序消费或派生缓存。
@@ -927,41 +931,43 @@ L0（guardian）    ──► 巡检 + 注入 + 强制审批
 .neko/
   preferences.md         ← 用户审批/模式偏好（项目级）
 
-  proposals/             ← AI 产出（核心 3 文档之一）
-    *.nkproposal.md
-  plans/                 ← AI 产出（核心 3 文档之一）
-    *.nkplan.md
-  todos/                 ← AI 产出（核心 3 文档之一，TodoWrite 工具落盘）
-    *.nktodo.md
-  
+  drafts/                ← Draft 阶段 AI 产出
+    draft-<runId>.md
+  plans/                 ← Plan 阶段 AI 产出（技术命令式）
+    plan-<runId>.md
+  tasks/                 ← Plan 阶段 AI 产出（用户可见清单）
+    task-<runId>.md
+
   sessions/              ← AI 产出（对话+任务上下文合并）
-    *.nksession.md
+    session-<runId>.md
     _active.json         ← 程序维护当前活跃 session 索引
-  
+
   logs/                  ← 程序产出（JSONL）
     events.jsonl
     audits.jsonl
     steps.jsonl
-  
+
   cache/                 ← 程序派生（JSON，可重建）
     capability-index.json
-    proposal-index.json
-  
+    draft-index.json
+
   state/                 ← 程序并发控制
     session-lock.json
-  
+
   settings.json          ← 媒体库变量（已有，PathResolver 使用）
   settings.local.json    ← 本地覆盖（已有）
-  
+
   archives/              ← 可选：长任务叙事归档导出
     *.md
 ```
 
 **移除项**：
 - ❌ `assets/` — 由 neko-assets + 媒体库管理（见 §9）
-- ❌ `reviews/` — Review 历史合并到 Proposal frontmatter
-- ❌ `statuses/` — Status 叙事合并到 TodoList 正文
+- ❌ `reviews/` — Review 历史合并到 Draft frontmatter
+- ❌ `statuses/` — Status 叙事合并到 Task 正文
 - ❌ `skills/workflows/specs/capabilities/` — 由能力体系管理（见 §9）
+- ❌ `proposals/` / `todos/` — 2026-04-22 重命名为 `drafts/` / `tasks/`
+- ❌ `.nkproposal.md` / `.nkplan.md` / `.nktodo.md` — 同日迁移为 `<kind>-<runId>.md`
 
 #### 媒体库 `${MEDIA_LIBRARY}/`（创作资产，跨项目共享）
 
@@ -1124,9 +1130,10 @@ ${MEDIA_LIBRARY}/                    ← 用户配置的媒体库根
 SDD 产物通过 **asset:// URI** 引用资产，不内嵌素材：
 
 ```markdown
-<!-- .nkproposal.md -->
+<!-- drafts/draft-001.md -->
 ---
-id: proposal-001
+id: draft-001
+kind: draft
 referenceChain:
   - asset://characters/hero
   - asset://styles/cyberpunk
@@ -1538,14 +1545,14 @@ SDD stage slash 命令在 AutoMode 下**由 §3.2 入口判定规则自动选择
 
 | 功能 | 命令 | 说明 |
 |-----|-----|-----|
-| 切换到 PlanMode | `/plan` | 强制走完整 SDD 4 阶段（§3.1）|
+| 切换到 PlanMode | `/plan` | 强制走完整 SDD 3 阶段（§3.1）|
 | 展开 Skill | `/<skill-name>` | 通过 `Skill.command` 字段注册 |
-| 引用已有产物 | `@proposal-<id>` / `@plan-<id>` / `@todo-<id>` | §3.2 规则 2，在 AutoMode 下触发对应阶段继续 |
+| 引用已有产物 | `@draft-<id>` / `@plan-<id>` / `@task-<id>` | §3.2 规则 2，在 AutoMode 下触发对应阶段继续 |
 
-**无单独的 `/specify` `/tasks` `/implement` slash**——这些是 SDD
-**阶段**（stage），不是命令。它们由 StagePlanner 根据用户输入自动
-判定（§3.2 六条规则），从而保持"一个意图，一个 slash"的心智简单。
-PlanMode 下也由 §4.1 强制从 Specify 起步，不需要用户手动命令。
+**无单独的 `/draft` `/apply` slash**——这些是 SDD**阶段**（stage），
+不是命令。它们由 StagePlanner 根据用户输入自动判定（§3.2 六条规则），
+从而保持"一个意图，一个 slash"的心智简单。
+PlanMode 下也由 §4.1 强制从 Draft 起步，不需要用户手动命令。
 
 ### 10.3 工程术语表（唯一标识符集合）
 
@@ -1553,10 +1560,10 @@ PlanMode 下也由 §4.1 强制从 Specify 起步，不需要用户手动命令�
 
 | 概念 | 术语 | 用途 |
 |-----|-----|-----|
-| SDD 阶段 | `Specify` / `Plan` / `Tasks` / `Implement` | 阶段名 |
-| 产物（声明式）| `Proposal` | Specify 产出，业务目标 |
-| 产物（命令式）| `ExecutionPlan` | Plan 产出，tool call 列表 |
-| 产物（清单）| `TodoList` | Tasks 产出，进度投影 |
+| SDD 阶段 | `Draft` / `Plan` / `Apply` | 阶段名（2026-04-22 从四阶段简化）|
+| 产物（声明式）| `Draft` | Draft 阶段产出，业务目标 |
+| 产物（命令式）| `ExecutionPlan` | Plan 阶段产出，tool call 列表；类型字段 `draftId` 指向源 Draft |
+| 产物（清单）| `Task` | Plan 阶段派生，进度投影（原 `TodoList`） |
 | 模式 | `AutoMode` / `PlanMode` | L3 模式档位 |
 | 动作 | `approve` / `reject` / `refine` / `fork` | Review 决策动词 |
 
@@ -1568,13 +1575,14 @@ PlanMode 下也由 §4.1 强制从 Specify 起步，不需要用户手动命令�
 **允许**：
 - ✅ 用户消息气泡、错误提示等**自由文本**内容按用户语言书写（这是
   内容，不是命令 / 术语）
-- ✅ 文档正文说明可以用中文解释 Specify 做什么，但"Specify"这个
+- ✅ 文档正文说明可以用中文解释 Draft 做什么，但"Draft"这个
   **词本身**始终以英文出现
 
-### 10.4 文件扩展名
+### 10.4 文件命名约定
 
-`.nkproposal.md` / `.nkplan.md` / `.nktodo.md` 等扩展名不本地化，
-跨系统兼容性优先。
+SDD 三件套采用 `<kind>-<runId>.md` 前缀方案（`draft-`、`plan-`、`task-`），
+`.md` 是唯一扩展名。原 `.nkproposal.md` / `.nkplan.md` / `.nktodo.md`
+扩展名方案已于 2026-04-22 废止。命名不本地化，跨系统兼容性优先。
 
 ### 10.5 未来国际化（若启用）的边界
 
@@ -1722,12 +1730,12 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 
 ## 12. 典型场景端到端走查
 
-### 8.1 简单任务（AutoMode 快路径）
+### 12.1 简单任务（AutoMode 快路径）
 
 ```
 用户：把 BGM 调高 3dB
 
-[AutoMode 判定: 原子指令 → 直接 Implement]
+[AutoMode 判定: 原子指令 → 直接 Apply]
   Step:
     think: 单步可逆 Operation
     act: 调用 audio.adjust-gain(+3)
@@ -1737,92 +1745,88 @@ P3（企业需求时）: 严格 DSL + Schema 校验
       - steps.jsonl: append Step 日志
 
 用户看到：完成。
-不产出：Proposal/Plan/TodoList（简单任务跳过）
+不产出：Draft/Plan/Task（简单任务跳过）
 ```
 
-### 8.2 中等任务（自动升级）
+### 12.2 中等任务（自动升级）
 
 ```
 用户：生成 3 张海报变体
 
 [复杂度评估 → 升级 PlanMode]
-  
-  Specify:
-    AI 产出 Proposal → proposals/poster-001.nkproposal.md
+
+  Draft:
+    AI 产出 Draft → drafts/draft-poster-001.md
     ↓ ReviewGate: L0 判定低风险自动通过
-  
+
   Plan:
-    AI 编译 ExecutionPlan → plans/poster-001.nkplan.md
+    AI 编译 ExecutionPlan → plans/plan-poster-001.md
     [call image.gen × 3]
-  
-  Tasks:
-    AI 调用 TodoWrite → todos/poster-001.nktodo.md
+    AI 调用 TaskWrite 同轮派生 → tasks/task-poster-001.md
     - [ ] 生成变体 1
     - [ ] 生成变体 2
     - [ ] 生成变体 3
-  
-  Implement:
+
+  Apply:
     逐 task 执行，L0:
       - TaskManager 管理
       - RetryEngine 处理失败
       - EventBus 广播进度 → events.jsonl
       - steps.jsonl 记录每步
-    
-    AI 每步后调用 TodoWrite 更新 todo.md
 
-用户看到：方案（MD 渲染）→ 进度条 → 3 张图
+    AI 每步后调用 TaskWrite 更新 task.md
+
+用户看到：Draft（MD 渲染）→ 进度条 → 3 张图
 ```
 
-### 8.3 复杂任务（用户显式 /plan）
+### 12.3 复杂任务（用户显式 /plan）
 
 ```
 用户：/plan 帮我做 TikTok 视频
 
 [PlanMode 显式激活]
-  
-  Specify:
+
+  Draft:
     AI 调用 orchestration-skill 引导发问
-    AI 产出 Proposal → proposals/tiktok-001.nkproposal.md
+    AI 产出 Draft → drafts/draft-tiktok-001.md
     （含 3 个风格方向）
     ↓ ReviewGate 等待用户审批
-  
+
 用户：选方向 2，refine 时长改 20s
-    AI 更新 Proposal（status: refined）
+    AI 更新 Draft（status: refined）
     ↓ ReviewGate 再次审批
 用户：确认
-  
+
   Plan:
-    AI 编译 → plans/tiktok-001.nkplan.md
+    AI 编译 → plans/plan-tiktok-001.md
     [12 shots + BGM + subtitles]
-  
-  Tasks:
-    TodoWrite → todos/tiktok-001.nktodo.md
-  
-  Implement:
+    TaskWrite → tasks/task-tiktok-001.md
+
+  Apply:
     逐 task 执行
     Shot 5 失败（OOM）
       ↓ L0.RetryEngine 级别 2 降分辨率 → 成功
       ↓ events.jsonl: task.failed + task.recovered
-      ↓ AI 调用 TodoWrite 更新 todo.md（追加失败叙事）
+      ↓ AI 调用 TaskWrite 更新 task.md（追加失败叙事）
 
-用户看到：方案审批 → 进度条 → 最终视频
+用户看到：Draft 审批 → 进度条 → 最终视频
 ```
 
-### 8.4 高风险任务（自动拦截）
+### 12.4 高风险任务（自动拦截）
 
 ```
 用户：导出 4K 视频
 
 [costProfile = { reversible: false, time: hours } → 强制 PlanMode]
-  
-  Specify:
-    AI 产出 Proposal（导出配置）
+
+  Draft:
+    AI 产出 Draft（导出配置）
     ↓ ReviewGate: L0.ApprovalEngine 强制人工审批
-  
+
 用户：确认导出
-  
-  Implement:
-    Apply 前再次 Approve（双重审批：Proposal 级 + Apply 级）
+
+  Apply:
+    Apply 前再次 Approve（双重审批：Draft 级 + Apply 级）
     L0.TaskManager 长任务模式
     L0.EventBus 每分钟广播进度
 
@@ -1837,11 +1841,11 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 |-----|---------|------------|--------|-----|
 | 默认模式 | 总 SDD | 灵活（/plan）| 直接 | **AutoMode 默认** |
 | 结构化入口 | /specify | /plan | - | **/plan 显式 + 自动升级** |
-| 流程阶段 | 4 阶段 | 灵活 | 灵活 | **4 阶段（对齐 Speckit）** |
+| 流程阶段 | 4 阶段 | 灵活 | 灵活 | **3 阶段 Draft/Plan/Apply（合并原 Plan+Tasks；Plan/Apply 对齐 Terraform）** |
 | 能力架构 | 模板驱动 | 工具注册 | 工具注册 | **扁平能力池 + 注册协议** |
 | 审批 | 无 | Permission | 无 | **L0 默认提供** |
 | 事件 | 无 | 有 | 有 | **L0 默认提供** |
-| 任务管理 | 无 | TodoWrite | 无 | **L0 TaskManager + AI TodoList** |
+| 任务管理 | 无 | TodoWrite | 无 | **L0 TaskManager + AI TaskWrite** |
 | 重试 | 无 | 有 | 有 | **L0 五级自愈** |
 | 产物格式 | 全 MD | MD + JSON | MD + JSON | **二分：AI→MD / 程序→JSON** |
 
@@ -1874,7 +1878,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 | 分级懒加载（LoadingTier）| 保留，用于 L1 能力按需加载 |
 | AgentCapabilityProvider 注册模式 | 保留并扩展为统一 capabilities 协议 |
 | TOOL_NAMES 常量 SSOT | 保留，用于命名空间规范 |
-| TodoList 概念 | 保留并修正为 AI 产出 MD |
+| TodoList 概念 | 保留为 AI 产出 MD（2026-04-22 重命名为 Task，落盘为 `task-<runId>.md`）|
 | ReviewGate 概念 | 保留为特殊 L1 能力 |
 
 ---
@@ -1889,18 +1893,18 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 
 neko-agent/packages/agent/services/
   mode-manager.ts            L3 模式切换
-  sdd-orchestrator.ts        L2 PlanMode 4 阶段编排
-  step-executor.ts           L2 Step 循环（AutoMode 快路径 + Implement 阶段）
+  sdd-orchestrator.ts        L2 PlanMode 3 阶段编排（Draft/Plan/Apply）
+  step-executor.ts           L2 Step 循环（AutoMode 快路径 + Apply 阶段）
   capability-registry.ts     L1 扁平能力聚合
   approval-engine.ts         L0 单引擎双策略包
   event-bus.ts               L0 统一事件
-  task-queue.ts              L0 任务管理（含 TodoWrite 工具）
+  task-manager.ts            L0 任务管理（含 TaskWrite 工具）
   retry-engine.ts            L0 五级自愈
 
-neko-agent/packages/agent/tools/
-  todo-write.ts              AI 工具（落盘 .nktodo.md）
-  proposal-write.ts          AI 工具（落盘 .nkproposal.md）
-  plan-write.ts              AI 工具（落盘 .nkplan.md）
+neko-agent/packages/agent/tools/core/
+  task-write-tool.ts         AI 工具（落盘 `tasks/task-<runId>.md`，原 TodoWriteTool）
+  draft-write-tool.ts        AI 工具（落盘 `drafts/draft-<id>.md`，原 ProposalWriteTool）
+  plan-write-tool.ts         AI 工具（落盘 `plans/plan-<id>.md`）
 
 第一方子包（示例 neko-cut）:
   extension/src/
@@ -1979,7 +1983,7 @@ neko-agent/packages/agent/tools/
 
 ### 架构反模式
 - ❌ 推翻 L3/L2/L1/L0 四层分工，让业务层处理基础设施
-- ❌ 让 AutoMode 简单任务也跑完整 SDD 4 阶段（违背"默认最短"）
+- ❌ 让 AutoMode 简单任务也跑完整 SDD 3 阶段（违背"默认最短"）
 - ❌ 能力注册按 kind 分多个 contributes 片段（应合并为扁平数组）
 - ❌ 让基础设施对业务层可见（L0 应透明）
 
@@ -1992,9 +1996,9 @@ neko-agent/packages/agent/tools/
 - ❌ 把 JSON 索引当事实源（应从 MD 派生重建）
 
 ### Plan 反模式
-- ❌ 用"Plan"单独命名任何产物（永远承载不了明确含义）
+- ❌ 用"Plan"单独命名业务型产物（Plan 仅指 ExecutionPlan / `plan-<id>.md`，其业务意图由 Draft 承载）
 - ❌ 让 Plan 承载业务语义（Plan 是纯命令式 tool call 列表）
-- ❌ 让用户审批 Plan（审批对象是 Proposal）
+- ❌ 让用户审批 Plan（审批对象是 Draft）
 
 ### 能力反模式
 - ❌ 能力不声明 kind（无法按模式筛选）
@@ -2026,7 +2030,7 @@ neko-agent/packages/agent/tools/
 
 | 风险 | 概率 | 影响 | 缓解 |
 |-----|-----|-----|-----|
-| PlanMode 4 阶段用户感觉繁重 | 中 | 中 | AutoMode 默认走快路径；PlanMode 仅显式切换 |
+| PlanMode 3 阶段用户感觉繁重 | 低 | 中 | AutoMode 默认走快路径；PlanMode 仅显式切换；阶段从 4 缩减为 3 后更紧凑 |
 | LLM 产出 frontmatter 错误 | 中 | 低 | Schema fail-soft + 自动修复 |
 | 扁平能力池跨域冲突 | 低 | 中 | 强制命名空间（`{domain}.`）|
 | L0 基础设施重构影响现有 Pipeline | 中 | 高 | 保留兼容层，渐进迁移 |
@@ -2046,6 +2050,8 @@ neko-agent/packages/agent/tools/
 | 2026-04-21 | 新增子包依赖声明 requiredSubpackages（以子包粒度而非命令粒度声明依赖），激活前校验避免运行时缺失；五级失效处理（必需缺失阻止激活/可选缺失降级/fallback message/version 不兼容提示升级/执行时 L0.RetryEngine 二次校验）；对齐成熟生态依赖管理（npm dependencies / VSCode extensionDependencies）；未来场景/Tool Group 维度作为扩展点保留不 pre-build；删除 DirectMode（AutoMode 已覆盖简单任务快路径 + PlanMode 承载深度参与，两档足够；Direct 调用作为独立的 Invocation Style 概念保留供未来扩展） | Architecture Team |
 | 2026-04-22 | §10 从 "术语双轨分层 + 双名 slash" 改为 "统一英文命令原则"（F 波文档决策）。撤销 CreatorTerms 映射表、撤销 `/specify`/`/构思` 双名注册、撤销 UI 呈现层与协议层的术语分离。保留 v1 原提议在 §10.7 作决策追溯。相关地方（§3.1 PlanMode 触发命令一栏）同步清理为仅 `/plan`。理由：一套英文术语同时用于文档 / 代码 / 日志 / UI / AI prompt 比"代码英文 + UI 中文"的双轨更有价值——一致性、可教学性、可搜索性、零翻译维护。 | Architecture Team |
 | 2026-04-22 | 收尾对齐（纯机械）：§5.1/§5.3 新增 `CapabilityKind` 判别式联合类型（`'skill' \| 'tool' \| 'operation'`）+ `capabilityKindOf()` 分类器。**Operation 不是独立接口** —— 代码层 Tool 和 Operation 共用 `Tool` interface，通过 `isDestructive` trait 区分（destructive=true ⇒ 'operation'）。Skill/Tool registry 仍然分离（查询路径不同），ADR "扁平池"是 Agent 组合视角的概念框架，不是数据结构强制。§6.3 TaskQueue 改称 TaskManager 匹配现有代码（`packages/agent/src/task/task-manager.ts`），说明 TaskManager 除入队出队还承担 persistence / recovery / 并发池职责。 | Architecture Team |
+| 2026-04-22 | **三阶段重命名（Phase A）**：SDD 从 `Specify/Plan/Tasks/Implement` 四阶段简化为 `Draft/Plan/Apply` 三阶段——原 Plan+Tasks 合并入单个 Plan 阶段（两者共享 persona / 工具 / guardians / 失败语义，只是产出物命名不同）；Implement 改名 Apply 借用 Terraform 成熟范式；Specify 改名 Draft 避开 `design` 在创作工具里的"视觉设计"歧义。产物 `Proposal` → `Draft`、`TodoList` → `Task`；文件命名从 `.nkproposal.md` / `.nkplan.md` / `.nktodo.md` 扩展名迁移为 `drafts/draft-<id>.md` / `plans/plan-<id>.md` / `tasks/task-<id>.md` 前缀方案（收益：ls 分组清晰、普通 MD 编辑器零配置打开、Git diff 原生识别）。ExecutionPlan 的 `proposalId` 字段改名 `draftId`；EventBus 频道 `creation.proposal.presented` → `creation.draft.presented`、`execution.todo.updated` → `execution.task.updated`；ApprovalEngine channel `proposal-review` → `draft-review`。代码改动：agent-types 新增 `draft.ts` / `task.ts`，删除 `proposal.ts` / `todo-list.ts`；agent 包内 `DraftWriteTool` / `TaskWriteTool` 替换原 `ProposalWriteTool` / `TodoWriteTool`；neko-paths 的 SUBDIRS 与 prefix 常量全面更新。工具逻辑保持不变（只改名 + 改路径），Phase B（后续 PR）将删除这 3 个 WriteTool，改为通用 Write + prompt 约束 + 后置 validator。 | Architecture Team |
+| 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 
 ---
 
@@ -2053,11 +2059,10 @@ neko-agent/packages/agent/tools/
 
 | Speckit | neko-suite 整合架构 |
 |--------|---------------------|
-| /specify | Specify 阶段 → Proposal |
-| /plan | Plan 阶段 → ExecutionPlan |
-| /tasks | Tasks 阶段 → TodoList |
-| /implement | Implement 阶段 → Step Loop |
-| Specifications 是主产物 | `.nkproposal.md` 是主产物 |
+| /specify | Draft 阶段 → Draft |
+| /plan + /tasks | Plan 阶段 → ExecutionPlan + Task（合并） |
+| /implement | Apply 阶段 → Step Loop |
+| Specifications 是主产物 | `drafts/draft-<id>.md` 是主产物 |
 | 纯 Markdown | Markdown + 二分格式（+ 程序日志 JSONL）|
 | 无审批 | L0 ApprovalEngine |
 | 无事件 | L0 EventBus |
@@ -2072,9 +2077,9 @@ neko-agent/packages/agent/tools/
 这个产物由谁产出内容？
   │
   ├─ AI 产出（或人产出）
-  │   → Markdown（`.nk*.md` / `.skill.md` / `.md`）
-  │   - 业务叙事产物（Proposal/Plan/Review/Status/...）
-  │   - TodoList（AI 调 TodoWrite 工具）
+  │   → Markdown（`<kind>-<runId>.md` / `.skill.md` / `.md`）
+  │   - SDD 三件套（Draft / Plan / Task，前缀命名）
+  │   - Task（AI 调 TaskWrite 工具）
   │   - Session/Skill/Workflow/Spec/Capability 声明
   │
   ├─ 程序自动记录
@@ -2083,7 +2088,7 @@ neko-agent/packages/agent/tools/
   │
   ├─ 程序派生构建
   │   → JSON（可重建的缓存/索引）
-  │   - Capability Index / Proposal Index / Cache
+  │   - Capability Index / Draft Index / Cache
   │
   └─ 协议强制
       → 协议格式

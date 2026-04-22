@@ -1,7 +1,7 @@
 > ⚠️ **此 ADR 已被简化版替代**
 >
 > 本文档为早期设计探索，存在过度设计（外环 5 阶段、10 类能力、8 层防御、Plan 概念混淆等）。
-> 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + 二分格式原则 + SDD 4 阶段）
+> 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + 二分格式原则 + SDD 3 阶段 Draft → Plan → Apply）
 >
 > 本文档保留作为设计思考记录。
 

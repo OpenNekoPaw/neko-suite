@@ -9,13 +9,15 @@
  * imports) — the caller's fsOps actually creates/writes files. This
  * keeps the agent package free of vscode / node wiring at L0.
  *
- * Canonical layout (directories, not files):
+ * Naming convention (2026-04-22 revision): artifacts use prefix + `.md`
+ * rather than custom `.nk*.md` extensions. The prefix matches the SDD
+ * stage vocabulary (draft / plan / task):
  *
  *   <root>/.neko/
- *     proposals/       AI-produced .nkproposal.md
- *     plans/           AI-produced .nkplan.md
- *     todos/           AI-produced .nktodo.md (TodoWrite tool output)
- *     sessions/        AI-produced .nksession.md
+ *     drafts/          AI-produced draft-<runId>.md
+ *     plans/           AI-produced plan-<runId>.md
+ *     tasks/           AI-produced task-<runId>.md
+ *     sessions/        AI-produced session-<runId>.md
  *     logs/            Program-produced .jsonl (events / audits / steps)
  *     cache/           Program-produced .json (indices, derivable)
  *     state/           Program-produced concurrency + lock files
@@ -35,9 +37,9 @@ export const NEKO_DIR = '.neko' as const;
 
 /** Subdirectories under `.neko/`. Values are relative paths. */
 export const NEKO_SUBDIRS = {
-  proposals: 'proposals',
+  drafts: 'drafts',
   plans: 'plans',
-  todos: 'todos',
+  tasks: 'tasks',
   sessions: 'sessions',
   logs: 'logs',
   cache: 'cache',
@@ -71,16 +73,15 @@ export const NEKO_STATE_FILES = {
 
 export type NekoStateFile = keyof typeof NEKO_STATE_FILES;
 
-/** Canonical extensions for AI-produced markdown artifacts. */
-export const NEKO_MD_EXTENSIONS = {
-  proposal: '.nkproposal.md',
-  plan: '.nkplan.md',
-  todo: '.nktodo.md',
-  session: '.nksession.md',
-  spec: '.nkspec.md',
-  workflow: '.nkworkflow.md',
-  review: '.nkreview.md',
-  status: '.nkstatus.md',
+/**
+ * Canonical filename prefixes for AI-produced markdown artifacts.
+ * Files are named `<prefix>-<runId>.md` under the matching subdirectory.
+ */
+export const NEKO_MD_PREFIXES = {
+  draft: 'draft',
+  plan: 'plan',
+  task: 'task',
+  session: 'session',
 } as const;
 
 // =============================================================================
@@ -94,11 +95,11 @@ export interface INekoPaths {
   dir(subdir: NekoSubdir): string;
   /**
    * Absolute path to an AI-produced artifact given its family.
-   * Example: `file('proposals', 'tiktok-001')` → `<root>/.neko/proposals/tiktok-001.nkproposal.md`
+   * Example: `file('drafts', 'tiktok-001')` → `<root>/.neko/drafts/draft-tiktok-001.md`
    */
-  file(subdir: 'proposals', basename: string): string;
+  file(subdir: 'drafts', basename: string): string;
   file(subdir: 'plans', basename: string): string;
-  file(subdir: 'todos', basename: string): string;
+  file(subdir: 'tasks', basename: string): string;
   file(subdir: 'sessions', basename: string): string;
   file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
   /** Absolute path to a canonical JSONL log. */
@@ -134,29 +135,36 @@ export function createNekoPaths(projectRoot: string): INekoPaths {
 
   const dir = (subdir: NekoSubdir): string => join(root, NEKO_SUBDIRS[subdir]);
 
-  function extensionFor(subdir: NekoSubdir): string {
+  function prefixFor(subdir: NekoSubdir): string | null {
     switch (subdir) {
-      case 'proposals':
-        return NEKO_MD_EXTENSIONS.proposal;
+      case 'drafts':
+        return NEKO_MD_PREFIXES.draft;
       case 'plans':
-        return NEKO_MD_EXTENSIONS.plan;
-      case 'todos':
-        return NEKO_MD_EXTENSIONS.todo;
+        return NEKO_MD_PREFIXES.plan;
+      case 'tasks':
+        return NEKO_MD_PREFIXES.task;
       case 'sessions':
-        return NEKO_MD_EXTENSIONS.session;
+        return NEKO_MD_PREFIXES.session;
       case 'archives':
-        return '.md';
+        return null;
       default:
-        throw new Error(`No canonical extension for subdir "${subdir}"`);
+        throw new Error(`No canonical prefix for subdir "${subdir}"`);
     }
   }
 
   function file(subdir: NekoSubdir, basename: string): string {
     if (!basename) throw new Error('NekoPaths.file: basename is required');
-    // Strip any accidental extension the caller already added.
-    const ext = extensionFor(subdir);
-    const clean = basename.endsWith(ext) ? basename.slice(0, -ext.length) : basename;
-    return `${dir(subdir)}/${clean}${ext}`;
+    const prefix = prefixFor(subdir);
+    const prefixPattern = prefix ? `${prefix}-` : '';
+    // Strip any accidental `.md` the caller already appended.
+    const withoutExt = basename.endsWith('.md') ? basename.slice(0, -'.md'.length) : basename;
+    // Strip an already-applied prefix so callers can pass either raw runId or the full name.
+    const runId =
+      prefix && withoutExt.startsWith(prefixPattern)
+        ? withoutExt.slice(prefixPattern.length)
+        : withoutExt;
+    const fileName = prefix ? `${prefixPattern}${runId}.md` : `${runId}.md`;
+    return `${dir(subdir)}/${fileName}`;
   }
 
   return {

@@ -95,7 +95,7 @@ describe('preferencesStrategyPack — alwaysApprove → escalate', () => {
         ...createPreferencesStrategyPacks(
           prefs({
             alwaysApprove: [
-              { kind: 'channel', value: 'proposal-review', source: 'channel:proposal-review' },
+              { kind: 'channel', value: 'draft-review', source: 'channel:draft-review' },
             ],
           }),
         ),
@@ -104,7 +104,7 @@ describe('preferencesStrategyPack — alwaysApprove → escalate', () => {
     });
     const res = await engine.evaluate(
       makeRequest({
-        channel: 'proposal-review',
+        channel: 'draft-review',
         paradigm: 'declarative',
         subject: { kind: 'proposal:x', label: 'x', idempotent: true, destructive: false },
       }),

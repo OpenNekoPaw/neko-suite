@@ -47,7 +47,7 @@ export type MilestoneKind =
   | 'round-decided'
   | 'autoheal'
   | 'quality-evaluated'
-  | 'proposal-presented'
+  | 'draft-presented'
   | 'review-decided'
   | 'status-updated'
   | 'other';
@@ -113,11 +113,11 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
       };
     case CREATION_CHANNELS.MILESTONE:
       return { ...base, kind: 'other', label: event.label, runId: event.runId };
-    case CREATION_CHANNELS.PROPOSAL_PRESENTED:
+    case CREATION_CHANNELS.DRAFT_PRESENTED:
       return {
         ...base,
-        kind: 'proposal-presented',
-        label: `Proposal ${event.proposalId}`,
+        kind: 'draft-presented',
+        label: `Draft ${event.draftId}`,
         runId: event.runId,
       };
     case CREATION_CHANNELS.REVIEW_DECIDED:
@@ -186,7 +186,7 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
         runId: event.runId,
       };
     default:
-      // TODO/plan/apply/step produce detailed events that are too
+      // task/plan/apply/step produce detailed events that are too
       // granular for milestones — skip by default. Callers that want
       // them should supply a custom classifier.
       return null;

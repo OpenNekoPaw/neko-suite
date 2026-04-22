@@ -2,7 +2,7 @@
  * StageGuardian tests (ADR §5.4, §6.5).
  *
  * Covers the two checks shipped in the first PR:
- *   - stage-out-of-order: Implement as the first-ever entered stage
+ *   - stage-out-of-order: Apply as the first-ever entered stage
  *   - stage-timeout:       tick detects when a stage stays active too long
  * Plus bookkeeping: disposal, history cap, seeded-current-stage behaviour.
  */
@@ -18,27 +18,27 @@ function collect(): [StageGuardianIssue[], (i: StageGuardianIssue) => void] {
 
 describe('StageGuardian', () => {
   describe('stage-out-of-order', () => {
-    it('flags implement-first entry', () => {
+    it('flags apply-first entry', () => {
       const tracker = createStageTracker({ now: () => 0 });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('implement');
+      tracker.enter('apply');
 
       expect(issues).toHaveLength(1);
       expect(issues[0]!.code).toBe('stage-out-of-order');
-      expect(issues[0]!.stage).toBe('implement');
+      expect(issues[0]!.stage).toBe('apply');
     });
 
-    it('does not flag implement when specify was already visited', () => {
+    it('does not flag apply when draft was already visited', () => {
       const tracker = createStageTracker({ now: () => 0 });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('specify');
-      tracker.enter('implement');
+      tracker.enter('draft');
+      tracker.enter('apply');
 
       expect(issues.filter((i) => i.code === 'stage-out-of-order')).toHaveLength(0);
     });
@@ -52,15 +52,15 @@ describe('StageGuardian', () => {
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('implement');
+      tracker.enter('apply');
 
       expect(issues).toHaveLength(0);
     });
 
-    it('does not flag when constructed mid-run on an already-Implement tracker', () => {
+    it('does not flag when constructed mid-run on an already-Apply tracker', () => {
       // If someone creates a guardian after a run is mid-flight, the current
       // stage counts as visited — we should not retroactively complain.
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 100 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
@@ -68,7 +68,7 @@ describe('StageGuardian', () => {
       // No further transitions — nothing should fire.
       expect(issues).toHaveLength(0);
       // A re-entrance (idempotent, no-op) also stays quiet.
-      tracker.enter('implement');
+      tracker.enter('apply');
       expect(issues).toHaveLength(0);
     });
   });
@@ -84,7 +84,7 @@ describe('StageGuardian', () => {
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('specify'); // enteredAt = 0
+      tracker.enter('draft'); // enteredAt = 0
       t = 500;
       guardian.tick();
       expect(issues.filter((i) => i.code === 'stage-timeout')).toHaveLength(0);
@@ -93,7 +93,7 @@ describe('StageGuardian', () => {
       guardian.tick();
       expect(issues.filter((i) => i.code === 'stage-timeout')).toHaveLength(1);
       const issue = issues.find((i) => i.code === 'stage-timeout')!;
-      expect(issue.stage).toBe('specify');
+      expect(issue.stage).toBe('draft');
       expect(issue.detail?.elapsedMs).toBe(2000);
       expect(issue.detail?.budgetMs).toBe(1000);
     });
@@ -108,7 +108,7 @@ describe('StageGuardian', () => {
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('specify');
+      tracker.enter('draft');
       t = 500;
       guardian.tick();
       guardian.tick();
@@ -127,7 +127,7 @@ describe('StageGuardian', () => {
       const [issues, listener] = collect();
       guardian.onIssue(listener);
 
-      tracker.enter('specify');
+      tracker.enter('draft');
       t = 500;
       guardian.tick();
       expect(issues.filter((i) => i.code === 'stage-timeout')).toHaveLength(1);
@@ -149,7 +149,7 @@ describe('StageGuardian', () => {
       // No stageTimeoutMs — timeouts disabled.
       const [issues, listener] = collect();
       guardian.onIssue(listener);
-      tracker.enter('specify');
+      tracker.enter('draft');
       t = 1_000_000;
       guardian.tick();
       expect(issues).toHaveLength(0);
@@ -166,7 +166,7 @@ describe('StageGuardian', () => {
       guardian.dispose();
 
       // After dispose, further tracker transitions must not raise issues.
-      tracker.enter('implement');
+      tracker.enter('apply');
       expect(issues).toHaveLength(0);
     });
 
@@ -174,7 +174,7 @@ describe('StageGuardian', () => {
       const tracker = createStageTracker({ now: () => 0 });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
 
-      tracker.enter('implement'); // raises out-of-order
+      tracker.enter('apply'); // raises out-of-order
       const history = guardian.getHistory();
       expect(history).toHaveLength(1);
       expect(history[0]!.code).toBe('stage-out-of-order');
@@ -183,7 +183,7 @@ describe('StageGuardian', () => {
 
   describe('approval-skipped', () => {
     it('flags apply without a preceding approval', () => {
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
@@ -193,11 +193,11 @@ describe('StageGuardian', () => {
       expect(issues).toHaveLength(1);
       expect(issues[0]!.code).toBe('approval-skipped');
       expect(issues[0]!.detail?.subject).toBe('tool:generate_image');
-      expect(issues[0]!.stage).toBe('implement');
+      expect(issues[0]!.stage).toBe('apply');
     });
 
     it('does not flag when approval precedes apply for the same subject', () => {
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
@@ -212,7 +212,7 @@ describe('StageGuardian', () => {
       // Each Apply must be preceded by its own Approve. This catches the
       // case where a skill approves once and then performs multiple
       // destructive applies against the same tool.
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
@@ -225,7 +225,7 @@ describe('StageGuardian', () => {
     });
 
     it('approvals are per-subject; apply on a different subject still flags', () => {
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);
@@ -238,7 +238,7 @@ describe('StageGuardian', () => {
     });
 
     it('opt-out via enforceApprovalGate=false silences the check', () => {
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, {
         now: () => 0,
         enforceApprovalGate: false,
@@ -252,7 +252,7 @@ describe('StageGuardian', () => {
     });
 
     it('after dispose, noteApproval / noteApply become no-ops', () => {
-      const tracker = createStageTracker({ now: () => 0, initialStage: 'implement' });
+      const tracker = createStageTracker({ now: () => 0, initialStage: 'apply' });
       const guardian = createStageGuardian(tracker, { now: () => 0 });
       const [issues, listener] = collect();
       guardian.onIssue(listener);

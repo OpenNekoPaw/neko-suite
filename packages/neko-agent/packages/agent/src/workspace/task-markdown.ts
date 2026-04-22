@@ -1,18 +1,19 @@
 /**
- * TodoList markdown serialiser.
+ * Task markdown serialiser.
  *
  * See: docs/architecture/agent-unified-workflow.md §7.3 (AI → Markdown),
- *      §7.4 (`.neko/todos/<runId>.nktodo.md`).
+ *      §7.4 (`.neko/tasks/task-<runId>.md`).
  *
- * Canonical shape the TodoWrite tool emits:
+ * Canonical shape for the Task artifact file:
  *
  *   ---
- *   id: <list id>
+ *   id: <task id>
+ *   kind: task
  *   createdAt: <ISO 8601>
  *   updatedAt: <ISO 8601>
  *   ---
  *
- *   # TODO
+ *   # Tasks
  *
  *   - [ ] <content>                      (pending)
  *   - [~] <activeForm ?? content>        (in progress)
@@ -20,26 +21,29 @@
  *   - [!] <content>                      (failed)
  *         _error: <error>_
  *
- * The TodoWrite tool is the single writer; it serialises the caller's
- * full TodoList snapshot each time, mirroring Claude Code's
+ * Emits the full Task snapshot each call, mirroring Claude Code's
  * TodoWrite-everything-at-once contract. Consumers don't diff — they
  * just read the latest file.
+ *
+ * Renamed from todo-markdown.ts (2026-04-22, ADR §4 revision). Phase B
+ * (2026-04-22) removed the dedicated TaskWriteTool that drove this helper
+ * — kept as a reusable library for future UI rendering + round-trip tests.
  */
 
-import type { TodoList, TodoItem, TodoStatus } from '@neko-agent/types';
+import type { Task, TaskItem, TaskStatus } from '@neko-agent/types';
 
 // =============================================================================
 // Status rendering
 // =============================================================================
 
-const STATUS_CHECKBOX: Record<TodoStatus, string> = {
+const STATUS_CHECKBOX: Record<TaskStatus, string> = {
   pending: '[ ]',
   in_progress: '[~]',
   completed: '[x]',
   failed: '[!]',
 };
 
-function renderItem(item: TodoItem): string {
+function renderItem(item: TaskItem): string {
   const label = item.status === 'in_progress' ? (item.activeForm ?? item.content) : item.content;
   const line = `- ${STATUS_CHECKBOX[item.status]} ${escapeInline(label)}`;
   if (item.status === 'failed' && item.error) {
@@ -63,26 +67,27 @@ function escapeInline(text: string): string {
 // =============================================================================
 
 /**
- * Render a full TodoList as the canonical `.nktodo.md` contents.
+ * Render a full Task checklist as the canonical `task-<runId>.md` contents.
  *
  * Timestamps are serialised with `toISOString()` so diffs across runs
- * stay stable and human-readable. The caller supplies the list's
+ * stay stable and human-readable. The caller supplies the task's
  * existing createdAt so repeated writes don't clobber it.
  */
-export function serializeTodoList(list: TodoList): string {
+export function serializeTask(task: Task): string {
   const header = [
     '---',
-    `id: ${list.id}`,
-    `createdAt: ${new Date(list.createdAt).toISOString()}`,
-    `updatedAt: ${new Date(list.updatedAt).toISOString()}`,
+    `id: ${task.id}`,
+    'kind: task',
+    `createdAt: ${new Date(task.createdAt).toISOString()}`,
+    `updatedAt: ${new Date(task.updatedAt).toISOString()}`,
     '---',
     '',
-    '# TODO',
+    '# Tasks',
     '',
   ].join('\n');
 
-  if (list.items.length === 0) {
+  if (task.items.length === 0) {
     return `${header}_No items._\n`;
   }
-  return `${header}${list.items.map(renderItem).join('\n')}\n`;
+  return `${header}${task.items.map(renderItem).join('\n')}\n`;
 }

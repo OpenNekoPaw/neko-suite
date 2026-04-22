@@ -11,7 +11,7 @@ export {
   NEKO_SUBDIRS,
   NEKO_LOG_FILES,
   NEKO_STATE_FILES,
-  NEKO_MD_EXTENSIONS,
+  NEKO_MD_PREFIXES,
   type INekoPaths,
   type NekoSubdir,
   type NekoLogFile,
@@ -34,8 +34,8 @@ export {
   type NdjsonFsOps,
 } from './ndjson-event-sink';
 
-export { serializeTodoList } from './todo-markdown';
-export { serializeProposal } from './proposal-markdown';
+export { serializeTask } from './task-markdown';
+export { serializeDraft } from './draft-markdown';
 export { serializeExecutionPlan } from './plan-markdown';
 
 export {

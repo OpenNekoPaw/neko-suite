@@ -4,8 +4,8 @@
  * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  *
  * Three channels funnel through ApprovalEngine:
- *   - permission: tool-call-level authorization (Implement)
- *   - proposal-review: business-level Proposal approval (end of Specify)
+ *   - permission: tool-call-level authorization (Apply)
+ *   - draft-review: business-level Draft approval (end of Draft stage)
  *   - quality-gate: pipeline verdict (pass / warn / fail)
  *
  * Each has its own UI surface, but all three boil down to the same
@@ -23,10 +23,10 @@ import type { Paradigm } from '@neko-agent/types';
 // =============================================================================
 
 export type ApprovalChannel =
-  /** Tool call authorization (fine-grained, frequent, Implement-stage). */
+  /** Tool call authorization (fine-grained, frequent, Apply-stage). */
   | 'permission'
-  /** Proposal review at end of Specify stage (coarse-grained, once per run). */
-  | 'proposal-review'
+  /** Draft review at end of Draft stage (coarse-grained, once per run). */
+  | 'draft-review'
   /** Quality gate verdict (per stage). */
   | 'quality-gate';
 
@@ -51,8 +51,8 @@ export interface ApprovalSubject {
 export interface ApprovalRequest {
   channel: ApprovalChannel;
   /**
-   * Paradigm the request belongs to — declarative (Proposal / Specify-stage
-   * business decisions) vs imperative (Plan / Implement-stage tool calls).
+   * Paradigm the request belongs to — declarative (Draft / Draft-stage
+   * business decisions) vs imperative (Plan / Apply-stage tool calls).
    * Drives strategy-pack selection.
    */
   paradigm: Paradigm;

@@ -13,7 +13,10 @@
  *   - Does NOT dispatch stages (PR2's stage-dispatcher will).
  *   - Does NOT enforce mode × stage in a security sense (runtime guard does).
  *   - Does NOT evaluate high-risk operation approval gates (the L0 approval
- *     engine owns that at Implement-time).
+ *     engine owns that at Apply-time).
+ *
+ * Renamed stages 2026-04-22 (ADR §4 revision):
+ *   specify → draft, implement → apply, tasks merged into plan.
  */
 
 import type {
@@ -35,12 +38,12 @@ import { getStageModeActivation, type StageMode } from './stage-activation-matri
  * start from. Rules are evaluated upstream by the activation classifier; the
  * planner just honours the result.
  *
- *   atomic-instruction  → rules 4 (e.g. "bump volume +3dB") → enter Implement
- *   multi-step          → rule 5 (e.g. "generate 3 covers")  → enter Plan
- *   vague-creative      → rule 6 (fallback)                  → enter Specify
- *   referenced-artifact → rule 2 (user cited @proposal-001)  → continue mid-DAG
- *   workflow-template   → rule 3 (user invoked /tiktok-15s)  → Workflow-defined
- *   high-risk-forced    → rule 1 (reversible=false present)  → force Specify
+ *   atomic-instruction  → rule 4 (e.g. "bump volume +3dB") → enter Apply
+ *   multi-step          → rule 5 (e.g. "generate 3 covers") → enter Plan
+ *   vague-creative      → rule 6 (fallback)                 → enter Draft
+ *   referenced-artifact → rule 2 (user cited @draft-001)    → continue mid-DAG
+ *   workflow-template   → rule 3 (user invoked /tiktok-15s) → Workflow-defined
+ *   high-risk-forced    → rule 1 (reversible=false present) → force Draft
  */
 export type StageEntrySignal =
   | 'atomic-instruction'
@@ -76,12 +79,12 @@ export interface StagePlanInputs {
  * Decide which stages to activate this round.
  *
  * Algorithm:
- *   1. Pick the entry stage (PlanMode always Specify; AutoMode per §3.2 rule;
- *      AskMode follows AutoMode entry rules but with approval on each
- *      Implement operation).
+ *   1. Pick the entry stage (PlanMode always Draft; AutoMode per §3.2 rule;
+ *      AskMode follows AutoMode entry rules but with approval on each Apply
+ *      operation).
  *   2. Expand from entry to the end of the DAG, honouring mode allow-list.
  *   3. Apply task-shape skips (pure-think / retry / plan-only / clarification).
- *   4. Honour retry hint: drop Specify/Plan/Tasks in favour of reusing prior.
+ *   4. Honour retry hint: drop Draft/Plan in favour of reusing prior.
  *   5. Sort by DAG order.
  */
 export function planStages(inputs: StagePlanInputs): StageActivationDecision {
@@ -95,7 +98,7 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
   const entryStage = resolveEntryStage(mode, entrySignal);
 
   // Step 2: Expand from entry to end, in DAG order, honouring mode allow-list.
-  const allInOrder: SddStage[] = ['specify', 'plan', 'tasks', 'implement'];
+  const allInOrder: SddStage[] = ['draft', 'plan', 'apply'];
   const entryIdx = allInOrder.indexOf(entryStage);
   for (let i = 0; i < allInOrder.length; i++) {
     const stage = allInOrder[i]!;
@@ -113,9 +116,9 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
   // Step 3: Task-shape skips.
   applyTaskShapeSkips(taskShape, activated, skipped);
 
-  // Step 4: Retry hint — reuse prior Specify/Plan/Tasks.
+  // Step 4: Retry hint — reuse prior Draft/Plan.
   if (lastObserveHint === 'retry') {
-    for (const reuseStage of ['specify', 'plan', 'tasks'] as SddStage[]) {
+    for (const reuseStage of ['draft', 'plan'] as SddStage[]) {
       if (activated.has(reuseStage)) {
         activated.delete(reuseStage);
         if (!skipped.some((s) => s.stage === reuseStage)) {
@@ -125,15 +128,15 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
     }
   }
 
-  // Step 5: PlanMode guard — strip Implement if a shape sneaked it in.
-  if (mode === 'plan' && activated.has('implement')) {
-    activated.delete('implement');
-    if (!skipped.some((s) => s.stage === 'implement')) {
-      skipped.push({ stage: 'implement', reason: 'user-suppressed' });
+  // Step 5: PlanMode guard — strip Apply if a shape sneaked it in.
+  if (mode === 'plan' && activated.has('apply')) {
+    activated.delete('apply');
+    if (!skipped.some((s) => s.stage === 'apply')) {
+      skipped.push({ stage: 'apply', reason: 'user-suppressed' });
     }
   }
 
-  // Ensure always-mandatory Implement stays (unless PlanMode / pure-think / plan-only).
+  // Ensure always-mandatory Apply stays (unless PlanMode / pure-think / plan-only).
   const registryMandatory = (
     Object.values(STAGE_REGISTRY) as { name: SddStage; defaultMandatory: boolean }[]
   )
@@ -157,33 +160,32 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
 // =============================================================================
 
 function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): SddStage {
-  // PlanMode (explicit) always starts at Specify — user chose the deep path.
-  if (mode === 'plan') return 'specify';
+  // PlanMode (explicit) always starts at Draft — user chose the deep path.
+  if (mode === 'plan') return 'draft';
 
-  // Rule 1 (highest): high-risk operation present — force Specify so user
-  // approves the Proposal before any Implement happens. Cannot be overridden
-  // by other entry signals.
-  if (signal === 'high-risk-forced') return 'specify';
+  // Rule 1 (highest): high-risk operation present — force Draft so user
+  // approves the Draft before any Apply happens. Cannot be overridden by
+  // other entry signals.
+  if (signal === 'high-risk-forced') return 'draft';
 
   // Rules 2–6 for AutoMode / AskMode:
   switch (signal) {
     case 'referenced-artifact':
-      // User cited @proposal-001 / @plan-001 → continue from that stage.
-      // Conservative default: jump to Plan (the stage after Specify).
+      // User cited @draft-001 / @plan-001 → continue from Plan.
       return 'plan';
     case 'workflow-template':
       // Workflow invocation — the workflow itself picks its entry point. We
       // default to Plan, letting the workflow override if needed.
       return 'plan';
     case 'atomic-instruction':
-      // "bump volume +3dB" — straight to Implement.
-      return 'implement';
+      // "bump volume +3dB" — straight to Apply.
+      return 'apply';
     case 'multi-step':
-      // "generate 3 covers" — start at Plan (skip Specify).
+      // "generate 3 covers" — start at Plan (skip Draft).
       return 'plan';
     case 'vague-creative':
       // Fallback — "make a TikTok video". Full SDD path.
-      return 'specify';
+      return 'draft';
   }
 }
 
@@ -198,22 +200,22 @@ function applyTaskShapeSkips(
 ): void {
   /**
    * Skip table per task shape:
-   *   single-read      → skip specify / plan / tasks (Implement only)
-   *   single-write     → skip specify (Plan + Tasks + Implement)
+   *   single-read      → skip draft / plan (Apply only)
+   *   single-write     → skip draft (Plan + Apply)
    *   multi-step       → no skips
-   *   pure-think       → skip plan / tasks / implement (Specify only, think-aloud)
+   *   pure-think       → skip plan / apply (Draft only, think-aloud)
    *   retry            → handled by lastObserveHint branch
-   *   plan-only        → skip implement (stop after Tasks)
-   *   clarification    → skip specify / plan / tasks (Implement only)
+   *   plan-only        → skip apply (stop after Plan)
+   *   clarification    → skip draft / plan (Apply only)
    */
   const shapeSkips: Record<StageTaskShape, SddStage[]> = {
-    'single-read': ['specify', 'plan', 'tasks'],
-    'single-write': ['specify'],
+    'single-read': ['draft', 'plan'],
+    'single-write': ['draft'],
     'multi-step': [],
-    'pure-think': ['plan', 'tasks', 'implement'],
+    'pure-think': ['plan', 'apply'],
     retry: [],
-    'plan-only': ['implement'],
-    clarification: ['specify', 'plan', 'tasks'],
+    'plan-only': ['apply'],
+    clarification: ['draft', 'plan'],
   };
 
   for (const stage of shapeSkips[taskShape]) {

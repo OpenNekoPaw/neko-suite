@@ -1,5 +1,5 @@
 /**
- * Approval module — unified engine for permission / proposal-review / quality-gate.
+ * Approval module — unified engine for permission / draft-review / quality-gate.
  *
  * See: docs/architecture/agent-unified-workflow.md §9 (approval governance)
  */

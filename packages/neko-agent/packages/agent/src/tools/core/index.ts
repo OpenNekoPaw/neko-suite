@@ -26,6 +26,6 @@ export { ListDirectoryTool } from './list-directory-tool';
 export { GrepTool, type GrepToolOptions } from './grep-tool';
 export { createCoreTools, type CoreToolsOptions } from './core-tools';
 export { MemoryWriteTool } from './memory-write-tool';
-export { TodoWriteTool, type TodoWriteToolOptions } from './todo-write-tool';
-export { ProposalWriteTool, type ProposalWriteToolOptions } from './proposal-write-tool';
-export { PlanWriteTool, type PlanWriteToolOptions } from './plan-write-tool';
+// Phase B (2026-04-22): DraftWrite / PlanWrite / TaskWrite deleted. AI uses
+// the generic `Write` tool against `.neko/drafts|plans|tasks/*.md` now; the
+// ArtifactWatcher validates frontmatter post-write (see artifact/index.ts).

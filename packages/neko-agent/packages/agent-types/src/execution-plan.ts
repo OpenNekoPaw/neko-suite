@@ -2,14 +2,14 @@
  * ExecutionPlan — Plan-stage artifact (ADR §4.2, §5, §7.5).
  *
  * The imperative "how" of SDD. Compiled by the AI from an approved
- * Proposal at the Plan stage; executed by the Implement stage as an
- * ordered tool-call list. Persisted as `.neko/plans/<id>.nkplan.md`.
+ * Draft at the Plan stage; executed by the Apply stage as an
+ * ordered tool-call list. Persisted as `.neko/plans/plan-<runId>.md`.
  *
  * Distinct from `Plan` in plan.ts — that type is the parsed shape of
  * plan-mode markdown (think / user-review UI artifact). ExecutionPlan
  * is the SDD-stage artifact:
- *   Proposal (What, declarative) → ExecutionPlan (How, imperative) →
- *   TodoList (task-row projection) → actual tool calls
+ *   Draft (What, declarative) → ExecutionPlan (How, imperative) →
+ *   Task (user-visible checklist projection) → actual tool calls
  *
  * Each step is a canonical representation of a single tool call. The
  * AI writes the artifact; the runner reads it back to know what to
@@ -68,10 +68,10 @@ export interface ExecutionPlanStep {
 // =============================================================================
 
 export interface ExecutionPlan {
-  /** Stable id, typically derived from the Proposal id. */
+  /** Stable id, typically derived from the Draft id. */
   id: string;
-  /** Id of the Proposal this plan was compiled from (ADR §4.2 lineage). */
-  proposalId: string;
+  /** Id of the Draft this plan was compiled from (ADR §4.2 lineage). */
+  draftId: string;
   /** Human-readable title. */
   title: string;
   /** Lifecycle status. */

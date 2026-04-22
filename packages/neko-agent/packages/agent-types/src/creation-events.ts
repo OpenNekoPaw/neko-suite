@@ -1,12 +1,12 @@
 /**
- * Creation Events — pre-Implement (creation-persona) event namespace.
+ * Creation Events — pre-Apply (creation-persona) event namespace.
  *
  * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
  * Channels follow `creation.<stage>.<verb>` and are **business-semantic**
- * (user-facing), not technical-semantic. Emitted during the SDD Specify /
- * Plan / Tasks stages while creation-persona is active. Technical,
- * Implement-stage events belong on the execution-events namespace.
+ * (user-facing), not technical-semantic. Emitted during the SDD Draft /
+ * Plan stages while creation-persona is active. Technical, Apply-stage
+ * events belong on the execution-events namespace.
  *
  * These are type declarations only. The runtime EventBus maps channel
  * strings to these payload types; this module stays zero-dependency so
@@ -25,8 +25,8 @@ export const CREATION_CHANNELS = {
   RUN_STARTED: 'creation.run.started',
   /** A user-visible milestone was produced by Orchestration or Status. */
   MILESTONE: 'creation.milestone',
-  /** A Proposal was presented for Review. */
-  PROPOSAL_PRESENTED: 'creation.proposal.presented',
+  /** A Draft was presented for Review. */
+  DRAFT_PRESENTED: 'creation.draft.presented',
   /** User decision on a Review (approve / reject / fork / refine). */
   REVIEW_DECIDED: 'creation.review.decided',
   /** Status summary refreshed (user-facing narrative). */
@@ -58,10 +58,10 @@ export interface CreationMilestoneEvent {
   at: number;
 }
 
-export interface CreationProposalPresentedEvent {
-  channel: typeof CREATION_CHANNELS.PROPOSAL_PRESENTED;
+export interface CreationDraftPresentedEvent {
+  channel: typeof CREATION_CHANNELS.DRAFT_PRESENTED;
   runId: string;
-  proposalId: string;
+  draftId: string;
   at: number;
 }
 
@@ -70,7 +70,7 @@ export type ReviewDecision = 'approve' | 'reject' | 'fork' | 'refine';
 export interface CreationReviewDecidedEvent {
   channel: typeof CREATION_CHANNELS.REVIEW_DECIDED;
   runId: string;
-  proposalId: string;
+  draftId: string;
   decision: ReviewDecision;
   /** Optional reason the user gave. */
   note?: string;
@@ -109,7 +109,7 @@ export interface CreationRunEndedEvent {
 export type CreationEvent =
   | CreationRunStartedEvent
   | CreationMilestoneEvent
-  | CreationProposalPresentedEvent
+  | CreationDraftPresentedEvent
   | CreationReviewDecidedEvent
   | CreationStatusUpdatedEvent
   | CreationRunEndedEvent;

@@ -27,7 +27,7 @@ function roundEvent(round = 0, at = 1): DualFlowEvent {
     taskShape: 'multi-step',
     summary: {
       round,
-      activatedStages: ['plan', 'tasks', 'implement'],
+      activatedStages: ['plan', 'apply'],
       skippedStages: [],
       decidedAt: at,
     },
@@ -143,7 +143,7 @@ describe('MilestoneTracker', () => {
     expect(tracker.getHistory()).toEqual([]);
   });
 
-  it('quality-evaluated + proposal + review-decided all map', () => {
+  it('quality-evaluated + draft + review-decided all map', () => {
     const bus = createEventBus();
     const tracker = createMilestoneTracker(bus);
     bus.emit({
@@ -153,19 +153,19 @@ describe('MilestoneTracker', () => {
       at: 1,
     } as DualFlowEvent);
     bus.emit({
-      channel: CREATION_CHANNELS.PROPOSAL_PRESENTED,
+      channel: CREATION_CHANNELS.DRAFT_PRESENTED,
       runId: 'r1',
-      proposalId: 'p1',
+      draftId: 'p1',
       at: 2,
     } as DualFlowEvent);
     bus.emit({
       channel: CREATION_CHANNELS.REVIEW_DECIDED,
       runId: 'r1',
-      proposalId: 'p1',
+      draftId: 'p1',
       decision: 'approve',
       at: 3,
     } as DualFlowEvent);
     const kinds = tracker.getHistory().map((m) => m.kind);
-    expect(kinds).toEqual(['quality-evaluated', 'proposal-presented', 'review-decided']);
+    expect(kinds).toEqual(['quality-evaluated', 'draft-presented', 'review-decided']);
   });
 });

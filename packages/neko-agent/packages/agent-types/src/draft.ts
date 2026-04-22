@@ -1,10 +1,10 @@
 /**
- * Proposal — Specify-stage artifact (ADR §5.2, §7.5).
+ * Draft — Draft-stage artifact (ADR §5.2, §7.5).
  *
  * The declarative "what" of SDD. Produced by creation-persona at the
- * end of the Specify stage; reviewed by the user; compiled into an
- * ExecutionPlan at the Plan stage. Persisted as
- * `.neko/proposals/<id>.nkproposal.md`.
+ * end of the Draft stage; reviewed by the user; compiled into an
+ * ExecutionPlan + Task checklist at the Plan stage. Persisted as
+ * `.neko/drafts/draft-<runId>.md`.
  *
  * Shape mirrors ADR §5 "three layers" — intent / approach / artifact —
  * plus §7.5 frontmatter minimum (id / kind / status / domain / timestamps).
@@ -12,6 +12,9 @@
  * The AI writes the entire artifact (frontmatter + body). Programs
  * don't mutate fields; they read the file, parse the frontmatter for
  * indexing, and surface the body verbatim.
+ *
+ * Renamed from `Proposal` (2026-04-22, ADR §4 revision) to align stage
+ * and artifact naming: the Draft stage produces a Draft.
  */
 
 // =============================================================================
@@ -30,39 +33,39 @@
  *                      after the AI incorporates feedback
  *   rejected         — user declined; the run terminates or re-plans
  */
-export type ProposalStatus = 'draft' | 'pending_review' | 'approved' | 'refined' | 'rejected';
+export type DraftStatus = 'draft' | 'pending_review' | 'approved' | 'refined' | 'rejected';
 
 // =============================================================================
-// Proposal
+// Draft
 // =============================================================================
 
-export interface Proposal {
+export interface Draft {
   /** Stable id, typically `<domain>-<shortName>-<seq>`. */
   id: string;
   /** Human-readable title rendered in the review card. */
   title: string;
   /** Lifecycle status. */
-  status: ProposalStatus;
+  status: DraftStatus;
   /**
    * Domain tag — matches a skill's domain frontmatter
    * (cut / canvas / story / puppet / ...). Used for index filtering.
    */
   domain: string;
-  /** ms epoch — when the AI first produced this proposal. */
+  /** ms epoch — when the AI first produced this draft. */
   createdAt: number;
   /** ms epoch — last mutation (status change, refine, etc.). */
   updatedAt: number;
   /**
-   * The three narrative layers that make a good Proposal (ADR §5.1).
+   * The three narrative layers that make a good Draft (ADR §5.1).
    * All three are free-form markdown bodies composed by the AI.
    */
   intent: string;
   approach: string;
   artifact: string;
   /**
-   * Optional reference chain (ADR §8.4) — asset:// URIs this proposal
+   * Optional reference chain (ADR §8.4) — asset:// URIs this draft
    * depends on. Empty array = self-contained. Consumed by downstream
-   * indexing so "find proposals that reference character X" works.
+   * indexing so "find drafts that reference character X" works.
    */
   referenceChain?: readonly string[];
 }

@@ -5,7 +5,7 @@ import { serializeExecutionPlan } from '../plan-markdown';
 function make(overrides: Partial<ExecutionPlan> = {}): ExecutionPlan {
   return {
     id: 'cut-tiktok-001-plan',
-    proposalId: 'cut-tiktok-001',
+    draftId: 'cut-tiktok-001',
     title: 'TikTok 15s hero cut — plan',
     status: 'ready',
     createdAt: Date.UTC(2026, 3, 22, 10, 0, 0),
@@ -23,13 +23,13 @@ function make(overrides: Partial<ExecutionPlan> = {}): ExecutionPlan {
 }
 
 describe('serializeExecutionPlan', () => {
-  it('writes canonical frontmatter + lineage back to proposal', () => {
+  it('writes canonical frontmatter + lineage back to draft', () => {
     const md = serializeExecutionPlan(make());
     expect(md).toContain('id: cut-tiktok-001-plan');
-    expect(md).toContain('kind: execution-plan');
-    expect(md).toContain('proposalId: cut-tiktok-001');
+    expect(md).toContain('kind: plan');
+    expect(md).toContain('draftId: cut-tiktok-001');
     expect(md).toContain('status: ready');
-    expect(md).toContain('> Compiled from proposal `cut-tiktok-001`.');
+    expect(md).toContain('> Compiled from draft `cut-tiktok-001`.');
   });
 
   it('numbers steps starting at 1 with status label + tool + rationale + args fence', () => {

@@ -78,7 +78,7 @@ there is no pipeline to start. The loop per panel:
       audio track
     - GenerateMusic (sfx mode) for sound effects
     - SetTransition between panels for comic-style wipes / page turns
-    - Walk the TodoList, flipping status as each panel lands
+    - Walk the Task checklist, flipping status as each panel lands
 
 Throughout this phase you are execution-persona — stay terse, emit
 step records, lean on the 5-level autoheal chain for transient failures.

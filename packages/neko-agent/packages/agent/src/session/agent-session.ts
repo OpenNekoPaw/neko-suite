@@ -30,6 +30,7 @@ import { createReActLoopRunner, createSddRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
+import { createArtifactWatcher, type IArtifactWatcher } from '../artifact';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -144,6 +145,10 @@ export class AgentSession implements IAgentSession {
   // JSONL steps sink persisting step.completed events to
   // `.neko/logs/steps.jsonl`. Third filter view on the bus.
   private _stepsSink: import('../workspace').INdjsonEventSink | null = null;
+  // Post-write validator + fs.watch for draft/plan/task artifacts (Phase B,
+  // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
+  // validator that emits artifact.* events onto the EventBus.
+  private _artifactWatcher: IArtifactWatcher | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
@@ -246,6 +251,16 @@ export class AgentSession implements IAgentSession {
           fsOps: config.workspace.fsOps,
         });
         this._eventSink.attach(this._eventBus);
+
+        // ArtifactWatcher (Phase B) — fire-and-forget start. Silent on
+        // platforms where fs.watch is unavailable; validator only reports
+        // structured issues via the bus, never blocks the write.
+        this._artifactWatcher = createArtifactWatcher({
+          paths: this._nekoPaths,
+          eventBus: this._eventBus,
+          getRunId: () => this._runStore?.getActive()?.id ?? null,
+        });
+        void this._artifactWatcher.start();
       }
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
@@ -894,9 +909,13 @@ export class AgentSession implements IAgentSession {
     void this._eventSink?.dispose();
     void this._auditsSink?.dispose();
     void this._stepsSink?.dispose();
+    // Close fs.watch handles + drop pending debounces before the bus goes away
+    // so any last emit on settle has somewhere to land. Fire-and-forget.
+    void this._artifactWatcher?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
+    this._artifactWatcher = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;

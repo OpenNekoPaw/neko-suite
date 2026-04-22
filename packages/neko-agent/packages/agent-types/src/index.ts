@@ -20,8 +20,8 @@ export { DEFAULT_SETTINGS } from './settings';
 // Agent phase
 export type { AgentPhase, AgentState } from './phase';
 
-// SDD four-stage model (agent-unified-workflow.md §4)
-// Replaces the dual-flow primitive pool (deleted in PR3).
+// SDD three-stage model (agent-unified-workflow.md §4)
+// Renamed 2026-04-22: specify/plan/tasks/implement → draft/plan/apply
 export type {
   SddStage,
   StageSet,
@@ -31,16 +31,16 @@ export type {
   Paradigm,
 } from './stage';
 
-// TodoList primitive (P2 W5 — downshifted L1 primitive)
-export type { TodoStatus, TodoStatusCamel, TodoItem, TodoList } from './todo-list';
-export { toTodoStatusCamel, toTodoStatusSnake } from './todo-list';
+// Task primitive (Plan-stage user-visible checklist — renamed from TodoList 2026-04-22)
+export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
+export { toTaskStatusCamel, toTaskStatusSnake } from './task';
 
 // SddRun — run record carrying SDD stage-activation summaries
 export type { SddRunStatus, SddRunRoundSummary, SddRun } from './sdd-run';
 export { roundSummaryFromDecision } from './sdd-run';
 
-// Proposal — Specify-stage artifact (ADR §5.2, §7.5)
-export type { Proposal, ProposalStatus } from './proposal';
+// Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)
+export type { Draft, DraftStatus } from './draft';
 
 // ExecutionPlan — Plan-stage artifact (ADR §4.2, §5, §7.5)
 export type {
@@ -73,7 +73,7 @@ export type {
   CreationEvent,
   CreationRunStartedEvent,
   CreationMilestoneEvent,
-  CreationProposalPresentedEvent,
+  CreationDraftPresentedEvent,
   CreationReviewDecidedEvent,
   CreationStatusUpdatedEvent,
   CreationRunEndedEvent,
@@ -86,7 +86,7 @@ export type {
   ExecutionEvent,
   ExecutionRoundActivationDecidedEvent,
   ExecutionPlanProducedEvent,
-  ExecutionTodoUpdatedEvent,
+  ExecutionTaskUpdatedEvent,
   ExecutionApproveDecidedEvent,
   ExecutionApplyCommittedEvent,
   ExecutionStepCompletedEvent,
@@ -97,6 +97,9 @@ export type {
   ExecutionAutohealL4TriggeredEvent,
   ExecutionAutohealL5EscalatedEvent,
   ExecutionQualityEvaluatedEvent,
+  ExecutionArtifactWrittenEvent,
+  ExecutionArtifactInvalidEvent,
+  ArtifactKind,
 } from './execution-events';
 export { EXECUTION_CHANNELS } from './execution-events';
 

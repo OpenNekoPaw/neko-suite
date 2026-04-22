@@ -1,27 +1,31 @@
 /**
- * SDD Stage Types — Speckit-aligned four-stage workflow
+ * SDD Stage Types — three-stage creative workflow
  *
  * See: docs/architecture/agent-unified-workflow.md §4 (L2 Flow Layer)
  *
- * Replaces the dual-flow ten-primitive pool (primitive.ts, deprecated).
- * Mapping:
- *   orchestration + proposal  → Specify
- *   review                    → Plan approval gate
- *   execution                 → Implement
- *   status                    → folded into Implement event stream
+ * Replaces the earlier four-stage layout (specify / plan / tasks / implement).
+ * The `tasks` step was merged into `plan` because both shared the same persona,
+ * tool set, and guardians (ADR §4 revision, 2026-04-22). The new naming
+ * (`draft / plan / apply`) borrows the Terraform plan/apply idiom and avoids
+ * the visual-design ambiguity of `design`.
  *
- * Approval points (per user decision, 2026-04-21):
- *   - End of Specify: user approves Proposal (channel: 'proposal-review')
- *   - Inside Implement: high-risk Operations (reversible=false / cost>threshold)
+ * Stage mapping (old → new):
+ *   specify                → draft
+ *   plan + tasks (merged)  → plan
+ *   implement              → apply
+ *
+ * Approval points:
+ *   - End of Draft: user approves Draft (channel: 'draft-review')
+ *   - Inside Apply: high-risk Operations (reversible=false / cost>threshold)
  *     trigger the 'permission' channel
- *   - Plan / Tasks stages have no default approval
+ *   - Plan stage has no default approval
  *
  * Dependency DAG:
- *   Specify → Plan → Tasks → Implement
+ *   Draft → Plan → Apply
  *
- * Implement is the only always-mandatory stage; the rest can be skipped per
- * mode × entry rules (AutoMode may start directly at Implement for atomic
- * instructions; PlanMode always starts at Specify).
+ * Apply is the only always-mandatory stage; the rest can be skipped per
+ * mode × entry rules (AutoMode may start directly at Apply for atomic
+ * instructions; PlanMode always starts at Draft).
  */
 
 // =============================================================================
@@ -33,26 +37,20 @@
  *
  * See: docs/architecture/agent-unified-workflow.md §4.2
  *
- * - declarative (What): Proposal. Business goal, user-facing approval object.
- *   Produced by Specify. The user approves *this*; they do not approve the Plan.
- * - imperative (How): ExecutionPlan. Technical tool-call list the agent compiles
- *   from the Proposal. The agent may recompile it during retries without
- *   re-asking the user.
+ * - declarative (What): Draft. Business goal, user-facing approval object.
+ *   Produced by the Draft stage. The user approves *this*; they do not
+ *   approve the Plan.
+ * - imperative (How): ExecutionPlan + Task. Technical tool-call list and its
+ *   user-visible checklist projection the agent compiles from the Draft. The
+ *   agent may recompile them during retries without re-asking the user.
  *
- * Different failure semantics: a Proposal failing means the direction is wrong
+ * Different failure semantics: a Draft failing means the direction is wrong
  * (user intervention). A Plan failing is a technical issue (autoheal).
- *
- * Replaces the dual-flow `FlowKind = 'creation' | 'execution'` which conflated
- * paradigm with subsystem boundaries. The new binding is:
- *   Creation ring ≈ declarative (Specify's Proposal)
- *   Execution ring ≈ imperative (Implement's tool calls)
- * but the SDD model phrases it as a paradigm of the artifact, not a ring the
- * agent lives in.
  */
 export type Paradigm =
-  /** Specify-stage Proposals and upstream business decisions. */
+  /** Draft-stage artifacts and upstream business decisions. */
   | 'declarative'
-  /** Implement-stage Plans, tool calls, technical decisions. */
+  /** Plan / Apply-stage tool calls and technical decisions. */
   | 'imperative';
 
 // =============================================================================
@@ -60,14 +58,14 @@ export type Paradigm =
 // =============================================================================
 
 /**
- * The four SDD stages (Speckit-aligned, agent-unified-workflow.md §4.1).
+ * The three SDD stages (agent-unified-workflow.md §4.1).
  *
- * - specify:   Business-declarative (What). AI produces a Proposal, user approves.
- * - plan:      Technical-imperative (How). AI compiles ExecutionPlan from Proposal.
- * - tasks:     TodoList derivation. AI produces a task checklist via TodoWrite.
- * - implement: Step loop (think → act → observe). Tool calls + event streaming.
+ * - draft: Business-declarative (What). AI produces a Draft, user approves.
+ * - plan:  Technical-imperative (How). AI compiles an ExecutionPlan and its
+ *          user-visible Task checklist from the Draft.
+ * - apply: Step loop (think → act → observe). Tool calls + event streaming.
  */
-export type SddStage = 'specify' | 'plan' | 'tasks' | 'implement';
+export type SddStage = 'draft' | 'plan' | 'apply';
 
 // =============================================================================
 // Task shape — reused from primitive pool, identical semantics
@@ -87,13 +85,13 @@ export type StageTaskShape =
   | 'single-write'
   /** Multi-step work requiring planning. */
   | 'multi-step'
-  /** Pure think — no tool call. Still produces an Implement log entry. */
+  /** Pure think — no tool call. Still produces an Apply log entry. */
   | 'pure-think'
-  /** Retry after autoheal — reuse prior Plan + Tasks. */
+  /** Retry after autoheal — reuse prior Draft + Plan. */
   | 'retry'
-  /** User explicitly wants planning only (stop before Implement). */
+  /** User explicitly wants planning only (stop before Apply). */
   | 'plan-only'
-  /** Direct clarification / param tweak — goes straight to Implement. */
+  /** Direct clarification / param tweak — goes straight to Apply. */
   | 'clarification';
 
 // =============================================================================
@@ -109,11 +107,11 @@ export type StageSkipReason =
   | 'task-shape'
   /** L2 mode forbids this stage in this context. */
   | 'mode'
-  /** Entry rule short-circuited to a later stage (e.g. atomic instruction → implement). */
+  /** Entry rule short-circuited to a later stage (e.g. atomic instruction → apply). */
   | 'entry-rule'
-  /** Retry round reuses prior Specify/Plan/Tasks. */
+  /** Retry round reuses prior Draft/Plan. */
   | 'retry-reuse'
-  /** User explicitly suppressed (e.g. plan-only stops before Implement). */
+  /** User explicitly suppressed (e.g. plan-only stops before Apply). */
   | 'user-suppressed';
 
 /**
@@ -139,7 +137,7 @@ export interface StageActivationDecision {
 
 /**
  * Ordered, deduplicated set of stages. Order matters: must respect the
- * Specify → Plan → Tasks → Implement DAG. Use the stage-registry's sort
- * helpers in the agent package to construct valid sets.
+ * Draft → Plan → Apply DAG. Use the stage-registry's sort helpers in the
+ * agent package to construct valid sets.
  */
 export type StageSet = readonly SddStage[];

@@ -1,12 +1,12 @@
 /**
  * SddRun — per-run record of an SDD-stage execution.
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (four SDD stages)
+ * See: docs/architecture/agent-unified-workflow.md §4 (three SDD stages)
  *
  * One SddRun corresponds to a single end-to-end traversal of the
- * Specify → Plan → Tasks → Implement DAG. The inner ReAct loop during
- * Implement produces rounds whose stage-activation decisions are stored
- * here for audit + telemetry.
+ * Draft → Plan → Apply DAG. The inner ReAct loop during Apply produces
+ * rounds whose stage-activation decisions are stored here for audit +
+ * telemetry.
  *
  * Distinct from:
  * - `Plan` (plan.ts): the generic plan/step abstraction used by
@@ -15,14 +15,14 @@
  */
 
 import type { SddStage, StageActivationDecision, StageSkipReason } from './stage';
-import type { TodoList } from './todo-list';
+import type { Task } from './task';
 
 // =============================================================================
 // Status
 // =============================================================================
 
 export type SddRunStatus =
-  /** Created but not yet entered Implement. */
+  /** Created but not yet entered Apply. */
   | 'pending'
   /** Running — at least one ReAct round has begun. */
   | 'running'
@@ -44,7 +44,7 @@ export type SddRunStatus =
 export interface SddRunRoundSummary {
   /** 0-based round index within this Run. */
   round: number;
-  /** Stages activated this round (DAG-ordered: specify → plan → tasks → implement). */
+  /** Stages activated this round (DAG-ordered: draft → plan → apply). */
   activatedStages: readonly SddStage[];
   /** Stages considered and skipped, with reason codes. */
   skippedStages: readonly {
@@ -92,8 +92,8 @@ export interface SddRun {
    * Empty while `status === 'pending'`.
    */
   rounds: readonly SddRunRoundSummary[];
-  /** Associated TODO list for the Implement stage, when one is active. */
-  todos?: TodoList;
+  /** Associated user-visible Task checklist for the Apply stage, when one is active. */
+  task?: Task;
   /**
    * Optional terminal error when `status === 'failed'`. Structured so
    * telemetry aggregators can bucket without parsing free-text.

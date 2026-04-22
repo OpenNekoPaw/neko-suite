@@ -1,12 +1,12 @@
 /**
  * ExecutionPlan markdown serialiser (ADR §4.2, §7.5).
  *
- * Canonical layout:
+ * Canonical layout (file: `.neko/plans/plan-<runId>.md`):
  *
  *   ---
  *   id: cut-tiktok-001-plan
- *   kind: execution-plan
- *   proposalId: cut-tiktok-001
+ *   kind: plan
+ *   draftId: cut-tiktok-001
  *   title: <title>
  *   status: ready
  *   createdAt: <ISO 8601>
@@ -15,7 +15,7 @@
  *
  *   # <title>
  *
- *   > Compiled from proposal `<proposalId>`.
+ *   > Compiled from draft `<draftId>`.
  *
  *   ## Steps
  *
@@ -46,8 +46,8 @@ export function serializeExecutionPlan(plan: ExecutionPlan): string {
   const frontmatter = [
     '---',
     `id: ${plan.id}`,
-    'kind: execution-plan',
-    `proposalId: ${plan.proposalId}`,
+    'kind: plan',
+    `draftId: ${plan.draftId}`,
     `title: ${escapeYamlScalar(plan.title)}`,
     `status: ${plan.status}`,
     `createdAt: ${new Date(plan.createdAt).toISOString()}`,
@@ -58,7 +58,7 @@ export function serializeExecutionPlan(plan: ExecutionPlan): string {
 
   const body: string[] = [];
   body.push(`# ${escapeInline(plan.title)}`, '');
-  body.push(`> Compiled from proposal \`${plan.proposalId}\`.`, '');
+  body.push(`> Compiled from draft \`${plan.draftId}\`.`, '');
   body.push('## Steps', '');
 
   if (plan.steps.length === 0) {

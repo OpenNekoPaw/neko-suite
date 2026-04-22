@@ -376,7 +376,7 @@ describe('AgentSession', () => {
     it('without stageTracking config: getCurrentStage() returns null', () => {
       const session = new AgentSession(createConfig());
       expect(session.getCurrentStage()).toBeNull();
-      expect(session.enterStage('implement')).toBe(false);
+      expect(session.enterStage('apply')).toBe(false);
     });
 
     it('with stageTracking config: initial stage applies its persona and enterStage swaps to Implement', async () => {
@@ -416,7 +416,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'specify',
+            initialStage: 'draft',
           },
         }),
       );
@@ -424,14 +424,14 @@ describe('AgentSession', () => {
       // Initial sync is fire-and-forget; wait for it.
       await session.syncStagePersona();
 
-      expect(session.getCurrentStage()).toBe('specify');
+      expect(session.getCurrentStage()).toBe('draft');
       expect(applyCalls[0]).toBe('creation-persona');
 
-      const changed = session.enterStage('implement');
+      const changed = session.enterStage('apply');
       expect(changed).toBe(true);
       await new Promise((r) => setImmediate(r));
 
-      expect(session.getCurrentStage()).toBe('implement');
+      expect(session.getCurrentStage()).toBe('apply');
       expect(applyCalls).toContain('execution-persona');
     });
 
@@ -463,7 +463,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'specify',
+            initialStage: 'draft',
           },
         }),
       );
@@ -473,7 +473,7 @@ describe('AgentSession', () => {
 
       // After dispose, stage tracking goes dormant.
       expect(session.getCurrentStage()).toBeNull();
-      expect(session.enterStage('implement')).toBe(false);
+      expect(session.enterStage('apply')).toBe(false);
     });
   });
 
@@ -529,7 +529,7 @@ describe('AgentSession', () => {
       const issues: string[] = [];
       session.onStageGuardianIssue((i) => issues.push(i.code));
 
-      session.enterStage('implement');
+      session.enterStage('apply');
 
       expect(issues).toContain('stage-out-of-order');
       expect(session.getStageGuardianIssues().length).toBeGreaterThan(0);
@@ -548,8 +548,8 @@ describe('AgentSession', () => {
       const issues: string[] = [];
       session.onStageGuardianIssue((i) => issues.push(i.code));
 
-      session.enterStage('specify');
-      session.enterStage('implement');
+      session.enterStage('draft');
+      session.enterStage('apply');
 
       expect(issues.filter((c) => c === 'stage-out-of-order')).toEqual([]);
     });
@@ -568,7 +568,7 @@ describe('AgentSession', () => {
       const issues: string[] = [];
       session.onStageGuardianIssue((i) => issues.push(i.code));
 
-      session.enterStage('implement');
+      session.enterStage('apply');
 
       expect(issues).toEqual([]);
       expect(session.getStageGuardianIssues()).toEqual([]);
@@ -585,7 +585,7 @@ describe('AgentSession', () => {
         }),
       );
 
-      session.enterStage('implement'); // raises out-of-order
+      session.enterStage('apply'); // raises out-of-order
       expect(session.getStageGuardianIssues().length).toBeGreaterThan(0);
 
       session.dispose();
@@ -610,7 +610,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -657,7 +657,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -701,7 +701,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -743,7 +743,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -847,7 +847,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -937,7 +937,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -970,7 +970,7 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            initialStage: 'implement',
+            initialStage: 'apply',
           },
         }),
       );

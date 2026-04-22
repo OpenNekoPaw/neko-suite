@@ -6,17 +6,17 @@
  * - recordRound appends summaries in order
  * - endRun transitions to terminal status + endedAt
  * - restart auto-closes the previous run as 'aborted'
- * - transitions / todos attach to the active run only
+ * - transitions / task attach to the active run only
  */
 
 import { describe, it, expect } from 'vitest';
-import type { StageActivationDecision, TodoList } from '@neko-agent/types';
+import type { StageActivationDecision, Task } from '@neko-agent/types';
 import { createSddRunStore } from '../sdd-run-store';
 
 function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
   return {
     taskShape: 'multi-step',
-    activated: ['plan', 'tasks', 'implement'],
+    activated: ['plan', 'apply'],
     skipped: [],
     decidedAt: 100,
     round: 0,
@@ -48,12 +48,12 @@ describe('SddRunStore', () => {
     const store = createSddRunStore();
     store.startRun({ workflowId: 'f' });
     store.recordRound(decision({ round: 0 }));
-    store.recordRound(decision({ round: 1, activated: ['implement'] }), 'retry');
+    store.recordRound(decision({ round: 1, activated: ['apply'] }), 'retry');
     const rounds = store.getActive()!.rounds;
     expect(rounds).toHaveLength(2);
     expect(rounds[0].round).toBe(0);
     expect(rounds[1].round).toBe(1);
-    expect(rounds[1].activatedStages).toEqual(['implement']);
+    expect(rounds[1].activatedStages).toEqual(['apply']);
     expect(rounds[1].lastObserveHint).toBe('retry');
   });
 
@@ -95,13 +95,13 @@ describe('SddRunStore', () => {
     expect(completed.find((r) => r.id === first)!.status).toBe('aborted');
   });
 
-  it('setTodos attaches the todo list to the active run', () => {
+  it('setTask attaches the task checklist to the active run', () => {
     const store = createSddRunStore();
     store.startRun({ workflowId: 'f' });
-    const todos: TodoList = { id: 'l1', items: [], createdAt: 0, updatedAt: 0 };
-    store.setTodos(todos);
+    const task: Task = { id: 'l1', items: [], createdAt: 0, updatedAt: 0 };
+    store.setTask(task);
 
     const run = store.getActive()!;
-    expect(run.todos).toBe(todos);
+    expect(run.task).toBe(task);
   });
 });

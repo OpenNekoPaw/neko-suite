@@ -1,11 +1,11 @@
 /**
- * Proposal markdown serialiser (ADR §5.1, §7.5).
+ * Draft markdown serialiser (ADR §5.1, §7.5).
  *
  * Canonical layout:
  *
  *   ---
  *   id: cut-tiktok-001
- *   kind: proposal
+ *   kind: draft
  *   title: <title>
  *   status: pending_review
  *   domain: cut
@@ -26,48 +26,52 @@
  *   ## Concrete artifact
  *   <artifact body>
  *
- * The serialiser is pure (no fs); the ProposalWriteTool handles I/O.
- * Body sections are emitted verbatim — whitespace / markdown semantics
- * are the AI's responsibility, not the serialiser's.
+ * The serialiser is pure (no fs). Body sections are emitted verbatim —
+ * whitespace / markdown semantics are the AI's responsibility, not the
+ * serialiser's.
+ *
+ * Renamed from proposal-markdown.ts (2026-04-22, ADR §4 revision). Phase B
+ * (2026-04-22) removed the dedicated DraftWriteTool that used this helper
+ * — kept as a reusable library for future UI rendering + round-trip tests.
  */
 
-import type { Proposal } from '@neko-agent/types';
+import type { Draft } from '@neko-agent/types';
 
-const BODY_SECTIONS: Array<{ heading: string; field: keyof Proposal }> = [
+const BODY_SECTIONS: Array<{ heading: string; field: keyof Draft }> = [
   { heading: 'Intent', field: 'intent' },
   { heading: 'Approach', field: 'approach' },
   { heading: 'Concrete artifact', field: 'artifact' },
 ];
 
 /**
- * Serialise a Proposal into its canonical `.nkproposal.md` form.
+ * Serialise a Draft into its canonical `draft-<runId>.md` form.
  *
  * Timestamps go through `toISOString()` so diffs stay stable.
  * `referenceChain` is omitted from frontmatter when empty / absent
  * to keep the artifact minimal.
  */
-export function serializeProposal(proposal: Proposal): string {
+export function serializeDraft(draft: Draft): string {
   const frontmatter = [
     '---',
-    `id: ${proposal.id}`,
-    'kind: proposal',
-    `title: ${escapeYamlScalar(proposal.title)}`,
-    `status: ${proposal.status}`,
-    `domain: ${proposal.domain}`,
-    `createdAt: ${new Date(proposal.createdAt).toISOString()}`,
-    `updatedAt: ${new Date(proposal.updatedAt).toISOString()}`,
+    `id: ${draft.id}`,
+    'kind: draft',
+    `title: ${escapeYamlScalar(draft.title)}`,
+    `status: ${draft.status}`,
+    `domain: ${draft.domain}`,
+    `createdAt: ${new Date(draft.createdAt).toISOString()}`,
+    `updatedAt: ${new Date(draft.updatedAt).toISOString()}`,
   ];
-  if (proposal.referenceChain && proposal.referenceChain.length > 0) {
+  if (draft.referenceChain && draft.referenceChain.length > 0) {
     frontmatter.push('referenceChain:');
-    for (const uri of proposal.referenceChain) {
+    for (const uri of draft.referenceChain) {
       frontmatter.push(`  - ${escapeYamlScalar(uri)}`);
     }
   }
   frontmatter.push('---', '');
 
-  const body = [`# ${escapeInline(proposal.title)}`, ''];
+  const body = [`# ${escapeInline(draft.title)}`, ''];
   for (const { heading, field } of BODY_SECTIONS) {
-    const raw = (proposal[field] ?? '') as string;
+    const raw = (draft[field] ?? '') as string;
     body.push(`## ${heading}`, '', raw.trimEnd(), '');
   }
 

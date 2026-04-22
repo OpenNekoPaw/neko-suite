@@ -41,12 +41,7 @@ export {
   type GrepToolOptions,
   createCoreTools,
   type CoreToolsOptions,
-  TodoWriteTool,
-  type TodoWriteToolOptions,
-  ProposalWriteTool,
-  type ProposalWriteToolOptions,
-  PlanWriteTool,
-  type PlanWriteToolOptions,
+  // Draft/Plan/Task write tools removed in Phase B — AI uses generic Write.
 } from './core';
 
 // Re-export types and constants from shared for convenience

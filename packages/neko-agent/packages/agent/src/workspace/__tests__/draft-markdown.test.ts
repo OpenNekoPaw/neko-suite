@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { Proposal } from '@neko-agent/types';
-import { serializeProposal } from '../proposal-markdown';
+import type { Draft } from '@neko-agent/types';
+import { serializeDraft } from '../draft-markdown';
 
-function make(overrides: Partial<Proposal> = {}): Proposal {
+function make(overrides: Partial<Draft> = {}): Draft {
   return {
     id: 'cut-tiktok-001',
     title: 'TikTok 15s hero cut',
@@ -17,11 +17,11 @@ function make(overrides: Partial<Proposal> = {}): Proposal {
   };
 }
 
-describe('serializeProposal', () => {
+describe('serializeDraft', () => {
   it('writes canonical frontmatter block', () => {
-    const md = serializeProposal(make());
+    const md = serializeDraft(make());
     expect(md).toContain('---\nid: cut-tiktok-001\n');
-    expect(md).toContain('kind: proposal');
+    expect(md).toContain('kind: draft');
     expect(md).toContain('status: pending_review');
     expect(md).toContain('domain: cut');
     expect(md).toContain('createdAt: 2026-04-22T10:00:00.000Z');
@@ -29,30 +29,30 @@ describe('serializeProposal', () => {
   });
 
   it('renders the three narrative layers as `## Intent / Approach / Concrete artifact`', () => {
-    const md = serializeProposal(make());
+    const md = serializeDraft(make());
     expect(md).toMatch(/## Intent\n\nCompose a 15-second vertical TikTok piece\./);
     expect(md).toMatch(/## Approach\n\nThree-act structure/);
     expect(md).toMatch(/## Concrete artifact\n\n- 00:00-00:03 hero shot/);
   });
 
   it('renders title both in frontmatter and as H1', () => {
-    const md = serializeProposal(make());
+    const md = serializeDraft(make());
     expect(md).toContain('# TikTok 15s hero cut');
     expect(md).toContain('title: TikTok 15s hero cut');
   });
 
   it('quotes YAML scalars that contain colons or special chars', () => {
-    const md = serializeProposal(make({ title: 'Launch: v2' }));
+    const md = serializeDraft(make({ title: 'Launch: v2' }));
     expect(md).toContain('title: "Launch: v2"');
   });
 
   it('omits referenceChain from frontmatter when empty', () => {
-    const md = serializeProposal(make());
+    const md = serializeDraft(make());
     expect(md).not.toContain('referenceChain:');
   });
 
   it('emits referenceChain as a YAML list when non-empty', () => {
-    const md = serializeProposal(
+    const md = serializeDraft(
       make({ referenceChain: ['asset://characters/hero', 'asset://styles/cinematic'] }),
     );
     expect(md).toMatch(/referenceChain:\n {2}- asset:\/\/characters\/hero/);
@@ -61,7 +61,7 @@ describe('serializeProposal', () => {
 
   it('status value flows through verbatim', () => {
     for (const status of ['draft', 'pending_review', 'approved', 'refined', 'rejected'] as const) {
-      const md = serializeProposal(make({ status }));
+      const md = serializeDraft(make({ status }));
       expect(md).toContain(`status: ${status}`);
     }
   });

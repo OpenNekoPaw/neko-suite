@@ -10,9 +10,9 @@
  * job is state, the guardian's job is "does this state smell right?".
  *
  * Checks shipped in this PR:
- *   - `stage-out-of-order`  — entering Implement without first visiting
- *     Specify / Plan / Tasks at least once. Matches ADR §3.2 rule 1
- *     (high-risk ops force Specify) from the run-level side.
+ *   - `stage-out-of-order`  — entering Apply without first visiting
+ *     Draft / Plan at least once. Matches ADR §3.2 rule 1
+ *     (high-risk ops force Draft) from the run-level side.
  *   - `stage-timeout`       — current stage has been active longer than
  *     the configured budget. Fires once per stage-entry.
  *
@@ -197,7 +197,7 @@ class StageGuardian implements IStageGuardian {
     }
     this._raise({
       code: 'approval-skipped',
-      stage: this._watchStage ?? 'implement',
+      stage: this._watchStage ?? 'apply',
       message: `Apply committed for subject "${subject}" without a prior approval decision`,
       at: this._now(),
       detail: { subject },
@@ -224,12 +224,12 @@ class StageGuardian implements IStageGuardian {
   // ---------------------------------------------------------------------------
 
   private _onEntered(stage: SddStage, at: number): void {
-    if (this._enforceOrderedEntry && stage === 'implement' && this._visited.size === 0) {
+    if (this._enforceOrderedEntry && stage === 'apply' && this._visited.size === 0) {
       this._raise({
         code: 'stage-out-of-order',
         stage,
         message:
-          'Entered Implement without visiting Specify / Plan / Tasks first — high-risk tool calls should traverse the earlier stages per ADR §3.2',
+          'Entered Apply without visiting Draft / Plan first — high-risk tool calls should traverse the earlier stages per ADR §3.2',
         at,
       });
     }
