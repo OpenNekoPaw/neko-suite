@@ -10,11 +10,22 @@ export {
   NEKO_DIR,
   NEKO_SUBDIRS,
   NEKO_LOG_FILES,
+  NEKO_STATE_FILES,
   NEKO_MD_EXTENSIONS,
   type INekoPaths,
   type NekoSubdir,
   type NekoLogFile,
+  type NekoStateFile,
 } from './neko-paths';
+
+export {
+  createSessionLock,
+  type ISessionLock,
+  type SessionLockConfig,
+  type SessionLockFsOps,
+  type SessionLockPayload,
+  type AcquireResult,
+} from './session-lock';
 
 export {
   createNdjsonEventSink,

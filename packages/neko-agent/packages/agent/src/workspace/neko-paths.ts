@@ -61,6 +61,16 @@ export const NEKO_LOG_FILES = {
 
 export type NekoLogFile = keyof typeof NEKO_LOG_FILES;
 
+/**
+ * Canonical state file names (under `state/`). Program-produced JSON
+ * concurrency / lock artifacts — not human-authored.
+ */
+export const NEKO_STATE_FILES = {
+  sessionLock: 'session-lock.json',
+} as const;
+
+export type NekoStateFile = keyof typeof NEKO_STATE_FILES;
+
 /** Canonical extensions for AI-produced markdown artifacts. */
 export const NEKO_MD_EXTENSIONS = {
   proposal: '.nkproposal.md',
@@ -93,6 +103,8 @@ export interface INekoPaths {
   file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
   /** Absolute path to a canonical JSONL log. */
   log(kind: NekoLogFile): string;
+  /** Absolute path to a canonical program-produced state file. */
+  state(kind: NekoStateFile): string;
 }
 
 /**
@@ -152,5 +164,6 @@ export function createNekoPaths(projectRoot: string): INekoPaths {
     dir,
     file: file as INekoPaths['file'],
     log: (kind) => `${dir('logs')}/${NEKO_LOG_FILES[kind]}`,
+    state: (kind) => `${dir('state')}/${NEKO_STATE_FILES[kind]}`,
   };
 }
