@@ -31,7 +31,7 @@
 | §9.3 preferences.md | parser + 双层合并 + auto-load | D |
 | §10 术语一致性 | 撤销双轨，统一英文命令 | F |
 | §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
-| §11.6 约束分级原则 | 四级约束谱系 + Tool/Operation 二分 + 反模式 + 决策清单 | 2026-04-22 新增 |
+| §11.6 约束分级原则 | 六层控制平面（Prompt/Schema/Runtime/Policy/Memory/Evaluator）+ 口诀 + Tool/Operation 二分 + 11 条反模式 + 7 问决策清单 + 时序图 + 合规度审计 | 2026-04-22 新增 / 2026-04-23 扩展到六层 |
 | §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
 **小计**：22 / 22 章节全部有落地证据。2026-04-22 Phase A 将四阶段合并为三阶段（Draft/Plan/Apply），并把 `.nk*.md` 扩展名迁移为 `<kind>-<runId>.md` 前缀方案。
@@ -1729,16 +1729,25 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 
 ### 11.6 约束分级原则（Constraint Layering by Consumer）
 
-**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错约束层是 SDD 最常见的反模式。
+> **Prompt 决定"说什么"**
+> **Schema 决定"长什么样"**
+> **Runtime 决定"什么时候做"**
+> **Policy 决定"能不能做"**
+> **Memory 决定"记得什么"**
+> **Evaluator 决定"做得好不好"**
 
-#### 11.6.1 四级约束谱系
+六层控制平面并行运转，每层有独立消费者、独立实现、独立更新频率。设计新组件时先用口诀对号入座，再查详表。**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错层是 SDD 最常见的反模式。
 
-| 约束类型 | 消费者 | 承载的创作维度 | 实现工具 | 典型产物 / 组件 |
-|-------|------|------------|--------|-------------|
-| **Schema 约束** | 程序 / 工具 | 工具使用 | TypeScript types、JSON Schema | `Tool` 入口参数、`Operation` 全量参数、Draft frontmatter 索引字段、`ExecutionPlan.steps[]` |
-| **提示词约束** | AI / 人 | 语义 / 灵感 / 风格 | persona markdown、章节惯例 | Draft 正文（`## Intent` / `## References` / `## Approach`）、`ExecutionPlan.rationale`、`Task.activeForm` |
-| **Runtime 约束** | 运行时 | 处理过程 | ApprovalEngine、RetryEngine、StageGuardian、ArtifactWatcher、ArtifactObservationHooks | 执行前 gate + 执行中巡检 + 执行后自愈 |
-| **Evaluator 约束** | 质量打分器 | 质量评估 | LLM-as-judge、美学打分、ConsistencyChecker | `verdict: pass \| warn \| fail` + 结构化 issues + 修复建议 |
+#### 11.6.1 六层控制平面全景
+
+| 层 | 决定 | 消费者 | 承载的创作维度 | 实现工具 | 更新频率 | 典型产物 / 组件 |
+|---|----|------|------------|--------|-----|-------------|
+| **Prompt** | 说什么 | AI / 人 | 语义 / 灵感 / 风格 | persona markdown、章节惯例 | 每轮激活 | Draft 正文、`ExecutionPlan.rationale`、`Task.activeForm`、creation-persona / execution-persona |
+| **Schema** | 长什么样 | 程序 / 工具 | 工具使用、产物索引 | TypeScript types、JSON Schema | 版本级 | `Tool` 入口参数、`Operation` 全量参数、Draft frontmatter 索引字段、`ExecutionPlan.steps[]` |
+| **Runtime** | 什么时候做 | 运行时 | 处理过程 | ExecutorHooks / StateMachine / Engine | 毫秒级 | ApprovalEngine、RetryEngine、StageGuardian、ArtifactWatcher、ArtifactObservationHooks |
+| **Policy** | 能不能做 | Runtime + Evaluator 读取 | 边界 / 合规 / 权限 | 声明式规则文件、allowlist、compliance 元数据 | 配置级 | `preferences.md`、`preferencesStrategyPack`、Skill `compliance.approvalRules[]`、Skill `allowedTools`、Skill `requiredSubpackages`、Operation `costProfile` |
+| **Memory** | 记得什么 | AI（读）+ 人（审计 / 编辑）| 个性化持续性 | 持久化存储 + 压缩策略 + 检索 | 跨会话累积 | `~/.claude/.../memory/MEMORY.md`、`.neko/memory.md`、`CreativeMemoryHooks`、7 级创意压缩（`creative-context-compression.md`）、`SharedMemoryStore` |
+| **Evaluator** | 做得好不好 | 质量打分器 | 质量评估 | LLM-as-judge、美学打分、ConsistencyChecker | 每产物 | `verdict: pass \| warn \| fail` + 结构化 issues + 修复建议；ConsistencyChecker（已）、IntentValidator（待）|
 
 #### 11.6.2 Schema 约束的二分（Tool vs Operation）
 
@@ -1783,12 +1792,40 @@ exportMp4({
 ```
 阶段          主约束层                 allowedTools 子类
 ──────       ────────                 ────────────────
-Draft  ────► 提示词约束（AI/人共读）   ────► 提示词型工具（Read/Write/Grep/ListDirectory/Glob + 只读查询）
-Plan   ────► 提示词约束 + schema 入口 ────► 提示词型工具（ExecutionPlan.steps 是 schema，rationale 是提示词）
-Apply  ────► Schema + Runtime 约束    ────► 操作型工具（cut.*/canvas.*/image.*/audio.* + export.*）+ 全套 L0 基础设施
+Draft  ────► Prompt（AI/人共读）       ────► 提示词型工具（Read/Write/Grep/ListDirectory/Glob + 只读查询）
+Plan   ────► Prompt + Schema 入口      ────► 提示词型工具（ExecutionPlan.steps 是 schema，rationale 是提示词）
+Apply  ────► Schema + Runtime + Policy ────► 操作型工具（cut.*/canvas.*/image.*/audio.* + export.*）+ 全套 L0 基础设施
 ```
 
 **creation-persona 当前的 `allowedTools` 全是提示词型**（Read/Write/LIST_DIRECTORY/GLOB/GET_TIMELINE_INFO/LIST_TIMELINE_ELEMENTS/GET_ELEMENT_INFO），**没有任何 Operation**。这条边界不是偶然，是约束分级的必然结论：Draft/Plan 阶段只做"产物叙述 + 信息读取"，操作型工具全部延后到 Apply 阶段由 execution-persona 解锁。
+
+##### 11.6.3.1 一次创作触发六层的时序
+
+```
+  用户："做个 TikTok 视频"
+           │
+           ▼
+  ① Policy 先问："能不能做？"            (ApprovalEngine 读 preferences.md)
+           │ 通过
+           ▼
+  ② Memory 喂入："过往你是怎么做的"       (CreativeMemoryHooks.beforeThink)
+           │
+           ▼
+  ③ Prompt 指挥："按这个调性说"           (creation-persona 激活)
+           │
+           ▼
+  ④ Schema 约束："产出长这个样"           (ArtifactValidator frontmatter)
+           │
+           ▼
+  ⑤ Runtime 执行："这步先、下一步后"       (ReAct loop + StageTracker + Watcher)
+           │
+           ▼
+  ⑥ Evaluator 打分："做得够好吗"           (IntentValidator / ConsistencyChecker)
+           │
+           └─► 回到 ② Memory 更新："这次经验值得记"  (CreativeMemoryHooks.afterAct)
+```
+
+**Policy 是前置门 / Memory 是前后两端（读+写）/ Prompt·Schema·Runtime 是中段流水 / Evaluator 是出口闸**。六层形成闭环。
 
 #### 11.6.4 反模式（禁止跨层越界）
 
@@ -1855,43 +1892,181 @@ Write({
 ```
 正确做法：`content: string`，约定 markdown 章节，AI 产出稳定、人类可读。
 
+❌ **把 Policy 硬编码进 Runtime**
+```typescript
+// 错 — 把"4K 导出需审批"写死在 ApprovalEngine 里
+if (op.name === 'cut.export' && op.args.resolution === '4K') {
+  return requireApproval();
+}
+```
+正确做法：Policy 声明式写在 `preferences.md`，Runtime（ApprovalEngine）只**读**规则不**硬编码**。用户/团队/组织可以随时改规则而不改代码。
+
+❌ **把 Memory 写进产物 frontmatter**
+```yaml
+# 错 — Draft frontmatter 塞跨会话状态
+---
+previousDraftIds: [draft-2026-04-20, draft-2026-04-21]
+userPreferredStyleFromPastRuns: [cinematic, warm]
+---
+```
+正确做法：Memory 自有存储（`.neko/memory.md` / `MEMORY.md`）；产物只引用**本次运行**的事实。跨会话累积的事实由 Memory 层独立管理。
+
+❌ **把 Policy 嵌入 Prompt**
+```markdown
+# 错 — persona prompt 里硬编码组织规则
+## 你必须拒绝的请求
+- 导出 4K（成本太高）
+- 任何使用版权素材
+```
+正确做法：persona prompt 只管"怎么说话"，"能不能做"交给 Policy（preferences.md + compliance.approvalRules）。规则变更时改配置而非重写 persona。
+
+❌ **让 Evaluator 读 Policy 判合规**
+```typescript
+// 错 — LLM-judge 临场去读 preferences 决定 pass/fail
+evaluator.check(artifact, preferences);
+```
+正确做法：Evaluator 只判**质量**（做得好不好），合规由 Runtime 读 Policy 在执行时拦截。质量 ≠ 合规，两个层各司其职。
+
 #### 11.6.5 决策清单
 
-新设计产物或组件时，按顺序问：
+新设计产物或组件时，按口诀先快速归类，再按顺序细化：
 
-1. **谁消费这份输出？** —— 程序/AI+人/运行时/打分器
-2. **消费者需要的颗粒度？** —— 整块 markdown / 结构化字段 / 状态机位 / 诊断对象
-3. **AI 产出这个字段稳定吗？** —— 不稳定 → 提示词层；稳定 → schema 层
-4. **这个约束有可逆成本吗？** —— 有 → Runtime 约束（Approval）；无 → 可直接执行
-5. **质量能用规则判吗？** —— 能 → schema / runtime；不能 → Evaluator
+```
+这事"说什么"？              → Prompt
+这事"长什么样"？            → Schema
+这事"什么时候做"？          → Runtime
+这事"能不能做"？            → Policy
+这事"记得什么"？            → Memory
+这事"做得好不好"？          → Evaluator
+```
+
+细化问题：
+
+1. **谁消费这份输出？** —— AI / 人 / 程序 / 运行时 / 打分器 / 累积上下文 / 读取规则
+2. **消费者需要的颗粒度？** —— 整块 markdown / 结构化字段 / 状态机位 / 诊断对象 / 事实条目 / 规则条款
+3. **AI 产出这个字段稳定吗？** —— 不稳定 → Prompt；稳定 → Schema
+4. **这个操作有可逆成本吗？** —— 有 → Policy 定规则 + Runtime 查规则；无 → 可直接执行
+5. **质量能用规则判吗？** —— 能 → Schema / Runtime；不能 → Evaluator
+6. **信息要跨会话存活吗？** —— 要 → Memory；不要 → 仅存产物或 runtime state
+7. **谁有权改这条约束？** —— 程序员 → Schema / Runtime；用户/管理员 → Policy / Memory
 
 选错层的代价：
-- 语义被 schema 切成碎片 → AI 产出不稳 + 人类不可读
-- 参数留在提示词 → 程序不可 parse + 每轮重新解释
+- 语义被 Schema 切成碎片 → AI 产出不稳 + 人类不可读
+- 参数留在 Prompt → 程序不可 parse + 每轮重新解释
 - 过程状态混进产物 → 产物文件噪音 + 无法回放
-- 质量硬编码 → 创作灵活度丢失 + 新场景要改 schema
+- 质量硬编码进 Schema → 创作灵活度丢失 + 新场景要改代码
+- Policy 硬编码进 Runtime → 用户无法调整 + 每次改规则都要发版
+- Memory 写进产物 → 跨会话信息污染单次产物 + 无法审计累积状态
+- Policy 嵌进 Prompt → 规则变更要重写 persona + 合规审计无处可查
 
 #### 11.6.6 现系统合规度
 
 SDD 3-stage 在设计上已符合约束分级原则：
 
-| 产物 / 组件 | 主约束层 | 合规 |
+| 产物 / 组件 | 主控制层 | 合规 |
 |---------|------|----|
-| Draft.md 正文（intent/approach/artifact）| 提示词 | ✅ 自由 markdown |
-| Draft.md frontmatter（id/kind/status/domain/ts/referenceChain）| schema（轻）| ✅ 只放索引字段 |
-| ExecutionPlan.md `steps[]` | schema（强）| ✅ tool name + args 结构化 |
-| ExecutionPlan.md rationale / notes | 提示词 | ✅ 自由文本 |
-| Task.md items[] content / activeForm | 提示词 | ✅ 叙述 |
-| Task.md items[] status | schema（轻）| ✅ 枚举 |
+| Draft.md 正文（intent/approach/artifact）| Prompt | ✅ 自由 markdown |
+| Draft.md frontmatter（id/kind/status/domain/ts/referenceChain）| Schema（轻）| ✅ 只放索引字段 |
+| ExecutionPlan.md `steps[]` | Schema（强）| ✅ tool name + args 结构化 |
+| ExecutionPlan.md rationale / notes | Prompt | ✅ 自由文本 |
+| Task.md items[] content / activeForm | Prompt | ✅ 叙述 |
+| Task.md items[] status | Schema（轻）| ✅ 枚举 |
 | ApprovalEngine / RetryEngine / StageGuardian | Runtime | ✅ 纯运行时 |
-| ArtifactWatcher + ArtifactValidator | Runtime + schema（仅 frontmatter）| ✅ 不侵犯正文 |
+| ArtifactWatcher + ArtifactValidator | Runtime + Schema（仅 frontmatter）| ✅ 不侵犯正文 |
 | ArtifactObservationHooks | Runtime | ✅ bus → context 桥 |
-| creation-persona.allowedTools | Schema 约束 — Tool 子类 | ✅ 全是提示词型 |
-| execution-persona.allowedTools（未来）| Schema 约束 — Operation 子类 | 设计预留 |
+| creation-persona.allowedTools | Schema — Tool 子类 | ✅ 全是提示词型 |
+| execution-persona.allowedTools（未来）| Schema — Operation 子类 | 设计预留 |
+| **preferences.md（项目 + 全局）** | **Policy** | **✅ 声明式规则，Runtime 读取** |
+| **preferencesStrategyPack** | **Runtime 消费 Policy** | **✅ ApprovalEngine 优先读用户规则** |
+| **Skill.compliance.approvalRules[]** | **Policy** | **✅ 合规元数据 + skillSha 审计链** |
+| **Skill.allowedTools / requiredSubpackages** | **Policy** | **✅ 每 Skill 声明自己的边界** |
+| **Operation.costProfile（reversible/tokens/cost）** | **Policy（成本锚点）** | **✅ Runtime 按阈值自动拦截** |
+| **`~/.claude/.../memory/` + `MEMORY.md`** | **Memory** | **✅ 跨会话用户画像 / feedback / 项目上下文** |
+| **`<workDir>/.neko/memory.md`（FileProjectMemoryManager）** | **Memory** | **✅ 项目级记忆，environment 层注入** |
+| **Creative Context Compression（7 级优先级）** | **Memory（压缩策略）** | **✅ 用户消息永留 / 创作决策 / 版本锚点 / 迭代链 / 资产状态 / 美学偏好 分层摘要** |
+| **CreativeMemoryHooks（ExecutorHooks）** | **Memory（读写桥）** | **✅ afterAct 抽取 creative 决策 / beforeThink 注入相关回忆** |
+| **SharedMemoryStore（subagent scratchpad）** | **Memory（多 agent 共享）** | **✅ 跨 subagent 协作 scratchpad** |
 | IntentValidator（待建）| Evaluator | ⏳ LLM-judge 形态 |
 | ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ |
 
-**全部合规。** 本原则可作为后续任何扩展的判断标尺。
+**全部合规。** 本原则可作为后续任何扩展的判断标尺。Memory 和 Policy 两层过去一直存在于代码，但没被正式命名为独立控制平面；本章将它们从"看起来散落"升级为"架构一等公民"，后续扩展不会再把它们误塞进其他层。
+
+#### 11.6.7 Memory 层详解
+
+Memory 是"AI 跨会话积累的事实"，不是"即时上下文"。三个关键属性：
+
+1. **持久化**：写入磁盘，下次会话可读
+2. **多尺度**：用户级（全局）/ 项目级（workspace）/ 角色级（CharacterAgent，规划中）/ 系列级（SeriesSpec，规划中）
+3. **压缩策略**：不是所有事实等权——按 `creative-context-compression.md` 的 7 级优先级分层保留
+
+**Memory 的消费路径**：
+
+```
+AI 读 Memory                        AI 写 Memory
+─────────────                      ─────────────
+CreativeMemoryHooks.beforeThink     CreativeMemoryHooks.afterAct
+  ↓                                    ↓
+从 .neko/memory.md 检索相关条目       抽取本轮的创作决策
+  ↓                                    ↓
+注入 context.messages                附加到 memory file
+```
+
+**Memory 与 Prompt 的区别**：
+
+| 维度 | Prompt | Memory |
+|----|------|------|
+| 生命周期 | 一次激活的上下文 | 跨会话持久 |
+| 作者 | Agent 架构师（persona）/ 当前用户消息 | AI 自动抽取 + 人工编辑 |
+| 更新方式 | 重启 Skill 时重新注入 | 每轮 afterAct 增量 |
+| 目的 | 告诉 AI **此刻**要做什么 / 怎么做 | 告诉 AI **过去**发生了什么 |
+| 典型内容 | "你是 TikTok 剪辑师，快节奏优先" | "用户上次偏好冷色调；上个项目用了 `neko-cut` v1.2" |
+
+**Prompt 是即时指导，Memory 是累积事实。**
+
+#### 11.6.8 Policy 层详解
+
+Policy 是"用户/组织声明的规则"，不是"代码里的判断逻辑"。三个关键属性：
+
+1. **声明式**：YAML / Markdown / 结构化文件，非可执行代码
+2. **可审计**：每条规则可追溯来源（谁写的、何时、为何）
+3. **分层覆盖**：全局 → 项目 → 团队（规划中） → 角色（规划中），下层覆盖上层
+
+**Policy 的存储位置**：
+
+```
+~/.neko/preferences.md         ← 全局用户偏好（跨项目默认）
+.neko/preferences.md            ← 项目级偏好（覆盖全局）
+Skill.frontmatter.compliance    ← Skill 级合规元数据（auditRequired / approvalRules）
+Skill.frontmatter.allowedTools  ← Skill 级工具白名单
+Operation.costProfile           ← Operation 成本锚点（被 Policy 规则引用）
+```
+
+**Policy 的消费路径**：
+
+```
+Runtime 读 Policy                   Evaluator 读 Policy
+────────────────                   ─────────────────
+ApprovalEngine.evaluate             （未来）ComplianceChecker
+  ↓                                    ↓
+读 preferencesStrategyPack            读 Skill.compliance.auditRequired
+  ↓                                    ↓
+按规则决定 pass/hold/reject           按规则决定 audit-required/skip
+  ↓                                    ↓
+写 audits.jsonl（skillSha 证据链）   写 audit-report
+```
+
+**Policy 与 Runtime 的区别**（最容易混淆）：
+
+| 维度 | Runtime | Policy |
+|----|-------|------|
+| 本质 | **机制**（how to enforce）| **规则**（what to enforce）|
+| 例子 | ApprovalEngine 是一个机制 | `preferences.md` "任何 4K 导出需审批" 是一条规则 |
+| 谁写 | 架构师 / 引擎开发者 | 用户 / 管理员 / 合规官 |
+| 变化频率 | 代码级（版本发布）| 配置级（随时改）|
+| 测试方式 | 单元 / 集成测试 | 规则 lint + 审计日志 |
+| 错位代价 | Runtime 变 Policy 则规则只在代码里没法改 | Policy 变 Runtime 则机制重复实现 |
+
+**Runtime 实现 Policy 决策。** ApprovalEngine（Runtime 机制）读 preferences.md（Policy 规则）+ Skill.compliance（Policy 规则），决定拦截哪个 Operation。Runtime 不**拥有**规则，Runtime **消费**规则。
 
 ---
 
@@ -2221,6 +2396,7 @@ neko-agent/packages/agent/tools/core/
 | 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 | 2026-04-22 | **Phase B 闭环（Observation loop + 运行时 runId 注入）**：Phase B 初版的 `artifact.invalid` 事件只有 watcher emit 端，没有消费端——承诺的"AI 自修复"只存在于 persona 提示词里。新增三件修补。 **(1)** `narrator/milestone-tracker.ts` 的 `defaultClassify` 补齐 `ARTIFACT_WRITTEN` / `ARTIFACT_INVALID` 两个 case；`progress-narrator.ts` 的图标表同步（✎ / ⚠）。 **(2)** 新增 `artifact/artifact-observation-hooks.ts`（ExecutorHooks），订阅 `execution.artifact.invalid`，在下一次 `beforeThink` 把 buffered issues 渲染成 system 消息追加到 `context.messages`，让 AI 真正看到 watcher 诊断并自修复。`AgentSession` 把它链到 `runnerHooks` 后面（与 `stageGuardian.tick` 组合），并在 dispose 时解订阅。 **(3)** `StagePersonaBinding` 新增 `getRunId` 可选 deps——激活 persona 时把 prompt 里的 `{runId}` / `{stage}` 字面量替换为活 SddRun 的 id / 当前 stage；`creation-persona.ts` 正文的 artifact-file 合同从 `<runId>` 改为 `{runId}`，让 AI 读到的永远是已解析好的具体路径（`.neko/drafts/draft-tiktok-001.md`），不再依赖 LLM 去会话上下文里二次检索。新增 `artifact-observation-hooks.test.ts`（8 个 case：no-op / 单事件注入 / 多事件排序 / 多 issue 展开 / 溢出截断 / 二次 drain / dispose 断链 / null bus 容错）。Phase B 闭环完成后端到端流程：AI 写 draft → watcher 300ms 后校验 → invalid 事件注入下一 beforeThink → AI 看到 issues → 重写。 | Architecture Team |
 | 2026-04-22 | **§11.6 约束分级原则（Constraint Layering by Consumer）**：把 SDD 背后隐含的分层原则形式化为四级谱系——**Schema 约束**（程序消费，承载工具使用）、**提示词约束**（AI/人消费，承载语义/灵感/风格）、**Runtime 约束**（运行时消费，承载处理过程）、**Evaluator 约束**（打分器消费，承载质量评估）。Schema 约束内部再二分为 **Tool**（提示词型工具，轻 schema 入口 + 自由文本内容，如 Write/Read/Grep）与 **Operation**（操作型工具，全量严格 schema + 副作用元数据，如 cut.trim-clip/image.generate），判定依据是"AI 产出这个字段时稳定吗"。SDD 阶段与约束层天然对齐：Draft/Plan 只用提示词型工具（creation-persona.allowedTools 全是 Read/Write/Grep/ListDirectory/Glob），Apply 阶段才解锁操作型工具。补齐 6 个反模式（语义推到 schema / 工具参数留在提示词 / 过程状态进产物 / 质量硬编码为 field / Operation 留提示词参数 / Tool 加业务 schema）、5 步决策清单、现系统合规度表。此章可作为后续任何扩展的判断标尺——多模态意图、IntentValidator、Intent drift 检测等下一阶段工作都按本原则决定约束层归属（例：用户多模态输入 → 提示词层由 LLM 自然理解；Draft 正文 → 提示词层自由 markdown；referenceChain asset:// URI → schema 层索引；ArtifactWatcher 校验 → Runtime 层；未来 IntentValidator → Evaluator 层 LLM-judge）。 | Architecture Team |
+| 2026-04-23 | **§11.6 扩展到六层控制平面**：把四级谱系扩展为**六层**，补齐长期存在于代码但未被正式命名的两层——**Memory**（决定"记得什么"，消费者是 AI 读 + 人审计/编辑，跨会话累积，实现有 `~/.claude/.../memory/MEMORY.md` + `.neko/memory.md` + CreativeMemoryHooks + 7 级创意压缩 + SharedMemoryStore）、**Policy**（决定"能不能做"，消费者是 Runtime + Evaluator 读取规则，声明式配置，实现有 `preferences.md` + preferencesStrategyPack + Skill.compliance + allowedTools + requiredSubpackages + Operation.costProfile）。用四字口诀作为章节开篇：**Prompt 决定"说什么" / Schema 决定"长什么样" / Runtime 决定"什么时候做" / Policy 决定"能不能做" / Memory 决定"记得什么" / Evaluator 决定"做得好不好"**。新增六层触发时序图（Policy 前置门 → Memory 双端读写 → Prompt·Schema·Runtime 中段流水 → Evaluator 出口闸）。补 5 条反模式（Policy 硬编码进 Runtime / Memory 写进产物 frontmatter / Policy 嵌入 Prompt persona / Evaluator 读 Policy 判合规 + 原有 6 条合计 11 条）、决策清单从 5 问扩到 7 问（新增"信息要跨会话存活吗"、"谁有权改这条约束"）、合规度审计表补齐 Memory/Policy 两块（preferences / Skill.compliance / costProfile / `.neko/memory.md` / CreativeMemoryHooks / SharedMemoryStore / 7 级创意压缩）。新增 §11.6.7 Memory 层详解（Memory vs Prompt 辨析表）、§11.6.8 Policy 层详解（Policy vs Runtime 辨析表："Runtime 是机制，Policy 是规则；Runtime 消费 Policy 而非拥有 Policy"）。此次扩展让"约束分级"不再是单纯"约束"概念，而是**六个并行控制平面**，所有现有组件都能清晰归类。 | Architecture Team |
 
 ---
 
