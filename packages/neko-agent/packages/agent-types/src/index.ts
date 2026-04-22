@@ -39,6 +39,9 @@ export { toTodoStatusCamel, toTodoStatusSnake } from './todo-list';
 export type { SddRunStatus, SddRunRoundSummary, SddRun } from './sdd-run';
 export { roundSummaryFromDecision } from './sdd-run';
 
+// Proposal — Specify-stage artifact (ADR §5.2, §7.5)
+export type { Proposal, ProposalStatus } from './proposal';
+
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
   CreationChannel,

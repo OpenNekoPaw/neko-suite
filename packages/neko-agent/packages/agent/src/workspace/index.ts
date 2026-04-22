@@ -35,3 +35,4 @@ export {
 } from './ndjson-event-sink';
 
 export { serializeTodoList } from './todo-markdown';
+export { serializeProposal } from './proposal-markdown';
