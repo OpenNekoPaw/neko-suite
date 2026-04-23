@@ -13,6 +13,7 @@ import { MemoryProjectModule } from '../modules/memory/memory-project-module';
 import { MemoryGlobalModule } from '../modules/memory/memory-global-module';
 import { MemoryRecallModule } from '../modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../modules/ephemeral/creative-version-log-module';
+import { AgentsMdModule } from '../modules/environment/agents-md-module';
 
 type ProjectionSetter = (content: string | null) => void;
 
@@ -79,6 +80,18 @@ const SPECS: ModuleSpec[] = [
     expectedLayer: 'ephemeral',
     expectedPriority: 30,
     expectedSectionId: 'creative-version-log',
+    headingPrefix: null,
+  },
+  {
+    name: 'AgentsMdModule',
+    make: () => {
+      const mod = new AgentsMdModule();
+      return { mod, setContent: (c) => mod.setContent(c) };
+    },
+    expectedManifestId: 'agents-md',
+    expectedLayer: 'environment',
+    expectedPriority: 80,
+    expectedSectionId: 'agents-md:override',
     headingPrefix: null,
   },
 ];

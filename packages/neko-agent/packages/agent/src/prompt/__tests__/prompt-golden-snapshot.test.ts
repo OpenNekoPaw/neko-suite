@@ -73,4 +73,19 @@ describe('prompt golden snapshots', () => {
       ),
     ).toMatchSnapshot();
   });
+
+  // PR3b: AGENTS.md overlays into the environment layer instead of
+  // replacing the base. This snapshot documents the composed output when a
+  // user-authored project-level AGENTS.md is present.
+  it('EN base + AGENTS.md overlay (environment layer)', () => {
+    const composer = new SystemPromptComposer();
+    composer.setBase(BUILTIN_DEFAULT_PROMPT_EN);
+    composer.setSection({
+      id: 'agents-md:override',
+      layer: 'environment',
+      content: '# Project Overrides\n\nUse TypeScript strict mode.\nPrefer functional composition.',
+      priority: 80,
+    });
+    expect(composer.compose()).toMatchSnapshot();
+  });
 });

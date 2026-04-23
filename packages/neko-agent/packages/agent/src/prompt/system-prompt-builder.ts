@@ -174,6 +174,35 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
     return `${basePrompt}\n\n${suffix}`;
   }
 
+  /**
+   * Base layer only — returns the plan prompt in plan mode, else the
+   * built-in (or custom) default prompt. AGENTS.md content is NOT merged
+   * in; callers wanting the overlay behaviour should additionally consume
+   * {@link buildAgentsOverlay}.
+   *
+   * Introduced in PR3b alongside the AGENTS.md overlay pattern — the
+   * session initializer uses this as `composer.setBase(...)` input so the
+   * base protocol stays visible even when the user supplies AGENTS.md.
+   */
+  buildBaseOnly(): string {
+    if (this._mode === 'plan') {
+      return this._getPlanPrompt();
+    }
+    return this._getDefaultPrompt();
+  }
+
+  /**
+   * AGENTS.md overlay content — returns the currently loaded AGENTS.md
+   * string regardless of mode, or null when no file has been loaded.
+   *
+   * Intended to be routed into the session's L3 environment layer so that
+   * user-authored project/personal instructions layer on top of the base
+   * protocol instead of replacing it.
+   */
+  buildAgentsOverlay(): string | null {
+    return this._agentsContent;
+  }
+
   // ---------------------------------------------------------------------------
   // Private Methods
   // ---------------------------------------------------------------------------

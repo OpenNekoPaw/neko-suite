@@ -34,6 +34,7 @@ import { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-modul
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
+import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import type { PromptModuleSection } from '../prompt/registry/module-manifest';
 
 // =============================================================================
@@ -74,6 +75,10 @@ export interface SessionComponents {
   // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
   // through the module (byte-identical to the legacy setSection path).
   skillInjectionModule: SkillInjectionModule;
+
+  // PR3b: AGENTS.md overlay projected into the environment layer instead
+  // of replacing the base prompt.
+  agentsMdModule: AgentsMdModule;
 }
 
 /**
@@ -203,6 +208,16 @@ export function initializeSession(
   const memoryRecallModule = new MemoryRecallModule();
   const creativeVersionLogModule = new CreativeVersionLogModule();
   const skillInjectionModule = new SkillInjectionModule();
+  const agentsMdModule = new AgentsMdModule();
+
+  // PR3b: AGENTS.md overlay — when the caller supplies agentsOverride
+  // content we project it through the module into the environment layer
+  // at priority 80. Happens before the memory subscriptions below so the
+  // final prompt interleaves correctly.
+  if (config.agentsOverride) {
+    agentsMdModule.setContent(config.agentsOverride);
+    writeModuleSectionsSync(promptComposer, 'agents-md:override', agentsMdModule.renderSync());
+  }
 
   // Inject project memory via MemoryProjectModule (renderSync for in-line
   // update: event handlers fire synchronously and the composer state must
@@ -243,6 +258,7 @@ export function initializeSession(
     memoryRecallModule,
     creativeVersionLogModule,
     skillInjectionModule,
+    agentsMdModule,
   };
 }
 

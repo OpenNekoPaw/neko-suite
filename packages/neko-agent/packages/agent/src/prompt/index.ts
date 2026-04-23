@@ -88,6 +88,9 @@ export { MemoryGlobalModule } from './modules/memory/memory-global-module';
 export { MemoryRecallModule } from './modules/memory/memory-recall-module';
 export { CreativeVersionLogModule } from './modules/ephemeral/creative-version-log-module';
 
+// AGENTS.md overlay module (PR3b)
+export { AgentsMdModule } from './modules/environment/agents-md-module';
+
 // Re-export types from @neko/shared for convenience
 export type {
   Prompt,

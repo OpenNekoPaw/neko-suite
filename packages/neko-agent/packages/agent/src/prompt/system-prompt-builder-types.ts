@@ -137,4 +137,17 @@ export interface ISystemPromptBuilder {
    * @param suffix Custom content to append
    */
   buildWithSuffix(suffix: string): string;
+
+  /**
+   * Base layer only — plan prompt in plan mode, else built-in default.
+   * AGENTS.md is NOT included; use {@link buildAgentsOverlay} to obtain
+   * the overlay separately for L3-environment injection.
+   */
+  buildBaseOnly(): string;
+
+  /**
+   * AGENTS.md overlay content, or null when no AGENTS.md has been loaded.
+   * Independent of mode — the overlay applies under both plan and default.
+   */
+  buildAgentsOverlay(): string | null;
 }

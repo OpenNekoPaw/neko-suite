@@ -449,8 +449,10 @@ export class AgentRunner implements IAgentRunner {
       this._projectMemoryManager = undefined;
     }
 
-    // Resolve system prompt
+    // Resolve system prompt + AGENTS.md overlay (PR3b: AGENTS.md is now
+    // layered into the environment layer rather than replacing the base).
     const effectiveSystemPrompt = this._resolveSystemPrompt(config);
+    const agentsOverride = this._resolveAgentsOverride();
 
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
@@ -463,6 +465,7 @@ export class AgentRunner implements IAgentRunner {
       service,
       toolRegistry: config.platform.tools,
       systemPrompt: effectiveSystemPrompt,
+      ...(agentsOverride !== undefined && { agentsOverride }),
       executionMode: config.executionMode ?? 'auto',
       maxIterations: config.maxIterations,
       temperature: config.temperature,
@@ -747,13 +750,25 @@ export class AgentRunner implements IAgentRunner {
       return config.systemPrompt;
     }
 
-    // Delegate entirely to SystemPromptBuilder (already configured with locale + mode)
+    // PR3b: use the base-only path so AGENTS.md doesn't get merged into
+    // the base prompt. AGENTS.md content is routed via agentsOverride on
+    // the session config and layered in as an environment section so the
+    // builtin protocol stays visible alongside user overrides.
     if (this._promptBuilder) {
-      return this._promptBuilder.build();
+      return this._promptBuilder.buildBaseOnly();
     }
 
     // Should not reach here — fallback
     return '';
+  }
+
+  /**
+   * AGENTS.md overlay content for the current session, or undefined when
+   * no AGENTS.md file has been loaded. Consumed by the session initializer
+   * as an environment-layer overlay on top of the base prompt.
+   */
+  private _resolveAgentsOverride(): string | undefined {
+    return this._promptBuilder?.buildAgentsOverlay() ?? undefined;
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): Promise<boolean> {

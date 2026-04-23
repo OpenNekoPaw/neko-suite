@@ -68,6 +68,14 @@ export interface AgentSessionConfig {
   /** System prompt (use SystemPromptBuilder to construct) */
   systemPrompt: string;
 
+  /**
+   * Optional AGENTS.md overlay content to layer on top of the base prompt.
+   * When set, the initializer injects this as an L3 environment-layer
+   * section at priority 80 instead of merging it into the base. Typically
+   * supplied by agentRunner from `SystemPromptBuilder.buildAgentsOverlay()`.
+   */
+  agentsOverride?: string;
+
   /** Execution mode */
   executionMode?: ExecutionMode;
 

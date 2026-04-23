@@ -195,6 +195,43 @@ describe('SystemPromptBuilder', () => {
       expect(builder.getMode()).toBe('plan');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // PR3b: buildBaseOnly + buildAgentsOverlay (AGENTS.md overlay pattern)
+  // ---------------------------------------------------------------------------
+
+  describe('buildBaseOnly', () => {
+    it('returns builtin default (without AGENTS.md) when in default mode', () => {
+      const builder = new SystemPromptBuilder();
+      builder.setAgentsContent('# Project rules\nUse strict mode.', 'project');
+      expect(builder.buildBaseOnly()).toBe(BUILTIN_DEFAULT_PROMPT_EN);
+      // Legacy build() still replaces with AGENTS.md.
+      expect(builder.build()).toBe('# Project rules\nUse strict mode.');
+    });
+
+    it('returns plan prompt in plan mode (ignoring AGENTS.md)', () => {
+      const builder = new SystemPromptBuilder({ mode: 'plan' });
+      builder.setAgentsContent('# Project rules', 'project');
+      expect(builder.buildBaseOnly()).toBe(BUILTIN_PLAN_PROMPT_EN);
+    });
+  });
+
+  describe('buildAgentsOverlay', () => {
+    it('returns null when no AGENTS.md has been loaded', () => {
+      const builder = new SystemPromptBuilder();
+      expect(builder.buildAgentsOverlay()).toBeNull();
+    });
+
+    it('returns the loaded AGENTS.md content regardless of mode', () => {
+      const content = '# Project Overrides\nUse TypeScript strict.';
+      const builder = new SystemPromptBuilder();
+      builder.setAgentsContent(content, 'project');
+      expect(builder.buildAgentsOverlay()).toBe(content);
+
+      builder.setMode('plan');
+      expect(builder.buildAgentsOverlay()).toBe(content);
+    });
+  });
 });
 
 describe('Builtin Prompts', () => {
