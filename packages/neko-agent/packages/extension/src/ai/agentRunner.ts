@@ -34,7 +34,8 @@ import {
   type AgentEvent,
   type AgentEventType,
 } from '@neko/agent';
-import type { IProjectMemoryManager } from '@neko/shared';
+import type { IProjectMemoryManager, PromptFragment } from '@neko/shared';
+import { getCapabilityDiscoveryService } from '../bootstrap/capabilityBootstrap';
 import * as nodePath from 'node:path';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
@@ -453,6 +454,11 @@ export class AgentRunner implements IAgentRunner {
     // layered into the environment layer rather than replacing the base).
     const effectiveSystemPrompt = this._resolveSystemPrompt(config);
     const agentsOverride = this._resolveAgentsOverride();
+    // PR3e: aggregate sub-package prompt fragments from every registered
+    // AgentCapabilityProvider and pass them through as a session config
+    // field so the SubpackageFragmentsModule can project them into the
+    // environment layer.
+    const promptFragments = this._resolvePromptFragments();
 
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
@@ -466,6 +472,7 @@ export class AgentRunner implements IAgentRunner {
       toolRegistry: config.platform.tools,
       systemPrompt: effectiveSystemPrompt,
       ...(agentsOverride !== undefined && { agentsOverride }),
+      ...(promptFragments !== undefined && { promptFragments }),
       executionMode: config.executionMode ?? 'auto',
       maxIterations: config.maxIterations,
       temperature: config.temperature,
@@ -769,6 +776,26 @@ export class AgentRunner implements IAgentRunner {
    */
   private _resolveAgentsOverride(): string | undefined {
     return this._promptBuilder?.buildAgentsOverlay() ?? undefined;
+  }
+
+  /**
+   * PR3e: aggregate sub-package prompt fragments from every registered
+   * capability provider. Returns undefined (not empty array) when no
+   * fragment is available so `createAgentSession` receives the field
+   * only when there's something to set.
+   *
+   * Uses the best-effort `getCapabilityDiscoveryService` — if bootstrap
+   * hasn't run yet (CLI context, tests) the function throws; we swallow
+   * to keep the session bring-up resilient.
+   */
+  private _resolvePromptFragments(): readonly PromptFragment[] | undefined {
+    try {
+      const discovery = getCapabilityDiscoveryService();
+      const fragments = discovery.getAllPromptFragments();
+      return fragments.length > 0 ? fragments : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): Promise<boolean> {

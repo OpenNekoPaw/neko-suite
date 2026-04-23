@@ -85,6 +85,7 @@ import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creat
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
+import type { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import { freezePromptContext } from '../prompt/context';
 import { getLogger } from '../utils/logger';
 import {
@@ -144,6 +145,9 @@ export class AgentSession implements IAgentSession {
   // PR3c: IDC artifact contract (L1 schema layer). Instance held here so
   // future session-level IdcRun transition wiring (PR3d) can toggle it.
   private _artifactSchemaModule: ArtifactSchemaModule;
+  // PR3e: sub-package prompt fragments (environment layer priority 70).
+  // Instance held for future re-sync passes when provider set changes.
+  private _subpackageFragmentsModule: SubpackageFragmentsModule;
 
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
@@ -244,6 +248,7 @@ export class AgentSession implements IAgentSession {
     this._skillInjectionModule = components.skillInjectionModule;
     this._agentsMdModule = components.agentsMdModule;
     this._artifactSchemaModule = components.artifactSchemaModule;
+    this._subpackageFragmentsModule = components.subpackageFragmentsModule;
 
     // Journal writer for session persistence
     if (config.journalWriter) {

@@ -36,6 +36,7 @@ import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-v
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
+import { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import type { PromptModuleSection } from '../prompt/registry/module-manifest';
 
 // =============================================================================
@@ -86,6 +87,10 @@ export interface SessionComponents {
   // initializer only creates/exposes the module; runtime activation is
   // driven by session-level IdcRun transitions (PR3d).
   artifactSchemaModule: ArtifactSchemaModule;
+
+  // PR3e: sub-package prompt fragments projected into the L3 environment
+  // layer (priority 70). Populated from config.promptFragments at init.
+  subpackageFragmentsModule: SubpackageFragmentsModule;
 }
 
 /**
@@ -217,6 +222,7 @@ export function initializeSession(
   const skillInjectionModule = new SkillInjectionModule();
   const agentsMdModule = new AgentsMdModule();
   const artifactSchemaModule = new ArtifactSchemaModule();
+  const subpackageFragmentsModule = new SubpackageFragmentsModule();
 
   // PR3b: AGENTS.md overlay — when the caller supplies agentsOverride
   // content we project it through the module into the environment layer
@@ -225,6 +231,27 @@ export function initializeSession(
   if (config.agentsOverride) {
     agentsMdModule.setContent(config.agentsOverride);
     writeModuleSectionsSync(promptComposer, 'agents-md:override', agentsMdModule.renderSync());
+  }
+
+  // PR3e: sub-package prompt fragments — one composer section per
+  // fragment at ids `fragment:${f.id}`. Uses removeSectionsByPrefix to
+  // clear any prior `fragment:*` sections in one sweep (cheap, and keeps
+  // the initializer idempotent if it were ever called twice).
+  if (config.promptFragments && config.promptFragments.length > 0) {
+    subpackageFragmentsModule.setFragments(config.promptFragments);
+    promptComposer.removeSectionsByPrefix('fragment:');
+    const fragmentSections = subpackageFragmentsModule.renderSync();
+    if (fragmentSections) {
+      for (const s of fragmentSections) {
+        promptComposer.setSection({
+          id: s.sectionId,
+          layer: s.layer,
+          content: s.content,
+          priority: s.priority ?? 70,
+          ...(s.cacheControl && { cacheControl: s.cacheControl }),
+        });
+      }
+    }
   }
 
   // Inject project memory via MemoryProjectModule (renderSync for in-line
@@ -268,6 +295,7 @@ export function initializeSession(
     skillInjectionModule,
     agentsMdModule,
     artifactSchemaModule,
+    subpackageFragmentsModule,
   };
 }
 

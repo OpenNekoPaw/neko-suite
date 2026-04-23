@@ -28,6 +28,7 @@ import type {
   ToolGroup,
   Skill,
   ISkillRegistry,
+  PromptFragment,
 } from '@neko/shared';
 import { getRootLogger } from '../base';
 
@@ -291,6 +292,34 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   /** Get all registered providers */
   getAllProviders(): AgentCapabilityProvider[] {
     return Array.from(this._providers.values()).map((e) => e.provider);
+  }
+
+  /**
+   * Aggregate `PromptFragment` contributions from every registered
+   * provider. Providers that don't implement `getPromptFragments` are
+   * skipped silently.
+   *
+   * Called once per session bring-up (by agentRunner) and passed through
+   * to the agent as `AgentSessionConfig.promptFragments`. The agent's
+   * SubpackageFragmentsModule projects them into the L3 environment
+   * layer at priority 70.
+   *
+   * Ordering mirrors provider registration order. Duplicate fragment ids
+   * across providers are dropped at the module layer (first-writer-wins).
+   */
+  getAllPromptFragments(): PromptFragment[] {
+    if (!this._capabilityContext) return [];
+    const aggregated: PromptFragment[] = [];
+    for (const { provider } of this._providers.values()) {
+      if (!provider.getPromptFragments) continue;
+      try {
+        const fragments = provider.getPromptFragments(this._capabilityContext);
+        if (fragments && fragments.length > 0) aggregated.push(...fragments);
+      } catch (err) {
+        this._logger.warn(`Provider "${provider.id}" getPromptFragments threw; skipping`, err);
+      }
+    }
+    return aggregated;
   }
 
   /** Get all discovered manifests (including unregistered) */

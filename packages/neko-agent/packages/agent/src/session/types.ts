@@ -12,6 +12,7 @@ import type {
   IToolRegistry,
   IToolGroupRegistry,
   IToolCategoryRegistry,
+  PromptFragment,
 } from '@neko/shared';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 
@@ -75,6 +76,17 @@ export interface AgentSessionConfig {
    * supplied by agentRunner from `SystemPromptBuilder.buildAgentsOverlay()`.
    */
   agentsOverride?: string;
+
+  /**
+   * Optional prompt fragments contributed by sub-package capability
+   * providers. Each fragment becomes an L3 environment-layer section at
+   * priority 70 (below AGENTS.md = 80, above project memory = 60). Ids
+   * become composer section ids as `fragment:${f.id}`.
+   *
+   * Typically populated by agentRunner from
+   * `CapabilityDiscoveryService.getAllPromptFragments()`.
+   */
+  promptFragments?: readonly PromptFragment[];
 
   /** Execution mode */
   executionMode?: ExecutionMode;

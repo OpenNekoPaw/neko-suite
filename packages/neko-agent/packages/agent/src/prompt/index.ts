@@ -94,6 +94,9 @@ export { AgentsMdModule } from './modules/environment/agents-md-module';
 // Schema-layer modules (PR3c)
 export { ArtifactSchemaModule } from './modules/schema/artifact-schema-module';
 
+// Sub-package prompt fragments module (PR3e)
+export { SubpackageFragmentsModule } from './modules/environment/subpackage-fragments-module';
+
 // Re-export types from @neko/shared for convenience
 export type {
   Prompt,

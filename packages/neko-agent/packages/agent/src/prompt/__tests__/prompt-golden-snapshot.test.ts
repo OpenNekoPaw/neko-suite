@@ -23,6 +23,7 @@ import {
 import { creationPersonaSkill } from '../../skill/builtins/creation-persona';
 import { executionPersonaSkill } from '../../skill/builtins/execution-persona';
 import { ArtifactSchemaModule } from '../modules/schema/artifact-schema-module';
+import { SubpackageFragmentsModule } from '../modules/environment/subpackage-fragments-module';
 import { freezePromptContext } from '../context';
 
 function composeBaseOnly(base: string): string {
@@ -113,6 +114,37 @@ describe('prompt golden snapshots', () => {
       priority: 50,
     });
 
+    expect(composer.compose()).toMatchSnapshot();
+  });
+
+  // PR3e: sub-package PromptFragments from AgentCapabilityProvider.
+  // Documents composed output when two hypothetical providers (neko-cut +
+  // neko-canvas) each contribute one fragment at priority 70. Section ids
+  // follow the `fragment:{package}:{local}` convention.
+  it('EN base + subpackage prompt fragments (environment layer)', () => {
+    const composer = new SystemPromptComposer();
+    composer.setBase(BUILTIN_DEFAULT_PROMPT_EN);
+
+    const mod = new SubpackageFragmentsModule();
+    mod.setFragments([
+      {
+        id: 'neko-cut:timeline-basics',
+        content: '## Timeline editing\n\n- Timestamps in ms.\n- Add tracks before elements.',
+      },
+      {
+        id: 'neko-canvas:shot-composition',
+        content: '## Canvas composition\n\n- Three-point grid preferred.',
+      },
+    ]);
+    const sections = mod.renderSync() ?? [];
+    for (const s of sections) {
+      composer.setSection({
+        id: s.sectionId,
+        layer: s.layer,
+        content: s.content,
+        priority: s.priority ?? 70,
+      });
+    }
     expect(composer.compose()).toMatchSnapshot();
   });
 
