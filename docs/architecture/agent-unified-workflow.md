@@ -35,7 +35,7 @@
 | §10 术语一致性 | 撤销双轨，统一英文命令 | F |
 | §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
 | §11.6 约束分级原则 | 六层控制平面（Prompt/Schema/Runtime/Policy/Memory/Evaluator）+ 口诀 + Tool/Operation 二分 + 12 条反模式 + 7 问决策清单 + 时序图 + 合规度审计 + §11.6.9 Evaluator 建设边界（AI 原生自评优先）| 2026-04-22 新增 / 2026-04-23 扩展到六层 / 2026-04-23 补 §11.6.9 |
-| §11.6 Prompt 平面 | Module/Registry/Orchestrator 骨架 + PromptContext/ContextProvider + 5 个 Module（Skill 参考 / Memory × 3 / VersionLog）+ `composer.removeSectionsByPrefix` 公共 API + base prompt 净化（删身份/工具可用性/任务分解/媒体规则）+ 5 个端到端 golden snapshot 保护 | PR1（2026-04-23）+ PR2（2026-04-23）|
+| §11.6 Prompt 平面 | 5 层架构（base → schema → skill → environment → ephemeral）+ Module/Registry/Orchestrator 骨架 + `PromptContext`/`PromptContextProvider` + 8 个 Module（Skill 注入 / Memory × 3 / VersionLog / AGENTS.md overlay / ArtifactSchema / SubpackageFragments）+ `SelfEvaluationHooks`（§11.6.9 ② 引导）+ base prompt 净化 + `composer.removeSectionsByPrefix` API + `AgentCapabilityProvider.promptFragments` 子包扩展面 + 8 个 golden snapshot 保护 | PR1-PR3f（2026-04-23）—— 6 个 `setSection`/`setBase` 写入点全部 module-owned；+178 测试 0 回归；§11.6.9 AI 自评三件套（可见性+引导+积累）全部运行时化 |
 | 抗演化审计 | 独立文档 [agent-evolution-capacity.md](./agent-evolution-capacity.md)：按 Skill / Prompt / Orchestration / 六控制平面评级，标出三处最脆弱断点 + 六条演化维护纪律 | 2026-04-23 新增 |
 | §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
