@@ -72,6 +72,19 @@ export interface ExecutorHooksFactoryConfig {
   /** Hook names to exclude from the chain (for ablation experiments) */
   disableHooks?: string[];
 
+  /**
+   * When true, MemoryHooks skips context compression. Used by the
+   * ablation framework to disable the compression pathway for A/B tests.
+   * Does not affect non-experiment runs (undefined keeps the default).
+   */
+  disableCompression?: boolean;
+
+  /**
+   * When true, MemoryHooks skips session-memory history loading. Used
+   * by the ablation framework; undefined keeps the default.
+   */
+  disableSessionMemory?: boolean;
+
   /** Pre-built creative memory hooks (recall + extraction). Inserted after MemoryHooks. */
   creativeMemoryHooks?: ExecutorHooks;
 }
@@ -104,9 +117,17 @@ export interface ExecutorHooksFactoryResult {
 export function createExecutorHooks(
   config: ExecutorHooksFactoryConfig,
 ): ExecutorHooksFactoryResult {
-  // 1. Memory hooks
+  // 1. Memory hooks — ablation flags pass through only when explicitly
+  // supplied (applyAblationToggles → initializer marker extraction).
+  // Conditional spread so exactOptionalPropertyTypes doesn't see `undefined`.
   const memoryHooks = new MemoryHooks({
     compressor: config.compressor,
+    ...(config.disableCompression !== undefined && {
+      disableCompression: config.disableCompression,
+    }),
+    ...(config.disableSessionMemory !== undefined && {
+      disableSessionMemory: config.disableSessionMemory,
+    }),
   });
 
   // 2. Validation hooks

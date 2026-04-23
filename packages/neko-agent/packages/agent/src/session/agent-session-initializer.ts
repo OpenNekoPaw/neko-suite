@@ -20,6 +20,7 @@ import { AgentExecutor } from '../executor';
 import type { Tool } from '@neko/shared';
 import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
+import { extractAblationMarker } from '../experiment/apply-toggles';
 import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
 import {
   ToolCategoryRegistry,
@@ -355,15 +356,32 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     onToolConfirmation,
   } = deps;
 
+  // When the caller came through applyAblationToggles, an AblationMarkerHook
+  // is prepended to config.hooks carrying disableHooks / disableCompression /
+  // disableSessionMemory metadata. Extract it here so (a) the metadata flows
+  // into the factory where the filtering actually happens, and (b) the
+  // marker itself is removed from customHooks so it doesn't appear as a
+  // no-op in the final chain. Non-experiment paths see no marker and this
+  // block is entirely a no-op.
+  const ablationMarker = extractAblationMarker(config.hooks);
+  const customHooks = ablationMarker
+    ? config.hooks?.filter((h) => h !== ablationMarker)
+    : config.hooks;
+
   const { hooks, permissionHooks } = createExecutorHooks({
     compressor,
     permissionMode,
     onToolAskStarted: onToolConfirmation,
     settingsHookLoader: config.settingsHookLoader,
-    customHooks: config.hooks,
+    customHooks,
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
     traitsRegistry: config.traitsRegistry,
+    ...(ablationMarker && {
+      disableHooks: ablationMarker.disableHooks,
+      disableCompression: ablationMarker.disableCompression,
+      disableSessionMemory: ablationMarker.disableSessionMemory,
+    }),
   });
 
   const executor = new AgentExecutor({
