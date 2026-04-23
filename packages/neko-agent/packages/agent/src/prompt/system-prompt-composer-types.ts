@@ -141,6 +141,16 @@ export interface ISystemPromptComposer {
   /** Remove a section by ID. Returns true if section existed. */
   removeSection(id: string): boolean;
 
+  /**
+   * Remove all sections whose id starts with the given prefix.
+   * Returns the number of sections removed.
+   *
+   * Enables per-module ownership cleanup (e.g. clear all `skill:*` sections
+   * when switching persona) without exposing the internal id Map to callers.
+   * An empty prefix is a no-op returning 0 (defensive against accidental wipes).
+   */
+  removeSectionsByPrefix(prefix: string): number;
+
   /** Check if a section exists */
   hasSection(id: string): boolean;
 

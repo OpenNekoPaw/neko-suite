@@ -78,6 +78,10 @@ import { type IPermissionManager, type PermissionMode } from '../permission';
 import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
 import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
+import type { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
+import type { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
+import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
+import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import { getLogger } from '../utils/logger';
 import {
   initializeSession,
@@ -121,6 +125,13 @@ export class AgentSession implements IAgentSession {
 
   // Prompt composition
   private _promptComposer: SystemPromptComposer;
+
+  // PR2 prompt modules — own the format contract for environment/ephemeral
+  // sections previously written directly via composer.setSection calls.
+  private _memoryProjectModule: MemoryProjectModule;
+  private _memoryGlobalModule: MemoryGlobalModule;
+  private _memoryRecallModule: MemoryRecallModule;
+  private _creativeVersionLogModule: CreativeVersionLogModule;
 
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
@@ -210,6 +221,14 @@ export class AgentSession implements IAgentSession {
     this._permissionHooks = components.permissionHooks;
     this._history = components.history;
     this._metaTools = components.metaTools;
+    // PR2 prompt modules — Session drives the version-log one during
+    // _syncSystemPrompt; the memory modules are event-driven from the
+    // initializer. Held here so future work can re-inject them via the
+    // orchestrator.
+    this._memoryProjectModule = components.memoryProjectModule;
+    this._memoryGlobalModule = components.memoryGlobalModule;
+    this._memoryRecallModule = components.memoryRecallModule;
+    this._creativeVersionLogModule = components.creativeVersionLogModule;
 
     // Journal writer for session persistence
     if (config.journalWriter) {
@@ -980,16 +999,25 @@ export class AgentSession implements IAgentSession {
 
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
-    // Inject version log summary into ephemeral layer (if entries exist)
-    if (this._versionLog.size > 0) {
-      this._promptComposer.setSection({
-        id: 'creative-version-log',
-        layer: 'ephemeral',
-        content: this._versionLog.toSummary(),
-        priority: 30,
-      });
-    } else {
-      this._promptComposer.removeSection('creative-version-log');
+    // Drive the CreativeVersionLogModule — owns the format contract for the
+    // version-log ephemeral section. renderSync() preserves the synchronous
+    // caller contract (this method is invoked from ask-snapshot paths where
+    // async would introduce a microtask between prompt sync and snapshot).
+    this._creativeVersionLogModule.setSummary(
+      this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
+    );
+    this._promptComposer.removeSection('creative-version-log');
+    const versionSections = this._creativeVersionLogModule.renderSync();
+    if (versionSections) {
+      for (const s of versionSections) {
+        this._promptComposer.setSection({
+          id: s.sectionId,
+          layer: s.layer,
+          content: s.content,
+          priority: s.priority,
+          ...(s.cacheControl && { cacheControl: s.cacheControl }),
+        });
+      }
     }
 
     // Compose both flat text and structured sections

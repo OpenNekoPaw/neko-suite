@@ -29,6 +29,11 @@ import {
   resolveToolGroupTier,
 } from '../tools';
 import { SystemPromptComposer } from '../prompt/system-prompt-composer';
+import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
+import { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
+import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
+import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
+import type { PromptModuleSection } from '../prompt/registry/module-manifest';
 
 // =============================================================================
 // Constants (re-exported for Session's _rebuildExecutor)
@@ -58,6 +63,13 @@ export interface SessionComponents {
   permissionHooks: IPermissionManager;
   history: ChatMessage[];
   metaTools: Tool[];
+
+  // PR2: Prompt-module infrastructure. Exposed for future runtime use
+  // (SkillInjectionCoordinator migration, SelfEvaluation hooks, etc.)
+  memoryProjectModule: MemoryProjectModule;
+  memoryGlobalModule: MemoryGlobalModule;
+  memoryRecallModule: MemoryRecallModule;
+  creativeVersionLogModule: CreativeVersionLogModule;
 }
 
 /**
@@ -177,40 +189,34 @@ export function initializeSession(
   const promptComposer = new SystemPromptComposer();
   promptComposer.setBase(config.systemPrompt);
 
-  // Inject project memory into environment layer (if available)
-  if (config.projectMemoryManager) {
-    const injectMemory = (content: string | null): void => {
-      if (content) {
-        promptComposer.setSection({
-          id: 'memory:project',
-          layer: 'environment',
-          content: `## Project Memory\n\n${content}`,
-          priority: 60,
-        });
-      } else {
-        promptComposer.removeSection('memory:project');
-      }
-    };
+  // Step 8: Prompt modules (PR2) — own the format contract for
+  // environment/ephemeral sections that were previously written directly
+  // with composer.setSection. The modules are stored on SessionComponents
+  // so session-level callers (CreativeMemoryHooks, _syncSystemPrompt) can
+  // drive them.
+  const memoryProjectModule = new MemoryProjectModule();
+  const memoryGlobalModule = new MemoryGlobalModule();
+  const memoryRecallModule = new MemoryRecallModule();
+  const creativeVersionLogModule = new CreativeVersionLogModule();
 
-    injectMemory(config.projectMemoryManager.getContent());
-    config.projectMemoryManager.on('change', injectMemory);
+  // Inject project memory via MemoryProjectModule (renderSync for in-line
+  // update: event handlers fire synchronously and the composer state must
+  // be fresh before the next composer read).
+  if (config.projectMemoryManager) {
+    const injectProject = (content: string | null): void => {
+      memoryProjectModule.setContent(content);
+      writeModuleSectionsSync(promptComposer, 'memory:project', memoryProjectModule.renderSync());
+    };
+    injectProject(config.projectMemoryManager.getContent());
+    config.projectMemoryManager.on('change', injectProject);
   }
 
-  // Inject global memory into environment layer (if available)
+  // Inject global memory via MemoryGlobalModule.
   if (config.globalMemoryManager) {
     const injectGlobal = (content: string | null): void => {
-      if (content) {
-        promptComposer.setSection({
-          id: 'memory:global',
-          layer: 'environment',
-          content: `## Global Memory\n\n${content}`,
-          priority: 50,
-        });
-      } else {
-        promptComposer.removeSection('memory:global');
-      }
+      memoryGlobalModule.setContent(content);
+      writeModuleSectionsSync(promptComposer, 'memory:global', memoryGlobalModule.renderSync());
     };
-
     injectGlobal(config.globalMemoryManager.getContent());
     config.globalMemoryManager.on('change', injectGlobal);
   }
@@ -227,7 +233,34 @@ export function initializeSession(
     permissionHooks,
     history,
     metaTools,
+    memoryProjectModule,
+    memoryGlobalModule,
+    memoryRecallModule,
+    creativeVersionLogModule,
   };
+}
+
+/**
+ * Write the sections produced by a Module.renderSync() into the composer,
+ * first clearing any stale section the module owned under `ownerId`. Keeps
+ * the swap semantics consistent with ModuleOrchestrator while staying sync.
+ */
+function writeModuleSectionsSync(
+  composer: SystemPromptComposer,
+  ownerId: string,
+  sections: readonly PromptModuleSection[] | null,
+): void {
+  composer.removeSection(ownerId);
+  if (!sections) return;
+  for (const s of sections) {
+    composer.setSection({
+      id: s.sectionId,
+      layer: s.layer,
+      content: s.content,
+      priority: s.priority,
+      ...(s.cacheControl && { cacheControl: s.cacheControl }),
+    });
+  }
 }
 
 // =============================================================================

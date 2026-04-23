@@ -118,6 +118,54 @@ describe('SystemPromptComposer', () => {
   });
 
   // -------------------------------------------------------------------------
+  // removeSectionsByPrefix
+  // -------------------------------------------------------------------------
+
+  describe('removeSectionsByPrefix', () => {
+    it('removes every section whose id starts with the prefix and returns count', () => {
+      composer.setSection({ id: 'skill:a', layer: 'skill', content: 'A' });
+      composer.setSection({ id: 'skill:b', layer: 'skill', content: 'B' });
+      composer.setSection({ id: 'memory:project', layer: 'environment', content: 'M' });
+      expect(composer.removeSectionsByPrefix('skill:')).toBe(2);
+      expect(composer.hasSection('skill:a')).toBe(false);
+      expect(composer.hasSection('skill:b')).toBe(false);
+      expect(composer.hasSection('memory:project')).toBe(true);
+    });
+
+    it('returns 0 when nothing matches', () => {
+      composer.setSection({ id: 'memory:project', layer: 'environment', content: 'M' });
+      expect(composer.removeSectionsByPrefix('skill:')).toBe(0);
+      expect(composer.hasSection('memory:project')).toBe(true);
+    });
+
+    it('empty prefix is a no-op (returns 0, does not wipe everything)', () => {
+      composer.setBase('Base');
+      composer.setSection({ id: 'skill:a', layer: 'skill', content: 'A' });
+      expect(composer.removeSectionsByPrefix('')).toBe(0);
+      expect(composer.hasSection('skill:a')).toBe(true);
+      expect(composer.hasSection('base')).toBe(true);
+    });
+
+    it('sections removed no longer appear in compose output', () => {
+      composer.setBase('Base');
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'SKILL_X' });
+      composer.setSection({ id: 'skill:y', layer: 'skill', content: 'SKILL_Y' });
+      expect(composer.compose()).toContain('SKILL_X');
+      composer.removeSectionsByPrefix('skill:');
+      const result = composer.compose();
+      expect(result).not.toContain('SKILL_X');
+      expect(result).not.toContain('SKILL_Y');
+      expect(result).toContain('Base');
+    });
+
+    it('prefix longer than any id matches nothing', () => {
+      composer.setSection({ id: 'short', layer: 'skill', content: 'S' });
+      expect(composer.removeSectionsByPrefix('veryLongPrefixThatCannotMatch')).toBe(0);
+      expect(composer.hasSection('short')).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // hasSection / getSection
   // -------------------------------------------------------------------------
 

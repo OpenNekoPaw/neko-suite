@@ -96,6 +96,18 @@ export class SystemPromptComposer implements ISystemPromptComposer {
     return this._sections.delete(id);
   }
 
+  removeSectionsByPrefix(prefix: string): number {
+    if (prefix.length === 0) return 0;
+    let count = 0;
+    for (const id of Array.from(this._sections.keys())) {
+      if (id.startsWith(prefix)) {
+        this._sections.delete(id);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   hasSection(id: string): boolean {
     return this._sections.has(id);
   }

@@ -60,6 +60,34 @@ export type {
 
 export { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';
 
+// Prompt Module Framework (Stage A)
+export { freezePromptContext, createPromptContextProvider } from './context';
+export type {
+  PromptContext,
+  PromptContextProvider,
+  PromptContextSources,
+  ArtifactIssue,
+} from './context';
+
+export { PromptModuleRegistry } from './registry/module-registry';
+export { PromptSectionCache } from './registry/section-cache';
+export type {
+  PromptModule,
+  PromptModuleManifest,
+  PromptModuleSection,
+} from './registry/module-manifest';
+
+export { ModuleOrchestrator } from './composer/module-orchestrator';
+
+// Reference module implementations (Stage B)
+export { SkillInjectionModule } from './modules/skill/skill-injection-module';
+
+// Content-projection modules (PR2 Stage C)
+export { MemoryProjectModule } from './modules/memory/memory-project-module';
+export { MemoryGlobalModule } from './modules/memory/memory-global-module';
+export { MemoryRecallModule } from './modules/memory/memory-recall-module';
+export { CreativeVersionLogModule } from './modules/ephemeral/creative-version-log-module';
+
 // Re-export types from @neko/shared for convenience
 export type {
   Prompt,
