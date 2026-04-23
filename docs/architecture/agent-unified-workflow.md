@@ -53,6 +53,7 @@
 
 - [agent-evolution-capacity.md](./agent-evolution-capacity.md) - **抗演化审计**：本 ADR 各层面对 LLM 升级 / Skill 生态扩展 / 引擎能力增长 / 新编排模式的吸收能力评级与脆弱点
 - [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) - **多 Agent 联邦**（Proposed 2026-04-24）：在六控制平面之上加第 7 个"拓扑维度"。SubAgent 对等 AgentSession、AgentId 路径寻址、MessageBus 双向通信、受控递归 spawn。本 ADR 的 StageGuardian / ApprovalEngine / AblationToggles 均在 Federation 中延伸
+- [agent-memory-unification.md](./agent-memory-unification.md) - **持久化四合一**（Proposed 2026-04-24）：Journal / ConversationRecord / Compact / Memory 统一到三层金字塔（Working / Episodic / Semantic）+ Journal 作为 SSOT。关闭本 ADR §已延后表的 `.nksession.md` 一项；闭环 §11.6.9 SelfEvaluationHooks 的结论去向
 - [dual-flow-architecture.md](./dual-flow-architecture.md) - 早期双流探索（本 ADR 的简化归宿）
 - [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) - 早期能力注册设计探索
 - [perception-first-roadmap.md](./perception-first-roadmap.md) - 感知路线图
