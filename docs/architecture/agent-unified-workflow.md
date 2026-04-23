@@ -34,7 +34,7 @@
 | §9.3 preferences.md | parser + 双层合并 + auto-load | D |
 | §10 术语一致性 | 撤销双轨，统一英文命令 | F |
 | §11 轻量化 | 贯穿全局（Skill MD + frontmatter） | 已存在 |
-| §11.6 约束分级原则 | 六层控制平面（Prompt/Schema/Runtime/Policy/Memory/Evaluator）+ 口诀 + Tool/Operation 二分 + 11 条反模式 + 7 问决策清单 + 时序图 + 合规度审计 | 2026-04-22 新增 / 2026-04-23 扩展到六层 |
+| §11.6 约束分级原则 | 六层控制平面（Prompt/Schema/Runtime/Policy/Memory/Evaluator）+ 口诀 + Tool/Operation 二分 + 12 条反模式 + 7 问决策清单 + 时序图 + 合规度审计 + §11.6.9 Evaluator 建设边界（AI 原生自评优先）| 2026-04-22 新增 / 2026-04-23 扩展到六层 / 2026-04-23 补 §11.6.9 |
 | §5.1/§5.3 | CapabilityKind discriminant + `capabilityKindOf()` | 收尾 |
 
 **小计**：22 / 22 章节全部有落地证据。2026-04-22 Phase A 将四阶段合并为三阶段（Draft/Plan/Apply），并把 `.nk*.md` 扩展名迁移为 `<kind>-<runId>.md` 前缀方案。
@@ -200,8 +200,8 @@
 | `~/.claude/.../memory/MEMORY.md` | 外部（Claude 内置）| 意图层输入 | Memory |
 | `.neko/memory.md` | L0 基础设施产物 | 意图层输入 | Memory |
 | `CreativeMemoryHooks` | L0 基础设施 | 控制层（正交，双向读写）| Memory |
-| `ConsistencyChecker` | L0 基础设施（未来接入）| 控制层（出口闸）| Evaluator |
-| `IntentValidator`（待建）| L0 基础设施 | 控制层（出口闸）| Evaluator |
+| `ConsistencyChecker` | L0 基础设施（未来接入）| 控制层（出口闸）| Evaluator（确定性指标）|
+| Agent 自评（creation/execution-persona + Memory）| 非组件，Agent 原生承载 | 控制层（AI 驱动）| Evaluator（主观判断，§11.6.9）|
 
 **解读**：L0 基础设施 ≈ 职责视角的控制层 ≈ 约束视角的 Runtime + Policy + Evaluator + Memory 四平面并集。实现视角把它们打包在一层；职责视角把它们看作横切；约束视角按消费者再细分。
 
@@ -1849,7 +1849,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 | **Runtime** | 什么时候做 | 运行时 | 处理过程 | ExecutorHooks / StateMachine / Engine | 毫秒级 | ApprovalEngine、RetryEngine、StageGuardian、ArtifactWatcher、ArtifactObservationHooks |
 | **Policy** | 能不能做 | Runtime + Evaluator 读取 | 边界 / 合规 / 权限 | 声明式规则文件、allowlist、compliance 元数据 | 配置级 | `preferences.md`、`preferencesStrategyPack`、Skill `compliance.approvalRules[]`、Skill `allowedTools`、Skill `requiredSubpackages`、Operation `costProfile` |
 | **Memory** | 记得什么 | AI（读）+ 人（审计 / 编辑）| 个性化持续性 | 持久化存储 + 压缩策略 + 检索 | 跨会话累积 | `~/.claude/.../memory/MEMORY.md`、`.neko/memory.md`、`CreativeMemoryHooks`、7 级创意压缩（`creative-context-compression.md`）、`SharedMemoryStore` |
-| **Evaluator** | 做得好不好 | 质量打分器 | 质量评估 | LLM-as-judge、美学打分、ConsistencyChecker | 每产物 | `verdict: pass \| warn \| fail` + 结构化 issues + 修复建议；ConsistencyChecker（已）、IntentValidator（待）|
+| **Evaluator** | 做得好不好 | 质量打分器 | 质量评估（**仅确定性指标**，见 §11.6.9）| 确定性打分器（CLIP 相似度、FPS、分辨率、ConsistencyChecker）；**主观质量判断不建组件，交由 Agent + Prompt + Memory** | 每产物 | `verdict: pass \| warn \| fail` + 结构化 issues；ConsistencyChecker（已）|
 
 #### 11.6.2 Schema 约束的二分（Tool vs Operation）
 
@@ -1922,7 +1922,7 @@ Apply  ────► Schema + Runtime + Policy ────► 操作型工具
   ⑤ Runtime 执行："这步先、下一步后"       (ReAct loop + StageTracker + Watcher)
            │
            ▼
-  ⑥ Evaluator 打分："做得够好吗"           (IntentValidator / ConsistencyChecker)
+  ⑥ Evaluator 打分："做得够好吗"           (ConsistencyChecker 确定性指标 / Agent 自评主观判断)
            │
            └─► 回到 ② Memory 更新："这次经验值得记"  (CreativeMemoryHooks.afterAct)
 ```
@@ -2029,6 +2029,18 @@ evaluator.check(artifact, preferences);
 ```
 正确做法：Evaluator 只判**质量**（做得好不好），合规由 Runtime 读 Policy 在执行时拦截。质量 ≠ 合规，两个层各司其职。
 
+❌ **把主观创作判断做成 Evaluator 组件**
+```typescript
+// 错 — 为"这个 Draft 的 intent 有没有实现"建 LLM-as-judge 组件
+class IntentValidator {
+  async evaluate(draft: Draft, outputs: Artifact[]): Promise<Verdict> { ... }
+}
+
+// 错 — 为"这个分镜节奏感好不好"建美学打分器
+class PacingEvaluator { ... }
+```
+正确做法（见 §11.6.9 建设边界）：AI 在 creation-persona / execution-persona 指导下**自行完成主观判断**，通过 Memory 积累经验。只有**确定性指标**（CLIP 向量相似度、FPS、分辨率、时长约束、格式校验）才建 Evaluator 组件。把"AI 能直接看着产物推理出来的事"外包给固定组件是在重复 AI 本就具备的能力，违反 §11.5 "AI 原生执行"原则。
+
 #### 11.6.5 决策清单
 
 新设计产物或组件时，按口诀先快速归类，再按顺序细化：
@@ -2088,8 +2100,10 @@ IDC 3-stage 在设计上已符合约束分级原则：
 | **Creative Context Compression（7 级优先级）** | **Memory（压缩策略）** | **✅ 用户消息永留 / 创作决策 / 版本锚点 / 迭代链 / 资产状态 / 美学偏好 分层摘要** |
 | **CreativeMemoryHooks（ExecutorHooks）** | **Memory（读写桥）** | **✅ afterAct 抽取 creative 决策 / beforeThink 注入相关回忆** |
 | **SharedMemoryStore（subagent scratchpad）** | **Memory（多 agent 共享）** | **✅ 跨 subagent 协作 scratchpad** |
-| IntentValidator（待建）| Evaluator | ⏳ LLM-judge 形态 |
-| ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ |
+| ~~IntentValidator（原计划 LLM-judge 组件）~~ | Evaluator（已撤销）| **✖ 不建** — Agent 在 persona 指导下自判（§11.6.9）|
+| ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ 跨镜头一致性 |
+| 确定性指标打分器（CLIP 相似度 / FPS / 分辨率 / 时长约束）| Evaluator | ⏳ 按需，真有确定性打分需求时再建 |
+| Agent 自评（创作审美 / 意图达成度 / 风格连贯性）| Evaluator（Agent 承载）| ✅ 通过 Prompt + Memory 三件套（§11.6.9）|
 
 **全部合规。** 本原则可作为后续任何扩展的判断标尺。Memory 和 Policy 两层过去一直存在于代码，但没被正式命名为独立控制平面；本章将它们从"看起来散落"升级为"架构一等公民"，后续扩展不会再把它们误塞进其他层。
 
@@ -2169,6 +2183,61 @@ ApprovalEngine.evaluate             （未来）ComplianceChecker
 | 错位代价 | Runtime 变 Policy 则规则只在代码里没法改 | Policy 变 Runtime 则机制重复实现 |
 
 **Runtime 实现 Policy 决策。** ApprovalEngine（Runtime 机制）读 preferences.md（Policy 规则）+ Skill.compliance（Policy 规则），决定拦截哪个 Operation。Runtime 不**拥有**规则，Runtime **消费**规则。
+
+#### 11.6.9 Evaluator 层的建设边界（AI 原生自评优先）
+
+Evaluator 是最容易**过度组件化**的层。每次讨论"如何保证 intent 达成 / 如何检测 drift / 如何打分美学"都会诱惑架构师建一个新的 LLM-as-judge 组件。这违反 §11.5 不变原则第 2 条"AI 原生执行"——**Agent 本身就是判断引擎**，再包一层 LLM 调用是在重复 AI 已具备的能力。
+
+##### 建 / 不建的分界线
+
+| 判断性质 | 例子 | 是否建 Evaluator 组件 |
+|-------|----|-----|
+| **确定性指标** | CLIP 向量相似度、FPS、分辨率、时长约束、格式校验、跨镜头 character bbox IoU | ✅ 建 — 可精确打分，可测试，AI 做得更慢且不稳定 |
+| **确定性一致性** | 多镜头角色外观一致性（向量差）、连续性（光照/色温差）| ✅ 建 — ConsistencyChecker 已是此类 |
+| **主观创作判断** | Draft intent 达成度、美学水准、节奏感、叙事连贯、风格匹配 | ❌ **不建** — Agent 读产物 + Draft 自己能推理；建组件反而固化策略 |
+| **意图漂移** | Draft 改写后 Plan/Task 是否 stale | ❌ **不建** — AI 读新旧 Draft 自己判断；Memory 记录历史判断 |
+| **Plan 重编译** | 失败后重编 Plan 还是改 Draft | ❌ **不建** — RetryEngine L1-L3 已处理机械重试；需要策略变化时 Agent 读 memory 自判 |
+
+##### "AI 自评"的三件套（替代 Evaluator 组件）
+
+```
+① 可见性（Visibility）
+   让 AI 在当轮 context 里看到需要的数据：
+   - .neko/drafts/ 历史版本（可 Read + Glob）
+   - 当前 Apply 产物路径（可 Read / Describe）
+   - steps.jsonl 本轮 observation 摘要
+   - 相关 Memory 记录（CreativeMemoryHooks.beforeThink 注入）
+
+② 引导（Guidance）
+   persona prompt 里以**指引**而非**强制**方式描述自评时机：
+   
+   # 自我评估（可选）
+   完成 Apply 后，如果产出了具体成品：
+   - 读一下 Draft 的 Intent 段
+   - 对照成品（Read / Describe）
+   - 发现偏离时在回复里说明并建议修正
+   
+   这不是必须步骤——不确定或无需要时可跳过。
+
+③ 积累（Memory）
+   CreativeMemoryHooks.afterAct 自动抽取本轮的自评结论入 memory，
+   下次类似任务的 beforeThink 把相关结论注入回来，让判断经验随时间积累。
+```
+
+##### 为什么这样更好
+
+| 维度 | AI 自评（推荐）| LLM-as-judge 组件 |
+|----|------------|----------------|
+| 上下文 | 已经有全量 context，原生读取 | 组件需要再次传入数据，context 重复消耗 |
+| 延迟 | 本轮 think 内完成 | 额外一次 LLM 调用 |
+| 策略变化 | 改 prompt 即可 | 改代码 / 发版 |
+| 标准 drift | Memory 积累带来自动演化 | 组件内 prompt 固化 |
+| 新场景适配 | AI 自动迁移判断框架 | 需要重设计组件 |
+| 失败语义 | AI 在对话里说明 + 建议 | 输出 `verdict: fail` 需要再翻译给用户 |
+
+##### 撤销记录
+
+历史讨论中曾提议建立 `IntentValidator`（intent 达成度 LLM-judge）、显式 `DraftToPlanCompiler`、`IntentDriftDetector` 三个组件。2026-04-23 基于本节原则**全部撤销**——它们承担的都是主观创作判断，应该交由 Agent 在 persona prompt 指导下自行完成。未来再遇到类似"我们需要一个 XXXValidator"的提议时，先用本节分界线复核：**这个判断是确定性的吗？** 是 → 建；否 → AI + Prompt + Memory。
 
 ---
 
@@ -2498,6 +2567,7 @@ neko-agent/packages/agent/tools/core/
 | 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 | 2026-04-22 | **Phase B 闭环（Observation loop + 运行时 runId 注入）**：Phase B 初版的 `artifact.invalid` 事件只有 watcher emit 端，没有消费端——承诺的"AI 自修复"只存在于 persona 提示词里。新增三件修补。 **(1)** `narrator/milestone-tracker.ts` 的 `defaultClassify` 补齐 `ARTIFACT_WRITTEN` / `ARTIFACT_INVALID` 两个 case；`progress-narrator.ts` 的图标表同步（✎ / ⚠）。 **(2)** 新增 `artifact/artifact-observation-hooks.ts`（ExecutorHooks），订阅 `execution.artifact.invalid`，在下一次 `beforeThink` 把 buffered issues 渲染成 system 消息追加到 `context.messages`，让 AI 真正看到 watcher 诊断并自修复。`AgentSession` 把它链到 `runnerHooks` 后面（与 `stageGuardian.tick` 组合），并在 dispose 时解订阅。 **(3)** `StagePersonaBinding` 新增 `getRunId` 可选 deps——激活 persona 时把 prompt 里的 `{runId}` / `{stage}` 字面量替换为活 SddRun 的 id / 当前 stage；`creation-persona.ts` 正文的 artifact-file 合同从 `<runId>` 改为 `{runId}`，让 AI 读到的永远是已解析好的具体路径（`.neko/drafts/draft-tiktok-001.md`），不再依赖 LLM 去会话上下文里二次检索。新增 `artifact-observation-hooks.test.ts`（8 个 case：no-op / 单事件注入 / 多事件排序 / 多 issue 展开 / 溢出截断 / 二次 drain / dispose 断链 / null bus 容错）。Phase B 闭环完成后端到端流程：AI 写 draft → watcher 300ms 后校验 → invalid 事件注入下一 beforeThink → AI 看到 issues → 重写。 | Architecture Team |
 | 2026-04-22 | **§11.6 约束分级原则（Constraint Layering by Consumer）**：把 SDD 背后隐含的分层原则形式化为四级谱系——**Schema 约束**（程序消费，承载工具使用）、**提示词约束**（AI/人消费，承载语义/灵感/风格）、**Runtime 约束**（运行时消费，承载处理过程）、**Evaluator 约束**（打分器消费，承载质量评估）。Schema 约束内部再二分为 **Tool**（提示词型工具，轻 schema 入口 + 自由文本内容，如 Write/Read/Grep）与 **Operation**（操作型工具，全量严格 schema + 副作用元数据，如 cut.trim-clip/image.generate），判定依据是"AI 产出这个字段时稳定吗"。SDD 阶段与约束层天然对齐：Draft/Plan 只用提示词型工具（creation-persona.allowedTools 全是 Read/Write/Grep/ListDirectory/Glob），Apply 阶段才解锁操作型工具。补齐 6 个反模式（语义推到 schema / 工具参数留在提示词 / 过程状态进产物 / 质量硬编码为 field / Operation 留提示词参数 / Tool 加业务 schema）、5 步决策清单、现系统合规度表。此章可作为后续任何扩展的判断标尺——多模态意图、IntentValidator、Intent drift 检测等下一阶段工作都按本原则决定约束层归属（例：用户多模态输入 → 提示词层由 LLM 自然理解；Draft 正文 → 提示词层自由 markdown；referenceChain asset:// URI → schema 层索引；ArtifactWatcher 校验 → Runtime 层；未来 IntentValidator → Evaluator 层 LLM-judge）。 | Architecture Team |
+| 2026-04-23 | **§11.6.9 Evaluator 层建设边界（AI 原生自评优先）**：撤销先前讨论中提议的 `IntentValidator`（intent 达成度 LLM-judge）/ 显式 `DraftToPlanCompiler` / `IntentDriftDetector` 三个组件提议。理由：它们承担的都是**主观创作判断**（intent 达成度 / Plan 编译策略 / drift 影响评估），AI 在 creation-persona / execution-persona 指导下**自身就是判断引擎**，再包一层 LLM-as-judge 组件是在重复 AI 已具备的能力，违反 §11.5 不变原则第 2 条"AI 原生执行"。新增 §11.6.9 明确**建 / 不建的分界线**：**确定性指标**（CLIP 向量相似度、FPS、分辨率、时长约束、格式校验、ConsistencyChecker 跨镜头 IoU）→ 建 Evaluator 组件；**主观创作判断**（intent 达成度、美学水准、节奏感、叙事连贯、风格匹配、意图漂移、Plan 重编译策略）→ **不建**，交由 **AI 自评三件套**：① **可见性**（让 AI 在 context 里看到 .neko/drafts/ 历史版本 + 当前产物路径 + steps.jsonl observation + 相关 Memory）+ ② **引导**（persona prompt 以"可选自评"而非"强制校验"方式描述时机）+ ③ **积累**（CreativeMemoryHooks.afterAct 抽取本轮自评结论入 memory，下次 beforeThink 注入回来形成经验演化）。对比优势：原生上下文不重复消耗 token / 本轮 think 内完成延迟 / 改 prompt 即改策略 / Memory 自动演化 / 新场景自动迁移 / 失败语义用对话形式说明而非 `verdict: fail` 再翻译。§11.6.1 Evaluator 行描述调整为"仅确定性指标"；§11.6.4 新增反模式"把主观创作判断做成 Evaluator 组件"（合计 12 条）；§11.6.6 合规度审计表把 IntentValidator 从"⏳ 待建"改为"✖ 不建"并新增两行（确定性指标打分器 ⏳ 按需 + Agent 自评 ✅ 通过三件套）。未来再遇"我们需要一个 XXXValidator"提议时，先用本节分界线复核：**这个判断是确定性的吗？** 是 → 建；否 → AI + Prompt + Memory。 | Architecture Team |
 | 2026-04-23 | **SDD → IDC 正式重命名（Intent-Driven Creation / 意图驱动创作）**：ADR 命名空间从 **Speckit 的 SDD（Spec-Driven Development）**迁移到 **IDC（Intent-Driven Creation）**。动机：原 Speckit SDD 是**代码开发场景**的规范驱动流程（Specify → Plan → Tasks → Implement，产物是代码 / spec），neko-agent 的业务是**创作场景**（视频 / 角色 / 分镜 / 海报），用户输入是**意图**（多模态：文本+图+视频+音频+3D），AI 输出是**创作产物**（非代码）；SDD 的"规范驱动"词汇不贴合创作工作流，**IDC 的"意图驱动"更精准**——在近期多次架构讨论中已反复被这一语义鸿沟验证。阶段名 `Draft / Plan / Apply` 保持不变（早已符合 IDC 语义）。代码层面：TypeScript 符号 `SddStage` → `IdcStage`、`SddRun` → `IdcRun`、`SddRunStatus` → `IdcRunStatus`、`SddRunRoundSummary` → `IdcRunRoundSummary`、`ISddRunStore` → `IIdcRunStore`、`createSddRunStore` → `createIdcRunStore`、变量 `sddRun*` → `idcRun*`；文件 `agent-types/src/sdd-run.ts` → `idc-run.ts`、`agent/src/executor/sdd-run-store.ts` → `idc-run-store.ts` + 对应测试；24 个 TS 文件共 143 处符号引用批量替换 + 66 处代码注释文本。文档层面：ADR 章节内 "SDD 阶段 / SDD 三件套 / SDD 产物" 全部更新为 "IDC 阶段 / IDC 三件套 / IDC 产物"；§22 早期 Phase A 历史 changelog 条目保留 SDD 原文以反映当时术语。测试套件 1969/1974 通过（与重命名前相同的 5 个 pre-existing 失败）。 | Architecture Team |
 | 2026-04-23 | **§2 重构为双视角架构（方案 B 彻底倒置）**：原 §2 "四层整合架构" 开篇直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构后 §2 升级为 **"架构总览（双视角）"**，开篇前置**职责视角**（§2.1 意图 / 编排 / 执行 / 控制）作为主入口，原 L3/L2/L1/L0 内容下移为**实现视角**（§2.2）。新增 §2.3 **双视角交叉引用表**（18 个关键组件在实现/职责/约束三视角的并行归位——例：ArtifactWatcher = L0 基础设施 / 控制层 / Runtime 平面；creation-persona = L1 能力 / 意图层 / Prompt 平面；.neko/preferences.md = L0 配置 / 控制层 / Policy 平面），让读者能按任意视角进入并跳转。新增 §2.4 **选视角指南**（按讨论场景判定用哪个视角：讲 Agent 做什么用职责 / 代码导航用实现 / 设计新字段用约束）。同步修订：§3.1 "IDC 3 阶段" 在 §2 实现视角图中从 "IDC 3 阶段" 纠正为 "IDC 3 阶段 (Draft → Plan → Apply)"；§2 L1 能力层图示从历史的 "Tool / Operation / ProposalTemplate / ReviewGate / ViewRecipe / StatusNarrator / Skill / Workflow" 八类收敛为 "Skill / Tool / Operation" 三类（CapabilityKind 联合，与 §5.1 一致）；§2 L0 层图示补齐 StageTracker / StageGuardian / ArtifactWatcher / ArtifactObservationHooks / PreferencesStrategyPack 等现代化组件。这让读者从 ADR 第一眼看到的就是"**Agent 做什么事**"而非"**代码如何分层**"，降低入门摩擦；同时保留实现视角供调试 / 代码导航使用。与 §11.6 六层约束视角形成**三视角互补体系**（实现 / 职责 / 约束），任意视角都能进入并跳转。 | Architecture Team |
 | 2026-04-23 | **§11.6 扩展到六层控制平面**：把四级谱系扩展为**六层**，补齐长期存在于代码但未被正式命名的两层——**Memory**（决定"记得什么"，消费者是 AI 读 + 人审计/编辑，跨会话累积，实现有 `~/.claude/.../memory/MEMORY.md` + `.neko/memory.md` + CreativeMemoryHooks + 7 级创意压缩 + SharedMemoryStore）、**Policy**（决定"能不能做"，消费者是 Runtime + Evaluator 读取规则，声明式配置，实现有 `preferences.md` + preferencesStrategyPack + Skill.compliance + allowedTools + requiredSubpackages + Operation.costProfile）。用四字口诀作为章节开篇：**Prompt 决定"说什么" / Schema 决定"长什么样" / Runtime 决定"什么时候做" / Policy 决定"能不能做" / Memory 决定"记得什么" / Evaluator 决定"做得好不好"**。新增六层触发时序图（Policy 前置门 → Memory 双端读写 → Prompt·Schema·Runtime 中段流水 → Evaluator 出口闸）。补 5 条反模式（Policy 硬编码进 Runtime / Memory 写进产物 frontmatter / Policy 嵌入 Prompt persona / Evaluator 读 Policy 判合规 + 原有 6 条合计 11 条）、决策清单从 5 问扩到 7 问（新增"信息要跨会话存活吗"、"谁有权改这条约束"）、合规度审计表补齐 Memory/Policy 两块（preferences / Skill.compliance / costProfile / `.neko/memory.md` / CreativeMemoryHooks / SharedMemoryStore / 7 级创意压缩）。新增 §11.6.7 Memory 层详解（Memory vs Prompt 辨析表）、§11.6.8 Policy 层详解（Policy vs Runtime 辨析表："Runtime 是机制，Policy 是规则；Runtime 消费 Policy 而非拥有 Policy"）。此次扩展让"约束分级"不再是单纯"约束"概念，而是**六个并行控制平面**，所有现有组件都能清晰归类。 | Architecture Team |
