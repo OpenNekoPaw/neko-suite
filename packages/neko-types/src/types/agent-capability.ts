@@ -14,6 +14,7 @@ import type { Tool, ToolCategory } from './tool';
 import type { ToolGroup } from './tool-group';
 import type { Skill } from './skill';
 import type { LoadingTier } from './loading-tier';
+import type { PromptFragment } from './prompt-fragment';
 
 // =============================================================================
 // Static Manifest (package.json contributes)
@@ -148,6 +149,20 @@ export interface AgentCapabilityProvider {
    * Groups organize tools by domain for selective activation.
    */
   getToolGroups?(): ToolGroup[];
+
+  /**
+   * Optional: Return prompt fragments contributed by this sub-package.
+   *
+   * Fragments are domain-specific usage conventions for this provider's
+   * tools (e.g. "timestamps are in milliseconds", "add tracks before
+   * inserting elements"). They are injected into the agent's L3
+   * environment layer — under any user-authored AGENTS.md override
+   * (priority 80) but above project / global memory (60 / 50).
+   *
+   * Fragment ids must be globally unique across providers; convention is
+   * `{package}:{local-id}` (e.g. `neko-cut:timeline-basics`).
+   */
+  getPromptFragments?(context: AgentCapabilityContext): PromptFragment[];
 
   /**
    * Optional: Cleanup when the provider is unregistered (extension deactivated).
