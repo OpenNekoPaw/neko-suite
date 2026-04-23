@@ -33,6 +33,17 @@ export interface AblationMarkerHook extends ExecutorHooks {
   disableHooks: string[];
   disableCompression: boolean;
   disableSessionMemory: boolean;
+  /** When true, SkillService.setDiscoveryEnabled(false) at session init. */
+  disableSkillDiscovery: boolean;
+  /** When true, SkillInjectionCoordinator.apply becomes a no-op. */
+  disableSkillInjection: boolean;
+  /** When true, ToolInjectionManager.activateToolSet becomes a no-op. */
+  disableDynamicToolSets: boolean;
+  /**
+   * When 'always-only', ToolInjectionManager skips the dynamic layer entirely.
+   * Undefined = keep default ('always+dynamic').
+   */
+  toolInjectionMode?: 'always-only' | 'always+dynamic';
 }
 
 function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook {
@@ -42,6 +53,12 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     disableHooks: collectDisabledHooks(toggles),
     disableCompression: toggles.compression === false,
     disableSessionMemory: toggles.sessionMemory === false,
+    disableSkillDiscovery: toggles.skillDiscovery === false,
+    disableSkillInjection: toggles.skillInjection === false,
+    disableDynamicToolSets: toggles.dynamicToolSets === false,
+    ...(toggles.toolInjection !== undefined && {
+      toolInjectionMode: toggles.toolInjection,
+    }),
   };
 }
 

@@ -23,6 +23,22 @@ export interface ToolInjectionConfig {
     always: number;
     dynamic: number;
   };
+
+  /**
+   * When false, `activateToolSet()` becomes a no-op and emits no events.
+   * Used by the ablation framework to disable dynamic ToolSet activation
+   * (meta tools `ActivateToolSet` / `DeactivateToolSet`). Default: true.
+   */
+  allowDynamicActivation?: boolean;
+
+  /**
+   * Controls whether the dynamic layer contributes tools at all.
+   * - `'always+dynamic'` (default): normal behavior
+   * - `'always-only'`: `getDynamicTools()` always returns `[]`,
+   *   effectively confining the session to resident (CORE_TOOLS + always-layer)
+   *   tools regardless of ToolSet activation state
+   */
+  injectionMode?: 'always+dynamic' | 'always-only';
 }
 
 /**
@@ -37,6 +53,8 @@ export const DEFAULT_INJECTION_CONFIG: ToolInjectionConfig = {
     always: 500000,
     dynamic: 500000,
   },
+  allowDynamicActivation: true,
+  injectionMode: 'always+dynamic',
 };
 
 /**

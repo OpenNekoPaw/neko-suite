@@ -126,3 +126,67 @@ describe('applyAblationToggles → initializer → factory (integration)', () =>
     expect(names[names.length - 1]).toBe('user-custom');
   });
 });
+
+// =============================================================================
+// Marker population tests — verify the 4 skill/tool toggles (P1-A) get written
+// into the marker. Enforcement is exercised by per-component unit tests.
+// =============================================================================
+
+describe('applyAblationToggles — skill/tool marker fields (P1-A)', () => {
+  it('skillDiscovery: false sets marker.disableSkillDiscovery', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { skillDiscovery: false });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableSkillDiscovery).toBe(true);
+    expect(marker.disableSkillInjection).toBe(false);
+    expect(marker.disableDynamicToolSets).toBe(false);
+    expect(marker.toolInjectionMode).toBeUndefined();
+  });
+
+  it('skillInjection: false sets marker.disableSkillInjection', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { skillInjection: false });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableSkillInjection).toBe(true);
+    expect(marker.disableSkillDiscovery).toBe(false);
+  });
+
+  it('dynamicToolSets: false sets marker.disableDynamicToolSets', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { dynamicToolSets: false });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableDynamicToolSets).toBe(true);
+  });
+
+  it('toolInjection: "always-only" threads through marker.toolInjectionMode', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { toolInjection: 'always-only' });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.toolInjectionMode).toBe('always-only');
+  });
+
+  it('toolInjection: "always+dynamic" is also captured (not only the false-like value)', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { toolInjection: 'always+dynamic' });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.toolInjectionMode).toBe('always+dynamic');
+  });
+
+  it('all 4 skill/tool toggles compose into a single marker', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {
+      skillDiscovery: false,
+      skillInjection: false,
+      dynamicToolSets: false,
+      toolInjection: 'always-only',
+    });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableSkillDiscovery).toBe(true);
+    expect(marker.disableSkillInjection).toBe(true);
+    expect(marker.disableDynamicToolSets).toBe(true);
+    expect(marker.toolInjectionMode).toBe('always-only');
+  });
+
+  it('empty toggles yield a marker with all skill/tool flags off', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {});
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableSkillDiscovery).toBe(false);
+    expect(marker.disableSkillInjection).toBe(false);
+    expect(marker.disableDynamicToolSets).toBe(false);
+    expect(marker.toolInjectionMode).toBeUndefined();
+  });
+});

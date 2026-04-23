@@ -20,7 +20,7 @@ import { AgentExecutor } from '../executor';
 import type { Tool } from '@neko/shared';
 import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
-import { extractAblationMarker } from '../experiment/apply-toggles';
+import { extractAblationMarker, type AblationMarkerHook } from '../experiment/apply-toggles';
 import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
 import {
   ToolCategoryRegistry,
@@ -92,6 +92,11 @@ export interface SessionComponents {
   // PR3e: sub-package prompt fragments projected into the L3 environment
   // layer (priority 70). Populated from config.promptFragments at init.
   subpackageFragmentsModule: SubpackageFragmentsModule;
+
+  // Ablation: extracted marker (if any) so downstream consumers (AgentSession,
+  // dispose chain) can honor skill-side flags without re-parsing config.hooks.
+  // undefined when the session was not produced via applyAblationToggles().
+  ablationMarker?: AblationMarkerHook;
 }
 
 /**
@@ -175,12 +180,37 @@ export function initializeSession(
     }
   }
 
-  // Step 4: Tool injection manager
+  // Ablation marker: extract once at the top level so skill-side flags
+  // (skillDiscovery / skillInjection / dynamicToolSets / toolInjection) can
+  // reach their enforcement points (ToolInjectionManager config, SkillService
+  // setter, SessionComponents for downstream AgentSession use).
+  // createConfiguredExecutor re-extracts from config.hooks on rebuild paths,
+  // so we do not mutate config.hooks here.
+  const ablationMarker = extractAblationMarker(config.hooks);
+
+  // Step 4: Tool injection manager — apply ablation overrides on top of
+  // DEFAULT_INJECTION_CONFIG. `allowDynamicActivation` false neutralizes
+  // ActivateToolSet/DeactivateToolSet meta tools; `injectionMode: 'always-only'`
+  // confines every turn to resident (always-layer) tools.
+  const toolInjectionConfig = {
+    ...DEFAULT_INJECTION_CONFIG,
+    ...(ablationMarker?.disableDynamicToolSets && { allowDynamicActivation: false }),
+    ...(ablationMarker?.toolInjectionMode && { injectionMode: ablationMarker.toolInjectionMode }),
+  };
   const toolInjectionManager = new ToolInjectionManager(
     toolCategoryRegistry,
     toolGroupRegistry,
-    DEFAULT_INJECTION_CONFIG,
+    toolInjectionConfig,
   );
+
+  // Ablation: skill discovery gate. SkillService is externally owned (shared
+  // across sessions), so we flip its state here and rely on AgentSession.dispose
+  // to restore. When no skillService is supplied (TUI / tests), the toggle is
+  // silently inert — the extension-side chat handler only calls discover() if
+  // it has a skillService anyway.
+  if (ablationMarker?.disableSkillDiscovery && config.skillService) {
+    config.skillService.setDiscoveryEnabled(false);
+  }
 
   // Step 5: Register core meta tools
   const metaTools = createCoreMetaTools(
@@ -297,6 +327,7 @@ export function initializeSession(
     agentsMdModule,
     artifactSchemaModule,
     subpackageFragmentsModule,
+    ...(ablationMarker && { ablationMarker }),
   };
 }
 

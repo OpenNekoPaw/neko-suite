@@ -224,6 +224,13 @@ export class AgentSession implements IAgentSession {
     }
   >();
 
+  /**
+   * Ablation marker (set when the session was constructed via
+   * applyAblationToggles). Session-side consumers: SkillInjectionCoordinator
+   * gate (via enableInjection) and dispose-time SkillService restore.
+   */
+  private _ablationMarker?: import('../experiment/apply-toggles').AblationMarkerHook;
+
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
@@ -254,6 +261,9 @@ export class AgentSession implements IAgentSession {
     this._agentsMdModule = components.agentsMdModule;
     this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
+    if (components.ablationMarker) {
+      this._ablationMarker = components.ablationMarker;
+    }
 
     // Journal writer for session persistence
     if (config.journalWriter) {
@@ -261,12 +271,17 @@ export class AgentSession implements IAgentSession {
     }
 
     // SkillInjectionCoordinator requires closures over Session fields
-    // (e.g. _permissionHooks changes on configure()), so created here
+    // (e.g. _permissionHooks changes on configure()), so created here.
+    // Ablation: when marker.disableSkillInjection is true, the coordinator's
+    // apply() short-circuits — discovery still works, injection does not.
     this._skillCoordinator = new SkillInjectionCoordinator({
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
       skillInjectionModule: this._skillInjectionModule,
+      ...(this._ablationMarker && {
+        enableInjection: !this._ablationMarker.disableSkillInjection,
+      }),
     });
 
     // Stage tracking: when the caller supplies a skill registry + service,
@@ -1008,6 +1023,13 @@ export class AgentSession implements IAgentSession {
   dispose(): void {
     this.cancel();
     this._isRunning = false;
+    // Ablation: restore SkillService discovery state if this session disabled
+    // it. SkillService is externally owned so we must un-flip to avoid leaking
+    // ablation state across sessions. Other ablation-driven state (ToolInjectionManager
+    // config, coordinator enableInjection flag) is session-local and dies with dispose.
+    if (this._ablationMarker?.disableSkillDiscovery && this._config.skillService) {
+      this._config.skillService.setDiscoveryEnabled(true);
+    }
     // Flush journal writer
     void this._journalWriter?.dispose();
     // Stage tracking: unsubscribe binding listener + clear tracker listeners.

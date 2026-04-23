@@ -64,6 +64,7 @@ export class SkillService {
   private readonly _subpackageResolver: ISubpackageResolver | null;
   private readonly _minRelevanceThreshold: number;
   private readonly _autoApplyThreshold: number;
+  private _discoveryEnabled: boolean = true;
   private readonly _logger = getLogger('SkillService');
 
   constructor(config: SkillServiceConfig = {}) {
@@ -74,6 +75,23 @@ export class SkillService {
     this._subpackageResolver = config.subpackageResolver ?? null;
     this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
     this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
+  }
+
+  /**
+   * Toggle automatic skill discovery (ablation-controlled).
+   * When disabled, `discover()` returns an empty result immediately, so
+   * chat-side auto-suggestion paths see no matches and skip activation.
+   * Manual `apply()` / `discoverAndApply` unaffected for explicit invocations,
+   * but `discoverAndApply` reads through `discover()` so it will also return
+   * null when disabled.
+   */
+  setDiscoveryEnabled(enabled: boolean): void {
+    this._discoveryEnabled = enabled;
+  }
+
+  /** Current discovery-enabled state (primarily for tests / introspection). */
+  isDiscoveryEnabled(): boolean {
+    return this._discoveryEnabled;
   }
 
   // ===========================================================================
@@ -120,6 +138,10 @@ export class SkillService {
   // ===========================================================================
 
   discover(userInput: string): SkillDiscoveryResult {
+    if (!this._discoveryEnabled) {
+      return { found: false, matches: [], requiresConfirmation: false };
+    }
+
     const skills = this.registry.listSkills();
     const allMatches = this._matcher.match(userInput, skills);
     const matches = allMatches.filter((m) => m.relevance >= this._minRelevanceThreshold);

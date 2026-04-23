@@ -303,4 +303,60 @@ describe('SkillService', () => {
     expect(result?.applied).toBe(false);
     expect(result?.error).toContain('declined');
   });
+
+  // ---------------------------------------------------------------------------
+  // Ablation: setDiscoveryEnabled (P1-A Toggle 1)
+  // ---------------------------------------------------------------------------
+
+  describe('ablation: setDiscoveryEnabled', () => {
+    it('discover() short-circuits to empty result when disabled', () => {
+      const skill = makeSkill({ name: 'would-match' });
+      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'strong' }]);
+      const registry = makeMockRegistry();
+      registry.registerSkill(skill);
+      const service = new SkillService({ registry, matcher });
+
+      service.setDiscoveryEnabled(false);
+      const result = service.discover('anything');
+
+      expect(result.found).toBe(false);
+      expect(result.matches).toEqual([]);
+      expect(result.requiresConfirmation).toBe(false);
+      // matcher never consulted
+      expect(matcher.match).not.toHaveBeenCalled();
+    });
+
+    it('re-enabling via setDiscoveryEnabled(true) restores normal behavior', () => {
+      const skill = makeSkill({ name: 'commit-helper' });
+      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'keyword match' }]);
+      const registry = makeMockRegistry();
+      registry.registerSkill(skill);
+      const service = new SkillService({ registry, matcher });
+
+      service.setDiscoveryEnabled(false);
+      expect(service.discover('x').found).toBe(false);
+
+      service.setDiscoveryEnabled(true);
+      const result = service.discover('x');
+      expect(result.found).toBe(true);
+    });
+
+    it('default state is enabled', () => {
+      const service = new SkillService();
+      expect(service.isDiscoveryEnabled()).toBe(true);
+    });
+
+    it('discoverAndApply returns null when discovery is disabled', async () => {
+      const skill = makeSkill({ name: 'strong' });
+      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'strong' }]);
+      const registry = makeMockRegistry();
+      registry.registerSkill(skill);
+      const service = new SkillService({ registry, matcher });
+
+      service.setDiscoveryEnabled(false);
+      const result = await service.discoverAndApply('x');
+
+      expect(result).toBeNull();
+    });
+  });
 });

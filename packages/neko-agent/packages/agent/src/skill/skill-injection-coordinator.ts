@@ -61,6 +61,15 @@ export interface SkillInjectionCoordinatorDeps {
    * `skill-injection-module.test.ts` for the equivalence assertion.
    */
   skillInjectionModule?: SkillInjectionModule;
+
+  /**
+   * When false, `apply()` becomes a no-op — skills can still be matched and
+   * activated via ISkillProvider, but nothing is injected into the prompt,
+   * no permission rules are added, and no ToolSets are auto-activated.
+   * Used by the ablation framework to measure the contribution of skill
+   * injection independent of skill discovery. Default: true.
+   */
+  enableInjection?: boolean;
 }
 
 /**
@@ -100,6 +109,13 @@ export class SkillInjectionCoordinator {
    * @param skill Optional full Skill object for active skill tracking
    */
   apply(injection: SkillInjection, skill?: Skill): void {
+    // Ablation: when injection is disabled, short-circuit. Callers can still
+    // observe the call succeeded (no throw) but no state changes — consistent
+    // with "skill discovered but not injected" semantics.
+    if (this._deps.enableInjection === false) {
+      return;
+    }
+
     // Auto-cleanup previous injection to prevent accumulation
     if (this._activeInjection) {
       this._removeInternal(this._activeInjection.name);

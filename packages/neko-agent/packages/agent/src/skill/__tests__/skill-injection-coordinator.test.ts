@@ -390,4 +390,55 @@ describe('SkillInjectionCoordinator', () => {
       expect(coord.hasActiveInjection()).toBe(false);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Ablation: enableInjection=false (P1-A Toggle 2)
+  // ---------------------------------------------------------------------------
+
+  describe('ablation: enableInjection=false', () => {
+    it('apply() does not write Track A section', () => {
+      const d = createMockDeps();
+      const coord = new SkillInjectionCoordinator({ ...d, enableInjection: false });
+
+      coord.apply(createInjection());
+
+      expect(d.mockComposer.setSection).not.toHaveBeenCalled();
+    });
+
+    it('apply() does not add Track B allow rules', () => {
+      const d = createMockDeps();
+      const coord = new SkillInjectionCoordinator({ ...d, enableInjection: false });
+
+      coord.apply(createInjection({ allowedTools: ['Read', 'Write'] }));
+
+      expect(d.mockPermissionHooks.addAllowRule).not.toHaveBeenCalled();
+    });
+
+    it('apply() does not track Track C state (no active injection)', () => {
+      const d = createMockDeps();
+      const coord = new SkillInjectionCoordinator({ ...d, enableInjection: false });
+
+      coord.apply(createInjection({ allowedTools: ['Read'] }));
+
+      expect(coord.hasActiveInjection()).toBe(false);
+      expect(coord.getActiveSkillAllowedTools()).toBeUndefined();
+    });
+
+    it('apply() is a silent no-op (does not throw)', () => {
+      const d = createMockDeps();
+      const coord = new SkillInjectionCoordinator({ ...d, enableInjection: false });
+
+      expect(() => coord.apply(createInjection())).not.toThrow();
+    });
+
+    it('default (enableInjection=undefined) preserves normal behavior', () => {
+      const d = createMockDeps();
+      const coord = new SkillInjectionCoordinator(d);
+
+      coord.apply(createInjection());
+
+      expect(d.mockComposer.setSection).toHaveBeenCalled();
+      expect(coord.hasActiveInjection()).toBe(true);
+    });
+  });
 });

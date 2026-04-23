@@ -168,6 +168,15 @@ export interface AgentSessionConfig {
   autoMemoryExtraction?: boolean;
 
   /**
+   * Optional reference to the shared SkillService. When supplied, ablation
+   * toggles that control discovery (e.g. `skillDiscovery: false`) can flip
+   * the service's discovery state at session init and restore it on dispose.
+   * The initializer is the only consumer — agent runtime code should not
+   * reach through this field.
+   */
+  skillService?: import('../skill/skill-service').SkillService;
+
+  /**
    * JSONL journal writer for session event persistence.
    * When provided, all non-streaming events are appended to a JSONL file
    * for crash recovery and session replay.
