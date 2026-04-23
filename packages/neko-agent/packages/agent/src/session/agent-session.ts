@@ -36,6 +36,7 @@ import {
   type ArtifactObservationHooks,
   type IArtifactWatcher,
 } from '../artifact';
+import { SelfEvaluationHooks } from '../evaluation/self-evaluation-hooks';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -184,6 +185,10 @@ export class AgentSession implements IAgentSession {
   // ExecutorHooks that drain watcher-reported invalid artifacts into the
   // next think's context, so the AI can self-correct its frontmatter.
   private _artifactObservationHooks: ArtifactObservationHooks | null = null;
+  // PR3f (ADR §11.6.9 ② guidance). Listens for Apply-stage exits on the
+  // StageTracker and injects a self-evaluation invitation on the next
+  // beforeThink. Not a PromptModule — per-turn ephemeral via messages.
+  private _selfEvaluationHooks: SelfEvaluationHooks | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
@@ -320,6 +325,14 @@ export class AgentSession implements IAgentSession {
           eventBus: this._eventBus,
         });
       }
+
+      // PR3f: self-evaluation guidance (ADR §11.6.9 piece ②). Listens
+      // for Apply-stage exits and injects an invitation-style system
+      // message on the next beforeThink. Must come after stageTracker
+      // is constructed (above) and before composedHooks is built (below).
+      this._selfEvaluationHooks = new SelfEvaluationHooks({
+        stageTracker: this._stageTracker,
+      });
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
@@ -464,27 +477,51 @@ export class AgentSession implements IAgentSession {
           }
         : runnerHooks;
 
-      // Chain the artifact-observation hook so `artifact.invalid` events
-      // reach the AI via a `beforeThink` system message. Kept as a final
-      // layer because it's a pure consumer of the bus; order among other
-      // `beforeThink` hooks is not significant.
+      // Chain the ephemeral-feedback hooks so their outputs reach the AI
+      // via a `beforeThink` system message. Order among these hooks is
+      // not semantically significant — both are pure context consumers.
+      // PR3f added SelfEvaluationHooks alongside the PR2
+      // ArtifactObservationHooks; both are optional independently.
       const observationHooks = this._artifactObservationHooks;
-      const composedHooks: import('@neko/shared').ExecutorHooks = observationHooks
-        ? {
-            ...withGuardian,
-            name: `${withGuardian.name ?? 'react-loop'}+artifact-observation`,
-            beforeThink: async (ctx) => {
-              let next = ctx;
-              if (withGuardian.beforeThink) {
-                next = (await withGuardian.beforeThink(next)) || next;
-              }
-              if (observationHooks.beforeThink) {
-                next = (await observationHooks.beforeThink(next)) || next;
-              }
-              return next;
-            },
-          }
-        : withGuardian;
+      const selfEvalHooks = this._selfEvaluationHooks;
+      const beforeThinkChain: Array<
+        (
+          ctx: import('@neko/shared').AgentContext,
+        ) => Promise<import('@neko/shared').AgentContext | void>
+      > = [];
+      if (withGuardian.beforeThink) {
+        beforeThinkChain.push((ctx) => withGuardian.beforeThink!(ctx));
+      }
+      if (observationHooks?.beforeThink) {
+        beforeThinkChain.push((ctx) => observationHooks.beforeThink!(ctx));
+      }
+      if (selfEvalHooks?.beforeThink) {
+        beforeThinkChain.push((ctx) => selfEvalHooks.beforeThink!(ctx));
+      }
+
+      const nameSuffix = [
+        observationHooks ? 'artifact-observation' : null,
+        selfEvalHooks ? 'self-evaluation' : null,
+      ]
+        .filter(Boolean)
+        .join('+');
+
+      const composedHooks: import('@neko/shared').ExecutorHooks =
+        beforeThinkChain.length > 1
+          ? {
+              ...withGuardian,
+              name: nameSuffix
+                ? `${withGuardian.name ?? 'react-loop'}+${nameSuffix}`
+                : (withGuardian.name ?? 'react-loop'),
+              beforeThink: async (ctx) => {
+                let next = ctx;
+                for (const step of beforeThinkChain) {
+                  next = (await step(next)) || next;
+                }
+                return next;
+              },
+            }
+          : withGuardian;
 
       this._runnerHooks = composedHooks;
 
@@ -995,11 +1032,14 @@ export class AgentSession implements IAgentSession {
     // Drop the observation hook's bus subscription so it doesn't hold
     // references after the bus clears.
     this._artifactObservationHooks?.dispose();
+    // PR3f: release the StageTracker subscription.
+    this._selfEvaluationHooks?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
     this._artifactWatcher = null;
     this._artifactObservationHooks = null;
+    this._selfEvaluationHooks = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
