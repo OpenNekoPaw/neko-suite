@@ -1,7 +1,7 @@
 /**
- * Stage Tracker — owns the current SDD stage and emits enter/exit events.
+ * Stage Tracker — owns the current IDC stage and emits enter/exit events.
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages), §6.5
+ * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §6.5
  *      (L0 StageTracker infrastructure)
  *
  * Replaces FlowSwitcher. Whereas FlowSwitcher modelled a two-ring cycle
@@ -22,7 +22,7 @@
  * merged into plan (ADR §4 revision).
  */
 
-import type { SddStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 
 // =============================================================================
 // Types
@@ -30,18 +30,18 @@ import type { SddStage } from '@neko-agent/types';
 
 export interface StageEnteredEvent {
   /** Stage the tracker just moved into. */
-  stage: SddStage;
+  stage: IdcStage;
   /** Stage the tracker was in before, or null on first enter. */
-  previous: SddStage | null;
+  previous: IdcStage | null;
   /** ms epoch. */
   at: number;
 }
 
 export interface StageExitedEvent {
   /** Stage the tracker just left. */
-  stage: SddStage;
+  stage: IdcStage;
   /** Stage it moved to. */
-  next: SddStage;
+  next: IdcStage;
   /** ms epoch. */
   at: number;
 }
@@ -53,7 +53,7 @@ export interface StageTrackerConfig {
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
   /** Initial stage (optional — tracker stays uninitialised until first enter). */
-  initialStage?: SddStage;
+  initialStage?: IdcStage;
 }
 
 // =============================================================================
@@ -61,7 +61,7 @@ export interface StageTrackerConfig {
 // =============================================================================
 
 export class StageTracker {
-  private _current: SddStage | null;
+  private _current: IdcStage | null;
   private _enteredAt: number;
   private readonly _now: () => number;
   private readonly _enteredListeners = new Set<StageEnteredListener>();
@@ -78,7 +78,7 @@ export class StageTracker {
   // ---------------------------------------------------------------------------
 
   /** Current stage, or null before the first enter(). */
-  get current(): SddStage | null {
+  get current(): IdcStage | null {
     return this._current;
   }
 
@@ -95,7 +95,7 @@ export class StageTracker {
    * Move the tracker into a stage. Idempotent: entering the current stage
    * is a no-op. Returns true iff the stage actually changed.
    */
-  enter(stage: SddStage): boolean {
+  enter(stage: IdcStage): boolean {
     if (this._current === stage) return false;
     const previous = this._current;
     const at = this._now();

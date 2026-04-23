@@ -69,7 +69,7 @@ export interface TaskItem {
 // =============================================================================
 
 export interface Task {
-  /** Stable id for the task list (usually SddRun.id or a sub-scope of it). */
+  /** Stable id for the task list (usually IdcRun.id or a sub-scope of it). */
   id: string;
   /** Ordered items. Order is semantic — earliest first. */
   items: readonly TaskItem[];

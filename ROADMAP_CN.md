@@ -18,7 +18,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
-| **neko-agent** | Alpha | 99% | **0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **SDD 统一工作流 Phase A+B+闭环 ✅**（三阶段 draft/plan/apply、ArtifactValidator/Watcher/ObservationHooks 闭环自修复，§4 revision 2026-04-22）；剩余：MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦（[ADR](./docs/architecture/agent-unified-workflow.md)） |
+| **neko-agent** | Alpha | 99% | **0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **IDC 统一工作流 Phase A+B+闭环 ✅**（三阶段 draft/plan/apply、ArtifactValidator/Watcher/ObservationHooks 闭环自修复，§4 revision 2026-04-22）；剩余：MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦（[ADR](./docs/architecture/agent-unified-workflow.md)） |
 | **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
 | **neko-story** | Alpha | 95% | **0 TODO(P0)**，155+ 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore 跨会话持久化；Story→Agent→Canvas 语义流水线已贯通（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
 | **neko-canvas** | Alpha | 92% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor 注册表** ✅（标签/图标/默认尺寸收敛；属性面板因循环依赖仍独立）；剩余 P1 增强（[ADR](./docs/architecture/canvas-role-boundary.md)） |
@@ -214,18 +214,18 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] P1：Pipeline 媒体落地统一（`MediaGeneratorAdapter` → 本地保存 + 资产索引）
 - [ ] P2：Extension Host DragDropBroker 增强（~100 行）
 
-### neko-agent — SDD 统一工作流（Phase A + B + B 闭环 ✅，2026-04-22）
+### neko-agent — IDC 统一工作流（Phase A + B + B 闭环 ✅，2026-04-22）
 > [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 对齐 Speckit 的四阶段流程精简为三阶段（draft/plan/apply）；AI 通过通用 Write 工具 + 后置 schema 校验来拥有产物所有权。
 
 - ✅ **Phase A（纯重命名，commit c5d6f993）** — 阶段词汇 `specify/plan/tasks/implement` → `draft/plan/apply`（tasks 并入 plan——两者共享 persona/工具/guardians，第四阶段冗余；`apply` 借用 Terraform plan/apply 成熟范式）；产物重命名 `Proposal`→`Draft`、`TodoList`→`Task`、`ExecutionPlan.proposalId`→`draftId`；文件命名从 `.nkproposal.md`/`.nktodo.md` 扩展名方案迁移为 `.neko/drafts|plans|tasks/` 下的 `<kind>-<runId>.md` 前缀方案（ls/grep 分组清晰、普通 MD 编辑器零配置打开、Git diff 原生识别）；EventBus 频道同步重命名（`creation.draft.presented`、`execution.task.updated`、approval `draft-review`）。63 文件变更，源码层净减 1431 行。
 - ✅ **Phase B（工具下线 + ArtifactWatcher 接管，commit c5d6f993）** — 删除 `DraftWriteTool`/`PlanWriteTool`/`TaskWriteTool`；AI 改用通用 `Write` 对三个 artifact 目录直写；新增 `artifact/artifact-validator.ts`（纯 frontmatter schema 校验：missing-frontmatter / malformed-frontmatter / missing-field / wrong-kind / invalid-status / invalid-timestamp）+ `artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms 防抖模式）；新增 `execution.artifact.written` / `execution.artifact.invalid` 频道；`AgentSession` 生命周期接线。**非阻塞设计**：校验失败文件保留在磁盘，validator 只发结构化 issues 给 AI 下一轮自修复。
 - ✅ **Phase B 闭环（observation 回路，commit b1cc3f71）** — `artifact/artifact-observation-hooks.ts` 订阅 `artifact.invalid`，缓冲 issues（上限 32 + 溢出上报），在下一次 `beforeThink` 时以 `system` 消息追加到 `context.messages`，让 AI 真正看到 validator 诊断；narrator `milestone-tracker.defaultClassify` 补齐两条新频道；`progress-narrator` 图标（✎ / ⚠）；`StagePersonaBinding.getRunId` 激活 persona 时把 systemPrompt 里的 `{runId}` / `{stage}` 替换为具体值，让 artifact-file 合同路径渲染为 `.neko/drafts/draft-tiktok-001.md`。
-- [ ] **P1 — `ask` 模式解耦**：`ExecutionMode 'ask'`（per-tool 确认 UX）和 `StageMode 'ask'`（SDD planner 模式）当前通过 cast 共用同一字符串；需重设计 permission/SDD 边界，让 stage 规划只认识 `plan`/`auto`。
+- [ ] **P1 — `ask` 模式解耦**：`ExecutionMode 'ask'`（per-tool 确认 UX）和 `StageMode 'ask'`（IDC planner 模式）当前通过 cast 共用同一字符串；需重设计 permission/IDC 边界，让 stage 规划只认识 `plan`/`auto`。
 - [ ] **P1 — `git rm --cached packages/neko-agent/neko`**：65 MB arm64 二进制被误提交；`.gitignore` 规则已添加，需要独立 commit 把已追踪副本从 index 移除。
 - [ ] **P2 — `.nksession.md` 会话摘要**（ADR §7.4 ⏳）：依赖 E 波先完成 Journal / ConversationRecord / compact / memory 四合一设计，让"session"有单一事实源。
 - [ ] **P2 — `.neko/cache/*.json` 派生索引**：`draft-index.json` 消费 `artifact.written` 事件重建；UI 侧有查询需求时再启动。
-- [ ] **P3 — 154 个 pre-existing TS 错误**：`MCPTool`/`BashTool` 参数不匹配 + `ToolParameters` 形状漂移；先于 SDD 重构存在，独立清理。
-- [ ] **P3 — 5 个 pre-existing `fileOperationHandler.test.ts` 失败**：vscode mock 不一致；与 SDD 重构无关。
+- [ ] **P3 — 154 个 pre-existing TS 错误**：`MCPTool`/`BashTool` 参数不匹配 + `ToolParameters` 形状漂移；先于 IDC 重构存在，独立清理。
+- [ ] **P3 — 5 个 pre-existing `fileOperationHandler.test.ts` 失败**：vscode mock 不一致；与 IDC 重构无关。
 
 **端到端回路（Phase A+B+闭环）**：AI 通过通用 Write 写 `.neko/drafts/draft-xyz.md` → ArtifactWatcher 300ms 防抖后读取 + 校验 → 失败时 emit `execution.artifact.invalid` 携结构化 issues → `ArtifactObservationHooks` 缓冲并在下次 think 注入 system 消息 → AI 读到诊断后重写文件。Validator 保持纯、watcher 走单路径、所有事件通过 typed EventBus 流向 narrator / logs / telemetry。
 

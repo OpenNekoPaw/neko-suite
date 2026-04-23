@@ -1,7 +1,7 @@
 /**
  * Draft — Draft-stage artifact (ADR §5.2, §7.5).
  *
- * The declarative "what" of SDD. Produced by creation-persona at the
+ * The declarative "what" of IDC. Produced by creation-persona at the
  * end of the Draft stage; reviewed by the user; compiled into an
  * ExecutionPlan + Task checklist at the Plan stage. Persisted as
  * `.neko/drafts/draft-<runId>.md`.

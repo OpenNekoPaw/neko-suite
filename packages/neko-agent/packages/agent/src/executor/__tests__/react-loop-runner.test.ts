@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentContext, AgentResult, ToolResultWithMeta } from '@neko/shared';
 import type { ToolCallInfo } from '@neko/shared';
 import { createStageTracker } from '../../skill';
-import { createSddRunStore } from '../sdd-run-store';
+import { createIdcRunStore } from '../idc-run-store';
 import { createReActLoopRunner } from '../react-loop-runner';
 import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
 import { createAutohealChain } from '../../autoheal';
@@ -24,11 +24,11 @@ function ctx(iteration: number): AgentContext {
 
 describe('ReActLoopRunner hooks', () => {
   let stageTracker: ReturnType<typeof createStageTracker>;
-  let store: ReturnType<typeof createSddRunStore>;
+  let store: ReturnType<typeof createIdcRunStore>;
 
   beforeEach(() => {
     stageTracker = createStageTracker({ now: () => 0 });
-    store = createSddRunStore();
+    store = createIdcRunStore();
     store.startRun({ workflowId: 'test' });
   });
 

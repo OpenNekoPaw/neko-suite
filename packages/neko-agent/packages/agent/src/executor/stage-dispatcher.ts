@@ -1,5 +1,5 @@
 /**
- * Stage Dispatcher — runtime guard that the SDD stage DAG is respected.
+ * Stage Dispatcher — runtime guard that the IDC stage DAG is respected.
  *
  * See: docs/architecture/agent-unified-workflow.md §4
  *
@@ -17,7 +17,7 @@
  * the runner without creating cycles.
  */
 
-import type { SddStage, StageActivationDecision } from '@neko-agent/types';
+import type { IdcStage, StageActivationDecision } from '@neko-agent/types';
 import {
   STAGE_REGISTRY,
   validateStageDag,
@@ -40,7 +40,7 @@ export interface StageDispatchViolation {
   code: StageDispatchViolationCode;
   message: string;
   /** The offending stage(s), when applicable. */
-  stages?: readonly SddStage[];
+  stages?: readonly IdcStage[];
   /** Structured DAG details, when code === 'dag-order'. */
   dagDetail?: StageDagValidationResult;
 }

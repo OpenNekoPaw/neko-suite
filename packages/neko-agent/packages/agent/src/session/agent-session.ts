@@ -16,7 +16,7 @@
  */
 
 import type { ChatMessage, Skill, Tool } from '@neko/shared';
-import type { SddStage, StageActivationDecision, SddRun } from '@neko-agent/types';
+import type { IdcStage, StageActivationDecision, IdcRun } from '@neko-agent/types';
 import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
 import {
   SkillInjectionCoordinator,
@@ -25,8 +25,8 @@ import {
   createStageGuardian,
 } from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
-import type { ISddRunStore, ReActLoopRunnerState } from '../executor';
-import { createReActLoopRunner, createSddRunStore } from '../executor';
+import type { IIdcRunStore, ReActLoopRunnerState } from '../executor';
+import { createReActLoopRunner, createIdcRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
@@ -125,7 +125,7 @@ export class AgentSession implements IAgentSession {
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
 
-  // SDD stage tracking: StageTracker emits stage.entered events;
+  // IDC stage tracking: StageTracker emits stage.entered events;
   // StagePersonaBinding subscribes and swaps the persona Skill when a new
   // stage is reached. Replaces the legacy FlowSwitcher/FlowBinding pair.
   private _stageTracker: StageTracker | null = null;
@@ -134,7 +134,7 @@ export class AgentSession implements IAgentSession {
   private _stageGuardian: IStageGuardian | null = null;
 
   // ReAct-loop stage-activation orchestrator.
-  private _runStore: ISddRunStore | null = null;
+  private _runStore: IIdcRunStore | null = null;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
 
@@ -236,7 +236,7 @@ export class AgentSession implements IAgentSession {
         skillService: config.stageTracking.skillService,
         coordinator: this._skillCoordinator,
         // Resolve `{runId}` in creation-persona's artifact-file contract
-        // lazily so re-applies after a new SddRun pick up the fresh id.
+        // lazily so re-applies after a new IdcRun pick up the fresh id.
         getRunId: () => this._runStore?.getActive()?.id ?? null,
       });
       void this._stagePersonaBinding.syncCurrent();
@@ -247,7 +247,7 @@ export class AgentSession implements IAgentSession {
       //     execution.autoheal.* on the same bus.
       //   - Approval engine: pre-filters ask-mode tool calls via the
       //     declarative + imperative strategy packs.
-      this._runStore = createSddRunStore();
+      this._runStore = createIdcRunStore();
       this._eventBus = createEventBus();
 
       // Workspace persistence (ADR §7.4). When a project root is
@@ -750,14 +750,14 @@ export class AgentSession implements IAgentSession {
   }
 
   // ---------------------------------------------------------------------------
-  // SDD stage tracking
+  // IDC stage tracking
   // ---------------------------------------------------------------------------
 
   /**
-   * Current SDD stage the agent is operating in, or null if stage tracking
+   * Current IDC stage the agent is operating in, or null if stage tracking
    * is not configured.
    */
-  getCurrentStage(): SddStage | null {
+  getCurrentStage(): IdcStage | null {
     return this._stageTracker?.current ?? null;
   }
 
@@ -778,7 +778,7 @@ export class AgentSession implements IAgentSession {
    * (e.g. restoring a saved session) can trigger the transition explicitly.
    * Returns true iff the stage actually changed.
    */
-  enterStage(stage: SddStage): boolean {
+  enterStage(stage: IdcStage): boolean {
     if (!this._stageTracker) return false;
     return this._stageTracker.enter(stage);
   }
@@ -794,14 +794,14 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Snapshot of the active SddRun (or null if none).
+   * Snapshot of the active IdcRun (or null if none).
    */
-  getActiveSddRun(): SddRun | null {
+  getActiveIdcRun(): IdcRun | null {
     return this._runStore?.getActive() ?? null;
   }
 
   /**
-   * Last SDD stage-activation decision made by the runner.
+   * Last IDC stage-activation decision made by the runner.
    */
   getLastActivationDecision(): StageActivationDecision | null {
     return this._reactRunnerState?.lastDecision ?? null;

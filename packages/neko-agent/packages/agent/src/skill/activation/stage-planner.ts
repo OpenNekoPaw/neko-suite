@@ -1,9 +1,9 @@
 /**
- * SDD Stage Planner — pure function `planStages(...)`.
+ * IDC Stage Planner — pure function `planStages(...)`.
  *
  * See: docs/architecture/agent-unified-workflow.md §3 (entry rules), §4 (stages)
  *
- * Responsibility: for one ReAct round, decide which SDD stages to activate,
+ * Responsibility: for one ReAct round, decide which IDC stages to activate,
  * given L2 mode + task shape + entry signal. Mirrors the shape of the legacy
  * `plan()` in activation-planner.ts so consumers can switch incrementally.
  *
@@ -20,7 +20,7 @@
  */
 
 import type {
-  SddStage,
+  IdcStage,
   StageActivationDecision,
   StageSkipReason,
   StageTaskShape,
@@ -90,15 +90,15 @@ export interface StagePlanInputs {
 export function planStages(inputs: StagePlanInputs): StageActivationDecision {
   const { mode, taskShape, entrySignal, round, now, lastObserveHint } = inputs;
 
-  const allowed = new Set<SddStage>(getStageModeActivation(mode).allowed);
-  const activated = new Set<SddStage>();
-  const skipped: { stage: SddStage; reason: StageSkipReason }[] = [];
+  const allowed = new Set<IdcStage>(getStageModeActivation(mode).allowed);
+  const activated = new Set<IdcStage>();
+  const skipped: { stage: IdcStage; reason: StageSkipReason }[] = [];
 
   // Step 1: Resolve entry stage.
   const entryStage = resolveEntryStage(mode, entrySignal);
 
   // Step 2: Expand from entry to end, in DAG order, honouring mode allow-list.
-  const allInOrder: SddStage[] = ['draft', 'plan', 'apply'];
+  const allInOrder: IdcStage[] = ['draft', 'plan', 'apply'];
   const entryIdx = allInOrder.indexOf(entryStage);
   for (let i = 0; i < allInOrder.length; i++) {
     const stage = allInOrder[i]!;
@@ -118,7 +118,7 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
 
   // Step 4: Retry hint — reuse prior Draft/Plan.
   if (lastObserveHint === 'retry') {
-    for (const reuseStage of ['draft', 'plan'] as SddStage[]) {
+    for (const reuseStage of ['draft', 'plan'] as IdcStage[]) {
       if (activated.has(reuseStage)) {
         activated.delete(reuseStage);
         if (!skipped.some((s) => s.stage === reuseStage)) {
@@ -138,7 +138,7 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
 
   // Ensure always-mandatory Apply stays (unless PlanMode / pure-think / plan-only).
   const registryMandatory = (
-    Object.values(STAGE_REGISTRY) as { name: SddStage; defaultMandatory: boolean }[]
+    Object.values(STAGE_REGISTRY) as { name: IdcStage; defaultMandatory: boolean }[]
   )
     .filter((m) => m.defaultMandatory)
     .map((m) => m.name);
@@ -159,7 +159,7 @@ export function planStages(inputs: StagePlanInputs): StageActivationDecision {
 // Entry-stage resolution (ADR §3.2)
 // =============================================================================
 
-function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): SddStage {
+function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): IdcStage {
   // PlanMode (explicit) always starts at Draft — user chose the deep path.
   if (mode === 'plan') return 'draft';
 
@@ -184,7 +184,7 @@ function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): SddStage 
       // "generate 3 covers" — start at Plan (skip Draft).
       return 'plan';
     case 'vague-creative':
-      // Fallback — "make a TikTok video". Full SDD path.
+      // Fallback — "make a TikTok video". Full IDC path.
       return 'draft';
   }
 }
@@ -195,8 +195,8 @@ function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): SddStage 
 
 function applyTaskShapeSkips(
   taskShape: StageTaskShape,
-  activated: Set<SddStage>,
-  skipped: { stage: SddStage; reason: StageSkipReason }[],
+  activated: Set<IdcStage>,
+  skipped: { stage: IdcStage; reason: StageSkipReason }[],
 ): void {
   /**
    * Skip table per task shape:
@@ -208,7 +208,7 @@ function applyTaskShapeSkips(
    *   plan-only        → skip apply (stop after Plan)
    *   clarification    → skip draft / plan (Apply only)
    */
-  const shapeSkips: Record<StageTaskShape, SddStage[]> = {
+  const shapeSkips: Record<StageTaskShape, IdcStage[]> = {
     'single-read': ['draft', 'plan'],
     'single-write': ['draft'],
     'multi-step': [],

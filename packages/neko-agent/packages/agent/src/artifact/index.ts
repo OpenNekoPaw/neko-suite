@@ -1,5 +1,5 @@
 /**
- * Artifact module — post-write validator + file watcher for the SDD three
+ * Artifact module — post-write validator + file watcher for the IDC three
  * artifact families (Draft / Plan / Task).
  *
  * Replaces the dedicated `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool`

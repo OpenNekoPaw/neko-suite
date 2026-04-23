@@ -3,14 +3,14 @@
  *
  * See: docs/architecture/agent-unified-workflow.md §7.4 (project workspace)
  *
- * Single source of truth for where SDD artifacts land on disk. Callers
+ * Single source of truth for where IDC artifacts land on disk. Callers
  * pass the project root; NekoPaths returns the canonical subpath for
  * each artifact family. The resolver is platform-agnostic (no Node `fs`
  * imports) — the caller's fsOps actually creates/writes files. This
  * keeps the agent package free of vscode / node wiring at L0.
  *
  * Naming convention (2026-04-22 revision): artifacts use prefix + `.md`
- * rather than custom `.nk*.md` extensions. The prefix matches the SDD
+ * rather than custom `.nk*.md` extensions. The prefix matches the IDC
  * stage vocabulary (draft / plan / task):
  *
  *   <root>/.neko/

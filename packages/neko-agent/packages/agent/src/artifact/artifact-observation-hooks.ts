@@ -2,7 +2,7 @@
  * ArtifactObservationHooks — ExecutorHooks that surface ArtifactWatcher
  * validation failures back into the AI conversation on the next think.
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages), §6.2
+ * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §6.2
  *      (EventBus), §6.5 (non-blocking guardians)
  *
  * Why this exists:

@@ -1,5 +1,5 @@
 /**
- * SharedMemoryStore — cross-scope scratchpad for SDD runs.
+ * SharedMemoryStore — cross-scope scratchpad for IDC runs.
  *
  * See: docs/architecture/agent-unified-workflow.md §9.2 (shared memory)
  *
@@ -37,7 +37,7 @@
 /**
  * Memory-store scope tags. The names align with the event-channel
  * namespaces (creation.* / execution.*) so producers and consumers can
- * reuse the same vocabulary. They are not SDD stage names — 'creation'
+ * reuse the same vocabulary. They are not IDC stage names — 'creation'
  * covers all pre-Implement activity (Specify + Plan + Tasks), 'execution'
  * covers Implement, and 'shared' is scope-agnostic.
  */

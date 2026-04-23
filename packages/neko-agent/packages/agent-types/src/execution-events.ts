@@ -1,5 +1,5 @@
 /**
- * Execution Events — SDD Apply-stage (execution-persona) event namespace.
+ * Execution Events — IDC Apply-stage (execution-persona) event namespace.
  *
  * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
@@ -14,7 +14,7 @@
  */
 
 import type { StageSkipReason, StageTaskShape } from './stage';
-import type { SddRunRoundSummary } from './sdd-run';
+import type { IdcRunRoundSummary } from './idc-run';
 
 // =============================================================================
 // Channel names
@@ -61,7 +61,7 @@ export interface ExecutionRoundActivationDecidedEvent {
   channel: typeof EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED;
   runId: string;
   taskShape: StageTaskShape;
-  summary: SddRunRoundSummary;
+  summary: IdcRunRoundSummary;
   at: number;
 }
 
@@ -187,7 +187,7 @@ export interface ExecutionQualityEvaluatedEvent {
 // Artifact lifecycle (Phase B — AI uses generic Write tool + post-write hooks)
 // -----------------------------------------------------------------------------
 
-/** Kind of SDD artifact a file represents. */
+/** Kind of IDC artifact a file represents. */
 export type ArtifactKind = 'draft' | 'plan' | 'task';
 
 /**

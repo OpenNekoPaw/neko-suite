@@ -12,7 +12,7 @@
  * - **Debounced**: 300ms, mirroring `HookLoader.watchDirectory()` so rapid
  *   rewrites (e.g. editor auto-save during AI authoring) collapse to one
  *   event per file.
- * - **Pure event side** only — the watcher does not read the SddRunStore or
+ * - **Pure event side** only — the watcher does not read the IdcRunStore or
  *   inject runId into files. Caller supplies `getRunId()` so the emitted event
  *   can carry the current run for correlation. Returns 'unknown' placeholder
  *   when no run is active.
@@ -63,7 +63,7 @@ export interface ArtifactWatcherHandle {
 export interface ArtifactWatcherConfig {
   paths: INekoPaths;
   eventBus: IEventBus;
-  /** Returns the active SddRun id. `null` → 'unknown' placeholder on events. */
+  /** Returns the active IdcRun id. `null` → 'unknown' placeholder on events. */
   getRunId: () => string | null;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
@@ -84,7 +84,7 @@ export interface IArtifactWatcher {
 // Kind resolution
 // =============================================================================
 
-/** Subdir → ArtifactKind mapping (only the three SDD families are watched). */
+/** Subdir → ArtifactKind mapping (only the three IDC families are watched). */
 const WATCHED_KIND_BY_SUBDIR: Readonly<Record<string, ArtifactKind>> = {
   drafts: 'draft',
   plans: 'plan',

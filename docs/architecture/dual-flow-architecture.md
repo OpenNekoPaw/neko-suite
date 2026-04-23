@@ -1,7 +1,7 @@
 > ⚠️ **此 ADR 已被简化版替代**
 >
 > 本文档为早期设计探索。"创作流/执行流"双流术语是对称美学诱导的过度抽象，实际是"条件激活的单一流程"。
-> 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + SDD 3 阶段 Draft → Plan → Apply，2026-04-22 从四阶段简化）
+> 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + IDC 3 阶段 Draft → Plan → Apply，2026-04-22 从四阶段简化，2026-04-23 更名 SDD → IDC）
 >
 > 本文档保留作为设计思考记录。
 

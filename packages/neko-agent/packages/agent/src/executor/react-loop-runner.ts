@@ -1,11 +1,11 @@
 /**
- * ReAct Loop Runner — integrates the SDD stage-activation planner with
+ * ReAct Loop Runner — integrates the IDC stage-activation planner with
  * AgentExecutor's existing think → act → observe loop.
  *
  * See: docs/architecture/agent-unified-workflow.md §3 (entry rules), §4 (stages)
  *
  * Design choice: registers as ExecutorHooks instead of patching the
- * executor directly. The executor stays ReAct-pure; the SDD machinery is
+ * executor directly. The executor stays ReAct-pure; the IDC machinery is
  * bolted on as a pluggable hook that any session which opts in can wire.
  *
  * Per-iteration behaviour:
@@ -27,14 +27,14 @@
  */
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
-import type { SddStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
+import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
 
 import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
-import type { ISddRunStore } from './sdd-run-store';
+import type { IIdcRunStore } from './idc-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
@@ -47,7 +47,7 @@ const logger = getLogger('ReActLoopRunner');
 
 export interface ReActLoopRunnerDeps {
   /**
-   * Tracks the current SDD stage. The runner calls `stageTracker.enter()`
+   * Tracks the current IDC stage. The runner calls `stageTracker.enter()`
    * with the terminal stage of each round's activation decision, which lets
    * listeners (e.g. StagePersonaBinding) swap the active persona Skill.
    * Optional so lightweight call sites (tests, headless executions) can
@@ -55,7 +55,7 @@ export interface ReActLoopRunnerDeps {
    */
   stageTracker?: StageTracker;
   /** Where round summaries get aggregated. */
-  runStore: ISddRunStore;
+  runStore: IIdcRunStore;
   /**
    * Resolves the current L2 mode each time a decision is needed. Callers
    * that wire ExecutionMode → StageMode should pass a closure rather than
@@ -373,7 +373,7 @@ export function defaultClassifyTaskShape(s: TaskShapeSignals): StageTaskShape {
 
 /**
  * Default entry-signal classifier. Conservative: treats round 0 of a
- * multi-step task as vague-creative (full SDD path) and subsequent
+ * multi-step task as vague-creative (full IDC path) and subsequent
  * rounds as atomic-instruction (straight to Implement). Callers with
  * user-intent signal — `@proposal-001` references, `/workflow` triggers,
  * or high-risk operation hints — should override.
@@ -465,7 +465,7 @@ function autohealOutcomeToHint(outcome: AutohealOutcome): 'retry' | 'user-cancel
  * element is the deepest stage the round reaches. Returns null for empty
  * sets, which shouldn't happen post-dispatch-validation but we guard anyway.
  */
-function terminalStage(activated: readonly SddStage[]): SddStage | null {
+function terminalStage(activated: readonly IdcStage[]): IdcStage | null {
   if (activated.length === 0) return null;
   return activated[activated.length - 1] ?? null;
 }

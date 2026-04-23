@@ -1,7 +1,7 @@
 /**
  * Stage Planner Tests
  *
- * Covers agent-unified-workflow.md §3 (entry rules) × §4 (three SDD stages).
+ * Covers agent-unified-workflow.md §3 (entry rules) × §4 (three IDC stages).
  *
  * Structure:
  *   - Entry-stage resolution per §3.2 rules 1–6
@@ -24,7 +24,7 @@ import {
   isStageModeAllowed,
   type StageMode,
 } from '../activation/stage-activation-matrix';
-import type { SddStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 
 const clock = () => 12345;
 
@@ -148,7 +148,7 @@ describe('stage planner — retry hint', () => {
       }),
     );
     expect(d.activated).toEqual(['apply']);
-    for (const s of ['draft', 'plan'] as SddStage[]) {
+    for (const s of ['draft', 'plan'] as IdcStage[]) {
       expect(d.skipped.find((x) => x.stage === s)?.reason).toBe('retry-reuse');
     }
   });
@@ -177,7 +177,7 @@ describe('stage registry', () => {
 
   it('only Apply is default-mandatory', () => {
     const mandatory = (
-      Object.values(STAGE_REGISTRY) as { name: SddStage; defaultMandatory: boolean }[]
+      Object.values(STAGE_REGISTRY) as { name: IdcStage; defaultMandatory: boolean }[]
     )
       .filter((m) => m.defaultMandatory)
       .map((m) => m.name);
@@ -186,7 +186,7 @@ describe('stage registry', () => {
 
   it('only Draft has a default approval gate', () => {
     const withGate = (
-      Object.values(STAGE_REGISTRY) as { name: SddStage; hasApprovalGate: boolean }[]
+      Object.values(STAGE_REGISTRY) as { name: IdcStage; hasApprovalGate: boolean }[]
     )
       .filter((m) => m.hasApprovalGate)
       .map((m) => m.name);

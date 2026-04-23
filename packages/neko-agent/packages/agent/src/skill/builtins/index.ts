@@ -22,7 +22,7 @@ export { comicToStoryboardSkill } from './comic-to-storyboard';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 
-// SDD stage persona skills (docs/architecture/agent-unified-workflow.md §4)
+// IDC stage persona skills (docs/architecture/agent-unified-workflow.md §4)
 export { creationPersonaSkill } from './creation-persona';
 export { executionPersonaSkill } from './execution-persona';
 export { iterationPersonaSkill } from './iteration-persona';
@@ -522,7 +522,7 @@ Report to the user what music was generated (prompt used, duration) and where it
  * have been removed as they are too generic.
  */
 export const builtinSkills: Skill[] = [
-  // SDD stage personas (Specify / Implement / Iteration)
+  // IDC stage personas (Specify / Implement / Iteration)
   creationPersonaSkill,
   executionPersonaSkill,
   iterationPersonaSkill,

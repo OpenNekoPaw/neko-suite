@@ -1,9 +1,9 @@
 /**
- * SddRun — per-run record of an SDD-stage execution.
+ * IdcRun — per-run record of an IDC-stage execution.
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (three SDD stages)
+ * See: docs/architecture/agent-unified-workflow.md §4 (three IDC stages)
  *
- * One SddRun corresponds to a single end-to-end traversal of the
+ * One IdcRun corresponds to a single end-to-end traversal of the
  * Draft → Plan → Apply DAG. The inner ReAct loop during Apply produces
  * rounds whose stage-activation decisions are stored here for audit +
  * telemetry.
@@ -14,14 +14,14 @@
  *   run-lifecycle record.
  */
 
-import type { SddStage, StageActivationDecision, StageSkipReason } from './stage';
+import type { IdcStage, StageActivationDecision, StageSkipReason } from './stage';
 import type { Task } from './task';
 
 // =============================================================================
 // Status
 // =============================================================================
 
-export type SddRunStatus =
+export type IdcRunStatus =
   /** Created but not yet entered Apply. */
   | 'pending'
   /** Running — at least one ReAct round has begun. */
@@ -38,17 +38,17 @@ export type SddRunStatus =
 // =============================================================================
 
 /**
- * One ReAct round inside an SddRun. Each round is summarised here
+ * One ReAct round inside an IdcRun. Each round is summarised here
  * rather than emitted as N stage-level events.
  */
-export interface SddRunRoundSummary {
+export interface IdcRunRoundSummary {
   /** 0-based round index within this Run. */
   round: number;
   /** Stages activated this round (DAG-ordered: draft → plan → apply). */
-  activatedStages: readonly SddStage[];
+  activatedStages: readonly IdcStage[];
   /** Stages considered and skipped, with reason codes. */
   skippedStages: readonly {
-    stage: SddStage;
+    stage: IdcStage;
     reason: StageSkipReason;
   }[];
   /** Wall-clock when the activation decision was made. */
@@ -60,7 +60,7 @@ export interface SddRunRoundSummary {
 export function roundSummaryFromDecision(
   decision: StageActivationDecision,
   lastObserveHint?: string,
-): SddRunRoundSummary {
+): IdcRunRoundSummary {
   return {
     round: decision.round,
     activatedStages: decision.activated,
@@ -74,13 +74,13 @@ export function roundSummaryFromDecision(
 // Run
 // =============================================================================
 
-export interface SddRun {
+export interface IdcRun {
   /** Stable run identifier. */
   id: string;
   /** Workflow ID (registry key) this Run belongs to. */
   workflowId: string;
   /** Current status. */
-  status: SddRunStatus;
+  status: IdcRunStatus;
   /** ms epoch — when the Run was created. */
   createdAt: number;
   /** ms epoch — when the Run transitioned out of `pending`, else undefined. */
@@ -91,7 +91,7 @@ export interface SddRun {
    * Ordered ReAct round summaries. Appended as rounds complete.
    * Empty while `status === 'pending'`.
    */
-  rounds: readonly SddRunRoundSummary[];
+  rounds: readonly IdcRunRoundSummary[];
   /** Associated user-visible Task checklist for the Apply stage, when one is active. */
   task?: Task;
   /**

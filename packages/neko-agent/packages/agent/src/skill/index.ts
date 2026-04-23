@@ -72,7 +72,7 @@ export {
   scriptToTimelineSkill,
   comicToStoryboardSkill,
   qualityAssessmentSkill,
-  // SDD stage persona skills
+  // IDC stage persona skills
   creationPersonaSkill,
   executionPersonaSkill,
   iterationPersonaSkill,
@@ -81,7 +81,7 @@ export {
   registerBuiltinToolGroups,
 } from './builtins';
 
-// Stage Tracker (SDD stage transitions — replaces FlowSwitcher)
+// Stage Tracker (IDC stage transitions — replaces FlowSwitcher)
 export {
   StageTracker,
   createStageTracker,

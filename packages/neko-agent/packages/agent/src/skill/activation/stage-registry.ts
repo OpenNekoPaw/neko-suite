@@ -1,5 +1,5 @@
 /**
- * Stage Registry — metadata + dependency DAG for the three SDD stages.
+ * Stage Registry — metadata + dependency DAG for the three IDC stages.
  *
  * See: docs/architecture/agent-unified-workflow.md §4
  *
@@ -15,7 +15,7 @@
  * draft/plan/apply. The `tasks` stage was merged into `plan`.
  */
 
-import type { SddStage, StageSet } from '@neko-agent/types';
+import type { IdcStage, StageSet } from '@neko-agent/types';
 
 // =============================================================================
 // Metadata
@@ -23,13 +23,13 @@ import type { SddStage, StageSet } from '@neko-agent/types';
 
 export interface StageMetadata {
   /** Stage name (redundant with the key but handy when iterating). */
-  name: SddStage;
+  name: IdcStage;
   /**
    * Prerequisites that must appear *before* this stage in an activation set.
    * Each prerequisite may itself be skipped — the registry only encodes
    * ordering, not mandatory-ness.
    */
-  dependsOn: readonly SddStage[];
+  dependsOn: readonly IdcStage[];
   /**
    * Whether the stage is always required. Only Apply is always-mandatory:
    * even clarification / pure-think rounds produce an Apply log entry.
@@ -51,7 +51,7 @@ export interface StageMetadata {
 /**
  * Canonical order: draft → plan → apply.
  */
-export const STAGE_REGISTRY: Readonly<Record<SddStage, StageMetadata>> = {
+export const STAGE_REGISTRY: Readonly<Record<IdcStage, StageMetadata>> = {
   draft: {
     name: 'draft',
     dependsOn: [],
@@ -82,11 +82,11 @@ export const STAGE_REGISTRY: Readonly<Record<SddStage, StageMetadata>> = {
 // Queries
 // =============================================================================
 
-export function getStageMetadata(s: SddStage): StageMetadata {
+export function getStageMetadata(s: IdcStage): StageMetadata {
   return STAGE_REGISTRY[s];
 }
 
-export function allStagesInOrder(): readonly SddStage[] {
+export function allStagesInOrder(): readonly IdcStage[] {
   return (Object.values(STAGE_REGISTRY) as StageMetadata[])
     .sort((a, b) => a.order - b.order)
     .map((m) => m.name);
@@ -99,7 +99,7 @@ export function allStagesInOrder(): readonly SddStage[] {
 /**
  * Sort stages by canonical order. Stable + total — safe on any subset.
  */
-export function sortStagesByDag(stages: readonly SddStage[]): StageSet {
+export function sortStagesByDag(stages: readonly IdcStage[]): StageSet {
   return [...stages].sort((a, b) => STAGE_REGISTRY[a].order - STAGE_REGISTRY[b].order);
 }
 
@@ -108,8 +108,8 @@ export type StageDagValidationResult =
   | {
       ok: false;
       violations: readonly {
-        stage: SddStage;
-        dependency: SddStage;
+        stage: IdcStage;
+        dependency: IdcStage;
         reason: 'out-of-order';
       }[];
     };
@@ -119,13 +119,13 @@ export type StageDagValidationResult =
  * in the set appears after that dependency. Missing dependencies are allowed
  * (skipping prereqs is how AutoMode enters mid-DAG).
  */
-export function validateStageDag(stages: readonly SddStage[]): StageDagValidationResult {
-  const index = new Map<SddStage, number>();
+export function validateStageDag(stages: readonly IdcStage[]): StageDagValidationResult {
+  const index = new Map<IdcStage, number>();
   stages.forEach((s, i) => index.set(s, i));
 
   const violations: {
-    stage: SddStage;
-    dependency: SddStage;
+    stage: IdcStage;
+    dependency: IdcStage;
     reason: 'out-of-order';
   }[] = [];
 

@@ -1,5 +1,5 @@
 /**
- * SDD Stage Types — three-stage creative workflow
+ * IDC Stage Types — three-stage creative workflow
  *
  * See: docs/architecture/agent-unified-workflow.md §4 (L2 Flow Layer)
  *
@@ -33,7 +33,7 @@
 // =============================================================================
 
 /**
- * Declarative vs imperative paradigms — a SDD artifact's fundamental nature.
+ * Declarative vs imperative paradigms — a IDC artifact's fundamental nature.
  *
  * See: docs/architecture/agent-unified-workflow.md §4.2
  *
@@ -58,14 +58,14 @@ export type Paradigm =
 // =============================================================================
 
 /**
- * The three SDD stages (agent-unified-workflow.md §4.1).
+ * The three IDC stages (agent-unified-workflow.md §4.1).
  *
  * - draft: Business-declarative (What). AI produces a Draft, user approves.
  * - plan:  Technical-imperative (How). AI compiles an ExecutionPlan and its
  *          user-visible Task checklist from the Draft.
  * - apply: Step loop (think → act → observe). Tool calls + event streaming.
  */
-export type SddStage = 'draft' | 'plan' | 'apply';
+export type IdcStage = 'draft' | 'plan' | 'apply';
 
 // =============================================================================
 // Task shape — reused from primitive pool, identical semantics
@@ -116,15 +116,15 @@ export type StageSkipReason =
 
 /**
  * Result of the stage-planner for one ReAct round. Consumed by
- * SddRunRoundSummary for per-round telemetry compaction.
+ * IdcRunRoundSummary for per-round telemetry compaction.
  */
 export interface StageActivationDecision {
   /** Task shape used to drive the decision. */
   taskShape: StageTaskShape;
   /** Stages to execute this round, in DAG order. */
-  activated: readonly SddStage[];
+  activated: readonly IdcStage[];
   /** Stages evaluated and rejected, with reasons. */
-  skipped: readonly { stage: SddStage; reason: StageSkipReason }[];
+  skipped: readonly { stage: IdcStage; reason: StageSkipReason }[];
   /** Wall-clock timestamp the decision was made. */
   decidedAt: number;
   /** Round index within the current run (0-based). */
@@ -140,4 +140,4 @@ export interface StageActivationDecision {
  * Draft → Plan → Apply DAG. Use the stage-registry's sort helpers in the
  * agent package to construct valid sets.
  */
-export type StageSet = readonly SddStage[];
+export type StageSet = readonly IdcStage[];

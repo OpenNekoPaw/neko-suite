@@ -1,9 +1,11 @@
-# Agent 统一工作流协议
+# Agent 统一工作流协议 — IDC（Intent-Driven Creation 意图驱动创作）
 
-**状态**: Proposed（22 / 22 ADR 章节已落地；2026-04-22 精简为三阶段 + Phase B 工具下线）
-**日期**: 2026-04-20 · 三阶段重命名 2026-04-22 · Phase B 同日完成
+**状态**: Proposed（22 / 22 ADR 章节已落地；2026-04-22 精简为 IDC 三阶段 + Phase B 工具下线；2026-04-23 SDD → IDC 正式重命名）
+**日期**: 2026-04-20 · 三阶段重命名 2026-04-22 · Phase B 同日完成 · IDC 命名 2026-04-23
 
-## 落地进度快照（2026-04-22）
+> **关于命名**：本协议初期借鉴 Speckit 的 **SDD（Spec-Driven Development）**范式；2026-04-22 从四阶段简化为三阶段；2026-04-23 根据创作场景特点正式重命名为 **IDC（意图驱动创作 / Intent-Driven Creation）**。IDC 强调**意图**（用户的创作目标）而非**规范**（Spec），更贴合多模态创作工作流。阶段名 `Draft / Plan / Apply` 保持不变。历史变更记录（§22）保留 SDD 表述以反映当时术语。
+
+## 落地进度快照（2026-04-23）
 
 ### 已完成（按 ADR 章节计）
 
@@ -12,9 +14,9 @@
 | §2 架构总览双视角 | §2.1 职责视角（意图/编排/执行/控制）前置为主入口 + §2.2 实现视角（L3/L2/L1/L0）+ §2.3 双视角交叉引用表 + §2.4 选视角指南 | 2026-04-23 新增 |
 | §3 L3 Mode 两档 | AutoMode / PlanMode | 已存在 |
 | §3.2 | StagePlanner 6 入口规则 | 已存在 |
-| §4 SDD 3 阶段 | Draft / Plan / Apply（合并原 Specify/Plan/Tasks/Implement）| Phase A（2026-04-22） |
-| §4.2 lineage | WorkflowRun → SddRun rename；proposalId → draftId | W1.2.3 / Phase A |
-| §5 Skill-as-package | SDD metadata / phases / pipelines 回落子包 | B1-B1.6 |
+| §4 IDC 3 阶段 | Draft / Plan / Apply（合并原 Specify/Plan/Tasks/Implement）| Phase A（2026-04-22） |
+| §4.2 lineage | WorkflowRun → SddRun → IdcRun 演进；proposalId → draftId | W1.2.3 / Phase A / 2026-04-23 IDC rename |
+| §5 Skill-as-package | IDC metadata / phases / pipelines 回落子包 | B1-B1.6 |
 | §5.2.10 | requiredSubpackages 激活校验 | A1 |
 | §5.3 | 内置 Skill prompt 原子化 | W1.3 |
 | §5.4 | StageTracker + StageGuardian | A1-A3 |
@@ -66,7 +68,7 @@
 4. **对称美学诱导设计债** — 双流/四维/五原语的对称结构是"架构洁癖"而非用户需求
 5. **产物格式分类混乱** — 未澄清"AI 产出 vs 程序产出"的本质二分
 
-**本 ADR 的角色**：基于这些反思，定义一套**可落地、与业界对齐、预留演进空间**的整合架构。核心是四层职责分离 + 二分格式原则 + SDD 流程对齐 Speckit。
+**本 ADR 的角色**：基于这些反思，定义一套**可落地、与业界对齐、预留演进空间**的整合架构。核心是四层职责分离 + 二分格式原则 + **IDC（意图驱动创作 / Intent-Driven Creation）三阶段**流程（初期参考 Speckit SDD 的四阶段范式，2026-04-23 根据创作场景特点重命名并精简为 Draft / Plan / Apply 三阶段）。
 
 ---
 
@@ -84,7 +86,7 @@
 
 ### 2.1 职责视角（Responsibility View — 主入口）
 
-从"Agent 做什么事"看，SDD 三阶段天然呈现为**意图 / 编排 / 执行**三层，加上贯穿全程的**控制**层，构成 **3+1 职责分层**：前三层是时序的，控制层是正交的。
+从"Agent 做什么事"看，IDC 三阶段天然呈现为**意图 / 编排 / 执行**三层，加上贯穿全程的**控制**层，构成 **3+1 职责分层**：前三层是时序的，控制层是正交的。
 
 ```
 时间轴 ────────────────────────────────►
@@ -102,9 +104,9 @@
 └─────────────────────────────────────────────┘
 ```
 
-#### 2.1.1 四层职责 × SDD 阶段映射
+#### 2.1.1 四层职责 × IDC 阶段映射
 
-| 职责层 | 回答的问题 | 对应 SDD 阶段 | 代码落地 |
+| 职责层 | 回答的问题 | 对应 IDC 阶段 | 代码落地 |
 |----|----------|----------|--------|
 | **意图层**（Intent）| 用户想做什么？审美目标是什么？参考素材是什么？ | Draft | `creation-persona` + `.neko/drafts/draft-<runId>.md`（Markdown 叙事）+ `referenceChain[]` |
 | **编排层**（Orchestration）| 用什么顺序的工具调用达成意图？用户面看到的清单是什么？ | Plan | `ExecutionPlan.steps[]` + `Task.items[]` + `.neko/plans/plan-<runId>.md` + `.neko/tasks/task-<runId>.md` |
@@ -134,16 +136,16 @@
 │ L3 模式层（Mode）— 两档切换                                  │
 │                                                             │
 │       AutoMode（默认）    │    PlanMode（显式切换）         │
-│       按任务特征自动判定  │    强制走完整 SDD 3 阶段        │
+│       按任务特征自动判定  │    强制走完整 IDC 3 阶段        │
 │                          │    (Draft → Plan → Apply)       │
 └─────────────┬───────────────────────────────────────────────┘
               │ 模式选择决定启用哪些流程
               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ L2 流程层（Flow）— 对齐 Speckit SDD                          │
+│ L2 流程层（Flow）— IDC 三阶段（意图驱动创作）                │
 │                                                             │
 │   AutoMode 简单任务:  直接 Step 循环（Apply）               │
-│   AutoMode 复杂任务:  按入口判定规则进入 SDD 对应阶段       │
+│   AutoMode 复杂任务:  按入口判定规则进入 IDC 对应阶段       │
 │   PlanMode:           Draft → Plan → Apply                  │
 └─────────────┬───────────────────────────────────────────────┘
               │ 流程由能力编排
@@ -170,7 +172,7 @@
 
 **四层职责正交**：
 - **L3** 是**用户选择**（两档模式：AutoMode / PlanMode）
-- **L2** 是**流程骨架**（条件激活 SDD 3 阶段：Draft / Plan / Apply）
+- **L2** 是**流程骨架**（条件激活 IDC 3 阶段：Draft / Plan / Apply）
 - **L1** 是**能力原子**（扁平注册 + 自由组合）
 - **L0** 是**基础设施**（默认全局透明）
 
@@ -223,7 +225,7 @@
 | 模式 | 默认性 | 触发方式 | 特征 |
 |-----|-------|---------|-----|
 | **AutoMode** | ✅ **默认** | 自动 | Agent 按任务特征自动选入口阶段 + 路径 |
-| **PlanMode** | 显式覆盖 | `/plan` 命令 | 强制走完整 SDD 3 阶段（Draft → Plan → Apply），深度参与 |
+| **PlanMode** | 显式覆盖 | `/plan` 命令 | 强制走完整 IDC 3 阶段（Draft → Plan → Apply），深度参与 |
 
 **两档足够**：AutoMode 已覆盖简单任务的快路径（无需单独的 DirectMode），PlanMode 承载需要深度参与的场景。早期设计的 DirectMode 与 AutoMode 功能重叠（AutoMode 已能自动判定简单任务走快路径）且"强制跳过审批"承诺无法完全兑现（critical 级 L0 强制拦截），已删除。
 
@@ -231,7 +233,7 @@
 
 ### 3.2 入口阶段判定（AutoMode 核心）
 
-AutoMode 下 Agent 按下列规则**判定从哪个 SDD 阶段开始**：
+AutoMode 下 Agent 按下列规则**判定从哪个 IDC 阶段开始**：
 
 | 优先级 | 规则 | 入口阶段 | 可被覆盖 |
 |------|-----|--------|--------|
@@ -262,7 +264,7 @@ AutoMode 下 Agent 按下列规则**判定从哪个 SDD 阶段开始**：
 
 ---
 
-## 4. L2 流程层（SDD 三阶段）
+## 4. L2 流程层（IDC 三阶段）
 
 ### 4.1 PlanMode 激活时的 3 阶段
 
@@ -985,7 +987,7 @@ L0（guardian）    ──► 巡检 + 注入 + 强制审批
 
 #### AI 产出 → Markdown
 
-SDD 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 扩展名迁移；收益：ls 输出按 kind 分组、普通 MD 编辑器零配置打开、Git diff 原生识别 YAML frontmatter）。其余非 SDD 核心产物保留原扩展名直至独立迁移。
+IDC 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 扩展名迁移；收益：ls 输出按 kind 分组、普通 MD 编辑器零配置打开、Git diff 原生识别 YAML frontmatter）。其余非 IDC 核心产物保留原扩展名直至独立迁移。
 
 | 产物 | 文件模式 |
 |-----|--------|
@@ -1228,7 +1230,7 @@ ${MEDIA_LIBRARY}/                    ← 用户配置的媒体库根
 
 ### 8.4 asset:// URI 引用机制
 
-SDD 产物通过 **asset:// URI** 引用资产，不内嵌素材：
+IDC 产物通过 **asset:// URI** 引用资产，不内嵌素材：
 
 ```markdown
 <!-- drafts/draft-001.md -->
@@ -1325,7 +1327,7 @@ AI 更新角色:
 
 ```
 neko-assets:         创作资产生命周期管理（存储/版本/索引/UI）
-neko-agent:          Agent 能力注册 + SDD 产物（Proposal/Plan/Todo）
+neko-agent:          Agent 能力注册 + IDC 产物（Proposal/Plan/Todo）
 neko-market:         资产分发（安装到媒体库由 neko-assets 接管）
 @neko/shared:        PathResolver 路径解析，AssetManifest 类型定义
 ```
@@ -1641,16 +1643,16 @@ slash（`/specify` 与 `/构思` 并存）。**经实施评审，双轨方案被
 
 ### 10.2 权威命令表
 
-SDD stage slash 命令在 AutoMode 下**由 §3.2 入口判定规则自动选择**，
+IDC stage slash 命令在 AutoMode 下**由 §3.2 入口判定规则自动选择**，
 用户通常不需要显式命令；仅 PlanMode 显式切换命令公开：
 
 | 功能 | 命令 | 说明 |
 |-----|-----|-----|
-| 切换到 PlanMode | `/plan` | 强制走完整 SDD 3 阶段（§3.1）|
+| 切换到 PlanMode | `/plan` | 强制走完整 IDC 3 阶段（§3.1）|
 | 展开 Skill | `/<skill-name>` | 通过 `Skill.command` 字段注册 |
 | 引用已有产物 | `@draft-<id>` / `@plan-<id>` / `@task-<id>` | §3.2 规则 2，在 AutoMode 下触发对应阶段继续 |
 
-**无单独的 `/draft` `/apply` slash**——这些是 SDD**阶段**（stage），
+**无单独的 `/draft` `/apply` slash**——这些是 IDC**阶段**（stage），
 不是命令。它们由 StagePlanner 根据用户输入自动判定（§3.2 六条规则），
 从而保持"一个意图，一个 slash"的心智简单。
 PlanMode 下也由 §4.1 强制从 Draft 起步，不需要用户手动命令。
@@ -1661,7 +1663,7 @@ PlanMode 下也由 §4.1 强制从 Draft 起步，不需要用户手动命令。
 
 | 概念 | 术语 | 用途 |
 |-----|-----|-----|
-| SDD 阶段 | `Draft` / `Plan` / `Apply` | 阶段名（2026-04-22 从四阶段简化）|
+| IDC 阶段 | `Draft` / `Plan` / `Apply` | 阶段名（2026-04-22 从四阶段简化）|
 | 产物（声明式）| `Draft` | Draft 阶段产出，业务目标 |
 | 产物（命令式）| `ExecutionPlan` | Plan 阶段产出，tool call 列表；类型字段 `draftId` 指向源 Draft |
 | 产物（清单）| `Task` | Plan 阶段派生，进度投影（原 `TodoList`） |
@@ -1681,7 +1683,7 @@ PlanMode 下也由 §4.1 强制从 Draft 起步，不需要用户手动命令。
 
 ### 10.4 文件命名约定
 
-SDD 三件套采用 `<kind>-<runId>.md` 前缀方案（`draft-`、`plan-`、`task-`），
+IDC 三件套采用 `<kind>-<runId>.md` 前缀方案（`draft-`、`plan-`、`task-`），
 `.md` 是唯一扩展名。原 `.nkproposal.md` / `.nkplan.md` / `.nktodo.md`
 扩展名方案已于 2026-04-22 废止。命名不本地化，跨系统兼容性优先。
 
@@ -1836,7 +1838,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 > **Memory 决定"记得什么"**
 > **Evaluator 决定"做得好不好"**
 
-六层控制平面并行运转，每层有独立消费者、独立实现、独立更新频率。设计新组件时先用口诀对号入座，再查详表。**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错层是 SDD 最常见的反模式。
+六层控制平面并行运转，每层有独立消费者、独立实现、独立更新频率。设计新组件时先用口诀对号入座，再查详表。**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错层是 IDC 最常见的反模式。
 
 #### 11.6.1 六层控制平面全景
 
@@ -1887,7 +1889,7 @@ exportMp4({
 - 不稳定（含创作语义 / 审美判断 / 情绪表达）→ 推向 Tool 的内容字段（提示词层）
 - 稳定（数值 / 枚举 / ID）→ 可以进 Operation schema（参数层）
 
-#### 11.6.3 SDD 阶段与约束层的天然对齐
+#### 11.6.3 IDC 阶段与约束层的天然对齐
 
 ```
 阶段          主约束层                 allowedTools 子类
@@ -2061,7 +2063,7 @@ evaluator.check(artifact, preferences);
 
 #### 11.6.6 现系统合规度
 
-SDD 3-stage 在设计上已符合约束分级原则：
+IDC 3-stage 在设计上已符合约束分级原则：
 
 | 产物 / 组件 | 主控制层 | 合规 |
 |---------|------|----|
@@ -2366,14 +2368,14 @@ neko-agent/packages/agent/tools/core/
 | **P0（现在）** | 本 ADR 评审；早期两份 ADR 标注为"设计探索" | 文档体系清晰 |
 | **P1（3 周）** | L0 基础设施重构（PermissionManager → ApprovalEngine 等）| 四大基础设施单测通过 |
 | **P1（并行）** | 格式层：`.nk*.md` 编解码 + frontmatter schema linter | Proposal/Plan/TodoList MD 化 |
-| **P2（4 周）** | L3 模式切换 + L2 SDD 4 阶段 | 端到端 PlanMode 走通 |
+| **P2（4 周）** | L3 模式切换 + L2 IDC 3 阶段 | 端到端 PlanMode 走通 |
 | **P3（4 周）** | L1 扁平能力池 + neko-cut 示范迁移 | neko-cut 按新协议贡献 |
 | **P4（按需）** | 其他子包迁移（neko-story 优先）| 5 创作域覆盖 ≥ 80% |
 | **P5（视情况）** | neko-market 扩展（Skill/Shader/Model）| market 分发就绪 |
 
 **工程复用度**：
 - PermissionManager / Pipeline 事件 / TodoList / 自愈策略：**已有代码保留 70%**
-- 主要新增：模式切换、SDD 流程编排、MD 格式层
+- 主要新增：模式切换、IDC 流程编排、MD 格式层
 - 主要修改：能力注册协议统一、产物格式二分
 
 ---
@@ -2425,7 +2427,7 @@ neko-agent/packages/agent/tools/core/
 
 ### 架构反模式
 - ❌ 推翻 L3/L2/L1/L0 四层分工，让业务层处理基础设施
-- ❌ 让 AutoMode 简单任务也跑完整 SDD 3 阶段（违背"默认最短"）
+- ❌ 让 AutoMode 简单任务也跑完整 IDC 3 阶段（违背"默认最短"）
 - ❌ 能力注册按 kind 分多个 contributes 片段（应合并为扁平数组）
 - ❌ 让基础设施对业务层可见（L0 应透明）
 
@@ -2496,7 +2498,8 @@ neko-agent/packages/agent/tools/core/
 | 2026-04-22 | **Phase B — 专用 WriteTool 下线 + ArtifactWatcher 接管**：删除 `DraftWriteTool` / `PlanWriteTool` / `TaskWriteTool` 三件套。AI 改用通用 `Write` 工具对 `.neko/drafts\|plans\|tasks/*.md` 直写；路径与 frontmatter 合同由 `creation-persona` 提示词约束（§5 新版正文列出完整 schema）。新增 `artifact/artifact-validator.ts`（纯函数，无 I/O，检测必填字段 / kind 匹配 / 时间戳格式 / status 枚举）与 `artifact/artifact-watcher.ts`（复用 HookLoader 的 `fs.watch` + 300ms debounce 模式，按子目录映射 `draft\|plan\|task` kind，读文件后调 validator，结果 emit 到 EventBus）。新增事件 `execution.artifact.written` / `execution.artifact.invalid`（在 agent-types `EXECUTION_CHANNELS` 注册），后者 payload 含结构化 `issues[]`（`missing-frontmatter` / `malformed-frontmatter` / `missing-field` / `wrong-kind` / `invalid-status` / `invalid-timestamp`）供下游 narrator / Agent 下一轮修复使用。集成点：`AgentSession` 构造时随 NekoPaths 一起实例化 watcher，dispose 时一并关闭 fs.watch handle 并清理 pending debounces。设计原则：watcher 是**非阻塞守卫**——文件已经在磁盘上，校验失败只发事件不回滚（对齐 §6.5 StageGuardian 的巡检-而非-拦截定位）。净代码减少：删除 3 工具 + 对应 6 个测试文件，新增 validator/watcher 共 2 个源文件 + 2 个测试文件（22 个新 case 覆盖 happy path / 结构失败 / schema 失败 / debounce / dispose / 真实 fs 冒烟）。工具移除后 `serializeDraft` / `serializeTask` / `serializeExecutionPlan` 成为独立可复用库（保留供未来 UI 渲染 / 回环测试用）。 | Architecture Team |
 | 2026-04-22 | **Phase B 闭环（Observation loop + 运行时 runId 注入）**：Phase B 初版的 `artifact.invalid` 事件只有 watcher emit 端，没有消费端——承诺的"AI 自修复"只存在于 persona 提示词里。新增三件修补。 **(1)** `narrator/milestone-tracker.ts` 的 `defaultClassify` 补齐 `ARTIFACT_WRITTEN` / `ARTIFACT_INVALID` 两个 case；`progress-narrator.ts` 的图标表同步（✎ / ⚠）。 **(2)** 新增 `artifact/artifact-observation-hooks.ts`（ExecutorHooks），订阅 `execution.artifact.invalid`，在下一次 `beforeThink` 把 buffered issues 渲染成 system 消息追加到 `context.messages`，让 AI 真正看到 watcher 诊断并自修复。`AgentSession` 把它链到 `runnerHooks` 后面（与 `stageGuardian.tick` 组合），并在 dispose 时解订阅。 **(3)** `StagePersonaBinding` 新增 `getRunId` 可选 deps——激活 persona 时把 prompt 里的 `{runId}` / `{stage}` 字面量替换为活 SddRun 的 id / 当前 stage；`creation-persona.ts` 正文的 artifact-file 合同从 `<runId>` 改为 `{runId}`，让 AI 读到的永远是已解析好的具体路径（`.neko/drafts/draft-tiktok-001.md`），不再依赖 LLM 去会话上下文里二次检索。新增 `artifact-observation-hooks.test.ts`（8 个 case：no-op / 单事件注入 / 多事件排序 / 多 issue 展开 / 溢出截断 / 二次 drain / dispose 断链 / null bus 容错）。Phase B 闭环完成后端到端流程：AI 写 draft → watcher 300ms 后校验 → invalid 事件注入下一 beforeThink → AI 看到 issues → 重写。 | Architecture Team |
 | 2026-04-22 | **§11.6 约束分级原则（Constraint Layering by Consumer）**：把 SDD 背后隐含的分层原则形式化为四级谱系——**Schema 约束**（程序消费，承载工具使用）、**提示词约束**（AI/人消费，承载语义/灵感/风格）、**Runtime 约束**（运行时消费，承载处理过程）、**Evaluator 约束**（打分器消费，承载质量评估）。Schema 约束内部再二分为 **Tool**（提示词型工具，轻 schema 入口 + 自由文本内容，如 Write/Read/Grep）与 **Operation**（操作型工具，全量严格 schema + 副作用元数据，如 cut.trim-clip/image.generate），判定依据是"AI 产出这个字段时稳定吗"。SDD 阶段与约束层天然对齐：Draft/Plan 只用提示词型工具（creation-persona.allowedTools 全是 Read/Write/Grep/ListDirectory/Glob），Apply 阶段才解锁操作型工具。补齐 6 个反模式（语义推到 schema / 工具参数留在提示词 / 过程状态进产物 / 质量硬编码为 field / Operation 留提示词参数 / Tool 加业务 schema）、5 步决策清单、现系统合规度表。此章可作为后续任何扩展的判断标尺——多模态意图、IntentValidator、Intent drift 检测等下一阶段工作都按本原则决定约束层归属（例：用户多模态输入 → 提示词层由 LLM 自然理解；Draft 正文 → 提示词层自由 markdown；referenceChain asset:// URI → schema 层索引；ArtifactWatcher 校验 → Runtime 层；未来 IntentValidator → Evaluator 层 LLM-judge）。 | Architecture Team |
-| 2026-04-23 | **§2 重构为双视角架构（方案 B 彻底倒置）**：原 §2 "四层整合架构" 开篇直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构后 §2 升级为 **"架构总览（双视角）"**，开篇前置**职责视角**（§2.1 意图 / 编排 / 执行 / 控制）作为主入口，原 L3/L2/L1/L0 内容下移为**实现视角**（§2.2）。新增 §2.3 **双视角交叉引用表**（18 个关键组件在实现/职责/约束三视角的并行归位——例：ArtifactWatcher = L0 基础设施 / 控制层 / Runtime 平面；creation-persona = L1 能力 / 意图层 / Prompt 平面；.neko/preferences.md = L0 配置 / 控制层 / Policy 平面），让读者能按任意视角进入并跳转。新增 §2.4 **选视角指南**（按讨论场景判定用哪个视角：讲 Agent 做什么用职责 / 代码导航用实现 / 设计新字段用约束）。同步修订：§3.1 "SDD 3 阶段" 在 §2 实现视角图中从 "SDD 4 阶段" 纠正为 "SDD 3 阶段 (Draft → Plan → Apply)"；§2 L1 能力层图示从历史的 "Tool / Operation / ProposalTemplate / ReviewGate / ViewRecipe / StatusNarrator / Skill / Workflow" 八类收敛为 "Skill / Tool / Operation" 三类（CapabilityKind 联合，与 §5.1 一致）；§2 L0 层图示补齐 StageTracker / StageGuardian / ArtifactWatcher / ArtifactObservationHooks / PreferencesStrategyPack 等现代化组件。这让读者从 ADR 第一眼看到的就是"**Agent 做什么事**"而非"**代码如何分层**"，降低入门摩擦；同时保留实现视角供调试 / 代码导航使用。与 §11.6 六层约束视角形成**三视角互补体系**（实现 / 职责 / 约束），任意视角都能进入并跳转。 | Architecture Team |
+| 2026-04-23 | **SDD → IDC 正式重命名（Intent-Driven Creation / 意图驱动创作）**：ADR 命名空间从 **Speckit 的 SDD（Spec-Driven Development）**迁移到 **IDC（Intent-Driven Creation）**。动机：原 Speckit SDD 是**代码开发场景**的规范驱动流程（Specify → Plan → Tasks → Implement，产物是代码 / spec），neko-agent 的业务是**创作场景**（视频 / 角色 / 分镜 / 海报），用户输入是**意图**（多模态：文本+图+视频+音频+3D），AI 输出是**创作产物**（非代码）；SDD 的"规范驱动"词汇不贴合创作工作流，**IDC 的"意图驱动"更精准**——在近期多次架构讨论中已反复被这一语义鸿沟验证。阶段名 `Draft / Plan / Apply` 保持不变（早已符合 IDC 语义）。代码层面：TypeScript 符号 `SddStage` → `IdcStage`、`SddRun` → `IdcRun`、`SddRunStatus` → `IdcRunStatus`、`SddRunRoundSummary` → `IdcRunRoundSummary`、`ISddRunStore` → `IIdcRunStore`、`createSddRunStore` → `createIdcRunStore`、变量 `sddRun*` → `idcRun*`；文件 `agent-types/src/sdd-run.ts` → `idc-run.ts`、`agent/src/executor/sdd-run-store.ts` → `idc-run-store.ts` + 对应测试；24 个 TS 文件共 143 处符号引用批量替换 + 66 处代码注释文本。文档层面：ADR 章节内 "SDD 阶段 / SDD 三件套 / SDD 产物" 全部更新为 "IDC 阶段 / IDC 三件套 / IDC 产物"；§22 早期 Phase A 历史 changelog 条目保留 SDD 原文以反映当时术语。测试套件 1969/1974 通过（与重命名前相同的 5 个 pre-existing 失败）。 | Architecture Team |
+| 2026-04-23 | **§2 重构为双视角架构（方案 B 彻底倒置）**：原 §2 "四层整合架构" 开篇直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构后 §2 升级为 **"架构总览（双视角）"**，开篇前置**职责视角**（§2.1 意图 / 编排 / 执行 / 控制）作为主入口，原 L3/L2/L1/L0 内容下移为**实现视角**（§2.2）。新增 §2.3 **双视角交叉引用表**（18 个关键组件在实现/职责/约束三视角的并行归位——例：ArtifactWatcher = L0 基础设施 / 控制层 / Runtime 平面；creation-persona = L1 能力 / 意图层 / Prompt 平面；.neko/preferences.md = L0 配置 / 控制层 / Policy 平面），让读者能按任意视角进入并跳转。新增 §2.4 **选视角指南**（按讨论场景判定用哪个视角：讲 Agent 做什么用职责 / 代码导航用实现 / 设计新字段用约束）。同步修订：§3.1 "IDC 3 阶段" 在 §2 实现视角图中从 "IDC 3 阶段" 纠正为 "IDC 3 阶段 (Draft → Plan → Apply)"；§2 L1 能力层图示从历史的 "Tool / Operation / ProposalTemplate / ReviewGate / ViewRecipe / StatusNarrator / Skill / Workflow" 八类收敛为 "Skill / Tool / Operation" 三类（CapabilityKind 联合，与 §5.1 一致）；§2 L0 层图示补齐 StageTracker / StageGuardian / ArtifactWatcher / ArtifactObservationHooks / PreferencesStrategyPack 等现代化组件。这让读者从 ADR 第一眼看到的就是"**Agent 做什么事**"而非"**代码如何分层**"，降低入门摩擦；同时保留实现视角供调试 / 代码导航使用。与 §11.6 六层约束视角形成**三视角互补体系**（实现 / 职责 / 约束），任意视角都能进入并跳转。 | Architecture Team |
 | 2026-04-23 | **§11.6 扩展到六层控制平面**：把四级谱系扩展为**六层**，补齐长期存在于代码但未被正式命名的两层——**Memory**（决定"记得什么"，消费者是 AI 读 + 人审计/编辑，跨会话累积，实现有 `~/.claude/.../memory/MEMORY.md` + `.neko/memory.md` + CreativeMemoryHooks + 7 级创意压缩 + SharedMemoryStore）、**Policy**（决定"能不能做"，消费者是 Runtime + Evaluator 读取规则，声明式配置，实现有 `preferences.md` + preferencesStrategyPack + Skill.compliance + allowedTools + requiredSubpackages + Operation.costProfile）。用四字口诀作为章节开篇：**Prompt 决定"说什么" / Schema 决定"长什么样" / Runtime 决定"什么时候做" / Policy 决定"能不能做" / Memory 决定"记得什么" / Evaluator 决定"做得好不好"**。新增六层触发时序图（Policy 前置门 → Memory 双端读写 → Prompt·Schema·Runtime 中段流水 → Evaluator 出口闸）。补 5 条反模式（Policy 硬编码进 Runtime / Memory 写进产物 frontmatter / Policy 嵌入 Prompt persona / Evaluator 读 Policy 判合规 + 原有 6 条合计 11 条）、决策清单从 5 问扩到 7 问（新增"信息要跨会话存活吗"、"谁有权改这条约束"）、合规度审计表补齐 Memory/Policy 两块（preferences / Skill.compliance / costProfile / `.neko/memory.md` / CreativeMemoryHooks / SharedMemoryStore / 7 级创意压缩）。新增 §11.6.7 Memory 层详解（Memory vs Prompt 辨析表）、§11.6.8 Policy 层详解（Policy vs Runtime 辨析表："Runtime 是机制，Policy 是规则；Runtime 消费 Policy 而非拥有 Policy"）。此次扩展让"约束分级"不再是单纯"约束"概念，而是**六个并行控制平面**，所有现有组件都能清晰归类。 | Architecture Team |
 
 ---
@@ -2524,7 +2527,7 @@ neko-agent/packages/agent/tools/core/
   │
   ├─ AI 产出（或人产出）
   │   → Markdown（`<kind>-<runId>.md` / `.skill.md` / `.md`）
-  │   - SDD 三件套（Draft / Plan / Task，前缀命名）
+  │   - IDC 三件套（Draft / Plan / Task，前缀命名）
   │   - Task（AI 调 TaskWrite 工具）
   │   - Session/Skill/Workflow/Spec/Capability 声明
   │

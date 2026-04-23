@@ -4,7 +4,7 @@
  * See: docs/architecture/agent-unified-workflow.md §4, §6.2
  *
  * Channels follow `creation.<stage>.<verb>` and are **business-semantic**
- * (user-facing), not technical-semantic. Emitted during the SDD Draft /
+ * (user-facing), not technical-semantic. Emitted during the IDC Draft /
  * Plan stages while creation-persona is active. Technical, Apply-stage
  * events belong on the execution-events namespace.
  *
@@ -14,7 +14,7 @@
  */
 
 import type { StageSkipReason } from './stage';
-import type { SddRunRoundSummary } from './sdd-run';
+import type { IdcRunRoundSummary } from './idc-run';
 
 // =============================================================================
 // Channel names (stable strings — used as bus keys)
@@ -89,7 +89,7 @@ export interface CreationStatusUpdatedEvent {
    * consumers to correlate narrative with the activation decision that
    * produced it without replaying the bus (R9 compaction).
    */
-  lastRound?: SddRunRoundSummary;
+  lastRound?: IdcRunRoundSummary;
   at: number;
 }
 

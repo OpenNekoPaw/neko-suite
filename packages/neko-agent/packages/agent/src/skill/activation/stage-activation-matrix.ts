@@ -1,5 +1,5 @@
 /**
- * Mode × SDD Stage Activation Matrix
+ * Mode × IDC Stage Activation Matrix
  *
  * See: docs/architecture/agent-unified-workflow.md §3 (L3 Mode Layer), §4 (L2 Flow)
  *
@@ -24,7 +24,7 @@
  * Pure data. No runtime deps beyond @neko-agent/types.
  */
 
-import type { SddStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 
 // =============================================================================
 // L2 modes — reused from mode-activation-matrix.ts
@@ -43,7 +43,7 @@ export type StageMode = 'plan' | 'ask' | 'auto';
 
 export interface StageModeActivation {
   /** Stages the mode allows by default. */
-  allowed: readonly SddStage[];
+  allowed: readonly IdcStage[];
   /** Whether Apply (and its tool calls) is permitted. */
   allowsApply: boolean;
   /**
@@ -84,6 +84,6 @@ export function getStageModeActivation(mode: StageMode): StageModeActivation {
   return STAGE_MODE_MATRIX[mode];
 }
 
-export function isStageModeAllowed(mode: StageMode, stage: SddStage): boolean {
+export function isStageModeAllowed(mode: StageMode, stage: IdcStage): boolean {
   return STAGE_MODE_MATRIX[mode].allowed.includes(stage);
 }

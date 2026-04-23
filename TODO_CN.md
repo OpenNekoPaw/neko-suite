@@ -50,21 +50,21 @@
 - [x] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
 - [x] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
 
-### neko-agent — SDD 统一工作流（Phase A + B + B 闭环完成 ✅，2026-04-22）
+### neko-agent — IDC 统一工作流（Phase A + B + B 闭环完成 ✅，2026-04-22）
 > [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 四阶段（specify/plan/tasks/implement）精简为三阶段（draft/plan/apply）；专用 DraftWrite/PlanWrite/TaskWrite 下线，由通用 Write + ArtifactValidator + ArtifactWatcher 取代。
 - [x] **Phase A** — 阶段重命名（specify/implement→draft/apply；tasks 并入 plan）；产物重命名（Proposal→Draft、TodoList→Task）；文件约定（`.nkproposal.md`/`.nktodo.md` 扩展名 → `.neko/drafts|plans|tasks/` 下的 `<kind>-<runId>.md` 前缀）；ExecutionPlan.proposalId→draftId；EventBus 频道 proposal-review→draft-review、creation.proposal.presented→creation.draft.presented、execution.todo.updated→execution.task.updated（commit c5d6f993）
 - [x] **Phase B** — 删除 DraftWriteTool/PlanWriteTool/TaskWriteTool；AI 改用通用 Write 对 `.neko/drafts|plans|tasks/*.md` 直写；新增 `artifact/artifact-validator.ts`（纯 frontmatter schema 校验）+ `artifact-watcher.ts`（fs.watch + 300ms 防抖 + EventBus emit）；新增事件 `execution.artifact.written` / `execution.artifact.invalid`；AgentSession 构造 + dispose 接线（commit c5d6f993）
 - [x] **Phase B 闭环** — `artifact-observation-hooks.ts`（ExecutorHooks 订阅 `artifact.invalid`，缓冲 issues，在 `beforeThink` 时注入 system message——闭合 AI 自修复循环）；narrator `milestone-tracker.defaultClassify` + progress-narrator 图标覆盖 artifact.*；`StagePersonaBinding.getRunId` 激活 persona 时把 systemPrompt 里的 `{runId}`/`{stage}` 替换为真实值（commit b1cc3f71）
 - [x] **端到端集成测试** — `artifact-loop.integration.test.ts`（4 case：bad→注入 / good→静默 / kind-mismatch / 重写循环）在真实 fs 上验证 Write→Watcher→Validator→Bus→ObservationHooks→beforeThink，含跨平台降级（commit af66f456）
 - [x] **§11.6 约束分级原则** — ADR 形式化四级约束谱系（Schema / 提示词 / Runtime / Evaluator）+ Schema 内部 Tool/Operation 二分 + 6 条反模式 + 5 步决策清单。后续意图 / validator / drift 检测等工作按本 taxonomy 分类
-- [x] **§2 双视角重构（2026-04-23，方案 B 彻底倒置）** — 原 §2 "四层整合架构" 直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构为 **"架构总览（双视角）"**：§2.1 **职责视角**（意图/编排/执行/控制）前置为主入口，§2.2 **实现视角**（L3/L2/L1/L0）下移，§2.3 新增 **18 个关键组件的三视角交叉引用表**（实现 / 职责 / 约束 §11.6 并排），§2.4 **选视角指南**（按讨论场景判定）。同步修订 §2 实现视角图中的 "SDD 4 阶段" 纠正为 "SDD 3 阶段"，L1 能力层从历史 8 类收敛为 `Skill / Tool / Operation` 三类（与 §5.1 CapabilityKind 一致）。读者第一眼看到的是"Agent 做什么事"而非"代码如何分层"
+- [x] **§2 双视角重构（2026-04-23，方案 B 彻底倒置）** — 原 §2 "四层整合架构" 直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构为 **"架构总览（双视角）"**：§2.1 **职责视角**（意图/编排/执行/控制）前置为主入口，§2.2 **实现视角**（L3/L2/L1/L0）下移，§2.3 新增 **18 个关键组件的三视角交叉引用表**（实现 / 职责 / 约束 §11.6 并排），§2.4 **选视角指南**（按讨论场景判定）。同步修订 §2 实现视角图中的 "SDD 4 阶段" 纠正为 "IDC 3 阶段"，L1 能力层从历史 8 类收敛为 `Skill / Tool / Operation` 三类（与 §5.1 CapabilityKind 一致）。读者第一眼看到的是"Agent 做什么事"而非"代码如何分层"
 - [x] **§11.6 六层扩展（2026-04-23）** — 从四级扩展为六层，补齐代码里长期存在但未正式命名的 **Memory**（`~/.claude/.../memory/`、`.neko/memory.md`、CreativeMemoryHooks、7 级压缩、SharedMemoryStore）和 **Policy**（preferences.md、preferencesStrategyPack、Skill.compliance、allowedTools、requiredSubpackages、Operation.costProfile）两层。四字口诀：Prompt 说什么 / Schema 长什么样 / Runtime 什么时候做 / Policy 能不能做 / Memory 记得什么 / Evaluator 做得好不好。新增六层触发时序图（Policy 前置门 → Memory 双端 → Prompt·Schema·Runtime 流水 → Evaluator 出口）、反模式补 5 条（合计 11 条）、决策清单扩到 7 问、合规度审计表补 Memory/Policy 两块、新增 §11.6.7 Memory vs Prompt 辨析表 + §11.6.8 Policy vs Runtime 辨析表
-- [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（当前 StageMode 映射自 ExecutionMode，后者有 per-tool-confirm UX 语义；需要 permission/SDD 边界重设计）
+- [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（当前 StageMode 映射自 ExecutionMode，后者有 per-tool-confirm UX 语义；需要 permission/IDC 边界重设计）
 - [ ] **P1** — `git rm --cached packages/neko-agent/neko`（65MB arm64 二进制历史误提交；.gitignore 规则已添加）
 - [ ] **P2** — `.nksession.md` 会话摘要（§7.4 ⏳）— 依赖 E 波：Journal/ConversationRecord/compact/memory 四合一
 - [ ] **P2** — `.neko/cache/*.json` 派生索引（draft-index.json 消费 `artifact.written` 事件重建）— UI 侧有查询需求时再做
-- [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配、ToolParameters 形状漂移；先于 SDD 重构存在，独立清理）
-- [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致；与 SDD 重构无关）
+- [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配、ToolParameters 形状漂移；先于 IDC 重构存在，独立清理）
+- [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致；与 IDC 重构无关）
 
 ### neko-agent — 工作流编排（Phase 1-6 完成 ✅；六轮解耦评审 ✅）
 > [Umbrella](./docs/architecture/workflow-orchestration.md)

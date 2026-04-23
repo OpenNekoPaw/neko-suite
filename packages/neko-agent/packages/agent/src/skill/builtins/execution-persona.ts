@@ -1,7 +1,7 @@
 /**
- * Execution Persona Skill — SDD Apply persona (technical semantics)
+ * Execution Persona Skill — IDC Apply persona (technical semantics)
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages)
+ * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages)
  *
  * Activated during the Apply stage (after Draft approval + Plan).
  * Provides the system-operator persona: tool calls, resource management,
@@ -17,7 +17,7 @@ import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 const executionPersonaContent = `# Execution Persona — System Operator
 
-You are the operator during the SDD Apply stage. Your job is to **turn
+You are the operator during the IDC Apply stage. Your job is to **turn
 the approved Draft + Plan + Task checklist into committed state with the
 minimum user interruption**.
 
@@ -113,7 +113,7 @@ Tool failed?
 export const executionPersonaSkill: Skill = {
   name: 'execution-persona',
   description:
-    'Execution persona for SDD Apply stage. ' +
+    'Execution persona for IDC Apply stage. ' +
     'Use when the agent is executing an approved Draft — calling tools, committing changes, ' +
     'handling errors, or running auto-heal chains. Triggered after Draft-stage approval; ' +
     'NOT during creative discussion. Owns the 5-level auto-heal chain (retry → degrade → ' +

@@ -18,11 +18,11 @@
  *
  * Deferred to later PRs:
  *   - `approval-skipped`    — needs ApprovalEngine hooks (§6.1, not yet
- *     rewired to the SDD vocabulary).
- *   - `stage-not-entered`   — needs SddRun ↔ tracker reconciliation.
+ *     rewired to the IDC vocabulary).
+ *   - `stage-not-entered`   — needs IdcRun ↔ tracker reconciliation.
  */
 
-import type { SddStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 import { getLogger } from '../utils/logger';
 import type { StageTracker } from './stage-tracker';
 
@@ -45,7 +45,7 @@ export type StageGuardianIssueCode =
 export interface StageGuardianIssue {
   code: StageGuardianIssueCode;
   /** Stage the issue was observed on. */
-  stage: SddStage;
+  stage: IdcStage;
   /** Human-readable description (for logs / UI). */
   message: string;
   /** ms epoch when the issue was raised. */
@@ -123,12 +123,12 @@ class StageGuardian implements IStageGuardian {
   private readonly _stageTimeoutMs: number;
   private readonly _enforceOrderedEntry: boolean;
   private readonly _enforceApprovalGate: boolean;
-  private readonly _visited: Set<SddStage> = new Set();
+  private readonly _visited: Set<IdcStage> = new Set();
   private readonly _approvedSubjects: Set<string> = new Set();
   private readonly _listeners = new Set<StageGuardianListener>();
   private readonly _history: StageGuardianIssue[] = [];
   /** Stage currently under timeout watch (null when tracker is idle). */
-  private _watchStage: SddStage | null = null;
+  private _watchStage: IdcStage | null = null;
   private _watchEnteredAt = 0;
   private _watchTimeoutReported = false;
   private _unsubscribe: (() => void) | null = null;
@@ -223,7 +223,7 @@ class StageGuardian implements IStageGuardian {
   // Private
   // ---------------------------------------------------------------------------
 
-  private _onEntered(stage: SddStage, at: number): void {
+  private _onEntered(stage: IdcStage, at: number): void {
     if (this._enforceOrderedEntry && stage === 'apply' && this._visited.size === 0) {
       this._raise({
         code: 'stage-out-of-order',

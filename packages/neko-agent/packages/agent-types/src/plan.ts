@@ -4,7 +4,7 @@
  * Plan is the parsed output of the agent's `parsePlanMarkdown` function:
  * a structured view of a plan-mode markdown message with numbered steps.
  * It has no relationship to:
- *   - SDD stages (see `./stage` — Specify/Plan/Tasks/Implement are process
+ *   - IDC stages (see `./stage` — Specify/Plan/Tasks/Implement are process
  *     stages, not document structures)
  *   - The deleted `WorkflowLitePlan` (a router/pipeline artifact)
  *

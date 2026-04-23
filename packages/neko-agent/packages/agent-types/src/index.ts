@@ -20,10 +20,10 @@ export { DEFAULT_SETTINGS } from './settings';
 // Agent phase
 export type { AgentPhase, AgentState } from './phase';
 
-// SDD three-stage model (agent-unified-workflow.md §4)
+// IDC three-stage model (agent-unified-workflow.md §4)
 // Renamed 2026-04-22: specify/plan/tasks/implement → draft/plan/apply
 export type {
-  SddStage,
+  IdcStage,
   StageSet,
   StageActivationDecision,
   StageSkipReason,
@@ -35,9 +35,9 @@ export type {
 export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
 export { toTaskStatusCamel, toTaskStatusSnake } from './task';
 
-// SddRun — run record carrying SDD stage-activation summaries
-export type { SddRunStatus, SddRunRoundSummary, SddRun } from './sdd-run';
-export { roundSummaryFromDecision } from './sdd-run';
+// IdcRun — run record carrying IDC stage-activation summaries
+export type { IdcRunStatus, IdcRunRoundSummary, IdcRun } from './idc-run';
+export { roundSummaryFromDecision } from './idc-run';
 
 // Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)
 export type { Draft, DraftStatus } from './draft';

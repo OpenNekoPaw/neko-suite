@@ -1,5 +1,5 @@
 /**
- * Stage Persona Binding — swaps the persona Skill when the active SDD stage
+ * Stage Persona Binding — swaps the persona Skill when the active IDC stage
  * changes.
  *
  * See: docs/architecture/agent-unified-workflow.md §4, §6.5
@@ -24,7 +24,7 @@
  */
 
 import type { Skill, SkillInjection, ISkillRegistry } from '@neko/shared';
-import type { SddStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 import type { SkillInjectionCoordinator } from './skill-injection-coordinator';
 import type { SkillService } from './skill-service';
 import type { StageTracker } from './stage-tracker';
@@ -46,7 +46,7 @@ export const EXECUTION_PERSONA_SKILL_NAME = 'execution-persona';
  * creative persona because they are both pre-Apply discussion / planning;
  * only Apply flips to the operator persona.
  */
-export function defaultSkillNameForStage(stage: SddStage): string {
+export function defaultSkillNameForStage(stage: IdcStage): string {
   return stage === 'apply' ? EXECUTION_PERSONA_SKILL_NAME : CREATION_PERSONA_SKILL_NAME;
 }
 
@@ -55,7 +55,7 @@ export function defaultSkillNameForStage(stage: SddStage): string {
 // =============================================================================
 
 export interface StagePersonaBindingDeps {
-  /** Source of truth for the current SDD stage. */
+  /** Source of truth for the current IDC stage. */
   stageTracker: StageTracker;
   /** Source for the persona Skills. */
   skillRegistry: ISkillRegistry;
@@ -68,9 +68,9 @@ export interface StagePersonaBindingDeps {
    * `defaultSkillNameForStage` (draft/plan → creation-persona,
    * apply → execution-persona).
    */
-  skillNameForStage?: (stage: SddStage) => string;
+  skillNameForStage?: (stage: IdcStage) => string;
   /**
-   * Optional provider of the active SddRun id. When supplied, the binding
+   * Optional provider of the active IdcRun id. When supplied, the binding
    * substitutes `{runId}` occurrences in the persona prompt at activation
    * time so the creation-persona's artifact-file contract renders with
    * concrete paths (e.g. `.neko/drafts/draft-tiktok-001.md`). Null → the
@@ -86,7 +86,7 @@ export interface IStagePersonaBinding {
   /** Stop listening for stage transitions. Idempotent. */
   dispose(): void;
   /** Which stage's persona is currently applied (null before the first sync). */
-  getActiveStage(): SddStage | null;
+  getActiveStage(): IdcStage | null;
 }
 
 // =============================================================================
@@ -95,8 +95,8 @@ export interface IStagePersonaBinding {
 
 class StagePersonaBinding implements IStagePersonaBinding {
   private _unsubscribe: (() => void) | null = null;
-  private _activeStage: SddStage | null = null;
-  private readonly _skillNameForStage: (stage: SddStage) => string;
+  private _activeStage: IdcStage | null = null;
+  private readonly _skillNameForStage: (stage: IdcStage) => string;
   private readonly _getRunId: (() => string | null) | null;
 
   constructor(private readonly _deps: StagePersonaBindingDeps) {
@@ -112,7 +112,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
     if (stage) await this._applyPersonaFor(stage);
   }
 
-  getActiveStage(): SddStage | null {
+  getActiveStage(): IdcStage | null {
     return this._activeStage;
   }
 
@@ -127,7 +127,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
   // Private
   // ---------------------------------------------------------------------------
 
-  private async _onEntered(stage: SddStage): Promise<void> {
+  private async _onEntered(stage: IdcStage): Promise<void> {
     try {
       await this._applyPersonaFor(stage);
     } catch (err) {
@@ -135,7 +135,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
     }
   }
 
-  private async _applyPersonaFor(stage: SddStage): Promise<void> {
+  private async _applyPersonaFor(stage: IdcStage): Promise<void> {
     const skillName = this._skillNameForStage(stage);
     // If the target skill is the same as the already-active persona, no swap
     // needed — draft→plan both map to creation-persona, so those stage
@@ -166,7 +166,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
    * interpolation convention. Missing context leaves the literal in
    * place so the AI can fall back to session-level hints.
    */
-  private _applyRuntimeContext(injection: SkillInjection, stage: SddStage): SkillInjection {
+  private _applyRuntimeContext(injection: SkillInjection, stage: IdcStage): SkillInjection {
     const runId = this._getRunId?.() ?? null;
     if (!runId && !stage) return injection;
     let prompt = injection.systemPrompt;

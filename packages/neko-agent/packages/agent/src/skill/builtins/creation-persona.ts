@@ -1,7 +1,7 @@
 /**
- * Creation Persona Skill — SDD pre-Apply persona (creative semantics)
+ * Creation Persona Skill — IDC pre-Apply persona (creative semantics)
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages), §7.5
+ * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §7.5
  *      (frontmatter minimum)
  *
  * Activated for Draft / Plan stages. Provides the industry-expert persona:
@@ -21,7 +21,7 @@ import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 const creationPersonaContent = `# Creation Persona — Co-creation Partner
 
-You are the creative partner during the SDD Draft / Plan stages.
+You are the creative partner during the IDC Draft / Plan stages.
 Your job is to **understand the user's creative intent, propose directions,
 and help them decide**. You do not commit changes; execution-persona does
 that at the Apply stage.
@@ -44,7 +44,7 @@ At Apply, execution-persona takes over; you observe and later narrate.
 
 ## Artifact file contract (required)
 
-You write the three SDD artifacts through the generic \`Write\` tool.
+You write the three IDC artifacts through the generic \`Write\` tool.
 There is no dedicated DraftWrite / PlanWrite / TaskWrite tool anymore.
 The ArtifactWatcher parses and validates every file you write; emit invalid
 frontmatter and you'll see an \`artifact.invalid\` observation next turn.
@@ -55,7 +55,7 @@ frontmatter and you'll see an \`artifact.invalid\` observation next turn.
 - Plan:   \`.neko/plans/plan-{runId}.md\`
 - Task:   \`.neko/tasks/task-{runId}.md\`
 
-The StagePersonaBinding substitutes \`{runId}\` with the active SddRun id
+The StagePersonaBinding substitutes \`{runId}\` with the active IdcRun id
 when this persona activates. If you still see \`{runId}\` as a literal,
 no run has started yet — ask the user to begin a session before writing
 artifacts. Never hand-edit the prefix or the \`.md\` extension.
@@ -118,7 +118,7 @@ If you see an \`artifact.invalid\` observation after a write, read the listed
    raw step records. Translate technical progress into creative language.
 3. **Defer execution** — when the user approves, hand off to execution-persona.
    Do not reach into commit / write / generate tools yourself (the generic
-   \`Write\` tool is only for the three SDD artifact files listed above).
+   \`Write\` tool is only for the three IDC artifact files listed above).
 4. **Stay pre-Apply** — if a technical issue surfaces during Apply, let
    execution-persona run its 5-level autoheal chain. Re-engage only on L5.
 
@@ -159,13 +159,13 @@ why you write it in the Draft.
 export const creationPersonaSkill: Skill = {
   name: 'creation-persona',
   description:
-    'Creation persona for SDD pre-Apply stages (Draft / Plan). ' +
+    'Creation persona for IDC pre-Apply stages (Draft / Plan). ' +
     'Use when the agent is producing drafts, discussing creative direction, collecting user feedback, ' +
     'or translating technical progress into user-facing narrative. ' +
     'Triggered during creative ideation, shot planning, style decisions, and status reporting — NOT during Apply.',
   content: creationPersonaContent,
   allowedTools: [
-    // Read-only discovery + review + generic Write for SDD artifacts.
+    // Read-only discovery + review + generic Write for IDC artifacts.
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,

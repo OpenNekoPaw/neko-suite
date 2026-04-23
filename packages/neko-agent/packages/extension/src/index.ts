@@ -863,7 +863,7 @@ function registerCommands(
  *
  * These commands collect user intent + source context (QuickPick / file URI)
  * and hand it to the Agent chat. The Agent matches the appropriate Skill
- * (via SDD-stage selection + atomic tool orchestration) — no hard-coded
+ * (via IDC-stage selection + atomic tool orchestration) — no hard-coded
  * pipeline routing.
  */
 function registerCreationQuickStartCommands(

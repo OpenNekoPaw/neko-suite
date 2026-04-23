@@ -1,10 +1,10 @@
 /**
- * Sdd Run Store — in-memory aggregator for SddRun records.
+ * Sdd Run Store — in-memory aggregator for IdcRun records.
  *
- * See: agent-types/sdd-run.ts
+ * See: agent-types/idc-run.ts
  *      docs/architecture/agent-unified-workflow.md §4
  *
- * Runtime companion to the SddRun *type*. In-memory implementation is
+ * Runtime companion to the IdcRun *type*. In-memory implementation is
  * enough for the current Agent loop; a shared-memory backed version can
  * replace it later without touching callers.
  *
@@ -16,9 +16,9 @@
 import type {
   StageActivationDecision,
   Task,
-  SddRun,
-  SddRunRoundSummary,
-  SddRunStatus,
+  IdcRun,
+  IdcRunRoundSummary,
+  IdcRunStatus,
 } from '@neko-agent/types';
 import { roundSummaryFromDecision } from '@neko-agent/types';
 
@@ -26,7 +26,7 @@ import { roundSummaryFromDecision } from '@neko-agent/types';
 // Types
 // =============================================================================
 
-export interface ISddRunStore {
+export interface IIdcRunStore {
   /** Start a fresh run, aborting any in-flight run. Returns the new run id. */
   startRun(input: { workflowId: string; runId?: string }): string;
   /** Append a round summary derived from the planner decision. */
@@ -34,14 +34,14 @@ export interface ISddRunStore {
   /** Attach / replace the active Task checklist for the current run. */
   setTask(task: Task): void;
   /** Terminal transition for the active run. */
-  endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void;
+  endRun(status: Exclude<IdcRunStatus, 'pending' | 'running'>, error?: IdcRun['error']): void;
   /** Snapshot of the active run, or null if none. */
-  getActive(): SddRun | null;
+  getActive(): IdcRun | null;
   /** Snapshots of every past run recorded by this store. */
-  listCompleted(): readonly SddRun[];
+  listCompleted(): readonly IdcRun[];
 }
 
-export interface SddRunStoreConfig {
+export interface IdcRunStoreConfig {
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
   /** Optional id generator; defaults to a monotonic counter. */
@@ -52,14 +52,14 @@ export interface SddRunStoreConfig {
 // Implementation
 // =============================================================================
 
-class SddRunStore implements ISddRunStore {
-  private _active: SddRun | null = null;
-  private readonly _completed: SddRun[] = [];
+class IdcRunStore implements IIdcRunStore {
+  private _active: IdcRun | null = null;
+  private readonly _completed: IdcRun[] = [];
   private readonly _now: () => number;
   private readonly _nextId: () => string;
   private _counter = 0;
 
-  constructor(config: SddRunStoreConfig = {}) {
+  constructor(config: IdcRunStoreConfig = {}) {
     this._now = config.now ?? (() => Date.now());
     this._nextId = config.nextId ?? (() => `run-${++this._counter}`);
   }
@@ -86,7 +86,7 @@ class SddRunStore implements ISddRunStore {
 
   recordRound(decision: StageActivationDecision, lastObserveHint?: string): void {
     if (!this._active) return;
-    const summary: SddRunRoundSummary = roundSummaryFromDecision(decision, lastObserveHint);
+    const summary: IdcRunRoundSummary = roundSummaryFromDecision(decision, lastObserveHint);
     this._active = {
       ...this._active,
       rounds: [...this._active.rounds, summary],
@@ -98,15 +98,15 @@ class SddRunStore implements ISddRunStore {
     this._active = { ...this._active, task };
   }
 
-  endRun(status: Exclude<SddRunStatus, 'pending' | 'running'>, error?: SddRun['error']): void {
+  endRun(status: Exclude<IdcRunStatus, 'pending' | 'running'>, error?: IdcRun['error']): void {
     this._closeActive(status, error);
   }
 
-  getActive(): SddRun | null {
+  getActive(): IdcRun | null {
     return this._active;
   }
 
-  listCompleted(): readonly SddRun[] {
+  listCompleted(): readonly IdcRun[] {
     return this._completed;
   }
 
@@ -115,11 +115,11 @@ class SddRunStore implements ISddRunStore {
   // ---------------------------------------------------------------------------
 
   private _closeActive(
-    status: Exclude<SddRunStatus, 'pending' | 'running'>,
-    error?: SddRun['error'],
+    status: Exclude<IdcRunStatus, 'pending' | 'running'>,
+    error?: IdcRun['error'],
   ): void {
     if (!this._active) return;
-    const closed: SddRun = {
+    const closed: IdcRun = {
       ...this._active,
       status,
       endedAt: this._now(),
@@ -134,6 +134,6 @@ class SddRunStore implements ISddRunStore {
 // Factory
 // =============================================================================
 
-export function createSddRunStore(config?: SddRunStoreConfig): ISddRunStore {
-  return new SddRunStore(config);
+export function createIdcRunStore(config?: IdcRunStoreConfig): IIdcRunStore {
+  return new IdcRunStore(config);
 }

@@ -1,7 +1,7 @@
 /**
  * Iteration Persona Skill — consistency-aware refinement persona
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (SDD stages)
+ * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages)
  *
  * Activated when a run has produced at least one ConsistencyReport and
  * the user asks to iterate — "why are these shots inconsistent?",
@@ -47,7 +47,7 @@ and propose a narrow, focused rerun** — not redo the whole run.
   — most recent reports from the current and prior runs
 - **Run milestones** (shared memory, topic: \`milestone\`) — what was
   already tried, where previous iterations stopped
-- **Latest qualityDecision** (on the SddRun if available) —
+- **Latest qualityDecision** (on the IdcRun if available) —
   auto-accept / escalate / reject verdict the quality gate issued
 
 ## What you produce

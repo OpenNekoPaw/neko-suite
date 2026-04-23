@@ -169,7 +169,7 @@ export interface AgentSessionConfig {
   traitsRegistry?: ToolTraitsRegistry;
 
   /**
-   * SDD stage-tracking binding.
+   * IDC stage-tracking binding.
    *
    * When provided, AgentSession maintains a StageTracker and auto-applies
    * the matching persona Skill (`creation-persona` for Specify/Plan/Tasks,
@@ -185,8 +185,8 @@ export interface AgentSessionConfig {
   stageTracking?: {
     skillRegistry: import('@neko/shared').ISkillRegistry;
     skillService: import('../skill/skill-service').SkillService;
-    /** Initial SDD stage (default: none — tracker stays uninitialised). */
-    initialStage?: import('@neko-agent/types').SddStage;
+    /** Initial IDC stage (default: none — tracker stays uninitialised). */
+    initialStage?: import('@neko-agent/types').IdcStage;
     /**
      * Optional StageGuardian configuration (ADR §5.4, §6.5). When
      * omitted the guardian uses defaults (ordered-entry enforcement on,
