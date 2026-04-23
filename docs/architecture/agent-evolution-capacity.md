@@ -47,14 +47,14 @@
 | 演化场景 | 现设计表现 |
 |-------|---------|
 | 模型变聪明（GPT-5 / Claude 5 级别）| ✅ Skill 正文是**自然语言 prompt**，智能越高越能自主判断章节何时跳过；不需要改 Skill |
-| Skill 数量从 10 → 1000 | ✅ 三级懒加载（frontmatter 常驻 → 正文按需加载 → 资源按需）覆盖 token 成本；⚠️ matching 仍依赖 `description.When` 关键词，需进化为语义向量匹配 |
+| Skill 数量从 10 → 1000 | ✅ 三级懒加载（frontmatter 常驻 → 正文按需加载 → 资源按需）覆盖 token 成本；⚠️ 前置匹配器（[skill-matcher.ts:76-116](../../packages/neko-agent/packages/agent/src/skill/skill-matcher.ts#L76-L116)）仍是 `description` 字段的词面匹配，Skill 数量极大后误匹配/漏匹配率可能上升——但这只是**提示层**，AI thinkLoop 已提供语义兜底 |
 | Skill 质量参差 | ✅ `compliance.approvalRules[]` + `autoInvoke: false` 可屏蔽高危；⚠️ 无信誉评分 / 社区投票机制 |
 | Skill 依赖子包版本升级 | ✅ `requiredSubpackages.minVersion` 已定义；⚠️ 无 **Skill 自身版本兼容矩阵**（Skill v1.0 能否在 Engine v2.0 下跑？）|
 | 多 Skill 域重叠（两个都声明 `domain: cut`）| ❌ 无仲裁机制——先激活的赢 |
 
 **主要优势**：Skill 是 Markdown + YAML，**改 prompt 不发版**，对新 prompt 技术（CoT / self-consistency / ReAct 变体）全透明。
 
-**主要断点**：Skill matching 的语义粒度 + 域冲突仲裁。
+**主要断点**：前置匹配器的语义粒度（可选优化，非必须——AI 已在做）+ 域冲突仲裁。
 
 ---
 
@@ -66,11 +66,12 @@
 | 需要注入运行时变量（runId / stage / memory）| ✅ §11.6.9 三件套之一的 "可见性" 已设计好数据通路；`{runId}` / `{stage}` 占位符已实现 |
 | 模型理解能力差异化 | ✅ persona 用"**可选自评**"/"**指引**"而非"强制规则"——聪明模型自主决定，弱模型按部就班 |
 | Prompt 策略需要按数据演化 | ✅ `CreativeMemoryHooks` 把经验写回 memory，persona 下次激活时注入回来——**策略自演化** |
-| 潜在隐患 | ⚠️ persona 正文经常多次被改写，无**版本化机制**——回退到旧行为需要翻 git log |
+| 部署级版本管理 | ✅ personas 入 git（commit hash 可回溯 / diff / branch 对照）；Skill 类型支持 `version` 字段；Market 分发层有 Plugin 版本号 |
+| 潜在隐患 | ⚠️ 无**会话级 A/B 选择**——单次会话里不能并行跑 persona v1.2 vs v1.3 对比评估 |
 
 **主要优势**：Prompt 层是**纯数据**（非代码），演化完全去中心化；CreativeMemoryHooks 提供了 **prompt 策略随数据自动演化**的通道（未来"LLM 自动调优 persona"的种子已埋下）。
 
-**主要断点**：persona 的版本化 + A/B 对照机制缺失。
+**主要断点**：persona 缺**运行时 A/B 选择机制**——Git/Market 已提供部署级版本，但无会话级并行评估。
 
 ---
 
@@ -97,7 +98,7 @@
 | 平面 | 抗演化评级 | 关键点 |
 |----|---------|-----|
 | **Prompt** | **A** | 100% 数据化，模型越强越受益 |
-| **Schema** | **A-** | Tool/Operation 二分稳健；Tool 名字硬引用是唯一断点 |
+| **Schema** | **A-** | Tool/Operation 二分稳健；内部 Skill 已通过 TOOL_NAMES 常量 SSOT 解决名字引用；唯一断点是外部/Market Skill 若绕过 TOOL_NAMES 直写字符串 |
 | **Runtime** | **A-** | hook 链可组合；StagePlanner 硬编码是断点 |
 | **Policy** | **B** | preferences.md 声明式规则可演化；**团队级 Policy / 规则冲突仲裁缺失** |
 | **Memory** | **A** | CreativeMemoryHooks + 7 级压缩已验证；未来 CharacterAgent/SeriesSpec memory 可加 |
@@ -143,9 +144,9 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 
 | # | 断点 | 症状 | 建议缓解 |
 |---|----|----|----|
-| **1** | **Tool 名字作为 Skill 的硬引用**（无 alias）| 子包改 Tool 名 → 引用它的 Skill 全部静默失败 | `TOOL_NAMES` 常量升级为带 alias 映射（TODO 已有 P0 项）；tool-registry 增加 resolve-by-alias 路径 |
-| **2** | **Skill Matching 仍是关键词**（基于 description.When）| Skill 增多后误匹配率上升 | 升级为 CLIP / sentence-embedding 向量匹配（workflow-orchestration Phase 4.2 已规划 CLIP napi）|
-| **3** | **Persona prompt 无版本化**（直接覆写）| 改动 persona 后难以 A/B 对照 / 回滚 | persona.md 入 git 外**独立 version tag**，或 Memory 中记录"本次用的 persona version"让自评可溯源；更激进方案：Skill frontmatter 增加 `promptVersion` 字段 |
+| **1** | **外部 Skill 若绕过 TOOL_NAMES 直接写工具字符串** | 内部 Skill 已走 [`TOOL_NAMES_SYSTEM/TIMELINE/...`](../../packages/neko-types/src/types/tool-names.ts#L150-L157) 常量 SSOT（改名一处修改全局跟上）；但 Market/Plugin 下发的 markdown Skill 若在 `allowedTools` 里写字符串字面量 `'Read'` 就绕过 key 层 → 工具改名静默失败 | Skill 加载期 validator 拒绝"未通过 TOOL_NAMES 登记"的工具名；或引入运行时 alias 注册表（`oldName → newName`）供外部 Skill 兼容期使用 |
+| **2** | **Skill 前置匹配是词面关键词**（[skill-matcher.ts:76-116](../../packages/neko-agent/packages/agent/src/skill/skill-matcher.ts#L76-L116)）| Skill 数量极大后误/漏匹配率上升；但**这只是提示层**——实际激活由 AI thinkLoop 自主判断，因此影响是"候选集质量"而非"功能失败" | 可选升级为 CLIP / sentence-embedding 向量匹配（workflow-orchestration Phase 4.2 已规划 CLIP napi）。**不紧急**——AI-native 选择是主通道 |
+| **3** | **Persona 缺会话级 A/B 选择**（部署级版本已有）| 无法在同一会话里并行跑 v1.2 vs v1.3 做 side-by-side 评估 | Skill frontmatter 启用现有 `version` 字段 + activation 时可指定 version；Memory 记录"本次用的 persona version"让自评可溯源；长期：加 version-aware Activator |
 
 ### 次级脆弱点（不紧急但值得记录）
 
@@ -165,7 +166,7 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 | 外部变化 | 现架构表现 |
 |-------|---------|
 | **新 LLM** 能看 10M token 视频并自判意图 | ✅ 直接受益：§11.6.9 AI 自评原生适配；多模态不走 extractor 管线；Memory 压缩策略可调高阈值 |
-| **Skill 市场 10000+ 个** | ✅ 三级懒加载扛住 token 成本；⚠️ **CLIP matching（P2 Rust milestone）必须完成**，否则 description.When 关键词匹配会崩 |
+| **Skill 市场 10000+ 个** | ✅ 三级懒加载扛住 token 成本；⚠️ 前置匹配器的候选集质量会下降（可选升级 CLIP matching，workflow-orchestration Phase 4.2 已规划）；AI thinkLoop 语义兜底仍可工作，但 token 成本升高 |
 | **新一代 engine 有 50 类 Operation** | ✅ 扁平能力池 + CapabilityKind 可吸收；子包各自贡献无中心瓶颈；`costProfile` 阈值可按新成本模型调整 |
 | **新编排模式 "多 Reviewer 并发"** | ⚠️ IDC 3 阶段硬编码需重构 stage-planner 代码；但 **Skill 内嵌 `phases`** DSL 可局部突破（单个 Skill 内定义自己的并发 phases 不用改全局）|
 | **Prompt 技术升级到不可预见的 X** | ✅ Prompt 层 100% 数据化，任何新技术都能以 markdown 写入 Skill/persona |
@@ -217,3 +218,4 @@ Memory 有独立存储（`~/.claude/.../memory/` / `.neko/memory.md`），产物
 | 日期 | 变更 | 作者 |
 |-----|-----|-----|
 | 2026-04-23 | 初版：对 agent-unified-workflow.md 定义的 IDC 三阶段 + 四层架构 + 六层控制平面做抗演化审计。按 Skill / Prompt / Orchestration / 控制六平面 分别评级 A- / A / B+ / (A/A-/A-/B/A/A)；识别三个最脆弱断点（Tool 硬引用 / Skill matching 关键词 / persona 无版本化）；提炼三原则共振作为最强演化锚点；总结六条演化维护纪律作为后续决策指南 | Architecture Team |
+| 2026-04-23 | 自审修正：三处断点按实际代码重新校准——① 内部 Skill 已通过 TOOL_NAMES 常量 SSOT 解决工具名引用，真正断点是外部/Market Skill 绕过 TOOL_NAMES；② Skill 匹配的是 `description` 字段（不是 `.When`），且只是提示层——AI thinkLoop 是主通道，向量匹配是可选优化而非必须；③ personas 入 git 且 Skill 类型已支持 `version` 字段，Market 有 Plugin 版本号，真正缺的是**会话级 A/B 选择**而非"无版本化"。§3.1 / §3.3 / §3.4 Schema 评级脚注 / §5 断点表 / §6 演化测试同步修正 | Architecture Team |
