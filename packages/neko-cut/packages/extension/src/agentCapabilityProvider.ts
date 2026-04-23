@@ -19,6 +19,7 @@ import type {
   ToolGroup,
   ToolParameters,
   NekoCutAPI,
+  PromptFragment,
 } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
 import { TimelineToolBridge } from './services/timelineToolBridge';
@@ -529,6 +530,38 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
         source: 'builtin',
         enabled: true,
         loadingTier: 'eager',
+      },
+    ];
+  }
+
+  /**
+   * PR3e: domain-specific usage conventions for the cut.* timeline tools,
+   * injected into the agent's L3 environment layer at priority 70. The
+   * agent sees this guidance alongside the tool definitions themselves so
+   * that calls to `AddTimelineElement`, `TrimElement`, `SetTransition`,
+   * etc. follow the same conventions the editor UI assumes.
+   */
+  getPromptFragments(): PromptFragment[] {
+    return [
+      {
+        id: 'neko-cut:timeline-basics',
+        content: [
+          '## Timeline editing (neko-cut)',
+          '',
+          'When using `cut.*` timeline tools:',
+          '',
+          '- Timestamps are in **milliseconds**. When the user says "1.5 seconds",',
+          '  emit `1500`, not `1.5`.',
+          '- Add tracks before inserting elements. Tracks are the primary',
+          '  ordering axis; element positions are meaningless without a track.',
+          '- Effects stack in declaration order; later entries draw on top.',
+          '- `GenerateVideoForClip` is asynchronous — its result arrives via the',
+          '  task system, not the tool return. Poll task status; do not assume',
+          '  the clip is ready when the call returns.',
+          '- When in doubt about the current timeline state, call',
+          '  `GetTimelineInfo` or `ListTimelineElements` instead of guessing.',
+        ].join('\n'),
+        priority: 70,
       },
     ];
   }
