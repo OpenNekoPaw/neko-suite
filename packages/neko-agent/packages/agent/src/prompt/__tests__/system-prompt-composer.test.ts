@@ -429,6 +429,41 @@ describe('SystemPromptComposer', () => {
       expect(result.sections[1]!.cacheControl).toBe('ephemeral');
       expect(result.sections[2]!.cacheControl).toBeUndefined();
     });
+
+    // PR3c: schema layer slots between base and skill
+    it('places schema layer between base and skill in compose() output', () => {
+      composer.setBase('BASE');
+      composer.setSection({ id: 'schema:artifact', layer: 'schema', content: 'SCHEMA' });
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'SKILL' });
+
+      const flat = composer.compose();
+      const baseIdx = flat.indexOf('BASE');
+      const schemaIdx = flat.indexOf('SCHEMA');
+      const skillIdx = flat.indexOf('SKILL');
+      expect(baseIdx).toBeLessThan(schemaIdx);
+      expect(schemaIdx).toBeLessThan(skillIdx);
+    });
+
+    it('merges schema + skill + environment into one cacheable section', () => {
+      composer.setBase('BASE');
+      composer.setSection({ id: 'schema:a', layer: 'schema', content: 'SCHEMA_BODY' });
+      composer.setSection({ id: 'skill:x', layer: 'skill', content: 'SKILL_BODY' });
+      composer.setSection({ id: 'env:x', layer: 'environment', content: 'ENV_BODY' });
+
+      const result = composer.composeStructured();
+
+      // base (1) + schema+skill+env merged (1) = 2 sections
+      expect(result.sections).toHaveLength(2);
+      expect(result.sections[0]!.cacheControl).toBe('ephemeral');
+      const mid = result.sections[1]!;
+      expect(mid.cacheControl).toBe('ephemeral');
+      expect(mid.content).toContain('SCHEMA_BODY');
+      expect(mid.content).toContain('SKILL_BODY');
+      expect(mid.content).toContain('ENV_BODY');
+      // Order within the merged section: schema before skill before env
+      expect(mid.content.indexOf('SCHEMA_BODY')).toBeLessThan(mid.content.indexOf('SKILL_BODY'));
+      expect(mid.content.indexOf('SKILL_BODY')).toBeLessThan(mid.content.indexOf('ENV_BODY'));
+    });
   });
 
   // -------------------------------------------------------------------------

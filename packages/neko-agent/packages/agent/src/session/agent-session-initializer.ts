@@ -35,6 +35,7 @@ import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-modul
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
+import { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import type { PromptModuleSection } from '../prompt/registry/module-manifest';
 
 // =============================================================================
@@ -79,6 +80,12 @@ export interface SessionComponents {
   // PR3b: AGENTS.md overlay projected into the environment layer instead
   // of replacing the base prompt.
   agentsMdModule: AgentsMdModule;
+
+  // PR3c: IDC artifact contract (paths, frontmatter, write rules)
+  // extracted out of creation-persona and into the L1 schema layer. The
+  // initializer only creates/exposes the module; runtime activation is
+  // driven by session-level IdcRun transitions (PR3d).
+  artifactSchemaModule: ArtifactSchemaModule;
 }
 
 /**
@@ -209,6 +216,7 @@ export function initializeSession(
   const creativeVersionLogModule = new CreativeVersionLogModule();
   const skillInjectionModule = new SkillInjectionModule();
   const agentsMdModule = new AgentsMdModule();
+  const artifactSchemaModule = new ArtifactSchemaModule();
 
   // PR3b: AGENTS.md overlay — when the caller supplies agentsOverride
   // content we project it through the module into the environment layer
@@ -259,6 +267,7 @@ export function initializeSession(
     creativeVersionLogModule,
     skillInjectionModule,
     agentsMdModule,
+    artifactSchemaModule,
   };
 }
 

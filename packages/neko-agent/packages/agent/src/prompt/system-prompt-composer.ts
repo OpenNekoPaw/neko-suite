@@ -138,7 +138,9 @@ export class SystemPromptComposer implements ISystemPromptComposer {
    *
    * Groups layers into cacheable sections:
    * - base layer → marked with cacheControl: 'ephemeral' (= cacheable in Anthropic API)
-   * - skill + environment layers → merged, marked with cacheControl: 'ephemeral'
+   * - schema + skill + environment layers → merged, marked with cacheControl: 'ephemeral'
+   *   (session-stable: schema keyed to active run, skill keyed to active persona,
+   *   environment keyed to loaded memory / AGENTS.md)
    * - ephemeral layer → no cache marker (changes every turn)
    */
   composeStructured(): ComposedPromptResult {
@@ -152,10 +154,11 @@ export class SystemPromptComposer implements ISystemPromptComposer {
       textParts.push(baseContent);
     }
 
-    // Group 2: skill + environment layers (session-stable, cacheable)
+    // Group 2: schema + skill + environment layers (session-stable, cacheable)
+    const schemaContent = this._composeLayer('schema');
     const skillContent = this._composeLayer('skill');
     const envContent = this._composeLayer('environment');
-    const midParts = [skillContent, envContent].filter(Boolean);
+    const midParts = [schemaContent, skillContent, envContent].filter(Boolean);
     if (midParts.length > 0) {
       const midContent = midParts.join(this._separator);
       sections.push({ content: midContent, cacheControl: 'ephemeral' });

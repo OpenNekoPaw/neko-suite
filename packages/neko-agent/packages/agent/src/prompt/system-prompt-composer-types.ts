@@ -9,12 +9,23 @@
 // Layer Definition
 // =============================================================================
 
-/** Prompt section layer, ordered by composition priority */
-export type PromptLayer = 'base' | 'skill' | 'environment' | 'ephemeral';
+/**
+ * Prompt section layer, ordered by composition priority.
+ *
+ * Layers (ADR §11.6 six control planes → Prompt plane sublayers):
+ * - base: protocol skeleton (tool-call conventions, output format, project context)
+ * - schema: machine contracts (artifact frontmatter, path templates, URI rules)
+ *   projected by modules when a run / artifact state is active
+ * - skill: active persona (creation-persona / execution-persona / iteration-persona)
+ * - environment: user-authored overlay (AGENTS.md) + project/global memory
+ * - ephemeral: per-turn injections (memory recall, version log, future self-eval)
+ */
+export type PromptLayer = 'base' | 'schema' | 'skill' | 'environment' | 'ephemeral';
 
 /** Layer ordering for composition */
 export const PROMPT_LAYER_ORDER: readonly PromptLayer[] = [
   'base',
+  'schema',
   'skill',
   'environment',
   'ephemeral',
@@ -49,6 +60,7 @@ export interface PromptSection {
 /** Per-layer token budget configuration */
 export interface PromptLayerBudget {
   base: number;
+  schema: number;
   skill: number;
   environment: number;
   ephemeral: number;
@@ -57,6 +69,7 @@ export interface PromptLayerBudget {
 /** Default budget values */
 export const DEFAULT_PROMPT_LAYER_BUDGET: PromptLayerBudget = {
   base: 8000,
+  schema: 1500,
   skill: 4000,
   environment: 2000,
   ephemeral: 1000,

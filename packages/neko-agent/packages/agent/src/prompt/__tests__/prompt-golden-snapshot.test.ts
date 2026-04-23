@@ -22,6 +22,8 @@ import {
 } from '../builtin-prompts';
 import { creationPersonaSkill } from '../../skill/builtins/creation-persona';
 import { executionPersonaSkill } from '../../skill/builtins/execution-persona';
+import { ArtifactSchemaModule } from '../modules/schema/artifact-schema-module';
+import { freezePromptContext } from '../context';
 
 function composeBaseOnly(base: string): string {
   const composer = new SystemPromptComposer();
@@ -72,6 +74,46 @@ describe('prompt golden snapshots', () => {
         executionPersonaSkill.content,
       ),
     ).toMatchSnapshot();
+  });
+
+  // PR3c: creation-persona + ArtifactSchemaModule combined. Proves the
+  // schema extraction is content-equivalent to the pre-PR3c monolithic
+  // persona (the schema section now lives on the schema layer between
+  // base and skill, the persona covers only creative behaviour).
+  it('EN base + creation-persona + schema layer (runId=tiktok-001)', () => {
+    const composer = new SystemPromptComposer();
+    composer.setBase(BUILTIN_DEFAULT_PROMPT_EN);
+
+    // Schema layer injected by ArtifactSchemaModule (simulated — at
+    // runtime the session-level wiring in PR3d will drive this).
+    const schemaModule = new ArtifactSchemaModule();
+    const ctx = freezePromptContext({
+      runId: 'tiktok-001',
+      stage: null,
+      locale: 'en',
+      projectPath: '',
+      activeSkillName: null,
+      activeTools: [],
+    });
+    const schemaSections = schemaModule.renderSync(ctx) ?? [];
+    for (const s of schemaSections) {
+      composer.setSection({
+        id: s.sectionId,
+        layer: s.layer,
+        content: s.content,
+        priority: s.priority ?? 50,
+      });
+    }
+
+    // Skill layer: creation-persona post-extraction (no schema inline).
+    composer.setSection({
+      id: `skill:${creationPersonaSkill.name}`,
+      layer: 'skill',
+      content: creationPersonaSkill.content,
+      priority: 50,
+    });
+
+    expect(composer.compose()).toMatchSnapshot();
   });
 
   // PR3b: AGENTS.md overlays into the environment layer instead of

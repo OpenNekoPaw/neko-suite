@@ -83,6 +83,8 @@ import type { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
+import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
+import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import { getLogger } from '../utils/logger';
 import {
   initializeSession,
@@ -136,6 +138,11 @@ export class AgentSession implements IAgentSession {
   // PR3a: owns the format contract for skill-layer sections; consumed by
   // SkillInjectionCoordinator's Track A writes.
   private _skillInjectionModule: SkillInjectionModule;
+  // PR3b: AGENTS.md overlay module (environment layer).
+  private _agentsMdModule: AgentsMdModule;
+  // PR3c: IDC artifact contract (L1 schema layer). Instance held here so
+  // future session-level IdcRun transition wiring (PR3d) can toggle it.
+  private _artifactSchemaModule: ArtifactSchemaModule;
 
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
@@ -234,6 +241,8 @@ export class AgentSession implements IAgentSession {
     this._memoryRecallModule = components.memoryRecallModule;
     this._creativeVersionLogModule = components.creativeVersionLogModule;
     this._skillInjectionModule = components.skillInjectionModule;
+    this._agentsMdModule = components.agentsMdModule;
+    this._artifactSchemaModule = components.artifactSchemaModule;
 
     // Journal writer for session persistence
     if (config.journalWriter) {

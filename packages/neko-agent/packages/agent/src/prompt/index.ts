@@ -91,6 +91,9 @@ export { CreativeVersionLogModule } from './modules/ephemeral/creative-version-l
 // AGENTS.md overlay module (PR3b)
 export { AgentsMdModule } from './modules/environment/agents-md-module';
 
+// Schema-layer modules (PR3c)
+export { ArtifactSchemaModule } from './modules/schema/artifact-schema-module';
+
 // Re-export types from @neko/shared for convenience
 export type {
   Prompt,

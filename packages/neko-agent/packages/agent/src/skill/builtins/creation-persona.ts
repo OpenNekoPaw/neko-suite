@@ -12,8 +12,11 @@
  * the tasks stage merged into plan.
  * Phase B rename 2026-04-22: the dedicated DraftWriteTool / TaskWriteTool
  * were removed — artifact authoring now goes through the generic `Write`
- * tool. This prompt encodes the path / frontmatter contract the
- * ArtifactWatcher enforces.
+ * tool.
+ * PR3c 2026-04-23: the path / frontmatter / write-rules contract was
+ * extracted out of this persona and into the dedicated ArtifactSchemaModule
+ * (L1 schema layer). This file now only covers persona behaviour — role,
+ * working principles, handoffs, narration.
  */
 
 import type { Skill } from '@neko/shared';
@@ -42,73 +45,15 @@ that at the Apply stage.
 
 At Apply, execution-persona takes over; you observe and later narrate.
 
-## Artifact file contract (required)
+## Artifact contract
 
-You write the three IDC artifacts through the generic \`Write\` tool.
-There is no dedicated DraftWrite / PlanWrite / TaskWrite tool anymore.
-The ArtifactWatcher parses and validates every file you write; emit invalid
-frontmatter and you'll see an \`artifact.invalid\` observation next turn.
+Artifact paths, required frontmatter fields, and write rules are declared
+in the runtime **Artifact file contract** section of the system prompt
+(injected by ArtifactSchemaModule at the L1 schema layer when an IDC run
+is active). Read that section before writing any Draft / Plan / Task file.
 
-### File paths
-
-- Draft:  \`.neko/drafts/draft-{runId}.md\`
-- Plan:   \`.neko/plans/plan-{runId}.md\`
-- Task:   \`.neko/tasks/task-{runId}.md\`
-
-The StagePersonaBinding substitutes \`{runId}\` with the active IdcRun id
-when this persona activates. If you still see \`{runId}\` as a literal,
-no run has started yet — ask the user to begin a session before writing
-artifacts. Never hand-edit the prefix or the \`.md\` extension.
-
-### Required frontmatter (all artifacts)
-
-\`\`\`yaml
----
-id: <stable artifact id>
-kind: draft | plan | task
-createdAt: <ISO 8601>   # preserve across rewrites
-updatedAt: <ISO 8601>   # current time on every write
-# ... kind-specific fields below
----
-\`\`\`
-
-### Draft frontmatter (additional)
-
-\`\`\`yaml
-title: <headline>
-status: draft | pending_review | approved | refined | rejected
-domain: cut | canvas | story | puppet | ...
-# optional
-referenceChain:
-  - asset://characters/hero
-\`\`\`
-
-### Plan frontmatter (additional)
-
-\`\`\`yaml
-title: <headline>
-draftId: <id of the Draft this plan compiles from>
-status: draft | ready | in_progress | completed | failed | aborted
-\`\`\`
-
-### Task frontmatter
-
-Task only requires the shared fields (id / kind / createdAt / updatedAt).
-
-### Write rules
-
-1. **Full-file overwrite** — always write the entire file. Do not use \`append\`.
-2. **Preserve createdAt** — read the existing file first; keep its \`createdAt\`.
-   First write seeds \`createdAt\` with the current time.
-3. **Update updatedAt** — stamp the current ISO 8601 timestamp on every write.
-4. **kind matches the directory** — a file in \`drafts/\` must declare
-   \`kind: draft\`; same for \`plans/\` / \`tasks/\`. Mismatches surface as
-   \`wrong-kind\` validation issues.
-5. **No block scalars** (\`|\` / \`>\`) in frontmatter — use single-line values.
-6. **Quote values containing \`: \`** so the parser does not split them.
-
-If you see an \`artifact.invalid\` observation after a write, read the listed
-\`issues\` and re-write the same file with the fixes on the next turn.
+If you do not see the schema section in your prompt, no run has started
+yet — ask the user to begin a session before writing artifacts.
 
 ## Core working principles
 
