@@ -85,6 +85,7 @@ import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creat
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
+import { freezePromptContext } from '../prompt/context';
 import { getLogger } from '../utils/logger';
 import {
   initializeSession,
@@ -1014,6 +1015,35 @@ export class AgentSession implements IAgentSession {
 
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
+    // PR3d: drive the ArtifactSchemaModule. When an IdcRun is active the
+    // artifact contract renders into the L1 schema layer; when no run is
+    // active the section is absent (the persona's pointer then guides the
+    // agent to ask the user to start a session). renderSync keeps this
+    // path synchronous — ask-mode snapshot callers below depend on it.
+    {
+      const schemaCtx = freezePromptContext({
+        runId: this._runStore?.getActive()?.id ?? null,
+        stage: null,
+        locale: 'en',
+        projectPath: '',
+        activeSkillName: null,
+        activeTools: [],
+      });
+      this._promptComposer.removeSection('artifact-schema');
+      const schemaSections = this._artifactSchemaModule.renderSync(schemaCtx);
+      if (schemaSections) {
+        for (const s of schemaSections) {
+          this._promptComposer.setSection({
+            id: s.sectionId,
+            layer: s.layer,
+            content: s.content,
+            priority: s.priority ?? 50,
+            ...(s.cacheControl && { cacheControl: s.cacheControl }),
+          });
+        }
+      }
+    }
+
     // Drive the CreativeVersionLogModule — owns the format contract for the
     // version-log ephemeral section. renderSync() preserves the synchronous
     // caller contract (this method is invoked from ask-snapshot paths where
