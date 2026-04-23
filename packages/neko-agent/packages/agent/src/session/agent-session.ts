@@ -82,6 +82,7 @@ import type { MemoryProjectModule } from '../prompt/modules/memory/memory-projec
 import type { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
+import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { getLogger } from '../utils/logger';
 import {
   initializeSession,
@@ -132,6 +133,9 @@ export class AgentSession implements IAgentSession {
   private _memoryGlobalModule: MemoryGlobalModule;
   private _memoryRecallModule: MemoryRecallModule;
   private _creativeVersionLogModule: CreativeVersionLogModule;
+  // PR3a: owns the format contract for skill-layer sections; consumed by
+  // SkillInjectionCoordinator's Track A writes.
+  private _skillInjectionModule: SkillInjectionModule;
 
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
@@ -229,6 +233,7 @@ export class AgentSession implements IAgentSession {
     this._memoryGlobalModule = components.memoryGlobalModule;
     this._memoryRecallModule = components.memoryRecallModule;
     this._creativeVersionLogModule = components.creativeVersionLogModule;
+    this._skillInjectionModule = components.skillInjectionModule;
 
     // Journal writer for session persistence
     if (config.journalWriter) {
@@ -241,6 +246,7 @@ export class AgentSession implements IAgentSession {
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
+      skillInjectionModule: this._skillInjectionModule,
     });
 
     // Stage tracking: when the caller supplies a skill registry + service,

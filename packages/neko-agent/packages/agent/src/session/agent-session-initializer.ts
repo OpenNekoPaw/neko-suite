@@ -33,6 +33,7 @@ import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-mod
 import { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
+import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { PromptModuleSection } from '../prompt/registry/module-manifest';
 
 // =============================================================================
@@ -65,11 +66,14 @@ export interface SessionComponents {
   metaTools: Tool[];
 
   // PR2: Prompt-module infrastructure. Exposed for future runtime use
-  // (SkillInjectionCoordinator migration, SelfEvaluation hooks, etc.)
+  // (SelfEvaluation hooks, etc.)
   memoryProjectModule: MemoryProjectModule;
   memoryGlobalModule: MemoryGlobalModule;
   memoryRecallModule: MemoryRecallModule;
   creativeVersionLogModule: CreativeVersionLogModule;
+  // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
+  // through the module (byte-identical to the legacy setSection path).
+  skillInjectionModule: SkillInjectionModule;
 }
 
 /**
@@ -198,6 +202,7 @@ export function initializeSession(
   const memoryGlobalModule = new MemoryGlobalModule();
   const memoryRecallModule = new MemoryRecallModule();
   const creativeVersionLogModule = new CreativeVersionLogModule();
+  const skillInjectionModule = new SkillInjectionModule();
 
   // Inject project memory via MemoryProjectModule (renderSync for in-line
   // update: event handlers fire synchronously and the composer state must
@@ -237,6 +242,7 @@ export function initializeSession(
     memoryGlobalModule,
     memoryRecallModule,
     creativeVersionLogModule,
+    skillInjectionModule,
   };
 }
 

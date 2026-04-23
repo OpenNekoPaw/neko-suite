@@ -285,4 +285,109 @@ describe('SkillInjectionCoordinator', () => {
       expect(coordinator.getActiveInjectionName()).toBeUndefined();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // PR3a: SkillInjectionModule integration
+  //
+  // These tests exercise the Track A path through the module instead of the
+  // legacy direct setSection call. They use a real SystemPromptComposer so
+  // we can assert byte-identical output between the two paths.
+  // ---------------------------------------------------------------------------
+
+  describe('with SkillInjectionModule', () => {
+    // Deferred imports — the real composer and module are heavier than the
+    // existing mocks used by the legacy tests above.
+    let realComposer: import('../../prompt/system-prompt-composer').SystemPromptComposer;
+    let moduleInstance: import('../../prompt/modules/skill/skill-injection-module').SkillInjectionModule;
+    let coord: SkillInjectionCoordinator;
+    let realPermissionHooks: ReturnType<typeof createMockPermissionHooks>;
+
+    beforeEach(async () => {
+      const { SystemPromptComposer } = await import('../../prompt/system-prompt-composer');
+      const { SkillInjectionModule } =
+        await import('../../prompt/modules/skill/skill-injection-module');
+      realComposer = new SystemPromptComposer();
+      moduleInstance = new SkillInjectionModule();
+      realPermissionHooks = createMockPermissionHooks();
+      coord = new SkillInjectionCoordinator({
+        promptComposer: realComposer,
+        getPermissionHooks: () =>
+          realPermissionHooks as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+        syncSystemPrompt: () => {},
+        skillInjectionModule: moduleInstance,
+      });
+    });
+
+    it('apply writes the skill section through the module and into the composer', () => {
+      coord.apply(createInjection({ name: 'helper', systemPrompt: 'HELPER_PROMPT' }));
+      expect(realComposer.hasSection('skill:helper')).toBe(true);
+      expect(realComposer.getSection('skill:helper')?.content).toBe('HELPER_PROMPT');
+      expect(moduleInstance.getInjection()?.name).toBe('helper');
+    });
+
+    it('remove clears both the composer section and the module state', () => {
+      coord.apply(createInjection({ name: 'helper' }));
+      coord.remove('helper');
+      expect(realComposer.hasSection('skill:helper')).toBe(false);
+      expect(moduleInstance.getInjection()).toBeNull();
+    });
+
+    it('module path and legacy path produce byte-identical composed output', async () => {
+      const { SystemPromptComposer } = await import('../../prompt/system-prompt-composer');
+      const { SkillInjectionModule } =
+        await import('../../prompt/modules/skill/skill-injection-module');
+      const injection = createInjection({ name: 'cut', systemPrompt: 'CUT_PROMPT' });
+
+      // Legacy coordinator (no module dep).
+      const legacyComposer = new SystemPromptComposer();
+      legacyComposer.setBase('BASE');
+      const legacyPermission = createMockPermissionHooks();
+      const legacyCoord = new SkillInjectionCoordinator({
+        promptComposer: legacyComposer,
+        getPermissionHooks: () =>
+          legacyPermission as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+        syncSystemPrompt: () => {},
+      });
+      legacyCoord.apply(injection);
+
+      // Module coordinator.
+      const modComposer = new SystemPromptComposer();
+      modComposer.setBase('BASE');
+      const modInstance = new SkillInjectionModule();
+      const modPermission = createMockPermissionHooks();
+      const modCoord = new SkillInjectionCoordinator({
+        promptComposer: modComposer,
+        getPermissionHooks: () =>
+          modPermission as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+        syncSystemPrompt: () => {},
+        skillInjectionModule: modInstance,
+      });
+      modCoord.apply(injection);
+
+      expect(modComposer.compose()).toBe(legacyComposer.compose());
+    });
+
+    it('apply → apply (switching skills) swaps the section and module state', () => {
+      coord.apply(createInjection({ name: 'first', systemPrompt: 'FIRST' }));
+      coord.apply(createInjection({ name: 'second', systemPrompt: 'SECOND' }));
+
+      expect(realComposer.hasSection('skill:first')).toBe(false);
+      expect(realComposer.hasSection('skill:second')).toBe(true);
+      expect(realComposer.getSection('skill:second')?.content).toBe('SECOND');
+      expect(moduleInstance.getInjection()?.name).toBe('second');
+    });
+
+    it('rollback on Track B failure clears both module and composer', () => {
+      realPermissionHooks.addAllowRule.mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+      expect(() =>
+        coord.apply(createInjection({ name: 'will-fail', allowedTools: ['Read'] })),
+      ).toThrow('boom');
+
+      expect(realComposer.hasSection('skill:will-fail')).toBe(false);
+      expect(moduleInstance.getInjection()).toBeNull();
+      expect(coord.hasActiveInjection()).toBe(false);
+    });
+  });
 });
