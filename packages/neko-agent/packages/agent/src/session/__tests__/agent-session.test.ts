@@ -26,6 +26,20 @@ async function collectEvents(iterable: AsyncIterable<AgentEvent>): Promise<Agent
   return events;
 }
 
+function getCompletedRuns(session: AgentSession) {
+  return ((
+    session as unknown as { _runStore?: { listCompleted(): readonly unknown[] } }
+  )._runStore?.listCompleted() ?? []) as readonly unknown[];
+}
+
+function getInternalRunStore(session: AgentSession) {
+  return (
+    session as unknown as {
+      _runStore?: { getActive(): unknown; listCompleted(): readonly unknown[] };
+    }
+  )._runStore;
+}
+
 // =============================================================================
 // Mocks
 // =============================================================================
@@ -304,6 +318,48 @@ describe('AgentSession', () => {
       const errorEvents = events.filter((e) => e.type === 'error');
       expect(errorEvents.length).toBe(1);
       expect(errorEvents[0]!.error!.message).toContain('already running');
+    });
+  });
+
+  describe('execute() failure lifecycle', () => {
+    it('ends the IDC run as failed with a serializable error cause', async () => {
+      const session = new AgentSession(
+        createConfig({
+          executionMode: 'plan',
+          stageTracking: {},
+        }),
+      );
+      const mockExec = injectMockExecutor(session, []);
+      mockExec.executeStream.mockImplementationOnce(
+        // eslint-disable-next-line require-yield
+        async function* () {
+          throw new Error('executor blew up');
+        },
+      );
+
+      const events = await collectEvents(session.execute('Break the pipeline'));
+
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: 'error',
+          error: expect.objectContaining({ message: 'executor blew up' }),
+        }),
+      ]);
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(getCompletedRuns(session)).toEqual([
+        expect.objectContaining({
+          workflowId: 'plan-mode',
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'execute_failed',
+            message: 'executor blew up',
+            cause: expect.objectContaining({
+              name: 'Error',
+              message: 'executor blew up',
+            }),
+          }),
+        }),
+      ]);
     });
   });
 
@@ -653,6 +709,27 @@ describe('AgentSession', () => {
       expect(session.isRunning()).toBe(false);
       expect(session.getPendingConfirmations()).toEqual([]);
     });
+
+    it('aborts an active IDC run before tearing down stage tracking', () => {
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {},
+        }),
+      );
+      const runStore = getInternalRunStore(session);
+
+      session.startWorkflowRun('wf', 'run-active');
+      session.dispose();
+
+      expect(runStore?.getActive()).toBeNull();
+      expect(runStore?.listCompleted()).toEqual([
+        expect.objectContaining({
+          id: 'run-active',
+          workflowId: 'wf',
+          status: 'aborted',
+        }),
+      ]);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -761,6 +838,28 @@ describe('AgentSession', () => {
       // After dispose, stage tracking goes dormant.
       expect(session.getCurrentStage()).toBeNull();
       expect(session.enterStage('apply')).toBe(false);
+    });
+
+    it('starts an IDC run automatically when execute() begins', async () => {
+      const session = new AgentSession(
+        createConfig({
+          executionMode: 'plan',
+          stageTracking: {},
+        }),
+      );
+      injectMockExecutor(session, [
+        { type: 'think', content: 'Draft first', timestamp: Date.now() },
+      ]);
+
+      await collectEvents(session.execute('Outline the implementation'));
+
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(getCompletedRuns(session)).toEqual([
+        expect.objectContaining({
+          workflowId: 'plan-mode',
+          status: 'completed',
+        }),
+      ]);
     });
   });
 

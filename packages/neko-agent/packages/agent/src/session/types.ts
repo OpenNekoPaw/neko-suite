@@ -219,22 +219,31 @@ export interface AgentSessionConfig {
   traitsRegistry?: ToolTraitsRegistry;
 
   /**
-   * IDC stage-tracking binding.
+   * IDC stage-tracking runtime.
    *
-   * When provided, AgentSession maintains a StageTracker and auto-applies
-   * the matching persona Skill (`creation-persona` for Specify/Plan/Tasks,
-   * `execution-persona` for Implement) via the injection coordinator on
-   * every stage transition.
+   * When provided, AgentSession enables the IDC runner pieces
+   * (StageTracker, IdcRunStore, ApprovalEngine, StageGuardian, optional
+   * workspace sinks). Persona auto-swap is optional: when both
+   * `skillRegistry` and `skillService` are supplied, the session also
+   * applies the matching persona Skill (`creation-persona` for draft/plan,
+   * `execution-persona` for apply) on each stage transition.
    *
-   * Both `skillRegistry` and `skillService` must be supplied together — the
-   * binding needs the registry to resolve the persona Skill by name and the
-   * service to prepare the SkillInjection payload. Omitted = stage tracking
-   * stays dormant, preserving behaviour for callers that don't use the
-   * skill system.
+   * Omitted = IDC runtime stays dormant, preserving legacy behaviour for
+   * callers that want a plain ReAct session.
    */
   stageTracking?: {
-    skillRegistry: import('@neko/shared').ISkillRegistry;
-    skillService: import('../skill/skill-service').SkillService;
+    /**
+     * Optional source for persona Skills. Must be paired with
+     * `skillService`; when omitted, IDC still runs but stage changes do
+     * not swap persona prompts.
+     */
+    skillRegistry?: import('@neko/shared').ISkillRegistry;
+    /**
+     * Optional injector for persona Skills. Must be paired with
+     * `skillRegistry`; when omitted, IDC still runs but persona binding is
+     * skipped.
+     */
+    skillService?: import('../skill/skill-service').SkillService;
     /** Initial IDC stage (default: none — tracker stays uninitialised). */
     initialStage?: import('@neko-agent/types').IdcStage;
     /**

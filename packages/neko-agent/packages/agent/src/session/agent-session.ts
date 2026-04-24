@@ -104,6 +104,12 @@ import {
   createConfiguredExecutor,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
+import {
+  classifyIdcEntrySignal,
+  classifyIdcTaskShape,
+  resolveIdcWorkflowId,
+  type IdcTurnPlanningContext,
+} from './idc-turn-planning';
 
 const logger = getLogger('AgentSession');
 
@@ -228,6 +234,8 @@ export class AgentSession implements IAgentSession {
   private _journalSeq = 0;
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
+  /** Current turn's IDC planning hints (input, active skill, external metadata). */
+  private _currentTurnPlanningContext: IdcTurnPlanningContext | null = null;
   private _keyFactExtractor: KeyFactExtractor | null = null;
   private _projectMemoryRouter: ProjectMemoryRouter | null = null;
   private _memoryRecall: MemoryRecall | null = null;
@@ -305,16 +313,18 @@ export class AgentSession implements IAgentSession {
     // callers that need determinism should call syncInitialPersona() directly.
     if (config.stageTracking) {
       this._stageTracker = new StageTracker({ initialStage: config.stageTracking.initialStage });
-      this._stagePersonaBinding = createStagePersonaBinding({
-        stageTracker: this._stageTracker,
-        skillRegistry: config.stageTracking.skillRegistry,
-        skillService: config.stageTracking.skillService,
-        coordinator: this._skillCoordinator,
-        // Resolve `{runId}` in creation-persona's artifact-file contract
-        // lazily so re-applies after a new IdcRun pick up the fresh id.
-        getRunId: () => this._runStore?.getActive()?.id ?? null,
-      });
-      void this._stagePersonaBinding.syncCurrent();
+      if (config.stageTracking.skillRegistry && config.stageTracking.skillService) {
+        this._stagePersonaBinding = createStagePersonaBinding({
+          stageTracker: this._stageTracker,
+          skillRegistry: config.stageTracking.skillRegistry,
+          skillService: config.stageTracking.skillService,
+          coordinator: this._skillCoordinator,
+          // Resolve `{runId}` in creation-persona's artifact-file contract
+          // lazily so re-applies after a new IdcRun pick up the fresh id.
+          getRunId: () => this._runStore?.getActive()?.id ?? null,
+        });
+        void this._stagePersonaBinding.syncCurrent();
+      }
 
       // Install the ReAct-loop stage-activation runner and its companions:
       //   - EventBus: typed channel for compacted round / milestone events.
@@ -449,6 +459,10 @@ export class AgentSession implements IAgentSession {
         stageTracker: this._stageTracker,
         runStore: this._runStore,
         getMode: () => this._executionMode as StageMode,
+        classifyTaskShape: (signals) =>
+          classifyIdcTaskShape(signals, this._currentTurnPlanningContext),
+        classifyEntrySignal: (signals) =>
+          classifyIdcEntrySignal(signals, this._currentTurnPlanningContext),
         eventBus: this._eventBus,
         autohealChain: this._autohealChain,
       });
@@ -633,8 +647,17 @@ export class AgentSession implements IAgentSession {
     }
 
     this._isRunning = true;
+    let runCompletionStatus: 'completed' | 'failed' = 'completed';
+    let runCompletionError: IdcRun['error'] | undefined;
 
     try {
+      this._currentTurnPlanningContext = {
+        input,
+        executionMode: this._executionMode,
+        activeSkill: this.getActiveSkill(),
+        metadata: context?.metadata,
+      };
+
       // Execute UserPromptSubmit hooks (if configured)
       let processedInput = input;
       const memoryQueryInput = input;
@@ -676,6 +699,12 @@ export class AgentSession implements IAgentSession {
           ...(userMessageEventId ? { eventId: userMessageEventId } : {}),
         },
       ];
+
+      if (this._runStore && !this._runStore.getActive()) {
+        this._runStore.startRun({
+          workflowId: resolveIdcWorkflowId(this._currentTurnPlanningContext),
+        });
+      }
 
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
@@ -825,11 +854,20 @@ export class AgentSession implements IAgentSession {
         await this._journalWriter.flush();
       }
     } catch (error) {
+      runCompletionStatus = 'failed';
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      runCompletionError = {
+        code: 'execute_failed',
+        message: normalizedError.message,
+        cause: toSerializableErrorCause(normalizedError),
+      };
       yield {
         type: 'error',
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: normalizedError,
       };
     } finally {
+      this._closeActiveRun(runCompletionStatus, runCompletionError);
+      this._currentTurnPlanningContext = null;
       this._memoryRecallModule.setContent(null);
       this._syncSystemPrompt();
       this._isRunning = false;
@@ -1110,6 +1148,7 @@ export class AgentSession implements IAgentSession {
 
   dispose(): void {
     this.cancel();
+    this._closeActiveRun('aborted');
     this._isRunning = false;
     // Ablation: restore SkillService discovery state if this session disabled
     // it. SkillService is externally owned so we must un-flip to avoid leaking
@@ -1167,6 +1206,15 @@ export class AgentSession implements IAgentSession {
   // ---------------------------------------------------------------------------
   // Private Methods
   // ---------------------------------------------------------------------------
+
+  private _closeActiveRun(
+    status: 'completed' | 'failed' | 'aborted',
+    error?: IdcRun['error'],
+  ): void {
+    const activeRun = this._runStore?.getActive();
+    if (!activeRun) return;
+    this._runStore?.endRun(status, error);
+  }
 
   private _refreshMemoryRuntime(): void {
     const projectMemory = this._config.projectMemoryManager;
@@ -1662,4 +1710,12 @@ function getChatMessageContent(message: ChatMessage): string {
   return message.content
     .flatMap((part) => ('text' in part && typeof part.text === 'string' ? [part.text] : []))
     .join('\n');
+}
+
+function toSerializableErrorCause(error: Error): Record<string, unknown> {
+  return {
+    name: error.name,
+    message: error.message,
+    ...(typeof error.stack === 'string' ? { stack: error.stack } : {}),
+  };
 }
