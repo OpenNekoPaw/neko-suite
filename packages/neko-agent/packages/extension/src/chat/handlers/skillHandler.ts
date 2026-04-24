@@ -138,11 +138,16 @@ export class SkillHandler {
     // Apply the skill with argument interpolation
     try {
       const injection = await skillService.apply(skill, args);
+      this._activeSkill = {
+        skill,
+        injection,
+        appliedAt: Date.now(),
+      };
 
       // Send injection to webview for conversation context
       this._sendSkillInjection(webview, injection);
 
-      return { applied: true, injection };
+      return { applied: true, injection, skill };
     } catch (error) {
       return {
         applied: false,

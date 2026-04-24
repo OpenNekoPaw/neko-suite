@@ -132,7 +132,9 @@ function createMockAgentManager() {
 /** Minimal Platform-shaped object */
 function createMockPlatform() {
   return {
-    config: {},
+    config: {
+      setRuntimeMediaDefaults: vi.fn(),
+    },
     tools: { get: vi.fn() },
     service: { chat: vi.fn(), chatStream: vi.fn() },
   };
@@ -148,6 +150,7 @@ function buildHandler(
     providers?: ReturnType<typeof createMockProviders>;
     conversations?: ReturnType<typeof createMockConversations>;
     settings?: ReturnType<typeof createMockSettings>;
+    isPlanMode?: boolean;
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
@@ -165,6 +168,7 @@ function buildHandler(
     agentManager as any,
     undefined, // editorRegistry
     () => 'mock system prompt',
+    () => overrides.isPlanMode ?? false,
     platform as any,
   );
 }
@@ -176,6 +180,51 @@ function buildHandler(
 describe('MessageHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('IDC plan mode wiring', () => {
+    it('configures the agent in plan execution mode when prompt plan mode is active', async () => {
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+        isPlanMode: true,
+      });
+
+      await handler.handleUserMessage(createMockWebview() as any, 'outline the rollout');
+
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionMode: 'plan',
+        }),
+      );
+    });
+
+    it('passes explicit IDC turn metadata when prompt plan mode is active', async () => {
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+        isPlanMode: true,
+      });
+
+      await handler.handleUserMessage(createMockWebview() as any, 'outline the rollout');
+
+      expect(agentRunner.execute).toHaveBeenCalledWith(
+        'outline the rollout',
+        expect.objectContaining({
+          metadata: {
+            idc: {
+              entrySignal: 'vague-creative',
+              taskShape: 'multi-step',
+              workflowId: 'plan-mode',
+            },
+          },
+        }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

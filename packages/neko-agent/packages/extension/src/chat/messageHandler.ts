@@ -91,6 +91,10 @@ interface AgentStateSnapshot {
   startedAt: number;
 }
 
+interface MessageExecutionOverrides {
+  metadata?: Record<string, unknown>;
+}
+
 export class MessageHandler {
   private _agentStates = new Map<
     string,
@@ -108,6 +112,7 @@ export class MessageHandler {
     private readonly _agentManager: IAgentManager | undefined,
     private readonly _editorRegistry: IEditorRegistry | undefined,
     private readonly _getSystemPrompt: () => string,
+    private readonly _isPlanMode: () => boolean = () => false,
     private readonly _platform?: Platform,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
@@ -259,6 +264,7 @@ export class MessageHandler {
       video?: { providerId?: string; modelId: string };
       audio?: { providerId?: string; modelId: string };
     },
+    executionOverrides?: MessageExecutionOverrides,
   ): Promise<void> {
     const conversationId = requestConversationId || this._conversations.ensureActive();
 
@@ -321,6 +327,7 @@ export class MessageHandler {
         mediaProviderId,
         mediaModelId,
         agentMediaModels,
+        executionOverrides,
       );
     } else {
       this._sendFallbackResponse(webview);
@@ -412,6 +419,7 @@ export class MessageHandler {
       video?: { providerId?: string; modelId: string };
       audio?: { providerId?: string; modelId: string };
     },
+    executionOverrides?: MessageExecutionOverrides,
   ): Promise<void> {
     let confirmationDisposable: { dispose(): void } | undefined;
 
@@ -487,6 +495,8 @@ export class MessageHandler {
           `Use canvas_get_node / canvas_update_node / canvas_generate_image tools to operate on them.`;
       }
 
+      const effectiveExecutionMode = this._isPlanMode() ? 'plan' : this._settings.executionMode;
+
       await agentRunner.configure({
         platform: this._platform,
         systemPrompt,
@@ -495,7 +505,7 @@ export class MessageHandler {
         temperature: this._settings.temperature,
         maxTokens: this._settings.maxTokens,
         modelId: effectiveModelId,
-        executionMode: this._settings.executionMode,
+        executionMode: effectiveExecutionMode,
         thinkingBudget: this._settings.thinkingBudget,
         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
         conversationId,
@@ -513,6 +523,13 @@ export class MessageHandler {
       const canvasSelection = getCanvasSelection();
       if (canvasSelection.length > 0) {
         context.canvasContext = { selectedNodes: canvasSelection };
+      }
+      const metadata = this._buildExecutionMetadata(
+        effectiveExecutionMode,
+        executionOverrides?.metadata,
+      );
+      if (metadata) {
+        context.metadata = metadata;
       }
 
       // Subscribe to tool confirmation requests (ask mode)
@@ -657,6 +674,14 @@ export class MessageHandler {
     return result;
   }
 
+  private _buildExecutionMetadata(
+    executionMode: 'auto' | 'ask' | 'plan',
+    overrides?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    const base = executionMode === 'plan' ? _createPlanModeMetadata() : undefined;
+    return _mergeMetadata(base, overrides);
+  }
+
   /**
    * Parse @ file references from message using InputProcessor
    */
@@ -746,4 +771,43 @@ export class MessageHandler {
   dispose(): void {
     this._assetIndex?.dispose();
   }
+}
+
+function _createPlanModeMetadata(): Record<string, unknown> {
+  return {
+    idc: {
+      entrySignal: 'vague-creative',
+      taskShape: 'multi-step',
+      workflowId: 'plan-mode',
+    },
+  };
+}
+
+function _mergeMetadata(
+  base?: Record<string, unknown>,
+  overrides?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!base && !overrides) return undefined;
+
+  const merged: Record<string, unknown> = {
+    ...(base ?? {}),
+    ...(overrides ?? {}),
+  };
+
+  const baseIdc = _asRecord(base?.['idc']);
+  const overrideIdc = _asRecord(overrides?.['idc']);
+  if (baseIdc || overrideIdc) {
+    merged['idc'] = {
+      ...(baseIdc ?? {}),
+      ...(overrideIdc ?? {}),
+    };
+  }
+
+  return merged;
+}
+
+function _asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

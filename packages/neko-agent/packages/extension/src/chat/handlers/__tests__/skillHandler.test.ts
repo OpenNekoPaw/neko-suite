@@ -113,7 +113,12 @@ describe('SkillHandler', () => {
     });
 
     it('should apply slash command and send injection', async () => {
-      const mockSkill = { name: 'commit', description: 'Create a commit', slashCommand: '/commit' };
+      const mockSkill = {
+        name: 'commit',
+        description: 'Create a commit',
+        command: 'commit',
+        phases: [{ name: 'draft' }],
+      };
       skillService.registry.getSkillByCommand.mockReturnValue(mockSkill);
       skillService.apply.mockReturnValue({
         name: 'commit',
@@ -132,7 +137,8 @@ describe('SkillHandler', () => {
           systemPrompt: 'You are a commit assistant',
         }),
       );
-      expect(result).toEqual(expect.objectContaining({ applied: true }));
+      expect(result).toEqual(expect.objectContaining({ applied: true, skill: mockSkill }));
+      expect(handler.getActiveSkill()?.skill).toBe(mockSkill);
     });
   });
 

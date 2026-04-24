@@ -314,6 +314,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._agentManager,
           this._editorRegistry,
           () => this._buildSystemPromptWithSkills(skillService),
+          () => this._systemPrompt.isPlanMode(),
           this._platform,
         );
 
@@ -404,7 +405,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           platform: this._platform,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
-        this._slashCommandHandler.updateDeps({ agentManager: this._agentManager });
+        this._slashCommandHandler.updateDeps({
+          agentManager: this._agentManager,
+          messages: this._messages,
+        });
         this._conversationMessageHandler.updateDeps({
           agentManager: this._agentManager,
           messages: this._messages,
@@ -909,7 +913,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Slash command invocation
         case 'invokeSlashCommand':
-          this._slashCommandHandler.handleCommand(
+          void this._slashCommandHandler.handleCommand(
             webview,
             message.command as string,
             message.args as string | undefined,

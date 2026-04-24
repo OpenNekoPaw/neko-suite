@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode';
+import type { Skill } from '@neko/shared';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { ConversationHandler } from '../conversationHandler';
 import type { SettingsManager } from '../settingsManager';
@@ -16,6 +17,7 @@ import type { SkillHandler } from './skillHandler';
 import type { TaskHandler } from './taskHandler';
 import type { ContextHandler } from './contextHandler';
 import type { PlanModeHandler } from './planModeHandler';
+import type { MessageHandler } from '../messageHandler';
 
 /**
  * Dependencies for SlashCommandHandler
@@ -25,6 +27,7 @@ export interface SlashCommandHandlerDeps {
   agentManager?: IAgentManager;
   settings: SettingsManager;
   systemPrompt: SystemPromptManager;
+  messages?: MessageHandler;
   skillHandler: SkillHandler;
   taskHandler: TaskHandler;
   contextHandler: ContextHandler;
@@ -49,17 +52,17 @@ export class SlashCommandHandler {
    * Handle slash command invocation
    * Supports both builtin commands and skill-based commands
    */
-  handleCommand(webview: vscode.Webview, command: string, args?: string): void {
+  async handleCommand(webview: vscode.Webview, command: string, args?: string): Promise<void> {
     // Remove leading / if present
     const cmdName = command.startsWith('/') ? command.slice(1) : command;
 
     // Handle builtin commands first
-    if (this._handleBuiltinCommand(webview, cmdName)) {
+    if (this._handleBuiltinCommand(webview, cmdName, args)) {
       return;
     }
 
     // If not a builtin command, try skill-based slash command
-    const result = this.deps.skillHandler.handleSlashCommand(webview, cmdName, args);
+    const result = await this.deps.skillHandler.handleSlashCommand(webview, cmdName, args);
 
     if (result) {
       if (result.applied) {
@@ -75,7 +78,30 @@ export class SlashCommandHandler {
         if (result.injection) {
           const conversationId = this.deps.conversations.getActiveId();
           if (conversationId) {
-            this.deps.agentManager?.applySkillInjection(conversationId, result.injection);
+            this.deps.agentManager?.applySkillInjection(
+              conversationId,
+              result.injection,
+              result.skill,
+            );
+
+            const nextPrompt = args?.trim();
+            if (nextPrompt && this.deps.messages) {
+              const executionOverrides = _createSlashExecutionOverrides(result.skill);
+              await this.deps.messages.handleUserMessage(
+                webview,
+                nextPrompt,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                conversationId,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                executionOverrides,
+              );
+            }
           }
         }
       } else {
@@ -142,7 +168,7 @@ export class SlashCommandHandler {
    * Handle builtin commands
    * @returns true if the command was handled, false otherwise
    */
-  private _handleBuiltinCommand(webview: vscode.Webview, cmdName: string): boolean {
+  private _handleBuiltinCommand(webview: vscode.Webview, cmdName: string, args?: string): boolean {
     switch (cmdName) {
       case 'clear':
       case 'cls': {
@@ -242,6 +268,18 @@ export class SlashCommandHandler {
           data: { planMode: newPlanMode },
           message: `Plan mode ${newPlanMode ? 'enabled' : 'disabled'}`,
         });
+        const nextPrompt = args?.trim();
+        if (newPlanMode && nextPrompt && this.deps.messages) {
+          void this.deps.messages.handleUserMessage(
+            webview,
+            nextPrompt,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this.deps.conversations.getActiveId(),
+          );
+        }
         return true;
       }
 
@@ -308,4 +346,31 @@ export class SlashCommandHandler {
         return false;
     }
   }
+}
+
+function _createSlashExecutionOverrides(
+  skill: Skill | undefined,
+): { metadata?: Record<string, unknown> } | undefined {
+  if (!skill) {
+    return undefined;
+  }
+
+  const legacyPipelines = Reflect.get(skill as object, 'pipelines');
+  const hasWorkflowTemplate =
+    (skill.phases?.length ?? 0) > 0 ||
+    (typeof legacyPipelines === 'object' && legacyPipelines !== null);
+
+  if (!hasWorkflowTemplate) {
+    return undefined;
+  }
+
+  return {
+    metadata: {
+      idc: {
+        entrySignal: 'workflow-template',
+        taskShape: 'multi-step',
+        workflowId: `skill:${skill.name}`,
+      },
+    },
+  };
 }

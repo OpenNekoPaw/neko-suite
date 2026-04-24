@@ -38,6 +38,8 @@ import {
 import type { IProjectMemoryManager, PromptFragment } from '@neko/shared';
 import { getCapabilityDiscoveryService } from '../bootstrap/capabilityBootstrap';
 import * as nodePath from 'node:path';
+import * as nodeFs from 'node:fs/promises';
+import * as nodeOs from 'node:os';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
 
@@ -496,6 +498,20 @@ export class AgentRunner implements IAgentRunner {
       hooks: customHooks.length > 0 ? customHooks : undefined,
       toolCategoryRegistry: config.toolCategoryRegistry,
       projectMemoryManager: this._projectMemoryManager,
+      stageTracking: {},
+      ...(config.workspaceRoot && {
+        workspace: {
+          root: config.workspaceRoot,
+          fsOps: {
+            appendFile: (filePath: string, data: string) => nodeFs.appendFile(filePath, data),
+            mkdir: async (dirPath: string, opts?: { recursive: boolean }) => {
+              await nodeFs.mkdir(dirPath, { recursive: opts?.recursive ?? false });
+            },
+            readFile: (filePath: string, encoding: 'utf-8') => nodeFs.readFile(filePath, encoding),
+          },
+          globalPreferencesPath: nodePath.join(nodeOs.homedir(), '.neko', 'preferences.md'),
+        },
+      }),
       ...(journalWriter && { journalWriter, conversationId: config.conversationId }),
       onConfirmTool: async (request) => {
         return this._handleToolConfirmation(request);
