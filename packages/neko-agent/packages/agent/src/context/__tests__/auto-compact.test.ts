@@ -56,7 +56,9 @@ function createMockCompressor(overrides?: {
       : vi.fn().mockResolvedValue(compressResult),
     estimateTokens: vi.fn().mockReturnValue(5000),
     configure: vi.fn(),
-    getConfig: vi.fn(),
+    getConfig: vi.fn().mockReturnValue({
+      triggers: { tokenThreshold: 4000, turnThreshold: 20 },
+    }),
     setSummarizer: vi.fn(),
     setClassifier: vi.fn(),
     getTurns: vi.fn().mockReturnValue([]),

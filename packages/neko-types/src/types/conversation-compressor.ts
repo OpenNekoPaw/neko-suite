@@ -103,6 +103,8 @@ export const DEFAULT_COMPRESSOR_CONFIG: ConversationCompressorConfig = {
 export interface CompressedMessage {
   /** Original message or summary */
   message: ChatMessage;
+  /** Source message indexes in the pre-compression history */
+  sourceIndexes?: number[];
   /** Whether this is a summary of multiple messages */
   isSummary: boolean;
   /** Original message count if summary */

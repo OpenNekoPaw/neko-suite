@@ -35,9 +35,19 @@ export interface AutoCompactResult {
   compressed: boolean;
   /** New history messages (only when compressed) */
   newHistory?: ChatMessage[];
+  /** Full compression result when compaction succeeded */
+  compressionResult?: import('@neko/shared').ConversationCompressionResult;
+  /** Trigger that caused auto-compaction */
+  trigger?: AutoCompactTrigger;
   /** Reason compression was skipped (if not compressed) */
   skipReason?: string;
+  /** Error message when compression failed */
+  errorMessage?: string;
+  /** Consecutive failure count after this run */
+  failureCount?: number;
 }
+
+export type AutoCompactTrigger = 'token_threshold' | 'turn_threshold';
 
 // =============================================================================
 // Constants
@@ -95,6 +105,7 @@ export async function autoCompactIfNeeded(
   options?: { activeSkills?: string[] },
 ): Promise<AutoCompactResult> {
   const now = Date.now();
+  const trigger = detectAutoCompactTrigger(compressor, history, currentTokens);
 
   // 1. Circuit breaker check
   if (state.isCircuitOpen) {
@@ -137,7 +148,7 @@ export async function autoCompactIfNeeded(
       messagesRemoved: result.messagesRemoved,
     });
 
-    return { compressed: true, newHistory };
+    return { compressed: true, newHistory, compressionResult: result, trigger };
   } catch (error) {
     // Failure: increment counter, maybe open circuit
     state.consecutiveFailures++;
@@ -157,7 +168,28 @@ export async function autoCompactIfNeeded(
 
     return {
       compressed: false,
+      trigger,
       skipReason: state.isCircuitOpen ? 'circuit_opened' : 'compression_failed',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      failureCount: state.consecutiveFailures,
     };
   }
+}
+
+function detectAutoCompactTrigger(
+  compressor: IConversationCompressor,
+  history: ChatMessage[],
+  currentTokens: number,
+): AutoCompactTrigger | undefined {
+  const config = compressor.getConfig();
+  if (currentTokens >= config.triggers.tokenThreshold) {
+    return 'token_threshold';
+  }
+
+  const turns = compressor.getTurns(history);
+  if (turns.length >= config.triggers.turnThreshold) {
+    return 'turn_threshold';
+  }
+
+  return undefined;
 }

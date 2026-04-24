@@ -124,12 +124,17 @@ export class ConversationCompressor implements IConversationCompressor {
   ): Promise<ConversationCompressionResult> {
     const originalTokens = this.estimateTokens(messages);
     const turns = this.getTurns(messages);
+    const messageIndexMap = new Map<ChatMessage, number>();
+    messages.forEach((message, index) => {
+      messageIndexMap.set(message, index);
+    });
 
     // If not enough turns, return as-is
     if (turns.length <= this.config.conversationWindow.recentTurns && !options?.force) {
       return {
-        messages: messages.map((msg) => ({
+        messages: messages.map((msg, index) => ({
           message: msg,
+          sourceIndexes: [index],
           isSummary: false,
           compressedTokens: estimateMessageTokens(msg),
         })),
@@ -159,6 +164,7 @@ export class ConversationCompressor implements IConversationCompressor {
       for (const msg of systemTurn.messages) {
         compressedMessages.push({
           message: msg,
+          sourceIndexes: getMessageSourceIndexes([msg], messageIndexMap),
           isSummary: false,
           compressedTokens: estimateMessageTokens(msg),
         });
@@ -181,6 +187,7 @@ export class ConversationCompressor implements IConversationCompressor {
         for (const item of userMsgs) {
           compressedMessages.push({
             message: item.message,
+            sourceIndexes: getMessageSourceIndexes([item.message], messageIndexMap),
             isSummary: false,
             compressedTokens: estimateMessageTokens(item.message),
           });
@@ -202,6 +209,7 @@ export class ConversationCompressor implements IConversationCompressor {
                 role: 'system',
                 content: `[Creative summary of turns 1-${olderTurns.length}]\n${summary}`,
               },
+              sourceIndexes: getMessageSourceIndexes(nonUserMessages, messageIndexMap),
               isSummary: true,
               originalCount: nonUserMessages.length,
               originalTokens: nonUserMessages.reduce((sum, m) => sum + estimateMessageTokens(m), 0),
@@ -225,6 +233,7 @@ export class ConversationCompressor implements IConversationCompressor {
               role: 'system',
               content: `[Summary of turns 1-${olderTurns.length}]\n${summary}`,
             },
+            sourceIndexes: getMessageSourceIndexes(olderMessages, messageIndexMap),
             isSummary: true,
             originalCount: olderMessages.length,
             originalTokens: olderTurns.reduce((sum, t) => sum + t.tokenCount, 0),
@@ -246,6 +255,7 @@ export class ConversationCompressor implements IConversationCompressor {
         const compressedMsg = this.compressMessage(msg);
         compressedMessages.push({
           message: compressedMsg,
+          sourceIndexes: getMessageSourceIndexes([msg], messageIndexMap),
           isSummary: false,
           compressedTokens: estimateMessageTokens(compressedMsg),
         });
@@ -440,6 +450,22 @@ export class ConversationCompressor implements IConversationCompressor {
   estimateTokens(messages: ChatMessage[]): number {
     return messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
   }
+}
+
+function getMessageSourceIndexes(
+  messages: readonly ChatMessage[],
+  messageIndexMap: ReadonlyMap<ChatMessage, number>,
+): number[] {
+  const indexes: number[] = [];
+
+  for (const message of messages) {
+    const index = messageIndexMap.get(message);
+    if (index !== undefined) {
+      indexes.push(index);
+    }
+  }
+
+  return indexes;
 }
 
 /**
