@@ -4,6 +4,7 @@
 
 export * from './types';
 export * from './agent-session';
+export { createSkillWorkflowId, encodeWorkflowIdSegment } from './idc-workflow-id';
 export {
   initializeSession,
   type SessionComponents,

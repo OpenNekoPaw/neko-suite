@@ -49,6 +49,24 @@ describe('idc-turn-planning', () => {
     expect(resolveIdcWorkflowId(context)).toBe('skill:launch-workflow');
   });
 
+  it('escapes workflow skill names before building workflowId', () => {
+    const context = planningContext({
+      activeSkill: {
+        name: '剪辑: 快速 workflow',
+        description: 'workflow',
+        content: '',
+        source: 'builtin',
+        enabled: true,
+        command: 'edit-fast',
+        phases: [{ name: 'draft' }],
+      } as never,
+    });
+
+    expect(resolveIdcWorkflowId(context)).toBe(
+      'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+    );
+  });
+
   it('detects referenced artifacts and resumes from the artifact path', () => {
     const context = planningContext({
       input: 'Continue from @draft-tiktok-001 and polish the timeline',

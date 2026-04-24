@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import type { Skill } from '@neko/shared';
+import { createSkillWorkflowId } from '@neko/agent';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { ConversationHandler } from '../conversationHandler';
 import type { SettingsManager } from '../settingsManager';
@@ -369,7 +370,7 @@ function _createSlashExecutionOverrides(
       idc: {
         entrySignal: 'workflow-template',
         taskShape: 'multi-step',
-        workflowId: `skill:${skill.name}`,
+        workflowId: createSkillWorkflowId(skill.name),
       },
     },
   };

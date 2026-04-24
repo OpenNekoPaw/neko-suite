@@ -415,6 +415,54 @@ describe('SlashCommandHandler', () => {
       expect(messageHandler.handleUserMessage).not.toHaveBeenCalled();
     });
 
+    it('should escape workflow skill names in IDC metadata for slash execution', async () => {
+      const agentManager = { applySkillInjection: vi.fn() };
+      handler = new SlashCommandHandler({
+        conversations: conversations as any,
+        agentManager: agentManager as any,
+        settings: settings as any,
+        systemPrompt: systemPrompt as any,
+        messages: messageHandler as any,
+        skillHandler: skillHandler as any,
+        taskHandler: taskHandler as any,
+        contextHandler: contextHandler as any,
+        planModeHandler: planModeHandler as any,
+        sendConversationList,
+        sendActiveConversation,
+      });
+      const skill = { name: '剪辑: 快速 workflow', command: 'edit', phases: [{ name: 'draft' }] };
+      skillHandler.handleSlashCommand.mockResolvedValue({
+        applied: true,
+        injection: { name: 'edit' },
+        skill,
+      });
+
+      await handler.handleCommand(webview as any, 'edit', 'polish cut');
+
+      expect(messageHandler.handleUserMessage).toHaveBeenCalledWith(
+        webview,
+        'polish cut',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'conv-1',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          metadata: {
+            idc: {
+              entrySignal: 'workflow-template',
+              taskShape: 'multi-step',
+              workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+            },
+          },
+        },
+      );
+    });
+
     it('should let the agent decide IDC when the skill has no workflow phases', async () => {
       const agentManager = { applySkillInjection: vi.fn() };
       handler = new SlashCommandHandler({

@@ -417,6 +417,8 @@ export {
 export {
   AgentSession,
   createAgentSession,
+  createSkillWorkflowId,
+  encodeWorkflowIdSegment,
   PLAN_MODE_SYSTEM_REMINDER as SESSION_PLAN_MODE_REMINDER,
   type IAgentSession,
   type AgentSessionConfig,

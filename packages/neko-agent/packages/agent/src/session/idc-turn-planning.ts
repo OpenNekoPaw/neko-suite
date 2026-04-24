@@ -3,6 +3,7 @@ import type { StageTaskShape } from '@neko-agent/types';
 import type { StageEntrySignal } from '../skill/activation/stage-planner';
 import type { ExecutionMode } from './types';
 import type { TaskShapeSignals } from '../executor/react-loop-runner';
+import { createSkillWorkflowId } from './idc-workflow-id';
 
 export interface IdcTurnMetadata {
   entrySignal?: StageEntrySignal;
@@ -110,7 +111,9 @@ export function resolveIdcWorkflowId(context: IdcTurnPlanningContext | null): st
 
   const metadata = extractIdcTurnMetadata(context.metadata);
   if (metadata?.workflowId) return metadata.workflowId;
-  if (hasWorkflowTemplate(context.activeSkill)) return `skill:${context.activeSkill!.name}`;
+  if (hasWorkflowTemplate(context.activeSkill)) {
+    return createSkillWorkflowId(context.activeSkill!.name);
+  }
   if (context.executionMode === 'plan') return 'plan-mode';
   if (IDC_ARTIFACT_REF_RE.test(context.input)) return 'artifact-resume';
   return 'agent-turn';
