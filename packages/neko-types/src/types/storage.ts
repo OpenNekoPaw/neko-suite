@@ -30,7 +30,7 @@ export interface IGlobalStorageLayout {
   readonly marketCache: string;
   readonly marketInstalled: string;
   readonly conversations: string;
-  readonly globalMemory: string;
+  readonly agentsMd: string;
   readonly config: string;
 }
 
@@ -74,11 +74,11 @@ export function resolveGlobalStorageLayout(homedir: string): IGlobalStorageLayou
   const root = join(homedir, '.neko');
   return {
     root,
+    agentsMd: join(root, 'AGENTS.md'),
     config: join(root, 'config.json'),
     marketCache: join(root, 'market-cache'),
     marketInstalled: join(root, 'market-installed.json'),
     conversations: join(root, 'conversations'),
-    globalMemory: join(root, 'global-memory.md'),
   };
 }
 

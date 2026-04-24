@@ -31,7 +31,7 @@ export type { ToolConfirmationRequest, PermissionMode } from '../permission/type
  * Implemented by JournalWriter — defined here to break the circular dependency.
  */
 export interface IJournalWriter {
-  appendEvent(seq: number, event: AgentEvent): Promise<void>;
+  appendEvent(seq: number, event: AgentEvent): Promise<string>;
   appendSnapshot(
     seq: number,
     snapshot: { historyLength: number; executionMode: ExecutionMode; versionLogSize: number },
@@ -155,17 +155,38 @@ export interface AgentSessionConfig {
   projectMemoryManager?: import('@neko/shared').IProjectMemoryManager;
 
   /**
-   * Global memory manager for cross-project persistence.
-   * When provided, memory content is injected into the `environment` layer
-   * of the system prompt. Backed by `~/.neko/global-memory.md`.
+   * Whether Journal-backed projection remains the primary persistence path.
+   * `false` keeps journaling enabled but allows callers to rebuild adjacent
+   * resume/storage layers in legacy Record-first mode as a rollback hatch.
+   *
+   * Default: true
    */
-  globalMemoryManager?: import('@neko/shared').IProjectMemoryManager;
+  journalAsSSOT?: boolean;
+
+  /**
+   * Whether working-memory compaction should emit compaction events into the
+   * Journal. `false` preserves in-memory compression but skips Journal
+   * provenance/logging for the compaction step.
+   *
+   * Default: true
+   */
+  compactLogging?: boolean;
 
   /**
    * Enable automatic KeyFact extraction from conversations.
-   * When true, CreativeMemoryHooks will extract key facts after each turn.
+   * When true, AgentSession extracts turn-level KeyFacts and routes them into
+   * project memory (`.neko/memory.md`) after each successful turn.
    */
   autoMemoryExtraction?: boolean;
+
+  /**
+   * Enable per-turn memory recall injection from project memory.
+   * When false, `.neko/memory.md` still exists as project memory state but the
+   * recall results are not injected into the ephemeral prompt layer.
+   *
+   * Default: true
+   */
+  memoryRecall?: boolean;
 
   /**
    * Optional reference to the shared SkillService. When supplied, ablation
@@ -262,6 +283,10 @@ export interface AgentSessionConfig {
  * Agent event types
  */
 export type AgentEventType =
+  | 'user_message' // User input persisted to journal for resume / projection
+  | 'compaction' // Working-memory compaction summary written to journal
+  | 'compaction_failed' // Compaction attempt failed and tripped/advanced circuit state
+  | 'memory_extraction' // Semantic memory extraction/write pipeline event
   | 'thinking' // Agent is in thinking phase
   | 'thinking_content' // Extended thinking content (Claude)
   | 'text' // Text output (complete)
@@ -318,6 +343,42 @@ export interface AgentEvent {
 
   /** Tool confirmation request */
   toolConfirmation?: import('../permission/types').ToolConfirmationRequest;
+
+  /** Compaction summary event */
+  compaction?: {
+    timestamp: number;
+    trigger: 'token_threshold' | 'turn_threshold' | 'manual';
+    replacedEventIds: string[];
+    summaryContent: string;
+    summaryMessageRole: 'system' | 'user';
+    tokenProfile: {
+      before: number;
+      after: number;
+    };
+    strategy: 'basic' | 'creative-priority';
+  };
+
+  /** Compaction failure event */
+  compactionFailed?: {
+    trigger: 'token_threshold' | 'turn_threshold' | 'manual';
+    reason: string;
+    failureCount: number;
+    circuitOpen: boolean;
+  };
+
+  /** Memory extraction pipeline event */
+  memoryExtraction?: {
+    timestamp: number;
+    sourceEventIds: string[];
+    facts: Array<{
+      id: string;
+      content: string;
+      category: 'preference' | 'decision' | 'context' | 'action';
+      confidence: number;
+      destination: 'project';
+    }>;
+    writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
+  };
 
   /** Creative version entry (on version_recorded) */
   versionEntry?: import('@neko/shared').CreativeVersionEntry;
@@ -452,7 +513,7 @@ export interface IAgentSession {
   /**
    * Add message to history
    */
-  addMessage(message: ChatMessage): void;
+  addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void;
 
   /**
    * Apply skill injection (reversible via removeSkillInjection)
@@ -495,7 +556,7 @@ export interface IAgentSession {
   /**
    * Load history from external source
    */
-  loadHistory(messages: ChatMessage[]): void;
+  loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void;
 
   // ---------------------------------------------------------------------------
   // Context Management

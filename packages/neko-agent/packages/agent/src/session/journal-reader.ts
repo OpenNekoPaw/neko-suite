@@ -8,6 +8,7 @@
 import type { ChatMessage, CreativeVersionEntry } from '@neko/shared';
 import type { ExecutionMode } from './types';
 import type { JournalEntry, SubAgentRef, StateSnapshot } from './journal-writer';
+import { projectJournalEntriesToHistory } from './working-memory';
 
 // =============================================================================
 // Types
@@ -62,11 +63,16 @@ export class JournalReader {
     const lines = content.split('\n');
     const entries: JournalEntry[] = [];
 
-    for (const line of lines) {
+    for (const [lineIndex, line] of lines.entries()) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       try {
-        entries.push(JSON.parse(trimmed) as JournalEntry);
+        const parsed = JSON.parse(trimmed) as JournalEntry;
+        entries.push({
+          ...parsed,
+          eventId:
+            parsed.eventId ?? createLegacyJournalEntryId(parsed.seq, parsed.ts, trimmed, lineIndex),
+        });
       } catch {
         // Skip corrupted lines — JSONL fault tolerance
       }
@@ -90,16 +96,6 @@ export class JournalReader {
     let lastSeq = 0;
     let lastSnapshot: StateSnapshot | undefined;
 
-    // Pending assistant message accumulator
-    let pendingAssistant: {
-      content: string;
-      toolCalls?: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-      }>;
-    } | null = null;
-
     for (const entry of entries) {
       if (entry.seq > lastSeq) lastSeq = entry.seq;
 
@@ -118,71 +114,20 @@ export class JournalReader {
         const evt = entry.event;
 
         switch (evt.type) {
-          case 'text':
-            // Flush pending assistant message if exists
-            if (pendingAssistant) {
-              history.push({
-                role: 'assistant',
-                content: pendingAssistant.content,
-                toolCalls: pendingAssistant.toolCalls,
-              });
-              pendingAssistant = null;
-            }
-            // Complete text event → assistant message
-            if (evt.content) {
-              history.push({ role: 'assistant', content: evt.content });
-            }
-            break;
-
-          case 'thinking_content':
-            // Accumulate thinking into pending assistant
-            if (!pendingAssistant) pendingAssistant = { content: '' };
-            // Thinking content is metadata, not part of history
-            break;
-
-          case 'tool_call':
-            if (evt.toolCall) {
-              if (!pendingAssistant) pendingAssistant = { content: '' };
-              if (!pendingAssistant.toolCalls) pendingAssistant.toolCalls = [];
-              pendingAssistant.toolCalls.push({
-                id: evt.toolCall.id,
-                type: 'function' as const,
-                function: {
-                  name: evt.toolCall.name,
-                  arguments: JSON.stringify(evt.toolCall.arguments),
-                },
-              });
-            }
-            break;
-
-          case 'tool_result':
-            // Flush pending assistant (with tool calls) before tool result
-            if (pendingAssistant) {
-              history.push({
-                role: 'assistant',
-                content: pendingAssistant.content,
-                toolCalls: pendingAssistant.toolCalls,
-              });
-              pendingAssistant = null;
-            }
-            if (evt.toolResult) {
-              history.push({
-                role: 'tool',
-                content: evt.toolResult.success
-                  ? JSON.stringify(evt.toolResult.data)
-                  : `Error: ${evt.toolResult.error ?? 'Unknown error'}`,
-                toolCallId: evt.toolResult.toolCallId,
-              });
-            }
-            break;
-
           case 'version_recorded':
             if (evt.versionEntry) {
               versionLogEntries.push(evt.versionEntry);
             }
             break;
 
-          // Skip non-history events
+          case 'user_message':
+          case 'compaction':
+          case 'compaction_failed':
+          case 'memory_extraction':
+          case 'text':
+          case 'thinking_content':
+          case 'tool_call':
+          case 'tool_result':
           case 'text_delta':
           case 'thinking':
           case 'tool_progress':
@@ -196,16 +141,20 @@ export class JournalReader {
         }
       }
     }
-
-    // Flush any remaining pending assistant
-    if (pendingAssistant) {
-      history.push({
-        role: 'assistant',
-        content: pendingAssistant.content,
-        toolCalls: pendingAssistant.toolCalls,
-      });
-    }
+    const projectedHistory = projectJournalEntriesToHistory(entries).messages;
+    history.push(...projectedHistory);
 
     return { history, executionMode, versionLogEntries, subAgentRefs, lastSeq, lastSnapshot };
   }
+}
+
+function createLegacyJournalEntryId(
+  seq: number,
+  ts: number,
+  rawLine: string,
+  lineIndex: number,
+): string {
+  const crypto = require('node:crypto') as typeof import('node:crypto');
+  const digest = crypto.createHash('sha1').update(rawLine).digest('hex').slice(0, 12);
+  return `legacy-${seq}-${ts}-${lineIndex.toString(36)}-${digest}`;
 }

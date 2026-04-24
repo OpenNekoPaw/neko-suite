@@ -72,6 +72,8 @@ CORRUPTED LINE
       expect(result).toHaveLength(2);
       expect(result[0]!.seq).toBe(1);
       expect(result[1]!.seq).toBe(2);
+      expect(result[0]!.eventId).toMatch(/^legacy-1-1000-0-[a-f0-9]{12}$/);
+      expect(result[1]!.eventId).toMatch(/^legacy-2-2000-2-[a-f0-9]{12}$/);
     });
 
     it('should skip empty lines', async () => {
@@ -86,6 +88,20 @@ CORRUPTED LINE
 
       const result = await reader.readAll();
       expect(result).toHaveLength(2);
+    });
+
+    it('derives unique fallback event ids even when seq/timestamp collide', async () => {
+      const content = `{"seq":1,"ts":1000,"type":"event","event":{"type":"text","content":"first"}}
+{"seq":1,"ts":1000,"type":"event","event":{"type":"text","content":"second"}}
+`;
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(content),
+      });
+
+      const result = await reader.readAll();
+      expect(result).toHaveLength(2);
+      expect(result[0]!.eventId).not.toBe(result[1]!.eventId);
     });
   });
 
@@ -118,6 +134,76 @@ CORRUPTED LINE
       expect(state!.history).toHaveLength(1);
       expect(state!.history[0]!.role).toBe('assistant');
       expect(state!.history[0]!.content).toBe('Hello from assistant');
+    });
+
+    it('should rebuild user messages from journal events', async () => {
+      const entries: JournalEntry[] = [
+        {
+          seq: 1,
+          ts: 1000,
+          type: 'event',
+          event: { type: 'user_message', content: 'Hello from user' },
+        },
+        {
+          seq: 2,
+          ts: 2000,
+          type: 'event',
+          event: { type: 'text', content: 'Hello from assistant' },
+        },
+      ];
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(entriesToJsonl(entries)),
+      });
+
+      const state = await reader.readSessionState();
+      expect(state).not.toBeNull();
+      expect(state!.history).toHaveLength(2);
+      expect(state!.history[0]).toEqual({ role: 'user', content: 'Hello from user' });
+      expect(state!.history[1]).toEqual({ role: 'assistant', content: 'Hello from assistant' });
+    });
+
+    it('should apply compaction events when rebuilding history', async () => {
+      const entries: JournalEntry[] = [
+        {
+          eventId: 'evt-user-old',
+          seq: 1,
+          ts: 1000,
+          type: 'event',
+          event: { type: 'user_message', content: 'old question' },
+        },
+        {
+          eventId: 'evt-text-old',
+          seq: 2,
+          ts: 2000,
+          type: 'event',
+          event: { type: 'text', content: 'old answer' },
+        },
+        {
+          seq: 3,
+          ts: 3000,
+          type: 'event',
+          event: {
+            type: 'compaction',
+            compaction: {
+              timestamp: 3000,
+              trigger: 'manual',
+              replacedEventIds: ['evt-user-old', 'evt-text-old'],
+              summaryContent: 'summary',
+              summaryMessageRole: 'system',
+              tokenProfile: { before: 100, after: 20 },
+              strategy: 'basic',
+            },
+          },
+        },
+      ];
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(entriesToJsonl(entries)),
+      });
+
+      const state = await reader.readSessionState();
+      expect(state!.history).toEqual([{ role: 'system', content: 'summary' }]);
     });
 
     it('should rebuild tool call + tool result sequence', async () => {

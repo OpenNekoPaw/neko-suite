@@ -118,3 +118,29 @@ export function createJournalStorage(fsOps: JournalStorageFsOps, baseDir?: strin
   const dir = baseDir ?? path.join(process.env['HOME'] ?? '~', '.neko', 'journals');
   return new JournalStorage(dir, fsOps);
 }
+
+/**
+ * Create a JournalStorage backed by Node.js fs/promises.
+ */
+export function createNodeJournalStorage(baseDir?: string): JournalStorage {
+  const fs = require('node:fs/promises') as typeof import('node:fs/promises');
+  return createJournalStorage(
+    {
+      appendFile: (p, data) => fs.appendFile(p, data),
+      mkdir: (p, opts) => fs.mkdir(p, opts).then(() => undefined),
+      readFile: (p) => fs.readFile(p, 'utf-8'),
+      exists: async (p) => {
+        try {
+          await fs.access(p);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      readdir: (p) => fs.readdir(p),
+      stat: (p) => fs.stat(p),
+      unlink: (p) => fs.unlink(p),
+    },
+    baseDir,
+  );
+}

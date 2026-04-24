@@ -106,6 +106,7 @@ describe('JournalWriter', () => {
       await writer.appendEvent(5, event);
 
       const parsed = JSON.parse(fsOps._written[0]!.trim());
+      expect(typeof parsed.eventId).toBe('string');
       expect(parsed.seq).toBe(5);
       expect(parsed.type).toBe('event');
       expect(parsed.event.type).toBe('text');

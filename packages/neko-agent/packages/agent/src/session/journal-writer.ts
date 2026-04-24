@@ -32,6 +32,8 @@ export interface SubAgentRef {
 
 /** Single JSONL line entry */
 export interface JournalEntry {
+  /** Stable entry identifier (generated when omitted) */
+  eventId?: string;
   /** Monotonically increasing sequence number */
   seq: number;
   /** Timestamp (ms) */
@@ -49,6 +51,14 @@ export interface JournalEntry {
 export interface JournalWriterOptions {
   filePath: string;
   fsOps: JournalFsOps;
+}
+
+/**
+ * Create a stable journal entry ID with a sortable timestamp prefix.
+ */
+export function createJournalEntryId(now = Date.now()): string {
+  const crypto = require('node:crypto') as typeof import('node:crypto');
+  return `${now.toString(36)}-${crypto.randomUUID()}`;
 }
 
 // =============================================================================
@@ -77,29 +87,36 @@ export class JournalWriter implements IJournalWriter {
   }
 
   /** Append a raw JournalEntry to the JSONL file */
-  async append(entry: JournalEntry): Promise<void> {
+  async append(entry: JournalEntry): Promise<string> {
     await this._ensureDir();
+    const withEventId: JournalEntry = entry.eventId
+      ? entry
+      : { ...entry, eventId: createJournalEntryId(entry.ts) };
     // Serialize error objects (not JSON-serializable by default)
-    const sanitized = entry.event?.error
+    const sanitized = withEventId.event?.error
       ? {
-          ...entry,
+          ...withEventId,
           event: {
-            ...entry.event,
-            error: { message: entry.event.error.message, name: entry.event.error.name },
+            ...withEventId.event,
+            error: {
+              message: withEventId.event.error.message,
+              name: withEventId.event.error.name,
+            },
           },
         }
-      : entry;
+      : withEventId;
     const line = JSON.stringify(sanitized) + '\n';
     // Chain writes to maintain order
     this._pendingWrite = this._pendingWrite.then(() =>
       this._fsOps.appendFile(this._filePath, line),
     );
     await this._pendingWrite;
+    return withEventId.eventId ?? createJournalEntryId(entry.ts);
   }
 
   /** Append an AgentEvent entry */
-  async appendEvent(seq: number, event: AgentEvent): Promise<void> {
-    await this.append({ seq, ts: Date.now(), type: 'event', event });
+  async appendEvent(seq: number, event: AgentEvent): Promise<string> {
+    return this.append({ seq, ts: Date.now(), type: 'event', event });
   }
 
   /** Append a state snapshot entry */
