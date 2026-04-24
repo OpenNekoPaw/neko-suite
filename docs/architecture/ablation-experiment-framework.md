@@ -1,6 +1,8 @@
 # 消融实验框架设计方案
 
 > 状态更新（2026-04-24）：代码中的 legacy `sessionMemory` / `disableSessionMemory` toggle 已移除。当前实验实现的 persistence 相关开关已收敛为 `journalAsSSOT`、`compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`；若后文仍出现 `sessionMemory`，应视为早期设计草案而非当前代码。
+>
+> **Proposed 扩展（2026-04-24）**：[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 拟新增 7 个 FeedbackArbiter 相关 toggle（`feedbackArbiter` / `feedbackPolicy` / `selfEvalSignal` / `memoryConflictSignal` / `regressionEnabled` / `llmConfidenceSignal` / `stageRegistry`）并明确**消融永不作为 stage**的原则。详见文末 "§附录 A：Proposed FeedbackArbiter Toggles"。
 
 ## 当前实现快照（2026-04-24）
 
@@ -702,3 +704,85 @@ pnpm exec vitest run packages/agent/src/experiment/__tests__/apply-toggles.integ
 # 3. presets 测试（已通过）
 pnpm exec vitest run packages/agent/src/experiment/__tests__/presets.test.ts
 ```
+
+---
+
+## 附录 A：Proposed FeedbackArbiter Toggles（2026-04-24）
+
+本附录对齐 [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) Proposed 内容。ADR 落地后，本附录内容上抬为正式 §1 AblationToggles 小节。
+
+### A.1 原则声明
+
+**消融永不作为 stage。** 消融是横切切面（观察 / 关组件 / 采指标），不占用 IDC stage 位置，也不拥有 artifact kind 或 persona 绑定。新 stage 的扩展走 `StageRegistry.register()` 显式注册路径（见 ADR §7），与消融机制完全正交。
+
+| 反模式 | 为什么错 |
+|---|---|
+| 把 "ablation-check" 当成一个 stage 插入流程 | Stage 需要 persona / prompt 模块 / artifact schema 三件套，消融不具备 |
+| 让 AblationToggle 直接驱动 stage DAG 跳转 | 会把"实验变量"和"流程骨架"耦合——后续难以分离对照组 |
+| 用消融覆盖 StageRegistry 默认注册表 | 默认 IDC 三阶段由 runtime bootstrap 固定；消融只能**关某组件**，不能**改骨架** |
+
+### A.2 新增 Toggle 清单
+
+```typescript
+export interface AblationToggles {
+  // ... 现有 18 个字段保留 ...
+
+  // === Proposed: FeedbackArbiter 相关（见 adr-control-plane-feedback-arbiter.md） ===
+
+  /** 整体开关：关掉 FeedbackArbiter 仲裁，回退到碎片化 hook（validation/retry/observation 各自处理）
+   *  对照组：验证"仲裁是否真正提升决策质量" */
+  feedbackArbiter?: false;
+
+  /** 策略切换：'default'（硬规则优先 + AI 自评兜底）/ 'hard-rules-only'（纯硬规则）/ 'ai-driven'（AI 自评主导）
+   *  用于验证不同决策权分配下的产物质量差异 */
+  feedbackPolicy?: 'default' | 'hard-rules-only' | 'ai-driven';
+
+  /** 关闭 AI 自评信号源（SelfEvaluationHooks 不触发 FeedbackSignal）
+   *  用于回答"关掉 AI 自评，只靠硬规则驱动，质量会下降多少" */
+  selfEvalSignal?: false;
+
+  /** 关闭 Memory 冲突检测信号（ProjectMemoryRouter.detectConflict 不触发）
+   *  用于评估 Memory 对反馈决策的贡献 */
+  memoryConflictSignal?: false;
+
+  /** 禁用 L2 回退（FeedbackDecision 'regress-to' 降级为 'retry-stage'）
+   *  用于验证"回退是否真的提升最终质量" vs 线性推进 */
+  regressionEnabled?: false;
+
+  /** 关闭 LLM 置信度信号（保留接口但不触发）
+   *  影响 ai-driven policy 的判断 */
+  llmConfidenceSignal?: false;
+
+  /** StageRegistry 注册变体：'default'（仅 IDC 三阶段）/ 'with-review'（追加 review stage）
+   *  扩展 stage 的实验对照——不是动态 stage，而是"带/不带 review 的对照组" */
+  stageRegistry?: 'default' | 'with-review';
+}
+```
+
+### A.3 预置变体（presets.ts 扩展）
+
+```typescript
+{ name: 'no-feedback-arbiter',  toggles: { feedbackArbiter: false } }
+{ name: 'hard-rules-only',       toggles: { feedbackPolicy: 'hard-rules-only' } }
+{ name: 'ai-driven-feedback',   toggles: { feedbackPolicy: 'ai-driven' } }
+{ name: 'no-self-eval',          toggles: { selfEvalSignal: false } }
+{ name: 'no-memory-conflict',    toggles: { memoryConflictSignal: false } }
+{ name: 'no-regression',         toggles: { regressionEnabled: false } }
+{ name: 'with-review-stage',     toggles: { stageRegistry: 'with-review' } }
+```
+
+### A.4 功能独立性验证矩阵（追加）
+
+| 开关 | 影响的组件 | 不影响的组件 | 可独立验证 |
+|------|-----------|-------------|-----------|
+| `feedbackArbiter: false` | ControlPlane.FeedbackArbiter + FeedbackDecision 事件写 Journal | 各单独 hook（validation/retry/observation）原路径保留 | ✅ |
+| `feedbackPolicy: 'hard-rules-only'` | FeedbackPolicy.decide() 跳过 self-eval / llm-confidence 分支 | 信号采集仍运行 | ✅ |
+| `selfEvalSignal: false` | SelfEvaluationHooks 不 emit `{ kind: 'self-eval' }` | Prompt 自评引导文本仍在（只是不转信号） | ✅ |
+| `memoryConflictSignal: false` | ProjectMemoryRouter 不 emit `{ kind: 'memory-conflict' }` | Memory recall / extraction 正常 | ✅ |
+| `regressionEnabled: false` | Policy 把 `regress-to` 降级为 `retry-stage` | 其他决策动作不变 | ✅ |
+| `llmConfidenceSignal: false` | LLM confidence 采集接口 no-op | Thinking budget / extended thinking 不受影响 | ✅ |
+| `stageRegistry: 'with-review'` | ControlPlane 追加注册 review StageDescriptor | IDC 三阶段默认行为不变 | ✅ |
+
+### A.5 落地依赖
+
+本附录的 toggle 接线需要 ADR PR-C5（FeedbackArbiter MVP）和 PR-C6（toggle 接线）先合入。在 ADR 落地前，本附录仅作**设计占位**；对应 preset 与 test 代码位于 Proposed 状态，不进入默认 `createStandardAblationSuite()`。

@@ -56,6 +56,7 @@
 - [agent-evolution-capacity.md](./agent-evolution-capacity.md) - **抗演化审计**：本 ADR 各层面对 LLM 升级 / Skill 生态扩展 / 引擎能力增长 / 新编排模式的吸收能力评级与脆弱点
 - [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) - **多 Agent 联邦**（Proposed 2026-04-24）：在六控制平面之上加第 7 个"拓扑维度"。SubAgent 对等 AgentSession、AgentId 路径寻址、MessageBus 双向通信、受控递归 spawn。本 ADR 的 StageGuardian / ApprovalEngine / AblationToggles 均在 Federation 中延伸
 - [agent-memory-unification.md](./agent-memory-unification.md) - **持久化四合一**（Proposed 2026-04-24）：Journal / ConversationRecord / Compact / Memory 统一到三层金字塔（Working / Episodic / Semantic）+ Journal 作为 SSOT。关闭本 ADR §已延后表的 `.nksession.md` 一项；闭环 §11.6.9 SelfEvaluationHooks 的结论去向
+- [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) - **控制面独立 + Stage Registry + FeedbackArbiter**（Proposed 2026-04-24）：把 IDC 三阶段从 `IdcStage` union 升级为 `StageDescriptor` Registry；抽取第 7 控制平面 **Control**（元层），承载 StageRegistry / ArtifactRegistry / FeedbackArbiter；统一 7 类反馈信号仲裁（validation / tool-failure / budget / self-eval / user / memory-conflict / llm-confidence）→ 5 级 FeedbackDecision（L0 retry-tool / L1 retry-stage / L2 regress-to / L3 restart-run / L4 escalate-user）；ArtifactKind `'task'` → `'apply'` 类型层对齐（磁盘路径保留）；消融扩展到 Policy 层但**不作为 stage**。落地后 Orchestration 评级 B+ → A-，§11.6 六平面 → 七平面
 - [dual-flow-architecture.md](./dual-flow-architecture.md) - 早期双流探索（本 ADR 的简化归宿）
 - [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) - 早期能力注册设计探索
 - [perception-first-roadmap.md](./perception-first-roadmap.md) - 感知路线图
@@ -1020,6 +1021,7 @@ IDC 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 
 | Step 原始日志 | `steps.jsonl` | Step 执行器采集，毫秒级 |
 | Capability 索引 | `capability-index.json` | 从 MD 派生的查询缓存 |
 | Draft 索引 | `draft-index.json` | 从 MD 派生的查询缓存 |
+| IDC Runtime Snapshot | `idc-runtime.json` | 当前 stage / active run / pending approvals 快照 |
 | Session Lock | `session-lock.json` | 并发控制 |
 
 **共同特征**：代码逻辑产出，AI 不感知，程序消费或派生缓存。
@@ -1060,7 +1062,8 @@ IDC 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 
     capability-index.json
     draft-index.json
 
-  state/                 ← 程序并发控制
+  state/                 ← 程序并发控制 / 运行态快照
+    idc-runtime.json     ← 当前 stage / active run / pending approvals
     session-lock.json
 
   settings.json          ← 媒体库变量（已有，PathResolver 使用）
@@ -1847,6 +1850,8 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 
 六层控制平面并行运转，每层有独立消费者、独立实现、独立更新频率。设计新组件时先用口诀对号入座，再查详表。**核心判断**：约束的类型由**谁消费这份输出**决定，不由"看起来像什么"决定。选错层是 IDC 最常见的反模式。
 
+> **前瞻（Proposed 2026-04-24）**：[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 拟新增第 7 平面 **Control**（决定"流程往哪走"）——承载 StageRegistry / ArtifactRegistry / FeedbackArbiter，把 IDC 阶段 DAG 与反馈迭代仲裁从散落 hook 升格为独立元层。当前 §11.6.1 全景表描述为六平面现状；ADR 落地后会更新为七平面并把本节"IDC 三阶段硬编码"的脆弱点消除。
+
 #### 11.6.1 六层控制平面全景
 
 | 层 | 决定 | 消费者 | 承载的创作维度 | 实现工具 | 更新频率 | 典型产物 / 组件 |
@@ -1857,6 +1862,9 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 | **Policy** | 能不能做 | Runtime + Evaluator 读取 | 边界 / 合规 / 权限 | 声明式规则文件、allowlist、compliance 元数据 | 配置级 | `preferences.md`、`preferencesStrategyPack`、Skill `compliance.approvalRules[]`、Skill `allowedTools`、Skill `requiredSubpackages`、Operation `costProfile` |
 | **Memory** | 记得什么 | AI（读）+ 人（审计 / 编辑）| 个性化持续性 | 持久化存储 + 压缩策略 + 检索 | 跨会话累积 | `.neko/memory.md`、`MemoryRecall` / `ProjectMemoryRouter`、7 级创意压缩（`creative-context-compression.md`）、`SharedMemoryStore` |
 | **Evaluator** | 做得好不好 | 质量打分器 | 质量评估（**仅确定性指标**，见 §11.6.9）| 确定性打分器（CLIP 相似度、FPS、分辨率、ConsistencyChecker）；**主观质量判断不建组件，交由 Agent + Prompt + Memory** | 每产物 | `verdict: pass \| warn \| fail` + 结构化 issues；ConsistencyChecker（已）|
+| **Control**（Proposed 2026-04-24）| 流程往哪走 | 元层（编排器 + 仲裁器消费）| IDC 阶段 DAG / 反馈迭代粒度 | StageRegistry / ArtifactRegistry / StageController / FeedbackArbiter + FeedbackPolicy | 每轮决策 | StageDescriptor 注册表 / FeedbackDecision 五级（retry-tool \| retry-stage \| regress-to \| restart-run \| escalate-user）；见 [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) |
+
+> **为什么新增 Control 而不是扩 Runtime**：Runtime 承载的是"机制"（hook 执行顺序、engine 调度、watcher 触发），消费者是运行时框架；Control 承载的是"流程决策"（下一个 stage 是哪个、反馈信号如何汇总、何时回退），消费者是编排器本身。两者都是"什么时候做"的不同侧面——Runtime 回答"此刻该跑哪个 hook"，Control 回答"此刻该进入哪个 stage / 做哪种循环"。分层后 Runtime 保持"机制中立"，Control 独占"流程决策权"。
 
 #### 11.6.2 Schema 约束的二分（Tool vs Operation）
 
