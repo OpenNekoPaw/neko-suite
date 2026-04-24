@@ -137,22 +137,4 @@ describe('createExecutorHooks', () => {
     await memoryHooks.beforeThink!(makeContext([{ role: 'user', content: 'hi' }]));
     expect(compressor.compress).toHaveBeenCalledOnce();
   });
-
-  it('disableSessionMemory: true is stored on MemoryHooks', () => {
-    const result = createExecutorHooks({
-      compressor: createMockCompressor(),
-      permissionMode: 'auto',
-      disableSessionMemory: true,
-    });
-
-    const memoryHooks = result.hooks.find((h) => h.name === 'memory') as MemoryHooks;
-    expect(memoryHooks).toBeDefined();
-    // MemoryHooks has no public accessor for disableSessionMemory; assert via
-    // private-field reflection. The behavior (skipping sessionMemory load/save)
-    // is covered by MemoryHooks' own tests — here we only need to confirm the
-    // factory threaded the flag through.
-    expect((memoryHooks as unknown as { disableSessionMemory: boolean }).disableSessionMemory).toBe(
-      true,
-    );
-  });
 });

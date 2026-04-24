@@ -39,6 +39,7 @@ export {
   ListDirectoryTool,
   GrepTool,
   type GrepToolOptions,
+  MemoryWriteTool,
   createCoreTools,
   type CoreToolsOptions,
   // Draft/Plan/Task write tools removed in Phase B — AI uses generic Write.

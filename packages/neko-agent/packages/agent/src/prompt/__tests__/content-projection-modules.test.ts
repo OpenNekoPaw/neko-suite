@@ -1,16 +1,15 @@
 /**
- * Tests for the four content-projection Modules introduced in PR2:
- * MemoryProjectModule, MemoryGlobalModule, MemoryRecallModule, and
- * CreativeVersionLogModule.
+ * Tests for the content-projection modules used by prompt composition:
+ * MemoryProjectModule, MemoryRecallModule, CreativeVersionLogModule,
+ * and AgentsMdModule.
  *
- * All four share the same shape — an externally-injected content string that
+ * All modules here share the same shape — an externally-injected content string that
  * projects into a single prompt section — so their tests are parameterised.
  * Additional module-specific assertions (layer, priority, sectionId, heading
  * prefix) are covered per-instance at the bottom.
  */
 import { describe, it, expect } from 'vitest';
 import { MemoryProjectModule } from '../modules/memory/memory-project-module';
-import { MemoryGlobalModule } from '../modules/memory/memory-global-module';
 import { MemoryRecallModule } from '../modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../modules/ephemeral/creative-version-log-module';
 import { AgentsMdModule } from '../modules/environment/agents-md-module';
@@ -45,18 +44,6 @@ const SPECS: ModuleSpec[] = [
     expectedPriority: 60,
     expectedSectionId: 'memory:project',
     headingPrefix: '## Project Memory\n\n',
-  },
-  {
-    name: 'MemoryGlobalModule',
-    make: () => {
-      const mod = new MemoryGlobalModule();
-      return { mod, setContent: (c) => mod.setContent(c) };
-    },
-    expectedManifestId: 'memory.global',
-    expectedLayer: 'environment',
-    expectedPriority: 50,
-    expectedSectionId: 'memory:global',
-    headingPrefix: '## Global Memory\n\n',
   },
   {
     name: 'MemoryRecallModule',

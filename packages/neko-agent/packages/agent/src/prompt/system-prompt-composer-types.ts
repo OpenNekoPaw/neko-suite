@@ -17,7 +17,7 @@
  * - schema: machine contracts (artifact frontmatter, path templates, URI rules)
  *   projected by modules when a run / artifact state is active
  * - skill: active persona (creation-persona / execution-persona / iteration-persona)
- * - environment: user-authored overlay (AGENTS.md) + project/global memory
+ * - environment: user-authored overlay (AGENTS.md) + project memory
  * - ephemeral: per-turn injections (memory recall, version log, future self-eval)
  */
 export type PromptLayer = 'base' | 'schema' | 'skill' | 'environment' | 'ephemeral';

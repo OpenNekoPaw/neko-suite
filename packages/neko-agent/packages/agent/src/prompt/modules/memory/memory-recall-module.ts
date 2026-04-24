@@ -2,14 +2,14 @@
  * MemoryRecallModule — projects per-turn memory recall results into the
  * ephemeral layer.
  *
- * Unlike the project/global memory modules which are event-driven, recall is
- * triggered per agent turn by CreativeMemoryHooks.onExecuteStart. The hook
- * performs the relevance-scored lookup and passes the already-formatted
- * content string to `setContent(...)`, then invokes the orchestrator.
+ * Unlike the project memory module which is event-driven, recall is triggered
+ * per turn by the AgentSession runtime. The caller performs the
+ * relevance-scored lookup and passes the already-formatted content string to
+ * `setContent(...)`.
  *
  * The module does no recall I/O itself — it is a pure projection. This keeps
- * the expensive memory-search pipeline in one place (the hook) and avoids
- * duplicating it inside render.
+ * the expensive memory-search pipeline in one place (the runtime caller) and
+ * avoids duplicating it inside render.
  */
 import type {
   PromptModule,

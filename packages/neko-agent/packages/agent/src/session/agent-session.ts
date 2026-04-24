@@ -15,7 +15,14 @@
  * - Converts AgentStep to AgentEvent for unified event streaming
  */
 
-import type { ChatMessage, Skill, Tool } from '@neko/shared';
+import type {
+  AgentStep,
+  ChatMessage,
+  CompressedMessage,
+  ConversationCompressionResult,
+  Skill,
+  Tool,
+} from '@neko/shared';
 import type { IdcStage, StageActivationDecision, IdcRun } from '@neko-agent/types';
 import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
 import {
@@ -49,7 +56,7 @@ import {
 import { loadPreferences } from '../workspace';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
-import { stepToEvents, recordStepInHistory, type StreamState } from './step-event-converter';
+import { stepToEvents, type StreamState } from './step-event-converter';
 
 import type {
   IAgentSession,
@@ -80,7 +87,6 @@ import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
 import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
 import type { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
-import type { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
@@ -88,6 +94,10 @@ import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-mod
 import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import type { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import { freezePromptContext } from '../prompt/context';
+import { KeyFactExtractor } from '../memory/keyfact-extractor';
+import { MemoryRecall } from '../memory/memory-recall';
+import { ProjectMemoryRouter } from '../memory/project-memory-router';
+import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
 import { getLogger } from '../utils/logger';
 import {
   initializeSession,
@@ -135,7 +145,6 @@ export class AgentSession implements IAgentSession {
   // PR2 prompt modules — own the format contract for environment/ephemeral
   // sections previously written directly via composer.setSection calls.
   private _memoryProjectModule: MemoryProjectModule;
-  private _memoryGlobalModule: MemoryGlobalModule;
   private _memoryRecallModule: MemoryRecallModule;
   private _creativeVersionLogModule: CreativeVersionLogModule;
   // PR3a: owns the format contract for skill-layer sections; consumed by
@@ -206,17 +215,22 @@ export class AgentSession implements IAgentSession {
 
   // State
   private _history: ChatMessage[] = [];
+  private _historyEventIds: string[][] = [];
+  private _processedMemoryEventIds = new Set<string>();
   private _isRunning = false;
   /** Circuit breaker state for auto-compact */
   private _compactState: AutoCompactState = createAutoCompactState();
   /** Creative version log for generation tracking */
   private _versionLog: CreativeVersionLog = createCreativeVersionLog();
   /** JSONL journal writer for session persistence */
-  private _journalWriter: import('./journal-writer').JournalWriter | null = null;
+  private _journalWriter: import('./types').IJournalWriter | null = null;
   /** Journal sequence counter */
   private _journalSeq = 0;
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
+  private _keyFactExtractor: KeyFactExtractor | null = null;
+  private _projectMemoryRouter: ProjectMemoryRouter | null = null;
+  private _memoryRecall: MemoryRecall | null = null;
   private _pendingConfirmations = new Map<
     string,
     {
@@ -248,19 +262,20 @@ export class AgentSession implements IAgentSession {
     this._executor = components.executor;
     this._permissionHooks = components.permissionHooks;
     this._history = components.history;
+    this._historyEventIds = components.history.map(() => []);
     this._metaTools = components.metaTools;
     // PR2 prompt modules — Session drives the version-log one during
     // _syncSystemPrompt; the memory modules are event-driven from the
     // initializer. Held here so future work can re-inject them via the
     // orchestrator.
     this._memoryProjectModule = components.memoryProjectModule;
-    this._memoryGlobalModule = components.memoryGlobalModule;
     this._memoryRecallModule = components.memoryRecallModule;
     this._creativeVersionLogModule = components.creativeVersionLogModule;
     this._skillInjectionModule = components.skillInjectionModule;
     this._agentsMdModule = components.agentsMdModule;
     this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
+    this._refreshMemoryRuntime();
     if (components.ablationMarker) {
       this._ablationMarker = components.ablationMarker;
     }
@@ -563,11 +578,13 @@ export class AgentSession implements IAgentSession {
     // Update system prompt in history if changed
     if (config.systemPrompt !== undefined) {
       this._promptComposer.setBase(config.systemPrompt);
-      this._syncSystemPrompt();
     }
+
+    this._refreshMemoryRuntime();
 
     // Reinitialize executor with new config
     this._rebuildExecutor();
+    this._syncSystemPrompt();
   }
 
   getExecutionMode(): ExecutionMode {
@@ -620,6 +637,7 @@ export class AgentSession implements IAgentSession {
     try {
       // Execute UserPromptSubmit hooks (if configured)
       let processedInput = input;
+      const memoryQueryInput = input;
       if (this._config.settingsHookLoader) {
         const hookResult = await this._config.settingsHookLoader.executeUserPromptSubmit(input);
         if (hookResult.blocked) {
@@ -646,9 +664,25 @@ export class AgentSession implements IAgentSession {
       // Accumulate real token usage from LLM API responses
       const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
+      const userMessageEventId = this._journalWriter
+        ? await this._journalWriter.appendEvent(++this._journalSeq, {
+            type: 'user_message',
+            content: processedInput,
+          })
+        : undefined;
+      const turnPersistedEvents: PersistedAgentEvent[] = [
+        {
+          event: { type: 'user_message', content: memoryQueryInput },
+          ...(userMessageEventId ? { eventId: userMessageEventId } : {}),
+        },
+      ];
+
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
-      this._history.push({ role: 'user', content: processedInput });
+      this.addMessage(
+        { role: 'user', content: processedInput },
+        userMessageEventId ? [userMessageEventId] : undefined,
+      );
 
       // Creative version log: detect user evaluation keywords in input
       if (this._versionLog.size > 0) {
@@ -658,6 +692,7 @@ export class AgentSession implements IAgentSession {
         }
       }
 
+      await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
 
@@ -680,9 +715,6 @@ export class AgentSession implements IAgentSession {
           totalUsage.totalTokens += step.usage.totalTokens;
         }
 
-        // Record history first (side effects), then emit events (pure)
-        recordStepInHistory(step, iteration, this._history);
-
         // Creative version log: record generation tool results
         if (step.type === 'act' && step.toolResults) {
           for (const result of step.toolResults) {
@@ -703,12 +735,38 @@ export class AgentSession implements IAgentSession {
           }
         }
 
-        // Yield events and append to journal (skip high-frequency text_delta)
-        for (const event of stepToEvents(step, iteration, maxIterations, this._streamState)) {
-          yield event;
-          if (this._journalWriter && event.type !== 'text_delta') {
-            await this._journalWriter.appendEvent(++this._journalSeq, event);
+        const yieldedEvents = Array.from(
+          stepToEvents(step, iteration, maxIterations, this._streamState),
+        );
+        const persistedEvents = createPersistedStepEvents(step, yieldedEvents);
+        const eventIdByEvent = new Map<AgentEvent, string>();
+
+        for (const event of persistedEvents) {
+          if (this._journalWriter) {
+            const eventId = await this._journalWriter.appendEvent(++this._journalSeq, event);
+            eventIdByEvent.set(event, eventId);
           }
+        }
+
+        for (const event of yieldedEvents) {
+          yield event;
+        }
+
+        for (const event of persistedEvents) {
+          turnPersistedEvents.push({
+            event,
+            eventId: eventIdByEvent.get(event),
+          });
+        }
+
+        const projectedStepHistory = projectPersistedEventsToWorkingMemory(
+          persistedEvents.map((event) => ({
+            event,
+            eventId: eventIdByEvent.get(event),
+          })),
+        );
+        for (const entry of projectedStepHistory) {
+          this.addMessage(entry.message, entry.sourceEventIds);
         }
 
         // Auto-compact: check if context compression is needed after each step
@@ -720,13 +778,30 @@ export class AgentSession implements IAgentSession {
             tokens,
             this._compactState,
           );
-          if (compactResult.compressed && compactResult.newHistory) {
-            this._history.length = 0;
-            this._history.push(...compactResult.newHistory);
-            this._syncSystemPrompt(); // Re-inject active Skills + ToolSet declarations
+          if (
+            compactResult.compressed &&
+            compactResult.compressionResult &&
+            compactResult.trigger
+          ) {
+            await this._applyCompressionResult(
+              compactResult.compressionResult,
+              compactResult.trigger,
+            );
+          } else if (
+            compactResult.trigger &&
+            (compactResult.skipReason === 'compression_failed' ||
+              compactResult.skipReason === 'circuit_opened')
+          ) {
+            await this._logCompactionFailure(
+              compactResult.trigger,
+              compactResult.errorMessage ?? compactResult.skipReason,
+              compactResult.failureCount ?? this._compactState.consecutiveFailures,
+            );
           }
         }
       }
+
+      await this._extractProjectMemory(turnPersistedEvents);
 
       // Emit done event with real accumulated usage
       const doneEvent = {
@@ -755,6 +830,8 @@ export class AgentSession implements IAgentSession {
         error: error instanceof Error ? error : new Error(String(error)),
       };
     } finally {
+      this._memoryRecallModule.setContent(null);
+      this._syncSystemPrompt();
       this._isRunning = false;
     }
   }
@@ -793,8 +870,9 @@ export class AgentSession implements IAgentSession {
     return [...this._history];
   }
 
-  addMessage(message: ChatMessage): void {
+  addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void {
     this._history.push(message);
+    this._historyEventIds.push(sourceEventIds ? [...sourceEventIds] : []);
   }
 
   /**
@@ -984,15 +1062,25 @@ export class AgentSession implements IAgentSession {
   }
 
   clearHistory(): void {
+    this._processedMemoryEventIds.clear();
+    this._memoryRecallModule.setContent(null);
+    this._syncSystemPrompt();
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
+    this._historyEventIds = [[]];
   }
 
-  loadHistory(messages: ChatMessage[]): void {
+  loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this._history = [...messages];
+    this._historyEventIds = normalizeMessageEventIds(this._history, messageEventIds);
+    this._processedMemoryEventIds = new Set();
+    this._markMessageEventIdsAsProcessed(this._historyEventIds);
     // Ensure system prompt is present
     if (this._history.length === 0 || this._history[0].role !== 'system') {
       this._history.unshift({ role: 'system', content: this._config.systemPrompt });
+      this._historyEventIds.unshift([]);
+    } else {
+      this._historyEventIds[0] = [];
     }
   }
 
@@ -1008,7 +1096,7 @@ export class AgentSession implements IAgentSession {
     const originalTokens = this.getTokenCount();
 
     const result = await this._compressor.compress(this._history);
-    this._history = result.messages.map((m) => m.message);
+    await this._applyCompressionResult(result, 'manual');
     const compressedTokens = this._compressor.estimateTokens(this._history);
 
     const ratio = originalTokens > 0 ? compressedTokens / originalTokens : 1;
@@ -1080,6 +1168,118 @@ export class AgentSession implements IAgentSession {
   // Private Methods
   // ---------------------------------------------------------------------------
 
+  private _refreshMemoryRuntime(): void {
+    const projectMemory = this._config.projectMemoryManager;
+    this._memoryRecall =
+      projectMemory && this._config.memoryRecall !== false
+        ? new MemoryRecall({ projectMemory })
+        : null;
+    this._memoryRecallModule.setContent(null);
+
+    if (
+      projectMemory &&
+      this._config.autoMemoryExtraction !== false &&
+      this._config.journalAsSSOT !== false
+    ) {
+      this._keyFactExtractor = new KeyFactExtractor();
+      this._projectMemoryRouter = new ProjectMemoryRouter(projectMemory);
+      return;
+    }
+
+    this._keyFactExtractor = null;
+    this._projectMemoryRouter = null;
+  }
+
+  private async _updateMemoryRecall(query: string): Promise<void> {
+    if (!this._memoryRecall) {
+      this._memoryRecallModule.setContent(null);
+      return;
+    }
+
+    try {
+      const recalled = await this._memoryRecall.recall(query, 5);
+      const body =
+        recalled.length === 0
+          ? null
+          : recalled
+              .map((memory) => {
+                return `- [${memory.source}] ${memory.content} (relevance: ${memory.relevance.toFixed(2)})`;
+              })
+              .join('\n');
+
+      this._memoryRecallModule.setContent(body);
+    } catch (error) {
+      this._memoryRecallModule.setContent(null);
+      logger.warn('Failed to update memory recall', { error });
+    }
+  }
+
+  private async _extractProjectMemory(entries: readonly PersistedAgentEvent[]): Promise<void> {
+    if (!this._keyFactExtractor || !this._projectMemoryRouter) {
+      return;
+    }
+
+    const unprocessedEntries = entries.filter(
+      (entry) => !entry.eventId || !this._processedMemoryEventIds.has(entry.eventId),
+    );
+    if (unprocessedEntries.length === 0) {
+      return;
+    }
+
+    const sourceEventIds = collectPersistedEventIds(unprocessedEntries);
+
+    try {
+      const extractionTimestamp = Date.now();
+      const turnMessages = projectPersistedEventsToWorkingMemory(unprocessedEntries).map(
+        (entry) => entry.message,
+      );
+      const facts = this._keyFactExtractor.extract(turnMessages);
+      if (facts.length === 0) {
+        this._markProcessedMemoryEventIds(sourceEventIds);
+        return;
+      }
+
+      const routing = await this._projectMemoryRouter.writeFacts(facts);
+      if (sourceEventIds.length > 0 && this._journalWriter) {
+        await this._journalWriter.appendEvent(++this._journalSeq, {
+          type: 'memory_extraction',
+          memoryExtraction: {
+            timestamp: extractionTimestamp,
+            sourceEventIds,
+            facts: routing.facts.map((fact) => ({
+              id: fact.id,
+              content: fact.content,
+              category: fact.category,
+              confidence: fact.confidence,
+              destination: fact.destination,
+            })),
+            writeStatus: routing.writtenFacts.length > 0 ? 'written' : 'dedup',
+          },
+        });
+      }
+
+      this._markProcessedMemoryEventIds(sourceEventIds);
+    } catch (error) {
+      logger.warn('Failed to extract project memory', { error });
+    }
+  }
+
+  private _markProcessedMemoryEventIds(eventIds: readonly string[]): void {
+    for (const eventId of eventIds) {
+      this._processedMemoryEventIds.add(eventId);
+    }
+  }
+
+  private _markMessageEventIdsAsProcessed(messageEventIds?: readonly (readonly string[])[]): void {
+    if (!messageEventIds) {
+      return;
+    }
+
+    for (const eventIds of messageEventIds) {
+      this._markProcessedMemoryEventIds(eventIds);
+    }
+  }
+
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
     // PR3d: drive the ArtifactSchemaModule. When an IdcRun is active the
@@ -1115,6 +1315,20 @@ export class AgentSession implements IAgentSession {
     // version-log ephemeral section. renderSync() preserves the synchronous
     // caller contract (this method is invoked from ask-snapshot paths where
     // async would introduce a microtask between prompt sync and snapshot).
+    this._promptComposer.removeSection('memory:recall');
+    const recallSections = this._memoryRecallModule.renderSync();
+    if (recallSections) {
+      for (const s of recallSections) {
+        this._promptComposer.setSection({
+          id: s.sectionId,
+          layer: s.layer,
+          content: s.content,
+          priority: s.priority,
+          ...(s.cacheControl && { cacheControl: s.cacheControl }),
+        });
+      }
+    }
+
     this._creativeVersionLogModule.setSummary(
       this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
     );
@@ -1136,6 +1350,10 @@ export class AgentSession implements IAgentSession {
     const structured = this._promptComposer.composeStructured();
     if (this._history.length > 0 && this._history[0]?.role === 'system') {
       this._history[0].content = structured.text;
+      if (this._historyEventIds.length === 0) {
+        this._historyEventIds = this._history.map(() => []);
+      }
+      this._historyEventIds[0] = [];
     }
 
     // Push cache-boundary sections to executor for provider-specific caching
@@ -1241,6 +1459,89 @@ export class AgentSession implements IAgentSession {
       logger.error('Tool confirmation failed', { error: err });
     }
   }
+
+  private async _applyCompressionResult(
+    result: ConversationCompressionResult,
+    trigger: 'token_threshold' | 'turn_threshold' | 'manual',
+  ): Promise<void> {
+    const summaryMessages = result.messages.filter((message) => message.isSummary);
+    let compactionEventId: string | undefined;
+    let replacedEventIds: string[] = [];
+    let summaryContent = '';
+    let summaryMessageRole: 'system' | 'user' = 'system';
+
+    if (summaryMessages.length > 0) {
+      const summaryMessage = summaryMessages[0]!;
+      replacedEventIds = collectCompressedMessageSourceEventIds(
+        summaryMessage,
+        this._historyEventIds,
+      );
+      summaryContent = getChatMessageContent(summaryMessage.message);
+      summaryMessageRole = summaryMessage.message.role === 'user' ? 'user' : 'system';
+
+      if (this._shouldLogCompaction() && this._journalWriter && summaryContent.length > 0) {
+        const compactionTimestamp = Date.now();
+        compactionEventId = await this._journalWriter.appendEvent(++this._journalSeq, {
+          type: 'compaction',
+          compaction: {
+            timestamp: compactionTimestamp,
+            trigger,
+            replacedEventIds,
+            summaryContent,
+            summaryMessageRole,
+            tokenProfile: {
+              before: result.originalTokens,
+              after: result.compressedTokens,
+            },
+            strategy: this._config.creativeCompression ? 'creative-priority' : 'basic',
+          },
+        });
+      }
+    }
+
+    const nextHistory: ChatMessage[] = [];
+    const nextHistoryEventIds: string[][] = [];
+
+    for (const message of result.messages) {
+      nextHistory.push(message.message);
+      if (message.isSummary) {
+        nextHistoryEventIds.push(compactionEventId ? [compactionEventId] : [...replacedEventIds]);
+        continue;
+      }
+
+      nextHistoryEventIds.push(
+        collectCompressedMessageSourceEventIds(message, this._historyEventIds),
+      );
+    }
+
+    this._history = nextHistory;
+    this._historyEventIds = nextHistoryEventIds;
+    this._syncSystemPrompt();
+  }
+
+  private async _logCompactionFailure(
+    trigger: 'token_threshold' | 'turn_threshold' | 'manual',
+    reason: string,
+    failureCount: number,
+  ): Promise<void> {
+    if (!this._journalWriter || !this._shouldLogCompaction()) {
+      return;
+    }
+
+    await this._journalWriter.appendEvent(++this._journalSeq, {
+      type: 'compaction_failed',
+      compactionFailed: {
+        trigger,
+        reason,
+        failureCount,
+        circuitOpen: this._compactState.isCircuitOpen,
+      },
+    });
+  }
+
+  private _shouldLogCompaction(): boolean {
+    return this._config.journalAsSSOT !== false && this._config.compactLogging !== false;
+  }
 }
 
 /**
@@ -1280,4 +1581,85 @@ function _approvalResolutionToDecision(
  */
 export function createAgentSession(config: AgentSessionConfig): AgentSession {
   return new AgentSession(config);
+}
+
+function createPersistedStepEvents(
+  step: AgentStep,
+  yieldedEvents: readonly AgentEvent[],
+): AgentEvent[] {
+  const persistedEvents = yieldedEvents.filter((event) => event.type !== 'text_delta');
+
+  if ((step.type === 'think' || step.type === 'respond') && step.content) {
+    const hasPersistedText = persistedEvents.some((event) => event.type === 'text');
+    if (!hasPersistedText) {
+      const syntheticText: AgentEvent = { type: 'text', content: step.content };
+      if (step.type === 'think') {
+        const firstToolCallIndex = persistedEvents.findIndex((event) => event.type === 'tool_call');
+        if (firstToolCallIndex >= 0) {
+          persistedEvents.splice(firstToolCallIndex, 0, syntheticText);
+        } else {
+          persistedEvents.push(syntheticText);
+        }
+      } else {
+        persistedEvents.push(syntheticText);
+      }
+    }
+  }
+
+  return persistedEvents;
+}
+
+function normalizeMessageEventIds(
+  messages: readonly ChatMessage[],
+  messageEventIds?: readonly (readonly string[])[],
+): string[][] {
+  return messages.map((message, index) => {
+    if (message.role === 'system') {
+      return [];
+    }
+    const sourceEventIds = messageEventIds?.[index];
+    return sourceEventIds ? [...sourceEventIds] : [];
+  });
+}
+
+function collectPersistedEventIds(entries: readonly PersistedAgentEvent[]): string[] {
+  const eventIds: string[] = [];
+  for (const entry of entries) {
+    if (entry.eventId && !eventIds.includes(entry.eventId)) {
+      eventIds.push(entry.eventId);
+    }
+  }
+  return eventIds;
+}
+
+function collectCompressedMessageSourceEventIds(
+  message: CompressedMessage,
+  historyEventIds: readonly string[][],
+): string[] {
+  const sourceIndexes = message.sourceIndexes ?? [];
+  const collected: string[] = [];
+
+  for (const sourceIndex of sourceIndexes) {
+    const eventIds = historyEventIds[sourceIndex];
+    if (!eventIds) {
+      continue;
+    }
+    for (const eventId of eventIds) {
+      if (!collected.includes(eventId)) {
+        collected.push(eventId);
+      }
+    }
+  }
+
+  return collected;
+}
+
+function getChatMessageContent(message: ChatMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  return message.content
+    .flatMap((part) => ('text' in part && typeof part.text === 'string' ? [part.text] : []))
+    .join('\n');
 }

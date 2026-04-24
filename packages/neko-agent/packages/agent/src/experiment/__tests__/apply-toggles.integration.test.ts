@@ -9,8 +9,8 @@
  *   4. createExecutorHooks receives disableHooks + disable* flags and
  *      filters the built-in chain accordingly
  *
- * Without this wiring, the 4 marker-dependent toggles (validation / retry /
- * compression / sessionMemory) silently have no effect.
+ * Without this wiring, the marker-dependent toggles (validation / retry /
+ * compression) silently have no effect.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -54,7 +54,6 @@ function buildChainFromConfig(config: AgentSessionConfig): ExecutorHooks[] {
     ...(marker && {
       disableHooks: marker.disableHooks,
       disableCompression: marker.disableCompression,
-      disableSessionMemory: marker.disableSessionMemory,
     }),
   });
   return hooks;
@@ -124,6 +123,26 @@ describe('applyAblationToggles → initializer → factory (integration)', () =>
     expect(names).toContain('user-custom');
     // Custom hooks run after built-ins
     expect(names[names.length - 1]).toBe('user-custom');
+  });
+
+  it('autoMemoryExtraction: false writes the session config override directly', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { autoMemoryExtraction: false });
+    expect(config.autoMemoryExtraction).toBe(false);
+  });
+
+  it('journalAsSSOT: false writes the session config override directly', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { journalAsSSOT: false });
+    expect(config.journalAsSSOT).toBe(false);
+  });
+
+  it('compactLogging: false writes the session config override directly', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { compactLogging: false });
+    expect(config.compactLogging).toBe(false);
+  });
+
+  it('memoryRecall: false writes the session config override directly', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { memoryRecall: false });
+    expect(config.memoryRecall).toBe(false);
   });
 });
 

@@ -32,7 +32,6 @@ export interface AblationMarkerHook extends ExecutorHooks {
   __ablation: true;
   disableHooks: string[];
   disableCompression: boolean;
-  disableSessionMemory: boolean;
   /** When true, SkillService.setDiscoveryEnabled(false) at session init. */
   disableSkillDiscovery: boolean;
   /** When true, SkillInjectionCoordinator.apply becomes a no-op. */
@@ -52,7 +51,6 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     __ablation: true,
     disableHooks: collectDisabledHooks(toggles),
     disableCompression: toggles.compression === false,
-    disableSessionMemory: toggles.sessionMemory === false,
     disableSkillDiscovery: toggles.skillDiscovery === false,
     disableSkillInjection: toggles.skillInjection === false,
     disableDynamicToolSets: toggles.dynamicToolSets === false,
@@ -75,7 +73,6 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | compression: false    | MemoryHooksOptions.disableCompression via marker    |
  * | compression: {...}    | contextSettings.maxTokens                          |
  * | creativeCompression   | creativeCompression = undefined                    |
- * | sessionMemory: false  | MemoryHooksOptions.disableSessionMemory via marker  |
  * | skillDiscovery        | (marker flag for session-level wiring)              |
  * | skillInjection        | (marker flag for session-level wiring)              |
  * | dynamicToolSets       | (marker flag for session-level wiring)              |
@@ -87,8 +84,10 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | traitsRegistry: false | traitsRegistry = undefined                         |
  * | settingsHooks: false  | settingsHookLoader = undefined                     |
  * | projectMemory: false  | projectMemoryManager = undefined                   |
- * | globalMemory: false   | globalMemoryManager = undefined                    |
- * | autoMemoryExtraction  | autoMemoryExtraction = false                       |
+ * | journalAsSSOT         | journalAsSSOT = false                              |
+ * | compactLogging        | compactLogging = false                             |
+ * | autoMemoryExtraction  | autoMemoryExtraction = false                        |
+ * | memoryRecall          | memoryRecall = false                               |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
  */
@@ -132,12 +131,20 @@ export function applyAblationToggles(
     config.projectMemoryManager = undefined;
   }
 
-  if (toggles.globalMemory === false) {
-    config.globalMemoryManager = undefined;
+  if (toggles.journalAsSSOT === false) {
+    config.journalAsSSOT = false;
+  }
+
+  if (toggles.compactLogging === false) {
+    config.compactLogging = false;
   }
 
   if (toggles.autoMemoryExtraction === false) {
     config.autoMemoryExtraction = false;
+  }
+
+  if (toggles.memoryRecall === false) {
+    config.memoryRecall = false;
   }
 
   // --- LLM parameters ---
@@ -154,7 +161,7 @@ export function applyAblationToggles(
   // Inject ablation marker hook at the beginning of custom hooks.
   // The marker carries metadata for session initialization:
   // - disableHooks: hook names to filter from the built-in chain
-  // - disableCompression/disableSessionMemory: passed to MemoryHooksOptions
+  // - disableCompression: passed to MemoryHooksOptions
   const marker = createAblationMarkerHook(toggles);
   config.hooks = [marker, ...(config.hooks ?? [])];
 

@@ -5,7 +5,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
 import type { AgentSessionConfig, AgentEvent } from '../types';
-import type { IService, IToolRegistry, AgentStep, ChatMessage } from '@neko/shared';
+import type {
+  IService,
+  IToolRegistry,
+  AgentStep,
+  ChatMessage,
+  IProjectMemoryManager,
+} from '@neko/shared';
+import type { IJournalWriter } from '../types';
 
 // =============================================================================
 // Helpers
@@ -72,6 +79,83 @@ function createConfig(overrides?: Partial<AgentSessionConfig>): AgentSessionConf
     maxIterations: 10,
     ...overrides,
   };
+}
+
+function createMockProjectMemory(initialContent: string | null = null): IProjectMemoryManager {
+  let content = initialContent;
+  const listeners: Array<(value: string | null) => void> = [];
+
+  return {
+    load: vi.fn().mockResolvedValue(undefined),
+    getContent: vi.fn(() => content),
+    upsertEntry: vi.fn(async (key: string, body: string) => {
+      const sections = parseSections(content);
+      const next = new Map(sections.map((section) => [section.key, section.body]));
+      next.set(key, body);
+      content = Array.from(next.entries())
+        .map(([sectionKey, sectionBody]) =>
+          sectionBody.trim().length > 0
+            ? `## ${sectionKey}\n${sectionBody.trimEnd()}`
+            : `## ${sectionKey}`,
+        )
+        .join('\n\n');
+      if (content) {
+        content += '\n';
+      }
+      for (const listener of listeners) {
+        listener(content);
+      }
+    }),
+    removeEntry: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn((_event, listener) => {
+      listeners.push(listener);
+    }),
+    off: vi.fn((_event, listener) => {
+      const index = listeners.indexOf(listener);
+      if (index >= 0) listeners.splice(index, 1);
+    }),
+  };
+}
+
+function createMockJournalWriter(): IJournalWriter & {
+  appendEvent: ReturnType<typeof vi.fn>;
+  appendSnapshot: ReturnType<typeof vi.fn>;
+  flush: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+} {
+  return {
+    appendEvent: vi.fn(async (seq: number) => `evt-${seq}`),
+    appendSnapshot: vi.fn().mockResolvedValue(undefined),
+    flush: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function parseSections(content: string | null): Array<{ key: string; body: string }> {
+  if (!content) return [];
+
+  const lines = content.split('\n');
+  const sections: Array<{ key: string; body: string }> = [];
+  let currentKey: string | null = null;
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      if (currentKey !== null) {
+        sections.push({ key: currentKey, body: currentLines.join('\n') });
+      }
+      currentKey = line.slice(3).trim();
+      currentLines = [];
+    } else if (currentKey !== null) {
+      currentLines.push(line);
+    }
+  }
+
+  if (currentKey !== null) {
+    sections.push({ key: currentKey, body: currentLines.join('\n') });
+  }
+
+  return sections;
 }
 
 // =============================================================================
@@ -241,6 +325,209 @@ describe('AgentSession', () => {
       const inputArg = callArgs![0] as string;
       expect(inputArg).toContain(PLAN_MODE_SYSTEM_REMINDER);
       expect(inputArg).toContain('Build a feature');
+    });
+  });
+
+  describe('project memory integration', () => {
+    it('writes extracted facts to project memory and logs memory_extraction', async () => {
+      const projectMemory = createMockProjectMemory();
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+          journalWriter,
+        }),
+      );
+      const steps: AgentStep[] = [
+        { type: 'think', content: '我会按你的偏好继续处理。', timestamp: Date.now() },
+      ];
+      injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('我喜欢中文说明，避免 global-memory'));
+
+      expect(projectMemory.upsertEntry).toHaveBeenCalledWith(
+        'User Preferences',
+        expect.stringContaining('我喜欢中文说明，避免 global-memory'),
+      );
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          type: 'memory_extraction',
+          memoryExtraction: expect.objectContaining({
+            timestamp: expect.any(Number),
+            writeStatus: 'written',
+            sourceEventIds: expect.arrayContaining(['evt-1']),
+          }),
+        }),
+      );
+    });
+
+    it('does not extract project memory when autoMemoryExtraction is disabled', async () => {
+      const projectMemory = createMockProjectMemory();
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+          autoMemoryExtraction: false,
+        }),
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: '好的', timestamp: Date.now() }];
+      injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('我喜欢中文说明'));
+
+      expect(projectMemory.upsertEntry).not.toHaveBeenCalled();
+    });
+
+    it('injects recalled project memories into the execution snapshot', async () => {
+      const projectMemory = createMockProjectMemory(
+        '## User Preferences\n- prefer dark theme for editor work\n',
+      );
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+        }),
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: 'Noted', timestamp: Date.now() }];
+      const mockExec = injectMockExecutor(session, steps);
+      let capturedSystemPrompt = '';
+      mockExec.executeStream.mockImplementationOnce(async function* (
+        _input: string,
+        options?: { messages?: ChatMessage[] },
+      ) {
+        capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
+        for (const step of steps) {
+          yield step;
+        }
+      });
+
+      await collectEvents(session.execute('please keep dark theme settings'));
+
+      expect(capturedSystemPrompt).toContain('## Recalled Memories');
+      expect(capturedSystemPrompt).toContain('dark theme');
+    });
+
+    it('does not inject recalled memories when memoryRecall is disabled', async () => {
+      const projectMemory = createMockProjectMemory(
+        '## User Preferences\n- prefer dark theme for editor work\n',
+      );
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+          memoryRecall: false,
+        }),
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: 'Noted', timestamp: Date.now() }];
+      const mockExec = injectMockExecutor(session, steps);
+      let capturedSystemPrompt = '';
+      mockExec.executeStream.mockImplementationOnce(async function* (
+        _input: string,
+        options?: { messages?: ChatMessage[] },
+      ) {
+        capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
+        for (const step of steps) {
+          yield step;
+        }
+      });
+
+      await collectEvents(session.execute('please keep dark theme settings'));
+
+      expect(capturedSystemPrompt).not.toContain('## Recalled Memories');
+      expect(capturedSystemPrompt).toContain('## Project Memory');
+    });
+
+    it('does not backfill loaded history into project memory on the next turn', async () => {
+      const projectMemory = createMockProjectMemory();
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+        }),
+      );
+      session.loadHistory(
+        [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: '我喜欢中文说明' },
+          { role: 'assistant', content: '收到' },
+        ],
+        [[], ['evt-old-user'], ['evt-old-assistant']],
+      );
+
+      const steps: AgentStep[] = [{ type: 'think', content: '继续处理', timestamp: Date.now() }];
+      injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('继续'));
+
+      expect(projectMemory.upsertEntry).not.toHaveBeenCalled();
+    });
+
+    it('disables automatic extraction when journalAsSSOT is turned off', async () => {
+      const projectMemory = createMockProjectMemory();
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+          journalAsSSOT: false,
+        }),
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: '好的', timestamp: Date.now() }];
+      injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('我喜欢中文说明'));
+
+      expect(projectMemory.upsertEntry).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('compaction logging', () => {
+    it('skips journal compaction events when compactLogging is disabled', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(
+        createConfig({
+          journalWriter,
+          compactLogging: false,
+        }),
+      );
+
+      (session as unknown as Record<string, unknown>)['_history'] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'old user message' },
+        { role: 'assistant', content: 'old assistant reply' },
+      ] satisfies ChatMessage[];
+      (session as unknown as Record<string, unknown>)['_historyEventIds'] = [
+        [],
+        ['evt-user'],
+        ['evt-assistant'],
+      ];
+      (session as unknown as Record<string, unknown>)['_compressor'] = {
+        compress: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              message: { role: 'system', content: 'You are a helpful assistant.' },
+              sourceIndexes: [0],
+              isSummary: false,
+              compressedTokens: 5,
+            },
+            {
+              message: { role: 'system', content: 'summary' },
+              sourceIndexes: [1, 2],
+              isSummary: true,
+              compressedTokens: 5,
+            },
+          ],
+          originalTokens: 100,
+          compressedTokens: 20,
+          compressionRatio: 0.2,
+          messagesRemoved: 2,
+          summariesCreated: 1,
+          timestamp: Date.now(),
+        }),
+        estimateTokens: vi.fn().mockReturnValue(20),
+      };
+
+      await session.compressContext();
+
+      expect(journalWriter.appendEvent).not.toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({ type: 'compaction' }),
+      );
     });
   });
 

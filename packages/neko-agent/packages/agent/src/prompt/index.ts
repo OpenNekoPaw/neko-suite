@@ -84,7 +84,6 @@ export { SkillInjectionModule } from './modules/skill/skill-injection-module';
 
 // Content-projection modules (PR2 Stage C)
 export { MemoryProjectModule } from './modules/memory/memory-project-module';
-export { MemoryGlobalModule } from './modules/memory/memory-global-module';
 export { MemoryRecallModule } from './modules/memory/memory-recall-module';
 export { CreativeVersionLogModule } from './modules/ephemeral/creative-version-log-module';
 

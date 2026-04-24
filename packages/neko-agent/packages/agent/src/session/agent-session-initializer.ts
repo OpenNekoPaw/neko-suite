@@ -31,7 +31,6 @@ import {
 } from '../tools';
 import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
-import { MemoryGlobalModule } from '../prompt/modules/memory/memory-global-module';
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
@@ -72,7 +71,6 @@ export interface SessionComponents {
   // PR2: Prompt-module infrastructure. Exposed for future runtime use
   // (SelfEvaluation hooks, etc.)
   memoryProjectModule: MemoryProjectModule;
-  memoryGlobalModule: MemoryGlobalModule;
   memoryRecallModule: MemoryRecallModule;
   creativeVersionLogModule: CreativeVersionLogModule;
   // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
@@ -244,10 +242,8 @@ export function initializeSession(
   // Step 8: Prompt modules (PR2) — own the format contract for
   // environment/ephemeral sections that were previously written directly
   // with composer.setSection. The modules are stored on SessionComponents
-  // so session-level callers (CreativeMemoryHooks, _syncSystemPrompt) can
-  // drive them.
+  // so session-level callers like _syncSystemPrompt can drive them.
   const memoryProjectModule = new MemoryProjectModule();
-  const memoryGlobalModule = new MemoryGlobalModule();
   const memoryRecallModule = new MemoryRecallModule();
   const creativeVersionLogModule = new CreativeVersionLogModule();
   const skillInjectionModule = new SkillInjectionModule();
@@ -297,16 +293,6 @@ export function initializeSession(
     config.projectMemoryManager.on('change', injectProject);
   }
 
-  // Inject global memory via MemoryGlobalModule.
-  if (config.globalMemoryManager) {
-    const injectGlobal = (content: string | null): void => {
-      memoryGlobalModule.setContent(content);
-      writeModuleSectionsSync(promptComposer, 'memory:global', memoryGlobalModule.renderSync());
-    };
-    injectGlobal(config.globalMemoryManager.getContent());
-    config.globalMemoryManager.on('change', injectGlobal);
-  }
-
   const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
 
   return {
@@ -320,7 +306,6 @@ export function initializeSession(
     history,
     metaTools,
     memoryProjectModule,
-    memoryGlobalModule,
     memoryRecallModule,
     creativeVersionLogModule,
     skillInjectionModule,
@@ -388,8 +373,8 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
   } = deps;
 
   // When the caller came through applyAblationToggles, an AblationMarkerHook
-  // is prepended to config.hooks carrying disableHooks / disableCompression /
-  // disableSessionMemory metadata. Extract it here so (a) the metadata flows
+  // is prepended to config.hooks carrying disableHooks / disableCompression
+  // metadata. Extract it here so (a) the metadata flows
   // into the factory where the filtering actually happens, and (b) the
   // marker itself is removed from customHooks so it doesn't appear as a
   // no-op in the final chain. Non-experiment paths see no marker and this
@@ -411,7 +396,6 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     ...(ablationMarker && {
       disableHooks: ablationMarker.disableHooks,
       disableCompression: ablationMarker.disableCompression,
-      disableSessionMemory: ablationMarker.disableSessionMemory,
     }),
   });
 

@@ -8,7 +8,7 @@
  *   ③ Accumulation  — conclusions feed back into memory
  *
  * Pieces ① and ③ already exist (Read tool / ArtifactObservationHooks /
- * CreativeMemoryHooks.onExecuteEnd). Piece ② was a gap: persona prompts
+ * AgentSession's Journal -> project-memory extraction path). Piece ② was a gap: persona prompts
  * mentioned "optional self-eval" as text but nothing fired at the right
  * moment. This hook closes that gap.
  *

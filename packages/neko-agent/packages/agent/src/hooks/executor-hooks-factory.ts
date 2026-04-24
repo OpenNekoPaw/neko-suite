@@ -79,12 +79,6 @@ export interface ExecutorHooksFactoryConfig {
    */
   disableCompression?: boolean;
 
-  /**
-   * When true, MemoryHooks skips session-memory history loading. Used
-   * by the ablation framework; undefined keeps the default.
-   */
-  disableSessionMemory?: boolean;
-
   /** Pre-built creative memory hooks (recall + extraction). Inserted after MemoryHooks. */
   creativeMemoryHooks?: ExecutorHooks;
 }
@@ -108,7 +102,7 @@ export interface ExecutorHooksFactoryResult {
  * Create a composed executor hooks chain from configuration.
  *
  * Hook execution order:
- * 1. MemoryHooks — context compression, session memory
+ * 1. MemoryHooks — context compression
  * 2. ValidationHooks — input/output validation
  * 3. PermissionHooks — permission checking, tool confirmation
  * 4. RetryHooks — tool call retry with exponential backoff
@@ -124,9 +118,6 @@ export function createExecutorHooks(
     compressor: config.compressor,
     ...(config.disableCompression !== undefined && {
       disableCompression: config.disableCompression,
-    }),
-    ...(config.disableSessionMemory !== undefined && {
-      disableSessionMemory: config.disableSessionMemory,
     }),
   });
 

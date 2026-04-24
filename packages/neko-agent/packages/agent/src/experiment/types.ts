@@ -2,7 +2,7 @@
  * Ablation Experiment Framework — Type Definitions
  *
  * Lightweight experiment infrastructure for measuring subsystem impact.
- * 15 independent toggles, each targeting a single indivisible feature unit.
+ * Provides independent toggles, each targeting a single indivisible feature unit.
  */
 
 import type { AgentResult } from '@neko/shared';
@@ -18,7 +18,7 @@ import type { AgentSessionConfig, ExecutionContext } from '../session/types';
  * `undefined` = use default behavior (no override).
  */
 export interface AblationToggles {
-  // --- Context management (3 independent dimensions) ---
+  // --- Context management (2 independent dimensions) ---
 
   /** Context compression (ConversationCompressor.compress).
    *  false = disable, object = override thresholds */
@@ -26,10 +26,6 @@ export interface AblationToggles {
   /** Creative compression (MessageClassifier + CreativeSummarizer).
    *  false = disable, fallback to basic compression */
   creativeCompression?: false;
-  /** Session memory load/save (SessionMemory cross-turn persistence).
-   *  false = disable, compression still works */
-  sessionMemory?: false;
-
   // --- Skill system (3 independent dimensions) ---
 
   /** Skill auto-matching (SkillService.match).
@@ -70,12 +66,18 @@ export interface AblationToggles {
   /** Project memory injection into system prompt.
    *  false = disable */
   projectMemory?: false;
-  /** Global memory injection into system prompt.
-   *  false = disable */
-  globalMemory?: false;
-  /** Automatic KeyFact extraction from conversations.
+  /** Journal-backed persistence remains the primary runtime source of truth.
+   *  false = rollback to Record-first/runtime-fallback mode */
+  journalAsSSOT?: false;
+  /** Persist compaction provenance/events into the Journal.
+   *  false = keep in-memory compression but skip compaction event logging */
+  compactLogging?: false;
+  /** Automatic project-memory KeyFact extraction from conversations.
    *  false = disable */
   autoMemoryExtraction?: false;
+  /** Per-turn recall injection from project memory.
+   *  false = keep memory file, disable recall prompt injection */
+  memoryRecall?: false;
 
   // --- LLM parameters ---
 

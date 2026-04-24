@@ -7,12 +7,10 @@
 
 import type {
   AgentContext,
-  AgentResult,
   ExecutorHooks,
   ToolCallInfo,
   ToolResultWithMeta,
   ToolResult,
-  SessionMemory,
   IConversationCompressor,
 } from '@neko/shared';
 import {
@@ -166,60 +164,23 @@ export class RetryHooks implements ExecutorHooks {
  * Memory hooks options
  */
 export interface MemoryHooksOptions {
-  /** Session memory for cross-session persistence */
-  sessionMemory?: SessionMemory;
   /** Conversation compressor for turn-aware token management */
   compressor?: IConversationCompressor;
   /** Disable compression in beforeThink (for ablation experiments) */
   disableCompression?: boolean;
-  /** Disable session memory load/save (for ablation experiments) */
-  disableSessionMemory?: boolean;
 }
 
 /**
- * Memory hooks - adds context compression and session memory
+ * Memory hooks - adds context compression
  */
 export class MemoryHooks implements ExecutorHooks {
   name = 'memory';
-  private sessionMemory?: SessionMemory;
   private compressor?: IConversationCompressor;
   private disableCompression: boolean;
-  private disableSessionMemory: boolean;
-  private userInput?: string;
-  private historyLoaded = false;
 
   constructor(options: MemoryHooksOptions = {}) {
-    this.sessionMemory = options.sessionMemory;
     this.compressor = options.compressor;
     this.disableCompression = options.disableCompression ?? false;
-    this.disableSessionMemory = options.disableSessionMemory ?? false;
-  }
-
-  async onExecuteStart(input: string, context: AgentContext): Promise<void> {
-    this.userInput = input;
-    this.historyLoaded = false;
-
-    // Load session memory if available
-    if (this.sessionMemory && !this.disableSessionMemory) {
-      const hasOnlySystemPrompt =
-        context.messages.length <= 2 &&
-        context.messages.every((m) => m.role === 'system' || m.role === 'user');
-      const userMsgCount = context.messages.filter((m) => m.role === 'user').length;
-
-      // Only load history if there's at most one user message (the current one)
-      if (hasOnlySystemPrompt && userMsgCount <= 1) {
-        const history = await this.sessionMemory.getHistory();
-        if (history.length > 0) {
-          this.historyLoaded = true;
-          const systemMsg = context.messages.find((m) => m.role === 'system');
-          const userMsg = context.messages.find((m) => m.role === 'user');
-          context.messages.length = 0;
-          if (systemMsg) context.messages.push(systemMsg);
-          context.messages.push(...history);
-          if (userMsg) context.messages.push(userMsg);
-        }
-      }
-    }
   }
 
   async beforeThink(context: AgentContext): Promise<AgentContext> {
@@ -229,21 +190,6 @@ export class MemoryHooks implements ExecutorHooks {
       context.messages = result.messages.map((m) => m.message);
     }
     return context;
-  }
-
-  async onExecuteEnd(result: AgentResult): Promise<void> {
-    // Save to session memory (only successful responses)
-    if (this.sessionMemory && !this.disableSessionMemory && this.userInput && result.success) {
-      await this.sessionMemory.addMessage({ role: 'user', content: this.userInput });
-      await this.sessionMemory.addMessage({ role: 'assistant', content: result.response });
-    }
-  }
-
-  /**
-   * Get session memory
-   */
-  getSessionMemory(): SessionMemory | undefined {
-    return this.sessionMemory;
   }
 
   /**

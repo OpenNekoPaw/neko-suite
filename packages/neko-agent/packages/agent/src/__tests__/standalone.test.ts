@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import type { IProjectMemoryManager } from '@neko/shared';
 
 // Import all major exports to verify they work standalone
 import {
@@ -36,7 +37,7 @@ import {
   MCPTool,
 
   // Memory
-  InMemorySessionMemory,
+  MemoryRecall,
 
   // Context
   ConversationCompressor,
@@ -64,6 +65,17 @@ import {
   HOOK_DIRECTORIES,
   DEFAULT_HOOK_METADATA,
 } from '../index';
+
+function createMockProjectMemory(content: string | null): IProjectMemoryManager {
+  return {
+    load: async () => undefined,
+    getContent: () => content,
+    upsertEntry: async () => undefined,
+    removeEntry: async () => undefined,
+    on: () => undefined,
+    off: () => undefined,
+  };
+}
 
 describe('Standalone Mode', () => {
   describe('Imports', () => {
@@ -102,7 +114,7 @@ describe('Standalone Mode', () => {
     });
 
     it('should export memory components', () => {
-      expect(InMemorySessionMemory).toBeDefined();
+      expect(MemoryRecall).toBeDefined();
       expect(ConversationCompressor).toBeDefined();
     });
 
@@ -249,15 +261,16 @@ describe('Standalone Mode', () => {
   });
 
   describe('Memory Components', () => {
-    it('should use InMemorySessionMemory', async () => {
-      const memory = new InMemorySessionMemory();
+    it('should use MemoryRecall with project memory', async () => {
+      const memory = new MemoryRecall({
+        projectMemory: createMockProjectMemory(
+          '## Preferences\nUse Chinese explanations\n\n## Stack\nReact + TypeScript',
+        ),
+      });
 
-      await memory.addMessage({ role: 'user', content: 'Hello' });
-      await memory.addMessage({ role: 'assistant', content: 'Hi there!' });
-
-      const history = await memory.getHistory();
-      expect(history.length).toBe(2);
-      expect(history[0]?.role).toBe('user');
+      const results = await memory.recall('Chinese explanations');
+      expect(results.length).toBe(1);
+      expect(results[0]?.source).toBe('project');
     });
 
     it('should use ConversationCompressor', () => {

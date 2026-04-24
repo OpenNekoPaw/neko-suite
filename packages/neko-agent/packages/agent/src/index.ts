@@ -100,21 +100,12 @@ export {
 
 // Export memory
 export {
-  InMemorySessionMemory,
   FileProjectMemoryManager,
   createFileProjectMemoryManager,
-  createGlobalMemoryManager,
-  DEFAULT_GLOBAL_MEMORY_PATH,
   KeyFactExtractor,
   MemoryRecall,
-  CreativeMemoryHooks,
 } from './memory';
-export type {
-  KeyFactExtractorOptions,
-  MemoryRecallOptions,
-  RecalledMemory,
-  CreativeMemoryHooksOptions,
-} from './memory';
+export type { KeyFactExtractorOptions, MemoryRecallOptions, RecalledMemory } from './memory';
 
 // Export MCP
 export {
@@ -539,8 +530,59 @@ export {
 } from './input';
 
 // Export conversation persistence (shared resume layer)
-export type { ConversationRecord, ConversationIndex } from './session/conversation-record';
+export type {
+  ConversationRecord,
+  ConversationIndex,
+  ConversationIndexMeta,
+  ConversationsIndexFile,
+  ConversationSource,
+  ConversationMediaModelSelection,
+} from './session/conversation-record';
+export {
+  createConversationId,
+  createLegacyConversationMigrationId,
+  getConversationWorkDirHash,
+  isCanonicalConversationId,
+  isLegacyConversationId,
+  parseConversationId,
+} from './session/conversation-id';
+export type { ConversationIdOptions, ParsedConversationId } from './session/conversation-id';
+export {
+  ConversationIndexStore,
+  type IConversationIndexStore,
+  type ConversationIndexStoreFsOps,
+  type ConversationIndexStoreOptions,
+} from './session/conversation-index-store';
+export {
+  discoverLegacyConversationWorkDirs,
+  migrateLegacyConversationIndex,
+  type ConversationIndexMigrationFsOps,
+  type ConversationIndexMigrationOptions,
+  type ConversationIndexMigrationResult,
+} from './session/conversation-index-migration';
 export {
   FileConversationStorage,
   createFileConversationStorage,
 } from './session/file-conversation-storage';
+export {
+  JournalProjection,
+  JournalStorage,
+  createJournalStorage,
+  createNodeJournalStorage,
+  createJournalEntryId,
+  projectEntriesToHistory,
+} from './session';
+export type {
+  JournalEntry,
+  JournalFsOps,
+  JournalWriterOptions,
+  StateSnapshot,
+  SubAgentRef,
+  ResumedSessionState,
+  JournalReaderFsOps,
+  JournalReaderOptions,
+  JournalStorageFsOps,
+  IJournalProjection,
+  JournalProjectionOptions,
+  ConversationSummary,
+} from './session';

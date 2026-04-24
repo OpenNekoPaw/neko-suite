@@ -2,8 +2,8 @@
  * Preset Ablation Variants — Ready-to-use experiment configurations
  *
  * Two suites:
- * - Standard: baseline + one feature off per variant (15 variants)
- * - Group: baseline + subsystem-level off (4 group variants)
+ * - Standard: baseline + one feature off per variant (16 variants total)
+ * - Group: baseline + subsystem-level off (5 variants total)
  */
 
 import type { ExperimentVariant } from './types';
@@ -30,12 +30,6 @@ export const NO_CREATIVE_COMPRESSION: ExperimentVariant = {
   name: 'no-creative-compression',
   description: 'Creative compression disabled, fallback to basic',
   toggles: { creativeCompression: false },
-};
-
-export const NO_SESSION_MEMORY: ExperimentVariant = {
-  name: 'no-session-memory',
-  description: 'Session memory load/save disabled',
-  toggles: { sessionMemory: false },
 };
 
 // --- Skill system ---
@@ -86,6 +80,30 @@ export const NO_PROJECT_MEMORY: ExperimentVariant = {
   toggles: { projectMemory: false },
 };
 
+export const NO_JOURNAL_AS_SSOT: ExperimentVariant = {
+  name: 'no-journal-as-ssot',
+  description: 'Journal-backed projection disabled; runtime falls back to legacy record-first mode',
+  toggles: { journalAsSSOT: false },
+};
+
+export const NO_COMPACT_LOGGING: ExperimentVariant = {
+  name: 'no-compact-logging',
+  description: 'Compaction keeps working in memory but skips journal compaction events',
+  toggles: { compactLogging: false },
+};
+
+export const NO_AUTO_MEMORY_EXTRACTION: ExperimentVariant = {
+  name: 'no-auto-memory-extraction',
+  description: 'Automatic project-memory KeyFact extraction disabled',
+  toggles: { autoMemoryExtraction: false },
+};
+
+export const NO_MEMORY_RECALL: ExperimentVariant = {
+  name: 'no-memory-recall',
+  description: 'Per-turn memory recall injection disabled',
+  toggles: { memoryRecall: false },
+};
+
 export const NO_TRAITS: ExperimentVariant = {
   name: 'no-traits',
   description: 'Trait-based permission disabled',
@@ -119,7 +137,15 @@ export const NO_ALL_SKILLS: ExperimentVariant = {
 export const NO_ALL_EXTERNAL: ExperimentVariant = {
   name: 'no-all-external',
   description: 'All external integrations disabled',
-  toggles: { settingsHooks: false, projectMemory: false, traitsRegistry: false },
+  toggles: {
+    settingsHooks: false,
+    projectMemory: false,
+    journalAsSSOT: false,
+    compactLogging: false,
+    autoMemoryExtraction: false,
+    memoryRecall: false,
+    traitsRegistry: false,
+  },
 };
 
 export const MINIMAL: ExperimentVariant = {
@@ -128,7 +154,6 @@ export const MINIMAL: ExperimentVariant = {
   toggles: {
     compression: false,
     creativeCompression: false,
-    sessionMemory: false,
     skillDiscovery: false,
     skillInjection: false,
     dynamicToolSets: false,
@@ -136,6 +161,10 @@ export const MINIMAL: ExperimentVariant = {
     retry: false,
     settingsHooks: false,
     projectMemory: false,
+    journalAsSSOT: false,
+    compactLogging: false,
+    autoMemoryExtraction: false,
+    memoryRecall: false,
     traitsRegistry: false,
     thinkingBudget: 0,
   },
@@ -147,14 +176,13 @@ export const MINIMAL: ExperimentVariant = {
 
 /**
  * Standard ablation suite: baseline + one feature off per variant.
- * 14 variants total (baseline + 13 single-feature).
+ * 16 variants total (baseline + 15 single-feature).
  */
 export function createStandardAblationSuite(): ExperimentVariant[] {
   return [
     BASELINE,
     NO_COMPRESSION,
     NO_CREATIVE_COMPRESSION,
-    NO_SESSION_MEMORY,
     NO_SKILL_DISCOVERY,
     NO_SKILL_INJECTION,
     NO_DYNAMIC_TOOLSETS,
@@ -162,6 +190,10 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
     NO_RETRY,
     NO_SETTINGS_HOOKS,
     NO_PROJECT_MEMORY,
+    NO_JOURNAL_AS_SSOT,
+    NO_COMPACT_LOGGING,
+    NO_AUTO_MEMORY_EXTRACTION,
+    NO_MEMORY_RECALL,
     NO_TRAITS,
     NO_THINKING,
   ];
