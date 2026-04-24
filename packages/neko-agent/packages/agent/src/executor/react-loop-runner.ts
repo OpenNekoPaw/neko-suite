@@ -164,6 +164,18 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       lastHadError = false;
       lastHadToolCalls = false;
       subjectAttempts.clear();
+
+      if (deps.eventBus) {
+        const activeRun = deps.runStore.getActive();
+        if (activeRun) {
+          deps.eventBus.emit({
+            channel: CREATION_CHANNELS.RUN_STARTED,
+            runId: activeRun.id,
+            workflowId: activeRun.workflowId,
+            at: clock(),
+          });
+        }
+      }
     },
 
     async beforeThink(_ctx: AgentContext) {

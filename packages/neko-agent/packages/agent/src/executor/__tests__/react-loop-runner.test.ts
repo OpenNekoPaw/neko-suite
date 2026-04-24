@@ -178,6 +178,30 @@ describe('ReActLoopRunner hooks', () => {
   });
 
   describe('EventBus integration (P5)', () => {
+    it('emits creation.run.started on onExecuteStart when a bus is supplied', async () => {
+      const bus = createEventBus();
+      const onStart = vi.fn();
+      bus.on(CREATION_CHANNELS.RUN_STARTED, onStart);
+
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+        now: () => 555,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart.mock.calls[0][0]).toEqual(
+        expect.objectContaining({
+          channel: CREATION_CHANNELS.RUN_STARTED,
+          runId: store.getActive()!.id,
+          workflowId: 'test',
+          at: 555,
+        }),
+      );
+    });
+
     it('emits execution.round.activation.decided per round when a bus is supplied', async () => {
       const bus = createEventBus();
       const onRound = vi.fn();
