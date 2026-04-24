@@ -11,10 +11,41 @@ export {
   DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
-export type { ConversationRecord, ConversationIndex } from './conversation-record';
+export type {
+  ConversationRecord,
+  ConversationIndex,
+  ConversationIndexMeta,
+  ConversationsIndexFile,
+  ConversationSource,
+  ConversationMediaModelSelection,
+} from './conversation-record';
+export {
+  createConversationId,
+  createLegacyConversationMigrationId,
+  getConversationWorkDirHash,
+  isCanonicalConversationId,
+  isLegacyConversationId,
+  parseConversationId,
+} from './conversation-id';
+export type { ConversationIdOptions, ParsedConversationId } from './conversation-id';
+export {
+  ConversationIndexStore,
+  type IConversationIndexStore,
+  type ConversationIndexStoreFsOps,
+  type ConversationIndexStoreOptions,
+} from './conversation-index-store';
+export {
+  discoverLegacyConversationWorkDirs,
+  migrateLegacyConversationIndex,
+  type ConversationIndexMigrationFsOps,
+  type ConversationIndexMigrationOptions,
+  type ConversationIndexMigrationResult,
+} from './conversation-index-migration';
 export {
   FileConversationStorage,
   createFileConversationStorage,
+  type LegacyConversationSupportMode,
+  type CreateFileConversationStorageOptions,
 } from './file-conversation-storage';
 
 // Journal (JSONL session persistence)
@@ -26,11 +57,18 @@ export type {
   StateSnapshot,
   SubAgentRef,
 } from './journal-writer';
+export { createJournalEntryId } from './journal-writer';
 export { JournalReader } from './journal-reader';
 export type {
   ResumedSessionState,
   JournalReaderFsOps,
   JournalReaderOptions,
 } from './journal-reader';
-export { JournalStorage, createJournalStorage } from './journal-storage';
+export { JournalStorage, createJournalStorage, createNodeJournalStorage } from './journal-storage';
 export type { JournalStorageFsOps } from './journal-storage';
+export { JournalProjection, projectEntriesToHistory } from './journal-projection';
+export type {
+  IJournalProjection,
+  JournalProjectionOptions,
+  ConversationSummary,
+} from './journal-projection';
