@@ -44,6 +44,19 @@ describe('IdcRunStore', () => {
     expect(store.startRun({ workflowId: 'f', runId: 'custom-run' })).toBe('custom-run');
   });
 
+  it('generates distinct default runIds across store instances', () => {
+    const now = () => 1234;
+    const first = createIdcRunStore({ now });
+    const second = createIdcRunStore({ now });
+
+    const firstId = first.startRun({ workflowId: 'flow-a' });
+    const secondId = second.startRun({ workflowId: 'flow-b' });
+
+    expect(firstId).not.toBe(secondId);
+    expect(firstId).toMatch(/^run-1234-[a-z0-9]+$/);
+    expect(secondId).toMatch(/^run-1234-[a-z0-9]+$/);
+  });
+
   it('recordRound appends round summaries in order', () => {
     const store = createIdcRunStore();
     store.startRun({ workflowId: 'f' });

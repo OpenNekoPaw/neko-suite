@@ -48,6 +48,8 @@ export interface IdcRunStoreConfig {
   nextId?: () => string;
 }
 
+let globalRunCounter = 0;
+
 // =============================================================================
 // Implementation
 // =============================================================================
@@ -57,11 +59,10 @@ class IdcRunStore implements IIdcRunStore {
   private readonly _completed: IdcRun[] = [];
   private readonly _now: () => number;
   private readonly _nextId: () => string;
-  private _counter = 0;
 
   constructor(config: IdcRunStoreConfig = {}) {
     this._now = config.now ?? (() => Date.now());
-    this._nextId = config.nextId ?? (() => `run-${++this._counter}`);
+    this._nextId = config.nextId ?? (() => defaultRunId(this._now));
   }
 
   startRun(input: { workflowId: string; runId?: string }): string {
@@ -128,6 +129,11 @@ class IdcRunStore implements IIdcRunStore {
     this._completed.push(closed);
     this._active = null;
   }
+}
+
+function defaultRunId(now: () => number): string {
+  globalRunCounter += 1;
+  return `run-${now()}-${globalRunCounter.toString(36)}`;
 }
 
 // =============================================================================
