@@ -138,7 +138,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个
 | `subagent/` | 子 Agent 管理 |
 | `task/` | 后台任务管理器 + 持久化 + 恢复 |
 | `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
-| `memory/` | InMemorySessionMemory |
+| `memory/` | 项目记忆（`.neko/memory.md`）+ recall / extraction |
 | `commands/` | 内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等） |
 | `errors/` | 统一错误类型 |
 

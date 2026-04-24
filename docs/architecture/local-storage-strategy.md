@@ -21,9 +21,9 @@ neko-suite 各扩展在本地存储了多种数据：项目配置、媒体缓存
 ### 核心决策：源数据与派生数据物理分离
 
 ```
-~/.neko/                              # L0: 用户级（全局，跨项目共享）
+~/.neko/                              # L0: 用户级（全局，显式用户配置与共享资源）
 ├── config.json                       #   用户配置（LLM 偏好等）
-├── global-memory.md                  #   全局 Agent 记忆
+├── AGENTS.md                         #   用户显式提示词配置（跨项目个性化）
 ├── market-cache/                     #   市场包下载缓存（LRU）
 ├── market-installed.json             #   已安装包注册表
 ├── auth.json                         #   认证令牌
@@ -51,6 +51,8 @@ neko-suite 各扩展在本地存储了多种数据：项目配置、媒体缓存
 │   └── audios/
 └── thumbnails/                       #   缩略图缓存
 ```
+
+说明：不提供 `global-memory.md`。跨项目个性化通过 `~/.neko/AGENTS.md` 等显式提示词配置完成；跨会话项目事实仍保存在 `<project>/.neko/memory.md`。
 
 ### 分层理由
 
@@ -95,10 +97,10 @@ interface IStorageLayout {
   global: {
     root: string;
     config: string;
+    agentsMd: string;
     marketCache: string;
     marketInstalled: string;
     conversations: string;
-    globalMemory: string;
   };
 
   /** L1: <workspace>/.neko/ */
@@ -140,10 +142,10 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
     global: {
       root: globalRoot,
       config: path.join(globalRoot, 'config.json'),
+      agentsMd: path.join(globalRoot, 'AGENTS.md'),
       marketCache: path.join(globalRoot, 'market-cache'),
       marketInstalled: path.join(globalRoot, 'market-installed.json'),
       conversations: path.join(globalRoot, 'conversations'),
-      globalMemory: path.join(globalRoot, 'global-memory.md'),
     },
     project: {
       root: projectRoot,

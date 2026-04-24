@@ -1,6 +1,6 @@
 # Memory Unification — Journal / ConversationRecord / Compact / Memory 四合一
 
-**状态**: Proposed
+**状态**: In Progress
 **日期**: 2026-04-24
 **关联范围**: neko-agent · @neko/shared · 所有 Skill / Hook / UI resume 路径
 **关联文档**:
@@ -10,6 +10,8 @@
 - [creative-context-compression.md](./creative-context-compression.md) — 七级优先级语义分类压缩策略；本 ADR 保留该策略作为 Compact 实现，但把"压缩结果"从"丢弃"改为"持久化成事件"
 
 **取代说明**：当前 `session/journal-*.ts` / `session/conversation-record.ts` / `context/conversation-compressor.ts` / `memory/*` 四个子系统各自为政。本 ADR 定义**统一事实源（SSOT）**，四者降级为 SSOT 的不同**视图 / 投影 / 工具**。现有代码全部保留兼容，通过分期迁移收敛到新模型。
+
+**设计决策补充**：本 ADR 的目标态**不保留** `~/.neko/global-memory.md`。跨项目个性化由用户显式提示词配置承载（如 personal `AGENTS.md` / 其他 prompt config）；Semantic Memory 仅保留项目级 `.neko/memory.md`。原因是 Global Memory 会把跨项目偏好变成隐式上下文，污染当前会话，且难以审计与复现。
 
 ---
 
@@ -24,7 +26,7 @@
 | **Journal** | `~/.neko/journals/{conversationId}.jsonl` | JSONL 事件流（`event` / `snapshot` / `subagent_ref`）| 文件级持久，手动 cleanup |
 | **ConversationRecord** | `~/.neko/conversations/{workDir-hash}.json` | 聚合 JSON（`ChatMessage[]` 列表）| 按 workDir 持久，100 条 FIFO |
 | **Compact** | **纯内存** | `CompressedMessage[]`（含 isSummary 标记）| 进程退出即丢 |
-| **Memory** | 三分身：`.neko/memory.md` / `~/.neko/global-memory.md` / 内存 Map | Markdown H2 section / in-memory KeyFact | 前两者持久，session memory 纯内存 |
+| **Memory（现状 / legacy）** | 三分身：`.neko/memory.md` / `~/.neko/global-memory.md` / 内存 Map | Markdown H2 section / in-memory KeyFact | 前两者持久，session memory 纯内存 |
 
 ### 1.2 观察到的问题
 
@@ -48,7 +50,7 @@
 压缩 = 删除。原始老消息在下一次 Compress 后只存在于 Journal 的事件流里，但用户 / Skill 没有"读压缩前历史"的 API。Compact 摘要本身也不写入 Journal，下次恢复 session 时需要重新压缩（或者干脆不压缩，把 Journal 全部重放加载回来 —— 但那就失去了压缩的意义）。
 
 **P4 — Session Memory 是伪持久化**
-`InMemorySessionMemory` 接受 `saveSession(sessionId, facts)` 调用，但**底层是 `Map<string, SessionMemoryEntry>`，进程退出即丢**。文档宣称"跨 session 持久化 KeyFact"是假的；真正跨 session 的记忆只有 Project Memory / Global Memory（需要 MemoryWriteTool 或用户手动写）。
+`InMemorySessionMemory` 接受 `saveSession(sessionId, facts)` 调用，但**底层是 `Map<string, SessionMemoryEntry>`，进程退出即丢**。文档宣称"跨 session 持久化 KeyFact"是假的；在现状实现里，真正跨 session 的记忆只有 Project Memory / legacy Global Memory（需要 MemoryWriteTool 或用户手动写）。
 
 **P5 — Memory 三分身语义漂移**
 Project / Global / Session 三个 manager 有几乎相同的接口，但：
@@ -57,6 +59,7 @@ Project / Global / Session 三个 manager 有几乎相同的接口，但：
 - Session 存 KeyFact 结构体
 - 三者注入系统提示走三个不同的 PromptModule（MemoryProjectModule / MemoryGlobalModule / MemoryRecallModule）
 - 抽取入口（KeyFactExtractor）只写 SessionMemory，不会自动升级到 Project —— 真正的"自动记忆"链条断在最后一步
+- Global Memory 与 personal `AGENTS.md` / 提示词配置语义重叠；若把跨项目个性化做成自动记忆，会形成隐式上下文污染
 
 **P6 — IDC artifacts 不在持久化讨论范围内**
 `.neko/drafts/*.md` / `plans/*.md` / `tasks/*.md` 是独立的 run-scoped artifact，既不写 Journal 也不写 ConversationRecord。它们事实上是第五种"持久化"，但归 IDC 管而非持久化平面。本 ADR **不**把 IDC artifact 并入四合一 —— 它们是用户可见的创作产物，性质不同。
@@ -85,10 +88,11 @@ Journal 升格为**所有持久化信息的权威来源**。任何对会话状�
 压缩事件本身写入 Journal（哪些消息被替换、替换成什么摘要、压缩时的 token 剖面）。下次恢复时既能选择"走压缩路径"（快 / 省 token），也能选择"展开到未压缩"（全量回溯）。
 
 **G4 Memory 层清晰**
-Project / Global / Session 保留但角色明确：
 
 - **Working / Episodic / Semantic** 三层金字塔，按时间尺度和访问频率区分
-- Semantic 层统一抽取入口：Journal 事件 → KeyFactExtractor → Semantic Memory（自动），而非当前"停在 Session Memory 不再往上流"
+- Semantic 层仅保留 Project Memory（`.neko/memory.md`）
+- 跨项目个性化通过用户显式提示词配置（如 personal `AGENTS.md` / prompt config）承载，不再通过 Global Memory 自动注入
+- Semantic 层统一抽取入口：Journal 事件 → KeyFactExtractor → Project Memory（自动），而非当前"停在 Session Memory 不再往上流"
 
 **G5 向后兼容**
 现有 API 保留至少一个 release cycle。新模型通过 `PersistenceV2` flag 逐步启用。非 opt-in 的调用继续走旧路径。
@@ -101,8 +105,8 @@ Project / Global / Session 保留但角色明确：
 **N2 IDC artifact 并入 Journal**
 `.neko/drafts/*.md` 等产物是用户可见文件，不是 runtime 事件。保留 IDC 所有权。
 
-**N3 把 Memory markdown 格式改为结构化**
-Project/Global memory 当前是 markdown H2 section（用户可手动编辑）。**保留**。本 ADR 只改"如何产生这些 section"而不改"section 自身是什么"。
+**N3 把 Project Memory markdown 格式改为结构化**
+`.neko/memory.md` 当前是 markdown H2 section（用户可手动编辑）。**保留**。本 ADR 只改"如何产生这些 section"而不改"section 自身是什么"，也不再引入新的全局 memory 文件承载跨项目个性化。
 
 **N4 实现 Event Sourcing 的全部范式**
 不做 CQRS / Projection rebuild on startup / Snapshot-based compaction of Journal 本身。Journal 仍是 append-only JSONL，快照仍是现有 `JournalWriter.appendSnapshot` 语义。
@@ -116,6 +120,7 @@ Project/Global memory 当前是 markdown H2 section（用户可手动编辑）�
 - JSONL 追加必须 O(1)（避免重写整个文件）
 - Project Memory markdown 格式是**向外承诺**（用户文档说"你可以编辑 `.neko/memory.md`"）—— 不可变
 - 现有 `ConversationRecord` 被 Extension / TUI 直接读 —— 不能直接 breaking
+- 用户级跨项目个性化必须显式配置（personal `AGENTS.md` / prompt config），不得通过自动抽取的全局 memory 隐式注入
 
 ---
 
@@ -130,7 +135,7 @@ Project/Global memory 当前是 markdown H2 section（用户可手动编辑）�
 | **Snapshot** | 某一时刻的 Record 物化缓存，用于加速 resume（替代全量 replay）|
 | **Working Memory** | 当前进程内的活动 `ChatMessage[]`，受 Compact 约束 |
 | **Episodic Memory** | 持久化的"这次会话做了什么"—— 就是 Journal 本体 |
-| **Semantic Memory** | 跨会话的"积累的事实"—— Project / Global memory + 它们的自动抽取管道 |
+| **Semantic Memory** | 跨会话的"积累的事实"—— Project Memory（`.neko/memory.md`）+ 它的自动抽取管道 |
 | **Compaction Event** | Journal 中一种新事件类型，记录一次 Compact 的输入/输出/摘要 |
 
 ---
@@ -139,9 +144,8 @@ Project/Global memory 当前是 markdown H2 section（用户可手动编辑）�
 
 ```
                        ┌──────────────────────┐
-                       │  Semantic Memory     │  跨会话持久化的事实
+                       │  Semantic Memory     │  跨会话持久化的项目事实
                        │  .neko/memory.md     │  低频写、高频读
-                       │  ~/.neko/global-*.md │
                        └─────────┬────────────┘
                                  │ KeyFactExtractor (on Journal events)
                        ┌─────────┴────────────┐
@@ -195,7 +199,8 @@ KeyFactExtractor scans new Journal events
     │
     ▼
 [next session starts]
-Semantic Memory → injected into system prompt via MemoryProjectModule/GlobalModule
+Project Memory → injected into system prompt via MemoryProjectModule
+Personal AGENTS.md / prompt config → injected independently into environment layer
 Episodic Memory → loaded via Journal Projection (optional, per user action)
 Working Memory → bootstrapped from projection if "continue previous"
 ```
@@ -207,7 +212,7 @@ Working Memory → bootstrapped from projection if "continue previous"
 | ConversationRecord 存 history，Journal 存事件（两份独立数据）| Journal 是 SSOT，ConversationRecord 是 Journal 的 **投影缓存**（定期 rebuild）|
 | Compact 替换 history、扔掉原始 | Compact 只改 Working Memory；原始 + 摘要都写 Journal |
 | SessionMemory 存 KeyFact 但不持久化 | SessionMemory 概念**移除**；KeyFact 是 Journal 事件的派生产物，直接送去 Semantic Memory |
-| Project / Global / Session 三个 manager 对等 | Project / Global 是 Semantic Memory 的两个存储后端；Session 不存在 |
+| Project / Global / Session 三个 manager 对等 | Project Memory 是 Semantic Memory 的唯一持久后端；跨项目个性化走 prompt config；Session 不存在 |
 
 ---
 
@@ -248,7 +253,7 @@ interface MemoryExtractionEvent {
     content: string;
     category: 'fact' | 'preference' | 'decision' | 'warning';
     confidence: number;
-    destination: 'project' | 'global';
+    destination: 'project';
   }>;
   writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
   timestamp: number;
@@ -386,9 +391,10 @@ compressAndLog(
 
 `InMemorySessionMemory` 是误导性命名（根本不持久化）。**本 ADR 提议移除**：
 
-- `SessionMemory` 接口标记为 `@deprecated`
-- `MemoryHooks.sessionMemory` 字段永远为 undefined（或接受但 no-op）
+- `SessionMemory` / `SessionMemoryEntry` 接口从共享契约删除
+- `MemoryHooks` 不再保留 session-memory load/save 兼容路径
 - KeyFact 的去处改为 **直接走 Semantic Memory 的抽取管道**
+- `@neko/agent` 不再保留 `InMemorySessionMemory` / `CreativeMemoryHooks` 实现与 public API 导出
 
 ### 8.2 统一 KeyFact 抽取管道
 
@@ -402,33 +408,34 @@ KeyFactExtractor.extract(events)   ← 保持现有启发式实现
 MemoryRouter.route(facts)
     │
     ├─ dedup against existing Project Memory
-    ├─ dedup against existing Global Memory
-    └─ decide destination (project vs global vs discard)
+    └─ decide write vs discard
            │
            ▼
-    MemoryWriteTool.upsert(section, content, destination)
+    MemoryWriteTool.upsert(section, content)
            │
            ▼
     MemoryExtractionEvent → Journal    (闭环：Journal 事件触发抽取，抽取结果又回到 Journal)
 ```
 
-**关键**：Semantic Memory 的写入**永远**经过 Journal 留痕。不存在"偷偷改了 memory.md 但没人知道"的路径。
+**关键**：Semantic Memory 的写入**永远**经过 Journal 留痕。不存在"偷偷改了 memory.md 但没人知道"的路径。跨项目个性化不在这条管道里，而走显式 prompt config。
 
-### 8.3 Project vs Global 保留
+### 8.3 仅保留 Project Memory
 
-两个 markdown 文件是**承诺给用户的 UI 契约**，保留：
+项目 memory 文件是**承诺给用户的 UI 契约**，保留：
 
-- 存储：`.neko/memory.md` / `~/.neko/global-memory.md`，H2 section 不变
-- 注入：`MemoryProjectModule` / `MemoryGlobalModule` 不变
+- 存储：`.neko/memory.md`，H2 section 不变
+- 注入：`MemoryProjectModule` 不变
 - 用户手动编辑：允许，change 事件触发 module 刷新（现有 `on('change')` 订阅）
-- 区分：Project = 当前 workDir 相关；Global = 跨项目。**边界不变**。
+- 跨项目个性化：不进入 Memory；走 personal `AGENTS.md` 或其他 prompt config
+- `~/.neko/global-memory.md`：不再属于新模型的一部分；迁移期可保留兼容文件，但不应继续作为目标架构能力
 
 ### 8.4 `MemoryRecallModule` 角色
 
 现有 `MemoryRecallModule`（priority 40 ephemeral layer）原本服务 Session Memory。Session Memory 移除后，这个 module 转向承载：
 
-- **临时召回**（per-turn）：基于当前 user query 做 Semantic Memory 子集选择，避免把整份 `.neko/memory.md` 都扔进 prompt（当 memory 文件 > 2KB 时）
+- **临时召回**（per-turn）：基于当前 user query 做 Project Memory 子集选择，避免把整份 `.neko/memory.md` 都扔进 prompt（当 memory 文件 > 2KB 时）
 - **Self-evaluation 引导后的自评结论**：§11.6.9 的 SelfEvaluationHooks 产生的结论，若被 KeyFactExtractor 判定为 KeyFact，走 MemoryRouter 入 Semantic；否则作为 ephemeral recall 留一轮
+- **非目标提醒**：跨项目长期偏好不从 recall 注入，而由 `AGENTS.md` / prompt overlay 显式提供
 
 ---
 
@@ -468,9 +475,11 @@ conversationId = "<workDirHash>-<ulid>"
 │   └── {conversationId}.jsonl         ← SSOT
 ├── conversations-index.json            ← workDir → conversationId[] 映射
 │                                          + 每个 conversation 的 meta（title / createdAt / tags）
-├── memory.md                           ← Semantic Memory (project-scoped, lives in workDir/.neko/)
-├── global-memory.md                    ← Semantic Memory (global)
+├── AGENTS.md                           ← 用户级显式提示词配置（可选）
 └── (conversations/ 目录删除)
+
+<workDir>/.neko/
+└── memory.md                           ← Semantic Memory (project-scoped)
 ```
 
 ---
@@ -493,7 +502,8 @@ MessageBus 的消息流走主 Journal 的 `agent_message_*` 事件（§Federatio
 
 ### 10.3 Prompt 平面
 
-- `MemoryProjectModule` / `MemoryGlobalModule`：保留，注入路径不变
+- `MemoryProjectModule`：保留，注入路径不变
+- `MemoryGlobalModule`：不再属于新模型；跨项目个性化转由 `AgentsMdModule` / personal `AGENTS.md`
 - `MemoryRecallModule`：语义变更（§8.4）
 - 新增 `CompactSummaryModule`（可选）：把最新一次 CompactionEvent 的摘要放入 ephemeral 层，让 LLM 感知 "你之前谈过但被压缩了的事情"
 
@@ -509,6 +519,13 @@ interface AblationTogglesPersistence {
   memoryRecall?: false;          // 关闭 MemoryRecallModule 注入
 }
 ```
+
+**实现补充（2026-04-24）**：
+
+- `journalAsSSOT?: false` 已重新接回 runtime config，并在 `createFileConversationStorage(..., { journalAsSSOT: false })` 侧提供对应回退入口：读取优先走 legacy record path，默认联动 `runtime-fallback`
+- `compactLogging?: false` 控制 compaction provenance 是否落 Journal；关闭时仍允许 in-memory compression
+- `autoMemoryExtraction?: false` 控制 `KeyFactExtractor → ProjectMemoryRouter` 写路径
+- `memoryRecall?: false` 控制 per-turn recall 注入；不影响 `.neko/memory.md` 作为 project memory 状态本身存在
 
 ### 10.5 Self-Evaluation（§11.6.9）
 
@@ -527,21 +544,21 @@ Apply 退出 → SelfEvaluationHooks 注入引导 → AI 产生自评结论（�
 | **PR-M1** | `eventId` 字段加入 Journal；现有事件迁移时用 `seq` 回填 | 无（仅新增字段）| 0.3d |
 | **PR-M2** | 新增 `UserMessageEvent` / `CompactionEvent` / `MemoryExtractionEvent` 事件类型；Journal writer 支持 | 无 | 0.4d |
 | **PR-M3** | `IJournalProjection` 接口 + `projectToHistory` 实现 | 无（新模块）| 0.8d |
-| **PR-M4** | ConversationRecord 改为 projection-backed；`save()` no-op；保留旧文件读逻辑作 fallback | 中（Extension 侧可能感知到 `source: 'journal-projection'`）| 1d |
+| **PR-M4** | ConversationRecord 改为 projection-backed；`save()` no-op；legacy JSON 降级为迁移输入 | 中（Extension 侧可能感知到 `source: 'journal-projection'`）| 1d |
 | **PR-M5** | `compressAndLog` 替换 `compress`；CompactionEvent 写入生效 | 中（Hook 签名变）| 0.5d |
 | **PR-M6** | Compaction 展开能力（`includeCompacted: true` 分支）| 无 | 0.3d |
-| **PR-M7** | KeyFactExtractor → MemoryRouter → MemoryWriteTool 自动管道 | 中（Session Memory 弃用）| 1d |
-| **PR-M8** | ConversationId 新规格 + conversations-index.json；旧 conversationId 透明迁移 | 高（数据迁移脚本）| 1.5d |
-| **PR-M9** | SessionMemory 删除；Ablation toggles 加 4 项；CLAUDE.md 更新 | 中 | 0.3d |
+| **PR-M7** | KeyFactExtractor → ProjectMemoryRouter → MemoryWriteTool 自动管道（仅 project） | 中（Session Memory 弃用）| 1d |
+| **PR-M8** | ConversationId 新规格 + conversations-index.json；legacy JSON 仅通过显式 migration 导入 | 高（数据迁移脚本）| 1.5d |
+| **PR-M9** | SessionMemory 删除；GlobalMemoryManager / MemoryGlobalModule 废弃；Ablation toggles 与文档更新 | 中 | 0.5d |
 
 **总量**：~6 工程日。PR-M1..M7 无破坏，PR-M8..M9 是数据迁移 + 清理。
 
 ### 11.2 兼容窗口
 
-- PR-M1..M4 合并后：旧 ConversationRecord JSON 文件继续读（fallback），新会话写新格式
+- PR-M1..M4 合并后：旧 ConversationRecord JSON 文件曾短暂保留 fallback；当前实现已收紧为显式迁移路径
 - PR-M5..M7 合并后：旧会话的 Compact 仍走老路径（in-memory），新会话带 CompactionEvent
-- PR-M8 上线一次性迁移脚本：扫描 `~/.neko/conversations/*.json`，对应 Journal 不存在则生成对应的 `conversations-index.json` 条目
-- PR-M9 正式删除 SessionMemory 接口；同版本 CLAUDE.md 标注 deprecation
+- PR-M8 上线一次性迁移脚本：扫描 `~/.neko/conversations/*.json`，仅导入**存在对应 Journal** 的 legacy 会话到 `conversations-index.json`；无 Journal 条目忽略，steady-state runtime 不再自动 fallback
+- PR-M9 正式删除 SessionMemory 接口；旧 `~/.neko/global-memory.md` 不再自动注入；若需要跨项目个性化，引导用户迁移到 `~/.neko/AGENTS.md` 或等价 prompt config
 
 ### 11.3 回滚策略
 
@@ -581,7 +598,14 @@ Semantic Memory 不再是 markdown 文件，直接从 Journal projection。
 
 **拒绝**：markdown 文件是用户接触面，不可内化。
 
-### 12.4 引入外部数据库（SQLite）
+### 12.4 保留 `global-memory.md` 作为跨项目个性化容器
+
+**pros**：自动跨项目复用用户偏好，看起来省去显式配置
+**cons**：形成隐式上下文污染；行为难审计、难复现；与 personal `AGENTS.md` / prompt config 职责重叠；项目私有事实容易误泄漏到其他项目
+
+**拒绝**：跨项目个性化必须是**显式提示词配置**，而不是自动注入的 Semantic Memory。
+
+### 12.5 引入外部数据库（SQLite）
 
 Journal + ConversationRecord + Memory 全走 SQLite。
 
@@ -600,11 +624,11 @@ PR-M8 扫描 `~/.neko/conversations/*.json` 时若发现没有对应 Journal，�
 (a) 为它合成一个最小 Journal（包含 `projectFromLegacy` 标记）
 (b) 忽略，用户在 UI 显示"legacy conversation"，只读不能恢复
 
-**立场**：倾向 (b)，但待用户反馈。
+**已决议**：采用 (b)。迁移脚本忽略无对应 Journal 的 legacy JSON；steady-state runtime 不再把 legacy conversation JSON 当作读源。
 
-### Q2 Semantic Memory 写入的 approval 时机
+### Q2 Project Memory 写入的 approval 时机
 
-自动抽取→写 memory.md 当前是直接写。改造后是否每个 MemoryExtractionEvent 都要走 ApprovalEngine？
+自动抽取→写 `.neko/memory.md` 当前是直接写。改造后是否每个 MemoryExtractionEvent 都要走 ApprovalEngine？
 
 **立场**：配置字段 `approveMemoryWrites?: boolean`，本地单用户默认 false，团队模式默认 true。但**此 ADR 不实现**，留给 memory-approval follow-up。
 
@@ -633,12 +657,19 @@ Journal 文件本身会无限增长。是否需要"老事件打包 + 生成 snap
 | 日期 | 变更 | 影响 |
 |---|---|---|
 | 2026-04-24 | 初版（Proposed）| 定稿，尚未实施 |
+| 2026-04-24 | 收窄 Semantic Memory：删除 Global Memory 目标态，跨项目个性化转为显式 prompt config | 避免上下文污染，明确 Memory / Prompt 边界 |
+| 2026-04-24 | PR-M5 实现说明补记：为保持 `ConversationCompressor` public API 向后兼容，CompactionEvent 的构建与 Journal 写入保留在 `AgentSession._applyCompressionResult()`，而非把 event 构造直接塞进 compressor 返回值 | 这是兼容性优先的保守妥协；后续若 Federation 需要跨 runtime 复用 compaction event 构造逻辑，再上提为共享 helper，而不是在本轮破坏 compressor 契约 |
+| 2026-04-24 | PR-M7 主链落地：Journal provenance → ProjectMemoryRouter → `.neko/memory.md`，并在 AgentSession 内接入 per-turn recall / extraction | 自动记忆闭环已切到 project-only；SessionMemory 降级为 legacy 兼容面 |
+| 2026-04-24 | PR-M8 收尾：runtime 默认停止读取 legacy `~/.neko/conversations/*.json`，legacy 仅通过显式 migration path 导入；无 Journal 条目忽略 | resume 存储边界收紧到 `journal + conversations-index.json`，不再混入旧 JSON fallback |
+| 2026-04-24 | PR-M9 public API cleanup：`MemoryRecall` 收敛为 project-only，`@neko/agent` 不再导出 `InMemorySessionMemory` / `CreativeMemoryHooks`，README / ARCHITECTURE 同步更新 | legacy memory 不再暴露给新集成；目标态对外契约与实现保持一致 |
+| 2026-04-24 | PR-M9 internal hard cleanup：删除 `SessionMemory` 共享契约、`InMemorySessionMemory` / `CreativeMemoryHooks` 实现，以及 ablation 中的 legacy `sessionMemory` toggle | legacy session-memory 路径从运行时与实验契约中彻底移除 |
+| 2026-04-24 | PR-M9 persistence rollback 收口：补回 `journalAsSSOT / compactLogging / memoryRecall` toggle，`JournalReader` legacy eventId 改为基于原始行内容的稳定 fallback，`MemoryExtractionEvent` 显式携带 timestamp | ADR §10.4 / §11.3 与实现重新对齐；旧 Journal 回填 ID 的碰撞窗口进一步收窄 |
 
 ---
 
 ## 附：四合一前后对照
 
-### 合并前（2026-04-24 现状）
+### 合并前（2026-04-24 现状 / legacy）
 
 ```
 Journal                      ConversationRecord             Compact (in-mem)              Memory
@@ -667,10 +698,10 @@ Journal (SSOT, append-only)
        │                         │
        │                         └→ "展开" 查询可恢复原始 history
        │
-       └─── MemoryExtraction events → MemoryRouter → Semantic Memory
-                                            │
-                                            ├→ .neko/memory.md (Project)
-                                            └→ ~/.neko/global-memory.md (Global)
+       └─── MemoryExtraction events → Project Memory (.neko/memory.md)
+
+Personal AGENTS.md / prompt config
+       └─── Explicit cross-project personalization (not Memory)
 
        ✅ 单 SSOT      ✅ 身份统一      ✅ Compact 可回溯      ✅ 记忆自动管道闭环
 ```

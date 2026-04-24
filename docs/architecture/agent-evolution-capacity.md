@@ -10,6 +10,8 @@
 - [creative-context-compression.md](./creative-context-compression.md) — Memory 层 7 级压缩策略
 - [perception-first-roadmap.md](./perception-first-roadmap.md) — 多模态感知路线图
 
+> 状态更新（2026-04-24）：文中提到的 `CreativeMemoryHooks` 属于历史实现名词。当前运行时已收敛为 `AgentSession + ProjectMemoryRouter + .neko/memory.md + Journal provenance` 的 project-only 记忆链路，不再保留 `CreativeMemoryHooks` / `SessionMemory` 作为现行实现入口。
+
 ---
 
 ## 1. 本文档的角色
@@ -65,11 +67,11 @@
 | 新 Prompt 技术（CoT / self-consistency / ReAct 变体 / Plan-and-Solve）| ✅ 100% Markdown 可写——任何模式可表达，改 prompt 不发版 |
 | 需要注入运行时变量（runId / stage / memory）| ✅ §11.6.9 三件套之一的 "可见性" 已设计好数据通路；`{runId}` / `{stage}` 占位符已实现 |
 | 模型理解能力差异化 | ✅ persona 用"**可选自评**"/"**指引**"而非"强制规则"——聪明模型自主决定，弱模型按部就班 |
-| Prompt 策略需要按数据演化 | ✅ `CreativeMemoryHooks` 把经验写回 memory，persona 下次激活时注入回来——**策略自演化** |
+| Prompt 策略需要按数据演化 | ✅ `AgentSession` 通过 per-turn recall + `ProjectMemoryRouter` 把经验沉淀到 `.neko/memory.md`，后续 turn 再按相关度回注——**策略自演化** |
 | 部署级版本管理 | ✅ personas 入 git（commit hash 可回溯 / diff / branch 对照）；Skill 类型支持 `version` 字段；Market 分发层有 Plugin 版本号 |
 | 潜在隐患 | ⚠️ 无**会话级 A/B 选择**——单次会话里不能并行跑 persona v1.2 vs v1.3 对比评估 |
 
-**主要优势**：Prompt 层是**纯数据**（非代码），演化完全去中心化；CreativeMemoryHooks 提供了 **prompt 策略随数据自动演化**的通道（未来"LLM 自动调优 persona"的种子已埋下）。
+**主要优势**：Prompt 层是**纯数据**（非代码），演化完全去中心化；project-only recall / extraction 让 **prompt 策略随项目事实自动演化**，同时避免把跨项目偏好隐式带入当前会话。
 
 **主要断点**：persona 缺**运行时 A/B 选择机制**——Git/Market 已提供部署级版本，但无会话级并行评估。
 
@@ -101,7 +103,7 @@
 | **Schema** | **A-** | Tool/Operation 二分稳健；内部 Skill 已通过 TOOL_NAMES 常量 SSOT 解决名字引用；唯一断点是外部/Market Skill 若绕过 TOOL_NAMES 直写字符串 |
 | **Runtime** | **A-** | hook 链可组合；StagePlanner 硬编码是断点 |
 | **Policy** | **B** | preferences.md 声明式规则可演化；**团队级 Policy / 规则冲突仲裁缺失** |
-| **Memory** | **A** | CreativeMemoryHooks + 7 级压缩已验证；未来 CharacterAgent/SeriesSpec memory 可加 |
+| **Memory** | **A** | `.neko/memory.md` + `MemoryRecall` / `ProjectMemoryRouter` + 7 级压缩已验证；未来 CharacterAgent/SeriesSpec memory 可加 |
 | **Evaluator** | **A** | §11.6.9 明确"AI 自评优先，不建 LLM-judge 组件"——从设计上规避了固化策略风险 |
 
 Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CLIP 相似度 / FPS / 分辨率）虽然明确应"按需建"，但当前只有 ConsistencyChecker 一个实现，演化到真需要时会有**零到一**的工程成本。

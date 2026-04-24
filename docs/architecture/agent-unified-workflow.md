@@ -5,6 +5,8 @@
 
 > **关于命名**：本协议初期借鉴 Speckit 的 **SDD（Spec-Driven Development）**范式；2026-04-22 从四阶段简化为三阶段；2026-04-23 根据创作场景特点正式重命名为 **IDC（意图驱动创作 / Intent-Driven Creation）**。IDC 强调**意图**（用户的创作目标）而非**规范**（Spec），更贴合多模态创作工作流。阶段名 `Draft / Plan / Apply` 保持不变。历史变更记录（§22）保留 SDD 表述以反映当时术语。
 
+> 状态更新（2026-04-24）：本文中若提到 `CreativeMemoryHooks` / `SessionMemory`，应理解为历史实现阶段的命名。当前 memory 主链已迁移到 `AgentSession` 驱动的 project-only recall / extraction，以及 `journal + conversations-index.json` 的统一恢复模型。
+
 ## 落地进度快照（2026-04-23）
 
 ### 已完成（按 ADR 章节计）
@@ -45,7 +47,7 @@
 
 | 动作 | ADR 章节 | 状态 | 待做 |
 |-----|--------|----|----|
-| .nksession.md 会话摘要 | §7.4 | ⏳ | 需先理清 Journal/ConversationRecord/compact/memory 四合一（E 波） |
+| .nksession.md 会话摘要 | §7.4 | ✅ 已由 [agent-memory-unification.md](./agent-memory-unification.md) 收口 | 会话摘要职责已收敛到 `journal + conversations-index.json + working-memory projection`，不再单列 `.nksession.md` |
 | .neko/cache/*.json 派生索引 | §7.4 | ⏳ | 按需，UI 侧提出索引需求再补 |
 
 **关联范围**: neko-agent · neko-market · @neko/shared · 所有子包
@@ -202,9 +204,8 @@
 | `ArtifactObservationHooks` | L0 基础设施 | 控制层（正交）| Runtime |
 | `.neko/preferences.md` | L0 基础设施配置源 | 控制层（正交）| Policy |
 | `Skill.compliance.approvalRules[]` | L1 能力元数据 | 控制层（正交）| Policy |
-| `~/.claude/.../memory/MEMORY.md` | 外部（Claude 内置）| 意图层输入 | Memory |
 | `.neko/memory.md` | L0 基础设施产物 | 意图层输入 | Memory |
-| `CreativeMemoryHooks` | L0 基础设施 | 控制层（正交，双向读写）| Memory |
+| `AgentSession（MemoryRecall + ProjectMemoryRouter）` | L0 基础设施 | 控制层（正交，project-only 双向读写）| Memory |
 | `ConsistencyChecker` | L0 基础设施（未来接入）| 控制层（出口闸）| Evaluator（确定性指标）|
 | Agent 自评（creation/execution-persona + Memory）| 非组件，Agent 原生承载 | 控制层（AI 驱动）| Evaluator（主观判断，§11.6.9）|
 
@@ -1091,21 +1092,22 @@ ${MEDIA_LIBRARY}/
   assets-manifest.json   ← AssetManifest（程序产出）
 ```
 
-#### 全局用户目录 `~/.neko/`（跨项目偏好 + Agent 能力）
+#### 全局用户目录 `~/.neko/`（显式偏好 + Agent 能力）
 
 ```
 ~/.neko/
+  AGENTS.md               ← 显式跨项目提示词配置
   preferences.md         ← 全局用户偏好（项目级 fallback）
   skills/                ← 全局 Skill
   workflows/             ← 全局 Workflow
   pipelines/             ← 全局 Pipeline
 ```
 
-#### Memory（保留现有，跨项目用户画像）
+#### Memory（项目事实，不承载跨项目个性化）
 
 ```
-~/.claude/projects/.../memory/
-  *.md
+<workDir>/.neko/
+  memory.md              ← 项目 Agent 记忆
 ```
 
 #### 协议强制
@@ -1853,7 +1855,7 @@ P3（企业需求时）: 严格 DSL + Schema 校验
 | **Schema** | 长什么样 | 程序 / 工具 | 工具使用、产物索引 | TypeScript types、JSON Schema | 版本级 | `Tool` 入口参数、`Operation` 全量参数、Draft frontmatter 索引字段、`ExecutionPlan.steps[]` |
 | **Runtime** | 什么时候做 | 运行时 | 处理过程 | ExecutorHooks / StateMachine / Engine | 毫秒级 | ApprovalEngine、RetryEngine、StageGuardian、ArtifactWatcher、ArtifactObservationHooks |
 | **Policy** | 能不能做 | Runtime + Evaluator 读取 | 边界 / 合规 / 权限 | 声明式规则文件、allowlist、compliance 元数据 | 配置级 | `preferences.md`、`preferencesStrategyPack`、Skill `compliance.approvalRules[]`、Skill `allowedTools`、Skill `requiredSubpackages`、Operation `costProfile` |
-| **Memory** | 记得什么 | AI（读）+ 人（审计 / 编辑）| 个性化持续性 | 持久化存储 + 压缩策略 + 检索 | 跨会话累积 | `~/.claude/.../memory/MEMORY.md`、`.neko/memory.md`、`CreativeMemoryHooks`、7 级创意压缩（`creative-context-compression.md`）、`SharedMemoryStore` |
+| **Memory** | 记得什么 | AI（读）+ 人（审计 / 编辑）| 个性化持续性 | 持久化存储 + 压缩策略 + 检索 | 跨会话累积 | `.neko/memory.md`、`MemoryRecall` / `ProjectMemoryRouter`、7 级创意压缩（`creative-context-compression.md`）、`SharedMemoryStore` |
 | **Evaluator** | 做得好不好 | 质量打分器 | 质量评估（**仅确定性指标**，见 §11.6.9）| 确定性打分器（CLIP 相似度、FPS、分辨率、ConsistencyChecker）；**主观质量判断不建组件，交由 Agent + Prompt + Memory** | 每产物 | `verdict: pass \| warn \| fail` + 结构化 issues；ConsistencyChecker（已）|
 
 #### 11.6.2 Schema 约束的二分（Tool vs Operation）
@@ -1915,7 +1917,7 @@ Apply  ────► Schema + Runtime + Policy ────► 操作型工具
   ① Policy 先问："能不能做？"            (ApprovalEngine 读 preferences.md)
            │ 通过
            ▼
-  ② Memory 喂入："过往你是怎么做的"       (CreativeMemoryHooks.beforeThink)
+  ② Memory 喂入："过往在这个项目里你是怎么做的"  (AgentSession._updateMemoryRecall → MemoryRecall.recall)
            │
            ▼
   ③ Prompt 指挥："按这个调性说"           (creation-persona 激活)
@@ -1929,7 +1931,7 @@ Apply  ────► Schema + Runtime + Policy ────► 操作型工具
            ▼
   ⑥ Evaluator 打分："做得够好吗"           (ConsistencyChecker 确定性指标 / Agent 自评主观判断)
            │
-           └─► 回到 ② Memory 更新："这次经验值得记"  (CreativeMemoryHooks.afterAct)
+           └─► 回到 ② Memory 更新："这次经验值得记"  (AgentSession._extractProjectMemory → ProjectMemoryRouter.writeFacts)
 ```
 
 **Policy 是前置门 / Memory 是前后两端（读+写）/ Prompt·Schema·Runtime 是中段流水 / Evaluator 是出口闸**。六层形成闭环。
@@ -2100,10 +2102,10 @@ IDC 3-stage 在设计上已符合约束分级原则：
 | **Skill.compliance.approvalRules[]** | **Policy** | **✅ 合规元数据 + skillSha 审计链** |
 | **Skill.allowedTools / requiredSubpackages** | **Policy** | **✅ 每 Skill 声明自己的边界** |
 | **Operation.costProfile（reversible/tokens/cost）** | **Policy（成本锚点）** | **✅ Runtime 按阈值自动拦截** |
-| **`~/.claude/.../memory/` + `MEMORY.md`** | **Memory** | **✅ 跨会话用户画像 / feedback / 项目上下文** |
-| **`<workDir>/.neko/memory.md`（FileProjectMemoryManager）** | **Memory** | **✅ 项目级记忆，environment 层注入** |
+| **`<workDir>/.neko/memory.md`（FileProjectMemoryManager）** | **Memory** | **✅ 项目级记忆，environment 层注入 + project-only 持久化** |
 | **Creative Context Compression（7 级优先级）** | **Memory（压缩策略）** | **✅ 用户消息永留 / 创作决策 / 版本锚点 / 迭代链 / 资产状态 / 美学偏好 分层摘要** |
-| **CreativeMemoryHooks（ExecutorHooks）** | **Memory（读写桥）** | **✅ afterAct 抽取 creative 决策 / beforeThink 注入相关回忆** |
+| **MemoryRecall + MemoryRecallModule（AgentSession per-turn recall）** | **Memory（读路径）** | **✅ 每轮按相关度从 `.neko/memory.md` 检索并注入 ephemeral 层** |
+| **ProjectMemoryRouter + `memory_extraction` journal event** | **Memory（写路径）** | **✅ 增量抽取 KeyFact、去重写回 `.neko/memory.md`，并保留 provenance** |
 | **SharedMemoryStore（subagent scratchpad）** | **Memory（多 agent 共享）** | **✅ 跨 subagent 协作 scratchpad** |
 | ~~IntentValidator（原计划 LLM-judge 组件）~~ | Evaluator（已撤销）| **✖ 不建** — Agent 在 persona 指导下自判（§11.6.9）|
 | ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ 跨镜头一致性 |
@@ -2117,19 +2119,21 @@ IDC 3-stage 在设计上已符合约束分级原则：
 Memory 是"AI 跨会话积累的事实"，不是"即时上下文"。三个关键属性：
 
 1. **持久化**：写入磁盘，下次会话可读
-2. **多尺度**：用户级（全局）/ 项目级（workspace）/ 角色级（CharacterAgent，规划中）/ 系列级（SeriesSpec，规划中）
+2. **多尺度**：当前落地主体是项目级 Semantic Memory（workspace）；角色级（CharacterAgent，规划中）/ 系列级（SeriesSpec，规划中）可以后续扩展；跨项目个性化走 Prompt，不走 Memory
 3. **压缩策略**：不是所有事实等权——按 `creative-context-compression.md` 的 7 级优先级分层保留
 
 **Memory 的消费路径**：
 
 ```
-AI 读 Memory                        AI 写 Memory
-─────────────                      ─────────────
-CreativeMemoryHooks.beforeThink     CreativeMemoryHooks.afterAct
-  ↓                                    ↓
-从 .neko/memory.md 检索相关条目       抽取本轮的创作决策
-  ↓                                    ↓
-注入 context.messages                附加到 memory file
+AI 读 Memory                                   AI 写 Memory
+─────────────                                 ─────────────
+AgentSession._updateMemoryRecall               AgentSession._extractProjectMemory
+  ↓                                               ↓
+MemoryRecall.recall(query)                      KeyFactExtractor.extract(...)
+  ↓                                               ↓
+MemoryRecallModule.setContent(...)              ProjectMemoryRouter.writeFacts(...)
+  ↓                                               ↓
+在当前 turn 注入 recalled memories               写回 `.neko/memory.md` + 追加 `memory_extraction` Journal 事件
 ```
 
 **Memory 与 Prompt 的区别**：
@@ -2138,7 +2142,7 @@ CreativeMemoryHooks.beforeThink     CreativeMemoryHooks.afterAct
 |----|------|------|
 | 生命周期 | 一次激活的上下文 | 跨会话持久 |
 | 作者 | Agent 架构师（persona）/ 当前用户消息 | AI 自动抽取 + 人工编辑 |
-| 更新方式 | 重启 Skill 时重新注入 | 每轮 afterAct 增量 |
+| 更新方式 | 重启 Skill 时重新注入 | 每轮按新增 Journal 事件增量抽取；每次 turn 按 query 刷新 recall |
 | 目的 | 告诉 AI **此刻**要做什么 / 怎么做 | 告诉 AI **过去**发生了什么 |
 | 典型内容 | "你是 TikTok 剪辑师，快节奏优先" | "用户上次偏好冷色调；上个项目用了 `neko-cut` v1.2" |
 
@@ -2211,7 +2215,7 @@ Evaluator 是最容易**过度组件化**的层。每次讨论"如何保证 inte
    - .neko/drafts/ 历史版本（可 Read + Glob）
    - 当前 Apply 产物路径（可 Read / Describe）
    - steps.jsonl 本轮 observation 摘要
-   - 相关 Memory 记录（CreativeMemoryHooks.beforeThink 注入）
+   - 相关 Memory 记录（`AgentSession` per-turn recall 注入）
 
 ② 引导（Guidance）
    persona prompt 里以**指引**而非**强制**方式描述自评时机：
@@ -2225,8 +2229,9 @@ Evaluator 是最容易**过度组件化**的层。每次讨论"如何保证 inte
    这不是必须步骤——不确定或无需要时可跳过。
 
 ③ 积累（Memory）
-   CreativeMemoryHooks.afterAct 自动抽取本轮的自评结论入 memory，
-   下次类似任务的 beforeThink 把相关结论注入回来，让判断经验随时间积累。
+   `AgentSession._extractProjectMemory` 自动抽取本轮的自评结论，
+   经 `ProjectMemoryRouter` 去重写入 `.neko/memory.md`，并把 provenance
+   记录到 `memory_extraction` Journal 事件；下次类似任务再通过 recall 注入回来。
 ```
 
 ##### 为什么这样更好

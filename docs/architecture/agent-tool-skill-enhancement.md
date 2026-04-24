@@ -2,6 +2,8 @@
 
 > 对标 [claude-code-analysis](https://github.com/liuup/claude-code-analysis) 的 Tool Call / Skills / MCP 实现，结合 AI 图文音视频创作场景的增强需求。
 
+> 状态更新（2026-04-24）：本文中关于 `CreativeMemoryHooks`、`global-memory.md` 的表述属于历史上下文。当前目标架构不再保留自动注入的 global memory，memory 主链也已转为 `AgentSession` 驱动的 project-only 路由。
+
 ---
 
 ## 对比基线：neko-agent vs Claude Code
@@ -398,7 +400,7 @@ Claude Code 的四层 Memory 对创作场景映射：
 
 ```
 Phase C.4: Creative Agent Memory
-├─ C.4.1 三 scope memory（user: 跨项目风格偏好 / project: 本项目角色设定 / local: 本次创作记录）
+├─ C.4.1 三 scope memory（legacy 提案：user / project / local；现已收敛为 project memory + 显式 prompt config）
 ├─ C.4.2 Session Memory 后台提取（forked subagent 自动摘要创作决策）
 ├─ C.4.3 Agent Memory Snapshot（创作模板预置 memory）
 └─ C.4.4 Relevant Recall（每轮选取最相关的创作 memory）
@@ -586,12 +588,12 @@ Phase C (P2, 体验打磨):
 │   ├─ dumpSections() 可观测性 + AgentExecutor.updateServiceOptions()
 │   └─ 9 单测通过
 ├─ C.4 Creative Agent Memory  ✅
-│   ├─ GlobalMemoryManager: 复用 FileProjectMemoryManager（~/.neko/global-memory.md）
+│   ├─ 历史实现曾探索 GlobalMemoryManager（~/.neko/global-memory.md），现已废弃
 │   ├─ KeyFactExtractor: 启发式 KeyFact 提取（偏好/决策/上下文/动作 4 类）
-│   ├─ MemoryRecall: 三层检索（Session + Project + Global）+ 关键词 relevance 排序
-│   ├─ CreativeMemoryHooks: ExecutorHooks 自动 recall 注入 + extraction 保存
-│   ├─ 集成: hooks factory + initializer global memory 注入 + ablation toggles
-│   └─ 34 单测通过
+│   ├─ MemoryRecall: 已收敛为 project-only 检索（`.neko/memory.md`）+ relevance 排序
+│   ├─ ProjectMemoryRouter: 按 section 路由、去重并写入项目记忆
+│   ├─ AgentSession 集成: per-turn recall 注入 + autoMemoryExtraction 写回 + `memory_extraction` journal event
+│   └─ 设计约束：不保留 global memory；跨项目个性化交给显式 prompt config / `AGENTS.md`
 └─ C.5 SubAgent 创作专家模式  ✅
     ├─ 5 种创作专家预设（creative-director/cinematographer/composer/editor/vfx-artist）
     ├─ CREATIVE_PRESETS 领域系统提示词 + 工具白名单 + 模型层级

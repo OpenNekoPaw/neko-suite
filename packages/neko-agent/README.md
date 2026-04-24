@@ -59,7 +59,7 @@ packages/
 │   ├── subagent/     子 Agent 委托
 │   ├── task/         后台任务管理 + 持久化
 │   ├── validation/   输出验证器（Image/Output/Mermaid/JSON/Length）
-│   ├── memory/       InMemorySessionMemory
+│   ├── memory/       项目记忆（.neko/memory.md）+ recall / extraction
 │   ├── commands/     内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等）
 │   └── errors/       统一错误类型
 ├── platform/   # @neko/platform — AI 服务平台

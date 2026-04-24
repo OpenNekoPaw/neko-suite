@@ -367,6 +367,7 @@
     "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint packages/extension/src packages/agent/src packages/platform/src packages/webview/src",
     "test": "vitest",
+    "migrate:conversations-index": "pnpm dlx tsx packages/cli-tui/scripts/migrate-conversations-index.ts",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
