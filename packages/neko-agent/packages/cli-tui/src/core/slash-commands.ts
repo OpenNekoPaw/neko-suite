@@ -57,7 +57,10 @@ export interface SlashCommandContext {
   /** Current conversation ID */
   currentConversationId?: string;
   /** Load history into current session */
-  onLoadHistory?: (messages: ChatMessage[]) => void;
+  onLoadHistory?: (
+    messages: ChatMessage[],
+    messageEventIds?: readonly (readonly string[])[],
+  ) => void;
   /** Get current session history */
   getHistory?: () => ChatMessage[];
   /** Update media model overrides and propagate to platform */
@@ -384,10 +387,13 @@ async function handleResume(
         error: `Conversation "${targetId}" not found`,
       };
     }
-    onLoadHistory?.(record.messages);
+    onLoadHistory?.(record.messages, record.messageEventIds);
+    const resumedMessageCount = record.messages.filter(
+      (message) => message.role !== 'system',
+    ).length;
     return {
       handled: true,
-      output: `Resumed: "${record.title}" (${record.messages.length - 1} messages, ${new Date(record.updatedAt).toLocaleString()})`,
+      output: `Resumed: "${record.title}" (${resumedMessageCount} messages, ${new Date(record.updatedAt).toLocaleString()})`,
       continueExecution: true,
     };
   }
@@ -405,7 +411,7 @@ async function handleResume(
   const lines = ['', 'Saved Conversations:', ''];
   records.slice(0, 20).forEach((r, i) => {
     const date = new Date(r.updatedAt).toLocaleDateString();
-    const msgCount = Math.max(0, r.messages.length - 1); // exclude system message
+    const msgCount = r.messages.filter((message) => message.role !== 'system').length;
     const isCurrent = r.id === context.currentConversationId ? ' (current)' : '';
     lines.push(`  [${i + 1}] ${r.title}${isCurrent}`);
     lines.push(`      id: ${r.id} · ${date} · ${msgCount} messages`);

@@ -52,6 +52,13 @@ describe('ConversationHandler', () => {
       const id2 = handler.ensureActive();
       expect(id1).toBe(id2);
     });
+
+    it('uses canonical conversationId format when workspace root is known', () => {
+      const workspaceHandler = new ConversationHandler(ctx as any, '/workspace/demo');
+      const id = workspaceHandler.create();
+
+      expect(id).toMatch(/^[0-9a-z]{8}-[0-9A-HJKMNP-TV-Z]{26}$/);
+    });
   });
 
   describe('switchTo', () => {

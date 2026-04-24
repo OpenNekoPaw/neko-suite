@@ -73,6 +73,8 @@ vi.mock('@neko/agent', async (importOriginal) => {
       loadAgentsFile: vi.fn().mockResolvedValue(undefined),
       getAgentsContent: vi.fn().mockReturnValue(null),
       build: vi.fn().mockReturnValue('default prompt'),
+      buildBaseOnly: vi.fn().mockReturnValue('default prompt'),
+      buildAgentsOverlay: vi.fn().mockReturnValue(undefined),
     })),
     getDefaultPersonalPath: vi.fn().mockReturnValue('~/.neko'),
   };

@@ -13,6 +13,7 @@ import {
 } from './conversationManager';
 import {
   createFileConversationStorage,
+  createConversationId,
   type FileConversationStorage,
   type ConversationRecord,
 } from '@neko/agent';
@@ -223,7 +224,11 @@ export class ConversationHandler {
 
   constructor(context: vscode.ExtensionContext, workspaceRoot?: string) {
     const storage = new VscodeConversationStorage(context.workspaceState);
-    this._conversationManager = new ConversationManager(storage);
+    this._conversationManager = new ConversationManager(storage, undefined, {
+      ...(workspaceRoot && {
+        generateId: () => createConversationId(workspaceRoot),
+      }),
+    });
 
     // Clean up empty conversations from previous sessions
     const cleaned = this._conversationManager.cleanupEmpty();
@@ -324,7 +329,8 @@ export class ConversationHandler {
   }
 
   /**
-   * Write a conversation to the shared resume-layer file (~/.neko/conversations/<hash>.json).
+   * Write conversation metadata to the shared resume layer
+   * (~/.neko/conversations-index.json + journal-backed history).
    * Best-effort: errors are logged but not rethrown.
    */
   private _syncConversationToFile(conversationId: string): void {

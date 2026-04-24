@@ -22,6 +22,7 @@ import type { ToolConfirmationRequest } from '@neko/agent';
 import {
   AgentSession,
   createAgentSession,
+  createNodeJournalStorage,
   createFileProjectMemoryManager,
   createCoreTools,
   SystemPromptBuilder,
@@ -116,6 +117,11 @@ export interface IAgentConfig {
    * Workspace root path for AGENTS.md loading
    */
   workspaceRoot?: string;
+
+  /**
+   * Stable conversation ID used for journal persistence.
+   */
+  conversationId?: string;
 
   /**
    * Locale for system prompt (en/zh)
@@ -245,7 +251,12 @@ export interface IAgentRunner extends vscode.Disposable {
   /**
    * Add message to history
    */
-  addMessage(message: ChatMessage): void;
+  addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void;
+
+  /**
+   * Replace history in one shot, optionally carrying journal provenance.
+   */
+  loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void;
 
   // -------------------------------------------------------------------------
   // Events
@@ -462,6 +473,9 @@ export class AgentRunner implements IAgentRunner {
 
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
+    const journalWriter = config.conversationId
+      ? createNodeJournalStorage().createWriter(config.conversationId)
+      : undefined;
 
     // Create service from platform, adapted to @neko/shared IService
     const service = toSharedService(config.platform.createService());
@@ -482,6 +496,7 @@ export class AgentRunner implements IAgentRunner {
       hooks: customHooks.length > 0 ? customHooks : undefined,
       toolCategoryRegistry: config.toolCategoryRegistry,
       projectMemoryManager: this._projectMemoryManager,
+      ...(journalWriter && { journalWriter, conversationId: config.conversationId }),
       onConfirmTool: async (request) => {
         return this._handleToolConfirmation(request);
       },
@@ -704,8 +719,12 @@ export class AgentRunner implements IAgentRunner {
     this._session?.clearHistory();
   }
 
-  addMessage(message: ChatMessage): void {
-    this._session?.addMessage(message);
+  addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void {
+    this._session?.addMessage(message, sourceEventIds);
+  }
+
+  loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
+    this._session?.loadHistory(messages, messageEventIds);
   }
 
   // -------------------------------------------------------------------------

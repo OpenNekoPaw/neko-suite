@@ -59,6 +59,10 @@ export interface CleanupPolicy {
   archiveOld: boolean;
 }
 
+export interface ConversationManagerOptions {
+  generateId?: () => string;
+}
+
 /**
  * Default cleanup policy
  */
@@ -82,6 +86,7 @@ export class ConversationManager {
   private activeId: string | null = null;
   private storage?: ConversationStorage;
   private cleanupPolicy: CleanupPolicy;
+  private readonly idGenerator?: () => string;
 
   /** Dirty tracking for incremental saves */
   private dirtyConversations = new Set<string>();
@@ -90,9 +95,14 @@ export class ConversationManager {
   private saveTimer?: ReturnType<typeof setTimeout>;
   private static readonly SAVE_DEBOUNCE_MS = 500;
 
-  constructor(storage?: ConversationStorage, cleanupPolicy?: Partial<CleanupPolicy>) {
+  constructor(
+    storage?: ConversationStorage,
+    cleanupPolicy?: Partial<CleanupPolicy>,
+    options?: ConversationManagerOptions,
+  ) {
     this.storage = storage;
     this.cleanupPolicy = { ...DEFAULT_CLEANUP_POLICY, ...cleanupPolicy };
+    this.idGenerator = options?.generateId;
     this._load();
     // Run cleanup on startup
     this._applyCleanupPolicy();
@@ -390,6 +400,9 @@ export class ConversationManager {
   }
 
   private _generateId(): string {
+    if (this.idGenerator) {
+      return this.idGenerator();
+    }
     return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 

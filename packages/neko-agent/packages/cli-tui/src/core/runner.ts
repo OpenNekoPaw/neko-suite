@@ -25,6 +25,8 @@ import {
   type InputProcessor,
   type ConversationRecord,
   createFileConversationStorage,
+  createNodeJournalStorage,
+  createConversationId,
   type FileConversationStorage,
 } from '@neko/agent';
 import * as os from 'node:os';
@@ -156,6 +158,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     const systemPrompt = promptBuilder.build();
 
     // Create agent session
+    const conversationId = createConversationId(config.workDir);
     const session = createAgentSession({
       service: llmService,
       toolRegistry,
@@ -167,6 +170,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
       projectMemoryManager,
+      journalWriter: createNodeJournalStorage().createWriter(conversationId),
+      conversationId,
       onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
         if (!runOptions.interactive) {
@@ -650,6 +655,26 @@ async function initializeInteractiveSession(
   await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
   const systemPrompt = promptBuilder.build();
 
+  // Shared resume-layer storage + conversation identity
+  const conversationStorage = createFileConversationStorage(config.workDir);
+  let conversationCreatedAt = Date.now();
+  let conversationId: string = createConversationId(config.workDir);
+  let conversationTitle = '';
+  let resumeRecord: ConversationRecord | undefined;
+
+  // Resolve the target conversation before creating the session so JournalWriter
+  // lands in the same conversation namespace used by resume.
+  if (resumeId) {
+    resumeRecord = await conversationStorage.load(resumeId).catch(() => undefined);
+    if (resumeRecord) {
+      conversationId = resumeRecord.id;
+      conversationTitle = resumeRecord.title;
+      conversationCreatedAt = resumeRecord.createdAt;
+    } else {
+      console.log(theme.warning(`Conversation "${resumeId}" not found — starting fresh`));
+    }
+  }
+
   // Helper: prompt user for tool confirmation using the shared rl
   const askToolConfirmation = (question: string): Promise<string> => {
     return new Promise((resolve) => {
@@ -672,6 +697,8 @@ async function initializeInteractiveSession(
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     modelId: config.model,
+    journalWriter: createNodeJournalStorage().createWriter(conversationId),
+    conversationId,
     onConfirmTool: async (request) => {
       // Check always-allowed set
       if (alwaysAllowedTools.has(request.toolCall.name)) {
@@ -748,25 +775,12 @@ async function initializeInteractiveSession(
     });
   };
 
-  // Initialize conversation storage for the shared resume layer
-  const conversationStorage = createFileConversationStorage(config.workDir);
-  const conversationCreatedAt = Date.now();
-  let conversationId: string = crypto.randomUUID();
-  let conversationTitle = '';
-
-  // Resume a previous conversation if requested
-  if (resumeId) {
-    const record = await conversationStorage.load(resumeId).catch(() => undefined);
-    if (record) {
-      session.loadHistory(record.messages);
-      conversationId = record.id;
-      conversationTitle = record.title;
-      console.log(
-        theme.info(`Resumed: "${record.title}" (${record.messages.length - 1} messages)`),
-      );
-    } else {
-      console.log(theme.warning(`Conversation "${resumeId}" not found — starting fresh`));
-    }
+  if (resumeRecord) {
+    session.loadHistory(resumeRecord.messages, resumeRecord.messageEventIds);
+    const resumedMessageCount = resumeRecord.messages.filter(
+      (message) => message.role !== 'system',
+    ).length;
+    console.log(theme.info(`Resumed: "${resumeRecord.title}" (${resumedMessageCount} messages)`));
   }
 
   return {
@@ -824,8 +838,8 @@ export async function runInteractive(
       },
       conversationStorage: state.conversationStorage,
       currentConversationId: state.conversationId,
-      onLoadHistory: (messages) => {
-        state!.session.loadHistory(messages);
+      onLoadHistory: (messages, messageEventIds) => {
+        state!.session.loadHistory(messages, messageEventIds);
       },
       getHistory: () => state!.session.getHistory(),
       onUpdateMediaOverrides: (overrides) => {

@@ -89,7 +89,11 @@ export interface IAgentManager extends vscode.Disposable {
   /**
    * 加载会话历史到指定 Agent
    */
-  loadHistory(conversationId: string, messages: ChatMessage[]): void;
+  loadHistory(
+    conversationId: string,
+    messages: ChatMessage[],
+    messageEventIds?: readonly (readonly string[])[],
+  ): void;
 
   /**
    * 加载完整会话历史（包含工具调用上下文）
@@ -348,12 +352,13 @@ export class AgentManager implements IAgentManager {
   // History Management
   // -------------------------------------------------------------------------
 
-  loadHistory(conversationId: string, messages: ChatMessage[]): void {
+  loadHistory(
+    conversationId: string,
+    messages: ChatMessage[],
+    messageEventIds?: readonly (readonly string[])[],
+  ): void {
     const agent = this.getOrCreate(conversationId);
-    agent.clearHistory();
-    for (const msg of messages) {
-      agent.addMessage(msg);
-    }
+    agent.loadHistory(messages, messageEventIds);
   }
 
   loadHistoryWithContext(

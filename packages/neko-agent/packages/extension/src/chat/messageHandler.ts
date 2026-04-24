@@ -498,6 +498,7 @@ export class MessageHandler {
         executionMode: this._settings.executionMode,
         thinkingBudget: this._settings.thinkingBudget,
         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        conversationId,
       });
 
       // Create agent context
