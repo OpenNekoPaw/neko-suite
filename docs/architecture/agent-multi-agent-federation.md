@@ -3,6 +3,9 @@
 **状态**: Proposed
 **日期**: 2026-04-24
 **关联范围**: neko-agent · @neko/shared · 所有能产生/消费工具的子包
+
+> **协议地基对齐（2026-04-25）**：本 ADR 的 SubAgent 能力继承通过 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 CapabilityContribution + Trust Level 传播实现——父 Agent 的 trustLevel 在 spawn 子 Agent 时可降级但不可提升；子 Agent 的 ScopedToolRegistry 复用协议地基的两阶段模型（Registration 继承父作用域，Injection 按子 Agent 独立策略）。AgentId 路径寻址与协议地基的 `contributorId` 命名空间共用一套规范。Federation 的 7 个 AblationToggle 与协议地基附录 B 的 5 个 Capability Protocol toggle 正交。
+
 **关联文档**:
 
 - [agent-unified-workflow.md](./agent-unified-workflow.md) — IDC 三阶段 + 六控制平面，本 ADR 在其基础上加第 7 个运行时维度（多 Agent 拓扑）

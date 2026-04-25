@@ -4,6 +4,8 @@
 
 > 状态更新（2026-04-24）：本文中关于 `CreativeMemoryHooks`、`global-memory.md` 的表述属于历史上下文。当前目标架构不再保留自动注入的 global memory，memory 主链也已转为 `AgentSession` 驱动的 project-only 路由。
 
+> **协议地基（Proposed 2026-04-25）**：本文讨论的 Tool / Skill / MCP / 注入模型的统一规范见 [adr-capability-protocol.md](./adr-capability-protocol.md)——CapabilityContribution v1.0 + 两阶段模型（Registration/Injection）+ Tool 四来源投影（Internal/MCP/Market/Local）+ 三级信任 + Operation 降级为 Tool 的 kind（非并列概念）+ ToolGroup 使用原则（仅用于跨 Skill 共享）+ VSCode 扩展三层接入。本文作为场景级增强需求文档，边界定义以协议地基 ADR 为准。
+
 ---
 
 ## 对比基线：neko-agent vs Claude Code

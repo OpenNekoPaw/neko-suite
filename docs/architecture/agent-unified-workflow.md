@@ -48,7 +48,7 @@
 | 动作 | ADR 章节 | 状态 | 待做 |
 |-----|--------|----|----|
 | .nksession.md 会话摘要 | §7.4 | ✅ 已由 [agent-memory-unification.md](./agent-memory-unification.md) 收口 | 会话摘要职责已收敛到 `journal + conversations-index.json + working-memory projection`，不再单列 `.nksession.md` |
-| .neko/cache/*.json 派生索引 | §7.4 | ⏳ | 按需，UI 侧提出索引需求再补 |
+| `.neko/cache/artifact-index.json` 派生索引 | §7.4 | ✅ | ArtifactService 已维护 Draft / Plan / Task 统一索引，并提供 `listRunIds` / `listByRunId` 运行态查询面；其余派生 cache 仍按需补 |
 
 **关联范围**: neko-agent · neko-market · @neko/shared · 所有子包
 **关联文档**:
@@ -57,8 +57,11 @@
 - [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) - **多 Agent 联邦**（Proposed 2026-04-24）：在六控制平面之上加第 7 个"拓扑维度"。SubAgent 对等 AgentSession、AgentId 路径寻址、MessageBus 双向通信、受控递归 spawn。本 ADR 的 StageGuardian / ApprovalEngine / AblationToggles 均在 Federation 中延伸
 - [agent-memory-unification.md](./agent-memory-unification.md) - **持久化四合一**（Proposed 2026-04-24）：Journal / ConversationRecord / Compact / Memory 统一到三层金字塔（Working / Episodic / Semantic）+ Journal 作为 SSOT。关闭本 ADR §已延后表的 `.nksession.md` 一项；闭环 §11.6.9 SelfEvaluationHooks 的结论去向
 - [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) - **控制面独立 + Stage Registry + FeedbackArbiter**（Proposed 2026-04-24）：把 IDC 三阶段从 `IdcStage` union 升级为 `StageDescriptor` Registry；抽取第 7 控制平面 **Control**（元层），承载 StageRegistry / ArtifactRegistry / FeedbackArbiter；统一 7 类反馈信号仲裁（validation / tool-failure / budget / self-eval / user / memory-conflict / llm-confidence）→ 5 级 FeedbackDecision（L0 retry-tool / L1 retry-stage / L2 regress-to / L3 restart-run / L4 escalate-user）；ArtifactKind `'task'` → `'apply'` 类型层对齐（磁盘路径保留）；消融扩展到 Policy 层但**不作为 stage**。落地后 Orchestration 评级 B+ → A-，§11.6 六平面 → 七平面
+- [adr-capability-protocol.md](./adr-capability-protocol.md) - **统一能力扩展协议（地基文档）**（Proposed 2026-04-25）：两阶段模型（Registration 可查 / Injection 按需进 LLM context）+ CapabilityContribution v1.0 Schema + Tool 四来源投影（Internal/MCP/Market/Local）+ MCP 三原语投影（Tool/Resource/Prompt）+ 三级信任（core/community/untrusted）+ Host Abstraction + VSCode 扩展三层接入（Agent 能力 / IDE 集成 / 桥接）+ Operation 降级为 Tool 的 kind（非并列概念）+ ToolGroup 使用原则 + Registry 查询面。本 ADR 是其他 Proposed ADR（Control Plane / Provider Bridge / Federation / Memory Unification）的基础协议框架
+- [adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) - **生成模型语义桥接**（Proposed 2026-04-24）：处理生成模型三类输入端差异（Syntax Dialect / Semantic Literacy / Training Distribution Bias）；Provider 独立抽象（与 Skill 是 M:N 关系）+ ProviderCapabilityCard 三合一 markdown + ProviderRouter + AdaptiveSemanticBridge；三层 Card 分发（Built-in/Market/Project）+ Layer 2 自动演化闭环
+- [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) - **Skill 编排退化为 prompt-chains**（Proposed 2026-04-25）：phases / pipelines DSL 退化为 markdown 章节惯例；保留 allowedTools / compliance / trustLevel 等安全/权限 DSL 边界；stage 信息由 artifact 状态自然推断（StagePlanner 不再读 Skill phases）；跨平台互通自然达成（neko Skill ↔ Claude Code Skill 双向直接复制）；演化能力 Skill 层 A- → A、Orchestration B+ → A-；4-Stage 渐进迁移路径，向后兼容
 - [dual-flow-architecture.md](./dual-flow-architecture.md) - 早期双流探索（本 ADR 的简化归宿）
-- [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) - 早期能力注册设计探索
+- [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) - 早期能力注册设计探索（已被 adr-capability-protocol 正式收口）
 - [perception-first-roadmap.md](./perception-first-roadmap.md) - 感知路线图
 - [marketplace.md](./marketplace.md) - neko-market 分发基础
 
@@ -328,9 +331,13 @@ type CapabilityKind =
 
 **删除**：独立 Workflow/Pipeline/ProposalTemplate/ReviewStrategy/OrchestrationSkill/StatusNarrator/ViewRecipe 等细分 kind，全部内嵌到 Skill。
 
+> **前瞻（Proposed 2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 拟把 `CapabilityKind` 的术语收敛为**四维正交**：`skill / tool / toolGroup / providerCard`。其中 `operation` **不再作为独立 kind 并列**——它是 `tool` 的 `kind` 字段二分（`kind: 'tool' | 'operation'`），代码层已是 discriminated union，仅需文档/讨论术语统一。ToolGroup / ProviderCard 作为独立维度引入，对应"动作分组 / 供给画像"两类过去散落的概念。落地后本小节的联合类型变为四元组。
+
 ### 5.2 Skill 作为场景包
 
 Skill 是 neko-suite 原生的场景打包单元，一个文件/文件夹承载完整创作场景所需的所有声明：**人格 + 多阶段编排 + 加工链 + 资产引用 + 合规元数据 + 跨 Skill 协作**。Skill 格式为 neko 生态服务，不追求与其他 Agent 框架互操作。
+
+> **前瞻（Proposed 2026-04-25）**：[adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) 拟把 `phases` / `pipelines` 字段标记为 deprecated，编排逻辑退化为 persona body 的 markdown 章节惯例（**prompt-chains** 风格，对齐 Claude Code / Codex 实证）。**保留 DSL 边界**：`allowedTools` / `compliance.approvalRules` / `requiredSubpackages` / `trustLevel` 等机器消费的安全/权限字段；**stage 信息**改为由 IDC artifact 文件存在性自然推断（StagePlanner 不读 Skill phases）。落地后：演化能力 Skill 层 **A- → A**、Orchestration **B+ → A-**、跨平台互通自然达成（neko Skill ↔ Claude Code Skill 双向直接复制）、§11.5 AI 原生执行 + §11.6.4 反模式 #4 完美对齐。本 ADR 提供 4-Stage 渐进迁移路径与自动迁移工具，向后兼容现有 phases-based Skill。
 
 #### 5.2.1 完整结构示例
 
@@ -1020,8 +1027,8 @@ IDC 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 
 | Audit Log | `audits.jsonl` | ApprovalEngine 记录，合规/哈希链 |
 | Step 原始日志 | `steps.jsonl` | Step 执行器采集，毫秒级 |
 | Capability 索引 | `capability-index.json` | 从 MD 派生的查询缓存 |
-| Draft 索引 | `draft-index.json` | 从 MD 派生的查询缓存 |
-| IDC Runtime Snapshot | `idc-runtime.json` | 当前 stage / active run / pending approvals 快照 |
+| Artifact 索引 | `artifact-index.json` | 从 Draft / Plan / Task MD 派生的查询缓存 |
+| IDC Runtime Snapshot | `idc-runtime.json` | 当前 stage + transition trail / active + lastCompleted run / pending approvals 快照 |
 | Session Lock | `session-lock.json` | 并发控制 |
 
 **共同特征**：代码逻辑产出，AI 不感知，程序消费或派生缓存。
@@ -1060,10 +1067,10 @@ IDC 三件套采用 `<kind>-<runId>.md` 前缀命名（2026-04-22 从 `.nk*.md` 
 
   cache/                 ← 程序派生（JSON，可重建）
     capability-index.json
-    draft-index.json
+    artifact-index.json
 
   state/                 ← 程序并发控制 / 运行态快照
-    idc-runtime.json     ← 当前 stage / active run / pending approvals
+    idc-runtime.json     ← 当前 stage + transition trail / active + lastCompleted run / pending approvals
     session-lock.json
 
   settings.json          ← 媒体库变量（已有，PathResolver 使用）

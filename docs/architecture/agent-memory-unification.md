@@ -3,6 +3,9 @@
 **状态**: In Progress
 **日期**: 2026-04-24
 **关联范围**: neko-agent · @neko/shared · 所有 Skill / Hook / UI resume 路径
+
+> **协议地基对齐（Proposed 2026-04-25）**：本 ADR 定义的 Semantic Memory 写入路径（`.neko/memory.md`、`.neko/providers/*.card.md` Layer 2 Override）可被 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 CapabilityContribution 作为能力贡献的 **project-scoped storage** 声明。KeyFactExtractor 的路由目标与 ProviderCard Layer 2 演化路径共用 ProjectMemoryRouter，协议地基不重新设计这套机制，只在 CapabilityContext 暴露 `IScopedStorage` 接口作为贡献者访问入口。
+
 **关联文档**:
 
 - [agent-unified-workflow.md](./agent-unified-workflow.md) — IDC §7.4 `.neko/` 布局 + §11.6.9 Evaluator 平面；本 ADR 关闭 §已延后表的 `.nksession.md` / `派生索引` 两项

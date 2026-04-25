@@ -4,6 +4,8 @@
 
 Proposed (2026-04-24)
 
+> **协议地基对齐（2026-04-25）**：本 ADR 定义的 `StageRegistry` / `ArtifactRegistry` 与 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 `CapabilityRegistry` 共享同一套 **Registry 查询面**（`getByContributor` / `isRegistered` / `onDidChange` 等）。ControlPlane 作为第 7 控制平面不拥有独立的注册/分发基础设施——它复用协议地基的两阶段模型（Registration / Injection），只在其上定义 StageDescriptor / ArtifactDescriptor 两类新的 Registry 条目语义。FeedbackArbiter 的 `beforeToolCall` 钩子挂在协议地基的 Injection 阶段之后。本 ADR 原先独立表述的"ControlPlane 子系统"语义不变，基础设施对齐到协议地基。
+
 ## 背景
 
 `adr-agent-runtime-bootstrap.md` 冻结了四个 runtime plane（workflow / artifact / capability / feedback）的最小契约，IDC 主链的依赖注入路径随之统一。但 IDC 三阶段骨架本身与反馈迭代流程仍是分散/硬编码的，在当前代码上已经出现三类具体症状。

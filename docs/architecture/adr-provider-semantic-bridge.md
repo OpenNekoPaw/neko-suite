@@ -4,6 +4,8 @@
 
 Proposed (2026-04-24)
 
+> **协议地基对齐（2026-04-25）**：本 ADR 的 Provider 贡献形式（`providerCardFiles` 路径引用 + `providerAdapters` 对象）以 [adr-capability-protocol.md](./adr-capability-protocol.md) 定义的 **CapabilityContribution v1.0** 为容器接入。`ProviderRegistry` 不是独立新系统，而是 Capability Protocol Registry 下与 SkillRegistry/ToolRegistry 并列的子 Registry。Trust Level（core/community/untrusted）约束 ProviderCard 谁可以贡献（untrusted 禁止贡献 ProviderCard，见协议地基信任能力矩阵）。AdaptiveSemanticBridge 作为 Runtime 面 `beforeToolCall` hook，挂入 Capability Protocol 两阶段模型的 Injection 相。本 ADR 原先独立表述的"Provider 子系统"语义不变，接入路径对齐到统一协议。
+
 ## 背景
 
 neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，已有 `agent-media-architecture.md` 定义了 GeneratedAsset 存储与 Send-to-Agent 协议。但在 **Plan → Apply 的 prompt 翻译** 环节，当前架构存在一个未正面处理的架构缺口：**不同生成模型对同一输入表现差异巨大**，且这种差异**不能用统一 schema 消除**。

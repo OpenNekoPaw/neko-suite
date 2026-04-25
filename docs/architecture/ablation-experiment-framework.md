@@ -3,6 +3,8 @@
 > 状态更新（2026-04-24）：代码中的 legacy `sessionMemory` / `disableSessionMemory` toggle 已移除。当前实验实现的 persistence 相关开关已收敛为 `journalAsSSOT`、`compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`；若后文仍出现 `sessionMemory`，应视为早期设计草案而非当前代码。
 >
 > **Proposed 扩展（2026-04-24）**：[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 拟新增 7 个 FeedbackArbiter 相关 toggle（`feedbackArbiter` / `feedbackPolicy` / `selfEvalSignal` / `memoryConflictSignal` / `regressionEnabled` / `llmConfidenceSignal` / `stageRegistry`）并明确**消融永不作为 stage**的原则。详见文末 "§附录 A：Proposed FeedbackArbiter Toggles"。
+>
+> **Proposed 扩展（2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 拟新增 5 个 Capability Protocol 相关 toggle（`twoPhaseRegistration` / `mcpAdapter` / `trustEnforcement` / `hostRequirementEnforcement` / `registryIntrospection`），让协议地基的每个决策都可消融验证。详见文末 "§附录 B：Proposed Capability Protocol Toggles"。
 
 ## 当前实现快照（2026-04-24）
 
@@ -786,3 +788,67 @@ export interface AblationToggles {
 ### A.5 落地依赖
 
 本附录的 toggle 接线需要 ADR PR-C5（FeedbackArbiter MVP）和 PR-C6（toggle 接线）先合入。在 ADR 落地前，本附录仅作**设计占位**；对应 preset 与 test 代码位于 Proposed 状态，不进入默认 `createStandardAblationSuite()`。
+
+---
+
+## 附录 B：Proposed Capability Protocol Toggles（2026-04-25）
+
+本附录对齐 [adr-capability-protocol.md](./adr-capability-protocol.md) Proposed 内容。ADR 落地后，本附录内容上抬为正式 §1 AblationToggles 小节。
+
+### B.1 原则声明
+
+消融协议地基的每个决策，验证"不做这个决策会怎样"。协议 5 个核心决策各有对应 toggle：两阶段模型 / MCP 适配 / 信任模型 / 宿主降级 / Registry 查询。
+
+### B.2 新增 Toggle 清单
+
+```typescript
+export interface AblationToggles {
+  // ... 既有字段（含附录 A FeedbackArbiter 系列）...
+
+  // === Proposed: Capability Protocol（见 adr-capability-protocol.md） ===
+
+  /** 两阶段注册：false=注册即注入（回退旧行为）
+   *  用于验证"两阶段模型"对 token 成本的影响 */
+  twoPhaseRegistration?: false;
+
+  /** MCP 适配器：false=不加载 mcpServers 声明
+   *  对照组：关掉 MCP 接入，仅用内部 Tool */
+  mcpAdapter?: false;
+
+  /** Trust Level 强制：false=忽略 trustLevel，全部视为 core
+   *  用于评估"三级信任矩阵"的约束成本 */
+  trustEnforcement?: false;
+
+  /** 宿主要求强制：false=缺失 requirement 时仍注册（行为可能出错）
+   *  对照组：跨宿主运行时不降级 vs 降级的行为差异 */
+  hostRequirementEnforcement?: false;
+
+  /** Registry 查询 API：false=禁用自省查询（Agent 无法列举自身能力）
+   *  用于验证"§11.6.9 自评三件套的可见性基础"的真实贡献 */
+  registryIntrospection?: false;
+}
+```
+
+### B.3 预置变体（presets.ts 扩展）
+
+```typescript
+{ name: 'no-two-phase-registration',  toggles: { twoPhaseRegistration: false } }
+{ name: 'no-mcp-adapter',              toggles: { mcpAdapter: false } }
+{ name: 'no-trust-enforcement',        toggles: { trustEnforcement: false } }
+{ name: 'no-host-requirement',         toggles: { hostRequirementEnforcement: false } }
+{ name: 'no-registry-introspection',   toggles: { registryIntrospection: false } }
+```
+
+### B.4 功能独立性验证矩阵（追加）
+
+| 开关 | 影响的组件 | 不影响的组件 | 可独立验证 |
+|------|-----------|-------------|-----------|
+| `twoPhaseRegistration: false` | CapabilityRegistry 与 ToolInjectionManager 耦合回退 | CapabilityContribution 声明不变 | ✅ |
+| `mcpAdapter: false` | McpAdapter no-op，mcpServers 字段被忽略 | Internal Tool / Skill / ProviderCard 路径不变 | ✅ |
+| `trustEnforcement: false` | 能力信任矩阵跳过，untrusted 可贡献所有能力 | 能力实际功能不变 | ✅ |
+| `hostRequirementEnforcement: false` | HostRequirement 校验跳过，缺失能力仍注册 | 能力实际 invoke 可能因 API 缺失失败 | ✅ |
+| `registryIntrospection: false` | `ListCapabilities` 类元工具禁用 | Registry 内部数据结构不变 | ✅ |
+
+### B.5 落地依赖
+
+本附录的 toggle 接线需要 adr-capability-protocol Stage 1-5 的对应 PR 先合入。在 ADR 落地前，本附录仅作**设计占位**；对应 preset 与 test 不进入默认 `createStandardAblationSuite()`。

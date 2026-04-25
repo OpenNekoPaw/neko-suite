@@ -112,6 +112,10 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 
 > **Proposed 新增第 7 平面（2026-04-24）**：[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 拟新增 **Control 平面（元层）**——承载 StageRegistry / ArtifactRegistry / FeedbackArbiter。抗演化评级预期 **A-**：Registry 化解决 Schema union 硬编码断点（使 Schema 同步抬到 **A**）；FeedbackPolicy 可插拔让反馈策略成为消融对象而非代码逻辑（使 Policy 抬到 **B+**）；新 stage 扩展从 9 文件降至 1 处注册调用；五级 FeedbackDecision（retry-tool / retry-stage / regress-to / restart-run / escalate-user）首次形式化 L2 回退事件。ADR 落地后本节表升级为 **A / A / A- / B+ / A / A / A-**（共 7 项）。
 
+> **Proposed 协议地基（2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 正式化 **CapabilityContribution v1.0** 统一能力扩展协议。两阶段模型（Registration vs Injection）+ Tool 四来源投影（Internal/MCP/Market/Local）+ 三级信任（core/community/untrusted）+ Host Abstraction 让现有多种机制（Tool / Skill / ToolGroup / ProviderCard / MCP / VSCode 扩展）收敛到一份规范。落地后抗演化评级同步抬升：**Schema A- → A**（命名空间 + trustLevel 填空 Market 风险）、**Runtime A- → A**（两阶段 + 生命周期规范）、**Policy B → B+**（trust model 入 Policy 层）、**Control A- → A**（Registry 统一化）。本 ADR 与 Control Plane ADR 的评级叠加最终形态为 **A / A / A / B+ / A / A / A**（7 平面全 A-）。另将新增 **Provider 层评级 A**（markdown + 自演化，三原则共振最强载体）。
+>
+> **Provider 层（Proposed 2026-04-24）**：[adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) 引入的 Provider 子系统——ProviderCapabilityCard 三合一 markdown（Syntax Profile / Concept Coverage Map / Training Profile）+ ProviderRouter + AdaptiveSemanticBridge。因全 markdown + Layer 2 Memory 自演化闭环，评级 **A**。
+
 ---
 
 ## 4. 最强演化锚点（三原则共振）
@@ -226,3 +230,4 @@ Memory 有独立存储（`~/.claude/.../memory/` / `.neko/memory.md`），产物
 | 2026-04-23 | 初版：对 agent-unified-workflow.md 定义的 IDC 三阶段 + 四层架构 + 六层控制平面做抗演化审计。按 Skill / Prompt / Orchestration / 控制六平面 分别评级 A- / A / B+ / (A/A-/A-/B/A/A)；识别三个最脆弱断点（Tool 硬引用 / Skill matching 关键词 / persona 无版本化）；提炼三原则共振作为最强演化锚点；总结六条演化维护纪律作为后续决策指南 | Architecture Team |
 | 2026-04-23 | 自审修正：三处断点按实际代码重新校准——① 内部 Skill 已通过 TOOL_NAMES 常量 SSOT 解决工具名引用，真正断点是外部/Market Skill 绕过 TOOL_NAMES；② Skill 匹配的是 `description` 字段（不是 `.When`），且只是提示层——AI thinkLoop 是主通道，向量匹配是可选优化而非必须；③ personas 入 git 且 Skill 类型已支持 `version` 字段，Market 有 Plugin 版本号，真正缺的是**会话级 A/B 选择**而非"无版本化"。§3.1 / §3.3 / §3.4 Schema 评级脚注 / §5 断点表 / §6 演化测试同步修正 | Architecture Team |
 | 2026-04-24 | 同步 [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) Proposed 注记：§3.3 Orchestration 评级保持现状 B+ 但预告 ADR 落地后升至 A-；§3.4 控制层表后追加 Proposed Control 平面评级预期 A-（落地后 Schema 抬到 A、Policy 抬到 B+）；§5 次级脆弱点 #4 "IDC 三阶段骨架硬编码" 加上缓解路径列，指向 StageDescriptor Registry 化方案（新 stage 成本 9 文件 → 1 处注册）。本更新只做前瞻注记，不动现状评级 | Architecture Team |
+| 2026-04-25 | 同步 [adr-capability-protocol.md](./adr-capability-protocol.md) Proposed 注记：§3.4 控制层表后追加 Proposed 协议地基评级预期（落地后 Schema A- → A、Runtime A- → A、Policy B → B+、Control A- → A，7 平面全 A-）+ Provider 层评级 A（三合一 markdown + Layer 2 自演化）。本 ADR 把过去散落的能力扩展机制（Tool/Skill/ToolGroup/ProviderCard/MCP/VSCode）收敛为 CapabilityContribution v1.0 统一协议，是其他 Proposed ADR 的基础框架，显著降低新能力接入成本（决策树化）+ 封住 Market 开放后的信任漏洞（三级信任 + 能力矩阵）+ 统一跨宿主行为（HostRequirement 降级）。本更新只做前瞻注记，不动现状评级 | Architecture Team |

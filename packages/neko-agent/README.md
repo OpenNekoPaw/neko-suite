@@ -8,6 +8,7 @@
 - 架构：Extension Host (Agent/Platform) + Webview (React 对话 UI) + CLI (Ink TUI)
 - 规范：[CLAUDE.md](../../CLAUDE.md)
 - 详细架构：[ARCHITECTURE.md](./ARCHITECTURE.md)
+- Runtime ADR：[adr-agent-runtime-bootstrap.md](../../docs/architecture/adr-agent-runtime-bootstrap.md)
 
 ## Quick Reference
 
@@ -54,6 +55,7 @@ packages/
 │   ├── hooks/        可组合中间件（ExecutorHooks + factory）
 │   ├── hook-loader/  用户自定义 Hook 加载器（.hook/ 目录）
 │   ├── prompt/       SystemPromptComposer + Builder（多语言）
+│   ├── runtime/      统一 runtime bootstrap 契约 + helper
 │   ├── plan/         Plan 管理器
 │   ├── input/        InputProcessor（@ 文件引用解析）
 │   ├── subagent/     子 Agent 委托

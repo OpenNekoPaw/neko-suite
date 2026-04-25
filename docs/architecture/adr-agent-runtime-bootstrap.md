@@ -40,6 +40,17 @@ P0 的目标不是增加功能，而是先冻结“最小可运行契约”和�
 
 统一外层配置名为 `AgentRuntimeConfig`。
 
+当前 contract 上已经开始承载后续阶段收口所需的最小入口，例如：
+
+- `IWorkflowRuntime.idcTaskProjection`：把 IDC Task checklist 投影进统一任务平面
+- `IFeedbackLoop.feedbackCoordinator`：把 artifact observation / self-eval / memory extraction 收口为单一 feedback runtime，并提供最小 `signal -> decision` 查询面
+
+补充约束：
+
+- 宿主若已经拥有共享 `TaskManager`，必须显式通过 `workflowRuntime.idcTaskProjection` 注入，不允许在某个 `createAgentSession*` 分支里临时偷建任务平面
+- CLI / TUI 的 Node 宿主 bootstrap 需要先确定 `TaskManager` 生命周期，再决定是否额外创建 `Platform`
+- extension 必须复用 service bootstrap 产出的同一个 `TaskManager`，避免 IDC checklist 与 UI 任务面出现双写分叉
+
 ### 2. 宿主统一通过 runtime bootstrap 创建 session
 
 `@neko/agent` 暴露两个统一入口：
@@ -99,6 +110,9 @@ Node 宿主不再直接手工拼 `artifactStore` 字面量。
 - extension、CLI、TUI 已统一通过 `createAgentSessionWithRuntime()` 创建 session
 - runtime plane 成为 IDC、artifact、capability、feedback 的唯一 bootstrap 汇合点
 - 后续 `stageTracking`、`workspace`、`toolGroupRegistry`、`skillRegistry`、`feedback coordinator` 等接线，都有了稳定入口
+- workspace-backed `ArtifactService` 负责从 `.neko/cache/artifact-index.json` + artifact markdown 做 startup rehydrate，并暴露 run-scoped query surface（`listRunIds` / `listByRunId`），宿主不再手写 artifact 恢复逻辑
+- `idc-runtime.json` 的 startup restore 统一由 session runtime 负责回灌 stage / run / approval 快照，宿主不再各自拼接恢复顺序
+- `FeedbackCoordinator` 已从零散 hook 组合器推进为最小 feedback runtime：当前统一接入 `artifact-invalid` / `self-eval-requested` / `memory-extraction` 三类信号，并能产出内存态 decision cycle，供 session / 宿主查询
 
 ### 代价与约束
 

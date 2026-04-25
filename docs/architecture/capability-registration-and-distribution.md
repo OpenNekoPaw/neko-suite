@@ -3,11 +3,13 @@
 > 本文档为早期设计探索，存在过度设计（外环 5 阶段、10 类能力、8 层防御、Plan 概念混淆等）。
 > 实际实施请参考：[agent-unified-workflow.md](./agent-unified-workflow.md)（四层架构 + 二分格式原则 + IDC 3 阶段 Draft → Plan → Apply）
 >
+> **协议层正式收口**（Proposed 2026-04-25）：[adr-capability-protocol.md](./adr-capability-protocol.md) 把 `AgentCapabilityProvider` 事实协议升格为 **CapabilityContribution v1.0** 正式规范——两阶段模型 + Tool 四来源投影 + 三级信任 + MCP 一等公民 + VSCode 三层接入。本文档的早期设想（能力注册、Market 分发、命名冲突）被完整覆盖。
+>
 > 本文档保留作为设计思考记录。
 
 # 能力注册与分发协议（设计探索，已被替代）
 
-**状态**: Superseded by [agent-unified-workflow.md](./agent-unified-workflow.md)
+**状态**: Superseded by [agent-unified-workflow.md](./agent-unified-workflow.md) + [adr-capability-protocol.md](./adr-capability-protocol.md)（Proposed 2026-04-25，协议层正式规范）
 **日期**: 2026-04-20
 **关联范围**: neko-agent · neko-market · @neko/shared · 所有子包
 **关联文档**:

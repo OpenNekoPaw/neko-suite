@@ -1,6 +1,8 @@
 # neko-agent 架构
 
 > AI Agent 系统，提供对话、MCP 工具、技能系统、多模型 LLM 等能力。
+>
+> 关联 ADR：[Agent Runtime Bootstrap 收口](../../docs/architecture/adr-agent-runtime-bootstrap.md)
 
 ---
 
@@ -133,6 +135,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个
 | `hooks/` | ExecutorHooks + composeHooks + factory |
 | `hook-loader/` | HookLoader — 用户自定义 Hook 加载（.hook/ 目录，IHookFileSystem/IHookCompiler 接口） |
 | `prompt/` | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md） |
+| `runtime/` | 统一 runtime bootstrap 契约（workflow/artifact/capability/feedback）+ `createAgentSessionWithRuntime()` |
 | `plan/` | Plan 管理器 + Markdown 解析 |
 | `input/` | InputProcessor — @ 文件引用解析（IFileReader 接口） |
 | `subagent/` | 子 Agent 管理 |
@@ -218,6 +221,39 @@ CLI 特有的 bootstrap 层（`createCLIPlatform()`）负责：
 
 ---
 
+## 统一 Runtime Bootstrap
+
+`AgentSession` 现在有两层创建语义：
+
+1. `AgentSessionConfig`
+2. `AgentRuntimeConfig`
+
+宿主统一走：
+
+```text
+host bootstrap
+  -> createAgentSessionWithRuntime(...)
+  -> buildAgentSessionConfigWithRuntime(...)
+  -> createAgentSession(...)
+```
+
+`AgentRuntimeConfig` 分成四个 plane：
+
+- `workflowRuntime`：IDC stage tracking / workflow 入口
+- `artifactStore`：workspace、journal writer、artifact 持久化平面
+- `capabilityRuntime`：skill / toolGroup / promptFragments 等动态能力注入
+- `feedbackLoop`：project memory、journal-as-SSOT、memory recall/extraction 等反馈设置
+
+关键约束：
+
+- 宿主的显式 `AgentSessionConfig` 字段优先于 runtime 默认值
+- extension、CLI、TUI 不再各自手写一套 session bootstrap 映射逻辑
+- Node 宿主统一复用 `createNodeArtifactStore()` 组装 artifact plane
+
+这层收口是 P1-P5 的前置条件：后续 IDC 主链、Prompt/Skill/Command 编排、Capability 注入、Artifact 主链化、FeedbackCoordinator，都应该优先接到 runtime plane，而不是继续把新字段散落进宿主入口。
+
+---
+
 ## 通信模式
 
 ### Extension ↔ Webview（postMessage）
@@ -273,7 +309,7 @@ AgentStreamProcessor（Extension — 事件翻译）
 
 | 模式 | 应用 |
 |------|------|
-| **Factory** | `createPlatform()`、`createAgentSession()`、`createCLIPlatform()` |
+| **Factory** | `createPlatform()`、`createAgentSession()`、`createAgentSessionWithRuntime()`、`createCLIPlatform()` |
 | **Registry** | ToolRegistry、SkillRegistry、ProviderRegistry、AdapterRegistry、MediaAdapterRegistry |
 | **Adapter** | 7 个 LLMAdapter + 8 个 MediaAdapter — 统一接口适配异构 API |
 | **Facade** | Service（platform 门面）、ChatViewProvider（extension 门面） |
