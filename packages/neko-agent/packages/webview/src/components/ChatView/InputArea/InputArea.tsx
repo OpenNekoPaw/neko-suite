@@ -10,10 +10,11 @@ import { ModeSelector } from './ModeSelector';
 import { SessionModeSelector } from './SessionModeSelector';
 import { GenerationParamsBar } from './GenerationParamsBar';
 import { AttachmentPreview } from './FileAttachment';
-import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
+import { SlashCommandMenu } from './SlashCommandMenu';
 import { parseFileReference } from './FileReferenceMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
 import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
+import { createSlashCommandCatalog, filterSlashCommands } from './slash-command-catalog';
 import { AgentContextChip } from './AgentContextChip';
 import { CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
 import { SuggestionChips } from './SuggestionChips';
@@ -121,7 +122,8 @@ export function InputArea({
   }, [droppedFiles, onDroppedFilesProcessed, updateAttachedFiles]);
 
   // Filtered data
-  const filteredCommands = getFilteredCommands(slashFilter, skills, pluginCommands);
+  const slashCommands = createSlashCommandCatalog(skills, pluginCommands);
+  const filteredCommands = filterSlashCommands(slashCommands, slashFilter, t);
   const filteredMentionItems = getFilteredMentionItems(mentionItems, atFilter);
 
   // Handle input change
@@ -291,7 +293,12 @@ export function InputArea({
     }
 
     // Normal send
-    if (e.key === 'Enter' && !e.shiftKey && !showSlashMenu && !showAtMenu) {
+    if (
+      e.key === 'Enter' &&
+      !e.shiftKey &&
+      (!showSlashMenu || filteredCommands.length === 0) &&
+      !showAtMenu
+    ) {
       e.preventDefault();
       handleSend();
     }
@@ -513,12 +520,10 @@ export function InputArea({
           {/* Slash command menu */}
           <SlashCommandMenu
             isOpen={showSlashMenu}
-            filter={slashFilter}
+            commands={filteredCommands}
             selectedIndex={selectedCommandIndex}
             onSelect={selectSlashCommand}
             onClose={() => setShowSlashMenu(false)}
-            skills={skills}
-            pluginCommands={pluginCommands}
           />
 
           {/* @mention menu — files, canvas nodes, story characters */}

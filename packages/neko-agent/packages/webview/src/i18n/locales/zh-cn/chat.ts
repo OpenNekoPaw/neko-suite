@@ -138,6 +138,8 @@ export const chat = {
   'chat.commands.model': '选择或切换 AI 模型',
   'chat.commands.permissions': '管理权限设置',
   'chat.commands.settings': '打开设置',
+  'chat.commands.skills': '列出和管理可用技能',
+  'chat.commands.tools': '列出和搜索可用工具',
   'chat.commands.todos': '列出当前待办事项',
   'chat.commands.tasks': '列出和管理后台任务',
   'chat.commands.plan': '进入计划模式',

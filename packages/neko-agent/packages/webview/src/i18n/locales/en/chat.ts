@@ -141,6 +141,8 @@ export const chat = {
   'chat.commands.model': 'Select or change AI model',
   'chat.commands.permissions': 'Manage permission settings',
   'chat.commands.settings': 'Open settings',
+  'chat.commands.skills': 'List and manage available skills',
+  'chat.commands.tools': 'List and search available tools',
   'chat.commands.todos': 'List current TODO items',
   'chat.commands.tasks': 'List and manage background tasks',
   'chat.commands.plan': 'Enter plan mode',

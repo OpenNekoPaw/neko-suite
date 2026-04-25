@@ -335,7 +335,6 @@ export function ConversationController({
           activeConversationId={activeConversationId}
           activeConversationIdRef={activeConversationIdRef}
           clearMessages={clearMessages}
-          conversations={conversations}
           // Config
           settings={settings}
           updateSettings={updateSettings}
@@ -376,8 +375,6 @@ export function ConversationController({
           handleMessage={handleMessage}
           setContextChips={setContextChips}
           setAmbientNodes={setAmbientNodes}
-          // Onboarding
-          setShowOnboarding={setShowOnboarding}
           onNewChat={handleNewChat}
           // Session cleanup registration
           sessionCleanupRef={sessionCleanupRef}

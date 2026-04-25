@@ -15,7 +15,7 @@
 import { type MutableRefObject, useEffect, useCallback, useState } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
 import { ShellExecutionMode, PromptMode, SessionMode, AgentState } from '@/components/types';
-import type { SettingsState, Message, ConversationSummary, TabType } from '@/components/types';
+import type { SettingsState, Message, TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
@@ -52,7 +52,6 @@ export interface ChatWorkspaceProps {
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   clearMessages: () => void;
-  conversations: ConversationSummary[];
   // Config
   settings: SettingsState;
   updateSettings: (partial: Partial<SettingsState>) => void;
@@ -98,8 +97,6 @@ export interface ChatWorkspaceProps {
   setAmbientNodes: React.Dispatch<
     React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
   >;
-  // Onboarding
-  setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
   onNewChat: () => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
@@ -123,7 +120,6 @@ export function ChatWorkspace({
   activeConversationId,
   activeConversationIdRef,
   clearMessages,
-  conversations,
   settings,
   updateSettings,
   selectedModel,
@@ -155,7 +151,6 @@ export function ChatWorkspace({
   handleMessage,
   setContextChips,
   setAmbientNodes,
-  setShowOnboarding,
   onNewChat,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
@@ -338,14 +333,10 @@ export function ChatWorkspace({
   // Slash command routing
   const { handleSlashCommand } = useSlashCommands({
     skills,
+    pluginCommands,
     inputValue,
-    setInputValue,
     setMessages,
     clearInput,
-    clearMessages,
-    setShowOnboarding,
-    onNewChat,
-    conversations,
   });
 
   // ---- Simple callback handlers ----

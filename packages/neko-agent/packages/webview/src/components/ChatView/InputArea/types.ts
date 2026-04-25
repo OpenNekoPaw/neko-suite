@@ -12,6 +12,8 @@ export type CommandSource = 'builtin' | 'skill' | 'plugin';
 // Slash command definition
 export interface SlashCommand {
   id: string;
+  /** Raw command id used when dispatching to the host/runtime */
+  commandId?: string;
   name: string;
   descriptionKey: string; // i18n key or direct description for skills
   icon: string;
@@ -35,111 +37,6 @@ export interface PluginSlashCommandDef {
   extensionId: string;
 }
 
-// Predefined slash commands - descriptions use i18n keys
-// Aligned with Claude Code CLI built-in commands
-const SLASH_COMMANDS: SlashCommand[] = [
-  // Core commands
-  {
-    id: 'clear',
-    name: '/clear',
-    descriptionKey: 'chat.commands.clear',
-    icon: '🗑️',
-    source: 'builtin',
-  },
-  {
-    id: 'exit',
-    name: '/exit',
-    descriptionKey: 'chat.commands.exit',
-    icon: '🚪',
-    source: 'builtin',
-  },
-  {
-    id: 'help',
-    name: '/help',
-    descriptionKey: 'chat.commands.help',
-    icon: '❓',
-    source: 'builtin',
-  },
-  // Session management
-  { id: 'new', name: '/new', descriptionKey: 'chat.commands.new', icon: '✨', source: 'builtin' },
-  {
-    id: 'resume',
-    name: '/resume',
-    descriptionKey: 'chat.commands.resume',
-    icon: '▶️',
-    source: 'builtin',
-  },
-  // Context and cost
-  {
-    id: 'compact',
-    name: '/compact',
-    descriptionKey: 'chat.commands.compact',
-    icon: '📦',
-    source: 'builtin',
-  },
-  // Configuration
-  {
-    id: 'status',
-    name: '/status',
-    descriptionKey: 'chat.commands.status',
-    icon: '📊',
-    source: 'builtin',
-  },
-  {
-    id: 'init',
-    name: '/init',
-    descriptionKey: 'chat.commands.init',
-    icon: '🚀',
-    source: 'builtin',
-  },
-  {
-    id: 'model',
-    name: '/model',
-    descriptionKey: 'chat.commands.model',
-    icon: '🤖',
-    source: 'builtin',
-  },
-  {
-    id: 'permissions',
-    name: '/permissions',
-    descriptionKey: 'chat.commands.permissions',
-    icon: '🔐',
-    source: 'builtin',
-  },
-  {
-    id: 'settings',
-    name: '/settings',
-    descriptionKey: 'chat.commands.settings',
-    icon: '⚙️',
-    source: 'builtin',
-  },
-  // Memory and tasks
-  {
-    id: 'todos',
-    name: '/todos',
-    descriptionKey: 'chat.commands.todos',
-    icon: '✅',
-    source: 'builtin',
-  },
-  {
-    id: 'tasks',
-    name: '/tasks',
-    descriptionKey: 'chat.commands.tasks',
-    icon: '📋',
-    source: 'builtin',
-  },
-  // Mode and planning
-  {
-    id: 'plan',
-    name: '/plan',
-    descriptionKey: 'chat.commands.plan',
-    icon: '📐',
-    source: 'builtin',
-  },
-  // Tools integration
-  { id: 'mcp', name: '/mcp', descriptionKey: 'chat.commands.mcp', icon: '🔌', source: 'builtin' },
-];
-
 /**
  * Skill summary for UI display (from @neko/platform)
  * Duplicated here to avoid direct dependency on platform package
@@ -153,51 +50,6 @@ export interface SkillSummary {
   tags: string[];
   source: 'builtin' | 'user' | 'project' | 'community';
   enabled: boolean;
-}
-
-/**
- * Convert skill summary to slash command
- */
-function skillToSlashCommand(skill: SkillSummary): SlashCommand | null {
-  if (!skill.slashCommand || !skill.enabled) {
-    return null;
-  }
-  return {
-    id: skill.slashCommand,
-    name: `/${skill.slashCommand}`,
-    descriptionKey: skill.description, // Direct description, not i18n key
-    icon: skill.icon || '🔧',
-    source: 'skill',
-    skillId: skill.id,
-  };
-}
-
-/**
- * Convert a plugin slash command def to a SlashCommand
- */
-function pluginToSlashCommand(def: PluginSlashCommandDef): SlashCommand {
-  return {
-    id: `plugin:${def.extensionId}:${def.id}`,
-    name: def.name.startsWith('/') ? def.name : `/${def.name}`,
-    descriptionKey: def.description,
-    icon: def.icon || '🔌',
-    source: 'plugin',
-    extensionId: def.extensionId,
-  };
-}
-
-/**
- * Get all available commands (builtin + skills + plugins)
- */
-export function getAllCommands(
-  skills: SkillSummary[] = [],
-  pluginCommands: PluginSlashCommandDef[] = [],
-): SlashCommand[] {
-  const skillCommands = skills
-    .map(skillToSlashCommand)
-    .filter((cmd): cmd is SlashCommand => cmd !== null);
-
-  return [...SLASH_COMMANDS, ...skillCommands, ...pluginCommands.map(pluginToSlashCommand)];
 }
 
 // Generation params -------------------------------------------------------
