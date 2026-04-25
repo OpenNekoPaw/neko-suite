@@ -28,6 +28,13 @@ export {
   commandResult,
 } from './types';
 
+export type {
+  SlashCommandSurface,
+  SlashCommandSkillLike,
+  SlashCommandCatalogEntry,
+} from './command-catalog';
+export { listSlashCommandCatalog, resolveSlashCommandCatalogEntry } from './command-catalog';
+
 // Builtin commands
 export {
   BUILTIN_COMMANDS,

@@ -19,6 +19,15 @@ import type { CommandContext } from '../../types';
 
 // Mock context factory
 function createMockContext(overrides?: Partial<CommandContext>): CommandContext {
+  const catalogSkill = {
+    name: 'commit',
+    command: 'commit',
+    description: 'Create a commit message',
+    enabled: true,
+    supportsArguments: true,
+    argumentHint: '<message>',
+  };
+
   return {
     config: {
       provider: 'anthropic',
@@ -35,15 +44,29 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
     },
     skillService: {
       skillCount: 5,
-      commandCount: 3,
+      registry: {
+        skillCount: 1,
+        listSkills: vi.fn(() => [catalogSkill]),
+        listAllSkills: vi.fn(() => [catalogSkill]),
+        getSkill: vi.fn((name: string) => (name === catalogSkill.name ? catalogSkill : undefined)),
+        getSkillByCommand: vi.fn((name: string) =>
+          name === catalogSkill.command ? catalogSkill : undefined,
+        ),
+        searchSkills: vi.fn(() => [catalogSkill]),
+      },
       getActiveSkill: vi.fn().mockReturnValue(null),
+      clearActiveSkill: vi.fn(),
     },
     toolRegistry: {
       size: 12,
+      list: vi.fn(() => []),
+      get: vi.fn(),
+      search: vi.fn(() => []),
     },
     conversations: {
       getActiveId: vi.fn().mockReturnValue('conv-123'),
       list: vi.fn().mockReturnValue([{ id: 'conv-123' }, { id: 'conv-456' }]),
+      create: vi.fn(),
       clearCurrent: vi.fn(),
     },
     planMode: {
@@ -81,6 +104,14 @@ describe('generateCliHelpText', () => {
   it('should include usage hints', () => {
     const helpText = generateCliHelpText();
     expect(helpText).toContain('[set <key> <value>');
+  });
+
+  it('should include skill-backed slash commands from context', () => {
+    const helpText = generateCliHelpText(createMockContext());
+
+    expect(helpText).toContain('Skill Commands:');
+    expect(helpText).toContain('/commit <message>');
+    expect(helpText).toContain('Create a commit message');
   });
 });
 

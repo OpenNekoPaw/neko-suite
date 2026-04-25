@@ -8,6 +8,11 @@ import type { BuiltinCommandName, CommandContext, CommandResult, CommandHandler 
 import { resolveCommandName } from './types';
 import { getBuiltinCommand, isBuiltinCommand } from './builtin-commands';
 import {
+  coerceSlashCommandSkills,
+  resolveSlashCommandCatalogEntry,
+  type SlashCommandSkillLike,
+} from './command-catalog';
+import {
   handleHelp,
   handleStatus,
   handleClear,
@@ -137,32 +142,33 @@ export async function executeSlashCommand(
   },
 ): Promise<CommandResult> {
   const { command, args } = parseSlashCommand(input);
+  const skills = toSlashCommandSkillList(context);
+  const surface = context.conversations ? 'extension' : 'cli';
+  const entry = resolveSlashCommandCatalogEntry(command, { surface, skills });
+  const resolvedSkill =
+    (entry?.source === 'skill' ? entry.skill : undefined) ??
+    skillService?.getSkillByCommand(command) ??
+    getSkillByCommandFromContext(context, command);
 
-  // Try builtin command first
-  const builtinResult = await executeBuiltinCommand(command, args, context);
-  if (builtinResult.handled) {
-    return builtinResult;
+  if (entry?.source === 'builtin') {
+    return executeBuiltinCommand(command, args, context);
   }
 
-  // Try user-defined slash command via skill (skills with command field)
-  if (skillService) {
-    const skill = skillService.getSkillByCommand(command);
-    if (skill) {
-      try {
-        const injection = await skillService.apply(skill, args.join(' '));
-        return {
-          handled: true,
-          continueExecution: true,
-          output: `Skill /${command} activated`,
-          data: { injection },
-        };
-      } catch (error) {
-        return {
-          handled: true,
-          continueExecution: true,
-          error: `Failed to execute /${command}: ${error instanceof Error ? error.message : String(error)}`,
-        };
-      }
+  if (resolvedSkill && skillService) {
+    try {
+      const injection = await skillService.apply(resolvedSkill, args.join(' '));
+      return {
+        handled: true,
+        continueExecution: true,
+        output: `Skill /${command} activated`,
+        data: { injection },
+      };
+    } catch (error) {
+      return {
+        handled: true,
+        continueExecution: true,
+        error: `Failed to execute /${command}: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   }
 
@@ -183,4 +189,22 @@ export function getCommandHandler(commandName: string): CommandHandler | undefin
     return COMMAND_HANDLERS[resolvedName as BuiltinCommandName];
   }
   return undefined;
+}
+
+function toSlashCommandSkillList(context: CommandContext): SlashCommandSkillLike[] {
+  const listAllSkills = context.skillService?.registry.listAllSkills;
+  if (typeof listAllSkills !== 'function') {
+    return [];
+  }
+
+  return coerceSlashCommandSkills(listAllSkills());
+}
+
+function getSkillByCommandFromContext(context: CommandContext, name: string): unknown | undefined {
+  const getSkillByCommand = context.skillService?.registry.getSkillByCommand;
+  if (typeof getSkillByCommand !== 'function') {
+    return undefined;
+  }
+
+  return getSkillByCommand(name);
 }

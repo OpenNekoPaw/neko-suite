@@ -5,13 +5,30 @@
  */
 
 import type { CommandHandler, CommandContext } from '../types';
-import { getCliCommands, getExtensionCommands } from '../builtin-commands';
+import {
+  coerceSlashCommandSkills,
+  listSlashCommandCatalog,
+  type SlashCommandCatalogEntry,
+  type SlashCommandSkillLike,
+} from '../command-catalog';
+import { getExtensionCommands } from '../builtin-commands';
 
 /**
  * Generate help text for CLI
  */
-export function generateCliHelpText(): string {
-  const commands = getCliCommands();
+export function generateCliHelpText(context?: CommandContext): string {
+  const commands = listSlashCommandCatalog({
+    surface: 'cli',
+    skills: listContextSlashCommandSkills(context),
+  });
+  const builtinCommands = commands.filter(
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'builtin' }> =>
+      entry.source === 'builtin',
+  );
+  const skillCommands = commands.filter(
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'skill' }> =>
+      entry.source === 'skill',
+  );
   const lines: string[] = [
     '',
     'Available Commands:',
@@ -20,8 +37,8 @@ export function generateCliHelpText(): string {
   ];
 
   // Group by category
-  const categories = new Map<string, typeof commands>();
-  for (const cmd of commands) {
+  const categories = new Map<string, typeof builtinCommands>();
+  for (const cmd of builtinCommands) {
     const cat = cmd.category;
     if (!categories.has(cat)) {
       categories.set(cat, []);
@@ -46,6 +63,15 @@ export function generateCliHelpText(): string {
       const usage = cmd.usage ? ` ${cmd.usage}` : '';
       lines.push(`  /${cmd.name}${aliases}${usage}`);
       lines.push(`      ${cmd.description}`);
+    }
+    lines.push('');
+  }
+
+  if (skillCommands.length > 0) {
+    lines.push('Skill Commands:');
+    for (const command of skillCommands) {
+      lines.push(`  /${command.name}${formatSkillUsage(command)}`);
+      lines.push(`      ${command.description}`);
     }
     lines.push('');
   }
@@ -101,7 +127,7 @@ export const handleHelp: CommandHandler = (_args, _context) => {
   return {
     handled: true,
     continueExecution: true,
-    output: generateCliHelpText(),
+    output: generateCliHelpText(_context),
     action: 'showHelp',
   };
 };
@@ -217,3 +243,20 @@ export const handleExit: CommandHandler = (_args, _context) => {
     action: 'exit',
   };
 };
+
+function listContextSlashCommandSkills(context?: CommandContext): SlashCommandSkillLike[] {
+  const listAllSkills = context?.skillService?.registry.listAllSkills;
+  if (typeof listAllSkills !== 'function') {
+    return [];
+  }
+
+  return coerceSlashCommandSkills(listAllSkills());
+}
+
+function formatSkillUsage(entry: Extract<SlashCommandCatalogEntry, { source: 'skill' }>): string {
+  if (!entry.supportsArguments) {
+    return '';
+  }
+
+  return entry.argumentHint ? ` ${entry.argumentHint}` : ' <args>';
+}

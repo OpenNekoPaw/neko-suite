@@ -5,56 +5,18 @@
  * between cli and extension.
  */
 
+import type { BuiltinSlashCommandCategory, BuiltinSlashCommandName } from '@neko-agent/types';
+import { BUILTIN_SLASH_COMMAND_ALIASES } from '@neko-agent/types';
+
 /**
  * Builtin command names
  */
-export type BuiltinCommandName =
-  // Core commands
-  | 'help'
-  | 'status'
-  | 'clear'
-  | 'exit'
-  // Session management
-  | 'new'
-  | 'resume'
-  // Configuration
-  | 'config'
-  | 'model'
-  | 'settings'
-  | 'permissions'
-  | 'init'
-  // Context management
-  | 'compact'
-  // Mode switching
-  | 'plan'
-  // Resource management
-  | 'skills'
-  | 'commands'
-  | 'tools'
-  | 'tasks'
-  | 'mcp';
+export type BuiltinCommandName = BuiltinSlashCommandName;
 
 /**
  * Command aliases mapping
  */
-export const COMMAND_ALIASES: Record<string, BuiltinCommandName> = {
-  // help aliases
-  h: 'help',
-  '?': 'help',
-  // status aliases
-  s: 'status',
-  // clear aliases
-  cls: 'clear',
-  // exit aliases
-  quit: 'exit',
-  q: 'exit',
-  // config aliases
-  cfg: 'config',
-  // commands aliases
-  cmds: 'commands',
-  // tasks aliases
-  todos: 'tasks',
-};
+export const COMMAND_ALIASES: Record<string, BuiltinCommandName> = BUILTIN_SLASH_COMMAND_ALIASES;
 
 /**
  * Resolve command name from input (handles aliases)
@@ -87,13 +49,7 @@ export interface BuiltinCommand {
 /**
  * Command categories for help grouping
  */
-export type CommandCategory =
-  | 'core'
-  | 'session'
-  | 'configuration'
-  | 'context'
-  | 'mode'
-  | 'resources';
+export type CommandCategory = BuiltinSlashCommandCategory;
 
 /**
  * Command execution context - provides access to services and state

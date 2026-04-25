@@ -174,6 +174,42 @@ describe('executeSlashCommand', () => {
     expect(result.output).toBe('Help text');
   });
 
+  it('should resolve skill commands from command catalog when registry exposes listAllSkills', async () => {
+    const skill = {
+      name: 'custom',
+      command: 'custom',
+      description: 'Custom skill command',
+      enabled: true,
+    };
+    context = {
+      ...context,
+      skillService: {
+        registry: {
+          skillCount: 1,
+          listSkills: vi.fn(() => [skill]),
+          listAllSkills: vi.fn(() => [skill]),
+          getSkill: vi.fn(() => skill),
+          getSkillByCommand: vi.fn(() => skill),
+          searchSkills: vi.fn(() => [skill]),
+        },
+        skillCount: 1,
+        getActiveSkill: vi.fn(() => null),
+        clearActiveSkill: vi.fn(),
+      },
+    } as unknown as CommandContext;
+
+    const mockSkillService = {
+      getSkillByCommand: vi.fn().mockReturnValue(undefined),
+      apply: vi.fn().mockResolvedValue('catalog-test'),
+    };
+
+    const result = await executeSlashCommand('/custom arg', context, mockSkillService);
+    expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
+    expect(mockSkillService.apply).toHaveBeenCalledWith(skill, 'arg');
+    expect(result.handled).toBe(true);
+    expect(result.data?.injection).toBe('catalog-test');
+  });
+
   it('should try user-defined command if builtin not found', async () => {
     const mockSkillService = {
       getSkillByCommand: vi.fn().mockReturnValue({ name: 'custom' }),

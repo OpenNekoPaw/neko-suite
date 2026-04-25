@@ -5,6 +5,11 @@
  */
 
 import type { CommandHandler } from '../types';
+import {
+  coerceSlashCommandSkills,
+  listSlashCommandCatalog,
+  type SlashCommandCatalogEntry,
+} from '../command-catalog';
 
 /**
  * Handle /skills command
@@ -113,10 +118,58 @@ export const handleSkills: CommandHandler = (args, context) => {
 };
 
 /**
- * Handle /commands command — now redirects to /skills
+ * Handle /commands command
  */
 export const handleCommands: CommandHandler = (args, context) => {
-  return handleSkills(args, context);
+  if (args.length > 0) {
+    return {
+      handled: true,
+      continueExecution: true,
+      error: 'Usage: /commands',
+    };
+  }
+
+  const commands = listSlashCommandCatalog({
+    surface: 'cli',
+    skills: listContextSlashCommandSkills(context),
+  });
+  const builtinCommands = commands.filter(
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'builtin' }> =>
+      entry.source === 'builtin',
+  );
+  const skillCommands = commands.filter(
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'skill' }> =>
+      entry.source === 'skill',
+  );
+
+  const lines = [
+    '',
+    'Available Slash Commands:',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `Builtin Commands (${builtinCommands.length}):`,
+    ...builtinCommands.flatMap((command) => [
+      `  /${command.name}${command.aliases.length > 0 ? ` (${command.aliases.map((alias) => `/${alias}`).join(', ')})` : ''}${command.usage ? ` ${command.usage}` : ''}`,
+      `      ${command.description}`,
+    ]),
+  ];
+
+  if (skillCommands.length > 0) {
+    lines.push('');
+    lines.push(`Skill Commands (${skillCommands.length}):`);
+    for (const command of skillCommands) {
+      lines.push(`  /${command.name}${formatSkillUsage(command)}`);
+      lines.push(`      ${command.description}`);
+    }
+  }
+
+  lines.push('');
+
+  return {
+    handled: true,
+    continueExecution: true,
+    output: lines.join('\n'),
+  };
 };
 
 /**
@@ -255,3 +308,22 @@ export const handleMcp: CommandHandler = (_args, _context) => {
     action: 'showMCPServers',
   };
 };
+
+function listContextSlashCommandSkills(
+  context: Parameters<CommandHandler>[1],
+): ReturnType<typeof coerceSlashCommandSkills> {
+  const listAllSkills = context.skillService?.registry.listAllSkills;
+  if (typeof listAllSkills !== 'function') {
+    return [];
+  }
+
+  return coerceSlashCommandSkills(listAllSkills());
+}
+
+function formatSkillUsage(entry: Extract<SlashCommandCatalogEntry, { source: 'skill' }>): string {
+  if (!entry.supportsArguments) {
+    return '';
+  }
+
+  return entry.argumentHint ? ` ${entry.argumentHint}` : ' <args>';
+}
