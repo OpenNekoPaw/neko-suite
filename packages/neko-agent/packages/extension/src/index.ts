@@ -35,6 +35,7 @@ import {
   creationStrategyPack,
   executionStrategyPack,
 } from '@neko/agent/approval';
+import { SkillRegistry, ToolGroupRegistry, registerBuiltinToolGroups } from '@neko/agent';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { getSkillFileService } from './services/SkillFileService';
 import { createStatusBar } from './statusBar';
@@ -177,9 +178,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
+  const capabilitySkillRegistry = new SkillRegistry();
+  const capabilityToolGroupRegistry = new ToolGroupRegistry();
+  registerBuiltinToolGroups(capabilityToolGroupRegistry);
+
   bootstrapCapabilities(
     {
       toolRegistry: bootstrapResult.toolRegistry,
+      skillRegistry: capabilitySkillRegistry,
+      toolGroupRegistry: capabilityToolGroupRegistry,
       mediaService: bootstrapResult.platform.media,
       configManager: bootstrapResult.platform.config,
       embedFn: buildEmbedFn(bootstrapResult.platform),

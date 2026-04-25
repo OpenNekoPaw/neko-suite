@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Platform, Service } from '@neko/platform';
-import { ToolRegistry } from '@neko/agent';
+import { TaskManager, ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
 import { AgentRunner, type AgentEvent, type IAgentConfig } from './agentRunner';
 
 // =============================================================================
@@ -57,15 +57,34 @@ vi.mock('@neko/platform', async (importOriginal) => {
   };
 });
 
+const capabilityRuntimeMock = {
+  skillRegistry: undefined as unknown,
+  skillService: undefined as unknown,
+  toolGroupRegistry: undefined as ToolGroupRegistry | undefined,
+  toolCategoryRegistry: undefined as ToolCategoryRegistry | undefined,
+};
+let capabilityPromptFragments: Array<{ id: string; content: string }> = [];
+const syncToolCategoriesMock = vi.fn();
+
+vi.mock('../bootstrap/capabilityBootstrap', () => ({
+  getCapabilityDiscoveryService: vi.fn(() => ({
+    getAllPromptFragments: vi.fn(() => capabilityPromptFragments),
+    syncToolCategories: syncToolCategoriesMock,
+  })),
+  getCapabilityRuntimeBindings: vi.fn(() => capabilityRuntimeMock),
+}));
+
 // Track the latest mock session created
 let latestMockSession: ReturnType<typeof createMockSession>;
+let latestCreateSessionConfig: unknown;
 
-// Mock @neko/agent — createAgentSession + createSystemPromptBuilder
+// Mock @neko/agent — createAgentSessionWithRuntime + createSystemPromptBuilder
 vi.mock('@neko/agent', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    createAgentSession: vi.fn(() => {
+    createAgentSessionWithRuntime: vi.fn((config: unknown) => {
+      latestCreateSessionConfig = config;
       latestMockSession = createMockSession();
       return latestMockSession;
     }),
@@ -117,6 +136,7 @@ function createMockSession(
     configure: vi.fn(),
     getExecutionMode: vi.fn().mockReturnValue('auto'),
     setExecutionMode: vi.fn(),
+    setPromptFragments: vi.fn(),
     dispose: vi.fn(),
   };
 }
@@ -166,6 +186,13 @@ describe('AgentRunner', () => {
     vi.clearAllMocks();
     runner = new AgentRunner();
     mockPlatform = createMockPlatform();
+    capabilityRuntimeMock.skillRegistry = undefined;
+    capabilityRuntimeMock.skillService = undefined;
+    capabilityRuntimeMock.toolGroupRegistry = undefined;
+    capabilityRuntimeMock.toolCategoryRegistry = undefined;
+    capabilityPromptFragments = [];
+    syncToolCategoriesMock.mockReset();
+    latestCreateSessionConfig = undefined;
   });
 
   // ---------------------------------------------------------------------------
@@ -191,6 +218,96 @@ describe('AgentRunner', () => {
 
     it('未配置时 getConfig 应该返回 undefined', () => {
       expect(runner.getConfig()).toBeUndefined();
+    });
+
+    it('应该把 shared capability runtime 投影进 session bootstrap', async () => {
+      const toolGroupRegistry = new ToolGroupRegistry();
+      toolGroupRegistry.register({
+        name: 'shared-tools',
+        description: 'Shared tool group',
+        tools: ['Read'],
+        enabled: true,
+      });
+      const skillRegistry = { kind: 'skill-registry' };
+      const skillService = { kind: 'skill-service' };
+      const toolCategoryRegistry = new ToolCategoryRegistry();
+      capabilityRuntimeMock.skillRegistry = skillRegistry;
+      capabilityRuntimeMock.skillService = skillService;
+      capabilityRuntimeMock.toolGroupRegistry = toolGroupRegistry;
+      capabilityRuntimeMock.toolCategoryRegistry = toolCategoryRegistry;
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              toolGroupRegistry,
+              toolCategoryRegistry,
+              skillService,
+              skillRegistry,
+            }),
+            workflowRuntime: expect.objectContaining({
+              stageTracking: expect.objectContaining({
+                skillRegistry,
+                skillService,
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(runner.getToolSkills()).toEqual([
+        expect.objectContaining({
+          name: 'shared-tools',
+          tools: ['Read'],
+        }),
+      ]);
+    });
+
+    it('应该把宿主 TaskManager 投影成 IDC task projection', async () => {
+      const taskManager = new TaskManager();
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+        taskManager,
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            workflowRuntime: expect.objectContaining({
+              idcTaskProjection: expect.objectContaining({
+                syncTask: expect.any(Function),
+                clearRun: expect.any(Function),
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('应该把 capability prompt fragments 热更新到已存在 session', async () => {
+      capabilityPromptFragments = [{ id: 'neko.cut:timeline', content: 'Timeline context' }];
+      capabilityRuntimeMock.toolCategoryRegistry = new ToolCategoryRegistry();
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      capabilityPromptFragments = [{ id: 'neko.canvas:shots', content: 'Shot context' }];
+      runner.refreshCapabilityRuntime();
+
+      expect(latestMockSession.setPromptFragments).toHaveBeenCalledWith([
+        { id: 'neko.canvas:shots', content: 'Shot context' },
+      ]);
+      expect(syncToolCategoriesMock).toHaveBeenCalledWith(
+        capabilityRuntimeMock.toolCategoryRegistry,
+      );
     });
   });
 
@@ -337,8 +454,8 @@ describe('AgentRunner', () => {
 
   describe('工具调用', () => {
     it('应该透传 session 的工具调用事件', async () => {
-      const { createAgentSession } = await import('@neko/agent');
-      vi.mocked(createAgentSession).mockReturnValueOnce(
+      const { createAgentSessionWithRuntime } = await import('@neko/agent');
+      vi.mocked(createAgentSessionWithRuntime).mockReturnValueOnce(
         createMockSession({
           events: [
             {
@@ -368,8 +485,8 @@ describe('AgentRunner', () => {
     });
 
     it('应该透传工具执行失败事件', async () => {
-      const { createAgentSession } = await import('@neko/agent');
-      vi.mocked(createAgentSession).mockReturnValueOnce(
+      const { createAgentSessionWithRuntime } = await import('@neko/agent');
+      vi.mocked(createAgentSessionWithRuntime).mockReturnValueOnce(
         createMockSession({
           events: [
             {

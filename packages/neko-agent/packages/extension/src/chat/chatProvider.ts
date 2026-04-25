@@ -12,8 +12,7 @@ import { getService, getLogger, handleError } from '../base';
 
 const logger = getLogger('ChatProvider');
 import type { Platform } from '@neko/platform';
-import type { ITaskManager as TaskManager } from '@neko/shared';
-import type { ProviderConfig } from '@neko/shared';
+import type { ProviderConfig, Skill } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import {
@@ -46,7 +45,10 @@ import {
 import {
   createSkillService,
   builtinSkills,
+  createCommandBackedSkill,
+  createLazyCommandBackedSkill,
   SkillRegistry,
+  type IRuntimeTaskManager,
   type ISubpackageResolver,
 } from '@neko/agent';
 import {
@@ -54,7 +56,11 @@ import {
   type SkillScanResult,
   type LazySkillScanResult,
 } from '../services/SkillFileService';
-import { getCapabilityDiscoveryService } from '../bootstrap/capabilityBootstrap';
+import {
+  getCapabilityDiscoveryService,
+  getCapabilityRuntimeBindings,
+  setCapabilityRuntimeSkillService,
+} from '../bootstrap/capabilityBootstrap';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.aiAssistant';
@@ -100,8 +106,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _agentManager?: IAgentManager;
   private _editorRegistry?: IEditorRegistry;
   private _platform?: Platform;
-  private _taskManager?: TaskManager;
+  private _taskManager?: IRuntimeTaskManager;
   private _configBridge?: ConfigBridge;
+  private readonly _managedDiskSkillNames = new Set<string>();
+  private readonly _managedDiskSkillFallbacks = new Map<string, Skill>();
   // Note: _routerAskBroker and _workflowPlanHandler were removed alongside
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
@@ -205,19 +213,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     skillService: ReturnType<typeof createSkillService>,
     scanResult: SkillScanResult,
   ): void {
-    skillService.registry.clear();
-
-    for (const skill of builtinSkills) {
-      skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
-    }
-    for (const skill of [...scanResult.personal.skills, ...scanResult.project.skills]) {
-      skillService.registry.registerSkill(skill);
+    const registry = skillService.registry as SkillRegistry;
+    this._ensureBuiltinSkills(skillService);
+    this._clearManagedDiskSkills(registry);
+    const diskSkills = [
+      ...scanResult.personal.skills,
+      ...scanResult.project.skills,
+      ...scanResult.personal.commands.map((command) => createCommandBackedSkill(command)),
+      ...scanResult.project.commands.map((command) => createCommandBackedSkill(command)),
+    ];
+    for (const skill of diskSkills) {
+      this._rememberManagedSkillFallback(registry, skill.name);
+      registry.registerSkill(skill);
+      this._managedDiskSkillNames.add(skill.name);
     }
 
     logger.info(`Skill registry populated: ${skillService.skillCount} skills`, {
       builtin: builtinSkills.length,
       personal: scanResult.personal.skills.length,
       project: scanResult.project.skills.length,
+      personalCommands: scanResult.personal.commands.length,
+      projectCommands: scanResult.project.commands.length,
     });
   }
 
@@ -230,25 +246,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     skillService: ReturnType<typeof createSkillService>,
     scanResult: LazySkillScanResult,
   ): void {
-    skillService.registry.clear();
-
-    // Builtins: always eagerly registered (resident tier)
-    for (const skill of builtinSkills) {
-      skillService.registry.registerSkill({ ...skill, source: 'builtin' as const, enabled: true });
-    }
+    const registry = skillService.registry as SkillRegistry;
+    this._ensureBuiltinSkills(skillService);
+    this._clearManagedDiskSkills(registry);
 
     // Personal + project: lazy registration (frontmatter only)
     // registerLazySkill is on the concrete SkillRegistry, not on ISkillRegistry interface
-    const registry = skillService.registry as SkillRegistry;
-    const allLazy = [...scanResult.personal.skills, ...scanResult.project.skills];
+    const allLazy = [
+      ...scanResult.personal.skills,
+      ...scanResult.project.skills,
+      ...scanResult.personal.commands.map((command) => createLazyCommandBackedSkill(command)),
+      ...scanResult.project.commands.map((command) => createLazyCommandBackedSkill(command)),
+    ];
     for (const lazySkill of allLazy) {
+      this._rememberManagedSkillFallback(registry, lazySkill.name);
       registry.registerLazySkill(lazySkill);
+      this._managedDiskSkillNames.add(lazySkill.name);
     }
 
     logger.info(`Skill registry populated (lazy): ${skillService.skillCount} skills`, {
       builtin: builtinSkills.length,
       personalLazy: scanResult.personal.skills.length,
       projectLazy: scanResult.project.skills.length,
+      personalLazyCommands: scanResult.personal.commands.length,
+      projectLazyCommands: scanResult.project.commands.length,
     });
   }
 
@@ -301,10 +322,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch {
           subpackageResolver = undefined;
         }
+        const capabilityRuntime = getCapabilityRuntimeBindings();
         const skillService = createSkillService({
+          registry: capabilityRuntime.skillRegistry ?? new SkillRegistry(),
           toolRegistry: toolRegistry ?? undefined,
           subpackageResolver,
         });
+        setCapabilityRuntimeSkillService(skillService);
 
         this._providers = new ProviderManager(this._context, this._platform);
         this._messages = new MessageHandler(
@@ -316,6 +340,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           () => this._buildSystemPromptWithSkills(skillService),
           () => this._systemPrompt.isPlanMode(),
           this._platform,
+          this._taskManager,
         );
 
         // Use lazy scanning: load frontmatter only, content deferred until activation
@@ -340,6 +365,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               });
           }),
         );
+        try {
+          const capabilityDiscovery = getCapabilityDiscoveryService();
+          this._disposables.push(
+            capabilityDiscovery.onDidRegister(() => {
+              this._agentManager?.refreshCapabilityRuntime();
+              void this._initializeToolSkills();
+            }),
+            capabilityDiscovery.onDidUnregister(() => {
+              this._agentManager?.refreshCapabilityRuntime();
+              void this._initializeToolSkills();
+            }),
+          );
+        } catch {
+          // Capability discovery is optional in tests / partial bootstraps.
+        }
         this._skillHandler.setDependencies({
           skillService,
           agentManager: this._agentManager,
@@ -421,14 +461,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   /**
    * Initialize ToolSkills in ConfigBridge
-   * Creates a temporary AgentRunner to get ToolSkills (they are registered during configure)
+   * Prefer the shared capability ToolGroupRegistry so dynamic provider
+   * registrations flow straight into the webview. Falls back to the legacy
+   * temporary AgentRunner path when capability bootstrap is unavailable.
    */
   private async _initializeToolSkills(): Promise<void> {
-    if (!this._agentManager || !this._platform || !this._configBridge) {
+    if (!this._configBridge) {
       return;
     }
 
     try {
+      const capabilityRuntime = getCapabilityRuntimeBindings();
+      if (capabilityRuntime.toolGroupRegistry) {
+        this._configBridge.setToolSkills(
+          capabilityRuntime.toolGroupRegistry.list().map((toolSkill) => ({ ...toolSkill })),
+        );
+        return;
+      }
+
+      if (!this._agentManager || !this._platform) {
+        return;
+      }
+
       // Get or create a temporary agent runner
       const tempRunner = this._agentManager.getOrCreate('__toolskill_init__');
 
@@ -449,6 +503,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       logger.error('Failed to initialize ToolSkills:', error);
     }
+  }
+
+  private _ensureBuiltinSkills(skillService: ReturnType<typeof createSkillService>): void {
+    for (const skill of builtinSkills) {
+      if (!skillService.registry.getSkill(skill.name)) {
+        skillService.registry.registerSkill({
+          ...skill,
+          source: 'builtin' as const,
+          enabled: true,
+        });
+      }
+    }
+  }
+
+  private _rememberManagedSkillFallback(registry: SkillRegistry, skillName: string): void {
+    if (this._managedDiskSkillFallbacks.has(skillName)) {
+      return;
+    }
+    const existing = registry.getSkill(skillName);
+    if (existing) {
+      this._managedDiskSkillFallbacks.set(skillName, existing);
+    }
+  }
+
+  private _clearManagedDiskSkills(registry: SkillRegistry): void {
+    for (const skillName of this._managedDiskSkillNames) {
+      const fallback = this._managedDiskSkillFallbacks.get(skillName);
+      if (fallback) {
+        registry.registerSkill(fallback);
+      } else {
+        registry.unregisterSkill(skillName);
+      }
+    }
+    this._managedDiskSkillNames.clear();
+    this._managedDiskSkillFallbacks.clear();
   }
 
   /**
@@ -1023,10 +1112,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(assetPath));
           break;
         default:
-          this._logger.warn(`Unknown sendToPlugin target: ${target}`);
+          logger.warn(`Unknown sendToPlugin target: ${target}`);
       }
     } catch (err) {
-      this._logger.error(`Failed to send to ${target}:`, err);
+      logger.error(`Failed to send to ${target}:`, err);
       void handleError(
         err instanceof Error
           ? err

@@ -704,7 +704,12 @@ Add your command instructions here.
       ...result.project.skills.map((s) => ({ ...s, enabled: true })),
     ];
 
-    return { skills, commands: [] };
+    const commands: ConfiguredSlashCommand[] = [
+      ...result.personal.commands.map((command) => ({ ...command, enabled: true })),
+      ...result.project.commands.map((command) => ({ ...command, enabled: true })),
+    ];
+
+    return { skills, commands };
   }
 
   // ==========================================================================

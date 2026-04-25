@@ -46,6 +46,7 @@ function createMockSkillHandler() {
   return {
     handleSlashCommand: vi.fn().mockResolvedValue(null),
     getActiveSkill: vi.fn().mockReturnValue(undefined),
+    getSkillService: vi.fn().mockReturnValue(undefined),
   };
 }
 
@@ -214,8 +215,8 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should handle /compact command', () => {
-      handler.handleCommand(webview as any, 'compact');
+    it('should handle /compact command', async () => {
+      await handler.handleCommand(webview as any, 'compact');
 
       expect(contextHandler.compressContext).toHaveBeenCalledWith(webview, 'conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -324,6 +325,49 @@ describe('SlashCommandHandler', () => {
         }),
       );
     });
+
+    it('should use shared builtin registry for /skills in extension', () => {
+      skillHandler.getSkillService.mockReturnValue({
+        registry: {
+          skillCount: 1,
+          listSkills: vi.fn(() => [
+            {
+              name: 'commit-helper',
+              description: 'Create commit messages',
+              enabled: true,
+              command: 'commit',
+            },
+          ]),
+          listAllSkills: vi.fn(() => []),
+          getSkill: vi.fn(),
+          getSkillByCommand: vi.fn(),
+          searchSkills: vi.fn(() => []),
+        },
+      });
+
+      handler.handleCommand(webview as any, 'skills');
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'skills',
+          success: true,
+          message: expect.stringContaining('commit-helper'),
+        }),
+      );
+    });
+
+    it('should not execute CLI-only builtins in extension mode', async () => {
+      await handler.handleCommand(webview as any, 'config');
+
+      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(webview, 'config', undefined);
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'config',
+          success: false,
+          error: expect.stringContaining('Unknown command'),
+        }),
+      );
+    });
   });
 
   describe('handleCommand - skill commands', () => {
@@ -374,6 +418,7 @@ describe('SlashCommandHandler', () => {
             idc: {
               entrySignal: 'workflow-template',
               taskShape: 'multi-step',
+              runKind: 'skill:commit-workflow',
               workflowId: 'skill:commit-workflow',
             },
           },
@@ -456,6 +501,7 @@ describe('SlashCommandHandler', () => {
             idc: {
               entrySignal: 'workflow-template',
               taskShape: 'multi-step',
+              runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
               workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
             },
           },

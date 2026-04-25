@@ -7,7 +7,13 @@
 
 import * as vscode from 'vscode';
 import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
-import { MCPManager, TaskManager, ToolRegistry, createAllMCPTools } from '@neko/agent';
+import {
+  MCPManager,
+  TaskManager,
+  ToolRegistry,
+  createAllMCPTools,
+  type IRuntimeTaskManager,
+} from '@neko/agent';
 import type { ITaskStorage, SerializableTask } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
@@ -22,7 +28,7 @@ import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/age
 export const IPlatform = createServiceId<Platform>('platform');
 export const IToolRegistry = createServiceId<ToolRegistry>('toolRegistry');
 export const IMCPManager = createServiceId<MCPManager>('mcpManager');
-export const ITaskManager = createServiceId<TaskManager>('taskManager');
+export const ITaskManager = createServiceId<IRuntimeTaskManager>('taskManager');
 export const IAgentManager = createServiceId<IAgentManagerInterface>('agentManager');
 
 // Re-export IEditorRegistry
@@ -108,7 +114,7 @@ export interface IServiceBootstrapResult {
   platform: Platform;
   toolRegistry: ToolRegistry;
   mcpManager: MCPManager;
-  taskManager: TaskManager;
+  taskManager: IRuntimeTaskManager;
   agentManager: AgentManager;
   connectionStateManager: ConnectionStateManager;
   editorRegistry: EditorRegistry;

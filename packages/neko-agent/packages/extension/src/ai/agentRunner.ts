@@ -21,8 +21,9 @@ import { toSharedService } from '@neko/platform';
 import type { ToolConfirmationRequest } from '@neko/agent';
 import {
   AgentSession,
-  createAgentSession,
-  createNodeJournalStorage,
+  createTaskManagerIdcTaskProjection,
+  createAgentSessionWithRuntime,
+  createNodeArtifactStore,
   createFileProjectMemoryManager,
   createCoreTools,
   SystemPromptBuilder,
@@ -34,12 +35,14 @@ import {
   type ExecutionMode,
   type AgentEvent,
   type AgentEventType,
+  type IRuntimeTaskManager,
 } from '@neko/agent';
 import type { IProjectMemoryManager, PromptFragment } from '@neko/shared';
-import { getCapabilityDiscoveryService } from '../bootstrap/capabilityBootstrap';
+import {
+  getCapabilityDiscoveryService,
+  getCapabilityRuntimeBindings,
+} from '../bootstrap/capabilityBootstrap';
 import * as nodePath from 'node:path';
-import * as nodeFs from 'node:fs/promises';
-import * as nodeOs from 'node:os';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
 
@@ -119,6 +122,13 @@ export interface IAgentConfig {
    * Workspace root path for AGENTS.md loading
    */
   workspaceRoot?: string;
+
+  /**
+   * Shared task plane owned by the host runtime.
+   * Used to project IDC checklist artifacts into the same task surface that
+   * powers UI task views and persistence.
+   */
+  taskManager?: IRuntimeTaskManager;
 
   /**
    * Stable conversation ID used for journal persistence.
@@ -298,6 +308,12 @@ export interface IAgentRunner extends vscode.Disposable {
   setSkillProvider(provider: import('@neko/agent').ISkillProvider): void;
 
   /**
+   * Re-sync capability-derived prompt fragments into the active session.
+   * Shared registries update by reference; fragments need an explicit push.
+   */
+  refreshCapabilityRuntime(): void;
+
+  /**
    * Apply a skill injection to the session context.
    * Merges the injection's system prompt into the conversation and
    * grants any specified tool allowances.
@@ -472,23 +488,23 @@ export class AgentRunner implements IAgentRunner {
     // field so the SubpackageFragmentsModule can project them into the
     // environment layer.
     const promptFragments = this._resolvePromptFragments();
+    const capabilityRuntime = getCapabilityRuntimeBindings();
+    const toolCategoryRegistry =
+      config.toolCategoryRegistry ?? capabilityRuntime.toolCategoryRegistry;
+    this._syncCapabilityToolCategories(toolCategoryRegistry);
+    this._toolGroupRegistry = capabilityRuntime.toolGroupRegistry;
 
     // Get custom hooks from HookManager (if available)
     const customHooks = config.hookManager?.getHooks() ?? [];
-    const journalWriter = config.conversationId
-      ? createNodeJournalStorage().createWriter(config.conversationId)
-      : undefined;
-
     // Create service from platform, adapted to @neko/shared IService
     const service = toSharedService(config.platform.createService());
 
     // Create agent session
-    this._session = createAgentSession({
+    this._session = createAgentSessionWithRuntime({
       service,
       toolRegistry: config.platform.tools,
       systemPrompt: effectiveSystemPrompt,
       ...(agentsOverride !== undefined && { agentsOverride }),
-      ...(promptFragments !== undefined && { promptFragments }),
       executionMode: config.executionMode ?? 'auto',
       maxIterations: config.maxIterations,
       temperature: config.temperature,
@@ -496,23 +512,51 @@ export class AgentRunner implements IAgentRunner {
       thinkingBudget: config.thinkingBudget,
       modelId: config.modelId,
       hooks: customHooks.length > 0 ? customHooks : undefined,
-      toolCategoryRegistry: config.toolCategoryRegistry,
-      projectMemoryManager: this._projectMemoryManager,
-      stageTracking: {},
-      ...(config.workspaceRoot && {
-        workspace: {
-          root: config.workspaceRoot,
-          fsOps: {
-            appendFile: (filePath: string, data: string) => nodeFs.appendFile(filePath, data),
-            mkdir: async (dirPath: string, opts?: { recursive: boolean }) => {
-              await nodeFs.mkdir(dirPath, { recursive: opts?.recursive ?? false });
-            },
-            readFile: (filePath: string, encoding: 'utf-8') => nodeFs.readFile(filePath, encoding),
-          },
-          globalPreferencesPath: nodePath.join(nodeOs.homedir(), '.neko', 'preferences.md'),
+      runtime: {
+        workflowRuntime: {
+          ...(capabilityRuntime.skillRegistry || capabilityRuntime.skillService
+            ? {
+                stageTracking: {
+                  ...(capabilityRuntime.skillRegistry
+                    ? { skillRegistry: capabilityRuntime.skillRegistry }
+                    : {}),
+                  ...(capabilityRuntime.skillService
+                    ? { skillService: capabilityRuntime.skillService }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(config.taskManager
+            ? {
+                idcTaskProjection: createTaskManagerIdcTaskProjection({
+                  store: config.taskManager,
+                }),
+              }
+            : {}),
         },
-      }),
-      ...(journalWriter && { journalWriter, conversationId: config.conversationId }),
+        capabilityRuntime: {
+          ...(capabilityRuntime.skillService
+            ? { skillService: capabilityRuntime.skillService }
+            : {}),
+          ...(capabilityRuntime.skillRegistry
+            ? { skillRegistry: capabilityRuntime.skillRegistry }
+            : {}),
+          ...(capabilityRuntime.toolGroupRegistry
+            ? { toolGroupRegistry: capabilityRuntime.toolGroupRegistry }
+            : {}),
+          ...(promptFragments !== undefined ? { promptFragments } : {}),
+          ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
+        },
+        artifactStore: createNodeArtifactStore({
+          ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
+        }),
+        feedbackLoop: {
+          ...(this._projectMemoryManager
+            ? { projectMemoryManager: this._projectMemoryManager }
+            : {}),
+        },
+      },
+      ...(config.conversationId && { conversationId: config.conversationId }),
       onConfirmTool: async (request) => {
         return this._handleToolConfirmation(request);
       },
@@ -763,6 +807,18 @@ export class AgentRunner implements IAgentRunner {
     this._session?.setSkillProvider(provider);
   }
 
+  refreshCapabilityRuntime(): void {
+    if (!this._session) {
+      return;
+    }
+
+    const capabilityRuntime = getCapabilityRuntimeBindings();
+    const toolCategoryRegistry =
+      this._config?.toolCategoryRegistry ?? capabilityRuntime.toolCategoryRegistry;
+    this._syncCapabilityToolCategories(toolCategoryRegistry);
+    this._session.setPromptFragments(this._resolvePromptFragments());
+  }
+
   applySkillInjection(
     injection: import('@neko/agent').SkillInjection,
     skill?: import('@neko/agent').Skill,
@@ -830,6 +886,19 @@ export class AgentRunner implements IAgentRunner {
       return fragments.length > 0 ? fragments : undefined;
     } catch {
       return undefined;
+    }
+  }
+
+  private _syncCapabilityToolCategories(toolCategoryRegistry?: ToolCategoryRegistry): void {
+    if (!toolCategoryRegistry) {
+      return;
+    }
+
+    try {
+      getCapabilityDiscoveryService().syncToolCategories(toolCategoryRegistry);
+    } catch {
+      // Capability bootstrap is optional in CLI/tests. When absent, the
+      // session falls back to its own registry initialization semantics.
     }
   }
 

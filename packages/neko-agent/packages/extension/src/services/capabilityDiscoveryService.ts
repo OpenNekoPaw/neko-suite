@@ -19,11 +19,13 @@
  */
 
 import * as vscode from 'vscode';
+import { emitDiagnostic } from '@neko/shared';
 import type {
   AgentCapabilityProvider,
   AgentCapabilityManifest,
   AgentCapabilityContext,
   IToolRegistry,
+  IToolCategoryRegistry,
   Tool,
   ToolGroup,
   Skill,
@@ -52,6 +54,10 @@ export interface CapabilityDiscoveryDeps {
   toolGroupRegistry?: {
     register(group: ToolGroup): void;
     unregister(name: string): void;
+    listEnabled?(): ToolGroup[];
+  };
+  toolCategoryRegistry?: Pick<IToolCategoryRegistry, 'categorizeTool'> & {
+    clearTools?(): void;
   };
 }
 
@@ -62,10 +68,14 @@ export interface CapabilityDiscoveryDeps {
 export class CapabilityDiscoveryService implements vscode.Disposable {
   private readonly _providers = new Map<string, RegisteredProvider>();
   private readonly _manifests = new Map<string, AgentCapabilityManifest>();
+  private readonly _toolOwners = new Map<string, string>();
+  private readonly _skillOwners = new Map<string, string>();
+  private readonly _toolGroupOwners = new Map<string, string>();
   private readonly _deps: CapabilityDiscoveryDeps;
   private readonly _disposables: vscode.Disposable[] = [];
   private readonly _logger = getRootLogger().child('CapabilityDiscovery');
   private _capabilityContext: AgentCapabilityContext | null = null;
+  private _warnedMissingCapabilityContextForFragments = false;
 
   private readonly _onDidRegister = new vscode.EventEmitter<AgentCapabilityProvider>();
   readonly onDidRegister = this._onDidRegister.event;
@@ -117,6 +127,8 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
         this._cleanupRemovedExtensions();
       }),
     );
+
+    this.syncToolCategories();
   }
 
   dispose(): void {
@@ -155,7 +167,15 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     try {
       const tools: Tool[] = provider.getTools(context);
       for (const tool of tools) {
+        this._recordCapabilityNameCollision({
+          kind: 'tool',
+          name: tool.name,
+          providerId: id,
+          existingOwner: this._toolOwners.get(tool.name),
+          existsInRuntime: this._deps.toolRegistry.get(tool.name) !== undefined,
+        });
         this._deps.toolRegistry.register(tool);
+        this._toolOwners.set(tool.name, id);
         registeredTools.push(tool.name);
       }
     } catch (err) {
@@ -167,7 +187,15 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
       try {
         const skills: Skill[] = provider.getSkills();
         for (const skill of skills) {
+          this._recordCapabilityNameCollision({
+            kind: 'skill',
+            name: skill.name,
+            providerId: id,
+            existingOwner: this._skillOwners.get(skill.name),
+            existsInRuntime: this._deps.skillRegistry.getSkill(skill.name) !== undefined,
+          });
           this._deps.skillRegistry.registerSkill(skill);
+          this._skillOwners.set(skill.name, id);
           registeredSkills.push(skill.name);
         }
       } catch (err) {
@@ -180,7 +208,15 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
       try {
         const groups: ToolGroup[] = provider.getToolGroups();
         for (const group of groups) {
+          this._recordCapabilityNameCollision({
+            kind: 'tool-group',
+            name: group.name,
+            providerId: id,
+            existingOwner: this._toolGroupOwners.get(group.name),
+            existsInRuntime: false,
+          });
           this._deps.toolGroupRegistry.register(group);
+          this._toolGroupOwners.set(group.name, id);
           registeredToolGroups.push(group.name);
         }
       } catch (err) {
@@ -201,6 +237,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
         `${registeredToolGroups.length} tool groups`,
     );
 
+    this.syncToolCategories();
     this._onDidRegister.fire(provider);
   }
 
@@ -214,12 +251,18 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     // Remove tools
     for (const toolName of entry.registeredTools) {
       this._deps.toolRegistry.unregister(toolName);
+      if (this._toolOwners.get(toolName) === id) {
+        this._toolOwners.delete(toolName);
+      }
     }
 
     // Remove skills
     if (this._deps.skillRegistry) {
       for (const skillName of entry.registeredSkills) {
         this._deps.skillRegistry.unregisterSkill(skillName);
+        if (this._skillOwners.get(skillName) === id) {
+          this._skillOwners.delete(skillName);
+        }
       }
     }
 
@@ -227,6 +270,9 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     if (this._deps.toolGroupRegistry) {
       for (const groupName of entry.registeredToolGroups) {
         this._deps.toolGroupRegistry.unregister(groupName);
+        if (this._toolGroupOwners.get(groupName) === id) {
+          this._toolGroupOwners.delete(groupName);
+        }
       }
     }
 
@@ -234,8 +280,34 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     entry.provider.dispose?.();
     this._providers.delete(id);
 
+    this.syncToolCategories();
     this._logger.info(`Provider "${id}" unregistered`);
     this._onDidUnregister.fire(id);
+  }
+
+  /**
+   * Rebuild tool categorization from the current tool + tool-group registries.
+   *
+   * Provider registration is incremental, but the category plane drives tool
+   * injection/filtering and needs deterministic state after register, refresh,
+   * and unregister. Rebuilding from the runtime source of truth keeps layer
+   * assignment stable even when providers hot-reload or overlapping groups
+   * change the effective loading tier for a tool.
+   */
+  syncToolCategories(
+    targetRegistry: CapabilityDiscoveryDeps['toolCategoryRegistry'] = this._deps
+      .toolCategoryRegistry,
+  ): void {
+    if (!targetRegistry) {
+      return;
+    }
+
+    targetRegistry.clearTools?.();
+
+    const layersByTool = this._resolveToolLayers();
+    for (const tool of this._deps.toolRegistry.list()) {
+      targetRegistry.categorizeTool(tool.name, tool.category, layersByTool.get(tool.name));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -308,7 +380,21 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
    * across providers are dropped at the module layer (first-writer-wins).
    */
   getAllPromptFragments(): PromptFragment[] {
-    if (!this._capabilityContext) return [];
+    if (!this._capabilityContext) {
+      if (!this._warnedMissingCapabilityContextForFragments) {
+        emitDiagnostic(this._logger, 'warn', {
+          code: 'extension.capability.prompt-fragments-skipped',
+          reason: 'missing-capability-context',
+          message:
+            'Skipping capability prompt fragment aggregation because capability context is not initialized.',
+          context: {
+            providerCount: this._providers.size,
+          },
+        });
+        this._warnedMissingCapabilityContextForFragments = true;
+      }
+      return [];
+    }
     const aggregated: PromptFragment[] = [];
     for (const { provider } of this._providers.values()) {
       if (!provider.getPromptFragments) continue;
@@ -335,6 +421,62 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   /** Get provider count */
   get providerCount(): number {
     return this._providers.size;
+  }
+
+  private _resolveToolLayers(): Map<string, 'always' | 'dynamic'> {
+    const layersByTool = new Map<string, 'always' | 'dynamic'>();
+    const groups = this._deps.toolGroupRegistry?.listEnabled?.() ?? [];
+
+    for (const group of groups) {
+      const layer = resolveGroupLayer(group);
+      for (const toolName of group.tools) {
+        const existing = layersByTool.get(toolName);
+        if (existing === 'always') {
+          continue;
+        }
+        layersByTool.set(toolName, layer);
+      }
+    }
+
+    return layersByTool;
+  }
+
+  private _recordCapabilityNameCollision(input: {
+    kind: 'tool' | 'skill' | 'tool-group';
+    name: string;
+    providerId: string;
+    existingOwner?: string;
+    existsInRuntime: boolean;
+  }): void {
+    let reason:
+      | 'duplicate-name-in-provider'
+      | 'provider-name-collision'
+      | 'preexisting-name-collision'
+      | null = null;
+
+    if (input.existingOwner === input.providerId) {
+      reason = 'duplicate-name-in-provider';
+    } else if (input.existingOwner) {
+      reason = 'provider-name-collision';
+    } else if (input.existsInRuntime) {
+      reason = 'preexisting-name-collision';
+    }
+
+    if (!reason) {
+      return;
+    }
+
+    emitDiagnostic(this._logger, 'warn', {
+      code: `extension.capability.${input.kind}.name-collision`,
+      reason,
+      message: 'Capability registration is overwriting a shared runtime name.',
+      context: {
+        capabilityKind: input.kind,
+        name: input.name,
+        providerId: input.providerId,
+        existingOwner: input.existingOwner ?? null,
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -372,4 +514,17 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     }
     return null;
   }
+}
+
+function resolveGroupLayer(group: ToolGroup): 'always' | 'dynamic' {
+  if (group.loadingTier === 'resident') {
+    return 'always';
+  }
+  if (group.loadingTier === 'eager' || group.loadingTier === 'lazy') {
+    return 'dynamic';
+  }
+  if (!group.alwaysActive) {
+    return 'dynamic';
+  }
+  return group.priority !== undefined && group.priority >= 100 ? 'always' : 'dynamic';
 }

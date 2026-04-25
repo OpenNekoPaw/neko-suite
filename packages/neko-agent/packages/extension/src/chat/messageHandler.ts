@@ -22,7 +22,14 @@ import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
 import { MediaPreprocessor, isImageMime, isVideoMime } from './message/mediaPreprocessor';
 import { getMimeType } from '@neko/shared';
-import { createInputProcessor, type InputProcessor, type IFileReader } from '@neko/agent';
+import {
+  createInputProcessor,
+  createPlanModeIdcMetadata,
+  mergeIdcExecutionMetadata,
+  type InputProcessor,
+  type IFileReader,
+  type IRuntimeTaskManager,
+} from '@neko/agent';
 import { EngineClient } from '@neko/neko-client';
 import type { AgentPhase } from '@neko-agent/types';
 import { GeneratedAssetIndex, resolveGeneratedDir } from '../services/generatedAssetIndex';
@@ -114,6 +121,7 @@ export class MessageHandler {
     private readonly _getSystemPrompt: () => string,
     private readonly _isPlanMode: () => boolean = () => false,
     private readonly _platform?: Platform,
+    private readonly _taskManager?: IRuntimeTaskManager,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
 
@@ -509,6 +517,7 @@ export class MessageHandler {
         thinkingBudget: this._settings.thinkingBudget,
         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
         conversationId,
+        ...(this._taskManager ? { taskManager: this._taskManager } : {}),
       });
 
       // Create agent context
@@ -678,8 +687,8 @@ export class MessageHandler {
     executionMode: 'auto' | 'ask' | 'plan',
     overrides?: Record<string, unknown>,
   ): Record<string, unknown> | undefined {
-    const base = executionMode === 'plan' ? _createPlanModeMetadata() : undefined;
-    return _mergeMetadata(base, overrides);
+    const base = executionMode === 'plan' ? createPlanModeIdcMetadata() : undefined;
+    return mergeIdcExecutionMetadata(base, overrides);
   }
 
   /**
@@ -771,43 +780,4 @@ export class MessageHandler {
   dispose(): void {
     this._assetIndex?.dispose();
   }
-}
-
-function _createPlanModeMetadata(): Record<string, unknown> {
-  return {
-    idc: {
-      entrySignal: 'vague-creative',
-      taskShape: 'multi-step',
-      workflowId: 'plan-mode',
-    },
-  };
-}
-
-function _mergeMetadata(
-  base?: Record<string, unknown>,
-  overrides?: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  if (!base && !overrides) return undefined;
-
-  const merged: Record<string, unknown> = {
-    ...(base ?? {}),
-    ...(overrides ?? {}),
-  };
-
-  const baseIdc = _asRecord(base?.['idc']);
-  const overrideIdc = _asRecord(overrides?.['idc']);
-  if (baseIdc || overrideIdc) {
-    merged['idc'] = {
-      ...(baseIdc ?? {}),
-      ...(overrideIdc ?? {}),
-    };
-  }
-
-  return merged;
-}
-
-function _asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

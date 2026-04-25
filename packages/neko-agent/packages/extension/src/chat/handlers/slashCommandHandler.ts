@@ -9,7 +9,13 @@
 
 import * as vscode from 'vscode';
 import type { Skill } from '@neko/shared';
-import { createSkillWorkflowId } from '@neko/agent';
+import {
+  createSkillExecutionIdcMetadata,
+  getCommandHandler,
+  resolveSlashCommandCatalogEntry,
+  type CommandContext,
+  type CommandResult,
+} from '@neko/agent';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { ConversationHandler } from '../conversationHandler';
 import type { SettingsManager } from '../settingsManager';
@@ -57,8 +63,12 @@ export class SlashCommandHandler {
     // Remove leading / if present
     const cmdName = command.startsWith('/') ? command.slice(1) : command;
 
-    // Handle builtin commands first
-    if (this._handleBuiltinCommand(webview, cmdName, args)) {
+    const builtinHandled = this._handleBuiltinCommand(webview, cmdName, args);
+    if (typeof builtinHandled === 'boolean') {
+      if (builtinHandled) {
+        return;
+      }
+    } else if (await builtinHandled) {
       return;
     }
 
@@ -169,182 +179,158 @@ export class SlashCommandHandler {
    * Handle builtin commands
    * @returns true if the command was handled, false otherwise
    */
-  private _handleBuiltinCommand(webview: vscode.Webview, cmdName: string, args?: string): boolean {
-    switch (cmdName) {
-      case 'clear':
-      case 'cls': {
-        const currentConversationId = this.deps.conversations.getActiveId();
-        if (currentConversationId) {
-          this.deps.agentManager?.clearHistory(currentConversationId);
-        }
-        this.deps.conversations.clearCurrent();
-        webview.postMessage({ type: 'historyCleared' });
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Conversation cleared',
-        });
-        return true;
-      }
+  private _handleBuiltinCommand(
+    webview: vscode.Webview,
+    cmdName: string,
+    rawArgs?: string,
+  ): boolean | Promise<boolean> {
+    const skillService = this.deps.skillHandler.getSkillService();
+    const commandEntry = resolveSlashCommandCatalogEntry(cmdName, {
+      surface: 'extension',
+      skills: skillService?.registry.listAllSkills(),
+    });
+    if (!commandEntry || commandEntry.source !== 'builtin') {
+      return false;
+    }
 
-      case 'exit':
-      case 'quit':
-      case 'q':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Goodbye!',
-          action: 'exit',
-        });
-        return true;
+    const handler = getCommandHandler(cmdName);
+    if (!handler) {
+      return false;
+    }
 
-      case 'help':
-      case 'h':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showHelp',
-        });
-        return true;
-
-      case 'new':
-        this.deps.conversations.create();
-        this.deps.sendConversationList();
-        this.deps.sendActiveConversation();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'New conversation created',
-        });
-        return true;
-
-      case 'status':
-      case 's':
-        this.sendStatusInfo(webview);
-        return true;
-
-      case 'compact':
-        this.deps.contextHandler.compressContext(
+    const activeConversationId = this.deps.conversations.getActiveId() ?? undefined;
+    const result = handler(_parseBuiltinArgs(rawArgs), this._createCommandContext(webview));
+    if (_isPromiseLike(result)) {
+      return result.then(async (resolved) => {
+        await this._dispatchBuiltinCommandResult(
           webview,
-          this.deps.conversations.getActiveId() ?? undefined,
+          cmdName,
+          rawArgs,
+          activeConversationId,
+          resolved,
         );
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          message: 'Context compression initiated',
-        });
         return true;
+      });
+    }
 
-      case 'model':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showModelSelector',
-        });
-        return true;
+    const dispatched = this._dispatchBuiltinCommandResult(
+      webview,
+      cmdName,
+      rawArgs,
+      activeConversationId,
+      result,
+    );
+    if (_isPromiseLike(dispatched)) {
+      return dispatched.then(() => true);
+    }
 
-      case 'settings':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showSettings',
-        });
-        return true;
+    return true;
+  }
 
-      case 'plan': {
-        this.deps.planModeHandler.handleTogglePlanMode(webview);
-        const newPlanMode = this.deps.systemPrompt.isPlanMode();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'togglePlanMode',
-          data: { planMode: newPlanMode },
-          message: `Plan mode ${newPlanMode ? 'enabled' : 'disabled'}`,
-        });
-        const nextPrompt = args?.trim();
-        if (newPlanMode && nextPrompt && this.deps.messages) {
-          void this.deps.messages.handleUserMessage(
-            webview,
-            nextPrompt,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            this.deps.conversations.getActiveId(),
-          );
-        }
-        return true;
+  private _createCommandContext(webview: vscode.Webview): CommandContext {
+    const skillService = this.deps.skillHandler.getSkillService();
+
+    return {
+      ...(skillService
+        ? {
+            skillService: {
+              registry: {
+                skillCount: skillService.registry.skillCount,
+                listSkills: () => skillService.registry.listSkills(),
+                listAllSkills: () => skillService.registry.listAllSkills(),
+                getSkill: (name: string) => skillService.registry.getSkill(name),
+                getSkillByCommand: (name: string) => skillService.registry.getSkillByCommand(name),
+                searchSkills: (keyword: string) => skillService.registry.searchSkills(keyword),
+              },
+              skillCount: skillService.registry.skillCount,
+              getActiveSkill: () => this.deps.skillHandler.getActiveSkill()?.skill ?? null,
+              clearActiveSkill: () => this.deps.skillHandler.clearActiveSkill(),
+            },
+          }
+        : {}),
+      config: {
+        provider: this.deps.settings.selectedProviderId,
+        model: this.deps.settings.selectedModelId,
+      },
+      conversations: {
+        list: () => this.deps.conversations.list(),
+        getActiveId: () => this.deps.conversations.getActiveId(),
+        create: () => this.deps.conversations.create(),
+        clearCurrent: () => this.deps.conversations.clearCurrent(),
+      },
+      planMode: {
+        isEnabled: () => this.deps.systemPrompt.isPlanMode(),
+        toggle: () => {
+          this.deps.planModeHandler.handleTogglePlanMode(webview);
+          return this.deps.systemPrompt.isPlanMode();
+        },
+      },
+      contextManager: {
+        getTokenCount: (conversationId: string) =>
+          this.deps.agentManager?.getContextTokenCount(conversationId) ?? 0,
+        compress: async (conversationId: string) => {
+          await this.deps.contextHandler.compressContext(webview, conversationId);
+        },
+      },
+    };
+  }
+
+  private _dispatchBuiltinCommandResult(
+    webview: vscode.Webview,
+    cmdName: string,
+    rawArgs: string | undefined,
+    activeConversationId: string | undefined,
+    result: CommandResult,
+  ): void | Promise<void> {
+    if (result.action === 'showStatus') {
+      this.sendStatusInfo(webview);
+      return;
+    }
+
+    if (result.action === 'clearHistory') {
+      if (activeConversationId) {
+        this.deps.agentManager?.clearHistory(activeConversationId);
       }
+      webview.postMessage({ type: 'historyCleared' });
+    }
 
-      case 'tasks':
-      case 'todos':
-        this.deps.taskHandler.sendTasks(webview);
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showTasks',
-        });
-        return true;
+    if (result.action === 'newConversation') {
+      this.deps.sendConversationList();
+      this.deps.sendActiveConversation();
+    }
 
-      case 'mcp':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showMCPServers',
-        });
-        return true;
+    if (result.action === 'showTasks') {
+      this.deps.taskHandler.sendTasks(webview);
+    }
 
-      case 'permissions':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'showPermissions',
-        });
-        return true;
+    const data = _extensionCommandData(result, this.deps.conversations);
+    const message = _extensionCommandMessage(result);
+    const payload = {
+      type: 'slashCommandResult' as const,
+      command: cmdName,
+      success: !result.error,
+      ...(result.action ? { action: result.action } : {}),
+      ...(data ? { data } : {}),
+      ...(message ? { message } : {}),
+      ...(result.error ? { error: result.error } : {}),
+    };
+    webview.postMessage(payload);
 
-      case 'init':
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'initProject',
-        });
-        return true;
-
-      case 'resume': {
-        const conversations = this.deps.conversations.list();
-        webview.postMessage({
-          type: 'slashCommandResult',
-          command: cmdName,
-          success: true,
-          action: 'resumeConversation',
-          data: {
-            conversations: conversations.map((c) => {
-              const conv = this.deps.conversations.manager.get(c.id);
-              return {
-                id: c.id,
-                title: c.title,
-                messageCount: conv?.messages.length ?? 0,
-              };
-            }),
-          },
-        });
-        return true;
-      }
-
-      default:
-        return false;
+    if (
+      result.action === 'togglePlanMode' &&
+      this.deps.systemPrompt.isPlanMode() &&
+      rawArgs?.trim() &&
+      this.deps.messages
+    ) {
+      return this.deps.messages.handleUserMessage(
+        webview,
+        rawArgs.trim(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        this.deps.conversations.getActiveId(),
+      );
     }
   }
 }
@@ -366,12 +352,62 @@ function _createSlashExecutionOverrides(
   }
 
   return {
-    metadata: {
-      idc: {
-        entrySignal: 'workflow-template',
-        taskShape: 'multi-step',
-        workflowId: createSkillWorkflowId(skill.name),
-      },
-    },
+    metadata: createSkillExecutionIdcMetadata(skill),
   };
+}
+
+function _parseBuiltinArgs(rawArgs?: string): string[] {
+  if (!rawArgs) {
+    return [];
+  }
+
+  return rawArgs
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+}
+
+function _isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof value === 'object' && value !== null && 'then' in value;
+}
+
+function _extensionCommandData(
+  result: CommandResult,
+  conversations: ConversationHandler,
+): Record<string, unknown> | undefined {
+  if (result.action === 'resumeConversation') {
+    return {
+      conversations: conversations.list().map((conversation) => {
+        const loaded = conversations.manager.get(conversation.id);
+        return {
+          id: conversation.id,
+          title: conversation.title,
+          messageCount: loaded?.messages.length ?? 0,
+        };
+      }),
+    };
+  }
+
+  return result.data;
+}
+
+function _extensionCommandMessage(result: CommandResult): string | undefined {
+  if (result.action === 'clearHistory') {
+    return 'Conversation cleared';
+  }
+
+  switch (result.action) {
+    case 'showHelp':
+    case 'showStatus':
+    case 'showModelSelector':
+    case 'showSettings':
+    case 'showPermissions':
+    case 'showTasks':
+    case 'showMCPServers':
+    case 'resumeConversation':
+    case 'initProject':
+      return undefined;
+    default:
+      return result.output;
+  }
 }

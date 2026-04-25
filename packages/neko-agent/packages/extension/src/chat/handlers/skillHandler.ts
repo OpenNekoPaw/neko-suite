@@ -76,6 +76,10 @@ export class SkillHandler {
     this._deps = deps;
   }
 
+  getSkillService(): SkillService | undefined {
+    return this._deps.skillService;
+  }
+
   // ===========================================================================
   // Skill List (for UI)
   // ===========================================================================

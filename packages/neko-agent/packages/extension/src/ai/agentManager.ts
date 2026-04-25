@@ -169,6 +169,12 @@ export interface IAgentManager extends vscode.Disposable {
    * Applied to all existing and future AgentRunners.
    */
   setSkillProvider(provider: import('@neko/agent').ISkillProvider): void;
+
+  /**
+   * Re-sync capability-derived runtime overlays into all existing sessions.
+   * Shared registries update by reference; prompt fragments need an explicit push.
+   */
+  refreshCapabilityRuntime(): void;
 }
 
 // =============================================================================
@@ -448,6 +454,12 @@ export class AgentManager implements IAgentManager {
     // Apply to all existing agents
     for (const agent of this._agents.values()) {
       agent.setSkillProvider(provider);
+    }
+  }
+
+  refreshCapabilityRuntime(): void {
+    for (const agent of this._agents.values()) {
+      agent.refreshCapabilityRuntime();
     }
   }
 

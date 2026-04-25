@@ -2,15 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageHandler } from '../messageHandler';
 
 // Mock @neko/agent module - createInputProcessor is used inside _getInputProcessor
-vi.mock('@neko/agent', () => ({
-  createInputProcessor: vi.fn(() => ({
-    process: vi.fn(async (msg: string) => ({
-      message: msg,
-      fileReferences: [],
-      errors: [],
+vi.mock('@neko/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@neko/agent')>();
+  return {
+    ...actual,
+    createInputProcessor: vi.fn(() => ({
+      process: vi.fn(async (msg: string) => ({
+        message: msg,
+        fileReferences: [],
+        errors: [],
+      })),
     })),
-  })),
-}));
+  };
+});
 
 // Mock @neko/platform module
 vi.mock('@neko/platform', () => ({}));
@@ -219,6 +223,7 @@ describe('MessageHandler', () => {
             idc: {
               entrySignal: 'vague-creative',
               taskShape: 'multi-step',
+              runKind: 'plan-mode',
               workflowId: 'plan-mode',
             },
           },
