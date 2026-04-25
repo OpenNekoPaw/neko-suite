@@ -120,19 +120,25 @@ describe('validateArtifact — structural failures', () => {
     expect(r.issues[0]?.code).toBe('malformed-frontmatter');
   });
 
-  it('rejects nested list items (unsupported construct)', () => {
+  it('accepts top-level YAML list fields such as referenceChain', () => {
     const raw = [
       '---',
       'id: x',
       'kind: draft',
+      'title: Hello',
+      'status: pending_review',
+      'domain: cut',
+      'createdAt: 2026-04-22T10:00:00.000Z',
+      'updatedAt: 2026-04-22T10:30:00.000Z',
       'referenceChain:',
       '  - asset://characters/hero',
+      '  - asset://styles/cinematic',
       '---',
       '',
     ].join('\n');
     const r = validateArtifact('draft', raw);
-    expect(r.valid).toBe(false);
-    expect(r.issues[0]?.code).toBe('malformed-frontmatter');
+    expect(r.valid).toBe(true);
+    expect(r.issues).toEqual([]);
   });
 });
 

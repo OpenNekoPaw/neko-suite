@@ -1,0 +1,18 @@
+export {
+  composeBeforeThinkHooks,
+  createFeedbackCoordinator,
+  type FeedbackCoordinatorConfig,
+  type FeedbackMemoryExtractionOutcome,
+  type FeedbackControlPolicy,
+  type FeedbackCycle,
+  type FeedbackDecision,
+  type FeedbackEvaluationContext,
+  type FeedbackFlowAction,
+  type FeedbackSignal,
+  type IFeedbackArbiter,
+  type IFeedbackEvaluator,
+  type FeedbackMemoryExtractionInput,
+  type FeedbackMemoryExtractionResult,
+  type FeedbackMemoryExtractionSkipped,
+  type IFeedbackCoordinator,
+} from './feedback-coordinator';

@@ -228,12 +228,23 @@ function parseFrontmatter(content: string): ParseResult {
   const frontmatter = body.slice(0, closeIdx);
   const fields: Record<string, string> = {};
   const lines = frontmatter.split(/\r?\n/);
+  let activeListKey: string | null = null;
   for (const line of lines) {
     // Skip blank / comment lines.
     if (!line || /^\s*#/.test(line)) continue;
-    // Reject nested list items and block scalars — the validator contract
-    // covers minimal frontmatter only.
-    if (/^\s+-/.test(line) || /:\s*[|>]\s*$/.test(line)) {
+    if (/^\s+-/.test(line)) {
+      if (!activeListKey) {
+        return {
+          kind: 'malformed',
+          message: `Unsupported frontmatter construct (nested list without key): "${line.trim()}"`,
+        };
+      }
+      continue;
+    }
+    // Reject orphan list items and block scalars — the validator contract
+    // covers minimal frontmatter only, but permits simple top-level lists
+    // such as `referenceChain:`.
+    if (/:\s*[|>]\s*$/.test(line)) {
       return {
         kind: 'malformed',
         message: `Unsupported frontmatter construct (block scalar / nested list): "${line.trim()}"`,
@@ -250,6 +261,12 @@ function parseFrontmatter(content: string): ParseResult {
     let value = line.slice(colon + 1).trim();
     if (!key) {
       return { kind: 'malformed', message: `Empty key before ":" in "${line.trim()}"` };
+    }
+    activeListKey = null;
+    if (value.length === 0) {
+      fields[key] = '';
+      activeListKey = key;
+      continue;
     }
     // Strip a single pair of surrounding quotes (single or double).
     if (

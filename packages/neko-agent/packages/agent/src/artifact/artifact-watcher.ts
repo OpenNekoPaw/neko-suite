@@ -20,7 +20,7 @@
  *   fs.watch without touching the real filesystem.
  *
  * What the watcher does NOT do:
- * - No index rebuild (future `.neko/cache/draft-index.json` consumer listens
+ * - No index rebuild (future `.neko/cache/artifact-index.json` consumer listens
  *   on the event instead).
  * - No permission enforcement; the generic Write tool already gates on
  *   workspace root.

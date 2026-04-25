@@ -56,6 +56,11 @@ export interface SelfEvaluationHooksDeps {
    * integrations) to wire the hook uniformly without special-casing.
    */
   readonly stageTracker?: StageTracker | null;
+  /**
+   * Optional observer called when an Apply-stage exit schedules the next
+   * self-evaluation guidance injection.
+   */
+  readonly onGuidanceRequested?: () => void;
 }
 
 export class SelfEvaluationHooks implements ExecutorHooks {
@@ -65,11 +70,12 @@ export class SelfEvaluationHooks implements ExecutorHooks {
   private _unsubscribe: (() => void) | undefined;
 
   constructor(deps: SelfEvaluationHooksDeps) {
-    const { stageTracker } = deps;
+    const { stageTracker, onGuidanceRequested } = deps;
     if (!stageTracker) return;
     this._unsubscribe = stageTracker.onExited((event) => {
       if (event.stage === 'apply') {
         this._pending = true;
+        onGuidanceRequested?.();
       }
     });
   }
