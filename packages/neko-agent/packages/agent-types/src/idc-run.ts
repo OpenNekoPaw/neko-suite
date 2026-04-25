@@ -44,6 +44,11 @@ export interface IdcRunArtifactBinding {
   artifactId: string;
   path: string;
   updatedAt: number;
+  /**
+   * True when the run snapshot still references this artifact but the
+   * authoritative ArtifactService could not restore its current record.
+   */
+  stale?: boolean;
 }
 
 // =============================================================================

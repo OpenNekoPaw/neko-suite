@@ -1310,6 +1310,7 @@ describe('AgentSession', () => {
         const writes: Array<{ path: string; data: string }> = [];
         const fsOps = {
           async mkdir(): Promise<void> {},
+          async appendFile(): Promise<void> {},
           async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
             writes.push({ path, data });
           },
@@ -1558,6 +1559,183 @@ describe('AgentSession', () => {
           updatedAt: 6,
         },
       });
+      session.dispose();
+    });
+
+    it('marks missing restored artifact bindings as stale when ArtifactService is authoritative', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const restoredDraft: Draft = {
+        id: 'draft-active',
+        title: 'Recovered draft',
+        status: 'pending_review',
+        domain: 'cut',
+        createdAt: 10,
+        updatedAt: 11,
+        intent: 'Recover intent',
+        approach: 'Recover approach',
+        artifact: 'Recover artifact',
+      };
+      const draftRecord = {
+        kind: 'draft',
+        runId: 'run-active',
+        artifactId: 'draft-active',
+        path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+        updatedAt: 11,
+        content: '# Draft',
+        value: restoredDraft,
+      };
+      const projection = {
+        syncTask: vi.fn(async () => ['idc:run-active:check-1']),
+        clearRun: vi.fn(async () => undefined),
+      };
+      const artifactService = {
+        restore: vi.fn(async () => [draftRecord]),
+        listRunIds: vi.fn(() => ['run-active']),
+        listByRunId: vi.fn((runId: string) => (runId === 'run-active' ? [draftRecord] : [])),
+        getByRunId: vi.fn(() => null),
+        write: vi.fn(),
+        writeDraft: vi.fn(),
+        writePlan: vi.fn(),
+        writeTask: vi.fn(),
+        ingestObservedArtifact: vi.fn(),
+        flush: vi.fn(async () => undefined),
+        dispose: vi.fn(async () => undefined),
+      };
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
+            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+          }
+
+          return JSON.stringify({
+            updatedAt: 50,
+            stage: {
+              current: 'apply',
+              enteredAt: 40,
+              transitions: [
+                { from: null, to: 'draft', at: 10 },
+                { from: 'draft', to: 'apply', at: 20 },
+              ],
+            },
+            run: {
+              active: {
+                id: 'run-active',
+                runKind: 'wf-active',
+                workflowId: 'wf-active',
+                status: 'running',
+                createdAt: 1,
+                startedAt: 2,
+                roundCount: 1,
+                rounds: [
+                  {
+                    round: 0,
+                    activatedStages: ['draft', 'apply'],
+                    skippedStages: [],
+                    decidedAt: 3,
+                  },
+                ],
+                artifacts: [
+                  {
+                    kind: 'draft',
+                    artifactId: 'draft-active',
+                    path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+                    updatedAt: 11,
+                  },
+                  {
+                    kind: 'task',
+                    artifactId: 'task-missing',
+                    path: '/tmp/proj/.neko/tasks/task-run-active.md',
+                    updatedAt: 31,
+                  },
+                ],
+              },
+            },
+            approval: {
+              pending: [],
+            },
+            feedback: {
+              pendingGuidance: null,
+            },
+          });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+          artifactService: artifactService as never,
+          idcTaskProjection: projection as never,
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(projection.syncTask).not.toHaveBeenCalled();
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-active',
+          runKind: 'wf-active',
+          workflowId: 'wf-active',
+          draft: restoredDraft,
+          artifactBindings: [
+            {
+              kind: 'draft',
+              artifactId: 'draft-active',
+              path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+              updatedAt: 11,
+            },
+            {
+              kind: 'task',
+              artifactId: 'task-missing',
+              path: '/tmp/proj/.neko/tasks/task-run-active.md',
+              updatedAt: 31,
+              stale: true,
+            },
+          ],
+        }),
+      );
+
+      const snapshot = parseLatestWrite<{
+        run: {
+          active?: {
+            artifacts?: Array<{
+              kind: string;
+              artifactId: string;
+              path: string;
+              updatedAt: number;
+              stale?: boolean;
+            }>;
+          };
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      expect(snapshot.run.active?.artifacts).toEqual([
+        {
+          kind: 'draft',
+          artifactId: 'draft-active',
+          path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+          updatedAt: 11,
+        },
+        {
+          kind: 'task',
+          artifactId: 'task-missing',
+          path: '/tmp/proj/.neko/tasks/task-run-active.md',
+          updatedAt: 31,
+          stale: true,
+        },
+      ]);
+
       session.dispose();
     });
 

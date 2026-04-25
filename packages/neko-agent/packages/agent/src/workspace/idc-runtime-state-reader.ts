@@ -321,7 +321,13 @@ function toRunArtifactBinding(
     return null;
   }
 
-  return { kind, artifactId, path, updatedAt };
+  return {
+    kind,
+    artifactId,
+    path,
+    updatedAt,
+    ...(entry['stale'] === true ? { stale: true } : {}),
+  };
 }
 
 function toPersistedRunTask(value: unknown): PersistedIdcRunSnapshot['task'] | null {

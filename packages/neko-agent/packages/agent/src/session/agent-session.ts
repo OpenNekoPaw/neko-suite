@@ -1790,10 +1790,12 @@ export class AgentSession implements IAgentSession {
     const activeCandidate = restoreIdcRunFromSnapshot(
       state.active,
       state.active ? (this._artifactService?.listByRunId(state.active.id) ?? []) : [],
+      { markMissingArtifactsStale: Boolean(this._artifactService) },
     );
     const lastCompletedCandidate = restoreIdcRunFromSnapshot(
       state.lastCompleted,
       state.lastCompleted ? (this._artifactService?.listByRunId(state.lastCompleted.id) ?? []) : [],
+      { markMissingArtifactsStale: Boolean(this._artifactService) },
     );
 
     this._runStore.restore({
@@ -2496,6 +2498,7 @@ function snapshotIdcRun(run: IdcRun): import('../workspace').PersistedIdcRunSnap
             artifactId: binding.artifactId,
             path: binding.path,
             updatedAt: binding.updatedAt,
+            ...(binding.stale === true ? { stale: true } : {}),
           })),
         }
       : {}),
@@ -2572,6 +2575,9 @@ function shouldRestorePersistedFeedbackGuidance(
 function restoreIdcRunFromSnapshot(
   snapshot: import('../workspace').PersistedIdcRunSnapshot | undefined,
   records: readonly AnyArtifactRecord[],
+  options: {
+    markMissingArtifactsStale?: boolean;
+  } = {},
 ): IdcRun | null {
   if (!snapshot) {
     return null;
@@ -2581,7 +2587,7 @@ function restoreIdcRunFromSnapshot(
     return null;
   }
 
-  const artifactBindings = mergeRestoredArtifactBindings(snapshot.artifacts, records);
+  const artifactBindings = mergeRestoredArtifactBindings(snapshot.artifacts, records, options);
   const draftRecord = records.find((record) => record.kind === 'draft');
   const planRecord = records.find((record) => record.kind === 'plan');
   const taskRecord = records.find((record) => record.kind === 'task');
@@ -2611,11 +2617,20 @@ function restoreIdcRunFromSnapshot(
 function mergeRestoredArtifactBindings(
   snapshotBindings: import('../workspace').PersistedIdcRunSnapshot['artifacts'] | undefined,
   records: readonly AnyArtifactRecord[],
+  options: {
+    markMissingArtifactsStale?: boolean;
+  } = {},
 ): readonly NonNullable<IdcRun['artifactBindings']>[number][] {
   const merged: NonNullable<IdcRun['artifactBindings']>[number][] = [];
+  const recordKinds = new Set(records.map((record) => record.kind));
 
   for (const binding of snapshotBindings ?? []) {
-    upsertRestoredArtifactBinding(merged, binding);
+    upsertRestoredArtifactBinding(
+      merged,
+      options.markMissingArtifactsStale === true && !recordKinds.has(binding.kind)
+        ? { ...binding, stale: true }
+        : binding,
+    );
   }
   for (const record of records) {
     upsertRestoredArtifactBinding(merged, toIdcRunArtifactBinding(record));

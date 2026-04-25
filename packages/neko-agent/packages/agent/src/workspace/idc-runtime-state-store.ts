@@ -44,6 +44,7 @@ export interface PersistedIdcRunSnapshot {
     artifactId: string;
     path: string;
     updatedAt: number;
+    stale?: boolean;
   }[];
   task?: {
     id: string;

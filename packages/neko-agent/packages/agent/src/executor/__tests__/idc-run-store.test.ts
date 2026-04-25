@@ -17,6 +17,7 @@ import type {
   StageActivationDecision,
   Task,
 } from '@neko-agent/types';
+import { roundSummaryFromDecision } from '@neko-agent/types';
 import { createIdcRunStore } from '../idc-run-store';
 
 function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
@@ -219,7 +220,7 @@ describe('IdcRunStore', () => {
       status: 'running',
       createdAt: 1,
       startedAt: 2,
-      rounds: [decision({ round: 0 })],
+      rounds: [roundSummaryFromDecision(decision({ round: 0 }))],
       artifactBindings: [
         {
           kind: 'draft',
