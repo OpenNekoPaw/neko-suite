@@ -61,4 +61,9 @@ export interface PromptModuleSection {
 export interface PromptModule {
   readonly manifest: PromptModuleManifest;
   render(ctx: PromptContext): Promise<readonly PromptModuleSection[] | null>;
+  /**
+   * Optional sync render path for prompt updates that must complete before the
+   * next immediate composer read (for example ask-mode snapshots).
+   */
+  renderSync?(ctx: PromptContext): readonly PromptModuleSection[] | null;
 }

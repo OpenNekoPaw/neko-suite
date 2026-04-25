@@ -30,6 +30,7 @@ function makeModule(
     priority?: number;
     cacheKey?: (ctx: PromptContext) => string | null;
     render: (ctx: PromptContext) => Promise<PromptModuleSection[] | null>;
+    renderSync?: (ctx: PromptContext) => PromptModuleSection[] | null;
   },
 ): PromptModule {
   return {
@@ -42,6 +43,7 @@ function makeModule(
       ...(overrides.cacheKey && { cacheKey: overrides.cacheKey }),
     },
     render: overrides.render,
+    ...(overrides.renderSync ? { renderSync: overrides.renderSync } : {}),
   };
 }
 
@@ -208,6 +210,51 @@ describe('ModuleOrchestrator', () => {
     expect(calls.sort()).toEqual(['a', 'b']);
     expect(composer.hasSection('a:s')).toBe(true);
     expect(composer.hasSection('b:s')).toBe(true);
+  });
+
+  it('applyOneSync uses renderSync and participates in cache/ownership tracking', () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+
+    let renderCalls = 0;
+    const mod = makeModule('sync.m', {
+      cacheKey: (ctx) => ctx.activeSkillName,
+      render: async () => null,
+      renderSync: (ctx) => {
+        renderCalls += 1;
+        return [
+          {
+            sectionId: `sync:${ctx.activeSkillName ?? 'none'}`,
+            layer: 'skill',
+            content: `render:${renderCalls}`,
+          },
+        ];
+      },
+    });
+    registry.register(mod);
+
+    orch.applyOneSync(mod, minimalCtx({ activeSkillName: 'draft' }));
+    orch.applyOneSync(mod, minimalCtx({ activeSkillName: 'draft' }));
+
+    expect(renderCalls).toBe(1);
+    expect(composer.hasSection('sync:draft')).toBe(true);
+    expect(composer.getSection('sync:draft')?.content).toBe('render:1');
+  });
+
+  it('applyOneSync throws when a module does not expose renderSync', () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+
+    const mod = makeModule('async-only', {
+      render: async () => [{ sectionId: 'async:only', layer: 'skill', content: 'A' }],
+    });
+    registry.register(mod);
+
+    expect(() => orch.applyOneSync(mod, minimalCtx())).toThrow(/sync rendering/i);
   });
 
   it('clearModule removes owned sections on demand', async () => {

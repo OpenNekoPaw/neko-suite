@@ -4,8 +4,8 @@
  *
  * Section layout: one composer section per fragment, id `fragment:${f.id}`.
  * The module is stateless I/O-wise — the session initializer calls
- * setFragments(config.promptFragments) once at construction time and may
- * be re-invoked when the capability-provider set changes (future work).
+ * setFragments(config.promptFragments) once at construction time and
+ * AgentSession may re-invoke it later when the capability-provider set changes.
  *
  * Duplicate ids: dropped (first-writer-wins) to keep composed output
  * deterministic across provider registration order. If this causes real

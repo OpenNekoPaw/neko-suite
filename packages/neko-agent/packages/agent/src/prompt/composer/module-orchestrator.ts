@@ -52,6 +52,15 @@ export class ModuleOrchestrator {
   }
 
   /**
+   * Synchronous counterpart to applyAll for modules that expose renderSync().
+   */
+  applyAllSync(ctx: PromptContext): void {
+    for (const module of this._registry.all()) {
+      this.applyOneSync(module, ctx);
+    }
+  }
+
+  /**
    * Render a single module and sync its sections into the composer.
    *
    * Flow:
@@ -86,30 +95,42 @@ export class ModuleOrchestrator {
       }
     }
 
-    // 4. Swap: remove old owned sections, write new ones.
-    this._clearOwned(manifest.id);
-    if (sections === null || sections.length === 0) return;
+    this._writeSections(manifest, sections);
+  }
 
-    const newlyOwned = new Set<string>();
-    for (const section of sections) {
-      // Ensure the emitted layer is actually declared by the manifest.
-      if (!manifest.layers.includes(section.layer)) {
+  /**
+   * Synchronous counterpart to applyOne for modules that expose renderSync().
+   */
+  applyOneSync(module: PromptModule, ctx: PromptContext): void {
+    const { manifest } = module;
+
+    if (this._missesRequirements(manifest.requires, ctx)) {
+      this._clearOwned(manifest.id);
+      return;
+    }
+
+    const key = manifest.cacheKey?.(ctx) ?? null;
+    let sections: readonly PromptModuleSection[] | null = null;
+
+    if (key !== null) {
+      sections = this._cache.get(key) ?? null;
+    }
+
+    if (sections === null) {
+      if (!module.renderSync) {
         throw new Error(
-          `ModuleOrchestrator: module '${manifest.id}' emitted layer ` +
-            `'${section.layer}' not declared in manifest.layers ` +
-            `[${manifest.layers.join(', ')}]`,
+          `ModuleOrchestrator: module '${manifest.id}' does not support sync rendering`,
         );
       }
-      this._composer.setSection({
-        id: section.sectionId,
-        layer: section.layer,
-        content: section.content,
-        priority: section.priority ?? manifest.priority,
-        ...(section.cacheControl && { cacheControl: section.cacheControl }),
-      });
-      newlyOwned.add(section.sectionId);
+
+      const result = module.renderSync(ctx);
+      sections = result ?? null;
+      if (key !== null && sections !== null) {
+        this._cache.set(key, sections);
+      }
     }
-    this._ownedByModule.set(manifest.id, newlyOwned);
+
+    this._writeSections(manifest, sections);
   }
 
   /**
@@ -148,5 +169,33 @@ export class ModuleOrchestrator {
       this._composer.removeSection(id);
     }
     this._ownedByModule.delete(moduleId);
+  }
+
+  private _writeSections(
+    manifest: PromptModule['manifest'],
+    sections: readonly PromptModuleSection[] | null,
+  ): void {
+    this._clearOwned(manifest.id);
+    if (sections === null || sections.length === 0) return;
+
+    const newlyOwned = new Set<string>();
+    for (const section of sections) {
+      if (!manifest.layers.includes(section.layer)) {
+        throw new Error(
+          `ModuleOrchestrator: module '${manifest.id}' emitted layer ` +
+            `'${section.layer}' not declared in manifest.layers ` +
+            `[${manifest.layers.join(', ')}]`,
+        );
+      }
+      this._composer.setSection({
+        id: section.sectionId,
+        layer: section.layer,
+        content: section.content,
+        priority: section.priority ?? manifest.priority,
+        ...(section.cacheControl && { cacheControl: section.cacheControl }),
+      });
+      newlyOwned.add(section.sectionId);
+    }
+    this._ownedByModule.set(manifest.id, newlyOwned);
   }
 }
