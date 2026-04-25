@@ -19,7 +19,11 @@ export interface IdcProjectedTaskBinding {
 export interface IdcProjectedTaskPayload extends Record<string, unknown> {
   readonly source: IdcProjectedTaskBinding['source'];
   readonly name: string;
-  readonly content: string;
+  /**
+   * Legacy mirror kept only for compatibility with already-persisted tasks.
+   * New projected IDC tasks should rely on `name` as the display field.
+   */
+  readonly content?: string;
   readonly runId: string;
   readonly runStartedAt?: number;
   readonly checklistId: string;
@@ -69,7 +73,6 @@ export function toIdcProjectedTaskPayload(
   return {
     source: input.binding.source,
     name: input.content,
-    content: input.content,
     runId: input.binding.runId,
     ...(input.binding.runStartedAt !== undefined
       ? { runStartedAt: input.binding.runStartedAt }
@@ -92,7 +95,7 @@ export function isIdcProjectedTaskPayload(value: unknown): value is IdcProjected
   return (
     candidate['source'] === 'idc' &&
     typeof candidate['name'] === 'string' &&
-    typeof candidate['content'] === 'string' &&
+    (candidate['content'] === undefined || typeof candidate['content'] === 'string') &&
     typeof candidate['runId'] === 'string' &&
     (candidate['runStartedAt'] === undefined || typeof candidate['runStartedAt'] === 'number') &&
     typeof candidate['checklistId'] === 'string' &&

@@ -184,6 +184,8 @@ export class TaskHandler {
       displayName = prompt.length > 50 ? prompt.slice(0, 47) + '...' : prompt;
     } else if (payload?.name && typeof payload.name === 'string') {
       displayName = payload.name;
+    } else if (payload?.content && typeof payload.content === 'string') {
+      displayName = payload.content;
     } else {
       // Format task type for display (e.g., "image_generation" -> "Image Generation")
       displayName = task.type

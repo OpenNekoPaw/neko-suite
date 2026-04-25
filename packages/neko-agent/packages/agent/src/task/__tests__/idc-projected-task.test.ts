@@ -41,7 +41,6 @@ describe('idc-projected-task', () => {
           payload: {
             source: 'idc',
             name: 'Export teaser',
-            content: 'Export teaser',
             runId: 'run-1',
             runStartedAt: 101,
             checklistId: 'task-1',
@@ -77,6 +76,7 @@ describe('idc-projected-task', () => {
     });
 
     expect(isIdcProjectedTaskPayload(validPayload)).toBe(true);
+    expect(isIdcProjectedTaskPayload({ ...validPayload, content: 'Export teaser' })).toBe(true);
     expect(isIdcProjectedTaskPayload({ source: 'idc', runId: 'run-1' })).toBe(false);
   });
 

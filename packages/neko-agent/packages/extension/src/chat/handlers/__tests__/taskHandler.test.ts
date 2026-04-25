@@ -127,6 +127,28 @@ describe('TaskHandler', () => {
       const tasks = call?.tasks as Array<{ name: string }>;
       expect(tasks?.[0]?.name).toBe('Image Generation');
     });
+
+    it('should fall back to legacy payload.content when payload.name is absent', async () => {
+      const mockTask = {
+        id: 'task-legacy',
+        type: 'workflow',
+        status: 'completed',
+        progress: 100,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        input: { payload: { content: 'Legacy IDC task label' } },
+        output: null,
+        error: undefined,
+      };
+      taskManager.list.mockResolvedValue([mockTask]);
+
+      handler = new TaskHandler({ taskManager: taskManager as any });
+      await handler.sendTasks(webview as any);
+
+      const call = webview.postMessage.mock.calls[0]?.[0] as Record<string, unknown>;
+      const tasks = call?.tasks as Array<{ name: string }>;
+      expect(tasks?.[0]?.name).toBe('Legacy IDC task label');
+    });
   });
 
   describe('handleCancelTask', () => {
