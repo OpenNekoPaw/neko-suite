@@ -9,6 +9,10 @@ export interface IdcTurnMetadata {
   entrySignal?: StageEntrySignal;
   taskShape?: StageTaskShape;
   runKind?: string;
+  /**
+   * Legacy metadata mirror of `runKind`.
+   * @deprecated Prefer `runKind` for new metadata producers.
+   */
   workflowId?: string;
 }
 

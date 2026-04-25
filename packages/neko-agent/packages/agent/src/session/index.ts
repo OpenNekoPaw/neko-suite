@@ -5,6 +5,7 @@
 export * from './types';
 export * from './agent-session';
 export { createSkillRunKind, encodeRunKindSegment } from './idc-run-kind';
+/** @deprecated Use `createSkillRunKind` / `encodeRunKindSegment` instead. */
 export { createSkillWorkflowId, encodeWorkflowIdSegment } from './idc-workflow-id';
 export {
   createPlanModeIdcMetadata,

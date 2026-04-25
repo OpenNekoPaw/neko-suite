@@ -466,11 +466,13 @@ export {
   AgentSession,
   createAgentSession,
   createSkillRunKind,
+  /** @deprecated Use `createSkillRunKind` instead. */
   createSkillWorkflowId,
   createPlanModeIdcMetadata,
   createSkillExecutionIdcMetadata,
   mergeIdcExecutionMetadata,
   encodeRunKindSegment,
+  /** @deprecated Use `encodeRunKindSegment` instead. */
   encodeWorkflowIdSegment,
   PLAN_MODE_SYSTEM_REMINDER as SESSION_PLAN_MODE_REMINDER,
   type IAgentSession,

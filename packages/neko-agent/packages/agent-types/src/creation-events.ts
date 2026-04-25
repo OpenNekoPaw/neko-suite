@@ -47,6 +47,7 @@ export interface CreationRunStartedEvent {
   runKind: string;
   /**
    * Legacy compatibility mirror of runKind.
+   * @deprecated Prefer `runKind`. This mirror remains only for migration safety.
    * TODO(P1): delete after workflowId -> runKind migration completes.
    */
   workflowId: string;

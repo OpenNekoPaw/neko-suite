@@ -31,6 +31,10 @@ export interface IdcRuntimeStageTransition {
 export interface PersistedIdcRunSnapshot {
   id: string;
   runKind?: string;
+  /**
+   * Legacy persisted mirror of `runKind`.
+   * @deprecated Prefer `runKind` for new writes; keep reading this during migration.
+   */
   workflowId?: string;
   status: IdcRunStatus;
   createdAt: number;

@@ -1152,6 +1152,7 @@ export class AgentSession implements IAgentSession {
   /**
    * Legacy compatibility wrapper for the old workflowId terminology.
    * New code should call startIdcRun().
+   * @deprecated Use `startIdcRun(runKind, runId)` instead.
    */
   startWorkflowRun(workflowId: string, runId?: string): string | null {
     return this.startIdcRun(workflowId, runId);
