@@ -161,6 +161,9 @@ export function getCapabilityRuntimeBindings(): Readonly<CapabilityRuntimeBindin
  * Late-bind the shared SkillService after ChatProvider constructs it on top
  * of the shared SkillRegistry. AgentRunner reads this during session bring-up
  * so stage-tracking + dynamic skills share the same service instance.
+ *
+ * Passing `undefined` is treated as a no-op on purpose: we warn and keep the
+ * previous shared singleton binding instead of silently clearing it.
  */
 export function setCapabilityRuntimeSkillService(skillService: SkillService | undefined): void {
   _runtimeBindings = {
