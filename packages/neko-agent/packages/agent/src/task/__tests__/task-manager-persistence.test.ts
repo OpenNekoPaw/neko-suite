@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
 import { MemoryTaskStorage } from '../task-storage';
+import { toSerializableIdcProjectedTask } from '../idc-projected-task';
 import type { ITaskStorage, SerializableTask, TaskExecutor } from '@neko/shared';
 
 describe('TaskManager Persistence', () => {
@@ -136,6 +137,65 @@ describe('TaskManager Persistence', () => {
       const match = newTaskId.match(/task_\d+_(\d+)/);
       expect(match).toBeTruthy();
       expect(parseInt(match![1], 10)).toBeGreaterThan(999);
+    });
+  });
+
+  describe('persisted workflow cleanup', () => {
+    it('should clear IDC projected tasks for a run directly from storage even before initialize', async () => {
+      await storage.save(
+        toSerializableIdcProjectedTask({
+          id: 'idc:run-restore:item-1',
+          status: 'completed',
+          progress: 100,
+          createdAt: 10,
+          updatedAt: 20,
+          content: 'Recovered task',
+          binding: {
+            source: 'idc',
+            runId: 'run-restore',
+            runStartedAt: 111,
+            checklistId: 'task-restore',
+            itemId: 'item-1',
+          },
+        }),
+      );
+      await storage.save(
+        toSerializableIdcProjectedTask({
+          id: 'idc:run-restore:item-2',
+          status: 'completed',
+          progress: 100,
+          createdAt: 11,
+          updatedAt: 21,
+          content: 'Recovered task retry',
+          binding: {
+            source: 'idc',
+            runId: 'run-restore',
+            runStartedAt: 222,
+            checklistId: 'task-restore-2',
+            itemId: 'item-2',
+          },
+        }),
+      );
+      await storage.save({
+        id: 'task_other',
+        type: 'custom',
+        status: 'completed',
+        input: { type: 'custom', payload: {} },
+        progress: 100,
+        createdAt: 1,
+        updatedAt: 2,
+      });
+
+      const deletedIds = await manager.clearIdcProjectedTasksForRun('run-restore', 111);
+
+      expect(deletedIds).toEqual(['idc:run-restore:item-1']);
+      expect(await storage.load('idc:run-restore:item-1')).toBeUndefined();
+      expect(await storage.load('idc:run-restore:item-2')).toEqual(
+        expect.objectContaining({ id: 'idc:run-restore:item-2' }),
+      );
+      expect(await storage.load('task_other')).toEqual(
+        expect.objectContaining({ id: 'task_other' }),
+      );
     });
   });
 

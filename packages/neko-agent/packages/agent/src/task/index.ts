@@ -4,7 +4,29 @@
  * Provides task scheduling, persistence, recovery, and concurrency control.
  */
 
-export { TaskManager, type TaskManagerOptions, type ConcurrencyConfig } from './task-manager';
+export {
+  TaskManager,
+  type TaskManagerOptions,
+  type ConcurrencyConfig,
+  type IIdcProjectedTaskStore,
+  type IRuntimeTaskManager,
+} from './task-manager';
+export {
+  createTaskManagerIdcTaskProjection,
+  type IIdcTaskProjection,
+  type IIdcTaskProjectionStore,
+  type IdcTaskProjectionConfig,
+} from './idc-task-projection';
+export {
+  getIdcProjectedTaskRunId,
+  isIdcProjectedTaskPayload,
+  toSerializableIdcProjectedTask,
+  toIdcProjectedTaskPayload,
+  type IdcProjectedTaskArtifactBinding,
+  type IdcProjectedTaskBinding,
+  type IdcProjectedTaskPayload,
+  type IdcProjectedTaskUpsertInput,
+} from './idc-projected-task';
 export {
   MemoryTaskStorage,
   FileTaskStorage,

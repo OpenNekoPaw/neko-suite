@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ExecutionPlan } from '@neko-agent/types';
-import { serializeExecutionPlan } from '../plan-markdown';
+import { parseExecutionPlan, serializeExecutionPlan } from '../plan-markdown';
 
 function make(overrides: Partial<ExecutionPlan> = {}): ExecutionPlan {
   return {
@@ -89,5 +89,24 @@ describe('serializeExecutionPlan', () => {
     expect(i1).toBeGreaterThan(0);
     expect(i2).toBeGreaterThan(i1);
     expect(i3).toBeGreaterThan(i2);
+  });
+
+  it('round-trips the canonical plan markdown back into an ExecutionPlan object', () => {
+    const original = make({
+      steps: [
+        { id: 'cut-tiktok-001-plan.step.1', tool: 'First', rationale: 'r1', args: 'a1' },
+        {
+          id: 'cut-tiktok-001-plan.step.2',
+          tool: 'Second',
+          rationale: 'r2',
+          args: 'a2',
+          status: 'failed',
+          error: 'Oops',
+        },
+      ],
+      notes: 'Observe 4K render budget.',
+    });
+
+    expect(parseExecutionPlan(serializeExecutionPlan(original))).toEqual(original);
   });
 });

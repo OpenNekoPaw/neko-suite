@@ -22,9 +22,31 @@ import type {
 import { BaseError, ConcurrencyPool, KeyedConcurrencyPool } from '@neko/shared';
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
+import {
+  getIdcProjectedTaskRunBinding,
+  toSerializableIdcProjectedTask,
+  type IdcProjectedTaskUpsertInput,
+} from './idc-projected-task';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskManager');
+
+export interface IIdcProjectedTaskStore {
+  upsertIdcProjectedTask(task: IdcProjectedTaskUpsertInput): Promise<void>;
+  clearIdcProjectedTasksForRun(runId: string, runStartedAt?: number): Promise<readonly string[]>;
+}
+
+export interface IRuntimeTaskManager extends ITaskManager, IIdcProjectedTaskStore {
+  initialize(): Promise<void>;
+  resumePendingTasks(): Promise<string[]>;
+  dispose(): void;
+  registerExecutor(type: TaskType, executor: TaskExecutor): void;
+  saveRecoveryInfo(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
+  deleteRecoveryInfo(taskId: string): Promise<void>;
+  getRecoveryStorage(): ITaskRecoveryStorage;
+  updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  upsertExternalTask(task: SerializableTask): Promise<void>;
+}
 
 /**
  * Concurrency configuration
@@ -57,7 +79,7 @@ export interface TaskManagerOptions {
 /**
  * Task manager implementation with optional persistence
  */
-export class TaskManager implements ITaskManager {
+export class TaskManager implements IRuntimeTaskManager {
   private tasks: Map<string, Task> = new Map();
   private executors: Map<TaskType, TaskExecutor> = new Map();
   private progressCallbacks: Map<string, Set<TaskProgressCallback>> = new Map();
@@ -380,7 +402,7 @@ export class TaskManager implements ITaskManager {
    * Delete a task
    */
   async delete(id: string): Promise<boolean> {
-    const task = this.tasks.get(id);
+    const task = this.tasks.get(id) ?? (await this.storage.load(id));
     if (!task) return false;
 
     // Remove from in-memory map
@@ -416,6 +438,53 @@ export class TaskManager implements ITaskManager {
 
     this.updateTask(id, { output: updatedOutput });
     return true;
+  }
+
+  /**
+   * Upsert an externally managed task into the shared task plane.
+   *
+   * Used by runtime adapters that need TaskManager's persistence/listing
+   * surface without delegating execution to TaskManager executors.
+   */
+  async upsertExternalTask(task: SerializableTask): Promise<void> {
+    const existing = this.tasks.get(task.id);
+    const nextTask: Task = {
+      ...task,
+      createdAt: existing?.createdAt ?? task.createdAt,
+    };
+
+    this.tasks.set(task.id, nextTask);
+    await this.storage.save(nextTask as SerializableTask);
+    this._notifyProgress(nextTask);
+  }
+
+  /**
+   * Upsert an IDC projected task that carries an explicit checklist/artifact binding.
+   */
+  async upsertIdcProjectedTask(task: IdcProjectedTaskUpsertInput): Promise<void> {
+    await this.upsertExternalTask(toSerializableIdcProjectedTask(task));
+  }
+
+  /**
+   * Clear all persisted IDC projected tasks projected from a specific run.
+   *
+   * This intentionally scans storage instead of only the in-memory task map
+   * so completed-run cleanup still works after restore/restart.
+   */
+  async clearIdcProjectedTasksForRun(
+    runId: string,
+    runStartedAt?: number,
+  ): Promise<readonly string[]> {
+    const storedTasks = await this.storage.loadAll();
+    const ids = storedTasks
+      .filter((task) => isIdcProjectedTaskBoundToRun(task, runId, runStartedAt))
+      .map((task) => task.id);
+
+    for (const id of ids) {
+      await this.delete(id);
+    }
+
+    return ids;
   }
 
   /**
@@ -587,21 +656,45 @@ export class TaskManager implements ITaskManager {
       logger.error('Failed to persist task', { error: err });
     });
 
-    // Notify progress callbacks
-    const callbacks = this.progressCallbacks.get(id);
-    if (callbacks) {
-      for (const callback of callbacks) {
-        try {
-          callback(updatedTask);
-        } catch {
-          // Ignore callback errors
-        }
-      }
-    }
+    this._notifyProgress(updatedTask);
   }
 
   private generateTaskId(): string {
     this.taskCounter++;
     return `task_${Date.now()}_${this.taskCounter}`;
   }
+
+  private _notifyProgress(task: Task): void {
+    const callbacks = this.progressCallbacks.get(task.id);
+    if (!callbacks) {
+      return;
+    }
+
+    for (const callback of callbacks) {
+      try {
+        callback(task);
+      } catch {
+        // Ignore callback errors
+      }
+    }
+  }
+}
+
+function isIdcProjectedTaskBoundToRun(
+  task: Pick<SerializableTask, 'type' | 'input'>,
+  runId: string,
+  runStartedAt?: number,
+): boolean {
+  const binding = getIdcProjectedTaskRunBinding(task);
+  if (!binding || binding.runId !== runId) {
+    return false;
+  }
+  if (runStartedAt === undefined) {
+    return true;
+  }
+
+  // Legacy payloads written before provenance tagging only carry runId.
+  // We still clear them during run cleanup to avoid leaking stale task views
+  // after restore, while newer payloads get exact runId+startedAt matching.
+  return binding.runStartedAt === undefined || binding.runStartedAt === runStartedAt;
 }

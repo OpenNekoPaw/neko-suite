@@ -10,13 +10,27 @@ export {
   NEKO_DIR,
   NEKO_SUBDIRS,
   NEKO_LOG_FILES,
+  NEKO_CACHE_FILES,
   NEKO_STATE_FILES,
   NEKO_MD_PREFIXES,
   type INekoPaths,
   type NekoSubdir,
   type NekoLogFile,
+  type NekoCacheFile,
   type NekoStateFile,
 } from './neko-paths';
+
+export {
+  createArtifactIndexStore,
+  type ArtifactIndexEntry,
+  type ArtifactIndexSnapshot,
+  type ArtifactIndexStoreConfig,
+  type ArtifactIndexStoreFsOps,
+  type DraftArtifactIndexEntry,
+  type IArtifactIndexStore,
+  type PlanArtifactIndexEntry,
+  type TaskArtifactIndexEntry,
+} from './artifact-index-store';
 
 export {
   createSessionLock,
@@ -28,15 +42,39 @@ export {
 } from './session-lock';
 
 export {
+  createIdcRuntimeStateStore,
+  type IIdcRuntimeStateStore,
+  type IdcRuntimeStateFsOps,
+  type IdcRuntimeStateInput,
+  type IdcRuntimeStateSnapshot,
+  type IdcRuntimeStageTransition,
+  type PersistedFeedbackGuidanceSnapshot,
+  type PersistedIdcRunSnapshot,
+  type PendingApprovalSnapshot,
+} from './idc-runtime-state-store';
+
+export {
+  readIdcRuntimeState,
+  parseIdcRuntimeState,
+  readPendingApprovalState,
+  parsePendingApprovalState,
+  type IdcRuntimeStateReadFsOps,
+  type ReadIdcRuntimeStateConfig,
+  type ReadPendingApprovalStateConfig,
+  type IdcRuntimeRestoreState,
+  type PendingApprovalRestoreState,
+} from './idc-runtime-state-reader';
+
+export {
   createNdjsonEventSink,
   type INdjsonEventSink,
   type NdjsonEventSinkConfig,
   type NdjsonFsOps,
 } from './ndjson-event-sink';
 
-export { serializeTask } from './task-markdown';
-export { serializeDraft } from './draft-markdown';
-export { serializeExecutionPlan } from './plan-markdown';
+export { serializeTask, parseTask } from './task-markdown';
+export { serializeDraft, parseDraft } from './draft-markdown';
+export { serializeExecutionPlan, parseExecutionPlan } from './plan-markdown';
 
 export {
   parsePreferences,

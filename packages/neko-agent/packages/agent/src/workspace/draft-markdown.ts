@@ -36,6 +36,13 @@
  */
 
 import type { Draft } from '@neko-agent/types';
+import {
+  collectMarkdownSections,
+  getFrontmatterString,
+  getFrontmatterStringList,
+  parseMarkdownArtifact,
+  parseRequiredTimestamp,
+} from './artifact-markdown-parser';
 
 const BODY_SECTIONS: Array<{ heading: string; field: keyof Draft }> = [
   { heading: 'Intent', field: 'intent' },
@@ -76,6 +83,54 @@ export function serializeDraft(draft: Draft): string {
   }
 
   return `${frontmatter.join('\n')}\n${body.join('\n')}`;
+}
+
+export function parseDraft(markdown: string): Draft {
+  const parsed = parseMarkdownArtifact(markdown);
+  const sections = collectMarkdownSections(parsed.body, 2);
+
+  const id = getFrontmatterString(parsed.frontmatter, 'id');
+  const title = getFrontmatterString(parsed.frontmatter, 'title');
+  const status = getFrontmatterString(parsed.frontmatter, 'status');
+  const domain = getFrontmatterString(parsed.frontmatter, 'domain');
+
+  if (!id || !title || !status || !domain) {
+    throw new Error('Draft markdown is missing required frontmatter fields');
+  }
+
+  const referenceChain = getFrontmatterStringList(parsed.frontmatter, 'referenceChain');
+
+  return {
+    id,
+    title,
+    status: parseDraftStatus(status),
+    domain,
+    createdAt: parseRequiredTimestamp(
+      getFrontmatterString(parsed.frontmatter, 'createdAt'),
+      'createdAt',
+    ),
+    updatedAt: parseRequiredTimestamp(
+      getFrontmatterString(parsed.frontmatter, 'updatedAt'),
+      'updatedAt',
+    ),
+    intent: sections.get('Intent') ?? '',
+    approach: sections.get('Approach') ?? '',
+    artifact: sections.get('Concrete artifact') ?? '',
+    ...(referenceChain && referenceChain.length > 0 ? { referenceChain } : {}),
+  };
+}
+
+function parseDraftStatus(status: string): Draft['status'] {
+  switch (status) {
+    case 'draft':
+    case 'pending_review':
+    case 'approved':
+    case 'refined':
+    case 'rejected':
+      return status;
+    default:
+      throw new Error(`Draft markdown has invalid status: ${status}`);
+  }
 }
 
 // =============================================================================

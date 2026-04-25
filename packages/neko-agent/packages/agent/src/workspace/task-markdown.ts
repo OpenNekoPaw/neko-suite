@@ -31,6 +31,11 @@
  */
 
 import type { Task, TaskItem, TaskStatus } from '@neko-agent/types';
+import {
+  getFrontmatterString,
+  parseMarkdownArtifact,
+  parseRequiredTimestamp,
+} from './artifact-markdown-parser';
 
 // =============================================================================
 // Status rendering
@@ -90,4 +95,86 @@ export function serializeTask(task: Task): string {
     return `${header}_No items._\n`;
   }
   return `${header}${task.items.map(renderItem).join('\n')}\n`;
+}
+
+export function parseTask(markdown: string): Task {
+  const parsed = parseMarkdownArtifact(markdown);
+  const id = getFrontmatterString(parsed.frontmatter, 'id');
+  if (!id) {
+    throw new Error('Task markdown is missing required "id" frontmatter');
+  }
+
+  return {
+    id,
+    createdAt: parseRequiredTimestamp(
+      getFrontmatterString(parsed.frontmatter, 'createdAt'),
+      'createdAt',
+    ),
+    updatedAt: parseRequiredTimestamp(
+      getFrontmatterString(parsed.frontmatter, 'updatedAt'),
+      'updatedAt',
+    ),
+    items: parseTaskItems(id, parsed.body),
+  };
+}
+
+function parseTaskItems(taskId: string, body: string): readonly TaskItem[] {
+  const marker = /^# Tasks\r?\n/m.exec(body);
+  if (!marker || marker.index === undefined) {
+    return [];
+  }
+
+  const lines = body
+    .slice(marker.index + marker[0].length)
+    .trim()
+    .split(/\r?\n/);
+  if (lines.length === 1 && lines[0] === '_No items._') {
+    return [];
+  }
+
+  const items: TaskItem[] = [];
+  let itemIndex = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const match = line?.match(/^- \[( |~|x|!)\] (.+)$/);
+    if (!match) {
+      continue;
+    }
+
+    itemIndex += 1;
+    const label = (match[2] ?? '').trim();
+    const status = parseTaskStatusMarker(match[1] ?? ' ');
+    const item: TaskItem = {
+      id: `${taskId}.item.${itemIndex}`,
+      content: label,
+      status,
+      ...(status === 'in_progress' ? { activeForm: label } : {}),
+    };
+
+    const errorMatch = lines[index + 1]?.match(/^\s+_error:\s+(.+)_$/);
+    if (errorMatch) {
+      item.error = (errorMatch[1] ?? '').trim();
+      index += 1;
+    }
+
+    items.push(item);
+  }
+
+  return items;
+}
+
+function parseTaskStatusMarker(marker: string): TaskStatus {
+  switch (marker) {
+    case ' ':
+      return 'pending';
+    case '~':
+      return 'in_progress';
+    case 'x':
+      return 'completed';
+    case '!':
+      return 'failed';
+    default:
+      throw new Error(`Task markdown has invalid status marker: ${marker}`);
+  }
 }

@@ -64,11 +64,23 @@ export const NEKO_LOG_FILES = {
 export type NekoLogFile = keyof typeof NEKO_LOG_FILES;
 
 /**
+ * Canonical cache-file names (under `cache/`). Program-produced JSON
+ * derived from markdown artifacts and registries, safe to rebuild.
+ */
+export const NEKO_CACHE_FILES = {
+  capabilityIndex: 'capability-index.json',
+  artifactIndex: 'artifact-index.json',
+} as const;
+
+export type NekoCacheFile = keyof typeof NEKO_CACHE_FILES;
+
+/**
  * Canonical state file names (under `state/`). Program-produced JSON
  * concurrency / lock artifacts — not human-authored.
  */
 export const NEKO_STATE_FILES = {
   sessionLock: 'session-lock.json',
+  idcRuntime: 'idc-runtime.json',
 } as const;
 
 export type NekoStateFile = keyof typeof NEKO_STATE_FILES;
@@ -104,6 +116,8 @@ export interface INekoPaths {
   file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
   /** Absolute path to a canonical JSONL log. */
   log(kind: NekoLogFile): string;
+  /** Absolute path to a canonical cache snapshot. */
+  cache(kind: NekoCacheFile): string;
   /** Absolute path to a canonical program-produced state file. */
   state(kind: NekoStateFile): string;
 }
@@ -172,6 +186,7 @@ export function createNekoPaths(projectRoot: string): INekoPaths {
     dir,
     file: file as INekoPaths['file'],
     log: (kind) => `${dir('logs')}/${NEKO_LOG_FILES[kind]}`,
+    cache: (kind) => `${dir('cache')}/${NEKO_CACHE_FILES[kind]}`,
     state: (kind) => `${dir('state')}/${NEKO_STATE_FILES[kind]}`,
   };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Draft } from '@neko-agent/types';
-import { serializeDraft } from '../draft-markdown';
+import { parseDraft, serializeDraft } from '../draft-markdown';
 
 function make(overrides: Partial<Draft> = {}): Draft {
   return {
@@ -64,5 +64,12 @@ describe('serializeDraft', () => {
       const md = serializeDraft(make({ status }));
       expect(md).toContain(`status: ${status}`);
     }
+  });
+
+  it('round-trips the canonical draft markdown back into a Draft object', () => {
+    const original = make({
+      referenceChain: ['asset://characters/hero', 'asset://styles/cinematic'],
+    });
+    expect(parseDraft(serializeDraft(original))).toEqual(original);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from '@neko-agent/types';
-import { serializeTask } from '../task-markdown';
+import { parseTask, serializeTask } from '../task-markdown';
 
 function task(items: Task['items'], overrides: Partial<Task> = {}): Task {
   return {
@@ -80,5 +80,20 @@ describe('serializeTask', () => {
     expect(firstIdx).toBeGreaterThan(0);
     expect(secondIdx).toBeGreaterThan(firstIdx);
     expect(thirdIdx).toBeGreaterThan(secondIdx);
+  });
+
+  it('round-trips canonical task markdown back into a Task object', () => {
+    const original = task([
+      { id: 'run-1.item.1', content: 'First', status: 'completed' },
+      {
+        id: 'run-1.item.2',
+        content: 'Doing second',
+        status: 'in_progress',
+        activeForm: 'Doing second',
+      },
+      { id: 'run-1.item.3', content: 'Third', status: 'failed', error: 'OOM' },
+    ]);
+
+    expect(parseTask(serializeTask(original))).toEqual(original);
   });
 });

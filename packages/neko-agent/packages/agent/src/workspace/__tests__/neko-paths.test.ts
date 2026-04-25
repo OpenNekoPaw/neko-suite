@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { createNekoPaths, NEKO_SUBDIRS, NEKO_LOG_FILES, NEKO_STATE_FILES } from '../neko-paths';
+import {
+  createNekoPaths,
+  NEKO_CACHE_FILES,
+  NEKO_LOG_FILES,
+  NEKO_STATE_FILES,
+  NEKO_SUBDIRS,
+} from '../neko-paths';
 
 describe('NekoPaths', () => {
   it('root is <projectRoot>/.neko', () => {
@@ -56,8 +62,15 @@ describe('NekoPaths', () => {
     expect(p.log('steps')).toBe(`/r/.neko/logs/${NEKO_LOG_FILES.steps}`);
   });
 
+  it('cache() returns canonical cache snapshot paths', () => {
+    const p = createNekoPaths('/r');
+    expect(p.cache('capabilityIndex')).toBe(`/r/.neko/cache/${NEKO_CACHE_FILES.capabilityIndex}`);
+    expect(p.cache('artifactIndex')).toBe(`/r/.neko/cache/${NEKO_CACHE_FILES.artifactIndex}`);
+  });
+
   it('state() returns canonical state file paths', () => {
     const p = createNekoPaths('/r');
     expect(p.state('sessionLock')).toBe(`/r/.neko/state/${NEKO_STATE_FILES.sessionLock}`);
+    expect(p.state('idcRuntime')).toBe(`/r/.neko/state/${NEKO_STATE_FILES.idcRuntime}`);
   });
 });
