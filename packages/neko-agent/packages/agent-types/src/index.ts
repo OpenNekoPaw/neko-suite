@@ -7,6 +7,20 @@
 // Message protocol
 export type { Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff } from './message';
 
+// Builtin slash command metadata shared across runtime + UI surfaces
+export type {
+  BuiltinSlashCommandName,
+  BuiltinSlashCommandCategory,
+  BuiltinSlashCommandSurface,
+  BuiltinSlashCommandDefinition,
+} from './builtin-slash-command';
+export {
+  BUILTIN_SLASH_COMMANDS,
+  BUILTIN_SLASH_COMMAND_ALIASES,
+  listBuiltinSlashCommands,
+  getBuiltinSlashCommand,
+} from './builtin-slash-command';
+
 // Plan (parsed plan-mode markdown — agent / extension / webview share)
 export type { Plan, PlanStep } from './plan';
 
@@ -36,7 +50,13 @@ export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
 export { toTaskStatusCamel, toTaskStatusSnake } from './task';
 
 // IdcRun — run record carrying IDC stage-activation summaries
-export type { IdcRunStatus, IdcRunRoundSummary, IdcRun } from './idc-run';
+export type {
+  IdcRunStatus,
+  IdcRunRoundSummary,
+  IdcRun,
+  IdcRunArtifactKind,
+  IdcRunArtifactBinding,
+} from './idc-run';
 export { roundSummaryFromDecision } from './idc-run';
 
 // Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)

@@ -9,6 +9,14 @@
 export { LogLevel } from './types';
 export type { ILogger, ILogTransport, LogEntry, LoggerFactory } from './types';
 export { ConsoleLogger, ConsoleTransport } from './console-logger';
+export {
+  emitDiagnostic,
+  classifyCommonFailureReason,
+  toDiagnosticError,
+  type DiagnosticErrorData,
+  type DiagnosticLevel,
+  type RuntimeDiagnostic,
+} from './diagnostic';
 
 // Logger registry factory — eliminates boilerplate in each package
 import type { ILogger } from './types';

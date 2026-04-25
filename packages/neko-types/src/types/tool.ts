@@ -2,6 +2,8 @@
  * Tool Types - Tool definition and execution (shared)
  */
 
+import type { ToolDefinition } from './platform';
+
 /**
  * Tool category
  */
@@ -251,10 +253,7 @@ export interface IToolRegistry {
    * Convert tools to LLM tool definitions
    * @param filter Optional filter to limit which tools are included
    */
-  toToolDefinitions(filter?: ToolFilterOptions): Array<{
-    type: 'function';
-    function: { name: string; description: string; parameters: ToolParameters };
-  }>;
+  toToolDefinitions(filter?: ToolFilterOptions): ToolDefinition[];
 
   /** Get tool count (optional) */
   readonly size?: number;

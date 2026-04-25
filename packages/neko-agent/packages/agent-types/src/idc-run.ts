@@ -15,6 +15,8 @@
  */
 
 import type { IdcStage, StageActivationDecision, StageSkipReason } from './stage';
+import type { Draft } from './draft';
+import type { ExecutionPlan } from './execution-plan';
 import type { Task } from './task';
 
 // =============================================================================
@@ -32,6 +34,17 @@ export type IdcRunStatus =
   | 'aborted'
   /** Terminated due to an error (autoheal exhausted or unrecoverable). */
   | 'failed';
+
+/** Kind of IDC artifact bound to a run. */
+export type IdcRunArtifactKind = 'draft' | 'plan' | 'task';
+
+/** Lightweight binding from a run to a persisted artifact file. */
+export interface IdcRunArtifactBinding {
+  kind: IdcRunArtifactKind;
+  artifactId: string;
+  path: string;
+  updatedAt: number;
+}
 
 // =============================================================================
 // Per-round summary (telemetry compaction)
@@ -92,8 +105,14 @@ export interface IdcRun {
    * Empty while `status === 'pending'`.
    */
   rounds: readonly IdcRunRoundSummary[];
+  /** Latest Draft artifact bound to this run, when present. */
+  draft?: Draft;
+  /** Latest ExecutionPlan artifact bound to this run, when present. */
+  plan?: ExecutionPlan;
   /** Associated user-visible Task checklist for the Apply stage, when one is active. */
   task?: Task;
+  /** Persisted artifact bindings for Draft / Plan / Task. */
+  artifactBindings?: readonly IdcRunArtifactBinding[];
   /**
    * Optional terminal error when `status === 'failed'`. Structured so
    * telemetry aggregators can bucket without parsing free-text.
