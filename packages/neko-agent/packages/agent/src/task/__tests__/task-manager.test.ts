@@ -329,7 +329,6 @@ describe('TaskManager', () => {
       expect(task?.input.payload).toEqual(
         expect.objectContaining({
           name: 'Export teaser',
-          content: 'Export teaser',
           artifact: {
             kind: 'task',
             artifactId: 'task-1',

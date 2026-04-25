@@ -197,6 +197,71 @@ describe('TaskManager Persistence', () => {
         expect.objectContaining({ id: 'task_other' }),
       );
     });
+
+    it('falls back to IDC task id provenance when the payload binding is corrupted', async () => {
+      await storage.save(
+        toSerializableIdcProjectedTask({
+          id: 'idc:run-restore:item-1',
+          status: 'completed',
+          progress: 100,
+          createdAt: 10,
+          updatedAt: 20,
+          content: 'Recovered task',
+          binding: {
+            source: 'idc',
+            runId: 'run-restore',
+            runStartedAt: 111,
+            checklistId: 'task-restore',
+            itemId: 'item-1',
+          },
+        }),
+      );
+      await storage.save({
+        id: 'idc:run-restore:item-corrupt',
+        type: 'workflow',
+        status: 'running',
+        input: {
+          type: 'workflow',
+          payload: {
+            source: 'idc',
+            runId: 123,
+            checklistId: 'task-corrupt',
+          },
+        },
+        progress: 25,
+        createdAt: 12,
+        updatedAt: 22,
+      } as SerializableTask);
+      await storage.save(
+        toSerializableIdcProjectedTask({
+          id: 'idc:run-restore:item-2',
+          status: 'completed',
+          progress: 100,
+          createdAt: 11,
+          updatedAt: 21,
+          content: 'Recovered task retry',
+          binding: {
+            source: 'idc',
+            runId: 'run-restore',
+            runStartedAt: 222,
+            checklistId: 'task-restore-2',
+            itemId: 'item-2',
+          },
+        }),
+      );
+
+      const deletedIds = await manager.clearIdcProjectedTasksForRun('run-restore', 111);
+
+      expect(deletedIds).toEqual(
+        expect.arrayContaining(['idc:run-restore:item-1', 'idc:run-restore:item-corrupt']),
+      );
+      expect(deletedIds).toHaveLength(2);
+      expect(await storage.load('idc:run-restore:item-1')).toBeUndefined();
+      expect(await storage.load('idc:run-restore:item-corrupt')).toBeUndefined();
+      expect(await storage.load('idc:run-restore:item-2')).toEqual(
+        expect.objectContaining({ id: 'idc:run-restore:item-2' }),
+      );
+    });
   });
 
   describe('resumePendingTasks', () => {

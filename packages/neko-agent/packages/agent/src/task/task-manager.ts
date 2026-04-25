@@ -681,10 +681,19 @@ export class TaskManager implements IRuntimeTaskManager {
 }
 
 function isIdcProjectedTaskBoundToRun(
-  task: Pick<SerializableTask, 'type' | 'input'>,
+  task: Pick<SerializableTask, 'id' | 'type' | 'input'>,
   runId: string,
   runStartedAt?: number,
 ): boolean {
+  if (task.type === 'workflow' && task.id.startsWith(`idc:${runId}:`)) {
+    if (runStartedAt === undefined) {
+      return true;
+    }
+
+    const idBinding = getIdcProjectedTaskRunBinding(task);
+    return idBinding?.runStartedAt === undefined || idBinding.runStartedAt === runStartedAt;
+  }
+
   const binding = getIdcProjectedTaskRunBinding(task);
   if (!binding || binding.runId !== runId) {
     return false;
