@@ -16,6 +16,7 @@ import { Command } from 'commander';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
 import type { CLIConfig } from './core/types';
 import { runAgent, runInteractive } from './core/runner';
+import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
 import { formatResult } from './core/formatter';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
@@ -52,6 +53,21 @@ program
   .option('-f, --format <format>', 'Output format (text, json, markdown)', 'text')
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     await handleRun(prompt, opts);
+  });
+
+program
+  .command('experiment <prompt>')
+  .description('Run ablation experiments and write JSON/Markdown reports')
+  .option('-p, --provider <provider>', 'AI provider')
+  .option('-m, --model <model>', 'Model ID')
+  .option('-k, --api-key <key>', 'API key')
+  .option('-s, --suite <suite>', 'Suite (standard, group, parameter)', 'standard')
+  .option('-r, --repetitions <n>', 'Repetitions per variant', '1')
+  .option('-t, --timeout <ms>', 'Timeout per variant in milliseconds')
+  .option('-o, --output-dir <dir>', 'Output directory (default: .neko/experiments)')
+  .option('-i, --isolation <mode>', 'Isolation mode (none, metadata-only, workspace-root)')
+  .action(async (prompt: string, opts: Record<string, unknown>) => {
+    await handleExperiment(prompt, opts);
   });
 
 // Config command
@@ -208,4 +224,77 @@ async function handleRun(prompt: string, opts: Record<string, unknown>): Promise
   }
 
   process.exit(result.success ? 0 : 1);
+}
+
+async function handleExperiment(prompt: string, opts: Record<string, unknown>): Promise<void> {
+  const config = loadConfig(process.cwd(), {
+    provider: opts['provider'] as string | undefined,
+    model: opts['model'] as string | undefined,
+    apiKey: opts['apiKey'] as string | undefined,
+  });
+
+  const validation = validateConfig(config);
+  if (!validation.valid) {
+    console.error(chalk.red('Configuration errors:'));
+    for (const error of validation.errors) {
+      console.error(chalk.red(`  • ${error}`));
+    }
+    process.exit(1);
+  }
+
+  const suite = parseExperimentSuite(opts['suite']);
+  const repetitions = parsePositiveInteger(opts['repetitions'], 'repetitions');
+  const timeout = opts['timeout'] ? parsePositiveInteger(opts['timeout'], 'timeout') : undefined;
+  const isolation = parseIsolationMode(opts['isolation']);
+
+  console.log(chalk.cyan.bold('\nRunning ablation experiment'));
+  console.log(chalk.gray(`  Suite:       ${suite}`));
+  console.log(chalk.gray(`  Repetitions: ${repetitions}`));
+  console.log(chalk.gray(`  Model:       ${config.model}`));
+
+  try {
+    const { result } = await runExperiment({
+      config,
+      prompt,
+      suite,
+      repetitions,
+      ...(timeout ? { timeout } : {}),
+      ...(typeof opts['outputDir'] === 'string' ? { outputDir: opts['outputDir'] } : {}),
+      ...(isolation ? { isolation } : {}),
+    });
+
+    console.log('');
+    console.log(formatExperimentReport(result));
+    process.exit(0);
+  } catch (error) {
+    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    process.exit(1);
+  }
+}
+
+function parseExperimentSuite(value: unknown): ExperimentSuiteName {
+  if (value === 'standard' || value === 'group' || value === 'parameter') {
+    return value;
+  }
+  throw new Error(`Invalid suite: ${String(value)}. Expected standard, group, or parameter.`);
+}
+
+function parseIsolationMode(
+  value: unknown,
+): 'none' | 'metadata-only' | 'workspace-root' | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'none' || value === 'metadata-only' || value === 'workspace-root') {
+    return value;
+  }
+  throw new Error(
+    `Invalid isolation mode: ${String(value)}. Expected none, metadata-only, or workspace-root.`,
+  );
+}
+
+function parsePositiveInteger(value: unknown, label: string): number {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid ${label}: ${String(value)}. Expected a positive integer.`);
+  }
+  return parsed;
 }

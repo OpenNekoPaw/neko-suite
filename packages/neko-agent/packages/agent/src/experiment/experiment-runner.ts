@@ -7,17 +7,22 @@
 
 import type { AgentEvent } from '../session/types';
 import type {
+  EvaluationResult,
   ExperimentConfig,
+  ExperimentIsolationMode,
   ExperimentMetrics,
+  ExperimentOutputFile,
   ExperimentProgressEvent,
   ExperimentResult,
+  ExperimentRunDescriptor,
+  ExperimentRunIsolation,
   TokenMetrics,
   VariantResult,
   VariantRunResult,
 } from './types';
 import { applyAblationToggles } from './apply-toggles';
 import { MetricsHooks } from './metrics-hooks';
-import { buildComparison } from './comparison';
+import { buildComparison, formatComparisonMarkdown } from './comparison';
 
 // =============================================================================
 // Types
@@ -69,6 +74,11 @@ export class ExperimentRunner {
       for (let rep = 0; rep < repetitions; rep++) {
         yield { type: 'variant_start', variant: variant.name, repetition: rep };
 
+        const descriptor = this._createRunDescriptor(variant.name, rep);
+        const isolation = createRunIsolation(descriptor);
+        let metricsHooks: MetricsHooks | undefined;
+        let session: IExperimentSession | undefined;
+
         try {
           // 1. Apply toggles
           const sessionConfig = applyAblationToggles(
@@ -77,22 +87,24 @@ export class ExperimentRunner {
           );
 
           // 2. Create MetricsHooks (prepend to hooks)
-          const metricsHooks = new MetricsHooks();
+          metricsHooks = new MetricsHooks();
           sessionConfig.hooks = [metricsHooks, ...(sessionConfig.hooks ?? [])];
 
           // 3. Create session
-          const session = this._sessionFactory.create(sessionConfig);
+          session = this._sessionFactory.create(sessionConfig);
 
           // 4. Execute with timeout
-          const agentResult = await this._executeWithTimeout(session, metricsHooks);
+          const agentResult = await this._executeWithTimeout(session, metricsHooks, isolation);
+          const evaluation = await this._evaluateRun(agentResult, descriptor);
+          const metrics = withEvaluation(metricsHooks.getMetrics(), evaluation);
 
           // 5. Collect
           const runResult: VariantRunResult = {
             variantName: variant.name,
             repetitionIndex: rep,
-            success: agentResult.success,
+            success: evaluation?.passed ?? agentResult.success,
             agentResult,
-            metrics: metricsHooks.getMetrics(),
+            metrics,
             toggles: variant.toggles,
           };
           runs.push(runResult);
@@ -103,10 +115,9 @@ export class ExperimentRunner {
             repetition: rep,
             metrics: runResult.metrics,
           };
-
-          session.dispose();
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
+          const metrics = withEvaluation(metricsHooks?.getMetrics() ?? createEmptyMetrics());
           runs.push({
             variantName: variant.name,
             repetitionIndex: rep,
@@ -119,7 +130,7 @@ export class ExperimentRunner {
               error: error instanceof Error ? error : new Error(errorMsg),
               timing: { startTime: 0, endTime: 0, duration: 0 },
             },
-            metrics: createEmptyMetrics(),
+            metrics,
             toggles: variant.toggles,
             error: errorMsg,
           });
@@ -130,6 +141,8 @@ export class ExperimentRunner {
             repetition: rep,
             error: errorMsg,
           };
+        } finally {
+          session?.dispose();
         }
       }
 
@@ -137,7 +150,7 @@ export class ExperimentRunner {
     }
 
     // Build final result
-    const result = this._buildResult(allRunResults);
+    const result = await this._buildResult(allRunResults);
     yield { type: 'experiment_complete', result };
   }
 
@@ -151,7 +164,10 @@ export class ExperimentRunner {
         finalResult = event.result;
       }
     }
-    return finalResult!;
+    if (!finalResult) {
+      throw new Error('Experiment completed without a final result');
+    }
+    return finalResult;
   }
 
   // ---------------------------------------------------------------------------
@@ -161,6 +177,7 @@ export class ExperimentRunner {
   private async _executeWithTimeout(
     session: IExperimentSession,
     _metricsHooks: MetricsHooks,
+    isolation: ExperimentRunIsolation,
   ): Promise<import('@neko/shared').AgentResult> {
     const timeoutMs = this._config.variantTimeoutMs;
 
@@ -168,7 +185,7 @@ export class ExperimentRunner {
       let lastEvent: AgentEvent | undefined;
       for await (const event of session.execute(
         this._config.taskPrompt,
-        this._config.taskContext,
+        this._createTaskContext(isolation),
       )) {
         lastEvent = event;
       }
@@ -228,7 +245,9 @@ export class ExperimentRunner {
     ]);
   }
 
-  private _buildResult(allRunResults: Map<string, VariantRunResult[]>): ExperimentResult {
+  private async _buildResult(
+    allRunResults: Map<string, VariantRunResult[]>,
+  ): Promise<ExperimentResult> {
     const variants: VariantResult[] = this._config.variants.map((variant) => {
       const runs = allRunResults.get(variant.name) ?? [];
       return {
@@ -238,7 +257,7 @@ export class ExperimentRunner {
       };
     });
 
-    return {
+    const result: ExperimentResult = {
       name: this._config.name,
       startedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
@@ -246,6 +265,81 @@ export class ExperimentRunner {
       variants,
       comparison: buildComparison(variants),
     };
+
+    const outputFiles = await this._writeOutputs(result);
+    return outputFiles.length > 0 ? { ...result, outputFiles } : result;
+  }
+
+  private async _writeOutputs(result: ExperimentResult): Promise<ExperimentOutputFile[]> {
+    if (!this._config.outputDir || !this._config.outputWriter) {
+      return [];
+    }
+
+    const baseDir = joinPath(this._config.outputDir, sanitizePathSegment(this._config.name));
+    const jsonPath = joinPath(baseDir, 'result.json');
+    const markdownPath = joinPath(baseDir, 'comparison.md');
+
+    await this._config.outputWriter.writeTextFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
+    await this._config.outputWriter.writeTextFile(
+      markdownPath,
+      `${formatComparisonMarkdown(result.comparison)}\n`,
+    );
+
+    return [
+      { kind: 'json', path: jsonPath },
+      { kind: 'markdown', path: markdownPath },
+    ];
+  }
+
+  private _createRunDescriptor(
+    variantName: string,
+    repetitionIndex: number,
+  ): ExperimentRunDescriptor {
+    const isolationMode = resolveIsolationMode(this._config);
+    return {
+      experimentName: this._config.name,
+      variantName,
+      repetitionIndex,
+      isolationMode,
+      ...(this._config.outputDir && {
+        outputDir: joinPath(
+          this._config.outputDir,
+          sanitizePathSegment(this._config.name),
+          sanitizePathSegment(variantName),
+          `run-${repetitionIndex}`,
+        ),
+      }),
+    };
+  }
+
+  private _createTaskContext(
+    isolation: ExperimentRunIsolation,
+  ): import('../session/types').ExecutionContext | undefined {
+    const baseContext = this._config.taskContext;
+    if (!baseContext && Object.keys(isolation.contextMetadata).length === 0) {
+      return undefined;
+    }
+
+    return {
+      ...baseContext,
+      ...(isolation.outputDir && resolveIsolationMode(this._config) === 'workspace-root'
+        ? { workspaceRoot: isolation.outputDir }
+        : {}),
+      metadata: {
+        ...(baseContext?.metadata ?? {}),
+        ...isolation.contextMetadata,
+      },
+    };
+  }
+
+  private async _evaluateRun(
+    agentResult: import('@neko/shared').AgentResult,
+    descriptor: ExperimentRunDescriptor,
+  ): Promise<EvaluationResult | undefined> {
+    if (!this._config.evaluator) {
+      return undefined;
+    }
+    return this._config.evaluator.evaluate(agentResult, descriptor);
   }
 }
 
@@ -262,6 +356,62 @@ function createEmptyMetrics(): ExperimentMetrics {
     toolSummary: { totalCalls: 0, successCount: 0, failureCount: 0, byTool: {} },
     custom: {},
   };
+}
+
+function resolveIsolationMode(config: ExperimentConfig): ExperimentIsolationMode {
+  return config.isolation ?? (config.outputDir ? 'metadata-only' : 'none');
+}
+
+function createRunIsolation(descriptor: ExperimentRunDescriptor): ExperimentRunIsolation {
+  if (descriptor.isolationMode === 'none' || !descriptor.outputDir) {
+    return { contextMetadata: {} };
+  }
+
+  return {
+    outputDir: descriptor.outputDir,
+    contextMetadata: {
+      experiment: {
+        name: descriptor.experimentName,
+        variant: descriptor.variantName,
+        repetition: descriptor.repetitionIndex,
+        outputDir: descriptor.outputDir,
+        isolationMode: descriptor.isolationMode,
+      },
+    },
+  };
+}
+
+function withEvaluation(
+  metrics: ExperimentMetrics,
+  evaluation?: EvaluationResult,
+): ExperimentMetrics {
+  if (!evaluation) {
+    return metrics;
+  }
+
+  return {
+    ...metrics,
+    custom: {
+      ...metrics.custom,
+      evaluation,
+    },
+  };
+}
+
+function sanitizePathSegment(value: string): string {
+  const sanitized = value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return sanitized || 'unnamed';
+}
+
+function joinPath(...segments: string[]): string {
+  return segments
+    .filter((segment) => segment.length > 0)
+    .map((segment, index) => {
+      if (index === 0) return segment.replace(/\/+$/g, '');
+      return segment.replace(/^\/+|\/+$/g, '');
+    })
+    .filter((segment) => segment.length > 0)
+    .join('/');
 }
 
 function averageMetrics(metricsList: ExperimentMetrics[]): ExperimentMetrics {

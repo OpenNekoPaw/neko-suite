@@ -19,8 +19,15 @@
 // Types
 export type {
   AblationToggles,
+  EvaluationResult,
+  ExperimentEvaluator,
+  ExperimentIsolationMode,
+  ExperimentOutputFile,
+  ExperimentOutputWriter,
   ExperimentVariant,
   ExperimentConfig,
+  ExperimentRunDescriptor,
+  ExperimentRunIsolation,
   TokenMetrics,
   ToolCallMetric,
   TurnMetrics,
@@ -61,6 +68,10 @@ export {
   NO_PROJECT_MEMORY,
   NO_TRAITS,
   NO_THINKING,
+  ALWAYS_ONLY_TOOLS,
+  PLAN_PERMISSION_MODE,
+  ASK_PERMISSION_MODE,
+  SINGLE_ITERATION,
   // Group variants
   NO_ALL_COMPRESSION,
   NO_ALL_SKILLS,
@@ -69,4 +80,5 @@ export {
   // Suite builders
   createStandardAblationSuite,
   createGroupAblationSuite,
+  createParameterAblationSuite,
 } from './presets';

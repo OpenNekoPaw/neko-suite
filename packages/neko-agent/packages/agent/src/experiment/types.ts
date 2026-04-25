@@ -125,8 +125,57 @@ export interface ExperimentConfig {
   baseSessionConfig: AgentSessionConfig;
   /** Maximum time per variant in milliseconds */
   variantTimeoutMs?: number;
-  /** Output directory for results */
+  /** Output directory for results and per-run isolation metadata */
   outputDir?: string;
+  /**
+   * Run isolation mode.
+   * - 'none': reuse the base session config and task context as-is
+   * - 'metadata-only': add a deterministic per-run output directory to context metadata
+   * - 'workspace-root': also override taskContext.workspaceRoot with the per-run directory
+   *
+   * Default: 'metadata-only' when outputDir is provided, otherwise 'none'.
+   */
+  isolation?: ExperimentIsolationMode;
+  /** Optional quality evaluator merged into metrics.custom.evaluation */
+  evaluator?: ExperimentEvaluator;
+  /** Optional writer for persisting result JSON and comparison markdown */
+  outputWriter?: ExperimentOutputWriter;
+}
+
+export type ExperimentIsolationMode = 'none' | 'metadata-only' | 'workspace-root';
+
+export interface ExperimentRunDescriptor {
+  experimentName: string;
+  variantName: string;
+  repetitionIndex: number;
+  outputDir?: string;
+  isolationMode: ExperimentIsolationMode;
+}
+
+export interface ExperimentRunIsolation {
+  outputDir?: string;
+  contextMetadata: Record<string, unknown>;
+}
+
+export interface EvaluationResult {
+  score?: number;
+  passed?: boolean;
+  reason?: string;
+  metrics?: Record<string, number | boolean | string>;
+  details?: Record<string, unknown>;
+}
+
+export interface ExperimentEvaluator {
+  evaluate(result: AgentResult, descriptor: ExperimentRunDescriptor): Promise<EvaluationResult>;
+}
+
+export interface ExperimentOutputFile {
+  kind: 'json' | 'markdown';
+  path: string;
+}
+
+export interface ExperimentOutputWriter {
+  writeTextFile(path: string, content: string): Promise<void>;
 }
 
 // =============================================================================
@@ -202,6 +251,7 @@ export interface ExperimentResult {
   taskPrompt: string;
   variants: VariantResult[];
   comparison: ComparisonEntry[];
+  outputFiles?: ExperimentOutputFile[];
 }
 
 /** Comparison table entry (one per variant) */

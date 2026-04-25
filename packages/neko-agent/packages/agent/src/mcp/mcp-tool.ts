@@ -8,6 +8,8 @@ import type {
   ToolCategory,
   MCPToolDefinition,
   ToolDefinition,
+  ToolParameters,
+  ToolParameterProperty,
 } from '@neko/shared';
 import { MCPManager } from './mcp-manager';
 import { getLogger } from '../utils/logger';
@@ -34,7 +36,7 @@ export class MCPTool implements Tool {
   readonly name: string;
   readonly description: string;
   readonly category: ToolCategory = 'mcp';
-  readonly parameters: Record<string, unknown>;
+  readonly parameters: ToolParameters;
 
   private serverId: string;
   private mcpManager: MCPManager;
@@ -49,7 +51,7 @@ export class MCPTool implements Tool {
     // Use double underscore to match permission system's mcp__ prefix convention
     this.name = `mcp__${serverId}__${mcpTool.name}`;
     this.description = truncateDescription(mcpTool.description || `MCP tool from ${serverId}`);
-    this.parameters = mcpTool.inputSchema || {};
+    this.parameters = normalizeMcpInputSchema(mcpTool.inputSchema);
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
@@ -68,10 +70,57 @@ export class MCPTool implements Tool {
       function: {
         name: this.name,
         description: this.description,
-        parameters: this.parameters,
+        parameters: { ...this.parameters },
       },
     };
   }
+}
+
+function normalizeMcpInputSchema(schema: Record<string, unknown> | undefined): ToolParameters {
+  const properties = normalizeProperties(schema?.['properties']);
+  const required = Array.isArray(schema?.['required'])
+    ? schema['required'].filter((item): item is string => typeof item === 'string')
+    : undefined;
+
+  return {
+    type: 'object',
+    properties,
+    ...(required && { required }),
+  };
+}
+
+function normalizeProperties(value: unknown): Record<string, ToolParameterProperty> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const properties: Record<string, ToolParameterProperty> = {};
+  for (const [key, property] of Object.entries(value)) {
+    if (!isRecord(property)) {
+      continue;
+    }
+    const type = property['type'];
+    properties[key] = {
+      ...property,
+      type: isToolParameterType(type) ? type : 'object',
+    };
+  }
+  return properties;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isToolParameterType(value: unknown): value is ToolParameterProperty['type'] {
+  return (
+    value === 'string' ||
+    value === 'number' ||
+    value === 'integer' ||
+    value === 'boolean' ||
+    value === 'array' ||
+    value === 'object'
+  );
 }
 
 /**

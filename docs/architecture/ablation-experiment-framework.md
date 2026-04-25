@@ -179,9 +179,40 @@ export interface ExperimentConfig {
   variants: ExperimentVariant[];
   baseSessionConfig: AgentSessionConfig;
   variantTimeoutMs?: number;       // 单变体超时
-  outputDir?: string;              // 默认 .neko/experiments/
+  outputDir?: string;              // 实验输出根目录；提供后默认启用 metadata-only 隔离
+  isolation?: ExperimentIsolationMode; // 'none' | 'metadata-only' | 'workspace-root'
+  evaluator?: ExperimentEvaluator; // 可选质量评估器，结果写入 metrics.custom.evaluation
+  outputWriter?: ExperimentOutputWriter; // 可选输出写入器，负责 result.json / comparison.md 落盘
+}
+
+export type ExperimentIsolationMode = 'none' | 'metadata-only' | 'workspace-root';
+
+export interface ExperimentRunDescriptor {
+  experimentName: string;
+  variantName: string;
+  repetitionIndex: number;
+  outputDir?: string;
+  isolationMode: ExperimentIsolationMode;
+}
+
+export interface EvaluationResult {
+  score?: number;
+  passed?: boolean;
+  reason?: string;
+  metrics?: Record<string, number | boolean | string>;
+  details?: Record<string, unknown>;
+}
+
+export interface ExperimentEvaluator {
+  evaluate(result: AgentResult, descriptor: ExperimentRunDescriptor): Promise<EvaluationResult>;
+}
+
+export interface ExperimentOutputWriter {
+  writeTextFile(path: string, content: string): Promise<void>;
 }
 ```
+
+隔离策略说明：`metadata-only` 会把 `{ experiment: { name, variant, repetition, outputDir, isolationMode } }` 注入 `taskContext.metadata`，不改变原 workspace；`workspace-root` 额外把 `taskContext.workspaceRoot` 指向该 run 的输出目录，用于强隔离 `.neko` 状态、journal、project memory 等磁盘副作用。
 
 ### Metrics 体系
 
@@ -379,7 +410,7 @@ export class MetricsHooks implements ExecutorHooks {
 
 ```typescript
 export class ExperimentRunner {
-  constructor(config: ExperimentConfig)
+  constructor(config: ExperimentConfig, sessionFactory: ISessionFactory)
 
   /** 流式运行，yield 进度事件 */
   async *run(): AsyncIterable<ExperimentProgressEvent>
@@ -393,11 +424,14 @@ export class ExperimentRunner {
 
 ```
 1. applyAblationToggles(baseConfig, variant.toggles) → 新 config
-2. 创建 MetricsHooks，插入 config.hooks 首位
-3. new AgentSession(config)
-4. session.execute(taskPrompt, taskContext) + 超时控制
-5. metricsHooks.getMetrics() → 收集结果
-6. session.dispose()
+2. 为 variant/repetition 生成 ExperimentRunDescriptor 与隔离 metadata
+3. 创建 MetricsHooks，插入 config.hooks 首位
+4. 通过 ISessionFactory 创建 session
+5. session.execute(taskPrompt, isolatedTaskContext) + 超时控制
+6. 可选 evaluator.evaluate(agentResult, descriptor)，写入 metrics.custom.evaluation
+7. metricsHooks.getMetrics() → 收集结果
+8. 若提供 outputDir + outputWriter，写入 result.json 与 comparison.md
+9. finally session.dispose()，错误与超时路径也释放资源
 ```
 
 进度事件类型：
@@ -527,12 +561,35 @@ export const MINIMAL: ExperimentVariant = {
   }
 };
 
-/** 标准消融套件：baseline + 逐个关闭每个已落地功能点（16 个变体） */
+/** 标准消融套件：baseline + 15 个单功能关闭变体（合计 16 个变体）
+ * 说明：toolInjection / permissionMode / maxIterations 属于参数覆盖型 toggle，
+ * 默认不进入标准单功能关闭套件，可按实验目标单独添加。 */
 export function createStandardAblationSuite(): ExperimentVariant[]
 
 /** 组合消融套件：baseline + 按子系统整体关闭 */
 export function createGroupAblationSuite(): ExperimentVariant[]
+
+/** 参数消融套件：baseline + toolInjection / permissionMode / maxIterations 覆盖 */
+export function createParameterAblationSuite(): ExperimentVariant[]
 ```
+
+### CLI 入口（阶段任务）
+
+`@neko/cli` 已提供实验命令，复用 CLI 的 provider / MCP / core tools / project memory / Skill / runtime bootstrap：
+
+```bash
+nekoagent experiment "完成一个短任务" --suite standard --repetitions 1
+nekoagent experiment "完成一个短任务" --suite parameter --output-dir .neko/experiments
+nekoagent experiment "完成一个短任务" --suite group --isolation workspace-root --timeout 120000
+```
+
+输出目录：CLI 默认写入 `.neko/experiments/<timestamp>-<suite>/cli-<suite>-ablation/`，显式 `--output-dir` 只替换根目录，仍保留 timestamp 子目录，避免多次实验互相覆盖。
+
+输出文件：
+
+- `result.json`：完整 `ExperimentResult`
+- `comparison.md`：Markdown 对比表
+- stdout：同样打印 Markdown report，便于 CI 日志查看
 
 ---
 
@@ -654,6 +711,13 @@ session、permission、context、skill、validation、retry 的核心逻辑 — 
 | `packages/neko-agent/packages/agent/src/hooks/executor-hooks-factory.ts` | 增加 `disableHooks?: string[]` 按名称过滤 built-in hooks |
 | `packages/neko-agent/packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts` | 修正 hook 数量期望 + 新增 disableHooks 测试 |
 | `packages/neko-agent/packages/agent/src/experiment/apply-toggles.ts` | `AblationMarkerHook` + `autoMemoryExtraction` / Skill / ToolInjection 映射 |
+| `packages/neko-agent/packages/agent/src/experiment/experiment-runner.ts` | 支持 per-run 隔离 metadata / workspace-root 模式、evaluator 注入、错误与超时路径 dispose |
+| `packages/neko-agent/packages/agent/src/experiment/types.ts` | 扩展 `ExperimentIsolationMode` / `ExperimentRunDescriptor` / `ExperimentEvaluator` 契约 |
+| `packages/neko-agent/packages/agent/src/experiment/presets.ts` | 新增参数消融套件 `createParameterAblationSuite()` |
+| `packages/neko-agent/packages/cli-tui/src/core/experiment.ts` | CLI 实验 runner，复用 CLI bootstrap 并写出 JSON/Markdown 报告 |
+| `packages/neko-agent/packages/cli-tui/src/cli.tsx` | 新增 `nekoagent experiment <prompt>` 命令 |
+| `packages/neko-agent/packages/agent/src/experiment/__tests__/metrics-hooks.test.ts` | 覆盖 token/tool/latency/iteration/reset 指标采集 |
+| `packages/neko-agent/packages/agent/src/experiment/__tests__/experiment-runner.test.ts` | 覆盖 runner 成功、隔离、evaluator、异常、超时与 dispose |
 | `packages/neko-agent/packages/agent/src/session/file-conversation-storage.ts` | `journalAsSSOT` rollback path，支持 legacy record-first 读写回退 |
 | `packages/neko-agent/packages/agent/src/experiment/presets.ts` | 新增 `no-journal-as-ssot` / `no-compact-logging` / `no-auto-memory-extraction` / `no-memory-recall`，移除 legacy `no-session-memory` |
 | `packages/neko-agent/packages/agent/src/experiment/index.ts` | 对外导出新增 persistence rollback presets，避免 public API 与 preset 实现脱节 |
@@ -667,16 +731,14 @@ packages/neko-agent/packages/agent/src/experiment/
   types.ts              — 18 个 AblationToggles + Metrics/Result/ProgressEvent 类型
   apply-toggles.ts      — applyAblationToggles() 纯函数 + AblationMarkerHook
   metrics-hooks.ts      — MetricsHooks（ExecutorHooks 被动观察者）
-  experiment-runner.ts  — ExperimentRunner（ISessionFactory 依赖注入，支持 mock）
-  presets.ts            — 15 个单功能变体 + 4 个组合变体 + 2 个套件构建器
+  experiment-runner.ts  — ExperimentRunner（ISessionFactory 依赖注入，支持 mock / per-run 隔离 / evaluator）
+  presets.ts            — 15 个单功能变体 + 4 个组合变体 + 参数变体 + 3 个套件构建器
   comparison.ts         — buildComparison() + formatComparisonMarkdown()
   index.ts              — 公共导出
 ```
 
 ### 待实现
 
-- `experiment/__tests__/metrics-hooks.test.ts` / `experiment-runner.test.ts` 仍可继续补齐
-- 如需更强验证，可补一组覆盖 `toolInjection: 'always-only'` / `permissionMode` / `maxIterations` 的 preset 级测试
 - 历史草案里的 `sessionMemory` / `disableSessionMemory` 路径可在后续整理时单独迁出到归档文档，避免再与现行实现混读
 
 ---
@@ -705,6 +767,22 @@ pnpm exec vitest run packages/agent/src/experiment/__tests__/apply-toggles.integ
 
 # 3. presets 测试（已通过）
 pnpm exec vitest run packages/agent/src/experiment/__tests__/presets.test.ts
+
+# 4. experiment SDK + CLI runner 相关测试（已通过）
+pnpm exec vitest run \
+  packages/agent/src/experiment/__tests__/metrics-hooks.test.ts \
+  packages/agent/src/experiment/__tests__/experiment-runner.test.ts \
+  packages/agent/src/experiment/__tests__/apply-toggles.integration.test.ts \
+  packages/agent/src/experiment/__tests__/presets.test.ts \
+  packages/agent/src/experiment/__tests__/index.test.ts \
+  packages/cli-tui/src/__tests__/experiment.test.ts
+
+# 5. CLI experiment 命令 smoke test（已通过）
+pnpm --filter @neko/cli exec tsx src/cli.tsx experiment --help
+
+# 6. 新增相关文件 TypeScript 筛查（已通过：无输出）
+pnpm exec tsc -p packages/cli-tui/tsconfig.json --noEmit 2>&1 | \
+  rg "packages/cli-tui/src/(core/experiment|cli|__tests__/experiment)|packages/agent/src/(experiment|mcp/mcp-tool|index)"
 ```
 
 ---

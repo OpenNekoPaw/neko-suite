@@ -76,7 +76,7 @@ export const NO_SETTINGS_HOOKS: ExperimentVariant = {
 
 export const NO_PROJECT_MEMORY: ExperimentVariant = {
   name: 'no-project-memory',
-  description: 'Project memory injection disabled',
+  description: 'Project memory backend disabled (recall, injection, and extraction target)',
   toggles: { projectMemory: false },
 };
 
@@ -116,6 +116,34 @@ export const NO_THINKING: ExperimentVariant = {
   name: 'no-thinking',
   description: 'Extended thinking disabled',
   toggles: { thinkingBudget: 0 },
+};
+
+// =============================================================================
+// Parameter Override Variants
+// =============================================================================
+
+export const ALWAYS_ONLY_TOOLS: ExperimentVariant = {
+  name: 'always-only-tools',
+  description: 'Use only always-layer tools; skip dynamic tool injection',
+  toggles: { toolInjection: 'always-only' },
+};
+
+export const PLAN_PERMISSION_MODE: ExperimentVariant = {
+  name: 'permission-plan-mode',
+  description: 'Run in plan mode without tool execution',
+  toggles: { permissionMode: 'plan' },
+};
+
+export const ASK_PERMISSION_MODE: ExperimentVariant = {
+  name: 'permission-ask-mode',
+  description: 'Run with per-tool confirmation mode',
+  toggles: { permissionMode: 'ask' },
+};
+
+export const SINGLE_ITERATION: ExperimentVariant = {
+  name: 'single-iteration',
+  description: 'Limit execution loop to one iteration',
+  toggles: { maxIterations: 1 },
 };
 
 // =============================================================================
@@ -205,4 +233,13 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
  */
 export function createGroupAblationSuite(): ExperimentVariant[] {
   return [BASELINE, NO_ALL_COMPRESSION, NO_ALL_SKILLS, NO_ALL_EXTERNAL, MINIMAL];
+}
+
+/**
+ * Parameter ablation suite: baseline + parameter override controls.
+ * Kept separate from standard single-feature-off suite because these variants
+ * change execution policy or numeric budgets rather than disabling a subsystem.
+ */
+export function createParameterAblationSuite(): ExperimentVariant[] {
+  return [BASELINE, ALWAYS_ONLY_TOOLS, PLAN_PERMISSION_MODE, ASK_PERMISSION_MODE, SINGLE_ITERATION];
 }
