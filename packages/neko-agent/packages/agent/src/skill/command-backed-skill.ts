@@ -21,7 +21,7 @@ export function createCommandBackedSkill(command: SlashCommand): Skill {
     enabled: command.enabled,
     command: command.command,
     argumentHint: command.argumentHint,
-    supportsArguments: supportsCommandArguments(command.content),
+    supportsArguments: supportsCommandArguments(command.content, command.argumentHint),
     autoInvoke: false,
   };
 }
@@ -51,8 +51,49 @@ export function createLazyCommandBackedSkill(command: LazyCommand): LazySkill {
   return lazySkill;
 }
 
-function supportsCommandArguments(content: string): boolean {
-  return /\$ARGUMENTS|\$\d{1,2}\b/.test(content);
+function supportsCommandArguments(content: string, argumentHint?: string): boolean {
+  const usesArgumentsToken = /\$ARGUMENTS\b/.test(content);
+  const positionalIndexes = extractPositionalPlaceholderIndexes(content);
+
+  if (!usesArgumentsToken && positionalIndexes.length === 0) {
+    return false;
+  }
+  if (positionalIndexes.length === 0) {
+    return true;
+  }
+
+  const uniqueIndexes = Array.from(new Set(positionalIndexes)).sort((a, b) => a - b);
+  if (uniqueIndexes.some((index) => index < 1 || index > 99)) {
+    return false;
+  }
+
+  const highestIndex = uniqueIndexes[uniqueIndexes.length - 1]!;
+  for (let expected = 1; expected <= highestIndex; expected += 1) {
+    if (!uniqueIndexes.includes(expected)) {
+      return false;
+    }
+  }
+
+  const hintedArgCount = countHintArguments(argumentHint);
+  return hintedArgCount === null || hintedArgCount >= highestIndex;
+}
+
+function extractPositionalPlaceholderIndexes(content: string): number[] {
+  return Array.from(content.matchAll(/\$(\d{1,2})(?!\d)/g), (match) => Number(match[1]));
+}
+
+function countHintArguments(argumentHint?: string): number | null {
+  const trimmed = argumentHint?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const groupedTokens = Array.from(trimmed.matchAll(/<[^>]+>|\[[^\]]+\]/g));
+  if (groupedTokens.length > 0) {
+    return groupedTokens.length;
+  }
+
+  return null;
 }
 
 function toCommandDirectoryPath(filePath?: string): string | undefined {

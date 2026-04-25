@@ -63,4 +63,42 @@ describe('command-backed-skill', () => {
     );
     expect(lazySkill.isLoaded).toBe(true);
   });
+
+  it('disables argument support when positional placeholders skip an index', () => {
+    const skill = createCommandBackedSkill({
+      command: 'broken',
+      description: 'Broken placeholder numbering',
+      content: 'Use only $2 here.',
+      argumentHint: '<first> <second>',
+      source: 'project',
+      enabled: true,
+    });
+
+    expect(skill.supportsArguments).toBe(false);
+  });
+
+  it('disables argument support when argumentHint cannot satisfy the highest placeholder index', () => {
+    const skill = createCommandBackedSkill({
+      command: 'rename',
+      description: 'Rename with too-small hint',
+      content: 'Rename from $1 to $2.',
+      argumentHint: '<from>',
+      source: 'project',
+      enabled: true,
+    });
+
+    expect(skill.supportsArguments).toBe(false);
+  });
+
+  it('keeps $ARGUMENTS-only commands argument-capable without positional validation', () => {
+    const skill = createCommandBackedSkill({
+      command: 'summarize',
+      description: 'Summarize arbitrary input',
+      content: 'Summarize: $ARGUMENTS',
+      source: 'project',
+      enabled: true,
+    });
+
+    expect(skill.supportsArguments).toBe(true);
+  });
 });
