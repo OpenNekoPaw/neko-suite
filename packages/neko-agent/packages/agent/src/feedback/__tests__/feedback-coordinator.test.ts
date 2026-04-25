@@ -476,6 +476,37 @@ describe('FeedbackCoordinator', () => {
     });
   });
 
+  it('keeps repeated-signal counts aligned with the capped history window', () => {
+    let tick = 0;
+    const coordinator = createFeedbackCoordinator({
+      controlPolicy: { escalationThreshold: 65 },
+      now: () => ++tick,
+    });
+
+    for (let index = 0; index < 65; index += 1) {
+      coordinator.observe({
+        kind: 'tool-failure',
+        observedAt: index,
+        toolCallId: `call-${index}`,
+        toolName: 'Write',
+        error: 'permission denied',
+        runId: 'run-cap',
+      });
+
+      expect(coordinator.evaluatePending({ activeRunId: 'run-cap' })).toEqual(
+        expect.objectContaining({
+          actions: [
+            expect.objectContaining({
+              kind: 'set-guidance',
+            }),
+          ],
+        }),
+      );
+    }
+
+    expect(coordinator.getSignalHistory()).toHaveLength(64);
+  });
+
   it('returns dedup when the extracted fact already exists in project memory', async () => {
     const projectMemory = createMockProjectMemory(
       '## User Preferences\n- 我喜欢中文说明，避免英文模板。\n',

@@ -206,6 +206,7 @@ export interface IFeedbackArbiter {
     readonly decisions: readonly FeedbackDecision[];
     readonly context: FeedbackEvaluationContext;
     readonly signalHistory: readonly FeedbackSignal[];
+    readonly countSignals?: (signal: FeedbackSignal) => number;
   }): readonly FeedbackFlowAction[];
 }
 
@@ -233,6 +234,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
   private readonly _now: () => number;
   private readonly _pendingSignals: FeedbackSignal[] = [];
   private readonly _signalHistory: FeedbackSignal[] = [];
+  private readonly _signalCounts = new Map<string, number>();
   private readonly _decisionHistory: FeedbackDecision[] = [];
   private readonly _actionHistory: FeedbackFlowAction[] = [];
   private readonly _artifactInvalidUnsubscribe: (() => void) | null;
@@ -296,7 +298,10 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
   observe(signal: FeedbackSignal): void {
     this._pendingSignals.push(signal);
     this._signalHistory.push(signal);
-    trimHistory(this._signalHistory);
+    incrementSignalCount(this._signalCounts, signalSignature(signal));
+    for (const evicted of trimHistory(this._signalHistory)) {
+      decrementSignalCount(this._signalCounts, signalSignature(evicted));
+    }
   }
 
   evaluatePending(context: FeedbackEvaluationContext = {}): FeedbackCycle | null {
@@ -317,6 +322,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
       decisions: normalizedDecisions,
       context,
       signalHistory: this._signalHistory,
+      countSignals: (signal) => this._signalCounts.get(signalSignature(signal)) ?? 0,
     });
 
     this._decisionHistory.push(...normalizedDecisions);
@@ -451,10 +457,12 @@ export function composeBeforeThinkHooks(
 
 const FEEDBACK_HISTORY_CAP = 64;
 
-function trimHistory<T>(history: T[]): void {
+function trimHistory<T>(history: T[]): readonly T[] {
   if (history.length > FEEDBACK_HISTORY_CAP) {
-    history.splice(0, history.length - FEEDBACK_HISTORY_CAP);
+    return history.splice(0, history.length - FEEDBACK_HISTORY_CAP);
   }
+
+  return [];
 }
 
 const DEFAULT_CONTROL_POLICY: Required<FeedbackControlPolicy> = {
@@ -557,7 +565,7 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
 
   return {
     id: 'default-feedback-arbiter',
-    decide: ({ signals, decisions, signalHistory }) => {
+    decide: ({ signals, decisions, signalHistory, countSignals }) => {
       const guidanceBlocks: string[] = [];
       const guidanceKinds = new Set<FeedbackSignal['kind']>();
       const actions: FeedbackFlowAction[] = [];
@@ -566,13 +574,14 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
         switch (decision.action) {
           case 'repair': {
             if (decision.signalKind === 'artifact-invalid') {
-              const repeatCount = countMatchingSignals(
-                signalHistory,
-                (signal) =>
-                  signal.kind === 'artifact-invalid' &&
-                  signal.runId === decision.runId &&
-                  signal.path === decision.path,
-              );
+              const repeatCount = getRepeatCount(signalHistory, countSignals, {
+                kind: 'artifact-invalid',
+                observedAt: 0,
+                runId: decision.runId,
+                artifactKind: decision.artifactKind,
+                path: decision.path,
+                issues: [],
+              });
               if (repeatCount >= effectivePolicy.escalationThreshold) {
                 actions.push({
                   kind: 'escalate-user',
@@ -596,13 +605,14 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
             }
 
             if (decision.signalKind === 'tool-failure') {
-              const repeatCount = countMatchingSignals(
-                signalHistory,
-                (signal) =>
-                  signal.kind === 'tool-failure' &&
-                  signal.toolName === decision.toolName &&
-                  signal.runId === decision.runId,
-              );
+              const repeatCount = getRepeatCount(signalHistory, countSignals, {
+                kind: 'tool-failure',
+                observedAt: 0,
+                toolCallId: decision.toolCallId,
+                toolName: decision.toolName,
+                error: decision.error,
+                ...(decision.runId ? { runId: decision.runId } : {}),
+              });
               if (repeatCount >= effectivePolicy.escalationThreshold) {
                 actions.push({
                   kind: 'escalate-user',
@@ -624,13 +634,18 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
               break;
             }
 
-            const repeatCount = countMatchingSignals(
-              signalHistory,
-              (signal) =>
-                signal.kind === 'quality-check' &&
-                signal.toolCallId === decision.toolCallId &&
-                signal.runId === decision.runId,
-            );
+            const repeatCount = getRepeatCount(signalHistory, countSignals, {
+              kind: 'quality-check',
+              observedAt: 0,
+              toolCallId: decision.toolCallId,
+              toolName: decision.toolName,
+              totalScenes: decision.totalScenes,
+              passed: Math.max(decision.totalScenes - decision.failed, 0),
+              failed: decision.failed,
+              failingSceneIndexes: decision.failingSceneIndexes,
+              remediationCount: decision.remediationCount,
+              ...(decision.runId ? { runId: decision.runId } : {}),
+            });
             if (repeatCount >= effectivePolicy.escalationThreshold) {
               actions.push({
                 kind: 'escalate-user',
@@ -690,6 +705,19 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
   };
 }
 
+function getRepeatCount(
+  history: readonly FeedbackSignal[],
+  countSignals: ((signal: FeedbackSignal) => number) | undefined,
+  signal: FeedbackSignal,
+): number {
+  if (countSignals) {
+    return countSignals(signal);
+  }
+
+  const signature = signalSignature(signal);
+  return countMatchingSignals(history, (entry) => signalSignature(entry) === signature);
+}
+
 function countMatchingSignals(
   history: readonly FeedbackSignal[],
   predicate: (signal: FeedbackSignal) => boolean,
@@ -701,6 +729,37 @@ function countMatchingSignals(
     }
   }
   return count;
+}
+
+function incrementSignalCount(counts: Map<string, number>, signature: string): void {
+  counts.set(signature, (counts.get(signature) ?? 0) + 1);
+}
+
+function decrementSignalCount(counts: Map<string, number>, signature: string): void {
+  const current = counts.get(signature);
+  if (current === undefined) {
+    return;
+  }
+  if (current <= 1) {
+    counts.delete(signature);
+    return;
+  }
+  counts.set(signature, current - 1);
+}
+
+function signalSignature(signal: FeedbackSignal): string {
+  switch (signal.kind) {
+    case 'artifact-invalid':
+      return `artifact-invalid|${signal.runId}|${signal.path}`;
+    case 'self-evaluation-requested':
+      return `self-evaluation-requested|${signal.stage}`;
+    case 'tool-failure':
+      return `tool-failure|${signal.runId ?? ''}|${signal.toolName}`;
+    case 'quality-check':
+      return `quality-check|${signal.runId ?? ''}|${signal.toolCallId}`;
+    case 'memory-extraction':
+      return `memory-extraction|${signal.extraction.sourceEventIds.join(',')}|${signal.observedAt}`;
+  }
 }
 
 function classifyClearReason(
