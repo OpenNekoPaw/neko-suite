@@ -24,6 +24,8 @@ interface InputEditorProps {
   readonly prompt?: string;
   /** Called when slash command detected (starts with /) */
   readonly onSlashCommand?: (input: string) => void;
+  /** Available slash commands for menu/autocomplete */
+  readonly commands?: readonly SlashCommandOption[];
 }
 
 const MAX_HISTORY = 50;
@@ -33,6 +35,7 @@ export function InputEditor({
   disabled = false,
   prompt = '>',
   onSlashCommand,
+  commands = TUI_COMMANDS,
 }: InputEditorProps): React.JSX.Element {
   const [value, setValue] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -43,7 +46,7 @@ export function InputEditor({
   // Filter commands based on current input
   const filterText = value.startsWith('/') ? value.slice(1).toLowerCase() : '';
   const filtered: SlashCommandOption[] = menuOpen
-    ? TUI_COMMANDS.filter((cmd) => cmd.name.toLowerCase().startsWith(filterText))
+    ? commands.filter((cmd) => cmd.name.toLowerCase().startsWith(filterText))
     : [];
 
   const addToHistory = useCallback((entry: string) => {

@@ -30,7 +30,15 @@ export interface TUISlashCommandContext {
 export async function handleTUISlashCommand(
   input: string,
   context: TUISlashCommandContext,
-): Promise<{ handled: boolean; output?: string; error?: string }> {
+): Promise<{
+  handled: boolean;
+  output?: string;
+  error?: string;
+  agentPrompt?: string;
+  executionOverrides?: {
+    metadata?: Record<string, unknown>;
+  };
+}> {
   const cliContext: SlashCommandContext = {
     config: context.config,
     skillService: context.skillService,
@@ -48,5 +56,7 @@ export async function handleTUISlashCommand(
     handled: result.handled,
     output: result.output,
     error: result.error,
+    agentPrompt: result.agentPrompt,
+    executionOverrides: result.executionOverrides,
   };
 }

@@ -6,52 +6,64 @@
  * but exposes it as a React hook for Ink components.
  */
 
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import {
   MCPManager,
   createAllMCPTools,
+  createTaskManagerIdcTaskProjection,
+  createPlanModeIdcMetadata,
+  createFileProjectMemoryManager,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
-  createAgentSession,
+  createAgentSessionWithRuntime,
+  createNodeArtifactStore,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
+  mergeIdcExecutionMetadata,
+  ToolGroupRegistry,
+  registerBuiltinToolGroups,
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
   type SkillService,
+  type IRuntimeTaskManager,
 } from '@neko/agent';
-import {
-  createPlatform,
-  FileUserConfigManager,
-  toSharedService,
-  type Platform,
-} from '@neko/platform';
-import { TaskManager, createFileTaskStorage } from '@neko/agent';
+import { type Platform } from '@neko/platform';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode } from '../types/state';
 import type { IService } from '@neko/shared';
 import { getProviderModels, updateDefaultModel } from '../core/config';
+import { createCLIPlatform, createCLITaskManager } from '../core/platform-bootstrap';
+import { loadSkillArtifactsAsSkills } from '../core/skill-artifacts';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
 import { createEventAdapter, type IEventAdapter } from '../adapters/event-adapter';
+import {
+  createTuiSlashCommandCatalog,
+  type TuiSlashCommandOption,
+} from '../core/slash-command-catalog';
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
   /** Optional Platform Service (from VSCode extension) */
   readonly service?: IService;
+  /** Optional shared task plane provided by the host bootstrap */
+  readonly taskManager?: IRuntimeTaskManager;
 }
 
 export interface AgentSessionHandle {
   /** Submit a prompt to the agent */
-  submit: (prompt: string) => Promise<void>;
+  submit: (
+    prompt: string,
+    executionOverrides?: { metadata?: Record<string, unknown> },
+  ) => Promise<void>;
   /** Cancel current execution */
   cancel: () => void;
   /** Clear conversation history */
@@ -70,6 +82,8 @@ export interface AgentSessionHandle {
   readonly getSkillService: () => SkillService | undefined;
   /** Tool registry (for slash commands) */
   readonly getToolRegistry: () => ToolRegistry | undefined;
+  /** Slash command catalog for TUI autocomplete */
+  readonly slashCommands: readonly TuiSlashCommandOption[];
   /** Whether session is initialized */
   readonly isReady: boolean;
 }
@@ -90,7 +104,7 @@ export interface AgentSessionHandle {
  * 3. Route events through EventAdapter → stores
  */
 export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHandle {
-  const { config, service } = options;
+  const { config, service, taskManager: providedTaskManager } = options;
   const sessionRef = useRef<IAgentSession | null>(null);
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
@@ -101,6 +115,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
+  const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
+    createTuiSlashCommandCatalog(),
+  );
 
   // Initialize session on mount
   useEffect(() => {
@@ -170,7 +187,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         toolRegistryRef.current = toolRegistry;
         const mcpTools = await createAllMCPTools(mcpManager);
         toolRegistry.registerMany(mcpTools);
-        const coreTools = createCoreTools({ defaultCwd: config.workDir });
+
+        const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
+        const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
+        await projectMemoryManager.load();
+
+        const coreTools = createCoreTools({
+          defaultCwd: config.workDir,
+          projectMemoryManager,
+        });
         toolRegistry.registerMany(coreTools);
 
         // 3. Skills
@@ -179,30 +204,30 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           const skillLoader = createNodeSkillLoader(fs, path);
           skillService = createSkillService();
           skillServiceRef.current = skillService;
-          const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
-          for (const skill of loadResult.skills) {
+          const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
+          for (const skill of loadedSkills) {
             skillService.registry.registerSkill(skill);
           }
-          // Commands from loadResult are now loaded as Skills with command field
+          setSlashCommands(createTuiSlashCommandCatalog(loadedSkills));
+        } else {
+          setSlashCommands(createTuiSlashCommandCatalog());
         }
 
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
+        const taskManager = providedTaskManager ?? createCLITaskManager();
         if (service) {
           // Extension mode: use injected service directly
           llmService = service;
         } else {
           // Standalone CLI mode: create Platform with media generation support
-          const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
-          const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
-          const platform = createPlatform({
-            userConfigManager: new FileUserConfigManager(),
+          const cliPlatform = createCLIPlatform({
             workspacePath: config.workDir,
             toolRegistry,
             taskManager,
           });
-          platformRef.current = platform;
-          llmService = toSharedService(platform.createService());
+          platformRef.current = cliPlatform.platform;
+          llmService = cliPlatform.service;
         }
 
         // 5. System Prompt
@@ -218,9 +243,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...config,
           model: effectiveModel,
         });
+        const toolGroupRegistry = createCliToolGroupRegistry();
 
         // 6. Create Session (with validated model)
-        const session = createAgentSession({
+        const session = createAgentSessionWithRuntime({
           service: llmService,
           toolRegistry,
           systemPrompt,
@@ -229,6 +255,36 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           temperature: config.temperature,
           maxTokens: config.maxTokens,
           modelId: effectiveModel,
+          runtime: {
+            workflowRuntime: {
+              ...(skillService
+                ? {
+                    stageTracking: {
+                      skillService,
+                      skillRegistry: skillService.registry,
+                    },
+                  }
+                : {}),
+              idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
+            },
+            ...(skillService
+              ? {
+                  capabilityRuntime: {
+                    skillService,
+                    skillRegistry: skillService.registry,
+                    toolGroupRegistry,
+                  },
+                }
+              : {
+                  capabilityRuntime: {
+                    toolGroupRegistry,
+                  },
+                }),
+            artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
+            feedbackLoop: {
+              projectMemoryManager,
+            },
+          },
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
@@ -307,56 +363,65 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = useCallback(async (prompt: string) => {
-    // Wait for initialization if needed
-    if (initPromiseRef.current) {
-      await initPromiseRef.current;
-    }
+  const submit = useCallback(
+    async (prompt: string, executionOverrides?: { metadata?: Record<string, unknown> }) => {
+      // Wait for initialization if needed
+      if (initPromiseRef.current) {
+        await initPromiseRef.current;
+      }
 
-    const session = sessionRef.current;
-    const adapter = adapterRef.current;
-    const inputProcessor = inputProcessorRef.current;
+      const session = sessionRef.current;
+      const adapter = adapterRef.current;
+      const inputProcessor = inputProcessorRef.current;
 
-    if (!session || !adapter) {
-      useAgentStore.getState().setError(new Error('Session not initialized'));
-      return;
-    }
+      if (!session || !adapter) {
+        useAgentStore.getState().setError(new Error('Session not initialized'));
+        return;
+      }
 
-    // Reset adapter state
-    adapter.reset();
+      // Reset adapter state
+      adapter.reset();
 
-    // Add user message to store
-    useConversationStore.getState().addUserMessage(prompt);
-    useAgentStore.getState().setRunning();
+      // Add user message to store
+      useConversationStore.getState().addUserMessage(prompt);
+      useAgentStore.getState().setRunning();
 
-    try {
-      // Process file references
-      let finalPrompt = prompt;
-      if (inputProcessor) {
-        const processed = await inputProcessor.process(prompt);
-        finalPrompt = processed.message;
-        if (processed.hasFiles) {
-          finalPrompt = `${processed.message}\n\n## Referenced Files\n\n${processed.fileContents}`;
+      try {
+        // Process file references
+        let finalPrompt = prompt;
+        if (inputProcessor) {
+          const processed = await inputProcessor.process(prompt);
+          finalPrompt = processed.message;
+          if (processed.hasFiles) {
+            finalPrompt = `${processed.message}\n\n## Referenced Files\n\n${processed.fileContents}`;
+          }
         }
-      }
 
-      // Execute and stream events
-      for await (const event of session.execute(finalPrompt, {
-        workspaceRoot: useConfigStore_getWorkDir(),
-      })) {
-        adapter.handleEvent(event);
-      }
+        const metadata = mergeIdcExecutionMetadata(
+          session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
+          executionOverrides?.metadata,
+        );
 
-      // Trigger plan review after plan-mode execution completes
-      if (useAgentStore.getState().executionMode === 'plan') {
-        useUIStore.getState().showPlanReview();
+        // Execute and stream events
+        for await (const event of session.execute(finalPrompt, {
+          workspaceRoot: useConfigStore_getWorkDir(),
+          ...(metadata ? { metadata } : {}),
+        })) {
+          adapter.handleEvent(event);
+        }
+
+        // Trigger plan review after plan-mode execution completes
+        if (useAgentStore.getState().executionMode === 'plan') {
+          useUIStore.getState().showPlanReview();
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        useAgentStore.getState().setError(err);
+        useConversationStore.getState().addError(err);
       }
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      useAgentStore.getState().setError(err);
-      useConversationStore.getState().addError(err);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const cancel = useCallback(() => {
     sessionRef.current?.cancel();
@@ -439,8 +504,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     deactivateSkill,
     getSkillService: () => skillServiceRef.current ?? undefined,
     getToolRegistry: () => toolRegistryRef.current ?? undefined,
+    slashCommands,
     isReady: isReadyRef.current,
   };
+}
+
+function createCliToolGroupRegistry(): ToolGroupRegistry {
+  const registry = new ToolGroupRegistry();
+  registerBuiltinToolGroups(registry);
+  return registry;
 }
 
 /** Helper to get workDir from config store */

@@ -25,7 +25,12 @@ interface SlashCommandHandlers {
 
 export function useSlashCommands(sessionActions: {
   clearHistory: () => void;
+  submit?: (
+    prompt: string,
+    executionOverrides?: { metadata?: Record<string, unknown> },
+  ) => Promise<void>;
   updateModel?: (model: string) => void;
+  updateMode?: (mode: 'plan' | 'ask' | 'auto') => void;
   activateSkill?: (name: string) => boolean;
   deactivateSkill?: () => void;
   getSkillService?: () => SkillService | undefined;
@@ -182,6 +187,21 @@ export function useSlashCommands(sessionActions: {
           return;
         }
 
+        case '/plan':
+          sessionActions.updateMode?.('plan');
+          addSystemMessage('Plan mode enabled');
+          return;
+
+        case '/auto':
+          sessionActions.updateMode?.('auto');
+          addSystemMessage('Auto mode enabled');
+          return;
+
+        case '/ask':
+          sessionActions.updateMode?.('ask');
+          addSystemMessage('Ask mode enabled');
+          return;
+
         default:
           break;
       }
@@ -204,6 +224,8 @@ export function useSlashCommands(sessionActions: {
           addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
         } else if (result.error) {
           useConversationStore.getState().addError(new Error(result.error));
+        } else if (result.agentPrompt && sessionActions.submit) {
+          await sessionActions.submit(result.agentPrompt, result.executionOverrides);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

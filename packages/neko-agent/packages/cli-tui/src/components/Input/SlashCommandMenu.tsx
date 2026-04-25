@@ -8,12 +8,12 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
-import { getCliCommands } from '@neko/agent';
+import {
+  createTuiSlashCommandCatalog,
+  type TuiSlashCommandOption,
+} from '../../core/slash-command-catalog';
 
-export interface SlashCommandOption {
-  readonly name: string;
-  readonly description: string;
-}
+export type SlashCommandOption = TuiSlashCommandOption;
 
 interface SlashCommandMenuProps {
   /** Available commands */
@@ -93,7 +93,4 @@ export function SlashCommandMenu({
  * Built-in slash commands available in TUI mode.
  * Dynamically derived from shared builtin-commands.ts.
  */
-export const TUI_COMMANDS: SlashCommandOption[] = getCliCommands().map((cmd) => ({
-  name: cmd.name,
-  description: cmd.description,
-}));
+export const TUI_COMMANDS: SlashCommandOption[] = createTuiSlashCommandCatalog();

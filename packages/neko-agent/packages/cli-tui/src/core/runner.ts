@@ -11,41 +11,41 @@ import type { AgentResult, AgentStep, ExecutorHooks, AgentEvent } from '@neko/ag
 import {
   MCPManager,
   createAllMCPTools,
+  createTaskManagerIdcTaskProjection,
+  createPlanModeIdcMetadata,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
   AgentSession,
-  createAgentSession,
+  createAgentSessionWithRuntime,
   SystemPromptBuilder,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
   createFileProjectMemoryManager,
+  mergeIdcExecutionMetadata,
+  createNodeArtifactStore,
+  ToolGroupRegistry,
+  registerBuiltinToolGroups,
   type InputProcessor,
   type ConversationRecord,
   createFileConversationStorage,
-  createNodeJournalStorage,
   createConversationId,
   type FileConversationStorage,
 } from '@neko/agent';
-import * as os from 'node:os';
-import {
-  createPlatform,
-  FileUserConfigManager,
-  toSharedService,
-  type Platform,
-} from '@neko/platform';
-import { TaskManager, createFileTaskStorage } from '@neko/agent';
+import { toSharedService, type Platform } from '@neko/platform';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
 import type { IService } from '@neko/shared';
-import type { SkillService } from '@neko/agent';
+import type { SkillService, IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { theme } from './theme';
 import { formatToolCall } from './formatter';
 import { isSlashCommand, handleSlashCommand, type SlashCommandContext } from './slash-commands';
 import { getProviderModels } from './config';
+import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
+import { loadSkillArtifactsAsSkills } from './skill-artifacts';
 
 /**
  * Agent runner options
@@ -55,12 +55,20 @@ export interface AgentRunnerOptions {
   runOptions: RunOptions;
   /** Optional Platform Service for advanced LLM features */
   service?: IService;
+  /** Optional shared task plane provided by the host bootstrap */
+  taskManager?: IRuntimeTaskManager;
   hooks?: Partial<ExecutorHooks>;
   onOutput?: (text: string) => void;
   onToolCall?: (name: string, args: unknown) => void;
   onThinking?: (thought: string) => void;
   /** Execution mode (plan/ask/auto) */
   executionMode?: ExecutionMode;
+}
+
+function createCliToolGroupRegistry(): ToolGroupRegistry {
+  const registry = new ToolGroupRegistry();
+  registerBuiltinToolGroups(registry);
+  return registry;
 }
 
 /**
@@ -71,6 +79,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     config,
     runOptions,
     service,
+    taskManager: providedTaskManager,
     hooks,
     onOutput,
     onToolCall,
@@ -125,8 +134,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     if (config.skillsDir) {
       const skillLoader = createNodeSkillLoader(fs, path);
       skillService = createSkillService();
-      const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
-      for (const skill of loadResult.skills) {
+      const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
+      for (const skill of loadedSkills) {
         skillService.registry.registerSkill(skill);
       }
     }
@@ -134,19 +143,18 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Create LLM service via Platform
     let llmService: IService;
     let platform: Platform | undefined;
+    const taskManager = providedTaskManager ?? createCLITaskManager();
 
     if (service) {
       llmService = service;
     } else {
-      const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
-      const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
-      platform = createPlatform({
-        userConfigManager: new FileUserConfigManager(),
+      const cliPlatform = createCLIPlatform({
         workspacePath: config.workDir,
         toolRegistry,
         taskManager,
       });
-      llmService = toSharedService(platform.createService());
+      platform = cliPlatform.platform;
+      llmService = cliPlatform.service;
     }
 
     // Build system prompt
@@ -156,10 +164,11 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     });
     await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
     const systemPrompt = promptBuilder.build();
+    const toolGroupRegistry = createCliToolGroupRegistry();
 
     // Create agent session
     const conversationId = createConversationId(config.workDir);
-    const session = createAgentSession({
+    const session = createAgentSessionWithRuntime({
       service: llmService,
       toolRegistry,
       systemPrompt,
@@ -169,8 +178,36 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxTokens: config.maxTokens,
       modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
-      projectMemoryManager,
-      journalWriter: createNodeJournalStorage().createWriter(conversationId),
+      runtime: {
+        workflowRuntime: {
+          ...(skillService
+            ? {
+                stageTracking: {
+                  skillService,
+                  skillRegistry: skillService.registry,
+                },
+              }
+            : {}),
+          idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
+        },
+        ...(skillService
+          ? {
+              capabilityRuntime: {
+                skillService,
+                skillRegistry: skillService.registry,
+                toolGroupRegistry,
+              },
+            }
+          : {
+              capabilityRuntime: {
+                toolGroupRegistry,
+              },
+            }),
+        artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
+        feedbackLoop: {
+          projectMemoryManager,
+        },
+      },
       conversationId,
       onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
@@ -251,8 +288,11 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     }
 
     try {
+      const executionMetadata =
+        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined;
       for await (const event of session.execute(finalPrompt, {
         workspaceRoot: config.workDir,
+        ...(executionMetadata ? { metadata: executionMetadata } : {}),
       })) {
         if (controller.signal.aborted) {
           onOutput?.('\n[Timeout] Execution aborted');
@@ -508,9 +548,12 @@ export async function runAgentWithContext(
     // Execute and collect events
     let output = '';
     const collector = createEventCollector();
+    const executionMetadata =
+      session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined;
 
     for await (const event of session.execute(finalPrompt, {
       workspaceRoot: config.workDir,
+      ...(executionMetadata ? { metadata: executionMetadata } : {}),
     })) {
       handleAgentEvent(
         event,
@@ -598,6 +641,7 @@ async function initializeInteractiveSession(
   rl: import('node:readline').Interface,
   service?: IService,
   resumeId?: string,
+  providedTaskManager?: IRuntimeTaskManager,
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
   const alwaysAllowedTools = new Set<string>();
@@ -627,8 +671,8 @@ async function initializeInteractiveSession(
   if (config.skillsDir) {
     const skillLoader = createNodeSkillLoader(fs, path);
     skillService = createSkillService();
-    const loadResult = await skillLoader.loadFromDirectory(config.skillsDir);
-    for (const skill of loadResult.skills) {
+    const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
+    for (const skill of loadedSkills) {
       skillService.registry.registerSkill(skill);
     }
   }
@@ -636,18 +680,17 @@ async function initializeInteractiveSession(
   // Create LLM service via Platform
   let platform: Platform | undefined;
   let llmService: IService;
+  const taskManager = providedTaskManager ?? createCLITaskManager();
   if (service) {
     llmService = service;
   } else {
-    const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
-    const taskManager = new TaskManager({ storage: createFileTaskStorage(taskStoragePath) });
-    platform = createPlatform({
-      userConfigManager: new FileUserConfigManager(),
+    const cliPlatform = createCLIPlatform({
       workspacePath: config.workDir,
       toolRegistry,
       taskManager,
     });
-    llmService = toSharedService(platform.createService());
+    platform = cliPlatform.platform;
+    llmService = cliPlatform.service;
   }
 
   // Build system prompt
@@ -688,7 +731,7 @@ async function initializeInteractiveSession(
   };
 
   // Create agent session
-  const session = createAgentSession({
+  const session = createAgentSessionWithRuntime({
     service: llmService,
     toolRegistry,
     systemPrompt,
@@ -697,7 +740,29 @@ async function initializeInteractiveSession(
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     modelId: config.model,
-    journalWriter: createNodeJournalStorage().createWriter(conversationId),
+    runtime: {
+      capabilityRuntime: {
+        ...(skillService
+          ? {
+              skillService,
+              skillRegistry: skillService.registry,
+            }
+          : {}),
+        toolGroupRegistry: createCliToolGroupRegistry(),
+      },
+      workflowRuntime: {
+        ...(skillService
+          ? {
+              stageTracking: {
+                skillService,
+                skillRegistry: skillService.registry,
+              },
+            }
+          : {}),
+        idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
+      },
+      artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
+    },
     conversationId,
     onConfirmTool: async (request) => {
       // Check always-allowed set
@@ -808,7 +873,7 @@ export async function runInteractive(
   config: CLIConfig,
   service?: IService,
   _hooks?: Partial<ExecutorHooks>,
-  options?: { resumeId?: string },
+  options?: { resumeId?: string; taskManager?: IRuntimeTaskManager },
 ): Promise<void> {
   const readline = await import('node:readline');
 
@@ -823,7 +888,13 @@ export async function runInteractive(
 
   try {
     // Initialize session (pass shared rl to avoid stdin contention)
-    state = await initializeInteractiveSession(sessionConfig, rl, service, options?.resumeId);
+    state = await initializeInteractiveSession(
+      sessionConfig,
+      rl,
+      service,
+      options?.resumeId,
+      options?.taskManager,
+    );
 
     // Create slash command context
     const slashContext: SlashCommandContext = {
@@ -865,6 +936,8 @@ export async function runInteractive(
     const prompt = (): void => {
       rl.question('> ', async (input) => {
         const trimmed = input.trim();
+        let executionPrompt = trimmed;
+        let executionMetadata: Record<string, unknown> | undefined;
 
         if (!trimmed) {
           prompt();
@@ -957,8 +1030,18 @@ export async function runInteractive(
             return;
           }
 
+          if (result.agentPrompt) {
+            executionPrompt = result.agentPrompt;
+            executionMetadata = mergeIdcExecutionMetadata(
+              state!.session.getExecutionMode() === 'plan'
+                ? createPlanModeIdcMetadata()
+                : undefined,
+              result.executionOverrides?.metadata,
+            );
+          }
+
           // If the slash command was handled and doesn't need agent execution
-          if (result.handled && !trimmed.startsWith('/run ')) {
+          if (result.handled && !trimmed.startsWith('/run ') && !result.agentPrompt) {
             console.log('');
             prompt();
             return;
@@ -966,7 +1049,7 @@ export async function runInteractive(
         }
 
         // Run agent for non-slash commands or /run commands
-        const agentPrompt = trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : trimmed;
+        const agentPrompt = trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : executionPrompt;
 
         if (!agentPrompt) {
           prompt();
@@ -994,8 +1077,16 @@ export async function runInteractive(
 
         // Execute via session
         try {
+          if (!executionMetadata) {
+            executionMetadata =
+              state!.session.getExecutionMode() === 'plan'
+                ? createPlanModeIdcMetadata()
+                : undefined;
+          }
+
           for await (const event of state!.session.execute(finalPrompt, {
             workspaceRoot: sessionConfig.workDir,
+            ...(executionMetadata ? { metadata: executionMetadata } : {}),
           })) {
             handleAgentEvent(event, {
               onOutput: (text) => process.stdout.write(text),

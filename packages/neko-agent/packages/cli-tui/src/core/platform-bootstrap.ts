@@ -14,7 +14,7 @@ import {
   toSharedService,
   type Platform,
 } from '@neko/platform';
-import { TaskManager, createFileTaskStorage } from '@neko/agent';
+import { TaskManager, createFileTaskStorage, type IRuntimeTaskManager } from '@neko/agent';
 import type { IService, IToolRegistry } from '@neko/shared';
 import { getEnvKeyMap } from '@neko/shared';
 
@@ -24,11 +24,19 @@ const ENV_KEY_MAP = getEnvKeyMap();
 export interface CLIPlatformOptions {
   workspacePath?: string;
   toolRegistry: IToolRegistry;
+  taskManager?: IRuntimeTaskManager;
 }
 
 export interface CLIPlatformResult {
   platform: Platform;
   service: IService;
+  taskManager: IRuntimeTaskManager;
+}
+
+export function createCLITaskManager(): IRuntimeTaskManager {
+  const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
+  const taskStorage = createFileTaskStorage(taskStoragePath);
+  return new TaskManager({ storage: taskStorage });
 }
 
 /**
@@ -60,10 +68,7 @@ function collectEnvApiKeys(): Record<string, string> {
 export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResult {
   const userConfigManager = new FileUserConfigManager();
 
-  // File-based task storage for media generation (save to ~/.neko/tasks.json)
-  const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
-  const taskStorage = createFileTaskStorage(taskStoragePath);
-  const taskManager = new TaskManager({ storage: taskStorage });
+  const taskManager = options.taskManager ?? createCLITaskManager();
 
   const platform = createPlatform({
     userConfigManager,
@@ -95,5 +100,5 @@ export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResul
   }
 
   const service = toSharedService(platform.createService());
-  return { platform, service };
+  return { platform, service, taskManager };
 }

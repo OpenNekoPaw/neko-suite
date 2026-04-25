@@ -60,6 +60,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     deactivateSkill,
     getSkillService,
     getToolRegistry,
+    slashCommands,
   } = useAgentSession({
     config,
     service,
@@ -68,7 +69,9 @@ export function App({ config, service }: AppProps): React.JSX.Element {
   // Slash command handling
   const { handleCommand, onClear } = useSlashCommands({
     clearHistory,
+    submit,
     updateModel,
+    updateMode,
     activateSkill,
     deactivateSkill,
     getSkillService,
@@ -176,6 +179,7 @@ export function App({ config, service }: AppProps): React.JSX.Element {
           onSubmit={handleSubmit}
           onSlashCommand={handleCommand}
           disabled={inputDisabled}
+          commands={slashCommands}
         />
 
         {/* Status bar — fixed at very bottom */}

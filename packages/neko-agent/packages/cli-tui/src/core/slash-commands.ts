@@ -6,14 +6,17 @@
  */
 
 import {
+  type Skill,
   type SkillService,
   type ToolRegistry,
   type CommandContext,
   type CommandResult,
   type ChatMessage,
+  createSkillExecutionIdcMetadata,
   executeSlashCommand,
   isSlashCommand as checkIsSlashCommand,
   parseSlashCommand as parseCommand,
+  resolveSlashCommandCatalogEntry,
   getCliCommands,
   type FileConversationStorage,
 } from '@neko/agent';
@@ -41,6 +44,12 @@ export interface SlashCommandResult {
   continueExecution: boolean;
   /** Error message if any */
   error?: string;
+  /** Prompt to continue into agent execution after command handling */
+  agentPrompt?: string;
+  /** Optional metadata overrides for AgentSession.execute() */
+  executionOverrides?: {
+    metadata?: Record<string, unknown>;
+  };
 }
 
 /**
@@ -162,6 +171,7 @@ export async function handleSlashCommand(
   context: SlashCommandContext,
 ): Promise<SlashCommandResult> {
   const { command, args } = parseSlashCommand(input);
+  const argsText = args.join(' ').trim();
 
   // Handle CLI-specific config command with provider info
   if (command === 'config' || command === 'cfg') {
@@ -189,6 +199,12 @@ export async function handleSlashCommand(
   }
 
   // Use shared command executor for other commands
+  const commandEntry = resolveSlashCommandCatalogEntry(command, {
+    surface: 'cli',
+    skills: context.skillService?.registry.listAllSkills(),
+  });
+  const skill = commandEntry?.source === 'skill' ? (commandEntry.skill as Skill) : undefined;
+  const isBuiltin = commandEntry?.source === 'builtin';
   const commandContext = toCommandContext(context);
   const result = await executeSlashCommand(
     input,
@@ -207,7 +223,15 @@ export async function handleSlashCommand(
       : undefined,
   );
 
-  return toSlashCommandResult(result);
+  const slashResult = toSlashCommandResult(result);
+  if (result.handled && !result.error && !isBuiltin && skill && argsText.length > 0) {
+    slashResult.agentPrompt = argsText;
+    slashResult.executionOverrides = {
+      metadata: createSkillExecutionIdcMetadata(skill as Skill),
+    };
+  }
+
+  return slashResult;
 }
 
 /**
