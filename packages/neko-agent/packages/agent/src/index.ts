@@ -25,7 +25,6 @@ export type {
   AgentResult,
   AgentCheckpoint,
   IAgentExecutor,
-  AgentRuntimeConfig,
   IAgentRuntime,
   // Hook types
   ExecutorHooks,
@@ -74,6 +73,53 @@ export type {
   ToolDefinition,
   LLMProviderConfig,
 } from '@neko/shared';
+
+export type {
+  AgentRuntimeConfig,
+  ArtifactWatcherFactory,
+  ArtifactWatcherRuntimeConfig,
+  IWorkflowRuntime,
+  IArtifactStore,
+  IArtifactService,
+  AnyArtifactObservedInput,
+  AnyArtifactRecord,
+  ArtifactObservedInput,
+  ArtifactBinding,
+  ArtifactRecord,
+  ArtifactServiceConfig,
+  ArtifactServiceFsOps,
+  ArtifactWriteInput,
+  ICapabilityRuntime,
+  IFeedbackLoop,
+  IRuntimeJournalWriter,
+  IRuntimeWorkspaceFsOps,
+  NodeArtifactStoreConfig,
+} from './runtime';
+export {
+  buildAgentSessionConfigWithRuntime,
+  createAgentSessionWithRuntime,
+  createNodeArtifactStore,
+  createNodeRuntimeWorkspaceFsOps,
+  createWorkspaceArtifactService,
+  toIdcRunArtifactBinding,
+  type AgentSessionRuntimeBootstrapConfig,
+} from './runtime';
+
+export {
+  composeBeforeThinkHooks,
+  createFeedbackCoordinator,
+  type FeedbackCoordinatorConfig,
+  type FeedbackCycle,
+  type FeedbackDecision,
+  type FeedbackEvaluationContext,
+  type FeedbackSignal,
+  type IFeedbackEvaluator,
+  type FeedbackMemoryExtractionInput,
+  type FeedbackMemoryExtractionOutcome,
+  type FeedbackMemoryExtractionResult,
+  type FeedbackMemoryExtractionSkipped,
+  type IFeedbackCoordinator,
+} from './feedback';
 
 // Export plan parsing
 export { parsePlanMarkdown, type Plan, type PlanStep } from './plan';
@@ -214,6 +260,8 @@ export {
   SkillInjector,
   SkillMatcher,
   KeywordSkillMatcher,
+  createCommandBackedSkill,
+  createLazyCommandBackedSkill,
   ToolGuard,
   NoOpToolGuard,
   createToolGuard,
@@ -417,7 +465,12 @@ export {
 export {
   AgentSession,
   createAgentSession,
+  createSkillRunKind,
   createSkillWorkflowId,
+  createPlanModeIdcMetadata,
+  createSkillExecutionIdcMetadata,
+  mergeIdcExecutionMetadata,
+  encodeRunKindSegment,
   encodeWorkflowIdSegment,
   PLAN_MODE_SYSTEM_REMINDER as SESSION_PLAN_MODE_REMINDER,
   type IAgentSession,
@@ -437,6 +490,7 @@ export {
 // Export task management
 export {
   TaskManager,
+  createTaskManagerIdcTaskProjection,
   MemoryTaskStorage,
   FileTaskStorage,
   createFileTaskStorage,
@@ -445,8 +499,21 @@ export {
   createFileRecoveryStorage,
   type TaskManagerOptions,
   type ConcurrencyConfig,
+  type IIdcProjectedTaskStore,
+  type IRuntimeTaskManager,
   type FileTaskStorageOptions,
   type FileTaskRecoveryStorageOptions,
+  type IIdcTaskProjection,
+  type IIdcTaskProjectionStore,
+  type IdcTaskProjectionConfig,
+  type IdcProjectedTaskArtifactBinding,
+  type IdcProjectedTaskBinding,
+  type IdcProjectedTaskPayload,
+  type IdcProjectedTaskUpsertInput,
+  getIdcProjectedTaskRunId,
+  isIdcProjectedTaskPayload,
+  toSerializableIdcProjectedTask,
+  toIdcProjectedTaskPayload,
   // Re-exported types from shared
   type Task,
   type TaskType,
@@ -473,11 +540,16 @@ export {
   type CommandAction,
   type CommandHandler,
   type CommandHandlerRegistration,
+  type SlashCommandSurface,
+  type SlashCommandSkillLike,
+  type SlashCommandCatalogEntry,
   // Constants
   COMMAND_ALIASES,
   BUILTIN_COMMANDS,
   // Functions
   resolveCommandName,
+  listSlashCommandCatalog,
+  resolveSlashCommandCatalogEntry,
   getCliCommands,
   getExtensionCommands,
   getBuiltinCommand,

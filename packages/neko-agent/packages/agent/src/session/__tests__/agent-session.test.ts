@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
 import type { AgentSessionConfig, AgentEvent } from '../types';
 import type {
@@ -11,8 +12,17 @@ import type {
   AgentStep,
   ChatMessage,
   IProjectMemoryManager,
+  ToolResultWithMeta,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    watch: vi.fn(() => ({ close() {} })),
+  };
+});
 
 // =============================================================================
 // Helpers
@@ -40,6 +50,12 @@ function getInternalRunStore(session: AgentSession) {
   )._runStore;
 }
 
+function parseLatestWrite<T>(writes: readonly { path: string; data: string }[], path: string): T {
+  const match = [...writes].reverse().find((write) => write.path === path);
+  expect(match).toBeDefined();
+  return JSON.parse(match!.data) as T;
+}
+
 // =============================================================================
 // Mocks
 // =============================================================================
@@ -47,7 +63,7 @@ function getInternalRunStore(session: AgentSession) {
 /** Mock steps yielded by AgentExecutor.executeStream */
 function createMockExecutorModule(steps: AgentStep[]) {
   return {
-    executeStream: vi.fn(async function* () {
+    executeStream: vi.fn(async function* (..._args: unknown[]) {
       for (const step of steps) {
         yield step;
       }
@@ -253,7 +269,12 @@ describe('AgentSession', () => {
           type: 'act',
           content: 'Executed 1 tool(s)',
           toolResults: [
-            { success: true, data: 'file content', callId: 'call_1', name: 'read_file' },
+            {
+              success: true,
+              data: 'file content',
+              callId: 'call_1',
+              name: 'read_file',
+            } as ToolResultWithMeta,
           ],
           timestamp: Date.now(),
         },
@@ -296,8 +317,10 @@ describe('AgentSession', () => {
       expect(userMessages[0]!.content).toBe('Hello');
 
       // Executor should receive skipUserMessage: true
-      const callArgs = mockExec.executeStream.mock.calls[0];
-      expect(callArgs![1]!.skipUserMessage).toBe(true);
+      const callArgs = mockExec.executeStream.mock.calls[0] as
+        | [string, { skipUserMessage?: boolean }]
+        | undefined;
+      expect(callArgs?.[1]?.skipUserMessage).toBe(true);
     });
   });
 
@@ -348,6 +371,7 @@ describe('AgentSession', () => {
       expect(session.getActiveIdcRun()).toBeNull();
       expect(getCompletedRuns(session)).toEqual([
         expect.objectContaining({
+          runKind: 'plan-mode',
           workflowId: 'plan-mode',
           status: 'failed',
           error: expect.objectContaining({
@@ -377,8 +401,8 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('Build a feature'));
 
-      const callArgs = mockExec.executeStream.mock.calls[0];
-      const inputArg = callArgs![0] as string;
+      const callArgs = mockExec.executeStream.mock.calls[0] as [string] | undefined;
+      const inputArg = callArgs?.[0] ?? '';
       expect(inputArg).toContain(PLAN_MODE_SYSTEM_REMINDER);
       expect(inputArg).toContain('Build a feature');
     });
@@ -416,6 +440,31 @@ describe('AgentSession', () => {
           }),
         }),
       );
+      expect(session.getFeedbackCycles()).toEqual([
+        expect.objectContaining({
+          currentStage: null,
+          activeRunId: null,
+          signals: [
+            expect.objectContaining({
+              kind: 'memory-extraction',
+            }),
+          ],
+          decisions: [
+            {
+              action: 'memorize',
+              signalKind: 'memory-extraction',
+              factCount: 1,
+              writeStatus: 'written',
+            },
+          ],
+          actions: [
+            {
+              kind: 'clear-guidance',
+              reason: 'memorize',
+            },
+          ],
+        }),
+      ]);
     });
 
     it('does not extract project memory when autoMemoryExtraction is disabled', async () => {
@@ -446,10 +495,8 @@ describe('AgentSession', () => {
       const steps: AgentStep[] = [{ type: 'think', content: 'Noted', timestamp: Date.now() }];
       const mockExec = injectMockExecutor(session, steps);
       let capturedSystemPrompt = '';
-      mockExec.executeStream.mockImplementationOnce(async function* (
-        _input: string,
-        options?: { messages?: ChatMessage[] },
-      ) {
+      mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+        const options = args[1] as { messages?: ChatMessage[] } | undefined;
         capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
         for (const step of steps) {
           yield step;
@@ -475,10 +522,8 @@ describe('AgentSession', () => {
       const steps: AgentStep[] = [{ type: 'think', content: 'Noted', timestamp: Date.now() }];
       const mockExec = injectMockExecutor(session, steps);
       let capturedSystemPrompt = '';
-      mockExec.executeStream.mockImplementationOnce(async function* (
-        _input: string,
-        options?: { messages?: ChatMessage[] },
-      ) {
+      mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+        const options = args[1] as { messages?: ChatMessage[] } | undefined;
         capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
         for (const step of steps) {
           yield step;
@@ -725,10 +770,40 @@ describe('AgentSession', () => {
       expect(runStore?.listCompleted()).toEqual([
         expect.objectContaining({
           id: 'run-active',
+          runKind: 'wf',
           workflowId: 'wf',
           status: 'aborted',
         }),
       ]);
+    });
+
+    it('disposes a runtime-provided artifact watcher', () => {
+      const start = vi.fn().mockResolvedValue(undefined);
+      const disposeWatcher = vi.fn().mockResolvedValue(undefined);
+      const artifactWatcherFactory = vi.fn(() => ({
+        start,
+        dispose: disposeWatcher,
+      }));
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {},
+          workspace: {
+            root: '/tmp/proj',
+            fsOps: {
+              mkdir: vi.fn(async () => undefined),
+              appendFile: vi.fn(async () => undefined),
+            },
+          },
+          artifactWatcherFactory,
+        }),
+      );
+
+      expect(artifactWatcherFactory).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledTimes(1);
+
+      session.dispose();
+
+      expect(disposeWatcher).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -856,10 +931,210 @@ describe('AgentSession', () => {
       expect(session.getActiveIdcRun()).toBeNull();
       expect(getCompletedRuns(session)).toEqual([
         expect.objectContaining({
+          runKind: 'plan-mode',
           workflowId: 'plan-mode',
           status: 'completed',
         }),
       ]);
+    });
+
+    it('startIdcRun writes runKind while keeping the legacy workflowId mirror', () => {
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {},
+        }),
+      );
+
+      session.startIdcRun('artifact-resume', 'run-kind');
+
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-kind',
+          runKind: 'artifact-resume',
+          workflowId: 'artifact-resume',
+          status: 'running',
+        }),
+      );
+    });
+  });
+
+  describe('feedback observation', () => {
+    it('captures tool failures as repair feedback cycles', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolResults: [
+            {
+              callId: 'call-write',
+              success: false,
+              error: 'permission denied',
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 100,
+        },
+      ]);
+
+      await collectEvents(session.execute('write the draft'));
+
+      expect(session.getFeedbackCycles()).toEqual([
+        expect.objectContaining({
+          currentStage: null,
+          activeRunId: null,
+          signals: [
+            {
+              kind: 'tool-failure',
+              observedAt: 100,
+              toolCallId: 'call-write',
+              toolName: 'Write',
+              error: 'permission denied',
+            },
+          ],
+          decisions: [
+            {
+              action: 'repair',
+              signalKind: 'tool-failure',
+              toolCallId: 'call-write',
+              toolName: 'Write',
+              error: 'permission denied',
+            },
+          ],
+          actions: [
+            {
+              kind: 'set-guidance',
+              guidance:
+                '- Repair the failed tool step for Write. Diagnose the error "permission denied" and choose a safer fallback if needed.',
+              signalKinds: ['tool-failure'],
+            },
+          ],
+        }),
+      ]);
+    });
+
+    it('captures QualityCheck results as feedback cycles by correlating tool call ids', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-qc',
+              success: true,
+              data: {
+                totalScenes: 2,
+                passed: 1,
+                failed: 1,
+                evaluations: [
+                  { index: 1, passed: true, finalScore: 82 },
+                  {
+                    index: 2,
+                    passed: false,
+                    finalScore: 41,
+                    remediations: [{ action: 'regen' }],
+                  },
+                ],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 200,
+        },
+      ]);
+
+      await collectEvents(session.execute('check scene quality'));
+
+      expect(session.getFeedbackCycles()).toEqual([
+        expect.objectContaining({
+          currentStage: null,
+          activeRunId: null,
+          signals: [
+            {
+              kind: 'quality-check',
+              observedAt: 200,
+              toolCallId: 'call-qc',
+              toolName: 'QualityCheck',
+              totalScenes: 2,
+              passed: 1,
+              failed: 1,
+              failingSceneIndexes: [2],
+              remediationCount: 1,
+            },
+          ],
+          decisions: [
+            {
+              action: 'repair',
+              signalKind: 'quality-check',
+              toolCallId: 'call-qc',
+              toolName: 'QualityCheck',
+              totalScenes: 2,
+              failed: 1,
+              failingSceneIndexes: [2],
+              remediationCount: 1,
+            },
+          ],
+          actions: [
+            {
+              kind: 'set-guidance',
+              guidance:
+                '- Repair the failing quality-check result. Focus on scene(s) 2 and apply 1 suggested remediation step(s) as needed.',
+              signalKinds: ['quality-check'],
+            },
+          ],
+        }),
+      ]);
+    });
+
+    it('injects feedback guidance into the next turn only, then clears it after consumption', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolResults: [
+            {
+              callId: 'call-write',
+              success: false,
+              error: 'permission denied',
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 300,
+        },
+      ]);
+
+      await collectEvents(session.execute('write the draft'));
+
+      let secondTurnPrompt = '';
+      const secondTurnExecutor = injectMockExecutor(session, [
+        { type: 'think', content: 'Retrying with guidance', timestamp: 301 },
+      ]);
+      secondTurnExecutor.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+        const options = args[1] as { messages?: ChatMessage[] } | undefined;
+        secondTurnPrompt = String(options?.messages?.[0]?.content ?? '');
+        yield { type: 'think', content: 'Retrying with guidance', timestamp: 301 };
+      });
+
+      await collectEvents(session.execute('try again'));
+
+      expect(secondTurnPrompt).toContain('## Feedback Guidance');
+      expect(secondTurnPrompt).toContain('permission denied');
+
+      let thirdTurnPrompt = '';
+      const thirdTurnExecutor = injectMockExecutor(session, [
+        { type: 'think', content: 'Normal turn', timestamp: 302 },
+      ]);
+      thirdTurnExecutor.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+        const options = args[1] as { messages?: ChatMessage[] } | undefined;
+        thirdTurnPrompt = String(options?.messages?.[0]?.content ?? '');
+        yield { type: 'think', content: 'Normal turn', timestamp: 302 };
+      });
+
+      await collectEvents(session.execute('one more turn'));
+
+      expect(thirdTurnPrompt).not.toContain('## Feedback Guidance');
     });
   });
 
@@ -1026,6 +1301,1052 @@ describe('AgentSession', () => {
       expect(parsed.seq).toBe(1);
       expect(parsed.event.channel).toBe('execution.apply.committed');
       expect(parsed.event.kind).toBe('tool:GenerateImage');
+    });
+
+    it('flushWorkspaceSink forces pending runtime-state debounce writes to land immediately', async () => {
+      vi.useFakeTimers();
+      try {
+        const { registry, service } = minimalStageTrackingConfig();
+        const writes: Array<{ path: string; data: string }> = [];
+        const fsOps = {
+          async mkdir(): Promise<void> {},
+          async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+            writes.push({ path, data });
+          },
+        };
+
+        const session = new AgentSession(
+          createConfig({
+            stageTracking: {
+              skillRegistry: registry as never,
+              skillService: service as never,
+              initialStage: 'draft',
+            },
+            workspace: { root: '/tmp/proj', fsOps },
+          }),
+        );
+
+        session.startWorkflowRun('wf-debounce', 'run-1');
+        await Promise.resolve();
+
+        expect(
+          writes.filter((entry) => entry.path === '/tmp/proj/.neko/state/idc-runtime.json'),
+        ).toHaveLength(0);
+
+        await session.flushWorkspaceSink();
+
+        const runtimeWrites = writes.filter(
+          (entry) => entry.path === '/tmp/proj/.neko/state/idc-runtime.json',
+        );
+        expect(runtimeWrites).toHaveLength(1);
+
+        const snapshot = JSON.parse(runtimeWrites[0]!.data) as {
+          run: {
+            active?: { id: string; status: string };
+          };
+        };
+        expect(snapshot.run.active).toEqual(
+          expect.objectContaining({
+            id: 'run-1',
+            status: 'running',
+          }),
+        );
+
+        session.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('writes draft / plan / task artifacts through ArtifactService and binds them to the active run', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf-artifacts', 'run-1');
+
+      const draft: Draft = {
+        id: 'draft-1',
+        title: 'Trailer draft',
+        status: 'pending_review',
+        domain: 'cut',
+        createdAt: 1,
+        updatedAt: 2,
+        intent: 'Tell the product story.',
+        approach: 'Build to a single reveal.',
+        artifact: 'A fast teaser cut.',
+      };
+      const plan: ExecutionPlan = {
+        id: 'plan-1',
+        draftId: 'draft-1',
+        title: 'Trailer plan',
+        status: 'ready',
+        createdAt: 3,
+        updatedAt: 4,
+        steps: [],
+      };
+      const task: Task = {
+        id: 'task-1',
+        createdAt: 5,
+        updatedAt: 6,
+        items: [{ id: 'step-1', content: 'Export teaser', status: 'pending' }],
+      };
+
+      await session.writeDraftArtifact(draft);
+      await session.writePlanArtifact(plan);
+      await session.writeTaskArtifact(task);
+      await session.flushWorkspaceSink();
+
+      expect(
+        writes.filter((entry) => entry.path === '/tmp/proj/.neko/drafts/draft-run-1.md'),
+      ).toHaveLength(1);
+      expect(
+        writes.filter((entry) => entry.path === '/tmp/proj/.neko/plans/plan-run-1.md'),
+      ).toHaveLength(1);
+      expect(
+        writes.filter((entry) => entry.path === '/tmp/proj/.neko/tasks/task-run-1.md'),
+      ).toHaveLength(1);
+      expect(session.getArtifactsForRun('run-1').map((record) => record.kind)).toEqual([
+        'draft',
+        'plan',
+        'task',
+      ]);
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-1',
+          draft,
+          plan,
+          task,
+          artifactBindings: [
+            {
+              kind: 'draft',
+              artifactId: 'draft-1',
+              path: '/tmp/proj/.neko/drafts/draft-run-1.md',
+              updatedAt: 2,
+            },
+            {
+              kind: 'plan',
+              artifactId: 'plan-1',
+              path: '/tmp/proj/.neko/plans/plan-run-1.md',
+              updatedAt: 4,
+            },
+            {
+              kind: 'task',
+              artifactId: 'task-1',
+              path: '/tmp/proj/.neko/tasks/task-run-1.md',
+              updatedAt: 6,
+            },
+          ],
+        }),
+      );
+
+      const snapshot = parseLatestWrite<{
+        run: {
+          active?: {
+            artifacts?: readonly { kind: string; artifactId: string; path: string }[];
+          };
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      const artifactIndexSnapshot = parseLatestWrite<{
+        entries: Array<{ kind: string; artifactId: string; runId: string }>;
+      }>(writes, '/tmp/proj/.neko/cache/artifact-index.json');
+      expect(snapshot.run.active?.artifacts).toEqual([
+        {
+          kind: 'draft',
+          artifactId: 'draft-1',
+          path: '/tmp/proj/.neko/drafts/draft-run-1.md',
+          updatedAt: 2,
+        },
+        {
+          kind: 'plan',
+          artifactId: 'plan-1',
+          path: '/tmp/proj/.neko/plans/plan-run-1.md',
+          updatedAt: 4,
+        },
+        {
+          kind: 'task',
+          artifactId: 'task-1',
+          path: '/tmp/proj/.neko/tasks/task-run-1.md',
+          updatedAt: 6,
+        },
+      ]);
+      expect(artifactIndexSnapshot.entries).toEqual([
+        expect.objectContaining({ kind: 'draft', artifactId: 'draft-1', runId: 'run-1' }),
+        expect.objectContaining({ kind: 'plan', artifactId: 'plan-1', runId: 'run-1' }),
+        expect.objectContaining({ kind: 'task', artifactId: 'task-1', runId: 'run-1' }),
+      ]);
+    });
+
+    it('restores task artifacts from ArtifactService and replays IDC task projection on startup', async () => {
+      const restoredTask: Task = {
+        id: 'task-restore',
+        createdAt: 5,
+        updatedAt: 6,
+        items: [{ id: 'restore-step', content: 'Replay checklist', status: 'pending' }],
+      };
+      const taskRecord = {
+        kind: 'task',
+        runId: 'run-restore',
+        artifactId: 'task-restore',
+        path: '/tmp/proj/.neko/tasks/task-run-restore.md',
+        updatedAt: 6,
+        content: '# Tasks',
+        value: restoredTask,
+      };
+      const projection = {
+        syncTask: vi.fn(async () => ['idc:run-restore:restore-step']),
+        clearRun: vi.fn(async () => undefined),
+      };
+      const artifactService = {
+        restore: vi.fn(async () => [taskRecord]),
+        listRunIds: vi.fn(() => ['run-restore']),
+        listByRunId: vi.fn((runId: string) => (runId === 'run-restore' ? [taskRecord] : [])),
+        getByRunId: vi.fn(() => null),
+        write: vi.fn(),
+        writeDraft: vi.fn(),
+        writePlan: vi.fn(),
+        writeTask: vi.fn(),
+        ingestObservedArtifact: vi.fn(),
+        flush: vi.fn(async () => undefined),
+        dispose: vi.fn(async () => undefined),
+      };
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        async writeFile(): Promise<void> {},
+        async readFile(): Promise<string> {
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          workspace: { root: '/tmp/proj', fsOps },
+          artifactService: artifactService as never,
+          idcTaskProjection: projection as never,
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(artifactService.restore).toHaveBeenCalledTimes(1);
+      expect(session.getArtifactsForRun('run-restore')).toEqual([taskRecord]);
+      expect(projection.syncTask).toHaveBeenCalledWith({
+        runId: 'run-restore',
+        task: restoredTask,
+        artifact: {
+          kind: 'task',
+          artifactId: 'task-restore',
+          path: '/tmp/proj/.neko/tasks/task-run-restore.md',
+          updatedAt: 6,
+        },
+      });
+      session.dispose();
+    });
+
+    it('restores stage/run runtime state and hydrates run artifacts on startup', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const restoredDraft: Draft = {
+        id: 'draft-active',
+        title: 'Recovered draft',
+        status: 'pending_review',
+        domain: 'cut',
+        createdAt: 10,
+        updatedAt: 11,
+        intent: 'Recover intent',
+        approach: 'Recover approach',
+        artifact: 'Recover artifact',
+      };
+      const restoredPlan: ExecutionPlan = {
+        id: 'plan-done',
+        draftId: 'draft-active',
+        title: 'Recovered plan',
+        status: 'ready',
+        createdAt: 20,
+        updatedAt: 21,
+        steps: [],
+      };
+      const restoredTask: Task = {
+        id: 'task-active',
+        createdAt: 30,
+        updatedAt: 31,
+        items: [{ id: 'check-1', content: 'Resume apply', status: 'pending' }],
+      };
+      const draftRecord = {
+        kind: 'draft',
+        runId: 'run-active',
+        artifactId: 'draft-active',
+        path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+        updatedAt: 11,
+        content: '# Draft',
+        value: restoredDraft,
+      };
+      const planRecord = {
+        kind: 'plan',
+        runId: 'run-done',
+        artifactId: 'plan-done',
+        path: '/tmp/proj/.neko/plans/plan-run-done.md',
+        updatedAt: 21,
+        content: '# Plan',
+        value: restoredPlan,
+      };
+      const taskRecord = {
+        kind: 'task',
+        runId: 'run-active',
+        artifactId: 'task-active',
+        path: '/tmp/proj/.neko/tasks/task-run-active.md',
+        updatedAt: 31,
+        content: '# Tasks',
+        value: restoredTask,
+      };
+      const projection = {
+        syncTask: vi.fn(async () => ['idc:run-active:check-1']),
+        clearRun: vi.fn(async () => undefined),
+      };
+      const artifactService = {
+        restore: vi.fn(async () => [draftRecord, planRecord, taskRecord]),
+        listRunIds: vi.fn(() => ['run-active', 'run-done']),
+        listByRunId: vi.fn((runId: string) => {
+          if (runId === 'run-active') return [draftRecord, taskRecord];
+          if (runId === 'run-done') return [planRecord];
+          return [];
+        }),
+        getByRunId: vi.fn(() => null),
+        write: vi.fn(),
+        writeDraft: vi.fn(),
+        writePlan: vi.fn(),
+        writeTask: vi.fn(),
+        ingestObservedArtifact: vi.fn(),
+        flush: vi.fn(async () => undefined),
+        dispose: vi.fn(async () => undefined),
+      };
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
+            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+          }
+
+          return JSON.stringify({
+            updatedAt: 50,
+            stage: {
+              current: 'plan',
+              enteredAt: 40,
+              transitions: [
+                { from: null, to: 'draft', at: 10 },
+                { from: 'draft', to: 'plan', at: 20 },
+              ],
+            },
+            run: {
+              active: {
+                id: 'run-active',
+                runKind: 'wf-active',
+                workflowId: 'wf-active',
+                status: 'running',
+                createdAt: 1,
+                startedAt: 2,
+                roundCount: 1,
+                rounds: [
+                  {
+                    round: 0,
+                    activatedStages: ['draft', 'plan'],
+                    skippedStages: [],
+                    decidedAt: 3,
+                  },
+                ],
+                artifacts: [
+                  {
+                    kind: 'draft',
+                    artifactId: 'draft-active',
+                    path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+                    updatedAt: 11,
+                  },
+                  {
+                    kind: 'task',
+                    artifactId: 'task-active',
+                    path: '/tmp/proj/.neko/tasks/task-run-active.md',
+                    updatedAt: 31,
+                  },
+                ],
+              },
+              lastCompleted: {
+                id: 'run-done',
+                runKind: 'wf-done',
+                workflowId: 'wf-done',
+                status: 'completed',
+                createdAt: 4,
+                startedAt: 5,
+                endedAt: 6,
+                roundCount: 1,
+                rounds: [
+                  {
+                    round: 0,
+                    activatedStages: ['apply'],
+                    skippedStages: [],
+                    decidedAt: 6,
+                  },
+                ],
+                artifacts: [
+                  {
+                    kind: 'plan',
+                    artifactId: 'plan-done',
+                    path: '/tmp/proj/.neko/plans/plan-run-done.md',
+                    updatedAt: 21,
+                  },
+                ],
+              },
+            },
+            approval: {
+              pending: [],
+            },
+          });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+          artifactService: artifactService as never,
+          idcTaskProjection: projection as never,
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(artifactService.restore).toHaveBeenCalledTimes(1);
+      expect(projection.syncTask).toHaveBeenCalledWith({
+        runId: 'run-active',
+        runStartedAt: 2,
+        task: restoredTask,
+        artifact: {
+          kind: 'task',
+          artifactId: 'task-active',
+          path: '/tmp/proj/.neko/tasks/task-run-active.md',
+          updatedAt: 31,
+        },
+      });
+      expect(session.listArtifactRunIds()).toEqual(['run-active', 'run-done']);
+      expect(session.getIdcRun('run-active')).toEqual(
+        expect.objectContaining({
+          id: 'run-active',
+          runKind: 'wf-active',
+          workflowId: 'wf-active',
+        }),
+      );
+      expect(session.getIdcRun('run-done')).toEqual(
+        expect.objectContaining({
+          id: 'run-done',
+          runKind: 'wf-done',
+          workflowId: 'wf-done',
+        }),
+      );
+      expect(session.listIdcRuns()).toEqual([
+        expect.objectContaining({ id: 'run-active', status: 'running' }),
+        expect.objectContaining({ id: 'run-done', status: 'completed' }),
+      ]);
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-active',
+          runKind: 'wf-active',
+          workflowId: 'wf-active',
+          status: 'running',
+          draft: restoredDraft,
+          task: restoredTask,
+          rounds: [
+            expect.objectContaining({
+              round: 0,
+              activatedStages: ['draft', 'plan'],
+            }),
+          ],
+          artifactBindings: [
+            {
+              kind: 'draft',
+              artifactId: 'draft-active',
+              path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+              updatedAt: 11,
+            },
+            {
+              kind: 'task',
+              artifactId: 'task-active',
+              path: '/tmp/proj/.neko/tasks/task-run-active.md',
+              updatedAt: 31,
+            },
+          ],
+        }),
+      );
+      expect(getCompletedRuns(session)).toEqual([
+        expect.objectContaining({
+          id: 'run-done',
+          runKind: 'wf-done',
+          workflowId: 'wf-done',
+          status: 'completed',
+          plan: restoredPlan,
+          rounds: [
+            expect.objectContaining({
+              round: 0,
+              activatedStages: ['apply'],
+            }),
+          ],
+          artifactBindings: [
+            {
+              kind: 'plan',
+              artifactId: 'plan-done',
+              path: '/tmp/proj/.neko/plans/plan-run-done.md',
+              updatedAt: 21,
+            },
+          ],
+        }),
+      ]);
+
+      const snapshot = parseLatestWrite<{
+        stage: {
+          current: string | null;
+          transitions: Array<{ from: string | null; to: string; at: number }>;
+        };
+        run: {
+          active?: {
+            id: string;
+            roundCount: number;
+            rounds?: Array<{ round: number }>;
+          };
+          lastCompleted?: {
+            id: string;
+            status: string;
+            rounds?: Array<{ round: number }>;
+          };
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+
+      expect(snapshot.stage).toEqual({
+        current: 'plan',
+        enteredAt: 40,
+        transitions: [
+          { from: null, to: 'draft', at: 10 },
+          { from: 'draft', to: 'plan', at: 20 },
+        ],
+      });
+      expect(snapshot.run.active).toEqual(
+        expect.objectContaining({
+          id: 'run-active',
+          roundCount: 1,
+          rounds: [
+            { round: 0, activatedStages: ['draft', 'plan'], skippedStages: [], decidedAt: 3 },
+          ],
+        }),
+      );
+      expect(snapshot.run.lastCompleted).toEqual(
+        expect.objectContaining({
+          id: 'run-done',
+          status: 'completed',
+          rounds: [{ round: 0, activatedStages: ['apply'], skippedStages: [], decidedAt: 6 }],
+        }),
+      );
+      session.dispose();
+    });
+
+    it('clears restored IDC task projection for completed runs during startup restore', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const completedTask: Task = {
+        id: 'task-done',
+        createdAt: 60,
+        updatedAt: 61,
+        items: [{ id: 'done-step', content: 'Completed checklist', status: 'completed' }],
+      };
+      const completedTaskRecord = {
+        kind: 'task',
+        runId: 'run-done',
+        artifactId: 'task-done',
+        path: '/tmp/proj/.neko/tasks/task-run-done.md',
+        updatedAt: 61,
+        content: '# Tasks',
+        value: completedTask,
+      };
+      const projection = {
+        syncTask: vi.fn(async () => ['idc:run-done:done-step']),
+        clearRun: vi.fn(async () => undefined),
+      };
+      const artifactService = {
+        restore: vi.fn(async () => [completedTaskRecord]),
+        listRunIds: vi.fn(() => ['run-done']),
+        listByRunId: vi.fn((runId: string) => (runId === 'run-done' ? [completedTaskRecord] : [])),
+        getByRunId: vi.fn(() => null),
+        write: vi.fn(),
+        writeDraft: vi.fn(),
+        writePlan: vi.fn(),
+        writeTask: vi.fn(),
+        ingestObservedArtifact: vi.fn(),
+        flush: vi.fn(async () => undefined),
+        dispose: vi.fn(async () => undefined),
+      };
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(): Promise<void> {},
+        async writeFile(): Promise<void> {},
+        async readFile(path: string): Promise<string> {
+          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
+            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+          }
+
+          return JSON.stringify({
+            stage: {
+              current: 'apply',
+              transitions: [],
+            },
+            run: {
+              lastCompleted: {
+                id: 'run-done',
+                runKind: 'wf-done',
+                workflowId: 'wf-done',
+                status: 'completed',
+                createdAt: 10,
+                startedAt: 11,
+                endedAt: 12,
+                roundCount: 1,
+                rounds: [
+                  {
+                    round: 0,
+                    activatedStages: ['apply'],
+                    skippedStages: [],
+                    decidedAt: 12,
+                  },
+                ],
+              },
+            },
+            approval: {
+              pending: [],
+            },
+            feedback: {
+              pendingGuidance: null,
+            },
+          });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+          artifactService: artifactService as never,
+          idcTaskProjection: projection as never,
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(projection.syncTask).toHaveBeenCalledWith({
+        runId: 'run-done',
+        runStartedAt: 11,
+        task: completedTask,
+        artifact: {
+          kind: 'task',
+          artifactId: 'task-done',
+          path: '/tmp/proj/.neko/tasks/task-run-done.md',
+          updatedAt: 61,
+        },
+      });
+      expect(projection.clearRun).toHaveBeenCalledWith('run-done', 11);
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(session.getIdcRun('run-done')).toEqual(
+        expect.objectContaining({
+          id: 'run-done',
+          status: 'completed',
+        }),
+      );
+      session.dispose();
+    });
+
+    it('hydrates previously written artifacts when startWorkflowRun reuses the same runId', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const fsOps = {
+        async mkdir(_path: string): Promise<void> {},
+        async appendFile(_path: string, _data: string): Promise<void> {},
+        async writeFile(_path: string, _data: string, _encoding: 'utf-8'): Promise<void> {},
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      const draft: Draft = {
+        id: 'draft-reuse',
+        title: 'Reuse me',
+        status: 'pending_review',
+        domain: 'cut',
+        createdAt: 10,
+        updatedAt: 11,
+        intent: 'Intent',
+        approach: 'Approach',
+        artifact: 'Artifact',
+      };
+
+      await session.writeDraftArtifact(draft, { runId: 'run-reuse' });
+      session.startWorkflowRun('wf-reuse', 'run-reuse');
+
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-reuse',
+          draft,
+          artifactBindings: [
+            {
+              kind: 'draft',
+              artifactId: 'draft-reuse',
+              path: '/tmp/proj/.neko/drafts/draft-run-reuse.md',
+              updatedAt: 11,
+            },
+          ],
+        }),
+      );
+    });
+
+    it('ingests artifact.written bus events into ArtifactService and the active run', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const files = new Map<string, string>();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(_path: string): Promise<void> {},
+        async appendFile(_path: string, _data: string): Promise<void> {},
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          files.set(path, data);
+          writes.push({ path, data });
+        },
+        async readFile(path: string, _encoding: 'utf-8'): Promise<string> {
+          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
+            return JSON.stringify({
+              schemaVersion: 1,
+              updatedAt: 0,
+              stage: { current: null, transitions: [] },
+              run: {},
+              approval: { pending: [] },
+            });
+          }
+          const value = files.get(path);
+          if (!value) {
+            throw new Error(`Missing fixture file: ${path}`);
+          }
+          return value;
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf-observed', 'run-observed');
+
+      const observedPath = '/tmp/proj/.neko/plans/plan-run-observed.md';
+      files.set(
+        observedPath,
+        [
+          '---',
+          'id: observed-plan',
+          'kind: plan',
+          'draftId: observed-draft',
+          'title: Observed plan',
+          'status: ready',
+          'createdAt: 2026-04-22T10:00:00.000Z',
+          'updatedAt: 2026-04-22T10:30:00.000Z',
+          '---',
+          '',
+          '# Observed plan',
+          '',
+          '> Compiled from draft `observed-draft`.',
+          '',
+          '## Steps',
+          '',
+          '### 1. [pending] Write',
+          '',
+          'Persist the artifact.',
+          '',
+          '```yaml',
+          'path: out.md',
+          '```',
+          '',
+        ].join('\n'),
+      );
+
+      session.getEventBus()!.emit({
+        channel: 'execution.artifact.written',
+        runId: 'run-observed',
+        kind: 'plan',
+        path: observedPath,
+        artifactId: 'observed-plan',
+        at: 123,
+      });
+      await session.flushWorkspaceSink();
+
+      expect(session.getArtifactsForRun('run-observed')).toEqual([
+        expect.objectContaining({
+          kind: 'plan',
+          artifactId: 'observed-plan',
+          path: observedPath,
+        }),
+      ]);
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-observed',
+          plan: {
+            id: 'observed-plan',
+            draftId: 'observed-draft',
+            title: 'Observed plan',
+            status: 'ready',
+            createdAt: Date.parse('2026-04-22T10:00:00.000Z'),
+            updatedAt: Date.parse('2026-04-22T10:30:00.000Z'),
+            steps: [
+              {
+                id: 'observed-plan.step.1',
+                tool: 'Write',
+                rationale: 'Persist the artifact.',
+                args: 'path: out.md',
+              },
+            ],
+          },
+          artifactBindings: [
+            {
+              kind: 'plan',
+              artifactId: 'observed-plan',
+              path: observedPath,
+              updatedAt: Date.parse('2026-04-22T10:30:00.000Z'),
+            },
+          ],
+        }),
+      );
+      expect(
+        parseLatestWrite<{
+          entries: Array<{ kind: string; artifactId: string; runId: string }>;
+        }>(writes, '/tmp/proj/.neko/cache/artifact-index.json').entries,
+      ).toEqual([
+        expect.objectContaining({
+          kind: 'plan',
+          artifactId: 'observed-plan',
+          runId: 'run-observed',
+        }),
+      ]);
+    });
+
+    it('skips lossy watcher re-ingest when the observed content matches an existing tracked artifact', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const files = new Map<string, string>();
+      const fsOps = {
+        async mkdir(_path: string): Promise<void> {},
+        async appendFile(_path: string, _data: string): Promise<void> {},
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          files.set(path, data);
+        },
+        async readFile(path: string, _encoding: 'utf-8'): Promise<string> {
+          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
+            return JSON.stringify({
+              schemaVersion: 1,
+              updatedAt: 0,
+              stage: { current: null, transitions: [] },
+              run: {},
+              approval: { pending: [] },
+            });
+          }
+          const value = files.get(path);
+          if (!value) {
+            throw new Error(`Missing fixture file: ${path}`);
+          }
+          return value;
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      session.startWorkflowRun('wf-task-echo', 'run-task-echo');
+
+      const task: Task = {
+        id: 'task-echo',
+        createdAt: 1,
+        updatedAt: 2,
+        items: [{ id: 'custom-item-id', content: 'Export teaser', status: 'pending' }],
+      };
+      const record = await session.writeTaskArtifact(task);
+
+      session.getEventBus()!.emit({
+        channel: 'execution.artifact.written',
+        runId: 'run-task-echo',
+        kind: 'task',
+        path: record.path,
+        artifactId: 'task-echo',
+        at: 999,
+      });
+      await session.flushWorkspaceSink();
+
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({
+          id: 'run-task-echo',
+          task,
+          artifactBindings: [
+            {
+              kind: 'task',
+              artifactId: 'task-echo',
+              path: record.path,
+              updatedAt: 2,
+            },
+          ],
+        }),
+      );
+    });
+
+    it('projects Task artifacts into the shared task plane when an IDC task projection is configured', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const idcTaskProjection = {
+        syncTask: vi.fn().mockResolvedValue(['idc:run-1:task-item-1']),
+        clearRun: vi.fn().mockResolvedValue(undefined),
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          workspace: {
+            root: '/tmp/proj',
+            fsOps: {
+              async mkdir(): Promise<void> {},
+              async appendFile(): Promise<void> {},
+              async writeFile(): Promise<void> {},
+            },
+          },
+          idcTaskProjection: idcTaskProjection as never,
+        }),
+      );
+      session.startWorkflowRun('wf-task-projection', 'run-1');
+      const activeRun = session.getActiveIdcRun();
+      expect(activeRun).toEqual(
+        expect.objectContaining({
+          id: 'run-1',
+          startedAt: expect.any(Number),
+        }),
+      );
+
+      const task: Task = {
+        id: 'task-1',
+        createdAt: 5,
+        updatedAt: 6,
+        items: [{ id: 'task-item-1', content: 'Export teaser', status: 'pending' }],
+      };
+
+      await session.writeTaskArtifact(task);
+      await session.flushWorkspaceSink();
+
+      expect(idcTaskProjection.syncTask).toHaveBeenCalledWith({
+        runId: 'run-1',
+        runStartedAt: activeRun?.startedAt,
+        task,
+        artifact: {
+          kind: 'task',
+          artifactId: 'task-1',
+          path: '/tmp/proj/.neko/tasks/task-run-1.md',
+          updatedAt: 6,
+        },
+      });
+    });
+
+    it('clears shared task projection when an active run completes', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const idcTaskProjection = {
+        syncTask: vi.fn().mockResolvedValue(['idc:run-complete:task-item-1']),
+        clearRun: vi.fn().mockResolvedValue(undefined),
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          idcTaskProjection: idcTaskProjection as never,
+        }),
+      );
+      injectMockExecutor(session, []);
+      session.startWorkflowRun('wf-task-cleanup', 'run-complete');
+      const startedAt = session.getIdcRun('run-complete')?.startedAt;
+      expect(startedAt).toEqual(expect.any(Number));
+
+      await collectEvents(session.execute('finish workflow'));
+      await session.flushWorkspaceSink();
+
+      expect(idcTaskProjection.clearRun).toHaveBeenCalledWith('run-complete', startedAt);
+      expect(session.getActiveIdcRun()).toBeNull();
+    });
+
+    it('clears shared task projection when dispose aborts an active run', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const idcTaskProjection = {
+        syncTask: vi.fn().mockResolvedValue(['idc:run-dispose:task-item-1']),
+        clearRun: vi.fn().mockResolvedValue(undefined),
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'plan',
+          },
+          idcTaskProjection: idcTaskProjection as never,
+        }),
+      );
+      session.startWorkflowRun('wf-task-dispose', 'run-dispose');
+      const startedAt = session.getIdcRun('run-dispose')?.startedAt;
+      expect(startedAt).toEqual(expect.any(Number));
+
+      session.dispose();
+      await Promise.resolve();
+
+      expect(idcTaskProjection.clearRun).toHaveBeenCalledWith('run-dispose', startedAt);
     });
 
     it('ApprovalEngine decisions bridge to execution.approve.decided + land in audits.jsonl (C4)', async () => {
@@ -1199,6 +2520,491 @@ describe('AgentSession', () => {
 
       const auditRows = writes.filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl');
       expect(auditRows).toHaveLength(0);
+    });
+
+    it('persists current stage transitions and last completed run to state/idc-runtime.json', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          conversationId: 'conv-1',
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      session.startWorkflowRun('wf-demo', 'run-1');
+      session.enterStage('draft');
+      session.enterStage('plan');
+      (
+        session as unknown as {
+          _closeActiveRun(status: 'completed' | 'failed' | 'aborted', error?: unknown): void;
+          _persistIdcRuntimeState(): void;
+        }
+      )._closeActiveRun('completed');
+      (
+        session as unknown as {
+          _persistIdcRuntimeState(): void;
+        }
+      )._persistIdcRuntimeState();
+
+      await session.flushWorkspaceSink();
+
+      const snapshot = parseLatestWrite<{
+        conversationId?: string;
+        stage: {
+          current: string | null;
+          transitions: Array<{ from: string | null; to: string; at: number }>;
+        };
+        run: {
+          active?: unknown;
+          lastCompleted?: { id: string; runKind?: string; workflowId: string; status: string };
+        };
+        approval: { pending: unknown[] };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+
+      expect(snapshot.conversationId).toBe('conv-1');
+      expect(snapshot.stage.current).toBe('plan');
+      expect(snapshot.stage.transitions).toEqual([
+        expect.objectContaining({ from: null, to: 'draft' }),
+        expect.objectContaining({ from: 'draft', to: 'plan' }),
+      ]);
+      expect(snapshot.run.active).toBeUndefined();
+      expect(snapshot.run.lastCompleted).toEqual(
+        expect.objectContaining({
+          id: 'run-1',
+          runKind: 'wf-demo',
+          workflowId: 'wf-demo',
+          status: 'completed',
+        }),
+      );
+      expect(snapshot.approval.pending).toEqual([]);
+      session.dispose();
+    });
+
+    it('persists pending tool approvals to state/idc-runtime.json and clears them after confirmation', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+          onConfirmTool: vi.fn(async () => await new Promise<boolean>(() => {})),
+        }),
+      );
+      (
+        session as unknown as {
+          _approvalEngine: unknown;
+          _permissionHooks: unknown;
+        }
+      )._approvalEngine = null;
+      (
+        session as unknown as {
+          _approvalEngine: unknown;
+          _permissionHooks: unknown;
+        }
+      )._permissionHooks = null;
+
+      (
+        session as unknown as {
+          _handleToolConfirmation(request: {
+            toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+            action: string;
+            description: string;
+            details: Record<string, unknown>;
+            confirmationToken: string;
+          }): void;
+        }
+      )._handleToolConfirmation({
+        toolCall: {
+          id: 'call-1',
+          name: 'Write',
+          arguments: { path: 'src/demo.ts' },
+        },
+        action: 'Write file',
+        description: 'Write src/demo.ts',
+        details: { path: 'src/demo.ts' },
+        confirmationToken: 'confirm-1',
+      });
+
+      await session.flushWorkspaceSink();
+
+      const pendingSnapshot = parseLatestWrite<{
+        approval: {
+          pending: Array<{ confirmationToken: string; toolCallId: string; toolName: string }>;
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      expect(pendingSnapshot.approval.pending).toEqual([
+        expect.objectContaining({
+          confirmationToken: 'confirm-1',
+          toolCallId: 'call-1',
+          toolName: 'Write',
+        }),
+      ]);
+
+      session.confirmTool('call-1', true);
+      await session.flushWorkspaceSink();
+
+      const clearedSnapshot = parseLatestWrite<{
+        approval: {
+          pending: unknown[];
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      expect(clearedSnapshot.approval.pending).toEqual([]);
+      session.dispose();
+    });
+
+    it('restores, persists, and clears pending feedback guidance via state/idc-runtime.json', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const statePath = '/tmp/proj/.neko/state/idc-runtime.json';
+      const restoredWrites: Array<{ path: string; data: string }> = [];
+      const persistedState = JSON.stringify({
+        stage: {
+          current: 'apply',
+          transitions: [],
+        },
+        run: {},
+        approval: {
+          pending: [],
+        },
+        feedback: {
+          pendingGuidance: '- Repair the failing draft artifact before retrying.',
+        },
+      });
+      const restoredFsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          restoredWrites.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          restoredWrites.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path === statePath) {
+            return persistedState;
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+      const restoredSession = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps: restoredFsOps },
+        }),
+      );
+
+      await restoredSession.flushWorkspaceSink();
+
+      expect(
+        (
+          restoredSession as unknown as {
+            _feedbackGuidanceModule: { getContent(): string | null };
+          }
+        )._feedbackGuidanceModule.getContent(),
+      ).toBe('- Repair the failing draft artifact before retrying.');
+      expect(restoredSession.getHistory()[0]!.content).toContain('Feedback Guidance');
+
+      (
+        restoredSession as unknown as {
+          _persistIdcRuntimeState(): void;
+        }
+      )._persistIdcRuntimeState();
+      await restoredSession.flushWorkspaceSink();
+
+      const persistedSnapshot = parseLatestWrite<{
+        feedback: {
+          pendingGuidance: {
+            content: string;
+            sourceRunId?: string;
+            sourceRunStartedAt?: number;
+          } | null;
+        };
+      }>(restoredWrites, statePath);
+      expect(persistedSnapshot.feedback.pendingGuidance).toEqual({
+        content: '- Repair the failing draft artifact before retrying.',
+      });
+
+      restoredSession.clearHistory();
+      await restoredSession.flushWorkspaceSink();
+
+      const clearedSnapshot = parseLatestWrite<{
+        feedback: {
+          pendingGuidance: {
+            content: string;
+            sourceRunId?: string;
+            sourceRunStartedAt?: number;
+          } | null;
+        };
+      }>(restoredWrites, statePath);
+      expect(clearedSnapshot.feedback.pendingGuidance).toBeNull();
+      restoredSession.dispose();
+    });
+
+    it('drops stale persisted feedback guidance when the source run is no longer active after restore', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const statePath = '/tmp/proj/.neko/state/idc-runtime.json';
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path === statePath) {
+            return JSON.stringify({
+              stage: {
+                current: 'apply',
+                transitions: [],
+              },
+              run: {},
+              approval: {
+                pending: [],
+              },
+              feedback: {
+                pendingGuidance: {
+                  content: '- Repair the failing draft artifact before retrying.',
+                  sourceRunId: 'run-stale',
+                  sourceRunStartedAt: 11,
+                },
+              },
+            });
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(
+        (
+          session as unknown as {
+            _feedbackGuidanceModule: { getContent(): string | null };
+          }
+        )._feedbackGuidanceModule.getContent(),
+      ).toBeNull();
+
+      const persistedSnapshot = parseLatestWrite<{
+        feedback: {
+          pendingGuidance: {
+            content: string;
+            sourceRunId?: string;
+            sourceRunStartedAt?: number;
+          } | null;
+        };
+      }>(writes, statePath);
+      expect(persistedSnapshot.feedback.pendingGuidance).toBeNull();
+      session.dispose();
+    });
+
+    it('restores pending tool approvals from state/idc-runtime.json and treats them as stale clearable state', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
+            return JSON.stringify({
+              updatedAt: 7,
+              approval: {
+                pending: [
+                  {
+                    channel: 'permission',
+                    confirmationToken: 'confirm-restore',
+                    toolCallId: 'call-restore',
+                    toolName: 'Write',
+                    action: 'Write file',
+                    description: 'Write src/demo.ts',
+                    details: {
+                      path: 'src/demo.ts',
+                      arguments: { path: 'src/demo.ts' },
+                    },
+                  },
+                ],
+              },
+            });
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(session.getPendingConfirmations()).toEqual([
+        expect.objectContaining({
+          confirmationToken: 'confirm-restore',
+          toolCall: expect.objectContaining({
+            id: 'call-restore',
+            name: 'Write',
+            arguments: { path: 'src/demo.ts' },
+          }),
+          details: expect.objectContaining({
+            path: 'src/demo.ts',
+            restoredFromRuntimeState: true,
+            restoredSnapshotUpdatedAt: 7,
+          }),
+        }),
+      ]);
+
+      session.confirmTool('call-restore', true);
+      await session.flushWorkspaceSink();
+
+      expect(session.getPendingConfirmations()).toEqual([]);
+
+      const clearedSnapshot = parseLatestWrite<{
+        approval: {
+          pending: unknown[];
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      expect(clearedSnapshot.approval.pending).toEqual([]);
+      session.dispose();
+    });
+
+    it('dispose clears restored pending approvals without requiring a live permission token', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
+            return JSON.stringify({
+              approval: {
+                pending: [
+                  {
+                    channel: 'permission',
+                    confirmationToken: 'confirm-restore',
+                    toolCallId: 'call-restore',
+                    toolName: 'Write',
+                    action: 'Write file',
+                    description: 'Write src/demo.ts',
+                    details: {
+                      arguments: { path: 'src/demo.ts' },
+                    },
+                  },
+                ],
+              },
+            });
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+      session.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const clearedSnapshot = parseLatestWrite<{
+        approval: {
+          pending: unknown[];
+        };
+      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
+      expect(clearedSnapshot.approval.pending).toEqual([]);
+    });
+
+    it('ignores malformed runtime-state approval snapshots during restore', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
+            return '{';
+          }
+          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+        },
+      };
+
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      await session.flushWorkspaceSink();
+
+      expect(session.getPendingConfirmations()).toEqual([]);
+      session.dispose();
     });
 
     it('session with no workspace config exposes NekoPaths === null', () => {

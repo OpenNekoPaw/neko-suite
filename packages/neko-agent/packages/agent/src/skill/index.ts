@@ -29,6 +29,7 @@ export { SkillLoader, createNodeSkillLoader } from './skill-loader';
 export { type LazySkill, type LazyCommand, type LazySkillLoadResult } from './lazy-loader';
 export { SkillInjector } from './skill-injector';
 export { SkillMatcher, KeywordSkillMatcher } from './skill-matcher';
+export { createCommandBackedSkill, createLazyCommandBackedSkill } from './command-backed-skill';
 export {
   ToolGuard,
   NoOpToolGuard,

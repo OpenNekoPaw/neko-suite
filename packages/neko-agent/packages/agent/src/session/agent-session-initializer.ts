@@ -10,7 +10,7 @@
  * Session creates the coordinator itself after initialization.
  */
 
-import type { ChatMessage } from '@neko/shared';
+import type { ChatMessage, ToolName } from '@neko/shared';
 import type { AgentSessionConfig } from './types';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode } from '../permission/types';
@@ -33,11 +33,15 @@ import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
+import { FeedbackGuidanceModule } from '../prompt/modules/ephemeral/feedback-guidance-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
-import type { PromptModuleSection } from '../prompt/registry/module-manifest';
+import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
+import { PromptModuleRegistry } from '../prompt/registry/module-registry';
+import { PromptSectionCache } from '../prompt/registry/section-cache';
+import { freezePromptContext, type PromptContext } from '../prompt/context';
 
 // =============================================================================
 // Constants (re-exported for Session's _rebuildExecutor)
@@ -73,6 +77,8 @@ export interface SessionComponents {
   memoryProjectModule: MemoryProjectModule;
   memoryRecallModule: MemoryRecallModule;
   creativeVersionLogModule: CreativeVersionLogModule;
+  feedbackGuidanceModule: FeedbackGuidanceModule;
+  promptModuleOrchestrator: ModuleOrchestrator;
   // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
   // through the module (byte-identical to the legacy setSection path).
   skillInjectionModule: SkillInjectionModule;
@@ -246,10 +252,26 @@ export function initializeSession(
   const memoryProjectModule = new MemoryProjectModule();
   const memoryRecallModule = new MemoryRecallModule();
   const creativeVersionLogModule = new CreativeVersionLogModule();
+  const feedbackGuidanceModule = new FeedbackGuidanceModule();
   const skillInjectionModule = new SkillInjectionModule();
   const agentsMdModule = new AgentsMdModule();
   const artifactSchemaModule = new ArtifactSchemaModule();
   const subpackageFragmentsModule = new SubpackageFragmentsModule();
+  const promptModuleRegistry = new PromptModuleRegistry();
+  promptModuleRegistry.register(agentsMdModule);
+  promptModuleRegistry.register(subpackageFragmentsModule);
+  promptModuleRegistry.register(memoryProjectModule);
+  promptModuleRegistry.register(memoryRecallModule);
+  promptModuleRegistry.register(feedbackGuidanceModule);
+  promptModuleRegistry.register(creativeVersionLogModule);
+  promptModuleRegistry.register(artifactSchemaModule);
+  const promptModuleOrchestrator = new ModuleOrchestrator(
+    promptModuleRegistry,
+    promptComposer,
+    new PromptSectionCache(),
+  );
+  const initialPromptContext = (): PromptContext =>
+    buildInitializerPromptContext(config, toolInjectionManager);
 
   // PR3b: AGENTS.md overlay — when the caller supplies agentsOverride
   // content we project it through the module into the environment layer
@@ -257,7 +279,7 @@ export function initializeSession(
   // final prompt interleaves correctly.
   if (config.agentsOverride) {
     agentsMdModule.setContent(config.agentsOverride);
-    writeModuleSectionsSync(promptComposer, 'agents-md:override', agentsMdModule.renderSync());
+    promptModuleOrchestrator.applyOneSync(agentsMdModule, initialPromptContext());
   }
 
   // PR3e: sub-package prompt fragments — one composer section per
@@ -266,19 +288,7 @@ export function initializeSession(
   // the initializer idempotent if it were ever called twice).
   if (config.promptFragments && config.promptFragments.length > 0) {
     subpackageFragmentsModule.setFragments(config.promptFragments);
-    promptComposer.removeSectionsByPrefix('fragment:');
-    const fragmentSections = subpackageFragmentsModule.renderSync();
-    if (fragmentSections) {
-      for (const s of fragmentSections) {
-        promptComposer.setSection({
-          id: s.sectionId,
-          layer: s.layer,
-          content: s.content,
-          priority: s.priority ?? 70,
-          ...(s.cacheControl && { cacheControl: s.cacheControl }),
-        });
-      }
-    }
+    promptModuleOrchestrator.applyOneSync(subpackageFragmentsModule, initialPromptContext());
   }
 
   // Inject project memory via MemoryProjectModule (renderSync for in-line
@@ -287,7 +297,7 @@ export function initializeSession(
   if (config.projectMemoryManager) {
     const injectProject = (content: string | null): void => {
       memoryProjectModule.setContent(content);
-      writeModuleSectionsSync(promptComposer, 'memory:project', memoryProjectModule.renderSync());
+      promptModuleOrchestrator.applyOneSync(memoryProjectModule, initialPromptContext());
     };
     injectProject(config.projectMemoryManager.getContent());
     config.projectMemoryManager.on('change', injectProject);
@@ -308,6 +318,8 @@ export function initializeSession(
     memoryProjectModule,
     memoryRecallModule,
     creativeVersionLogModule,
+    feedbackGuidanceModule,
+    promptModuleOrchestrator,
     skillInjectionModule,
     agentsMdModule,
     artifactSchemaModule,
@@ -316,27 +328,22 @@ export function initializeSession(
   };
 }
 
-/**
- * Write the sections produced by a Module.renderSync() into the composer,
- * first clearing any stale section the module owned under `ownerId`. Keeps
- * the swap semantics consistent with ModuleOrchestrator while staying sync.
- */
-function writeModuleSectionsSync(
-  composer: SystemPromptComposer,
-  ownerId: string,
-  sections: readonly PromptModuleSection[] | null,
-): void {
-  composer.removeSection(ownerId);
-  if (!sections) return;
-  for (const s of sections) {
-    composer.setSection({
-      id: s.sectionId,
-      layer: s.layer,
-      content: s.content,
-      priority: s.priority,
-      ...(s.cacheControl && { cacheControl: s.cacheControl }),
-    });
-  }
+function buildInitializerPromptContext(
+  config: AgentSessionConfig,
+  toolInjectionManager: ToolInjectionManager,
+): PromptContext {
+  const state = toolInjectionManager.getState();
+  return freezePromptContext({
+    runId: null,
+    stage: config.stageTracking?.initialStage ?? null,
+    locale: 'en',
+    projectPath: config.workspace?.root ?? '',
+    activeSkillName: null,
+    activeTools: [
+      ...(state.injectedTools.get('always') ?? []),
+      ...(state.injectedTools.get('dynamic') ?? []),
+    ] as readonly ToolName[],
+  });
 }
 
 // =============================================================================

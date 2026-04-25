@@ -179,6 +179,24 @@ describe('StageGuardian', () => {
       expect(history).toHaveLength(1);
       expect(history[0]!.code).toBe('stage-out-of-order');
     });
+
+    it('restore reseeds visited stages after tracker state is rehydrated', () => {
+      const tracker = createStageTracker({ now: () => 0 });
+      const guardian = createStageGuardian(tracker, { now: () => 0 });
+      const [issues, listener] = collect();
+      guardian.onIssue(listener);
+
+      tracker.restore({ current: 'plan', enteredAt: 10 });
+      guardian.restore({
+        current: 'plan',
+        enteredAt: 10,
+        visitedStages: ['draft', 'plan'],
+      });
+
+      tracker.enter('apply');
+
+      expect(issues.filter((i) => i.code === 'stage-out-of-order')).toHaveLength(0);
+    });
   });
 
   describe('approval-skipped', () => {

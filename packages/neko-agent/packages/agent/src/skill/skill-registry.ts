@@ -41,11 +41,13 @@ export class SkillRegistry implements ISkillRegistry {
       logger.warn('Skill already registered, overwriting', { skillName: skill.name });
     }
 
+    this.lazySkills.delete(skill.name);
     this.skills.set(skill.name, skill);
   }
 
   unregisterSkill(name: string): void {
     this.skills.delete(name);
+    this.lazySkills.delete(name);
   }
 
   getSkill(name: string): Skill | undefined {

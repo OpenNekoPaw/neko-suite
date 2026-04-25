@@ -14,6 +14,7 @@ import type {
   IToolCategoryRegistry,
   PromptFragment,
 } from '@neko/shared';
+import type { ArtifactWatcherFactory } from '../runtime/types';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 
 // Re-export validation types
@@ -84,7 +85,8 @@ export interface AgentSessionConfig {
    * become composer section ids as `fragment:${f.id}`.
    *
    * Typically populated by agentRunner from
-   * `CapabilityDiscoveryService.getAllPromptFragments()`.
+   * `CapabilityDiscoveryService.getAllPromptFragments()` and can be refreshed
+   * later on the live session via `setPromptFragments()`.
    */
   promptFragments?: readonly PromptFragment[];
 
@@ -189,6 +191,16 @@ export interface AgentSessionConfig {
   memoryRecall?: boolean;
 
   /**
+   * Optional feedback runtime coordinator.
+   *
+   * When provided, session-level feedback sources such as artifact
+   * observation, self-evaluation guidance, and project-memory extraction
+   * are delegated to this coordinator instead of being assembled ad hoc
+   * inside AgentSession.
+   */
+  feedbackCoordinator?: import('../feedback').IFeedbackCoordinator;
+
+  /**
    * Optional reference to the shared SkillService. When supplied, ablation
    * toggles that control discovery (e.g. `skillDiscovery: false`) can flip
    * the service's discovery state at session init and restore it on dispose.
@@ -196,6 +208,36 @@ export interface AgentSessionConfig {
    * reach through this field.
    */
   skillService?: import('../skill/skill-service').SkillService;
+
+  /**
+   * Optional runtime ArtifactService.
+   *
+   * When provided, Draft / Plan / Task writes go through this service so
+   * session callers, runtime bootstrap, and host surfaces share the same
+   * artifact persistence + run-binding entrypoint. When omitted but
+   * `workspace.fsOps.writeFile` exists, AgentSession may bootstrap a default
+   * workspace-backed service.
+   */
+  artifactService?: import('../runtime/artifact-service').IArtifactService;
+
+  /**
+   * Optional runtime artifact watcher factory.
+   *
+   * When supplied, AgentSession delegates draft/plan/task watch bootstrap to
+   * the runtime artifact plane instead of directly instantiating the default
+   * node-backed watcher. Hosts should normally provide this through the
+   * unified runtime bootstrap (`IArtifactStore.createArtifactWatcher`).
+   */
+  artifactWatcherFactory?: ArtifactWatcherFactory;
+
+  /**
+   * Optional IDC task projection runtime.
+   *
+   * When provided, Task artifacts are mirrored into the shared task plane
+   * (for example TaskManager-backed UI surfaces) so checklist progress no
+   * longer lives only inside markdown artifacts / IdcRun state.
+   */
+  idcTaskProjection?: import('../task').IIdcTaskProjection;
 
   /**
    * JSONL journal writer for session event persistence.
@@ -258,8 +300,11 @@ export interface AgentSessionConfig {
    * Workspace persistence (ADR §7.4). When supplied, AgentSession
    * creates a NekoPaths resolver rooted at `root` and attaches an
    * NdjsonEventSink that appends every bus event to
-   * `<root>/.neko/logs/events.jsonl`. Omitted = no disk sink; the
-   * session still runs but without persisted telemetry.
+   * `<root>/.neko/logs/events.jsonl`. When `fsOps.writeFile` is also
+   * available, the session additionally maintains
+   * `<root>/.neko/state/idc-runtime.json` with the latest stage/run/
+   * pending-approval snapshot. Omitted = no disk sink; the session
+   * still runs but without persisted telemetry/state snapshots.
    *
    * Separate audit / step sinks are left for follow-up PRs (each
    * gets its own sink with a channel-filter predicate). This PR
@@ -272,9 +317,13 @@ export interface AgentSessionConfig {
      * Platform fsOps. Must implement NdjsonFsOps; when `readFile` is
      * also provided (widened type, `readFile(path, 'utf-8')`), the
      * session auto-loads `.neko/preferences.md` and registers a
-     * preferences strategy pack on the ApprovalEngine (ADR §9.3).
+     * preferences strategy pack on the ApprovalEngine (ADR §9.3). When
+     * `writeFile(path, data, 'utf-8')` is provided, the latest IDC
+     * runtime snapshot is persisted under `.neko/state/idc-runtime.json`.
      */
-    fsOps: import('../workspace').NdjsonFsOps & Partial<import('../workspace').PreferencesFsOps>;
+    fsOps: import('../workspace').NdjsonFsOps &
+      Partial<import('../workspace').PreferencesFsOps> &
+      Partial<import('../workspace').IdcRuntimeStateFsOps>;
     /**
      * Absolute path to the global `preferences.md` (typically
      * `~/.neko/preferences.md`). When omitted, only the project layer
@@ -471,6 +520,66 @@ export interface IAgentSession {
    * Called by the extension layer after the skill system is initialized.
    */
   setSkillProvider(provider: import('../tools/core/meta-tools').ISkillProvider): void;
+
+  /**
+   * Replace capability-contributed prompt fragments at runtime and sync the
+   * composed system prompt immediately.
+   */
+  setPromptFragments(fragments: readonly PromptFragment[] | undefined): void;
+
+  /**
+   * Get the known IDC artifacts bound to a run.
+   * Defaults to the active run when `runId` is omitted.
+   */
+  getArtifactsForRun(
+    runId?: string,
+  ): readonly import('../runtime/artifact-service').ArtifactRecord[];
+
+  /**
+   * List run ids that currently have persisted Draft / Plan / Task artifacts.
+   */
+  listArtifactRunIds(): readonly string[];
+
+  /**
+   * Look up an IDC run by id across the active + completed run plane.
+   */
+  getIdcRun(runId: string): import('@neko-agent/types').IdcRun | null;
+
+  /**
+   * Enumerate active + completed IDC runs, newest-first with the active run
+   * (when present) ahead of completed history.
+   */
+  listIdcRuns(): readonly import('@neko-agent/types').IdcRun[];
+
+  /**
+   * Recent feedback coordination cycles assembled from artifact observation,
+   * self-evaluation scheduling, and memory extraction.
+   */
+  getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[];
+
+  /**
+   * Persist a Draft artifact through the unified runtime artifact service.
+   */
+  writeDraftArtifact(
+    draft: import('@neko-agent/types').Draft,
+    options?: { runId?: string },
+  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'draft'>>;
+
+  /**
+   * Persist an ExecutionPlan artifact through the unified runtime artifact service.
+   */
+  writePlanArtifact(
+    plan: import('@neko-agent/types').ExecutionPlan,
+    options?: { runId?: string },
+  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'plan'>>;
+
+  /**
+   * Persist a Task artifact through the unified runtime artifact service.
+   */
+  writeTaskArtifact(
+    task: import('@neko-agent/types').Task,
+    options?: { runId?: string },
+  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'task'>>;
 
   // ---------------------------------------------------------------------------
   // Execution

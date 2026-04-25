@@ -157,6 +157,36 @@ describe('SkillRegistry — lazy loading', () => {
       expect(result).toBeDefined();
       expect(result?.content).toBe('');
     });
+
+    it('drops lazy loader metadata when skill is unregistered', async () => {
+      registry.registerLazySkill(makeLazySkill());
+      expect(registry.isLazy('test-skill')).toBe(true);
+
+      registry.unregisterSkill('test-skill');
+
+      expect(registry.getSkill('test-skill')).toBeUndefined();
+      expect(registry.isLazy('test-skill')).toBe(false);
+      await expect(registry.ensureLoaded('test-skill')).resolves.toBeUndefined();
+    });
+
+    it('replaces lazy loader metadata when eagerly overwriting the same skill', async () => {
+      registry.registerLazySkill(makeLazySkill());
+
+      registry.registerSkill({
+        name: 'test-skill',
+        description: 'Eager replacement',
+        content: 'Ready now',
+        source: 'builtin',
+        enabled: true,
+      });
+
+      expect(registry.isLazy('test-skill')).toBe(false);
+      await expect(registry.ensureLoaded('test-skill')).resolves.toEqual(
+        expect.objectContaining({
+          content: 'Ready now',
+        }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

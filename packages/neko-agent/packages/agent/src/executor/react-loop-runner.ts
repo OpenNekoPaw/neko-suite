@@ -38,6 +38,7 @@ import type { IIdcRunStore } from './idc-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
+import { toSerializableErrorCause } from '../utils/serializable-error';
 
 const logger = getLogger('ReActLoopRunner');
 
@@ -171,6 +172,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
           deps.eventBus.emit({
             channel: CREATION_CHANNELS.RUN_STARTED,
             runId: activeRun.id,
+            runKind: activeRun.runKind,
             workflowId: activeRun.workflowId,
             at: clock(),
           });
@@ -344,7 +346,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
           : {
               code: 'executor-error',
               message: result.response ?? 'unknown',
-              cause: result.error,
+              cause: toSerializableErrorCause(result.error),
             },
       );
 

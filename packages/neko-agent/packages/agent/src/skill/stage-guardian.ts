@@ -108,6 +108,15 @@ export interface IStageGuardian {
    * `execution.apply.committed` channel.
    */
   noteApply(subject: string): void;
+  /**
+   * Replace the guardian's stage bookkeeping from a restored runtime
+   * snapshot. Does not emit issues; callers rehydrate first, then continue.
+   */
+  restore(state: {
+    current: IdcStage | null;
+    enteredAt?: number;
+    visitedStages?: readonly IdcStage[];
+  }): void;
   /** Snapshot of issues raised since construction (capped to 64 most recent). */
   getHistory(): readonly StageGuardianIssue[];
   /** Drop listeners + tracker subscription. Idempotent. */
@@ -143,11 +152,11 @@ class StageGuardian implements IStageGuardian {
 
     // Seed with the tracker's current stage so guardians built mid-run
     // don't re-flag a legitimately-Implement run as out-of-order.
-    if (this._tracker.current) {
-      this._visited.add(this._tracker.current);
-      this._watchStage = this._tracker.current;
-      this._watchEnteredAt = this._tracker.enteredAt;
-    }
+    this.restore({
+      current: this._tracker.current,
+      enteredAt: this._tracker.enteredAt,
+      ...(this._tracker.current ? { visitedStages: [this._tracker.current] } : {}),
+    });
 
     this._unsubscribe = this._tracker.onEntered((event) => {
       this._onEntered(event.stage, event.at);
@@ -202,6 +211,26 @@ class StageGuardian implements IStageGuardian {
       at: this._now(),
       detail: { subject },
     });
+  }
+
+  restore(state: {
+    current: IdcStage | null;
+    enteredAt?: number;
+    visitedStages?: readonly IdcStage[];
+  }): void {
+    if (this._disposed) return;
+
+    this._visited.clear();
+    for (const stage of state.visitedStages ?? []) {
+      this._visited.add(stage);
+    }
+    if (state.current) {
+      this._visited.add(state.current);
+    }
+
+    this._watchStage = state.current;
+    this._watchEnteredAt = state.current ? (state.enteredAt ?? this._now()) : 0;
+    this._watchTimeoutReported = false;
   }
 
   getHistory(): readonly StageGuardianIssue[] {

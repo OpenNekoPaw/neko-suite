@@ -29,7 +29,7 @@ describe('ReActLoopRunner hooks', () => {
   beforeEach(() => {
     stageTracker = createStageTracker({ now: () => 0 });
     store = createIdcRunStore();
-    store.startRun({ workflowId: 'test' });
+    store.startRun({ runKind: 'test' });
   });
 
   it('beforeThink produces a decision and records it on the store', async () => {
@@ -121,6 +121,12 @@ describe('ReActLoopRunner hooks', () => {
     const closed = store.listCompleted()[0];
     expect(closed.status).toBe('failed');
     expect(closed.error?.code).toBe('executor-error');
+    expect(closed.error?.cause).toEqual(
+      expect.objectContaining({
+        name: 'Error',
+        message: 'tool timeout',
+      }),
+    );
   });
 
   it('multi-iteration sequence: round counter + decision.round match', async () => {
@@ -196,6 +202,7 @@ describe('ReActLoopRunner hooks', () => {
         expect.objectContaining({
           channel: CREATION_CHANNELS.RUN_STARTED,
           runId: store.getActive()!.id,
+          runKind: 'test',
           workflowId: 'test',
           at: 555,
         }),

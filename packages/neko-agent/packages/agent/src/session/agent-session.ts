@@ -20,10 +20,22 @@ import type {
   ChatMessage,
   CompressedMessage,
   ConversationCompressionResult,
+  PromptFragment,
   Skill,
+  ToolName,
   Tool,
 } from '@neko/shared';
-import type { IdcStage, StageActivationDecision, IdcRun } from '@neko-agent/types';
+import {
+  CREATION_CHANNELS,
+  EXECUTION_CHANNELS,
+  type Draft,
+  type ExecutionArtifactWrittenEvent,
+  type ExecutionPlan,
+  type IdcStage,
+  type StageActivationDecision,
+  type IdcRun,
+  type Task,
+} from '@neko-agent/types';
 import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
 import {
   SkillInjectionCoordinator,
@@ -36,14 +48,13 @@ import type { IIdcRunStore, ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner, createIdcRunStore } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
-import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import {
-  createArtifactObservationHooks,
-  createArtifactWatcher,
-  type ArtifactObservationHooks,
-  type IArtifactWatcher,
-} from '../artifact';
-import { SelfEvaluationHooks } from '../evaluation/self-evaluation-hooks';
+  createIdcRuntimeStateStore,
+  createNekoPaths,
+  createNdjsonEventSink,
+  readIdcRuntimeState,
+} from '../workspace';
+import { createArtifactWatcher, type IArtifactWatcher } from '../artifact';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -86,28 +97,43 @@ import { type IPermissionManager, type PermissionMode } from '../permission';
 import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
 import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
+import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
+import type { PromptModule } from '../prompt/registry/module-manifest';
 import type { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
+import type { FeedbackGuidanceModule } from '../prompt/modules/ephemeral/feedback-guidance-module';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import type { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
-import { freezePromptContext } from '../prompt/context';
-import { KeyFactExtractor } from '../memory/keyfact-extractor';
+import { createPromptContextProvider } from '../prompt/context';
 import { MemoryRecall } from '../memory/memory-recall';
-import { ProjectMemoryRouter } from '../memory/project-memory-router';
+import {
+  composeBeforeThinkHooks,
+  createFeedbackCoordinator,
+  type IFeedbackCoordinator,
+} from '../feedback';
 import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
 import { getLogger } from '../utils/logger';
+import { toSerializableErrorCause } from '../utils/serializable-error';
+import type { IdcProjectedTaskArtifactBinding } from '../task/idc-projected-task';
 import {
   initializeSession,
   createConfiguredExecutor,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
 import {
+  createWorkspaceArtifactService,
+  type AnyArtifactRecord,
+  toIdcRunArtifactBinding,
+  type ArtifactRecord,
+  type IArtifactService,
+} from '../runtime/artifact-service';
+import {
   classifyIdcEntrySignal,
   classifyIdcTaskShape,
-  resolveIdcWorkflowId,
+  resolveIdcRunKind,
   type IdcTurnPlanningContext,
 } from './idc-turn-planning';
 
@@ -123,6 +149,12 @@ export const PLAN_MODE_SYSTEM_REMINDER = `
 You are in planning mode. Generate a detailed implementation plan but DO NOT execute any tools.
 Describe what tools you would use and in what order, but do not call them.
 `;
+
+const MAX_PERSISTED_STAGE_TRANSITIONS = 32;
+const MAX_FEEDBACK_CYCLES = 32;
+const IDC_RUNTIME_STATE_DEBOUNCE_MS = 200;
+
+type PersistedFeedbackGuidanceSnapshot = import('../workspace').PersistedFeedbackGuidanceSnapshot;
 
 // =============================================================================
 // AgentSession Implementation
@@ -153,6 +185,9 @@ export class AgentSession implements IAgentSession {
   private _memoryProjectModule: MemoryProjectModule;
   private _memoryRecallModule: MemoryRecallModule;
   private _creativeVersionLogModule: CreativeVersionLogModule;
+  private _feedbackGuidanceModule: FeedbackGuidanceModule;
+  private _promptModuleOrchestrator: ModuleOrchestrator;
+  private readonly _promptContextProvider: ReturnType<typeof createPromptContextProvider>;
   // PR3a: owns the format contract for skill-layer sections; consumed by
   // SkillInjectionCoordinator's Track A writes.
   private _skillInjectionModule: SkillInjectionModule;
@@ -179,6 +214,7 @@ export class AgentSession implements IAgentSession {
   // ReAct-loop stage-activation orchestrator.
   private _runStore: IIdcRunStore | null = null;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
+  private _reactLoopBaseHooks: import('@neko/shared').ExecutorHooks | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
 
   // Typed event bus for creation.* / execution.* channels.
@@ -187,6 +223,8 @@ export class AgentSession implements IAgentSession {
   private _nekoPaths: import('../workspace').INekoPaths | null = null;
   // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
+  // Mutable workspace snapshot for active IDC runtime state.
+  private _runtimeStateStore: import('../workspace').IIdcRuntimeStateStore | null = null;
   // JSONL audits sink persisting approve.decided events to
   // `.neko/logs/audits.jsonl`. Filter-predicated sibling of _eventSink.
   private _auditsSink: import('../workspace').INdjsonEventSink | null = null;
@@ -197,17 +235,20 @@ export class AgentSession implements IAgentSession {
   // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
   // validator that emits artifact.* events onto the EventBus.
   private _artifactWatcher: IArtifactWatcher | null = null;
-  // ExecutorHooks that drain watcher-reported invalid artifacts into the
-  // next think's context, so the AI can self-correct its frontmatter.
-  private _artifactObservationHooks: ArtifactObservationHooks | null = null;
-  // PR3f (ADR §11.6.9 ② guidance). Listens for Apply-stage exits on the
-  // StageTracker and injects a self-evaluation invitation on the next
-  // beforeThink. Not a PromptModule — per-turn ephemeral via messages.
-  private _selfEvaluationHooks: SelfEvaluationHooks | null = null;
+  // Unified feedback runtime: owns artifact observation, self-evaluation
+  // guidance, and project-memory extraction as a single session-level
+  // dependency rather than three ad hoc code paths.
+  private _feedbackCoordinator: IFeedbackCoordinator | null = null;
+  private _feedbackCycles: import('../feedback').FeedbackCycle[] = [];
+  private _feedbackGuidanceState: PersistedFeedbackGuidanceSnapshot | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
   private _preferencesWarnings: readonly string[] = [];
+  private _stageTransitions: import('../workspace').IdcRuntimeStageTransition[] = [];
+  private _runtimeStateUnsubscribers: Array<() => void> = [];
+  private _runtimeStatePersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private _runtimeStatePersistScheduled = false;
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -224,6 +265,7 @@ export class AgentSession implements IAgentSession {
   private _historyEventIds: string[][] = [];
   private _processedMemoryEventIds = new Set<string>();
   private _isRunning = false;
+  private _disposed = false;
   /** Circuit breaker state for auto-compact */
   private _compactState: AutoCompactState = createAutoCompactState();
   /** Creative version log for generation tracking */
@@ -236,15 +278,21 @@ export class AgentSession implements IAgentSession {
   private _streamState: StreamState = { hasStreamedDeltas: false };
   /** Current turn's IDC planning hints (input, active skill, external metadata). */
   private _currentTurnPlanningContext: IdcTurnPlanningContext | null = null;
-  private _keyFactExtractor: KeyFactExtractor | null = null;
-  private _projectMemoryRouter: ProjectMemoryRouter | null = null;
   private _memoryRecall: MemoryRecall | null = null;
   private _pendingConfirmations = new Map<
     string,
     {
+      source: 'live' | 'restored';
       request: ToolConfirmationRequest;
     }
   >();
+  private _runtimeStateRestoreReady: Promise<void> | null = null;
+  private _runtimeStateRestorePending = false;
+  private _artifactService: IArtifactService | null = null;
+  private _artifactRestoreReady: Promise<void> | null = null;
+  private _artifactSyncPending: Promise<void> = Promise.resolve();
+  private _idcTaskProjection: import('../task').IIdcTaskProjection | null = null;
+  private _idcTaskProjectionPending: Promise<void> = Promise.resolve();
 
   /**
    * Ablation marker (set when the session was constructed via
@@ -279,10 +327,20 @@ export class AgentSession implements IAgentSession {
     this._memoryProjectModule = components.memoryProjectModule;
     this._memoryRecallModule = components.memoryRecallModule;
     this._creativeVersionLogModule = components.creativeVersionLogModule;
+    this._feedbackGuidanceModule = components.feedbackGuidanceModule;
+    this._promptModuleOrchestrator = components.promptModuleOrchestrator;
     this._skillInjectionModule = components.skillInjectionModule;
     this._agentsMdModule = components.agentsMdModule;
     this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
+    this._promptContextProvider = createPromptContextProvider({
+      getRunId: () => this._runStore?.getActive()?.id ?? null,
+      getStage: () => this._stageTracker?.current ?? null,
+      getActiveSkillName: () => this.getActiveSkill()?.name ?? null,
+      getActiveTools: () => collectInjectedToolNames(this._toolInjectionManager),
+      getLocale: () => 'en',
+      getProjectPath: () => this._config.workspace?.root ?? '',
+    });
     this._refreshMemoryRuntime();
     if (components.ablationMarker) {
       this._ablationMarker = components.ablationMarker;
@@ -292,6 +350,10 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
+
+    this._artifactService = resolveArtifactService(config);
+    this._idcTaskProjection = config.idcTaskProjection ?? null;
+    this._scheduleArtifactRestore();
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here.
@@ -347,32 +409,59 @@ export class AgentSession implements IAgentSession {
           fsOps: config.workspace.fsOps,
         });
         this._eventSink.attach(this._eventBus);
+      }
 
-        // ArtifactWatcher (Phase B) — fire-and-forget start. Silent on
-        // platforms where fs.watch is unavailable; validator only reports
-        // structured issues via the bus, never blocks the write.
-        this._artifactWatcher = createArtifactWatcher({
-          paths: this._nekoPaths,
-          eventBus: this._eventBus,
-          getRunId: () => this._runStore?.getActive()?.id ?? null,
-        });
-        void this._artifactWatcher.start();
+      // ArtifactWatcher (Phase B) — fire-and-forget start. Prefer the
+      // runtime artifact-plane factory when one is supplied so host
+      // bootstraps control how Draft/Plan/Task watch/validate is wired.
+      // Fallback keeps the legacy workspace-backed watcher alive.
+      this._artifactWatcher = this._createConfiguredArtifactWatcher();
+      void this._artifactWatcher?.start();
 
-        // Observation-loop closure (Phase B) — subscribes to
-        // `artifact.invalid` and injects a system message before the next
-        // think, so the AI sees validator issues and self-corrects.
-        this._artifactObservationHooks = createArtifactObservationHooks({
-          eventBus: this._eventBus,
+      if (
+        this._nekoPaths &&
+        config.workspace &&
+        typeof config.workspace.fsOps.writeFile === 'function'
+      ) {
+        this._runtimeStateStore = createIdcRuntimeStateStore({
+          filePath: this._nekoPaths.state('idcRuntime'),
+          fsOps: {
+            mkdir: config.workspace.fsOps.mkdir,
+            writeFile: config.workspace.fsOps.writeFile.bind(config.workspace.fsOps),
+          },
         });
       }
 
-      // PR3f: self-evaluation guidance (ADR §11.6.9 piece ②). Listens
-      // for Apply-stage exits and injects an invitation-style system
-      // message on the next beforeThink. Must come after stageTracker
-      // is constructed (above) and before composedHooks is built (below).
-      this._selfEvaluationHooks = new SelfEvaluationHooks({
-        stageTracker: this._stageTracker,
-      });
+      if (
+        this._nekoPaths &&
+        config.workspace &&
+        typeof config.workspace.fsOps.readFile === 'function'
+      ) {
+        this._runtimeStateRestorePending = true;
+        const runtimeStateRead = readIdcRuntimeState({
+          filePath: this._nekoPaths.state('idcRuntime'),
+          fsOps: {
+            readFile: config.workspace.fsOps.readFile.bind(config.workspace.fsOps),
+          },
+        });
+        this._runtimeStateRestoreReady = Promise.all([
+          this._artifactRestoreReady ?? Promise.resolve(),
+          runtimeStateRead,
+        ])
+          .then(([, restored]) => {
+            if (this._disposed || !restored) {
+              return;
+            }
+            this._restoreIdcRuntimeState(restored);
+          })
+          .then(() => undefined)
+          .finally(() => {
+            this._runtimeStateRestorePending = false;
+            if (!this._disposed) {
+              this._persistIdcRuntimeState();
+            }
+          });
+      }
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
@@ -467,6 +556,7 @@ export class AgentSession implements IAgentSession {
         autohealChain: this._autohealChain,
       });
       this._reactRunnerState = state;
+      this._installRuntimeStatePersistence();
 
       // StageGuardian — non-blocking inspector alongside the tracker.
       // Opted out by setting `stageTracking.guardian = false`; otherwise
@@ -503,6 +593,8 @@ export class AgentSession implements IAgentSession {
         }
       }
 
+      this._rebuildFeedbackCoordinator();
+
       // Compose runner hooks with the guardian's tick. Keep runner hooks
       // in a single ExecutorHooks object so the executor's addHook call
       // stays idempotent across configure() rebuilds.
@@ -521,58 +613,17 @@ export class AgentSession implements IAgentSession {
           }
         : runnerHooks;
 
-      // Chain the ephemeral-feedback hooks so their outputs reach the AI
-      // via a `beforeThink` system message. Order among these hooks is
-      // not semantically significant — both are pure context consumers.
-      // PR3f added SelfEvaluationHooks alongside the PR2
-      // ArtifactObservationHooks; both are optional independently.
-      const observationHooks = this._artifactObservationHooks;
-      const selfEvalHooks = this._selfEvaluationHooks;
-      const beforeThinkChain: Array<
-        (
-          ctx: import('@neko/shared').AgentContext,
-        ) => Promise<import('@neko/shared').AgentContext | void>
-      > = [];
-      if (withGuardian.beforeThink) {
-        beforeThinkChain.push((ctx) => withGuardian.beforeThink!(ctx));
-      }
-      if (observationHooks?.beforeThink) {
-        beforeThinkChain.push((ctx) => observationHooks.beforeThink!(ctx));
-      }
-      if (selfEvalHooks?.beforeThink) {
-        beforeThinkChain.push((ctx) => selfEvalHooks.beforeThink!(ctx));
-      }
-
-      const nameSuffix = [
-        observationHooks ? 'artifact-observation' : null,
-        selfEvalHooks ? 'self-evaluation' : null,
-      ]
-        .filter(Boolean)
-        .join('+');
-
-      const composedHooks: import('@neko/shared').ExecutorHooks =
-        beforeThinkChain.length > 1
-          ? {
-              ...withGuardian,
-              name: nameSuffix
-                ? `${withGuardian.name ?? 'react-loop'}+${nameSuffix}`
-                : (withGuardian.name ?? 'react-loop'),
-              beforeThink: async (ctx) => {
-                let next = ctx;
-                for (const step of beforeThinkChain) {
-                  next = (await step(next)) || next;
-                }
-                return next;
-              },
-            }
-          : withGuardian;
-
-      this._runnerHooks = composedHooks;
+      this._reactLoopBaseHooks = withGuardian;
+      this._runnerHooks = this._composeRunnerHooks(withGuardian);
 
       // Register on the already-built executor + on any re-builds after configure().
       if (this._executor) {
-        this._executor.addHook(composedHooks);
+        this._executor.addHook(this._runnerHooks);
       }
+    }
+
+    if (!config.stageTracking) {
+      this._rebuildFeedbackCoordinator();
     }
   }
 
@@ -582,7 +633,18 @@ export class AgentSession implements IAgentSession {
 
   configure(config: Partial<AgentSessionConfig>): void {
     // Update config
+    const previousArtifactService = this._artifactService;
     this._config = { ...this._config, ...config };
+    if (config.artifactService !== undefined || config.workspace !== undefined) {
+      this._artifactService = resolveArtifactService(this._config);
+      if (previousArtifactService && previousArtifactService !== this._artifactService) {
+        void previousArtifactService.dispose?.();
+      }
+      this._scheduleArtifactRestore();
+    }
+    if (config.idcTaskProjection !== undefined) {
+      this._idcTaskProjection = config.idcTaskProjection ?? null;
+    }
 
     // Update execution mode if changed
     if (config.executionMode !== undefined) {
@@ -594,7 +656,11 @@ export class AgentSession implements IAgentSession {
       this._promptComposer.setBase(config.systemPrompt);
     }
 
+    this._rebuildFeedbackCoordinator();
     this._refreshMemoryRuntime();
+    if (this._reactLoopBaseHooks) {
+      this._runnerHooks = this._composeRunnerHooks(this._reactLoopBaseHooks);
+    }
 
     // Reinitialize executor with new config
     this._rebuildExecutor();
@@ -619,6 +685,72 @@ export class AgentSession implements IAgentSession {
         tool.setSkillProvider(provider);
       }
     }
+  }
+
+  setPromptFragments(fragments: readonly PromptFragment[] | undefined): void {
+    this._config.promptFragments = fragments ? [...fragments] : undefined;
+    this._subpackageFragmentsModule.setFragments(fragments);
+    this._applyPromptModuleSync(this._subpackageFragmentsModule);
+    this._syncSystemPrompt();
+  }
+
+  getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
+    if (!this._artifactService) {
+      return [];
+    }
+
+    const targetRunId = runId ?? this._runStore?.getActive()?.id ?? null;
+    if (!targetRunId) {
+      return [];
+    }
+
+    return this._artifactService.listByRunId(targetRunId);
+  }
+
+  listArtifactRunIds(): readonly string[] {
+    return this._artifactService?.listRunIds() ?? [];
+  }
+
+  getIdcRun(runId: string): IdcRun | null {
+    if (!runId || !this._runStore) {
+      return null;
+    }
+
+    const active = this._runStore.getActive();
+    if (active?.id === runId) {
+      return active;
+    }
+
+    return this._runStore.listCompleted().find((run) => run.id === runId) ?? null;
+  }
+
+  listIdcRuns(): readonly IdcRun[] {
+    if (!this._runStore) {
+      return [];
+    }
+
+    const active = this._runStore.getActive();
+    const completed = [...this._runStore.listCompleted()].reverse();
+    return active ? [active, ...completed] : completed;
+  }
+
+  getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[] {
+    return this._feedbackCycles;
+  }
+
+  writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
+    return this._writeDraftArtifact(draft, options?.runId);
+  }
+
+  writePlanArtifact(
+    plan: ExecutionPlan,
+    options?: { runId?: string },
+  ): Promise<ArtifactRecord<'plan'>> {
+    return this._writePlanArtifact(plan, options?.runId);
+  }
+
+  writeTaskArtifact(task: Task, options?: { runId?: string }): Promise<ArtifactRecord<'task'>> {
+    return this._writeTaskArtifact(task, options?.runId);
   }
 
   setExecutionMode(mode: ExecutionMode): void {
@@ -649,6 +781,8 @@ export class AgentSession implements IAgentSession {
     this._isRunning = true;
     let runCompletionStatus: 'completed' | 'failed' = 'completed';
     let runCompletionError: IdcRun['error'] | undefined;
+    const hadPendingFeedbackGuidance = this._feedbackGuidanceState !== null;
+    let feedbackGuidanceAdjustedThisTurn = false;
 
     try {
       this._currentTurnPlanningContext = {
@@ -701,9 +835,7 @@ export class AgentSession implements IAgentSession {
       ];
 
       if (this._runStore && !this._runStore.getActive()) {
-        this._runStore.startRun({
-          workflowId: resolveIdcWorkflowId(this._currentTurnPlanningContext),
-        });
+        this.startIdcRun(resolveIdcRunKind(this._currentTurnPlanningContext));
       }
 
       // Add user message to history first, then pass snapshot (including user message)
@@ -721,6 +853,8 @@ export class AgentSession implements IAgentSession {
         }
       }
 
+      feedbackGuidanceAdjustedThisTurn =
+        this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
       await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
@@ -762,6 +896,10 @@ export class AgentSession implements IAgentSession {
               yield { type: 'version_recorded', versionEntry: entry };
             }
           }
+
+          this._observeToolFeedback(step);
+          feedbackGuidanceAdjustedThisTurn =
+            this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
         }
 
         const yieldedEvents = Array.from(
@@ -831,6 +969,8 @@ export class AgentSession implements IAgentSession {
       }
 
       await this._extractProjectMemory(turnPersistedEvents);
+      feedbackGuidanceAdjustedThisTurn =
+        this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
 
       // Emit done event with real accumulated usage
       const doneEvent = {
@@ -869,7 +1009,11 @@ export class AgentSession implements IAgentSession {
       this._closeActiveRun(runCompletionStatus, runCompletionError);
       this._currentTurnPlanningContext = null;
       this._memoryRecallModule.setContent(null);
+      if (!feedbackGuidanceAdjustedThisTurn && hadPendingFeedbackGuidance) {
+        this._setFeedbackGuidanceContent(null);
+      }
       this._syncSystemPrompt();
+      this._persistIdcRuntimeState();
       this._isRunning = false;
     }
   }
@@ -889,10 +1033,11 @@ export class AgentSession implements IAgentSession {
   confirmTool(toolCallId: string, approved: boolean): void {
     const pending = this._pendingConfirmations.get(toolCallId);
     if (pending) {
-      if (pending.request.confirmationToken && this._permissionHooks) {
+      if (pending.source === 'live' && pending.request.confirmationToken && this._permissionHooks) {
         this._permissionHooks.confirmTool(pending.request.confirmationToken, approved);
       }
       this._pendingConfirmations.delete(toolCallId);
+      this._persistIdcRuntimeState();
     }
   }
 
@@ -992,13 +1137,25 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
+   * Begin an IdcRun — the ReAct-loop runner appends rounds into the
+   * active run. Returns null if dual-flow is not configured. No-op if a
+   * run is already active (the runner closes it on onExecuteEnd).
+   */
+  startIdcRun(runKind: string, runId?: string): string | null {
+    if (!this._runStore) return null;
+    const nextRunId = this._runStore.startRun({ runKind, workflowId: runKind, runId });
+    this._hydrateRunArtifacts(nextRunId);
+    this._persistIdcRuntimeState();
+    return nextRunId;
+  }
+
+  /**
    * Begin a WorkflowRun — the ReAct-loop runner appends rounds into the
    * active run. Returns null if dual-flow is not configured. No-op if a
    * run is already active (the runner closes it on onExecuteEnd).
    */
   startWorkflowRun(workflowId: string, runId?: string): string | null {
-    if (!this._runStore) return null;
-    return this._runStore.startRun({ workflowId, runId });
+    return this.startIdcRun(workflowId, runId);
   }
 
   /**
@@ -1068,10 +1225,21 @@ export class AgentSession implements IAgentSession {
    * disabled.
    */
   async flushWorkspaceSink(): Promise<void> {
+    if (this._artifactRestoreReady) {
+      await this._artifactRestoreReady;
+    }
+    if (this._runtimeStateRestoreReady) {
+      await this._runtimeStateRestoreReady;
+    }
+    await this._artifactSyncPending;
+    await this._idcTaskProjectionPending;
+    this._flushPendingRuntimeStatePersist();
     await Promise.all([
       this._eventSink ? this._eventSink.flush() : Promise.resolve(),
+      this._runtimeStateStore ? this._runtimeStateStore.flush() : Promise.resolve(),
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
       this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
+      this._artifactService?.flush?.() ?? Promise.resolve(),
     ]);
   }
 
@@ -1101,17 +1269,22 @@ export class AgentSession implements IAgentSession {
 
   clearHistory(): void {
     this._processedMemoryEventIds.clear();
+    this._feedbackCycles = [];
+    this._setFeedbackGuidanceContent(null);
     this._memoryRecallModule.setContent(null);
     this._syncSystemPrompt();
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptComposer.compose() }];
     this._historyEventIds = [[]];
+    this._persistIdcRuntimeState();
   }
 
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this._history = [...messages];
     this._historyEventIds = normalizeMessageEventIds(this._history, messageEventIds);
     this._processedMemoryEventIds = new Set();
+    this._feedbackCycles = [];
+    this._setFeedbackGuidanceContent(null);
     this._markMessageEventIdsAsProcessed(this._historyEventIds);
     // Ensure system prompt is present
     if (this._history.length === 0 || this._history[0].role !== 'system') {
@@ -1120,6 +1293,7 @@ export class AgentSession implements IAgentSession {
     } else {
       this._historyEventIds[0] = [];
     }
+    this._persistIdcRuntimeState();
   }
 
   // ---------------------------------------------------------------------------
@@ -1147,6 +1321,8 @@ export class AgentSession implements IAgentSession {
   // ---------------------------------------------------------------------------
 
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     this.cancel();
     this._closeActiveRun('aborted');
     this._isRunning = false;
@@ -1163,6 +1339,19 @@ export class AgentSession implements IAgentSession {
     this._stagePersonaBinding?.dispose();
     this._stageGuardian?.dispose();
     this._stageTracker?.dispose();
+    // Reject all pending tool confirmations via permission hooks
+    for (const pending of this._pendingConfirmations.values()) {
+      if (pending.source === 'live' && pending.request.confirmationToken && this._permissionHooks) {
+        this._permissionHooks.confirmTool(pending.request.confirmationToken, false);
+      }
+    }
+    this._pendingConfirmations.clear();
+    this._persistIdcRuntimeState();
+    this._flushPendingRuntimeStatePersist();
+    for (const unsubscribe of this._runtimeStateUnsubscribers) {
+      unsubscribe();
+    }
+    this._runtimeStateUnsubscribers = [];
     this._stagePersonaBinding = null;
     this._stageGuardian = null;
     this._stageTracker = null;
@@ -1178,29 +1367,31 @@ export class AgentSession implements IAgentSession {
     // Close fs.watch handles + drop pending debounces before the bus goes away
     // so any last emit on settle has somewhere to land. Fire-and-forget.
     void this._artifactWatcher?.dispose();
-    // Drop the observation hook's bus subscription so it doesn't hold
-    // references after the bus clears.
-    this._artifactObservationHooks?.dispose();
-    // PR3f: release the StageTracker subscription.
-    this._selfEvaluationHooks?.dispose();
+    this._feedbackCoordinator?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
     this._artifactWatcher = null;
-    this._artifactObservationHooks = null;
-    this._selfEvaluationHooks = null;
+    this._feedbackCoordinator = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
     this._autohealChain = null;
     this._approvalEngine = null;
-    // Reject all pending tool confirmations via permission hooks
-    for (const pending of this._pendingConfirmations.values()) {
-      if (pending.request.confirmationToken && this._permissionHooks) {
-        this._permissionHooks.confirmTool(pending.request.confirmationToken, false);
-      }
+    this._reactLoopBaseHooks = null;
+    void this._artifactService?.dispose?.();
+    this._artifactService = null;
+    this._artifactRestoreReady = null;
+    this._artifactSyncPending = Promise.resolve();
+    this._idcTaskProjection = null;
+    this._idcTaskProjectionPending = Promise.resolve();
+    const runtimeStateStore = this._runtimeStateStore;
+    if (runtimeStateStore) {
+      void runtimeStateStore.dispose().catch((error) => {
+        logger.warn('Failed to dispose IDC runtime state store', { error });
+      });
     }
-    this._pendingConfirmations.clear();
+    this._runtimeStateStore = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -1214,6 +1405,562 @@ export class AgentSession implements IAgentSession {
     const activeRun = this._runStore?.getActive();
     if (!activeRun) return;
     this._runStore?.endRun(status, error);
+    this._queueIdcTaskProjectionClear(activeRun.id, activeRun.startedAt);
+  }
+
+  private _scheduleArtifactRestore(): void {
+    const readFile = this._config.workspace?.fsOps.readFile;
+    const artifactService = this._artifactService;
+    if (!readFile || !artifactService?.restore) {
+      this._artifactRestoreReady = null;
+      return;
+    }
+
+    this._artifactRestoreReady = artifactService
+      .restore()
+      .then((records) => {
+        if (this._disposed || this._artifactService !== artifactService) {
+          return;
+        }
+        for (const record of records) {
+          this._attachArtifactRecord(record);
+        }
+      })
+      .catch((error) => {
+        logger.warn('Failed to restore artifacts from workspace', { error });
+      });
+  }
+
+  private async _writeDraftArtifact(
+    draft: Draft,
+    runId?: string,
+  ): Promise<ArtifactRecord<'draft'>> {
+    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
+    const record = await artifactService.writeDraft(targetRunId, draft);
+    this._attachArtifactRecord(record);
+    this._persistIdcRuntimeState();
+    return record;
+  }
+
+  private async _writePlanArtifact(
+    plan: ExecutionPlan,
+    runId?: string,
+  ): Promise<ArtifactRecord<'plan'>> {
+    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
+    const record = await artifactService.writePlan(targetRunId, plan);
+    this._attachArtifactRecord(record);
+    this._persistIdcRuntimeState();
+    return record;
+  }
+
+  private async _writeTaskArtifact(task: Task, runId?: string): Promise<ArtifactRecord<'task'>> {
+    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
+    const record = await artifactService.writeTask(targetRunId, task);
+    this._attachArtifactRecord(record);
+    this._persistIdcRuntimeState();
+    return record;
+  }
+
+  private _resolveArtifactWriteContext(runId?: string): {
+    artifactService: IArtifactService;
+    targetRunId: string;
+  } {
+    const artifactService = this._artifactService;
+    if (!artifactService) {
+      throw new Error('ArtifactService is not configured for this session');
+    }
+
+    const targetRunId = runId ?? this._runStore?.getActive()?.id ?? null;
+    if (!targetRunId) {
+      throw new Error('writeArtifact requires an active IDC run or an explicit runId');
+    }
+
+    return { artifactService, targetRunId };
+  }
+
+  private _attachArtifactRecord(record: AnyArtifactRecord): void {
+    const binding = toIdcRunArtifactBinding(record);
+
+    if (record.kind === 'task') {
+      this._queueIdcTaskProjection(
+        record.runId,
+        record.value,
+        {
+          kind: 'task',
+          artifactId: binding.artifactId,
+          path: binding.path,
+          updatedAt: binding.updatedAt,
+        },
+        this._getKnownRunStartedAt(record.runId),
+      );
+    }
+
+    const activeRun = this._runStore?.getActive();
+    if (!activeRun || activeRun.id !== record.runId) {
+      return;
+    }
+
+    switch (record.kind) {
+      case 'draft':
+        this._runStore?.setDraft(record.value, binding);
+        return;
+      case 'plan':
+        this._runStore?.setPlan(record.value, binding);
+        return;
+      case 'task':
+        this._runStore?.setTask(record.value, binding);
+        return;
+    }
+  }
+
+  private _hydrateRunArtifacts(runId: string): void {
+    if (!this._artifactService) {
+      return;
+    }
+
+    for (const record of this._artifactService.listByRunId(runId)) {
+      this._attachArtifactRecord(record);
+    }
+  }
+
+  private _getKnownRunStartedAt(runId: string): number | undefined {
+    const activeRun = this._runStore?.getActive();
+    if (activeRun?.id === runId) {
+      return activeRun.startedAt;
+    }
+
+    const completedRun = this._runStore?.listCompleted().find((run) => run.id === runId);
+    return completedRun?.startedAt;
+  }
+
+  private _queueArtifactSync(event: ExecutionArtifactWrittenEvent): void {
+    this._artifactSyncPending = this._artifactSyncPending
+      .then(async () => {
+        await this._syncObservedArtifact(event);
+      })
+      .catch((error) => {
+        logger.warn(`artifact sync failed for ${event.path}: ${String(error)}`);
+      });
+  }
+
+  private _queueIdcTaskProjection(
+    runId: string,
+    task: Task,
+    artifact?: IdcProjectedTaskArtifactBinding,
+    runStartedAt?: number,
+  ): void {
+    const projection = this._idcTaskProjection;
+    if (!projection) {
+      return;
+    }
+
+    this._idcTaskProjectionPending = this._idcTaskProjectionPending
+      .then(async () => {
+        await projection.syncTask({
+          runId,
+          ...(runStartedAt !== undefined ? { runStartedAt } : {}),
+          task,
+          ...(artifact ? { artifact } : {}),
+        });
+      })
+      .catch((error) => {
+        logger.warn(`IDC task projection failed for ${runId}: ${String(error)}`);
+      });
+  }
+
+  private _queueIdcTaskProjectionClear(runId: string, runStartedAt?: number): void {
+    const projection = this._idcTaskProjection;
+    if (!projection) {
+      return;
+    }
+
+    this._idcTaskProjectionPending = this._idcTaskProjectionPending
+      .then(async () => {
+        await projection.clearRun(runId, runStartedAt);
+      })
+      .catch((error) => {
+        logger.warn(`IDC task projection cleanup failed for ${runId}: ${String(error)}`);
+      });
+  }
+
+  private async _syncObservedArtifact(event: ExecutionArtifactWrittenEvent): Promise<void> {
+    if (this._disposed || event.runId === 'unknown') {
+      return;
+    }
+
+    const artifactService = this._artifactService;
+    const existing =
+      artifactService === null
+        ? null
+        : event.kind === 'draft'
+          ? artifactService.getByRunId(event.runId, 'draft')
+          : event.kind === 'plan'
+            ? artifactService.getByRunId(event.runId, 'plan')
+            : artifactService.getByRunId(event.runId, 'task');
+    const binding = {
+      kind: event.kind,
+      artifactId: event.artifactId,
+      path: event.path,
+      updatedAt: existing && existing.path === event.path ? existing.updatedAt : event.at,
+    } as const;
+    this._runStore?.bindArtifact(binding);
+
+    const workspace = this._config.workspace;
+    if (!workspace || typeof workspace.fsOps.readFile !== 'function' || !artifactService) {
+      this._persistIdcRuntimeState();
+      return;
+    }
+
+    const content = await workspace.fsOps.readFile(event.path, 'utf-8');
+    if (existing && existing.path === event.path && existing.content === content) {
+      this._persistIdcRuntimeState();
+      return;
+    }
+
+    const record =
+      event.kind === 'draft'
+        ? artifactService.ingestObservedArtifact({
+            kind: 'draft',
+            runId: event.runId,
+            path: event.path,
+            content,
+          })
+        : event.kind === 'plan'
+          ? artifactService.ingestObservedArtifact({
+              kind: 'plan',
+              runId: event.runId,
+              path: event.path,
+              content,
+            })
+          : artifactService.ingestObservedArtifact({
+              kind: 'task',
+              runId: event.runId,
+              path: event.path,
+              content,
+            });
+    this._attachArtifactRecord(record);
+    this._persistIdcRuntimeState();
+  }
+
+  private _installRuntimeStatePersistence(): void {
+    const shouldPersistRuntimeState = this._runtimeStateStore !== null;
+
+    if (this._stageTracker && shouldPersistRuntimeState) {
+      this._runtimeStateUnsubscribers.push(
+        this._stageTracker.onEntered((event) => {
+          this._stageTransitions.push({
+            from: event.previous,
+            to: event.stage,
+            at: event.at,
+          });
+          if (this._stageTransitions.length > MAX_PERSISTED_STAGE_TRANSITIONS) {
+            this._stageTransitions.splice(
+              0,
+              this._stageTransitions.length - MAX_PERSISTED_STAGE_TRANSITIONS,
+            );
+          }
+          this._persistIdcRuntimeState();
+        }),
+      );
+    }
+
+    if (this._eventBus) {
+      this._runtimeStateUnsubscribers.push(
+        this._eventBus.on(EXECUTION_CHANNELS.ARTIFACT_WRITTEN, (event) => {
+          this._queueArtifactSync(event);
+        }),
+      );
+      if (shouldPersistRuntimeState) {
+        this._runtimeStateUnsubscribers.push(
+          this._eventBus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, () => {
+            this._persistIdcRuntimeState();
+          }),
+        );
+        this._runtimeStateUnsubscribers.push(
+          this._eventBus.on(CREATION_CHANNELS.RUN_ENDED, () => {
+            this._persistIdcRuntimeState();
+          }),
+        );
+      }
+    }
+
+    if (shouldPersistRuntimeState && !this._runtimeStateRestorePending) {
+      this._persistIdcRuntimeState();
+    }
+  }
+
+  private _persistIdcRuntimeState(): void {
+    if (!this._runtimeStateStore) return;
+    if (this._runtimeStateRestorePending) return;
+    if (this._runtimeStatePersistScheduled) return;
+
+    this._runtimeStatePersistScheduled = true;
+    this._runtimeStatePersistTimer = setTimeout(() => {
+      this._runtimeStatePersistTimer = null;
+      this._runtimeStatePersistScheduled = false;
+      this._persistIdcRuntimeStateNow();
+    }, IDC_RUNTIME_STATE_DEBOUNCE_MS);
+  }
+
+  private _flushPendingRuntimeStatePersist(): void {
+    if (!this._runtimeStatePersistScheduled) return;
+
+    if (this._runtimeStatePersistTimer) {
+      clearTimeout(this._runtimeStatePersistTimer);
+      this._runtimeStatePersistTimer = null;
+    }
+    this._runtimeStatePersistScheduled = false;
+    this._persistIdcRuntimeStateNow();
+  }
+
+  private _persistIdcRuntimeStateNow(): void {
+    if (!this._runtimeStateStore) return;
+    if (this._runtimeStateRestorePending) return;
+
+    const activeRun = this._runStore?.getActive() ?? null;
+    const completedRuns = this._runStore?.listCompleted() ?? [];
+    const lastCompletedRun =
+      completedRuns.length > 0 ? (completedRuns[completedRuns.length - 1] ?? null) : null;
+
+    this._runtimeStateStore.update({
+      ...(this._config.conversationId ? { conversationId: this._config.conversationId } : {}),
+      stage: {
+        current: this._stageTracker?.current ?? null,
+        ...(this._stageTracker?.current ? { enteredAt: this._stageTracker.enteredAt } : {}),
+        transitions: [...this._stageTransitions],
+      },
+      run: {
+        ...(activeRun ? { active: snapshotIdcRun(activeRun) } : {}),
+        ...(lastCompletedRun ? { lastCompleted: snapshotIdcRun(lastCompletedRun) } : {}),
+      },
+      approval: {
+        pending: Array.from(this._pendingConfirmations.values()).map(({ request }) =>
+          snapshotPendingApproval(request),
+        ),
+      },
+      feedback: {
+        pendingGuidance: this._feedbackGuidanceState ? { ...this._feedbackGuidanceState } : null,
+      },
+    });
+  }
+
+  private _restoreIdcRuntimeState(state: import('../workspace').IdcRuntimeRestoreState): void {
+    this._restoreStageRuntimeState(state.stage);
+    this._restoreRunState(state.run);
+    this._restorePendingApprovals(state.approval);
+    this._restoreFeedbackRuntimeState(state.feedback);
+    if (this._stagePersonaBinding) {
+      void this._stagePersonaBinding.syncCurrent();
+    }
+  }
+
+  private _restoreStageRuntimeState(
+    state: import('../workspace').IdcRuntimeRestoreState['stage'],
+  ): void {
+    if (!this._stageTracker) {
+      return;
+    }
+    if (
+      this._stageTransitions.length > 0 ||
+      this._runStore?.getActive() ||
+      (this._runStore?.listCompleted().length ?? 0) > 0
+    ) {
+      return;
+    }
+
+    this._stageTransitions = [...state.transitions].slice(-MAX_PERSISTED_STAGE_TRANSITIONS);
+    this._stageTracker.restore({
+      current: state.current,
+      ...(state.enteredAt !== undefined ? { enteredAt: state.enteredAt } : {}),
+    });
+    this._stageGuardian?.restore({
+      current: state.current,
+      ...(state.enteredAt !== undefined ? { enteredAt: state.enteredAt } : {}),
+      visitedStages: collectVisitedStages(state.transitions, state.current),
+    });
+  }
+
+  private _restoreRunState(state: import('../workspace').IdcRuntimeRestoreState['run']): void {
+    if (!this._runStore) {
+      return;
+    }
+    if (this._runStore.getActive() || this._runStore.listCompleted().length > 0) {
+      return;
+    }
+
+    const activeCandidate = restoreIdcRunFromSnapshot(
+      state.active,
+      state.active ? (this._artifactService?.listByRunId(state.active.id) ?? []) : [],
+    );
+    const lastCompletedCandidate = restoreIdcRunFromSnapshot(
+      state.lastCompleted,
+      state.lastCompleted ? (this._artifactService?.listByRunId(state.lastCompleted.id) ?? []) : [],
+    );
+
+    this._runStore.restore({
+      ...(activeCandidate && isActiveRunStatus(activeCandidate.status)
+        ? { active: activeCandidate }
+        : {}),
+      completed: [
+        ...(lastCompletedCandidate && isTerminalRunStatus(lastCompletedCandidate.status)
+          ? [lastCompletedCandidate]
+          : []),
+        ...(!lastCompletedCandidate &&
+        activeCandidate &&
+        isTerminalRunStatus(activeCandidate.status)
+          ? [activeCandidate]
+          : []),
+      ],
+    });
+
+    this._replayRestoredTaskProjection(activeCandidate);
+    this._replayRestoredTaskProjection(lastCompletedCandidate);
+
+    if (lastCompletedCandidate && isTerminalRunStatus(lastCompletedCandidate.status)) {
+      this._queueIdcTaskProjectionClear(
+        lastCompletedCandidate.id,
+        lastCompletedCandidate.startedAt,
+      );
+    } else if (activeCandidate && isTerminalRunStatus(activeCandidate.status)) {
+      this._queueIdcTaskProjectionClear(activeCandidate.id, activeCandidate.startedAt);
+    }
+  }
+
+  private _restoreFeedbackRuntimeState(
+    state: import('../workspace').IdcRuntimeRestoreState['feedback'],
+  ): void {
+    const activeRun = this._runStore?.getActive() ?? null;
+    if (!shouldRestorePersistedFeedbackGuidance(state.pendingGuidance, activeRun)) {
+      this._applyFeedbackGuidanceSnapshot(null);
+      this._syncSystemPrompt();
+      return;
+    }
+
+    this._applyFeedbackGuidanceSnapshot(state.pendingGuidance);
+    this._syncSystemPrompt();
+  }
+
+  private _applyFeedbackGuidanceSnapshot(snapshot: PersistedFeedbackGuidanceSnapshot | null): void {
+    this._feedbackGuidanceState = snapshot ? { ...snapshot } : null;
+    this._feedbackGuidanceModule.setContent(snapshot?.content ?? null);
+  }
+
+  private _setFeedbackGuidanceContent(
+    content: string | null,
+    sourceRun?: Pick<IdcRun, 'id' | 'startedAt'> | null,
+  ): void {
+    const trimmed = content?.trim();
+    if (!trimmed) {
+      this._applyFeedbackGuidanceSnapshot(null);
+      return;
+    }
+
+    this._applyFeedbackGuidanceSnapshot({
+      content: trimmed,
+      ...(sourceRun?.id ? { sourceRunId: sourceRun.id } : {}),
+      ...(sourceRun?.startedAt !== undefined ? { sourceRunStartedAt: sourceRun.startedAt } : {}),
+    });
+  }
+
+  private _replayRestoredTaskProjection(run: IdcRun | null): void {
+    if (!run?.task) {
+      return;
+    }
+
+    const artifactBinding = run.artifactBindings?.find((binding) => binding.kind === 'task');
+    this._queueIdcTaskProjection(
+      run.id,
+      run.task,
+      artifactBinding
+        ? {
+            kind: 'task',
+            artifactId: artifactBinding.artifactId,
+            path: artifactBinding.path,
+            updatedAt: artifactBinding.updatedAt,
+          }
+        : undefined,
+      run.startedAt,
+    );
+  }
+
+  private _restorePendingApprovals(
+    state: import('../workspace').PendingApprovalRestoreState,
+  ): void {
+    for (const pending of state.pending) {
+      if (this._pendingConfirmations.has(pending.toolCallId)) {
+        continue;
+      }
+
+      const restoredDetails = {
+        ...pending.details,
+        restoredFromRuntimeState: true,
+        ...(state.updatedAt !== undefined ? { restoredSnapshotUpdatedAt: state.updatedAt } : {}),
+      };
+
+      this._pendingConfirmations.set(pending.toolCallId, {
+        source: 'restored',
+        request: {
+          toolCall: {
+            id: pending.toolCallId,
+            name: pending.toolName,
+            arguments: getRestoredToolArguments(pending.details),
+            index: 0,
+          },
+          action: pending.action,
+          description: pending.description,
+          details: restoredDetails,
+          confirmationToken: pending.confirmationToken,
+        },
+      });
+    }
+  }
+
+  private _rebuildFeedbackCoordinator(): void {
+    const previous = this._feedbackCoordinator;
+    this._feedbackCoordinator =
+      this._config.feedbackCoordinator ??
+      createFeedbackCoordinator({
+        eventBus: this._eventBus,
+        stageTracker: this._stageTracker,
+        projectMemoryManager: this._config.projectMemoryManager,
+        autoMemoryExtraction: this._config.autoMemoryExtraction,
+        journalAsSSOT: this._config.journalAsSSOT,
+      });
+
+    if (previous && previous !== this._feedbackCoordinator) {
+      previous.dispose();
+    }
+  }
+
+  private _createConfiguredArtifactWatcher(): IArtifactWatcher | null {
+    if (!this._eventBus) {
+      return null;
+    }
+
+    const getRunId = (): string | null => this._runStore?.getActive()?.id ?? null;
+    if (this._config.artifactWatcherFactory) {
+      return this._config.artifactWatcherFactory({
+        eventBus: this._eventBus,
+        getRunId,
+      });
+    }
+
+    if (!this._nekoPaths) {
+      return null;
+    }
+
+    return createArtifactWatcher({
+      paths: this._nekoPaths,
+      eventBus: this._eventBus,
+      getRunId,
+    });
+  }
+
+  private _composeRunnerHooks(
+    baseHooks: import('@neko/shared').ExecutorHooks,
+  ): import('@neko/shared').ExecutorHooks {
+    const feedbackHooks = this._feedbackCoordinator?.getBeforeThinkHooks() ?? [];
+    return composeBeforeThinkHooks(baseHooks, feedbackHooks);
   }
 
   private _refreshMemoryRuntime(): void {
@@ -1223,19 +1970,6 @@ export class AgentSession implements IAgentSession {
         ? new MemoryRecall({ projectMemory })
         : null;
     this._memoryRecallModule.setContent(null);
-
-    if (
-      projectMemory &&
-      this._config.autoMemoryExtraction !== false &&
-      this._config.journalAsSSOT !== false
-    ) {
-      this._keyFactExtractor = new KeyFactExtractor();
-      this._projectMemoryRouter = new ProjectMemoryRouter(projectMemory);
-      return;
-    }
-
-    this._keyFactExtractor = null;
-    this._projectMemoryRouter = null;
   }
 
   private async _updateMemoryRecall(query: string): Promise<void> {
@@ -1263,7 +1997,7 @@ export class AgentSession implements IAgentSession {
   }
 
   private async _extractProjectMemory(entries: readonly PersistedAgentEvent[]): Promise<void> {
-    if (!this._keyFactExtractor || !this._projectMemoryRouter) {
+    if (!this._feedbackCoordinator) {
       return;
     }
 
@@ -1277,32 +2011,22 @@ export class AgentSession implements IAgentSession {
     const sourceEventIds = collectPersistedEventIds(unprocessedEntries);
 
     try {
-      const extractionTimestamp = Date.now();
       const turnMessages = projectPersistedEventsToWorkingMemory(unprocessedEntries).map(
         (entry) => entry.message,
       );
-      const facts = this._keyFactExtractor.extract(turnMessages);
-      if (facts.length === 0) {
+      const extraction = await this._feedbackCoordinator.extractMemory({
+        messages: turnMessages,
+        sourceEventIds,
+      });
+      if (extraction.kind === 'skipped') {
         this._markProcessedMemoryEventIds(sourceEventIds);
         return;
       }
 
-      const routing = await this._projectMemoryRouter.writeFacts(facts);
       if (sourceEventIds.length > 0 && this._journalWriter) {
         await this._journalWriter.appendEvent(++this._journalSeq, {
           type: 'memory_extraction',
-          memoryExtraction: {
-            timestamp: extractionTimestamp,
-            sourceEventIds,
-            facts: routing.facts.map((fact) => ({
-              id: fact.id,
-              content: fact.content,
-              category: fact.category,
-              confidence: fact.confidence,
-              destination: fact.destination,
-            })),
-            writeStatus: routing.writtenFacts.length > 0 ? 'written' : 'dedup',
-          },
+          memoryExtraction: extraction,
         });
       }
 
@@ -1310,6 +2034,63 @@ export class AgentSession implements IAgentSession {
     } catch (error) {
       logger.warn('Failed to extract project memory', { error });
     }
+  }
+
+  private _observeToolFeedback(step: AgentStep): void {
+    if (!this._feedbackCoordinator || step.type !== 'act' || !step.toolResults) {
+      return;
+    }
+
+    const activeRunId = this._runStore?.getActive()?.id ?? null;
+    for (let i = 0; i < step.toolResults.length; i++) {
+      const result = step.toolResults[i] as ObservedToolResult;
+      const toolCall = step.toolCalls?.find((candidate) => candidate.id === result.callId);
+      const toolCallId = result.callId ?? toolCall?.id ?? `tool-call-${i}`;
+      const toolName = resolveObservedToolName(result, toolCall?.name);
+      if (!result.success) {
+        this._feedbackCoordinator.observe({
+          kind: 'tool-failure',
+          observedAt: step.timestamp,
+          toolCallId,
+          toolName,
+          error: result.error ?? 'Tool execution failed',
+          ...(activeRunId ? { runId: activeRunId } : {}),
+        });
+        continue;
+      }
+
+      const qualityCheckSignal = toQualityCheckFeedbackSignal({
+        result,
+        toolCallId,
+        toolName,
+        observedAt: step.timestamp,
+        ...(activeRunId ? { runId: activeRunId } : {}),
+      });
+      if (qualityCheckSignal) {
+        this._feedbackCoordinator.observe(qualityCheckSignal);
+      }
+    }
+  }
+
+  private _captureFeedbackCycle(): boolean {
+    if (!this._feedbackCoordinator) {
+      return false;
+    }
+
+    const cycle = this._feedbackCoordinator.evaluatePending({
+      currentStage: this._stageTracker?.current ?? null,
+      activeRunId: this._runStore?.getActive()?.id ?? null,
+    });
+    if (!cycle) {
+      return false;
+    }
+
+    this._feedbackCycles.push(cycle);
+    if (this._feedbackCycles.length > MAX_FEEDBACK_CYCLES) {
+      this._feedbackCycles.splice(0, this._feedbackCycles.length - MAX_FEEDBACK_CYCLES);
+    }
+    this._applyFeedbackFlowActions(cycle.actions);
+    return cycle.actions.length > 0;
   }
 
   private _markProcessedMemoryEventIds(eventIds: readonly string[]): void {
@@ -1330,69 +2111,14 @@ export class AgentSession implements IAgentSession {
 
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
-    // PR3d: drive the ArtifactSchemaModule. When an IdcRun is active the
-    // artifact contract renders into the L1 schema layer; when no run is
-    // active the section is absent (the persona's pointer then guides the
-    // agent to ask the user to start a session). renderSync keeps this
-    // path synchronous — ask-mode snapshot callers below depend on it.
-    {
-      const schemaCtx = freezePromptContext({
-        runId: this._runStore?.getActive()?.id ?? null,
-        stage: null,
-        locale: 'en',
-        projectPath: '',
-        activeSkillName: null,
-        activeTools: [],
-      });
-      this._promptComposer.removeSection('artifact-schema');
-      const schemaSections = this._artifactSchemaModule.renderSync(schemaCtx);
-      if (schemaSections) {
-        for (const s of schemaSections) {
-          this._promptComposer.setSection({
-            id: s.sectionId,
-            layer: s.layer,
-            content: s.content,
-            priority: s.priority ?? 50,
-            ...(s.cacheControl && { cacheControl: s.cacheControl }),
-          });
-        }
-      }
-    }
-
-    // Drive the CreativeVersionLogModule — owns the format contract for the
-    // version-log ephemeral section. renderSync() preserves the synchronous
-    // caller contract (this method is invoked from ask-snapshot paths where
-    // async would introduce a microtask between prompt sync and snapshot).
-    this._promptComposer.removeSection('memory:recall');
-    const recallSections = this._memoryRecallModule.renderSync();
-    if (recallSections) {
-      for (const s of recallSections) {
-        this._promptComposer.setSection({
-          id: s.sectionId,
-          layer: s.layer,
-          content: s.content,
-          priority: s.priority,
-          ...(s.cacheControl && { cacheControl: s.cacheControl }),
-        });
-      }
-    }
+    this._applyPromptModuleSync(this._artifactSchemaModule);
+    this._applyPromptModuleSync(this._feedbackGuidanceModule);
+    this._applyPromptModuleSync(this._memoryRecallModule);
 
     this._creativeVersionLogModule.setSummary(
       this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
     );
-    this._promptComposer.removeSection('creative-version-log');
-    const versionSections = this._creativeVersionLogModule.renderSync();
-    if (versionSections) {
-      for (const s of versionSections) {
-        this._promptComposer.setSection({
-          id: s.sectionId,
-          layer: s.layer,
-          content: s.content,
-          priority: s.priority,
-          ...(s.cacheControl && { cacheControl: s.cacheControl }),
-        });
-      }
-    }
+    this._applyPromptModuleSync(this._creativeVersionLogModule);
 
     // Compose both flat text and structured sections
     const structured = this._promptComposer.composeStructured();
@@ -1409,6 +2135,43 @@ export class AgentSession implements IAgentSession {
       this._executor.updateServiceOptions({
         systemPromptSections: structured.sections,
       });
+    }
+  }
+
+  private _applyPromptModuleSync(module: PromptModule): void {
+    this._promptModuleOrchestrator.applyOneSync(module, this._promptContextProvider());
+  }
+
+  private _applyFeedbackFlowActions(
+    actions: readonly import('../feedback').FeedbackFlowAction[],
+  ): void {
+    if (actions.length === 0) {
+      return;
+    }
+
+    const activeRun = this._runStore?.getActive() ?? null;
+    const guidanceBlocks: string[] = [];
+    let requestedClear = false;
+    for (const action of actions) {
+      if (action.kind === 'set-guidance') {
+        guidanceBlocks.push(action.guidance);
+        continue;
+      }
+      if (action.kind === 'escalate-user') {
+        guidanceBlocks.push(
+          `- Escalate to the user: ${action.message} ` + `(repeat count: ${action.repeatCount}).`,
+        );
+        continue;
+      }
+      if (action.kind === 'clear-guidance') {
+        requestedClear = true;
+      }
+    }
+
+    if (guidanceBlocks.length > 0) {
+      this._setFeedbackGuidanceContent(guidanceBlocks.join('\n'), activeRun);
+    } else if (requestedClear) {
+      this._setFeedbackGuidanceContent(null);
     }
   }
 
@@ -1437,7 +2200,8 @@ export class AgentSession implements IAgentSession {
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {
     const toolCallId = request.toolCall.id;
     // Store pending confirmation (resolve is handled by onConfirmTool callback)
-    this._pendingConfirmations.set(toolCallId, { request });
+    this._pendingConfirmations.set(toolCallId, { source: 'live', request });
+    this._persistIdcRuntimeState();
 
     void this._resolveToolConfirmation(request);
   }
@@ -1712,10 +2476,361 @@ function getChatMessageContent(message: ChatMessage): string {
     .join('\n');
 }
 
-function toSerializableErrorCause(error: Error): Record<string, unknown> {
+function snapshotIdcRun(run: IdcRun): import('../workspace').PersistedIdcRunSnapshot {
+  const lastRound = run.rounds.length > 0 ? run.rounds[run.rounds.length - 1] : undefined;
+
   return {
-    name: error.name,
-    message: error.message,
-    ...(typeof error.stack === 'string' ? { stack: error.stack } : {}),
+    id: run.id,
+    runKind: run.runKind,
+    workflowId: run.workflowId,
+    status: run.status,
+    createdAt: run.createdAt,
+    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
+    ...(run.endedAt !== undefined ? { endedAt: run.endedAt } : {}),
+    roundCount: run.rounds.length,
+    ...(run.rounds.length > 0 ? { rounds: [...run.rounds] } : {}),
+    ...(lastRound ? { lastRound } : {}),
+    ...(run.artifactBindings && run.artifactBindings.length > 0
+      ? {
+          artifacts: run.artifactBindings.map((binding) => ({
+            kind: binding.kind,
+            artifactId: binding.artifactId,
+            path: binding.path,
+            updatedAt: binding.updatedAt,
+          })),
+        }
+      : {}),
+    ...(run.task
+      ? {
+          task: {
+            id: run.task.id,
+            counts: countTaskStatuses(run.task.items),
+          },
+        }
+      : {}),
+    ...(run.error
+      ? {
+          error: {
+            code: run.error.code,
+            message: run.error.message,
+            ...(run.error.cause !== undefined
+              ? { cause: toSerializableErrorCause(run.error.cause) }
+              : {}),
+          },
+        }
+      : {}),
   };
+}
+
+function snapshotPendingApproval(
+  request: ToolConfirmationRequest,
+): import('../workspace').PendingApprovalSnapshot {
+  return {
+    channel: 'permission',
+    confirmationToken: request.confirmationToken,
+    toolCallId: request.toolCall.id,
+    toolName: request.toolCall.name,
+    action: request.action,
+    description: request.description,
+    details: stripRestoredPendingApprovalDetails(request.details),
+  };
+}
+
+function getRestoredToolArguments(details: Record<string, unknown>): Record<string, unknown> {
+  const raw = details['arguments'];
+  return typeof raw === 'object' && raw !== null ? { ...(raw as Record<string, unknown>) } : {};
+}
+
+function stripRestoredPendingApprovalDetails(
+  details: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...details };
+  delete next['restoredFromRuntimeState'];
+  delete next['restoredSnapshotUpdatedAt'];
+  return next;
+}
+
+function shouldRestorePersistedFeedbackGuidance(
+  guidance: PersistedFeedbackGuidanceSnapshot | null,
+  activeRun: Pick<IdcRun, 'id' | 'startedAt'> | null,
+): boolean {
+  if (!guidance) {
+    return false;
+  }
+  if (!guidance.sourceRunId) {
+    return true;
+  }
+  if (!activeRun || activeRun.id !== guidance.sourceRunId) {
+    return false;
+  }
+  if (guidance.sourceRunStartedAt === undefined) {
+    return true;
+  }
+
+  return activeRun.startedAt === guidance.sourceRunStartedAt;
+}
+
+function restoreIdcRunFromSnapshot(
+  snapshot: import('../workspace').PersistedIdcRunSnapshot | undefined,
+  records: readonly AnyArtifactRecord[],
+): IdcRun | null {
+  if (!snapshot) {
+    return null;
+  }
+  const runKind = snapshot.runKind ?? snapshot.workflowId;
+  if (!runKind) {
+    return null;
+  }
+
+  const artifactBindings = mergeRestoredArtifactBindings(snapshot.artifacts, records);
+  const draftRecord = records.find((record) => record.kind === 'draft');
+  const planRecord = records.find((record) => record.kind === 'plan');
+  const taskRecord = records.find((record) => record.kind === 'task');
+
+  return {
+    id: snapshot.id,
+    runKind,
+    workflowId: snapshot.workflowId ?? runKind,
+    status: snapshot.status,
+    createdAt: snapshot.createdAt,
+    ...(snapshot.startedAt !== undefined ? { startedAt: snapshot.startedAt } : {}),
+    ...(snapshot.endedAt !== undefined ? { endedAt: snapshot.endedAt } : {}),
+    rounds:
+      snapshot.rounds && snapshot.rounds.length > 0
+        ? [...snapshot.rounds]
+        : snapshot.lastRound
+          ? [snapshot.lastRound]
+          : [],
+    ...(artifactBindings.length > 0 ? { artifactBindings } : {}),
+    ...(draftRecord?.kind === 'draft' ? { draft: draftRecord.value } : {}),
+    ...(planRecord?.kind === 'plan' ? { plan: planRecord.value } : {}),
+    ...(taskRecord?.kind === 'task' ? { task: taskRecord.value } : {}),
+    ...(snapshot.error ? { error: { ...snapshot.error } } : {}),
+  };
+}
+
+function mergeRestoredArtifactBindings(
+  snapshotBindings: import('../workspace').PersistedIdcRunSnapshot['artifacts'] | undefined,
+  records: readonly AnyArtifactRecord[],
+): readonly NonNullable<IdcRun['artifactBindings']>[number][] {
+  const merged: NonNullable<IdcRun['artifactBindings']>[number][] = [];
+
+  for (const binding of snapshotBindings ?? []) {
+    upsertRestoredArtifactBinding(merged, binding);
+  }
+  for (const record of records) {
+    upsertRestoredArtifactBinding(merged, toIdcRunArtifactBinding(record));
+  }
+
+  return merged;
+}
+
+function upsertRestoredArtifactBinding(
+  target: NonNullable<IdcRun['artifactBindings']>[number][],
+  binding: NonNullable<IdcRun['artifactBindings']>[number],
+): void {
+  const existingIndex = target.findIndex((entry) => entry.kind === binding.kind);
+  if (existingIndex >= 0) {
+    target.splice(existingIndex, 1, binding);
+  } else {
+    target.push(binding);
+  }
+
+  target.sort(
+    (left, right) => restoredArtifactKindOrder(left.kind) - restoredArtifactKindOrder(right.kind),
+  );
+}
+
+function restoredArtifactKindOrder(
+  kind: NonNullable<IdcRun['artifactBindings']>[number]['kind'],
+): number {
+  switch (kind) {
+    case 'draft':
+      return 0;
+    case 'plan':
+      return 1;
+    case 'task':
+      return 2;
+  }
+}
+
+function collectVisitedStages(
+  transitions: readonly import('../workspace').IdcRuntimeStageTransition[],
+  current: IdcStage | null,
+): readonly IdcStage[] {
+  const visited: IdcStage[] = [];
+  const push = (stage: IdcStage | null) => {
+    if (!stage || visited.includes(stage)) {
+      return;
+    }
+    visited.push(stage);
+  };
+
+  for (const transition of transitions) {
+    push(transition.from);
+    push(transition.to);
+  }
+  push(current);
+
+  return visited;
+}
+
+function isActiveRunStatus(status: IdcRun['status']): status is 'pending' | 'running' {
+  return status === 'pending' || status === 'running';
+}
+
+function isTerminalRunStatus(
+  status: IdcRun['status'],
+): status is 'completed' | 'aborted' | 'failed' {
+  return status === 'completed' || status === 'aborted' || status === 'failed';
+}
+
+function countTaskStatuses(
+  items: NonNullable<IdcRun['task']>['items'],
+): NonNullable<import('../workspace').PersistedIdcRunSnapshot['task']>['counts'] {
+  const counts = {
+    pending: 0,
+    in_progress: 0,
+    completed: 0,
+    failed: 0,
+  };
+
+  for (const item of items) {
+    switch (item.status) {
+      case 'pending':
+        counts.pending += 1;
+        break;
+      case 'in_progress':
+        counts.in_progress += 1;
+        break;
+      case 'completed':
+        counts.completed += 1;
+        break;
+      case 'failed':
+        counts.failed += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
+function resolveArtifactService(config: AgentSessionConfig): IArtifactService | null {
+  if (config.artifactService) {
+    return config.artifactService;
+  }
+
+  const workspace = config.workspace;
+  if (!workspace || typeof workspace.fsOps.writeFile !== 'function') {
+    return null;
+  }
+
+  return createWorkspaceArtifactService({
+    workspaceRoot: workspace.root,
+    fsOps: {
+      mkdir: workspace.fsOps.mkdir.bind(workspace.fsOps),
+      writeFile: workspace.fsOps.writeFile.bind(workspace.fsOps),
+    },
+  });
+}
+
+interface ObservedToolResult {
+  readonly callId?: string;
+  readonly name?: string;
+  readonly success: boolean;
+  readonly data?: unknown;
+  readonly error?: string;
+}
+
+interface QualityCheckEvaluationSummary {
+  readonly index: number;
+  readonly passed: boolean;
+  readonly finalScore: number;
+  readonly remediations?: readonly unknown[];
+}
+
+interface QualityCheckFeedbackPayload {
+  readonly totalScenes: number;
+  readonly passed: number;
+  readonly failed: number;
+  readonly evaluations: readonly QualityCheckEvaluationSummary[];
+}
+
+function resolveObservedToolName(result: ObservedToolResult, fallbackName?: string): string {
+  return result.name ?? fallbackName ?? 'unknown-tool';
+}
+
+function toQualityCheckFeedbackSignal(input: {
+  readonly result: ObservedToolResult;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly observedAt: number;
+  readonly runId?: string;
+}): import('../feedback').FeedbackSignal | null {
+  if (input.toolName !== 'QualityCheck' || !isQualityCheckFeedbackPayload(input.result.data)) {
+    return null;
+  }
+
+  const failingSceneIndexes = input.result.data.evaluations
+    .filter((evaluation) => !evaluation.passed)
+    .map((evaluation) => evaluation.index);
+  const remediationCount = input.result.data.evaluations.reduce((count, evaluation) => {
+    return count + (evaluation.remediations?.length ?? 0);
+  }, 0);
+
+  return {
+    kind: 'quality-check',
+    observedAt: input.observedAt,
+    toolCallId: input.toolCallId,
+    toolName: 'QualityCheck',
+    totalScenes: input.result.data.totalScenes,
+    passed: input.result.data.passed,
+    failed: input.result.data.failed,
+    failingSceneIndexes,
+    remediationCount,
+    ...(input.runId ? { runId: input.runId } : {}),
+  };
+}
+
+function isQualityCheckFeedbackPayload(value: unknown): value is QualityCheckFeedbackPayload {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    isFiniteNumber(candidate['totalScenes']) &&
+    isFiniteNumber(candidate['passed']) &&
+    isFiniteNumber(candidate['failed']) &&
+    Array.isArray(candidate['evaluations']) &&
+    candidate['evaluations'].every(isQualityCheckEvaluationSummary)
+  );
+}
+
+function isQualityCheckEvaluationSummary(value: unknown): value is QualityCheckEvaluationSummary {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    isFiniteNumber(candidate['index']) &&
+    typeof candidate['passed'] === 'boolean' &&
+    isFiniteNumber(candidate['finalScore']) &&
+    (candidate['remediations'] === undefined || Array.isArray(candidate['remediations']))
+  );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function collectInjectedToolNames(toolInjectionManager: ToolInjectionManager): readonly ToolName[] {
+  const state = toolInjectionManager.getState();
+  return [
+    ...new Set([
+      ...(state.injectedTools.get('always') ?? []),
+      ...(state.injectedTools.get('dynamic') ?? []),
+    ]),
+  ] as readonly ToolName[];
 }

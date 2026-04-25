@@ -4,7 +4,13 @@
 
 export * from './types';
 export * from './agent-session';
+export { createSkillRunKind, encodeRunKindSegment } from './idc-run-kind';
 export { createSkillWorkflowId, encodeWorkflowIdSegment } from './idc-workflow-id';
+export {
+  createPlanModeIdcMetadata,
+  createSkillExecutionIdcMetadata,
+  mergeIdcExecutionMetadata,
+} from './idc-execution-metadata';
 export {
   initializeSession,
   type SessionComponents,

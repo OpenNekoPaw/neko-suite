@@ -56,6 +56,13 @@ export interface StageTrackerConfig {
   initialStage?: IdcStage;
 }
 
+export interface StageTrackerRestoreState {
+  /** Current stage, or null when the tracker was idle at snapshot time. */
+  current: IdcStage | null;
+  /** ms epoch when the current stage was entered. */
+  enteredAt?: number;
+}
+
 // =============================================================================
 // Implementation
 // =============================================================================
@@ -107,6 +114,16 @@ export class StageTracker {
     this._enteredAt = at;
     this._emitEntered({ stage, previous, at });
     return true;
+  }
+
+  /**
+   * Replace tracker state from a persisted snapshot without re-emitting
+   * entered/exited events. Callers restoring a session can then resync their
+   * dependent listeners explicitly.
+   */
+  restore(state: StageTrackerRestoreState): void {
+    this._current = state.current;
+    this._enteredAt = state.current ? (state.enteredAt ?? this._now()) : 0;
   }
 
   // ---------------------------------------------------------------------------

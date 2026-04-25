@@ -10,7 +10,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { StageActivationDecision, Task } from '@neko-agent/types';
+import type {
+  Draft,
+  ExecutionPlan,
+  IdcRun,
+  StageActivationDecision,
+  Task,
+} from '@neko-agent/types';
 import { createIdcRunStore } from '../idc-run-store';
 
 function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
@@ -25,18 +31,51 @@ function decision(overrides: Partial<StageActivationDecision> = {}): StageActiva
 }
 
 describe('IdcRunStore', () => {
-  it('startRun creates a running record with the supplied workflowId', () => {
+  const draft: Draft = {
+    id: 'draft-1',
+    title: 'Draft title',
+    status: 'pending_review',
+    domain: 'cut',
+    createdAt: 1,
+    updatedAt: 2,
+    intent: 'Intent',
+    approach: 'Approach',
+    artifact: 'Artifact',
+  };
+  const plan: ExecutionPlan = {
+    id: 'plan-1',
+    draftId: 'draft-1',
+    title: 'Plan title',
+    status: 'ready',
+    createdAt: 3,
+    updatedAt: 4,
+    steps: [],
+  };
+
+  it('startRun creates a running record with the supplied runKind', () => {
     const t = 1000;
     const store = createIdcRunStore({ now: () => t });
-    const id = store.startRun({ workflowId: 'flow-c' });
+    const id = store.startRun({ runKind: 'flow-c' });
     const run = store.getActive();
     expect(run).not.toBeNull();
     expect(run!.id).toBe(id);
+    expect(run!.runKind).toBe('flow-c');
     expect(run!.workflowId).toBe('flow-c');
     expect(run!.status).toBe('running');
     expect(run!.createdAt).toBe(1000);
     expect(run!.startedAt).toBe(1000);
     expect(run!.rounds).toEqual([]);
+  });
+
+  it('still accepts legacy workflowId input during migration', () => {
+    const store = createIdcRunStore();
+    store.startRun({ workflowId: 'legacy-flow' });
+    expect(store.getActive()).toEqual(
+      expect.objectContaining({
+        runKind: 'legacy-flow',
+        workflowId: 'legacy-flow',
+      }),
+    );
   });
 
   it('uses a user-supplied runId when given', () => {
@@ -116,5 +155,95 @@ describe('IdcRunStore', () => {
 
     const run = store.getActive()!;
     expect(run.task).toBe(task);
+  });
+
+  it('tracks draft / plan / task bindings on the active run', () => {
+    const store = createIdcRunStore();
+    store.startRun({ workflowId: 'f', runId: 'run-1' });
+    const task: Task = { id: 'task-1', items: [], createdAt: 5, updatedAt: 6 };
+
+    store.setDraft(draft, {
+      kind: 'draft',
+      artifactId: 'draft-1',
+      path: '/tmp/.neko/drafts/draft-run-1.md',
+      updatedAt: 2,
+    });
+    store.setPlan(plan, {
+      kind: 'plan',
+      artifactId: 'plan-1',
+      path: '/tmp/.neko/plans/plan-run-1.md',
+      updatedAt: 4,
+    });
+    store.setTask(task, {
+      kind: 'task',
+      artifactId: 'task-1',
+      path: '/tmp/.neko/tasks/task-run-1.md',
+      updatedAt: 6,
+    });
+
+    expect(store.getActive()).toEqual(
+      expect.objectContaining({
+        draft,
+        plan,
+        task,
+        artifactBindings: [
+          {
+            kind: 'draft',
+            artifactId: 'draft-1',
+            path: '/tmp/.neko/drafts/draft-run-1.md',
+            updatedAt: 2,
+          },
+          {
+            kind: 'plan',
+            artifactId: 'plan-1',
+            path: '/tmp/.neko/plans/plan-run-1.md',
+            updatedAt: 4,
+          },
+          {
+            kind: 'task',
+            artifactId: 'task-1',
+            path: '/tmp/.neko/tasks/task-run-1.md',
+            updatedAt: 6,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('restore replaces active and completed run state from a persisted snapshot', () => {
+    const store = createIdcRunStore();
+    const active: IdcRun = {
+      id: 'run-active',
+      runKind: 'wf-active',
+      workflowId: 'wf-active',
+      status: 'running',
+      createdAt: 1,
+      startedAt: 2,
+      rounds: [decision({ round: 0 })],
+      artifactBindings: [
+        {
+          kind: 'draft',
+          artifactId: 'draft-active',
+          path: '/tmp/.neko/drafts/draft-run-active.md',
+          updatedAt: 3,
+        },
+      ],
+    };
+    const completed: IdcRun = {
+      id: 'run-completed',
+      runKind: 'wf-completed',
+      workflowId: 'wf-completed',
+      status: 'completed',
+      createdAt: 4,
+      startedAt: 5,
+      endedAt: 6,
+      rounds: [],
+      error: undefined,
+    };
+
+    store.restore({ active, completed: [completed] });
+
+    expect(store.getActive()).toEqual(active);
+    expect(store.listCompleted()).toEqual([completed]);
   });
 });
