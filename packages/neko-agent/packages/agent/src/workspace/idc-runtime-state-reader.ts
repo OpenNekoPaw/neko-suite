@@ -206,10 +206,10 @@ function toPersistedRunSnapshot(value: unknown): PersistedIdcRunSnapshot | null 
   if (!entry) return null;
 
   const id = asString(entry['id']);
-  const workflowId = asString(entry['workflowId']);
+  const runKind = asString(entry['runKind']) ?? asString(entry['workflowId']);
   const status = asIdcRunStatus(entry['status']);
   const createdAt = asNumber(entry['createdAt']);
-  if (!id || !workflowId || !status || createdAt === null) {
+  if (!id || !runKind || !status || createdAt === null) {
     return null;
   }
 
@@ -239,7 +239,8 @@ function toPersistedRunSnapshot(value: unknown): PersistedIdcRunSnapshot | null 
 
   return {
     id,
-    workflowId,
+    runKind,
+    workflowId: asString(entry['workflowId']) ?? runKind,
     status,
     createdAt,
     ...(startedAt !== null ? { startedAt } : {}),

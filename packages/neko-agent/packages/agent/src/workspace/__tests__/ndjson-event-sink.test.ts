@@ -57,6 +57,7 @@ describe('NdjsonEventSink', () => {
     bus.emit({
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'run-1',
+      runKind: 'w-1',
       workflowId: 'w-1',
       at: 0,
     });
@@ -142,6 +143,7 @@ describe('NdjsonEventSink', () => {
     bus.emit({
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
+      runKind: 'w',
       workflowId: 'w',
       at: 0,
     });
@@ -172,6 +174,7 @@ describe('NdjsonEventSink', () => {
     bus.emit({
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
+      runKind: 'w',
       workflowId: 'w',
       at: 0,
     });
@@ -202,6 +205,7 @@ describe('NdjsonEventSink', () => {
     bus.emit({
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
+      runKind: 'w',
       workflowId: 'w',
       at: 0,
     });

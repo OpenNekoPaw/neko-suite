@@ -3,11 +3,12 @@ import type { StageTaskShape } from '@neko-agent/types';
 import type { StageEntrySignal } from '../skill/activation/stage-planner';
 import type { ExecutionMode } from './types';
 import type { TaskShapeSignals } from '../executor/react-loop-runner';
-import { createSkillWorkflowId } from './idc-workflow-id';
+import { createSkillRunKind } from './idc-run-kind';
 
 export interface IdcTurnMetadata {
   entrySignal?: StageEntrySignal;
   taskShape?: StageTaskShape;
+  runKind?: string;
   workflowId?: string;
 }
 
@@ -47,8 +48,17 @@ function extractIdcTurnMetadata(
   if (isStageTaskShape(idc['taskShape'])) {
     next.taskShape = idc['taskShape'];
   }
+  if (typeof idc['runKind'] === 'string' && idc['runKind'].trim().length > 0) {
+    next.runKind = idc['runKind'].trim();
+  }
   if (typeof idc['workflowId'] === 'string' && idc['workflowId'].trim().length > 0) {
     next.workflowId = idc['workflowId'].trim();
+  }
+  if (!next.runKind && next.workflowId) {
+    next.runKind = next.workflowId;
+  }
+  if (!next.workflowId && next.runKind) {
+    next.workflowId = next.runKind;
   }
 
   return Object.keys(next).length > 0 ? next : undefined;
@@ -106,17 +116,21 @@ export function classifyIdcEntrySignal(
   return fallbackEntrySignal(signals.taskShape, input);
 }
 
-export function resolveIdcWorkflowId(context: IdcTurnPlanningContext | null): string {
+export function resolveIdcRunKind(context: IdcTurnPlanningContext | null): string {
   if (!context) return 'agent-turn';
 
   const metadata = extractIdcTurnMetadata(context.metadata);
-  if (metadata?.workflowId) return metadata.workflowId;
+  if (metadata?.runKind) return metadata.runKind;
   if (hasWorkflowTemplate(context.activeSkill)) {
-    return createSkillWorkflowId(context.activeSkill!.name);
+    return createSkillRunKind(context.activeSkill!.name);
   }
   if (context.executionMode === 'plan') return 'plan-mode';
   if (IDC_ARTIFACT_REF_RE.test(context.input)) return 'artifact-resume';
   return 'agent-turn';
+}
+
+export function resolveIdcWorkflowId(context: IdcTurnPlanningContext | null): string {
+  return resolveIdcRunKind(context);
 }
 
 function fallbackEntrySignal(taskShape: StageTaskShape, input: string): StageEntrySignal {

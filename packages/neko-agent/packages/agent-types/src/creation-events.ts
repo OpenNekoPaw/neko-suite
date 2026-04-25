@@ -44,6 +44,11 @@ export type CreationChannel = (typeof CREATION_CHANNELS)[keyof typeof CREATION_C
 export interface CreationRunStartedEvent {
   channel: typeof CREATION_CHANNELS.RUN_STARTED;
   runId: string;
+  runKind: string;
+  /**
+   * Legacy compatibility mirror of runKind.
+   * TODO(P1): delete after workflowId -> runKind migration completes.
+   */
   workflowId: string;
   at: number;
 }

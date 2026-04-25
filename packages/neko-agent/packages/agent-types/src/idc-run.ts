@@ -90,7 +90,12 @@ export function roundSummaryFromDecision(
 export interface IdcRun {
   /** Stable run identifier. */
   id: string;
-  /** Workflow ID (registry key) this Run belongs to. */
+  /** Run kind / origin label for this Run. */
+  runKind: string;
+  /**
+   * Legacy compatibility mirror of runKind.
+   * TODO(P1): delete after workflowId -> runKind migration completes.
+   */
   workflowId: string;
   /** Current status. */
   status: IdcRunStatus;

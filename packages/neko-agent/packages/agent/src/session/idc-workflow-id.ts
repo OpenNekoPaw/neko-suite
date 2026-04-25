@@ -1,18 +1,8 @@
 /**
- * IDC workflow id helpers.
+ * Legacy compatibility wrappers for the old "workflowId" terminology.
  *
- * Workflow ids travel across the session/runtime boundary and may be
- * persisted or split by downstream consumers. Skill names therefore
- * need an escaped representation that is stable and delimiter-safe.
+ * New code should use idc-run-kind.ts instead.
  */
 
-const EMPTY_SKILL_WORKFLOW_SEGMENT = 'unnamed';
-
-export function encodeWorkflowIdSegment(value: string): string {
-  const trimmed = value.trim();
-  return encodeURIComponent(trimmed.length > 0 ? trimmed : EMPTY_SKILL_WORKFLOW_SEGMENT);
-}
-
-export function createSkillWorkflowId(skillName: string): string {
-  return `skill:${encodeWorkflowIdSegment(skillName)}`;
-}
+export { createSkillRunKind as createSkillWorkflowId } from './idc-run-kind';
+export { encodeRunKindSegment as encodeWorkflowIdSegment } from './idc-run-kind';

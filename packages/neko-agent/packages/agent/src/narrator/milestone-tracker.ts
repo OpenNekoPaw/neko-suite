@@ -103,7 +103,7 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
       return {
         ...base,
         kind: 'run-started',
-        label: `Run started (${event.workflowId})`,
+        label: `Run started (${event.runKind})`,
         runId: event.runId,
       };
     case CREATION_CHANNELS.RUN_ENDED:

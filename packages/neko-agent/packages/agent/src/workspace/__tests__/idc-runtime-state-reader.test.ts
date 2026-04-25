@@ -25,6 +25,7 @@ describe('idc-runtime-state-reader', () => {
             run: {
               active: {
                 id: 'run-1',
+                runKind: 'wf-demo',
                 workflowId: 'wf-demo',
                 status: 'running',
                 createdAt: 1,
@@ -89,6 +90,7 @@ describe('idc-runtime-state-reader', () => {
       run: {
         active: expect.objectContaining({
           id: 'run-1',
+          runKind: 'wf-demo',
           workflowId: 'wf-demo',
           roundCount: 1,
           rounds: [
@@ -139,6 +141,40 @@ describe('idc-runtime-state-reader', () => {
     expect(state?.feedback.pendingGuidance).toEqual({
       content: '- Retry once after repairing the draft.',
     });
+  });
+
+  it('restores legacy run snapshots that only persisted workflowId', () => {
+    const state = parseIdcRuntimeState(
+      JSON.stringify({
+        stage: {
+          current: 'draft',
+          transitions: [],
+        },
+        run: {
+          active: {
+            id: 'run-legacy',
+            workflowId: 'wf-legacy',
+            status: 'running',
+            createdAt: 1,
+            roundCount: 0,
+          },
+        },
+        approval: {
+          pending: [],
+        },
+        feedback: {
+          pendingGuidance: null,
+        },
+      }),
+    );
+
+    expect(state?.run.active).toEqual(
+      expect.objectContaining({
+        id: 'run-legacy',
+        runKind: 'wf-legacy',
+        workflowId: 'wf-legacy',
+      }),
+    );
   });
 
   it('reads pending approval snapshots from idc-runtime.json', async () => {

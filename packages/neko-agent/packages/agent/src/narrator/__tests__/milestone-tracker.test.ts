@@ -39,6 +39,7 @@ function runStarted(at = 1): DualFlowEvent {
   return {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId: 'r1',
+    runKind: 'flow-a',
     workflowId: 'flow-a',
     at,
   };
@@ -65,6 +66,7 @@ describe('MilestoneTracker', () => {
     const history = tracker.getHistory();
     expect(history).toHaveLength(3);
     expect(history[0]!.kind).toBe('run-started');
+    expect(history[0]!.label).toBe('Run started (flow-a)');
     expect(history[1]!.kind).toBe('round-decided');
     expect(history[2]!.kind).toBe('autoheal');
     expect(tracker.getLatest()?.kind).toBe('autoheal');

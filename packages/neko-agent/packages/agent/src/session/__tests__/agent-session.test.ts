@@ -1326,7 +1326,7 @@ describe('AgentSession', () => {
           }),
         );
 
-        session.startWorkflowRun('wf-debounce', 'run-1');
+        session.startIdcRun('wf-debounce', 'run-1');
         await Promise.resolve();
 
         expect(
@@ -1381,7 +1381,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf-artifacts', 'run-1');
+      session.startIdcRun('wf-artifacts', 'run-1');
 
       const draft: Draft = {
         id: 'draft-1',
@@ -2074,7 +2074,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf-observed', 'run-observed');
+      session.startIdcRun('wf-observed', 'run-observed');
 
       const observedPath = '/tmp/proj/.neko/plans/plan-run-observed.md';
       files.set(
@@ -2203,7 +2203,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf-task-echo', 'run-task-echo');
+      session.startIdcRun('wf-task-echo', 'run-task-echo');
 
       const task: Task = {
         id: 'task-echo',
@@ -2263,7 +2263,7 @@ describe('AgentSession', () => {
           idcTaskProjection: idcTaskProjection as never,
         }),
       );
-      session.startWorkflowRun('wf-task-projection', 'run-1');
+      session.startIdcRun('wf-task-projection', 'run-1');
       const activeRun = session.getActiveIdcRun();
       expect(activeRun).toEqual(
         expect.objectContaining({
@@ -2312,7 +2312,7 @@ describe('AgentSession', () => {
         }),
       );
       injectMockExecutor(session, []);
-      session.startWorkflowRun('wf-task-cleanup', 'run-complete');
+      session.startIdcRun('wf-task-cleanup', 'run-complete');
       const startedAt = session.getIdcRun('run-complete')?.startedAt;
       expect(startedAt).toEqual(expect.any(Number));
 
@@ -2339,7 +2339,7 @@ describe('AgentSession', () => {
           idcTaskProjection: idcTaskProjection as never,
         }),
       );
-      session.startWorkflowRun('wf-task-dispose', 'run-dispose');
+      session.startIdcRun('wf-task-dispose', 'run-dispose');
       const startedAt = session.getIdcRun('run-dispose')?.startedAt;
       expect(startedAt).toEqual(expect.any(Number));
 
@@ -2369,7 +2369,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('test-wf', 'run-1');
+      session.startIdcRun('test-wf', 'run-1');
 
       const engine = session.getApprovalEngine()!;
       await engine.evaluate({
@@ -2413,7 +2413,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('test-wf', 'run-1');
+      session.startIdcRun('test-wf', 'run-1');
 
       await session.getApprovalEngine()!.evaluate({
         channel: 'permission',
@@ -2455,7 +2455,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf', 'run-1');
+      session.startIdcRun('wf', 'run-1');
 
       const bus = session.getEventBus()!;
       bus.emit({
@@ -2545,7 +2545,7 @@ describe('AgentSession', () => {
         }),
       );
 
-      session.startWorkflowRun('wf-demo', 'run-1');
+      session.startIdcRun('wf-demo', 'run-1');
       session.enterStage('draft');
       session.enterStage('plan');
       (
@@ -3044,7 +3044,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf', 'run-1');
+      session.startIdcRun('wf', 'run-1');
 
       await session.whenPreferencesReady();
 
@@ -3134,7 +3134,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startWorkflowRun('wf', 'run-1');
+      session.startIdcRun('wf', 'run-1');
       await session.whenPreferencesReady();
 
       // User said "auto approve tool:DeleteAll" but the subject is

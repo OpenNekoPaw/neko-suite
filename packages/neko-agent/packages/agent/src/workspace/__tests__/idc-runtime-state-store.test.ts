@@ -96,4 +96,44 @@ describe('IdcRuntimeStateStore', () => {
       sourceRunStartedAt: 123,
     });
   });
+
+  it('rethrows the last write failure on flush and recovers after a later successful write', async () => {
+    const writes: string[] = [];
+    let failWrite = true;
+    const store = createIdcRuntimeStateStore({
+      filePath: '/r/.neko/state/idc-runtime.json',
+      fsOps: {
+        async mkdir(): Promise<void> {},
+        async writeFile(_path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          if (failWrite) {
+            throw new Error('disk full');
+          }
+          writes.push(data);
+        },
+      },
+    });
+
+    store.update({
+      stage: { current: 'draft', transitions: [] },
+      run: {},
+      approval: { pending: [] },
+      feedback: { pendingGuidance: null },
+    });
+    await expect(store.flush()).rejects.toThrow('disk full');
+
+    failWrite = false;
+    store.update({
+      stage: { current: 'apply', transitions: [] },
+      run: {},
+      approval: { pending: [] },
+      feedback: { pendingGuidance: null },
+    });
+    await expect(store.flush()).resolves.toBeUndefined();
+
+    expect(writes).toHaveLength(1);
+    const recovered = JSON.parse(writes[0]!) as {
+      stage: { current: string | null };
+    };
+    expect(recovered.stage.current).toBe('apply');
+  });
 });

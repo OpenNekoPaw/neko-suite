@@ -30,7 +30,8 @@ export interface IdcRuntimeStageTransition {
 
 export interface PersistedIdcRunSnapshot {
   id: string;
-  workflowId: string;
+  runKind?: string;
+  workflowId?: string;
   status: IdcRunStatus;
   createdAt: number;
   startedAt?: number;
@@ -127,6 +128,7 @@ class IdcRuntimeStateStore implements IIdcRuntimeStateStore {
   private _dirEnsured = false;
   private _pending: Promise<void> = Promise.resolve();
   private _disposed = false;
+  private _lastWriteError: unknown | null = null;
 
   constructor(config: IdcRuntimeStateStoreConfig) {
     if (!config.filePath) {
@@ -170,8 +172,10 @@ class IdcRuntimeStateStore implements IIdcRuntimeStateStore {
       .then(async () => {
         await this._ensureDir();
         await this._fsOps.writeFile(this._filePath, serialized, 'utf-8');
+        this._lastWriteError = null;
       })
       .catch((err) => {
+        this._lastWriteError = err;
         emitDiagnostic(logger, 'warn', {
           code: 'agent.runtime-state.write-failed',
           reason: classifyCommonFailureReason(err),
@@ -188,12 +192,15 @@ class IdcRuntimeStateStore implements IIdcRuntimeStateStore {
 
   async flush(): Promise<void> {
     await this._pending;
+    if (this._lastWriteError !== null) {
+      throw this._lastWriteError;
+    }
   }
 
   async dispose(): Promise<void> {
     if (this._disposed) return;
     this._disposed = true;
-    await this._pending;
+    await this.flush();
   }
 
   private async _ensureDir(): Promise<void> {

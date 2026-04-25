@@ -1143,16 +1143,15 @@ export class AgentSession implements IAgentSession {
    */
   startIdcRun(runKind: string, runId?: string): string | null {
     if (!this._runStore) return null;
-    const nextRunId = this._runStore.startRun({ runKind, workflowId: runKind, runId });
+    const nextRunId = this._runStore.startRun({ runKind, runId });
     this._hydrateRunArtifacts(nextRunId);
     this._persistIdcRuntimeState();
     return nextRunId;
   }
 
   /**
-   * Begin a WorkflowRun — the ReAct-loop runner appends rounds into the
-   * active run. Returns null if dual-flow is not configured. No-op if a
-   * run is already active (the runner closes it on onExecuteEnd).
+   * Legacy compatibility wrapper for the old workflowId terminology.
+   * New code should call startIdcRun().
    */
   startWorkflowRun(workflowId: string, runId?: string): string | null {
     return this.startIdcRun(workflowId, runId);

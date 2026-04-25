@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyIdcEntrySignal,
   classifyIdcTaskShape,
+  resolveIdcRunKind,
   resolveIdcWorkflowId,
   type IdcTurnPlanningContext,
 } from '../idc-turn-planning';
@@ -46,10 +47,11 @@ describe('idc-turn-planning', () => {
 
     expect(taskShape).toBe('multi-step');
     expect(entrySignal).toBe('workflow-template');
+    expect(resolveIdcRunKind(context)).toBe('skill:launch-workflow');
     expect(resolveIdcWorkflowId(context)).toBe('skill:launch-workflow');
   });
 
-  it('escapes workflow skill names before building workflowId', () => {
+  it('escapes workflow skill names before building runKind', () => {
     const context = planningContext({
       activeSkill: {
         name: '剪辑: 快速 workflow',
@@ -62,6 +64,9 @@ describe('idc-turn-planning', () => {
       } as never,
     });
 
+    expect(resolveIdcRunKind(context)).toBe(
+      'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+    );
     expect(resolveIdcWorkflowId(context)).toBe(
       'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
     );
@@ -76,6 +81,7 @@ describe('idc-turn-planning', () => {
     const entrySignal = classifyIdcEntrySignal({ ...signals(), taskShape }, context);
 
     expect(entrySignal).toBe('referenced-artifact');
+    expect(resolveIdcRunKind(context)).toBe('artifact-resume');
     expect(resolveIdcWorkflowId(context)).toBe('artifact-resume');
   });
 
@@ -98,6 +104,7 @@ describe('idc-turn-planning', () => {
         idc: {
           taskShape: 'plan-only',
           entrySignal: 'workflow-template',
+          runKind: 'custom-run-kind',
           workflowId: 'custom-workflow',
         },
       },
@@ -108,15 +115,30 @@ describe('idc-turn-planning', () => {
 
     expect(taskShape).toBe('plan-only');
     expect(entrySignal).toBe('workflow-template');
-    expect(resolveIdcWorkflowId(context)).toBe('custom-workflow');
+    expect(resolveIdcRunKind(context)).toBe('custom-run-kind');
+    expect(resolveIdcWorkflowId(context)).toBe('custom-run-kind');
   });
 
-  it('uses plan-mode workflow id when the turn is forced into plan execution mode', () => {
+  it('falls back to legacy workflowId metadata when runKind is absent', () => {
+    const context = planningContext({
+      metadata: {
+        idc: {
+          workflowId: 'legacy-workflow-only',
+        },
+      },
+    });
+
+    expect(resolveIdcRunKind(context)).toBe('legacy-workflow-only');
+    expect(resolveIdcWorkflowId(context)).toBe('legacy-workflow-only');
+  });
+
+  it('uses plan-mode run kind when the turn is forced into plan execution mode', () => {
     const context = planningContext({
       input: 'Outline the migration plan',
       executionMode: 'plan',
     });
 
+    expect(resolveIdcRunKind(context)).toBe('plan-mode');
     expect(resolveIdcWorkflowId(context)).toBe('plan-mode');
   });
 });

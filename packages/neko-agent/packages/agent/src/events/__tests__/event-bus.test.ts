@@ -22,6 +22,7 @@ function creationStarted(runId = 'r1', at = 1): DualFlowEvent {
   return {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId,
+    runKind: 'wf',
     workflowId: 'wf',
     at,
   };
@@ -60,7 +61,7 @@ describe('EventBus', () => {
   it('typed payload is narrowed via channel generic', () => {
     const bus = createEventBus();
     bus.on(CREATION_CHANNELS.RUN_STARTED, (event) => {
-      // Type narrowing: `event.workflowId` only exists on CreationRunStartedEvent.
+      expect(event.runKind).toBe('wf');
       expect(event.workflowId).toBe('wf');
     });
     bus.emit(creationStarted());
