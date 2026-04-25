@@ -1,4 +1,4 @@
-# ADR: Skill as Prompt-Chains — phases DSL 退化为自然语言编排
+# ADR: Skill as Prompt-Chains — phases DSL 退化为 IDC 下的轻量工作流
 
 ## 状态
 
@@ -25,7 +25,7 @@ pipelines:
 ---
 ```
 
-这一设计在初期看起来"工整、机器可分析、UI 可展示"，但经过实际落地与跨生态对比后，发现是 §11.6 反模式 #4（**硬编码 LLM 行为策略**）的具体实例，违反 §11.5（**AI 原生执行**）核心原则。本 ADR 把 phases / pipelines 从 DSL 退化为 markdown 章节惯例（**prompt-chains**），保留必要的安全/权限 DSL 边界。
+这一设计在初期看起来"工整、机器可分析、UI 可展示"，但经过实际落地与跨生态对比后，发现是 §11.6 反模式 #4（**硬编码 LLM 行为策略**）的具体实例，违反 §11.5（**AI 原生执行**）核心原则。本 ADR 把 phases / pipelines 从 DSL 退化为 markdown 章节惯例（**prompt-chains**），把 Skill 工作流表达降为 **IDC 框架下的轻量化工作流提示**，用于帮助 Agent 判断先理解、再计划、后执行等先后关系；同时保留必要的安全/权限 DSL 边界。
 
 ### 问题 1：违反 §11.5 AI 原生执行原则
 
@@ -38,9 +38,9 @@ pipelines:
   AI 想跳过 review 做快速 edit？被 DSL 锁死。
 
 §11.5 期望行为：
-  AI 自主判断顺序，根据当前任务复杂度调整
-  快速任务可以并行做 review + edit
-  关键任务可以多轮迭代 review
+  IDC 框架给出 Draft / Plan / Apply 的阶段边界
+  prompt-chains 给出 Skill 领域内的轻量先后流程
+  AI 在该范围内根据任务复杂度自主合并、跳过、迭代
 ```
 
 ### 问题 2：违反 §11.6.4 反模式
@@ -91,9 +91,19 @@ Anthropic 自家最成功的 coding agent（Claude Code / Codex）**完全不使
 
 ## 决策
 
-### 1. phases / pipelines 退化为 markdown 章节惯例
+### 1. phases / pipelines 退化为 IDC 下的 markdown 轻量工作流
 
-**Skill 不再以 DSL 字段承载编排**——取而代之的是 persona body 中的自然语言描述，遵循约定的 markdown 章节惯例：
+**Skill 不再以 DSL 字段承载编排**——取而代之的是 persona body 中的自然语言描述，遵循约定的 markdown 章节惯例。prompt-chains 不是“无流程”，而是**轻量化工作流**：它在 IDC 的 Draft / Plan / Apply 大框架内，向 Agent 说明某个 Skill 的典型执行先后、关键判断点和失败恢复方式。
+
+职责边界如下：
+
+| 层 | 职责 | 是否机器调度 |
+|---|---|---|
+| IDC ControlPlane / StagePlanner | 决定当前轮次处于 Draft / Plan / Apply 哪个阶段，处理模式、风险、artifact 状态 | 是 |
+| Skill prompt-chains | 描述该 Skill 在 IDC 阶段内应如何理解任务、产出方案、执行动作、处理失败 | 否 |
+| Tool / Approval / Compliance DSL | 限制可调用工具、审批门槛、安全策略 | 是 |
+
+因此，prompt-chains 的目标是**帮助 Agent 在 IDC 框架下确定执行先后流程**，而不是替代 IDC，也不是重新引入可由程序解析的 workflow DSL：
 
 ```yaml
 ---
@@ -117,12 +127,13 @@ recommendedStages: [plan, apply]   # optional 软提示
 
 ## 工作流程
 
-当用户要求创作 TikTok 视频时，按以下方式工作：
+当用户要求创作 TikTok 视频时，通常按以下方式工作；若任务很小，可合并相邻步骤，若风险较高，可多轮回到 Draft / Plan：
 
-1. **理解阶段**：先用 Read 看相关素材，用 Grep 找参考案例
-2. **方案阶段**：写 Draft 描述创意方向，列出 3-5 个钩子设计
-3. **执行阶段**：用 cut.trim_clip 剪辑核心镜头
-4. **导出阶段**：timeline.export 时记得选 9:16 竖屏 / 30fps
+1. **理解**：先用 Read 看相关素材，用 Grep 找参考案例
+2. **方案**：写 Draft 描述创意方向，列出 3-5 个钩子设计
+3. **计划**：把已确认的 Draft 编译为 Plan / Task 清单
+4. **执行**：进入 Apply 后用 cut.trim_clip 剪辑核心镜头
+5. **导出**：timeline.export 时记得选 9:16 竖屏 / 30fps
 
 ## 关键决策点
 
@@ -200,18 +211,18 @@ phases 现有的所有"功能"都可以由更优机制承载：
 
 ### 5. prompt-chains 写作约定（推荐章节）
 
-虽然不是 DSL，仍约定 markdown 章节结构作为最佳实践：
+虽然不是 DSL，仍约定 markdown 章节结构作为最佳实践。这里的“工作流程”是 **IDC 下的轻量化先后指导**：它应让 Agent 知道通常先做什么、后做什么、哪些条件下跳过或回退，但不应让运行时解析成强制状态机。
 
 | 章节 | 用途 | 必填 |
 |---|---|---|
-| `## 工作流程` | 描述典型步骤序列 | 推荐 |
+| `## 工作流程` | 描述 IDC 框架内的典型先后流程、可跳过条件和回退条件 | 推荐 |
 | `## 关键决策点` | 列出判断准则与标准 | 推荐 |
 | `## 失败处理` | 常见错误及恢复策略 | 推荐 |
 | `## 与其他 Skill 协作` | 何时切换 / spawn 其他 Skill | 可选 |
 | `## 反模式` | 明确不该做什么 | 可选 |
 | `## 示例对话` | few-shot 样本 | 可选 |
 
-**关键**：这些章节**不是机器解析的**——AI 阅读后形成认知。是 prompt-chains 写作惯例（类似 README 的 Installation/Usage 章节惯例），约定俗成而非强制。
+**关键**：这些章节**不是机器解析的**——AI 阅读后形成认知，用来在 IDC 阶段内安排先后流程。是 prompt-chains 写作惯例（类似 README 的 Installation/Usage 章节惯例），约定俗成而非强制。
 
 ### 6. 跨平台互通自然达成
 
@@ -404,7 +415,7 @@ recommendedStages: [draft, plan, apply]  # 从 phases artifact 关联推断（op
 | 4 | 用 mermaid 图描述工作流 | mermaid 是结构化 DSL 的另一种表达，违反 §11.5 |
 | 5 | 推荐章节强制必填 | 是惯例非强制，强制等于变相 DSL |
 | 6 | 把 stage 名字写死在 body 里（"必须先 Draft 再 Plan"） | 锁死 IDC 三阶段，AI 应能跳过简单情况的 Draft |
-| 7 | 把"工作流程"章节做成有序列表锁定顺序 | 推荐用"以下步骤"而非强制顺序 |
+| 7 | 把"工作流程"章节写成不可跳过的硬顺序 | 推荐写成 IDC 下的典型先后流程，并说明可合并 / 跳过 / 回退条件 |
 | 8 | StagePlanner 还读 phases 字段 | 应该改为读 artifact 状态（决策 3）|
 | 9 | UI 仍按 phases 渲染进度 | 应该改为渲染 task status |
 | 10 | 把 SubAgent 协作做成 pipelines DSL | 应让 AI 在 body 描述触发条件 |
@@ -441,4 +452,4 @@ recommendedStages: [draft, plan, apply]  # 从 phases artifact 关联推断（op
 
 ---
 
-**核心承诺**：本 ADR 把 neko Skill 从"半 DSL 半自然语言"修正为"安全/权限 DSL + 编排 prompt-chains"——前者是程序必需的硬约束（allowedTools / compliance / trustLevel），后者让 AI 真正主导工作流（§11.5 AI 原生执行）。退化 phases / pipelines 后，**演化能力 Skill 层 A- → A、跨平台互通自然达成、维护成本下降、§11.5 / §11.6.4 完美对齐**——是架构上的纯收益修正，对齐 Claude Code 实证经验，关闭"对称美学诱导债"的最后入口。
+**核心承诺**：本 ADR 把 neko Skill 从"半 DSL 半自然语言"修正为"安全/权限 DSL + IDC 下的轻量工作流 prompt-chains"——前者是程序必需的硬约束（allowedTools / compliance / trustLevel），后者让 AI 在 IDC 框架内理解领域流程、判断执行先后、按任务复杂度合并 / 跳过 / 回退（§11.5 AI 原生执行）。退化 phases / pipelines 后，**演化能力 Skill 层 A- → A、跨平台互通自然达成、维护成本下降、§11.5 / §11.6.4 完美对齐**——是架构上的纯收益修正，对齐 Claude Code 实证经验，关闭"对称美学诱导债"的最后入口。
