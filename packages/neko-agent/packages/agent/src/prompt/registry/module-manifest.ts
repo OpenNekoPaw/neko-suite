@@ -23,6 +23,9 @@ import type { PromptContext } from '../context';
  *   and removes any previously-owned sections.
  * - `priority`: used as the default `priority` for emitted sections.
  * - `cost`: hint for future parallel/serial scheduling; currently informational.
+ * - `dependsOn`: optional module ids that must be applied before this module
+ *   when callers use ModuleOrchestrator.applyAll/applyAllSync(). Missing or
+ *   circular dependencies are treated as configuration errors.
  * - `cacheKey`: if provided, return a stable key per ctx; orchestrator reuses
  *   the last render output if the key matches. Return null to opt out per call.
  */
@@ -32,6 +35,7 @@ export interface PromptModuleManifest {
   readonly requires: readonly (keyof PromptContext)[];
   readonly priority: number;
   readonly cost: 'free' | 'cheap' | 'expensive';
+  readonly dependsOn?: readonly string[];
   readonly cacheKey?: (ctx: PromptContext) => string | null;
 }
 

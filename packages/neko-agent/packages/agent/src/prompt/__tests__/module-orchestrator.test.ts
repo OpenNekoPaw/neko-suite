@@ -28,6 +28,7 @@ function makeModule(
     layers?: ('base' | 'skill' | 'environment' | 'ephemeral')[];
     requires?: (keyof PromptContext)[];
     priority?: number;
+    dependsOn?: string[];
     cacheKey?: (ctx: PromptContext) => string | null;
     render: (ctx: PromptContext) => Promise<PromptModuleSection[] | null>;
     renderSync?: (ctx: PromptContext) => PromptModuleSection[] | null;
@@ -40,6 +41,7 @@ function makeModule(
       requires: overrides.requires ?? [],
       priority: overrides.priority ?? 50,
       cost: 'free',
+      ...(overrides.dependsOn ? { dependsOn: overrides.dependsOn } : {}),
       ...(overrides.cacheKey && { cacheKey: overrides.cacheKey }),
     },
     render: overrides.render,
@@ -210,6 +212,106 @@ describe('ModuleOrchestrator', () => {
     expect(calls.sort()).toEqual(['a', 'b']);
     expect(composer.hasSection('a:s')).toBe(true);
     expect(composer.hasSection('b:s')).toBe(true);
+  });
+
+  it('applyAll honors manifest.dependsOn instead of registry insertion order', async () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+    const calls: string[] = [];
+
+    registry.register(
+      makeModule('dependent', {
+        dependsOn: ['base'],
+        render: async () => {
+          calls.push('dependent');
+          return [{ sectionId: 'dependent:s', layer: 'skill', content: 'dependent' }];
+        },
+      }),
+    );
+    registry.register(
+      makeModule('base', {
+        render: async () => {
+          calls.push('base');
+          return [{ sectionId: 'base:s', layer: 'skill', content: 'base' }];
+        },
+      }),
+    );
+
+    await orch.applyAll(minimalCtx());
+
+    expect(calls).toEqual(['base', 'dependent']);
+  });
+
+  it('applyAllSync honors manifest.dependsOn for synchronous modules', () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+    const calls: string[] = [];
+
+    registry.register(
+      makeModule('late', {
+        dependsOn: ['early'],
+        render: async () => null,
+        renderSync: () => {
+          calls.push('late');
+          return [{ sectionId: 'late:s', layer: 'skill', content: 'late' }];
+        },
+      }),
+    );
+    registry.register(
+      makeModule('early', {
+        render: async () => null,
+        renderSync: () => {
+          calls.push('early');
+          return [{ sectionId: 'early:s', layer: 'skill', content: 'early' }];
+        },
+      }),
+    );
+
+    orch.applyAllSync(minimalCtx());
+
+    expect(calls).toEqual(['early', 'late']);
+  });
+
+  it('throws when a declared dependency is missing', async () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+
+    registry.register(
+      makeModule('orphan', {
+        dependsOn: ['missing'],
+        render: async () => [{ sectionId: 'orphan:s', layer: 'skill', content: 'orphan' }],
+      }),
+    );
+
+    await expect(orch.applyAll(minimalCtx())).rejects.toThrow(/depends on missing module/i);
+  });
+
+  it('throws when dependencies form a cycle', async () => {
+    const registry = new PromptModuleRegistry();
+    const composer = new SystemPromptComposer();
+    const cache = new PromptSectionCache();
+    const orch = new ModuleOrchestrator(registry, composer, cache);
+
+    registry.register(
+      makeModule('a', {
+        dependsOn: ['b'],
+        render: async () => [{ sectionId: 'a:s', layer: 'skill', content: 'a' }],
+      }),
+    );
+    registry.register(
+      makeModule('b', {
+        dependsOn: ['a'],
+        render: async () => [{ sectionId: 'b:s', layer: 'skill', content: 'b' }],
+      }),
+    );
+
+    await expect(orch.applyAll(minimalCtx())).rejects.toThrow(/circular dependency/i);
   });
 
   it('applyOneSync uses renderSync and participates in cache/ownership tracking', () => {

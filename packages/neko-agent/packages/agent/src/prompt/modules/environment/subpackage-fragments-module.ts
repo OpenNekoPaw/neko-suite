@@ -31,6 +31,7 @@ export class SubpackageFragmentsModule implements PromptModule {
     requires: [],
     priority: DEFAULT_FRAGMENT_PRIORITY,
     cost: 'free',
+    dependsOn: ['agents-md'],
   };
 
   private _fragments: readonly PromptFragment[] = [];

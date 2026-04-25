@@ -46,7 +46,7 @@ export class ModuleOrchestrator {
    * Returns after all modules have either rendered or been skipped.
    */
   async applyAll(ctx: PromptContext): Promise<void> {
-    for (const module of this._registry.all()) {
+    for (const module of this._orderedModules()) {
       await this.applyOne(module, ctx);
     }
   }
@@ -55,7 +55,7 @@ export class ModuleOrchestrator {
    * Synchronous counterpart to applyAll for modules that expose renderSync().
    */
   applyAllSync(ctx: PromptContext): void {
-    for (const module of this._registry.all()) {
+    for (const module of this._orderedModules()) {
       this.applyOneSync(module, ctx);
     }
   }
@@ -150,6 +150,43 @@ export class ModuleOrchestrator {
   }
 
   // --- Internal helpers ---
+
+  private _orderedModules(): readonly PromptModule[] {
+    const modules = this._registry.all();
+    const byId = new Map(modules.map((module) => [module.manifest.id, module] as const));
+    const visitState = new Map<string, 'visiting' | 'visited'>();
+    const ordered: PromptModule[] = [];
+
+    const visit = (module: PromptModule, chain: readonly string[]): void => {
+      const moduleId = module.manifest.id;
+      const state = visitState.get(moduleId);
+      if (state === 'visited') return;
+      if (state === 'visiting') {
+        throw new Error(
+          `ModuleOrchestrator: circular dependency detected (${[...chain, moduleId].join(' -> ')})`,
+        );
+      }
+
+      visitState.set(moduleId, 'visiting');
+      for (const dependencyId of module.manifest.dependsOn ?? []) {
+        const dependency = byId.get(dependencyId);
+        if (!dependency) {
+          throw new Error(
+            `ModuleOrchestrator: module '${moduleId}' depends on missing module '${dependencyId}'`,
+          );
+        }
+        visit(dependency, [...chain, moduleId]);
+      }
+      visitState.set(moduleId, 'visited');
+      ordered.push(module);
+    };
+
+    for (const module of modules) {
+      visit(module, []);
+    }
+
+    return ordered;
+  }
 
   private _missesRequirements(
     requires: readonly (keyof PromptContext)[],

@@ -25,6 +25,7 @@ export class MemoryProjectModule implements PromptModule {
     requires: [],
     priority: 60,
     cost: 'free',
+    dependsOn: ['subpackage.fragments'],
   };
 
   private _content: string | null = null;

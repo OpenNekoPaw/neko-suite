@@ -20,6 +20,7 @@ export class FeedbackGuidanceModule implements PromptModule {
     requires: [],
     priority: 45,
     cost: 'free',
+    dependsOn: ['artifact.schema'],
   };
 
   private _content: string | null = null;

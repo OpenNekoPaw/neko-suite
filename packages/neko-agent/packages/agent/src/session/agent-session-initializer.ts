@@ -258,13 +258,17 @@ export function initializeSession(
   const artifactSchemaModule = new ArtifactSchemaModule();
   const subpackageFragmentsModule = new SubpackageFragmentsModule();
   const promptModuleRegistry = new PromptModuleRegistry();
-  promptModuleRegistry.register(agentsMdModule);
-  promptModuleRegistry.register(subpackageFragmentsModule);
-  promptModuleRegistry.register(memoryProjectModule);
-  promptModuleRegistry.register(memoryRecallModule);
-  promptModuleRegistry.register(feedbackGuidanceModule);
-  promptModuleRegistry.register(creativeVersionLogModule);
-  promptModuleRegistry.register(artifactSchemaModule);
+  for (const module of [
+    memoryRecallModule,
+    agentsMdModule,
+    creativeVersionLogModule,
+    artifactSchemaModule,
+    subpackageFragmentsModule,
+    feedbackGuidanceModule,
+    memoryProjectModule,
+  ]) {
+    promptModuleRegistry.register(module);
+  }
   const promptModuleOrchestrator = new ModuleOrchestrator(
     promptModuleRegistry,
     promptComposer,
@@ -277,19 +281,13 @@ export function initializeSession(
   // content we project it through the module into the environment layer
   // at priority 80. Happens before the memory subscriptions below so the
   // final prompt interleaves correctly.
-  if (config.agentsOverride) {
-    agentsMdModule.setContent(config.agentsOverride);
-    promptModuleOrchestrator.applyOneSync(agentsMdModule, initialPromptContext());
-  }
+  agentsMdModule.setContent(config.agentsOverride ?? null);
 
   // PR3e: sub-package prompt fragments — one composer section per
   // fragment at ids `fragment:${f.id}`. Uses removeSectionsByPrefix to
   // clear any prior `fragment:*` sections in one sweep (cheap, and keeps
   // the initializer idempotent if it were ever called twice).
-  if (config.promptFragments && config.promptFragments.length > 0) {
-    subpackageFragmentsModule.setFragments(config.promptFragments);
-    promptModuleOrchestrator.applyOneSync(subpackageFragmentsModule, initialPromptContext());
-  }
+  subpackageFragmentsModule.setFragments(config.promptFragments);
 
   // Inject project memory via MemoryProjectModule (renderSync for in-line
   // update: event handlers fire synchronously and the composer state must
@@ -299,9 +297,11 @@ export function initializeSession(
       memoryProjectModule.setContent(content);
       promptModuleOrchestrator.applyOneSync(memoryProjectModule, initialPromptContext());
     };
-    injectProject(config.projectMemoryManager.getContent());
+    memoryProjectModule.setContent(config.projectMemoryManager.getContent());
     config.projectMemoryManager.on('change', injectProject);
   }
+
+  promptModuleOrchestrator.applyAllSync(initialPromptContext());
 
   const history: ChatMessage[] = [{ role: 'system', content: promptComposer.compose() }];
 

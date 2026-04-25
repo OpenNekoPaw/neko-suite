@@ -23,6 +23,7 @@ export class CreativeVersionLogModule implements PromptModule {
     requires: [],
     priority: 30,
     cost: 'free',
+    dependsOn: ['memory.recall'],
   };
 
   private _summary: string | null = null;

@@ -24,6 +24,7 @@ export class MemoryRecallModule implements PromptModule {
     requires: [],
     priority: 40,
     cost: 'cheap',
+    dependsOn: ['feedback.guidance'],
   };
 
   private _content: string | null = null;
