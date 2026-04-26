@@ -1,4 +1,13 @@
-import type { AgentContext, ChatMessage, ExecutorHooks, IProjectMemoryManager } from '@neko/shared';
+import type {
+  AgentContext,
+  AgentObservation,
+  ChatMessage,
+  DecisionRationale,
+  ExecutorHooks,
+  IProjectMemoryManager,
+  PerceptionEvidence,
+  SubagentReviewResult,
+} from '@neko/shared';
 import type { ArtifactKind, ExecutionArtifactInvalidEvent, IdcStage } from '@neko-agent/types';
 import { EXECUTION_CHANNELS } from '@neko-agent/types';
 import type { IEventBus } from '../events';
@@ -125,6 +134,7 @@ export type FeedbackSignal =
       readonly failingSceneIndexes: readonly number[];
       readonly remediationCount: number;
       readonly runId?: string;
+      readonly evidence?: PerceptionEvidence;
     }
   | {
       readonly kind: 'memory-extraction';
@@ -144,6 +154,24 @@ export type FeedbackSignal =
       readonly conceptDecisions?: readonly ProviderExpressionConceptDecision[];
       readonly runId?: string;
       readonly metadata: Record<string, unknown>;
+    }
+  | {
+      readonly kind: 'agent-observation';
+      readonly observedAt: number;
+      readonly observation: AgentObservation;
+      readonly runId?: string;
+    }
+  | {
+      readonly kind: 'decision-rationale';
+      readonly observedAt: number;
+      readonly rationale: DecisionRationale;
+      readonly runId?: string;
+    }
+  | {
+      readonly kind: 'subagent-review';
+      readonly observedAt: number;
+      readonly review: SubagentReviewResult;
+      readonly runId?: string;
     };
 
 export type FeedbackDecision =
@@ -178,6 +206,7 @@ export type FeedbackDecision =
       readonly failingSceneIndexes: readonly number[];
       readonly remediationCount: number;
       readonly runId?: string;
+      readonly evidenceId?: string;
     }
   | {
       readonly action: 'continue';
@@ -205,6 +234,31 @@ export type FeedbackDecision =
     }
   | {
       readonly action: 'continue';
+      readonly signalKind: 'agent-observation';
+      readonly observationId: string;
+      readonly confidence: AgentObservation['confidence'];
+      readonly evidenceIds: readonly string[];
+    }
+  | {
+      readonly action: 'continue';
+      readonly signalKind: 'decision-rationale';
+      readonly rationaleId: string;
+      readonly confidence: DecisionRationale['confidence'];
+      readonly observationIds: readonly string[];
+      readonly evidenceIds: readonly string[];
+      readonly riskLevel?: NonNullable<DecisionRationale['risk']>['level'];
+    }
+  | {
+      readonly action: 'continue';
+      readonly signalKind: 'subagent-review';
+      readonly requestId: string;
+      readonly reviewerId: string;
+      readonly evidenceIds: readonly string[];
+      readonly recommendationIds: readonly string[];
+      readonly runId?: string;
+    }
+  | {
+      readonly action: 'continue';
       readonly reason: 'no-actionable-signal';
     };
 
@@ -215,6 +269,16 @@ export interface FeedbackControlPolicy {
    * escalate the issue back to the user.
    */
   readonly escalationThreshold?: number;
+  /**
+   * When true, low-confidence rationale without an AgentObservation receives
+   * guidance instead of silently clearing feedback state.
+   */
+  readonly agentObservationRequired?: boolean;
+  /**
+   * Controls only guidance wording. The arbiter never invokes tools directly;
+   * the Agent remains responsible for choosing whether to attach evidence.
+   */
+  readonly toolEvidenceMode?: 'off' | 'optional' | 'required-for-low-confidence';
 }
 
 export type FeedbackFlowAction =
@@ -559,6 +623,8 @@ function trimHistory<T>(history: T[]): readonly T[] {
 
 const DEFAULT_CONTROL_POLICY: Required<FeedbackControlPolicy> = {
   escalationThreshold: 2,
+  agentObservationRequired: false,
+  toolEvidenceMode: 'optional',
 };
 
 function feedbackSignalFromArtifactInvalidEvent(
@@ -621,6 +687,7 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
                 failingSceneIndexes: [...signal.failingSceneIndexes],
                 remediationCount: signal.remediationCount,
                 ...(signal.runId ? { runId: signal.runId } : {}),
+                ...(signal.evidence ? { evidenceId: signal.evidence.id } : {}),
               });
               break;
             }
@@ -651,6 +718,39 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
               ...(signal.providerId ? { providerId: signal.providerId } : {}),
               ...(signal.reason ? { reason: signal.reason } : {}),
               ...(signal.styleFamily ? { styleFamily: signal.styleFamily } : {}),
+            });
+            break;
+          case 'agent-observation':
+            decisions.push({
+              action: 'continue',
+              signalKind: signal.kind,
+              observationId: signal.observation.id,
+              confidence: signal.observation.confidence,
+              evidenceIds: [...signal.observation.evidenceIds],
+            });
+            break;
+          case 'decision-rationale':
+            decisions.push({
+              action: 'continue',
+              signalKind: signal.kind,
+              rationaleId: signal.rationale.id,
+              confidence: signal.rationale.confidence,
+              observationIds: [...signal.rationale.observationIds],
+              evidenceIds: [...signal.rationale.evidenceIds],
+              ...(signal.rationale.risk ? { riskLevel: signal.rationale.risk.level } : {}),
+            });
+            break;
+          case 'subagent-review':
+            decisions.push({
+              action: 'continue',
+              signalKind: signal.kind,
+              requestId: signal.review.requestId,
+              reviewerId: signal.review.reviewerId,
+              evidenceIds: signal.review.evidence.map((evidence) => evidence.id),
+              recommendationIds: signal.review.recommendations.map(
+                (recommendation) => recommendation.id,
+              ),
+              ...(signal.runId ? { runId: signal.runId } : {}),
             });
             break;
         }
@@ -782,6 +882,12 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
           case 'memorize':
             break;
           case 'continue':
+            appendAgentFirstContinueGuidance(
+              decision,
+              effectivePolicy,
+              guidanceBlocks,
+              guidanceKinds,
+            );
             break;
         }
       }
@@ -807,6 +913,101 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
       ];
     },
   };
+}
+
+function appendAgentFirstContinueGuidance(
+  decision: Extract<FeedbackDecision, { action: 'continue' }>,
+  policy: Required<FeedbackControlPolicy>,
+  guidanceBlocks: string[],
+  guidanceKinds: Set<FeedbackSignal['kind']>,
+): void {
+  if (!('signalKind' in decision)) {
+    return;
+  }
+
+  if (decision.signalKind === 'agent-observation') {
+    const guidance = buildLowConfidenceEvidenceGuidance({
+      subject: `AgentObservation ${decision.observationId}`,
+      confidence: decision.confidence,
+      evidenceCount: decision.evidenceIds.length,
+      policy,
+      requiresObservation: false,
+    });
+    if (guidance) {
+      guidanceKinds.add(decision.signalKind);
+      guidanceBlocks.push(guidance);
+    }
+    return;
+  }
+
+  if (decision.signalKind === 'subagent-review') {
+    if (decision.recommendationIds.length > 0) {
+      guidanceKinds.add(decision.signalKind);
+      guidanceBlocks.push(
+        `Subagent reviewer ${decision.reviewerId} returned ${decision.evidenceIds.length} evidence item(s) ` +
+          `and ${decision.recommendationIds.length} recommendation(s) for request ${decision.requestId}. ` +
+          'Treat them as review evidence only; the main Agent must form the final rationale before acting.',
+      );
+    }
+    return;
+  }
+
+  if (decision.signalKind === 'decision-rationale') {
+    const guidance = buildLowConfidenceEvidenceGuidance({
+      subject: `DecisionRationale ${decision.rationaleId}`,
+      confidence: decision.confidence,
+      evidenceCount: decision.evidenceIds.length,
+      policy,
+      requiresObservation: policy.agentObservationRequired && decision.observationIds.length === 0,
+      riskLevel: decision.riskLevel,
+    });
+    if (guidance) {
+      guidanceKinds.add(decision.signalKind);
+      guidanceBlocks.push(guidance);
+    }
+  }
+}
+
+function buildLowConfidenceEvidenceGuidance(input: {
+  readonly subject: string;
+  readonly confidence: AgentObservation['confidence'];
+  readonly evidenceCount: number;
+  readonly policy: Required<FeedbackControlPolicy>;
+  readonly requiresObservation: boolean;
+  readonly riskLevel?: NonNullable<DecisionRationale['risk']>['level'];
+}): string | null {
+  const needsEvidence =
+    input.confidence === 'low' || input.confidence === 'unknown' || input.requiresObservation;
+  if (!needsEvidence) {
+    return null;
+  }
+
+  const riskPrefix =
+    input.riskLevel === 'high'
+      ? 'Do not perform high-risk or irreversible project-state mutation yet. '
+      : '';
+  const observationClause = input.requiresObservation
+    ? 'Attach an AgentObservation before relying on this rationale. '
+    : '';
+
+  switch (input.policy.toolEvidenceMode) {
+    case 'off':
+      return (
+        `${riskPrefix}${observationClause}${input.subject} has ${input.confidence} confidence. ` +
+        'State the uncertainty and ask the user for clarification before risky mutation.'
+      );
+    case 'required-for-low-confidence':
+      return (
+        `${riskPrefix}${observationClause}${input.subject} has ${input.confidence} confidence ` +
+        `with ${input.evidenceCount} attached evidence item(s). The arbiter is guidance-only: ` +
+        'the Agent should attach evidence or obtain user confirmation before unsafe mutation.'
+      );
+    case 'optional':
+      return (
+        `${riskPrefix}${observationClause}${input.subject} has ${input.confidence} confidence. ` +
+        'The Agent may attach optional tool, memory, subagent, or user evidence before proceeding.'
+      );
+  }
 }
 
 function getRepeatCount(
@@ -865,6 +1066,12 @@ function signalSignature(signal: FeedbackSignal): string {
       return `memory-extraction|${signal.extraction.sourceEventIds.join(',')}|${signal.observedAt}`;
     case 'provider-card-observation':
       return `provider-card-observation|${signal.runId ?? ''}|${signal.toolCallId}|${signal.mode}|${signal.providerId ?? ''}|${signal.reason ?? ''}`;
+    case 'agent-observation':
+      return `agent-observation|${signal.runId ?? ''}|${signal.observation.id}`;
+    case 'decision-rationale':
+      return `decision-rationale|${signal.runId ?? ''}|${signal.rationale.id}`;
+    case 'subagent-review':
+      return `subagent-review|${signal.runId ?? ''}|${signal.review.requestId}|${signal.review.reviewerId}`;
   }
 }
 

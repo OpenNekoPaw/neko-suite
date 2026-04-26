@@ -17,3 +17,12 @@ export {
   type ProviderExpressionConceptDecision,
   type IFeedbackCoordinator,
 } from './feedback-coordinator';
+
+export {
+  createQualityReviewEvidence,
+  type QualityReviewEvidenceInput,
+  type QualityReviewEvidenceResult,
+  type QualityReviewEvidenceSummary,
+  type QualityReviewEvaluationSummary,
+  type QualityReviewFeedbackPayload,
+} from './quality-review-evidence';

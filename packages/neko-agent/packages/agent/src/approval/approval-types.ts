@@ -43,7 +43,7 @@ export interface ApprovalSubject {
   destructive?: boolean;
   /**
    * Does repeating the same action produce the same result? Informs
-   * partial-rerun policies.
+   * recovery guidance and retry policies.
    */
   idempotent?: boolean;
 }

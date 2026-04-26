@@ -8,7 +8,7 @@
  * Does NOT require user confirmation — writes are non-destructive upserts.
  */
 
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 import type { IProjectMemoryManager } from '@neko/shared';
 
@@ -19,7 +19,7 @@ export class MemoryWriteTool extends BuiltinTool {
     'Use `upsert` to create or update a named section; use `remove` to delete one. ' +
     'Good sections: "User Preferences", "Project Architecture", "Recent Decisions", "Key Conventions".';
 
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       action: {

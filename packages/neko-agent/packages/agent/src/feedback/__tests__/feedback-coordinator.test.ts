@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ChatMessage, IProjectMemoryManager } from '@neko/shared';
+import {
+  createSubagentReviewEvidence,
+  type AgentObservation,
+  type ChatMessage,
+  type DecisionRationale,
+  type IProjectMemoryManager,
+  type PerceptionEvidence,
+} from '@neko/shared';
 import { EXECUTION_CHANNELS } from '@neko-agent/types';
 import { createEventBus } from '../../events';
 import { createStageTracker } from '../../skill';
@@ -187,6 +194,286 @@ describe('FeedbackCoordinator', () => {
         ],
       }),
     );
+  });
+
+  it('keeps high-confidence Agent observations on the fast continue path', () => {
+    const observation: AgentObservation = {
+      id: 'obs-high',
+      modality: 'image',
+      summary: 'The frame already matches the requested composition.',
+      confidence: 'high',
+      evidenceIds: [],
+      createdAt: 11,
+    };
+    const coordinator = createFeedbackCoordinator({ now: () => 13 });
+
+    coordinator.observe({
+      kind: 'agent-observation',
+      observedAt: 11,
+      observation,
+      runId: 'run-observe',
+    });
+
+    expect(coordinator.evaluatePending({ activeRunId: 'run-observe' })).toEqual({
+      timestamp: 13,
+      activeRunId: 'run-observe',
+      signals: [
+        {
+          kind: 'agent-observation',
+          observedAt: 11,
+          observation,
+          runId: 'run-observe',
+        },
+      ],
+      decisions: [
+        {
+          action: 'continue',
+          signalKind: 'agent-observation',
+          observationId: 'obs-high',
+          confidence: 'high',
+          evidenceIds: [],
+        },
+      ],
+      actions: [
+        {
+          kind: 'clear-guidance',
+          reason: 'continue',
+        },
+      ],
+    });
+  });
+
+  it('guides low-confidence Agent observations to optional evidence without invoking tools', () => {
+    const observation: AgentObservation = {
+      id: 'obs-low',
+      modality: 'video',
+      summary: 'The motion may stutter near the cut point.',
+      confidence: 'low',
+      evidenceIds: [],
+      createdAt: 14,
+    };
+    const coordinator = createFeedbackCoordinator({
+      controlPolicy: { toolEvidenceMode: 'optional' },
+      now: () => 16,
+    });
+
+    coordinator.observe({
+      kind: 'agent-observation',
+      observedAt: 14,
+      observation,
+    });
+
+    expect(coordinator.evaluatePending()).toEqual({
+      timestamp: 16,
+      signals: [
+        {
+          kind: 'agent-observation',
+          observedAt: 14,
+          observation,
+        },
+      ],
+      decisions: [
+        {
+          action: 'continue',
+          signalKind: 'agent-observation',
+          observationId: 'obs-low',
+          confidence: 'low',
+          evidenceIds: [],
+        },
+      ],
+      actions: [
+        {
+          kind: 'set-guidance',
+          guidance:
+            '- AgentObservation obs-low has low confidence. The Agent may attach optional tool, memory, subagent, or user evidence before proceeding.',
+          signalKinds: ['agent-observation'],
+        },
+      ],
+    });
+  });
+
+  it('routes subagent review results as reviewer-only guidance', () => {
+    const evidence = createSubagentReviewEvidence({
+      id: 'evidence-subagent-shot-3',
+      reviewerId: 'reviewer-style-consistency',
+      requestId: 'review-request-shot-3',
+      summary: 'Reviewer confirms shot 3 style drift.',
+      observationId: 'obs-shot-3-style-drift',
+      createdAt: 18,
+    });
+    const coordinator = createFeedbackCoordinator({ now: () => 20 });
+
+    coordinator.observe({
+      kind: 'subagent-review',
+      observedAt: 18,
+      review: {
+        requestId: 'review-request-shot-3',
+        reviewerId: 'reviewer-style-consistency',
+        summary: 'Recommend minimal prompt adjustment.',
+        evidence: [evidence],
+        recommendations: [
+          {
+            id: 'guidance-shot-3-minimal-prompt-adjustment',
+            rationaleId: 'rat-shot-3-recovery-guidance',
+            kind: 'adjust-prompt',
+            summary: 'Regenerate only shot 3 with a tighter style prompt.',
+            recommendedNextStep: 'Adjust the shot 3 prompt before any generation tool call.',
+            evidenceIds: ['evidence-subagent-shot-3'],
+            createdAt: 19,
+          },
+        ],
+        createdAt: 18,
+      },
+      runId: 'run-review',
+    });
+
+    expect(coordinator.evaluatePending({ activeRunId: 'run-review' })).toEqual({
+      timestamp: 20,
+      activeRunId: 'run-review',
+      signals: [
+        {
+          kind: 'subagent-review',
+          observedAt: 18,
+          review: {
+            requestId: 'review-request-shot-3',
+            reviewerId: 'reviewer-style-consistency',
+            summary: 'Recommend minimal prompt adjustment.',
+            evidence: [evidence],
+            recommendations: [
+              {
+                id: 'guidance-shot-3-minimal-prompt-adjustment',
+                rationaleId: 'rat-shot-3-recovery-guidance',
+                kind: 'adjust-prompt',
+                summary: 'Regenerate only shot 3 with a tighter style prompt.',
+                recommendedNextStep: 'Adjust the shot 3 prompt before any generation tool call.',
+                evidenceIds: ['evidence-subagent-shot-3'],
+                createdAt: 19,
+              },
+            ],
+            createdAt: 18,
+          },
+          runId: 'run-review',
+        },
+      ],
+      decisions: [
+        {
+          action: 'continue',
+          signalKind: 'subagent-review',
+          requestId: 'review-request-shot-3',
+          reviewerId: 'reviewer-style-consistency',
+          evidenceIds: ['evidence-subagent-shot-3'],
+          recommendationIds: ['guidance-shot-3-minimal-prompt-adjustment'],
+          runId: 'run-review',
+        },
+      ],
+      actions: [
+        {
+          kind: 'set-guidance',
+          guidance:
+            '- Subagent reviewer reviewer-style-consistency returned 1 evidence item(s) and 1 recommendation(s) for request review-request-shot-3. Treat them as review evidence only; the main Agent must form the final rationale before acting.',
+          signalKinds: ['subagent-review'],
+        },
+      ],
+    });
+  });
+
+  it('keeps required tool evidence mode guidance-only for low-confidence rationale', () => {
+    const rationale: DecisionRationale = {
+      id: 'rat-low-risky',
+      decision: 'recovery-guidance-shot',
+      reason: 'The previous shot render may not match the storyboard intent.',
+      confidence: 'low',
+      observationIds: [],
+      evidenceIds: [],
+      risk: {
+        level: 'high',
+        impactScope: 'medium',
+        reversibility: 'low',
+        budgetCost: 'medium',
+        userVisibility: 'high',
+      },
+      createdAt: 17,
+    };
+    const coordinator = createFeedbackCoordinator({
+      controlPolicy: {
+        agentObservationRequired: true,
+        toolEvidenceMode: 'required-for-low-confidence',
+      },
+      now: () => 19,
+    });
+
+    coordinator.observe({
+      kind: 'decision-rationale',
+      observedAt: 17,
+      rationale,
+      runId: 'run-rationale',
+    });
+
+    expect(coordinator.evaluatePending({ activeRunId: 'run-rationale' })).toEqual({
+      timestamp: 19,
+      activeRunId: 'run-rationale',
+      signals: [
+        {
+          kind: 'decision-rationale',
+          observedAt: 17,
+          rationale,
+          runId: 'run-rationale',
+        },
+      ],
+      decisions: [
+        {
+          action: 'continue',
+          signalKind: 'decision-rationale',
+          rationaleId: 'rat-low-risky',
+          confidence: 'low',
+          observationIds: [],
+          evidenceIds: [],
+          riskLevel: 'high',
+        },
+      ],
+      actions: [
+        {
+          kind: 'set-guidance',
+          guidance:
+            '- Do not perform high-risk or irreversible project-state mutation yet. Attach an AgentObservation before relying on this rationale. DecisionRationale rat-low-risky has low confidence with 0 attached evidence item(s). The arbiter is guidance-only: the Agent should attach evidence or obtain user confirmation before unsafe mutation.',
+          signalKinds: ['decision-rationale'],
+        },
+      ],
+    });
+  });
+
+  it('keeps toolEvidenceMode off guidance user-facing without suggesting tool evidence', () => {
+    const observation: AgentObservation = {
+      id: 'obs-low-off',
+      modality: 'image',
+      summary: 'The subject identity is unclear.',
+      confidence: 'low',
+      evidenceIds: [],
+      createdAt: 21,
+    };
+    const coordinator = createFeedbackCoordinator({
+      controlPolicy: { toolEvidenceMode: 'off' },
+      now: () => 22,
+    });
+
+    coordinator.observe({
+      kind: 'agent-observation',
+      observedAt: 21,
+      observation,
+    });
+
+    const cycle = coordinator.evaluatePending();
+    expect(cycle?.actions).toEqual([
+      {
+        kind: 'set-guidance',
+        guidance:
+          '- AgentObservation obs-low-off has low confidence. State the uncertainty and ask the user for clarification before risky mutation.',
+        signalKinds: ['agent-observation'],
+      },
+    ]);
+    expect(
+      cycle?.actions[0]?.kind === 'set-guidance' ? cycle.actions[0].guidance : '',
+    ).not.toContain('attach optional tool');
   });
 
   it('routes provider expression observations into project provider-card overrides when configured', async () => {
@@ -427,6 +714,15 @@ describe('FeedbackCoordinator', () => {
     const coordinator = createFeedbackCoordinator({
       now: () => 25,
     });
+    const evidence: PerceptionEvidence = {
+      id: 'quality-review:run-quality:call-qc',
+      source: 'tool',
+      summary: 'QualityReview failed 1/2 scene(s): scene(s) 2; 3 remediation hint(s) available.',
+      confidence: 0.5,
+      toolName: 'QualityCheck',
+      createdAt: 20,
+      status: 'active',
+    };
 
     coordinator.observe({
       kind: 'quality-check',
@@ -439,6 +735,7 @@ describe('FeedbackCoordinator', () => {
       failingSceneIndexes: [2],
       remediationCount: 3,
       runId: 'run-quality',
+      evidence,
     });
 
     expect(coordinator.evaluatePending({ activeRunId: 'run-quality' })).toEqual({
@@ -456,6 +753,7 @@ describe('FeedbackCoordinator', () => {
           failingSceneIndexes: [2],
           remediationCount: 3,
           runId: 'run-quality',
+          evidence,
         },
       ],
       decisions: [
@@ -469,6 +767,7 @@ describe('FeedbackCoordinator', () => {
           failingSceneIndexes: [2],
           remediationCount: 3,
           runId: 'run-quality',
+          evidenceId: 'quality-review:run-quality:call-qc',
         },
       ],
       actions: [

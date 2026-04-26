@@ -9,6 +9,23 @@ import type { AgentResult } from '@neko/shared';
 import type { PermissionMode } from '../permission/types';
 import type { AgentSessionConfig, ExecutionContext } from '../session/types';
 
+export type AgentFirstToolEvidenceMode = 'off' | 'optional' | 'required-for-low-confidence';
+
+export interface AgentFirstAblationToggles {
+  /** Single kill switch. false disables Agent-first runtime augmentations where wired. */
+  readonly enabled?: false;
+  /** Observation/rationale Journal recording. false = keep prompt behavior but skip recorder writes. */
+  readonly observation?: false;
+  /** Tool evidence wrapping / feedback policy. false = guidance avoids tool-evidence requirements. */
+  readonly toolEvidence?: false;
+  /** QualityReview evidence wrapper. false = keep legacy quality-check feedback shape only. */
+  readonly qualityReviewEvidence?: false;
+  /** Skill prompt-chain recovery guidance. false = do not inject recovery-specific prompt guidance. */
+  readonly recoveryGuidance?: false;
+  /** Confidence policy override for low-confidence evidence guidance. */
+  readonly toolEvidenceMode?: AgentFirstToolEvidenceMode;
+}
+
 // =============================================================================
 // Feature Toggles
 // =============================================================================
@@ -83,6 +100,11 @@ export interface AblationToggles {
 
   /** Project ProviderCard auto-evolution: false = do not write .neko/providers/*.card.md. */
   providerCardAutoEvolve?: false;
+
+  // --- Agent-first multimodal ---
+
+  /** Agent-first multimodal observation/evidence/recovery toggles. */
+  agentFirst?: AgentFirstAblationToggles;
 
   // --- LLM parameters ---
 

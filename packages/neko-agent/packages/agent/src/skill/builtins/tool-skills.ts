@@ -11,7 +11,7 @@
  */
 
 import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
-import { TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import { TOOL_NAMES_MEDIA, TOOL_NAMES_PERCEPTION, TOOL_NAMES_TIMELINE } from '@neko/shared';
 
 // =============================================================================
 // Resident ToolSets — schema always in LLM context
@@ -326,6 +326,29 @@ export const mediaQAToolSet: ToolGroup = {
 /**
  * All builtin ToolSets — ordered by loading tier
  */
+
+/**
+ * Optional perception evidence tools - Agent remains the primary perceiver.
+ */
+export const perceptionEvidenceToolSet: ToolGroup = {
+  name: 'perception-evidence',
+  description:
+    'Optional evidence tools for Agent-first multimodal perception. These tools attach PerceptionEvidence and do not replace AgentObservation.',
+  tools: [
+    TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT,
+    TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
+    TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
+    TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,
+    TOOL_NAMES_PERCEPTION.VIDEO_DETECT_SHOTS,
+  ],
+  alwaysActive: false,
+  priority: 50,
+  loadingTier: 'lazy',
+  source: 'builtin',
+  enabled: true,
+  icon: '👁️',
+};
+
 export const builtinToolGroups: ToolGroup[] = [
   // Resident
   coreSystemToolSet,
@@ -346,6 +369,7 @@ export const builtinToolGroups: ToolGroup[] = [
   shapeMaskToolSet,
   aiGenerationToolSet,
   mediaQAToolSet,
+  perceptionEvidenceToolSet,
 ];
 
 /**

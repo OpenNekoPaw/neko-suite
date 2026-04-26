@@ -8,7 +8,7 @@
 
 import type { ExecutorHooks } from '@neko/shared';
 import type { AgentSessionConfig } from '../session/types';
-import type { AblationToggles } from './types';
+import type { AblationToggles, AgentFirstToolEvidenceMode } from './types';
 
 /**
  * Collect hook names that should be excluded from the built-in chain.
@@ -45,6 +45,18 @@ export interface AblationMarkerHook extends ExecutorHooks {
   toolInjectionMode?: 'always-only' | 'always+dynamic';
   /** When true, project ProviderCard override auto-writes are disabled. */
   disableProviderCardAutoEvolve: boolean;
+  /** Agent-first single kill switch. */
+  disableAgentFirst: boolean;
+  /** When true, observation/rationale Journal recorder writes are disabled. */
+  disableAgentFirstObservation: boolean;
+  /** When true, tool evidence wrappers/policy are disabled. */
+  disableAgentFirstToolEvidence: boolean;
+  /** When true, QualityReview evidence wrapper is disabled. */
+  disableAgentFirstQualityReviewEvidence: boolean;
+  /** When true, recovery prompt-chain guidance is disabled. */
+  disableAgentFirstRecoveryGuidance: boolean;
+  /** Agent-first tool-evidence guidance mode override. */
+  agentFirstToolEvidenceMode?: AgentFirstToolEvidenceMode;
 }
 
 function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook {
@@ -57,6 +69,18 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     disableSkillInjection: toggles.skillInjection === false,
     disableDynamicToolSets: toggles.dynamicToolSets === false,
     disableProviderCardAutoEvolve: toggles.providerCardAutoEvolve === false,
+    disableAgentFirst: toggles.agentFirst?.enabled === false,
+    disableAgentFirstObservation:
+      toggles.agentFirst?.enabled === false || toggles.agentFirst?.observation === false,
+    disableAgentFirstToolEvidence:
+      toggles.agentFirst?.enabled === false || toggles.agentFirst?.toolEvidence === false,
+    disableAgentFirstQualityReviewEvidence:
+      toggles.agentFirst?.enabled === false || toggles.agentFirst?.qualityReviewEvidence === false,
+    disableAgentFirstRecoveryGuidance:
+      toggles.agentFirst?.enabled === false || toggles.agentFirst?.recoveryGuidance === false,
+    ...(toggles.agentFirst?.toolEvidenceMode !== undefined && {
+      agentFirstToolEvidenceMode: toggles.agentFirst.toolEvidenceMode,
+    }),
     ...(toggles.toolInjection !== undefined && {
       toolInjectionMode: toggles.toolInjection,
     }),
@@ -92,6 +116,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | autoMemoryExtraction  | autoMemoryExtraction = false                        |
  * | memoryRecall          | memoryRecall = false                               |
  * | providerCardAutoEvolve | marker flag for ProviderCard auto-evolution writes |
+ * | agentFirst           | marker flags + feedback control policy           |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
  */
@@ -149,6 +174,22 @@ export function applyAblationToggles(
 
   if (toggles.memoryRecall === false) {
     config.memoryRecall = false;
+  }
+
+  // --- Agent-first multimodal ---
+
+  if (toggles.agentFirst?.toolEvidenceMode !== undefined) {
+    config.feedbackControlPolicy = {
+      ...config.feedbackControlPolicy,
+      toolEvidenceMode: toggles.agentFirst.toolEvidenceMode,
+    };
+  }
+
+  if (toggles.agentFirst?.toolEvidence === false || toggles.agentFirst?.enabled === false) {
+    config.feedbackControlPolicy = {
+      ...config.feedbackControlPolicy,
+      toolEvidenceMode: 'off',
+    };
   }
 
   // --- LLM parameters ---

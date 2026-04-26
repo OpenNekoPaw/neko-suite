@@ -215,3 +215,44 @@ describe('applyAblationToggles — skill/tool marker fields (P1-A)', () => {
     expect(marker.toolInjectionMode).toBeUndefined();
   });
 });
+
+describe('applyAblationToggles — Agent-first marker fields', () => {
+  it('agentFirst.enabled: false disables all Agent-first marker fields and tool evidence policy', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {
+      agentFirst: { enabled: false },
+    });
+    const marker = extractAblationMarker(config.hooks)!;
+
+    expect(marker.disableAgentFirst).toBe(true);
+    expect(marker.disableAgentFirstObservation).toBe(true);
+    expect(marker.disableAgentFirstToolEvidence).toBe(true);
+    expect(marker.disableAgentFirstQualityReviewEvidence).toBe(true);
+    expect(marker.disableAgentFirstRecoveryGuidance).toBe(true);
+    expect(config.feedbackControlPolicy).toEqual({ toolEvidenceMode: 'off' });
+  });
+
+  it('agentFirst.toolEvidenceMode threads through feedback control policy and marker', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {
+      agentFirst: { toolEvidenceMode: 'required-for-low-confidence' },
+    });
+    const marker = extractAblationMarker(config.hooks)!;
+
+    expect(marker.agentFirstToolEvidenceMode).toBe('required-for-low-confidence');
+    expect(marker.disableAgentFirst).toBe(false);
+    expect(config.feedbackControlPolicy).toEqual({
+      toolEvidenceMode: 'required-for-low-confidence',
+    });
+  });
+
+  it('agentFirst.toolEvidence: false disables tool evidence guidance without disabling observation', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {
+      agentFirst: { toolEvidence: false },
+    });
+    const marker = extractAblationMarker(config.hooks)!;
+
+    expect(marker.disableAgentFirst).toBe(false);
+    expect(marker.disableAgentFirstObservation).toBe(false);
+    expect(marker.disableAgentFirstToolEvidence).toBe(true);
+    expect(config.feedbackControlPolicy).toEqual({ toolEvidenceMode: 'off' });
+  });
+});

@@ -45,6 +45,26 @@ export {
   // Draft/Plan/Task write tools removed in Phase B — AI uses generic Write.
 } from './core';
 
+// Perception evidence tools
+export {
+  PERCEPTION_AUDIO_TRANSCRIBE_METADATA,
+  PERCEPTION_IMAGE_SIMILARITY_METADATA,
+  PERCEPTION_IMAGE_CLASSIFY_METADATA,
+  PERCEPTION_DESCRIBE_INPUT_METADATA,
+  PerceptionAudioTranscribeTool,
+  PerceptionImageSimilarityTool,
+  PerceptionImageClassifyTool,
+  PerceptionDescribeInputTool,
+  createPerceptionTools,
+  perceptionToolGroup,
+  type PerceptionAudioTranscribeToolConfig,
+  type PerceptionImageSimilarityToolConfig,
+  type PerceptionImageClassifyToolConfig,
+  type PerceptionClassifyClient,
+  type PerceptionSimilarityClient,
+  type PerceptionTranscribeClient,
+} from './perception';
+
 // Re-export types and constants from shared for convenience
 export type {
   Tool,
@@ -64,6 +84,8 @@ export type {
   LayerTokenUsage,
   IToolInjectionManager,
   InjectionEvent,
+  PerceptionToolMetadata,
+  PerceptionToolResult,
   InjectionEventListener,
 } from '@neko/shared';
 

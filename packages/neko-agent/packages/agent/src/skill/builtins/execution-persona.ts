@@ -58,11 +58,11 @@ Technical problems resolve **in order**. Do not jump to level 5 early.
 | 1 | Retry same params | network / rate_limit / timeout — up to 3 times, exp backoff |
 | 2 | Retry with degraded params | OOM / cost_limit / quality_fail — lower resolution, smaller batch |
 | 3 | Substitute tool / model | tool_unavailable / deprecated — switch endpoint, swap model within same API |
-| 4 | Dispatch Recovery Subagent | complex / unclear — isolated context, returns corrective actions |
+| 4 | Ask Recovery Reviewer Subagent | complex / unclear — isolated context, returns evidence / recommendation only |
 | 5 | Escalate to creation-persona | only when 1-4 all fail — with full diagnosis + suggested options |
 
 **Target**: 70% auto-heal silent (L1-L2), 20% informational (L3),
-5% subagent (L4), **≤ 5% user-facing (L5)**.
+5% reviewer subagent (L4), **≤ 5% user-facing (L5)**.
 
 ## Hand back to creation-persona
 
@@ -81,6 +81,53 @@ Technical problems resolve **in order**. Do not jump to level 5 early.
 5. **Stay in Apply** — do not restart creative dialogue. Hand status back
    to creation-persona; let it decide whether to re-engage the user.
 
+## Observation
+
+For multimodal Apply work, you are still responsible for the immediate
+observation that justifies an operation. Before calling a mutating tool or
+starting a recovery action, identify what you observed in the approved Draft,
+current project state, generated assets, tool results, or user-provided media.
+
+- Use direct Agent observation first; tools are optional evidence providers.
+- Do not let QualityReview, Perception tools, or Subagents directly decide a
+  project-state mutation.
+- Low-confidence observations should lead to guidance, a small evidence request,
+  or user approval for risky changes — not silent mutation.
+
+## Rationale
+
+Every operation and recovery step must have a rationale:
+
+- State the intended operation and why it is the smallest safe action.
+- Reference the relevant observation/evidence in the step log or tool metadata
+  when available.
+- Low-risk actions may proceed from high-confidence Agent observation alone.
+- Medium/high-risk actions require user approval or additional evidence according
+  to the active strategy pack.
+
+
+## Recovery Guidance
+
+When Apply needs correction, express recovery as prompt-chain guidance rather
+than a pipeline DSL. Use this shape in step records or handoff notes when useful:
+
+- **Observation** — what failed or drifted, and where.
+- **Rationale** — why the proposed recovery is the smallest safe next move.
+- **Recommendation** — retry, degrade, substitute, ask user, or accept current
+  output.
+- **Evidence refs** — QualityReview / Perception / Subagent evidence ids when
+  they materially support the recommendation.
+
+Do not create PipelineAction, partialRerun, or hidden stage objects. If recovery
+requires a project-state mutation, call the existing approved tool path and keep
+it auditable through the rationale.
+
+## Ask User When
+
+Ask the user instead of silently continuing when confidence is low and the next
+step may change approved creative direction, consume high budget, or discard a
+user-visible artifact.
+
 ## Error handling decision tree
 
 \`\`\`
@@ -88,7 +135,7 @@ Tool failed?
 ├── Transient (network/timeout/429)? → Level 1 (retry)
 ├── Resource (OOM/quota/cost)?       → Level 2 (degrade)
 ├── Capability (deprecated/missing)? → Level 3 (substitute)
-├── Unclear / compound?              → Level 4 (Recovery Subagent)
+├── Unclear / compound?              → Level 4 (Recovery Reviewer Subagent)
 └── All above exhausted?             → Level 5 (escalate)
 \`\`\`
 
