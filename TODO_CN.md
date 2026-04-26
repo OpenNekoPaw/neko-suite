@@ -69,7 +69,7 @@
 - [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致；与 IDC 重构无关）
 
 ### neko-agent — 工作流编排（Phase 1-6 完成 ✅；六轮解耦评审 ✅）
-> [Umbrella](./docs/architecture/workflow-orchestration.md)
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md)
 - [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
 - [x] **Phase 2 + 2.5** `.nkplan` 持久化 + 状态机 + ConsistencyChecker v1 + Fork/Diff/Checkpoint + PlanBrowser
 - [x] **Phase 3 + 3.5** LLM Router + ask_user broker + router-memory 审查 UI
@@ -389,8 +389,12 @@
 - **neko-story**: 场景工作流状态持久化（StorySceneStateStore + workspaceState）+ 语义分镜入口 + 场景/镜头规划工具 + canvas 移交
 - **neko-agent**: Fountain 流水线接入场景规划 + 语义分镜 canvas 导入管道
 
+### ✅ 架构文档清理（2026-04-26）
+- 移除过时 AI capability / capability registration / dual-flow 探索文档，统一收口到 `agent-unified-workflow.md`、`adr-capability-protocol.md`、`plan-mode.md`、`pipeline-execution.md`
+- 清理 TODO、ROADMAP、架构文档、proto 注释与测试夹具中的旧 workflow umbrella / routing 引用
+
 </details>
 
 ---
 
-*最后更新：2026-04-17（AI 视频参考系统：L0-L5 分层 + 双轴 Provider 能力矩阵 + 3D→2D turnaround + 跨镜头角色绑定 + 运镜翻译 §11 Path A/B/C + 统一 §12 ControlNet 产物 producer（2D ONNX + 3D 渲染 + Puppet，PNG 主输出）收编 controlnet-pipeline.md E5；详见 [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md）。同步新增：AI 生成链路战术级修复 — 7 项代码级缺口修复，日级工作量，作为战略框架的前置 enabler。）*
+*最后更新：2026-04-26（架构文档清理：移除过时 workflow / capability 探索文档，并统一收口到当前 Agent Unified Workflow + Capability Protocol ADR。）*

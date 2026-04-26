@@ -1,7 +1,7 @@
 /**
  * ProgressNarrator — pure text composer for user-facing progress.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.2 Status
+ * See: docs/architecture/agent-unified-workflow.md §2
  *      plan v2 P5 (ProgressNarrator + MilestoneTracker)
  *
  * Responsibility: turn milestones (produced by MilestoneTracker) into

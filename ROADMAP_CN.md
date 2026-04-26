@@ -18,7 +18,7 @@
 | 模块 | 状态 | 进度 | 说明 |
 |------|------|------|------|
 | **neko-engine** | Alpha | 98% | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** |
-| **neko-agent** | Alpha | 99% | **0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **IDC 统一工作流 Phase A+B+闭环 ✅**（三阶段 draft/plan/apply、ArtifactValidator/Watcher/ObservationHooks 闭环自修复，§4 revision 2026-04-22）；剩余：MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦（[ADR](./docs/architecture/agent-unified-workflow.md)） |
+| **neko-agent** | Alpha | 99% | **0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **IDC 统一工作流 Phase A+B+闭环 ✅**（三阶段 draft/plan/apply、ArtifactValidator/Watcher/ObservationHooks 闭环自修复，§4 revision 2026-04-22）；架构文档已收口到 Agent Unified Workflow + Capability Protocol；剩余：MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦（[ADR](./docs/architecture/agent-unified-workflow.md)） |
 | **neko-cut** | Alpha | 95% | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑（[ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)） |
 | **neko-story** | Alpha | 95% | **0 TODO(P0)**，155+ 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore 跨会话持久化；Story→Agent→Canvas 语义流水线已贯通（[ADR](./docs/architecture/story-agent-canvas-boundary.md)） |
 | **neko-canvas** | Alpha | 92% | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor 注册表** ✅（标签/图标/默认尺寸收敛；属性面板因循环依赖仍独立）；剩余 P1 增强（[ADR](./docs/architecture/canvas-role-boundary.md)） |
@@ -232,7 +232,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 **测试覆盖**：artifact 模块 30 个测试（8 observation-hooks + 16 validator + 6 watcher）；agent 全量套件 1957/1962 通过（5 个 pre-existing fileOperationHandler 失败未变）。
 
 ### neko-agent — 工作流编排（Phase 1-6 大部分完成，Rust milestone 待做）
-> [Umbrella ADR](./docs/architecture/workflow-orchestration.md) · [Routing](./docs/architecture/workflow-routing.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
 
 - ✅ **Phase 1** — Router（FastProbe + InputProbe）+ RouteRegistry + LitePlan + AssetLibrary facade + Matching L1/L2/L5
 - ✅ **Phase 1.5** — 交互 Plan Mode + PlanCard webview
@@ -261,6 +261,8 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - ⏭ **Rust Milestone（4.2 + 4.3b + 5.4c-rust + 5.4e）** — ~8-12 人天；需 Rust toolchain + 跨平台 CI
 
 **测试覆盖**：914 green（437 workflow/pipeline + 477 neko-types）。六轮评审零生产回归；累计回归测试覆盖 commit_route 验证（D2）、reference-chain DAG 不变式（D3）、fork→approve 派发（R1-Fix-2）、plan.input fork 派发（R2-Fix-A）、Legacy fork 拒绝（R4-Fix-D）、能力首帧时序（R4-Fix-F）、fork 经 matchingShots 重校验（R5-Fix-I）、Shot↔NkplanShot 结构兼容（R6-Fix-M）。
+
+**架构文档清理（2026-04-26）**：过时 workflow / capability 探索文档已从活动引用中移除。当前入口为 [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md)、[Capability Protocol](./docs/architecture/adr-capability-protocol.md)、[Plan Mode](./docs/architecture/plan-mode.md)、[Pipeline Execution](./docs/architecture/pipeline-execution.md)。
 
 ### neko-model (3D) + neko-puppet (2D) — 角色编辑 Rust 引擎 ✅
 
@@ -677,4 +679,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-*最后更新：2026-04-17（AI 视频参考系统：L0-L5 分层 + 双轴 Provider 能力矩阵（参考 × 运镜）+ 3D→2D turnaround 自动化 + `CharacterBundle.referenceSet` 跨镜头绑定 + 运镜翻译 §11 Path A/B/C（L1-L3 感知）+ 统一 §12 ControlNet 产物 producer 接口（2D ONNX / 3D 渲染 / Puppet）收编 controlnet-pipeline.md E5；详见 [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md)）*
+*最后更新：2026-04-26（架构文档清理：过时 workflow / capability 探索文档已从活动引用中移除；当前入口为 Agent Unified Workflow + Capability Protocol。）*

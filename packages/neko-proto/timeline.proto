@@ -475,7 +475,7 @@ message ClipLineage {
   // NkPlan id that orchestrated the generation.
   // Empty string when the shot was generated outside a workflow plan.
   string plan_id = 3;
-  // RouteLevel the plan ran at (L0..L4, see workflow-routing.md).
+  // RouteLevel the plan ran at (L0..L4, see agent-unified-workflow.md).
   // Empty string when unset.
   string route_level = 4;
   // Unix millis — when this lineage was recorded.

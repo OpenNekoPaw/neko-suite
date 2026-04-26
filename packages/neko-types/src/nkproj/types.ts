@@ -14,7 +14,7 @@
 //     script" Lossless Upgrade flows can be replayed or undone.
 // =============================================================================
 //
-// See docs/architecture/workflow-orchestration.md Phase 6 and
+// See docs/architecture/agent-unified-workflow.md and
 // docs/architecture/format-strategy.md for the broader format family.
 
 import type { ValidationError, ValidationResult } from '../config/config-adapter';

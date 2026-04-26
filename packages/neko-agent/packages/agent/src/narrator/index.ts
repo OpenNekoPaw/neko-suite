@@ -1,7 +1,7 @@
 /**
  * Narrator module — MilestoneTracker + ProgressNarrator.
  *
- * See: docs/architecture/dual-flow-architecture.md §3.2 + §9.2
+ * See: docs/architecture/agent-unified-workflow.md §2, §11.6
  *      plan v2 P5
  */
 

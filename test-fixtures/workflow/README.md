@@ -1,7 +1,7 @@
 # Workflow Orchestration — Test Fixtures
 
-Sample inputs that exercise the five canonical E2E scenarios documented in
-[`docs/development/workflow-orchestration-impl-plan.md` §7](../../docs/development/workflow-orchestration-impl-plan.md).
+Sample inputs that exercise the five canonical E2E scenarios from the current
+agent workflow architecture.
 
 | Fixture | Scenario | Expected Route |
 |---------|----------|----------------|

@@ -69,7 +69,7 @@
 - [ ] **P3** — 5 pre-existing `fileOperationHandler.test.ts` failures (vscode mock divergence, unrelated to IDC refactor)
 
 ### neko-agent — Workflow Orchestration (Phase 1-6 complete ✅; 6 rounds of decoupling review ✅)
-> [Umbrella](./docs/architecture/workflow-orchestration.md) · progress see ROADMAP neko-agent section
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) · progress see ROADMAP neko-agent section
 - [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
 - [x] **Phase 2** `.nkplan` persistence + Plan state machine + ConsistencyChecker v1
 - [x] **Phase 2.5** Fork + Diff + Checkpoint pause + PlanBrowser
@@ -563,8 +563,12 @@
 - **neko-story**: Scene workflow state persistence (StorySceneStateStore + workspaceState) + semantic storyboard entry + scene/shot planning tools + canvas handoff
 - **neko-agent**: Fountain pipeline routed through scene planning + semantic storyboard canvas import pipeline
 
+### ✅ Architecture Docs Cleanup (2026-04-26)
+- Removed obsolete AI capability / capability registration / dual-flow exploration docs and consolidated links on `agent-unified-workflow.md`, `adr-capability-protocol.md`, `plan-mode.md`, and `pipeline-execution.md`
+- Removed stale workflow umbrella / routing references from TODO, ROADMAP, architecture docs, proto comments, and test fixtures
+
 </details>
 
 ---
 
-*Last updated: 2026-04-17 (AI Video Reference System: L0-L5 tier framework + dual-axis provider matrix + 3D→2D turnaround + cross-shot character binding + camera motion translation §11 Path A/B/C + unified §12 ControlNet asset producer (2D ONNX + 3D render + Puppet, PNG-primary output) absorbing controlnet-pipeline.md E5; see [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md). Plus: AI Generation Pipeline Tactical Fixes — 7 code-level gap fixes for asset→script/canvas→video flow, day-level work as enabler for the strategic framework.)*
+*Last updated: 2026-04-26 (Architecture docs cleanup: removed obsolete workflow/capability exploration docs and consolidated references on the current Agent Unified Workflow + Capability Protocol ADRs.)*

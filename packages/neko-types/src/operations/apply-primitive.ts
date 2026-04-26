@@ -2,7 +2,7 @@
 // Apply Primitive — common contract over every kind of Apply
 // =============================================================================
 //
-// See: docs/architecture/dual-flow-architecture.md §3.3, §4.2
+// See: docs/architecture/agent-unified-workflow.md §2, §11.6
 //      plan v2 P2 W6 (Apply primitive abstraction)
 //
 // Background: every sub-package (sketch, canvas, audio, timeline, etc.)

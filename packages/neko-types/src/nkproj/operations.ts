@@ -14,7 +14,7 @@
 // the caller runs `validateNkproj` before committing to disk.
 // =============================================================================
 //
-// See docs/architecture/workflow-orchestration.md Phase 6 (Lossless Upgrade).
+// See docs/architecture/agent-unified-workflow.md (Lossless Upgrade).
 
 import type { NkProj, NkprojArtifactKind, NkprojArtifactRef, NkprojUpgradeEvent } from './types';
 

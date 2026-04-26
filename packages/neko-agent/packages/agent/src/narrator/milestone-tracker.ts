@@ -1,7 +1,7 @@
 /**
  * MilestoneTracker — stateful aggregator over dual-flow events.
  *
- * See: docs/architecture/dual-flow-architecture.md §9.2
+ * See: docs/architecture/agent-unified-workflow.md §11.6
  *      plan v2 P5 (ProgressNarrator + MilestoneTracker)
  *
  * Responsibility: subscribe to a EventBus and distill the stream into

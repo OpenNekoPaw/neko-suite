@@ -1,7 +1,7 @@
 /**
  * EventBus — typed in-process pub/sub for dual-flow events.
  *
- * See: docs/architecture/dual-flow-architecture.md §9.2
+ * See: docs/architecture/agent-unified-workflow.md §11.6
  *      plan v2 §3 Epic P5 + R9 (telemetry compaction)
  *      agent-types/{creation-events,execution-events}.ts for payload types
  *

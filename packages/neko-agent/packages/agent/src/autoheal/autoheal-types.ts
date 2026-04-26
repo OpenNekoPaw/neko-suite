@@ -1,7 +1,7 @@
 /**
  * Autoheal Types — shape of failures, attempts, and outcomes.
  *
- * See: docs/architecture/dual-flow-architecture.md §7 (5-level autoheal)
+ * See: docs/architecture/agent-unified-workflow.md §11.6
  *      plan v2 P3 (autoheal = ReAct "skip mode" pattern)
  *
  * The chain models **technical failures** (tool errors, timeouts,

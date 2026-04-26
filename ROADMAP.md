@@ -18,7 +18,7 @@
 | Module | Status | Progress | Description |
 |--------|--------|----------|-------------|
 | **neko-engine** | Alpha | 98% | GPU rendering + codec + export + HTTP/WS + device proxy + ONNX ML inference + full color/keying pipeline + keyframe/animation blending + character editing API + **concurrency guard Semaphore(8/4/2) ✅** |
-| **neko-agent** | Alpha | 99% | **0 TODOs**, 1957+ tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment + Webview P0 complete + **IDC Unified Workflow Phase A+B+closure ✅** (3-stage draft/plan/apply, ArtifactValidator/Watcher/ObservationHooks closed-loop self-correct, §4 revision 2026-04-22); remaining: MCP reconnection backoff + P1 Zustand migration + ask-mode decoupling ([ADR](./docs/architecture/agent-unified-workflow.md)) |
+| **neko-agent** | Alpha | 99% | **0 TODOs**, 1957+ tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment + Webview P0 complete + **IDC Unified Workflow Phase A+B+closure ✅** (3-stage draft/plan/apply, ArtifactValidator/Watcher/ObservationHooks closed-loop self-correct, §4 revision 2026-04-22); architecture docs consolidated on Agent Unified Workflow + Capability Protocol; remaining: MCP reconnection backoff + P1 Zustand migration + ask-mode decoupling ([ADR](./docs/architecture/agent-unified-workflow.md)) |
 | **neko-cut** | Alpha | 95% | **~65K LOC**, 50+ commands; AI Handler 14/16 actions; **P0 closed**; subtitle/ripple editing/playback speed/effects export complete; remaining: export round-trip tests + ai-auto-edit/ai-match-music + advanced time editing ([ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md)) |
 | **neko-story** | Alpha | 95% | **0 TODO(P0)**, 155+ tests; 8 LSP Providers + Fountain parser + 3 preview views + ScenePlan/ShotPlan planners + StorySceneStateStore cross-session persistence; Story→Agent→Canvas semantic pipeline fully operational ([ADR](./docs/architecture/story-agent-canvas-boundary.md)) |
 | **neko-canvas** | Alpha | 92% | 13 node types + BatchGenerationScheduler + 7 MCP Tools; **P0 fully converged** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor registry** ✅ (labels/icons/defaultSize converged; property panels remain separate); remaining P1 enhancements ([ADR](./docs/architecture/canvas-role-boundary.md)) |
@@ -238,7 +238,7 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 **Test coverage**: 30 artifact-module tests (8 observation-hooks + 16 validator + 6 watcher); full agent suite 1957/1962 passing (5 pre-existing fileOperationHandler failures unchanged).
 
 ### neko-agent — Workflow Orchestration (Phase 1-6 mostly complete, Rust milestone pending)
-> [Umbrella ADR](./docs/architecture/workflow-orchestration.md) · [Routing](./docs/architecture/workflow-routing.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) · [Plan Mode](./docs/architecture/plan-mode.md) · [Pipeline Execution](./docs/architecture/pipeline-execution.md) · [Asset Library](./docs/architecture/asset-knowledge-graph.md) · [Matching](./docs/architecture/cross-modal-matching.md) · [Consistency](./docs/architecture/creative-consistency.md)
 
 - ✅ **Phase 1** — Router (FastProbe + InputProbe) + RouteRegistry + LitePlan + AssetLibrary facade + Matching L1/L2/L5
 - ✅ **Phase 1.5** — Interactive Plan Mode + PlanCard webview
@@ -267,6 +267,8 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - ⏭ **Rust Milestone (4.2 + 4.3b + 5.4c-rust + 5.4e)** — ~8-12 person-days, requires Rust toolchain + cross-platform CI
 
 **Test coverage**: 914 green (437 workflow/pipeline + 477 neko-types). Six review rounds zero-regression; accumulated regression tests span commit_route validator (D2), reference-chain DAG invariants (D3), fork → approve dispatch (R1-Fix-2), plan.input fork-dispatch (R2-Fix-A), legacy-fork rejection (R4-Fix-D), capability timing (R4-Fix-F), fork-recheck via matchingShots (R5-Fix-I), Shot↔NkplanShot structural compat (R6-Fix-M).
+
+**Architecture docs cleanup (2026-04-26)**: obsolete workflow/capability exploration docs have been removed from active references. Current entry points are [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md), [Capability Protocol](./docs/architecture/adr-capability-protocol.md), [Plan Mode](./docs/architecture/plan-mode.md), and [Pipeline Execution](./docs/architecture/pipeline-execution.md).
 
 ### neko-model (3D) + neko-puppet (2D) — Character Editing Rust Engine ✅
 - Phase 3.1-3.3 ✅ (basic 3D + AI face sculpting + CSG + PBR + particles + timeline integration)
@@ -863,4 +865,4 @@ agent/market are included in core; scenario sub-packs stack with zero duplicatio
 
 ---
 
-*Last updated: 2026-04-17 (AI Video Reference System: L0-L5 tier framework + dual-axis provider capability matrix (reference × camera) + 3D→2D turnaround automation + `CharacterBundle.referenceSet` cross-shot binding + camera motion translation §11 Path A/B/C (L1-L3 perception) + unified §12 ControlNet asset producer interface (2D ONNX / 3D render / Puppet) absorbing controlnet-pipeline.md E5; see [ai-video-reference-system.md](./docs/architecture/ai-video-reference-system.md))*
+*Last updated: 2026-04-26 (Architecture docs cleanup: obsolete workflow/capability exploration docs removed from active references; current entry points are Agent Unified Workflow + Capability Protocol.)*

@@ -196,7 +196,7 @@ try {
 4. Generate video from scenes
 ```
 
-See [ai-capabilities.md](../../docs/architecture/ai-capabilities.md) for detailed workflow documentation.
+See [agent-unified-workflow.md](../../docs/architecture/agent-unified-workflow.md) and [agent-media-architecture.md](../../docs/architecture/agent-media-architecture.md) for detailed workflow documentation.
 
 ## Troubleshooting
 

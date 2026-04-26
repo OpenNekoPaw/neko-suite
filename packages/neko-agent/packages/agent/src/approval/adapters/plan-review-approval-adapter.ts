@@ -1,7 +1,7 @@
 /**
  * Plan Review → ApprovalEngine adapter.
  *
- * See: docs/architecture/dual-flow-architecture.md §5.1
+ * See: docs/architecture/agent-unified-workflow.md §11.6
  *      plan v2 P4 (Approval unification — adapter migration)
  *
  * Plan review is the outer-ring (creation-flow) business-level
