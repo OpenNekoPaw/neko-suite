@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
-import type { AgentCapabilityProvider, Skill, Tool } from '@neko/shared';
+import type {
+  AgentCapabilityHostRequirement,
+  AgentCapabilityLifecycleHook,
+  AgentCapabilityProvider,
+  AgentCapabilityProtocolVersion,
+  AgentCapabilityTrustLevel,
+  ProviderCard,
+  Skill,
+  Tool,
+} from '@neko/shared';
 import { CapabilityDiscoveryService } from '../capabilityDiscoveryService';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
@@ -39,13 +48,23 @@ function createProvider(config: {
   tools: Tool[];
   skills?: Skill[];
   toolGroups?: ReturnType<ToolGroupRegistry['list']>;
+  providerCards?: ProviderCard[];
+  protocolVersion?: AgentCapabilityProtocolVersion;
+  trustLevel?: AgentCapabilityTrustLevel;
+  hostRequirements?: readonly AgentCapabilityHostRequirement[];
+  lifecycleHooks?: readonly AgentCapabilityLifecycleHook[];
 }): AgentCapabilityProvider {
   return {
     id: config.id ?? 'neko.test',
     version: config.version ?? '1.0.0',
+    ...(config.protocolVersion ? { protocolVersion: config.protocolVersion } : {}),
+    ...(config.trustLevel ? { trustLevel: config.trustLevel } : {}),
+    ...(config.hostRequirements ? { hostRequirements: config.hostRequirements } : {}),
+    ...(config.lifecycleHooks ? { lifecycleHooks: config.lifecycleHooks } : {}),
     getTools: () => config.tools,
     ...(config.skills ? { getSkills: () => config.skills } : {}),
     ...(config.toolGroups ? { getToolGroups: () => config.toolGroups } : {}),
+    ...(config.providerCards ? { getProviderCards: () => config.providerCards } : {}),
   };
 }
 
@@ -53,6 +72,10 @@ describe('CapabilityDiscoveryService', () => {
   let toolRegistry: ToolRegistry;
   let toolGroupRegistry: ToolGroupRegistry;
   let toolCategoryRegistry: ToolCategoryRegistry;
+  let providerCardRegistry: {
+    register: ReturnType<typeof vi.fn>;
+    unregister: ReturnType<typeof vi.fn>;
+  };
   let service: CapabilityDiscoveryService;
 
   beforeEach(() => {
@@ -62,10 +85,12 @@ describe('CapabilityDiscoveryService', () => {
     toolRegistry = new ToolRegistry();
     toolGroupRegistry = new ToolGroupRegistry();
     toolCategoryRegistry = new ToolCategoryRegistry();
+    providerCardRegistry = { register: vi.fn(), unregister: vi.fn() };
     service = new CapabilityDiscoveryService({
       toolRegistry,
       toolGroupRegistry,
       toolCategoryRegistry,
+      providerCardRegistry,
     });
   });
 
@@ -170,6 +195,7 @@ describe('CapabilityDiscoveryService', () => {
       },
       toolGroupRegistry,
       toolCategoryRegistry,
+      providerCardRegistry,
     });
 
     service.registerProvider(
@@ -231,6 +257,81 @@ describe('CapabilityDiscoveryService', () => {
         reason: 'provider-name-collision',
       }),
     );
+  });
+
+  it('registerProvider 应该把 providerCards 投影到 ProviderCardRegistry 并在 unregister 清理', () => {
+    const card: ProviderCard = {
+      providerId: 'flux',
+      displayName: 'Flux.1',
+      version: '1.0.0',
+      capabilities: ['image.generate'],
+      sourceLayer: 'builtin',
+      syntaxProfile: { supportsNegativePrompt: false, notes: [] },
+      conceptCoverage: { entries: [] },
+      trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+    };
+    const modelCard: ProviderCard = {
+      providerId: 'flux',
+      modelId: 'flux-pro-1.1',
+      displayName: 'Flux Pro 1.1',
+      version: '1.1.0',
+      capabilities: ['image.generate'],
+      sourceLayer: 'builtin',
+      syntaxProfile: { supportsNegativePrompt: false, notes: [] },
+      conceptCoverage: { entries: [] },
+      trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+    };
+    const provider = createProvider({
+      id: 'neko.provider-cards',
+      tools: [],
+      providerCards: [card, modelCard],
+    });
+
+    service.registerProvider(provider, { extensionContext: {} });
+
+    expect(providerCardRegistry.register).toHaveBeenCalledWith(card);
+    expect(providerCardRegistry.register).toHaveBeenCalledWith(modelCard);
+    expect(capabilityLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('0 tools, 0 skills, 0 tool groups, 2 provider cards'),
+    );
+
+    service.unregisterProvider('neko.provider-cards');
+
+    expect(providerCardRegistry.unregister).toHaveBeenCalledWith('flux', undefined, undefined);
+    expect(providerCardRegistry.unregister).toHaveBeenCalledWith('flux', undefined, 'flux-pro-1.1');
+  });
+
+  it('exposes Capability Protocol v1 metadata for registered providers with legacy defaults', () => {
+    const legacyProvider = createProvider({ id: 'neko.legacy', tools: [] });
+    service.registerProvider(legacyProvider, { extensionContext: {} });
+
+    expect(service.getCapabilityProtocolInfo('neko.legacy')).toEqual({
+      providerId: 'neko.legacy',
+      protocolVersion: '1.0',
+      trustLevel: 'core',
+      hostRequirements: [{ host: 'vscode' }],
+      lifecycleHooks: [],
+      source: 'provider',
+    });
+
+    const communityProvider = createProvider({
+      id: 'neko.community',
+      tools: [],
+      protocolVersion: '1.0',
+      trustLevel: 'community',
+      hostRequirements: [{ host: 'vscode' }, { host: 'cli', optional: true }],
+      lifecycleHooks: ['register', 'dispose'],
+    });
+    service.registerProvider(communityProvider, { extensionContext: {} });
+
+    expect(service.getCapabilityProtocolInfo('neko.community')).toEqual({
+      providerId: 'neko.community',
+      protocolVersion: '1.0',
+      trustLevel: 'community',
+      hostRequirements: [{ host: 'vscode' }, { host: 'cli', optional: true }],
+      lifecycleHooks: ['register', 'dispose'],
+      source: 'provider',
+    });
   });
 
   it('在 capability context 缺失时返回空 promptFragments 并输出一次告警', () => {

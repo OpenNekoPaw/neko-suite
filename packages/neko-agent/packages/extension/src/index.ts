@@ -190,6 +190,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       mediaService: bootstrapResult.platform.media,
       configManager: bootstrapResult.platform.config,
       embedFn: buildEmbedFn(bootstrapResult.platform),
+      workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     },
     context,
   );

@@ -513,6 +513,11 @@ export class MessageHandler {
         temperature: this._settings.temperature,
         maxTokens: this._settings.maxTokens,
         modelId: effectiveModelId,
+        providerExpressionTargets: buildProviderExpressionTargets(
+          agentMediaModels,
+          mediaProviderId,
+          mediaModelId,
+        ),
         executionMode: effectiveExecutionMode,
         thinkingBudget: this._settings.thinkingBudget,
         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -780,4 +785,49 @@ export class MessageHandler {
   dispose(): void {
     this._assetIndex?.dispose();
   }
+}
+
+export type ProviderExpressionMediaTarget = {
+  capability: 'image.generate' | 'video.generate' | 'audio.generate';
+  providerId?: string;
+  modelId?: string;
+};
+
+export function buildProviderExpressionTargets(
+  agentMediaModels:
+    | {
+        image?: { providerId?: string; modelId: string };
+        video?: { providerId?: string; modelId: string };
+        audio?: { providerId?: string; modelId: string };
+      }
+    | undefined,
+  mediaProviderId: string | undefined,
+  mediaModelId: string | undefined,
+): ProviderExpressionMediaTarget[] | undefined {
+  if (agentMediaModels && Object.keys(agentMediaModels).length > 0) {
+    return [
+      ...(agentMediaModels.image
+        ? [{ capability: 'image.generate' as const, ...agentMediaModels.image }]
+        : []),
+      ...(agentMediaModels.video
+        ? [{ capability: 'video.generate' as const, ...agentMediaModels.video }]
+        : []),
+      ...(agentMediaModels.audio
+        ? [{ capability: 'audio.generate' as const, ...agentMediaModels.audio }]
+        : []),
+    ];
+  }
+
+  if (!mediaModelId || mediaModelId === 'none') return undefined;
+
+  const selectedTarget = {
+    ...(mediaProviderId ? { providerId: mediaProviderId } : {}),
+    modelId: mediaModelId,
+  };
+
+  return [
+    { capability: 'image.generate', ...selectedTarget },
+    { capability: 'video.generate', ...selectedTarget },
+    { capability: 'audio.generate', ...selectedTarget },
+  ];
 }

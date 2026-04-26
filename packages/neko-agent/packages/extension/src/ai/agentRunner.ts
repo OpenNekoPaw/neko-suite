@@ -32,12 +32,17 @@ import {
   ToolGroupRegistry,
   ToolCategoryRegistry,
   MemoryWriteTool,
+  createProviderExpressionPromptFragments,
   type ExecutionMode,
   type AgentEvent,
   type AgentEventType,
   type IRuntimeTaskManager,
 } from '@neko/agent';
-import type { IProjectMemoryManager, PromptFragment } from '@neko/shared';
+import type {
+  IProjectMemoryManager,
+  ProviderGenerationCapability,
+  PromptFragment,
+} from '@neko/shared';
 import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
@@ -70,6 +75,12 @@ export type { AgentEvent, AgentEventType };
 /**
  * Agent configuration
  */
+export interface ProviderExpressionTargetConfig {
+  readonly capability: ProviderGenerationCapability;
+  readonly providerId?: string;
+  readonly modelId?: string;
+}
+
 export interface IAgentConfig {
   /** Platform instance */
   platform: Platform;
@@ -91,6 +102,9 @@ export interface IAgentConfig {
 
   /** Model ID */
   modelId?: string;
+
+  /** Selected media generation provider/model targets for ProviderCard expression context. */
+  providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
 
   /**
    * Extended thinking budget tokens (Claude only)
@@ -546,6 +560,9 @@ export class AgentRunner implements IAgentRunner {
             : {}),
           ...(promptFragments !== undefined ? { promptFragments } : {}),
           ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
+          ...(capabilityRuntime.providerCardRegistry
+            ? { providerCardRegistry: capabilityRuntime.providerCardRegistry }
+            : {}),
         },
         artifactStore: createNodeArtifactStore({
           ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
@@ -882,11 +899,37 @@ export class AgentRunner implements IAgentRunner {
   private _resolvePromptFragments(): readonly PromptFragment[] | undefined {
     try {
       const discovery = getCapabilityDiscoveryService();
-      const fragments = discovery.getAllPromptFragments();
+      const capabilityFragments = discovery.getAllPromptFragments();
+      const providerCards = getCapabilityRuntimeBindings().providerCardRegistry?.list() ?? [];
+      const providerFragments = this._resolveProviderExpressionFragments(providerCards);
+      const fragments = [...capabilityFragments, ...providerFragments];
       return fragments.length > 0 ? fragments : undefined;
     } catch {
       return undefined;
     }
+  }
+
+  private _resolveProviderExpressionFragments(
+    providerCards: readonly import('@neko/shared').ProviderCard[],
+  ): readonly PromptFragment[] {
+    const targets =
+      this._config?.providerExpressionTargets?.filter(
+        (target) => target.providerId || target.modelId,
+      ) ?? [];
+    if (targets.length === 0) {
+      return createProviderExpressionPromptFragments({ cards: providerCards, mode: 'candidates' });
+    }
+
+    return targets.flatMap((target) =>
+      createProviderExpressionPromptFragments({
+        cards: providerCards,
+        mode: 'selected',
+        capability: target.capability,
+        ...(target.providerId ? { providerId: target.providerId } : {}),
+        ...(target.modelId ? { modelId: target.modelId } : {}),
+        fragmentId: `provider:expression-context:${target.capability}`,
+      }),
+    );
   }
 
   private _syncCapabilityToolCategories(toolCategoryRegistry?: ToolCategoryRegistry): void {

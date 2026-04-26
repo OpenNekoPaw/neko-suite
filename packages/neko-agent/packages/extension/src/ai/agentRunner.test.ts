@@ -62,6 +62,7 @@ const capabilityRuntimeMock = {
   skillService: undefined as unknown,
   toolGroupRegistry: undefined as ToolGroupRegistry | undefined,
   toolCategoryRegistry: undefined as ToolCategoryRegistry | undefined,
+  providerCardRegistry: undefined as unknown,
 };
 let capabilityPromptFragments: Array<{ id: string; content: string }> = [];
 const syncToolCategoriesMock = vi.fn();
@@ -190,6 +191,7 @@ describe('AgentRunner', () => {
     capabilityRuntimeMock.skillService = undefined;
     capabilityRuntimeMock.toolGroupRegistry = undefined;
     capabilityRuntimeMock.toolCategoryRegistry = undefined;
+    capabilityRuntimeMock.providerCardRegistry = undefined;
     capabilityPromptFragments = [];
     syncToolCategoriesMock.mockReset();
     latestCreateSessionConfig = undefined;
@@ -231,10 +233,12 @@ describe('AgentRunner', () => {
       const skillRegistry = { kind: 'skill-registry' };
       const skillService = { kind: 'skill-service' };
       const toolCategoryRegistry = new ToolCategoryRegistry();
+      const providerCardRegistry = { kind: 'provider-card-registry' };
       capabilityRuntimeMock.skillRegistry = skillRegistry;
       capabilityRuntimeMock.skillService = skillService;
       capabilityRuntimeMock.toolGroupRegistry = toolGroupRegistry;
       capabilityRuntimeMock.toolCategoryRegistry = toolCategoryRegistry;
+      capabilityRuntimeMock.providerCardRegistry = providerCardRegistry;
 
       await runner.configure({
         platform: mockPlatform,
@@ -247,6 +251,7 @@ describe('AgentRunner', () => {
             capabilityRuntime: expect.objectContaining({
               toolGroupRegistry,
               toolCategoryRegistry,
+              providerCardRegistry,
               skillService,
               skillRegistry,
             }),
@@ -308,6 +313,177 @@ describe('AgentRunner', () => {
       expect(syncToolCategoriesMock).toHaveBeenCalledWith(
         capabilityRuntimeMock.toolCategoryRegistry,
       );
+    });
+
+    it('应该把 ProviderCard 汇总成 AGENT provider expression prompt fragment', async () => {
+      capabilityPromptFragments = [{ id: 'neko.cut:timeline', content: 'Timeline context' }];
+      capabilityRuntimeMock.providerCardRegistry = {
+        list: vi.fn(() => [
+          {
+            providerId: 'flux',
+            displayName: 'Flux.1',
+            version: '1.0.0',
+            capabilities: ['image.generate'],
+            sourceLayer: 'builtin',
+            syntaxProfile: {
+              supportsNegativePrompt: false,
+              notes: [],
+            },
+            conceptCoverage: {
+              entries: [
+                {
+                  concept: 'cluttercore',
+                  status: 'unknown',
+                  expansion: 'maximalist collection, wall of objects',
+                },
+              ],
+            },
+            trainingProfile: {
+              styleAffinities: { photorealistic: 3 },
+              antiBiasStrategies: ['avoid over-polished stock photo look'],
+            },
+          },
+        ]),
+      };
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              promptFragments: expect.arrayContaining([
+                { id: 'neko.cut:timeline', content: 'Timeline context' },
+                expect.objectContaining({
+                  id: 'provider:expression-context',
+                  content: expect.stringContaining('Flux.1 (flux)'),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('应该在已选择媒体 provider/model 时注入 selected ProviderCard fragment', async () => {
+      capabilityRuntimeMock.providerCardRegistry = {
+        list: vi.fn(() => [
+          {
+            providerId: 'flux',
+            displayName: 'Flux.1',
+            version: '1.0.0',
+            capabilities: ['image.generate'],
+            sourceLayer: 'builtin',
+            syntaxProfile: { supportsNegativePrompt: false, notes: [] },
+            conceptCoverage: { entries: [] },
+            trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+          },
+          {
+            providerId: 'flux',
+            modelId: 'flux-pro-1.1',
+            displayName: 'Flux Pro 1.1',
+            version: '1.1.0',
+            capabilities: ['image.generate'],
+            sourceLayer: 'builtin',
+            syntaxProfile: { supportsNegativePrompt: false, notes: [] },
+            conceptCoverage: { entries: [] },
+            trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+          },
+        ]),
+      };
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+        providerExpressionTargets: [
+          { capability: 'image.generate', providerId: 'flux', modelId: 'flux-pro-1.1' },
+        ],
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              promptFragments: expect.arrayContaining([
+                expect.objectContaining({
+                  id: 'provider:expression-context:image.generate',
+                  content: expect.stringContaining('Flux Pro 1.1 (flux/flux-pro-1.1)'),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+      const config = latestCreateSessionConfig as {
+        runtime?: { capabilityRuntime?: { promptFragments?: Array<{ content: string }> } };
+      };
+      expect(config.runtime?.capabilityRuntime?.promptFragments?.[0]?.content).not.toContain(
+        'Flux.1 (flux)',
+      );
+    });
+
+    it('应该为多个已选择媒体目标注入独立 ProviderCard fragments', async () => {
+      capabilityRuntimeMock.providerCardRegistry = {
+        list: vi.fn(() => [
+          {
+            providerId: 'flux',
+            modelId: 'flux-pro-1.1',
+            displayName: 'Flux Pro 1.1',
+            version: '1.1.0',
+            capabilities: ['image.generate'],
+            sourceLayer: 'builtin',
+            syntaxProfile: { supportsNegativePrompt: false, notes: [] },
+            conceptCoverage: { entries: [] },
+            trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+          },
+          {
+            providerId: 'runway',
+            modelId: 'gen-4',
+            displayName: 'Runway Gen-4',
+            version: '4.0.0',
+            capabilities: ['video.generate'],
+            sourceLayer: 'builtin',
+            syntaxProfile: { supportsNegativePrompt: true, notes: [] },
+            conceptCoverage: { entries: [] },
+            trainingProfile: { styleAffinities: { cinematic: 3 }, antiBiasStrategies: [] },
+          },
+        ]),
+      };
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+        providerExpressionTargets: [
+          { capability: 'image.generate', providerId: 'flux', modelId: 'flux-pro-1.1' },
+          { capability: 'video.generate', providerId: 'runway', modelId: 'gen-4' },
+        ],
+      });
+
+      const config = latestCreateSessionConfig as {
+        runtime?: {
+          capabilityRuntime?: { promptFragments?: Array<{ id: string; content: string }> };
+        };
+      };
+      const fragments = config.runtime?.capabilityRuntime?.promptFragments ?? [];
+
+      expect(fragments).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'provider:expression-context:image.generate',
+            content: expect.stringContaining('Flux Pro 1.1 (flux/flux-pro-1.1)'),
+          }),
+          expect.objectContaining({
+            id: 'provider:expression-context:video.generate',
+            content: expect.stringContaining('Runway Gen-4 (runway/gen-4)'),
+          }),
+        ]),
+      );
+      expect(
+        fragments.filter((fragment) => fragment.id.startsWith('provider:expression-context:')),
+      ).toHaveLength(2);
     });
   });
 

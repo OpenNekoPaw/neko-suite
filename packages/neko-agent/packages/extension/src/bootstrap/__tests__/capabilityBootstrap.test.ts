@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', () => ({
+  workspace: { workspaceFolders: undefined },
   EventEmitter: class {
     event = vi.fn();
     fire = vi.fn();
@@ -17,6 +18,18 @@ const bootstrapLogger = {
 
 const activateMock = vi.fn();
 const disposeMock = vi.fn();
+const discoveryDeps: unknown[] = [];
+const registerProviderCardDirectoryMock = vi.fn(() => Promise.resolve([]));
+
+vi.mock('@neko/agent', () => ({
+  ProviderCardRegistry: class ProviderCardRegistry {
+    readonly id = 'default-provider-card-registry';
+  },
+  ToolCategoryRegistry: class ToolCategoryRegistry {
+    readonly id = 'default-tool-category-registry';
+  },
+  registerProviderCardDirectory: registerProviderCardDirectoryMock,
+}));
 
 vi.mock('../../base', () => ({
   getLogger: () => bootstrapLogger,
@@ -24,7 +37,9 @@ vi.mock('../../base', () => ({
 
 vi.mock('../../services/capabilityDiscoveryService', () => ({
   CapabilityDiscoveryService: class {
-    constructor(_deps: unknown) {}
+    constructor(deps: unknown) {
+      discoveryDeps.push(deps);
+    }
     activate = activateMock;
     dispose = disposeMock;
   },
@@ -39,6 +54,8 @@ describe('capabilityBootstrap', () => {
     bootstrapLogger.warn.mockReset();
     bootstrapLogger.error.mockReset();
     bootstrapLogger.debug.mockReset();
+    discoveryDeps.length = 0;
+    registerProviderCardDirectoryMock.mockClear();
   });
 
   it('does not clear existing runtime bindings when a later bootstrap omits them', async () => {
@@ -81,6 +98,63 @@ describe('capabilityBootstrap', () => {
       expect.objectContaining({
         code: 'extension.capability-runtime.binding-update-ignored',
         reason: 'undefined-value-ignored',
+      }),
+    );
+  });
+
+  it('creates and shares a ProviderCardRegistry when none is provided', async () => {
+    const module = await import('../capabilityBootstrap');
+    const toolRegistry = {
+      register: vi.fn(),
+      unregister: vi.fn(),
+      get: vi.fn(),
+      list: vi.fn(() => []),
+    } as never;
+
+    module.bootstrapCapabilities(
+      {
+        toolRegistry,
+      },
+      { subscriptions: [] } as never,
+    );
+
+    const bindings = module.getCapabilityRuntimeBindings();
+    expect(bindings.providerCardRegistry).toBeDefined();
+    expect(discoveryDeps[0]).toEqual(
+      expect.objectContaining({
+        providerCardRegistry: bindings.providerCardRegistry,
+      }),
+    );
+  });
+
+  it('loads market and project provider card directories into the shared registry', async () => {
+    const module = await import('../capabilityBootstrap');
+    const toolRegistry = {
+      register: vi.fn(),
+      unregister: vi.fn(),
+      get: vi.fn(),
+      list: vi.fn(() => []),
+    } as never;
+
+    module.bootstrapCapabilities(
+      {
+        toolRegistry,
+        workspaceRoot: '/workspace/project',
+      },
+      { subscriptions: [] } as never,
+    );
+
+    expect(registerProviderCardDirectoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceLayer: 'market',
+        sourceRefPrefix: '${NEKO_HOME}/providers',
+      }),
+    );
+    expect(registerProviderCardDirectoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        root: '/workspace/project/.neko/providers',
+        sourceLayer: 'project',
+        sourceRefPrefix: '.neko/providers',
       }),
     );
   });

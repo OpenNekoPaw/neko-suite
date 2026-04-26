@@ -1,5 +1,54 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MessageHandler } from '../messageHandler';
+
+vi.mock('vscode', () => {
+  class EventEmitter<T> {
+    private readonly listeners: Array<(event: T) => void> = [];
+
+    readonly event = (listener: (event: T) => void) => {
+      this.listeners.push(listener);
+      return { dispose: () => undefined };
+    };
+
+    fire(event: T): void {
+      for (const listener of this.listeners) listener(event);
+    }
+
+    dispose(): void {
+      this.listeners.length = 0;
+    }
+  }
+
+  class RelativePattern {
+    constructor(
+      readonly base: string,
+      readonly pattern: string,
+    ) {}
+  }
+
+  return {
+    EventEmitter,
+    FileType: { File: 1, Directory: 2 },
+    RelativePattern,
+    Uri: {
+      file: (fsPath: string) => ({ fsPath }),
+      joinPath: (base: { fsPath: string }, filePath: string) => ({
+        fsPath: `${base.fsPath}/${filePath}`,
+      }),
+    },
+    workspace: {
+      workspaceFolders: undefined,
+      fs: {
+        readFile: vi.fn(),
+        stat: vi.fn(),
+      },
+      findFiles: vi.fn().mockResolvedValue([]),
+      asRelativePath: vi.fn((value: { fsPath?: string } | string) =>
+        typeof value === 'string' ? value : (value.fsPath ?? ''),
+      ),
+    },
+  };
+});
+import { MessageHandler, buildProviderExpressionTargets } from '../messageHandler';
 
 // Mock @neko/agent module - createInputProcessor is used inside _getInputProcessor
 vi.mock('@neko/agent', async (importOriginal) => {
@@ -184,6 +233,32 @@ function buildHandler(
 describe('MessageHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('provider expression target mapping', () => {
+    it('maps agent media models to capability-specific targets', () => {
+      expect(
+        buildProviderExpressionTargets(
+          {
+            image: { providerId: 'flux', modelId: 'flux-pro-1.1' },
+            video: { providerId: 'runway', modelId: 'gen-4' },
+          },
+          undefined,
+          undefined,
+        ),
+      ).toEqual([
+        { capability: 'image.generate', providerId: 'flux', modelId: 'flux-pro-1.1' },
+        { capability: 'video.generate', providerId: 'runway', modelId: 'gen-4' },
+      ]);
+    });
+
+    it('maps a non-agent media model to image, video, and audio targets', () => {
+      expect(buildProviderExpressionTargets(undefined, 'openai', 'gpt-image-1')).toEqual([
+        { capability: 'image.generate', providerId: 'openai', modelId: 'gpt-image-1' },
+        { capability: 'video.generate', providerId: 'openai', modelId: 'gpt-image-1' },
+        { capability: 'audio.generate', providerId: 'openai', modelId: 'gpt-image-1' },
+      ]);
+    });
   });
 
   describe('IDC plan mode wiring', () => {

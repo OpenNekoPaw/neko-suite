@@ -24,6 +24,10 @@ import type {
   AgentCapabilityProvider,
   AgentCapabilityManifest,
   AgentCapabilityContext,
+  AgentCapabilityHostRequirement,
+  AgentCapabilityLifecycleHook,
+  AgentCapabilityProtocolVersion,
+  AgentCapabilityTrustLevel,
   IToolRegistry,
   IToolCategoryRegistry,
   Tool,
@@ -31,6 +35,8 @@ import type {
   Skill,
   ISkillRegistry,
   PromptFragment,
+  ProviderCard,
+  IProviderCardRegistry,
 } from '@neko/shared';
 import { getRootLogger } from '../base';
 
@@ -38,14 +44,31 @@ import { getRootLogger } from '../base';
 // Types
 // =============================================================================
 
+export interface CapabilityProtocolInfo {
+  readonly providerId: string;
+  readonly protocolVersion: AgentCapabilityProtocolVersion;
+  readonly trustLevel: AgentCapabilityTrustLevel;
+  readonly hostRequirements: readonly AgentCapabilityHostRequirement[];
+  readonly lifecycleHooks: readonly AgentCapabilityLifecycleHook[];
+  readonly source: 'provider' | 'manifest';
+}
+
+interface ProviderCardTarget {
+  readonly providerId: string;
+  readonly modelId?: string;
+}
+
 interface RegisteredProvider {
   provider: AgentCapabilityProvider;
+  protocol: CapabilityProtocolInfo;
   /** Tool names registered by this provider (for cleanup) */
   registeredTools: string[];
   /** Skill names registered by this provider (for cleanup) */
   registeredSkills: string[];
   /** ToolGroup names registered by this provider (for cleanup) */
   registeredToolGroups: string[];
+  /** ProviderCard targets registered by this provider (for cleanup) */
+  registeredProviderCards: ProviderCardTarget[];
 }
 
 export interface CapabilityDiscoveryDeps {
@@ -59,6 +82,7 @@ export interface CapabilityDiscoveryDeps {
   toolCategoryRegistry?: Pick<IToolCategoryRegistry, 'categorizeTool'> & {
     clearTools?(): void;
   };
+  providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
 }
 
 // =============================================================================
@@ -71,6 +95,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   private readonly _toolOwners = new Map<string, string>();
   private readonly _skillOwners = new Map<string, string>();
   private readonly _toolGroupOwners = new Map<string, string>();
+  private readonly _providerCardOwners = new Map<string, string>();
   private readonly _deps: CapabilityDiscoveryDeps;
   private readonly _disposables: vscode.Disposable[] = [];
   private readonly _logger = getRootLogger().child('CapabilityDiscovery');
@@ -162,6 +187,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     const registeredTools: string[] = [];
     const registeredSkills: string[] = [];
     const registeredToolGroups: string[] = [];
+    const registeredProviderCards: ProviderCardTarget[] = [];
 
     // Inject tools
     try {
@@ -224,17 +250,40 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
       }
     }
 
+    // Inject provider cards
+    if (provider.getProviderCards && this._deps.providerCardRegistry) {
+      try {
+        const cards: ProviderCard[] = provider.getProviderCards(context);
+        for (const card of cards) {
+          this._recordCapabilityNameCollision({
+            kind: 'provider-card',
+            name: formatProviderCardTarget(card),
+            providerId: id,
+            existingOwner: this._providerCardOwners.get(toProviderCardOwnerKey(card)),
+            existsInRuntime: false,
+          });
+          this._deps.providerCardRegistry.register(card);
+          this._providerCardOwners.set(toProviderCardOwnerKey(card), id);
+          registeredProviderCards.push(toProviderCardTarget(card));
+        }
+      } catch (err) {
+        this._logger.warn(`Failed to get provider cards from provider "${id}"`, { error: err });
+      }
+    }
+
     this._providers.set(id, {
       provider,
+      protocol: resolveCapabilityProtocolInfo(id, provider, 'provider'),
       registeredTools,
       registeredSkills,
       registeredToolGroups,
+      registeredProviderCards,
     });
 
     this._logger.info(
       `Provider "${id}" v${provider.version} registered: ` +
         `${registeredTools.length} tools, ${registeredSkills.length} skills, ` +
-        `${registeredToolGroups.length} tool groups`,
+        `${registeredToolGroups.length} tool groups, ${registeredProviderCards.length} provider cards`,
     );
 
     this.syncToolCategories();
@@ -272,6 +321,17 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
         this._deps.toolGroupRegistry.unregister(groupName);
         if (this._toolGroupOwners.get(groupName) === id) {
           this._toolGroupOwners.delete(groupName);
+        }
+      }
+    }
+
+    // Remove provider cards
+    if (this._deps.providerCardRegistry) {
+      for (const target of entry.registeredProviderCards) {
+        this._deps.providerCardRegistry.unregister(target.providerId, undefined, target.modelId);
+        const key = toProviderCardOwnerKey(target);
+        if (this._providerCardOwners.get(key) === id) {
+          this._providerCardOwners.delete(key);
         }
       }
     }
@@ -326,6 +386,19 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
       )?.contributes?.['neko.agentCapabilities'];
 
       if (manifest?.id) {
+        const protocol = resolveCapabilityProtocolInfo(manifest.id, manifest, 'manifest');
+        if (!isSupportedCapabilityProtocol(protocol.protocolVersion)) {
+          emitDiagnostic(this._logger, 'warn', {
+            code: 'extension.capability.protocol.unsupported',
+            reason: 'unsupported-protocol-version',
+            message: 'Skipping unsupported capability manifest protocol version.',
+            context: {
+              providerId: manifest.id,
+              protocolVersion: protocol.protocolVersion,
+            },
+          });
+          continue;
+        }
         this._manifests.set(manifest.id, manifest);
       }
     }
@@ -413,6 +486,15 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     return Array.from(this._manifests.values());
   }
 
+  getCapabilityProtocolInfo(id: string): CapabilityProtocolInfo | null {
+    const registered = this._providers.get(id);
+    if (registered) {
+      return registered.protocol;
+    }
+    const manifest = this._manifests.get(id);
+    return manifest ? resolveCapabilityProtocolInfo(id, manifest, 'manifest') : null;
+  }
+
   /** Check if a provider is registered */
   hasProvider(id: string): boolean {
     return this._providers.has(id);
@@ -442,7 +524,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   }
 
   private _recordCapabilityNameCollision(input: {
-    kind: 'tool' | 'skill' | 'tool-group';
+    kind: 'tool' | 'skill' | 'tool-group' | 'provider-card';
     name: string;
     providerId: string;
     existingOwner?: string;
@@ -514,6 +596,48 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
     }
     return null;
   }
+}
+
+function toProviderCardTarget(card: ProviderCard): ProviderCardTarget {
+  return {
+    providerId: card.providerId,
+    ...(card.modelId ? { modelId: card.modelId } : {}),
+  };
+}
+
+function toProviderCardOwnerKey(target: ProviderCardTarget): string {
+  return target.modelId ? `${target.providerId}\u0000${target.modelId}` : target.providerId;
+}
+
+function formatProviderCardTarget(target: ProviderCardTarget): string {
+  return target.modelId ? `${target.providerId}/${target.modelId}` : target.providerId;
+}
+
+function resolveCapabilityProtocolInfo(
+  providerId: string,
+  metadata: {
+    readonly protocolVersion?: AgentCapabilityProtocolVersion;
+    readonly trustLevel?: AgentCapabilityTrustLevel;
+    readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+    readonly lifecycleHooks?: readonly AgentCapabilityLifecycleHook[];
+  },
+  source: 'provider' | 'manifest',
+): CapabilityProtocolInfo {
+  return {
+    providerId,
+    protocolVersion: metadata.protocolVersion ?? '1.0',
+    trustLevel: metadata.trustLevel ?? 'core',
+    hostRequirements:
+      metadata.hostRequirements && metadata.hostRequirements.length > 0
+        ? metadata.hostRequirements
+        : [{ host: 'vscode' }],
+    lifecycleHooks: metadata.lifecycleHooks ?? [],
+    source,
+  };
+}
+
+function isSupportedCapabilityProtocol(version: AgentCapabilityProtocolVersion): boolean {
+  return version === '1.0';
 }
 
 function resolveGroupLayer(group: ToolGroup): 'always' | 'dynamic' {
