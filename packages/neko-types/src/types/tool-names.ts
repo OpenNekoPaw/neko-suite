@@ -144,6 +144,18 @@ export const TOOL_NAMES_TRANSCRIBE = {
 } as const;
 
 // =============================================================================
+// Perception — Optional Evidence Tools
+// =============================================================================
+
+export const TOOL_NAMES_PERCEPTION = {
+  DESCRIBE_INPUT: 'perception.describeInput',
+  AUDIO_TRANSCRIBE: 'perception.audio.transcribe',
+  IMAGE_SIMILARITY: 'perception.image.similarity',
+  IMAGE_CLASSIFY: 'perception.image.classify',
+  VIDEO_DETECT_SHOTS: 'perception.video.detectShots',
+} as const;
+
+// =============================================================================
 // System — Utility Tools
 // =============================================================================
 
@@ -185,7 +197,7 @@ export const TOOL_NAMES_CREATION = {
 export const TOOL_NAMES_EXECUTION = {
   // Slots reserved — e.g. 'execution.plan.produce', 'execution.todo.update',
   // 'execution.apply.commit'. Fill in as execution-flow machinery comes
-  // online (P3 autoheal, P4 approval, Q3 partialRerun).
+  // online (P3 autoheal, P4 approval, Q3 recovery guidance).
 } as const;
 
 /**
@@ -202,6 +214,7 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_SKETCH,
   ...TOOL_NAMES_ASSETS,
   ...TOOL_NAMES_TRANSCRIBE,
+  ...TOOL_NAMES_PERCEPTION,
   ...TOOL_NAMES_SYSTEM,
   ...TOOL_NAMES_CREATION,
   ...TOOL_NAMES_EXECUTION,

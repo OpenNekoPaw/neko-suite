@@ -103,6 +103,9 @@ export * from './tool-group';
 // Tool category types (tool categorization and layer management)
 export * from './tool-category';
 
+// Perception tool contracts (Agent-first optional evidence providers)
+export * from './perception-tool';
+
 // Tool injection types (three-layer injection mechanism)
 export * from './tool-injection';
 
@@ -202,6 +205,14 @@ export * from './tool-names';
 
 // Agent capability provider protocol (sub-package → neko-agent capability injection)
 export * from './agent-capability';
+
+// Agent-first multimodal observation / rationale contracts
+export * from './agent-observation';
+export * from './multimodal-context';
+export * from './decision-rationale';
+export * from './recovery-guidance';
+export * from './subagent-reviewer';
+export * from './operation-tool-adapter';
 
 // Prompt fragment (PR3e: sub-package prompt contribution)
 export * from './prompt-fragment';

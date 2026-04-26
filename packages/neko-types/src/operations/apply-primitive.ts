@@ -7,7 +7,7 @@
 //
 // Background: every sub-package (sketch, canvas, audio, timeline, etc.)
 // has its own `applyXxxOperation(data, op)` function. Q3's
-// partialRerun and Q4's Puppet/Model Operations will both need to say
+// recovery guidance and Q4's Puppet/Model Operations will both need to say
 // "Apply this operation" without caring which sub-system owns it.
 //
 // This module provides:
@@ -30,7 +30,7 @@
 export type ApplyFn<TData, TOp> = (data: TData, op: TOp) => TData;
 
 /**
- * Metadata around an apply function. Used by partialRerun + Operation
+ * Metadata around an apply function. Used by recovery guidance + Operation
  * layer to route a generic Apply request to the right sub-system.
  */
 export interface ApplyDescriptor<TData = unknown, TOp = unknown> {
@@ -41,7 +41,7 @@ export interface ApplyDescriptor<TData = unknown, TOp = unknown> {
    * functional apply) or whether it has side effects the caller must
    * guard against (e.g. remote API calls).
    *
-   * Partial-rerun only reuses descriptors where this is true.
+   * Recovery flows only reuse descriptors where this is true.
    */
   idempotent: boolean;
   /**

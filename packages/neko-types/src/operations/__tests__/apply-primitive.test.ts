@@ -53,7 +53,7 @@ describe('ApplyRegistry', () => {
     expect(reg.list()).toEqual([]);
   });
 
-  it('destructive/idempotent metadata is preserved for partial-rerun callers', () => {
+  it('destructive/idempotent metadata is preserved for recovery callers', () => {
     const reg = createApplyRegistry();
     const destructive: ApplyDescriptor<Box, { id: string }> = {
       namespace: 'test.drop',

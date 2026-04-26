@@ -153,7 +153,11 @@ export interface ToolExecuteOptions {
 /**
  * Tool definition
  */
+export type ToolKind = 'standard' | 'perception' | 'operation';
+
 export interface Tool {
+  /** Discriminant for capability-specific tool metadata. */
+  kind?: ToolKind;
   /** Tool name (unique identifier) */
   name: string;
   /** Tool description for LLM */
