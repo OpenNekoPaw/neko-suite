@@ -1919,6 +1919,9 @@ export class AgentSession implements IAgentSession {
 
   private _rebuildFeedbackCoordinator(): void {
     const previous = this._feedbackCoordinator;
+    const providerCardProject = this._ablationMarker?.disableProviderCardAutoEvolve
+      ? undefined
+      : createProviderCardProjectConfig(this._config.workspace);
     this._feedbackCoordinator =
       this._config.feedbackCoordinator ??
       createFeedbackCoordinator({
@@ -1927,6 +1930,7 @@ export class AgentSession implements IAgentSession {
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
         journalAsSSOT: this._config.journalAsSSOT,
+        ...(providerCardProject ? { providerCardProject } : {}),
       });
 
     if (previous && previous !== this._feedbackCoordinator) {
@@ -2070,6 +2074,17 @@ export class AgentSession implements IAgentSession {
       });
       if (qualityCheckSignal) {
         this._feedbackCoordinator.observe(qualityCheckSignal);
+      }
+
+      const providerExpressionSignal = toProviderExpressionFeedbackSignal({
+        result,
+        toolCallId,
+        toolName,
+        observedAt: step.timestamp,
+        ...(activeRunId ? { runId: activeRunId } : {}),
+      });
+      if (providerExpressionSignal) {
+        this._feedbackCoordinator.observe(providerExpressionSignal);
       }
     }
   }
@@ -2730,6 +2745,25 @@ function countTaskStatuses(
   return counts;
 }
 
+function createProviderCardProjectConfig(
+  workspace: AgentSessionConfig['workspace'] | undefined,
+): import('../feedback').FeedbackCoordinatorConfig['providerCardProject'] | undefined {
+  if (!workspace || typeof workspace.fsOps.writeFile !== 'function') {
+    return undefined;
+  }
+
+  return {
+    workspaceRoot: workspace.root,
+    fsOps: {
+      mkdir: workspace.fsOps.mkdir.bind(workspace.fsOps),
+      writeFile: workspace.fsOps.writeFile.bind(workspace.fsOps),
+      ...(typeof workspace.fsOps.readFile === 'function'
+        ? { readFile: workspace.fsOps.readFile.bind(workspace.fsOps) }
+        : {}),
+    },
+  };
+}
+
 function resolveArtifactService(config: AgentSessionConfig): IArtifactService | null {
   if (config.artifactService) {
     return config.artifactService;
@@ -2755,6 +2789,7 @@ interface ObservedToolResult {
   readonly success: boolean;
   readonly data?: unknown;
   readonly error?: string;
+  readonly metadata?: Record<string, unknown>;
 }
 
 interface QualityCheckEvaluationSummary {
@@ -2805,6 +2840,134 @@ function toQualityCheckFeedbackSignal(input: {
     remediationCount,
     ...(input.runId ? { runId: input.runId } : {}),
   };
+}
+
+function toProviderExpressionFeedbackSignal(input: {
+  readonly result: ObservedToolResult;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly observedAt: number;
+  readonly runId?: string;
+}): import('../feedback').FeedbackSignal | null {
+  const metadata = extractProviderExpressionMetadata(input.result);
+  if (!metadata) {
+    return null;
+  }
+
+  return {
+    kind: 'provider-card-observation',
+    observedAt: input.observedAt,
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    mode: metadata.mode,
+    ...(metadata.providerId ? { providerId: metadata.providerId } : {}),
+    ...(metadata.reason ? { reason: metadata.reason } : {}),
+    ...(metadata.styleFamily ? { styleFamily: metadata.styleFamily } : {}),
+    ...(metadata.concepts.length > 0 ? { concepts: metadata.concepts } : {}),
+    ...(metadata.conceptDecisions.length > 0
+      ? { conceptDecisions: metadata.conceptDecisions }
+      : {}),
+    ...(input.runId ? { runId: input.runId } : {}),
+    metadata: metadata.raw,
+  };
+}
+
+function extractProviderExpressionMetadata(
+  result: ObservedToolResult,
+): {
+  mode: 'agentic' | 'fallback' | 'native';
+  providerId?: string;
+  reason?: string;
+  styleFamily?: string;
+  concepts: readonly string[];
+  conceptDecisions: readonly import('../feedback').ProviderExpressionConceptDecision[];
+  raw: Record<string, unknown>;
+} | null {
+  const adaptation = getProviderAdaptationCandidate(result);
+  if (isRecord(adaptation)) {
+    return extractProviderAdaptationMetadata(adaptation);
+  }
+
+  return null;
+}
+
+function extractProviderAdaptationMetadata(
+  metadata: Record<string, unknown>,
+): {
+  mode: 'agentic' | 'fallback' | 'native';
+  providerId?: string;
+  reason?: string;
+  styleFamily?: string;
+  concepts: readonly string[];
+  conceptDecisions: readonly import('../feedback').ProviderExpressionConceptDecision[];
+  raw: Record<string, unknown>;
+} | null {
+  const mode =
+    metadata['mode'] === 'agentic' ? 'agentic' : metadata['mode'] === 'native' ? 'native' : null;
+  if (!mode) return null;
+
+  const intent = metadata['extractedIntent'];
+  const adaptationMetadata = metadata['adaptationMetadata'];
+  return {
+    mode,
+    ...(readProviderId(metadata) ? { providerId: readProviderId(metadata) } : {}),
+    ...(readAdaptationReason(adaptationMetadata)
+      ? { reason: readAdaptationReason(adaptationMetadata) }
+      : {}),
+    ...(isRecord(intent) && typeof intent['styleFamily'] === 'string'
+      ? { styleFamily: intent['styleFamily'] }
+      : {}),
+    concepts: readIntentConcepts(intent),
+    conceptDecisions: [],
+    raw: metadata,
+  };
+}
+
+function readAdaptationReason(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value['riskFlags'])) return undefined;
+  return value['riskFlags'].find((entry): entry is string => typeof entry === 'string');
+}
+
+function readIntentConcepts(value: unknown): readonly string[] {
+  if (!isRecord(value)) return [];
+  const concepts = [
+    ...(Array.isArray(value['style']) ? value['style'] : []),
+    ...(Array.isArray(value['mustInclude']) ? value['mustInclude'] : []),
+    ...(Array.isArray(value['mood']) ? value['mood'] : []),
+  ];
+  return concepts
+    .filter((concept): concept is string => typeof concept === 'string')
+    .map((concept) => concept.trim())
+    .filter(Boolean);
+}
+
+function getProviderAdaptationCandidate(result: ObservedToolResult): unknown {
+  const direct = result.metadata?.['providerAdaptation'];
+  if (direct) return direct;
+  if (isRecord(result.data)) return result.data['providerAdaptation'];
+  return undefined;
+}
+
+function readProviderId(metadata: Record<string, unknown>): string | undefined {
+  if (typeof metadata['providerId'] === 'string') {
+    return metadata['providerId'];
+  }
+
+  const providerHints = metadata['providerHints'];
+  if (isRecord(providerHints) && typeof providerHints['providerId'] === 'string') {
+    return providerHints['providerId'];
+  }
+
+  const selection = metadata['selection'];
+  if (isRecord(selection) && typeof selection['primary'] === 'string') {
+    return selection['primary'];
+  }
+
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isQualityCheckFeedbackPayload(value: unknown): value is QualityCheckFeedbackPayload {

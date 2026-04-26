@@ -99,7 +99,9 @@ export function* stepToEvents(
             data?: unknown;
             error?: string;
             attachments?: import('@neko/shared').ToolResultAttachment[];
+            metadata?: Record<string, unknown>;
           };
+          const metadata = extractToolResultMetadata(result);
           yield {
             type: 'tool_result',
             toolResult: {
@@ -109,6 +111,7 @@ export function* stepToEvents(
               error: result.error,
               ...(result.attachments &&
                 result.attachments.length > 0 && { attachments: result.attachments }),
+              ...(metadata ? { metadata } : {}),
             },
           };
         }
@@ -127,6 +130,22 @@ export function* stepToEvents(
       }
       break;
   }
+}
+
+function extractToolResultMetadata(result: {
+  data?: unknown;
+  metadata?: Record<string, unknown>;
+}): Record<string, unknown> | undefined {
+  if (result.metadata) return result.metadata;
+  if (!isRecord(result.data)) return undefined;
+  const providerAdaptation = result.data.providerAdaptation;
+  if (providerAdaptation) return { providerAdaptation };
+
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 // =============================================================================

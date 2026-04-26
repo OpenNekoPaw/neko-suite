@@ -79,6 +79,11 @@ export interface AblationToggles {
    *  false = keep memory file, disable recall prompt injection */
   memoryRecall?: false;
 
+  // --- Provider Card Context ---
+
+  /** Project ProviderCard auto-evolution: false = do not write .neko/providers/*.card.md. */
+  providerCardAutoEvolve?: false;
+
   // --- LLM parameters ---
 
   /** Thinking budget override (0 = disable extended thinking) */

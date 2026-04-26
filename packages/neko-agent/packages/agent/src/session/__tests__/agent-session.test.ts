@@ -15,6 +15,7 @@ import type {
   ToolResultWithMeta,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
+import { applyAblationToggles } from '../../experiment/apply-toggles';
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -1085,6 +1086,112 @@ describe('AgentSession', () => {
           ],
         }),
       ]);
+    });
+
+    it('captures provider expression metadata as feedback observations', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-img', name: 'GenerateImage', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-img',
+              success: true,
+              data: {
+                taskId: 'image-task',
+                providerAdaptation: {
+                  mode: 'agentic',
+                  providerId: 'sdxl',
+                  extractedIntent: { styleFamily: 'anime', style: ['anime'] },
+                  adaptationMetadata: { riskFlags: ['agent-expression-context-only'] },
+                },
+              },
+              name: 'GenerateImage',
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 300,
+        },
+      ]);
+
+      await collectEvents(session.execute('generate anime image'));
+
+      expect(session.getFeedbackCycles()).toEqual([
+        expect.objectContaining({
+          signals: [
+            expect.objectContaining({
+              kind: 'provider-card-observation',
+              observedAt: 300,
+              toolCallId: 'call-img',
+              toolName: 'GenerateImage',
+              mode: 'agentic',
+              providerId: 'sdxl',
+            }),
+          ],
+          decisions: [
+            expect.objectContaining({
+              action: 'continue',
+              signalKind: 'provider-card-observation',
+              toolCallId: 'call-img',
+              reason: 'agent-expression-context-only',
+              styleFamily: 'anime',
+            }),
+          ],
+        }),
+      ]);
+    });
+
+    it('does not write provider card overrides when providerCardAutoEvolve is disabled', async () => {
+      const writes: Array<{ path: string; data: string }> = [];
+      const session = new AgentSession(
+        applyAblationToggles(
+          {
+            ...config,
+            workspace: {
+              root: '/workspace/demo',
+              fsOps: {
+                async appendFile(): Promise<void> {},
+                async mkdir(): Promise<void> {},
+                async writeFile(path: string, data: string): Promise<void> {
+                  writes.push({ path, data });
+                },
+              },
+            },
+          },
+          { providerCardAutoEvolve: false },
+        ),
+      );
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-img', name: 'GenerateImage', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-img',
+              success: true,
+              data: {
+                taskId: 'image-task',
+                providerAdaptation: {
+                  mode: 'agentic',
+                  providerId: 'sdxl',
+                  extractedIntent: { styleFamily: 'anime' },
+                  adaptationMetadata: { riskFlags: ['agent-expression-context-only'] },
+                },
+              },
+              name: 'GenerateImage',
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 350,
+        },
+      ]);
+
+      await collectEvents(session.execute('generate anime image'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(session.getFeedbackCycles()).toHaveLength(1);
+      expect(writes).toEqual([]);
     });
 
     it('injects feedback guidance into the next turn only, then clears it after consumption', async () => {

@@ -266,6 +266,22 @@ describe('Builtin Skills', () => {
       expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_MUSIC);
     });
 
+    it('should guide GenerateImage toward prompt or markdown intent sources', () => {
+      const generateImage = aiGenerateSkill.toolDefinitions?.find(
+        (tool) => tool.name === TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+      );
+
+      expect(generateImage?.description).toContain('prompt');
+      expect(generateImage?.parameters.prompt).toEqual(
+        expect.objectContaining({ required: false }),
+      );
+      expect(generateImage?.parameters.taskRef).toEqual(
+        expect.objectContaining({ required: false }),
+      );
+      expect(aiGenerateSkill.content).toContain('Generation Intent Sources');
+      expect(aiGenerateSkill.content).toContain('taskRef');
+    });
+
     it('should have timeline tools in video-editing skill', () => {
       expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO);
       expect(videoEditingSkill.allowedTools).toContain(TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT);

@@ -115,6 +115,43 @@ describe('stepToEvents', () => {
     expect(resultEvents[0]!.toolResult!.success).toBe(true);
   });
 
+  it('should project provider adaptation metadata into tool_result events', () => {
+    const step: AgentStep = {
+      type: 'act',
+      content: 'Executed 1 tool(s)',
+      toolResults: [
+        {
+          callId: 'c1',
+          success: true,
+          data: {
+            taskId: 'image-task',
+            providerAdaptation: {
+              mode: 'agentic',
+              providerId: 'sdxl',
+              modelId: 'sdxl-base',
+              resolvedTarget: { providerId: 'sdxl', modelId: 'sdxl-base' },
+            },
+          },
+          name: 'GenerateImage',
+        },
+      ] as any,
+      timestamp: Date.now(),
+    };
+    const ss = freshStreamState();
+
+    const events = collect(stepToEvents(step, 1, 10, ss));
+    const resultEvent = events.find((event) => event.type === 'tool_result');
+
+    expect(resultEvent?.toolResult?.metadata).toEqual({
+      providerAdaptation: {
+        mode: 'agentic',
+        providerId: 'sdxl',
+        modelId: 'sdxl-base',
+        resolvedTarget: { providerId: 'sdxl', modelId: 'sdxl-base' },
+      },
+    });
+  });
+
   it('should emit tool_progress events before tool_result for act step', () => {
     const step: AgentStep = {
       type: 'act',

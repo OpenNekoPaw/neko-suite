@@ -231,7 +231,10 @@ async function executeToolCall(
     });
   };
 
-  const execute = () => deps.toolRegistry.execute(info.name, info.arguments, { onProgress });
+  const execute = () =>
+    deps.toolRegistry.execute(info.name, info.arguments, {
+      onProgress,
+    });
 
   // Check if any hook wants to handle the tool call
   for (const hook of deps.hooks) {

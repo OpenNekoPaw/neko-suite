@@ -200,6 +200,12 @@ describe('applyAblationToggles — skill/tool marker fields (P1-A)', () => {
     expect(marker.toolInjectionMode).toBe('always-only');
   });
 
+  it('providerCardAutoEvolve: false sets marker.disableProviderCardAutoEvolve', () => {
+    const config = applyAblationToggles(makeBaseConfig(), { providerCardAutoEvolve: false });
+    const marker = extractAblationMarker(config.hooks)!;
+    expect(marker.disableProviderCardAutoEvolve).toBe(true);
+  });
+
   it('empty toggles yield a marker with all skill/tool flags off', () => {
     const config = applyAblationToggles(makeBaseConfig(), {});
     const marker = extractAblationMarker(config.hooks)!;

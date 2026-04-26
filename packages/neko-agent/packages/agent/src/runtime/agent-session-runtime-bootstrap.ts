@@ -38,6 +38,7 @@ export function buildAgentSessionConfigWithRuntime(
   const toolGroupRegistry = base.toolGroupRegistry ?? capability?.toolGroupRegistry;
   const toolCategoryRegistry = base.toolCategoryRegistry ?? capability?.toolCategoryRegistry;
   const skillService = base.skillService ?? capability?.skillService;
+  const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
   const journalWriter = resolveJournalWriter(base, artifacts);
@@ -53,6 +54,7 @@ export function buildAgentSessionConfigWithRuntime(
     ...(toolGroupRegistry ? { toolGroupRegistry } : {}),
     ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
     ...(skillService ? { skillService } : {}),
+    ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
     ...(feedback?.journalAsSSOT !== undefined && base.journalAsSSOT === undefined

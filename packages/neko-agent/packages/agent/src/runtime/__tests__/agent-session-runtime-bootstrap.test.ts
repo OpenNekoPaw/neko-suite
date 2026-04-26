@@ -20,6 +20,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const skillService = { kind: 'skill-service' } as never;
     const toolGroupRegistry = { kind: 'tool-group-registry' } as never;
     const toolCategoryRegistry = { kind: 'tool-category-registry' } as never;
+    const providerCardRegistry = { kind: 'provider-card-registry' } as never;
     const projectMemoryManager = { kind: 'project-memory' } as never;
     const feedbackCoordinator = { kind: 'feedback-coordinator' } as never;
     const idcTaskProjection = { kind: 'idc-task-projection' } as never;
@@ -51,6 +52,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         skillService,
         toolGroupRegistry,
         toolCategoryRegistry,
+        providerCardRegistry,
         promptFragments,
       },
       feedbackLoop: {
@@ -91,6 +93,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.promptFragments).toBe(promptFragments);
     expect(config.toolGroupRegistry).toBe(toolGroupRegistry);
     expect(config.toolCategoryRegistry).toBe(toolCategoryRegistry);
+    expect(config.providerCardRegistry).toBe(providerCardRegistry);
     expect(config.skillService).toBe(skillService);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.feedbackCoordinator).toBe(feedbackCoordinator);

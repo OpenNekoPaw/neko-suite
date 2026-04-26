@@ -43,6 +43,8 @@ export interface AblationMarkerHook extends ExecutorHooks {
    * Undefined = keep default ('always+dynamic').
    */
   toolInjectionMode?: 'always-only' | 'always+dynamic';
+  /** When true, project ProviderCard override auto-writes are disabled. */
+  disableProviderCardAutoEvolve: boolean;
 }
 
 function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook {
@@ -54,6 +56,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     disableSkillDiscovery: toggles.skillDiscovery === false,
     disableSkillInjection: toggles.skillInjection === false,
     disableDynamicToolSets: toggles.dynamicToolSets === false,
+    disableProviderCardAutoEvolve: toggles.providerCardAutoEvolve === false,
     ...(toggles.toolInjection !== undefined && {
       toolInjectionMode: toggles.toolInjection,
     }),
@@ -88,6 +91,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | compactLogging        | compactLogging = false                             |
  * | autoMemoryExtraction  | autoMemoryExtraction = false                        |
  * | memoryRecall          | memoryRecall = false                               |
+ * | providerCardAutoEvolve | marker flag for ProviderCard auto-evolution writes |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
  */

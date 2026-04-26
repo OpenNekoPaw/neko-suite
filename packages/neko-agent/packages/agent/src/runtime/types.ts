@@ -3,6 +3,7 @@ import type {
   ISkillRegistry,
   IToolCategoryRegistry,
   IToolGroupRegistry,
+  IProviderCardRegistry,
   PromptFragment,
 } from '@neko/shared';
 import type { IdcStage } from '@neko-agent/types';
@@ -102,6 +103,7 @@ export interface ICapabilityRuntime {
   readonly skillRegistry?: ISkillRegistry;
   readonly toolGroupRegistry?: IToolGroupRegistry;
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
+  readonly providerCardRegistry?: IProviderCardRegistry;
   readonly promptFragments?: readonly PromptFragment[];
 }
 

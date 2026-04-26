@@ -12,6 +12,7 @@ import type {
   IToolRegistry,
   IToolGroupRegistry,
   IToolCategoryRegistry,
+  IProviderCardRegistry,
   PromptFragment,
 } from '@neko/shared';
 import type { ArtifactWatcherFactory } from '../runtime/types';
@@ -140,6 +141,7 @@ export interface AgentSessionConfig {
   /** External registries (optional, will create if not provided) */
   toolGroupRegistry?: IToolGroupRegistry;
   toolCategoryRegistry?: IToolCategoryRegistry;
+  providerCardRegistry?: IProviderCardRegistry;
 
   /**
    * Settings hook loader for executing shell hooks from .neko/settings.json
@@ -388,6 +390,8 @@ export interface AgentEvent {
     error?: string;
     /** Multimodal attachments from tool execution (e.g. generated images) */
     attachments?: import('@neko/shared').ToolResultAttachment[];
+    /** Tool-level observability metadata persisted to journal consumers. */
+    metadata?: Record<string, unknown>;
   };
 
   /** Tool execution progress update */

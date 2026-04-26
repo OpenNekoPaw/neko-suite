@@ -14,12 +14,39 @@ import { TOOL_NAMES_MEDIA, TOOL_NAMES_TRANSCRIBE, TOOL_NAMES_SYSTEM } from '@nek
 export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
   {
     name: 'GenerateImage',
-    description: 'Generate an image from a text prompt using AI',
+    description: 'Generate an image using AI. Prefer prompt or taskRef/planRef markdown.',
     parameters: {
       prompt: {
         type: 'string',
-        required: true,
-        description: 'Text description of the image to generate',
+        required: false,
+        description: 'Natural language generation prompt; default user-facing input',
+      },
+      taskRef: {
+        type: 'string',
+        required: false,
+        description: 'Optional task markdown URI/path used as the generation intent source.',
+      },
+      planRef: {
+        type: 'string',
+        required: false,
+        description: 'Optional plan markdown URI/path used as the generation intent source.',
+      },
+      providerAdaptationMode: {
+        type: 'string',
+        enum: ['auto', 'agentic', 'native'],
+        required: false,
+        description:
+          'Provider expression adaptation mode. Use native to bypass provider expression guidance and pass the prompt through.',
+      },
+      providerId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit provider id. Usually omit and let ProviderRouter choose.',
+      },
+      modelId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit model id. Usually omit and let media routing choose.',
       },
       size: {
         type: 'string',
@@ -50,12 +77,39 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
   },
   {
     name: 'GenerateVideo',
-    description: 'Generate a video from a text prompt using AI',
+    description: 'Generate a video using AI. Prefer prompt or taskRef/planRef markdown.',
     parameters: {
       prompt: {
         type: 'string',
-        required: true,
-        description: 'Text description of the video to generate',
+        required: false,
+        description: 'Natural language generation prompt; default user-facing input',
+      },
+      taskRef: {
+        type: 'string',
+        required: false,
+        description: 'Optional task markdown URI/path used as the generation intent source.',
+      },
+      planRef: {
+        type: 'string',
+        required: false,
+        description: 'Optional plan markdown URI/path used as the generation intent source.',
+      },
+      providerAdaptationMode: {
+        type: 'string',
+        enum: ['auto', 'agentic', 'native'],
+        required: false,
+        description:
+          'Provider expression adaptation mode. Use native to bypass provider expression guidance and pass the prompt through.',
+      },
+      providerId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit provider id. Usually omit and let ProviderRouter choose.',
+      },
+      modelId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit model id. Usually omit and let media routing choose.',
       },
       duration: {
         type: 'number',
@@ -221,8 +275,8 @@ You now have access to AI-powered media generation tools.
 
 | Request Type | Tool | Key Params |
 |--------------|------|------------|
-| Draw/Generate image | \`generate_image\` | prompt, size, style |
-| Generate video | \`generate_video\` | prompt, duration, resolution |
+| Draw/Generate image | \`generate_image\` | prompt or taskRef, size, style |
+| Generate video | \`generate_video\` | prompt or taskRef, duration, resolution |
 | Voiceover/TTS | \`generate_tts\` | text, voice, language |
 | Background music | \`generate_music\` | prompt, duration, genre |
 | Character consistency | \`generate_character\` | prompt, referenceImageUrl |
@@ -233,9 +287,9 @@ You now have access to AI-powered media generation tools.
 
 ## Decision Flow
 
-\`\`\`
+~~~
 User Request → Identify Type → Select Tool → Confirm Params → Generate
-\`\`\`
+~~~
 
 ## Default Parameters
 
@@ -246,10 +300,21 @@ User Request → Identify Type → Select Tool → Confirm Params → Generate
 | generate_tts | speed: 1.0 |
 | generate_music | duration: 30s |
 
+
+## Generation Intent Sources
+
+Use natural-language \`prompt\` as the default input. When a Plan/Task markdown document exists, pass \`taskRef\` or \`planRef\` so the runtime can use that markdown as the structured intent anchor. structured intent is derived from markdown or prompt metadata.
+
+Default strategy:
+- prompt only → native provider prompt
+- taskRef / planRef → extract generation intent from markdown while preserving the document as the structured anchor
+- providerAdaptationMode: auto/agentic → rely on AGENT provider expression context when available
+- providerAdaptationMode: native → bypass provider expression guidance and pass the prompt through
+
 ## Image Generation Tips
 
 ### Prompt Structure
-\`[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]\`
+[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]
 
 ### Size Selection
 - Social media cover: 1792x1024 (16:9)
