@@ -256,13 +256,13 @@ name: cut-tiktok-creator
 description: What + When（AutoMode 触发依据）
 requiredSubpackages: [neko-cut, neko-audio]
 allowedTools: [cut.trim, cut.export-mp4]
-phases: [校准 → 分镜 → 生成 → 合成 → 导出]
-pipelines: { export: [...] }
 referencedAssets: [asset://styles/cinematic]
 compliance: { framework: SOC2, auditRequired: true }
 ---
 
 # 人格正文即 system prompt
+## 工作流程
+先校准风格，再拆分镜头，随后生成、合成并在导出前确认参数。
 你是 TikTok 创作剪辑师...
 ```
 

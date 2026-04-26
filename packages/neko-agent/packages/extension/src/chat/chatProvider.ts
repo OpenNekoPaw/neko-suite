@@ -690,7 +690,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       // Note: workflow/plan* / workflow/router* / pipelineGate* webview
       // messages were removed with the orchestrator layer. Plan handling
-      // is now the Agent's job via Skill phases + approvalEngine.
+      // is now the Agent's job via IDC artifacts + approvalEngine.
 
       // 3. Handle chat-specific messages
       switch (message.type) {

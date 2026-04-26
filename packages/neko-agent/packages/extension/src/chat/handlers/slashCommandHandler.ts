@@ -338,21 +338,11 @@ export class SlashCommandHandler {
 function _createSlashExecutionOverrides(
   skill: Skill | undefined,
 ): { metadata?: Record<string, unknown> } | undefined {
-  if (!skill) {
-    return undefined;
-  }
-
-  const legacyPipelines = Reflect.get(skill as object, 'pipelines');
-  const hasWorkflowTemplate =
-    (skill.phases?.length ?? 0) > 0 ||
-    (typeof legacyPipelines === 'object' && legacyPipelines !== null);
-
-  if (!hasWorkflowTemplate) {
-    return undefined;
-  }
+  const metadata = createSkillExecutionIdcMetadata(skill);
+  if (!metadata) return undefined;
 
   return {
-    metadata: createSkillExecutionIdcMetadata(skill),
+    metadata,
   };
 }
 

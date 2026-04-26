@@ -13,6 +13,11 @@ export function createPlanModeIdcMetadata(): Record<string, unknown> {
   };
 }
 
+/**
+ * Explicit slash Skill execution always enters IDC as a prompt-chain run.
+ * Skill schema fields do not control IDC routing; non-slash activation paths
+ * should inject metadata explicitly when they need the same entry signal.
+ */
 export function createSkillExecutionIdcMetadata(
   skill: Skill | undefined,
 ): Record<string, unknown> | undefined {
@@ -20,19 +25,10 @@ export function createSkillExecutionIdcMetadata(
     return undefined;
   }
 
-  const legacyPipelines = Reflect.get(skill as object, 'pipelines');
-  const hasWorkflowTemplate =
-    (skill.phases?.length ?? 0) > 0 ||
-    (typeof legacyPipelines === 'object' && legacyPipelines !== null);
-
-  if (!hasWorkflowTemplate) {
-    return undefined;
-  }
-
   const runKind = createSkillRunKind(skill.name);
   return {
     idc: {
-      entrySignal: 'workflow-template',
+      entrySignal: 'prompt-chain-skill',
       taskShape: 'multi-step',
       runKind,
       workflowId: runKind,

@@ -42,7 +42,7 @@ import { getStageModeActivation, type StageMode } from './stage-activation-matri
  *   multi-step          → rule 5 (e.g. "generate 3 covers") → enter Plan
  *   vague-creative      → rule 6 (fallback)                 → enter Draft
  *   referenced-artifact → rule 2 (user cited @draft-001)    → continue mid-DAG
- *   workflow-template   → rule 3 (user invoked /tiktok-15s) → Workflow-defined
+ *   prompt-chain-skill → rule 3 (user invoked /tiktok-15s) → prompt-chain Skill
  *   high-risk-forced    → rule 1 (reversible=false present) → force Draft
  */
 export type StageEntrySignal =
@@ -50,7 +50,7 @@ export type StageEntrySignal =
   | 'multi-step'
   | 'vague-creative'
   | 'referenced-artifact'
-  | 'workflow-template'
+  | 'prompt-chain-skill'
   | 'high-risk-forced';
 
 export interface StagePlanInputs {
@@ -173,9 +173,9 @@ function resolveEntryStage(mode: StageMode, signal: StageEntrySignal): IdcStage 
     case 'referenced-artifact':
       // User cited @draft-001 / @plan-001 → continue from Plan.
       return 'plan';
-    case 'workflow-template':
-      // Workflow invocation — the workflow itself picks its entry point. We
-      // default to Plan, letting the workflow override if needed.
+    case 'prompt-chain-skill':
+      // Explicit Skill invocation starts from Plan; the prompt-chain guidance
+      // can still steer Draft/Apply details inside IDC.
       return 'plan';
     case 'atomic-instruction':
       // "bump volume +3dB" — straight to Apply.

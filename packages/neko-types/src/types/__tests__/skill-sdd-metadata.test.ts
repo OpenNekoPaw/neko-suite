@@ -2,7 +2,7 @@
  * validateSkill + validateSkillManifest SDD metadata tests (B1 + B1.5)
  *
  * Covers agent-unified-workflow.md §5.2.1 manifest fields:
- *   version, domain, requiredSubpackages, autoInvoke, phases, pipelines,
+ *   version, domain, requiredSubpackages, autoInvoke,
  *   referencedAssets, referencedSkills, compliance.
  *
  * The SDD manifest lives in a sibling `manifest.json` — separate from
@@ -14,8 +14,8 @@
  *   - `validateSkillManifest(manifest)`: bare manifest pass used by the
  *     marketplace installer and by the activation guard.
  *
- * Missing version / domain only warn; every other field is optional but
- * its shape is checked when present.
+ * Missing version / domain warn; deterministic runtime fields are
+ * shape-checked when present.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -44,6 +44,42 @@ function baseManifest(overrides: Partial<SkillManifest> = {}): Partial<SkillMani
 }
 
 describe('validateSkill — SDD metadata §5.2.1', () => {
+  describe('base invariants', () => {
+    it('requires slash-routable lowercase hyphen skill names', () => {
+      for (const name of ['Bad Name', '中文-skill', 'skill_name']) {
+        const r = validateSkill(baseSkill({ name }));
+        expect(r.valid).toBe(false);
+        expect(r.errors.some((e) => e.includes('name'))).toBe(true);
+      }
+    });
+
+    it('limits skill names to 64 characters', () => {
+      const r = validateSkill(baseSkill({ name: 'a'.repeat(65) }));
+
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('64'))).toBe(true);
+    });
+
+    it('requires description and content', () => {
+      const r = validateSkill(baseSkill({ description: '', content: '' }));
+
+      expect(r.valid).toBe(false);
+      expect(r.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('description'),
+          expect.stringContaining('content'),
+        ]),
+      );
+    });
+
+    it('limits descriptions to 2048 characters', () => {
+      const r = validateSkill(baseSkill({ description: 'a'.repeat(2049) }));
+
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.includes('2048'))).toBe(true);
+    });
+  });
+
   describe('version', () => {
     it('accepts a valid semver string', () => {
       const r = validateSkill(baseSkill({ version: '2.3.4' }));
@@ -143,160 +179,18 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
     });
   });
 
-  describe('phases', () => {
-    it('accepts a well-formed phase list', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'specify', label: 'Specify', approval: true },
-            { name: 'implement', label: 'Implement', parallel: true },
-          ],
-        }),
-      );
+  describe('retired workflow DSL fields', () => {
+    it('ignores unknown retired workflow DSL fields', () => {
+      const r = validateSkillManifest({
+        ...baseManifest(),
+        phases: [],
+        pipelines: {},
+        workflow: {},
+        stages: [],
+      } as unknown as SkillManifest);
+
       expect(r.valid).toBe(true);
-    });
-
-    it('errors on duplicate phase names', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'specify', label: 'Specify' },
-            { name: 'specify', label: 'Specify again' },
-          ],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('Duplicate phase'))).toBe(true);
-    });
-
-    it('errors on missing label', () => {
-      const r = validateSkill(
-        baseSkill({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          phases: [{ name: 'specify', label: '' as any }],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('label'))).toBe(true);
-    });
-
-    // ------------------------------------------------------------------
-    // W1: DAG fields (dependsOn / tool / outputKey / allowedTools)
-    // ------------------------------------------------------------------
-
-    it('accepts a DAG with dependsOn references', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'parse', label: 'Parse', tool: 'parseStoryboard', outputKey: 'scenes' },
-            {
-              name: 'generate',
-              label: 'Generate',
-              dependsOn: ['parse'],
-              tool: 'generatePrompts',
-              outputKey: 'prompts',
-            },
-            {
-              name: 'batch',
-              label: 'Batch',
-              dependsOn: ['generate'],
-              tool: 'batchGenerate',
-              parallel: true,
-            },
-          ],
-        }),
-      );
-      expect(r.valid).toBe(true);
-    });
-
-    it('errors when dependsOn references an unknown phase', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'parse', label: 'Parse' },
-            { name: 'generate', label: 'Generate', dependsOn: ['nonexistent'] },
-          ],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('unknown phase "nonexistent"'))).toBe(true);
-    });
-
-    it('errors on self-dependency', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [{ name: 'parse', label: 'Parse', dependsOn: ['parse'] }],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('cannot reference the phase itself'))).toBe(true);
-    });
-
-    it('detects a simple two-node cycle', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'a', label: 'A', dependsOn: ['b'] },
-            { name: 'b', label: 'B', dependsOn: ['a'] },
-          ],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('cycle'))).toBe(true);
-    });
-
-    it('detects a three-node cycle', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [
-            { name: 'a', label: 'A', dependsOn: ['c'] },
-            { name: 'b', label: 'B', dependsOn: ['a'] },
-            { name: 'c', label: 'C', dependsOn: ['b'] },
-          ],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('cycle'))).toBe(true);
-    });
-
-    it('errors when tool is empty string', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [{ name: 'parse', label: 'Parse', tool: '' }],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('tool must be'))).toBe(true);
-    });
-
-    it('errors when outputKey is empty string', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [{ name: 'parse', label: 'Parse', outputKey: '' }],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('outputKey'))).toBe(true);
-    });
-
-    it('accepts allowedTools as tool-id whitelist', () => {
-      const r = validateSkill(
-        baseSkill({
-          phases: [{ name: 'parse', label: 'Parse', allowedTools: ['cut.trim', 'cut.export'] }],
-        }),
-      );
-      expect(r.valid).toBe(true);
-    });
-
-    it('errors when allowedTools contains a non-string', () => {
-      const r = validateSkill(
-        baseSkill({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          phases: [{ name: 'parse', label: 'Parse', allowedTools: [123 as any] }],
-        }),
-      );
-      expect(r.valid).toBe(false);
-      expect(r.errors.some((e) => e.includes('allowedTools[0]'))).toBe(true);
+      expect(r.errors).toEqual([]);
     });
   });
 
@@ -446,9 +340,7 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     expect(r.errors.some((e) => e.includes('asset://'))).toBe(true);
   });
 
-  it('accepts a SDD metadata block exactly as loaded from manifest.json', () => {
-    // Mirrors the full manifest ADR §5.2.1 example — checks that every
-    // top-level key is accepted when shaped correctly.
+  it('accepts a prompt-chain era metadata block loaded from manifest.json', () => {
     const r = validateSkillManifest({
       version: '1.2.0',
       domain: 'cut',
@@ -457,11 +349,6 @@ describe('validateSkillManifest — standalone manifest pass', () => {
         { id: 'neko-audio', required: false, fallback: { message: 'no BGM' } },
       ],
       autoInvoke: true,
-      phases: [
-        { name: 'style-calibration', label: '风格校准' },
-        { name: 'shot-breakdown', label: '分镜拆解', approval: true },
-        { name: 'shot-generation', label: '镜头生成', parallel: true },
-      ],
       referencedAssets: [
         { uri: 'asset://styles/cinematic-lut', required: false, purpose: 'default LUT' },
       ],
@@ -472,5 +359,6 @@ describe('validateSkillManifest — standalone manifest pass', () => {
       },
     });
     expect(r.valid).toBe(true);
+    expect(r.errors).toEqual([]);
   });
 });

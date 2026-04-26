@@ -72,7 +72,7 @@ export interface ReActLoopRunnerDeps {
   /**
    * Resolves the entry signal (ADR §3.2) for the *next* iteration.
    * Defaults to deriving from task shape + round index. Callers with
-   * stronger signal (user cited @proposal, workflow template) can
+   * stronger signal (user cited @proposal, prompt-chain skill) can
    * override.
    */
   classifyEntrySignal?: (ctx: TaskShapeSignals & { taskShape: StageTaskShape }) => StageEntrySignal;

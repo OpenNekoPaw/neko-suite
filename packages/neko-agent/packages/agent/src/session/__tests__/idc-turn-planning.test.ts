@@ -28,40 +28,34 @@ function planningContext(overrides: Partial<IdcTurnPlanningContext> = {}): IdcTu
 }
 
 describe('idc-turn-planning', () => {
-  it('uses workflow-template when the active skill declares workflow metadata', () => {
+  it('uses prompt-chain-skill when slash skill metadata is supplied', () => {
     const context = planningContext({
       input: 'Use the workflow skill for this campaign',
-      activeSkill: {
-        name: 'launch-workflow',
-        description: 'workflow',
-        content: '',
-        source: 'builtin',
-        enabled: true,
-        command: 'launch',
-        phases: [{ name: 'draft' }],
-      } as never,
+      metadata: {
+        idc: {
+          entrySignal: 'prompt-chain-skill',
+          taskShape: 'multi-step',
+          runKind: 'skill:launch-workflow',
+        },
+      },
     });
 
     const taskShape = classifyIdcTaskShape(signals(), context);
     const entrySignal = classifyIdcEntrySignal({ ...signals(), taskShape }, context);
 
     expect(taskShape).toBe('multi-step');
-    expect(entrySignal).toBe('workflow-template');
+    expect(entrySignal).toBe('prompt-chain-skill');
     expect(resolveIdcRunKind(context)).toBe('skill:launch-workflow');
     expect(resolveIdcWorkflowId(context)).toBe('skill:launch-workflow');
   });
 
-  it('escapes workflow skill names before building runKind', () => {
+  it('uses explicit skill runKind metadata', () => {
     const context = planningContext({
-      activeSkill: {
-        name: '剪辑: 快速 workflow',
-        description: 'workflow',
-        content: '',
-        source: 'builtin',
-        enabled: true,
-        command: 'edit-fast',
-        phases: [{ name: 'draft' }],
-      } as never,
+      metadata: {
+        idc: {
+          runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+        },
+      },
     });
 
     expect(resolveIdcRunKind(context)).toBe(
@@ -103,7 +97,7 @@ describe('idc-turn-planning', () => {
       metadata: {
         idc: {
           taskShape: 'plan-only',
-          entrySignal: 'workflow-template',
+          entrySignal: 'prompt-chain-skill',
           runKind: 'custom-run-kind',
           workflowId: 'custom-workflow',
         },
@@ -114,7 +108,7 @@ describe('idc-turn-planning', () => {
     const entrySignal = classifyIdcEntrySignal({ ...signals(), taskShape }, context);
 
     expect(taskShape).toBe('plan-only');
-    expect(entrySignal).toBe('workflow-template');
+    expect(entrySignal).toBe('prompt-chain-skill');
     expect(resolveIdcRunKind(context)).toBe('custom-run-kind');
     expect(resolveIdcWorkflowId(context)).toBe('custom-run-kind');
   });

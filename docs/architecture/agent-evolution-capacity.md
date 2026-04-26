@@ -81,13 +81,13 @@
 
 | 演化场景 | 现设计表现 |
 |-------|---------|
-| 新编排模式涌现（并发 subagent / parallel reviewer / plan-as-data）| ✅ Skill 可内嵌 `phases + pipelines` DSL；⚠️ 但 IDC 3 阶段本身是硬编码，加 "Review 并行阶段" 需要改 StagePlanner 代码 |
+| 新编排模式涌现（并发 subagent / parallel reviewer / plan-as-data）| ✅ Skill 可通过 prompt-chain 描述新工作方式；⚠️ 但 IDC 3 阶段本身是硬编码，加 "Review 并行阶段" 需要改 StagePlanner 代码 |
 | AI 想跳过阶段（简单任务无需 Draft）| ✅ AutoMode §3.2 六条入口规则 + StagePlanner 状态机已支持 |
 | 新 ExecutorHooks 类型加入 | ✅ 现有 hook 链是可组合的（memory / validation / retry / observation）；新类型 `implements ExecutorHooks` 即可接入 |
 | Operation 工具重命名 | ⚠️ Skill 通过名字引用 Tool——工具改名 Skill 静默失效；无 rename alias 机制 |
 | Tool 的 schema 演进（新字段 / 枚举扩展）| ✅ Operation 参数是 JSON Schema，AI 在 prompt 引导下能自适应；⚠️ 但旧 Skill 若硬编码了旧 schema 用法则需手动更新 |
 
-**主要优势**：ExecutorHooks 架构 + Skill 内嵌 phases DSL 提供了**两个扩展面**——hook 为 runtime 扩展，Skill phases 为编排扩展。
+**主要优势**：ExecutorHooks 架构 + Skill prompt-chain 提供了**两个扩展面**——hook 为 runtime 扩展，prompt-chain 为 AI 原生编排扩展。
 
 **主要断点**：IDC 三阶段骨架硬编码（stage-activation-matrix / stage-planner），突破性新模式需改代码。
 

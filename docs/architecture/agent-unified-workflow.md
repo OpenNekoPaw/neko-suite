@@ -18,7 +18,7 @@
 | §3.2 | StagePlanner 6 入口规则 | 已存在 |
 | §4 IDC 3 阶段 | Draft / Plan / Apply（合并原 Specify/Plan/Tasks/Implement）| Phase A（2026-04-22） |
 | §4.2 lineage | WorkflowRun → SddRun → IdcRun 演进；proposalId → draftId | W1.2.3 / Phase A / 2026-04-23 IDC rename |
-| §5 Skill-as-package | IDC metadata / phases / pipelines 回落子包 | B1-B1.6 |
+| §5 Skill-as-package | IDC metadata + prompt-chain 场景包 | B1-B1.6 / prompt-chain cleanup 2026-04-26 |
 | §5.2.10 | requiredSubpackages 激活校验 | A1 |
 | §5.3 | 内置 Skill prompt 原子化 | W1.3 |
 | §5.4 | StageTracker + StageGuardian | A1-A3 |
@@ -59,7 +59,7 @@
 - [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) - **控制面独立 + Stage Registry + FeedbackArbiter**（Proposed 2026-04-24）：把 IDC 三阶段从 `IdcStage` union 升级为 `StageDescriptor` Registry；抽取第 7 控制平面 **Control**（元层），承载 StageRegistry / ArtifactRegistry / FeedbackArbiter；统一 7 类反馈信号仲裁（validation / tool-failure / budget / self-eval / user / memory-conflict / llm-confidence）→ 5 级 FeedbackDecision（L0 retry-tool / L1 retry-stage / L2 regress-to / L3 restart-run / L4 escalate-user）；ArtifactKind `'task'` → `'apply'` 类型层对齐（磁盘路径保留）；消融扩展到 Policy 层但**不作为 stage**。落地后 Orchestration 评级 B+ → A-，§11.6 六平面 → 七平面
 - [adr-capability-protocol.md](./adr-capability-protocol.md) - **统一能力扩展协议（地基文档）**（Proposed 2026-04-25）：两阶段模型（Registration 可查 / Injection 按需进 LLM context）+ CapabilityContribution v1.0 Schema + Tool 四来源投影（Internal/MCP/Market/Local）+ MCP 三原语投影（Tool/Resource/Prompt）+ 三级信任（core/community/untrusted）+ Host Abstraction + VSCode 扩展三层接入（Agent 能力 / IDE 集成 / 桥接）+ Operation 降级为 Tool 的 kind（非并列概念）+ ToolGroup 使用原则 + Registry 查询面。本 ADR 是其他 Proposed ADR（Control Plane / Provider Bridge / Federation / Memory Unification）的基础协议框架
 - [adr-provider-expression-context.md](./adr-provider-expression-context.md) - **生成模型表达倾向上下文**（Proposed 2026-04-24）：处理生成模型三类输入端差异（Syntax Dialect / Semantic Literacy / Training Distribution Bias）；Provider 独立抽象（与 Skill 是 M:N 关系）+ ProviderCapabilityCard 三合一 markdown + ProviderRouter + ProviderExpressionContext；三层 Card 分发（Built-in/Market/Project）+ Layer 2 自动演化闭环；ProviderCard 作为 AGENT 软提示上下文，不做工具执行前确定性 prompt 替换
-- [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) - **Skill 编排退化为 prompt-chains**（Proposed 2026-04-25）：phases / pipelines DSL 退化为 markdown 章节惯例；保留 allowedTools / compliance / trustLevel 等安全/权限 DSL 边界；stage 信息由 artifact 状态自然推断（StagePlanner 不再读 Skill phases）；跨平台互通自然达成（neko Skill ↔ Claude Code Skill 双向直接复制）；演化能力 Skill 层 A- → A、Orchestration B+ → A-；4-Stage 渐进迁移路径，向后兼容
+- [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) - **Skill 编排退化为 prompt-chains**（Accepted 2026-04-26，未上线前直接清理 legacy schema）：phases / pipelines DSL 已从类型与运行时入口移除；新 Skill 用 markdown 章节惯例表达流程；保留 allowedTools / compliance / trustLevel 等安全/权限 DSL 边界；stage 信息由 artifact 状态自然推断
 - 早期双流探索 - 已清理，本 ADR 是简化归宿
 - 早期能力注册设计探索 - 已清理；正式协议见 [adr-capability-protocol.md](./adr-capability-protocol.md)
 - [perception-first-roadmap.md](./perception-first-roadmap.md) - 感知路线图
@@ -316,13 +316,13 @@ AutoMode 判定为简单任务时**跳过 Draft / Plan**，直接进入 Apply �
 
 ## 5. L1 能力层（Skill 为核心 + 扁平工具池）
 
-**重大简化**：能力分类从前期 10+ kind 收敛为 3 核心类。Skill 作为**场景包**内嵌编排声明（phases + pipelines），替代独立的 Workflow/Pipeline 文件。
+**重大简化**：能力分类从前期 10+ kind 收敛为 3 核心类。Skill 作为**场景包**承载人格、prompt-chain 工作流程提示与确定性安全边界，替代独立的 Workflow/Pipeline 文件。
 
 ### 5.1 三核心能力类
 
 ```typescript
 type CapabilityKind =
-  | 'skill'      // 场景包：人格 + 编排 + 加工链 + 引用资产
+  | 'skill'      // 场景包：人格 + prompt-chain + 引用资产
   | 'tool'       // 工具/Operation（扁平工具池）
   | 'operation'  // 业务语义操作（扁平工具池）
 ```
@@ -335,9 +335,9 @@ type CapabilityKind =
 
 ### 5.2 Skill 作为场景包
 
-Skill 是 neko-suite 原生的场景打包单元，一个文件/文件夹承载完整创作场景所需的所有声明：**人格 + 多阶段编排 + 加工链 + 资产引用 + 合规元数据 + 跨 Skill 协作**。Skill 格式为 neko 生态服务，不追求与其他 Agent 框架互操作。
+Skill 是 neko-suite 原生的场景打包单元，一个文件/文件夹承载完整创作场景所需的声明：**人格 + prompt-chain 工作流程提示 + 资产引用 + 合规元数据 + 跨 Skill 协作**。安全/权限/依赖等确定性边界保留在结构化 metadata；执行先后流程放在正文由 Agent 在 IDC 框架内理解。
 
-> **前瞻（Proposed 2026-04-25）**：[adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) 拟把 `phases` / `pipelines` 字段标记为 deprecated，编排逻辑退化为 persona body 的 markdown 章节惯例（**prompt-chains** 风格，对齐 Claude Code / Codex 实证）。**保留 DSL 边界**：`allowedTools` / `compliance.approvalRules` / `requiredSubpackages` / `trustLevel` 等机器消费的安全/权限字段；**stage 信息**改为由 IDC artifact 文件存在性自然推断（StagePlanner 不读 Skill phases）。落地后：演化能力 Skill 层 **A- → A**、Orchestration **B+ → A-**、跨平台互通自然达成（neko Skill ↔ Claude Code Skill 双向直接复制）、§11.5 AI 原生执行 + §11.6.4 反模式 #4 完美对齐。本 ADR 提供 4-Stage 渐进迁移路径与自动迁移工具，向后兼容现有 phases-based Skill。
+> **更新（Accepted 2026-04-26）**：[adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) 已在公开上线前移除 `phases` / `pipelines` schema 与运行时入口：新 Skill 使用正文 markdown prompt-chains 表达工作流程；`allowedTools` / `compliance.approvalRules` / `requiredSubpackages` / `trustLevel` 等机器消费的安全/权限字段仍是 DSL；stage 信息由 IDC artifact 文件存在性自然推断。
 
 #### 5.2.1 完整结构示例
 
@@ -370,38 +370,6 @@ allowedTools:                         # 工具白名单
   - cut.export-mp4
   - audio.select-bgm
 autoInvoke: true                      # 是否允许 AutoMode 自动激活（默认 true）
-
-# === 多阶段编排（内嵌 Workflow，可选）===
-phases:
-  - name: style-calibration
-    label: 风格校准
-    approval: false
-  - name: shot-breakdown
-    label: 分镜拆解
-    approval: true                    # 声明式审批点
-  - name: shot-generation
-    label: 镜头生成
-    approval: false
-    parallel: true
-  - name: composition
-    label: 合成配乐
-    approval: false
-  - name: export
-    label: 导出
-    approval: true
-
-# === 加工链（内嵌 Pipeline，可选）===
-pipelines:
-  export:
-    ops:
-      - cut.upscale: { target: 1080p }
-      - cut.color-grade: { preset: cinematic }
-      - cut.encode: { codec: h264, bitrate: 8M }
-      - cut.watermark
-  preview:
-    ops:
-      - cut.downscale: { target: 360p }
-      - cut.encode: { codec: h264, bitrate: 1M }
 
 # === 资产引用（asset:// URI + 失效处理，可选）===
 referencedAssets:
@@ -452,7 +420,7 @@ compliance:
 按分镜合成 timeline，配合快节奏 BGM。
 
 ### Phase 5: 导出 ⚠️ 需审批
-使用 `export` pipeline 导出。
+用 cut 导出工具导出 1080p H.264 竖屏 MP4；导出前确认封面、字幕和音频节奏。
 **不可逆操作，需用户确认参数。**
 
 ## 失败处理
@@ -464,7 +432,7 @@ compliance:
 处理音频细节时可切换到 `audio-expert` Skill。
 ```
 
-**一个 Skill 文件打包**：元数据 + 人格（正文）+ 多阶段编排 + 加工链 + 资产引用 + 合规元数据 + 跨 Skill 协作。
+**一个 Skill 文件打包**：元数据 + 人格（正文）+ prompt-chain 工作流程提示 + 资产引用 + 合规元数据 + 跨 Skill 协作。
 
 #### 5.2.2 字段语义
 
@@ -477,8 +445,6 @@ compliance:
 | **requiredSubpackages** | 🟡 建议 | 子包依赖声明（激活前校验，避免运行时缺失）|
 | **allowedTools** | ❌ | 工具白名单（不声明则允许所有子包贡献的工具）|
 | **autoInvoke** | ❌ | 是否允许 AutoMode 自动激活（默认 true）|
-| **phases** | ❌ | 多阶段编排（内嵌 Workflow，有则激活多阶段）|
-| **pipelines** | ❌ | 加工链（内嵌 Pipeline，按 key 引用）|
 | **referencedAssets** | ❌ | 资产引用（asset:// URI + required/fallback 失效处理）|
 | **referencedSkills** | ❌ | 跨 Skill 协作声明（collaborator/delegator）|
 | **compliance** | ❌ | 合规元数据（framework/auditRequired/...）|
@@ -617,7 +583,7 @@ AutoMode 下 Agent 基于 description 自动选择 Skill：
   ↓
 作为 system prompt 激活
   ↓
-按 phases 执行任务
+按 Skill body 的 prompt-chain 指导执行任务
 ```
 
 **示例场景**：
@@ -738,32 +704,31 @@ Agent 调用工具前检查子包是否仍加载，缺失则触发 L0.RetryEngin
 - 可提供默认 Skill（作为子包能力的"使用示例"）
 - 不贡献 Workflow/Pipeline（内嵌到 Skill）
 
-### 5.4 AI 原生执行：注入 + 巡检
+### 5.4 AI 原生执行：注入 + artifact 巡检
 
-L0 基础设施支持 Skill 内嵌 phases 的运行时执行：
+L0 基础设施支持 Skill prompt-chain 注入与 IDC artifact 状态巡检：
 
 ```typescript
-// L0.StageTracker - 轻量追踪器（不是调度器）
+// L0.StageTracker - artifact 状态投影（不是 Skill DSL 调度器）
 interface StageTracker {
   current: StageInfo | null;
   history: StageInfo[];
-  enter(stageName: string): void;
-  exit(success: boolean): void;
+  projectFromArtifacts(runId: string): StageInfo;
   inject(promptHint: string): void;  // 注入 stage 提示给 Agent
 }
 
 // L0.StageGuardian - 巡检器
 interface StageGuardian {
   check(skill: Skill, state: AgentState): GuardResult;
-  // 巡检: stage 顺序 / 审批跳过 / 超时 / 声明偏离
+  // 巡检: artifact 状态 / 审批跳过 / 超时 / 输出缺失
   // 自动修正: 注入提示 / 强制 ReviewGate
 }
 ```
 
 **分工**：
-- **Skill 是声明**（phases + pipelines）
-- **Agent 是执行**（读声明 + 按序执行）
-- **L0 是 guardian**（巡检 + 注入 + 强制审批）
+- **Skill 是提示**（persona + prompt-chain + 安全边界）
+- **Agent 是执行**（读提示 + 自主组织步骤）
+- **L0 是 guardian**（artifact 巡检 + 注入 + 强制审批）
 
 **避免的反模式**：
 - ❌ 全 AI 推进（LLM 幻觉导致 stage 错乱 + token 爆炸）
@@ -791,15 +756,13 @@ interface StageGuardian {
 ```typescript
 // Agent 激活 Skill
 const skill = registry.get('cut-tiktok-creator');
-stageTracker.load(skill.phases);
+skillInjectionCoordinator.apply(injection, skill);
 
-// Agent 执行时按 Skill 声明调度
-for (const phase of skill.phases) {
-  stageTracker.enter(phase.name);
-  if (phase.approval) await reviewGate.wait();
-  await executePhase(skill, phase);
-  stageTracker.exit(true);
-}
+// Agent 执行时读取 Skill body 的 prompt-chain 指导；实际 IDC stage
+// 由 Draft / Plan / Apply / Task artifact 状态投影，不读取 Skill workflow DSL。
+const stage = stageProjection.fromArtifacts(runId);
+const tasks = taskStore.read(runId);
+await agent.act({ skill, stage, tasks });
 
 // 扁平工具池按需查询
 const ops = registry.filter({ kind: ['tool', 'operation'] });
@@ -807,7 +770,7 @@ const ops = registry.filter({ kind: ['tool', 'operation'] });
 
 ### 5.7 按需升级路径
 
-当前（P0）：Skill 内置轻量声明式（覆盖 90% 场景）
+当前（P0）：Skill body 内置 prompt-chain 工作流程提示（覆盖 90% 场景）
   ↓
 P1（有复用需求时）：抽取共享 Pipeline 文件（多 Skill 引用同一 pipeline）
   ↓
@@ -907,9 +870,9 @@ JSONL 技术日志）。
 
 **目标**：80%+ 技术错误在级别 1-4 自愈，级别 5 频率 ≤ 5%。
 
-### 6.5 StageTracker + StageGuardian（Skill 编排支持）
+### 6.5 StageTracker + StageGuardian（artifact 巡检支持）
 
-支持 Skill 内嵌 phases 声明的运行时执行（对齐 §5.4）。
+支持 IDC artifact 状态投影与运行时巡检（对齐 §5.4）。
 
 #### StageTracker（轻量追踪器）
 
@@ -918,15 +881,14 @@ interface StageTracker {
   current: StageInfo | null;
   history: StageInfo[];
   
-  load(phases: SkillPhase[]): void;
-  enter(stageName: string, metadata?: any): void;
-  exit(success: boolean): void;
+  projectFromArtifacts(runId: string): StageInfo;
+  record(stageName: string, metadata?: unknown): void;
   inject(promptHint: string): void;  // 注入 stage 提示给 Agent
 }
 ```
 
 **职责极简**：
-- 追踪当前 stage
+- 从 Draft / Plan / Apply / Task artifact 投影当前 stage
 - 发布 stage.* 事件（EventBus）
 - 按需注入 prompt
 
@@ -941,35 +903,35 @@ interface StageGuardian {
 }
 
 type StageIssue =
-  | 'stage-not-entered'      // Agent 未进入声明的 stage
-  | 'approval-skipped'        // 跳过了声明的审批点
+  | 'artifact-missing'        // 当前 stage 缺少必要 artifact
+  | 'approval-skipped'        // 跳过了必要审批点
   | 'stage-timeout'           // stage 超时
-  | 'out-of-order';           // stage 顺序违反声明
+  | 'output-missing';         // 任务完成但输出缺失
 ```
 
 **触发时机**：
 - Step 执行前后
-- Stage 进入/退出
+- Artifact 写入 / 校验 / 状态变化
 - 定期 tick（长任务）
 
-**作用**：**安全兜底**，确保 Agent 遵循 Skill 声明（关键审批点由 L0 强制插入 ReviewGate）。
+**作用**：**安全兜底**，确保 Agent 遵循 IDC artifact 状态与审批边界（关键审批点由 L0 强制插入 ReviewGate）。
 
 #### 分工原则
 
 ```
-Skill（声明）     ──► phases + pipelines
+Skill（提示）     ──► persona + prompt-chain + 安全边界
        │
        ▼
-Agent（执行）     ──► 读声明 + 按序执行 + 决策
+Agent（执行）     ──► 读提示 + 自主组织步骤 + 决策
        │
        ▼
-L0（guardian）    ──► 巡检 + 注入 + 强制审批
+L0（guardian）    ──► artifact 巡检 + 注入 + 强制审批
 ```
 
 **避免的反模式**：
 - ❌ 全 AI 推进（LLM 幻觉导致 stage 错乱 + token 爆炸）
 - ❌ 全程序推进（参数呆板 + 失败机械 + 无创作审美）
-- ✅ 程序驱动流程 + AI 决策点注入智能
+- ✅ artifact 边界确定 + AI 原生执行
 
 ---
 
@@ -1109,8 +1071,6 @@ ${MEDIA_LIBRARY}/
   AGENTS.md               ← 显式跨项目提示词配置
   preferences.md         ← 全局用户偏好（项目级 fallback）
   skills/                ← 全局 Skill
-  workflows/             ← 全局 Workflow
-  pipelines/             ← 全局 Pipeline
 ```
 
 #### Memory（项目事实，不承载跨项目个性化）
@@ -1363,7 +1323,7 @@ Tier 1: Skills（主分发单位，100% 场景）
   - 创作域 Skills（cut-editor / story-writer / puppet-rigger / ...）
   - 营销域 Skills（tiktok-marketer / linkedin-writer / ...）
   - 工程域 Skills（code-reviewer / test-generator / ...)
-  - 自包含：人格 + 编排（phases）+ 加工链（pipelines）+ 引用资产
+  - 自包含：人格 + prompt-chain 工作流程提示 + 安全/依赖 metadata + 引用资产
 
 Tier 2: Assets（辅助，被 Skill 引用）
   - 角色设定（character）

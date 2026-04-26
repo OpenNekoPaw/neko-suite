@@ -117,7 +117,6 @@ describe('SkillHandler', () => {
         name: 'commit',
         description: 'Create a commit',
         command: 'commit',
-        phases: [{ name: 'draft' }],
       };
       skillService.registry.getSkillByCommand.mockReturnValue(mockSkill);
       skillService.apply.mockReturnValue({

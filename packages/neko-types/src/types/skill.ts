@@ -84,94 +84,6 @@ export const COMMAND_DIRECTORIES = {
   personal: '~/.neko/commands',
 } as const;
 
-// =============================================================================
-// SDD Skill extensions — see docs/architecture/agent-unified-workflow.md §5.2.1
-// =============================================================================
-
-/**
- * A phase inside a multi-stage Skill (ADR §5.2.1 `phases:` + agent-unified-
- * workflow.md §6.5 StageGuardian).
- *
- * Phases describe the Skill's internal orchestration — e.g. a TikTok
- * creation Skill might declare shot-breakdown / shot-generation / export
- * phases with approval gates between them. The fields here are declarative
- * only; the runtime StageGuardian is responsible for honouring them.
- *
- * ## DAG semantics (W1)
- *
- * Phases form a DAG when `dependsOn` is populated. Phases with no
- * `dependsOn` are roots (can start immediately); a phase becomes runnable
- * once all its dependencies are in a terminal state. The scheduler (W3)
- * identifies parallel-runnable batches by topological rank.
- *
- *   phases:
- *     - name: parse-storyboard
- *       tool: parseStoryboard
- *       outputKey: scenes
- *     - name: generate-prompts
- *       dependsOn: [parse-storyboard]
- *       tool: generatePrompts
- *       outputKey: prompts
- *     - name: batch-generate
- *       dependsOn: [generate-prompts]
- *       tool: batchGenerate
- *       parallel: true           # scheduler fans out per-prompt
- *       outputKey: assets
- *     - name: quality-gate
- *       dependsOn: [batch-generate]
- *       approval: true           # StageGuardian halts until ApprovalEngine resolves
- *
- * ## Tool binding (W1)
- *
- * When `tool` is set, the runtime knows which tool implements the phase;
- * phases without `tool` are purely narrative (the Agent executes them by
- * reading the Skill body). `allowedTools` narrows what the Agent may call
- * from inside the phase — useful when the phase is scripted through the
- * model rather than a single tool.
- *
- * ## Output routing (W1)
- *
- * `outputKey` names the slot on the run's shared context where the phase's
- * result lands. Subsequent phases read it via the same key. Keeping this
- * in the manifest (rather than implicit ordering) lets the scheduler
- * build the context object deterministically without asking the Agent to
- * memorise intermediate values.
- */
-export interface SkillPhase {
-  /** Stable phase identifier, unique within a Skill. */
-  name: string;
-  /** Human-readable phase label for UI/logs. */
-  label: string;
-  /** Whether the phase requires user approval before advancing. */
-  approval?: boolean;
-  /** Whether the phase's work can run in parallel (e.g. per-shot generation). */
-  parallel?: boolean;
-  /**
-   * Names of phases that must reach a terminal state before this phase may
-   * run. Each entry must match another phase's `name` within the same
-   * Skill; missing references and cycles are rejected by
-   * `validateSkillManifest`.
-   */
-  dependsOn?: string[];
-  /**
-   * Tool id the scheduler invokes for this phase. Optional — phases
-   * without a tool are narrative steps executed by the Agent interpreting
-   * the Skill body.
-   */
-  tool?: string;
-  /**
-   * Key in the run's shared context under which the phase's output is
-   * stored. Downstream phases read by the same key.
-   */
-  outputKey?: string;
-  /**
-   * Tool whitelist for Agent-driven (no explicit `tool`) phases. The
-   * runtime (StageGuardian) denies tool calls outside this list while the
-   * phase is active.
-   */
-  allowedTools?: string[];
-}
-
 /**
  * Subpackage dependency declared by a Skill (ADR §5.2.1 `requiredSubpackages:`).
  *
@@ -229,7 +141,7 @@ export interface RelatedSkill {
 /**
  * Compliance metadata (ADR §5.2.1 / §9.6 `compliance:`).
  *
- * Purely declarative. Audit pipelines read this block to decide
+ * Purely declarative. Audit tooling reads this block to decide
  * whether a Skill's execution must be recorded with extra evidence
  * (e.g. the skillSha chain in audits.jsonl).
  */
@@ -419,13 +331,6 @@ export interface Skill {
    * @default true
    */
   autoInvoke?: boolean;
-
-  /**
-   * Multi-stage orchestration embedded in the Skill. Each phase is a
-   * logical checkpoint; StageGuardian can enforce ordering and approval
-   * gates at runtime.
-   */
-  phases?: SkillPhase[];
 
   /**
    * Assets (characters, styles, LoRAs, …) the Skill relies on. Resolved
@@ -774,8 +679,8 @@ export interface SkillFrontmatter {
    */
   'market-id'?: string;
 
-  // Note: SDD metadata (version, domain, requiredSubpackages, autoInvoke,
-  // phases, pipelines, referencedAssets, referencedSkills, compliance) lives
+  // Note: Skill metadata (version, domain, requiredSubpackages, autoInvoke,
+  // referencedAssets, referencedSkills, compliance) lives
   // in a sibling `manifest.json` file — see SkillManifest below. SKILL.md
   // frontmatter is reserved for document metadata only (fields that also
   // shape how Claude / Agent reads the document). Rationale: Skill body is
@@ -801,7 +706,7 @@ export interface SkillFrontmatter {
  *     autoInvoke flag, compliance rules. Machine-readable JSON; validated
  *     at market install time and at Skill activation.
  *   - **SKILL.md body**: fields the Agent needs to understand semantically
- *     — description, persona, phases narrative, pipeline instructions.
+ *     — description, persona, prompt-chain workflow guidance.
  *     Natural language; consumed as a system prompt.
  *
  * Optional so older skills (manifest-less) keep loading; the validator
@@ -822,12 +727,6 @@ export interface SkillManifest {
    * omitted; set false for high-risk or test-only Skills.
    */
   autoInvoke?: boolean;
-
-  /**
-   * Multi-stage orchestration. Declares phase ordering and approval
-   * gates; StageGuardian enforces them at runtime.
-   */
-  phases?: SkillPhase[];
 
   /** Assets the Skill depends on (resolved via PathResolver). */
   referencedAssets?: SkillAssetReference[];
@@ -1080,73 +979,6 @@ export function isToolAllowed(tool: string, allowedTools?: string[]): boolean {
 }
 
 /**
- * DAG validator for SkillPhase[]. Checks that every `dependsOn` entry
- * names a known phase and that the resulting graph has no cycles. Kept
- * module-private because the only caller is validateSkillManifest, and
- * it mutates the shared `errors` array instead of returning a result so
- * error messages stay in phase-declaration order.
- */
-function validatePhaseDag(phases: readonly SkillPhase[], errors: string[]): void {
-  const byName: Record<string, SkillPhase> = {};
-  for (let i = 0; i < phases.length; i++) {
-    const p = phases[i];
-    if (p && typeof p.name === 'string' && p.name.length > 0 && !byName[p.name]) {
-      byName[p.name] = p;
-    }
-  }
-
-  // Reference check.
-  for (let i = 0; i < phases.length; i++) {
-    const p = phases[i];
-    if (!p || !Array.isArray(p.dependsOn)) continue;
-    for (const dep of p.dependsOn) {
-      if (typeof dep !== 'string' || dep.length === 0) continue;
-      if (!byName[dep]) {
-        errors.push(`phases[${i}].dependsOn references unknown phase "${dep}"`);
-      }
-    }
-  }
-
-  // Cycle check via iterative DFS. `state` tracks: 'visiting' means on
-  // the current path; 'done' means fully explored.
-  const state: Record<string, 'visiting' | 'done'> = {};
-  const phaseNames = Object.keys(byName);
-  for (let i = 0; i < phaseNames.length; i++) {
-    const start = phaseNames[i]!;
-    if (state[start]) continue;
-    const stack: Array<{ name: string; depIdx: number }> = [{ name: start, depIdx: 0 }];
-    state[start] = 'visiting';
-    while (stack.length > 0) {
-      const top = stack[stack.length - 1]!;
-      const phase = byName[top.name];
-      const deps = phase && Array.isArray(phase.dependsOn) ? phase.dependsOn : [];
-      if (top.depIdx >= deps.length) {
-        state[top.name] = 'done';
-        stack.pop();
-        continue;
-      }
-      const dep = deps[top.depIdx]!;
-      top.depIdx++;
-      if (!byName[dep]) continue; // already reported by the reference check
-      if (state[dep] === 'visiting') {
-        errors.push(`phases cycle detected through "${dep}" — dependsOn graph must be acyclic`);
-        // Abort this traversal; the rest of the graph will be checked
-        // on subsequent start points (cycle already reported).
-        while (stack.length > 0) {
-          state[stack[stack.length - 1]!.name] = 'done';
-          stack.pop();
-        }
-        break;
-      }
-      if (state[dep] !== 'done') {
-        state[dep] = 'visiting';
-        stack.push({ name: dep, depIdx: 0 });
-      }
-    }
-  }
-}
-
-/**
  * Semver-ish regex: major.minor.patch with optional pre-release and build
  * metadata. Deliberately not importing a full semver library — Skills
  * author-input versions are validated to catch typos, not to run complex
@@ -1155,61 +987,39 @@ function validatePhaseDag(phases: readonly SkillPhase[], errors: string[]): void
 const SEMVER_RE =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-/**
- * Validate a skill
- */
+const SKILL_NAME_RE = /^[a-z0-9-]+$/;
+const MAX_SKILL_NAME_LENGTH = 64;
+const MAX_SKILL_DESCRIPTION_LENGTH = 2048;
+
 export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!skill.name) {
+  if (typeof skill.name !== 'string' || skill.name.length === 0) {
     errors.push('Missing required field: name');
   } else {
-    if (!/^[a-z0-9-]+$/.test(skill.name)) {
-      errors.push('Name must contain only lowercase letters, numbers, and hyphens');
+    if (!SKILL_NAME_RE.test(skill.name)) {
+      errors.push('Field "name" must contain only lowercase letters, numbers, and hyphens');
     }
-    if (skill.name.length > 64) {
-      errors.push('Name must be 64 characters or less');
+    if (skill.name.length > MAX_SKILL_NAME_LENGTH) {
+      errors.push(`Field "name" must be at most ${MAX_SKILL_NAME_LENGTH} characters`);
     }
   }
 
-  if (!skill.description) {
+  if (typeof skill.description !== 'string' || skill.description.trim().length === 0) {
     errors.push('Missing required field: description');
-  } else {
-    if (skill.description.length > 2048) {
-      errors.push('Description must be 2048 characters or less');
-    }
-    if (skill.description.length < 20) {
-      warnings.push(
-        'Description is very short. Consider adding more context for better semantic matching.',
-      );
-    }
+  } else if (skill.description.length > MAX_SKILL_DESCRIPTION_LENGTH) {
+    errors.push(`Field "description" must be at most ${MAX_SKILL_DESCRIPTION_LENGTH} characters`);
   }
 
-  if (!skill.content) {
+  if (typeof skill.content !== 'string' || skill.content.trim().length === 0) {
     errors.push('Missing required field: content');
   }
 
-  // Runtime Skill objects carry the merged manifest + frontmatter view, so
-  // a single Skill snapshot is validated against both contracts here. The
-  // manifest validator takes the shared error/warning arrays so its
-  // findings are reported alongside content-level errors.
   validateSkillManifest(skill, errors, warnings);
-
   return { valid: errors.length === 0, errors, warnings };
 }
 
-/**
- * Validate the SDD manifest fields (agent-unified-workflow.md §5.2.1).
- *
- * Accepts either a runtime `Skill` (where the manifest has been merged in)
- * or a standalone `SkillManifest` loaded from `manifest.json`. All fields
- * are optional for backwards compatibility; missing `version` / `domain`
- * only warn so legacy skills keep loading.
- *
- * This function is called by both the Skill loader (runtime snapshot) and
- * the marketplace installer (pre-install audit of the manifest alone).
- */
 export function validateSkillManifest(
   manifest: Partial<SkillManifest>,
   errors: string[] = [],
@@ -1263,88 +1073,10 @@ export function validateSkillManifest(
     errors.push('Field "autoInvoke" must be a boolean');
   }
 
-  // phases: shape + unique names.
-  if (manifest.phases !== undefined) {
-    if (!Array.isArray(manifest.phases)) {
-      errors.push('Field "phases" must be an array');
-    } else {
-      const seenNames: Record<string, true> = {};
-      for (let idx = 0; idx < manifest.phases.length; idx++) {
-        const phase = manifest.phases[idx];
-        if (!phase || typeof phase !== 'object') {
-          errors.push(`phases[${idx}] must be an object`);
-          continue;
-        }
-        if (typeof phase.name !== 'string' || phase.name.length === 0) {
-          errors.push(`phases[${idx}].name must be a non-empty string`);
-        } else if (seenNames[phase.name]) {
-          errors.push(`Duplicate phase name "${phase.name}" — phase names must be unique`);
-        } else {
-          seenNames[phase.name] = true;
-        }
-        if (typeof phase.label !== 'string' || phase.label.length === 0) {
-          errors.push(`phases[${idx}].label must be a non-empty string`);
-        }
-        if (phase.approval !== undefined && typeof phase.approval !== 'boolean') {
-          errors.push(`phases[${idx}].approval must be a boolean`);
-        }
-        if (phase.parallel !== undefined && typeof phase.parallel !== 'boolean') {
-          errors.push(`phases[${idx}].parallel must be a boolean`);
-        }
-        if (phase.dependsOn !== undefined) {
-          if (!Array.isArray(phase.dependsOn)) {
-            errors.push(`phases[${idx}].dependsOn must be an array of phase names`);
-          } else {
-            for (let depIdx = 0; depIdx < phase.dependsOn.length; depIdx++) {
-              const dep = phase.dependsOn[depIdx];
-              if (typeof dep !== 'string' || dep.length === 0) {
-                errors.push(`phases[${idx}].dependsOn[${depIdx}] must be a non-empty string`);
-              } else if (dep === phase.name) {
-                errors.push(
-                  `phases[${idx}].dependsOn cannot reference the phase itself ("${dep}")`,
-                );
-              }
-            }
-          }
-        }
-        if (
-          phase.tool !== undefined &&
-          (typeof phase.tool !== 'string' || phase.tool.length === 0)
-        ) {
-          errors.push(`phases[${idx}].tool must be a non-empty string`);
-        }
-        if (
-          phase.outputKey !== undefined &&
-          (typeof phase.outputKey !== 'string' || phase.outputKey.length === 0)
-        ) {
-          errors.push(`phases[${idx}].outputKey must be a non-empty string`);
-        }
-        if (phase.allowedTools !== undefined) {
-          if (!Array.isArray(phase.allowedTools)) {
-            errors.push(`phases[${idx}].allowedTools must be an array of tool ids`);
-          } else {
-            for (let toolIdx = 0; toolIdx < phase.allowedTools.length; toolIdx++) {
-              const tool = phase.allowedTools[toolIdx];
-              if (typeof tool !== 'string' || tool.length === 0) {
-                errors.push(`phases[${idx}].allowedTools[${toolIdx}] must be a non-empty string`);
-              }
-            }
-          }
-        }
-      }
-
-      // DAG validation: every dependsOn must reference a known phase,
-      // and the graph must be acyclic. Running after the shape loop so
-      // we already know which names are valid.
-      validatePhaseDag(manifest.phases, errors);
-    }
-  }
-
-  // Note: pipeline definitions live inside subpackages that own the
-  // underlying atomic tools. Skills are orchestration prompts, not
-  // pipeline definitions — the Agent drives execution via TOOL_NAMES.
-  // If a real cross-Skill sharing need emerges, introduce a
-  // `pipelineRefs` pointer field, not inline op definitions.
+  // Atomic tools are contributed by subpackages through AgentCapabilityProvider.
+  // Skills remain prompt-chain instructions; the Agent drives execution via TOOL_NAMES.
+  // If a real cross-Skill sharing need emerges, introduce explicit reference fields
+  // instead of inline operation definitions.
 
   // referencedAssets: require asset:// URI.
   if (manifest.referencedAssets !== undefined) {
@@ -1482,7 +1214,6 @@ export function createSkill(
     domain: manifest?.domain,
     requiredSubpackages: manifest?.requiredSubpackages,
     autoInvoke: manifest?.autoInvoke,
-    phases: manifest?.phases,
     referencedAssets: manifest?.referencedAssets,
     referencedSkills: manifest?.referencedSkills,
     compliance: manifest?.compliance,

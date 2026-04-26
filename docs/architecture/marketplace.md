@@ -6,6 +6,8 @@
 >
 > **Provider Card 分发（Proposed 2026-04-24）**：[adr-provider-expression-context.md](./adr-provider-expression-context.md) 引入 `provider-card` 作为 Market 新分发品类（三层分发模型的 Layer 1 Market 层，承载社区/长尾生成模型的能力画像）。本文档的覆盖品类在 Provider ADR 落地时需追加。
 > **Provider Card 安装校验（2026-04-26）**：`provider-card` 安装目标在本地安装前执行 manifest 校验：`untrusted` 禁止作为 Market ProviderCard 安装；`community` 必须带签名元数据或来自 verified publisher。当前为 manifest-level gate，真实 cryptographic verification 与服务端审核流水后续接入。
+>
+> **Skill Prompt-Chain 审核（2026-04-26）**：[adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) 已移除 Skill workflow DSL。Market Skill 包不得包含 `phases` / `pipelines` / `workflow` / `stages` 字段；安装目标会在 `SKILL.md` 与 `manifest.json` 中拒绝这些字段。工作流程必须写成 Skill body 的 prompt-chain 章节。
 
 ---
 
@@ -17,7 +19,7 @@ Neko Suite 需要一个统一的市场平台，管理官方、私有、共享、
 
 | 品类 | 类型标识 | 典型大小 | 来源 |
 |------|---------|---------|------|
-| Agent Skill | `skill` | KB | 提示词模板 + 工具集声明 |
+| Agent Skill | `skill` | KB | Prompt-chain Skill + 工具/权限 metadata |
 | 本地模型 | `ai-model` / `lora` / `embedding` | MB~GB | ONNX / PyTorch / safetensors |
 | Shader | `shader` / `shader-preset` | KB~MB | WGSL / GLSL 效果 |
 | 插件 | `plugin` | KB~MB | 扩展 Neko 功能的代码包 |
@@ -286,7 +288,7 @@ AssetChangeEvent { kind: 'registered' }
 
 | 类型 | 安装位置 | 运行时注册 |
 |------|----------|-----------|
-| Skill | `.neko/skills/{publisher}/{name}/` | SkillService 扫描加载 |
+| Skill | `.neko/skills/{publisher}/{name}/` | 安装时拒绝 workflow DSL 字段；SkillService 扫描加载 |
 | 本地模型 | `.neko/models/{framework}/{name}/` | EngineClient 注册 |
 | Shader | `.neko/shaders/{name}/` | EffectDispatcher 注册 |
 | 插件 | `.neko/plugins/{name}/` | PluginHost 动态加载 |

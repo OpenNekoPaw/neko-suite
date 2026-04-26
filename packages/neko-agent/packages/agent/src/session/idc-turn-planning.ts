@@ -3,7 +3,6 @@ import type { StageTaskShape } from '@neko-agent/types';
 import type { StageEntrySignal } from '../skill/activation/stage-planner';
 import type { ExecutionMode } from './types';
 import type { TaskShapeSignals } from '../executor/react-loop-runner';
-import { createSkillRunKind } from './idc-run-kind';
 
 export interface IdcTurnMetadata {
   entrySignal?: StageEntrySignal;
@@ -91,7 +90,6 @@ export function classifyIdcTaskShape(
   const input = context.input.trim();
   if (input.length === 0) return 'clarification';
 
-  if (hasWorkflowTemplate(context.activeSkill)) return 'multi-step';
   if (looksLikeClarification(input)) return 'clarification';
   if (looksLikeThinkOnly(input)) return 'pure-think';
   if (looksLikeMultiStep(input)) return 'multi-step';
@@ -114,7 +112,6 @@ export function classifyIdcEntrySignal(
 
   const input = context.input.trim();
   if (IDC_ARTIFACT_REF_RE.test(input)) return 'referenced-artifact';
-  if (hasWorkflowTemplate(context.activeSkill)) return 'workflow-template';
   if (HIGH_RISK_RE.test(input)) return 'high-risk-forced';
   if (looksLikeVagueCreative(input)) return 'vague-creative';
   return fallbackEntrySignal(signals.taskShape, input);
@@ -125,9 +122,6 @@ export function resolveIdcRunKind(context: IdcTurnPlanningContext | null): strin
 
   const metadata = extractIdcTurnMetadata(context.metadata);
   if (metadata?.runKind) return metadata.runKind;
-  if (hasWorkflowTemplate(context.activeSkill)) {
-    return createSkillRunKind(context.activeSkill!.name);
-  }
   if (context.executionMode === 'plan') return 'plan-mode';
   if (IDC_ARTIFACT_REF_RE.test(context.input)) return 'artifact-resume';
   return 'agent-turn';
@@ -171,21 +165,13 @@ function looksLikeVagueCreative(input: string): boolean {
   return VAGUE_CREATIVE_RE.test(input) && !SPECIFIC_DELIVERY_RE.test(input);
 }
 
-function hasWorkflowTemplate(skill: Skill | undefined): boolean {
-  if (!skill) return false;
-  if ((skill.phases?.length ?? 0) > 0) return true;
-
-  const legacyPipelines = Reflect.get(skill as object, 'pipelines');
-  return typeof legacyPipelines === 'object' && legacyPipelines !== null;
-}
-
 function isStageEntrySignal(value: unknown): value is StageEntrySignal {
   return (
     value === 'atomic-instruction' ||
     value === 'multi-step' ||
     value === 'vague-creative' ||
     value === 'referenced-artifact' ||
-    value === 'workflow-template' ||
+    value === 'prompt-chain-skill' ||
     value === 'high-risk-forced'
   );
 }

@@ -433,7 +433,7 @@ Fountain is a plain-text screenplay format:
 // pipelineDiagnosticsSkill were removed together with the workflow/
 // orchestration layer. Script-to-video flows are expressed by the Agent
 // directly composing GenerateImage / GenerateVideo / AddTimelineElement
-// over a Skill's phases — no separate pipeline DSL.
+// from prompt-chain Skill guidance — no separate pipeline DSL.
 
 /**
  * Scene-to-Music Skill

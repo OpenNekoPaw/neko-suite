@@ -2,7 +2,15 @@
 
 ## 状态
 
-Proposed (2026-04-25)
+Accepted — implemented before public launch (2026-04-26)
+
+## 当前实现快照（2026-04-26）
+
+- 旧 phase 类型与 manifest 字段已从类型契约移除；新 Skill 只能在正文中使用 prompt-chain 章节表达工作流程。
+- `validateSkillManifest()` 不再接收 `phases` 调度语义；未上线前不保留 legacy parser / 兼容注入路径。
+- slash Skill 带参数执行时不再依赖 `phases` / `pipelines` 判断 IDC 入口；显式 Skill 执行交由 Agent + IDC artifact 状态判断。
+- `SkillInjectionCoordinator` 只注入 Skill body / tool permissions，不再处理旧 phase 兼容路径。
+- 由于该能力尚未公开上线，本 ADR 不需要自动迁移 CLI 或 6-12 个月兼容期。
 
 ## 背景
 
@@ -58,6 +66,7 @@ pipelines:
 ### 问题 4：维护成本高
 
 phases / pipelines 需要：
+
 - TypeScript schema 类型
 - Skill 加载期 validator
 - StagePlanner 状态机消费
@@ -78,16 +87,16 @@ Anthropic 自家最成功的 coding agent（Claude Code / Codex）**完全不使
 
 ### 与既有 ADR 的关系
 
-| ADR | 关系 |
-|---|---|
-| [agent-unified-workflow.md §5.2](./agent-unified-workflow.md) | Skill 现行 phases / pipelines 字段所在；本 ADR 标记其 deprecated |
-| [agent-unified-workflow.md §11.5](./agent-unified-workflow.md) | "AI 原生执行"原则的进一步落实 |
-| [agent-unified-workflow.md §11.6.4](./agent-unified-workflow.md) | 反模式 #4（不硬编码 LLM 行为策略）的具体应用 |
-| [agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md) | Skill 层评级 A- → A 的关键路径 |
-| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 不再读 Skill phases，只看 artifact 状态 |
-| [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) | SubAgent 编排不依赖 pipelines DSL |
-| [adr-capability-protocol.md](./adr-capability-protocol.md) | CapabilityContribution.skillFiles 期望的 Skill 格式更新 |
-| [adr-provider-expression-context.md](./adr-provider-expression-context.md) | ProviderCard 不受影响（其字段是技术参数，是合法 DSL）|
+| ADR                                                                              | 关系                                                             |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [agent-unified-workflow.md §5.2](./agent-unified-workflow.md)                    | Skill 现行 phases / pipelines 字段所在；本 ADR 标记其 deprecated |
+| [agent-unified-workflow.md §11.5](./agent-unified-workflow.md)                   | "AI 原生执行"原则的进一步落实                                    |
+| [agent-unified-workflow.md §11.6.4](./agent-unified-workflow.md)                 | 反模式 #4（不硬编码 LLM 行为策略）的具体应用                     |
+| [agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md)                | Skill 层评级 A- → A 的关键路径                                   |
+| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 不再读 Skill phases，只看 artifact 状态             |
+| [agent-multi-agent-federation.md](./agent-multi-agent-federation.md)             | SubAgent 编排不依赖 pipelines DSL                                |
+| [adr-capability-protocol.md](./adr-capability-protocol.md)                       | CapabilityContribution.skillFiles 期望的 Skill 格式更新          |
+| [adr-provider-expression-context.md](./adr-provider-expression-context.md)       | ProviderCard 不受影响（其字段是技术参数，是合法 DSL）            |
 
 ## 决策
 
@@ -97,11 +106,11 @@ Anthropic 自家最成功的 coding agent（Claude Code / Codex）**完全不使
 
 职责边界如下：
 
-| 层 | 职责 | 是否机器调度 |
-|---|---|---|
-| IDC ControlPlane / StagePlanner | 决定当前轮次处于 Draft / Plan / Apply 哪个阶段，处理模式、风险、artifact 状态 | 是 |
-| Skill prompt-chains | 描述该 Skill 在 IDC 阶段内应如何理解任务、产出方案、执行动作、处理失败 | 否 |
-| Tool / Approval / Compliance DSL | 限制可调用工具、审批门槛、安全策略 | 是 |
+| 层                               | 职责                                                                          | 是否机器调度 |
+| -------------------------------- | ----------------------------------------------------------------------------- | ------------ |
+| IDC ControlPlane / StagePlanner  | 决定当前轮次处于 Draft / Plan / Apply 哪个阶段，处理模式、风险、artifact 状态 | 是           |
+| Skill prompt-chains              | 描述该 Skill 在 IDC 阶段内应如何理解任务、产出方案、执行动作、处理失败        | 否           |
+| Tool / Approval / Compliance DSL | 限制可调用工具、审批门槛、安全策略                                            | 是           |
 
 因此，prompt-chains 的目标是**帮助 Agent 在 IDC 框架下确定执行先后流程**，而不是替代 IDC，也不是重新引入可由程序解析的 workflow DSL：
 
@@ -168,18 +177,18 @@ recommendedStages: [plan, apply]   # optional 软提示
 
 按此原则审视 Skill 字段：
 
-| 字段 | 当前 | 修正后 | 理由 |
-|---|---|---|---|
-| `name` | DSL | DSL | Registry 索引消费 |
-| `version` | DSL | DSL | Market 版本管理消费 |
-| `description` | DSL | DSL | SkillService.match() + AI 双消费 |
-| `trustLevel` | DSL | DSL | 安全分级必须严格 enum |
-| `allowedTools` | DSL | DSL | ToolInjectionManager 消费（硬约束）|
-| `requiredSubpackages` | DSL | DSL | CapabilityDiscovery 消费 |
-| `compliance.approvalRules` | DSL | DSL | ApprovalEngine 消费 |
-| `recommendedStages` | DSL | DSL（optional 软提示）| SkillService.match() 优化 |
-| **`phases`** | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI |
-| **`pipelines`** | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI |
+| 字段                       | 当前    | 修正后                      | 理由                                |
+| -------------------------- | ------- | --------------------------- | ----------------------------------- |
+| `name`                     | DSL     | DSL                         | Registry 索引消费                   |
+| `version`                  | DSL     | DSL                         | Market 版本管理消费                 |
+| `description`              | DSL     | DSL                         | SkillService.match() + AI 双消费    |
+| `trustLevel`               | DSL     | DSL                         | 安全分级必须严格 enum               |
+| `allowedTools`             | DSL     | DSL                         | ToolInjectionManager 消费（硬约束） |
+| `requiredSubpackages`      | DSL     | DSL                         | CapabilityDiscovery 消费            |
+| `compliance.approvalRules` | DSL     | DSL                         | ApprovalEngine 消费                 |
+| `recommendedStages`        | DSL     | DSL（optional 软提示）      | SkillService.match() 优化           |
+| **`phases`**               | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI                     |
+| **`pipelines`**            | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI                     |
 
 ### 3. Stage 信息由 Artifact 状态自然推断
 
@@ -198,14 +207,14 @@ apply 阶段     ⇔   .neko/tasks/task-<runId>.md 存在 + 有未完成任务
 
 phases 现有的所有"功能"都可以由更优机制承载：
 
-| phases 当前价值 | 替代方案 | 优势 |
-|---|---|---|
-| UI 显示进度 | Task artifact 的 `status` 字段（pending/in_progress/completed） | 颗粒度更细（按 task 而非 phase）|
-| 阶段级 approval 门控 | `compliance.approvalRules` 绑定**工具**而非阶段 | 更精准（工具级 vs 阶段级）|
-| StageTracker 状态推进 | Artifact 文件存在性自然推断 | 自然语义，无需显式声明 |
-| 调试可见性 | Journal 记录每个工具调用 | 信息更完整 |
-| 用户中断点 | AbortController + approval mode | 已覆盖 |
-| 跨 Skill 编排（pipelines）| AI 在 body 里描述"如需 X，spawn skill Y" | AI 主导更灵活 |
+| phases 当前价值            | 替代方案                                                        | 优势                             |
+| -------------------------- | --------------------------------------------------------------- | -------------------------------- |
+| UI 显示进度                | Task artifact 的 `status` 字段（pending/in_progress/completed） | 颗粒度更细（按 task 而非 phase） |
+| 阶段级 approval 门控       | `compliance.approvalRules` 绑定**工具**而非阶段                 | 更精准（工具级 vs 阶段级）       |
+| StageTracker 状态推进      | Artifact 文件存在性自然推断                                     | 自然语义，无需显式声明           |
+| 调试可见性                 | Journal 记录每个工具调用                                        | 信息更完整                       |
+| 用户中断点                 | AbortController + approval mode                                 | 已覆盖                           |
+| 跨 Skill 编排（pipelines） | AI 在 body 里描述"如需 X，spawn skill Y"                        | AI 主导更灵活                    |
 
 **结论**：phases 没有真正不可替代的功能。所有"价值"都可由其他机制承载，且**更优**。
 
@@ -213,14 +222,14 @@ phases 现有的所有"功能"都可以由更优机制承载：
 
 虽然不是 DSL，仍约定 markdown 章节结构作为最佳实践。这里的“工作流程”是 **IDC 下的轻量化先后指导**：它应让 Agent 知道通常先做什么、后做什么、哪些条件下跳过或回退，但不应让运行时解析成强制状态机。
 
-| 章节 | 用途 | 必填 |
-|---|---|---|
-| `## 工作流程` | 描述 IDC 框架内的典型先后流程、可跳过条件和回退条件 | 推荐 |
-| `## 关键决策点` | 列出判断准则与标准 | 推荐 |
-| `## 失败处理` | 常见错误及恢复策略 | 推荐 |
-| `## 与其他 Skill 协作` | 何时切换 / spawn 其他 Skill | 可选 |
-| `## 反模式` | 明确不该做什么 | 可选 |
-| `## 示例对话` | few-shot 样本 | 可选 |
+| 章节                   | 用途                                                | 必填 |
+| ---------------------- | --------------------------------------------------- | ---- |
+| `## 工作流程`          | 描述 IDC 框架内的典型先后流程、可跳过条件和回退条件 | 推荐 |
+| `## 关键决策点`        | 列出判断准则与标准                                  | 推荐 |
+| `## 失败处理`          | 常见错误及恢复策略                                  | 推荐 |
+| `## 与其他 Skill 协作` | 何时切换 / spawn 其他 Skill                         | 可选 |
+| `## 反模式`            | 明确不该做什么                                      | 可选 |
+| `## 示例对话`          | few-shot 样本                                       | 可选 |
 
 **关键**：这些章节**不是机器解析的**——AI 阅读后形成认知，用来在 IDC 阶段内安排先后流程。是 prompt-chains 写作惯例（类似 README 的 Installation/Usage 章节惯例），约定俗成而非强制。
 
@@ -233,9 +242,9 @@ phases 现有的所有"功能"都可以由更优机制承载：
 ---
 name: cut-tiktok-creator
 description: TikTok 短视频创作师...
-allowedTools: [cut.trim_clip]      # neko 私有，CC 忽略
-trustLevel: core                   # neko 私有，CC 忽略
-compliance: {...}                  # neko 私有，CC 忽略
+allowedTools: [cut.trim_clip] # neko 私有，CC 忽略
+trustLevel: core # neko 私有，CC 忽略
+compliance: { ... } # neko 私有，CC 忽略
 ---
 你是 TikTok 短视频创作师...
 ```
@@ -276,12 +285,12 @@ AI 在 think 阶段判断条件并自主调用 Task 工具——这是 §11.5 �
 
 虽然支持 prompt-chains，但**安全/权限边界不能让 AI 在每次激活时重新解析**：
 
-| 反模式 | 为什么必须 DSL |
-|---|---|
-| 把 `allowedTools` 写到 body 里 | ToolInjectionManager 是程序消费，不能依赖 AI 解析 markdown 中的字符串 |
-| 把 `compliance.approvalRules` 写成自然语言 | ApprovalEngine 是确定性程序，需要严格 schema |
-| 把 `requiredSubpackages` 写成 body 提示 | Capability Discovery 期校验需要结构化字段 |
-| 把 `trustLevel` 写成形容词 | 安全分级必须严格 enum，AI 解析有概率性误判 |
+| 反模式                                     | 为什么必须 DSL                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| 把 `allowedTools` 写到 body 里             | ToolInjectionManager 是程序消费，不能依赖 AI 解析 markdown 中的字符串 |
+| 把 `compliance.approvalRules` 写成自然语言 | ApprovalEngine 是确定性程序，需要严格 schema                          |
+| 把 `requiredSubpackages` 写成 body 提示    | Capability Discovery 期校验需要结构化字段                             |
+| 把 `trustLevel` 写成形容词                 | 安全分级必须严格 enum，AI 解析有概率性误判                            |
 
 **判断标准**：**AI 解析有概率性，安全边界需要确定性**——这是 DSL 与 prompt-chains 的硬分界线。
 
@@ -289,14 +298,12 @@ AI 在 think 阶段判断条件并自主调用 Task 工具——这是 §11.5 �
 
 本 ADR **不包含**：
 
-1. **不立即移除 phases / pipelines parser**——保持向后兼容到 Stage 4（约 6-12 个月）
-2. **不强制重写所有现有 Skill**——通过 deprecation + 自动迁移工具自然推动
-3. **不引入新的 markdown 编排 DSL（如 mermaid 图）替代 phases**——纯自然语言更符合 §11.5
-4. **不动 ProviderCard 的字段设计**——ProviderCard 的 Syntax/Concept/Training Profile 是技术参数，是合法 DSL
-5. **不动 Tool / Operation 的 schema 严格度**——§11.6.2 二分原则保留
-6. **不在 Skill body 里塞机器可读结构**（如 `<phase id="...">` 标签）——markdown 自由文本就是终态
-7. **不要求所有 Skill 必须使用推荐章节**——是惯例非强制
-8. **不引入 Skill 编排测试 DSL**——AI 行为测试走端到端，不走 schema 校验
+1. **不引入新的 markdown 编排 DSL**（如 mermaid 图）替代 phases——纯自然语言更符合 §11.5
+2. **不动 ProviderCard 的字段设计**——ProviderCard 的 Syntax/Concept/Training Profile 是技术参数，是合法 DSL
+3. **不动 Tool / Operation 的 schema 严格度**——§11.6.2 二分原则保留
+4. **不在 Skill body 里塞机器可读结构**（如 `<phase id="...">` 标签）——markdown 自由文本就是终态
+5. **不要求所有 Skill 必须使用推荐章节**——是惯例非强制
+6. **不引入 Skill 编排测试 DSL**——AI 行为测试走端到端，不走 schema 校验
 
 ## 结果与影响
 
@@ -312,132 +319,94 @@ AI 在 think 阶段判断条件并自主调用 Task 工具——这是 §11.5 �
 
 ### 代价与约束
 
-1. **现有 phases-based Skill 需要迁移**——通过 4 阶段 deprecation 路径平滑过渡
-2. **失去"机器可分析编排"的能力**——但实际上从未真正利用过（无下游消费者）
-3. **UI 进度展示需切到 Task artifact 颗粒度**——颗粒度变细但需要 UI 适配
-4. **Skill 写作惯例需要文档化**——推荐章节标准需要写作指南
-5. **早期使用者可能困惑**——"为什么没有 phases 了"——需要文档说明 §11.5 对齐
+1. **失去"机器可分析编排"的能力**——但实际上从未真正利用过（无下游消费者）
+2. **UI 进度展示需切到 Task artifact 颗粒度**——颗粒度变细但需要 UI 适配
+3. **Skill 写作惯例需要文档化**——推荐章节标准需要写作指南
 
 ### 演化评级影响
 
-| 控制面 / 层 | 当前 | 本 ADR 后 |
-|---|---|---|
-| Skill 层（[agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md)） | A- | **A** |
-| Prompt 平面 | A | A（保持） |
-| Schema 平面 | A | A（保持） |
-| Orchestration 层 | B+ | A-（DSL 一减反而前进，与 [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 协同） |
+| 控制面 / 层                                                                   | 当前 | 本 ADR 后                                                                                                        |
+| ----------------------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
+| Skill 层（[agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md)） | A-   | **A**                                                                                                            |
+| Prompt 平面                                                                   | A    | A（保持）                                                                                                        |
+| Schema 平面                                                                   | A    | A（保持）                                                                                                        |
+| Orchestration 层                                                              | B+   | A-（DSL 一减反而前进，与 [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 协同） |
 
 ## 后续演进
 
-按 4 个 Stage 推进，每个 Stage 包含 1-3 个 PR，累计约 4-5 工程日。
+未公开上线前直接清理 legacy schema，避免形成兼容承诺。剩余演进只保留面向新格式的增强项。
 
-| Stage | 目标 | 工作量 | 依赖 |
-|---|---|---|---|
-| **Stage 1（PR-S1）** | 文档先行：在 [agent-unified-workflow.md §5.2](./agent-unified-workflow.md) 标记 phases/pipelines deprecated；新 Skill 写作指南；写作惯例章节文档 | 1d | — |
-| **Stage 2（PR-S2-S3）** | 自动迁移工具 `@neko/skill-migrate`：把现有 phases 投影为 markdown 章节；输出新版 Skill 文件 + diff 让作者审阅；--dry-run 模式 | 1.5d | S1 |
-| **Stage 3（PR-S4-S5）** | 运行时降级：SkillInjectionCoordinator 检测到 phases 字段时自动转为 markdown 章节注入；写 Journal 提示作者迁移；StagePlanner 改为读 artifact 状态而非 Skill phases | 1.5d | S2 |
-| **Stage 4（PR-S6）** | 6-12 个月后移除 phases/pipelines parser；仍有这些字段的 Skill 用 fallback 显示警告 | 1d | S3（远期） |
+| Stage    | 目标                                                              | 工作量 | 依赖     |
+| -------- | ----------------------------------------------------------------- | ------ | -------- |
+| **完成** | 删除旧 phase 类型 / manifest 字段 / validator / runtime inference | —      | —        |
+| **后续** | 新 Skill 写作指南；官方模板统一 prompt-chain 章节                 | 0.5-1d | —        |
+| **后续** | Marketplace 模板与审核指南：不再引导 workflow DSL 字段            | 0.5d   | 模板稳定 |
 
 ### 回滚策略
 
-每个 Stage 都有 AblationToggle kill-switch：
+本字段尚未公开上线，直接删除 legacy parser/schema，不提供 `phases` 回滚开关，避免把错误抽象固化成实验维度。若未来需要对比，只能通过独立分支或 fixture 重放历史实现，不进入生产配置。
 
-- Stage 3 回滚：`skillPhasesAutoMigration: false`（保留旧 phases parser 行为）
-- 整体回滚：`promptChainsMode: false`（强制读 phases，作为对照实验）
-
-### 新增 AblationToggles（2 个）
-
-```typescript
-export interface AblationToggles {
-  // ... 既有字段 ...
-
-  // === Skill as Prompt-Chains（adr-skill-as-prompt-chains.md） ===
-
-  /** 自动迁移：false=保留 phases parser，不自动转 markdown */
-  skillPhasesAutoMigration?: false;
-
-  /** prompt-chains 模式整体：false=强制走 phases DSL（对照实验） */
-  promptChainsMode?: false;
-}
-```
-
-### 自动迁移示例（Stage 2 工具行为）
-
-输入（旧 Skill）：
+### 推荐 Skill 写法示例
 
 ```yaml
 ---
 name: cut-tiktok-creator
-phases:
-  - name: review
-    artifacts: [draft]
-    approvalRequired: true
-  - name: edit
-    artifacts: [plan, apply]
-  - name: export
-    approvalRequired: true
----
-你是 TikTok 短视频创作师...
-```
-
-输出（迁移后）：
-
-```yaml
----
-name: cut-tiktok-creator
+description: TikTok 短视频创作师。Use when creating short-form vertical videos.
+allowedTools:
+  - cut.trim_clip
+  - cut.export_mp4
 compliance:
-  approvalRules:                    # 从 phases.approvalRequired 提取，绑定到具体工具
-    - tool: timeline.export
+  approvalRules:
+    - tool: cut.export_mp4
       mode: ask
-recommendedStages: [draft, plan, apply]  # 从 phases artifact 关联推断（optional）
 ---
-你是 TikTok 短视频创作师...
+```
 
+正文：
+
+```yaml
+---
+name: cut-tiktok-creator
 ## 工作流程
 
-按以下方式工作（自动从 phases 迁移生成）：
+按以下方式工作：
 
 1. **Review 阶段**：先生成 Draft 描述创意方向（需用户审批后继续）
 2. **Edit 阶段**：写 Plan 列出剪辑步骤，逐步执行 Apply
-3. **Export 阶段**：导出前向用户确认参数（自动 approval）
-
-> 本节由 phases 字段自动迁移生成于 2026-04-25。
-> 建议作者根据实际工作流改写为更具体的指导。
+3. **Export 阶段**：导出前向用户确认参数
 ```
 
 ## 反模式清单
 
-| # | 反模式 | 为什么错 |
-|---|---|---|
-| 1 | 把 phases 字段保留但内容写空 | 作为 "我已经迁移" 的伪装；应彻底删除字段 |
-| 2 | 把 allowedTools 写到 body markdown 里 | 安全约束需要程序消费，不能依赖 AI 解析 |
-| 3 | 在 body 里塞 `<phase>` 自定义标签 | 把 DSL 隐藏在 markdown 里，没解决问题 |
-| 4 | 用 mermaid 图描述工作流 | mermaid 是结构化 DSL 的另一种表达，违反 §11.5 |
-| 5 | 推荐章节强制必填 | 是惯例非强制，强制等于变相 DSL |
-| 6 | 把 stage 名字写死在 body 里（"必须先 Draft 再 Plan"） | 锁死 IDC 三阶段，AI 应能跳过简单情况的 Draft |
-| 7 | 把"工作流程"章节写成不可跳过的硬顺序 | 推荐写成 IDC 下的典型先后流程，并说明可合并 / 跳过 / 回退条件 |
-| 8 | StagePlanner 还读 phases 字段 | 应该改为读 artifact 状态（决策 3）|
-| 9 | UI 仍按 phases 渲染进度 | 应该改为渲染 task status |
-| 10 | 把 SubAgent 协作做成 pipelines DSL | 应让 AI 在 body 描述触发条件 |
-| 11 | 重新引入"轻量编排 DSL"（如 YAML 工作流）| §11.5 的根本问题不在重不重，在 DSL vs 自然语言 |
-| 12 | 自动迁移工具机械翻译，不让作者审阅 | 应输出 diff + 让作者改写为更具体的指导 |
-| 13 | 把现有 phases 视为"高级特性"保留给老用户 | 这是 deprecation 路径上的债务，应明确退出时间 |
+| #   | 反模式                                                | 为什么错                                                      |
+| --- | ----------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | 把 phases 字段保留但内容写空                          | 作为 "我已经迁移" 的伪装；应彻底删除字段                      |
+| 2   | 把 allowedTools 写到 body markdown 里                 | 安全约束需要程序消费，不能依赖 AI 解析                        |
+| 3   | 在 body 里塞 `<phase>` 自定义标签                     | 把 DSL 隐藏在 markdown 里，没解决问题                         |
+| 4   | 用 mermaid 图描述工作流                               | mermaid 是结构化 DSL 的另一种表达，违反 §11.5                 |
+| 5   | 推荐章节强制必填                                      | 是惯例非强制，强制等于变相 DSL                                |
+| 6   | 把 stage 名字写死在 body 里（"必须先 Draft 再 Plan"） | 锁死 IDC 三阶段，AI 应能跳过简单情况的 Draft                  |
+| 7   | 把"工作流程"章节写成不可跳过的硬顺序                  | 推荐写成 IDC 下的典型先后流程，并说明可合并 / 跳过 / 回退条件 |
+| 8   | StagePlanner 还读 phases 字段                         | 应该改为读 artifact 状态（决策 3）                            |
+| 9   | UI 仍按 phases 渲染进度                               | 应该改为渲染 task status                                      |
+| 10  | 把 SubAgent 协作做成 pipelines DSL                    | 应让 AI 在 body 描述触发条件                                  |
+| 11  | 重新引入"轻量编排 DSL"（如 YAML 工作流）              | §11.5 的根本问题不在重不重，在 DSL vs 自然语言                |
+| 12  | 把现有 phases 视为"高级特性"保留给老用户              | 未上线前不保留兼容债务，应直接移除                            |
 
 ## 与其他 ADR 的关系
 
 本 ADR 合入后需同步更新：
 
-| ADR | 更新内容 |
-|---|---|
-| [agent-unified-workflow.md §5.2](./agent-unified-workflow.md) | phases / pipelines 字段标记 deprecated；§5.2.10 phases.parallel 等 phases 子字段同步 deprecated；新增"Skill 写作惯例"小节 |
-| [agent-unified-workflow.md §11.6.4](./agent-unified-workflow.md) | 反模式 #4 增补"phases / pipelines DSL"作为具体实例 |
-| [agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md) | Skill 层评级 A- → A；§3.3 Orchestration 评级同步抬升 |
-| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 实现说明：从读 Skill phases 改为读 artifact 状态 |
-| [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) | SubAgent 编排原则：靠 AI 在 body 描述触发条件，非 pipelines DSL |
-| [adr-capability-protocol.md](./adr-capability-protocol.md) | CapabilityContribution.skillFiles 期望的 Skill 格式更新（去除 phases / pipelines 字段示例） |
-| [adr-provider-expression-context.md](./adr-provider-expression-context.md) | 不受影响——ProviderCard 的字段是技术参数，是合法 DSL |
-| [ablation-experiment-framework.md](./ablation-experiment-framework.md) | 附录追加 2 个新 toggle |
-| [marketplace.md](./marketplace.md) | Skill 分发审核标准：检查是否仍使用 deprecated phases，引导作者迁移 |
+| ADR                                                                              | 更新内容                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [agent-unified-workflow.md §5.2](./agent-unified-workflow.md)                    | 移除 phases / pipelines 字段示例；新增 Skill prompt-chain 写作惯例                          |
+| [agent-unified-workflow.md §11.6.4](./agent-unified-workflow.md)                 | 反模式 #4 增补"phases / pipelines DSL"作为具体实例                                          |
+| [agent-evolution-capacity.md §3.1](./agent-evolution-capacity.md)                | Skill 层评级 A- → A；§3.3 Orchestration 评级同步抬升                                        |
+| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 实现说明：只读 artifact 状态                                                   |
+| [agent-multi-agent-federation.md](./agent-multi-agent-federation.md)             | SubAgent 编排原则：靠 AI 在 body 描述触发条件，非 pipelines DSL                             |
+| [adr-capability-protocol.md](./adr-capability-protocol.md)                       | CapabilityContribution.skillFiles 期望的 Skill 格式更新（去除 phases / pipelines 字段示例） |
+| [adr-provider-expression-context.md](./adr-provider-expression-context.md)       | 不受影响——ProviderCard 的字段是技术参数，是合法 DSL                                         |
+| [marketplace.md](./marketplace.md)                                               | Skill 分发审核标准：不再引导 workflow DSL 字段                                              |
 
 ### 不纳入本 ADR 的延伸议题
 

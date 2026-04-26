@@ -17,15 +17,14 @@ describe('idc-execution-metadata', () => {
     });
   });
 
-  it('creates workflow-template metadata for slash skills with phases', () => {
+  it('creates prompt-chain-skill metadata for explicit slash skill execution', () => {
     expect(
       createSkillExecutionIdcMetadata({
         name: '剪辑: 快速 workflow',
-        phases: [{ name: 'draft' }] as never,
       } as never),
     ).toEqual({
       idc: {
-        entrySignal: 'workflow-template',
+        entrySignal: 'prompt-chain-skill',
         taskShape: 'multi-step',
         runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
         workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
@@ -46,7 +45,7 @@ describe('idc-execution-metadata', () => {
         },
         {
           idc: {
-            entrySignal: 'workflow-template',
+            entrySignal: 'prompt-chain-skill',
           },
           trigger: 'slash',
         },
@@ -56,7 +55,7 @@ describe('idc-execution-metadata', () => {
         runKind: 'plan-mode',
         workflowId: 'plan-mode',
         taskShape: 'multi-step',
-        entrySignal: 'workflow-template',
+        entrySignal: 'prompt-chain-skill',
       },
       source: 'plan',
       trigger: 'slash',

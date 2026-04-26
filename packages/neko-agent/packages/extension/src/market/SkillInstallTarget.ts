@@ -39,6 +39,7 @@ export class SkillInstallTarget implements IInstallTarget<'skill'> {
   async onPostInstall(manifest: AssetManifest, installedPath: string): Promise<void> {
     // Inject market metadata into SKILL.md frontmatter
     const skillMdPath = path.join(installedPath, 'SKILL.md');
+
     try {
       const content = await fs.readFile(skillMdPath, 'utf-8');
       const updated = this.injectMarketSource(content, manifest.id);

@@ -51,7 +51,7 @@ describe('stage planner — entry resolution (§3.2)', () => {
       'multi-step',
       'vague-creative',
       'referenced-artifact',
-      'workflow-template',
+      'prompt-chain-skill',
       'high-risk-forced',
     ] as StageEntrySignal[]) {
       const d = planStages(baseInputs({ mode: 'plan', entrySignal: signal }));

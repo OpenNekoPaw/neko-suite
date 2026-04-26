@@ -386,7 +386,7 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
-      const skill = { name: 'commit-workflow', command: 'commit', phases: [{ name: 'draft' }] };
+      const skill = { name: 'commit-workflow', command: 'commit' };
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'commit' },
@@ -416,7 +416,7 @@ describe('SlashCommandHandler', () => {
         {
           metadata: {
             idc: {
-              entrySignal: 'workflow-template',
+              entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
               runKind: 'skill:commit-workflow',
               workflowId: 'skill:commit-workflow',
@@ -460,7 +460,7 @@ describe('SlashCommandHandler', () => {
       expect(messageHandler.handleUserMessage).not.toHaveBeenCalled();
     });
 
-    it('should escape workflow skill names in IDC metadata for slash execution', async () => {
+    it('should escape skill names in IDC metadata for slash execution', async () => {
       const agentManager = { applySkillInjection: vi.fn() };
       handler = new SlashCommandHandler({
         conversations: conversations as any,
@@ -475,7 +475,7 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
-      const skill = { name: '剪辑: 快速 workflow', command: 'edit', phases: [{ name: 'draft' }] };
+      const skill = { name: '剪辑: 快速 workflow', command: 'edit' };
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'edit' },
@@ -499,7 +499,7 @@ describe('SlashCommandHandler', () => {
         {
           metadata: {
             idc: {
-              entrySignal: 'workflow-template',
+              entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
               runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
               workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
@@ -509,7 +509,7 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should let the agent decide IDC when the skill has no workflow phases', async () => {
+    it('should attach IDC metadata for explicit skill slash execution', async () => {
       const agentManager = { applySkillInjection: vi.fn() };
       handler = new SlashCommandHandler({
         conversations: conversations as any,
@@ -545,7 +545,16 @@ describe('SlashCommandHandler', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
+        {
+          metadata: {
+            idc: {
+              entrySignal: 'prompt-chain-skill',
+              taskShape: 'multi-step',
+              runKind: 'skill:commit',
+              workflowId: 'skill:commit',
+            },
+          },
+        },
       );
     });
 
