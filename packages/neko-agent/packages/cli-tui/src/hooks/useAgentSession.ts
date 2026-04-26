@@ -10,21 +10,17 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import {
   MCPManager,
   createAllMCPTools,
-  createTaskManagerIdcTaskProjection,
   createPlanModeIdcMetadata,
   createFileProjectMemoryManager,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
   createAgentSessionWithRuntime,
-  createNodeArtifactStore,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
   mergeIdcExecutionMetadata,
-  ToolGroupRegistry,
-  registerBuiltinToolGroups,
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
@@ -39,6 +35,7 @@ import type { ExecutionMode } from '../types/state';
 import type { IService } from '@neko/shared';
 import { getProviderModels, updateDefaultModel } from '../core/config';
 import { createCLIPlatform, createCLITaskManager } from '../core/platform-bootstrap';
+import { createCliAgentRuntime } from '../core/runtime-bootstrap';
 import { loadSkillArtifactsAsSkills } from '../core/skill-artifacts';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
@@ -243,8 +240,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...config,
           model: effectiveModel,
         });
-        const toolGroupRegistry = createCliToolGroupRegistry();
-
         // 6. Create Session (with validated model)
         const session = createAgentSessionWithRuntime({
           service: llmService,
@@ -255,36 +250,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           temperature: config.temperature,
           maxTokens: config.maxTokens,
           modelId: effectiveModel,
-          runtime: {
-            workflowRuntime: {
-              ...(skillService
-                ? {
-                    stageTracking: {
-                      skillService,
-                      skillRegistry: skillService.registry,
-                    },
-                  }
-                : {}),
-              idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
-            },
-            ...(skillService
-              ? {
-                  capabilityRuntime: {
-                    skillService,
-                    skillRegistry: skillService.registry,
-                    toolGroupRegistry,
-                  },
-                }
-              : {
-                  capabilityRuntime: {
-                    toolGroupRegistry,
-                  },
-                }),
-            artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
-            feedbackLoop: {
-              projectMemoryManager,
-            },
-          },
+          runtime: createCliAgentRuntime({
+            workspaceRoot: config.workDir,
+            taskManager,
+            ...(skillService ? { skillService } : {}),
+            projectMemoryManager,
+          }),
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
@@ -507,12 +478,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     slashCommands,
     isReady: isReadyRef.current,
   };
-}
-
-function createCliToolGroupRegistry(): ToolGroupRegistry {
-  const registry = new ToolGroupRegistry();
-  registerBuiltinToolGroups(registry);
-  return registry;
 }
 
 /** Helper to get workDir from config store */

@@ -9,7 +9,6 @@ import {
   formatComparisonMarkdown,
   MCPManager,
   createAllMCPTools,
-  createTaskManagerIdcTaskProjection,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
@@ -18,9 +17,6 @@ import {
   getDefaultPersonalPath,
   createCoreTools,
   createFileProjectMemoryManager,
-  createNodeArtifactStore,
-  ToolGroupRegistry,
-  registerBuiltinToolGroups,
   createConversationId,
   type AgentSessionConfig,
   type ExperimentConfig,
@@ -34,6 +30,7 @@ import type { IService } from '@neko/shared';
 import type { IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig } from './types';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
+import { createCliAgentRuntime } from './runtime-bootstrap';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
 
 export type ExperimentSuiteName = 'standard' | 'group' | 'parameter';
@@ -127,12 +124,6 @@ function createNodeExperimentOutputWriter() {
   };
 }
 
-function createCliToolGroupRegistry(): ToolGroupRegistry {
-  const registry = new ToolGroupRegistry();
-  registerBuiltinToolGroups(registry);
-  return registry;
-}
-
 async function buildCliExperimentSessionConfig(
   options: CLIExperimentOptions,
 ): Promise<AgentSessionConfig> {
@@ -180,7 +171,6 @@ async function buildCliExperimentSessionConfig(
 
   const promptBuilder = createSystemPromptBuilder({ locale: 'en', mode: 'default' });
   await promptBuilder.loadAgentsFile(options.config.workDir, getDefaultPersonalPath());
-  const toolGroupRegistry = createCliToolGroupRegistry();
   const conversationId = createConversationId(options.config.workDir);
 
   return buildAgentSessionConfigWithRuntime({
@@ -193,35 +183,11 @@ async function buildCliExperimentSessionConfig(
     modelId: options.config.model,
     conversationId,
     onConfirmTool: async () => true,
-    runtime: {
-      workflowRuntime: {
-        ...(skillService
-          ? {
-              stageTracking: {
-                skillService,
-                skillRegistry: skillService.registry,
-              },
-            }
-          : {}),
-        idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
-      },
-      ...(skillService
-        ? {
-            capabilityRuntime: {
-              skillService,
-              skillRegistry: skillService.registry,
-              toolGroupRegistry,
-            },
-          }
-        : {
-            capabilityRuntime: {
-              toolGroupRegistry,
-            },
-          }),
-      artifactStore: createNodeArtifactStore({ workspaceRoot: options.config.workDir }),
-      feedbackLoop: {
-        projectMemoryManager,
-      },
-    },
+    runtime: createCliAgentRuntime({
+      workspaceRoot: options.config.workDir,
+      taskManager,
+      ...(skillService ? { skillService } : {}),
+      projectMemoryManager,
+    }),
   });
 }

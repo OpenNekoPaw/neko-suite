@@ -11,7 +11,6 @@ import type { AgentResult, AgentStep, ExecutorHooks, AgentEvent } from '@neko/ag
 import {
   MCPManager,
   createAllMCPTools,
-  createTaskManagerIdcTaskProjection,
   createPlanModeIdcMetadata,
   createSkillService,
   createNodeSkillLoader,
@@ -25,9 +24,6 @@ import {
   createCoreTools,
   createFileProjectMemoryManager,
   mergeIdcExecutionMetadata,
-  createNodeArtifactStore,
-  ToolGroupRegistry,
-  registerBuiltinToolGroups,
   type InputProcessor,
   type ConversationRecord,
   createFileConversationStorage,
@@ -45,6 +41,7 @@ import { formatToolCall } from './formatter';
 import { isSlashCommand, handleSlashCommand, type SlashCommandContext } from './slash-commands';
 import { getProviderModels } from './config';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
+import { createCliAgentRuntime } from './runtime-bootstrap';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
 
 /**
@@ -63,12 +60,6 @@ export interface AgentRunnerOptions {
   onThinking?: (thought: string) => void;
   /** Execution mode (plan/ask/auto) */
   executionMode?: ExecutionMode;
-}
-
-function createCliToolGroupRegistry(): ToolGroupRegistry {
-  const registry = new ToolGroupRegistry();
-  registerBuiltinToolGroups(registry);
-  return registry;
 }
 
 /**
@@ -164,7 +155,6 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     });
     await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
     const systemPrompt = promptBuilder.build();
-    const toolGroupRegistry = createCliToolGroupRegistry();
 
     // Create agent session
     const conversationId = createConversationId(config.workDir);
@@ -178,36 +168,12 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxTokens: config.maxTokens,
       modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
-      runtime: {
-        workflowRuntime: {
-          ...(skillService
-            ? {
-                stageTracking: {
-                  skillService,
-                  skillRegistry: skillService.registry,
-                },
-              }
-            : {}),
-          idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
-        },
-        ...(skillService
-          ? {
-              capabilityRuntime: {
-                skillService,
-                skillRegistry: skillService.registry,
-                toolGroupRegistry,
-              },
-            }
-          : {
-              capabilityRuntime: {
-                toolGroupRegistry,
-              },
-            }),
-        artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
-        feedbackLoop: {
-          projectMemoryManager,
-        },
-      },
+      runtime: createCliAgentRuntime({
+        workspaceRoot: config.workDir,
+        taskManager,
+        ...(skillService ? { skillService } : {}),
+        projectMemoryManager,
+      }),
       conversationId,
       onConfirmTool: async (_request) => {
         // In non-interactive mode, auto-approve all tools
@@ -740,29 +706,11 @@ async function initializeInteractiveSession(
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     modelId: config.model,
-    runtime: {
-      capabilityRuntime: {
-        ...(skillService
-          ? {
-              skillService,
-              skillRegistry: skillService.registry,
-            }
-          : {}),
-        toolGroupRegistry: createCliToolGroupRegistry(),
-      },
-      workflowRuntime: {
-        ...(skillService
-          ? {
-              stageTracking: {
-                skillService,
-                skillRegistry: skillService.registry,
-              },
-            }
-          : {}),
-        idcTaskProjection: createTaskManagerIdcTaskProjection({ store: taskManager }),
-      },
-      artifactStore: createNodeArtifactStore({ workspaceRoot: config.workDir }),
-    },
+    runtime: createCliAgentRuntime({
+      workspaceRoot: config.workDir,
+      taskManager,
+      ...(skillService ? { skillService } : {}),
+    }),
     conversationId,
     onConfirmTool: async (request) => {
       // Check always-allowed set
