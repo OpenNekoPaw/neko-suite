@@ -22,6 +22,7 @@ import type {
   ConversationCompressionResult,
   PromptFragment,
   Skill,
+  SubagentReviewResult,
   ToolName,
   Tool,
 } from '@neko/shared';
@@ -112,6 +113,7 @@ import { MemoryRecall } from '../memory/memory-recall';
 import {
   composeBeforeThinkHooks,
   createFeedbackCoordinator,
+  createQualityReviewEvidence,
   type IFeedbackCoordinator,
 } from '../feedback';
 import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
@@ -130,6 +132,7 @@ import {
   type ArtifactRecord,
   type IArtifactService,
 } from '../runtime/artifact-service';
+import { createAgentObservationRecorder } from '../runtime/agent-observation-recorder';
 import {
   classifyIdcEntrySignal,
   classifyIdcTaskShape,
@@ -239,6 +242,10 @@ export class AgentSession implements IAgentSession {
   // guidance, and project-memory extraction as a single session-level
   // dependency rather than three ad hoc code paths.
   private _feedbackCoordinator: IFeedbackCoordinator | null = null;
+  private _controlPlane: import('../control-plane').IControlPlane | null = null;
+  private _operationToolAdapterRegistry:
+    | import('@neko/shared').IOperationToolAdapterRegistry
+    | null = null;
   private _feedbackCycles: import('../feedback').FeedbackCycle[] = [];
   private _feedbackGuidanceState: PersistedFeedbackGuidanceSnapshot | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
@@ -350,6 +357,8 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
+    this._controlPlane = config.controlPlane ?? null;
+    this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
     this._artifactService = resolveArtifactService(config);
     this._idcTaskProjection = config.idcTaskProjection ?? null;
@@ -645,6 +654,12 @@ export class AgentSession implements IAgentSession {
     if (config.idcTaskProjection !== undefined) {
       this._idcTaskProjection = config.idcTaskProjection ?? null;
     }
+    if (config.controlPlane !== undefined) {
+      this._controlPlane = config.controlPlane ?? null;
+    }
+    if (config.operationToolAdapterRegistry !== undefined) {
+      this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
+    }
 
     // Update execution mode if changed
     if (config.executionMode !== undefined) {
@@ -736,6 +751,30 @@ export class AgentSession implements IAgentSession {
 
   getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[] {
     return this._feedbackCycles;
+  }
+
+  getOperationToolAdapterRegistry(): import('@neko/shared').IOperationToolAdapterRegistry | null {
+    return this._operationToolAdapterRegistry;
+  }
+
+  async recordSubagentReviewResult(result: SubagentReviewResult): Promise<void> {
+    if (!this._feedbackCoordinator) {
+      return;
+    }
+
+    const activeRun = this._runStore?.getActive() ?? null;
+    this._feedbackCoordinator.observe({
+      kind: 'subagent-review',
+      observedAt: result.createdAt,
+      review: result,
+      ...(activeRun?.id ? { runId: activeRun.id } : {}),
+    });
+
+    if (!this._ablationMarker?.disableAgentFirstToolEvidence) {
+      await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
+    }
+
+    this._captureFeedbackCycle();
   }
 
   writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
@@ -1373,6 +1412,8 @@ export class AgentSession implements IAgentSession {
     this._stepsSink = null;
     this._artifactWatcher = null;
     this._feedbackCoordinator = null;
+    this._controlPlane = null;
+    this._operationToolAdapterRegistry = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
     this._eventBus = null;
@@ -1831,6 +1872,12 @@ export class AgentSession implements IAgentSession {
   private _restoreFeedbackRuntimeState(
     state: import('../workspace').IdcRuntimeRestoreState['feedback'],
   ): void {
+    if (this._ablationMarker?.disableAgentFirstRecoveryGuidance) {
+      this._applyFeedbackGuidanceSnapshot(null);
+      this._syncSystemPrompt();
+      return;
+    }
+
     const activeRun = this._runStore?.getActive() ?? null;
     if (!shouldRestorePersistedFeedbackGuidance(state.pendingGuidance, activeRun)) {
       this._applyFeedbackGuidanceSnapshot(null);
@@ -1851,6 +1898,11 @@ export class AgentSession implements IAgentSession {
     content: string | null,
     sourceRun?: Pick<IdcRun, 'id' | 'startedAt'> | null,
   ): void {
+    if (this._ablationMarker?.disableAgentFirstRecoveryGuidance && content !== null) {
+      this._applyFeedbackGuidanceSnapshot(null);
+      return;
+    }
+
     const trimmed = content?.trim();
     if (!trimmed) {
       this._applyFeedbackGuidanceSnapshot(null);
@@ -1930,6 +1982,9 @@ export class AgentSession implements IAgentSession {
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
         journalAsSSOT: this._config.journalAsSSOT,
+        ...(this._config.feedbackControlPolicy
+          ? { controlPolicy: this._config.feedbackControlPolicy }
+          : {}),
         ...(providerCardProject ? { providerCardProject } : {}),
       });
 
@@ -2070,10 +2125,14 @@ export class AgentSession implements IAgentSession {
         toolCallId,
         toolName,
         observedAt: step.timestamp,
+        attachEvidence: !this._ablationMarker?.disableAgentFirstQualityReviewEvidence,
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (qualityCheckSignal) {
         this._feedbackCoordinator.observe(qualityCheckSignal);
+        if (qualityCheckSignal.evidence && !this._ablationMarker?.disableAgentFirstToolEvidence) {
+          void this._recordAgentEvidence(qualityCheckSignal.evidence);
+        }
       }
 
       const providerExpressionSignal = toProviderExpressionFeedbackSignal({
@@ -2087,6 +2146,43 @@ export class AgentSession implements IAgentSession {
         this._feedbackCoordinator.observe(providerExpressionSignal);
       }
     }
+  }
+
+  private async _recordAgentEvidence(
+    evidence: import('@neko/shared').PerceptionEvidence,
+  ): Promise<void> {
+    if (!this._journalWriter || this._ablationMarker?.disableAgentFirst) {
+      return;
+    }
+
+    const contextPacketId = this._getCurrentContextPacketId();
+    if (!contextPacketId) {
+      logger.warn('Skipping Agent-first evidence without contextPacketId', {
+        evidenceId: evidence.id,
+      });
+      return;
+    }
+
+    try {
+      const recorder = createAgentObservationRecorder({
+        journalWriter: this._journalWriter,
+        nextSeq: () => ++this._journalSeq,
+        contextPacketId,
+      });
+      await recorder.attachEvidence(evidence);
+    } catch (error) {
+      logger.warn('Failed to record Agent-first evidence', { error });
+    }
+  }
+
+  private _getCurrentContextPacketId(): string | undefined {
+    const packet = this._currentTurnPlanningContext?.metadata?.['multimodalContextPacket'];
+    if (!isRecord(packet)) {
+      return undefined;
+    }
+
+    const id = packet['id'];
+    return typeof id === 'string' ? id : undefined;
   }
 
   private _captureFeedbackCycle(): boolean {
@@ -2106,8 +2202,22 @@ export class AgentSession implements IAgentSession {
     if (this._feedbackCycles.length > MAX_FEEDBACK_CYCLES) {
       this._feedbackCycles.splice(0, this._feedbackCycles.length - MAX_FEEDBACK_CYCLES);
     }
+    this._adviseControlPlane(cycle);
     this._applyFeedbackFlowActions(cycle.actions);
     return cycle.actions.length > 0;
+  }
+
+  private _adviseControlPlane(cycle: import('../feedback').FeedbackCycle): void {
+    if (!this._controlPlane) {
+      return;
+    }
+
+    for (const decision of cycle.decisions) {
+      this._controlPlane.advise({
+        ...(cycle.currentStage ? { currentStageId: cycle.currentStage } : {}),
+        decision,
+      });
+    }
   }
 
   private _markProcessedMemoryEventIds(eventIds: readonly string[]): void {
@@ -2792,19 +2902,9 @@ interface ObservedToolResult {
   readonly metadata?: Record<string, unknown>;
 }
 
-interface QualityCheckEvaluationSummary {
-  readonly index: number;
-  readonly passed: boolean;
-  readonly finalScore: number;
-  readonly remediations?: readonly unknown[];
-}
+type QualityCheckEvaluationSummary = import('../feedback').QualityReviewEvaluationSummary;
 
-interface QualityCheckFeedbackPayload {
-  readonly totalScenes: number;
-  readonly passed: number;
-  readonly failed: number;
-  readonly evaluations: readonly QualityCheckEvaluationSummary[];
-}
+type QualityCheckFeedbackPayload = import('../feedback').QualityReviewFeedbackPayload;
 
 function resolveObservedToolName(result: ObservedToolResult, fallbackName?: string): string {
   return result.name ?? fallbackName ?? 'unknown-tool';
@@ -2816,29 +2916,32 @@ function toQualityCheckFeedbackSignal(input: {
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
+  readonly attachEvidence?: boolean;
 }): import('../feedback').FeedbackSignal | null {
   if (input.toolName !== 'QualityCheck' || !isQualityCheckFeedbackPayload(input.result.data)) {
     return null;
   }
 
-  const failingSceneIndexes = input.result.data.evaluations
-    .filter((evaluation) => !evaluation.passed)
-    .map((evaluation) => evaluation.index);
-  const remediationCount = input.result.data.evaluations.reduce((count, evaluation) => {
-    return count + (evaluation.remediations?.length ?? 0);
-  }, 0);
+  const qualityReview = createQualityReviewEvidence({
+    payload: input.result.data,
+    toolCallId: input.toolCallId,
+    toolName: 'QualityCheck',
+    observedAt: input.observedAt,
+    ...(input.runId ? { runId: input.runId } : {}),
+  });
 
   return {
     kind: 'quality-check',
     observedAt: input.observedAt,
     toolCallId: input.toolCallId,
     toolName: 'QualityCheck',
-    totalScenes: input.result.data.totalScenes,
-    passed: input.result.data.passed,
-    failed: input.result.data.failed,
-    failingSceneIndexes,
-    remediationCount,
+    totalScenes: qualityReview.summary.totalScenes,
+    passed: qualityReview.summary.passed,
+    failed: qualityReview.summary.failed,
+    failingSceneIndexes: qualityReview.summary.failingSceneIndexes,
+    remediationCount: qualityReview.summary.remediationCount,
     ...(input.runId ? { runId: input.runId } : {}),
+    ...(input.attachEvidence === false ? {} : { evidence: qualityReview.evidence }),
   };
 }
 
@@ -2848,6 +2951,7 @@ function toProviderExpressionFeedbackSignal(input: {
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
+  readonly attachEvidence?: boolean;
 }): import('../feedback').FeedbackSignal | null {
   const metadata = extractProviderExpressionMetadata(input.result);
   if (!metadata) {
@@ -2872,9 +2976,7 @@ function toProviderExpressionFeedbackSignal(input: {
   };
 }
 
-function extractProviderExpressionMetadata(
-  result: ObservedToolResult,
-): {
+function extractProviderExpressionMetadata(result: ObservedToolResult): {
   mode: 'agentic' | 'fallback' | 'native';
   providerId?: string;
   reason?: string;
@@ -2891,9 +2993,7 @@ function extractProviderExpressionMetadata(
   return null;
 }
 
-function extractProviderAdaptationMetadata(
-  metadata: Record<string, unknown>,
-): {
+function extractProviderAdaptationMetadata(metadata: Record<string, unknown>): {
   mode: 'agentic' | 'fallback' | 'native';
   providerId?: string;
   reason?: string;

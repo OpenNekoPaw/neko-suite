@@ -236,6 +236,310 @@ describe('JournalProjection', () => {
     });
   });
 
+  it('projects Agent-first observation, evidence, and rationale graph summaries', async () => {
+    const filePath = '/tmp/journals/conv-agent-first.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        eventId: 'evt-obs',
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: {
+          type: 'agent.observation.created',
+          agentObservation: {
+            id: 'obs-1',
+            modality: 'image',
+            summary: 'Shot 3 style drifts from the surrounding sequence.',
+            confidence: 'medium',
+            evidenceIds: ['evidence-1'],
+            createdAt: 1000,
+            contextPacketId: 'ctx-shot-3',
+          },
+        },
+      },
+      {
+        eventId: 'evt-evidence',
+        seq: 2,
+        ts: 1100,
+        type: 'event',
+        event: {
+          type: 'agent.evidence.attached',
+          agentEvidence: {
+            id: 'evidence-1',
+            source: 'tool',
+            summary: 'QualityReview found style mismatch in shot 3.',
+            observationId: 'obs-1',
+            createdAt: 1100,
+            contextPacketId: 'ctx-shot-3',
+          },
+        },
+      },
+      {
+        eventId: 'evt-rationale',
+        seq: 3,
+        ts: 1200,
+        type: 'event',
+        event: {
+          type: 'agent.rationale.created',
+          agentRationale: {
+            id: 'rat-1',
+            decision: 'recovery-guidance-shot-3',
+            reason: 'A low-risk prompt adjustment should be suggested before asking the user.',
+            confidence: 'medium',
+            observationIds: ['obs-1'],
+            evidenceIds: ['evidence-1'],
+            createdAt: 1200,
+            contextPacketId: 'ctx-shot-3',
+          },
+        },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    await expect(projection.projectAgentFirstGraph('conv-agent-first')).resolves.toEqual({
+      conversationId: 'conv-agent-first',
+      observations: [
+        {
+          id: 'obs-1',
+          summary: 'Shot 3 style drifts from the surrounding sequence.',
+          confidence: 'medium',
+          evidenceIds: ['evidence-1'],
+          contextPacketId: 'ctx-shot-3',
+        },
+      ],
+      evidence: [
+        {
+          id: 'evidence-1',
+          source: 'tool',
+          summary: 'QualityReview found style mismatch in shot 3.',
+          observationId: 'obs-1',
+          contextPacketId: 'ctx-shot-3',
+        },
+      ],
+      rationales: [
+        {
+          id: 'rat-1',
+          decision: 'recovery-guidance-shot-3',
+          reason: 'A low-risk prompt adjustment should be suggested before asking the user.',
+          confidence: 'medium',
+          observationIds: ['obs-1'],
+          evidenceIds: ['evidence-1'],
+          contextPacketId: 'ctx-shot-3',
+        },
+      ],
+    });
+  });
+
+  it('projects rationales that reference multiple observations without expiring linked records', async () => {
+    const filePath = '/tmp/journals/conv-agent-multi-observation.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: {
+          type: 'agent.observation.created',
+          agentObservation: {
+            id: 'obs-shot-1',
+            modality: 'video',
+            summary: 'Shot 1 establishes the warm lighting style.',
+            confidence: 'high',
+            evidenceIds: [],
+            createdAt: 1000,
+            contextPacketId: 'ctx-sequence',
+          },
+        },
+      },
+      {
+        seq: 2,
+        ts: 1100,
+        type: 'event',
+        event: {
+          type: 'agent.observation.created',
+          agentObservation: {
+            id: 'obs-shot-3',
+            modality: 'video',
+            summary: 'Shot 3 uses a cooler palette than the sequence reference.',
+            confidence: 'medium',
+            evidenceIds: ['evidence-style-compare'],
+            createdAt: 1100,
+            contextPacketId: 'ctx-sequence',
+          },
+        },
+      },
+      {
+        seq: 3,
+        ts: 1200,
+        type: 'event',
+        event: {
+          type: 'agent.evidence.attached',
+          agentEvidence: {
+            id: 'evidence-style-compare',
+            source: 'tool',
+            summary: 'Similarity evidence compares shot 1 and shot 3 style.',
+            observationId: 'obs-shot-3',
+            createdAt: 1200,
+            contextPacketId: 'ctx-sequence',
+          },
+        },
+      },
+      {
+        seq: 4,
+        ts: 1300,
+        type: 'event',
+        event: {
+          type: 'agent.rationale.created',
+          agentRationale: {
+            id: 'rat-style-align',
+            decision: 'adjust-shot-3-style-reference',
+            reason: 'Compare the reference shot and target shot before deciding.',
+            confidence: 'medium',
+            observationIds: ['obs-shot-1', 'obs-shot-3'],
+            evidenceIds: ['evidence-style-compare'],
+            createdAt: 1300,
+            contextPacketId: 'ctx-sequence',
+          },
+        },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    await expect(
+      projection.projectAgentFirstGraph('conv-agent-multi-observation'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        observations: expect.arrayContaining([
+          expect.objectContaining({ id: 'obs-shot-1', contextPacketId: 'ctx-sequence' }),
+          expect.objectContaining({ id: 'obs-shot-3', evidenceIds: ['evidence-style-compare'] }),
+        ]),
+        rationales: [
+          expect.objectContaining({
+            id: 'rat-style-align',
+            observationIds: ['obs-shot-1', 'obs-shot-3'],
+            evidenceIds: ['evidence-style-compare'],
+          }),
+        ],
+      }),
+    );
+    await expect(
+      projection.scanAgentFirstIntegrity('conv-agent-multi-observation'),
+    ).resolves.toEqual({
+      conversationId: 'conv-agent-multi-observation',
+      issues: [],
+    });
+  });
+
+  it('scans Agent-first graph integrity and marks orphan records as expired candidates', async () => {
+    const filePath = '/tmp/journals/conv-agent-integrity.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: {
+          type: 'agent.observation.created',
+          agentObservation: {
+            id: 'obs-orphan',
+            modality: 'image',
+            summary: 'Unreferenced observation.',
+            confidence: 'unknown',
+            evidenceIds: [],
+            createdAt: 1000,
+          },
+        },
+      },
+      {
+        seq: 2,
+        ts: 1100,
+        type: 'event',
+        event: {
+          type: 'agent.observation.created',
+          agentObservation: {
+            id: 'obs-missing-evidence',
+            modality: 'image',
+            summary: 'Observation references missing evidence.',
+            confidence: 'medium',
+            evidenceIds: ['evidence-missing'],
+            createdAt: 1100,
+          },
+        },
+      },
+      {
+        seq: 3,
+        ts: 1200,
+        type: 'event',
+        event: {
+          type: 'agent.evidence.attached',
+          agentEvidence: {
+            id: 'evidence-orphan',
+            source: 'tool',
+            summary: 'Evidence points at a missing observation.',
+            observationId: 'obs-missing',
+            createdAt: 1200,
+          },
+        },
+      },
+      {
+        seq: 4,
+        ts: 1300,
+        type: 'event',
+        event: {
+          type: 'agent.rationale.created',
+          agentRationale: {
+            id: 'rat-missing-links',
+            decision: 'continue-with-guidance',
+            reason: 'References are stale after migration.',
+            confidence: 'low',
+            observationIds: ['obs-missing'],
+            evidenceIds: ['evidence-missing'],
+            createdAt: 1300,
+          },
+        },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    await expect(projection.scanAgentFirstIntegrity('conv-agent-integrity')).resolves.toEqual({
+      conversationId: 'conv-agent-integrity',
+      issues: [
+        {
+          kind: 'orphan-evidence',
+          id: 'evidence-orphan',
+          missingId: 'obs-missing',
+          recommendedStatus: 'expired',
+        },
+        {
+          kind: 'rationale-missing-observation',
+          id: 'rat-missing-links',
+          missingId: 'obs-missing',
+          recommendedStatus: 'expired',
+        },
+        {
+          kind: 'rationale-missing-evidence',
+          id: 'rat-missing-links',
+          missingId: 'evidence-missing',
+          recommendedStatus: 'expired',
+        },
+        { kind: 'orphan-observation', id: 'obs-orphan', recommendedStatus: 'expired' },
+        {
+          kind: 'observation-missing-evidence',
+          id: 'obs-missing-evidence',
+          missingId: 'evidence-missing',
+          recommendedStatus: 'expired',
+        },
+      ],
+    });
+  });
+
   it('filters events by type', async () => {
     const filePath = '/tmp/journals/conv-3.jsonl';
     const entries: JournalEntry[] = [

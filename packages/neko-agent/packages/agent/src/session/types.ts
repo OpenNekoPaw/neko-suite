@@ -13,10 +13,17 @@ import type {
   IToolGroupRegistry,
   IToolCategoryRegistry,
   IProviderCardRegistry,
+  IOperationToolAdapterRegistry,
   PromptFragment,
 } from '@neko/shared';
 import type { ArtifactWatcherFactory } from '../runtime/types';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
+import type {
+  PerceptionClassifyClient,
+  PerceptionDetectShotsClient,
+  PerceptionSimilarityClient,
+  PerceptionTranscribeClient,
+} from '../tools/perception';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -202,6 +209,37 @@ export interface AgentSessionConfig {
    */
   feedbackCoordinator?: import('../feedback').IFeedbackCoordinator;
 
+  /** Feedback control policy used by the default FeedbackCoordinator. */
+  feedbackControlPolicy?: import('../feedback').FeedbackControlPolicy;
+
+  /**
+   * Optional ControlPlane guidance provider. It only receives feedback
+   * decisions and may return stage guidance; it must not execute tools or
+   * mutate project state.
+   */
+  controlPlane?: import('../control-plane').IControlPlane;
+
+  /**
+   * Optional OperationTool adapter registry. Adapters only map approved
+   * operation intents to EditOperation plans; they do not execute mutations.
+   */
+  operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
+
+  /**
+   * Optional clients for Agent-first perception evidence tools.
+   *
+   * Supplying a client registers the matching lazy ToolSet execution tool;
+   * it does not inject the tool into the default prompt. Agent remains the
+   * primary perceiver and can activate/call these tools only as optional
+   * evidence providers.
+   */
+  perceptionClients?: {
+    readonly transcribe?: PerceptionTranscribeClient;
+    readonly similarity?: PerceptionSimilarityClient;
+    readonly classify?: PerceptionClassifyClient;
+    readonly detectShots?: PerceptionDetectShotsClient;
+  };
+
   /**
    * Optional reference to the shared SkillService. When supplied, ablation
    * toggles that control discovery (e.g. `skillDiscovery: false`) can flip
@@ -347,6 +385,9 @@ export type AgentEventType =
   | 'compaction' // Working-memory compaction summary written to journal
   | 'compaction_failed' // Compaction attempt failed and tripped/advanced circuit state
   | 'memory_extraction' // Semantic memory extraction/write pipeline event
+  | 'agent.observation.created' // Agent-first multimodal observation recorded
+  | 'agent.evidence.attached' // Optional evidence attached to an observation/rationale
+  | 'agent.rationale.created' // Agent decision rationale recorded
   | 'thinking' // Agent is in thinking phase
   | 'thinking_content' // Extended thinking content (Claude)
   | 'text' // Text output (complete)
@@ -441,6 +482,15 @@ export interface AgentEvent {
     }>;
     writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
   };
+
+  /** Agent-first multimodal observation event */
+  agentObservation?: import('@neko/shared').AgentObservation;
+
+  /** Optional evidence attached to the Agent-first observation/rationale graph */
+  agentEvidence?: import('@neko/shared').PerceptionEvidence;
+
+  /** Agent decision rationale event */
+  agentRationale?: import('@neko/shared').DecisionRationale;
 
   /** Creative version entry (on version_recorded) */
   versionEntry?: import('@neko/shared').CreativeVersionEntry;
@@ -560,6 +610,11 @@ export interface IAgentSession {
    * self-evaluation scheduling, and memory extraction.
    */
   getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[];
+
+  /**
+   * Get the injected OperationTool adapter registry, if this host provides one.
+   */
+  getOperationToolAdapterRegistry(): IOperationToolAdapterRegistry | null;
 
   /**
    * Persist a Draft artifact through the unified runtime artifact service.

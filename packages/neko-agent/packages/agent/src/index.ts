@@ -178,7 +178,13 @@ export {
   type FeedbackMemoryExtractionOutcome,
   type FeedbackMemoryExtractionResult,
   type FeedbackMemoryExtractionSkipped,
+  createQualityReviewEvidence,
   type IFeedbackCoordinator,
+  type QualityReviewEvidenceInput,
+  type QualityReviewEvidenceResult,
+  type QualityReviewEvidenceSummary,
+  type QualityReviewEvaluationSummary,
+  type QualityReviewFeedbackPayload,
 } from './feedback';
 
 export {
@@ -198,6 +204,48 @@ export {
   createProviderExpressionPromptFragments,
   type ProviderExpressionContextOptions,
 } from './provider';
+
+export {
+  PERCEPTION_AUDIO_TRANSCRIBE_METADATA,
+  PERCEPTION_IMAGE_SIMILARITY_METADATA,
+  PERCEPTION_IMAGE_CLASSIFY_METADATA,
+  PERCEPTION_DESCRIBE_INPUT_METADATA,
+  PERCEPTION_VIDEO_DETECT_SHOTS_METADATA,
+  PerceptionAudioTranscribeTool,
+  PerceptionImageSimilarityTool,
+  PerceptionImageClassifyTool,
+  PerceptionDescribeInputTool,
+  PerceptionVideoDetectShotsTool,
+  createPerceptionTools,
+  perceptionToolGroup,
+  type PerceptionAudioTranscribeToolConfig,
+  type PerceptionImageSimilarityToolConfig,
+  type PerceptionImageClassifyToolConfig,
+  type PerceptionToolMetadata,
+  type PerceptionToolResult,
+  type PerceptionClassifyClient,
+  type PerceptionDetectShotsClient,
+  type PerceptionSimilarityClient,
+  type PerceptionTranscribeClient,
+} from './tools';
+
+export {
+  ControlPlane,
+  FeedbackStageController,
+  StageRegistry,
+  createControlPlane,
+  createStageRegistry,
+  type ControlPlaneConfig,
+  type ControlPlaneDecision,
+  type ControlPlaneDecisionInput,
+  type IControlPlane,
+  type IStageController,
+  type IStageRegistry,
+  type StageControllerContext,
+  type StageDescriptor,
+  type StageRiskLevel,
+  type StageTransitionGuidance,
+} from './control-plane';
 
 // Export plan parsing
 export { parsePlanMarkdown, type Plan, type PlanStep } from './plan';

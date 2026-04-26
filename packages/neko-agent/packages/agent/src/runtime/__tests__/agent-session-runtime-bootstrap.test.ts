@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PromptFragment } from '@neko/shared';
+import type { IOperationToolAdapterRegistry, PromptFragment } from '@neko/shared';
 import { buildAgentSessionConfigWithRuntime, type AgentRuntimeConfig } from '../index';
 
 describe('buildAgentSessionConfigWithRuntime', () => {
@@ -23,6 +23,10 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const providerCardRegistry = { kind: 'provider-card-registry' } as never;
     const projectMemoryManager = { kind: 'project-memory' } as never;
     const feedbackCoordinator = { kind: 'feedback-coordinator' } as never;
+    const controlPlane = { kind: 'control-plane' } as never;
+    const operationToolAdapterRegistry = {
+      list: vi.fn(() => []),
+    } as unknown as IOperationToolAdapterRegistry;
     const idcTaskProjection = { kind: 'idc-task-projection' } as never;
 
     const runtime: AgentRuntimeConfig = {
@@ -32,6 +36,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
           guardian: false,
         },
         idcTaskProjection,
+        controlPlane,
       },
       artifactStore: {
         workspace: {
@@ -54,6 +59,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         toolCategoryRegistry,
         providerCardRegistry,
         promptFragments,
+        operationToolAdapterRegistry,
       },
       feedbackLoop: {
         projectMemoryManager,
@@ -97,6 +103,8 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.skillService).toBe(skillService);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.feedbackCoordinator).toBe(feedbackCoordinator);
+    expect(config.controlPlane).toBe(controlPlane);
+    expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
     expect(config.journalAsSSOT).toBe(false);
     expect(config.compactLogging).toBe(false);
     expect(config.autoMemoryExtraction).toBe(false);

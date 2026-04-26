@@ -35,3 +35,10 @@ export {
   createNodeRuntimeWorkspaceFsOps,
   type NodeArtifactStoreConfig,
 } from './node-artifact-store';
+
+export {
+  AgentObservationRecorder,
+  createAgentObservationRecorder,
+  type AgentObservationRecorderConfig,
+  type IAgentObservationRecorder,
+} from './agent-observation-recorder';

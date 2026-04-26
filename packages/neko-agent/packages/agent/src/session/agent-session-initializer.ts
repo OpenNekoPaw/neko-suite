@@ -26,6 +26,7 @@ import {
   ToolCategoryRegistry,
   ToolInjectionManager,
   createCoreMetaTools,
+  createPerceptionTools,
   DEFAULT_INJECTION_CONFIG,
   resolveToolGroupTier,
 } from '../tools';
@@ -225,6 +226,25 @@ export function initializeSession(
   for (const tool of metaTools) {
     config.toolRegistry.register(tool);
     toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
+  }
+
+  if (!ablationMarker?.disableAgentFirstToolEvidence) {
+    for (const tool of createPerceptionTools({
+      ...(config.perceptionClients?.transcribe && {
+        transcribeClient: config.perceptionClients.transcribe,
+      }),
+      ...(config.perceptionClients?.similarity && {
+        similarityClient: config.perceptionClients.similarity,
+      }),
+      ...(config.perceptionClients?.classify && {
+        classifyClient: config.perceptionClients.classify,
+      }),
+      ...(config.perceptionClients?.detectShots && {
+        detectShotsClient: config.perceptionClients.detectShots,
+      }),
+    })) {
+      config.toolRegistry.register(tool);
+    }
   }
 
   // Step 6: Create executor with hooks chain

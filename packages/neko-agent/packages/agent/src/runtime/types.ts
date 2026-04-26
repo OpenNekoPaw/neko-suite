@@ -4,6 +4,7 @@ import type {
   IToolCategoryRegistry,
   IToolGroupRegistry,
   IProviderCardRegistry,
+  IOperationToolAdapterRegistry,
   PromptFragment,
 } from '@neko/shared';
 import type { IdcStage } from '@neko-agent/types';
@@ -12,6 +13,7 @@ import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
 import type { IArtifactService } from './artifact-service';
 import type { IFeedbackCoordinator } from '../feedback';
+import type { IControlPlane } from '../control-plane';
 
 /**
  * Minimal journal-writer contract exposed at the runtime bootstrap layer.
@@ -59,6 +61,7 @@ export interface IWorkflowRuntime {
     readonly guardian?: false | Record<string, unknown>;
   };
   readonly idcTaskProjection?: import('../task').IIdcTaskProjection;
+  readonly controlPlane?: IControlPlane;
 }
 
 /**
@@ -105,6 +108,7 @@ export interface ICapabilityRuntime {
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly providerCardRegistry?: IProviderCardRegistry;
   readonly promptFragments?: readonly PromptFragment[];
+  readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
 }
 
 /**

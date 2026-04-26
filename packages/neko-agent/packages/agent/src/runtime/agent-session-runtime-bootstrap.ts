@@ -41,6 +41,9 @@ export function buildAgentSessionConfigWithRuntime(
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
+  const controlPlane = base.controlPlane ?? workflow?.controlPlane;
+  const operationToolAdapterRegistry =
+    base.operationToolAdapterRegistry ?? capability?.operationToolAdapterRegistry;
   const journalWriter = resolveJournalWriter(base, artifacts);
 
   return {
@@ -57,6 +60,8 @@ export function buildAgentSessionConfigWithRuntime(
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
+    ...(controlPlane ? { controlPlane } : {}),
+    ...(operationToolAdapterRegistry ? { operationToolAdapterRegistry } : {}),
     ...(feedback?.journalAsSSOT !== undefined && base.journalAsSSOT === undefined
       ? { journalAsSSOT: feedback.journalAsSSOT }
       : {}),

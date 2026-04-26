@@ -5,7 +5,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
+import { ToolRegistry } from '../../tools';
 import type { AgentSessionConfig, AgentEvent } from '../types';
+import { TOOL_NAMES_PERCEPTION, createSubagentReviewEvidence } from '@neko/shared';
 import type {
   IService,
   IToolRegistry,
@@ -228,6 +230,168 @@ describe('AgentSession', () => {
     it('should default execution mode to auto', () => {
       const session = new AgentSession(config);
       expect(session.getExecutionMode()).toBe('auto');
+    });
+
+    it('registers configured perception evidence tools without default prompt injection', () => {
+      const toolRegistry = createMockToolRegistry();
+      new AgentSession(
+        createConfig({
+          toolRegistry,
+          perceptionClients: {
+            transcribe: {
+              perception: {
+                transcribe: vi.fn(),
+              },
+            },
+            similarity: {
+              perception: {
+                similarity: vi.fn(),
+              },
+            },
+            classify: {
+              perception: {
+                classify: vi.fn(),
+              },
+            },
+          },
+        }),
+      );
+
+      const registeredNames = vi
+        .mocked(toolRegistry.register)
+        .mock.calls.map(([tool]) => tool.name);
+      expect(registeredNames).toEqual(
+        expect.arrayContaining([
+          TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT,
+          TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
+          TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
+          TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,
+        ]),
+      );
+      expect(toolRegistry.toToolDefinitions).toHaveBeenCalled();
+    });
+
+    it('executes registered perception tools after the lazy ToolSet is available', async () => {
+      const toolRegistry = new ToolRegistry();
+      new AgentSession(
+        createConfig({
+          toolRegistry,
+          perceptionClients: {
+            transcribe: {
+              perception: {
+                transcribe: vi.fn(async () => ({
+                  text: 'hello world',
+                  segments: [],
+                  language: 'en',
+                  durationSecs: 1,
+                })),
+              },
+            },
+            similarity: {
+              perception: {
+                similarity: vi.fn(async () => 0.75),
+              },
+            },
+            classify: {
+              perception: {
+                classify: vi.fn(async () => [{ label: 'red umbrella', score: 0.91 }]),
+              },
+            },
+          },
+        }),
+      );
+
+      expect(toolRegistry.has(TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT)).toBe(true);
+      expect(toolRegistry.has(TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE)).toBe(true);
+      expect(toolRegistry.has(TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY)).toBe(true);
+      expect(toolRegistry.has(TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY)).toBe(true);
+      await expect(
+        toolRegistry.execute(TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE, {
+          audioSource: '/tmp/audio.wav',
+          evidenceId: 'evidence-audio',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            id: 'evidence-audio',
+            source: 'tool',
+            summary: 'hello world',
+            toolName: TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
+          }),
+        }),
+      );
+      await expect(
+        toolRegistry.execute(TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY, {
+          imageSource: '/tmp/frame.png',
+          text: 'red umbrella',
+          evidenceId: 'evidence-image',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            id: 'evidence-image',
+            source: 'tool',
+            confidence: 0.75,
+            toolName: TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
+          }),
+        }),
+      );
+      await expect(
+        toolRegistry.execute(TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY, {
+          imageSource: '/tmp/frame.png',
+          labels: ['red umbrella'],
+          evidenceId: 'evidence-classify',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            id: 'evidence-classify',
+            source: 'tool',
+            confidence: 0.91,
+            toolName: TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,
+          }),
+        }),
+      );
+    });
+
+    it('does not register perception evidence tools when agent-first tool evidence is disabled', () => {
+      const toolRegistry = createMockToolRegistry();
+      new AgentSession(
+        applyAblationToggles(
+          createConfig({
+            toolRegistry,
+            perceptionClients: {
+              transcribe: {
+                perception: {
+                  transcribe: vi.fn(),
+                },
+              },
+              similarity: {
+                perception: {
+                  similarity: vi.fn(),
+                },
+              },
+              classify: {
+                perception: {
+                  classify: vi.fn(),
+                },
+              },
+            },
+          }),
+          { agentFirst: { toolEvidence: false } },
+        ),
+      );
+
+      const registeredNames = vi
+        .mocked(toolRegistry.register)
+        .mock.calls.map(([tool]) => tool.name);
+      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT);
+      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE);
+      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY);
+      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY);
     });
   });
 
@@ -466,6 +630,40 @@ describe('AgentSession', () => {
           ],
         }),
       ]);
+    });
+
+    it('routes feedback decisions through ControlPlane guidance only', async () => {
+      const projectMemory = createMockProjectMemory();
+      const controlPlane = {
+        stageRegistry: {
+          register: vi.fn(),
+          unregister: vi.fn(),
+          get: vi.fn(),
+          list: vi.fn(() => []),
+          has: vi.fn(() => false),
+        },
+        advise: vi.fn((input) => ({ input, guidance: null, createdAt: 1 })),
+        getDecisionHistory: vi.fn(() => []),
+      };
+      const session = new AgentSession(
+        createConfig({
+          projectMemoryManager: projectMemory,
+          controlPlane,
+        }),
+      );
+      injectMockExecutor(session, [
+        { type: 'think', content: '我会记住。', timestamp: Date.now() },
+      ]);
+
+      await collectEvents(session.execute('我喜欢中文说明'));
+
+      expect(controlPlane.advise).toHaveBeenCalledWith({
+        currentStageId: undefined,
+        decision: expect.objectContaining({
+          action: 'memorize',
+          signalKind: 'memory-extraction',
+        }),
+      });
     });
 
     it('does not extract project memory when autoMemoryExtraction is disabled', async () => {
@@ -1014,6 +1212,133 @@ describe('AgentSession', () => {
       ]);
     });
 
+    it('records subagent review evidence and routes reviewer guidance without spawning subagents', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      (session as unknown as { _currentTurnPlanningContext: unknown })._currentTurnPlanningContext =
+        {
+          metadata: {
+            multimodalContextPacket: { id: 'ctx-subagent-review' },
+          },
+        };
+      const evidence = createSubagentReviewEvidence({
+        id: 'evidence-subagent-shot-3',
+        reviewerId: 'reviewer-style-consistency',
+        requestId: 'review-request-shot-3',
+        summary: 'Reviewer confirms shot 3 style drift.',
+        observationId: 'obs-shot-3-style-drift',
+        createdAt: 18,
+      });
+
+      await session.recordSubagentReviewResult({
+        requestId: 'review-request-shot-3',
+        reviewerId: 'reviewer-style-consistency',
+        summary: 'Recommend minimal prompt adjustment.',
+        evidence: [evidence],
+        recommendations: [
+          {
+            id: 'guidance-shot-3-minimal-prompt-adjustment',
+            rationaleId: 'rat-shot-3-recovery-guidance',
+            kind: 'adjust-prompt',
+            summary: 'Regenerate only shot 3 with a tighter style prompt.',
+            recommendedNextStep: 'Adjust the shot 3 prompt before any generation tool call.',
+            evidenceIds: ['evidence-subagent-shot-3'],
+            createdAt: 19,
+          },
+        ],
+        createdAt: 18,
+      });
+
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(1, {
+        type: 'agent.evidence.attached',
+        agentEvidence: { ...evidence, contextPacketId: 'ctx-subagent-review' },
+      });
+      expect(session.getFeedbackCycles()[0]).toEqual(
+        expect.objectContaining({
+          signals: [expect.objectContaining({ kind: 'subagent-review' })],
+          decisions: [
+            expect.objectContaining({
+              action: 'continue',
+              signalKind: 'subagent-review',
+              requestId: 'review-request-shot-3',
+              reviewerId: 'reviewer-style-consistency',
+            }),
+          ],
+          actions: [expect.objectContaining({ kind: 'set-guidance' })],
+        }),
+      );
+    });
+
+    it('does not inject feedback recovery guidance when recovery guidance is disabled', async () => {
+      const session = new AgentSession(
+        applyAblationToggles(createConfig(), {
+          agentFirst: { recoveryGuidance: false },
+        }),
+      );
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-qc',
+              success: true,
+              data: {
+                totalScenes: 1,
+                passed: 0,
+                failed: 1,
+                evaluations: [{ index: 1, passed: false, finalScore: 41 }],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 199,
+        },
+      ]);
+
+      await collectEvents(session.execute('check scene quality'));
+
+      expect(session.getFeedbackCycles()[0]?.actions).toEqual([
+        expect.objectContaining({ kind: 'set-guidance' }),
+      ]);
+      expect(
+        (
+          session as unknown as {
+            _feedbackGuidanceModule: { getContent(): string | null };
+          }
+        )._feedbackGuidanceModule.getContent(),
+      ).toBeNull();
+    });
+
+    it('skips Agent-first evidence journaling when no context packet is active', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      const evidence = createSubagentReviewEvidence({
+        id: 'evidence-subagent-no-context',
+        reviewerId: 'reviewer-style-consistency',
+        requestId: 'review-request-no-context',
+        summary: 'Reviewer confirms uncertainty but no active context packet exists.',
+        createdAt: 18,
+      });
+
+      await session.recordSubagentReviewResult({
+        requestId: 'review-request-no-context',
+        reviewerId: 'reviewer-style-consistency',
+        summary: 'No context packet available.',
+        evidence: [evidence],
+        recommendations: [],
+        createdAt: 18,
+      });
+
+      expect(journalWriter.appendEvent).not.toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({ type: 'agent.evidence.attached' }),
+      );
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.objectContaining({ kind: 'subagent-review' }),
+      );
+    });
+
     it('captures QualityCheck results as feedback cycles by correlating tool call ids', async () => {
       const session = new AgentSession(config);
       injectMockExecutor(session, [
@@ -1062,6 +1387,13 @@ describe('AgentSession', () => {
               failed: 1,
               failingSceneIndexes: [2],
               remediationCount: 1,
+              evidence: expect.objectContaining({
+                id: 'quality-review:runless:call-qc',
+                source: 'tool',
+                toolName: 'QualityCheck',
+                summary:
+                  'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+              }),
             },
           ],
           decisions: [
@@ -1074,6 +1406,7 @@ describe('AgentSession', () => {
               failed: 1,
               failingSceneIndexes: [2],
               remediationCount: 1,
+              evidenceId: 'quality-review:runless:call-qc',
             },
           ],
           actions: [
@@ -1086,6 +1419,105 @@ describe('AgentSession', () => {
           ],
         }),
       ]);
+    });
+
+    it('records QualityReview evidence into the Agent-first journal graph', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-qc',
+              success: true,
+              data: {
+                totalScenes: 1,
+                passed: 0,
+                failed: 1,
+                evaluations: [
+                  {
+                    index: 1,
+                    passed: false,
+                    finalScore: 41,
+                    remediations: [{ action: 'regen' }],
+                  },
+                ],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 200,
+        },
+      ]);
+
+      await collectEvents(
+        session.execute('check scene quality', {
+          metadata: {
+            multimodalContextPacket: {
+              id: 'ctx-quality-review',
+              selection: [],
+              artifactRefs: [],
+              projectRefs: [],
+              perceptionInputs: [],
+              uiContext: { activePanel: 'canvas', selectionIds: [] },
+              createdAt: 200,
+            },
+          },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          type: 'agent.evidence.attached',
+          agentEvidence: expect.objectContaining({
+            id: 'quality-review:runless:call-qc',
+            source: 'tool',
+            toolName: 'QualityCheck',
+            contextPacketId: 'ctx-quality-review',
+          }),
+        }),
+      );
+    });
+
+    it('respects agentFirst.qualityReviewEvidence: false for legacy quality feedback shape', async () => {
+      const session = new AgentSession(
+        applyAblationToggles(createConfig(), {
+          agentFirst: { qualityReviewEvidence: false },
+        }),
+      );
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
+          toolResults: [
+            {
+              callId: 'call-qc',
+              success: true,
+              data: {
+                totalScenes: 1,
+                passed: 0,
+                failed: 1,
+                evaluations: [{ index: 1, passed: false, finalScore: 41 }],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 200,
+        },
+      ]);
+
+      await collectEvents(session.execute('check scene quality'));
+
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.not.objectContaining({ evidence: expect.anything() }),
+      );
+      expect(session.getFeedbackCycles()[0]?.decisions[0]).toEqual(
+        expect.not.objectContaining({ evidenceId: expect.anything() }),
+      );
     });
 
     it('captures provider expression metadata as feedback observations', async () => {
