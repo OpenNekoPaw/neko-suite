@@ -76,6 +76,7 @@ pub mod actions {
     pub const AUDIOS: &[&str] = &[
         "probe",
         "transcode",
+        "segment",
         "stream",
         "waveform",
         "diff",

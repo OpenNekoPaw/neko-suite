@@ -45,6 +45,7 @@ glam.workspace = true
 
 # Base64 encoding (for INP puppet data transfer)
 base64.workspace = true
+tempfile = "3"
 
 [features]
 default = []
@@ -53,4 +54,3 @@ onnx = ["neko-runtime-ml"]
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 tokio-util = { version = "0.7", features = ["rt"] }
-tempfile = "3"

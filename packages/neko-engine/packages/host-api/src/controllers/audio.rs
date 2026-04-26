@@ -69,6 +69,24 @@ struct TranscodeRequestOptions {
     channels: Option<u16>,
 }
 
+/// Options for audios:segment
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct SegmentRequestOptions {
+    /// Source path (alternative to resource_id)
+    source: Option<String>,
+    /// Segment start time in seconds
+    start: Option<f64>,
+    /// Segment duration in seconds
+    duration: Option<f64>,
+    /// Output format / codec (wav, mp3, flac, aac, opus)
+    format: Option<String>,
+    /// Target sample rate
+    sample_rate: Option<u32>,
+    /// Target channels
+    channels: Option<u16>,
+}
+
 /// Options for audios:stream
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -209,6 +227,76 @@ impl Controller for AudioController {
                     "resourceId": res_id.as_str(),
                     "output": output_path,
                     "success": true,
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "segment" => {
+                let opts: SegmentRequestOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let (res_id, file_path) =
+                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
+                        .await?;
+
+                let start = opts.start.unwrap_or(0.0);
+                let duration = opts.duration.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "duration required for audios:segment".to_string(),
+                    )
+                })?;
+                if !start.is_finite() || start < 0.0 || !duration.is_finite() || duration <= 0.0 {
+                    return Err(ApiError::InvalidRequest(
+                        "start must be >= 0 and duration must be > 0 for audios:segment"
+                            .to_string(),
+                    ));
+                }
+
+                use base64::Engine;
+                use neko_engine_kernel::domain::{AudioOutputFormat, AudioTranscodeOptions};
+                let requested_format = opts.format.unwrap_or_else(|| "wav".to_string());
+                let format = match requested_format.to_lowercase().as_str() {
+                    "aac" | "m4a" => AudioOutputFormat::Aac,
+                    "mp3" => AudioOutputFormat::Mp3,
+                    "opus" | "ogg" => AudioOutputFormat::Opus,
+                    "flac" => AudioOutputFormat::Flac,
+                    "pcm" | "wav" => AudioOutputFormat::Pcm,
+                    _ => AudioOutputFormat::Pcm,
+                };
+                let extension = match format {
+                    AudioOutputFormat::Aac => "aac",
+                    AudioOutputFormat::Mp3 => "mp3",
+                    AudioOutputFormat::Opus => "opus",
+                    AudioOutputFormat::Flac => "flac",
+                    AudioOutputFormat::Pcm => "wav",
+                };
+                let temp_dir = tempfile::tempdir().map_err(|e| {
+                    ApiError::Internal(format!("failed to create temp dir: {}", e))
+                })?;
+                let output_path = temp_dir.path().join(format!("segment.{}", extension));
+
+                let transcode_opts = AudioTranscodeOptions {
+                    time_range: Some((start, start + duration)),
+                    sample_rate: opts.sample_rate,
+                    channels: opts.channels,
+                    format: Some(format),
+                    ..Default::default()
+                };
+
+                self.audio_service
+                    .transcode(&file_path, &output_path, transcode_opts)
+                    .await?;
+                let bytes = tokio::fs::read(&output_path).await.map_err(|e| {
+                    ApiError::Internal(format!("failed to read audio segment: {}", e))
+                })?;
+
+                let response = serde_json::json!({
+                    "resourceId": res_id.as_str(),
+                    "format": extension,
+                    "start": start,
+                    "duration": duration,
+                    "size": bytes.len(),
+                    "data": base64::engine::general_purpose::STANDARD.encode(&bytes),
                 });
 
                 Ok(ActionResponse::ok("", response))
@@ -532,6 +620,17 @@ mod tests {
         assert!(result.is_err());
     }
 
+
+    #[tokio::test]
+    async fn test_audio_controller_segment_missing_duration() {
+        let controller = create_test_controller();
+
+        let opts = serde_json::json!({ "source": "/some/file.wav", "start": 0.0 });
+        let result = controller.handle("segment", None, opts, None).await;
+
+        assert!(result.is_err());
+    }
+
     #[tokio::test]
     async fn test_audio_controller_analyze_loudness_missing_source() {
         let controller = create_test_controller();
@@ -561,6 +660,7 @@ mod tests {
 
         assert!(actions.contains(&"probe"));
         assert!(actions.contains(&"transcode"));
+        assert!(actions.contains(&"segment"));
         assert!(actions.contains(&"stream"));
         assert!(actions.contains(&"waveform"));
         assert!(actions.contains(&"diff"));
@@ -576,6 +676,6 @@ mod tests {
         assert!(actions.contains(&"record_start"));
         assert!(actions.contains(&"record_stop"));
         assert!(actions.contains(&"mixdown"));
-        assert_eq!(actions.len(), 17);
+        assert_eq!(actions.len(), 18);
     }
 }
