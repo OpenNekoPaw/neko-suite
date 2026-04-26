@@ -212,6 +212,9 @@ export interface IInstallTarget<T extends AssetType = AssetType> {
   /** Compute the install path from manifest */
   getInstallPath(manifest: AssetManifest): string;
 
+  /** Validate manifest before extraction/install. Throw to reject install. */
+  validateManifest?(manifest: AssetManifest): void | Promise<void>;
+
   /** Post-install hook (e.g., trigger runtime registration) */
   onPostInstall?(manifest: AssetManifest, installedPath: string): Promise<void>;
 

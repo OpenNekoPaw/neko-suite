@@ -15,6 +15,43 @@ import type { ToolGroup } from './tool-group';
 import type { Skill } from './skill';
 import type { LoadingTier } from './loading-tier';
 import type { PromptFragment } from './prompt-fragment';
+import type { ProviderCard } from './provider-card';
+
+// =============================================================================
+// Protocol v1 metadata
+// =============================================================================
+
+export type AgentCapabilityProtocolVersion = '1.0';
+
+export type AgentCapabilityTrustLevel = 'core' | 'community' | 'untrusted';
+
+export type AgentCapabilityHost = 'vscode' | 'cli' | 'tui';
+
+export type AgentCapabilityLifecycleHook = 'register' | 'activate' | 'deactivate' | 'dispose';
+
+export interface AgentCapabilityHostRequirement {
+  readonly host: AgentCapabilityHost;
+  readonly optional?: boolean;
+  readonly reason?: string;
+}
+
+export interface AgentCapabilityProtocolMetadata {
+  /** Capability protocol version. Omitted legacy providers are treated as 1.0-compatible. */
+  readonly protocolVersion?: AgentCapabilityProtocolVersion;
+  /** Trust tier used by future policy enforcement; omitted providers default to core. */
+  readonly trustLevel?: AgentCapabilityTrustLevel;
+  /** Hosts supported by this provider. Omitted means vscode-only for legacy compatibility. */
+  readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+  /** Lifecycle hooks implemented by the provider. Informational in Stage 1. */
+  readonly lifecycleHooks?: readonly AgentCapabilityLifecycleHook[];
+}
+
+export interface CapabilityContributionV1 extends AgentCapabilityProtocolMetadata {
+  readonly id: string;
+  readonly version: string;
+  readonly displayName: string;
+  readonly capabilities: readonly CapabilityDeclaration[];
+}
 
 // =============================================================================
 // Static Manifest (package.json contributes)
@@ -24,7 +61,7 @@ import type { PromptFragment } from './prompt-fragment';
  * Declared in a sub-package's package.json under `contributes.neko.agentCapabilities`.
  * Used by neko-agent for static discovery at startup — before the sub-package activates.
  */
-export interface AgentCapabilityManifest {
+export interface AgentCapabilityManifest extends AgentCapabilityProtocolMetadata {
   /** Unique provider ID matching the extension's short name (e.g. "neko-cut") */
   id: string;
 
@@ -125,7 +162,7 @@ export interface AgentCapabilityContext {
  * 1. Static manifest scan → identifies which extensions have capabilities
  * 2. Dynamic registration → receives the provider instance at runtime
  */
-export interface AgentCapabilityProvider {
+export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata {
   /** Provider ID (must match manifest.id) */
   readonly id: string;
 
@@ -163,6 +200,16 @@ export interface AgentCapabilityProvider {
    * `{package}:{local-id}` (e.g. `neko-cut:timeline-basics`).
    */
   getPromptFragments?(context: AgentCapabilityContext): PromptFragment[];
+
+  /**
+   * Optional: Return ProviderCards contributed by this sub-package.
+   *
+   * ProviderCards describe model syntax, concept coverage, and training-profile
+   * preferences for ProviderExpressionContext. They are registered into the
+   * ProviderCard registry when available, but remain optional for backward
+   * compatibility with existing AgentCapabilityProvider implementations.
+   */
+  getProviderCards?(context: AgentCapabilityContext): ProviderCard[];
 
   /**
    * Optional: Cleanup when the provider is unregistered (extension deactivated).

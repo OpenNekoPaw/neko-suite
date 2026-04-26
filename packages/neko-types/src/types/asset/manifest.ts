@@ -35,7 +35,9 @@ export type AssetType =
   // 2D Puppet 动作 / 表情预设
   | 'puppet-motion'
   // 文档
-  | 'document';
+  | 'document'
+  // ProviderCard expression context
+  | 'provider-card';
 
 // =============================================================================
 // Asset Source
@@ -131,6 +133,30 @@ export interface SkillMarketMetadata {
   };
 }
 
+export type ProviderCardMarketTrustLevel = 'core' | 'community' | 'untrusted';
+
+export interface ProviderCardSignature {
+  readonly algorithm: 'sha256' | 'sha512' | 'ed25519';
+  readonly value: string;
+  readonly signedBy?: string;
+}
+
+/** Provider expression card marketplace metadata */
+export interface ProviderCardMarketMetadata {
+  /** Provider ID declared by the card frontmatter */
+  providerId: string;
+  /** Generation capabilities covered by this card */
+  capabilities: ('image.generate' | 'video.generate' | 'audio.generate')[];
+  /** Optional model ids this semantic profile applies to */
+  modelIds?: string[];
+  /** Provider card schema version */
+  cardSchemaVersion?: string;
+  /** Capability-protocol trust tier assigned by marketplace review */
+  trustLevel?: ProviderCardMarketTrustLevel;
+  /** Optional package/card signature metadata for reviewed marketplace packages */
+  signature?: ProviderCardSignature;
+}
+
 /** Document metadata */
 export interface DocumentMetadata {
   subtype: 'markdown' | 'pdf' | 'word' | 'pptx' | 'xlsx' | 'epub' | 'cbz' | 'fdx';
@@ -148,7 +174,8 @@ export type AssetTypeMetadata =
   | { type: 'plugin'; data: PluginMetadata }
   | { type: 'preset'; data: PresetMetadata }
   | { type: 'skill'; data: SkillMarketMetadata }
-  | { type: 'document'; data: DocumentMetadata };
+  | { type: 'document'; data: DocumentMetadata }
+  | { type: 'provider-card'; data: ProviderCardMarketMetadata };
 
 // =============================================================================
 // Distribution Info

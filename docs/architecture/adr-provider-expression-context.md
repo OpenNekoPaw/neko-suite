@@ -1,18 +1,18 @@
-# ADR: Provider Semantic Bridge — 生成模型语义桥接子系统
+# ADR: Provider Expression Context — 生成模型表达倾向子系统
 
 ## 状态
 
 Proposed (2026-04-24)
 
-> **协议地基对齐（2026-04-25）**：本 ADR 的 Provider 贡献形式（`providerCardFiles` 路径引用 + `providerAdapters` 对象）以 [adr-capability-protocol.md](./adr-capability-protocol.md) 定义的 **CapabilityContribution v1.0** 为容器接入。`ProviderRegistry` 不是独立新系统，而是 Capability Protocol Registry 下与 SkillRegistry/ToolRegistry 并列的子 Registry。Trust Level（core/community/untrusted）约束 ProviderCard 谁可以贡献（untrusted 禁止贡献 ProviderCard，见协议地基信任能力矩阵）。AdaptiveSemanticBridge 作为 Runtime 面 `beforeToolCall` hook，挂入 Capability Protocol 两阶段模型的 Injection 相。本 ADR 原先独立表述的"Provider 子系统"语义不变，接入路径对齐到统一协议。
+> **协议地基对齐（2026-04-25）**：本 ADR 的 Provider 贡献形式（`providerCardFiles` 路径引用 + `providerAdapters` 对象）以 [adr-capability-protocol.md](./adr-capability-protocol.md) 定义的 **CapabilityContribution v1.0** 为容器接入。`ProviderRegistry` 不是独立新系统，而是 Capability Protocol Registry 下与 SkillRegistry/ToolRegistry 并列的子 Registry。Trust Level（core/community/untrusted）约束 ProviderCard 谁可以贡献（untrusted 禁止贡献 ProviderCard，见协议地基信任能力矩阵）。ProviderCard 不再作为 Runtime 面确定性 prompt 替换器，而是汇总为 `ProviderExpressionContext` PromptFragment，注入 AGENT 系统提示词，由 AGENT 在生成工具参数时自主判断是否调整表达倾向。
 
 ## 背景
 
-neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，已有 `agent-media-architecture.md` 定义了 GeneratedAsset 存储与 Send-to-Agent 协议。但在 **Plan → Apply 的 prompt 翻译** 环节，当前架构存在一个未正面处理的架构缺口：**不同生成模型对同一输入表现差异巨大**，且这种差异**不能用统一 schema 消除**。
+neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，已有 `agent-media-architecture.md` 定义了 GeneratedAsset 存储与 Send-to-Agent 协议。但在 **Plan/Task Markdown → Apply 工具参数** 环节，当前架构存在一个未正面处理的架构缺口：**不同生成模型对同一输入表现差异巨大**，且这种差异**不能用统一 schema 消除**。
 
 ### 差异的三个层级（本 ADR 覆盖范围）
 
-生成模型差异在实践中可以精准分为三个正交层级。本 ADR 聚焦这三类的"输入端"对齐：
+生成模型差异在实践中可以精准分为三个正交层级。本 ADR 聚焦这三类的"输入端表达倾向"对齐：
 
 | # | 差异类型 | 层级 | 根源 | 典型表现 |
 |---|---|---|---|---|
@@ -20,12 +20,12 @@ neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，
 | 2 | **Semantic Literacy**（语义理解深度） | 概念层 | 文本编码器能力 | "cyberpunk" 在 Flux 直接懂，在 SDXL 需要展开为 "neon lights, rainy night, blade runner style" |
 | 3 | **Training Distribution Bias**（训练分布偏置） | 数据分布层 | 训练集构成 | 默认画风倾向（NovelAI 动漫 / SDXL 3D / Flux 写实）；描述密度要求（短 tag 堆砌 vs 长自然语言）；视角 / 空间描述依赖度 |
 
-> 第四类差异 **Stochasticity**（采样随机性、候选池问题）是"输出端"的不确定性，**不在本 ADR 范围**——由独立的 `adr-generation-variance-and-selection.md` 处理（CandidatePool + Selection）。本 ADR 只处理"同意图如何对不同模型说得对"。
+> 第四类差异 **Stochasticity**（采样随机性、候选池问题）是"输出端"的不确定性，**不在本 ADR 范围**——由独立的 `adr-generation-variance-and-selection.md` 处理（CandidatePool + Selection）。本 ADR 只处理"AGENT 如何在不改变用户意图的前提下，按 provider 倾向表达得更合适"。
 
 ### 当前架构的具体缺口
 
 1. **Skill 中硬编码 provider-specific prompt**：Skill 作者为了出片，在 phases 里写死特定模型能理解的 prompt 字符串。换 provider 需要改 Skill。
-2. **工具直接消费 prompt 字符串**：`image.generate({ prompt: "..." })` 没有翻译层，Plan 里写什么 Apply 就送什么。
+2. **工具直接消费 prompt 字符串**：`image.generate({ prompt: "..." })` 没有 ProviderCard 上下文，AGENT 无法知道不同 provider 的表达偏好。
 3. **新 provider 接入成本高**：每个新模型需要新建一个 tool，重写 prompt 组织逻辑。
 4. **跨模型一致性无保障**：同一 Plan 在不同 provider 上表现方差无可控机制，用户感知差异巨大。
 5. **能力画像无承载**：主流模型的偏好、甜点、反偏置策略散落在 README / 社区博客中，系统无法消费。
@@ -38,16 +38,16 @@ neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，
 - 同一个 `prompt: "cyberpunk cat"` 字段，到模型里效果天差地别
 - 强行对齐参数（`steps` / `cfg_scale` 归一化）只解决了 1% 的问题
 
-真正需要对齐的是 **AI 如何向该 provider 表达意图**，这是**提示词级**的对齐，不是参数级。
+真正需要对齐的是 **AGENT 如何向该 provider 表达意图的倾向**。它不是稳定语法转换，也不是确定性概念替换；ProviderCard 只提供软上下文，最终由 AGENT 在用户 prompt 与 Plan/Task Markdown 约束下自主表达。
 
 ### 与既有 ADR 的关系
 
 | ADR | 关系 |
 |---|---|
-| [agent-media-architecture.md](./agent-media-architecture.md) | GeneratedAsset / Send-to-Agent 协议不变；本 ADR 在其工具调用前新增翻译层 |
+| [agent-media-architecture.md](./agent-media-architecture.md) | GeneratedAsset / Send-to-Agent 协议不变；本 ADR 在 AGENT prompt 中新增 provider 表达上下文 |
 | [agent-tool-skill-enhancement.md](./agent-tool-skill-enhancement.md) | TOOL_NAMES 常量 SSOT 约束保留；Provider 作为独立抽象与 Skill 平行 |
 | [agent-unified-workflow.md](./agent-unified-workflow.md) §5.1 CapabilityKind | 新增 `providerCard` 作为第 4 种能力类型 |
-| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | SemanticBridge 作为 Control/Runtime 面的新 hook，挂 beforeToolCall |
+| [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | ProviderCard feedback 仍进入项目级 Card 演化；不再通过 beforeToolCall 做确定性 prompt 替换 |
 | [marketplace.md](./marketplace.md) | 新增 `provider-card` 分发品类 |
 | [agent-memory-unification.md](./agent-memory-unification.md) | Layer 2 项目级 Card override 写入 `.neko/providers/*.card.md`（扩展 ProjectMemoryRouter 目标） |
 | [agent-evolution-capacity.md](./agent-evolution-capacity.md) | 新增 Provider 层评级（预期 A）——全 markdown + 自演化，符合最强演化锚点 |
@@ -75,20 +75,20 @@ export interface AgentCapabilityProvider {
 }
 ```
 
-### 2. ProviderCapabilityCard 三合一结构
+### 2. ProviderCard 三合一结构
 
-每个 Provider 贡献一张 markdown Card，三个部分分别对应三类差异：
+Provider 可按 provider 或 provider/model 贡献 markdown Card；`modelId` 可选，新模型没有 Card 时允许原生 passthrough。三个部分分别对应三类差异：
 
 ```markdown
 ---
-id: flux-1-dev
+providerId: flux
+modelId: flux-1-dev          # 可选；省略时表示 provider 级默认 Card
+displayName: Flux.1 [dev]
 version: 2026-04-24
-providerKind: image-generation
-modelVersions: [flux-1-dev-v1.2, flux-1-dev-v1.1]
-endpoint: { kind: api | local | comfyui }
+capabilities: [image.generate]
 ---
 
-# Flux.1 [dev] Provider Capability Card
+# Flux.1 [dev] ProviderCard
 
 ## Part 1: Syntax Profile（语法层，对应 Dialect 差异）
 
@@ -164,7 +164,7 @@ endpoint: { kind: api | local | comfyui }
 
 ### 3. ProviderRouter — 按 Training Profile 做意图→模型匹配
 
-Plan 层新增受控枚举 `styleFamily`，Router 按此字段 O(1) 查表匹配：
+Plan 层新增受控枚举 `styleFamily`，Router 按此字段 O(1) 查表匹配。Router 的职责只到 provider selection：输出 `primary` / `fallbacks` / `reason`，不读取或改写 prompt，也不把 `ConceptCoverage` 当作替换规则。ProviderCard 对表达方式的影响只通过 `ProviderExpressionContext` 进入 AGENT prompt，由 AGENT 自主判断是否采用。对于已确定 `providerId/modelId` 的单类型生成，Router/Context 只使用对应目标 Card；多 Card 仅用于候选选择。
 
 ```typescript
 export type StyleFamily =
@@ -177,15 +177,22 @@ export type StyleFamily =
   | '3d-render'
   | 'mixed';
 
+export interface ProviderTarget {
+  providerId: ProviderId;
+  modelId?: ProviderModelId;
+}
+
 export interface IProviderRouter {
   /**
-   * 按语义 + 偏好选择 Provider。
+   * 按语义 + 偏好选择 Provider/Model target。
    * 综合：styleFamily × Training Profile × Memory 命中率 × Policy 偏好。
    */
   route(input: {
     capability: 'image.generate' | 'video.generate' | 'audio.generate';
+    providerId?: ProviderId;                // 已指定 provider 时只在该 provider 内选择
+    modelId?: ProviderModelId;              // 已指定 model 时只匹配该 model Card
     styleFamily: StyleFamily;
-    projectHints?: ProjectProviderHints;    // Memory 注入
+    projectHints?: ProjectProviderHints;    // Memory 注入，可包含 targetSuccessRate
     userPreference?: ProviderPreference;    // Policy 注入
     fallbackChain?: boolean;                // 是否允许降级
   }): ProviderSelection;
@@ -193,7 +200,8 @@ export interface IProviderRouter {
 
 export interface ProviderSelection {
   primary: ProviderId;
-  fallbacks: ProviderId[];
+  modelId?: ProviderModelId;
+  fallbacks: ProviderTarget[];
   reason: string;  // 可观察可审计
 }
 ```
@@ -214,73 +222,46 @@ route(capability: image.generate, styleFamily: anime, ...)
 Memory 加权（"本项目 NovelAI 命中率 80% > Flux 40%"）
 Policy 加权（用户偏好 / 配额）
   ↓
-选出 primary + fallbacks，写 Journal
+选出 primary provider/model target + fallback targets，写 Journal
 ```
 
-### 4. AdaptiveSemanticBridge — 查三表翻译
+### 4. ProviderExpressionContext — 软提示词上下文
 
-Bridge 是 Control/Runtime 面的新组件，挂在 `beforeToolCall` hook，拦截生成类工具调用：
+ProviderCard 不再被编译成确定性替换规则，也不在工具执行前改写 prompt。运行时只做一件事：把当前可用 ProviderCard 汇总成 `PromptFragment`，注入 AGENT 系统提示词。
 
 ```typescript
-export interface IAdaptiveSemanticBridge {
-  /**
-   * 将 provider-neutral Semantic Prompt 翻译为目标 provider 的 prompt string。
-   * 翻译由 AI 驱动（非规则引擎），查 Card 三部分 + Memory Hints 综合输出。
-   */
-  translate(input: {
-    semanticPrompt: SemanticPrompt;  // Plan 里的抽象字段
-    providerId: ProviderId;
-    card: ProviderCard;              // 合并后（Built-in + Market + Project）
-    memoryHints: MemoryHint[];       // 项目级观察
-  }): Promise<TranslatedPrompt>;
+export interface ProviderExpressionContextOptions {
+  readonly cards: readonly ProviderCard[];
+  readonly mode?: 'selected' | 'candidates';
+  readonly providerId?: ProviderId;
+  readonly modelId?: ProviderModelId;
+  readonly capability?: ProviderGenerationCapability;
+  readonly maxCards?: number;
+  readonly maxCardsPerCapability?: number;
+  readonly maxContextTokens?: number;       // 可选：按真实/近似 token budget 裁剪摘要
+  readonly estimateTokens?: (content: string) => number;
+  readonly taskStage?: 'planning' | 'routing' | 'generation'; // 按任务阶段调整摘要优先级
+  readonly fragmentId?: string;
 }
 
-export interface SemanticPrompt {
-  subject?: string;
-  style?: string[];       // 抽象概念数组
-  mood?: string[];
-  quality?: string[];
-  composition?: string;
-  avoid?: string[];
-  mustInclude?: string[];
-  referenceImages?: AssetRef[];
-  referenceStrength?: number;
-  styleFamily: StyleFamily;  // 必填，驱动 Router
-}
-
-export interface TranslatedPrompt {
-  positivePrompt: string;
-  negativePrompt?: string;   // 视 provider 支持
-  providerHints?: Record<string, unknown>;  // 模型特有参数（guidance/cfg/steps 等）
-  translationMetadata: {
-    conceptDecisions: ConceptDecision[];     // 每个概念的保留/展开决策
-    densityAdjustment: 'shortened' | 'expanded' | 'kept';
-    biasCompensation?: string[];             // 加入的反偏置词
-  };
-}
+export function createProviderExpressionPromptFragments(
+  options: ProviderExpressionContextOptions,
+): readonly PromptFragment[];
 ```
 
-**核心工作流**（AI 在 think 阶段完成）：
+输入：ProviderCard 列表（Built-in / Market / Project 合并后），以及可选 `providerId` / `modelId` / `capability` 目标。
 
-```
-输入：SemanticPrompt + Card + MemoryHints
+输出：`PromptFragment`（`provider:expression-context`），内容包含能力、风格倾向、描述密度、negative prompt 支持、失败/偏置提示与少量表达 hint。Card 数量按模型类型（capability）分层控制：已确定 `providerId + modelId + capability` 的单类型生成路径默认只渲染一张 selected Card；已确定 capability 但未定 provider/model 时只渲染同类型少量候选；capability 未确定时按 capability 分组渲染极简代表 Card；多张 Card 只用于 provider/model 候选选择或对比上下文。运行时可传入 `maxContextTokens` 与 token estimator，按预算从低优先级细节开始裁剪，避免 ProviderCard 上下文挤占主任务上下文。`taskStage` 控制摘要排序：`routing` 优先 style affinity / style prior，`generation` 优先 phrasing / negative prompt / concept hints，`planning` 保留中等粒度概览。
 
-对 SemanticPrompt 的每个 concept 决策：
-  查 Card.Part2 ConceptCoverageMap:
-    Native   → 保留原词
-    Partial  → 保留 + 追加辅助词
-    Unknown  → 字面展开
-  查 Card.Part1 Syntax Profile:
-    权重语法、token 限制、negative 支持
-  查 Card.Part3 Training Profile:
-    Description Density → 调整输出长度
-    Style Prior × styleFamily 失配 → 加 Anti-Bias 词
-  合并 MemoryHints（项目级调优）
+**关键约束**：
 
-输出：TranslatedPrompt（含决策元数据，支持审计）
-```
-
-**关键约束**：翻译结果**不落回 Plan**——Plan 保持 provider-neutral，TranslatedPrompt 是运行时变量。这保证"换 provider 重跑"不需要改 Plan。
+1. ProviderCard 是 soft guidance，不是 deterministic replacement rules。
+2. Plan/Task Markdown 与用户 prompt 永远是 source of truth。
+3. AGENT 可以参考 ProviderCard 调整表达倾向，也可以在不相关时直接写原生 prompt。
+4. 单类型且已确定 `providerId/modelId` 的生成调用只使用匹配目标的一张 Card；不混合多个同类型模型的表达倾向。
+5. 候选模式必须 capability-aware：已知类型只看同类型候选，未知类型按 image/video/audio 分组限制数量。
+6. 工具层不再接收独立语义 prompt 字段，也不再调用运行时语义桥。
+7. 新模型没有合适 Card 时仍可原生调用，不阻塞生成。
 
 ### 5. Plan Schema 扩展
 
@@ -290,7 +271,7 @@ export interface TranslatedPrompt {
   tool: 'image.generate' | 'video.generate' | 'audio.generate',
   args: {
     // === 语义核心（provider-neutral） ===
-    semanticPrompt: SemanticPrompt,       // 上面定义的抽象字段组
+    generationIntent: GenerationIntent,       // 上面定义的抽象字段组
 
     // === Router 驱动字段 ===
     styleFamily: StyleFamily,             // 必填，决定路由
@@ -394,12 +375,12 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Schema 面   Plan.semanticPrompt / styleFamily 字段定义        │
+│ Schema 面   Plan/Task Markdown → GenerationIntent 字段定义        │
 ├──────────────────────────────────────────────────────────────┤
-│ Prompt 面   ProviderCapabilityCard markdown（AI 可读）         │
+│ Prompt 面   ProviderCard markdown（AI 可读）         │
 ├──────────────────────────────────────────────────────────────┤
-│ Runtime 面  ProviderRouter + AdaptiveSemanticBridge            │
-│             （beforeToolCall hook，AI 驱动翻译）               │
+│ Prompt 面   ProviderExpressionContext PromptFragment           │
+│             （AGENT 系统提示软上下文，不改写 prompt）          │
 ├──────────────────────────────────────────────────────────────┤
 │ Policy 面   Provider 白名单 / 配额 / 用户偏好                  │
 │             .neko/preferences.md: "图像默认 Flux"              │
@@ -427,7 +408,7 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 6. **用户手动选 Provider 作为主要路径**——Router 自动路由，用户只在 `.neko/preferences.md` 声明偏好。
 7. **参数级 schema 归一化**（`steps` / `cfg_scale` / `guidance`）——这是 1% 问题，通过 `providerHints` 逃生阀处理即可。
 8. **Layer 0-1 的自动演化**——安全模型要求 Git Flow 式人工审核。
-9. **不把翻译结果落回 Plan**——Plan 保持 provider-neutral，TranslatedPrompt 是运行时变量。
+9. **不把表达调整落回 Plan**——Plan/Task Markdown 保持 provider-neutral；ProviderCard 只影响 AGENT 当次工具参数生成倾向。
 
 ## 结果与影响
 
@@ -442,11 +423,11 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 
 ### 代价与约束
 
-1. **新增 Provider 子系统**：ProviderRegistry + ProviderRouter + SemanticBridge + ProviderAdapter 共 4 个新组件
+1. **新增 Provider 子系统**：ProviderRegistry + ProviderRouter + ProviderExpressionContext 共 3 个核心组件
 2. **扩展 AgentCapabilityProvider**：新增 `providerCards` 扩展槽
-3. **新增 Plan 字段**：`semanticPrompt` / `styleFamily` 是 breaking change（现有 Plan 需 migration）
+3. **新增 Plan 字段**：`generationIntent` / `styleFamily` 是 breaking change（现有 Plan 需 migration）
 4. **Market 新增品类**：`provider-card` 需要对齐审核流程
-5. **工具调用链变长**：Apply 前多一次 AI 翻译，延迟增加约 0.5-2s（但通常与生成本身的秒级时间相比可忽略）
+5. **AGENT prompt 变长**：ProviderCard 作为 PromptFragment 注入，需要控制卡片数量和摘要长度
 6. **Built-in Card 维护成本**：内部团队需要为主流 provider 持续维护 Card
 
 ### 演化评级预期
@@ -454,8 +435,8 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 | 控制面 | 本 ADR 影响 |
 |---|---|
 | Prompt | A → A（保持） |
-| Schema | A- → A（semanticPrompt 结构化 + 受控枚举 styleFamily） |
-| Runtime | A- → A-（新增 Router + Bridge hook） |
+| Schema | A- → A（generationIntent 结构化 + 受控枚举 styleFamily） |
+| Runtime | A- → A-（保留 Router/Registry，移除确定性 Bridge hook） |
 | Policy | B → B+（Provider 偏好纳入 preferences.md） |
 | Memory | A → A+（Layer 2 Card override 是最强演化载体） |
 | Evaluator | A → A（保持） |
@@ -464,53 +445,40 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 
 ## 后续演进
 
-按 7 个 PR 推进，累计工作量约 8-10 工程日。
+实现状态（2026-04-25）：PR-P1 至 PR-P7 的 P0/P1 主链已调整为 ProviderCard 软上下文路线；确定性语义桥 / 独立语义 prompt 路径已取消，后续以 ProviderCard 摘要质量、Project Override 与反馈闭环增强为主。
 
-| PR | 目标 | 工作量 | 依赖 |
+| PR | 目标 | 状态 | 已落地范围 |
 |---|---|---|---|
-| **PR-P1** | ProviderRegistry + Card schema + ProviderCard 类型定义 | 1d | — |
-| **PR-P2** | ProviderRouter 骨架（styleFamily 路由 + Memory 加权） | 1d | P1 |
-| **PR-P3** | AdaptiveSemanticBridge 骨架（挂 beforeToolCall，查三表） | 2d | P1 |
-| **PR-P4** | 主流 Built-in Cards：Flux / SDXL / MJ / Runway / Sora / DALL-E 6 张 | 2d | P1 |
-| **PR-P5** | neko-market `provider-card` 品类 + `.neko/providers/` Project Override 机制 | 1.5d | P1, P4 |
-| **PR-P6** | Memory 演化闭环：Evaluator → ProjectMemoryRouter → Layer 2 Override | 1.5d | P3, P5 |
-| **PR-P7** | 消融 toggle 接线 + 文档同步 | 1d | P2, P3, P6 |
+| **PR-P1** | ProviderRegistry + Card schema + ProviderCard 类型定义 | ✅ 完成 | `ProviderCard` / `GenerationIntent` / Registry / markdown parser |
+| **PR-P2** | ProviderRouter 骨架（styleFamily 路由 + Memory 加权） | ✅ 完成 | styleFamily affinity 路由、显式 providerId 优先、fallback chain metadata |
+| **PR-P3** | ProviderExpressionContext 骨架（ProviderCard → PromptFragment） | ✅ 完成 | ProviderCard 汇总为 AGENT 软提示上下文；工具层保持原生 prompt / Markdown-derived prompt |
+| **PR-P4** | 主流 Built-in Cards：Flux / SDXL / MJ / Runway / Sora / DALL-E 6 张 | ✅ 完成 | 4 张 image card + 2 张 video card |
+| **PR-P5** | neko-market `provider-card` 品类 + `.neko/providers/` Project Override 机制 | ✅ 完成 | market install target、global/project card loading、Project Override 写入 |
+| **PR-P6** | Memory 演化闭环：Evaluator → ProjectMemoryRouter → Layer 2 Override | ✅ 完成 | tool metadata → feedback signal → project card observations / concept coverage / anti-bias candidates |
+| **PR-P7** | 消融 toggle 接线 + 文档同步 | ✅ 完成 | 保留 `providerCardAutoEvolve` kill-switch；移除确定性 prompt 替换 kill-switch |
+
+剩余增强项：
+
+1. ProviderExpressionContext 已支持基础 token budget 裁剪与按 `taskStage` 调整摘要优先级；后续可继续按运行阶段动态分配预算。
+2. Project Override 已支持 `review-queue` 模式，把候选 patch 写入 `.neko/providers/review/*.patch.md` 等待人工确认；后续可在 UI 中提供 approve/reject 操作。
+3. Market `provider-card` 已接入基础 trustLevel / signature manifest 校验；后续可接入真实签名验签与服务端审核流水。
 
 ### 回滚策略
 
-每个 PR 都有 AblationToggle kill-switch：
+ProviderCard 不再位于工具执行前的确定性替换链路，因此不需要确定性 prompt 替换 kill-switch。
 
-- PR-P2 回滚：`providerRouter: false`（回退到"Plan 指定 providerId 直传"）
-- PR-P3 回滚：`semanticBridge: false`（prompt 不翻译，Plan 里写什么 Apply 就送什么）
-- PR-P6 回滚：`providerCardAutoEvolve: false`（关闭 Layer 2 自动演化）
+- `providerCardAutoEvolve: false`：关闭 Layer 2 Project ProviderCard 自动演化。
+- `providerAdaptationMode: native`：生成工具参数显式要求原生 prompt passthrough；默认 `auto/agentic` 仅提示 AGENT 倾向，不做确定替换。
+- 未注册 ProviderCard 或没有匹配 Card 时，AGENT 直接按用户 prompt / Plan/Task Markdown 原生生成工具参数。
 
-### 新增 AblationToggles（8 个）
+### AblationToggles
 
 ```typescript
 export interface AblationToggles {
   // ... 既有字段 ...
 
-  // === Provider Semantic Bridge（adr-provider-semantic-bridge.md） ===
-
-  /** Provider Router：false=禁用自动路由，Plan 必须显式指定 providerId */
-  providerRouter?: false;
-
-  /** Semantic Bridge 整体：false=禁用翻译，prompt 直传 */
-  semanticBridge?: false;
-
-  /** 单独关闭三个 Profile 查询（细粒度对照） */
-  syntaxProfile?: false;
-  conceptCoverage?: false;
-  trainingProfile?: false;
-
-  /** 翻译策略：'literal'（最少干预）/ 'adaptive'（按 Card 调整）/ 'aggressive'（大幅改写） */
-  translationPolicy?: 'literal' | 'adaptive' | 'aggressive';
-
   /** Layer 2 自动演化：false=禁用 Project Override 自动写入 */
   providerCardAutoEvolve?: false;
-
-  /** Model Ensemble：false=禁用跨 provider 并行（即便 Plan 显式声明） */
-  modelEnsemble?: false;
 }
 ```
 
@@ -525,7 +493,7 @@ export interface AblationToggles {
 | 把 Card 做成 TypeScript 常量 / Schema | 违反 §11.5 AI 原生，无法演化 |
 | 每个 Card 一个 npm 包（@neko/provider-flux） | 过度工程；主流 Card 应内置 |
 | 用户手动选 Provider 作为主路径 | ProviderRouter 应自动路由，用户只在 preferences 声明偏好 |
-| 把翻译结果落回 Plan | 破坏 Plan 的 provider-neutral 性，换模型要重编 |
+| 把 provider 表达结果落回 Plan | 破坏 Plan 的 provider-neutral 性，换模型要重编 |
 | 在 Plan 层就按 provider 展开描述 | 锁死 provider；Plan 的语义层被污染 |
 | 用技术参数描述 Card（`anime_bias=0.8`） | 无法 AI 驱动演化；应用美学 / 能力语言 |
 | Card 全部展开描述（保守策略） | 限制强模型创造力；token 成本爆炸 |
@@ -540,12 +508,12 @@ export interface AblationToggles {
 | **agent-unified-workflow.md** §5.1 | CapabilityKind 联合新增 `providerCard` |
 | **agent-unified-workflow.md** §7.4 | `.neko/` 布局新增 `providers/` 子目录 |
 | **agent-tool-skill-enhancement.md** | 注明 Provider 与 Skill 的边界（M:N） |
-| **agent-media-architecture.md** | 标注 Send-to-Agent 工具调用前新增 Bridge 翻译层 |
+| **agent-media-architecture.md** | 标注 Send-to-Agent 工具调用由 AGENT 结合 ProviderExpressionContext 生成参数 |
 | **marketplace.md** | 新增 `provider-card` 品类 + 三层分发策略 |
 | **agent-memory-unification.md** | ProjectMemoryRouter 扩展目标：`.neko/memory.md` + `.neko/providers/*.card.md` |
-| **ablation-experiment-framework.md** | 附录追加 8 个新 toggle（对齐 adr-control-plane-feedback-arbiter 附录 A 风格） |
+| **ablation-experiment-framework.md** | ProviderCard 仅保留 `providerCardAutoEvolve` 消融开关 |
 | **agent-evolution-capacity.md** | §3 新增 Provider 层评级 A；§3.4 控制面表末追加 Provider 行 |
-| **adr-control-plane-feedback-arbiter.md** | 补充说明 SemanticBridge 作为 Control 面 beforeToolCall hook 的定位 |
+| **adr-control-plane-feedback-arbiter.md** | 补充说明 ProviderCard feedback 进入 Project Override 演化，不再作为 beforeToolCall 替换 hook |
 
 ### 不纳入本 ADR 的延伸议题
 
@@ -560,4 +528,4 @@ export interface AblationToggles {
 
 ---
 
-**核心承诺**：本 ADR 让生成模型的三类输入端差异（方言 / 语义深度 / 训练偏置）从"散落在 Skill / 代码 / README"升级为"统一的 Markdown Card + AI 驱动翻译 + 自演化闭环"。新 Provider 接入零代码、只写 Card；Plan 层保持 provider-neutral；Memory 驱动 Card 持续优化——符合 "LLM 变强 = 系统自动增强" 的最强演化锚点。
+**核心承诺**：本 ADR 让生成模型的三类输入端差异（方言 / 语义深度 / 训练偏置）从"散落在 Skill / 代码 / README"升级为"统一的 Markdown Card + AGENT 表达倾向上下文 + 自演化闭环"。新 Provider 接入零代码、只写 Card；Plan 层保持 provider-neutral；Memory 驱动 Card 持续优化——符合 "LLM 变强 = 系统自动增强" 的最强演化锚点。

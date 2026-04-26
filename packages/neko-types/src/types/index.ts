@@ -206,5 +206,8 @@ export * from './agent-capability';
 // Prompt fragment (PR3e: sub-package prompt contribution)
 export * from './prompt-fragment';
 
+// Provider card expression context contracts
+export * from './provider-card';
+
 // Creative entity graph types (cross-modal relationship graph, ADR Phase 3)
 export * from './creative-entity-graph';
