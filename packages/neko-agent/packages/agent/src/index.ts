@@ -181,6 +181,24 @@ export {
   type IFeedbackCoordinator,
 } from './feedback';
 
+export {
+  parseProviderCardMarkdown,
+  ProviderCardRegistry,
+  createProviderCardRegistry,
+  ProviderRouter,
+  createProviderRouter,
+  loadProviderCardDirectory,
+  registerProviderCardDirectory,
+  type ParseProviderCardOptions,
+  type LoadProviderCardDirectoryOptions,
+  type RegisterProviderCardDirectoryOptions,
+  type ProviderCardLoaderFs,
+  type ProviderCardDirent,
+  type ProviderCardLoadError,
+  createProviderExpressionPromptFragments,
+  type ProviderExpressionContextOptions,
+} from './provider';
+
 // Export plan parsing
 export { parsePlanMarkdown, type Plan, type PlanStep } from './plan';
 
