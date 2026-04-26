@@ -10,6 +10,8 @@ Partially Adopted / Needs Refresh (2026-04-24，2026-04-26 现状核对；Agent-
 
 > **Agent-first 感知边界（2026-04-26）**：ControlPlane / FeedbackArbiter 不替代 Agent 对图片、视频、音频、数据与创作质量的主判断。Agent 形成 `AgentObservation` 与 `DecisionRationale`，工具输出作为可选 evidence；FeedbackArbiter 只管理流程层决策（budget、retry、regress、terminate、escalate）和 Journal 可观察性，不直接判定内容好坏，也不直接调用 Perception tool 或 Subagent。
 
+**关联开发方案**: [Agent-First 多模态开发方案](./agent-first-multimodal-development-plan.md)
+
 ## 背景
 
 `adr-agent-runtime-bootstrap.md` 冻结了四个 runtime plane（workflow / artifact / capability / feedback）的最小契约，IDC 主链的依赖注入路径随之统一。但 IDC 三阶段骨架本身与反馈迭代流程仍是分散/硬编码的，在当前代码上已经出现三类具体症状。

@@ -9,6 +9,7 @@
 > - [agent-unified-workflow.md](./agent-unified-workflow.md)
 > - [perception-first-roadmap.md](./perception-first-roadmap.md) — Agent-first perception 策略修订
 > - [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) — ControlPlane / FeedbackArbiter 边界
+> - [agent-first-multimodal-development-plan.md](./agent-first-multimodal-development-plan.md) — 统一开发方案
 
 ## 2026-04-26 Agent-first 策略对齐
 

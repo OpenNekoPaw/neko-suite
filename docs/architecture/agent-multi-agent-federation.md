@@ -12,6 +12,7 @@
 - [agent-tool-skill-enhancement.md](./agent-tool-skill-enhancement.md) — Tool / Skill 注入模型，Federation 复用
 - [agent-evolution-capacity.md](./agent-evolution-capacity.md) — 抗演化审计，本 ADR 需要同步评估 Federation 对 Skill / Prompt / Orchestration 演化的影响
 - [ablation-experiment-framework.md](./ablation-experiment-framework.md) — 消融框架；Federation 把新维度（子代数 / 通信密度 / 角色组合）纳入 AblationToggles
+- [agent-first-multimodal-development-plan.md](./agent-first-multimodal-development-plan.md) — Agent-first MVP 与 Federation Future Work 的边界
 
 **取代说明**：本 ADR（Future Work）吸收 `packages/neko-agent/packages/agent/src/subagent/` 已有实现（`SubAgentManager` / `Coordinator` / `ContextBridge` / Task 工具），把它从"单次 fire-and-forget 子 agent"升级为"**对等 Agent 联邦**"。原实现保留兼容，本 ADR 定义新能力边界与迁移路径。
 

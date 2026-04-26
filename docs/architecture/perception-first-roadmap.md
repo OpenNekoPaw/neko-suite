@@ -5,11 +5,14 @@
 **决策者**: Neko Suite Architecture Team
 **关联范围**: neko-agent · neko-engine · neko-story · neko-canvas · neko-cut · neko-puppet · neko-model
 **关联文档**:
+
 - [agent-unified-workflow.md](./agent-unified-workflow.md) - IDC 工作流、分层术语与约束平面
 - [agent-media-architecture.md](./agent-media-architecture.md) - GeneratedAsset 协议
 - [neko-agent-media-requirements-fit.md](./neko-agent-media-requirements-fit.md) - AgentCapabilityProvider
 - [creative-consistency.md](./creative-consistency.md) - Reference Chain / QualityGate
 - [model-runtime.md](./model-runtime.md) - Engine ML 推理策略
+- [agent-first-multimodal-development-plan.md](./agent-first-multimodal-development-plan.md) - 统一开发方案
+- [agent-first-multimodal-context-resolution.md](./agent-first-multimodal-context-resolution.md) - UI / 项目状态 / 素材文件到 Agent 感知输入的分层边界
 
 ---
 
@@ -28,11 +31,11 @@
 
 基于对 Neko Suite 现状的多模态工作流分析（输入 → 感知 → 处理 → 输出），发现架构层存在**三重结构性断裂**：
 
-| 断裂点 | 现状 | 影响 |
-|--------|------|------|
-| **能力断裂** | `runtime-ml`（CLIP/Whisper/Upscale/Denoise）已有零散入口，CLIP/Whisper 已可经 `models:*` / Agent 工具部分调用，但尚未统一为 PerceptionCapability | Agent 能处理部分感知任务，但缺少统一协议、命名空间、成本元数据与缓存策略 |
-| **反馈断裂** | QualityGate 产出 `ConsistencyReport` 但无触发重跑 Operation | Agent 不能基于评估结果自修正 |
-| **模态断裂** | 3D/Puppet/Manga Operation 层缺失或不完整 | Agent 只能文件替换，无法精准编辑 |
+| 断裂点       | 现状                                                                                                                                                                     | 影响                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| **能力断裂** | `runtime-ml`（CLIP/Whisper/Upscale/Denoise）已有零散入口；`EngineClient.perception` facade、`TOOL_NAMES_PERCEPTION` 与 lazy `perception-evidence` ToolSet 已完成最小闭环 | Agent 已有统一 evidence 工具入口；音频转写、图像相似度与图像分类工具已接入，缓存策略与成本治理仍需扩展 |
+| **反馈断裂** | QualityReview 已可包装为 `PerceptionEvidence` 并写入 Agent-first Journal graph；恢复策略按 Skill prompt-chain 表达                                                       | Agent 可基于 evidence 形成恢复建议，但还需补真实恢复 Skill 章节和更多投影治理         |
+| **模态断裂** | 3D/Puppet/Manga Operation 层缺失或不完整                                                                                                                                 | Agent 只能文件替换，无法精准编辑                                                      |
 
 当前工作流是**单向生成式管道**（text → image → timeline），不是**感知-生成-评估闭环**。这限制了 Agent 从「素材生产者」升级为「创作协同者」。
 
@@ -44,10 +47,10 @@
 
 - Engine 侧当前主要通过 `models:*` action 暴露 ML 能力，而不是独立 `/perception/*` REST controller。
 - `host-api/src/controllers/models.rs` 已覆盖 `clip` 与 `transcribe`；`PerceptionController` / `PerceptionRegistry` 尚未落地。
-- `@neko/neko-client` 已有 CLIP similarity 与 Whisper transcription 的扁平方法，但尚未提供 `EngineClient.perception.*` facade。
-- `neko-agent` extension 已有音频转写工具和 `QualityCheckConsistency`，但尚未形成 lazy-loaded `PerceptionToolGroup`。
+- `@neko/neko-client` 已提供 `EngineClient.perception.transcribe()` 与 `EngineClient.perception.similarity()` facade，内部委托既有 `models:*` 方法；VSCode extension runner 通过该 client 懒连接 `neko-engine` 后注入 Agent-first perception evidence 工具。
+- `neko-agent` 已提供 lazy-loaded `perception-evidence` ToolSet、`perception.describeInput`、`perception.audio.transcribe`、`perception.image.similarity` 与 `perception.image.classify` evidence 工具。
 - `GeneratedAsset` 协议与资产索引已存在，可继续作为感知工具输入输出边界。
-- `partialRerun` / Q4 Operation 在 `apply-primitive` 相关抽象中已有前置痕迹，但闭环反馈管道仍未完整实现。
+- Q4 Operation 在 `apply-primitive` 相关抽象中已有前置痕迹；闭环反馈应优先以 Skill prompt-chain 和 Agent rationale 表达，不新增 pipeline 调度 DSL。
 
 因此，后续实现应以 Agent 感知为核心，统一并协议化已有零散工具能力作为可选增强。
 
@@ -58,7 +61,7 @@
 - Agent 是图片、视频、音频、数据与上下文的默认感知入口和创作判断主体。
 - Perception tools 是 Agent 的外置感官，用于增强、验证、加速或补齐高精度证据，不作为主链路硬依赖。
 - QualityGate 从“强制判定器”降级为“可调用 reviewer / evidence provider”；除非用户、策略或安全边界明确要求，否则不默认阻塞主链路。
-- PipelineAction、partialRerun、修复策略由 Agent 基于 observation / rationale 发起；工具输出只能作为 evidence，不直接决定创作方向或项目状态。
+- 修复策略由 Agent 基于 observation / rationale 发起；工具输出只能作为 evidence，不直接决定创作方向或项目状态；不新增 PipelineAction / partialRerun 功能。
 - ControlPlane 只管理预算、审批、重试、升级、Journal 与 stage transition，不判断内容质量。
 - Subagent 仍是可选 Recovery Executor，不是感知能力或闭环 MVP 的前置依赖。
 
@@ -124,7 +127,7 @@ interface DecisionRationale {
 约束：
 
 - Agent observation 是主链路 SSOT；工具结果只作为 `PerceptionEvidence` 追加。
-- 所有状态修改、PipelineAction、partialRerun 之前必须能追溯到 `DecisionRationale`。
+- 所有状态修改、工具操作或恢复建议之前必须能追溯到 `DecisionRationale`。
 - 低置信度 observation 可建议调用工具或询问用户，但不能由工具自动覆盖 Agent 判断。
 
 ### ADR-P1: PerceptionCapabilityProvider 协议
@@ -144,19 +147,19 @@ interface DecisionRationale {
 
 `runtime-ml` 增补 `PerceptionRegistry`，作为 CLIP/Whisper 等模型的统一入口。`host-api` 新增 `PerceptionController`，暴露 REST：
 
-| Endpoint | 模型 | 用途 |
-|----------|------|------|
-| `POST /perception/image/embed` | CLIP | 图像向量化 |
-| `POST /perception/image/classify` | CLIP zero-shot | 图像零样本分类 |
-| `POST /perception/image/similarity` | CLIP | 双向相似度 |
-| `POST /perception/audio/transcribe` | Whisper | 音频转文字 + 时间戳 |
-| `POST /perception/video/shots` | FFmpeg scene | 镜头切分 |
+| Endpoint                            | 模型           | 用途                |
+| ----------------------------------- | -------------- | ------------------- |
+| `POST /perception/image/embed`      | CLIP           | 图像向量化          |
+| `POST /perception/image/classify`   | CLIP zero-shot | 图像零样本分类      |
+| `POST /perception/image/similarity` | CLIP           | 双向相似度          |
+| `POST /perception/audio/transcribe` | Whisper        | 音频转文字 + 时间戳 |
+| `POST /perception/video/shots`      | FFmpeg scene   | 镜头切分            |
 
 > 注：以上 `/perception/*` endpoint 是原始目标形态。若继续沿用当前 dispatch/action 架构，可等价映射为 `perception:image_embed`、`perception:audio_transcribe` 等 action，或保留 `models:*` 作为内部实现细节。
 
 ### ADR-P3: Agent 侧 Tool 注册
 
-**2026-04-26 状态**：部分实现但未统一。音频转写与一致性检查已有工具入口；`TOOL_NAMES` 的 `perception.*` 分类、lazy-loaded `PerceptionToolGroup`、Creation/Execution 双 Skill 提示差异仍未落地。工具注册应表达“可用能力”，不强制 Agent 每轮调用。
+**2026-04-26 状态**：最小统一入口已落地。`TOOL_NAMES_PERCEPTION`、lazy `perception-evidence` ToolSet、`perception.describeInput`、`perception.audio.transcribe`、`perception.image.similarity` 与 `perception.image.classify` 工具已实现；视频镜头检测等 PerceptionTool 后续按需接入。工具注册只表达“可用能力”，不强制 Agent 每轮调用。
 
 - [TOOL_NAMES](../../packages/neko-types/src/types/tool-names.ts) 新增 `perception.*` 分类（~12 工具）
 - `neko-agent` 注册 lazy-loaded `PerceptionToolGroup`（参考现有分级加载策略）
@@ -168,9 +171,10 @@ interface DecisionRationale {
 
 ### ADR-P4: EngineClient 方法补齐
 
-**2026-04-26 状态**：部分实现但命名空间不一致。当前 client 已有 CLIP similarity 与 Whisper transcription 的扁平方法；推荐补 `perception` facade，保持外部契约稳定，内部委托既有方法。
+**2026-04-26 状态**：`EngineClient.perception` facade 已完成最小闭环。`transcribe()`、`similarity()` 与 `classify()` 已保持外部契约稳定，内部委托既有 `models:*` 能力；`detectShots()` 后续按需追加。
 
 `@neko/neko-client` 新增 `perception` 命名空间：
+
 ```
 EngineClient.perception.embedImage(asset) -> Float32Array
 EngineClient.perception.transcribe(asset, options) -> { segments, language }
@@ -181,18 +185,20 @@ EngineClient.perception.similarity(a, b) -> number
 
 ### 交付清单
 
-| 模块 | 路径 | 状态 |
-|------|------|------|
-| Rust PerceptionController | `host-api/src/controllers/perception.rs` | 未实现；当前由 `models:*` action 承载部分能力 |
-| Rust PerceptionRegistry | `runtime-ml/src/registry.rs` | 未实现；当前 ML 能力分散在 runtime / models controller |
-| TS PerceptionTool 类型 | `@neko/shared/types/agent-capability.ts` | 未实现；需在现有 AgentCapability 协议上扩展 |
-| TS EngineClient perception | `@neko/neko-client/src/EngineClient.ts` | 部分实现；已有扁平 CLIP/Whisper 方法，缺 `perception` facade |
-| TS PerceptionToolGroup | `neko-agent/.../perceptionToolGroup.ts` | 部分实现；已有音频转写/一致性检查工具，缺统一分组与双 Skill 注册 |
+| 模块                       | 路径                                     | 状态                                                           |
+| -------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| Rust PerceptionController  | `host-api/src/controllers/perception.rs` | 未实现；当前由 `models:*` action 承载部分能力                  |
+| Rust PerceptionRegistry    | `runtime-ml/src/registry.rs`             | 未实现；当前 ML 能力分散在 runtime / models controller         |
+| TS PerceptionTool 类型     | `@neko/shared/types/perception-tool.ts`  | 已实现 metadata / result helper；已覆盖 describe/audio/image similarity 基础 schema |
+| TS EngineClient perception | `@neko/neko-client/src/EngineClient.ts`  | 已实现 `transcribe()` / `similarity()` / `classify()` facade，并由 extension runner 懒连接注入 |
+| TS PerceptionToolGroup     | `neko-agent/.../tools/perception/`       | 已实现 lazy `perception-evidence` ToolSet、describe/audio/image similarity 工具 |
 
 ### 验收
 
-- Agent 可响应「这张参考图里的角色是什么发色？」→ 调用 `perception.image.classify`
-- 单元测试覆盖 5 个核心工具
+- Agent 可响应「请转写这段音频」→ 可选调用 `perception.audio.transcribe` 并记录 `PerceptionEvidence`
+- Agent 可响应「这张图是否接近 red umbrella？」→ 可选调用 `perception.image.similarity`
+- Agent 可响应「这张参考图里的角色是什么发色？」→ 可选调用 `perception.image.classify`
+- 单元测试覆盖已实现 perception evidence 工具；后续扩展到 5 个核心工具
 - Token 成本：感知工具 schema resident 层 ≤ 1.5K token
 
 ### Q2 修订后落地顺序
@@ -205,102 +211,106 @@ EngineClient.perception.similarity(a, b) -> number
 
 ---
 
-## Q3 2026: Closed-Loop Feedback Pipeline
+## Q3 2026: Skill Prompt-Chain Feedback Loop
 
-**目标**：Agent 从自身 observation / rationale 出发触发闭环修正；QualityGate 作为可调用 reviewer / evidence provider 参与执行流自愈链条，而不是替代 Agent 判断。
+**目标**：Agent 从自身 observation / rationale 出发形成恢复建议；QualityGate 作为可调用 reviewer / evidence provider 参与判断，而不是替代 Agent，也不新增 PipelineAction / partialRerun 执行器。
 
 ### 与双流架构的集成
 
-Q3 闭环反馈不是独立的"重试机制"，而是**Agent 驱动的执行流自愈链条**在创作语境下的落地：
+Q3 闭环反馈不是独立 pipeline 或重试调度器，而是 **Agent 驱动的 Skill prompt-chain 恢复指导**在创作语境下的落地：
 
 ```
 Agent 判断需修正 / Step 失败 / 质量不达标
     │
-    ├─► 自愈级别 1-3（Execution Skill 内尝试）
-    │      重试 / 降级 / 替代模型
+    ├─► Execution Skill 内尝试
+    │      复述 observation / rationale
+    │      选择最小恢复建议：重试 / 降级 / 换模型 / 调整 prompt / 接受当前结果 / 询问用户
     │
-    ├─► 自愈级别 4（本季度新建）
-    │      派发 Recovery Subagent
-    │      使用 AgentObservation 定位问题，必要时调用 Perception 工具补充证据
-    │      基于 DecisionRationale 产出 PipelineAction
-    │      触发 partialRerun
+    ├─► 可选 reviewer / evidence
+    │      QualityReview / Perception 工具 / Subagent 只补证据或建议
+    │      FeedbackArbiter 只给 guidance，不直接调工具或调度重跑
     │
-    └─► 自愈级别 5（所有手段失败）
+    └─► 无法安全继续
            上报 Status → Creation Skill
            附完整诊断 + 建议方案
 ```
 
-### ADR-C1: AgentObservation / ConsistencyReport → Action 分派
+### ADR-C1: AgentObservation / ConsistencyReport → Recovery Guidance
 
-扩展 Agent observation 与可选 QualityGate report 的合流协议：`DecisionRationale` 可引用 `ConsistencyReport`，并由 Agent 产出 `suggestedActions: PipelineAction[]`：
+扩展 Agent observation 与可选 QualityGate report 的合流协议：`DecisionRationale` 可引用 `ConsistencyReport`，并由 Agent 在 Skill markdown 中形成恢复建议。建议使用章节惯例，而不是机器可解析 DSL：
 
-```typescript
-type PipelineAction =
-  | { type: 'regenerate'; shotId: string; hints: GenerationHint[] }
-  | { type: 'adjust-prompt'; shotId: string; promptDiff: string }
-  | { type: 'replace-reference'; shotId: string; newRef: GeneratedAsset }
-  | { type: 'accept'; shotId: string }
-  | { type: 'defer-human'; shotId: string; reason: string };
+```markdown
+## Observation
+
+- shot 3 与前后镜头风格不一致。
+
+## Rationale
+
+- confidence: medium
+- evidence: quality-review:run-1:call-qc
+- risk: low，影响单个 shot，用户可见性低。
+
+## Recovery Guidance
+
+- 建议优先调整 prompt 中的光照和角色风格描述。
+- 如仍不一致，再询问用户是否接受局部重试。
 ```
 
-**归属**：`PipelineAction` 是**执行流内环**的自愈动作候选集，由 Agent / Execution Skill 消费。QualityGate 和 Perception 工具只能提供 evidence；最终动作必须能追溯到 Agent 的 `DecisionRationale`。若所有 PipelineAction 均失败（如连续 `regenerate` 仍不达标），则升级为 `defer-human` → 上报创作流 Status。
+**归属**：Recovery Guidance 是 Execution / Iteration Skill 的 prompt-chain 内容，由 Agent 消费。QualityGate 和 Perception 工具只能提供 evidence；最终是否调用工具、写 artifact 或询问用户必须由 Agent 基于 `DecisionRationale` 自主决定。
 
-### ADR-C2: 增量重跑 Stage（partialRerun）
+### ADR-C2: 不新增 partialRerun Stage
 
-Pipeline 新增 `partialRerun` stage（执行流内环 Apply 的子类型）：
-- 入参 `PipelineAction[]`
-- 配置 `targetShots?: string[]`，只对指定镜头重走 `generatePrompts → batchGenerate`
-- 复用 Reference Chain（Phase 5.4）保证一致性
-- **审批路径**：走执行流审批策略包（execution pack）
-  - 微修正（单 shot 重跑）→ 自动通过
-  - 中修正（多 shot 或变 prompt）→ AskMode 询问，AutoMode 自动
-  - 宏修正（改 Scheme 结构）→ 回退创作流（Review pack）
+不新增 `partialRerun` stage、`PipelineAction` 类型或 pipeline DSL。原因：
+
+- [Skill as Prompt Chains](./adr-skill-as-prompt-chains.md) 已确认 phases / pipelines DSL 退化为 markdown 章节。
+- 修复顺序属于 AI 行为策略，应由 Agent 读取 Skill prompt-chain 后自主安排。
+- Artifact 状态、ApprovalEngine、Journal 已能承载进度、权限和审计，不需要新增调度层。
 
 ### ADR-C3: Agent-Augmented Quality Review
 
 Quality review 由 Agent 先形成 `AgentObservation` 和 `DecisionRationale`；QualityGate 可按需调用 Q2 的 `perception.image.similarity` / `clip.classify` 产出**量化证据**，用于补强或挑战 Agent 判断。阈值由 `ProjectConfig.qualityThresholds` 驱动，不再硬编码，但阈值命中默认只生成 evidence / recommendation，不直接替代 Agent 发起项目状态修改。
 
 **事件命名**（对齐双流事件分流）：
+
 - `execution.quality.evaluated` — 质检完成，内环事件
-- `execution.autoheal.triggered` — 触发自愈，内环事件
-- `execution.autoheal.succeeded` — 自愈成功，内环事件
-- `creation.status.degraded` — 仅在级别 5 升级时触发，外环事件
+- `execution.recovery.guided` — Agent 形成恢复指导，内环事件
+- `creation.status.degraded` — 无法安全继续时触发，外环事件
 
-### ADR-C4: Creative Iteration Loop Skill
+### ADR-C4: Creative Iteration Prompt-Chain Skill
 
-新增 Skill `creative-iteration-loop`（归属 Execution Skill 的自愈扩展）：
-- 注入的 ToolSet：perception + partialRerun + quality-report-reader
-- System prompt 模板：「评估→定位问题→选择最小修正动作」
-- 通过 SkillInjectionCoordinator 4-track 原子管理
-- **与 execution-flow Skill 关系**：作为执行流 Skill 的**子技能**，在自愈级别 4 激活；不直接面向用户
+新增或扩展 Skill `creative-iteration-loop`（归属 Execution Skill 的自愈扩展）：
 
-### ADR-C5: Recovery Subagent
+- 注入的 ToolSet：perception + quality-report-reader + diagnostic
+- Markdown 章节模板：`## Observation`、`## Rationale`、`## Recovery Guidance`、`## Ask User When`
+- 通过 SkillInjectionCoordinator 注入 Skill body / tool permissions，不解析 phases / pipelines
+- **与 execution-flow Skill 关系**：作为执行流 Skill 的 prompt-chain 增强，不直接面向用户
 
-新增 `RecoverySubagent`（自愈级别 4 的载体）：
+### ADR-C5: Recovery Subagent（可选 reviewer）
+
+`RecoverySubagent` 仅作为可选 reviewer：
+
 - 独立上下文（避免污染主会话）
 - 工具集：perception + quality-report-reader + diagnostic
-- 产出结构化 PipelineAction[] 回流主 Agent
-- 若 Subagent 亦无解，返回 `defer-human` 附诊断上下文
+- 产出自然语言 recommendation / evidence summary 回流主 Agent
+- 若 Subagent 亦无解，返回 ask-user 建议和诊断上下文
 
 ### 交付清单
 
-| 模块 | 路径 | 目的 | 归属 |
-|------|------|------|------|
-| Quality Review 重构 | `neko-agent/.../qualityGate.ts` | 产出 evidence / recommendations，供 Agent rationale 引用 | 执行流 |
-| partialRerun stage | `neko-agent/.../stages/partialRerun.ts` | 增量重跑 | 执行流 |
-| Iteration Skill | `neko-agent/.../skills/creative-iteration-loop/` | 自愈级别 4 Skill | 执行流扩展 |
-| PipelineAction 类型 | `@neko/shared/types/pipeline-action.ts` | SSOT | L1 原语 |
-| RecoverySubagent | `neko-agent/.../subagents/recovery/` | 自愈级别 4 载体 | 执行流 |
-| Execution Pack 扩展 | `neko-agent/.../approval/packs/execution.pack.ts` | partialRerun 审批 | 审批引擎 |
+| 模块                         | 路径                                             | 目的                                                     | 归属       |
+| ---------------------------- | ------------------------------------------------ | -------------------------------------------------------- | ---------- |
+| Quality Review 重构          | `neko-agent/.../qualityGate.ts`                  | 产出 evidence / recommendations，供 Agent rationale 引用 | 执行流     |
+| Iteration Prompt-Chain Skill | `neko-agent/.../skills/creative-iteration-loop/` | Observation / Rationale / Recovery Guidance 章节         | 执行流扩展 |
+| RecoverySubagent reviewer    | `neko-agent/.../subagents/recovery/`             | 可选 reviewer / evidence summary                         | 执行流     |
+| Feedback guidance            | `neko-agent/.../feedback/`                       | low confidence / high risk 时提示补 evidence 或 ask user | 控制面     |
 
 ### 验收
 
-- 端到端测试：输入 5 shots，故意让 shot 3 低一致性 → Agent 形成 observation / rationale → 可选 QualityGate 补充 evidence → 仅重跑 shot 3 → Agent review 通过
+- 端到端测试：输入 5 shots，故意让 shot 3 低一致性 → Agent 形成 observation / rationale → 可选 QualityGate 补充 evidence → Skill recovery guidance 给出最小修正建议 → Agent 决定下一步。
 - **关键指标**：
-  - 闭环自修正通过率 ≥ 70%
-  - 增量重跑耗时 / 全量重跑 ≤ 30%
-  - 自愈级别 1-4 解决比例 ≥ 80%（符合双流架构自愈目标）
-  - 升级到创作流 Status 的频率 ≤ 5%
+  - 恢复建议均可追溯到 observation / rationale / evidence
+  - 高风险或低置信建议触发 ask-user guidance
+  - 工具 / QualityReview / Subagent 不直接修改项目状态
+  - 代码库不新增 PipelineAction / partialRerun DSL
 
 ---
 
@@ -311,6 +321,7 @@ Quality review 由 Agent 先形成 `AgentObservation` 和 `DecisionRationale`；
 ### ADR-O1: PuppetOperation 完整化
 
 补齐面部参数时间线 Operation：
+
 - `puppet.param.add/remove/update/interpolate`（面部 32 参数 + inox2d 动态参数）
 - `puppet.bone.transform.update`（骨骼 FK/IK 关键帧）
 - `puppet.layer.add/remove/visibility`（inox2d 图层）
@@ -320,6 +331,7 @@ Quality review 由 Agent 先形成 `AgentObservation` 和 `DecisionRationale`；
 ### ADR-O2: ModelOperation 新增（3D 域）
 
 3D 动画编辑 Operation：
+
 - `model.ikKeyframe.add/remove/update`（FABRIK/CCD/TwoBone 关键帧）
 - `model.animation.blend.update` / `model.animation.crossfade.update`
 - `model.morphTarget.weight.update`（blend shape / 面部 22 参数）
@@ -353,12 +365,12 @@ Puppet/Model Operation **归属执行流内环**，通过以下方式接入：
 
 ### 交付清单
 
-| 模块 | 操作数 | 主要场景 |
-|------|--------|----------|
+| 模块            | 操作数 | 主要场景                   |
+| --------------- | ------ | -------------------------- |
 | PuppetOperation | ~12 种 | 面部动画、骨骼关键帧、图层 |
-| ModelOperation | ~15 种 | IK 关键帧、动画混合、形变 |
-| Export 适配器 | 2 类 | glTF / nkp+psd |
-| Agent 工具 | ~20 | 精准编辑入口 |
+| ModelOperation  | ~15 种 | IK 关键帧、动画混合、形变  |
+| Export 适配器   | 2 类   | glTF / nkp+psd             |
+| Agent 工具      | ~20    | 精准编辑入口               |
 
 ### 验收
 
@@ -386,6 +398,7 @@ Puppet/Model Operation **归属执行流内环**，通过以下方式接入：
 ### ADR-M2: Motion Generation Pipeline
 
 基于 Q4 ModelOperation，新增 `generateMotion` stage：
+
 - 输入：文本描述 / 参考视频（Q2 perception 抽运动）
 - 输出：IK 关键帧序列 → `BatchOperation`
 - 路由策略（[model-runtime.md](./model-runtime.md)）：优先 MCP-Blender，fallback 本地简单合成
@@ -393,12 +406,15 @@ Puppet/Model Operation **归属执行流内环**，通过以下方式接入：
 ### ADR-M3: flowC 新管道
 
 Story→Comic 管道 `flowC`：
+
 ```
 parseStoryboard → generatePanelLayout → generateBalloon → arrangeOnComic
 ```
+
 复用 Q2 AgentObservation 做画风判断；必要时调用 Perception 工具补充一致性证据。
 
 **双流映射**：
+
 - 创作流视角：用户看到"Orchestration → Proposal (Comic 方案) → Review → Execution → Status"
 - 执行流视角：flowC 展开为 TODO 列表，经 Approve → Apply → Step 执行
 - Creation Skill 主导 flowC 选择与 Proposal 编辑
@@ -416,30 +432,31 @@ parseStoryboard → generatePanelLayout → generateBalloon → arrangeOnComic
 
 每季度交付物在双流架构下的具体落点：
 
-| 季度 | 新增能力 | 归属层 | 对创作流影响 | 对执行流影响 |
-|------|---------|------|------------|------------|
-| Q2 | AgentObservation + Perception 工具（可选）| L2/L3 感知与微能力 | Agent 形成 Proposal observation，工具可补充 evidence | Agent 形成 Apply rationale，工具可补充验证 evidence |
-| Q3 | partialRerun + PipelineAction | L1 执行流原语 + L3 stage | Status 新增"自修正中"状态 | Agent rationale 驱动自愈；Approval Engine 执行策略包扩展 |
-| Q3 | RecoverySubagent | L2 模式层扩展 | 对用户透明（自愈成功不惊扰）| 主 Agent 派发子任务 |
-| Q4 | PuppetOperation + ModelOperation | L3 中能力 | Proposal 可引用 Operation 作为创作"动作" | Apply 执行 Operation，Step 记录结果 |
-| 2027 Q1 | neko-comic + flowC | L3 宏能力 + L2 模式 | Creation Skill 支持选择 comic Workflow | Execution Skill 新增 comic 生成 TODO |
-| 2027 Q1 | Motion Generation | L3 中能力 | Proposal 可描述动作意图 | Apply IK 关键帧序列，Step 反馈动画帧 |
+| 季度    | 新增能力                                   | 归属层                                    | 对创作流影响                                         | 对执行流影响                                        |
+| ------- | ------------------------------------------ | ----------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Q2      | AgentObservation + Perception 工具（可选） | L2/L3 感知与微能力                        | Agent 形成 Proposal observation，工具可补充 evidence | Agent 形成 Apply rationale，工具可补充验证 evidence |
+| Q3      | Skill Prompt-Chain Feedback Loop           | L3 Skill prompt-chain + Feedback guidance | Status 可显示"需要确认 / 建议修正"                   | Agent rationale 驱动恢复建议；不新增 pipeline DSL   |
+| Q3      | RecoverySubagent                           | L2 模式层扩展                             | 对用户透明（自愈成功不惊扰）                         | 主 Agent 派发子任务                                 |
+| Q4      | PuppetOperation + ModelOperation           | L3 中能力                                 | Proposal 可引用 Operation 作为创作"动作"             | Apply 执行 Operation，Step 记录结果                 |
+| 2027 Q1 | neko-comic + flowC                         | L3 宏能力 + L2 模式                       | Creation Skill 支持选择 comic Workflow               | Execution Skill 新增 comic 生成 TODO                |
+| 2027 Q1 | Motion Generation                          | L3 中能力                                 | Proposal 可描述动作意图                              | Apply IK 关键帧序列，Step 反馈动画帧                |
 
 **关键原则**：
+
 - 新能力**先在 L3 注册**，再被双 Skill 引用
-- 不直接修改 L1/L2，除非 Q3 的 PipelineAction/Subagent 机制这种基础扩展
+- 不直接修改 L1/L2；Q3 仅扩展 Skill prompt-chain、Feedback guidance 与可选 reviewer
 - 任何新工具都必须声明所属 Skill（Creation/Execution/Both）
 
 ---
 
 ## 否决的替代方案
 
-| 方案 | 否决原因 |
-|------|----------|
-| **A. 先补 Operation 层（Q4 前置到 Q2）** | Operation 补齐本身收益有限；没有 perception，Agent 不知道「要编辑什么」，会沦为手动操作转发器 |
-| **B. 先建 Manga（单模态纵深）** | 新模态无复用引擎能力，ROI 低；不解决现有模态的闭环缺失 |
-| **C. Story 管道多模态深化（TTS + 图回灌）** | 主链路深化但不解决结构性断裂；perception 缺席下即便加 TTS 也是盲飞 |
-| **D. 全量并行四个方向** | 团队规模不匹配；易形成「全部开始、全部半成品」 |
+| 方案                                        | 否决原因                                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **A. 先补 Operation 层（Q4 前置到 Q2）**    | Operation 补齐本身收益有限；没有 perception，Agent 不知道「要编辑什么」，会沦为手动操作转发器 |
+| **B. 先建 Manga（单模态纵深）**             | 新模态无复用引擎能力，ROI 低；不解决现有模态的闭环缺失                                        |
+| **C. Story 管道多模态深化（TTS + 图回灌）** | 主链路深化但不解决结构性断裂；perception 缺席下即便加 TTS 也是盲飞                            |
+| **D. 全量并行四个方向**                     | 团队规模不匹配；易形成「全部开始、全部半成品」                                                |
 
 ---
 
@@ -448,15 +465,15 @@ parseStoryboard → generatePanelLayout → generateBalloon → arrangeOnComic
 ### 正面
 
 - **Agent 从「素材生产者」升级为「创作协同者」**：看得见、能反馈、能精修
-- **架构一致性增强**：Operation + GeneratedAsset 二元协议贯穿所有模态
+- **架构一致性增强**：Observation / Rationale / Evidence 三元协议贯穿所有模态
 - **引擎投资兑现**：`runtime-ml` 已有能力对 Agent 可见
 - **每季度可独立发布**：每阶段都是闭环增值，非「集齐龙珠」式依赖
 
 ### 负面
 
 - **短期无新模态**：Manga 和 3D 动画要等到 2027 Q1，用户感知层面「慢」
-- **Token 成本上升**：Perception 工具 schema + Action 反馈增加每 turn 开销（Q2 约束 ≤ 1.5K resident）
-- **测试复杂度激增**：闭环 pipeline 的端到端测试矩阵大，需 CI 算力投入
+- **Token 成本上升**：Perception 工具 schema + recovery guidance 增加每 turn 开销（Q2 约束 ≤ 1.5K resident）
+- **测试复杂度上升**：需验证 Agent rationale 与 evidence 引用关系，但避免 pipeline 调度矩阵
 
 ### 中性
 
@@ -467,15 +484,15 @@ parseStoryboard → generatePanelLayout → generateBalloon → arrangeOnComic
 
 ## 指标门槛
 
-| 季度 | 北极星指标 | 阈值 |
-|------|-----------|------|
-| Q2 | Perception 工具调用成功率 | ≥ 95% |
-| Q2 | Perception resident token | ≤ 1.5K |
-| Q3 | Agent 闭环自修正通过率 | ≥ 70% |
-| Q3 | 增量重跑时间 / 全量重跑时间 | ≤ 30% |
-| Q4 | Puppet+Model 编辑动作 Operation 化覆盖率 | ≥ 90% |
-| Q4 | Undo/Redo 测试覆盖 | 100% operation types |
-| 2027 Q1 | flowC 端到端成功率 | ≥ 80% |
+| 季度    | 北极星指标                               | 阈值                 |
+| ------- | ---------------------------------------- | -------------------- |
+| Q2      | Perception 工具调用成功率                | ≥ 95%                |
+| Q2      | Perception resident token                | ≤ 1.5K               |
+| Q3      | Agent 恢复建议可追溯率                   | ≥ 95%                |
+| Q3      | 高风险建议 ask-user guidance 命中率      | ≥ 95%                |
+| Q4      | Puppet+Model 编辑动作 Operation 化覆盖率 | ≥ 90%                |
+| Q4      | Undo/Redo 测试覆盖                       | 100% operation types |
+| 2027 Q1 | flowC 端到端成功率                       | ≥ 80%                |
 
 ---
 
@@ -490,21 +507,21 @@ parseStoryboard → generatePanelLayout → generateBalloon → arrangeOnComic
 ### 内部依赖链
 
 ```
-Q2 Perception ──► Q3 闭环 ──► Q4 Operation 扩展
+Q2 Perception ──► Q3 Prompt-Chain Recovery ──► Q4 Operation 扩展
       │                             │
       └──────────► 2027 Q1 Manga/Motion ◄────┘
 ```
 
-**关键路径**：Q2 必须完成 Agent observation / rationale 结构化与工具能力协议化，否则 Q3 闭环只能依赖隐式 prompt 判断或零散工具，难以形成可审计、可回放的质量反馈基础。
+**关键路径**：Q2 必须完成 Agent observation / rationale 结构化与工具能力协议化，否则 Q3 prompt-chain recovery 只能依赖隐式判断或零散工具，难以形成可审计、可回放的质量反馈基础。
 
 ### 风险
 
-| 风险 | 概率 | 影响 | 缓解 |
-|------|------|------|------|
-| ONNX 推理在 Apple Silicon 性能不足 | 中 | 高 | 预留 fallback 到远程推理服务 |
-| Operation 类型爆炸（Q4 ~35 新操作）apply 分支难维护 | 中 | 中 | 引入代码生成（proto-driven dispatch） |
-| Agent 闭环陷入死循环（反复修正同一 shot） | 中 | 高 | iteration budget + 人工介入 gate |
-| 新 Skill 膨胀 system prompt | 低 | 中 | 强制走 lazy-loading，监控 token baseline |
+| 风险                                                | 概率 | 影响 | 缓解                                     |
+| --------------------------------------------------- | ---- | ---- | ---------------------------------------- |
+| ONNX 推理在 Apple Silicon 性能不足                  | 中   | 高   | 预留 fallback 到远程推理服务             |
+| Operation 类型爆炸（Q4 ~35 新操作）apply 分支难维护 | 中   | 中   | 引入代码生成（proto-driven dispatch）    |
+| Agent 恢复建议反复循环（反复建议同一修正）          | 中   | 高   | iteration budget + ask-user guidance     |
+| 新 Skill 膨胀 system prompt                         | 低   | 中   | 强制走 lazy-loading，监控 token baseline |
 
 ---
 
@@ -513,15 +530,17 @@ Q2 Perception ──► Q3 闭环 ──► Q4 Operation 扩展
 1. **本周**：确认 Agent-first 策略边界：Agent 是主感知与主决策主体，工具是可选 evidence provider。
 2. **2 周内**：拆分 Q2 收敛 Epic（`AgentObservation` / `DecisionRationale` / `PerceptionTool` 元数据 / `EngineClient.perception` facade / `PerceptionToolGroup`）。
 3. **4 周内**：完成 Agent observation 记录、`perception.audio.transcribe` facade 化与一个图像工具 evidence MVP，端到端验证 Creation / Execution 双 Skill 注册。
-4. **Q3 前**：为 `AgentObservation → DecisionRationale → PipelineAction → partialRerun` 补齐最小闭环契约，避免 QualityGate 或工具输出直接替代 Agent 判断。
+4. **P2**：落地 `MultimodalContextPacket`，先覆盖 timeline / canvas 的 `UIContextProvider`、项目/引擎状态解析与 perception input resolver。
+5. **Q3 前**：为 `AgentObservation → DecisionRationale → Skill Recovery Guidance` 补齐 prompt-chain 模板与反馈 guidance，避免 QualityGate 或工具输出直接替代 Agent 判断。
 
 ---
 
 ## 变更历史
 
-| 日期 | 变更 | 作者 |
-|------|------|------|
-| 2026-04-20 | 初版 Proposed | Architecture Team |
+| 日期       | 变更                                                                                                                                                                                                          | 作者              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| 2026-04-20 | 初版 Proposed                                                                                                                                                                                                 | Architecture Team |
 | 2026-04-20 | 对齐双流探索：新增术语对齐小节、双 Skill 归属、自愈链条集成、Q3 ADR-C5（RecoverySubagent）、Q4 ADR-O5（Operation 双流集成）、季度集成矩阵；现由 [agent-unified-workflow.md](./agent-unified-workflow.md) 收口 | Architecture Team |
-| 2026-04-26 | 现状核对：标记路线图为 Partially Adopted / Needs Refresh；补充 `models:*` 与原 `/perception/*` 方案的偏移、Q2 交付状态、修订后落地顺序与后续动作 | Codex |
-| 2026-04-26 | 策略修订：从 Perception-tool-first 调整为 Agent-first perception；新增 AgentObservation / DecisionRationale，明确工具作为可选增强与 evidence provider，不替代 Agent 判断 | Codex |
+| 2026-04-26 | 现状核对：标记路线图为 Partially Adopted / Needs Refresh；补充 `models:*` 与原 `/perception/*` 方案的偏移、Q2 交付状态、修订后落地顺序与后续动作                                                              | Codex             |
+| 2026-04-26 | 策略修订：从 Perception-tool-first 调整为 Agent-first perception；新增 AgentObservation / DecisionRationale，明确工具作为可选增强与 evidence provider，不替代 Agent 判断                                      | Codex             |
+| 2026-04-26 | 补充多模态上下文解析文档引用，将 UI selection、项目/引擎状态、素材文件解析为 Agent 感知输入列入 P2 后续动作。                                  | Codex             |
