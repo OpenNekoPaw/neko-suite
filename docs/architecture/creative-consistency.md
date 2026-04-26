@@ -248,7 +248,7 @@ Plan 矩阵视图基础上增加**约束栏**：
 - pipeline-bootstrap 默认 resolver 现在按 `renderedAnchorPaths` → `taskIds/generatedPaths` 顺序查 — puppet/scene 输出的 anchor 帧优先于 in-batch AI 生成结果
 - 与 Phase 5.4c stub 对接：runtime-puppet / runtime-scene adapter 落地后只需把 `RenderAdapter.render()` 包装成 `renderAnchor` 闭包传给 stage
 
-详见 [workflow-orchestration.md](./workflow-orchestration.md) Phase 5。
+详见 [agent-unified-workflow.md](./agent-unified-workflow.md) 的 IDC 工作流说明，以及 [pipeline-execution.md](./pipeline-execution.md) 的下游执行契约。
 
 ## 9. 与 Pipeline 执行的集成
 

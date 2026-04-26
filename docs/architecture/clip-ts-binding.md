@@ -231,7 +231,7 @@ export interface LLMMatchBroker {
 | [asset-knowledge-graph.md](./asset-knowledge-graph.md) | Asset.embeddings.clip 字段归属 |
 | [model-runtime.md](./model-runtime.md) | ONNX + tokenizer 文件分发路径 |
 | [plan-mode.md](./plan-mode.md) | Plan 矩阵消费 L3/L4 候选作为 alternatives |
-| [workflow-orchestration.md](./workflow-orchestration.md) | Phase 4 进度跟踪 |
+| [agent-unified-workflow.md](./agent-unified-workflow.md) | IDC 编排与进度语义 |
 
 ## 12. 一句话总结
 

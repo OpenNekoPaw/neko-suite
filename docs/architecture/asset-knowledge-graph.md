@@ -23,7 +23,7 @@ Neko Suite 已有多套素材管理机制，但各自为政：
 **不属于 AssetLibrary 的**：
 - 素材匹配算法 → [cross-modal-matching.md](./cross-modal-matching.md)
 - 一致性规则 → [creative-consistency.md](./creative-consistency.md)
-- 路由决策 → [workflow-routing.md](./workflow-routing.md)
+- 计划构建 → [plan-mode.md](./plan-mode.md)
 
 ## 2. 渐进式四级成熟度
 

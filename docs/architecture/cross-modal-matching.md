@@ -278,5 +278,5 @@ interface MatchContext {
 | [asset-knowledge-graph.md](./asset-knowledge-graph.md) | 提供 Asset / Entity / Binding 数据模型 |
 | [plan-mode.md](./plan-mode.md) | PlanBuilder 调用 MatchingEngine 填充 bindings |
 | [creative-consistency.md](./creative-consistency.md) | 基于 MatchingEngine 输出做一致性校验 |
-| [workflow-routing.md](./workflow-routing.md) | Router 的 LLM 工具 `check_existing_assets` 间接用 AssetLibrary |
+| [agent-unified-workflow.md](./agent-unified-workflow.md) | IDC 计划构建阶段间接用 AssetLibrary |
 | [clip-ts-binding.md](./clip-ts-binding.md) | L3 依赖的 Rust/TS 桥接契约与分阶段落地方案 |

@@ -62,7 +62,8 @@
 - `packages/neko-agent/packages/agent/src/tools/tool-injection-manager.ts`
 - `packages/neko-agent/packages/agent/src/mcp/mcp-tool.ts`
 - `docs/architecture/agent-media-architecture.md`
-- `docs/architecture/ai-capabilities.md`
+- `docs/architecture/agent-unified-workflow.md`
+- `docs/architecture/agent-media-architecture.md`
 - `docs/architecture/extension-pack-strategy.md`
 
 ---
@@ -640,4 +641,3 @@ interface AgentCapabilityProvider {
 
 如果后续仍采用“每新增能力都手改 `neko-agent` 主入口”的方式，维护难度一定会上升。  
 如果尽快引入“**子包自带 Agent Capability Provider，`neko-agent` 只负责发现、注册、编排**”的模式，那么 `neko-agent` 可以继续扩张能力面，而不会同步失控。
-

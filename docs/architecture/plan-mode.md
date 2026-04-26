@@ -240,7 +240,7 @@ PlanBuilder 内部调用：
 
 | 文档 | 关系 |
 |------|-----|
-| [workflow-routing.md](./workflow-routing.md) | Plan 的上游：Route → PlanBuilder |
+| [agent-unified-workflow.md](./agent-unified-workflow.md) | Plan 的上游：IDC Draft → PlanBuilder |
 | [pipeline-execution.md](./pipeline-execution.md) | Plan 的下游：approved → PipelineExecutor |
 | [asset-knowledge-graph.md](./asset-knowledge-graph.md) | PlanBuilder 查询素材 |
 | [cross-modal-matching.md](./cross-modal-matching.md) | PlanBuilder 生成 bindings |

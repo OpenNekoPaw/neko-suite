@@ -210,8 +210,8 @@ Plan Store 把 Run Report 挂回 `NkPlan.lastRunReport`，供 PlanBrowser / Plan
 
 | 文档 | 关系 |
 |------|-----|
-| [workflow-orchestration.md](./workflow-orchestration.md) | 三层 umbrella，Pipeline 是最下层 |
-| [workflow-routing.md](./workflow-routing.md) | 产出 Route → Plan 翻译为 PipelineConfig |
+| [agent-unified-workflow.md](./agent-unified-workflow.md) | IDC umbrella，Pipeline 是 Apply 阶段的执行层 |
+| [plan-mode.md](./plan-mode.md) | Plan 产物翻译为 PipelineConfig |
 | [plan-mode.md](./plan-mode.md) | 产出 NkPlan → PipelineDispatch |
 | [cross-modal-matching.md](./cross-modal-matching.md) | MatchingEngine 的 bindings 落入 ctx.matchingBindings |
 | [creative-consistency.md](./creative-consistency.md) | referenceChain 经 Plan 透传到 ctx，batch-generate 消费 |

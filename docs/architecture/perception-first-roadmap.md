@@ -5,7 +5,7 @@
 **决策者**: Neko Suite Architecture Team
 **关联范围**: neko-agent · neko-engine · neko-story · neko-canvas · neko-cut · neko-puppet · neko-model
 **关联文档**:
-- [dual-flow-architecture.md](./dual-flow-architecture.md) - 双流架构（创作流 + 执行流）术语规范与分层
+- [agent-unified-workflow.md](./agent-unified-workflow.md) - IDC 工作流、分层术语与约束平面
 - [agent-media-architecture.md](./agent-media-architecture.md) - GeneratedAsset 协议
 - [neko-agent-media-requirements-fit.md](./neko-agent-media-requirements-fit.md) - AgentCapabilityProvider
 - [creative-consistency.md](./creative-consistency.md) - Reference Chain / QualityGate
@@ -15,7 +15,7 @@
 
 ## 术语对齐（与双流架构一致）
 
-本文所有术语遵循 [dual-flow-architecture.md](./dual-flow-architecture.md) 的权威术语表：
+本文所有术语遵循 [agent-unified-workflow.md](./agent-unified-workflow.md) 的权威术语表：
 
 - **创作流（外环）**：Orchestration → Proposal → Review → Execution → Status
 - **执行流（内环）**：Plan → TODO → Approve → Apply → Step
@@ -440,4 +440,4 @@ Q2 Perception ──► Q3 闭环 ──► Q4 Operation 扩展
 | 日期 | 变更 | 作者 |
 |------|------|------|
 | 2026-04-20 | 初版 Proposed | Architecture Team |
-| 2026-04-20 | 对齐 [dual-flow-architecture.md](./dual-flow-architecture.md)：新增术语对齐小节、双 Skill 归属、自愈链条集成、Q3 ADR-C5（RecoverySubagent）、Q4 ADR-O5（Operation 双流集成）、季度集成矩阵 | Architecture Team |
+| 2026-04-20 | 对齐双流探索：新增术语对齐小节、双 Skill 归属、自愈链条集成、Q3 ADR-C5（RecoverySubagent）、Q4 ADR-O5（Operation 双流集成）、季度集成矩阵；现由 [agent-unified-workflow.md](./agent-unified-workflow.md) 收口 | Architecture Team |

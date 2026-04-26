@@ -1,6 +1,6 @@
 # AI Technology Landscape & Neko Suite Integration Strategy
 
-> Related: [ai-capabilities.md](./ai-capabilities.md) (agent pipeline orchestration) | [neko-engine-architecture.md](./neko-engine-architecture.md) | [cloth-surface-materials.md](./cloth-surface-materials.md) | [model-runtime.md](./model-runtime.md)
+> Related: [agent-unified-workflow.md](./agent-unified-workflow.md) (agent workflow orchestration) | [agent-media-architecture.md](./agent-media-architecture.md) | [neko-engine-architecture.md](./neko-engine-architecture.md) | [cloth-surface-materials.md](./cloth-surface-materials.md) | [model-runtime.md](./model-runtime.md)
 
 ## Summary
 
