@@ -48,7 +48,7 @@ export interface AudioProjectDataMessage {
 // Extension → Webview Messages
 // =============================================================================
 
-export interface ProjectInitV2Message {
+export interface ProjectInitMessage {
   type: 'project:init';
   payload: {
     projectData: AudioProjectDataMessage;
@@ -177,7 +177,7 @@ export type ExtensionMessage =
   | EditorInputDevicesMessage
   | EditorRecordStartResultMessage
   | EditorRecordStopResultMessage
-  | ProjectInitV2Message
+  | ProjectInitMessage
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage
   | ProjectRevertMessage

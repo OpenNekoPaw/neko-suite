@@ -14,9 +14,6 @@
 export type { BlendModeType } from '@neko/shared';
 import type { BlendModeType } from '@neko/shared';
 
-// Legacy alias for backward compatibility within webview
-export type BlendMode = BlendModeType;
-
 // =============================================================================
 // Blend Mode Categories
 // =============================================================================

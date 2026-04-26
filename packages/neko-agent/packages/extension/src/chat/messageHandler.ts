@@ -9,7 +9,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { Platform, MediaTask } from '@neko/platform';
-import type { ConversationMessage } from './conversationManager';
+import type { Message } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import { createDefaultAgentContext } from '../ai/agentContext';
 import { getCanvasSelection } from '../services/canvasAmbientContext';
@@ -299,7 +299,7 @@ export class MessageHandler {
     }
 
     // Store user message
-    const userMessage: ConversationMessage = {
+    const userMessage: Message = {
       id: this._generateId(),
       role: 'user',
       content: messageText,
@@ -586,7 +586,7 @@ export class MessageHandler {
           result.accumulatedThinking) &&
         !result.hasError
       ) {
-        const assistantMessage: ConversationMessage = {
+        const assistantMessage: Message = {
           id: this._generateId(),
           role: 'assistant',
           content: result.accumulatedResponse,

@@ -5,12 +5,8 @@
 
 import * as vscode from 'vscode';
 import { getLogger } from '../base';
-import {
-  ConversationManager,
-  type ConversationMessage,
-  type ConversationStorage,
-  type ContentBlock,
-} from './conversationManager';
+import { ConversationManager, type ConversationStorage } from './conversationManager';
+import type { ContentBlock, Message } from '@neko-agent/types';
 import {
   createFileConversationStorage,
   createConversationId,
@@ -154,10 +150,7 @@ function convertLocalPathsInObject(
  * Convert all local file paths in messages to webview URIs
  * Handles both legacy toolCalls array and new contentBlocks structure
  */
-function convertMessagesForWebview(
-  webview: vscode.Webview,
-  messages: ConversationMessage[],
-): ConversationMessage[] {
+function convertMessagesForWebview(webview: vscode.Webview, messages: Message[]): Message[] {
   return messages.map((message) => {
     const convertedMessage = { ...message };
 
@@ -312,7 +305,7 @@ export class ConversationHandler {
   /**
    * Add message to active conversation
    */
-  addMessage(message: ConversationMessage): void {
+  addMessage(message: Message): void {
     const conversationId = this._conversationManager.getActiveId();
     if (!conversationId) return;
     this.addMessageToConversation(conversationId, message);
@@ -321,7 +314,7 @@ export class ConversationHandler {
   /**
    * Add message to a specific conversation (for background execution)
    */
-  addMessageToConversation(conversationId: string, message: ConversationMessage): void {
+  addMessageToConversation(conversationId: string, message: Message): void {
     // Use incremental addMessage instead of full array copy via updateMessages
     this._conversationManager.addMessage(conversationId, message);
     // Sync to shared resume-layer file (best-effort, non-blocking)

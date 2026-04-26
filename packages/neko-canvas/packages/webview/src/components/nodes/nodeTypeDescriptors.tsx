@@ -26,8 +26,9 @@ import type {
   ScriptCanvasNode,
   ShotCanvasNode,
   StoryboardCanvasNode,
+  TextCanvasNode,
+  ArtboardCanvasNode,
 } from '@neko/shared';
-import type { TextCanvasNode, ArtboardCanvasNode } from '../../types/extendedCanvas';
 import type { NodeTypeDescriptorRegistry } from './nodeTypeDescriptor';
 
 // Node components

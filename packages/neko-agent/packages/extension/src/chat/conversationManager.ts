@@ -13,22 +13,13 @@ import type { Message } from '@neko-agent/types';
 
 const logger = getLogger('ConversationManager');
 
-// Re-export shared types for backward compatibility
-export type { ToolCall, ContentBlock, ContentBlockType } from '@neko-agent/types';
-
-/**
- * Conversation message — alias for Message from @neko-agent/types.
- * Kept for backward compatibility with extension-internal code.
- */
-export type ConversationMessage = Message;
-
 /**
  * Conversation session
  */
 export interface Conversation {
   id: string;
   title: string;
-  messages: ConversationMessage[];
+  messages: Message[];
   createdAt: number;
   updatedAt: number;
   /** Whether this conversation can be resumed (has unfinished context) */
@@ -162,7 +153,7 @@ export class ConversationManager {
   /**
    * Add a single message to a conversation (incremental)
    */
-  addMessage(id: string, message: ConversationMessage): void {
+  addMessage(id: string, message: Message): void {
     const conversation = this.conversations.get(id);
     if (!conversation) return;
 
@@ -190,7 +181,7 @@ export class ConversationManager {
   /**
    * Update conversation messages (full replacement)
    */
-  updateMessages(id: string, messages: ConversationMessage[]): void {
+  updateMessages(id: string, messages: Message[]): void {
     const conversation = this.conversations.get(id);
     if (!conversation) return;
 
@@ -219,10 +210,7 @@ export class ConversationManager {
   /**
    * Update the last message in a conversation (for streaming updates)
    */
-  updateLastMessage(
-    id: string,
-    updater: (message: ConversationMessage) => ConversationMessage,
-  ): void {
+  updateLastMessage(id: string, updater: (message: Message) => Message): void {
     const conversation = this.conversations.get(id);
     if (!conversation || conversation.messages.length === 0) return;
 

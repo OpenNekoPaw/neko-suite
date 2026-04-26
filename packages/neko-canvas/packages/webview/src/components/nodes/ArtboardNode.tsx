@@ -4,10 +4,9 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { CanvasViewport } from '@neko/shared';
+import type { ArtboardCanvasNode, CanvasViewport } from '@neko/shared';
+import { ARTBOARD_PRESETS } from '@neko/shared';
 import { BaseNode } from './BaseNode';
-import type { ArtboardCanvasNode } from '../../types/extendedCanvas';
-import { ARTBOARD_PRESETS } from '../../types/extendedCanvas';
 import { exportArtboard, type ExportFormat } from '../../utils/artboardExport';
 import { t } from '../../i18n';
 import clsx from 'clsx';

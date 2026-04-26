@@ -17,7 +17,7 @@ import type { ColorCorrection } from './colorCorrection';
 import type { EffectInstance } from './effects';
 import type { MaskInstance } from './mask';
 import type { AudioProperties } from './audio';
-import type { BlendMode } from './blendModes';
+import type { BlendModeType } from '@neko/shared';
 
 // =============================================================================
 // 基础元素接口
@@ -86,7 +86,7 @@ export interface IEffectable {
   /** 应用的遮罩列表 */
   masks?: MaskInstance[];
   /** 图层混合模式 */
-  blendMode?: BlendMode;
+  blendMode?: BlendModeType;
 }
 
 /**

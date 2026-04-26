@@ -13,6 +13,8 @@ import type {
   ScriptCanvasNode,
   ShotCanvasNode,
   StoryboardCanvasNode,
+  TextCanvasNode,
+  ArtboardCanvasNode,
   CanvasViewport,
 } from '@neko/shared';
 import {
@@ -30,7 +32,6 @@ import {
   StoryboardNode,
   TextNode,
 } from './index';
-import type { TextCanvasNode, ArtboardCanvasNode } from '../../types/extendedCanvas';
 
 export interface NodeRendererCommonProps {
   viewport: CanvasViewport;

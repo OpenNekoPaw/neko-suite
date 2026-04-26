@@ -4,10 +4,9 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { CanvasViewport } from '@neko/shared';
+import type { CanvasViewport, TextCanvasNode, TextNodeStyle } from '@neko/shared';
+import { DEFAULT_TEXT_STYLE } from '@neko/shared';
 import { BaseNode } from './BaseNode';
-import type { TextCanvasNode, TextNodeStyle } from '../../types/extendedCanvas';
-import { DEFAULT_TEXT_STYLE } from '../../types/extendedCanvas';
 import clsx from 'clsx';
 
 // =============================================================================
