@@ -12,8 +12,13 @@ import type { Platform, MediaTask } from '@neko/platform';
 import type { Message } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import { createDefaultAgentContext } from '../ai/agentContext';
+import {
+  createCanvasSelectionContextPacket,
+  createTimelineContextPacketFromEditor,
+} from '../ai/multimodalContextPacket';
+import { resolveTimelinePerceptionInputs } from '../ai/perceptionInputResolver';
 import { getCanvasSelection } from '../services/canvasAmbientContext';
-import { IEditorRegistry } from '../editor/common/editorRegistry';
+import type { IEditorRegistry } from '../editor/common/editorRegistry';
 import { SettingsManager } from './settingsManager';
 import { ProviderManager } from './providerManager';
 import { ConversationHandler } from './conversationHandler';
@@ -36,6 +41,38 @@ import { GeneratedAssetIndex, resolveGeneratedDir } from '../services/generatedA
 import { getLogger } from '../base';
 
 const logger = getLogger('MessageHandler');
+
+async function buildTimelineContextPacket(
+  activeEditor: ReturnType<IEditorRegistry['getActiveEditor']> | undefined,
+  message: string,
+  workspaceRoot: string | undefined,
+) {
+  if (!activeEditor?.capabilities.hasTimeline) {
+    return null;
+  }
+
+  const selection = activeEditor.getSelection();
+  const state = activeEditor.getState();
+  const packet = createTimelineContextPacketFromEditor({
+    content: activeEditor.getContent<unknown>(),
+    selectedElementIds: selection.elementIds,
+    ...(selection.trackId ? { selectedTrackId: selection.trackId } : {}),
+    ...(state.currentTime !== undefined ? { currentTime: state.currentTime } : {}),
+    ...(selection.timeRange ? { timeRange: selection.timeRange } : {}),
+    userAnnotation: message,
+  });
+
+  if (!packet || !workspaceRoot) {
+    return packet;
+  }
+
+  const engineClient = await getEngineClient();
+  if (!engineClient) {
+    return packet;
+  }
+
+  return resolveTimelinePerceptionInputs(packet, { engineClient, workspaceRoot });
+}
 
 // =============================================================================
 // neko-engine transcoder (lazy, optional)
@@ -533,10 +570,26 @@ export class MessageHandler {
       if (imageAttachments && imageAttachments.length > 0) {
         context.imageAttachments = imageAttachments;
       }
-      // Inject ambient canvas selection (updated by onSelectionChange subscription)
+      // Inject active timeline selection before canvas ambient context.
+      const timelinePacket = await buildTimelineContextPacket(
+        context.activeEditor,
+        message,
+        context.workspaceRoot,
+      );
+      if (timelinePacket) {
+        context.multimodalContextPacket = timelinePacket;
+      }
+
+      // Inject ambient canvas selection (updated by onSelectionChange subscription).
       const canvasSelection = getCanvasSelection();
       if (canvasSelection.length > 0) {
         context.canvasContext = { selectedNodes: canvasSelection };
+        const contextPacket = createCanvasSelectionContextPacket(canvasSelection, {
+          userAnnotation: message,
+        });
+        if (contextPacket) {
+          context.multimodalContextPacket = contextPacket;
+        }
       }
       const metadata = this._buildExecutionMetadata(
         effectiveExecutionMode,

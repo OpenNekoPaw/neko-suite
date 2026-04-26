@@ -14,9 +14,10 @@
 
 import * as vscode from 'vscode';
 import { createServiceId, getLogger } from '../base';
+import { createDefaultOperationToolAdapterRegistry } from './operationAdapters';
 
 const logger = getLogger('AgentRunner');
-import type { Platform, ChatMessage } from '@neko/platform';
+import type { Platform } from '@neko/platform';
 import { toSharedService } from '@neko/platform';
 import type { ToolConfirmationRequest } from '@neko/agent';
 import {
@@ -37,11 +38,17 @@ import {
   type AgentEvent,
   type AgentEventType,
   type IRuntimeTaskManager,
+  type PerceptionClassifyClient,
+  type PerceptionDetectShotsClient,
+  type PerceptionSimilarityClient,
+  type PerceptionTranscribeClient,
 } from '@neko/agent';
 import type {
   IProjectMemoryManager,
+  IOperationToolAdapterRegistry,
   ProviderGenerationCapability,
   PromptFragment,
+  ChatMessage,
 } from '@neko/shared';
 import {
   getCapabilityDiscoveryService,
@@ -50,12 +57,15 @@ import {
 import * as nodePath from 'node:path';
 import { IAgentContext } from './agentContext';
 import type { HookManager } from './hookManager';
+import { EngineClient } from '@neko/neko-client';
 
 // =============================================================================
 // Service Identifier
 // =============================================================================
 
 export const IAgentRunner = createServiceId<IAgentRunner>('agentRunner');
+
+const ENGINE_EXTENSION_ID = 'neko.neko-engine';
 
 // =============================================================================
 // Agent Configuration
@@ -107,6 +117,12 @@ export interface IAgentConfig {
   providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
 
   /**
+   * Optional pre-created EngineClient. When omitted, AgentRunner lazily connects
+   * to neko-engine via `neko.engine.ensureFrameServer` and @neko/neko-client.
+   */
+  engineClient?: EngineClient;
+
+  /**
    * Extended thinking budget tokens (Claude only)
    * Set to enable extended thinking. Recommended: 10000-50000
    */
@@ -148,6 +164,12 @@ export interface IAgentConfig {
    * Stable conversation ID used for journal persistence.
    */
   conversationId?: string;
+
+  /**
+   * Optional operation adapter registry override. When omitted, extension
+   * runtime installs the default timeline/canvas/model adapters.
+   */
+  operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
 
   /**
    * Locale for system prompt (en/zh)
@@ -379,6 +401,7 @@ export class AgentRunner implements IAgentRunner {
   private _isRunning = false;
   private _skillProvider?: import('@neko/agent').ISkillProvider;
   private _projectMemoryManager?: IProjectMemoryManager;
+  private _engineClient?: EngineClient;
 
   // Pending messages queue (for messages sent while agent is running)
   private _pendingMessages: string[] = [];
@@ -503,6 +526,8 @@ export class AgentRunner implements IAgentRunner {
     // environment layer.
     const promptFragments = this._resolvePromptFragments();
     const capabilityRuntime = getCapabilityRuntimeBindings();
+    const operationToolAdapterRegistry =
+      config.operationToolAdapterRegistry ?? createDefaultOperationToolAdapterRegistry();
     const toolCategoryRegistry =
       config.toolCategoryRegistry ?? capabilityRuntime.toolCategoryRegistry;
     this._syncCapabilityToolCategories(toolCategoryRegistry);
@@ -563,6 +588,7 @@ export class AgentRunner implements IAgentRunner {
           ...(capabilityRuntime.providerCardRegistry
             ? { providerCardRegistry: capabilityRuntime.providerCardRegistry }
             : {}),
+          operationToolAdapterRegistry,
         },
         artifactStore: createNodeArtifactStore({
           ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
@@ -574,6 +600,12 @@ export class AgentRunner implements IAgentRunner {
         },
       },
       ...(config.conversationId && { conversationId: config.conversationId }),
+      perceptionClients: {
+        transcribe: this._createEnginePerceptionClient(config),
+        similarity: this._createEnginePerceptionClient(config),
+        classify: this._createEnginePerceptionClient(config),
+        detectShots: this._createEnginePerceptionClient(config),
+      },
       onConfirmTool: async (request) => {
         return this._handleToolConfirmation(request);
       },
@@ -589,6 +621,63 @@ export class AgentRunner implements IAgentRunner {
     if (this._skillProvider) {
       this._session.setSkillProvider(this._skillProvider);
     }
+  }
+
+  private _createEnginePerceptionClient(
+    config: IAgentConfig,
+  ): PerceptionTranscribeClient &
+    PerceptionSimilarityClient &
+    PerceptionClassifyClient &
+    PerceptionDetectShotsClient {
+    if (config.engineClient) {
+      return config.engineClient;
+    }
+
+    return {
+      perception: {
+        transcribe: async (request) => {
+          const client = await this._getEngineClient();
+          return client.perception.transcribe(request);
+        },
+        similarity: async (request) => {
+          const client = await this._getEngineClient();
+          return client.perception.similarity(request);
+        },
+        classify: async (request) => {
+          const client = await this._getEngineClient();
+          return client.perception.classify(request);
+        },
+        detectShots: async (request) => {
+          const client = await this._getEngineClient();
+          return client.perception.detectShots(request);
+        },
+      },
+    };
+  }
+
+  private async _getEngineClient(): Promise<EngineClient> {
+    if (this._engineClient) {
+      return this._engineClient;
+    }
+
+    const extension = vscode.extensions.getExtension(ENGINE_EXTENSION_ID);
+    if (!extension) {
+      throw new Error(`Extension ${ENGINE_EXTENSION_ID} not installed`);
+    }
+
+    if (!extension.isActive) {
+      await extension.activate();
+    }
+
+    const result = await vscode.commands.executeCommand<{ port: number } | null>(
+      'neko.engine.ensureFrameServer',
+    );
+    if (!result) {
+      throw new Error('Failed to start neko-engine Frame Server');
+    }
+
+    this._engineClient = new EngineClient(result.port, { timeout: 300_000 });
+    return this._engineClient;
   }
 
   /**
@@ -649,6 +738,7 @@ export class AgentRunner implements IAgentRunner {
           workspaceRoot: context.workspaceRoot,
           projectType: context.projectType,
           activeFile: context.activeEditor?.uri?.toString(),
+          metadata: buildExecutionMetadata(context),
         })) {
           yield event;
         }
@@ -993,4 +1083,13 @@ export class AgentRunner implements IAgentRunner {
     this._onDidStop.dispose();
     this._onDidRequestConfirmation.dispose();
   }
+}
+function buildExecutionMetadata(context: IAgentContext): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = { ...(context.metadata ?? {}) };
+
+  if (context.multimodalContextPacket) {
+    metadata['multimodalContextPacket'] = context.multimodalContextPacket;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }

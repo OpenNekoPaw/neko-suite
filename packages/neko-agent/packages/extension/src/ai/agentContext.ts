@@ -3,6 +3,7 @@
  * Agent 执行时的上下文环境
  */
 
+import type { MultimodalContextPacket } from '@neko/shared';
 import type { IEditorModel } from '../editor/common/editorModel';
 
 // =============================================================================
@@ -100,6 +101,9 @@ export interface IAgentContext {
       summary: string;
     }>;
   };
+
+  /** Agent-first multimodal context packet for the current turn. */
+  multimodalContextPacket?: MultimodalContextPacket;
 }
 
 /**

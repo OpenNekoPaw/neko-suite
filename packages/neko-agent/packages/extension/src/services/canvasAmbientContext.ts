@@ -23,6 +23,14 @@ export interface SelectedNodeSummary {
   nodeId: string;
   type: string;
   summary: string;
+  assetUri?: string;
+  assetKind?: 'image' | 'video' | 'audio' | 'metadata' | 'unknown';
+  bounds?: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
 }
 
 /** Lightweight summary of a canvas/asset change event for ambient injection. */
@@ -172,5 +180,53 @@ function summarizeNode(node: CanvasNode): SelectedNodeSummary {
       break;
   }
 
-  return { nodeId: node.id, type, summary };
+  return {
+    nodeId: node.id,
+    type,
+    summary,
+    ...(readCanvasNodeAssetUri(node) ? { assetUri: readCanvasNodeAssetUri(node) } : {}),
+    ...(readCanvasNodeAssetKind(node) ? { assetKind: readCanvasNodeAssetKind(node) } : {}),
+    bounds: {
+      x: node.position.x,
+      y: node.position.y,
+      width: node.size.width,
+      height: node.size.height,
+    },
+  };
+}
+
+function readCanvasNodeAssetUri(node: CanvasNode): string | undefined {
+  const data = node.data as Record<string, unknown>;
+  if (node.type === 'media' && typeof data['assetPath'] === 'string') {
+    return data['assetPath'];
+  }
+  if (node.type === 'shot') {
+    const generatedAsset = data['generatedAsset'];
+    if (isRecord(generatedAsset) && typeof generatedAsset['path'] === 'string') {
+      return generatedAsset['path'];
+    }
+    if (typeof data['generatedImage'] === 'string') {
+      return data['generatedImage'];
+    }
+  }
+  return undefined;
+}
+
+function readCanvasNodeAssetKind(node: CanvasNode): SelectedNodeSummary['assetKind'] | undefined {
+  const data = node.data as Record<string, unknown>;
+  if (node.type === 'media') {
+    const mediaType = data['mediaType'];
+    if (mediaType === 'image' || mediaType === 'video' || mediaType === 'audio') {
+      return mediaType;
+    }
+    return 'unknown';
+  }
+  if (node.type === 'shot' && readCanvasNodeAssetUri(node)) {
+    return 'image';
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

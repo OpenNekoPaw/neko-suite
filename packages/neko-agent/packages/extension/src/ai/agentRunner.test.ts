@@ -9,10 +9,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Platform, Service } from '@neko/platform';
 import { TaskManager, ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
 import { AgentRunner, type AgentEvent, type IAgentConfig } from './agentRunner';
+import { EngineClient } from '@neko/neko-client';
 
 // =============================================================================
 // Module mocks
 // =============================================================================
+
+const { executeCommandMock, activateEngineExtensionMock } = vi.hoisted(() => ({
+  executeCommandMock: vi.fn(),
+  activateEngineExtensionMock: vi.fn(),
+}));
 
 // Mock vscode (already handled by __mocks__/vscode.ts, but ensure EventEmitter works)
 vi.mock('vscode', () => {
@@ -35,6 +41,15 @@ vi.mock('vscode', () => {
     EventEmitter,
     Uri: { file: (p: string) => ({ fsPath: p }) },
     workspace: { workspaceFolders: undefined },
+    extensions: {
+      getExtension: vi.fn(() => ({
+        isActive: false,
+        activate: activateEngineExtensionMock,
+      })),
+    },
+    commands: {
+      executeCommand: executeCommandMock,
+    },
   };
 });
 
@@ -63,6 +78,7 @@ const capabilityRuntimeMock = {
   toolGroupRegistry: undefined as ToolGroupRegistry | undefined,
   toolCategoryRegistry: undefined as ToolCategoryRegistry | undefined,
   providerCardRegistry: undefined as unknown,
+  operationToolAdapterRegistry: undefined as unknown,
 };
 let capabilityPromptFragments: Array<{ id: string; content: string }> = [];
 const syncToolCategoriesMock = vi.fn();
@@ -192,8 +208,12 @@ describe('AgentRunner', () => {
     capabilityRuntimeMock.toolGroupRegistry = undefined;
     capabilityRuntimeMock.toolCategoryRegistry = undefined;
     capabilityRuntimeMock.providerCardRegistry = undefined;
+    capabilityRuntimeMock.operationToolAdapterRegistry = undefined;
     capabilityPromptFragments = [];
     syncToolCategoriesMock.mockReset();
+    executeCommandMock.mockReset();
+    activateEngineExtensionMock.mockReset();
+    vi.restoreAllMocks();
     latestCreateSessionConfig = undefined;
   });
 
@@ -270,6 +290,130 @@ describe('AgentRunner', () => {
           tools: ['Read'],
         }),
       ]);
+    });
+
+    it('应该通过 @neko/neko-client EngineClient 连接 neko-engine perception facade', async () => {
+      const engineClient = new EngineClient(7788);
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+        engineClient,
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          perceptionClients: {
+            transcribe: engineClient,
+            similarity: engineClient,
+            classify: engineClient,
+            detectShots: engineClient,
+          },
+        }),
+      );
+    });
+
+    it('未显式传入 EngineClient 时仍注入懒连接 neko-engine 的 perception clients', async () => {
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      const sessionConfig = latestCreateSessionConfig as {
+        perceptionClients?: {
+          transcribe?: { perception: { transcribe: unknown } };
+          similarity?: { perception: { similarity: unknown } };
+          classify?: { perception: { classify: unknown } };
+        };
+      };
+      expect(sessionConfig.perceptionClients?.transcribe?.perception.transcribe).toEqual(
+        expect.any(Function),
+      );
+      expect(sessionConfig.perceptionClients?.similarity?.perception.similarity).toEqual(
+        expect.any(Function),
+      );
+      expect(sessionConfig.perceptionClients?.classify?.perception.classify).toEqual(
+        expect.any(Function),
+      );
+      expect(sessionConfig.perceptionClients?.detectShots?.perception.detectShots).toEqual(
+        expect.any(Function),
+      );
+    });
+
+    it('懒连接 perception client 调用 @neko/neko-client EngineClient dispatch 到 neko-engine', async () => {
+      executeCommandMock.mockResolvedValue({ port: 7788 });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'req-1',
+          status: 'ok',
+          data: {
+            text: 'hello',
+            segments: [],
+            language: 'en',
+            durationSecs: 1,
+          },
+        }),
+      } as Response);
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      const sessionConfig = latestCreateSessionConfig as {
+        perceptionClients?: {
+          transcribe?: {
+            perception: {
+              transcribe(request: { model: string; audio: string }): Promise<unknown>;
+            };
+          };
+        };
+      };
+
+      await expect(
+        sessionConfig.perceptionClients?.transcribe?.perception.transcribe({
+          model: 'whisper-small',
+          audio: '/tmp/audio.wav',
+        }),
+      ).resolves.toEqual({
+        text: 'hello',
+        segments: [],
+        language: 'en',
+        durationSecs: 1,
+      });
+      expect(activateEngineExtensionMock).toHaveBeenCalled();
+      expect(executeCommandMock).toHaveBeenCalledWith('neko.engine.ensureFrameServer');
+
+      const fetchCall = vi.mocked(globalThis.fetch).mock.calls.at(-1);
+      expect(fetchCall?.[0]).toBe('http://127.0.0.1:7788/v1/dispatch');
+      expect(JSON.parse(String((fetchCall?.[1] as RequestInit).body))).toEqual(
+        expect.objectContaining({
+          group: 'models',
+          action: 'transcribe',
+          options: { model: 'whisper-small', audio: '/tmp/audio.wav' },
+        }),
+      );
+    });
+
+    it('应该默认装配 OperationToolAdapterRegistry 到 session runtime', async () => {
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              operationToolAdapterRegistry: expect.objectContaining({
+                list: expect.any(Function),
+                findPlanner: expect.any(Function),
+              }),
+            }),
+          }),
+        }),
+      );
     });
 
     it('应该把宿主 TaskManager 投影成 IDC task projection', async () => {
@@ -490,6 +634,35 @@ describe('AgentRunner', () => {
   // ---------------------------------------------------------------------------
   // Execution state
   // ---------------------------------------------------------------------------
+
+  describe('多模态上下文', () => {
+    it('应该把 multimodal context packet 透传到 session metadata', async () => {
+      await runner.configure({ platform: mockPlatform, maxIterations: 1 });
+
+      await collectEvents(
+        runner.execute('inspect selection', {
+          multimodalContextPacket: {
+            id: 'ctx-canvas-test',
+            selection: [],
+            artifactRefs: [],
+            projectRefs: [],
+            perceptionInputs: [],
+            uiContext: { activePanel: 'canvas', selectionIds: [] },
+            createdAt: 1_771_718_405_000,
+          },
+        }),
+      );
+
+      expect(latestMockSession.execute).toHaveBeenCalledWith(
+        'inspect selection',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            multimodalContextPacket: expect.objectContaining({ id: 'ctx-canvas-test' }),
+          }),
+        }),
+      );
+    });
+  });
 
   describe('执行状态', () => {
     it('应该能够检查是否正在运行', () => {
