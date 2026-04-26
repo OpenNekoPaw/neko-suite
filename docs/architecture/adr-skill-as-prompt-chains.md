@@ -87,7 +87,7 @@ Anthropic 自家最成功的 coding agent（Claude Code / Codex）**完全不使
 | [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 不再读 Skill phases，只看 artifact 状态 |
 | [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) | SubAgent 编排不依赖 pipelines DSL |
 | [adr-capability-protocol.md](./adr-capability-protocol.md) | CapabilityContribution.skillFiles 期望的 Skill 格式更新 |
-| [adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) | ProviderCard 不受影响（其字段是技术参数，是合法 DSL）|
+| [adr-provider-expression-context.md](./adr-provider-expression-context.md) | ProviderCard 不受影响（其字段是技术参数，是合法 DSL）|
 
 ## 决策
 
@@ -435,7 +435,7 @@ recommendedStages: [draft, plan, apply]  # 从 phases artifact 关联推断（op
 | [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | StagePlanner 实现说明：从读 Skill phases 改为读 artifact 状态 |
 | [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) | SubAgent 编排原则：靠 AI 在 body 描述触发条件，非 pipelines DSL |
 | [adr-capability-protocol.md](./adr-capability-protocol.md) | CapabilityContribution.skillFiles 期望的 Skill 格式更新（去除 phases / pipelines 字段示例） |
-| [adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) | 不受影响——ProviderCard 的字段是技术参数，是合法 DSL |
+| [adr-provider-expression-context.md](./adr-provider-expression-context.md) | 不受影响——ProviderCard 的字段是技术参数，是合法 DSL |
 | [ablation-experiment-framework.md](./ablation-experiment-framework.md) | 附录追加 2 个新 toggle |
 | [marketplace.md](./marketplace.md) | Skill 分发审核标准：检查是否仍使用 deprecated phases，引导作者迁移 |
 

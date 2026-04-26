@@ -58,10 +58,10 @@
 - [agent-memory-unification.md](./agent-memory-unification.md) - **持久化四合一**（Proposed 2026-04-24）：Journal / ConversationRecord / Compact / Memory 统一到三层金字塔（Working / Episodic / Semantic）+ Journal 作为 SSOT。关闭本 ADR §已延后表的 `.nksession.md` 一项；闭环 §11.6.9 SelfEvaluationHooks 的结论去向
 - [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) - **控制面独立 + Stage Registry + FeedbackArbiter**（Proposed 2026-04-24）：把 IDC 三阶段从 `IdcStage` union 升级为 `StageDescriptor` Registry；抽取第 7 控制平面 **Control**（元层），承载 StageRegistry / ArtifactRegistry / FeedbackArbiter；统一 7 类反馈信号仲裁（validation / tool-failure / budget / self-eval / user / memory-conflict / llm-confidence）→ 5 级 FeedbackDecision（L0 retry-tool / L1 retry-stage / L2 regress-to / L3 restart-run / L4 escalate-user）；ArtifactKind `'task'` → `'apply'` 类型层对齐（磁盘路径保留）；消融扩展到 Policy 层但**不作为 stage**。落地后 Orchestration 评级 B+ → A-，§11.6 六平面 → 七平面
 - [adr-capability-protocol.md](./adr-capability-protocol.md) - **统一能力扩展协议（地基文档）**（Proposed 2026-04-25）：两阶段模型（Registration 可查 / Injection 按需进 LLM context）+ CapabilityContribution v1.0 Schema + Tool 四来源投影（Internal/MCP/Market/Local）+ MCP 三原语投影（Tool/Resource/Prompt）+ 三级信任（core/community/untrusted）+ Host Abstraction + VSCode 扩展三层接入（Agent 能力 / IDE 集成 / 桥接）+ Operation 降级为 Tool 的 kind（非并列概念）+ ToolGroup 使用原则 + Registry 查询面。本 ADR 是其他 Proposed ADR（Control Plane / Provider Bridge / Federation / Memory Unification）的基础协议框架
-- [adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) - **生成模型语义桥接**（Proposed 2026-04-24）：处理生成模型三类输入端差异（Syntax Dialect / Semantic Literacy / Training Distribution Bias）；Provider 独立抽象（与 Skill 是 M:N 关系）+ ProviderCapabilityCard 三合一 markdown + ProviderRouter + AdaptiveSemanticBridge；三层 Card 分发（Built-in/Market/Project）+ Layer 2 自动演化闭环
+- [adr-provider-expression-context.md](./adr-provider-expression-context.md) - **生成模型表达倾向上下文**（Proposed 2026-04-24）：处理生成模型三类输入端差异（Syntax Dialect / Semantic Literacy / Training Distribution Bias）；Provider 独立抽象（与 Skill 是 M:N 关系）+ ProviderCapabilityCard 三合一 markdown + ProviderRouter + ProviderExpressionContext；三层 Card 分发（Built-in/Market/Project）+ Layer 2 自动演化闭环；ProviderCard 作为 AGENT 软提示上下文，不做工具执行前确定性 prompt 替换
 - [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) - **Skill 编排退化为 prompt-chains**（Proposed 2026-04-25）：phases / pipelines DSL 退化为 markdown 章节惯例；保留 allowedTools / compliance / trustLevel 等安全/权限 DSL 边界；stage 信息由 artifact 状态自然推断（StagePlanner 不再读 Skill phases）；跨平台互通自然达成（neko Skill ↔ Claude Code Skill 双向直接复制）；演化能力 Skill 层 A- → A、Orchestration B+ → A-；4-Stage 渐进迁移路径，向后兼容
-- [dual-flow-architecture.md](./dual-flow-architecture.md) - 早期双流探索（本 ADR 的简化归宿）
-- [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) - 早期能力注册设计探索（已被 adr-capability-protocol 正式收口）
+- 早期双流探索 - 已清理，本 ADR 是简化归宿
+- 早期能力注册设计探索 - 已清理；正式协议见 [adr-capability-protocol.md](./adr-capability-protocol.md)
 - [perception-first-roadmap.md](./perception-first-roadmap.md) - 感知路线图
 - [marketplace.md](./marketplace.md) - neko-market 分发基础
 
@@ -2123,7 +2123,7 @@ IDC 3-stage 在设计上已符合约束分级原则：
 | **ProjectMemoryRouter + `memory_extraction` journal event** | **Memory（写路径）** | **✅ 增量抽取 KeyFact、去重写回 `.neko/memory.md`，并保留 provenance** |
 | **SharedMemoryStore（subagent scratchpad）** | **Memory（多 agent 共享）** | **✅ 跨 subagent 协作 scratchpad** |
 | ~~IntentValidator（原计划 LLM-judge 组件）~~ | Evaluator（已撤销）| **✖ 不建** — Agent 在 persona 指导下自判（§11.6.9）|
-| ConsistencyChecker（workflow-orchestration Phase 2 已有）| Evaluator | ✅ 跨镜头一致性 |
+| ConsistencyChecker（Plan / Pipeline 链路已有）| Evaluator | ✅ 跨镜头一致性 |
 | 确定性指标打分器（CLIP 相似度 / FPS / 分辨率 / 时长约束）| Evaluator | ⏳ 按需，真有确定性打分需求时再建 |
 | Agent 自评（创作审美 / 意图达成度 / 风格连贯性）| Evaluator（Agent 承载）| ✅ 通过 Prompt + Memory 三件套（§11.6.9）|
 
@@ -2549,7 +2549,7 @@ neko-agent/packages/agent/tools/core/
 
 ### 16.1 立即（本周）
 1. 本 ADR 落盘评审
-2. 在 [dual-flow-architecture.md](./dual-flow-architecture.md) 和 [capability-registration-and-distribution.md](./capability-registration-and-distribution.md) 头部加"已被简化版替代"标注
+2. 清理早期双流探索与早期能力注册探索文档，避免与本 ADR 和 [adr-capability-protocol.md](./adr-capability-protocol.md) 混读
 3. 协议草案：`@neko/shared/types/capability.ts` + `artifact-format.ts`
 
 ### 16.2 2 周内

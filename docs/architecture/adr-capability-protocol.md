@@ -269,7 +269,7 @@ export interface McpServerContribution {
 ├────────────────────────────────────────────────────────┤
 │ 维度 4：供给画像                                         │
 │   ProviderCard（"用哪个模型做" + "它能理解什么"）         │
-│   消费者：ProviderRouter + SemanticBridge               │
+│   消费者：ProviderRouter + ProviderExpressionContext     │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -620,12 +620,12 @@ AI 可通过 `ListCapabilities` 类元工具查询自身能力——这是"让 A
 
 ## 后续演进
 
-按 5 个 Stage 推进，每个 Stage 包含 2-3 个 PR，累计约 10-12 工程日。
+按 5 个 Stage 推进，每个 Stage 包含 2-3 个 PR，累计约 10-12 工程日。实现状态（2026-04-25）：Stage 1 的兼容类型契约已开始落地，`AgentCapabilityManifest` / `AgentCapabilityProvider` 已支持可选 `protocolVersion`、`trustLevel`、`hostRequirements`、`lifecycleHooks`，legacy provider 默认视为 `protocolVersion: '1.0'`、`trustLevel: 'core'`、`hostRequirements: [{ host: 'vscode' }]`。
 
 | Stage | 目标 | 工作量 | 依赖 |
 |---|---|---|---|
 | **Stage 0（当前）** | AgentCapabilityProvider 事实协议 | — | — |
-| **Stage 1（PR-A1-A3）** | 形式化 CapabilityContribution v1.0；定义完整类型 schema；增加 protocolVersion / trustLevel / hostRequirements 字段；保持现有 runtime 兼容 | 2d | — |
+| **Stage 1（PR-A1-A3）** | 形式化 CapabilityContribution v1.0；定义完整类型 schema；增加 protocolVersion / trustLevel / hostRequirements 字段；保持现有 runtime 兼容 | 进行中 | 已完成兼容类型与 discovery metadata 查询；强校验留给 Stage 4/5 |
 | **Stage 2（PR-A4-A6）** | 两阶段分离：Registry 与 ToolInjectionManager 解耦；Registration vs Injection 概念显式；Lifecycle hooks 生效 | 2.5d | S1 |
 | **Stage 3（PR-A7-A9）** | MCP 一等公民：McpAdapter 实现；Tool/Resource/Prompt 三原语投影；MCP Server 生命周期管理；健康检查 | 3d | S1 |
 | **Stage 4（PR-A10-A12）** | Trust Model：core/community/untrusted 三级；能力信任矩阵强制；Market 接入 trustLevel 认证 | 2d | S1, S2 |
@@ -671,11 +671,11 @@ export interface AblationToggles {
 
 | ADR | 更新内容 |
 |---|---|
-| **[capability-registration-and-distribution.md](./capability-registration-and-distribution.md)** | 收口早期设计；指向本 ADR 作为正式规范 |
+| 早期能力注册设计探索 | 已清理；本 ADR 是正式规范 |
 | **[agent-unified-workflow.md](./agent-unified-workflow.md)** §5.1 | CapabilityKind 联合更新：保留 `tool / operation / skill / toolGroup / providerCard`，明确 `operation` 是 `tool` 的 kind（非并列）|
 | **[agent-unified-workflow.md](./agent-unified-workflow.md)** §7.4 | `.neko/` 布局增加 `providers/`（已在 provider ADR 声明）|
 | **[agent-tool-skill-enhancement.md](./agent-tool-skill-enhancement.md)** | Skill / Tool 边界引用本 ADR 的 §能力类型边界 |
-| **[adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md)** | ProviderCard 的贡献形式对齐本 ADR 的 `providerCardFiles + providerAdapters` |
+| **[adr-provider-expression-context.md](./adr-provider-expression-context.md)** | ProviderCard 的贡献形式对齐本 ADR 的 `providerCardFiles + providerAdapters` |
 | **[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md)** | Stage/Artifact Registry 可复用本 ADR 定义的 Registry 查询面 |
 | **[marketplace.md](./marketplace.md)** | 对接 trustLevel 认证流程；分发品类对齐本 ADR 能力类型 |
 | **[agent-multi-agent-federation.md](./agent-multi-agent-federation.md)** | SubAgent 的能力继承走本协议；trustLevel 在 Federation 中传播 |

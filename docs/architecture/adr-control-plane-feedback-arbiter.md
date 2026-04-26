@@ -337,7 +337,7 @@ controlPlane.artifactRegistry.register({
 - **agent-unified-workflow.md §11.6**：六控制面 → 七控制面，本 ADR 合入后同步修订
 - **agent-evolution-capacity.md**：Orchestration 评级 B+ → A-，三大断点中"编排骨架硬编码"解决
 - **ablation-experiment-framework.md**：新增 7 个 FeedbackArbiter 相关 toggle，明确"消融不作为 stage"原则
-- **workflow-orchestration-adr 家族**：对齐 FeedbackDecision 作为编排事件的首类概念
+- **agent-unified-workflow.md**：对齐 FeedbackDecision 作为编排事件的首类概念
 - **agent-multi-agent-federation.md**：Federation 的 Inbox polling 可作为 FeedbackSignal 的第 8 类接入（联邦消息触发反馈决策），本 ADR 预留 `FeedbackSignal` 扩展点
 
 ### 不纳入本 ADR 的后续工作
@@ -347,7 +347,7 @@ controlPlane.artifactRegistry.register({
 - FeedbackPolicy DSL 化（让 Policy 也变成数据驱动而非代码）——需要稳定 MVP 后评估
 - 跨 run 的 FeedbackDecision 历史聚合（哪些策略在哪些场景表现更好）——依赖 Journal 聚合能力
 - FeedbackSignal 的 embedding 化（语义匹配而非结构匹配）——与 evolution §7 纪律冲突，暂不考虑
-- Stage 之间的并发编排（Review 并发 Reviewer）——属于 workflow-orchestration-adr 家族
+- Stage 之间的并发编排（Review 并发 Reviewer）——属于 IDC 编排扩展范畴
 
 ---
 

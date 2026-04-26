@@ -4,7 +4,8 @@
 
 > **协议地基对齐（Proposed 2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 规定市场下发的能力（Skill / Tool / ProviderCard / ToolGroup）在签名审核时必须标记 **trustLevel**。默认审核通过的社区包标记 `community`（见协议地基 §6 三级信任）；未认证或用户本地 `.neko/plugins/` 的能力标记 `untrusted`（默认限制：不可贡献 ProviderCard、Operation 强制 approval='ask'、每次激活要求用户确认）。Market 需要在 Phase 推进时对接 trustLevel 审核流程，作为能力审核的新维度。
 >
-> **Provider Card 分发（Proposed 2026-04-24）**：[adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) 引入 `provider-card` 作为 Market 新分发品类（三层分发模型的 Layer 1 Market 层，承载社区/长尾生成模型的能力画像）。本文档的覆盖品类在 Provider ADR 落地时需追加。
+> **Provider Card 分发（Proposed 2026-04-24）**：[adr-provider-expression-context.md](./adr-provider-expression-context.md) 引入 `provider-card` 作为 Market 新分发品类（三层分发模型的 Layer 1 Market 层，承载社区/长尾生成模型的能力画像）。本文档的覆盖品类在 Provider ADR 落地时需追加。
+> **Provider Card 安装校验（2026-04-26）**：`provider-card` 安装目标在本地安装前执行 manifest 校验：`untrusted` 禁止作为 Market ProviderCard 安装；`community` 必须带签名元数据或来自 verified publisher。当前为 manifest-level gate，真实 cryptographic verification 与服务端审核流水后续接入。
 
 ---
 

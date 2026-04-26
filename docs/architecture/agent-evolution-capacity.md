@@ -6,7 +6,7 @@
 **关联文档**:
 
 - [agent-unified-workflow.md](./agent-unified-workflow.md) — 本文档的上层 ADR，定义 IDC 三阶段 + 四层架构 + 六层控制平面
-- [workflow-orchestration.md](./workflow-orchestration.md) — orchestration 编排实现（Phase 1-6）
+- [agent-unified-workflow.md](./agent-unified-workflow.md) — IDC 编排实现与六层控制平面
 - [creative-context-compression.md](./creative-context-compression.md) — Memory 层 7 级压缩策略
 - [perception-first-roadmap.md](./perception-first-roadmap.md) — 多模态感知路线图
 
@@ -114,7 +114,7 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 
 > **Proposed 协议地基（2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 正式化 **CapabilityContribution v1.0** 统一能力扩展协议。两阶段模型（Registration vs Injection）+ Tool 四来源投影（Internal/MCP/Market/Local）+ 三级信任（core/community/untrusted）+ Host Abstraction 让现有多种机制（Tool / Skill / ToolGroup / ProviderCard / MCP / VSCode 扩展）收敛到一份规范。落地后抗演化评级同步抬升：**Schema A- → A**（命名空间 + trustLevel 填空 Market 风险）、**Runtime A- → A**（两阶段 + 生命周期规范）、**Policy B → B+**（trust model 入 Policy 层）、**Control A- → A**（Registry 统一化）。本 ADR 与 Control Plane ADR 的评级叠加最终形态为 **A / A / A / B+ / A / A / A**（7 平面全 A-）。另将新增 **Provider 层评级 A**（markdown + 自演化，三原则共振最强载体）。
 >
-> **Provider 层（Proposed 2026-04-24）**：[adr-provider-semantic-bridge.md](./adr-provider-semantic-bridge.md) 引入的 Provider 子系统——ProviderCapabilityCard 三合一 markdown（Syntax Profile / Concept Coverage Map / Training Profile）+ ProviderRouter + AdaptiveSemanticBridge。因全 markdown + Layer 2 Memory 自演化闭环，评级 **A**。
+> **Provider 层（Proposed 2026-04-24）**：[adr-provider-expression-context.md](./adr-provider-expression-context.md) 引入的 Provider 子系统——ProviderCapabilityCard 三合一 markdown（Syntax Profile / Concept Coverage Map / Training Profile）+ ProviderRouter + ProviderExpressionContext。ProviderCard 作为 AGENT 软提示上下文影响表达倾向，不作为工具执行前确定性 prompt 替换器；因全 markdown + Layer 2 Memory 自演化闭环，评级 **A**。
 
 ---
 
@@ -155,7 +155,7 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 | # | 断点 | 症状 | 建议缓解 |
 |---|----|----|----|
 | **1** | **外部 Skill 若绕过 TOOL_NAMES 直接写工具字符串** | 内部 Skill 已走 [`TOOL_NAMES_SYSTEM/TIMELINE/...`](../../packages/neko-types/src/types/tool-names.ts#L150-L157) 常量 SSOT（改名一处修改全局跟上）；但 Market/Plugin 下发的 markdown Skill 若在 `allowedTools` 里写字符串字面量 `'Read'` 就绕过 key 层 → 工具改名静默失败 | Skill 加载期 validator 拒绝"未通过 TOOL_NAMES 登记"的工具名；或引入运行时 alias 注册表（`oldName → newName`）供外部 Skill 兼容期使用 |
-| **2** | **Skill 前置匹配是词面关键词**（[skill-matcher.ts:76-116](../../packages/neko-agent/packages/agent/src/skill/skill-matcher.ts#L76-L116)）| Skill 数量极大后误/漏匹配率上升；但**这只是提示层**——实际激活由 AI thinkLoop 自主判断，因此影响是"候选集质量"而非"功能失败" | 可选升级为 CLIP / sentence-embedding 向量匹配（workflow-orchestration Phase 4.2 已规划 CLIP napi）。**不紧急**——AI-native 选择是主通道 |
+| **2** | **Skill 前置匹配是词面关键词**（[skill-matcher.ts:76-116](../../packages/neko-agent/packages/agent/src/skill/skill-matcher.ts#L76-L116)）| Skill 数量极大后误/漏匹配率上升；但**这只是提示层**——实际激活由 AI thinkLoop 自主判断，因此影响是"候选集质量"而非"功能失败" | 可选升级为 CLIP / sentence-embedding 向量匹配（见 [cross-modal-matching.md](./cross-modal-matching.md)）。**不紧急**——AI-native 选择是主通道 |
 | **3** | **Persona 缺会话级 A/B 选择**（部署级版本已有）| 无法在同一会话里并行跑 v1.2 vs v1.3 做 side-by-side 评估 | Skill frontmatter 启用现有 `version` 字段 + activation 时可指定 version；Memory 记录"本次用的 persona version"让自评可溯源；长期：加 version-aware Activator |
 
 ### 次级脆弱点（不紧急但值得记录）
@@ -176,7 +176,7 @@ Evaluator 层得 A 而非 A+ 的唯一原因：**确定性指标打分器**（CL
 | 外部变化 | 现架构表现 |
 |-------|---------|
 | **新 LLM** 能看 10M token 视频并自判意图 | ✅ 直接受益：§11.6.9 AI 自评原生适配；多模态不走 extractor 管线；Memory 压缩策略可调高阈值 |
-| **Skill 市场 10000+ 个** | ✅ 三级懒加载扛住 token 成本；⚠️ 前置匹配器的候选集质量会下降（可选升级 CLIP matching，workflow-orchestration Phase 4.2 已规划）；AI thinkLoop 语义兜底仍可工作，但 token 成本升高 |
+| **Skill 市场 10000+ 个** | ✅ 三级懒加载扛住 token 成本；⚠️ 前置匹配器的候选集质量会下降（可选升级 CLIP matching，见 [cross-modal-matching.md](./cross-modal-matching.md)）；AI thinkLoop 语义兜底仍可工作，但 token 成本升高 |
 | **新一代 engine 有 50 类 Operation** | ✅ 扁平能力池 + CapabilityKind 可吸收；子包各自贡献无中心瓶颈；`costProfile` 阈值可按新成本模型调整 |
 | **新编排模式 "多 Reviewer 并发"** | ⚠️ IDC 3 阶段硬编码需重构 stage-planner 代码；但 **Skill 内嵌 `phases`** DSL 可局部突破（单个 Skill 内定义自己的并发 phases 不用改全局）|
 | **Prompt 技术升级到不可预见的 X** | ✅ Prompt 层 100% 数据化，任何新技术都能以 markdown 写入 Skill/persona |
