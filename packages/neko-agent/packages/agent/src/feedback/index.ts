@@ -14,5 +14,6 @@ export {
   type FeedbackMemoryExtractionInput,
   type FeedbackMemoryExtractionResult,
   type FeedbackMemoryExtractionSkipped,
+  type ProviderExpressionConceptDecision,
   type IFeedbackCoordinator,
 } from './feedback-coordinator';

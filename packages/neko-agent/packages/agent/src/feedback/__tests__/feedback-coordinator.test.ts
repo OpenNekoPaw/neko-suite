@@ -143,6 +143,126 @@ describe('FeedbackCoordinator', () => {
     expect(coordinator.getDecisionHistory()).toHaveLength(1);
   });
 
+  it('records provider expression observations as continue decisions for evaluator consumers', () => {
+    const coordinator = createFeedbackCoordinator({ now: () => 12 });
+
+    coordinator.observe({
+      kind: 'provider-card-observation',
+      observedAt: 10,
+      toolCallId: 'call-img',
+      toolName: 'GenerateImage',
+      mode: 'agentic',
+      providerId: 'sdxl',
+      styleFamily: 'anime',
+      metadata: { mode: 'agentic', selection: { primary: 'sdxl' } },
+    });
+
+    const cycle = coordinator.evaluatePending();
+
+    expect(cycle).toEqual(
+      expect.objectContaining({
+        signals: [
+          expect.objectContaining({
+            kind: 'provider-card-observation',
+            toolCallId: 'call-img',
+            providerId: 'sdxl',
+          }),
+        ],
+        decisions: [
+          {
+            action: 'continue',
+            signalKind: 'provider-card-observation',
+            toolCallId: 'call-img',
+            toolName: 'GenerateImage',
+            mode: 'agentic',
+            providerId: 'sdxl',
+            styleFamily: 'anime',
+          },
+        ],
+        actions: [
+          {
+            kind: 'clear-guidance',
+            reason: 'continue',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('routes provider expression observations into project provider-card overrides when configured', async () => {
+    const writes: Array<{ path: string; data: string }> = [];
+    const coordinator = createFeedbackCoordinator({
+      providerCardProject: {
+        workspaceRoot: '/workspace/demo',
+        fsOps: {
+          mkdir: vi.fn(async () => undefined),
+          writeFile: vi.fn(async (path: string, data: string) => {
+            writes.push({ path, data });
+          }),
+        },
+      },
+      now: () => 0,
+    });
+
+    coordinator.observe({
+      kind: 'provider-card-observation',
+      observedAt: 0,
+      toolCallId: 'call-img',
+      toolName: 'GenerateImage',
+      mode: 'fallback',
+      providerId: 'sdxl',
+      reason: 'provider-card-not-found',
+      styleFamily: 'anime',
+      metadata: { mode: 'fallback' },
+    });
+
+    coordinator.evaluatePending();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.path).toBe('/workspace/demo/.neko/providers/sdxl.card.md');
+    expect(writes[0]?.data).toContain('"type":"provider-card-observation"');
+    expect(writes[0]?.data).toContain('"mode":"fallback"');
+  });
+
+  it('logs provider-card project write failures from fire-and-forget writes', async () => {
+    const logger = { warn: vi.fn() };
+    const coordinator = createFeedbackCoordinator({
+      providerCardProject: {
+        workspaceRoot: '/workspace/demo',
+        fsOps: {
+          mkdir: vi.fn(async () => undefined),
+          writeFile: vi.fn(async () => undefined),
+        },
+      },
+      providerCardProjectRouterFactory: () => ({
+        writeObservation: vi.fn(async () => {
+          throw new Error('disk full');
+        }),
+      }),
+      logger,
+      now: () => 0,
+    });
+
+    coordinator.observe({
+      kind: 'provider-card-observation',
+      observedAt: 0,
+      toolCallId: 'call-img',
+      toolName: 'GenerateImage',
+      mode: 'agentic',
+      providerId: 'sdxl',
+      metadata: { mode: 'agentic' },
+    });
+
+    coordinator.evaluatePending();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'provider-card observation write failed',
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+  });
+
   it('records apply-exit self-evaluation requests as feedback signals', () => {
     const tracker = createStageTracker({ now: () => 0 });
     const coordinator = createFeedbackCoordinator({

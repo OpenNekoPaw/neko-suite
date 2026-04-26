@@ -7,10 +7,25 @@ import { createArtifactObservationHooks } from '../artifact/artifact-observation
 import { SelfEvaluationHooks } from '../evaluation/self-evaluation-hooks';
 import { KeyFactExtractor } from '../memory/keyfact-extractor';
 import { ProjectMemoryRouter } from '../memory/project-memory-router';
+import {
+  ProviderCardProjectRouter,
+  type ProviderCardProjectFsOps,
+  type ProviderCardProjectReviewMode,
+} from '../memory/provider-card-project-router';
 
 // =============================================================================
 // Types
 // =============================================================================
+
+export interface IProviderCardProjectRouter {
+  writeObservation(
+    signal: Extract<FeedbackSignal, { kind: 'provider-card-observation' }>,
+  ): Promise<unknown>;
+}
+
+export interface FeedbackLogger {
+  warn(message: string, metadata?: Record<string, unknown>): void;
+}
 
 export interface FeedbackCoordinatorConfig {
   readonly eventBus?: IEventBus | null;
@@ -21,6 +36,18 @@ export interface FeedbackCoordinatorConfig {
   readonly evaluators?: readonly IFeedbackEvaluator[];
   readonly arbiter?: IFeedbackArbiter;
   readonly controlPolicy?: FeedbackControlPolicy;
+  readonly providerCardProject?: {
+    readonly workspaceRoot: string;
+    readonly fsOps: ProviderCardProjectFsOps;
+    readonly reviewMode?: ProviderCardProjectReviewMode;
+  };
+  readonly providerCardProjectRouterFactory?: (config: {
+    readonly workspaceRoot: string;
+    readonly fsOps: ProviderCardProjectFsOps;
+    readonly reviewMode?: ProviderCardProjectReviewMode;
+    readonly now: () => number;
+  }) => IProviderCardProjectRouter;
+  readonly logger?: FeedbackLogger;
   readonly now?: () => number;
 }
 
@@ -57,6 +84,13 @@ export interface FeedbackMemoryExtractionResult {
 export type FeedbackMemoryExtractionOutcome =
   | FeedbackMemoryExtractionSkipped
   | FeedbackMemoryExtractionResult;
+
+export interface ProviderExpressionConceptDecision {
+  readonly concept: string;
+  readonly status: string;
+  readonly output?: string;
+  readonly reason?: string;
+}
 
 export type FeedbackSignal =
   | {
@@ -96,6 +130,20 @@ export type FeedbackSignal =
       readonly kind: 'memory-extraction';
       readonly observedAt: number;
       readonly extraction: FeedbackMemoryExtractionResult;
+    }
+  | {
+      readonly kind: 'provider-card-observation';
+      readonly observedAt: number;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly mode: 'agentic' | 'fallback' | 'native';
+      readonly providerId?: string;
+      readonly reason?: string;
+      readonly styleFamily?: string;
+      readonly concepts?: readonly string[];
+      readonly conceptDecisions?: readonly ProviderExpressionConceptDecision[];
+      readonly runId?: string;
+      readonly metadata: Record<string, unknown>;
     };
 
 export type FeedbackDecision =
@@ -144,6 +192,16 @@ export type FeedbackDecision =
       readonly signalKind: 'memory-extraction';
       readonly factCount: number;
       readonly writeStatus: FeedbackMemoryExtractionResult['writeStatus'];
+    }
+  | {
+      readonly action: 'continue';
+      readonly signalKind: 'provider-card-observation';
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly mode: 'agentic' | 'fallback' | 'native';
+      readonly providerId?: string;
+      readonly reason?: string;
+      readonly styleFamily?: string;
     }
   | {
       readonly action: 'continue';
@@ -225,10 +283,21 @@ export interface IFeedbackCoordinator {
 // Implementation
 // =============================================================================
 
+function createDefaultProviderCardProjectRouter(config: {
+  readonly workspaceRoot: string;
+  readonly fsOps: ProviderCardProjectFsOps;
+  readonly reviewMode?: ProviderCardProjectReviewMode;
+  readonly now: () => number;
+}): IProviderCardProjectRouter {
+  return new ProviderCardProjectRouter(config);
+}
+
 class FeedbackCoordinator implements IFeedbackCoordinator {
   private readonly _beforeThinkHooks: readonly ExecutorHooks[];
   private readonly _keyFactExtractor: KeyFactExtractor | null;
   private readonly _projectMemoryRouter: ProjectMemoryRouter | null;
+  private readonly _providerCardProjectRouter: IProviderCardProjectRouter | null;
+  private readonly _logger: FeedbackLogger | null;
   private readonly _evaluators: readonly IFeedbackEvaluator[];
   private readonly _arbiter: IFeedbackArbiter;
   private readonly _now: () => number;
@@ -267,6 +336,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     }
     this._beforeThinkHooks = beforeThinkHooks;
     this._now = config.now ?? (() => Date.now());
+    this._logger = config.logger ?? null;
     this._evaluators =
       config.evaluators && config.evaluators.length > 0
         ? [...config.evaluators]
@@ -276,6 +346,12 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
       config.eventBus?.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => {
         this.observe(feedbackSignalFromArtifactInvalidEvent(event));
       }) ?? null;
+    this._providerCardProjectRouter = config.providerCardProject
+      ? (config.providerCardProjectRouterFactory ?? createDefaultProviderCardProjectRouter)({
+          ...config.providerCardProject,
+          now: this._now,
+        })
+      : null;
 
     if (
       config.projectMemoryManager &&
@@ -317,6 +393,10 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
       decisions.length > 0
         ? decisions
         : [{ action: 'continue', reason: 'no-actionable-signal' } as const];
+    void this._writeProviderCardObservations(signals).catch((error: unknown) => {
+      this._logger?.warn('provider-card observation write failed', { error });
+    });
+
     const actions = this._arbiter.decide({
       signals,
       decisions: normalizedDecisions,
@@ -338,6 +418,18 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
       ...(context.currentStage !== undefined ? { currentStage: context.currentStage } : {}),
       ...(context.activeRunId !== undefined ? { activeRunId: context.activeRunId } : {}),
     };
+  }
+
+  private async _writeProviderCardObservations(signals: readonly FeedbackSignal[]): Promise<void> {
+    if (!this._providerCardProjectRouter) {
+      return;
+    }
+
+    for (const signal of signals) {
+      if (signal.kind === 'provider-card-observation') {
+        await this._providerCardProjectRouter.writeObservation(signal);
+      }
+    }
   }
 
   getSignalHistory(): readonly FeedbackSignal[] {
@@ -547,6 +639,18 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
               signalKind: signal.kind,
               factCount: signal.extraction.facts.length,
               writeStatus: signal.extraction.writeStatus,
+            });
+            break;
+          case 'provider-card-observation':
+            decisions.push({
+              action: 'continue',
+              signalKind: signal.kind,
+              toolCallId: signal.toolCallId,
+              toolName: signal.toolName,
+              mode: signal.mode,
+              ...(signal.providerId ? { providerId: signal.providerId } : {}),
+              ...(signal.reason ? { reason: signal.reason } : {}),
+              ...(signal.styleFamily ? { styleFamily: signal.styleFamily } : {}),
             });
             break;
         }
@@ -759,6 +863,8 @@ function signalSignature(signal: FeedbackSignal): string {
       return `quality-check|${signal.runId ?? ''}|${signal.toolCallId}`;
     case 'memory-extraction':
       return `memory-extraction|${signal.extraction.sourceEventIds.join(',')}|${signal.observedAt}`;
+    case 'provider-card-observation':
+      return `provider-card-observation|${signal.runId ?? ''}|${signal.toolCallId}|${signal.mode}|${signal.providerId ?? ''}|${signal.reason ?? ''}`;
   }
 }
 
