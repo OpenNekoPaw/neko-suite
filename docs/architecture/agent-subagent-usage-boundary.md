@@ -1,12 +1,25 @@
 # Subagent 使用边界分析
 
-> **状态**: Analysis (2026-04-26)
+> **状态**: Analysis / Agent-first Aligned (2026-04-26)
 > **类型**: 架构判断 / 设计原则
 > **关联 ADR**:
 > - [agent-multi-agent-federation.md](./agent-multi-agent-federation.md) (Proposed)
 > - [agent-media-architecture.md](./agent-media-architecture.md)
 > - [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md)
 > - [agent-unified-workflow.md](./agent-unified-workflow.md)
+> - [perception-first-roadmap.md](./perception-first-roadmap.md) — Agent-first perception 策略修订
+> - [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) — ControlPlane / FeedbackArbiter 边界
+
+## 2026-04-26 Agent-first 策略对齐
+
+本文档的 Subagent 边界需服从 Agent-first perception 原则：
+
+- 主 Agent 是图片、视频、音频、数据与上下文的默认感知主体。
+- Subagent 不是主感知入口，也不替代主 Agent 做最终创作判断。
+- Subagent 只在“上下文压力大 + 主 Agent 不必亲眼看全过程 + 多轮 LLM 推理有价值”时作为隔离上下文。
+- Subagent 输出必须以 `PerceptionEvidence` / `QualityReviewEvidence` / `DecisionRationale` 引用的形式回流主 Agent。
+- 主 Agent 基于自身 `AgentObservation` 和可选 evidence 做最终 `DecisionRationale`；工具、QualityGate、Subagent 都不能直接决定项目状态修改。
+- Federation 不是 Agent-first perception MVP 的前置依赖。
 
 ## 摘要
 
@@ -17,7 +30,7 @@
 
 核心结论统一为一条**使用边界原则**:
 
-> **Subagent 是上下文隔离器,不是异步执行器,也不是并发控制器。** 只有当工作满足"多轮 LLM 推理 + 主 agent 不必直接参与"两个条件时,subagent 才有架构价值。否则增加的 ReAct token 开销和序列化成本会压倒收益。
+> **Subagent 是上下文隔离器,不是异步执行器,也不是并发控制器,更不是主感知主体。** 只有当工作满足"多轮 LLM 推理 + 主 agent 不必亲眼看全过程 + 输出可作为 evidence 回流"这些条件时,subagent 才有架构价值。否则增加的 ReAct token 开销和序列化成本会压倒收益。
 
 ---
 
@@ -30,14 +43,14 @@
 | 上下文 | 隔离主 agent 上下文,避免 vision/长内容污染 | 后台 worker (后台任务由 TaskManager / Provider 层负责) |
 | 推理 | 多轮 LLM 工作的容器 | 单次工具调用的包装器 |
 | 并发 | 不同上下文的并行推理 | 单工具的并发调度 (Provider/Executor 层负责) |
-| 决策 | 把"摘要"还给主 agent | 替主 agent 做最终决策 |
+| 决策 | 把 evidence / recommendation / 摘要还给主 agent | 替主 agent 做最终决策或直接改项目状态 |
 
 ### 1.2 工作类型四分
 
 任何 agent 工作都可以按下面两个维度归类:
 
 ```
-                主 agent 是否需要"亲眼"看 / 全程参与决策?
+                主 agent 是否需要"亲眼"看 / 形成主 observation?
                      ┌──────────┬──────────┐
                      │ 是       │ 否       │
         ┌─────────┬──┼──────────┼──────────┤
@@ -53,7 +66,7 @@
         └─────────┴──┴──────────┴──────────┘
 ```
 
-只有右上角 (大压力 + 不必直看) 是 subagent 的领地。
+只有右上角 (大压力 + 不必直看全过程 + 输出可回流为 evidence) 是 subagent 的领地。即便进入该区域，最终 `DecisionRationale` 仍由主 Agent 形成。
 
 ---
 
@@ -89,11 +102,11 @@
 | 场景 | 主 agent 拿到 |
 |------|--------------|
 | 长视频逐帧分析 (>30s, >8 frames) | 文本摘要 |
-| 批量一致性校验 ([image-validator](../../packages/neko-agent/packages/agent/src/quality/) 类) | pass/fail + 理由 |
+| 批量一致性校验 ([image-validator](../../packages/neko-agent/packages/agent/src/quality/) 类) | reviewer evidence + 理由 |
 | 多视频比较 (各自独立分析) | 每段的描述 |
 | OCR / 字幕提取 | 提取后的文本 |
 
-**共同特征**: 主 agent 不需要"亲眼看",只需要文本抽象。
+**共同特征**: 主 Agent 已经拥有或不需要完整视觉细节，只需要隔离上下文产出的文本 evidence / 摘要。
 
 **不适合 subagent**:
 
@@ -102,7 +115,7 @@
 | 用户刚上传单图,正在对话讨论 | 主 agent 必须直接感知 |
 | 生成任务的参考图 | 上下文小,单次性 |
 | 截图驱动下一步决策 (如 UI 自动化) | 视觉→决策回路不能割断 |
-| 单截图问答 | 序列化成本压倒收益 |
+| 单截图问答 | 序列化成本压倒收益，且主 Agent 必须直接感知 |
 
 ---
 
@@ -196,8 +209,8 @@ L1 和 L2 已经设计良好,**不需要也不应该 subagent**。真正的问�
 | 多模态读取 — 长视频/批量评估 | ❌ 只要结论 | ★ subagent |
 | 生成 — 单次提交 | ✅ 决策依赖 | 主 agent 直调 (已非阻塞) |
 | 生成 — taskId 轮询 | ❌ 机械调度 | TaskManager 后台 (**不**用 subagent) |
-| 生成 — 质量/迭代闭环 | ❌ 只要结论 | ★ subagent |
-| 生成 — 大批量协同 | ❌ 只要批次摘要 | ★ subagent |
+| 生成 — 质量/迭代闭环 | ⚠️ 主 Agent 做最终判断 | 可选 subagent reviewer |
+| 生成 — 大批量协同 | ❌ 只要批次 evidence / 摘要 | 可选 subagent |
 
 ---
 
@@ -230,33 +243,34 @@ L1 和 L2 已经设计良好,**不需要也不应该 subagent**。真正的问�
 1. **预处理结果缓存**: keyframe 按 `file_path + mtime` 缓存,跨轮次复用
 2. **Tool 结果中的图像块**改成 `GeneratedAsset 引用 + 按需拉取` (协议已在 [agent-media-architecture.md](./agent-media-architecture.md) 定义,但 [act-phase.ts](../../packages/neko-agent/packages/agent/src/executor/act-phase.ts) 仍在 inline base64)
 
-### P2: 第一个 subagent 试点 — 质量评估闭环
+### P2: 第一个 subagent 试点 — 可选质量 Reviewer
 
-唯一一个数据明确的场景:
+第一个 subagent 试点应是**可选 reviewer**,而不是主感知替代品:
 
 - 复用现成的 `quality-checker` preset
-- 入口: `qualityAssessmentSkill` 显式调用时
-- 主 agent 拿到 `{ passed, score, issues, recommendations }`,不再自己看图
+- 入口: 主 Agent 已形成 `AgentObservation` 后,由 `qualityAssessmentSkill` 或低置信度策略显式调用
+- Subagent 返回 `{ passed, score, issues, recommendations }` 并包装为 `QualityReviewEvidence` / `PerceptionEvidence`
+- 主 Agent 仍负责最终 `DecisionRationale`,决定是否接受建议、重跑或询问用户
 - 失败成本低、可观测、容易回滚
 
 ### P3: 长视频摘要 subagent
 
-- 仅当用户上传 >30s 视频时启用
+- 仅当用户上传 >30s 视频且主 Agent 不需要逐帧亲自决策时启用
 - 复用 `SubAgentManager` 的 specialized preset 模式
 - 不依赖未实现的 [Federation ADR](./agent-multi-agent-federation.md) (仍 Proposed)
 - 输入: 视频 file path + 关注点
-- 输出: 时间轴摘要 (text)
+- 输出: 时间轴摘要 (text) 并包装为 `PerceptionEvidence`,供主 Agent observation / rationale 引用
 
 ### P4: 批量生成协调器 subagent
 
-- 仅当用户请求 ≥5 项生成时启用
+- 仅当用户请求 ≥5 项生成且主 Agent 只需要批次 evidence / 摘要时启用
 - 复用 `creative-director` preset
 - 内部用 `spawnBatch()` + 一致性 prompt
-- 主 agent 拿到批次完成 + 摘要
+- 主 agent 拿到批次完成 + 摘要/evidence,再形成最终 DecisionRationale
 
 ### 永远保留的"快路径"
 
-- 单图问答、单次生成、参考图传递、用户交互对话 → **直接调,不走 subagent**
+- 单图问答、单次生成、参考图传递、用户交互对话、低风险 partialRerun → **主 Agent 直接处理,不走 subagent**
 - 这条快路径必须明确保留,否则 token 开销会失控
 
 ---
@@ -270,7 +284,7 @@ Federation ADR 提的是 *peer reasoning* (对等推理),本文档讨论的是 *
 - **本文档**: 主 agent → SubAgent 单向 spawn (现有 SubAgentManager 能力,无需 Federation)
 - **Federation ADR**: SubAgent ↔ SubAgent + SubAgent → Parent 反向消息 (需要 MessageBus 等基础设施)
 
-P0-P4 建议**全部不依赖 Federation ADR**,可在当前 SubAgentManager 上落地。
+P0-P4 建议**全部不依赖 Federation ADR**,可在当前 SubAgentManager 上落地。Agent-first MVP 也不依赖 Federation。
 
 ### 与 [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md)
 
@@ -297,10 +311,11 @@ Agent Media Architecture 已经定义"GeneratedAsset on-disk + JSON 引用 + 零
 
 ## 八、一句话结论
 
-> **Subagent 是上下文隔离器,不是异步执行器。在 neko-agent 中,绝大多数"读取"和"生成"调用不需要 subagent;subagent 的真正领地是"多轮 LLM 工作 + 主 agent 不必参与"的少数场景 (质量评估闭环、大批量协同、长媒体摘要、跨模态精修)。任何把 subagent 当 worker pool 或并发控制使用的设计都是错配。**
+> **Subagent 是上下文隔离器,不是异步执行器,也不是主感知主体。在 neko-agent 中,绝大多数"读取"和"生成"调用不需要 subagent;subagent 的真正领地是"多轮 LLM 工作 + 主 agent 不必亲眼看全过程 + 输出可作为 evidence 回流"的少数场景 (可选质量 reviewer、大批量协同、长媒体摘要、复杂恢复)。任何把 subagent 当 worker pool、并发控制器或 Agent 判断替代品的设计都是错配。**
 
 ---
 
 ## 九、修订记录
 
 - **2026-04-26**: 初版,基于多模态读取与生成调用两次设计审查整理。
+- **2026-04-26**: Agent-first 策略对齐: 明确主 Agent 是默认感知主体;Subagent 只输出 evidence / recommendation,不替代 AgentObservation / DecisionRationale;Federation 不作为 MVP 前置依赖。

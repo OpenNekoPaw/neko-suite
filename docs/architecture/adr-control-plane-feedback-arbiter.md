@@ -2,9 +2,13 @@
 
 ## 状态
 
-Proposed (2026-04-24)
+Partially Adopted / Needs Refresh (2026-04-24，2026-04-26 现状核对；Agent-first 策略修订)
 
 > **协议地基对齐（2026-04-25）**：本 ADR 定义的 `StageRegistry` / `ArtifactRegistry` 与 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 `CapabilityRegistry` 共享同一套 **Registry 查询面**（`getByContributor` / `isRegistered` / `onDidChange` 等）。ControlPlane 作为第 7 控制平面不拥有独立的注册/分发基础设施——它复用协议地基的两阶段模型（Registration / Injection），只在其上定义 StageDescriptor / ArtifactDescriptor 两类新的 Registry 条目语义。FeedbackArbiter 的 `beforeToolCall` 钩子挂在协议地基的 Injection 阶段之后。本 ADR 原先独立表述的"ControlPlane 子系统"语义不变，基础设施对齐到协议地基。
+
+> **现状核对（2026-04-26）**：本 ADR 的 Stage / Artifact Registry 与 ControlPlane 仍未落地；`IdcStage` 仍是 `draft | plan | apply` union，`ArtifactKind` 仍是 `draft | plan | task`。但 feedback 方向已经出现轻量实现：`FeedbackCoordinator` 已支持 `IFeedbackArbiter` 注入、信号 history、`evaluatePending()` 与 guidance / escalate-user action。当前代码中的 Arbiter 是**反馈指导层**，尚不是本文目标的**流程仲裁层**；因此本 ADR 的后续重点应从“新建 Arbiter”调整为“收敛并升级现有 FeedbackCoordinator / IFeedbackArbiter 契约”。
+
+> **Agent-first 感知边界（2026-04-26）**：ControlPlane / FeedbackArbiter 不替代 Agent 对图片、视频、音频、数据与创作质量的主判断。Agent 形成 `AgentObservation` 与 `DecisionRationale`，工具输出作为可选 evidence；FeedbackArbiter 只管理流程层决策（budget、retry、regress、terminate、escalate）和 Journal 可观察性，不直接判定内容好坏，也不直接调用 Perception tool 或 Subagent。
 
 ## 背景
 
@@ -34,7 +38,7 @@ export type ArtifactKind = 'draft' | 'plan' | 'task';   // task ≠ apply
 
 要扩展一个新 stage（如 Review / Critique / Refine），需要同步修改至少 9 个文件：`stage.ts` union、`stage-registry.ts`、`stage-planner.ts`、`stage-activation-matrix.ts`、`stage-persona-binding.ts`、`react-loop-runner.terminalStage`、`stage-dispatcher`、`execution-events.ArtifactKind`、`artifact-validator.SCHEMAS`。这是 `agent-evolution-capacity.md` 将 Orchestration 评级压在 **B+** 的主要结构性原因。
 
-### 症状 2：反馈信号散落，没有仲裁者
+### 症状 2：反馈信号已开始归集，但缺少流程仲裁者
 
 反馈循环需要消费至少七类信号：
 
@@ -48,7 +52,7 @@ export type ArtifactKind = 'draft' | 'plan' | 'task';   // task ≠ apply
 | Memory conflict | `ProjectMemoryRouter` |
 | LLM confidence | 未实现 |
 
-这些信号当前**各自处理、不做仲裁**。结果是：反馈循环的"下一步做什么"实际上是由七个独立 hook 的副作用叠加出来的，没有一个模块能回答"当前回合结束后应该 continue / retry / regress / escalate / terminate"。跨 stage 的回退（apply 发现 plan 错了 → 退回 draft）靠 AI 自发再调 DraftWrite 实现，在 Journal 中没有对应事件，不可观察、不可消融。
+这些信号当前已通过 `FeedbackCoordinator` 做了部分归集，并可经 `IFeedbackArbiter` 生成 guidance / escalate-user 等 `FeedbackFlowAction`。但现有 Arbiter 仍停留在**提示与升级建议层**：它不会真正决定或驱动 `retry-tool` / `retry-stage` / `regress-to` / `restart-run`，也没有把跨 stage 的回退写成 Journal 中可观察的流程事件。换言之，当前已有"反馈指导者"，但还没有本文目标中的"流程仲裁者"。
 
 ### 症状 3：消融粒度止步于"组件开关"
 
@@ -120,6 +124,8 @@ export interface IArtifactRegistry {
 
 为避免破坏现有磁盘布局，`'apply'` 对应的 subdir **保持为 `.neko/tasks/`**（只改类型层命名，不改文件系统），迁移旧产物通过 ArtifactWatcher 兼容读即可。
 
+**兼容约束（2026-04-26）**：`task → apply` 不应作为第一步强切。当前事件、watcher、validator、UI task card 与 `.neko/tasks/` 语义均依赖 `task`。迁移时应先引入 `apply` descriptor，并保留 `task` 作为 legacy alias；只有当 Journal/event/UI 都能读写 `apply` 语义后，才逐步收敛类型层命名。
+
 ### 3. 抽取 ControlPlane 作为元层（第 7 控制面）
 
 当前 `agent-unified-workflow.md §11.6` 定义的六控制面是 Prompt / Schema / Runtime / Policy / Memory / Evaluator。本 ADR 新增第 7 面 **Control**（元层），把 IDC 流程编排与反馈仲裁的职责显式化：
@@ -133,7 +139,7 @@ ControlPlane
 └─ FeedbackArbiter        反馈信号仲裁（见决策 4）
 ```
 
-产物面（Intent / Plan / Apply / ...）只负责自己的产物，不再做流程决策；ControlPlane 成为**唯一的流程仲裁来源**。
+产物面（Intent / Plan / Apply / ...）只负责自己的产物，不再做流程决策；ControlPlane 成为**唯一的流程仲裁来源**。但 ControlPlane 不成为内容判断来源：内容理解、创意取舍与操作理由仍由 Agent 负责，并通过 `AgentObservation` / `DecisionRationale` 进入 Journal。
 
 ControlPlane 接入 runtime bootstrap 的路径是：
 
@@ -151,7 +157,7 @@ interface AgentRuntimeConfig {
 
 ### 4. FeedbackArbiter：统一仲裁七类信号
 
-FeedbackArbiter 是 ControlPlane 下的一个子模块，职责是**把七类散落信号归一化为一个 FeedbackDecision**：
+FeedbackArbiter 是 ControlPlane 下的一个子模块，职责是**把七类散落信号与 Agent rationale 归一化为流程层 FeedbackDecision**。它不替代 Agent 的多模态判断，只把 Agent observation、工具 evidence、用户反馈、预算和错误信号组合为可执行的流程决策：
 
 ```typescript
 // @neko/agent/control/feedback/types.ts
@@ -162,13 +168,15 @@ export type FeedbackSignal =
   | { kind: 'self-eval'; confidence: number; verdict: 'done' | 'needs-more' }
   | { kind: 'user-feedback'; action: 'approve' | 'reject' | 'amend'; payload?: unknown }
   | { kind: 'memory-conflict'; factId: string; evidence: unknown }
-  | { kind: 'llm-confidence'; score: number };
+  | { kind: 'llm-confidence'; score: number }
+  | { kind: 'agent-observation'; observation: AgentObservation }
+  | { kind: 'decision-rationale'; rationale: DecisionRationale };
 
 export type FeedbackDecision =
-  | { action: 'continue' }                                          // L1
+  | { action: 'continue'; evidenceIds?: string[] }                  // L1
   | { action: 'retry-tool'; toolCallId: string }                    // L0
   | { action: 'retry-stage'; stageId: string }                      // L1
-  | { action: 'regress-to'; stageId: string; reason: string }       // L2
+  | { action: 'regress-to'; stageId: string; reason: string; rationaleId?: string } // L2
   | { action: 'restart-run'; reason: string }                       // L3
   | { action: 'escalate-user'; question: string }                   // L4
   | { action: 'terminate'; outcome: 'success' | 'failed' | 'cancelled' };
@@ -179,6 +187,13 @@ export interface IFeedbackArbiter {
   reset(): void;
 }
 ```
+
+**与现有实现的收敛要求（2026-04-26）**：当前 `FeedbackCoordinator` 已经拆出了 `IFeedbackEvaluator` 与 `IFeedbackArbiter` 两层，且 `IFeedbackArbiter.decide()` 返回 `FeedbackFlowAction[]`，用于设置临时 guidance 或升级用户。后续不应直接替换这条路径，而应引入二层模型：
+
+1. `FeedbackDecision`：策略层决策，回答 `continue / retry / regress / terminate`，并引用 Agent observation / rationale / optional tool evidence。
+2. `FeedbackFlowAction`：执行层副作用，回答 `set-guidance / clear-guidance / escalate-user / emit-journal / request-stage-transition`。
+
+迁移时，现有 guidance arbiter 可保留为 `FeedbackDecision -> FeedbackFlowAction` 的 adapter；流程级 Arbiter 则只产出结构化 `FeedbackDecision`，由 `StageController` 或 runtime loop 消费，避免 Arbiter 直接操作 runner。
 
 FeedbackDecision 的五级循环粒度（L0-L4）**首次被形式化**：
 
@@ -213,14 +228,15 @@ export interface FeedbackPolicy {
 
 ```
 1. user-feedback     → 最优先，任意动作 override
-2. budget-exceeded   → terminate(failed)
-3. validation-fail × retry<3 → retry-stage
-4. validation-fail × retry≥3 → regress-to(previous) | escalate-user
-5. tool-failure × attempts<3 → retry-tool
-6. memory-conflict   → regress-to('draft')
-7. self-eval 'needs-more' × confidence>0.6 → continue
-8. self-eval 'done'        × confidence>0.8 → terminate(success)
-9. default → continue
+2. agent rationale    → 内容判断主来源，工具 evidence 仅补强
+3. budget-exceeded   → terminate(failed)
+4. validation-fail × retry<3 → retry-stage
+5. validation-fail × retry≥3 → regress-to(previous) | escalate-user
+6. tool-failure × attempts<3 → retry-tool
+7. memory-conflict   → regress-to('draft')
+8. self-eval 'needs-more' × confidence>0.6 → continue
+9. self-eval 'done'        × confidence>0.8 → terminate(success)
+10. default → continue
 ```
 
 ### 6. 消融扩展：作用于 Policy，不作为 stage
@@ -235,6 +251,8 @@ export interface FeedbackPolicy {
 | `memoryConflictSignal: boolean` | 关闭 Memory 冲突检测 |
 | `regressionEnabled: boolean` | 禁用 L2 回退 |
 | `llmConfidenceSignal: boolean` | 关闭 LLM 置信度信号 |
+| `agentObservationRequired: boolean` | 要求流程决策必须引用 AgentObservation / DecisionRationale |
+| `toolEvidenceMode: 'off' \| 'optional' \| 'required-for-low-confidence'` | 控制工具 evidence 是否参与低置信度判断 |
 | `stageRegistry: 'default' \| 'with-review'` | 切换默认注册表变体 |
 
 这些 toggle 让 ControlPlane 本身成为可验证的演化对象。
@@ -313,24 +331,25 @@ controlPlane.artifactRegistry.register({
 
 ## 后续演进
 
-本 ADR 落地按 6 个 PR 推进，累计工作量约 5-6 工程日。每个 PR 都可独立合并与回滚。
+本 ADR 落地按 7 个 PR 推进，累计工作量约 6-7 工程日。每个 PR 都可独立合并与回滚。由于当前代码已存在轻量 `FeedbackCoordinator` / `IFeedbackArbiter`，迁移顺序以“先收敛反馈契约，再注册化 stage，最后做 artifact 命名迁移”为原则。
 
 | PR | 目标 | 工作量 | 依赖 |
 |---|---|---|---|
-| **PR-C1** | 命名对齐：ArtifactKind `'task'` → `'apply'`（类型层，保留磁盘路径） | 0.5d | — |
-| **PR-C2** | StageRegistry + StageDescriptor，默认注册三阶段；stage-planner / stage-activation-matrix 读 registry | 1d | C1 |
-| **PR-C3** | ArtifactRegistry + ArtifactDescriptor；artifact-validator 读 registry | 1d | C1 |
-| **PR-C4** | 新建 `control/` 目录，打包 StageController / ArtifactController / ControlPlane；接入 runtime bootstrap | 1d | C2, C3 |
-| **PR-C5** | FeedbackArbiter MVP + 默认 FeedbackPolicy；Journal 写入 `feedback.*` 事件 | 1.5d | C4 |
-| **PR-C6** | FeedbackArbiter 消融 toggle 接线；更新 ablation-experiment-framework 与 agent-unified-workflow §11.6 | 1d | C5 |
+| **PR-C1** | 收敛反馈契约：区分 `FeedbackDecision` 与 `FeedbackFlowAction`，引入 AgentObservation / DecisionRationale 引用，保留现有 guidance arbiter adapter | 1d | — |
+| **PR-C2** | FeedbackPolicy MVP：把默认 retry / escalate 阈值从当前 `controlPolicy` 扩展为可消融策略 | 1d | C1 |
+| **PR-C3** | StageDescriptor 只读包装：默认三阶段从 descriptor 读取，但不开放外部注册 | 1d | — |
+| **PR-C4** | StageRegistry + StageController：默认注册三阶段；stage-planner / stage-dispatcher 读 registry | 1.5d | C3 |
+| **PR-C5** | ArtifactDescriptor + legacy alias：新增 `apply` descriptor，`task` 继续兼容 `.neko/tasks/` | 1d | C4 |
+| **PR-C6** | ControlPlane 接入 runtime bootstrap：新增 optional `controlPlane`，未提供时构造默认实现 | 1d | C2, C4, C5 |
+| **PR-C7** | FeedbackArbiter 消融 toggle 接线；更新 ablation-experiment-framework 与 agent-unified-workflow §11.6 | 1d | C6 |
 
 ### 回滚策略
 
 每个 PR 都有对应的 AblationToggle 作为 kill switch：
 
-- PR-C2 回滚：`stageRegistry: 'legacy'`（读旧 STAGE_REGISTRY 常量）
-- PR-C3 回滚：`artifactRegistry: 'legacy'`
-- PR-C5 回滚：`feedbackArbiter: false`（回到碎片化 hook）
+- PR-C1 / C2 回滚：`feedbackArbiter: false` 或 `feedbackPolicy: 'legacy-guidance'`（保留现有 guidance 行为）
+- PR-C4 回滚：`stageRegistry: 'legacy'`（读旧 STAGE_REGISTRY 常量）
+- PR-C5 回滚：`artifactRegistry: 'legacy'`（继续只暴露 `task` kind）
 
 ### 与其他 ADR 的对齐
 
@@ -348,6 +367,15 @@ controlPlane.artifactRegistry.register({
 - 跨 run 的 FeedbackDecision 历史聚合（哪些策略在哪些场景表现更好）——依赖 Journal 聚合能力
 - FeedbackSignal 的 embedding 化（语义匹配而非结构匹配）——与 evolution §7 纪律冲突，暂不考虑
 - Stage 之间的并发编排（Review 并发 Reviewer）——属于 IDC 编排扩展范畴
+
+## 变更历史
+
+| 日期 | 变更 | 作者 |
+|---|---|---|
+| 2026-04-24 | 初版 Proposed | Architecture Team |
+| 2026-04-25 | 对齐协议地基：StageRegistry / ArtifactRegistry 复用 CapabilityRegistry 查询面，ControlPlane 不自建注册基础设施 | Architecture Team |
+| 2026-04-26 | 现状核对：标记为 Partially Adopted / Needs Refresh；说明现有 `FeedbackCoordinator` / `IFeedbackArbiter` 是 guidance 层实现；补充 `FeedbackDecision` / `FeedbackFlowAction` 分层、`task → apply` 兼容约束与新的 7 PR 落地顺序 | Codex |
+| 2026-04-26 | Agent-first 策略修订：明确 ControlPlane / FeedbackArbiter 不替代 Agent 多模态判断；流程决策引用 AgentObservation / DecisionRationale，工具 evidence 仅作为可选增强 | Codex |
 
 ---
 

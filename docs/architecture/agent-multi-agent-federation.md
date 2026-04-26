@@ -1,7 +1,7 @@
 # Multi-Agent Federation — 多 Agent 联邦
 
-**状态**: Proposed
-**日期**: 2026-04-24
+**状态**: Proposed / Future Work (Agent-first MVP 不依赖)
+**日期**: 2026-04-24（2026-04-26 Agent-first 边界修订）
 **关联范围**: neko-agent · @neko/shared · 所有能产生/消费工具的子包
 
 > **协议地基对齐（2026-04-25）**：本 ADR 的 SubAgent 能力继承通过 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 CapabilityContribution + Trust Level 传播实现——父 Agent 的 trustLevel 在 spawn 子 Agent 时可降级但不可提升；子 Agent 的 ScopedToolRegistry 复用协议地基的两阶段模型（Registration 继承父作用域，Injection 按子 Agent 独立策略）。AgentId 路径寻址与协议地基的 `contributorId` 命名空间共用一套规范。Federation 的 7 个 AblationToggle 与协议地基附录 B 的 5 个 Capability Protocol toggle 正交。
@@ -13,7 +13,9 @@
 - [agent-evolution-capacity.md](./agent-evolution-capacity.md) — 抗演化审计，本 ADR 需要同步评估 Federation 对 Skill / Prompt / Orchestration 演化的影响
 - [ablation-experiment-framework.md](./ablation-experiment-framework.md) — 消融框架；Federation 把新维度（子代数 / 通信密度 / 角色组合）纳入 AblationToggles
 
-**取代说明**：本 ADR 吸收 `packages/neko-agent/packages/agent/src/subagent/` 已有实现（`SubAgentManager` / `Coordinator` / `ContextBridge` / Task 工具），把它从"单次 fire-and-forget 子 agent"升级为"**对等 Agent 联邦**"。原实现保留兼容，本 ADR 定义新能力边界与迁移路径。
+**取代说明**：本 ADR（Future Work）吸收 `packages/neko-agent/packages/agent/src/subagent/` 已有实现（`SubAgentManager` / `Coordinator` / `ContextBridge` / Task 工具），把它从"单次 fire-and-forget 子 agent"升级为"**对等 Agent 联邦**"。原实现保留兼容，本 ADR 定义新能力边界与迁移路径。
+
+**Agent-first 边界说明（2026-04-26）**：本 ADR 不作为 Agent-first perception、AgentObservation / DecisionRationale、PerceptionToolGroup、QualityReviewTool 或 PipelineAction MVP 的前置依赖。当前阶段使用现有 `SubAgentManager` 即可实现可选 reviewer / recovery executor；只有当出现运行中双向通信、兄弟 Agent 协作、递归 spawn 或长期可寻址拓扑需求时，才启动 Federation。Federation 解决的是多 Agent 拓扑与通信，不解决基础多模态感知，也不替代主 Agent 的最终创作判断。
 
 ---
 
@@ -46,7 +48,7 @@
 | Quality-Checker 发现失败，需要询问 Creator 具体意图 | QC 只能 return `failed` + 错误描述，下一轮 parent 再转问 Creator | QC 直接 `ask(creator, question)`，一跳而非三跳 |
 | 子任务嵌套（Coordinator 派出的 Worker 再派 Helper） | Worker 无法 spawn | Worker 持有 manager 引用，按 depth 配额再 spawn |
 
-核心转变：**Agent 不是 parent 的一次性工具，是可寻址、可对话、可嵌套的独立实体**。
+核心转变：**Agent 不是 parent 的一次性工具，是可寻址、可对话、可嵌套的独立实体**。但这属于 Federation 阶段能力；Agent-first MVP 仍应保留主 Agent 直接感知与直接决策的快路径。
 
 ### 1.3 为什么现在写 ADR 而不是直接开干
 
@@ -63,12 +65,12 @@
 ### 2.1 目标
 
 **G1 能力对等（Capability Parity）**
-任何 subagent 内部是完整 `AgentSession`，拥有 hooks 链 / permission 平面 / SkillInjectionCoordinator / PromptComposer / Memory / Journal。Parent 只通过 `SubAgentConfig` 字段**限制**子 agent 的能力（toolFilter、promptOverride、skillWhitelist 等），而不是替换一个"阉割版 agent"。
+任何 subagent 内部是完整 `AgentSession`，拥有 hooks 链 / permission 平面 / SkillInjectionCoordinator / PromptComposer / Memory / Journal。Parent 只通过 `SubAgentConfig` 字段**限制**子 agent 的能力（toolFilter、promptOverride、skillWhitelist 等），而不是替换一个"阉割版 agent"。能力对等不表示决策对等：在 Agent-first 工作流中，主 Agent 仍负责最终 `DecisionRationale`。
 
-**G2 双向异步通信（Bidirectional Messaging）**
+**G2 双向异步通信（Bidirectional Messaging，非 MVP 前置）**
 Parent 可以向运行中的 subagent 发消息（追加约束、变更需求、紧急中断）；subagent 可以主动向 parent 或兄弟 agent 发消息（询问、汇报进度、协作请求）。通信通过 **通用 MessageBus + 对称工具对** 实现，不走 parent-child 专用通道。
 
-**G3 受控递归（Bounded Recursion）**
+**G3 受控递归（Bounded Recursion，非 MVP 前置）**
 Subagent 可以再 spawn subagent，但受 **depth / breadth / 总 budget** 三项配额约束。任何一项触顶即拒绝 spawn，明确报错而非 OOM。
 
 **G4 可观测、可调试（Observable）**
@@ -101,6 +103,24 @@ neko-agent 内的 subagent 不与 neko-cut / neko-story 等其他 extension 的 
 - TypeScript `exactOptionalPropertyTypes` 严格模式
 - 不依赖外部进程（除已有 neko-engine sidecar）
 - Logger 使用 `@neko/shared` 的 `getLogger`
+
+### 2.4 与 Agent-first MVP 的关系
+
+以下能力不需要等待 Federation：
+
+- `AgentObservation` / `DecisionRationale` 记录。
+- Perception tools 作为 optional evidence provider。
+- Quality reviewer subagent 作为可选 `IRecoveryExecutor` / reviewer adapter。
+- 长视频摘要 subagent（单向 spawn + summary 回流）。
+- PipelineAction / partialRerun 由主 Agent rationale 驱动。
+
+以下能力才需要 Federation：
+
+- Parent 向运行中 subagent 追加约束。
+- Subagent 主动询问 parent 或 sibling agent。
+- Sibling agents 直接协作。
+- Subagent 再 spawn 下级 agent。
+- 长期 AgentRegistry / MessageBus / Inbox 拓扑观测。
 
 ---
 
@@ -809,7 +829,9 @@ interface AblationTogglesFederation {
 
 ---
 
-## 13. 迁移路径
+## 13. 迁移路径（Future Work）
+
+本节是 Federation 启动后的实施计划，不是 Agent-first perception MVP 的前置工作。当前 MVP 只需要现有 `SubAgentManager` 的单向 spawn 能力即可。
 
 ### 13.1 分期 PR
 
@@ -824,7 +846,7 @@ interface AblationTogglesFederation {
 | **PR-F7** | AblationToggles 11 项扩展 + Federation journal sink | F6 | 0.5 天 |
 | **PR-F8** | EventBus 事件统一 + 时序图导出 + debug UI (stub) | F7 | 1 天 |
 
-**总量**：~6.5 工程日。每个 PR 独立可 merge、可测试、可 rollback。
+**总量**：~6.5 工程日。每个 PR 独立可 merge、可测试、可 rollback。该估算仅适用于 Federation 正式启动后。
 
 ### 13.2 向后兼容
 
@@ -912,11 +934,13 @@ Message `data` 字段目前是 `Record<string, unknown>`。是否该要求按 ki
 
 ---
 
-## 16. 变更记录
+## 16. 变更历史
 
-| 日期 | 变更 | 影响 |
+| 日期 | 变更 | 作者 |
 |---|---|---|
-| 2026-04-24 | 初版（Proposed）| 设计定稿，尚未实施 |
+| 2026-04-24 | 初版 Proposed：设计定稿，尚未实施 | Architecture Team |
+| 2026-04-25 | 对齐协议地基：CapabilityContribution / Trust Level / ScopedToolRegistry 复用协议地基 | Architecture Team |
+| 2026-04-26 | Agent-first 边界修订：标记为 Future Work；明确 Federation 不作为 Agent-first perception MVP 前置依赖，主 Agent 保留最终感知与 DecisionRationale | Codex |
 
 ---
 
