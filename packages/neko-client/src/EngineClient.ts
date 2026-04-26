@@ -65,16 +65,58 @@ export interface TranscribeResponse {
   durationSecs: number | null;
 }
 
+export interface PerceptionTranscribeRequest {
+  readonly model: string;
+  readonly audio: string;
+}
+
+export interface PerceptionSimilarityRequest {
+  readonly model: string;
+  readonly image: string;
+  readonly text: string;
+}
+
+export interface PerceptionClassifyRequest {
+  readonly model: string;
+  readonly image: string;
+  readonly labels: readonly string[];
+}
+
+export interface PerceptionClassifyLabelScore {
+  readonly label: string;
+  readonly score: number;
+}
+
+export interface PerceptionDetectShotsRequest {
+  readonly video: string;
+}
+
+export interface PerceptionDetectedShot {
+  readonly index: number;
+  readonly start: number;
+  readonly end: number | null;
+  readonly confidence: number | null;
+}
+
+export interface EnginePerceptionFacade {
+  transcribe(request: PerceptionTranscribeRequest): Promise<TranscribeResponse>;
+  similarity(request: PerceptionSimilarityRequest): Promise<number>;
+  classify(request: PerceptionClassifyRequest): Promise<readonly PerceptionClassifyLabelScore[]>;
+  detectShots(request: PerceptionDetectShotsRequest): Promise<readonly PerceptionDetectedShot[]>;
+}
+
 const logger = getLogger('EngineClient');
 
 export class EngineClient {
   readonly port: number;
+  readonly perception: EnginePerceptionFacade;
   private readonly timeout: number;
   private pathResolver: PathResolver | null = null;
 
   constructor(port: number, config?: EngineClientConfig) {
     this.port = port;
     this.timeout = config?.timeout ?? 120_000;
+    this.perception = createEnginePerceptionFacade(this);
   }
 
   /**
@@ -238,6 +280,38 @@ export class EngineClient {
   }
 
   /**
+   * Extract an encoded audio segment from an audio/video source.
+   * Dispatches `audios:segment` and returns raw encoded bytes.
+   */
+  async extractAudioSegment(
+    source: string,
+    start: number,
+    duration: number,
+    opts?: { format?: string; sampleRate?: number; channels?: number },
+  ): Promise<ArrayBuffer | null> {
+    const resp = await this.dispatch({
+      group: 'audios',
+      action: 'segment',
+      options: {
+        source,
+        start,
+        duration,
+        format: opts?.format ?? 'wav',
+        ...(opts?.sampleRate != null && { sampleRate: opts.sampleRate }),
+        ...(opts?.channels != null && { channels: opts.channels }),
+      },
+    });
+
+    if (resp.status === 'error') return null;
+
+    const data = resp.data as { data?: string; base64?: string; dataBase64?: string } | undefined;
+    const b64 = data?.data ?? data?.base64 ?? data?.dataBase64;
+    if (!b64 || typeof b64 !== 'string') return null;
+
+    return base64ToArrayBuffer(b64);
+  }
+
+  /**
    * Diff two media files.
    * Dispatches `{group}:diff` and transforms the Rust tagged-enum response.
    * Returns typed DiffResult with flattened content (imageDiff/audioDiff/videoDiff/timelineDiff).
@@ -300,6 +374,36 @@ export class EngineClient {
   }
 
   /**
+   * Capture an image file into encoded image bytes.
+   * Dispatches `images:capture`.
+   * Returns raw image data as ArrayBuffer, or null on failure.
+   */
+  async captureImage(
+    source: string,
+    opts?: { quality?: number; format?: string; width?: number; height?: number },
+  ): Promise<ArrayBuffer | null> {
+    const resp = await this.dispatch({
+      group: 'images',
+      action: 'capture',
+      options: {
+        source,
+        quality: opts?.quality ?? 85,
+        format: opts?.format ?? 'jpeg',
+        ...(opts?.width != null && { width: opts.width }),
+        ...(opts?.height != null && { height: opts.height }),
+      },
+    });
+
+    if (resp.status === 'error') return null;
+
+    const data = resp.data as { data?: string; base64?: string } | undefined;
+    const b64 = data?.data ?? data?.base64;
+    if (!b64 || typeof b64 !== 'string') return null;
+
+    return base64ToArrayBuffer(b64);
+  }
+
+  /**
    * Get keyframe timestamps from a video file.
    * Dispatches `videos:keyframes`.
    * Returns sorted array of keyframe timestamps in seconds.
@@ -315,6 +419,20 @@ export class EngineClient {
 
     const data = resp.data as { keyframes?: Array<{ time: number }> } | undefined;
     return (data?.keyframes ?? []).map((k) => k.time).sort((a, b) => a - b);
+  }
+
+  /**
+   * Derive shot boundary candidates from engine keyframes.
+   * This is evidence for Agent review, not an authoritative edit decision.
+   */
+  async detectShots(source: string): Promise<readonly PerceptionDetectedShot[]> {
+    const keyframes = await this.getKeyframes(source);
+    return keyframes.map((start, index) => ({
+      index,
+      start,
+      end: keyframes[index + 1] ?? null,
+      confidence: null,
+    }));
   }
 
   // =========================================================================
@@ -1494,6 +1612,23 @@ export class EngineClient {
       throw new Error(msg);
     }
   }
+}
+
+function createEnginePerceptionFacade(client: EngineClient): EnginePerceptionFacade {
+  return {
+    transcribe: (request) => client.transcribe(request.model, request.audio),
+    similarity: (request) => client.clipScore(request.model, request.image, request.text),
+    classify: async (request) => {
+      const scores = await Promise.all(
+        request.labels.map(async (label) => ({
+          label,
+          score: await client.clipScore(request.model, request.image, label),
+        })),
+      );
+      return scores.sort((left, right) => right.score - left.score);
+    },
+    detectShots: (request) => client.detectShots(request.video),
+  };
 }
 
 // =============================================================================

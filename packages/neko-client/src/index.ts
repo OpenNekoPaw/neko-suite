@@ -60,6 +60,9 @@ export { formatTime, formatTimePrecise } from './formatTime';
 export {
   EngineClient,
   type EngineClientConfig,
+  type EnginePerceptionFacade,
+  type PerceptionSimilarityRequest,
+  type PerceptionTranscribeRequest,
   type TranscribeSegment,
   type TranscribeResponse,
 } from './EngineClient';
