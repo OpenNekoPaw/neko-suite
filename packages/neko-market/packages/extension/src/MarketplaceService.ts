@@ -36,6 +36,7 @@ import { ShaderInstallTarget } from './ShaderInstallTarget';
 import { ModelInstallTarget } from './ModelInstallTarget';
 import { PresetInstallTarget } from './PresetInstallTarget';
 import { PuppetMotionInstallTarget } from './PuppetMotionInstallTarget';
+import { ProviderCardInstallTarget } from './ProviderCardInstallTarget';
 
 /** Minimal NekoAuthAPI interface (defined locally to avoid cross-extension imports). */
 interface NekoAuthAPI {
@@ -103,6 +104,7 @@ export class MarketplaceService implements vscode.Disposable {
     targets.register(new PresetInstallTarget('template'));
     targets.register(new PresetInstallTarget('lut'));
     targets.register(new PuppetMotionInstallTarget());
+    targets.register(new ProviderCardInstallTarget());
 
     this._installManager = new InstallManager(
       this._client,

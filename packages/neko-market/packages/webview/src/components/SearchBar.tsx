@@ -13,6 +13,7 @@ const TYPE_FILTER_KEYS: { key: AssetTypeFilter; i18nKey: string }[] = [
   { key: 'shader', i18nKey: 'marketplace.filter.shader' },
   { key: 'model', i18nKey: 'marketplace.filter.model' },
   { key: 'preset', i18nKey: 'marketplace.filter.preset' },
+  { key: 'provider-card', i18nKey: 'marketplace.filter.providerCard' },
 ];
 
 /** Map UI filter labels to backend AssetType values */
@@ -28,6 +29,8 @@ function filterToAssetTypes(filter: AssetTypeFilter): string[] | undefined {
       return ['ai-model', 'lora', 'embedding', '3d-model'];
     case 'preset':
       return ['preset', 'template', 'lut'];
+    case 'provider-card':
+      return ['provider-card'];
   }
 }
 

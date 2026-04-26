@@ -106,6 +106,9 @@ export class InstallManager implements IInstallManager {
       if (!target) {
         return { success: false, error: `No install target for type: ${manifest.type}` };
       }
+      if (target.validateManifest) {
+        await target.validateManifest(manifest);
+      }
       onProgress?.({ packageId, phase: 'validating', percent: 100 });
 
       // 7. Extract archive to target path

@@ -54,7 +54,7 @@ export interface InstallProgressInfo {
 // =============================================================================
 
 export type TabType = 'browse' | 'installed' | 'updates';
-export type AssetTypeFilter = 'all' | 'skill' | 'shader' | 'model' | 'preset';
+export type AssetTypeFilter = 'all' | 'skill' | 'shader' | 'model' | 'preset' | 'provider-card';
 
 interface MarketplaceState {
   // Navigation

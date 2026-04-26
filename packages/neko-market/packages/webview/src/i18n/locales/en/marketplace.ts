@@ -8,6 +8,7 @@ export const marketplace = {
   'marketplace.filter.skill': 'Skills',
   'marketplace.filter.shader': 'Shaders',
   'marketplace.filter.model': 'Models',
+  'marketplace.filter.providerCard': 'Provider Cards',
   'marketplace.filter.preset': 'Presets',
 
   // Tabs
