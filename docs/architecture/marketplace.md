@@ -1,6 +1,6 @@
 # 市场平台架构
 
-> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [remote-storage.md](./remote-storage.md) · [registry-server.md](./registry-server.md) · [model-runtime.md](./model-runtime.md)
+> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [storage-strategy.md](./storage-strategy.md) · [model-runtime.md](./model-runtime.md)
 
 > **协议地基对齐（Proposed 2026-04-25）**：[adr-capability-protocol.md](./adr-capability-protocol.md) 规定市场下发的能力（Skill / Tool / ProviderCard / ToolGroup）在签名审核时必须标记 **trustLevel**。默认审核通过的社区包标记 `community`（见协议地基 §6 三级信任）；未认证或用户本地 `.neko/plugins/` 的能力标记 `untrusted`（默认限制：不可贡献 ProviderCard、Operation 强制 approval='ask'、每次激活要求用户确认）。Market 需要在 Phase 推进时对接 trustLevel 审核流程，作为能力审核的新维度。
 >
@@ -489,7 +489,7 @@ Phase 6.5.5 — 消费端集成 + 热加载（待开发）
 └── 私有 registry 支持（MarketClient 可配 registryUrl，团队/企业自建）
 
 Phase 6.5.7 — Registry Server + 商业化（待开发）
-├── Registry Server 实现（详见 registry-server.md）
+├── Registry Server 实现（详见第九节）
 │   ├── S1: 最小 Server（Package API + SQLite + Docker）
 │   ├── S2: 对象存储 + 预签名直传 + 发布能力
 │   ├── S3: 上游代理（HF/Civitai 适配器 + 缓存，对客户端透明）
@@ -549,4 +549,223 @@ neko-market 安装模型文件 → ~/.neko/models/{framework}/{name}/
 消费扩展使用：
     ├── neko-agent: ComfyUIMediaAdapter / OllamaAdapter（本地优先，VRAM 不足回退云端）
     └── neko-engine: ONNX 模型直接加载到 GPU 管线
+```
+
+---
+
+## 九、Registry Server 架构
+
+> neko-market 客户端（`MarketClient`）已实现完整的搜索/安装/管理协议，本节描述对应的后端服务架构。当前 `DEFAULT_REGISTRY_URL` 指向 `https://market.neko.dev/api/v1`。
+
+### 核心架构决策
+
+**决策 1：薄 API + 对象存储直传**
+
+API 服务器只处理元数据和鉴权，文件下载通过对象存储预签名 URL 直传。AI 模型 2-15 GB，不能过 API 代理；预签名 URL 让客户端直接从存储下载，对象存储原生支持 Range 请求（断点续传）。
+
+```
+客户端                      Registry Server                 对象存储
+  │─── GET /download ───────────▶│                             │
+  │                              │── 鉴权 + 生成预签名 URL ──▶│
+  │◀── { url: "签名URL" } ──────│                             │
+  │─── GET 签名URL（直传）──────────────────────────────────▶│
+  │◀── 文件流（支持 Range）──────────────────────────────────│
+```
+
+**决策 2：不单独配 CDN，存储选型自带加速**
+
+90% 的资产（Skill/Shader/Preset/LUT）在 KB-MB 级别，任何存储直传都够快；大文件低频单次下载，CDN 缓存命中率极低。按用户地域选存储：
+
+| 用户分布 | 推荐存储 | 加速能力 |
+|---------|---------|---------|
+| 中国为主 | 阿里云 OSS | OSS 加速 + 按需开 CDN |
+| 海外为主 | Cloudflare R2 | 自带 Cloudflare CDN，**零出站费** |
+| 全球分布 | OSS（国内）+ R2（海外）双存储 | 各自加速 |
+
+**决策 3：上游代理模式（借鉴 Verdaccio）**
+
+支持配置上游源（HuggingFace / Civitai / 其他 neko registry），首次请求代理下载并缓存到本地存储，用户无需离开 neko-market 即可访问 HF / Civitai 模型。
+
+**决策 4：客户端 registryUrl 固定，不支持多 Registry**
+
+客户端 `registryUrl` 固定为 `https://market.neko.dev/api/v1`，第三方源聚合是**服务端职责**（通过 upstreams 代理 HF/Civitai，对客户端透明），避免碎片化。
+
+### 系统架构
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                   Neko Market Registry Server                 │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │
+│  │ Package   │  │ Upload    │  │ Upstream  │  │ Auth      │ │
+│  │ API       │  │ Service   │  │ Proxy     │  │ Service   │ │
+│  │ 搜索/详情 │  │ 分片上传   │  │ HF 适配   │  │ JWT 验证  │ │
+│  │ 版本管理  │  │ 完整性校验 │  │ Civitai  │  │ 发布者    │ │
+│  │ 下载 URL  │  │ 元数据提取 │  │ 缓存管理  │  │ 付费授权  │ │
+│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘ │
+│  ┌─────┴──────────────┴───────────────┴───────────────┴─────┐ │
+│  │  Metadata DB (PostgreSQL / SQLite)  Object Store (S3/R2) │ │
+│  └───────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### API 设计
+
+**Package API（复用 IMarketClient 契约）**
+
+```
+# 读操作（匿名可用）
+GET  /api/v1/packages?q=&types=&tags=&sort=&page=&pageSize=
+GET  /api/v1/packages/:id
+GET  /api/v1/packages/:id/versions
+GET  /api/v1/packages/:id/versions/:ver/download    # 返回预签名 URL
+GET  /api/v1/featured?type=
+
+# 写操作（需认证）
+POST /api/v1/packages
+POST /api/v1/packages/:id/versions
+PUT  /api/v1/packages/:id
+DEL  /api/v1/packages/:id/versions/:ver
+
+# LocalAI Gallery（供 LocalAI GALLERIES 配置使用）
+GET  /api/v1/gallery.yaml
+```
+
+**Upload API（大文件分片直传）**
+
+```
+POST /api/v1/upload/init     → { uploadId, parts: [{ partNumber, presignedUrl }] }
+POST /api/v1/upload/complete → { success, downloadUrl }
+POST /api/v1/upload/direct   multipart/form-data（< 100MB）
+```
+
+**Publisher API**
+
+```
+POST /api/v1/publishers/register
+GET  /api/v1/publishers/:id
+GET  /api/v1/publishers/:id/packages
+PUT  /api/v1/publishers/:id
+```
+
+### 上游代理配置
+
+```yaml
+# registry-config.yaml
+upstreams:
+  huggingface:
+    url: "https://huggingface.co"
+    protocol: "huggingface"
+    enabled: true
+    cache: true
+    cache_ttl: "7d"
+    types: ["ai-model", "lora", "embedding"]
+    auth_token: "${HF_TOKEN}"
+
+  civitai:
+    url: "https://civitai.com/api/v1"
+    protocol: "civitai"
+    enabled: true
+    cache: true
+    types: ["ai-model", "lora", "embedding"]
+    read_only: true
+
+  team-registry:
+    url: "https://market.mycompany.com/api/v1"
+    protocol: "neko"
+    enabled: true
+    cache: true
+    auth_token: "${TEAM_TOKEN}"
+```
+
+搜索时并发查询本地 DB + 上游，合并去重后标记来源（`source: 'local' | 'huggingface' | 'civitai'`）。上游模型下载时：本地缓存命中直接返回预签名 URL，未命中则从上游下载后缓存。
+
+### 数据模型
+
+```sql
+CREATE TABLE packages (
+  id          TEXT PRIMARY KEY,         -- @publisher/name
+  name        TEXT NOT NULL,
+  publisher_id TEXT NOT NULL REFERENCES publishers(id),
+  type        TEXT NOT NULL,            -- skill/shader/ai-model/lora/...
+  visibility  TEXT NOT NULL DEFAULT 'public',
+  tags        TEXT[],
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE versions (
+  id          SERIAL PRIMARY KEY,
+  package_id  TEXT NOT NULL REFERENCES packages(id),
+  version     TEXT NOT NULL,
+  storage_path TEXT NOT NULL,           -- S3 key
+  checksum    TEXT NOT NULL,            -- sha256
+  manifest    JSONB NOT NULL,           -- AssetManifest 完整快照
+  compatibility JSONB,
+  downloads   BIGINT NOT NULL DEFAULT 0,
+  UNIQUE(package_id, version)
+);
+
+CREATE TABLE licenses (
+  id          SERIAL PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  package_id  TEXT NOT NULL REFERENCES packages(id),
+  license_type TEXT NOT NULL,           -- one-time/subscription
+  expires_at  TIMESTAMPTZ
+);
+```
+
+### 权限模型
+
+```
+anonymous      搜索 + 下载 public 包
+registered     + 发布包 + 管理自己的包
+purchased      + 访问已购买的 paid 包
+admin          + 管理所有包 + 审核 + 推荐设置
+```
+
+认证方式：复用 neko-auth JWT，Registry Server 验证签名，提取 userId 和 roles。
+
+### 部署模式
+
+**官方托管（SaaS）**：`market.neko.dev` — 轻量 VPS/Serverless + PostgreSQL（Neon 免费层）+ Cloudflare R2 或阿里云 OSS。月成本约 $20（R2 方案）或 ¥100-300（OSS 方案）。
+
+**私有部署（Docker 单容器）**：
+
+```bash
+docker run -d -p 4873:4873 \
+  -v neko-registry-data:/data \
+  -e DATABASE_TYPE=sqlite \
+  -e STORAGE_TYPE=local \
+  neko/market-registry
+```
+
+SQLite 元数据 + 本地文件存储（零外部依赖）。私有部署的 Registry 作为官方 Registry 的上游数据源，或用于企业内部独立使用。
+
+### 技术选型
+
+| 组件 | 推荐 | 理由 |
+|------|------|------|
+| API 框架 | Hono (TS) | 轻量，Cloudflare Workers 兼容，TS 与客户端类型共享 |
+| 数据库 | PostgreSQL / SQLite（私有） | PostgreSQL 生产级；SQLite 零依赖私有部署 |
+| 对象存储 | Cloudflare R2 / 阿里云 OSS | R2 零出站 + CDN；OSS 国内最优 |
+| 搜索 | PostgreSQL 全文搜索 / MeiliSearch（大规模时） | 初期 PG tsvector 足够 |
+
+### 实施路径
+
+```
+Phase S1 — 最小 Registry Server
+├── Package API + SQLite + 本地文件存储 + 基础认证（API key）+ Docker 镜像
+
+Phase S2 — 对象存储 + 发布能力
+├── S3/R2/OSS 存储后端 + 预签名 URL 直传
+├── Upload API（小文件直传 + 大文件分片）
+└── Publisher 注册 + 包发布 + neko-auth JWT 集成
+
+Phase S3 — 上游代理
+├── HuggingFace + Civitai 上游适配器 + 透明缓存
+└── 私有 registry 上游链式代理
+
+Phase S4 — 商业化
+├── 可见性控制（public/private/paid）
+├── LicenseManager 服务端实现 + 支付集成
+└── 发布者 Portal Web UI + 评分评论系统
 ```

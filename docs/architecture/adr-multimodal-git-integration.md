@@ -6,10 +6,8 @@ Proposed
 
 ## 关联
 
-- [project-data-management.md](./project-data-management.md)
-- [diff.md](./diff.md)
-- [lsp.md](./lsp.md)
-- [local-storage-strategy.md](./local-storage-strategy.md)
+- [storage-strategy.md](./storage-strategy.md)
+- [media-lsp.md](./media-lsp.md)
 - [adr-character-unified-index.md](./adr-character-unified-index.md)
 
 ---

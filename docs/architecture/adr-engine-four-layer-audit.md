@@ -9,6 +9,7 @@ Proposed (2026-04-25)
 - 上层依赖:[adr-four-layer-contract.md](./adr-four-layer-contract.md)
 - 横向配合:[adr-2d3d-unified-engine.md](./adr-2d3d-unified-engine.md), [adr-xr-authoring-runtime-split.md](./adr-xr-authoring-runtime-split.md)
 - 后续推进:[adr-engine-ai-native-foundation.md](./adr-engine-ai-native-foundation.md)
+- 具体域审计:[adr-3d-editor-rendering-architecture.md](./adr-3d-editor-rendering-architecture.md)（runtime-scene 四层断裂的详细诊断与修复路径）
 
 ## 背景
 
@@ -35,10 +36,10 @@ Proposed (2026-04-25)
 
 | Crate | 状态 | 说明 |
 |-------|------|------|
-| `runtime-scene` | 已四层化 | 3D ECS,IK + GPU Skinning |
-| `runtime-puppet` | 已四层化 | 2D 骨骼 ECS,inox2d |
+| `runtime-scene` | 已四层化（L3 完整；L2 TS 镜像断裂；L1 缺失；L4 3D 域未注册） | 3D ECS,IK + GPU Skinning；详见 [adr-3d-editor-rendering-architecture.md §1.4](./adr-3d-editor-rendering-architecture.md) |
+| `runtime-puppet` | **四层完整度最高（参照标准）** | 2D 骨骼 ECS；L2 TS 类型完整（PuppetSnapshot/PuppetDelta/DeformedMesh）；L1 WebSocket /v1/puppets/stream 60fps delta 已实现；L3 双向 HTTP+WS；L4 AgentCapabilityProvider 已注册（PuppetGenerateParams/PuppetFromImage/PuppetAdjust） |
 | `runtime-xr` | 已设计 | 提议新增,见 [adr-xr-authoring-runtime-split.md](./adr-xr-authoring-runtime-split.md) |
-| (TS) `neko-sketch` | 已四层化 | 2D 栅格,非 ECS |
+| (TS) `neko-sketch` | **独立自治，不适用四层框架** | 100% 自研 WebGL2，零 neko-engine 依赖；保存数据来自 gl.readPixels() 纹理回读；无 WYSIWYG 一致性问题（单一渲染器）；不需要 ECS，四层框架 L2 对其不适用 |
 | **`runtime-media`** | **未四层化** | NLE 域,**最大的未覆盖域** |
 | **`runtime-ml`** | **未四层化** | ML 推理(超分/降噪/CLIP/Whisper) |
 | **`runtime-device`** | 部分需要 | 相机/麦克/MIDI/手柄 I/O |
@@ -139,7 +140,7 @@ L1 Feedback   embedding-stale / tag-conflict / asset-missing /
               search-irrelevant (人类 thumbs-down)
 ```
 
-**与 [LSP ScriptIndex](./lsp.md) 同构**——都是"嵌入索引 + 语义搜索",可共享底层 `engine-vector-index` crate。
+**与 [LSP ScriptIndex](./media-lsp.md) 同构**——都是"嵌入索引 + 语义搜索",可共享底层 `engine-vector-index` crate。
 
 ### 部分需要(L4+L3 但 L2/L1 弱)
 

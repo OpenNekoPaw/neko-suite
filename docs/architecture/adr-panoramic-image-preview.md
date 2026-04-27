@@ -283,7 +283,7 @@ export interface EnvironmentSpec {
 | [adr-capability-protocol.md](./adr-capability-protocol.md) | 球面查看器作为 Capability 注册（`viewer.panoramic.image`），Tool 投影使预览可被 Agent 程序化调用 |
 | [adr-provider-expression-context.md](./adr-provider-expression-context.md) | `panoramic` 作为 Provider Capability Card 的能力位；Router 据此选 Provider |
 | [model-runtime.md](./model-runtime.md) | HDRI 作为 IBL 输入，复用现有 `Environment` cubemap 管线 |
-| [device-access.md](./device-access.md) | 暂无直接耦合（未涉及陀螺仪），但若未来支持 VR Headset 预览将复用其抽象 |
+| [vscode-constraints.md](./vscode-constraints.md) | 暂无直接耦合（未涉及陀螺仪），但若未来支持 VR Headset 预览将复用其抽象 |
 
 ---
 
@@ -366,7 +366,7 @@ export interface EnvironmentSpec {
 
 - **全景视频** (`.mp4` 360°)：与本 ADR 架构同源，但需要复用视频帧调度；放在后续 ADR `panoramic-video-preview` 中。
 - **多分辨率瓦片 (Deep Zoom / Pannellum tile)**：超大全景图（≥ 16K）的瓦片化加载；先用整图下采样应付。
-- **VR Headset 直连**：WebXR / OpenXR 输出，待 `device-access.md` 引入对应 trait。
+- **VR Headset 直连**：WebXR / OpenXR 输出，待 `vscode-constraints.md` 引入对应 trait。
 - **空间音频**：Ambisonics B-format 解码，与 audio 预览相关，独立 ADR。
 - **模板/编辑**：在球面预览中绘制 / 标注 / 重投影；那是 neko-sketch 范畴，本 ADR 仅做 Send-to。
 

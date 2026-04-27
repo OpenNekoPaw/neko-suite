@@ -2,7 +2,7 @@
 
 **状态**: 持续更新（2026-04-08 已落实 asset 代理边界与 `timelineSync` 最小回流契约）  
 **日期**: 2026-04-08  
-**关联**: `canvas-agent-integration.md` · `project-data-management.md` · `ARCHITECTURE_CN.md`
+**关联**: `canvas-agent-integration.md` · `storage-strategy.md` · `ARCHITECTURE_CN.md`
 
 ---
 

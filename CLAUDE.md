@@ -104,20 +104,18 @@ Before diving into any domain, consult the corresponding ADR document. For the f
 
 | Domain | Document | Key Points |
 |--------|----------|------------|
-| Media Diff | [docs/architecture/diff.md](./docs/architecture/diff.md) | H264+PCM streaming, not frame-by-frame extraction |
-| Media LSP | [docs/architecture/lsp.md](./docs/architecture/lsp.md) | JVI diagnostics + Hover + symbol navigation + cross-file indexing |
+| Media Diff + LSP | [docs/architecture/media-lsp.md](./docs/architecture/media-lsp.md) | H264+PCM streaming; JVI diagnostics + Hover + symbol navigation + cross-file indexing; script semantic search |
 | Cross-Cutting Concerns | *internalized* | Logger/i18n/Theme/Error unified in @neko/shared, three-layer isolation (L0 zero-dep -> L1 vscode -> L2 DOM/React) |
 | Cross-Language Architecture | *internalized* | Rust engine is the authoritative source for data models; TS handles UI only |
 | Shared Package Design | *internalized* | @neko/shared uses exports subpath layering |
 | Asset Management | *internalized* | Unified AssetManifest + Handler registry pattern |
 | 3D Capabilities | *Internalized* | bevy_ecs standalone crate + runtime-scene; dual GPU Skinning pipeline; FABRIK/CCD/TwoBone IK; animation blend/crossfade; hybrid strategy (built-in lightweight + MCP bridge to Blender) |
+| 3D Editor Rendering Architecture | [docs/architecture/adr-3d-editor-rendering-architecture.md](./docs/architecture/adr-3d-editor-rendering-architecture.md) | **Proposed (2026-04-27)**. neko-model 当前双渲染器（R3F + wgpu）导致编辑器预览与导出结果不一致。三大引擎（UE5/Unity/Godot）均采用编辑器 Viewport 直接运行引擎渲染器（SSOT 原则）。近期修复优先级：P0 修复 GLB 导出器（材质/灯光/相机丢失）、P1 修复法线贴图 shader + 动画状态同步、P2 实现 `scenes:stream`（WYSIWYG 基础条件）。混合路线：R3F 做交互预览 + Engine capture 做质量预览 + Engine stream 做长期 WYSIWYG 目标。VSCode CSP 已放行 `connect-src http://127.0.0.1:*`，全景/HDR 文件通过 engine HTTP 端点加载可绕过限制。 |
 | 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (skeletal animation); multi-layer animation blend + crossfade; hybrid strategy (built-in lightweight + MCP bridge to PS/ComfyUI) |
-| Panel Placement | [docs/architecture/panel-placement.md](./docs/architecture/panel-placement.md) | Editor-bound panels use embedded Webview; global panels use native VSCode containers |
-| Device Access | [docs/architecture/device-access.md](./docs/architecture/device-access.md) | Webview sandbox restricts hardware APIs; proxied through engine Rust sidecar (cpal/nokhwa/midir/gilrs) |
+| VSCode Constraints | [docs/architecture/vscode-constraints.md](./docs/architecture/vscode-constraints.md) | Panel placement: editor-bound → embedded Webview, global → native container; device access: Webview sandbox proxied through engine Rust sidecar (cpal/nokhwa/midir/gilrs) |
 | Format Strategy | [docs/architecture/format-strategy.md](./docs/architecture/format-strategy.md) | nk* unified naming; JSON Schema as file format SSOT; Proto for engine communication only; Format SDK (@neko/shared/nkv) provides load/validate/migrate/save; 20 incremental operations + full fallback |
-| Marketplace | [docs/architecture/marketplace.md](./docs/architecture/marketplace.md) | @neko/market-core Layer 0 + multi-category InstallTarget + unified distribution protocol |
+| Marketplace + Registry | [docs/architecture/marketplace.md](./docs/architecture/marketplace.md) | @neko/market-core Layer 0 + multi-category InstallTarget + unified distribution protocol; Registry Server: thin API + object storage direct upload + upstream proxy (HF/Civitai) + private Docker deployment |
 | Local Model Deployment | [docs/architecture/model-runtime.md](./docs/architecture/model-runtime.md) | No neko-runtime package; onPostInstall GGUF->Ollama / ONNX->Engine; Engine ort/candle native ML; external runtime Provider/MCP integration |
-| Registry Server | [docs/architecture/registry-server.md](./docs/architecture/registry-server.md) | Thin API + object storage direct upload + upstream proxy (HF/Civitai) + multi-registry + private Docker deployment |
 | Document Preview | [docs/architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ delegated to Book Reader or self-built (pdfjs-dist/epub.js); DOCX->docx-preview; XLSX->x-data-spreadsheet; PPTX->LibreOffice headless; priority: option |
 | Creative Context Compression | [docs/architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7-level priority semantic classification: user messages permanently retained; creative decisions/version anchors/iteration chains/asset state/aesthetic preferences summarized by tier |
 | Ablation Experiment Framework | [docs/architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles + MetricsHooks zero-intrusion ablation experiments |

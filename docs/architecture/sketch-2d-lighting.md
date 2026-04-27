@@ -7,7 +7,7 @@ Accepted — P0 (flat point light) + P1 (normal map lighting) implemented
 ## 关联
 
 - [format-strategy.md](./format-strategy.md) — `.nks` 文件格式
-- [device-access.md](./device-access.md) — Webview GPU 限制
+- [vscode-constraints.md](./vscode-constraints.md) — Webview GPU 限制
 - [canvas-role-boundary.md](./canvas-role-boundary.md) — neko-canvas 与 neko-sketch 职责边界
 
 ---

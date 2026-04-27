@@ -1,7 +1,7 @@
 # RFC: neko-engine 插件化架构
 
 > 状态：Active（P1 MVP + semver + activation handler 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
-> 关联：[marketplace.md](./marketplace.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md) · [engine-runtime-layering.md](./engine-runtime-layering.md)
+> 关联：[marketplace.md](./marketplace.md) · [model-runtime.md](./model-runtime.md) · [vscode-constraints.md](./vscode-constraints.md) · [engine-runtime-layering.md](./engine-runtime-layering.md)
 
 ---
 

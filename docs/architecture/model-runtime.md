@@ -1,6 +1,6 @@
 # 本地模型运行时架构
 
-> 关联：[marketplace.md](./marketplace.md) · [registry-server.md](./registry-server.md) · [ARCHITECTURE.md](../../ARCHITECTURE.md)
+> 关联：[marketplace.md](./marketplace.md) · [marketplace.md](./marketplace.md) · [ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 ---
 

@@ -1,7 +1,7 @@
 # Neko Tools DI 改造方案
 
 > 状态：Draft | 日期：2026-04-12  
-> 关联：[diff.md](./diff.md) · [lsp.md](./lsp.md) · [ARCHITECTURE_CN.md](../../ARCHITECTURE_CN.md)
+> 关联：[media-lsp.md](./media-lsp.md) · [ARCHITECTURE_CN.md](../../ARCHITECTURE_CN.md)
 
 ---
 

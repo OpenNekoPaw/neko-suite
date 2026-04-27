@@ -67,9 +67,9 @@ Phase 5 部分（规则匹配）：
 
 ## 关联
 
-- [lsp.md](./lsp.md)
-- [project-data-management.md](./project-data-management.md)
-- [local-storage-strategy.md](./local-storage-strategy.md)
+- [media-lsp.md](./media-lsp.md)
+- [storage-strategy.md](./storage-strategy.md)
+- [storage-strategy.md](./storage-strategy.md)
 - [canvas-agent-integration.md](./canvas-agent-integration.md)
 
 ---

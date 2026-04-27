@@ -1,6 +1,6 @@
 # 文件格式策略
 
-> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [lsp.md](./lsp.md)
+> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [media-lsp.md](./media-lsp.md)
 
 ---
 

@@ -213,7 +213,7 @@ Canvas webview adds a right-click menu item on `GalleryCanvasNode`: **"Fill from
 ### 4.4 Caching and invalidation
 
 - Cache key: SHA-256 of model file + preset name + lighting preset
-- Storage: `.neko/.cache/turnarounds/<hash>/` (falls into existing `L2 cache` layout per [local-storage-strategy.md](./local-storage-strategy.md))
+- Storage: `.neko/.cache/turnarounds/<hash>/` (falls into existing `L2 cache` layout per [storage-strategy.md](./storage-strategy.md))
 - Invalidation: model file mtime change → cache entry dropped
 - Size budget: ~1.5 MB per 8-angle turnaround at 1024² PNG
 

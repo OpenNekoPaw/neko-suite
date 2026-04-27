@@ -1,6 +1,6 @@
 # 文档预览策略
 
-> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [panel-placement.md](./panel-placement.md)
+> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [vscode-constraints.md](./vscode-constraints.md)
 
 ---
 

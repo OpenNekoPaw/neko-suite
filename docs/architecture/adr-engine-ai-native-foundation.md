@@ -206,7 +206,7 @@ StateDelta {
                              ─ Send-to-Anywhere 协议
 ```
 
-> 这 6+1 个组件 **不是** 新功能,是把现有散落代码沉淀。例如 [LSP ScriptIndex](./lsp.md) 的 HNSW 索引、neko-puppet 的 32-param 表、provider-bridge ADR 的卡片格式、CLAUDE.md 的 AssetManifest+Handler 模式,都已存在但各自为政——必须收回到共享层 / 联邦协议。
+> 这 6+1 个组件 **不是** 新功能,是把现有散落代码沉淀。例如 [LSP ScriptIndex](./media-lsp.md) 的 HNSW 索引、neko-puppet 的 32-param 表、provider-bridge ADR 的卡片格式、CLAUDE.md 的 AssetManifest+Handler 模式,都已存在但各自为政——必须收回到共享层 / 联邦协议。
 
 ### 3. 语义状态的历史管理策略
 

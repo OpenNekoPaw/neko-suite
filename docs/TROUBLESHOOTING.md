@@ -734,7 +734,7 @@
 #### NKAS-003：`AssetRegistry` 多源架构尚未真正落地（P1）
 - 影响：文档中“项目库 + 共享库 + marketplace”统一资产视图的目标尚未实现，当前仍主要停留在项目级 `AssetLibrary`。
 - 定位：
-  - 文档规划：`docs/architecture/local-storage-strategy.md`
+  - 文档规划：`docs/architecture/storage-strategy.md`
   - 核心实现：`packages/neko-assets/packages/asset/src/service/AssetRegistry.ts`
   - 扩展入口：`packages/neko-assets/src/extension.ts`
 - 现状：扩展启动时直接实例化的是 `AssetLibrary`，未见 `AssetRegistry` 进入主查询、视图或命令链路。
@@ -859,7 +859,7 @@
 - 定位：
   - 扩展配置：`packages/neko-market/package.json`
   - 服务实现：`packages/neko-market/packages/extension/src/MarketplaceService.ts`
-  - 架构文档：`docs/architecture/registry-server.md`
+  - 架构文档：`docs/architecture/marketplace.md`
 - 现状：
   - 文档倾向固定官方 registry；
   - 代码仍允许 `registryUrl` 自定义；

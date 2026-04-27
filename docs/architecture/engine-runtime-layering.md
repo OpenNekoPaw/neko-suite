@@ -1,7 +1,7 @@
 # ADR: neko-engine Runtime 分层与宿主模型
 
 > 状态：Active（R0-R3 + P1 + R4 已完成） | 日期：2026-04-08 | 更新：2026-04-08  
-> 关联：[engine-plugin-rfc.md](./engine-plugin-rfc.md) · [model-runtime.md](./model-runtime.md) · [device-access.md](./device-access.md)
+> 关联：[engine-plugin-rfc.md](./engine-plugin-rfc.md) · [model-runtime.md](./model-runtime.md) · [vscode-constraints.md](./vscode-constraints.md)
 
 ---
 
