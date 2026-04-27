@@ -555,11 +555,7 @@ export {
 // Export prompt management
 export {
   PromptManager,
-  ChainPromptExecutor,
   createPromptManager,
-  type ChainExecutionResult,
-  type ChainExecutionOptions,
-  type StepExecutor,
   // System Prompt Builder
   SystemPromptBuilder,
   createSystemPromptBuilder,
@@ -583,8 +579,6 @@ export {
   type PromptCategory,
   type RenderedPrompt,
   type IPromptManager,
-  type ChainPrompt,
-  type ChainPromptStep,
 } from './prompt';
 
 // Export session management

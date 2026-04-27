@@ -2,7 +2,8 @@
  * Prompt Manager - Simple implementation for Platform
  *
  * This is a lightweight PromptManager for the platform layer.
- * For advanced features like ChainPromptExecutor, use @neko/agent.
+ * Skill prompt-chains are natural-language guidance interpreted by the Agent
+ * inside IDC, not runtime chain-executor workflows.
  */
 
 import type { Prompt, PromptCategory, RenderedPrompt, IPromptManager } from '@neko/shared';

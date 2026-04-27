@@ -3,18 +3,10 @@
  *
  * Provides:
  * - PromptManager: Template registration and rendering
- * - ChainPromptExecutor: Multi-step prompt chain execution
  * - SystemPromptBuilder: Unified system prompt construction
  */
 
-export {
-  PromptManager,
-  ChainPromptExecutor,
-  createPromptManager,
-  type ChainExecutionResult,
-  type ChainExecutionOptions,
-  type StepExecutor,
-} from './prompt-manager';
+export { PromptManager, createPromptManager } from './prompt-manager';
 
 // System Prompt Builder
 export {
@@ -103,6 +95,4 @@ export type {
   PromptCategory,
   RenderedPrompt,
   IPromptManager,
-  ChainPrompt,
-  ChainPromptStep,
 } from '@neko/shared';

@@ -1,7 +1,5 @@
 /**
  * PromptManager Unit Tests (Platform - Lightweight implementation)
- *
- * Note: ChainPromptExecutor tests are in @neko/agent package.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

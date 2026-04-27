@@ -23,7 +23,7 @@ export interface PromptVariable {
 /**
  * Prompt category
  */
-export type PromptCategory = 'system' | 'user' | 'format' | 'chain' | 'custom';
+export type PromptCategory = 'system' | 'user' | 'format' | 'custom';
 
 /**
  * Prompt definition
@@ -55,34 +55,6 @@ export interface RenderedPrompt {
   variables: Record<string, unknown>;
   /** Warnings during rendering */
   warnings: string[];
-}
-
-/**
- * Chain prompt step
- */
-export interface ChainPromptStep {
-  /** Step name */
-  name: string;
-  /** Prompt ID to use */
-  promptId: string;
-  /** Variable mappings from previous steps */
-  variableMappings?: Record<string, string>;
-  /** Transform function for output */
-  transform?: (output: string) => unknown;
-}
-
-/**
- * Chain prompt definition
- */
-export interface ChainPrompt {
-  /** Chain ID */
-  id: string;
-  /** Chain name */
-  name: string;
-  /** Chain description */
-  description: string;
-  /** Ordered steps */
-  steps: ChainPromptStep[];
 }
 
 /**

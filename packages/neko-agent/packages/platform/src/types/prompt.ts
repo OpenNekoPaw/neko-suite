@@ -9,7 +9,5 @@ export type {
   PromptVariable,
   PromptCategory,
   RenderedPrompt,
-  ChainPrompt,
-  ChainPromptStep,
   IPromptManager,
 } from '@neko/shared';

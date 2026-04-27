@@ -4,7 +4,6 @@
  * Manages prompt templates for agent interactions:
  * - Template registration and retrieval
  * - Variable substitution
- * - Chain prompt execution
  */
 
 import type {
@@ -13,38 +12,7 @@ import type {
   PromptCategory,
   RenderedPrompt,
   IPromptManager,
-  ChainPrompt,
-  ChainPromptStep,
 } from '@neko/shared';
-
-/**
- * Chain execution result
- */
-export interface ChainExecutionResult {
-  /** Final output */
-  output: unknown;
-  /** Results from each step */
-  stepResults: Map<string, unknown>;
-  /** Total execution time in ms */
-  executionTime: number;
-}
-
-/**
- * Chain execution options
- */
-export interface ChainExecutionOptions {
-  /** Initial variables */
-  variables?: Record<string, unknown>;
-  /** Callback for each step completion */
-  onStepComplete?: (step: string, result: unknown) => void;
-  /** Maximum steps to execute */
-  maxSteps?: number;
-}
-
-/**
- * Step executor function type
- */
-export type StepExecutor = (prompt: string) => Promise<string>;
 
 /**
  * Prompt manager implementation
@@ -231,7 +199,7 @@ Do not include any text before or after the JSON. Only output the JSON object.`,
       id: 'task-planning',
       name: 'Task Planning',
       description: 'Prompt for planning multi-step tasks',
-      category: 'chain',
+      category: 'user',
       template: `Analyze the following request and break it down into steps:
 {{request}}
 
@@ -258,7 +226,7 @@ Respond with a structured plan.`,
       id: 'analyze-video',
       name: 'Video Analysis',
       description: 'Analyze video content and structure',
-      category: 'chain',
+      category: 'user',
       template: `Analyze the following video information and provide insights:
 
 Video Details:
@@ -285,7 +253,7 @@ Please provide:
       id: 'generate-subtitles',
       name: 'Subtitle Generation',
       description: 'Generate subtitles from transcript',
-      category: 'chain',
+      category: 'user',
       template: `Generate properly formatted subtitles from the following transcript:
 
 Transcript:
@@ -333,7 +301,7 @@ Format the output as a list of subtitle entries with start time, end time, and t
       id: 'suggest-effects',
       name: 'Effect Suggestions',
       description: 'Suggest video effects based on content',
-      category: 'chain',
+      category: 'user',
       template: `Based on the following video content and mood, suggest appropriate effects:
 
 Content Description:
@@ -412,186 +380,6 @@ Please analyze the issue and suggest how to:
         },
       ],
       version: '1.0.0',
-    });
-  }
-}
-
-/**
- * Chain prompt executor - executes multi-step prompt chains
- */
-export class ChainPromptExecutor {
-  private promptManager: PromptManager;
-  private chains: Map<string, ChainPrompt> = new Map();
-
-  constructor(promptManager: PromptManager) {
-    this.promptManager = promptManager;
-    this.registerBuiltinChains();
-  }
-
-  /**
-   * Register a chain prompt
-   */
-  registerChain(chain: ChainPrompt): void {
-    this.chains.set(chain.id, chain);
-  }
-
-  /**
-   * Get a chain by ID
-   */
-  getChain(id: string): ChainPrompt | undefined {
-    return this.chains.get(id);
-  }
-
-  /**
-   * List all chains
-   */
-  listChains(): ChainPrompt[] {
-    return Array.from(this.chains.values());
-  }
-
-  /**
-   * Execute a chain prompt
-   */
-  async execute(
-    chainId: string,
-    executor: StepExecutor,
-    options: ChainExecutionOptions = {},
-  ): Promise<ChainExecutionResult> {
-    const chain = this.chains.get(chainId);
-    if (!chain) {
-      throw new Error(`Chain '${chainId}' not found`);
-    }
-
-    const startTime = Date.now();
-    const stepResults = new Map<string, unknown>();
-    const maxSteps = options.maxSteps || 100;
-    const currentVariables = { ...options.variables };
-
-    for (let i = 0; i < chain.steps.length && i < maxSteps; i++) {
-      const step = chain.steps[i];
-
-      // Map variables from previous steps
-      const stepVariables = { ...currentVariables };
-      if (step.variableMappings) {
-        for (const [target, source] of Object.entries(step.variableMappings)) {
-          const [sourceStep, sourceKey] = source.split('.');
-          const sourceResult = stepResults.get(sourceStep);
-          if (sourceResult !== undefined) {
-            if (sourceKey && typeof sourceResult === 'object') {
-              stepVariables[target] = (sourceResult as Record<string, unknown>)[sourceKey];
-            } else {
-              stepVariables[target] = sourceResult;
-            }
-          }
-        }
-      }
-
-      // Render and execute the prompt
-      const rendered = this.promptManager.render(step.promptId, stepVariables);
-      const result = await executor(rendered.content);
-
-      // Transform output if needed
-      let transformedResult: unknown = result;
-      if (step.transform) {
-        try {
-          transformedResult = step.transform(result);
-        } catch {
-          // Keep raw result if transform fails
-        }
-      }
-
-      stepResults.set(step.name, transformedResult);
-
-      // Callback
-      if (options.onStepComplete) {
-        options.onStepComplete(step.name, transformedResult);
-      }
-    }
-
-    // Get final output from last step
-    const lastStep = chain.steps[chain.steps.length - 1];
-    const output = stepResults.get(lastStep?.name) || null;
-
-    return {
-      output,
-      stepResults,
-      executionTime: Date.now() - startTime,
-    };
-  }
-
-  /**
-   * Create a simple chain from prompt IDs
-   */
-  createSimpleChain(
-    id: string,
-    name: string,
-    promptIds: string[],
-    variableMappings?: Record<number, Record<string, string>>,
-  ): ChainPrompt {
-    const steps: ChainPromptStep[] = promptIds.map((promptId, index) => ({
-      name: `step_${index + 1}`,
-      promptId,
-      variableMappings: variableMappings?.[index],
-    }));
-
-    const chain: ChainPrompt = {
-      id,
-      name,
-      description: `Chain of ${promptIds.length} prompts`,
-      steps,
-    };
-
-    this.registerChain(chain);
-    return chain;
-  }
-
-  private registerBuiltinChains(): void {
-    // Video editing workflow chain
-    this.registerChain({
-      id: 'chain-video-edit-workflow',
-      name: 'Video Edit Workflow',
-      description: 'Complete video editing workflow from analysis to output',
-      steps: [
-        {
-          name: 'analyze',
-          promptId: 'analyze-video',
-        },
-        {
-          name: 'plan',
-          promptId: 'task-planning',
-          variableMappings: {
-            request: 'analyze.output',
-          },
-        },
-        {
-          name: 'effects',
-          promptId: 'suggest-effects',
-          variableMappings: {
-            contentDescription: 'analyze.output',
-          },
-        },
-      ],
-    });
-
-    // Subtitle generation chain
-    this.registerChain({
-      id: 'chain-subtitle-generation',
-      name: 'Subtitle Generation Chain',
-      description: 'Generate and format subtitles from audio',
-      steps: [
-        {
-          name: 'generate',
-          promptId: 'generate-subtitles',
-          transform: (output: string) => {
-            // Try to parse as JSON, otherwise return raw
-            try {
-              return JSON.parse(output);
-            } catch {
-              return output;
-            }
-          },
-        },
-      ],
     });
   }
 }
