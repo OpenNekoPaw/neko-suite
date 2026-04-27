@@ -340,6 +340,91 @@ Extension Host
 
 ---
 
+## 架构红线（宿主隔离）
+
+> **背景**：当前主线是 VS Code 集成（覆盖 90% AI 创作场景），未来可能演进为独立专业 IDE（Neko Studio：Native overlay HDR、多视口、OpenXR、零拷贝 GPU）。为避免未来切换宿主时被迫 fork 或大规模重构，下列红线**自现在起对所有 PR 强制生效**。
+
+### 三层宿主隔离模型
+
+```
+Layer 3: 前端宿主（可替换）
+  ├─ VS Code Extension (主线 P0)：Webview 沙箱 + SDR + P3 + WebCodecs
+  └─ Neko Studio (未来)         ：Native window + HDR + 多视口 + OpenXR
+        │
+        ▼
+Layer 2: 客户端 SDK（@neko/neko-client，宿主无关）
+  • EngineClient / 流媒体客户端 / detectCapabilities
+  • 零 vscode / 零 electron / 零 tauri 依赖
+        │
+        ▼
+Layer 1: 引擎（neko-engine，SSOT，宿主无关）
+  • 完整能力始终可用（HDR/10bit/EXR/Rgba16Float）
+  • 独立进程，host-cli 已支持脱离 VSCode 运行
+```
+
+### 红线清单（违反即阻断 PR）
+
+| # | 红线 | 反例 | 正例 |
+|---|------|------|------|
+| **R1** | 引擎不感知宿主 | `fn render_for_vscode_webview()` | `fn render(output: OutputFormat, color_pipeline: ColorPipeline)` |
+| **R2** | `@neko/neko-client` 不依赖 vscode/electron/tauri | `import * as vscode from 'vscode'` | 通过参数注入端口/能力 |
+| **R3** | 引擎能力不为宿主限制阉割 | 因 VSCode 不显示 HDR 就删掉 HEVC Main10 编码 | 引擎保留全格式，宿主按 capabilities 选择 |
+| **R4** | 显示路径与导出路径解耦 | 预览精度限制导出精度 | VSCode 预览 SDR + 导出 HEVC Main10 母版 |
+| **R5** | Webview 组件不直接调用 `vscode.*` | `acquireVsCodeApi().postMessage(...)` 散落各处 | 封装 `HostBridge` 适配层，组件用抽象接口 |
+| **R6** | 文件路径走 PathResolver | `vscode.workspace.fs.readFile()` 跨层使用 | `PathResolver`（@neko/shared L0）+ 适配层翻译 |
+| **R7** | 显示能力走 `HostCapabilities` 抽象 | 组件 `if (isVSCode)` 硬编码 | `if (capabilities.display.colorSpaces.includes('rec2100-pq'))` |
+
+### HostCapabilities 契约（关键抽象）
+
+`@neko/neko-client/src/host-capabilities.ts` 暴露统一能力描述，所有"宿主能让我做什么"的判断都走这一层：
+
+```typescript
+interface HostCapabilities {
+  readonly hostType: 'vscode-webview' | 'electron-native' | 'tauri-native' | 'browser';
+  readonly display: {
+    colorSpaces: ('srgb' | 'display-p3' | 'rec2100-pq' | 'rec2100-hlg')[];
+    bitDepth: 8 | 10 | 16;
+    maxLuminance: number;  // nits
+  };
+  readonly codec: {
+    h264: boolean; h265Main10: boolean;
+    av1_8bit: boolean; av1_10bit: boolean;
+  };
+  readonly windowing: {
+    nativeOverlay: boolean; multiViewport: boolean; openXR: boolean;
+  };
+  readonly fileIO: {
+    streamingRead: boolean;       // VSCode 必须走 engine HTTP
+    largeFileLimit: number;       // VSCode webview 全量加载限制
+  };
+}
+```
+
+VSCode Webview 与未来 Studio 的能力差异通过**不同 `HostCapabilities` 实现**披露，引擎和组件代码不变。
+
+### 三契约（显示 / 数据 / 导出）
+
+| 契约 | 边界 | VSCode 当前 | 未来 Studio |
+|------|------|------------|------------|
+| **显示契约** | webview 显示端 | 8bit sRGB / display-p3 | + 10bit HDR (rec2100-pq/hlg) |
+| **数据契约** | 引擎内部 + 项目文件 | `Rgba16Float` 全保留 | 同 |
+| **导出契约** | 用户导出路径 | 全格式（HEVC Main10 / EXR / ProRes） | 同 |
+
+**核心原则**：显示精度限制不能传染到数据精度和导出精度。VSCode 用户在 SDR 预览下编辑 HDR 内容并导出 HDR 母版,迁移到 Studio 是**纯增量**，不丢历史项目。
+
+### 演进路线（路线图，非承诺）
+
+| 阶段 | 时间窗 | 内容 | 触发条件 |
+|------|-------|------|---------|
+| 阶段 1 | 现在 - 6mo | VSCode 主线：H.264 SDR + P3 广色域 + tone-mapping + HostCapabilities 抽象 | — |
+| 阶段 2 | 6-12mo | 专业能力埋点：XR 桌面预览 / 高级 PBR / 调色基础 | 阶段 1 商业化验证 |
+| 阶段 3 | 12-24mo | Neko Studio 独立 IDE（Tauri/Electron）：Native HDR + 多视口 + OpenXR | 阶段 2 付费意愿验证 |
+| 阶段 4 | 可选 | Neko Cloud(Web) / iPad 版本 | 战略需要 |
+
+**关键不变量**：阶段 3 的 Studio 与 VSCode 共用同一个 Rust engine、同一个 EngineClient，**只是新的 Layer 3 实现**。
+
+---
+
 ## 技术栈一览
 
 | 层级 | 技术选型 | 理由 |

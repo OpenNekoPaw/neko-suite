@@ -73,12 +73,20 @@ pnpm check                 # Code quality checks
 
 **Quick Reference**:
 ```
-Webview (React)  <-- postMessage -->  Extension Host (Node.js)
-                                         |
-                                         +-- vscode.workspace.*
-                                         +-- vscode.window.*
-                                         +-- fs / path / child_process
+Webview (React)  <-- postMessage -->  Extension Host (Node.js)  -->  Business Packages
+   UI layer                              Bridge layer                   Domain layer
+                                            |                              |
+                                            +-- vscode.workspace.*         +-- @neko/agent
+                                            +-- vscode.window.*            +-- @neko-engine/*
+                                            +-- fs / path / child_process  +-- @neko/shared, etc.
 ```
+
+**Layer responsibilities** (clarification of the existing structure — not a new rule):
+- **UI layer** (`*/webview/`): React components, local state, postMessage I/O. No Node / no `vscode`.
+- **Bridge layer** (`*/extension/`): VSCode integration only — command/provider registration, postMessage routing, Webview lifecycle, file-system access on behalf of the Webview. Should delegate domain logic to business packages.
+- **Domain layer** (standalone packages, e.g. `neko-agent/packages/agent/`, `@neko/shared`, `@neko-engine/*`): Business logic, no `vscode` import. Imported by the bridge layer.
+
+Enforced by `dependency-cruiser` rules (`webview-no-vscode`, `extension-no-react`, `layer0-no-internal-deps`, `no-cross-extension-deps-*`). Some current `*/extension/` packages still mix domain logic into the bridge layer; new code should keep domain logic in standalone packages.
 
 **File Access Example**:
 ```typescript

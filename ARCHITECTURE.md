@@ -340,6 +340,91 @@ Extension Host
 
 ---
 
+## Architecture Redlines (Host Isolation)
+
+> **Context**: The current mainline is VS Code integration (covering ~90% of AI-creation scenarios). The future may evolve into a standalone professional IDE (Neko Studio: native overlay HDR, multi-viewport, OpenXR, zero-copy GPU). To avoid being forced to fork or undergo a massive refactor when the host changes, the redlines below are **enforced on every PR starting now**.
+
+### Three-Layer Host Isolation Model
+
+```
+Layer 3: Frontend host (replaceable)
+  ├─ VS Code Extension (mainline P0): Webview sandbox + SDR + P3 + WebCodecs
+  └─ Neko Studio (future)           : Native window + HDR + multi-viewport + OpenXR
+        │
+        ▼
+Layer 2: Client SDK (@neko/neko-client, host-agnostic)
+  • EngineClient / streaming clients / detectCapabilities
+  • Zero vscode / zero electron / zero tauri dependency
+        │
+        ▼
+Layer 1: Engine (neko-engine, SSOT, host-agnostic)
+  • Full capability surface always available (HDR / 10-bit / EXR / Rgba16Float)
+  • Standalone process; host-cli already supports running outside VS Code
+```
+
+### Redlines (violation blocks the PR)
+
+| # | Redline | Counter-example | Correct |
+|---|---------|----------------|---------|
+| **R1** | Engine never knows the host | `fn render_for_vscode_webview()` | `fn render(output: OutputFormat, color_pipeline: ColorPipeline)` |
+| **R2** | `@neko/neko-client` never depends on vscode/electron/tauri | `import * as vscode from 'vscode'` | Inject port/capabilities via constructor args |
+| **R3** | Engine capability is never trimmed for host limits | Removing HEVC Main10 encoder because VSCode can't display HDR | Engine keeps all formats; host picks via capabilities |
+| **R4** | Display path is decoupled from export path | Preview precision limits export precision | VSCode previews SDR + exports HEVC Main10 master |
+| **R5** | Webview components never call `vscode.*` directly | `acquireVsCodeApi().postMessage(...)` scattered across components | `HostBridge` adapter; components consume the abstract interface |
+| **R6** | File paths go through PathResolver | `vscode.workspace.fs.readFile()` used cross-layer | `PathResolver` (@neko/shared L0) + adapter translation |
+| **R7** | Display capability goes through `HostCapabilities` | `if (isVSCode)` hardcoded in components | `if (capabilities.display.colorSpaces.includes('rec2100-pq'))` |
+
+### HostCapabilities Contract (the key abstraction)
+
+`@neko/neko-client/src/host-capabilities.ts` exposes a unified capability description. Every "what can the host let me do" decision goes through this layer:
+
+```typescript
+interface HostCapabilities {
+  readonly hostType: 'vscode-webview' | 'electron-native' | 'tauri-native' | 'browser';
+  readonly display: {
+    colorSpaces: ('srgb' | 'display-p3' | 'rec2100-pq' | 'rec2100-hlg')[];
+    bitDepth: 8 | 10 | 16;
+    maxLuminance: number;  // nits
+  };
+  readonly codec: {
+    h264: boolean; h265Main10: boolean;
+    av1_8bit: boolean; av1_10bit: boolean;
+  };
+  readonly windowing: {
+    nativeOverlay: boolean; multiViewport: boolean; openXR: boolean;
+  };
+  readonly fileIO: {
+    streamingRead: boolean;       // VSCode must go through engine HTTP
+    largeFileLimit: number;       // VSCode webview full-load limit
+  };
+}
+```
+
+VSCode Webview and the future Studio differ via **different `HostCapabilities` implementations** — engine and component code stay identical.
+
+### Three Contracts (Display / Data / Export)
+
+| Contract | Boundary | VSCode (current) | Studio (future) |
+|----------|----------|-----------------|-----------------|
+| **Display** | Webview rendering | 8-bit sRGB / display-p3 | + 10-bit HDR (rec2100-pq/hlg) |
+| **Data** | Engine internal + project files | `Rgba16Float` preserved end-to-end | Same |
+| **Export** | User export path | All formats (HEVC Main10 / EXR / ProRes) | Same |
+
+**Core principle**: Display-precision limits must not propagate to data precision or export precision. A VSCode user editing HDR content under SDR preview can still export HDR masters — migrating to Studio is a **pure upgrade** with no historical-project loss.
+
+### Evolution Roadmap (directional, not a commitment)
+
+| Phase | Window | Content | Trigger |
+|-------|--------|---------|---------|
+| Phase 1 | now – 6mo | VSCode mainline: H.264 SDR + P3 wide gamut + tone-mapping + HostCapabilities abstraction | — |
+| Phase 2 | 6 – 12mo | Pro-capability seeding: XR desktop preview / advanced PBR / basic color grading | Phase 1 commercial validation |
+| Phase 3 | 12 – 24mo | Neko Studio standalone IDE (Tauri/Electron): native HDR + multi-viewport + OpenXR | Phase 2 paid-user validation |
+| Phase 4 | optional | Neko Cloud (Web) / iPad version | Strategic need |
+
+**Invariant**: Phase 3 Studio shares the **same Rust engine and same EngineClient** with the VSCode mainline — only Layer 3 changes.
+
+---
+
 ## Tech Stack Overview
 
 | Layer | Technology | Rationale |

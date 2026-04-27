@@ -33,29 +33,31 @@
   - 类型契约：Protobuf
   - 构建：pnpm 10 + Turborepo 2
   - 测试：Vitest、cargo test
-- 常见核心包：
-  - `packages/neko-engine`：Rust 媒体引擎
+- 共享基础核心包：
+  - `packages/neko-engine`：Rust 媒体引擎（GPU/FFmpeg/HTTP + ONNX 原生推理）
   - `packages/neko-types`：共享基础设施（Logger、i18n、Theme、Errors）
   - `packages/neko-client`：流媒体客户端与 `EngineClient`
   - `packages/neko-proto`：Protobuf IDL，类型契约单一事实来源
+- 功能扩展包：`neko-cut`（视频）、`neko-agent`（AI）、`neko-canvas`（画布）、`neko-model`（3D）、`neko-sketch`（2D 绘画）、`neko-puppet`（2D 骨骼）、`neko-story`（剧本）、`neko-preview`（预览）、`neko-tools`、`neko-assets`、`neko-market`、`neko-audio`、`neko-auth`、`neko-live`、`neko-suite` 等。完整清单与职责见 `ARCHITECTURE_CN.md` 与 `README_CN.md`。
 
 ## 开发前先读
 
 - 总体架构先看 `ARCHITECTURE_CN.md`，必要时对照 `ARCHITECTURE.md`。
 - 功能背景先看 `README_CN.md`。
 - 进入某个领域前，先查阅对应 ADR 或架构文档，例如：
-  - `docs/architecture/diff.md`
-  - `docs/architecture/lsp.md`
-  - `docs/architecture/panel-placement.md`
-  - `docs/architecture/device-access.md`
-  - `docs/architecture/format-strategy.md`
-  - `docs/architecture/marketplace.md`
-  - `docs/architecture/model-runtime.md`
-  - `docs/architecture/registry-server.md`
-  - `docs/architecture/document-preview.md`
-  - `docs/architecture/creative-context-compression.md`
-  - `docs/architecture/ablation-experiment-framework.md`
-  - `docs/architecture/agent-media-architecture.md`
+  - VSCode 平台约束（面板放置 / 设备访问）：`docs/architecture/vscode-constraints.md`
+  - 媒体 Diff 与 LSP：`docs/architecture/media-lsp.md`
+  - 文件格式策略（nk* / JSON Schema / Proto）：`docs/architecture/format-strategy.md`
+  - 市场与 Registry（含 registry-server）：`docs/architecture/marketplace.md`
+  - 本地模型部署：`docs/architecture/model-runtime.md`
+  - 文档预览：`docs/architecture/document-preview.md`
+  - 创意上下文压缩：`docs/architecture/creative-context-compression.md`
+  - 消融实验框架：`docs/architecture/ablation-experiment-framework.md`
+  - Agent 媒体资产：`docs/architecture/agent-media-architecture.md`
+  - Agent 统一工作流（IDC 三阶段 + 六平面约束）：`docs/architecture/agent-unified-workflow.md`
+  - Agent 能力提供者协议：`docs/architecture/neko-agent-media-requirements-fit.md`
+  - 3D 编辑器渲染架构（活跃议题，Proposed 2026-04-27）：`docs/architecture/adr-3d-editor-rendering-architecture.md`
+- ADR 全集见 `docs/architecture/`，更多条目请直接浏览该目录。
 
 ## 架构硬约束
 

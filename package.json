@@ -9,26 +9,20 @@
   "scripts": {
     "build": "turbo run build",
     "build:ui": "turbo run build --filter=@neko/webview --filter=@neko-agent/webview --filter=@neko-canvas/webview",
-
     "build:release": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-cut --filter=neko-canvas --filter=neko-story --filter=neko-sketch --filter=neko-puppet --filter=neko-audio",
     "build:dev": "turbo run compile --filter='neko-*'",
-
     "build:pack-video": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-cut --filter=neko-canvas --filter=neko-story",
     "build:pack-2d": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-sketch --filter=neko-puppet",
     "build:pack-audio": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-audio",
-
     "build:neko-engine": "turbo run compile --filter=neko-engine",
     "build:neko-cut": "turbo run compile --filter=neko-cut",
     "build:neko-agent": "turbo run compile --filter=neko-agent",
-
     "dev": "turbo run dev --filter=neko-cut",
     "dev:neko": "turbo run watch --filter=neko-cut",
-
     "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint \"packages/**/src/**/*.{ts,tsx}\" --fix",
     "lint:turbo": "turbo run lint",
     "test": "turbo run test --concurrency=2",
-
     "package:all": "turbo run package --filter='neko-*'",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
@@ -55,21 +49,21 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@vitest/coverage-v8": "^4.1.2",
-    "@vscode/vsce": "^3.7.1",
+    "@vitest/coverage-v8": "4.1.2",
+    "@vscode/vsce": "^3.9.1",
     "dependency-cruiser": "^16.10.4",
     "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-security": "^4.0.0",
     "husky": "^9.1.7",
-    "knip": "^5.86.0",
-    "lint-staged": "^16.3.2",
-    "prettier": "^3.8.1",
-    "protobufjs": "^8.0.0",
-    "turbo": "^2.8.3",
-    "typescript-eslint": "^8.56.1",
-    "vite": "^6.4.2",
-    "vitest": "^4.1.2"
+    "knip": "^5.88.1",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
+    "protobufjs": "^8.0.1",
+    "turbo": "^2.9.6",
+    "typescript-eslint": "^8.59.0",
+    "vite": "6.4.2",
+    "vitest": "4.1.2"
   },
   "pnpm": {
     "overrides": {

@@ -73,12 +73,20 @@ pnpm check                 # 代码质量检查
 
 **快速参考**:
 ```
-Webview (React)  ←─ postMessage ─→  Extension Host (Node.js)
-                                         │
-                                         ├─ vscode.workspace.*
-                                         ├─ vscode.window.*
-                                         └─ fs / path / child_process
+Webview (React)  ←─ postMessage ─→  Extension Host (Node.js)  ──→  业务包
+   UI 层                                桥接层                       业务层
+                                          │                           │
+                                          ├─ vscode.workspace.*       ├─ @neko/agent
+                                          ├─ vscode.window.*          ├─ @neko-engine/*
+                                          └─ fs / path / child_process└─ @neko/shared 等
 ```
+
+**分层职责**（澄清现有结构 — 非新增准则）:
+- **UI 层**（`*/webview/`）: React 组件、本地状态、postMessage I/O。无 Node、无 `vscode`。
+- **桥接层**（`*/extension/`）: 仅承担 VSCode 集成 — 命令/Provider 注册、postMessage 路由、Webview 生命周期、代理 Webview 请求文件系统。业务逻辑应下沉到业务包。
+- **业务层**（独立包，如 `neko-agent/packages/agent/`、`@neko/shared`、`@neko-engine/*`）: 承载业务逻辑，不 import `vscode`。由桥接层引用。
+
+由 `dependency-cruiser` 规则强制（`webview-no-vscode`、`extension-no-react`、`layer0-no-internal-deps`、`no-cross-extension-deps-*`）。当前部分 `*/extension/` 包仍把业务逻辑混在桥接层；新代码应优先把业务逻辑放在独立业务包。
 
 **文件操作示例**:
 ```typescript
