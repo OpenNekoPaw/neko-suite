@@ -31,6 +31,7 @@ interface InputAreaProps {
   onInputChange: (value: string) => void;
   onSend: (attachments?: MessageAttachment[]) => void;
   onCancel?: () => void;
+  disabled?: boolean;
   /** Session-bound attached files (managed by parent for conversation isolation) */
   attachedFiles?: MessageAttachment[];
   /** Callback to update attached files (when managed externally) */
@@ -45,6 +46,7 @@ export function InputArea({
   onInputChange,
   onSend,
   onCancel,
+  disabled = false,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
 }: InputAreaProps) {
@@ -335,6 +337,7 @@ export function InputArea({
   };
 
   const handleSend = () => {
+    if (disabled) return;
     if (!inputValue.trim() && attachedFiles.length === 0 && contextChips.length === 0) return;
     // Add to history before sending
     if (inputValue.trim()) {
@@ -467,7 +470,8 @@ export function InputArea({
     textareaRef.current?.focus();
   };
 
-  const canSend = inputValue.trim() || attachedFiles.length > 0 || contextChips.length > 0;
+  const canSend =
+    !disabled && (inputValue.trim() || attachedFiles.length > 0 || contextChips.length > 0);
 
   return (
     <div className="flex-shrink-0">
@@ -583,6 +587,7 @@ export function InputArea({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              disabled={disabled}
               placeholder={
                 isThinking ? t('chat.input.thinkingPlaceholder') : t('chat.input.placeholder')
               }
@@ -648,7 +653,10 @@ export function InputArea({
             {isThinking ? (
               <button
                 onClick={onCancel}
-                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white hover:opacity-90 transition-opacity"
+                disabled={disabled}
+                className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white transition-opacity ${
+                  disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                }`}
                 title={t('chat.input.cancel')}
               >
                 <StopIcon className="w-3.5 h-3.5" />

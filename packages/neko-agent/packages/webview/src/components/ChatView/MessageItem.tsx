@@ -12,6 +12,7 @@ import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 
 interface MessageItemProps {
   message: Message;
+  conversationId: string | null;
   // Background tasks for inline task cards
   backgroundTasks?: BackgroundTask[];
   // P2: Message operations
@@ -119,6 +120,7 @@ function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
 function ContentBlockRenderer({
   block,
   isStreaming,
+  conversationId,
   onAcceptDiff,
   onRejectDiff,
   onApprovePlanStep,
@@ -129,6 +131,7 @@ function ContentBlockRenderer({
 }: {
   block: ContentBlock;
   isStreaming?: boolean;
+  conversationId: string | null;
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
   onApprovePlanStep?: (planId: string, stepId: string) => void;
@@ -160,7 +163,7 @@ function ContentBlockRenderer({
       if (!block.toolCall) return null;
       return (
         <div className="w-full">
-          <ToolCallDisplay toolCall={block.toolCall} />
+          <ToolCallDisplay toolCall={block.toolCall} conversationId={conversationId} />
         </div>
       );
 
@@ -210,6 +213,7 @@ function ContentBlockRenderer({
 function AssistantContentBlocks({
   message,
   isStreaming,
+  conversationId,
   onAcceptDiff,
   onRejectDiff,
   onApprovePlanStep,
@@ -220,6 +224,7 @@ function AssistantContentBlocks({
 }: {
   message: Message;
   isStreaming?: boolean;
+  conversationId: string | null;
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
   onApprovePlanStep?: (planId: string, stepId: string) => void;
@@ -237,6 +242,7 @@ function AssistantContentBlocks({
             key={block.id}
             block={block}
             isStreaming={isStreaming}
+            conversationId={conversationId}
             onAcceptDiff={onAcceptDiff}
             onRejectDiff={onRejectDiff}
             onApprovePlanStep={onApprovePlanStep}
@@ -271,7 +277,11 @@ function AssistantContentBlocks({
       {message.toolCalls && message.toolCalls.length > 0 && (
         <div className="mt-2 space-y-2 w-full">
           {message.toolCalls.map((toolCall) => (
-            <ToolCallDisplay key={toolCall.id} toolCall={toolCall} />
+            <ToolCallDisplay
+              key={toolCall.id}
+              toolCall={toolCall}
+              conversationId={conversationId}
+            />
           ))}
         </div>
       )}
@@ -304,6 +314,7 @@ function ErrorMessageCard({ content }: { content: string }) {
 
 export const MessageItem = memo(function MessageItem({
   message,
+  conversationId,
   backgroundTasks,
   onEditMessage,
   onResendFrom,
@@ -409,6 +420,7 @@ export const MessageItem = memo(function MessageItem({
             <AssistantContentBlocks
               message={message}
               isStreaming={isStreaming}
+              conversationId={conversationId}
               onAcceptDiff={onAcceptDiff}
               onRejectDiff={onRejectDiff}
               onApprovePlanStep={onApprovePlanStep}

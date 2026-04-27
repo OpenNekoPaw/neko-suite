@@ -78,17 +78,16 @@ export class ConversationMessageHandler {
 
   // ---- Agent Control ----
 
-  handleConfirmTool(toolCallId: string, approved: boolean, conversationId?: string): void {
-    const id = conversationId || this.deps.conversations.getActiveId();
-    if (id) {
-      this.deps.agentManager?.confirmTool(id, toolCallId, approved);
-    } else {
-      logger.warn('No conversation for confirmTool');
+  handleConfirmTool(toolCallId: string, approved: boolean, conversationId: string): void {
+    if (!conversationId) {
+      logger.warn('No conversationId for confirmTool');
+      return;
     }
+
+    this.deps.agentManager?.confirmTool(conversationId, toolCallId, approved);
   }
 
-  handleCancelMessage(webview: vscode.Webview): void {
-    const conversationId = this.deps.conversations.getActiveId();
+  handleCancelMessage(webview: vscode.Webview, conversationId: string): void {
     if (conversationId && this.deps.agentManager) {
       const agent = this.deps.agentManager.get(conversationId);
       if (agent?.isRunning()) {
@@ -101,6 +100,8 @@ export class ConversationMessageHandler {
         this.deps.agentManager.cancel(conversationId);
         webview.postMessage({ type: 'messageCancelled', conversationId });
       }
+    } else {
+      logger.warn('No conversationId for cancelMessage');
     }
   }
 

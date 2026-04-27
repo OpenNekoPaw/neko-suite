@@ -40,9 +40,10 @@ const logger = getLogger('ToolCallDisplay');
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall;
+  conversationId: string | null;
 }
 
-function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
+function ToolCallDisplayComponent({ toolCall, conversationId }: ToolCallDisplayProps) {
   const { t } = useTranslation();
   const { backgroundTasks, onCancelTask, onViewTaskResult } = useMessageActions();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -61,10 +62,15 @@ function ToolCallDisplayComponent({ toolCall }: ToolCallDisplayProps) {
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         approved,
+        conversationId,
       });
-      VSCodeMessages.confirmTool(toolCall.id, approved);
+      if (!conversationId) {
+        logger.warn('Cannot confirm tool without conversationId');
+        return;
+      }
+      VSCodeMessages.confirmTool(toolCall.id, approved, conversationId);
     },
-    [toolCall.id, toolCall.name],
+    [toolCall.id, toolCall.name, conversationId],
   );
 
   // Serialized data

@@ -51,6 +51,7 @@ export interface ChatWorkspaceProps {
   streamingMessageIdRef: MutableRefObject<string | null>;
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
+  activeTabConversationId: string | null;
   clearMessages: () => void;
   // Config
   settings: SettingsState;
@@ -119,6 +120,7 @@ export function ChatWorkspace({
   streamingMessageIdRef,
   activeConversationId,
   activeConversationIdRef,
+  activeTabConversationId,
   clearMessages,
   settings,
   updateSettings,
@@ -184,6 +186,9 @@ export function ChatWorkspace({
 
   // ---- Session mode ----
   const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
+  const isConversationSwitching = Boolean(
+    activeTabConversationId && activeTabConversationId !== activeConversationId,
+  );
 
   // ---- Model lists ----
   const allModels =
@@ -238,6 +243,7 @@ export function ChatWorkspace({
     agentMediaModels,
     activeConversationId,
     activeConversationIdRef,
+    isConversationSwitching,
     streamingMessageIdRef,
     messages,
     setMessages,
@@ -418,6 +424,8 @@ export function ChatWorkspace({
         inputValue={inputValue}
         isThinking={isThinking}
         streamingMessageId={streamingMessageId}
+        activeConversationId={activeConversationId}
+        isConversationSwitching={isConversationSwitching}
         pendingSkillConfirm={
           pendingSkillConfirm?.conversationId === activeConversationId ? pendingSkillConfirm : null
         }

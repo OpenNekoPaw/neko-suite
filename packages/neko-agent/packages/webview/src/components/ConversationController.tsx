@@ -189,6 +189,9 @@ export function ConversationController({
   const mediaModelCallCount = activeConversationId
     ? (conversationMediaCallCountRef.current.get(activeConversationId) ?? 0)
     : 0;
+  const activeTabConversationId = activeTabId
+    ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
+    : null;
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
@@ -334,6 +337,7 @@ export function ConversationController({
           streamingMessageIdRef={streamingMessageIdRef}
           activeConversationId={activeConversationId}
           activeConversationIdRef={activeConversationIdRef}
+          activeTabConversationId={activeTabConversationId}
           clearMessages={clearMessages}
           // Config
           settings={settings}

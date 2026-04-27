@@ -22,6 +22,8 @@ interface ContentBlockItemProps {
   isLast: boolean;
   /** Whether the parent message is streaming */
   isStreaming: boolean;
+  /** Current conversation for scoped UI actions */
+  conversationId: string | null;
 }
 
 // Assistant avatar component - compact size (20px)
@@ -77,6 +79,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   block,
   isFirst,
   isStreaming,
+  conversationId,
 }: ContentBlockItemProps) {
   const config = blockTypeConfig[block.type];
   const actions = useMessageActions();
@@ -107,7 +110,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
           </div>
 
           {/* Block content */}
-          {renderBlockContent(block, isStreaming, actions)}
+          {renderBlockContent(block, isStreaming, conversationId, actions)}
         </div>
       </div>
     </div>
@@ -120,6 +123,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
 function renderBlockContent(
   block: ContentBlock,
   isStreaming: boolean,
+  conversationId: string | null,
   callbacks: Pick<
     import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
     | 'onAcceptDiff'
@@ -150,7 +154,7 @@ function renderBlockContent(
       if (!block.toolCall) return null;
       return (
         <div className="w-full">
-          <ToolCallDisplay toolCall={block.toolCall} />
+          <ToolCallDisplay toolCall={block.toolCall} conversationId={conversationId} />
         </div>
       );
 

@@ -140,18 +140,19 @@ export const VSCodeMessages = {
    * Confirm or reject a tool execution
    * @param toolCallId - The tool call ID
    * @param approved - Whether the tool is approved
-   * @param conversationId - Optional conversation ID for multi-tab safety
+   * @param conversationId - Conversation ID for multi-tab safety
    */
-  confirmTool: (toolCallId: string, approved: boolean, conversationId?: string) => {
+  confirmTool: (toolCallId: string, approved: boolean, conversationId: string) => {
     postMessage({ type: 'confirmTool', toolCallId, approved, conversationId });
   },
 
   /**
    * Cancel the current AI message generation
    * Stops the agent execution and streaming response
+   * @param conversationId - Conversation ID for multi-tab safety
    */
-  cancelMessage: () => {
-    postMessage({ type: 'cancelMessage' });
+  cancelMessage: (conversationId: string) => {
+    postMessage({ type: 'cancelMessage', conversationId });
   },
 
   /** Request the list of background tasks */

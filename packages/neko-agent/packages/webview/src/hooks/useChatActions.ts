@@ -34,6 +34,7 @@ export interface UseChatActionsProps {
   agentMediaModels?: AgentMediaModels;
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
+  isConversationSwitching?: boolean;
   streamingMessageIdRef: MutableRefObject<string | null>;
   messages: Message[];
   setMessages: Dispatch<SetStateAction<Message[]>>;
@@ -73,6 +74,7 @@ export function useChatActions({
   agentMediaModels,
   activeConversationId,
   activeConversationIdRef,
+  isConversationSwitching = false,
   streamingMessageIdRef,
   messages,
   setMessages,
@@ -97,6 +99,8 @@ export function useChatActions({
   // AgentRunner handles queueing if the agent is already running.
   const handleSend = useCallback(
     (attachments?: MessageAttachment[]) => {
+      if (isConversationSwitching) return;
+
       const trimmed = inputValue.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -143,6 +147,7 @@ export function useChatActions({
       mediaModelId,
       agentMediaModels,
       activeConversationId,
+      isConversationSwitching,
       isDuplicate,
       setMessages,
       setIsThinking,
@@ -156,6 +161,7 @@ export function useChatActions({
   // Trigger send from external message (with custom message text)
   const triggerSend = useCallback(
     (messageText: string) => {
+      if (isConversationSwitching) return;
       if (isThinking) return;
 
       setStreamingMessageId(null);
@@ -184,6 +190,7 @@ export function useChatActions({
     },
     [
       isThinking,
+      isConversationSwitching,
       selectedModel,
       setMessages,
       setIsThinking,
@@ -204,11 +211,14 @@ export function useChatActions({
 
   // Cancel current AI message generation
   const handleCancelMessage = useCallback(() => {
-    if (isThinking) {
-      VSCodeMessages.cancelMessage();
+    if (isConversationSwitching) return;
+
+    const conversationId = activeConversationIdRef.current;
+    if (isThinking && conversationId) {
+      VSCodeMessages.cancelMessage(conversationId);
       setIsThinking(false);
     }
-  }, [isThinking, setIsThinking]);
+  }, [isThinking, isConversationSwitching, activeConversationIdRef, setIsThinking]);
 
   return { handleSend, triggerSend, handleCancelMessage, copyLastResponse };
 }

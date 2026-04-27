@@ -194,11 +194,20 @@ describe('useVSCode', () => {
       });
 
       it('should post confirmTool', () => {
-        VSCodeMessages.confirmTool('tool-1', true);
+        VSCodeMessages.confirmTool('tool-1', true, 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'confirmTool',
           toolCallId: 'tool-1',
           approved: true,
+          conversationId: 'conv-1',
+        });
+      });
+
+      it('should post cancelMessage with conversationId', () => {
+        VSCodeMessages.cancelMessage('conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'cancelMessage',
+          conversationId: 'conv-1',
         });
       });
     });

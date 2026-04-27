@@ -723,7 +723,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._conversationMessageHandler.handleConfirmTool(
             message.toolCallId as string,
             message.approved as boolean,
-            message.conversationId as string | undefined,
+            message.conversationId as string,
           );
           break;
 
@@ -773,7 +773,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Cancel / stop agent
         case 'cancelMessage':
-          this._conversationMessageHandler.handleCancelMessage(webview);
+          this._conversationMessageHandler.handleCancelMessage(
+            webview,
+            message.conversationId as string,
+          );
           break;
         case 'stopAgent':
           this._conversationMessageHandler.handleStopAgent(
@@ -1048,6 +1051,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // ============================================================================
 
   private _restoreState(): void {
+    this._syncActiveConversationFromTabState();
     this._conversationMessageHandler.sendConversationList();
     this._conversationMessageHandler.sendActiveConversation();
     if (this._view) {
@@ -1072,6 +1076,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private _getActiveTabConversationId(): string | null {
+    const activeTab = this._tabState.activeTabId
+      ? this._tabState.openTabs.find((tab) => tab.id === this._tabState.activeTabId)
+      : undefined;
+
+    if (!activeTab) return null;
+    return this._conversations.get(activeTab.conversationId) ? activeTab.conversationId : null;
+  }
+
+  private _syncActiveConversationFromTabState(): void {
+    // Defensive sync for panel restore: normal tab switches send switchConversation
+    // before updateTabState, but restored tab state can replay without that message.
+    const conversationId = this._getActiveTabConversationId();
+    if (!conversationId || this._conversations.getActiveId() === conversationId) return;
+
+    this._conversations.switchTo(conversationId);
+  }
+
   private _saveTabState(): void {
     this._context.workspaceState.update(ChatViewProvider.TAB_STATE_KEY, this._tabState);
   }
@@ -1086,6 +1108,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private _updateTabState(openTabs: OpenTab[], activeTabId: string | null): void {
     this._tabState = { openTabs, activeTabId };
+    this._syncActiveConversationFromTabState();
     this._saveTabState();
   }
 

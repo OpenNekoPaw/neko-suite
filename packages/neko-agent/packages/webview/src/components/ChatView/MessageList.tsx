@@ -16,6 +16,7 @@ interface MessageListProps {
   messages: Message[];
   isThinking: boolean;
   streamingMessageId: string | null;
+  activeConversationId: string | null;
   backgroundTasks?: BackgroundTask[];
 }
 
@@ -96,6 +97,7 @@ export function MessageList({
   messages,
   isThinking,
   streamingMessageId,
+  activeConversationId,
   backgroundTasks,
 }: MessageListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -223,12 +225,14 @@ export function MessageList({
                     isFirst={item.isFirst}
                     isLast={item.isLast}
                     isStreaming={item.isStreaming}
+                    conversationId={activeConversationId}
                   />
                 ) : (
                   <MessageItem
                     message={item.message}
                     backgroundTasks={backgroundTasks}
                     isGrouped={item.isGrouped}
+                    conversationId={activeConversationId}
                   />
                 )}
               </div>

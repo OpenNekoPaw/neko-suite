@@ -18,6 +18,8 @@ interface ChatViewProps {
   inputValue: string;
   isThinking: boolean;
   streamingMessageId: string | null;
+  activeConversationId: string | null;
+  isConversationSwitching?: boolean;
   /** Pending skill confirmation request */
   pendingSkillConfirm?: SkillConfirmRequest | null;
   /** Active skill indicator */
@@ -56,6 +58,8 @@ export function ChatView({
   inputValue,
   isThinking,
   streamingMessageId,
+  activeConversationId,
+  isConversationSwitching = false,
   pendingSkillConfirm,
   activeSkill,
   onConfirmSkill,
@@ -137,6 +141,7 @@ export function ChatView({
               messages={messages}
               isThinking={isThinking}
               streamingMessageId={streamingMessageId}
+              activeConversationId={activeConversationId}
               backgroundTasks={backgroundTasks}
             />
           </MessageActionsProvider>
@@ -151,6 +156,7 @@ export function ChatView({
           onInputChange={onInputChange}
           onSend={onSend}
           onCancel={onCancel}
+          disabled={isConversationSwitching}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
         />
