@@ -113,7 +113,7 @@ Webview → Extension:
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.2",
   "canvas": { "width": 1920, "height": 1080, "dpi": 72, "backgroundColor": "#ffffff" },
   "layers": [
     {
@@ -121,14 +121,17 @@ Webview → Extension:
       "visible": true, "locked": false, "opacity": 1, "blendMode": "normal",
       "width": 1920, "height": 1080, "offsetX": 0, "offsetY": 0,
       "clippingMask": false, "maskLayerId": null, "children": [],
-      "data": "<base64 pixel data, optional>"
+      "data": "<base64 pixel data, optional>",
+      "vectorData": "<editable vector source data, optional>"
     }
   ],
   "brushPresets": [],
   "palette": ["#000000", "#ffffff"],
-  "viewport": { "panX": 0, "panY": 0, "zoom": 1 }
+  "viewport": { "panX": 0, "panY": 0, "zoom": 1, "rotation": 0 }
 }
 ```
+
+Current `.nks` version is `1.2`. Version detection and no-op migration scaffolding live in `@neko/shared/nks`; future schema changes should extend that migration chain rather than patching webview deserialization ad hoc.
 
 ## Shared Resources
 
@@ -172,9 +175,14 @@ Webview → Extension:
 | Scene manager | ✅ | Parallax rendering + 4 templates + 5 atmosphere presets |
 | Sprite sheet | ✅ | Import/export sprite sheets |
 
-### S.4: AI Assistance & Cross-Module — PLANNED
+### S.4: PSD, AI Assistance & Cross-Module — PARTIAL
 
-- AI MCP Tools in neko-agent (generate/style_transfer/auto_layer/inpaint/upscale)
-- Export to neko-cut (PNG sequence / sprite sheet → timeline)
-- Export to neko-canvas (PNG/SVG → canvas node)
-- Asset registration in neko-assets
+| Module | Status | Details |
+|--------|--------|---------|
+| PSD import | Experimental MVP | Extension-side `ag-psd` adapter, wire tree contract, compatibility issues, import limits, and `neko.sketch.psdImport.enabled` kill switch |
+| AI capability provider | Experimental MVP | Tool registration behind `neko.sketch.aiOps.enabled`; routes image work through neko-agent media capabilities |
+| AI result applier | ✅ | Applies layer / selection / palette / brushPreset results; cancelled apply rolls back and does not write history |
+| AI outpainting | Planned | Requires canvas expansion, mask/context contract, provider capability check, cancellation and rollback semantics |
+| Cross-module export | Planned | Export to neko-cut, neko-canvas, and neko-assets still needs explicit contracts |
+
+Open work is tracked in `TODO.md`.

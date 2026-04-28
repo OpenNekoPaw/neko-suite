@@ -2,7 +2,7 @@
 
 ## 状态
 
-**规划阶段** — 本文定义 `neko-sketch` 面向 AI 驱动轻量 2D 创作的 PSD 导入与 AI 增强开发路线。
+**实施中** — PSD 导入 MVP、RasterSource 收口、AI 结果应用器、AI 上下文 `fileUri` 桥、AI 进度浮层、结果预览/应用/丢弃、AI 面板参数化上下文桥、图层/选区级 undo/redo、像素区域 history replay 与底层媒体任务取消链路已落地；面板内直接执行工具和更复杂的像素操作回放策略仍待后续迭代。
 
 ## 相关文档
 
@@ -160,7 +160,7 @@ AI 契约分两层，避免和现有能力注册重复：
 ```text
 Extension 层（已存在）
   packages/neko-sketch/packages/extension/src/agentCapabilityProvider.ts
-    - 注册 TOOL_NAMES_SKETCH 下的 generate / inpaint / style-transfer / auto-layer
+    - 注册 TOOL_NAMES_SKETCH 下的 generate / smart-selection / inpaint / style-transfer / upscale / auto-layer / lineart-colorize
     - 校验工具参数
     - 调用 ICapabilityMediaService
     - 维护长任务状态、进度、取消与结果路径
@@ -181,6 +181,8 @@ SketchAIContext
 SketchAIResult
 SketchAIRun
 SketchAIRunState
+SketchAIOperationParams
+SketchAIOpenAgentMessage
 ```
 
 `postMessage` payload 类型在 `ai-progress-types.ts` 中单列，避免和持久化/共享数据模型混在一起。
@@ -323,7 +325,7 @@ darken / lighten / difference / exclusion / color-dodge / color-burn
 
 - `ag-psd` 必须放在 Extension Host 侧，不能进入 webview bundle。
 - `import('ag-psd')` 必须使用字面量模块名，保证 esbuild 能把依赖打进 VSCode extension bundle；不要写成 `import(moduleName)`，否则 `vsce package --no-dependencies` 后运行时可能找不到解析器。
-- 当前实测 bundle 影响：`ag-psd@28.5.1` npm 解压约 8.50 MiB，直接依赖 `pako@2.1.0` 约 1.56 MiB、`base64-js@1.5.1` 约 0.01 MiB；esbuild 打包后 extension bundle 约 681.8 KiB，gzip 约 127.7 KiB。Webview bundle 不受影响。
+- 当前实测 bundle 影响：`ag-psd@28.5.1` 在本地 pnpm 实体包约 12.5 MiB，`dist-es/*.js` 合计约 519 KiB；esbuild 打包后 extension bundle 约 686.4 KiB，gzip 约 128.7 KiB。Webview bundle 不受影响。
 - Extension Host 没有 DOM Canvas；即使 `readPsd({ useImageData: true })`，ag-psd 仍需要 `initializeCanvas()` 提供 `createImageData`。adapter 必须初始化一个只支持 `ImageData` buffer 的 bridge，并让 canvas 输出路径显式失败。
 - 包体不是主要风险；大 PSD 的原始 RGBA 像素内存才是主要风险，必须优先执行 §4.5 的 `maxTextureSize` / `memoryBudget` 防御。
 
@@ -355,8 +357,10 @@ packages/neko-sketch/packages/extension/src/editor/sketchEditorProvider.ts
 
 - `.psd` 文件过滤。
 - `file:importedPsdTree` 消息。
+- `file:importResult` 失败消息；kill switch 关闭时返回 `kill-switch-disabled`，parser 不可用和解析失败分别返回 `parser-unavailable` / `parse-failed`。
 - drop request 中识别 `.psd`。
 - PSD import output channel，用于展示每个 compatibility issue 的 code / severity / layerPath / message。
+- 空 group 识别必须依赖 ag-psd `sectionDivider` / group metadata，不能只用 `children.length > 0` 判断。
 
 ### 4.5 验收标准
 
@@ -369,7 +373,10 @@ packages/neko-sketch/packages/extension/src/editor/sketchEditorProvider.ts
 - 总图层数超过阈值（建议 100）时给用户确认提示。
 - 导入完成后，warning 摘要必须可打开详情视图，不能只显示数量。
 - 估算内存预算超过阈值时降级或中止导入。
+- PSD 像素 wire payload 必须 JSON-safe；`PsdEncodedPixelsWire` 使用 PNG base64 字符串，webview mapper 必须通过 JSON round-trip 测试。
+- 空 group 必须保留为 group layer，不得被误导入为空 raster layer。
 - Contract issue test 必须通过：枚举文本层、智能对象、CMYK、超过 `maxTextureSize`、未支持 blend mode 等不支持特性，断言每种都至少产生一个 `PsdImportIssue`。
+- 图层顺序测试必须通过：Extension 侧真实 `ag-psd` 读回后保持顶层与组内顺序，Webview mapper 不得反转 wire tree 顺序。
 - 没有新增 `@neko/neko-client` 或 engine 依赖。
 
 实施时内存预算应按 raster 图层实际像素区域累加，即 `sum(layer.width * layer.height * 4)`；不要按整张画布乘总图层数估算，group 节点不计入像素预算。
@@ -428,6 +435,7 @@ export type SketchAIOperationType =
   | 'brush-generate';
 
 export type SketchAIAssetRef =
+  | { readonly kind: 'webviewUri'; readonly ref: string; readonly mimeType: string }
   | { readonly kind: 'fileUri'; readonly ref: string; readonly mimeType: string }
   | { readonly kind: 'assetId'; readonly ref: string; readonly mimeType: string }
   | { readonly kind: 'engineHandle'; readonly ref: string; readonly mimeType: string };
@@ -479,7 +487,9 @@ export interface SketchAIRun {
 
 `BrushPreset` 应从 sketch 现有类型导入；若实现期还没有可复用类型，先定义最小 placeholder，并保留 `TODO(P2)` 到 brush 生成能力落地时补全。
 
-MVP 不应在 `SketchAIContext` 里传大段 base64。合成图、图层图和 mask 应落到 `.neko/cache/sketch-ai/<runId>/` 或 GeneratedAsset，再通过 `fileUri` / `assetId` 传引用，符合 `agent-media-architecture.md` 的零 base64 跨进程原则。
+MVP 不应在 `SketchAIContext` 里传大段 base64。合成图、图层图和 mask 应落到 `.neko/cache/sketch-ai/<runId>/` 或 GeneratedAsset，再通过 `fileUri` / `assetId` 传引用，符合 `agent-media-architecture.md` 的零 base64 跨进程原则。Extension 发给 Webview 前必须把可直接读取的本地文件转换为 `webviewUri`，Webview 不直接读取 Node / VSCode file API。
+
+实施现状：`NekoSketchAPI.createAIContextSnapshot()` 已提供 Extension 侧上下文缓存桥，返回 `SketchAIContextSnapshot` 与 `fileUri` 资产引用。`ImageGenerationRequest` 已支持 `referenceImageUri` / `maskUri` / `controlImageUri`，platform executor 会在 provider 执行前把本地 URI materialize 为现有 provider 可消费的 base64。`agentCapabilityProvider.ts` 已优先使用 context snapshot 的 `fileUri`，快照不可用时回退到 legacy base64，以兼容尚未升级的 media service 实现。
 
 ### 5.4 与 neko-agent 集成
 
@@ -502,15 +512,23 @@ neko-sketch webview
 
 ```text
 ai:request       { runId, operation, contextRef, params }
-ai:progress      { runId, percent, stage }
-ai:resultApply   { runId, result }
+ai:progress      { runId, operation, percent, stage }
+ai:resultApply   { runId, operation, result }
+ai:resultApplied { runId, success, reason }
 ai:error         { runId, message, issues }
 ai:cancel        { runId }
 ```
 
 `contextRef` 是 `SketchAIContext` 的轻量引用子集，形如 `{ compositeImage?: SketchAIAssetRef; layerImage?: SketchAIAssetRef; maskImage?: SketchAIAssetRef }`，禁止内联大图 base64。
+`ai:progress.percent` 为 0..100 的协议值，Webview session store 内部归一化为 0..1；首个 progress 包必须带 `operation`，用于创建 `SketchAIRun`。
+`ai:resultApplied` 是 Webview 到 Extension Host 的确认消息；Extension 收到后删除 `globalStorage/sketch-ai/<runId>` 下的结果缓存。AI 上下文快照由 capability provider 在对应工具结束后调用 `NekoSketchAPI.cleanupAIArtifacts(runId)` 清理，避免 auto-layer 多轮生成中提前删除共享上下文。
+`NekoSketchAPI.reportAIProgress()` 用于 provider 在拿到 media task id 后立即向 webview 建立 run 状态；webview 的 AI run monitor 可基于该 runId 发出 `ai:cancel`。
+`ai:resultApply` 在 Webview 内先进入 `previewing` 状态，不直接修改画布；用户点击 Apply 后才写入 `LayerData` / `SelectionMask`，点击 Discard 会回发 `ai:resultApplied { success: false, reason: 'discarded' }` 以清理 Extension 缓存。
+`ai:openAgent` 是 Webview 到 Extension 的轻量入口：AI 面板把 operation + prompt 发给 Extension，由 Extension 调用 `neko.agent.sendContext` 注入 `sketch-layer` context 与 intent。当前不直接调用内部 tool 执行命令，避免绑定不稳定的 agent runtime 私有接口。
+图层导入和 AI Apply 使用 state snapshot history：记录 layers / activeLayerId / selection 的 before/after，undo/redo 时由 HistorySlice 回放状态，并重新触发 dirty edit。
+像素编辑使用 region snapshot history：记录受影响区域的 before/after RGBA 数据，HistorySlice 只调度快照，Webview renderer 通过注册的 region applier 恢复 WebGL texture；brush / eraser / pixel / fill / shape / transform / flip / rotate / clear / delete selection 已接入。
 
-`SketchAIRun` 由 webview 持有 UI 状态；Extension 侧用 run registry 保存任务、`AbortController` 和临时文件路径。取消时由 `ai:cancel` 触发 `AbortController.abort()`，并清理 pending layer / 临时文件；失败或取消不进入 history。
+`SketchAIRun` 由 webview 持有 UI 状态；Extension 侧用 run registry 保存媒体任务取消回调与临时文件路径。取消时由 `ai:cancel` 触发 `NekoSketchAPI.cancelAIRun(runId)`，再调用 `ICapabilityMediaService.cancelTask(taskId)`；Extension 根据结果回发 `ai:cancel` 或 `ai:error`，并清理 runId 对应缓存。失败或取消不进入 history。
 
 后端选择：
 
@@ -540,6 +558,7 @@ ai:cancel        { runId }
 
 - PNG/JPEG/WebP 导入后可显示、保存、重开。
 - 导入行为不破坏现有 `.nks` serialization。
+- brush / eraser / pixel / fill / shape / transform / flip / rotate / clear / delete selection 的 undo/redo 能恢复 WebGL texture，且只保存变化区域。
 
 ### M2：PSD 有损导入 MVP
 
@@ -563,8 +582,9 @@ ai:cancel        { runId }
 - 超大图层、超多图层和超预算 PSD 只能降级或中止，不能卡死 webview。
 - blend mode mapping completeness test 必须通过。
 - Contract issue test 必须通过：文本层、智能对象、mask、图层样式、调整层、vector fill/stroke、超大纹理、未知 blend mode 等不支持能力都要产生 `PsdImportIssue`。
-- 导入会触发 VSCode custom editor dirty edit；完整导入 undo/redo 需要等 history replay 能力补齐后再接入。
-- ag-psd integration test 必须通过：使用真实 `ag-psd` reader 解析生成的最小 PSD 和分组 PSD，验证 Extension Host 的 `initializeCanvas` bridge、像素编码路径、group / pass-through wire tree 可用。
+- 导入会触发 VSCode custom editor dirty edit；导入图层的 undo/redo 已通过 state snapshot history 接入。
+- ag-psd integration test 必须通过：使用真实 `ag-psd` reader 解析生成的最小 PSD、分组 PSD 和顺序样本，验证 Extension Host 的 `initializeCanvas` bridge、像素编码路径、group / pass-through wire tree、顶层与组内 layer order 可用。
+- package 级 `pnpm --dir packages/neko-sketch run compile` 必须通过，覆盖 extension/webview build 与发布资源 copy 流程。
 
 ### M3：AI 结果应用器（Webview 落地）
 
@@ -578,12 +598,19 @@ ai:cancel        { runId }
 - 新增 `ai:progress` / `ai:resultApply` / `ai:error` / `ai:cancel` postMessage 协议。
 - 新增 cache file / GeneratedAsset 引用读取逻辑，禁止大图 base64 跨进程传输。
 - AI 结果支持生成新图层或 selection mask。
+- `SketchAIResult` 与 `ai:*` postMessage wire 类型上移到 `@neko/shared`，webview 只保留 applier/session 实现。
+- `NekoSketchAPI.createAIContextSnapshot()` 可把 canvas / layer / selection mask 缓存为 `fileUri`；provider 优先传 `referenceImageUri` / `maskUri`，ControlNet 类输入可传 `controlImageUri`，并在快照不可用时回退 base64。
+- `request:layerImageData` 已改为按 `layerId` / `activeLayerId` 导出单层 raster 数据；支持嵌套图层查找和 `pendingData` fallback，无法导出时返回 `null`，不再静默回退合成图。
+- `NekoSketchAPI.registerAIRun()` / `unregisterAIRun()` / `cancelAIRun()` 已接入 Extension run registry；`agentCapabilityProvider.ts` 在每个 `generateImage()` media task 等待期间注册 `media.cancelTask()`，完成、失败或取消后注销。
+- `NekoSketchAPI.reportAIProgress()` 已接入 provider 等待路径；webview AI run monitor 会显示 operation、stage、progress，并提供 `ai:cancel` 入口。
+- `ai:resultApply` 已改为 preview-first：用户 Apply 才调用 `ai-result-applier`，Discard 会触发 Extension 缓存清理且不污染当前文档。
+- Webview 侧 AI 面板已提供 operation + prompt 输入，并通过 `ai:openAgent` / `neko.agent.sendContext` 把当前 Sketch 文档和 intent 交给 Neko Agent。
 
 验收：
 
 - mock `ai:resultApply` 可以生成新图层。
 - mock alpha mask PNG 可以写入 selection store。
-- AI 结果进入 history，可撤销。
+- AI layer 结果会触发 dirty edit；AI layer / selection 结果的 undo/redo 已通过 state snapshot history 接入。
 - 失败或取消会 dispose pending layer，不污染当前文档。
 
 ### M4：智能选区与局部重绘
@@ -601,8 +628,10 @@ ai:cancel        { runId }
 验收：
 
 - 用户可框选区域后发起局部重绘。
+- AI 智能选区可把 mask PNG 应用到 `SelectionMask`。
 - 结果生成在新图层。
 - 原始图层不被自动覆盖。
+- 底层 media task cancellation、运行状态浮层、结果预览/应用/丢弃和 Agent 上下文桥已接入；AI 面板参数表单会把 scope、negative prompt、strength、style、scale、layerName、palette、auto-layer targets 作为 `SketchAIOperationParams` 注入 Agent context；面板内直接执行工具和工具结果联动仍属于后续项。
 
 ### M5：超分、自动分层、线稿上色
 
@@ -613,7 +642,7 @@ ai:cancel        { runId }
 - Upscale 当前层或合成图。
 - Auto-layer 输出多图层。
 - Lineart colorize 输出颜色层。
-- 提供简单结果预览与应用/丢弃。
+- 提供简单结果预览与应用/丢弃（已由 AI run monitor 覆盖 layer / selection 结果）。
 
 验收：
 
@@ -669,6 +698,8 @@ M6 PSD enhancement depends on M2 and real-world fixtures.
 
 PSD 先解决资产进入问题，AI 负责产品差异化。两者都必须服务 `.nks` 原生编辑模型，而不是反向定义核心架构。
 
+真实 PSD 兼容性样本单独维护在 `packages/neko-sketch/test-fixtures/psd/`。M2 的自动化测试先覆盖 `ag-psd` 自生成样本与 contract 行为；Photoshop / Photopea / Krita 等外部样本进入仓库后，再把它们纳入 M6 兼容性回归，不用生成样本冒充真实外部兼容性。
+
 ---
 
 ## 9. 回滚与灰度策略
@@ -679,7 +710,12 @@ PSD 先解决资产进入问题，AI 负责产品差异化。两者都必须服�
 |--------|--------|------|
 | `neko.sketch.psdImport.enabled` | M2 开发期 `false`；M2 验收通过后 `true` | 控制 PSD 导入入口 |
 | `neko.sketch.aiOps.enabled` | `false` | AI 总开关，灰度阶段默认关闭 |
+| `neko.sketch.aiOps.generate.enabled` | `true` | 受 AI 总开关约束 |
 | `neko.sketch.aiOps.inpaint.enabled` | `true` | 受 AI 总开关约束 |
+| `neko.sketch.aiOps.styleTransfer.enabled` | `true` | 受 AI 总开关约束 |
+| `neko.sketch.aiOps.upscale.enabled` | `true` | 受 AI 总开关约束 |
+| `neko.sketch.aiOps.autoLayer.enabled` | `true` | 受 AI 总开关约束 |
+| `neko.sketch.aiOps.lineartColorize.enabled` | `true` | 受 AI 总开关约束 |
 | `neko.sketch.aiOps.smartSelection.enabled` | `true` | 受 AI 总开关约束 |
 
 有效开启条件为 `neko.sketch.aiOps.enabled && neko.sketch.aiOps.<feature>.enabled`。子开关默认 `true` 表示 AI 总开关打开后该子能力默认可用，并不表示灰度阶段独立开启。
@@ -690,3 +726,4 @@ PSD 先解决资产进入问题，AI 负责产品差异化。两者都必须服�
 - AI run 失败或取消时不提交 history。
 - 已生成的临时文件按 runId 清理。
 - kill switch 关闭后，UI 入口隐藏，Extension 侧消息仍需返回 `kill-switch-disabled` 错误码，避免悬空调用。
+- `neko.sketch.aiOps.enabled` 关闭时，`agentCapabilityProvider.ts` 不向 neko-agent 注册 sketch AI tools；子开关关闭时过滤对应工具。
