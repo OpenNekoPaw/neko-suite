@@ -148,6 +148,8 @@ export const DEFAULT_TOOL_TRAITS: ToolTraits = {
 export interface ToolExecuteOptions {
   /** Progress callback for long-running tools */
   onProgress?: (progress: ToolProgress) => void;
+  /** Host/runtime metadata that should not be exposed as model-authored tool arguments */
+  metadata?: Record<string, unknown>;
 }
 
 /**

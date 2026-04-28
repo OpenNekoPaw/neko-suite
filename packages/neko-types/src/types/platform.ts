@@ -201,6 +201,20 @@ export interface ImageGenerationRequest extends MediaGenerationRequest {
   height?: number;
   style?: string;
   referenceImage?: string;
+  /** Reference image URL for image-to-image workflows */
+  referenceImageUrl?: string;
+  /** Reference image as base64-encoded PNG */
+  referenceImageBase64?: string;
+  /** Reference image local URI/path for extension-host side media services */
+  referenceImageUri?: string;
+  /** Inpaint mask as base64-encoded grayscale PNG */
+  maskBase64?: string;
+  /** Inpaint mask local URI/path for extension-host side media services */
+  maskUri?: string;
+  /** ControlNet conditioning image as base64-encoded PNG */
+  controlImageBase64?: string;
+  /** ControlNet conditioning image local URI/path for extension-host side media services */
+  controlImageUri?: string;
 }
 
 /**

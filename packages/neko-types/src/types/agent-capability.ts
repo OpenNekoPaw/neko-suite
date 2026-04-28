@@ -105,6 +105,13 @@ export interface CapabilityDeclaration {
  * Subset of MediaGenerationService — avoids sub-packages depending on @neko/platform.
  */
 export interface ICapabilityMediaService {
+  /**
+   * Generate an image.
+   *
+   * Capability providers may pass base64 fields for legacy adapters, or
+   * `referenceImageUri` / `maskUri` / `controlImageUri` for extension-host
+   * file-backed inputs that the platform materializes before provider execution.
+   */
   generateImage(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
   generateVideo(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
   waitForTask(
@@ -114,6 +121,8 @@ export interface ICapabilityMediaService {
     status: string;
     outputs?: Array<{ url: string; mimeType?: string }>;
   }>;
+  /** Cancel a running media task when the underlying platform supports it. */
+  cancelTask?(taskId: string): Promise<boolean>;
 }
 
 /**

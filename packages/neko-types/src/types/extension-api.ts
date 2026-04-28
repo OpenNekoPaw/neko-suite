@@ -26,6 +26,12 @@ import type {
 } from './storyboard-planner';
 import type { StoryScenePlan, StoryShotPlan } from './storyboard-planner';
 import type { CharacterRegistryFile, CharacterRecord } from './character-registry';
+import type {
+  SketchAIContextSnapshot,
+  SketchAIContextSnapshotRequest,
+  SketchAIImageResultRequest,
+  SketchAIProgressMessage,
+} from './sketch-ai';
 
 // =============================================================================
 // NekoCut API
@@ -508,6 +514,49 @@ export interface NekoSketchAPI {
    * as a new raster layer. No-ops silently when no sketch editor is open.
    */
   importImageData(base64: string, name: string): void;
+
+  /**
+   * Apply an AI image result through the sketch AI result protocol.
+   * The extension host downloads the source asset, converts it to a webview-safe
+   * URI, and posts an `ai:resultApply` message to the active editor.
+   */
+  applyAIImageResult(request: SketchAIImageResultRequest): Promise<boolean>;
+
+  /**
+   * Capture current sketch AI context into extension-owned cache files.
+   * Returned image references use `fileUri` and are intended for Extension Host
+   * / provider side consumption, not direct webview loading.
+   */
+  createAIContextSnapshot(
+    request: SketchAIContextSnapshotRequest,
+  ): Promise<SketchAIContextSnapshot | null>;
+
+  /**
+   * Delete cached AI files for a run. Implementations should ignore missing
+   * files so callers can safely invoke cleanup from success, failure, or cancel
+   * paths.
+   */
+  cleanupAIArtifacts?(runId: string): Promise<void>;
+
+  /**
+   * Report AI operation progress to the active sketch webview.
+   * Used by capability providers after a media task id is known, so the webview
+   * can expose progress and cancellation for long-running tasks.
+   */
+  reportAIProgress?(message: Omit<SketchAIProgressMessage, 'type'>): Promise<boolean>;
+
+  /**
+   * Register a cancellable AI run. The run id should match the media task id
+   * whenever possible so UI and logs can correlate progress, cancellation, and
+   * result application.
+   */
+  registerAIRun?(runId: string, cancel: () => Promise<void>): void;
+
+  /** Remove a cancellable AI run registration. */
+  unregisterAIRun?(runId: string): void;
+
+  /** Cancel a registered AI run. Returns false when the run is unknown. */
+  cancelAIRun?(runId: string): Promise<boolean>;
 
   /**
    * Import an image with a source context to enable round-trip workflow buttons

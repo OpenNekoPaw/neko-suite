@@ -120,9 +120,12 @@ export const TOOL_NAMES_STORY = {
 
 export const TOOL_NAMES_SKETCH = {
   SKETCH_GENERATE: 'SketchGenerate',
+  SKETCH_SMART_SELECTION: 'SketchSmartSelection',
   SKETCH_INPAINT: 'SketchInpaint',
   SKETCH_STYLE_TRANSFER: 'SketchStyleTransfer',
+  SKETCH_UPSCALE: 'SketchUpscale',
   SKETCH_AUTO_LAYER: 'SketchAutoLayer',
+  SKETCH_LINEART_COLORIZE: 'SketchLineartColorize',
 } as const;
 
 // =============================================================================
