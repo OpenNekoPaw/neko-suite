@@ -1,15 +1,16 @@
 import React, { useCallback, useState } from 'react';
 import type { AnimationClipInfo, PlaybackState } from '../types';
-import { postMessage } from '@neko/shared/vscode';
 
 interface AnimationPlayerProps {
   clips: AnimationClipInfo[];
   activeClip: string | null;
   playbackState: PlaybackState;
   onSelectClip: (name: string) => void;
+  onCrossfade: (clipName: string, fadeDuration: number) => void;
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
+  disabled?: boolean;
 }
 
 /**
@@ -23,9 +24,11 @@ export function AnimationPlayer({
   activeClip,
   playbackState,
   onSelectClip,
+  onCrossfade,
   onPlay,
   onPause,
   onStop,
+  disabled = false,
 }: AnimationPlayerProps): React.JSX.Element {
   const [fadeDuration, setFadeDuration] = useState(0.3);
 
@@ -33,16 +36,11 @@ export function AnimationPlayer({
     (clipName: string) => {
       // If currently playing, crossfade to the new clip instead of stop+play
       if (playbackState === 'playing' && activeClip && clipName !== activeClip) {
-        postMessage({
-          type: 'crossfadeAnimation',
-          clipName,
-          fadeDuration,
-          loop: true,
-        });
+        onCrossfade(clipName, fadeDuration);
       }
       onSelectClip(clipName);
     },
-    [playbackState, activeClip, fadeDuration, onSelectClip],
+    [playbackState, activeClip, fadeDuration, onCrossfade, onSelectClip],
   );
 
   if (clips.length === 0) {
@@ -55,6 +53,7 @@ export function AnimationPlayer({
         className="px-2 py-1 text-xs"
         value={activeClip ?? ''}
         onChange={(e) => handleClipChange(e.target.value)}
+        disabled={disabled}
       >
         <option value="">-- Select Animation --</option>
         {clips.map((clip) => (
@@ -67,7 +66,7 @@ export function AnimationPlayer({
       <button
         className="model-btn-primary px-2 py-1"
         onClick={playbackState === 'playing' ? onPause : onPlay}
-        disabled={!activeClip}
+        disabled={disabled || !activeClip}
       >
         {playbackState === 'playing' ? 'Pause' : 'Play'}
       </button>
@@ -75,7 +74,7 @@ export function AnimationPlayer({
       <button
         className="model-btn-secondary px-2 py-1"
         onClick={onStop}
-        disabled={!activeClip || playbackState === 'stopped'}
+        disabled={disabled || !activeClip || playbackState === 'stopped'}
       >
         Stop
       </button>
@@ -89,6 +88,7 @@ export function AnimationPlayer({
           step={0.1}
           value={fadeDuration}
           onChange={(e) => setFadeDuration(Math.max(0, parseFloat(e.target.value) || 0))}
+          disabled={disabled}
           className="model-input w-12 px-1 py-0.5 text-center text-xs"
         />
         s

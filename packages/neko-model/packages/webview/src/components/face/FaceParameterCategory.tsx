@@ -8,6 +8,7 @@ interface FaceParameterCategoryProps {
   parameters: FaceParameter[];
   values: Record<string, number>;
   onChange: (name: string, value: number) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -19,6 +20,7 @@ export function FaceParameterCategory({
   parameters,
   values,
   onChange,
+  disabled = false,
 }: FaceParameterCategoryProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -49,6 +51,7 @@ export function FaceParameterCategory({
               parameter={param}
               value={values[param.name] ?? param.default}
               onChange={(value) => onChange(param.name, value)}
+              disabled={disabled}
             />
           ))}
         </div>

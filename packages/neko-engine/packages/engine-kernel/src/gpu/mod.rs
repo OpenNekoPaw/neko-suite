@@ -97,7 +97,12 @@ pub use windows_import::WindowsTextureImporter;
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use mask_rasterizer::MaskRasterizer;
 pub use scene_renderer::{
-    AssetCache, CameraParams, PbrRenderError, PbrRenderer, PbrVertex, SceneRenderOutput,
+    extract_render_world, AssetCache, CameraParams, ControlAckHealthSample, DegradationDecision,
+    DegradationStep, FrameBudget, FrameLoadSample, FrameScheduleDecision, FrameScheduler,
+    PbrRenderError, PbrRenderer, PbrVertex, RenderExtractStats, RenderGraph, RenderGraphError,
+    RenderPassDesc, RenderResourceDesc, RenderResourceId, RenderResourceKind, RenderSystemLabel,
+    RenderWorld, SceneRenderOutput, StandardSceneRenderGraphOptions, ViewportDescriptor,
+    ViewportRenderGraphOutput, ViewportRenderGraphVariant, ViewportRenderMode, RENDER_SYSTEM_ORDER,
 };
 pub use shape_rasterizer::{RasterizedShape, ShapeRasterizer};
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};

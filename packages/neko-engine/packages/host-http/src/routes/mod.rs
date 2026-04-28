@@ -7,6 +7,8 @@ pub mod midi_stream;
 pub mod monitor;
 pub mod preview_file;
 pub mod puppet_stream;
+pub mod scene_control;
+pub mod scene_modeling;
 pub mod streaming;
 
 use axum::routing::{delete, get, post};
@@ -38,12 +40,28 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
             "/v1/streams/:stream_id",
             get(streaming::handle_stream_websocket),
         )
+        // Dedicated PCM audio WebSocket path. It uses the same registry frame
+        // transport as video, but keeps audio out of the 3D H.264 stream.
+        .route(
+            "/v1/audio/:stream_id",
+            get(streaming::handle_stream_websocket),
+        )
         // Audio recording monitor (RMS/Peak level data)
         .route("/v1/monitor/:stream_id", get(monitor::handle_monitor))
         // WebSocket puppet delta stream (60fps PuppetDelta push for neko-live)
         .route(
             "/v1/puppets/stream",
             get(puppet_stream::handle_puppet_stream),
+        )
+        // WebSocket 3D scene control plane
+        .route(
+            "/v1/scenes/control",
+            get(scene_control::handle_scene_control),
+        )
+        // WebSocket 3D modeling binary side channel
+        .route(
+            "/v1/scenes/modeling/:session_id",
+            get(scene_modeling::handle_scene_modeling),
         )
         // WebSocket MIDI event stream (JSON push per MIDI message)
         .route("/v1/midi/:stream_id", get(midi_stream::handle_midi_stream))

@@ -6,8 +6,9 @@ import {
 } from '../../types/vrmExpressions';
 
 interface ExpressionPresetPanelProps {
-  onApplyExpression: (expression: VRMExpressionPreset) => void;
-  isVRMLoaded: boolean;
+  onApplyExpression: (expression: VRMExpressionPreset, weight: number) => void;
+  characterId: string | null;
+  disabled?: boolean;
 }
 
 /**
@@ -21,12 +22,14 @@ interface ExpressionPresetPanelProps {
  */
 export function ExpressionPresetPanel({
   onApplyExpression,
-  isVRMLoaded,
+  characterId,
+  disabled = false,
 }: ExpressionPresetPanelProps): React.JSX.Element {
   const [selectedExpression, setSelectedExpression] = useState<VRMExpressionPreset>('neutral');
+  const controlsDisabled = disabled || !characterId;
 
   const handleApply = () => {
-    onApplyExpression(selectedExpression);
+    onApplyExpression(selectedExpression, 1);
   };
 
   return (
@@ -35,9 +38,9 @@ export function ExpressionPresetPanel({
         <h2 className="model-title">VRM 表情预设</h2>
       </div>
 
-      {!isVRMLoaded && (
+      {controlsDisabled && (
         <div className="model-panel-section text-xs text-[var(--model-fg-secondary)]">
-          ⚠️ 请加载 VRM 模型以使用表情预设
+          Route A requires an Engine character command target
         </div>
       )}
 
@@ -51,7 +54,7 @@ export function ExpressionPresetPanel({
                   key={expression}
                   className={`model-selectable-row flex items-center gap-2 px-2 py-1 ${
                     selectedExpression === expression ? 'model-selected-row' : ''
-                  } ${!isVRMLoaded ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                  } ${controlsDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                 >
                   <input
                     type="radio"
@@ -59,7 +62,7 @@ export function ExpressionPresetPanel({
                     value={expression}
                     checked={selectedExpression === expression}
                     onChange={() => setSelectedExpression(expression)}
-                    disabled={!isVRMLoaded}
+                    disabled={controlsDisabled}
                     className="cursor-pointer"
                   />
                   <span className="text-xs text-[var(--model-fg)]">
@@ -75,7 +78,7 @@ export function ExpressionPresetPanel({
       <div className="model-panel-footer">
         <button
           onClick={handleApply}
-          disabled={!isVRMLoaded}
+          disabled={controlsDisabled}
           className="model-btn-primary w-full text-sm"
         >
           应用表情

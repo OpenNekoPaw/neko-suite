@@ -1,11 +1,17 @@
-//! GPU asset cache for 3D scene rendering
+//! GPU asset cache for 3D scene rendering.
 //!
 //! Loads glTF mesh geometry and PBR materials into GPU buffers,
 //! keyed by (uri, primitive_index) / (uri, material_index).
-//! Independent of runtime-scene (preserves its zero-GPU-dependency).
+//!
+//! This is derived runtime state. Authoring asset metadata belongs to
+//! `neko_runtime_scene::asset_database::AssetDatabase`; exporters, inspectors,
+//! and scene serialization must read that authoring layer instead of this cache.
+//! `runtime-scene` stays zero-GPU-dependency, while engine-kernel consumes
+//! descriptors and materializes them as `wgpu` resources here.
 
 use super::vertex::{PbrVertex, SkinnedPbrVertex};
 use crate::gpu::GpuContext;
+use neko_runtime_scene::MeshDirtyRegion;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -154,6 +160,44 @@ impl AssetCache {
         self.materials.get(&(uri.to_string(), usize::MAX))
     }
 
+    /// Record that a modeling brush patch dirtied a mesh range.
+    ///
+    /// This method is intentionally cheap and non-blocking for the control
+    /// path. Call `upload_pbr_vertex_dirty_region` after the CPU modeling
+    /// solver has produced updated vertex data for the dirty range.
+    pub fn record_mesh_dirty_region(&self, region: &MeshDirtyRegion) {
+        tracing::trace!(
+            mesh_id = region.mesh_id,
+            start = region.start,
+            count = region.count,
+            sparse_count = region.sparse_indices.len(),
+            payload_bytes = region.payload_byte_len,
+            "Recorded mesh dirty region for partial GPU upload"
+        );
+    }
+
+    /// Upload only the dirty PBR vertex range for a mesh.
+    pub fn upload_pbr_vertex_dirty_region(
+        &self,
+        uri: &str,
+        primitive_index: usize,
+        region: &MeshDirtyRegion,
+        updated_vertices: &[PbrVertex],
+    ) -> Result<MeshDirtyUploadPlan, String> {
+        let key = (uri.to_string(), primitive_index);
+        let gpu_mesh = self
+            .meshes
+            .get(&key)
+            .ok_or_else(|| format!("Mesh ({uri}, {primitive_index}) not found"))?;
+        let plan = MeshDirtyUploadPlan::for_pbr_vertices(region, updated_vertices.len())?;
+        self.ctx.queue().write_buffer(
+            &gpu_mesh.vertex_buffer,
+            plan.byte_offset,
+            bytemuck::cast_slice(updated_vertices),
+        );
+        Ok(plan)
+    }
+
     /// Update material uniform parameters at runtime.
     /// Only provided fields are changed; others keep their current values.
     #[allow(clippy::too_many_arguments)]
@@ -230,7 +274,7 @@ impl AssetCache {
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("procedural_vertex_buffer"),
                     contents: bytemuck::cast_slice(&vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 });
 
         let index_buffer =
@@ -340,7 +384,7 @@ impl AssetCache {
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("skinned_pbr_vertex_buffer"),
                     contents: bytemuck::cast_slice(&vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 })
         } else {
             let mut vertices = Vec::with_capacity(vertex_count);
@@ -358,7 +402,7 @@ impl AssetCache {
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("pbr_vertex_buffer"),
                     contents: bytemuck::cast_slice(&vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 })
         };
 
@@ -696,6 +740,33 @@ impl AssetCache {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeshDirtyUploadPlan {
+    pub byte_offset: u64,
+    pub byte_len: u64,
+    pub vertex_count: u32,
+}
+
+impl MeshDirtyUploadPlan {
+    pub fn for_pbr_vertices(
+        region: &MeshDirtyRegion,
+        updated_vertex_count: usize,
+    ) -> Result<Self, String> {
+        if region.count as usize != updated_vertex_count {
+            return Err(format!(
+                "dirty region vertex count mismatch: region {}, data {}",
+                region.count, updated_vertex_count
+            ));
+        }
+        let stride = std::mem::size_of::<PbrVertex>() as u64;
+        Ok(Self {
+            byte_offset: u64::from(region.start) * stride,
+            byte_len: u64::from(region.count) * stride,
+            vertex_count: region.count,
+        })
+    }
+}
+
 /// Errors from asset loading
 #[derive(Debug, thiserror::Error)]
 pub enum AssetCacheError {
@@ -703,4 +774,42 @@ pub enum AssetCacheError {
     GltfLoad(String),
     #[error("Missing vertex attribute: {0}")]
     MissingAttribute(&'static str),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dirty_upload_plan_targets_only_dirty_vertex_range() {
+        let region = MeshDirtyRegion {
+            mesh_id: "mesh-a".to_string(),
+            start: 4,
+            count: 3,
+            sparse_indices: Vec::new(),
+            payload_byte_len: 36,
+        };
+
+        let plan = MeshDirtyUploadPlan::for_pbr_vertices(&region, 3).unwrap();
+
+        assert_eq!(
+            plan.byte_offset,
+            4 * std::mem::size_of::<PbrVertex>() as u64
+        );
+        assert_eq!(plan.byte_len, 3 * std::mem::size_of::<PbrVertex>() as u64);
+        assert_eq!(plan.vertex_count, 3);
+    }
+
+    #[test]
+    fn dirty_upload_plan_rejects_full_rebuild_sized_payload_mismatch() {
+        let region = MeshDirtyRegion {
+            mesh_id: "mesh-a".to_string(),
+            start: 2,
+            count: 2,
+            sparse_indices: Vec::new(),
+            payload_byte_len: 24,
+        };
+
+        assert!(MeshDirtyUploadPlan::for_pbr_vertices(&region, 8).is_err());
+    }
 }

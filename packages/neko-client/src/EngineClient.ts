@@ -15,6 +15,13 @@
  */
 
 import { PathResolver } from '@neko/shared';
+import type {
+  AudioStreamDescriptor,
+  RenderStreamDescriptor,
+  SceneSnapshot,
+  ViewportDescriptor,
+} from '@neko/shared';
+import { SceneControlSocket, type SceneControlSocketConfig } from './SceneControlSocket';
 import { getLogger } from './utils/logger';
 import type {
   ActionRequest,
@@ -105,7 +112,288 @@ export interface EnginePerceptionFacade {
   detectShots(request: PerceptionDetectShotsRequest): Promise<readonly PerceptionDetectedShot[]>;
 }
 
+export interface SceneCapturePreview {
+  width: number;
+  height: number;
+  format: 'jpeg';
+  mimeType: 'image/jpeg';
+  encoding: 'base64';
+  data: string;
+  dataUrl: string;
+  status: 'captured';
+}
+
+export interface SceneCaptureOptions {
+  width?: number;
+  height?: number;
+  quality?: number;
+  clipName?: string;
+  time?: number;
+  backgroundColor?: [number, number, number, number];
+}
+
+export interface SceneRenderStreamHandle {
+  descriptor: RenderStreamDescriptor;
+  wsUrl: string;
+  audioWsUrl?: string;
+}
+
 const logger = getLogger('EngineClient');
+
+type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
+type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
+type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function getNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function getBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function toVec3(value: unknown, fallback: { x: number; y: number; z: number }) {
+  if (Array.isArray(value)) {
+    return {
+      x: getNumber(value[0], fallback.x),
+      y: getNumber(value[1], fallback.y),
+      z: getNumber(value[2], fallback.z),
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      x: getNumber(value.x, fallback.x),
+      y: getNumber(value.y, fallback.y),
+      z: getNumber(value.z, fallback.z),
+    };
+  }
+  return fallback;
+}
+
+function toQuat(value: unknown, fallback: { x: number; y: number; z: number; w: number }) {
+  if (Array.isArray(value)) {
+    return {
+      x: getNumber(value[0], fallback.x),
+      y: getNumber(value[1], fallback.y),
+      z: getNumber(value[2], fallback.z),
+      w: getNumber(value[3], fallback.w),
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      x: getNumber(value.x, fallback.x),
+      y: getNumber(value.y, fallback.y),
+      z: getNumber(value.z, fallback.z),
+      w: getNumber(value.w, fallback.w),
+    };
+  }
+  return fallback;
+}
+
+function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
+  if (!isRecord(value)) return null;
+
+  const transform = isRecord(value.transform) ? value.transform : value;
+  const nodeId = getString(value.nodeId, getString(value.id));
+  if (!nodeId) return null;
+
+  const kind = getString(
+    value.kind,
+    getBoolean(value.hasMesh, false)
+      ? 'mesh'
+      : getBoolean(value.hasLight, false)
+        ? 'light'
+        : getBoolean(value.hasCamera, false)
+          ? 'camera'
+          : 'node',
+  );
+
+  const parentValue = value.parentId ?? value.parent_id;
+  const parentId =
+    typeof parentValue === 'string' && parentValue.length > 0 ? parentValue : undefined;
+
+  return {
+    nodeId,
+    parentId,
+    name: getString(value.name, nodeId),
+    transform: {
+      position: toVec3(transform.position, { x: 0, y: 0, z: 0 }),
+      rotation: toQuat(transform.rotation, { x: 0, y: 0, z: 0, w: 1 }),
+      scale: toVec3(transform.scale, { x: 1, y: 1, z: 1 }),
+    },
+    children: getStringArray(value.children),
+    visible: getBoolean(value.visible, true),
+    layerMask: typeof value.layerMask === 'number' ? value.layerMask : undefined,
+    mesh: isRecord(value.mesh)
+      ? { id: getString(value.mesh.id), uri: getString(value.mesh.uri), kind: 'mesh' }
+      : undefined,
+    material: isRecord(value.material)
+      ? { id: getString(value.material.id), uri: getString(value.material.uri), kind: 'material' }
+      : undefined,
+    kind,
+  };
+}
+
+function normalizeAnimationClip(value: unknown): SceneAnimationClipInfo | null {
+  if (!isRecord(value)) return null;
+  const name = getString(value.name);
+  if (!name) return null;
+  return {
+    name,
+    duration: getNumber(value.duration),
+  };
+}
+
+function normalizeCameraState(value: unknown): SceneCameraState | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    cameraId: getString(value.cameraId, getString(value.id, 'camera')),
+    position: toVec3(value.position, { x: 0, y: 0, z: 0 }),
+    target: toVec3(value.target, { x: 0, y: 0, z: -1 }),
+    up: toVec3(value.up, { x: 0, y: 1, z: 0 }),
+    fov: getNumber(value.fov, 45),
+    near: typeof value.near === 'number' ? value.near : undefined,
+    far: typeof value.far === 'number' ? value.far : undefined,
+  };
+}
+
+function normalizeSceneSnapshot(value: unknown): SceneSnapshot {
+  if (!isRecord(value)) {
+    return { sceneId: 'default', revision: 0, nodes: [], animations: [] };
+  }
+
+  const nodes = Array.isArray(value.nodes)
+    ? value.nodes
+        .map(normalizeSceneNodeSnapshot)
+        .filter((node): node is SceneNodeSnapshot => node !== null)
+    : [];
+  const animations = Array.isArray(value.animations)
+    ? value.animations
+        .map(normalizeAnimationClip)
+        .filter((clip): clip is SceneAnimationClipInfo => clip !== null)
+    : [];
+
+  return {
+    sceneId: getString(value.sceneId, getString(value.scene_id, 'default')),
+    revision: getNumber(value.revision),
+    nodes,
+    animations,
+    activeCamera: normalizeCameraState(value.activeCamera ?? value.active_camera),
+  };
+}
+
+function normalizeSceneCapturePreview(value: unknown): SceneCapturePreview {
+  if (!isRecord(value)) {
+    throw new Error('scenes:capture returned invalid preview data');
+  }
+
+  const data = getString(value.data);
+  const dataUrl = getString(value.dataUrl, data ? `data:image/jpeg;base64,${data}` : '');
+  if (!data || !dataUrl) {
+    throw new Error('scenes:capture returned no displayable image data');
+  }
+
+  return {
+    width: getNumber(value.width),
+    height: getNumber(value.height),
+    format: 'jpeg',
+    mimeType: 'image/jpeg',
+    encoding: 'base64',
+    data,
+    dataUrl,
+    status: 'captured',
+  };
+}
+
+function normalizeAudioStreamDescriptor(value: unknown): AudioStreamDescriptor | undefined {
+  if (!isRecord(value)) return undefined;
+  const streamId = getString(value.streamId);
+  if (!streamId) return undefined;
+
+  return {
+    streamId,
+    codec: 'pcm-f32le',
+    frameHeader: 'neko-pcm-v1',
+    sampleRate: getNumber(value.sampleRate, 48000),
+    channels: getNumber(value.channels, 2),
+    isMasterClock: typeof value.isMasterClock === 'boolean' ? value.isMasterClock : undefined,
+  };
+}
+
+function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescriptor {
+  if (!isRecord(value)) {
+    throw new Error('scenes:stream returned invalid stream descriptor');
+  }
+
+  const streamId = getString(value.streamId);
+  const viewportId = getString(value.viewportId);
+  if (!streamId || !viewportId) {
+    throw new Error('scenes:stream returned descriptor without streamId or viewportId');
+  }
+
+  return {
+    streamId,
+    viewportId,
+    container: value.container === 'h264-avcc' ? 'h264-avcc' : 'h264-annexb',
+    codecString: getString(value.codecString, 'avc1.42001f'),
+    profile: typeof value.profile === 'string' ? value.profile : undefined,
+    level: typeof value.level === 'string' ? value.level : undefined,
+    frameHeader: 'neko-h264-v1',
+    initData: isRecord(value.initData)
+      ? {
+          format: 'avcc-record',
+          data: getString(value.initData.data),
+        }
+      : undefined,
+    width: getNumber(value.width, 1280),
+    height: getNumber(value.height, 720),
+    fps: getNumber(value.fps, 30),
+    colorSpace:
+      value.colorSpace === 'rec709' || value.colorSpace === 'p3' ? value.colorSpace : 'srgb',
+    bitDepth: getNumber(value.bitDepth, 8),
+    toneMapping:
+      value.toneMapping === 'reinhard' || value.toneMapping === 'none' ? value.toneMapping : 'aces',
+    gopSize: typeof value.gopSize === 'number' ? value.gopSize : undefined,
+    initialRevision: getNumber(value.initialRevision),
+    audioStream: normalizeAudioStreamDescriptor(value.audioStream),
+    qualityTier: typeof value.qualityTier === 'string' ? value.qualityTier : undefined,
+    helperPassesEnabled:
+      typeof value.helperPassesEnabled === 'boolean' ? value.helperPassesEnabled : undefined,
+    postProcessEnabled:
+      typeof value.postProcessEnabled === 'boolean' ? value.postProcessEnabled : undefined,
+  };
+}
+
+function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<string, unknown> {
+  return {
+    viewportId: viewport.viewportId,
+    sceneId: viewport.sceneId,
+    cameraRef: viewport.cameraRef,
+    renderMode: viewport.renderMode,
+    debugView: viewport.debugView,
+    resolution: viewport.resolution,
+    fps: viewport.fps,
+    colorSpace: viewport.colorSpace,
+    toneMapping: viewport.toneMapping,
+    postProcess: viewport.postProcess,
+    layerMask: viewport.layerMask,
+    workMode: viewport.workMode,
+  };
+}
 
 export class EngineClient {
   readonly port: number;
@@ -151,6 +439,25 @@ export class EngineClient {
 
   getStreamWsUrl(streamId: string): string {
     return `${this.wsBaseUrl}/${streamId}`;
+  }
+
+  getAudioWsUrl(streamId: string): string {
+    return `ws://127.0.0.1:${this.port}/v1/audio/${streamId}`;
+  }
+
+  getSceneControlWsUrl(): string {
+    return `ws://127.0.0.1:${this.port}/v1/scenes/control`;
+  }
+
+  openSceneControlSocket(
+    config?: Omit<SceneControlSocketConfig, 'url'> & { url?: string },
+  ): SceneControlSocket {
+    const socket = new SceneControlSocket({
+      ...config,
+      url: config?.url ?? this.getSceneControlWsUrl(),
+    });
+    socket.connect();
+    return socket;
   }
 
   // =========================================================================
@@ -616,28 +923,70 @@ export class EngineClient {
    * Dispatches `scenes:load`.
    * Returns the scene snapshot with all nodes and animations.
    */
-  async loadModel(source: string): Promise<Record<string, unknown>> {
+  async loadModel(source: string): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'load',
       options: { source },
     });
     this.assertOk(resp, 'scenes:load');
-    return (resp.data as Record<string, unknown>) ?? {};
+    return normalizeSceneSnapshot(resp.data);
   }
 
   /**
    * Get the current scene graph snapshot.
    * Dispatches `scenes:snapshot`.
    */
-  async getSceneSnapshot(): Promise<Record<string, unknown>> {
+  async getSceneSnapshot(): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'snapshot',
       options: {},
     });
     this.assertOk(resp, 'scenes:snapshot');
-    return (resp.data as Record<string, unknown>) ?? {};
+    return normalizeSceneSnapshot(resp.data);
+  }
+
+  /**
+   * Capture a displayable Engine-rendered scene preview.
+   * Dispatches `scenes:capture` and returns a JPEG data URL for Route C.
+   */
+  async captureScenePreview(options?: SceneCaptureOptions): Promise<SceneCapturePreview> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'capture',
+      options: {
+        width: options?.width,
+        height: options?.height,
+        quality: options?.quality,
+        clipName: options?.clipName,
+        time: options?.time,
+        backgroundColor: options?.backgroundColor,
+      },
+    });
+    this.assertOk(resp, 'scenes:capture');
+    return normalizeSceneCapturePreview(resp.data);
+  }
+
+  /**
+   * Start an Engine-rendered 3D viewport stream.
+   * Dispatches `scenes:stream` with a shared ViewportDescriptor.
+   */
+  async startSceneRenderStream(viewport: ViewportDescriptor): Promise<SceneRenderStreamHandle> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'stream',
+      options: viewportDescriptorToOptions(viewport),
+    });
+    this.assertOk(resp, 'scenes:stream');
+    const descriptor = normalizeSceneRenderStreamDescriptor(resp.data);
+    return {
+      descriptor,
+      wsUrl: this.getStreamWsUrl(descriptor.streamId),
+      audioWsUrl: descriptor.audioStream
+        ? this.getAudioWsUrl(descriptor.audioStream.streamId)
+        : undefined,
+    };
   }
 
   /**
@@ -775,9 +1124,7 @@ export class EngineClient {
    * Load a .nkm project file and restore the scene.
    * Dispatches `scenes:load_project`.
    */
-  async loadProject(
-    path: string,
-  ): Promise<{ snapshot: Record<string, unknown>; editorState: unknown }> {
+  async loadProject(path: string): Promise<{ snapshot: SceneSnapshot; editorState: unknown }> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'load_project',
@@ -786,7 +1133,7 @@ export class EngineClient {
     this.assertOk(resp, 'scenes:load_project');
     const result = resp.data as Record<string, unknown>;
     return {
-      snapshot: result['snapshot'] as Record<string, unknown>,
+      snapshot: normalizeSceneSnapshot(result['snapshot']),
       editorState: result['editorState'],
     };
   }

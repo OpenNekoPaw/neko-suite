@@ -5,6 +5,7 @@ interface FaceParameterSliderProps {
   parameter: FaceParameter;
   value: number;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -15,6 +16,7 @@ export function FaceParameterSlider({
   parameter,
   value,
   onChange,
+  disabled = false,
 }: FaceParameterSliderProps): React.JSX.Element {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(parseFloat(e.target.value));
@@ -36,6 +38,7 @@ export function FaceParameterSlider({
         step={parameter.step}
         value={value}
         onChange={handleChange}
+        disabled={disabled}
         className="model-range flex-1"
       />
       <span className="w-10 text-right text-xs text-[var(--model-fg-secondary)]">

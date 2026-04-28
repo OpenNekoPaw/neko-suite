@@ -11,6 +11,7 @@ mod image;
 mod node;
 mod puppet;
 mod scene;
+mod scene_command_queue;
 pub(crate) mod stream_loop;
 mod task;
 mod timeline;

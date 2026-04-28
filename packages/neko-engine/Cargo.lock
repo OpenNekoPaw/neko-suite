@@ -2485,6 +2485,7 @@ dependencies = [
  "axum",
  "neko-engine-types",
  "neko-host-api",
+ "neko-runtime-scene",
  "serde",
  "serde_json",
  "tokio",

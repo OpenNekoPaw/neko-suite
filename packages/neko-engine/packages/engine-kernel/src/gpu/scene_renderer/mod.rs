@@ -16,19 +16,61 @@
 
 pub mod asset_cache;
 pub mod environment;
+pub mod frame_scheduler;
 pub mod particles;
 pub mod pbr_pipeline;
 pub mod post_process;
+pub mod render_extract;
+pub mod render_graph;
+pub mod render_graph_presets;
+pub mod render_systems;
+pub mod render_world;
 pub mod vertex;
+pub mod viewport;
 
 pub use asset_cache::{AssetCache, AssetCacheError, GpuMaterial, GpuMesh, MaterialUniforms};
 pub use environment::Environment;
+pub use frame_scheduler::{
+    ControlAckHealthSample, DegradationDecision, DegradationStep, FrameBudget, FrameLoadSample,
+    FrameScheduleDecision, FrameScheduler,
+};
 pub use particles::{GpuParticleSystem, ParticleEmitterConfig};
 pub use pbr_pipeline::{PbrRenderError, PbrRenderer};
 pub use post_process::{PostProcessChain, PostProcessSettings, ToneMapping};
+pub use render_extract::{extract_render_world, RenderExtractStats};
+pub use render_graph::{
+    CompiledRenderGraph, CompiledRenderPass, RenderGraph, RenderGraphError, RenderGraphExecutor,
+    RenderPassDesc, RenderPassId, RenderResourceDesc, RenderResourceId, RenderResourceKind,
+};
+pub use render_graph_presets::{
+    build_standard_scene_render_graph, StandardSceneRenderGraphOptions, RESOURCE_ENCODER_INPUT,
+    RESOURCE_ENCODER_PACKET, RESOURCE_HELPER_COLOR, RESOURCE_SCENE_COLOR, RESOURCE_SCENE_DEPTH,
+    RESOURCE_TONEMAPPED_COLOR,
+};
+pub use render_systems::{RenderSystemLabel, RENDER_SYSTEM_ORDER};
+pub use render_world::{
+    DrawItem, GpuMaterialHandle, GpuMeshHandle, RenderCameraData, RenderInstance, RenderLightData,
+    RenderLightKind, RenderMaterialData, RenderWorld,
+};
 pub use vertex::PbrVertex;
+pub use viewport::{
+    build_viewport_render_graph, SceneToneMapping, ViewportDebugView, ViewportDescriptor,
+    ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphPlan,
+    ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
+};
 
 use crate::gpu::{BlendMode, GpuLayer, Transform2D};
+
+/// Output from a 3D scene render pass
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SceneRenderGraphExecution {
+    pub variant: ViewportRenderGraphVariant,
+    pub pass_ids: Vec<String>,
+    pub helper_passes: bool,
+    pub post_process: bool,
+    pub color_convert: bool,
+    pub encoder_copy: bool,
+}
 
 /// Output from a 3D scene render pass
 pub struct SceneRenderOutput {
@@ -42,6 +84,8 @@ pub struct SceneRenderOutput {
     pub width: u32,
     /// Output height in pixels
     pub height: u32,
+    /// RenderGraph variant and pass list used to produce the frame.
+    pub graph_execution: SceneRenderGraphExecution,
 }
 
 impl SceneRenderOutput {

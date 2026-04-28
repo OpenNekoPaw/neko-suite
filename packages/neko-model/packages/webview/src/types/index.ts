@@ -1,44 +1,9 @@
-import type { EditorKeyframeTrack } from '@neko/shared';
+import type { SceneCapturePreview } from '@neko/neko-client';
+import type { EditorKeyframeTrack, SceneDelta, SceneSnapshot } from '@neko/shared';
 
-/** Scene node snapshot from the backend */
-export interface SceneNodeSnapshot {
-  id: string;
-  name: string;
-  position: [number, number, number];
-  rotation: [number, number, number, number]; // quaternion xyzw
-  scale: [number, number, number];
-  parentId: string | null;
-  hasMesh: boolean;
-  hasLight: boolean;
-  hasCamera: boolean;
-  hasSkeleton: boolean;
-}
-
-/** Animation clip info */
-export interface AnimationClipInfo {
-  name: string;
-  duration: number;
-  channelCount: number;
-}
-
-/** Scene snapshot from the backend */
-export interface SceneSnapshot {
-  nodes: SceneNodeSnapshot[];
-  animations: AnimationClipInfo[];
-}
-
-/** Transform update from animation tick */
-export interface TransformUpdate {
-  nodeId: string;
-  position: [number, number, number];
-  rotation: [number, number, number, number];
-  scale: [number, number, number];
-}
-
-/** Scene delta from backend tick */
-export interface SceneDelta {
-  updatedTransforms: TransformUpdate[];
-}
+export type { SceneDelta, SceneSnapshot };
+export type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
+export type AnimationClipInfo = SceneSnapshot['animations'][number];
 
 /** Transform mode for gizmo */
 export type TransformMode = 'translate' | 'rotate' | 'scale';
@@ -53,6 +18,7 @@ export type ExtensionMessage =
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }
   | { type: 'sceneDelta'; delta: SceneDelta }
+  | { type: 'sceneCapturePreview'; preview: SceneCapturePreview }
   | { type: 'latency:response'; timestamp: number }
   | { type: 'exportComplete'; success: boolean; filePath?: string; error?: string }
   | { type: 'projectSaved'; success: boolean; filePath?: string; error?: string }
@@ -76,6 +42,7 @@ export type WebviewMessage =
   | { type: 'pauseAnimation' }
   | { type: 'stopAnimation' }
   | { type: 'latency:test'; timestamp: number }
+  | { type: 'scene:capturePreview'; width?: number; height?: number; quality?: number }
   | { type: 'createShape'; shapeType: string; params: Record<string, number> }
   | { type: 'model:import' }
   | { type: 'model:template'; templateId: string }

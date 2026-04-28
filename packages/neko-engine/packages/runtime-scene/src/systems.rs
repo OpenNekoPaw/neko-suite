@@ -4,13 +4,53 @@
 //! - animation_tick: advances animation playback
 //! - scene_animation_blend_tick: multi-layer blended animation with crossfade
 
-use crate::animation_blend::{SceneAnimationBlendState, SceneBlendLayer, SceneCrossfadeRequest};
+use crate::animation_blend::{
+    SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneCrossfadeRequest,
+};
 use crate::components::{
     AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, SceneRoot, Transform,
 };
 use crate::hierarchy::{Children, Parent};
 use bevy_ecs::prelude::*;
 use std::collections::HashMap;
+
+/// Stable labels for simulation-side scene systems.
+///
+/// These labels define the authoring/simulation boundary used by engine-kernel
+/// render extraction. They intentionally live in runtime-scene because they
+/// describe ECS truth updates rather than GPU render work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SimulationSystemLabel {
+    CommandApply,
+    AnimationTick,
+    AnimationBlendTick,
+    IkSolve,
+    TransformPropagation,
+    DirtyDeltaExtraction,
+}
+
+impl SimulationSystemLabel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            SimulationSystemLabel::CommandApply => "simulation.command_apply",
+            SimulationSystemLabel::AnimationTick => "simulation.animation_tick",
+            SimulationSystemLabel::AnimationBlendTick => "simulation.animation_blend_tick",
+            SimulationSystemLabel::IkSolve => "simulation.ik_solve",
+            SimulationSystemLabel::TransformPropagation => "simulation.transform_propagation",
+            SimulationSystemLabel::DirtyDeltaExtraction => "simulation.dirty_delta_extraction",
+        }
+    }
+}
+
+/// Canonical high-level order for a scene simulation step.
+pub const SIMULATION_SYSTEM_ORDER: &[SimulationSystemLabel] = &[
+    SimulationSystemLabel::CommandApply,
+    SimulationSystemLabel::AnimationTick,
+    SimulationSystemLabel::AnimationBlendTick,
+    SimulationSystemLabel::IkSolve,
+    SimulationSystemLabel::TransformPropagation,
+    SimulationSystemLabel::DirtyDeltaExtraction,
+];
 
 /// Propagate local transforms through the hierarchy to compute GlobalTransform.
 ///
@@ -551,6 +591,28 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
             }
         }
     }
+
+    if let Some(dominant_layer) = layers
+        .iter()
+        .filter(|layer| layer.clip_index < clips.len())
+        .max_by(|a, b| a.weight.total_cmp(&b.weight))
+    {
+        let (clip_name, duration, _) = &clips[dominant_layer.clip_index];
+        let evaluated_time = if *duration > 0.0 {
+            dominant_layer.elapsed % duration
+        } else {
+            0.0
+        };
+        world
+            .entity_mut(root_entity)
+            .insert(SceneAnimationPlaybackState {
+                clip_name: Some(clip_name.clone()),
+                time_cursor: dominant_layer.elapsed,
+                evaluated_time,
+                playing: dominant_layer.weight > 0.0,
+                looping: dominant_layer.looping,
+            });
+    }
 }
 
 fn find_entity_by_node_id(world: &mut World, node_id: &str) -> Option<Entity> {
@@ -576,6 +638,25 @@ mod tests {
     use super::*;
     use crate::components::*;
     use crate::hierarchy::*;
+
+    #[test]
+    fn simulation_system_labels_define_stable_boundary_order() {
+        assert_eq!(
+            SIMULATION_SYSTEM_ORDER,
+            &[
+                SimulationSystemLabel::CommandApply,
+                SimulationSystemLabel::AnimationTick,
+                SimulationSystemLabel::AnimationBlendTick,
+                SimulationSystemLabel::IkSolve,
+                SimulationSystemLabel::TransformPropagation,
+                SimulationSystemLabel::DirtyDeltaExtraction,
+            ]
+        );
+        assert_eq!(
+            SimulationSystemLabel::TransformPropagation.as_str(),
+            "simulation.transform_propagation"
+        );
+    }
 
     #[test]
     fn test_transform_propagation_single_root() {

@@ -1,5 +1,6 @@
 //! ECS components for 3D scene entities
 
+use crate::asset_database::AssetHandle;
 use bevy_ecs::prelude::*;
 use glam::{Mat4, Quat, Vec3};
 use neko_engine_types::easing::EasingType;
@@ -59,6 +60,7 @@ impl GlobalTransform {
 /// Reference to a mesh asset
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct MeshRef {
+    pub asset: AssetHandle,
     pub uri: String,
     pub primitive_index: usize,
 }
@@ -66,6 +68,7 @@ pub struct MeshRef {
 /// Reference to a material asset
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct MaterialRef {
+    pub asset: AssetHandle,
     pub uri: String,
     pub material_index: usize,
 }
@@ -128,6 +131,63 @@ impl Default for Visible {
 #[derive(Component, Clone, Debug, Default)]
 pub struct MorphWeights {
     pub weights: Vec<f32>,
+}
+
+/// Runtime reference to an editable character authoring description.
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
+pub struct CharacterInstanceId(pub String);
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CharacterMorphWeight {
+    pub morph_id: String,
+    pub weight: f32,
+}
+
+/// Runtime projection of character morph weights.
+#[derive(Component, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CharacterMorphWeights {
+    pub weights: Vec<CharacterMorphWeight>,
+    pub topology_version: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CharacterMaterialLayer {
+    pub slot_id: String,
+    pub params_json: String,
+    pub topology_version: u64,
+}
+
+/// Runtime projection of character material layer overrides.
+#[derive(Component, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CharacterMaterialLayers {
+    pub layers: Vec<CharacterMaterialLayer>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CharacterBonePose {
+    pub bone_id: String,
+    pub transform: Transform,
+    pub topology_version: u64,
+}
+
+/// Runtime projection of a character skeleton pose.
+#[derive(Component, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SkeletonPose {
+    pub bones: Vec<CharacterBonePose>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CharacterOverrideState {
+    pub path: String,
+    pub value_type: String,
+    pub value_json: String,
+    pub topology_version: u64,
+}
+
+/// Runtime projection of acknowledged character override entries.
+#[derive(Component, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CharacterOverrides {
+    pub entries: Vec<CharacterOverrideState>,
 }
 
 /// Skeleton component for skeletal animation

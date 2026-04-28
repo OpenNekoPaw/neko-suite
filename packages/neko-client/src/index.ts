@@ -46,6 +46,23 @@ export {
 // Playback performance monitoring
 export { PlaybackPerformanceMonitor, type PerformanceSnapshot } from './PlaybackPerformanceMonitor';
 
+// 3D scene control WebSocket client
+export {
+  SceneControlSocket,
+  type SceneControlReadyMessage,
+  type SceneControlSocketConfig,
+  type SceneControlWebSocketFactory,
+  type SceneControlWebSocketLike,
+} from './SceneControlSocket';
+
+export {
+  VertexBrushPatchClient,
+  encodeVertexBrushPatchFrame,
+  type BrushPatchWebSocketFactory,
+  type BrushPatchWebSocketLike,
+  type VertexBrushPatchClientConfig,
+} from './VertexBrushPatchClient';
+
 // Browser capability detection
 export {
   detectCapabilities,
@@ -63,6 +80,9 @@ export {
   type EnginePerceptionFacade,
   type PerceptionSimilarityRequest,
   type PerceptionTranscribeRequest,
+  type SceneCaptureOptions,
+  type SceneCapturePreview,
+  type SceneRenderStreamHandle,
   type TranscribeSegment,
   type TranscribeResponse,
 } from './EngineClient';

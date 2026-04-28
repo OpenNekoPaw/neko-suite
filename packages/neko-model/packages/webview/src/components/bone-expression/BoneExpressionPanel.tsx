@@ -1,8 +1,13 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { PHONEME_ROTATIONS, type Phoneme } from '../../types/boneExpression';
-import { postMessage } from '@neko/shared/vscode';
 
 const PHONEMES: Phoneme[] = ['A', 'I', 'U', 'E', 'O', 'silent'];
+
+interface BoneExpressionPanelProps {
+  characterId: string | null;
+  disabled?: boolean;
+  onSetBonePose: (boneId: string, rotation: [number, number, number, number]) => void;
+}
 
 /**
  * Bone Expression Panel - Lip sync, eye tracking, and eyebrow control.
@@ -12,37 +17,33 @@ const PHONEMES: Phoneme[] = ['A', 'I', 'U', 'E', 'O', 'silent'];
  * - Eye Tracking: 128x128 trackpad for eye rotation
  * - Eyebrow: 3 sliders (raise/lower/furrow)
  */
-export function BoneExpressionPanel(): React.JSX.Element {
+export function BoneExpressionPanel({
+  characterId,
+  disabled = false,
+  onSetBonePose,
+}: BoneExpressionPanelProps): React.JSX.Element {
   const [activePhoneme, setActivePhoneme] = useState<Phoneme>('silent');
   const [eyebrowRaise, setEyebrowRaise] = useState(0);
   const [eyebrowLower, setEyebrowLower] = useState(0);
   const [eyebrowFurrow, setEyebrowFurrow] = useState(0);
   const eyeTrackRef = useRef<HTMLDivElement>(null);
 
-  const sendBoneTransform = useCallback(
-    (nodeId: string, rotation: [number, number, number, number]) => {
-      postMessage({
-        type: 'updateBoneTransform',
-        nodeId,
-        rotation,
-      });
-    },
-    [],
-  );
+  const controlsDisabled = disabled || !characterId;
 
   const handlePhonemeClick = useCallback(
     (phoneme: Phoneme) => {
+      if (controlsDisabled) return;
       setActivePhoneme(phoneme);
       const rot = PHONEME_ROTATIONS[phoneme];
-      sendBoneTransform('jaw', rot.jaw);
+      onSetBonePose('jaw', rot.jaw);
     },
-    [sendBoneTransform],
+    [controlsDisabled, onSetBonePose],
   );
 
   const handleEyeTrack = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = eyeTrackRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect || controlsDisabled) return;
 
       // Normalize to [-1, 1]
       const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -55,14 +56,15 @@ export function BoneExpressionPanel(): React.JSX.Element {
       const qw = Math.sqrt(1 - qx * qx - qy * qy);
 
       const rotation: [number, number, number, number] = [qx, qy, 0, qw];
-      sendBoneTransform('leftEye', rotation);
-      sendBoneTransform('rightEye', rotation);
+      onSetBonePose('leftEye', rotation);
+      onSetBonePose('rightEye', rotation);
     },
-    [sendBoneTransform],
+    [controlsDisabled, onSetBonePose],
   );
 
   const handleEyebrowChange = useCallback(
     (param: 'raise' | 'lower' | 'furrow', value: number) => {
+      if (controlsDisabled) return;
       switch (param) {
         case 'raise':
           setEyebrowRaise(value);
@@ -85,15 +87,15 @@ export function BoneExpressionPanel(): React.JSX.Element {
       ];
 
       if (param === 'raise' || param === 'lower') {
-        sendBoneTransform('leftEyebrow', rotation);
-        sendBoneTransform('rightEyebrow', rotation);
+        onSetBonePose('leftEyebrow', rotation);
+        onSetBonePose('rightEyebrow', rotation);
       } else {
         // Furrow: opposing rotations for left/right
-        sendBoneTransform('leftEyebrow', [angle, 0, angle * 0.5, Math.sqrt(1 - angle * angle)]);
-        sendBoneTransform('rightEyebrow', [angle, 0, -angle * 0.5, Math.sqrt(1 - angle * angle)]);
+        onSetBonePose('leftEyebrow', [angle, 0, angle * 0.5, Math.sqrt(1 - angle * angle)]);
+        onSetBonePose('rightEyebrow', [angle, 0, -angle * 0.5, Math.sqrt(1 - angle * angle)]);
       }
     },
-    [sendBoneTransform],
+    [controlsDisabled, onSetBonePose],
   );
 
   return (
@@ -110,6 +112,7 @@ export function BoneExpressionPanel(): React.JSX.Element {
               <button
                 key={p}
                 onClick={() => handlePhonemeClick(p)}
+                disabled={controlsDisabled}
                 className={`${activePhoneme === p ? 'model-btn-primary' : 'model-btn-secondary'} px-2 py-1.5 text-xs ${
                   activePhoneme === p ? '' : ''
                 }`}
@@ -125,7 +128,9 @@ export function BoneExpressionPanel(): React.JSX.Element {
           <div
             ref={eyeTrackRef}
             onMouseMove={handleEyeTrack}
-            className="relative mx-auto h-32 w-32 cursor-crosshair rounded-lg border border-[var(--model-input-border)] bg-[var(--model-input-bg)]"
+            className={`relative mx-auto h-32 w-32 rounded-lg border border-[var(--model-input-border)] bg-[var(--model-input-bg)] ${
+              controlsDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-crosshair'
+            }`}
           >
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="h-px w-full bg-[var(--model-fg-muted)] opacity-60" />
@@ -147,16 +152,19 @@ export function BoneExpressionPanel(): React.JSX.Element {
             label="Raise"
             value={eyebrowRaise}
             onChange={(v) => handleEyebrowChange('raise', v)}
+            disabled={controlsDisabled}
           />
           <EyebrowSlider
             label="Lower"
             value={eyebrowLower}
             onChange={(v) => handleEyebrowChange('lower', v)}
+            disabled={controlsDisabled}
           />
           <EyebrowSlider
             label="Furrow"
             value={eyebrowFurrow}
             onChange={(v) => handleEyebrowChange('furrow', v)}
+            disabled={controlsDisabled}
           />
         </div>
       </div>
@@ -168,10 +176,12 @@ function EyebrowSlider({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2 mb-1.5">
@@ -183,6 +193,7 @@ function EyebrowSlider({
         step={0.01}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        disabled={disabled}
         className="model-range flex-1"
       />
       <span className="w-8 text-right text-[10px] text-[var(--model-fg-secondary)]">

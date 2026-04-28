@@ -173,7 +173,7 @@ impl PostProcessChain {
     ///
     /// Returns the processed texture view. The input texture is consumed.
     pub fn process(
-        &mut self,
+        &self,
         input_view: &wgpu::TextureView,
         output_view: &wgpu::TextureView,
         _width: u32,
@@ -181,7 +181,33 @@ impl PostProcessChain {
         settings: &PostProcessSettings,
     ) {
         let device = self.ctx.device();
-        let queue = self.ctx.queue();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("post_process_encoder"),
+        });
+
+        self.record_process(
+            input_view,
+            output_view,
+            _width,
+            height,
+            settings,
+            &mut encoder,
+        );
+
+        self.ctx.queue().submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Record post-processing work into an existing RenderGraph encoder.
+    pub fn record_process(
+        &self,
+        input_view: &wgpu::TextureView,
+        output_view: &wgpu::TextureView,
+        _width: u32,
+        height: u32,
+        settings: &PostProcessSettings,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let device = self.ctx.device();
 
         // Pack settings into uniform buffer
         let uniforms = PostProcessUniformsGpu {
@@ -234,10 +260,6 @@ impl PostProcessChain {
             ],
         });
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("post_process_encoder"),
-        });
-
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("tonemap_pass"),
@@ -258,8 +280,6 @@ impl PostProcessChain {
             pass.set_bind_group(0, &bind_group, &[]);
             pass.draw(0..3, 0..1); // Fullscreen triangle
         }
-
-        queue.submit(std::iter::once(encoder.finish()));
     }
 }
 

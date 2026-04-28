@@ -9,11 +9,13 @@ export const en = {
   'toolbar.geometry': 'Geometry',
   'toolbar.text3d': '3D Text',
   'toolbar.csg': 'CSG',
+  'toolbar.sculpt': 'Sculpt Brush',
   'toolbar.exportGlb': 'Export GLB',
   'toolbar.saveProject': 'Save Project',
 
   // Toolbar (continued)
   'toolbar.keyframes': 'Keyframes',
+  'toolbar.qualityPreview': 'Engine Quality Preview',
 
   // Empty state
   'empty.hint': 'Open a .gltf, .glb, or .vrm file to view',

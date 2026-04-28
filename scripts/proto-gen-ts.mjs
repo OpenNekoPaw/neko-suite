@@ -33,7 +33,7 @@ const OUT_DIR = resolve(ROOT, 'packages/neko-types/src/generated');
 // Per-proto overrides — only non-default config needs to be specified
 // =============================================================================
 
-/** @type {Record<string, { enumStyleOverrides?: Record<string, string>, keyConstants?: Array<[string, string]> }>} */
+/** @type {Record<string, { enumStyleOverrides?: Record<string, string>, keyConstants?: Array<[string, string]>, optionalRepeatedMessages?: string[] }>} */
 const PROTO_CONFIG = {
   'timeline.proto': {
     enumStyleOverrides: {
@@ -58,6 +58,36 @@ const PROTO_CONFIG = {
     enumStyleOverrides: {},
     keyConstants: [],
   },
+  'scene.proto': {
+    enumStyleOverrides: {
+      SceneCommandType: 'kebab-case',
+      CameraRefKind: 'camelCase',
+      ViewportRenderMode: 'camelCase',
+      ViewportDebugView: 'camelCase',
+      ViewportWorkMode: 'kebab-case',
+      H264Container: 'kebab-case',
+      H264FrameHeader: 'kebab-case',
+      H264InitDataFormat: 'kebab-case',
+      AudioCodec: 'kebab-case',
+      AudioFrameHeader: 'kebab-case',
+      CharacterDataBlockKind: 'kebab-case',
+      CharacterOverrideOperation: 'kebab-case',
+      CharacterCommandType: 'kebab-case',
+      TopologyOperation: 'kebab-case',
+      TopologyMigrationStatus: 'kebab-case',
+      MigrationKind: 'kebab-case',
+      VertexBrushPatchEncoding: 'kebab-case',
+    },
+    optionalRepeatedMessages: [
+      'AssetReferencePatch',
+      'HierarchyPatch',
+      'SceneDelta',
+      'SceneNodePatch',
+      'TopologyChangeEvent',
+      'ViewportOverlayPatch',
+    ],
+    keyConstants: [],
+  },
 };
 
 // =============================================================================
@@ -66,7 +96,7 @@ const PROTO_CONFIG = {
 
 /**
  * Discover .proto files and extract package declarations.
- * @returns {Array<{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]> }>}
+ * @returns {Array<{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string> }>}
  */
 function discoverProtoFiles() {
   const files = readdirSync(PROTO_DIR).filter(f => f.endsWith('.proto')).sort();
@@ -85,6 +115,7 @@ function discoverProtoFiles() {
       output: `${stem}.engine.ts`,
       enumStyleOverrides: overrides.enumStyleOverrides || {},
       keyConstants: overrides.keyConstants || [],
+      optionalRepeatedMessages: new Set(overrides.optionalRepeatedMessages || []),
     };
   });
 }
@@ -289,9 +320,11 @@ function generateEnum(enumObj, styleOverrides, knownEnums, commentMap) {
  * Determine if a field should be optional in the generated TS interface.
  * @param {protobuf.Field} field
  * @param {Set<string>} knownEnums
+ * @param {boolean} optionalRepeated
  * @returns {boolean}
  */
-function isFieldOptional(field, knownEnums) {
+function isFieldOptional(field, knownEnums, optionalRepeated = false) {
+  if (field.repeated && optionalRepeated) return true;
   if (field.options?.proto3_optional) return true;
   if (field.repeated) return false;
   if (!isScalarType(field.type) && !knownEnums.has(field.type)) return true;
@@ -304,12 +337,14 @@ function isFieldOptional(field, knownEnums) {
  * @param {protobuf.Type} msgType
  * @param {Set<string>} knownEnums
  * @param {Map<string, string>} commentMap
+ * @param {Set<string>} optionalRepeatedMessages
  * @returns {{ interfaceDef: string, name: string, keys: string[], oneofKeys: Set<string> }}
  */
-function generateMessage(msgType, knownEnums, commentMap) {
+function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessages) {
   const tsName = `Engine${msgType.name}`;
   const lines = [];
   const keys = [];
+  const optionalRepeated = optionalRepeatedMessages.has(msgType.name);
   /** @type {Set<string>} */
   const oneofKeys = new Set();
 
@@ -330,7 +365,7 @@ function generateMessage(msgType, knownEnums, commentMap) {
     if (oneofFieldNames.has(field.name)) continue;
 
     const camelName = snakeToCamel(field.name);
-    const optional = isFieldOptional(field, knownEnums);
+    const optional = isFieldOptional(field, knownEnums, optionalRepeated);
 
     let tsType;
     let suffix = '';
@@ -405,7 +440,7 @@ function generateKeyConst(constName, keys) {
 // =============================================================================
 
 /**
- * @param {{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]> }} config
+ * @param {{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string> }} config
  */
 function processProto(config) {
   const protoPath = resolve(PROTO_DIR, config.proto);
@@ -469,7 +504,7 @@ function processProto(config) {
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Type) {
-      const result = generateMessage(child, knownEnums, commentMap);
+      const result = generateMessage(child, knownEnums, commentMap, config.optionalRepeatedMessages);
       output.push(result.interfaceDef);
       messageInfo.set(child.name, { keys: result.keys, oneofKeys: result.oneofKeys });
       console.log(`  ✓ Message: ${result.name} (${result.keys.length} fields, ${result.oneofKeys.size} oneof)`);

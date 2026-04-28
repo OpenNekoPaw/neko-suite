@@ -2,6 +2,11 @@
 //!
 //! Parses glTF files and spawns ECS entities with appropriate components.
 
+use crate::asset_database::{
+    AssetDatabase, AssetDescriptor, AssetHandle, AssetKind, AssetMetadata, ImageDescriptor,
+    MaterialDescriptor, MeshDescriptor, TextureColorSpace, TextureDescriptor,
+    TextureSamplerDescriptor,
+};
 use crate::components::*;
 use crate::hierarchy::Children;
 use bevy_ecs::prelude::*;
@@ -24,6 +29,7 @@ pub struct LoadResult {
     pub root_entity: Entity,
     pub entity_count: usize,
     pub animation_clips: Vec<String>,
+    pub asset_database: AssetDatabase,
 }
 
 /// Load a glTF/glb file into the ECS world
@@ -36,6 +42,7 @@ pub fn load_gltf(world: &mut World, path: &Path) -> Result<LoadResult, LoadError
         .ok_or(LoadError::NoDefaultScene)?;
 
     let uri = path.to_string_lossy().to_string();
+    let asset_database = build_asset_database(&document, &buffers, path, &uri);
     let mut node_entity_map: HashMap<usize, Entity> = HashMap::new();
     let mut entity_count = 0;
 
@@ -95,7 +102,262 @@ pub fn load_gltf(world: &mut World, path: &Path) -> Result<LoadResult, LoadError
         root_entity,
         entity_count,
         animation_clips,
+        asset_database,
     })
+}
+
+fn build_asset_database(
+    document: &gltf::Document,
+    buffers: &[gltf::buffer::Data],
+    path: &Path,
+    uri: &str,
+) -> AssetDatabase {
+    let mut database = AssetDatabase::default();
+    let base_dir = path.parent();
+    let texture_color_spaces = collect_texture_color_spaces(document);
+
+    for image in document.images() {
+        let handle = AssetHandle::for_image(uri, image.index());
+        let descriptor = image_descriptor(&image, &handle, buffers, base_dir);
+        database.insert_descriptor(AssetDescriptor::Image(descriptor));
+    }
+
+    for texture in document.textures() {
+        let handle = AssetHandle::for_texture(uri, texture.index());
+        let image = texture.source();
+        let image_handle = AssetHandle::for_image(uri, image.index());
+        let image_uri =
+            image_source_uri(&image).unwrap_or_else(|| format!("{}#image:{}", uri, image.index()));
+        let color_space = texture_color_spaces
+            .get(&texture.index())
+            .copied()
+            .unwrap_or(TextureColorSpace::Linear);
+
+        database.insert_descriptor(AssetDescriptor::Texture(TextureDescriptor {
+            handle: handle.clone(),
+            uri: image_uri,
+            texture_index: texture.index(),
+            color_space,
+            source_image: Some(image_handle.clone()),
+            sampler: Some(sampler_descriptor(texture.sampler())),
+        }));
+
+        let mut metadata = AssetMetadata::new(AssetKind::Texture);
+        metadata.source_path = Some(uri.to_string());
+        metadata.dependencies.push(image_handle);
+        database.insert_metadata(handle, metadata);
+    }
+
+    for mesh in document.meshes() {
+        for primitive in mesh.primitives() {
+            let handle = AssetHandle::for_mesh(uri, primitive.index());
+            database.insert_descriptor(AssetDescriptor::Mesh(MeshDescriptor {
+                handle: handle.clone(),
+                uri: uri.to_string(),
+                primitive_index: primitive.index(),
+                topology_version: 1,
+            }));
+
+            let mut metadata = AssetMetadata::new(AssetKind::Mesh);
+            metadata.source_path = Some(uri.to_string());
+            database.insert_metadata(handle, metadata);
+        }
+    }
+
+    for material in document.materials() {
+        let Some(material_index) = material.index() else {
+            continue;
+        };
+        let handle = AssetHandle::for_material(uri, material_index);
+        let pbr = material.pbr_metallic_roughness();
+        let mut descriptor = MaterialDescriptor::new(handle.clone());
+        descriptor.name = material.name().map(str::to_string);
+        descriptor.base_color_factor = pbr.base_color_factor();
+        descriptor.metallic_factor = pbr.metallic_factor();
+        descriptor.roughness_factor = pbr.roughness_factor();
+        descriptor.emissive_factor = material.emissive_factor();
+        descriptor.normal_scale = material
+            .normal_texture()
+            .map(|info| info.scale())
+            .unwrap_or(1.0);
+        descriptor.occlusion_strength = material
+            .occlusion_texture()
+            .map(|info| info.strength())
+            .unwrap_or(1.0);
+        descriptor.base_color_texture = pbr
+            .base_color_texture()
+            .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+        descriptor.metallic_roughness_texture = pbr
+            .metallic_roughness_texture()
+            .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+        descriptor.normal_texture = material
+            .normal_texture()
+            .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+        descriptor.occlusion_texture = material
+            .occlusion_texture()
+            .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+        descriptor.emissive_texture = material
+            .emissive_texture()
+            .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+
+        let dependencies = [
+            descriptor.base_color_texture.clone(),
+            descriptor.metallic_roughness_texture.clone(),
+            descriptor.normal_texture.clone(),
+            descriptor.occlusion_texture.clone(),
+            descriptor.emissive_texture.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        database.insert_descriptor(AssetDescriptor::Material(descriptor));
+        let mut metadata = AssetMetadata::new(AssetKind::Material);
+        metadata.source_path = Some(uri.to_string());
+        metadata.dependencies = dependencies;
+        database.insert_metadata(handle, metadata);
+    }
+
+    database
+}
+
+fn collect_texture_color_spaces(document: &gltf::Document) -> HashMap<usize, TextureColorSpace> {
+    let mut spaces = HashMap::new();
+
+    for material in document.materials() {
+        let pbr = material.pbr_metallic_roughness();
+        if let Some(info) = pbr.base_color_texture() {
+            spaces.insert(info.texture().index(), TextureColorSpace::Srgb);
+        }
+        if let Some(info) = material.emissive_texture() {
+            spaces.insert(info.texture().index(), TextureColorSpace::Srgb);
+        }
+        if let Some(info) = pbr.metallic_roughness_texture() {
+            spaces
+                .entry(info.texture().index())
+                .or_insert(TextureColorSpace::Linear);
+        }
+        if let Some(info) = material.normal_texture() {
+            spaces
+                .entry(info.texture().index())
+                .or_insert(TextureColorSpace::Linear);
+        }
+        if let Some(info) = material.occlusion_texture() {
+            spaces
+                .entry(info.texture().index())
+                .or_insert(TextureColorSpace::Linear);
+        }
+    }
+
+    spaces
+}
+
+fn image_descriptor(
+    image: &gltf::Image<'_>,
+    handle: &AssetHandle,
+    buffers: &[gltf::buffer::Data],
+    base_dir: Option<&Path>,
+) -> ImageDescriptor {
+    match image.source() {
+        gltf::image::Source::Uri { uri, mime_type } => {
+            let data = if uri.starts_with("data:") {
+                None
+            } else {
+                base_dir
+                    .map(|dir| dir.join(uri))
+                    .and_then(|path| std::fs::read(path).ok())
+            };
+            ImageDescriptor {
+                handle: handle.clone(),
+                uri: Some(uri.to_string()),
+                mime_type: mime_type
+                    .map(str::to_string)
+                    .or_else(|| infer_mime_type(Some(uri), data.as_deref())),
+                data,
+            }
+        }
+        gltf::image::Source::View { view, mime_type } => {
+            let data = buffers.get(view.buffer().index()).and_then(|buffer| {
+                let start = view.offset();
+                let end = start.checked_add(view.length())?;
+                buffer.0.get(start..end).map(|slice| slice.to_vec())
+            });
+            ImageDescriptor {
+                handle: handle.clone(),
+                uri: None,
+                mime_type: Some(mime_type.to_string())
+                    .or_else(|| infer_mime_type(None, data.as_deref())),
+                data,
+            }
+        }
+    }
+}
+
+fn image_source_uri(image: &gltf::Image<'_>) -> Option<String> {
+    match image.source() {
+        gltf::image::Source::Uri { uri, .. } => Some(uri.to_string()),
+        gltf::image::Source::View { .. } => None,
+    }
+}
+
+fn sampler_descriptor(sampler: gltf::texture::Sampler<'_>) -> TextureSamplerDescriptor {
+    TextureSamplerDescriptor {
+        mag_filter: sampler.mag_filter().map(mag_filter_value),
+        min_filter: sampler.min_filter().map(min_filter_value),
+        wrap_s: wrapping_mode_value(sampler.wrap_s()),
+        wrap_t: wrapping_mode_value(sampler.wrap_t()),
+    }
+}
+
+fn mag_filter_value(filter: gltf::texture::MagFilter) -> u32 {
+    match filter {
+        gltf::texture::MagFilter::Nearest => 9728,
+        gltf::texture::MagFilter::Linear => 9729,
+    }
+}
+
+fn min_filter_value(filter: gltf::texture::MinFilter) -> u32 {
+    match filter {
+        gltf::texture::MinFilter::Nearest => 9728,
+        gltf::texture::MinFilter::Linear => 9729,
+        gltf::texture::MinFilter::NearestMipmapNearest => 9984,
+        gltf::texture::MinFilter::LinearMipmapNearest => 9985,
+        gltf::texture::MinFilter::NearestMipmapLinear => 9986,
+        gltf::texture::MinFilter::LinearMipmapLinear => 9987,
+    }
+}
+
+fn wrapping_mode_value(mode: gltf::texture::WrappingMode) -> u32 {
+    match mode {
+        gltf::texture::WrappingMode::ClampToEdge => 33071,
+        gltf::texture::WrappingMode::MirroredRepeat => 33648,
+        gltf::texture::WrappingMode::Repeat => 10497,
+    }
+}
+
+fn infer_mime_type(uri: Option<&str>, data: Option<&[u8]>) -> Option<String> {
+    if let Some(bytes) = data {
+        if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Some("image/png".to_string());
+        }
+        if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+            return Some("image/jpeg".to_string());
+        }
+        if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+            return Some("image/webp".to_string());
+        }
+    }
+
+    let uri = uri?.to_ascii_lowercase();
+    if uri.ends_with(".png") {
+        Some("image/png".to_string())
+    } else if uri.ends_with(".jpg") || uri.ends_with(".jpeg") {
+        Some("image/jpeg".to_string())
+    } else if uri.ends_with(".webp") {
+        Some("image/webp".to_string())
+    } else {
+        None
+    }
 }
 
 fn spawn_node(
@@ -128,12 +390,14 @@ fn spawn_node(
     if let Some(mesh) = node.mesh() {
         for (i, primitive) in mesh.primitives().enumerate() {
             world.entity_mut(entity).insert(MeshRef {
+                asset: AssetHandle::for_mesh(uri, i),
                 uri: uri.to_string(),
                 primitive_index: i,
             });
 
             if let Some(material) = primitive.material().index() {
                 world.entity_mut(entity).insert(MaterialRef {
+                    asset: AssetHandle::for_material(uri, material),
                     uri: uri.to_string(),
                     material_index: material,
                 });
@@ -355,6 +619,69 @@ mod tests {
         let result = vec![identity; 2];
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], glam::Mat4::IDENTITY);
+    }
+
+    #[test]
+    fn build_asset_database_registers_material_texture_image_descriptors() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("albedo.png"), b"\x89PNG\r\n\x1a\nfake").unwrap();
+        let model_path = dir.path().join("model.gltf");
+        let uri = model_path.to_string_lossy().to_string();
+        let gltf = gltf::Gltf::from_slice(
+            br#"{
+                "asset": { "version": "2.0" },
+                "images": [{ "uri": "albedo.png" }],
+                "samplers": [{
+                    "magFilter": 9729,
+                    "minFilter": 9987,
+                    "wrapS": 33071,
+                    "wrapT": 33648
+                }],
+                "textures": [{ "source": 0, "sampler": 0 }],
+                "materials": [{
+                    "name": "Mat",
+                    "pbrMetallicRoughness": {
+                        "baseColorFactor": [0.2, 0.3, 0.4, 0.9],
+                        "metallicFactor": 0.7,
+                        "roughnessFactor": 0.25,
+                        "baseColorTexture": { "index": 0 },
+                        "metallicRoughnessTexture": { "index": 0 }
+                    },
+                    "normalTexture": { "index": 0, "scale": 0.5 },
+                    "occlusionTexture": { "index": 0, "strength": 0.6 },
+                    "emissiveTexture": { "index": 0 },
+                    "emissiveFactor": [0.1, 0.2, 0.3]
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        let database = build_asset_database(&gltf.document, &[], &model_path, &uri);
+        let material_handle = AssetHandle::for_material(&uri, 0);
+        let texture_handle = AssetHandle::for_texture(&uri, 0);
+        let image_handle = AssetHandle::for_image(&uri, 0);
+
+        let material = database.material(&material_handle).unwrap();
+        assert_eq!(material.name.as_deref(), Some("Mat"));
+        assert_eq!(material.base_color_texture, Some(texture_handle.clone()));
+        assert_eq!(
+            material.metallic_roughness_texture,
+            Some(texture_handle.clone())
+        );
+        assert_eq!(material.normal_texture, Some(texture_handle.clone()));
+        assert_eq!(material.occlusion_texture, Some(texture_handle.clone()));
+        assert_eq!(material.emissive_texture, Some(texture_handle.clone()));
+        assert!((material.normal_scale - 0.5).abs() < f32::EPSILON);
+        assert!((material.occlusion_strength - 0.6).abs() < f32::EPSILON);
+
+        let texture = database.texture(&texture_handle).unwrap();
+        assert_eq!(texture.source_image, Some(image_handle.clone()));
+        assert_eq!(texture.sampler.unwrap().wrap_s, 33071);
+        assert_eq!(texture.sampler.unwrap().wrap_t, 33648);
+
+        let image = database.image(&image_handle).unwrap();
+        assert_eq!(image.mime_type.as_deref(), Some("image/png"));
+        assert!(image.data.as_ref().is_some_and(|data| !data.is_empty()));
     }
 
     #[test]

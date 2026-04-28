@@ -29,6 +29,16 @@ pub struct SceneBlendLayerInfo {
     pub looping: bool,
 }
 
+/// ECS component: authoritative animation playback cursor for export/capture.
+#[derive(Debug, Clone, Default, Component, Serialize, Deserialize)]
+pub struct SceneAnimationPlaybackState {
+    pub clip_name: Option<String>,
+    pub time_cursor: f32,
+    pub evaluated_time: f32,
+    pub playing: bool,
+    pub looping: bool,
+}
+
 /// ECS component: multi-layer blend state on the scene root entity
 #[derive(Debug, Default, Component)]
 pub struct SceneAnimationBlendState {
@@ -81,5 +91,12 @@ mod tests {
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("\"clip_name\":\"walk\""));
         assert!(json.contains("\"weight\":0.7"));
+    }
+
+    #[test]
+    fn test_scene_animation_playback_state_default() {
+        let state = SceneAnimationPlaybackState::default();
+        assert!(state.clip_name.is_none());
+        assert!(!state.playing);
     }
 }

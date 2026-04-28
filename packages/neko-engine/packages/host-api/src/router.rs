@@ -84,14 +84,17 @@ impl ActionRouter {
                 export_service,
                 stream_registry.clone(),
             ),
-            stream_controller: StreamController::new(stream_registry, timeline_service),
+            stream_controller: StreamController::new(stream_registry.clone(), timeline_service),
             effects_controller: EffectsController::new(effects_service),
             #[cfg(feature = "onnx")]
             models_controller: ModelsController::new(ml_service),
             #[cfg(not(feature = "onnx"))]
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
-            scenes_controller: ScenesController::new(scene_service),
+            scenes_controller: ScenesController::with_stream_registry(
+                scene_service,
+                stream_registry,
+            ),
             puppets_controller: PuppetsController::new(puppet_service),
             camera_controller: CameraController::new(camera_service),
             midi_controller: MidiController::new(midi_service),

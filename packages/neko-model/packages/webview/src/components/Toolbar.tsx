@@ -80,6 +80,13 @@ const TOOLS: ToolItem[] = [
     toggle: 'toggleCsgPanel',
   },
   {
+    key: 'sculpt',
+    icon: <SculptIcon />,
+    titleKey: 'toolbar.sculpt',
+    stateKey: 'isSculptBrushOpen',
+    toggle: 'toggleSculptBrush',
+  },
+  {
     key: 'keyframe',
     icon: <KeyframeIcon />,
     titleKey: 'toolbar.keyframes',
@@ -88,6 +95,13 @@ const TOOLS: ToolItem[] = [
   },
   'spacer',
   'separator',
+  {
+    key: 'qualityPreview',
+    icon: <QualityPreviewIcon />,
+    titleKey: 'toolbar.qualityPreview',
+    action: () =>
+      postMessage({ type: 'scene:capturePreview', width: 1280, height: 720, quality: 90 }),
+  },
   {
     key: 'export',
     icon: <ExportIcon />,
@@ -187,6 +201,27 @@ function LatencyIcon() {
   );
 }
 
+function QualityPreviewIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="3" width="11" height="8" rx="1" />
+      <path d="M5 13h6" />
+      <path d="M8 11v2" />
+      <path d="M5.5 6.5h5" />
+      <path d="M5.5 8.5h3" />
+    </svg>
+  );
+}
+
 function VrmIcon() {
   return (
     <svg
@@ -237,6 +272,25 @@ function ShapeIcon() {
       strokeLinejoin="round"
     >
       <rect x="3" y="3" width="10" height="10" rx="2" />
+    </svg>
+  );
+}
+
+function SculptIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 12c2.5-4 5.5-4 8-8" />
+      <path d="M3 13c2 0 3-.6 4-1.8" />
+      <circle cx="12" cy="4" r="1.5" />
     </svg>
   );
 }

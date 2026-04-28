@@ -1,25 +1,27 @@
 import React, { useState, useCallback } from 'react';
-import { postMessage } from '@neko/shared/vscode';
+
+interface TextEditorPanelProps {
+  disabled?: boolean;
+  onCreateText: (text: string, fontSize: number, extrusionDepth: number) => void;
+}
 
 /**
  * Text Editor Panel - Create extruded 3D text meshes.
  *
  * Controls: text input, font size, extrusion depth, create button.
  */
-export function TextEditorPanel(): React.JSX.Element {
+export function TextEditorPanel({
+  disabled = false,
+  onCreateText,
+}: TextEditorPanelProps): React.JSX.Element {
   const [text, setText] = useState('Hello');
   const [fontSize, setFontSize] = useState(48);
   const [extrusionDepth, setExtrusionDepth] = useState(0.5);
 
   const handleCreate = useCallback(() => {
     if (!text.trim()) return;
-    postMessage({
-      type: 'createTextMesh',
-      text: text.trim(),
-      fontSize,
-      extrusionDepth,
-    });
-  }, [text, fontSize, extrusionDepth]);
+    onCreateText(text.trim(), fontSize, extrusionDepth);
+  }, [onCreateText, text, fontSize, extrusionDepth]);
 
   return (
     <div className="model-side-panel h-full w-64">
@@ -33,6 +35,7 @@ export function TextEditorPanel(): React.JSX.Element {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            disabled={disabled}
             rows={3}
             className="model-input min-h-[4.5rem] resize-none"
             placeholder="Enter text..."
@@ -51,6 +54,7 @@ export function TextEditorPanel(): React.JSX.Element {
             step={1}
             value={fontSize}
             onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
+            disabled={disabled}
             className="model-range"
           />
         </div>
@@ -69,6 +73,7 @@ export function TextEditorPanel(): React.JSX.Element {
             step={0.01}
             value={extrusionDepth}
             onChange={(e) => setExtrusionDepth(parseFloat(e.target.value))}
+            disabled={disabled}
             className="model-range"
           />
         </div>
@@ -76,7 +81,7 @@ export function TextEditorPanel(): React.JSX.Element {
         <div className="px-3 py-3">
           <button
             onClick={handleCreate}
-            disabled={!text.trim()}
+            disabled={disabled || !text.trim()}
             className="model-btn-primary w-full"
           >
             Create Text Mesh

@@ -1,0 +1,388 @@
+{
+  "snapshot": {
+    "sceneId": "scene-main",
+    "revision": 40,
+    "nodes": [
+      {
+        "nodeId": "node-root",
+        "name": "Root",
+        "transform": {
+          "position": { "x": 0, "y": 1, "z": 2 },
+          "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+          "scale": { "x": 1, "y": 1, "z": 1 }
+        },
+        "children": ["node-mesh"],
+        "visible": true,
+        "kind": "group"
+      },
+      {
+        "nodeId": "node-mesh",
+        "parentId": "node-root",
+        "name": "Mesh",
+        "transform": {
+          "position": { "x": 3, "y": 4, "z": 5 },
+          "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+          "scale": { "x": 1, "y": 1, "z": 1 }
+        },
+        "children": [],
+        "visible": true,
+        "mesh": { "id": "mesh-main", "uri": "assets/model.glb", "kind": "mesh" },
+        "material": { "id": "mat-main", "uri": "assets/model.glb#material0", "kind": "material" },
+        "kind": "mesh"
+      }
+    ],
+    "animations": [{ "name": "Idle", "duration": 1.5 }],
+    "activeCamera": {
+      "cameraId": "camera-editor",
+      "position": { "x": 0, "y": 2, "z": 5 },
+      "target": { "x": 0, "y": 1, "z": 0 },
+      "up": { "x": 0, "y": 1, "z": 0 },
+      "fov": 45,
+      "near": 0.1,
+      "far": 1000
+    }
+  },
+  "delta": {
+    "revision": 41,
+    "appliedSeq": 7,
+    "updatedTransforms": [
+      {
+        "nodeId": "node-mesh",
+        "position": { "x": 4, "y": 4, "z": 5 }
+      }
+    ],
+    "updatedMorphWeights": [
+      {
+        "nodeId": "node-mesh",
+        "weights": [{ "name": "Smile", "weight": 0.35 }]
+      }
+    ],
+    "updatedVisibility": [{ "nodeId": "node-mesh", "visible": true, "layerMask": 1 }],
+    "updatedMaterials": [
+      {
+        "materialId": "mat-main",
+        "nodeId": "node-mesh",
+        "slot": "surface",
+        "paramsJson": "{\"roughness\":0.42}"
+      }
+    ],
+    "updatedAssetReferences": [
+      {
+        "nodeId": "node-mesh",
+        "mesh": { "id": "mesh-main", "kind": "mesh" },
+        "material": { "id": "mat-main", "kind": "material" }
+      }
+    ],
+    "updatedLights": [
+      {
+        "nodeId": "light-key",
+        "kind": "directional",
+        "color": { "x": 1, "y": 0.95, "z": 0.9 },
+        "intensity": 3
+      }
+    ],
+    "updatedCameras": [
+      {
+        "cameraId": "camera-editor",
+        "nodeId": "camera-node",
+        "fov": 45
+      }
+    ],
+    "topologyChanges": [
+      {
+        "meshId": "mesh-main",
+        "fromVersion": 2,
+        "toVersion": 3,
+        "operation": "subdivide",
+        "invalidatesMorphLibrary": true,
+        "invalidatesSkinWeights": true,
+        "invalidatesUv": false,
+        "vertexCountBefore": 100,
+        "vertexCountAfter": 400,
+        "operationSummary": "subdivide mesh-main once",
+        "migrationResults": [
+          { "dataKind": "morph", "status": "migrated" },
+          { "dataKind": "skin", "status": "invalidated", "diagnostic": "joint remap required" }
+        ],
+        "invalidatesTangents": true,
+        "invalidatesBounds": true,
+        "invalidatesAccelerationStructure": true
+      }
+    ],
+    "modelingSessions": [
+      {
+        "sessionId": "session-sculpt",
+        "characterId": "character-a",
+        "topologyMutable": true,
+        "topologyVersion": 3,
+        "state": "active",
+        "pendingMigrations": ["morph-retarget", "skin-retarget"],
+        "meshId": "mesh-main",
+        "beforeHash": "sha256-before",
+        "opLog": [
+          {
+            "seq": 1,
+            "operation": "brush",
+            "summary": "inflate cheek vertices",
+            "topologyVersion": 3
+          }
+        ]
+      }
+    ],
+    "updatedCharacterMorphWeights": [
+      {
+        "characterId": "character-a",
+        "weights": [{ "name": "Smile", "weight": 0.6 }],
+        "topologyVersion": 3
+      }
+    ],
+    "updatedCharacterMaterials": [
+      {
+        "characterId": "character-a",
+        "slotId": "skin",
+        "paramsJson": "{\"baseColorFactor\":[1,0.8,0.7,1]}",
+        "topologyVersion": 3
+      }
+    ],
+    "updatedSkeletonPose": [
+      {
+        "characterId": "character-a",
+        "boneId": "head",
+        "transform": {
+          "position": { "x": 0, "y": 1.6, "z": 0 },
+          "rotation": { "x": 0, "y": 0.1, "z": 0, "w": 0.995 },
+          "scale": { "x": 1, "y": 1, "z": 1 }
+        },
+        "topologyVersion": 3
+      }
+    ],
+    "characterOverrides": [
+      {
+        "characterId": "character-a",
+        "overrides": [
+          {
+            "path": "$.geometry.morphLibrary.Smile.defaultWeight",
+            "valueType": "number",
+            "valueJson": "0.6",
+            "operation": "set",
+            "baseRevision": 40
+          }
+        ],
+        "topologyVersion": 3
+      }
+    ],
+    "overlay": {
+      "viewportId": "viewport-main",
+      "revision": 41,
+      "selectedNodeIds": ["node-mesh"],
+      "projectedBounds": [
+        {
+          "nodeId": "node-mesh",
+          "min": { "x": 10, "y": 20 },
+          "max": { "x": 110, "y": 120 }
+        }
+      ],
+      "gizmoAnchors": [
+        {
+          "nodeId": "node-mesh",
+          "worldPosition": { "x": 4, "y": 4, "z": 5 },
+          "screenPosition": { "x": 60, "y": 70 }
+        }
+      ]
+    }
+  },
+  "deltaWithOmittedFields": {
+    "revision": 42
+  },
+  "renderFrameMeta": {
+    "streamId": "stream-main",
+    "viewportId": "viewport-main",
+    "frameId": 1001,
+    "ptsUs": 16666,
+    "durationUs": 16666,
+    "isKeyframe": true,
+    "sceneRevision": 41,
+    "appliedSeq": 7,
+    "diagnostics": {
+      "gpuFrameTimeMs": 7.5,
+      "encodeTimeMs": 3.1,
+      "qualityTier": "high",
+      "droppedFramesSinceLast": 0,
+      "gpuUploadTimeMs": 1.4
+    }
+  },
+  "character": {
+    "descriptor": {
+      "characterId": "character-a",
+      "name": "Ava",
+      "schemaVersion": 1,
+      "featureFlags": ["morph-v1", "material-layer-v1"],
+      "baseTemplate": {
+        "id": "template-ava",
+        "uri": "templates/ava.nkc",
+        "kind": "character-template"
+      },
+      "templateVersion": "1.0.0",
+      "checksum": "sha256-character"
+    },
+    "topologyVersion": 3,
+    "definition": {
+      "controls": [
+        {
+          "morphId": "Smile",
+          "displayName": "Smile",
+          "targetPath": "$.geometry.morphLibrary.Smile",
+          "defaultWeight": 0,
+          "min": 0,
+          "max": 1,
+          "tags": ["face"]
+        }
+      ],
+      "expressionPresets": [
+        {
+          "presetId": "smile",
+          "displayName": "Smile",
+          "morphWeights": [{ "name": "Smile", "weight": 0.6 }],
+          "bonePoseIds": [],
+          "materialOverrideIds": []
+        }
+      ],
+      "behaviorDrivers": [
+        {
+          "driverId": "blink-driver",
+          "kind": "expression",
+          "targetPath": "$.definition.controls.Blink",
+          "paramsJson": "{\"interval\":3}"
+        }
+      ]
+    },
+    "geometry": {
+      "baseMesh": { "id": "mesh-main", "uri": "assets/ava.glb", "kind": "mesh" },
+      "skeleton": {
+        "skeletonId": "skeleton-main",
+        "skeleton": { "id": "skeleton-main", "uri": "assets/ava.glb#skeleton", "kind": "skeleton" },
+        "rootBone": "hips",
+        "bindJoints": ["hips", "spine", "head"]
+      },
+      "morphLibrary": [
+        {
+          "morphId": "Smile",
+          "displayName": "Smile",
+          "targetPath": "$.geometry.blendShapes.Smile",
+          "defaultWeight": 0,
+          "tags": ["face"]
+        }
+      ],
+      "skinWeightAtlases": [
+        {
+          "atlasId": "skin-main",
+          "data": {
+            "blockId": "skin-main",
+            "kind": "skin-weight-atlas",
+            "uri": "characters/ava.nkcdata",
+            "checksum": "sha256-skin"
+          },
+          "jointCount": 64,
+          "vertexCount": 1024,
+          "encoding": "f32"
+        }
+      ],
+      "blendShapes": [
+        {
+          "blendShapeId": "Smile",
+          "name": "Smile",
+          "data": {
+            "blockId": "smile-delta",
+            "kind": "blend-shape",
+            "uri": "characters/ava.nkcdata",
+            "checksum": "sha256-smile"
+          },
+          "defaultWeights": [{ "name": "Smile", "weight": 0 }]
+        }
+      ],
+      "dataBlocks": [
+        {
+          "blockId": "smile-delta",
+          "kind": "morph-sparse-delta",
+          "uri": "characters/ava.nkcdata",
+          "checksum": "sha256-smile",
+          "encoding": "f32",
+          "byteOffset": 0,
+          "byteLength": 128
+        }
+      ]
+    },
+    "materialSlots": [
+      {
+        "slotId": "skin",
+        "name": "Skin",
+        "material": { "id": "mat-skin", "uri": "assets/ava.glb#skin", "kind": "material" },
+        "role": "skin",
+        "index": 0
+      }
+    ],
+    "overrideLayer": {
+      "baseTemplate": {
+        "id": "template-ava",
+        "uri": "templates/ava.nkc",
+        "kind": "character-template"
+      },
+      "overrides": [
+        {
+          "path": "$.geometry.morphLibrary.Smile.defaultWeight",
+          "valueType": "number",
+          "valueJson": "0.6",
+          "operation": "set",
+          "baseRevision": 40
+        }
+      ]
+    }
+  },
+  "characterCommandEnvelope": {
+    "seq": 9,
+    "baseRevision": 41,
+    "coalesceKey": "character-a:morph:Smile",
+    "command": {
+      "type": "character",
+      "characterCommand": {
+        "type": "morph-set",
+        "characterId": "character-a",
+        "topologyVersion": 3,
+        "morphSet": {
+          "morphId": "Smile",
+          "weight": 0.6
+        }
+      }
+    }
+  },
+  "modelingSession": {
+    "sessionId": "session-sculpt",
+    "meshId": "mesh-main",
+    "characterId": "character-a",
+    "topologyMutable": true,
+    "topologyVersion": 3,
+    "beforeHash": "sha256-before",
+    "affectedFlags": ["positions", "bounds"],
+    "opLog": [
+      {
+        "seq": 1,
+        "operation": "brush",
+        "summary": "inflate cheek vertices",
+        "topologyVersion": 3
+      }
+    ],
+    "state": "active"
+  },
+  "vertexBrushPatch": {
+    "sessionId": "session-sculpt",
+    "meshId": "mesh-main",
+    "topologyVersion": 3,
+    "strokeId": "stroke-1",
+    "seq": 2,
+    "encoding": "f32-delta",
+    "sparseIndices": [1, 2, 3],
+    "affectedStart": 1,
+    "affectedCount": 3,
+    "payload": [0, 1, 2, 3]
+  }
+}

@@ -9,11 +9,13 @@ export const zhCN = {
   'toolbar.geometry': '几何体',
   'toolbar.text3d': '3D 文字',
   'toolbar.csg': 'CSG',
+  'toolbar.sculpt': '雕刻笔刷',
   'toolbar.exportGlb': '导出 GLB',
   'toolbar.saveProject': '保存项目',
 
   // Toolbar (continued)
   'toolbar.keyframes': '关键帧',
+  'toolbar.qualityPreview': '引擎质量预览',
 
   // Empty state
   'empty.hint': '打开 .gltf、.glb 或 .vrm 文件进行查看',

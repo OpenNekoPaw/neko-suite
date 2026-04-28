@@ -26,7 +26,7 @@ export function SceneTree({
       <div className="p-1">
         {rootNodes.map((node) => (
           <TreeNode
-            key={node.id}
+            key={node.nodeId}
             node={node}
             allNodes={nodes}
             selectedNodeId={selectedNodeId}
@@ -54,18 +54,19 @@ function TreeNode({
   onSelectNode,
   depth,
 }: TreeNodeProps): React.JSX.Element {
-  const children = allNodes.filter((n) => n.parentId === node.id);
-  const isSelected = selectedNodeId === node.id;
+  const children = allNodes.filter((n) => n.parentId === node.nodeId);
+  const isSelected = selectedNodeId === node.nodeId;
 
-  const icon = node.hasCamera
-    ? 'camera'
-    : node.hasLight
-      ? 'light'
-      : node.hasMesh
-        ? 'mesh'
-        : node.hasSkeleton
-          ? 'skeleton'
-          : 'node';
+  const icon =
+    node.kind === 'camera'
+      ? 'camera'
+      : node.kind === 'light'
+        ? 'light'
+        : node.kind === 'mesh' || node.mesh
+          ? 'mesh'
+          : node.kind === 'skeleton'
+            ? 'skeleton'
+            : 'node';
 
   const iconMap: Record<string, string> = {
     camera: '\u{1F3A5}',
@@ -82,7 +83,7 @@ function TreeNode({
           isSelected ? 'model-selected-row' : ''
         }`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        onClick={() => onSelectNode(node.id)}
+        onClick={() => onSelectNode(node.nodeId)}
       >
         <span className="text-[10px] text-[var(--model-fg-secondary)] opacity-80">
           {iconMap[icon]}
@@ -91,7 +92,7 @@ function TreeNode({
       </div>
       {children.map((child) => (
         <TreeNode
-          key={child.id}
+          key={child.nodeId}
           node={child}
           allNodes={allNodes}
           selectedNodeId={selectedNodeId}

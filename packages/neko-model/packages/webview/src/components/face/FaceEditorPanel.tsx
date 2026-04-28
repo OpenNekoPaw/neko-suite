@@ -11,6 +11,12 @@ import {
   type FaceCategory,
 } from '../../types/faceParameters';
 
+interface FaceEditorPanelProps {
+  characterId: string | null;
+  disabled?: boolean;
+  onSetMorph: (morphId: string, weight: number) => void;
+}
+
 /**
  * Face Editor Panel - Parametric face customization UI.
  *
@@ -20,7 +26,11 @@ import {
  * - Random / Reset / AI Generate buttons
  * - Real-time Morph Target updates (< 1ms)
  */
-export function FaceEditorPanel(): React.JSX.Element {
+export function FaceEditorPanel({
+  characterId,
+  disabled = false,
+  onSetMorph,
+}: FaceEditorPanelProps): React.JSX.Element {
   const faceParams = useModelStore((s) => s.faceParams);
   const setFaceParam = useModelStore((s) => s.setFaceParam);
   const setFaceParams = useModelStore((s) => s.setFaceParams);
@@ -34,6 +44,9 @@ export function FaceEditorPanel(): React.JSX.Element {
 
   const handleReset = () => {
     setFaceParams(getDefaultFaceParams());
+    for (const [name, value] of Object.entries(getDefaultFaceParams())) {
+      onSetMorph(name, value);
+    }
   };
 
   const handleRandomize = () => {
@@ -42,6 +55,9 @@ export function FaceEditorPanel(): React.JSX.Element {
       randomized[param.name] = Math.random() * (param.max - param.min) + param.min;
     }
     setFaceParams(randomized);
+    for (const [name, value] of Object.entries(randomized)) {
+      onSetMorph(name, value);
+    }
   };
 
   const handleAIGenerate = () => {
@@ -50,6 +66,11 @@ export function FaceEditorPanel(): React.JSX.Element {
   };
 
   const categories: FaceCategory[] = ['face', 'eyes', 'nose', 'mouth', 'eyebrows'];
+  const handleParamChange = (name: string, value: number) => {
+    setFaceParam(name, value);
+    onSetMorph(name, value);
+  };
+  const controlsDisabled = disabled || !characterId;
 
   return (
     <div className="model-side-panel h-full w-64">
@@ -58,10 +79,18 @@ export function FaceEditorPanel(): React.JSX.Element {
       </div>
 
       <div className="model-panel-section flex gap-2">
-        <button onClick={handleRandomize} className="model-btn-primary flex-1">
+        <button
+          onClick={handleRandomize}
+          disabled={controlsDisabled}
+          className="model-btn-primary flex-1"
+        >
           随机
         </button>
-        <button onClick={handleReset} className="model-btn-secondary flex-1">
+        <button
+          onClick={handleReset}
+          disabled={controlsDisabled}
+          className="model-btn-secondary flex-1"
+        >
           重置
         </button>
       </div>
@@ -79,7 +108,8 @@ export function FaceEditorPanel(): React.JSX.Element {
             category={category}
             parameters={getParametersByCategory(category)}
             values={faceParams}
-            onChange={setFaceParam}
+            onChange={handleParamChange}
+            disabled={controlsDisabled}
           />
         ))}
       </div>

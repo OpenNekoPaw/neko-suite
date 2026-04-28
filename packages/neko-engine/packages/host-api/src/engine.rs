@@ -6,8 +6,8 @@ use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_engine_kernel::gpu::GpuContext;
 use neko_engine_kernel::services::{
-    AudioService, EffectsService, ExportService, IPuppetService, ImageService, NodeService,
-    PuppetService, SceneService, TaskService, TimelineService, VideoService,
+    AudioService, EffectsService, ExportService, IPuppetService, ISceneService, ImageService,
+    NodeService, PuppetService, SceneService, TaskService, TimelineService, VideoService,
 };
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
@@ -33,6 +33,8 @@ pub struct EngineApi {
     gpu_ctx: Option<Arc<GpuContext>>,
     /// Puppet service — exposed for WS stream endpoint
     puppet_service: Option<Arc<dyn IPuppetService>>,
+    /// Scene service — exposed for scene control WebSocket endpoint
+    scene_service: Option<Arc<SceneService>>,
     /// Audio service — exposed for monitor endpoint
     audio_service: Arc<AudioService>,
     /// MIDI service — exposed for WS event stream endpoint
@@ -125,8 +127,13 @@ impl EngineApi {
             }
         });
 
-        // Create scene service
-        let scene_service = Some(Arc::new(SceneService::new()));
+        // Create scene service. When GPU is available, the scene service owns
+        // the Engine-rendered authoring viewport path used by scenes:capture and scenes:stream.
+        let scene_service = Some(Arc::new(match &gpu_ctx {
+            Some(ctx) => SceneService::with_gpu(Arc::clone(ctx)),
+            None => SceneService::new(),
+        }));
+        let scene_service_ref = scene_service.clone();
 
         // Create puppet service (2D puppet management)
         // Keep an Arc clone so the WS stream endpoint shares the same ECS world
@@ -175,6 +182,7 @@ impl EngineApi {
             session_manager,
             gpu_ctx,
             puppet_service: puppet_service_dyn,
+            scene_service: scene_service_ref,
             audio_service: audio_service_ref,
             midi_service: midi_service_ref,
             gamepad_service: gamepad_service_ref,
@@ -251,6 +259,21 @@ impl EngineApi {
     /// Get the puppet service (shared with controller layer)
     pub fn puppet_service(&self) -> Option<Arc<dyn IPuppetService>> {
         self.puppet_service.clone()
+    }
+
+    /// Get the scene service (shared with scene control WebSocket endpoint)
+    pub fn scene_service(&self) -> Option<Arc<SceneService>> {
+        self.scene_service.clone()
+    }
+
+    /// Read the current scene snapshot as JSON for HTTP/WebSocket adapters.
+    pub fn scene_snapshot_value(&self) -> Result<serde_json::Value, String> {
+        let service = self
+            .scene_service
+            .as_ref()
+            .ok_or_else(|| "scene service is not available".to_string())?;
+        let snapshot = service.get_snapshot().map_err(|error| error.to_string())?;
+        serde_json::to_value(snapshot).map_err(|error| error.to_string())
     }
 
     /// Get the session manager

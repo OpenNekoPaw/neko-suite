@@ -5,13 +5,59 @@
  */
 
 import { create } from 'zustand';
-import type { SceneNodeSnapshot, AnimationClipInfo, PlaybackState, TransformMode } from '../types';
+import type {
+  SceneNodeSnapshot,
+  AnimationClipInfo,
+  PlaybackState,
+  SceneDelta,
+  SceneSnapshot,
+  TransformMode,
+} from '../types';
 import type { EditorKeyframeTrack } from '@neko/shared';
+import type { RenderFrameMeta } from '@neko/shared';
+import {
+  AuthoringPerformanceMetrics,
+  type AuthoringMetricsSnapshot,
+} from '../scene/AuthoringPerformanceMetrics';
+import {
+  LocalPredictionLayer,
+  type LocalPredictionInput,
+  type LocalPredictionSnapshot,
+} from '../scene/LocalPredictionLayer';
+
+type TransformPatch = NonNullable<SceneDelta['updatedTransforms']>[number];
+type VisibilityPatch = NonNullable<SceneDelta['updatedVisibility']>[number];
+type ViewportOverlayPatch = NonNullable<SceneDelta['overlay']>;
+type ModelingSessionState = NonNullable<SceneDelta['modelingSessions']>[number];
+type SceneControlStatus = 'disconnected' | 'connecting' | 'ready' | 'error';
+
+export interface PendingTransformPrediction {
+  seq: number;
+  nodeId: string;
+  position?: TransformPatch['position'];
+  rotation?: TransformPatch['rotation'];
+  scale?: TransformPatch['scale'];
+}
 
 export interface ModelState {
   // Scene
+  sceneId: string;
+  sceneRevision: number;
   sceneNodes: SceneNodeSnapshot[];
   selectedNodeId: string | null;
+  sceneControlStatus: SceneControlStatus;
+  sceneControlError: string | null;
+  nextSceneCommandSeq: number;
+  pendingTransformPredictions: PendingTransformPrediction[];
+  localPredictionLayer: LocalPredictionLayer;
+  localPredictions: LocalPredictionSnapshot[];
+  viewportOverlay: ViewportOverlayPatch | null;
+  topologyWarning: string | null;
+  characterTopologyVersions: Record<string, number>;
+  modelingSessions: Record<string, ModelingSessionState>;
+  lastRenderFrameMeta: RenderFrameMeta | null;
+  authoringMetrics: AuthoringPerformanceMetrics;
+  authoringMetricsSnapshot: AuthoringMetricsSnapshot;
 
   // Animation
   animationClips: AnimationClipInfo[];
@@ -24,6 +70,7 @@ export interface ModelState {
   // Model loading
   modelUrl: string | null;
   isLoading: boolean;
+  qualityPreviewDataUrl: string | null;
 
   // Face Editor
   faceParams: Record<string, number>;
@@ -41,6 +88,7 @@ export interface ModelState {
   isCsgPanelOpen: boolean;
   isTextEditorOpen: boolean;
   isShapeCreatorOpen: boolean;
+  isSculptBrushOpen: boolean;
   csgOperandA: string | null;
   csgOperandB: string | null;
 
@@ -52,7 +100,25 @@ export interface ModelState {
 
   // Actions — Scene
   setSceneNodes: (nodes: SceneNodeSnapshot[]) => void;
+  applySceneSnapshot: (snapshot: SceneSnapshot) => void;
+  applySceneDelta: (delta: SceneDelta) => void;
   selectNode: (id: string | null) => void;
+  setSceneControlStatus: (status: SceneControlStatus, error?: string | null) => void;
+  allocateSceneCommandSeq: () => number;
+  addTransformPrediction: (prediction: PendingTransformPrediction) => void;
+  commitTransformPrediction: (seq: number) => void;
+  commitPredictionsThrough: (appliedSeq: number) => void;
+  rollbackTransformPrediction: (seq: number) => void;
+  createLocalPrediction: (prediction: LocalPredictionInput) => LocalPredictionSnapshot;
+  commitLocalPredictionsThrough: (appliedSeq: number) => void;
+  rollbackLocalPrediction: (idOrSeq: string | number) => void;
+  timeoutLocalPredictions: (nowMs?: number) => void;
+  invalidateLocalPredictions: (filter: Parameters<LocalPredictionLayer['invalidate']>[0]) => void;
+  recordAckLatency: (ms: number) => void;
+  recordPatchBytes: (bytes: number, atMs?: number) => void;
+  recordGpuUpload: (ms: number) => void;
+  recordRenderFrameMeta: (meta: RenderFrameMeta) => void;
+  incrementDroppedPrediction: () => void;
 
   // Actions — Animation
   setAnimationClips: (clips: AnimationClipInfo[]) => void;
@@ -67,13 +133,14 @@ export interface ModelState {
   // Actions — Model
   setModelUrl: (url: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setQualityPreview: (dataUrl: string | null) => void;
 
   // Actions — Bulk update
   updateNodeTransform: (
     nodeId: string,
-    position: [number, number, number],
-    rotation: [number, number, number, number],
-    scale: [number, number, number],
+    position?: TransformPatch['position'],
+    rotation?: TransformPatch['rotation'],
+    scale?: TransformPatch['scale'],
   ) => void;
 
   // Actions — Face Editor
@@ -95,6 +162,7 @@ export interface ModelState {
   toggleCsgPanel: () => void;
   toggleTextEditor: () => void;
   toggleShapeCreator: () => void;
+  toggleSculptBrush: () => void;
   setCsgOperand: (slot: 'A' | 'B', nodeId: string | null) => void;
 
   // Actions — Keyframe Editor
@@ -111,14 +179,30 @@ export interface ModelState {
 
 export const useModelStore = create<ModelState>((set, get) => ({
   // Initial state
+  sceneId: 'default',
+  sceneRevision: 0,
   sceneNodes: [],
   selectedNodeId: null,
+  sceneControlStatus: 'disconnected',
+  sceneControlError: null,
+  nextSceneCommandSeq: 1,
+  pendingTransformPredictions: [],
+  localPredictionLayer: new LocalPredictionLayer(),
+  localPredictions: [],
+  viewportOverlay: null,
+  topologyWarning: null,
+  characterTopologyVersions: {},
+  modelingSessions: {},
+  lastRenderFrameMeta: null,
+  authoringMetrics: new AuthoringPerformanceMetrics(),
+  authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
   animationClips: [],
   activeAnimation: null,
   playbackState: 'stopped',
   transformMode: 'translate',
   modelUrl: null,
   isLoading: false,
+  qualityPreviewDataUrl: null,
   faceParams: {},
   isFaceEditorOpen: false,
   isLatencyTesterOpen: false,
@@ -128,6 +212,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   isCsgPanelOpen: false,
   isTextEditorOpen: false,
   isShapeCreatorOpen: false,
+  isSculptBrushOpen: false,
   csgOperandA: null,
   csgOperandB: null,
   keyframeTracks: [],
@@ -138,7 +223,252 @@ export const useModelStore = create<ModelState>((set, get) => ({
   // Scene actions
   setSceneNodes: (nodes) => set({ sceneNodes: nodes }),
 
+  applySceneSnapshot: (snapshot) =>
+    set((state) => {
+      const selectedNodeId = snapshot.nodes.some((node) => node.nodeId === state.selectedNodeId)
+        ? state.selectedNodeId
+        : null;
+
+      return {
+        sceneId: snapshot.sceneId,
+        sceneRevision: snapshot.revision,
+        sceneNodes: snapshot.nodes,
+        animationClips: snapshot.animations,
+        selectedNodeId,
+        viewportOverlay: null,
+        topologyWarning: null,
+        modelingSessions: {},
+      };
+    }),
+
+  applySceneDelta: (delta) =>
+    set((state) => {
+      if (delta.revision <= state.sceneRevision) {
+        return {};
+      }
+
+      const transformByNodeId = new Map<string, TransformPatch>();
+      for (const update of delta.updatedTransforms ?? []) {
+        transformByNodeId.set(update.nodeId, update);
+      }
+
+      const visibilityByNodeId = new Map<string, VisibilityPatch>();
+      for (const update of delta.updatedVisibility ?? []) {
+        visibilityByNodeId.set(update.nodeId, update);
+      }
+      const faceParams = { ...state.faceParams };
+      const characterTopologyVersions = { ...state.characterTopologyVersions };
+      const modelingSessions = { ...state.modelingSessions };
+      for (const update of delta.updatedCharacterMorphWeights ?? []) {
+        characterTopologyVersions[update.characterId] = update.topologyVersion;
+        for (const weight of update.weights) {
+          faceParams[weight.name] = weight.weight;
+        }
+      }
+      for (const update of delta.updatedCharacterMaterials ?? []) {
+        characterTopologyVersions[update.characterId] = update.topologyVersion;
+      }
+      for (const update of delta.updatedSkeletonPose ?? []) {
+        characterTopologyVersions[update.characterId] = update.topologyVersion;
+      }
+      const topologyWarning =
+        delta.topologyChanges?.find(
+          (event) =>
+            event.invalidatesMorphLibrary ||
+            event.invalidatesSkinWeights ||
+            event.invalidatesUv ||
+            event.invalidatesBounds,
+        )?.operationSummary ?? state.topologyWarning;
+      for (const session of delta.modelingSessions ?? []) {
+        modelingSessions[session.sessionId] = session;
+      }
+
+      const removedNodeIds = collectRemovedNodeIds(state.sceneNodes, delta.removedNodes ?? []);
+      const sceneNodes = state.sceneNodes
+        .filter((node) => !removedNodeIds.has(node.nodeId))
+        .map((node) => {
+          const transformUpdate = transformByNodeId.get(node.nodeId);
+          const visibilityUpdate = visibilityByNodeId.get(node.nodeId);
+          if (!transformUpdate && !visibilityUpdate) {
+            return node;
+          }
+
+          return {
+            ...node,
+            transform: transformUpdate
+              ? {
+                  ...node.transform,
+                  position: transformUpdate.position ?? node.transform?.position,
+                  rotation: transformUpdate.rotation ?? node.transform?.rotation,
+                  scale: transformUpdate.scale ?? node.transform?.scale,
+                }
+              : node.transform,
+            visible: visibilityUpdate?.visible ?? node.visible,
+            layerMask: visibilityUpdate?.layerMask ?? node.layerMask,
+          };
+        });
+
+      const appliedSeq = delta.appliedSeq ?? 0;
+      if (appliedSeq > 0) {
+        state.localPredictionLayer.commitThrough(appliedSeq);
+        state.localPredictionLayer.clearFinalized();
+      }
+      for (const event of delta.topologyChanges ?? []) {
+        state.localPredictionLayer.invalidate({ topologyVersion: event.toVersion });
+        state.localPredictionLayer.clearFinalized();
+      }
+
+      return {
+        sceneRevision: delta.revision,
+        sceneNodes,
+        faceParams,
+        characterTopologyVersions,
+        modelingSessions,
+        viewportOverlay: delta.overlay ?? state.viewportOverlay,
+        topologyWarning,
+        localPredictions: state.localPredictionLayer.active(),
+        pendingTransformPredictions:
+          appliedSeq > 0
+            ? state.pendingTransformPredictions.filter((prediction) => prediction.seq > appliedSeq)
+            : state.pendingTransformPredictions,
+        selectedNodeId:
+          state.selectedNodeId && removedNodeIds.has(state.selectedNodeId)
+            ? null
+            : state.selectedNodeId,
+      };
+    }),
+
   selectNode: (id) => set({ selectedNodeId: id }),
+
+  setSceneControlStatus: (status, error = null) =>
+    set({
+      sceneControlStatus: status,
+      sceneControlError: error,
+    }),
+
+  allocateSceneCommandSeq: () => {
+    const seq = get().nextSceneCommandSeq;
+    set({ nextSceneCommandSeq: seq + 1 });
+    return seq;
+  },
+
+  addTransformPrediction: (prediction) =>
+    set((state) => ({
+      pendingTransformPredictions: [
+        ...state.pendingTransformPredictions.filter((item) => item.seq !== prediction.seq),
+        prediction,
+      ],
+    })),
+
+  commitTransformPrediction: (seq) =>
+    set((state) => {
+      const prediction = state.pendingTransformPredictions.find((item) => item.seq === seq);
+      if (!prediction) return {};
+
+      return {
+        sceneNodes: applyPredictedTransform(state.sceneNodes, prediction),
+        pendingTransformPredictions: state.pendingTransformPredictions.filter(
+          (item) => item.seq !== seq,
+        ),
+      };
+    }),
+
+  commitPredictionsThrough: (appliedSeq) =>
+    set((state) => {
+      const toCommit = state.pendingTransformPredictions.filter(
+        (prediction) => prediction.seq <= appliedSeq,
+      );
+      if (toCommit.length === 0) return {};
+
+      return {
+        sceneNodes: toCommit.reduce(applyPredictedTransform, state.sceneNodes),
+        pendingTransformPredictions: state.pendingTransformPredictions.filter(
+          (prediction) => prediction.seq > appliedSeq,
+        ),
+      };
+    }),
+
+  rollbackTransformPrediction: (seq) =>
+    set((state) => ({
+      pendingTransformPredictions: state.pendingTransformPredictions.filter(
+        (prediction) => prediction.seq !== seq,
+      ),
+    })),
+
+  createLocalPrediction: (prediction) => {
+    const layer = get().localPredictionLayer;
+    const created = layer.create(prediction);
+    set({ localPredictions: layer.active() });
+    return created;
+  },
+
+  commitLocalPredictionsThrough: (appliedSeq) =>
+    set((state) => {
+      state.localPredictionLayer.commitThrough(appliedSeq);
+      state.localPredictionLayer.clearFinalized();
+      return { localPredictions: state.localPredictionLayer.active() };
+    }),
+
+  rollbackLocalPrediction: (idOrSeq) =>
+    set((state) => {
+      state.localPredictionLayer.rollback(idOrSeq);
+      state.localPredictionLayer.clearFinalized();
+      state.authoringMetrics.incrementDroppedPrediction();
+      return { localPredictions: state.localPredictionLayer.active() };
+    }),
+
+  timeoutLocalPredictions: (nowMs) =>
+    set((state) => {
+      state.localPredictionLayer.timeout(nowMs);
+      state.localPredictionLayer.clearFinalized();
+      state.authoringMetrics.incrementDroppedPrediction();
+      return { localPredictions: state.localPredictionLayer.active() };
+    }),
+
+  invalidateLocalPredictions: (filter) =>
+    set((state) => {
+      state.localPredictionLayer.invalidate(filter);
+      state.localPredictionLayer.clearFinalized();
+      state.authoringMetrics.incrementDroppedPrediction();
+      return { localPredictions: state.localPredictionLayer.active() };
+    }),
+
+  recordAckLatency: (ms) =>
+    set((state) => {
+      state.authoringMetrics.recordAckLatency(ms);
+      return { authoringMetricsSnapshot: state.authoringMetrics.snapshot() };
+    }),
+
+  recordPatchBytes: (bytes, atMs) =>
+    set((state) => {
+      state.authoringMetrics.recordPatchBytes(bytes, atMs);
+      return { authoringMetricsSnapshot: state.authoringMetrics.snapshot(atMs) };
+    }),
+
+  recordGpuUpload: (ms) =>
+    set((state) => {
+      state.authoringMetrics.recordGpuUpload(ms);
+      return { authoringMetricsSnapshot: state.authoringMetrics.snapshot() };
+    }),
+
+  recordRenderFrameMeta: (meta) =>
+    set((state) => {
+      const latencyMs = meta.durationUs > 0 ? meta.durationUs / 1000 : 0;
+      state.authoringMetrics.recordFrameLatency(latencyMs);
+      if (typeof meta.diagnostics?.gpuUploadTimeMs === 'number') {
+        state.authoringMetrics.recordGpuUpload(meta.diagnostics.gpuUploadTimeMs);
+      }
+      return {
+        lastRenderFrameMeta: meta,
+        authoringMetricsSnapshot: state.authoringMetrics.snapshot(),
+      };
+    }),
+
+  incrementDroppedPrediction: () =>
+    set((state) => {
+      state.authoringMetrics.incrementDroppedPrediction();
+      return { authoringMetricsSnapshot: state.authoringMetrics.snapshot() };
+    }),
 
   // Animation actions
   setAnimationClips: (clips) => set({ animationClips: clips }),
@@ -156,15 +486,27 @@ export const useModelStore = create<ModelState>((set, get) => ({
   setTransformMode: (mode) => set({ transformMode: mode }),
 
   // Model actions
-  setModelUrl: (url) => set({ modelUrl: url }),
+  setModelUrl: (url) => set({ modelUrl: url, qualityPreviewDataUrl: null }),
 
   setLoading: (loading) => set({ isLoading: loading }),
+
+  setQualityPreview: (dataUrl) => set({ qualityPreviewDataUrl: dataUrl }),
 
   // Bulk update: update a single node's transform in the scene graph
   updateNodeTransform: (nodeId, position, rotation, scale) =>
     set((state) => ({
       sceneNodes: state.sceneNodes.map((node) =>
-        node.id === nodeId ? { ...node, position, rotation, scale } : node,
+        node.nodeId === nodeId
+          ? {
+              ...node,
+              transform: {
+                ...node.transform,
+                position: position ?? node.transform?.position,
+                rotation: rotation ?? node.transform?.rotation,
+                scale: scale ?? node.transform?.scale,
+              },
+            }
+          : node,
       ),
     })),
 
@@ -206,6 +548,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   toggleShapeCreator: () => set((state) => ({ isShapeCreatorOpen: !state.isShapeCreatorOpen })),
 
+  toggleSculptBrush: () => set((state) => ({ isSculptBrushOpen: !state.isSculptBrushOpen })),
+
   setCsgOperand: (slot, nodeId) =>
     set(slot === 'A' ? { csgOperandA: nodeId } : { csgOperandB: nodeId }),
 
@@ -241,6 +585,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       isCsgPanelOpen: s.isCsgPanelOpen,
       isTextEditorOpen: s.isTextEditorOpen,
       isShapeCreatorOpen: s.isShapeCreatorOpen,
+      isSculptBrushOpen: s.isSculptBrushOpen,
       faceParams: s.faceParams,
       keyframeTracks: s.keyframeTracks,
       currentTimeMs: s.currentTimeMs,
@@ -257,9 +602,49 @@ export const useModelStore = create<ModelState>((set, get) => ({
       isCsgPanelOpen: (state['isCsgPanelOpen'] as boolean) ?? false,
       isTextEditorOpen: (state['isTextEditorOpen'] as boolean) ?? false,
       isShapeCreatorOpen: (state['isShapeCreatorOpen'] as boolean) ?? false,
+      isSculptBrushOpen: (state['isSculptBrushOpen'] as boolean) ?? false,
       faceParams: (state['faceParams'] as Record<string, number>) ?? {},
       keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
       currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
       isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
     }),
 }));
+
+function collectRemovedNodeIds(
+  nodes: readonly SceneNodeSnapshot[],
+  removedNodeIds: readonly string[],
+): Set<string> {
+  const removed = new Set(removedNodeIds);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const node of nodes) {
+      if (node.parentId && removed.has(node.parentId) && !removed.has(node.nodeId)) {
+        removed.add(node.nodeId);
+        changed = true;
+      }
+    }
+  }
+
+  return removed;
+}
+
+function applyPredictedTransform(
+  nodes: SceneNodeSnapshot[],
+  prediction: PendingTransformPrediction,
+): SceneNodeSnapshot[] {
+  return nodes.map((node) =>
+    node.nodeId === prediction.nodeId
+      ? {
+          ...node,
+          transform: {
+            ...node.transform,
+            position: prediction.position ?? node.transform?.position,
+            rotation: prediction.rotation ?? node.transform?.rotation,
+            scale: prediction.scale ?? node.transform?.scale,
+          },
+        }
+      : node,
+  );
+}

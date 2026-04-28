@@ -5,6 +5,8 @@
 // Generated engine types (from packages/neko-proto/*.proto)
 export * from '../generated/timeline.engine';
 export * from '../generated/diff.engine';
+export * from '../generated/scene.engine';
+export type { EngineResolution } from '../generated/timeline.engine';
 
 // Track types
 export * from './track';
@@ -14,6 +16,9 @@ export * from './easing';
 
 // Blend modes
 export * from './blendMode';
+export * from './sketch-psd-import';
+export * from './sketch-psd-blend-mode';
+export * from './sketch-ai';
 
 // Transform
 export * from './transform';
@@ -169,6 +174,9 @@ export * from './keyframe-editor';
 
 // 3D Model project types (.nkm project format)
 export * from './model-project';
+
+// 3D scene authoring and viewport contracts
+export * from './scene';
 
 // Audio project types (.nka file format)
 export * from './audioProject';

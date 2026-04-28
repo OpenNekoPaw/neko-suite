@@ -1,15 +1,22 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { SHAPE_PARAMS, SHAPE_ICONS, type ShapeType } from '../../types/shapeParams';
-import { postMessage } from '@neko/shared/vscode';
 
 const SHAPE_TYPES: ShapeType[] = ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane'];
+
+interface ShapeCreatorPanelProps {
+  disabled?: boolean;
+  onCreateShape: (shapeType: ShapeType, params: Record<string, number>) => void;
+}
 
 /**
  * Shape Creator Panel - Create parametric 3D primitives.
  *
  * Select a shape type, adjust parameters, and create the mesh.
  */
-export function ShapeCreatorPanel(): React.JSX.Element {
+export function ShapeCreatorPanel({
+  disabled = false,
+  onCreateShape,
+}: ShapeCreatorPanelProps): React.JSX.Element {
   const [shapeType, setShapeType] = useState<ShapeType>('cube');
   const [params, setParams] = useState<Record<string, number>>(() => buildDefaults('cube'));
 
@@ -25,12 +32,8 @@ export function ShapeCreatorPanel(): React.JSX.Element {
   }, []);
 
   const handleCreate = useCallback(() => {
-    postMessage({
-      type: 'createShape',
-      shapeType,
-      params,
-    });
-  }, [shapeType, params]);
+    onCreateShape(shapeType, params);
+  }, [onCreateShape, shapeType, params]);
 
   return (
     <div className="model-side-panel h-full w-64">
@@ -46,6 +49,7 @@ export function ShapeCreatorPanel(): React.JSX.Element {
               <button
                 key={type}
                 onClick={() => handleShapeChange(type)}
+                disabled={disabled}
                 className={`${shapeType === type ? 'model-btn-primary' : 'model-btn-secondary'} flex flex-col items-center px-1 py-1.5 ${
                   shapeType === type ? '' : ''
                 }`}
@@ -75,6 +79,7 @@ export function ShapeCreatorPanel(): React.JSX.Element {
                 step={def.step}
                 value={params[def.name] ?? def.default}
                 onChange={(e) => handleParamChange(def.name, parseFloat(e.target.value))}
+                disabled={disabled}
                 className="model-range"
               />
             </div>
@@ -82,7 +87,7 @@ export function ShapeCreatorPanel(): React.JSX.Element {
         </div>
 
         <div className="px-3 py-3">
-          <button onClick={handleCreate} className="model-btn-primary w-full">
+          <button onClick={handleCreate} disabled={disabled} className="model-btn-primary w-full">
             Create {shapeType.charAt(0).toUpperCase() + shapeType.slice(1)}
           </button>
         </div>

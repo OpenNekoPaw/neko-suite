@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { useModelStore } from '../../stores/modelStore';
-import { postMessage } from '@neko/shared/vscode';
 
 type CsgOperation = 'union' | 'difference' | 'intersection';
 
@@ -10,12 +9,17 @@ const OPERATIONS: { value: CsgOperation; label: string; icon: string }[] = [
   { value: 'intersection', label: 'Intersection', icon: '\u2229' },
 ];
 
+interface CsgPanelProps {
+  disabled?: boolean;
+  onExecuteCsg: (operation: CsgOperation, operandA: string, operandB: string) => void;
+}
+
 /**
  * CSG Boolean Panel - Constructive Solid Geometry operations.
  *
  * Select two mesh operands and apply union/difference/intersection.
  */
-export function CsgPanel(): React.JSX.Element {
+export function CsgPanel({ disabled = false, onExecuteCsg }: CsgPanelProps): React.JSX.Element {
   const [operation, setOperation] = useState<CsgOperation>('union');
   const [operandA, setOperandA] = useState<string | null>(null);
   const [operandB, setOperandB] = useState<string | null>(null);
@@ -27,7 +31,7 @@ export function CsgPanel(): React.JSX.Element {
   const getNodeName = useCallback(
     (id: string | null): string => {
       if (!id) return '(none)';
-      const node = sceneNodes.find((n) => n.id === id);
+      const node = sceneNodes.find((n) => n.nodeId === id);
       return node?.name ?? id;
     },
     [sceneNodes],
@@ -63,15 +67,10 @@ export function CsgPanel(): React.JSX.Element {
 
   const handleExecute = useCallback(() => {
     if (!operandA || !operandB) return;
-    postMessage({
-      type: 'csgBoolean',
-      entityA: operandA,
-      entityB: operandB,
-      operation,
-    });
-  }, [operandA, operandB, operation]);
+    onExecuteCsg(operation, operandA, operandB);
+  }, [onExecuteCsg, operandA, operandB, operation]);
 
-  const canExecute = operandA !== null && operandB !== null && operandA !== operandB;
+  const canExecute = !disabled && operandA !== null && operandB !== null && operandA !== operandB;
 
   return (
     <div className="model-side-panel h-full w-64">
@@ -87,6 +86,7 @@ export function CsgPanel(): React.JSX.Element {
               <button
                 key={op.value}
                 onClick={() => setOperation(op.value)}
+                disabled={disabled}
                 className={`${operation === op.value ? 'model-btn-primary' : 'model-btn-secondary'} flex-1 px-1 py-1.5 text-xs text-center ${
                   operation === op.value ? '' : ''
                 }`}
@@ -107,6 +107,7 @@ export function CsgPanel(): React.JSX.Element {
             </span>
             <button
               onClick={() => handleSelect('A')}
+              disabled={disabled}
               className={`${selectingFor === 'A' ? 'model-btn-primary' : 'model-btn-secondary'} shrink-0 px-2 py-1 text-xs ${
                 selectingFor === 'A' ? '' : ''
               }`}
@@ -124,6 +125,7 @@ export function CsgPanel(): React.JSX.Element {
             </span>
             <button
               onClick={() => handleSelect('B')}
+              disabled={disabled}
               className={`${selectingFor === 'B' ? 'model-btn-primary' : 'model-btn-secondary'} shrink-0 px-2 py-1 text-xs ${
                 selectingFor === 'B' ? '' : ''
               }`}

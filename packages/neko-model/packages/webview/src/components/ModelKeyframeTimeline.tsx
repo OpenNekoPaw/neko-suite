@@ -9,9 +9,21 @@ import React, { useCallback, useMemo } from 'react';
 import { KeyframeTimeline } from '@neko/shared/components';
 import type { EasingType } from '@neko/shared';
 import { useModelStore } from '../stores/modelStore';
-import { postMessage } from '@neko/shared/vscode';
 
-export function ModelKeyframeTimeline(): React.JSX.Element {
+export interface ModelKeyframeTimelineProps {
+  disabled?: boolean;
+  onSeek: (clipName: string, timeMs: number) => void;
+  onKeyframeMutation: (
+    operation: 'add' | 'remove' | 'update',
+    payload: Record<string, unknown>,
+  ) => void;
+}
+
+export function ModelKeyframeTimeline({
+  disabled = false,
+  onSeek,
+  onKeyframeMutation,
+}: ModelKeyframeTimelineProps): React.JSX.Element {
   const keyframeTracks = useModelStore((s) => s.keyframeTracks);
   const currentTimeMs = useModelStore((s) => s.currentTimeMs);
   const selectedKeyframeIds = useModelStore((s) => s.selectedKeyframeIds);
@@ -31,21 +43,22 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
 
   const handleSeek = useCallback(
     (timeMs: number) => {
+      if (disabled || !clipName) return;
       setCurrentTimeMs(timeMs);
+      onSeek(clipName, timeMs);
     },
-    [setCurrentTimeMs],
+    [clipName, disabled, onSeek, setCurrentTimeMs],
   );
 
   const handleKeyframeAdd = useCallback(
     (trackProperty: string, timeMs: number, _value: number) => {
-      if (!clipName) return;
+      if (disabled || !clipName) return;
       // Extract nodeId from trackProperty (format: "nodeId.property")
       const dotIdx = trackProperty.indexOf('.');
       const nodeId = dotIdx >= 0 ? trackProperty.slice(0, dotIdx) : trackProperty;
       const property = dotIdx >= 0 ? trackProperty.slice(dotIdx + 1) : trackProperty;
 
-      postMessage({
-        type: 'addKeyframe',
+      onKeyframeMutation('add', {
         clipName,
         nodeId,
         property,
@@ -53,19 +66,18 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
         values: [_value],
       });
     },
-    [clipName],
+    [clipName, disabled, onKeyframeMutation],
   );
 
   const handleKeyframeRemove = useCallback(
     (_trackProperty: string, keyframeId: string) => {
-      if (!clipName) return;
-      postMessage({
-        type: 'removeKeyframe',
+      if (disabled || !clipName) return;
+      onKeyframeMutation('remove', {
         clipName,
         keyframeId,
       });
     },
-    [clipName],
+    [clipName, disabled, onKeyframeMutation],
   );
 
   const handleKeyframeUpdate = useCallback(
@@ -74,9 +86,8 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
       keyframeId: string,
       updates: { timeMs?: number; value?: number; easing?: EasingType },
     ) => {
-      if (!clipName) return;
-      postMessage({
-        type: 'updateKeyframe',
+      if (disabled || !clipName) return;
+      onKeyframeMutation('update', {
         clipName,
         keyframeId,
         timestamp: updates.timeMs,
@@ -84,7 +95,7 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
         easing: updates.easing,
       });
     },
-    [clipName],
+    [clipName, disabled, onKeyframeMutation],
   );
 
   const handleKeyframeSelect = useCallback(
@@ -96,15 +107,14 @@ export function ModelKeyframeTimeline(): React.JSX.Element {
 
   const handleKeyframeDrag = useCallback(
     (_trackProperty: string, keyframeId: string, newTimeMs: number) => {
-      if (!clipName) return;
-      postMessage({
-        type: 'updateKeyframe',
+      if (disabled || !clipName) return;
+      onKeyframeMutation('update', {
         clipName,
         keyframeId,
         timestamp: newTimeMs,
       });
     },
-    [clipName],
+    [clipName, disabled, onKeyframeMutation],
   );
 
   if (keyframeTracks.length === 0) {

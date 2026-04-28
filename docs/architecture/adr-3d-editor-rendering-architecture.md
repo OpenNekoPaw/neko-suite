@@ -2,7 +2,25 @@
 
 ## 状态
 
-Proposed (2026-04-27, revised 2026-04-27 — 当前规范收敛为：VSCode Webview 实时视口播放链路仅支持 raw H.264 + WebCodecs + `H264StreamClient`，音频仅支持独立 PCM f32le + `AudioStreamClient`；不支持 fMP4 / MSE / `FMP4StreamClient` 作为 3D Webview 实时播放路径。neko-engine 内部媒体处理、探测、转码和离线导出能力不受本 ADR 的 Webview 播放链路约束。)
+Proposed (2026-04-27, revised 2026-04-27 — 当前规范收敛为：VSCode Webview 实时视口播放链路仅支持 raw H.264 + WebCodecs + `H264StreamClient`（`container ∈ {h264-annexb, h264-avcc}`、`frameHeader='neko-h264-v1'`、`initData.format='avcc-record'`、`RenderFrameMeta.durationUs` 必填），音频仅支持独立 PCM f32le + `AudioStreamClient`（`/v1/audio/:stream_id`、`frameHeader='neko-pcm-v1'`，作为 A/V 同步 master clock）；不支持 fMP4 / MSE / `FMP4StreamClient` 作为 3D Webview 实时播放路径，也不支持在视频流中夹带音频。neko-engine 内部媒体处理、探测、转码和离线导出能力不受本 ADR 的 Webview 播放链路约束。)
+
+### 阶段 1A 落地说明（2026-04-28）
+
+- Route A 实时视口由 Webview 通过 `EngineClient.startSceneRenderStream(ViewportDescriptor)` 直连 Engine，`scenes:stream` 返回 `RenderStreamDescriptor`，视频 WebSocket 固定消费 raw H.264 access unit，客户端按 `codecString`、`container`、`frameHeader` 和可选 `initData` 初始化 WebCodecs。
+- 音频不进入视频包；需要实时音频时使用 `/v1/audio/:stream_id` 与 `AudioStreamDescriptor(codec='pcm-f32le', frameHeader='neko-pcm-v1')`，由 `AudioStreamClient` 独立校验和播放。
+- Webview 视觉真值 surface 为 `VideoViewport` 的 canvas / `VideoFrame`，选择框、gizmo、本地预测和诊断信息绘制在独立 `OverlayCanvas`，并用 `RenderFrameMeta.viewportId / frameId / sceneRevision / appliedSeq` 对齐。
+- WebCodecs 不可用时不切换到 fMP4/MSE；UI 进入明确的 Route A unavailable 状态，保留 R3F 开发 fallback 或 `scenes:capture` 静态质量预览作为 Route C。
+- Extension Host 只负责 VSCode 能力代理、资源 URI、Engine 端口和低频操作，不承载 60fps SceneDelta、视频包、PCM 包或高频 transform dispatch；边界可用 `node scripts/check-3d-route-a-boundaries.mjs` 校验。
+
+### 阶段 1B 落地说明（2026-04-28）
+
+- `.nkc` / `.nkcdata` 成为角色 authoring 真值：`LayeredCharacterDescription` 保存 descriptor、definition、behavior、geometry、override、material slot、morph、skin weight 和 blend shape 引用；Engine 将其投影到 ECS，ECS 不反向拥有 canonical morph library、override map 或 skin weight atlas。
+- Webview 旧角色面板收敛为控制面：Face、Expression、Bone/IK、Shape/CSG/Text、Animation/Keyframe 和 Inspector 操作编译为 `SceneCommand`、`CharacterCommand` 或 `ModelingSession` 命令，经 `/v1/scenes/control` 直连 Engine；本地 Zustand/R3F 只保存带 revision/seq 的镜像和短生命周期预测。
+- 自由建模进入 `ModelingSession`：笔刷 patch 走 `VertexBrushPatch` 二进制副通道，语义状态走 `SceneDelta.modelingSessions`，拓扑变更走 `TopologyChangeEvent`；`topologyVersion` 同时约束命令、hit-test、projected bounds、本地预测和导出。
+- `MeshTopologyMigrationService` 是拓扑提交闸门：仅顶点位置变化可保留 morph/skin/UV；Boolean、Decimate、Dynamic Topology 等会显式迁移或失效，并通过 Overlay/诊断面板提示，禁止静默导出损坏的角色数据。
+- Route A Webview 现在是 Engine 渲染结果播放器和控制面：可见 3D 内容只来自 `VideoViewport` 的 Engine H.264 帧；`OverlayCanvas`、`InteractionLayer`、`LocalPredictionLayer` 只负责命令反馈、拾取查询、gizmo anchor、bounds、IK/brush/morph 预测和恢复路径。
+- R3F/Three.js 仅保留两类用途：短生命周期非权威预测/辅助 overlay，以及明确标记为 Route A unavailable 的开发 fallback；fallback 不参与 WYSIWYG 验收、导出、undo/redo 或 authoring commit。
+- `CharacterBakingSystem` 是角色导出权威：GLB/VRM/FBX 路径读取 `.nkc`、`.nkcdata`、AssetDatabase、Engine 当前 pose 和 topology migration state；导出器不得读取 GPU cache、Render World 或 Webview prediction。
 
 ## 关联 ADR
 
@@ -637,14 +655,14 @@ Engine wgpu 渲染 → GPU color convert / zero-copy 编码 → WebSocket
 
 > `avc1.42001f` 是 `H264StreamClient` 在 `RenderStreamDescriptor` 落地之前的硬编码默认值，仅用于描述现状。迁移完成后 codec 由 descriptor 动态下发（详见 §10.1 `codecString` 字段、§10.2 B6 / §10.3 W2/F5 验收）。新代码禁止再硬编码任何 `avc1.*`。
 
-#### 选型规则
+#### 场景适配（所有场景共用 raw H.264 + WebCodecs）
 
-| 场景 | 推荐路径 | 理由 |
-|------|---------|------|
-| 实时编辑 viewport（拖拽 / Gizmo / 笔刷预测） | raw H.264 + WebCodecs | 单帧解码可控延迟，易与 OverlayCanvas 像素级对齐 |
-| Lookdev / render-preview 视口（30fps，可接受缓冲） | raw H.264 + WebCodecs | 仍复用同一 VideoViewport 组件，避免双渲染/双解码路径漂移 |
-| 与音频同步（动画预览 + 配音 / 旁白） | raw H.264 + WebCodecs + 独立 PCM | `AudioStreamClient.getCurrentTime()` 是 master clock，视频按 `RenderFrameMeta.ptsUs` 对齐 |
-| WebCodecs 不可用的运行环境 | Route A 不可用 | 降级到 `scenes:capture` 静态预览或提示环境不支持实时 Engine Viewport |
+| 场景 | 同一播放栈下的差异 | 备注 |
+|------|------------------|------|
+| 实时编辑 viewport（拖拽 / Gizmo / 笔刷预测） | 高 FPS（60fps）/ 低 GOP / Annex B 容器 | 单帧解码可控延迟,易与 OverlayCanvas 像素级对齐 |
+| Lookdev / render-preview 视口 | 中 FPS（30fps）/ 较大 GOP / 高 profile | 仍复用同一 `VideoViewport` 组件,避免双渲染/双解码路径漂移 |
+| 动画预览 + 配音 / 旁白 | 视频栈不变；并行启用独立 PCM 音频流 | `AudioStreamClient.getCurrentTime()` 是 master clock,视频按 `RenderFrameMeta.ptsUs` 对齐 |
+| WebCodecs 不可用的运行环境 | Route A 不可用 | 降级到 `scenes:capture` 静态预览或提示环境不支持实时 Engine Viewport（不切换到其他播放栈） |
 
 #### 长期方向
 
@@ -661,11 +679,11 @@ Engine wgpu 渲染 → GPU color convert / zero-copy 编码 → WebSocket
 
 **约束清单（仅 Webview 实时播放链路）**：
 
-1. **Webview 视频不引入 H.265 / AV1 / VP9**：H.264 baseline / main / high 配置已经覆盖编辑器 + 互动影游所有场景；新增编码会破坏栈 A 的 WebCodecs 兼容性矩阵和 Engine 端硬件编码器选型。**离线导出 / 转码不受此约束**——这些场景由 neko-engine 媒体管线按其自有能力决定。
+1. **Webview 视频不引入 H.265 / AV1 / VP9**：H.264 baseline / main / high 配置已经覆盖编辑器 + 互动影游所有场景；新增编码会破坏 WebCodecs 兼容性矩阵和 Engine 端硬件编码器选型。**离线导出 / 转码不受此约束**——这些场景由 neko-engine 媒体管线按其自有能力决定。
 2. **Webview 音频不引入 Opus / AAC 编码**：`AudioStreamClient` 直接消费 PCM f32le 写入 `AudioBuffer`，无解码步骤；Web Audio API 时钟即主时钟（A/V sync 的 reference clock），引入编码会重新引入解码缓冲与时钟偏差。**离线音频文件导出不受此约束**。
-3. **Webview 实时链路不支持 fMP4 / MSE**：3D `scenes:stream` 不返回 fMP4 init segment / media segment，不创建 `FMP4StreamClient`，不接受 `frameHeader='neko-fmp4-v1'`。fMP4 如用于离线导出或其他媒体预览，属于本 ADR 范围外。
+3. **Webview 实时链路不支持 fMP4 / MSE**：3D `scenes:stream` 不返回 fMP4 init segment / media segment，不创建 `FMP4StreamClient`，不接受 `frameHeader='neko-fmp4-v1'`，也不允许在 fMP4 容器内夹带任何视频或音频载荷。fMP4 如用于离线导出或其他媒体预览，属于本 ADR 范围外。
 4. **A/V 同步主时钟**：`AudioStreamClient.getCurrentTime()` 是 master clock，视频栈按 `RenderFrameMeta.ptsUs` 对齐到这个时钟。视频流不依赖容器时序。
-5. **新视口 / 新流不可绕过**：3D `scenes:stream` 创建的视频流必须使用 raw H.264，需要音频时另起 PCM 流（按 §3.5 通道分层），不允许在 fMP4 容器内夹带音频。
+5. **新视口 / 新流不可绕过**：3D `scenes:stream` 创建的视频流必须使用 raw H.264 + WebCodecs，需要音频时另起 PCM 流（按 §3.5 通道分层），不允许引入 fMP4 / MSE 等其他播放路径。
 
 #### 3D 域音频接入策略
 

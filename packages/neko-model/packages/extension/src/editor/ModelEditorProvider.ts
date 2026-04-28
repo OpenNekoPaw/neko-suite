@@ -281,6 +281,26 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'scene:capturePreview': {
+        const client = await this.ensureEngineClient();
+        if (!client) break;
+
+        try {
+          const preview = await client.captureScenePreview({
+            width: (message.width as number | undefined) ?? 1280,
+            height: (message.height as number | undefined) ?? 720,
+            quality: (message.quality as number | undefined) ?? 90,
+          });
+          webviewPanel.webview.postMessage({
+            type: 'sceneCapturePreview',
+            preview,
+          });
+        } catch (err) {
+          this.logError('scene:capturePreview', err);
+        }
+        break;
+      }
+
       case 'exportGlb': {
         const client = await this.ensureEngineClient();
         if (!client) break;

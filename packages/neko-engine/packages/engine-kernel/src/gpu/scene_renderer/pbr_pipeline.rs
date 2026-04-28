@@ -4,12 +4,17 @@
 //! Outputs to Rgba16Float texture (matching TextureCompositor format).
 
 use crate::gpu::scene_renderer::asset_cache::AssetCache;
-use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
+use crate::gpu::scene_renderer::{
+    build_viewport_render_graph, extract_render_world, CameraParams, CompiledRenderPass,
+    PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
+    RenderSystemLabel, RenderWorld, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping,
+    ToneMapping, ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput,
+    ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
+};
 use crate::gpu::GpuContext;
-use bevy_ecs::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use neko_runtime_scene::components::*;
+use neko_runtime_scene::asset_database::AssetDatabase;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -19,6 +24,54 @@ const MAX_LIGHTS: usize = 16;
 /// Maximum joints per skeleton for GPU skinning
 const MAX_JOINTS: usize = 256;
 
+const SCENE_COLOR_CONVERT_SHADER: &str = r#"
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var out: VertexOutput;
+    var pos: vec2<f32>;
+    var uv: vec2<f32>;
+    switch vertex_index {
+        case 0u: {
+            pos = vec2<f32>(-1.0, -1.0);
+            uv = vec2<f32>(0.0, 1.0);
+        }
+        case 1u: {
+            pos = vec2<f32>(3.0, -1.0);
+            uv = vec2<f32>(2.0, 1.0);
+        }
+        default: {
+            pos = vec2<f32>(-1.0, 3.0);
+            uv = vec2<f32>(0.0, -1.0);
+        }
+    }
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+@group(0) @binding(0) var input_texture: texture_2d<f32>;
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let size = textureDimensions(input_texture);
+    let size_f = vec2<f32>(f32(size.x), f32(size.y));
+    let max_coord = vec2<i32>(i32(size.x) - 1, i32(size.y) - 1);
+    let coord = clamp(
+        vec2<i32>(in.uv * size_f),
+        vec2<i32>(0, 0),
+        max_coord,
+    );
+    let color = textureLoad(input_texture, coord, 0);
+    let rgb = pow(clamp(color.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 2.2));
+    return vec4<f32>(rgb, clamp(color.a, 0.0, 1.0));
+}
+"#;
+
 /// PBR forward renderer
 pub struct PbrRenderer {
     render_pipeline: wgpu::RenderPipeline,
@@ -27,6 +80,9 @@ pub struct PbrRenderer {
     model_bind_group_layout: wgpu::BindGroupLayout,
     light_bind_group_layout: wgpu::BindGroupLayout,
     joint_bind_group_layout: wgpu::BindGroupLayout,
+    color_convert_bind_group_layout: wgpu::BindGroupLayout,
+    color_convert_pipeline: wgpu::RenderPipeline,
+    post_process_chain: PostProcessChain,
     ctx: Arc<GpuContext>,
 }
 
@@ -364,6 +420,53 @@ impl PbrRenderer {
                 ],
             });
 
+        let color_convert_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene_color_convert_bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                },
+                count: None,
+            }],
+        });
+        let color_convert_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("scene_color_convert_pipeline_layout"),
+                bind_group_layouts: &[&color_convert_bgl],
+                push_constant_ranges: &[],
+            });
+        let color_convert_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("scene_color_convert_shader"),
+            source: wgpu::ShaderSource::Wgsl(SCENE_COLOR_CONVERT_SHADER.into()),
+        });
+        let color_convert_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("scene_color_convert_pipeline"),
+                layout: Some(&color_convert_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &color_convert_shader,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &color_convert_shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
+
         (
             Self {
                 render_pipeline,
@@ -372,6 +475,9 @@ impl PbrRenderer {
                 model_bind_group_layout: model_bgl,
                 light_bind_group_layout: light_bgl,
                 joint_bind_group_layout: joint_bgl,
+                color_convert_bind_group_layout: color_convert_bgl,
+                color_convert_pipeline,
+                post_process_chain: PostProcessChain::new(Arc::clone(&ctx)),
                 ctx,
             },
             material_bgl_clone,
@@ -390,9 +496,133 @@ impl PbrRenderer {
         output_size: (u32, u32),
         background_color: Option<[f32; 4]>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
+        let mut render_world = RenderWorld::default();
+        let asset_database = AssetDatabase::default();
+        extract_render_world(world, &asset_database, camera_params, &mut render_world);
+        self.render_from_render_world(
+            &render_world,
+            asset_cache,
+            camera_params,
+            output_size,
+            background_color,
+        )
+    }
+
+    /// Render an already-extracted Render World with the default quality-capture viewport.
+    pub fn render_from_render_world(
+        &self,
+        render_world: &RenderWorld,
+        asset_cache: &AssetCache,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        background_color: Option<[f32; 4]>,
+    ) -> Result<SceneRenderOutput, PbrRenderError> {
+        let descriptor = default_pbr_viewport_descriptor();
+        self.render_viewport_from_render_world(
+            render_world,
+            asset_cache,
+            camera_params,
+            output_size,
+            background_color,
+            &descriptor,
+            ViewportRenderGraphOutput::QualityCapture,
+        )
+    }
+
+    /// Render a viewport through the compiled RenderGraph selected by its descriptor.
+    pub fn render_viewport(
+        &self,
+        world: &mut bevy_ecs::world::World,
+        asset_cache: &AssetCache,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        background_color: Option<[f32; 4]>,
+        descriptor: &ViewportDescriptor,
+        graph_output: ViewportRenderGraphOutput,
+    ) -> Result<SceneRenderOutput, PbrRenderError> {
+        let mut render_world = RenderWorld::default();
+        let asset_database = AssetDatabase::default();
+        extract_render_world(world, &asset_database, camera_params, &mut render_world);
+        self.render_viewport_from_render_world(
+            &render_world,
+            asset_cache,
+            camera_params,
+            output_size,
+            background_color,
+            descriptor,
+            graph_output,
+        )
+    }
+
+    /// Render an already-extracted Render World through the viewport RenderGraph.
+    pub fn render_viewport_from_render_world(
+        &self,
+        render_world: &RenderWorld,
+        asset_cache: &AssetCache,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        background_color: Option<[f32; 4]>,
+        descriptor: &ViewportDescriptor,
+        graph_output: ViewportRenderGraphOutput,
+    ) -> Result<SceneRenderOutput, PbrRenderError> {
+        let plan = build_viewport_render_graph(descriptor, graph_output)?;
+        let compiled = plan
+            .graph
+            .compile(std::slice::from_ref(&plan.live_output))?;
+        let pass_ids: Vec<String> = compiled
+            .passes
+            .iter()
+            .map(|pass| pass.id.0.clone())
+            .collect();
+        let graph_execution = SceneRenderGraphExecution {
+            variant: plan.variant,
+            pass_ids,
+            helper_passes: plan.helper_passes,
+            post_process: plan.post_process,
+            color_convert: plan.color_convert,
+            encoder_copy: plan.encoder_copy,
+        };
+
+        let mut encoder =
+            self.ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("pbr_render_graph_encoder"),
+                });
+        let mut executor = PbrRenderGraphPassExecutor {
+            renderer: self,
+            render_world,
+            asset_cache,
+            camera_params,
+            output_size,
+            background_color,
+            post_process_settings: post_process_settings_for_descriptor(descriptor),
+            output: None,
+            intermediate_textures: Vec::new(),
+            intermediate_views: Vec::new(),
+        };
+
+        plan.graph.execute(&compiled, &mut encoder, &mut executor)?;
+        self.ctx.queue().submit(std::iter::once(encoder.finish()));
+
+        let mut output = executor.output.ok_or_else(|| {
+            PbrRenderError::RenderFailed("RenderGraph produced no color output".into())
+        })?;
+        output.graph_execution = graph_execution;
+        Ok(output)
+    }
+
+    fn record_pbr_forward_pass(
+        &self,
+        render_world: &RenderWorld,
+        asset_cache: &AssetCache,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        background_color: Option<[f32; 4]>,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<SceneRenderOutput, PbrRenderError> {
         let (width, height) = output_size;
         let device = self.ctx.device();
-        let queue = self.ctx.queue();
 
         // Create render targets
         let color_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -406,7 +636,9 @@ impl PbrRenderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba16Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -449,8 +681,8 @@ impl PbrRenderer {
             }],
         });
 
-        // Collect lights from ECS
-        let light_uniforms = self.collect_lights(world);
+        // Collect lights from the revision-stable Render World.
+        let light_uniforms = self.collect_lights(render_world);
         let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("pbr_light_buffer"),
             contents: bytemuck::bytes_of(&light_uniforms),
@@ -466,14 +698,10 @@ impl PbrRenderer {
         });
 
         // Pre-collect draw data (buffers + bind groups must outlive render pass)
-        let draw_calls = self.collect_draw_calls(world, asset_cache, device);
+        let draw_calls = self.collect_draw_calls(render_world, asset_cache, device);
 
         // Begin render pass
         let bg = background_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("pbr_render_encoder"),
-        });
-
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("pbr_render_pass"),
@@ -537,57 +765,49 @@ impl PbrRenderer {
             }
         }
 
-        queue.submit(std::iter::once(encoder.finish()));
-
         Ok(SceneRenderOutput {
             color_texture,
             color_view,
             depth_texture,
             width,
             height,
+            graph_execution: empty_graph_execution(),
         })
     }
 
-    /// Collect light data from ECS world into GPU uniform struct
-    fn collect_lights(&self, world: &mut bevy_ecs::world::World) -> LightUniformsGpu {
+    /// Collect light data from Render World into GPU uniform struct.
+    fn collect_lights(&self, render_world: &RenderWorld) -> LightUniformsGpu {
         let mut uniforms = LightUniformsGpu {
             lights: [LightGpu::zeroed(); MAX_LIGHTS],
             count: 0,
             _padding: [0; 3],
         };
 
-        let mut query = world.query::<(&Light, &GlobalTransform, &Transform)>();
         let mut idx = 0usize;
-        for (light, global_transform, _transform) in query.iter(world) {
+        for light in &render_world.lights {
             if idx >= MAX_LIGHTS {
                 break;
             }
 
-            let world_pos = global_transform.0.col(3).truncate();
-            let world_dir = global_transform
-                .0
+            let world_pos = light.world_transform.col(3).truncate();
+            let world_dir = light
+                .world_transform
                 .transform_vector3(Vec3::new(0.0, 0.0, -1.0))
                 .normalize_or_zero();
 
             uniforms.lights[idx] = LightGpu {
                 position: world_pos.to_array(),
                 kind: match light.kind {
-                    LightKind::Directional => 0,
-                    LightKind::Point => 1,
-                    LightKind::Spot { .. } => 2,
+                    RenderLightKind::Directional => 0,
+                    RenderLightKind::Point => 1,
+                    RenderLightKind::Spot => 2,
                 },
                 direction: world_dir.to_array(),
                 intensity: light.intensity,
                 color: light.color.to_array(),
-                range: 0.0, // glTF doesn't always set range
-                inner_cone: match &light.kind {
-                    LightKind::Spot { inner_cone, .. } => *inner_cone,
-                    _ => 0.0,
-                },
-                outer_cone: match &light.kind {
-                    LightKind::Spot { outer_cone, .. } => *outer_cone,
-                    _ => 0.0,
-                },
+                range: light.range.unwrap_or(0.0),
+                inner_cone: light.inner_cone.unwrap_or(0.0),
+                outer_cone: light.outer_cone.unwrap_or(0.0),
                 _padding: [0.0; 2],
             };
             idx += 1;
@@ -616,54 +836,34 @@ impl PbrRenderer {
     /// Pre-collect all draw call data so buffers outlive the render pass
     fn collect_draw_calls<'a>(
         &self,
-        world: &mut bevy_ecs::world::World,
+        render_world: &RenderWorld,
         asset_cache: &'a AssetCache,
         device: &wgpu::Device,
     ) -> Vec<DrawCall<'a>> {
-        // Pre-collect skeleton data for joint matrix computation
-        let skeleton_data: Vec<(Entity, Vec<Entity>, Vec<Mat4>)> = {
-            let mut sq = world.query::<(Entity, &Skeleton)>();
-            sq.iter(world)
-                .map(|(e, s)| (e, s.joint_entities.clone(), s.inverse_bind_matrices.clone()))
-                .collect()
-        };
-
         let mut calls = Vec::new();
-        let mut query = world.query::<(
-            Entity,
-            &GlobalTransform,
-            &MeshRef,
-            Option<&MaterialRef>,
-            Option<&Visible>,
-        )>();
+        let mut draw_items = render_world.draw_list.clone();
+        draw_items.sort_by_key(|item| item.sort_key);
 
-        #[allow(clippy::type_complexity)]
-        let draw_data: Vec<(Entity, Mat4, String, usize, Option<(String, usize)>)> = query
-            .iter(world)
-            .filter(|(_, _, _, _, visible)| visible.is_none_or(|v| v.0))
-            .map(|(entity, gt, mesh_ref, mat_ref, _)| {
-                (
-                    entity,
-                    gt.0,
-                    mesh_ref.uri.clone(),
-                    mesh_ref.primitive_index,
-                    mat_ref.map(|m| (m.uri.clone(), m.material_index)),
-                )
-            })
-            .collect();
-
-        for (entity, model_matrix, mesh_uri, prim_idx, mat_info) in &draw_data {
-            let gpu_mesh = match asset_cache.get_mesh(mesh_uri, *prim_idx) {
-                Some(m) => m,
-                None => continue,
+        for item in draw_items {
+            let Some(instance) = render_world.instances.get(item.instance_index) else {
+                continue;
             };
+            if !instance.visible {
+                continue;
+            }
 
-            let gpu_material = if let Some((mat_uri, mat_idx)) = mat_info {
+            let gpu_mesh =
+                match asset_cache.get_mesh(&instance.mesh.uri, instance.mesh.primitive_index) {
+                    Some(m) => m,
+                    None => continue,
+                };
+
+            let gpu_material = if let Some(material) = &instance.material {
                 asset_cache
-                    .get_material(mat_uri, *mat_idx)
-                    .or_else(|| asset_cache.get_default_material(mesh_uri))
+                    .get_material(&material.uri, material.material_index)
+                    .or_else(|| asset_cache.get_default_material(&instance.mesh.uri))
             } else {
-                asset_cache.get_default_material(mesh_uri)
+                asset_cache.get_default_material(&instance.mesh.uri)
             };
 
             let gpu_material = match gpu_material {
@@ -672,9 +872,9 @@ impl PbrRenderer {
             };
 
             // Model uniforms
-            let normal_matrix = model_matrix.inverse().transpose();
+            let normal_matrix = instance.world_transform.inverse().transpose();
             let model_uniforms = ModelUniformsGpu {
-                model: model_matrix.to_cols_array_2d(),
+                model: instance.world_transform.to_cols_array_2d(),
                 normal_matrix_0: normal_matrix.col(0).to_array(),
                 normal_matrix_1: normal_matrix.col(1).to_array(),
                 normal_matrix_2: normal_matrix.col(2).to_array(),
@@ -697,22 +897,12 @@ impl PbrRenderer {
 
             // Compute joint matrices for skinned meshes
             let (joint_bind_group, joint_buffer) = if gpu_mesh.is_skinned {
-                // Find skeleton for this entity (or its ancestors)
-                let skel = skeleton_data
-                    .iter()
-                    .find(|(e, _, _)| *e == *entity)
-                    .or_else(|| skeleton_data.first());
-
-                if let Some((_, joint_entities, ibms)) = skel {
+                if let Some(extracted_joint_matrices) = &instance.joint_matrices {
                     let mut joint_matrices = vec![Mat4::IDENTITY; MAX_JOINTS];
-
-                    for (i, joint_entity) in joint_entities.iter().enumerate().take(MAX_JOINTS) {
-                        let joint_global = world
-                            .get::<GlobalTransform>(*joint_entity)
-                            .map(|gt| gt.0)
-                            .unwrap_or(Mat4::IDENTITY);
-                        let ibm = ibms.get(i).copied().unwrap_or(Mat4::IDENTITY);
-                        joint_matrices[i] = joint_global * ibm;
+                    for (index, matrix) in
+                        extracted_joint_matrices.iter().take(MAX_JOINTS).enumerate()
+                    {
+                        joint_matrices[index] = *matrix;
                     }
 
                     // Flatten to f32 array
@@ -762,6 +952,329 @@ impl PbrRenderer {
     }
 }
 
+struct PbrRenderGraphPassExecutor<'a> {
+    renderer: &'a PbrRenderer,
+    render_world: &'a RenderWorld,
+    asset_cache: &'a AssetCache,
+    camera_params: &'a CameraParams,
+    output_size: (u32, u32),
+    background_color: Option<[f32; 4]>,
+    post_process_settings: PostProcessSettings,
+    output: Option<SceneRenderOutput>,
+    intermediate_textures: Vec<wgpu::Texture>,
+    intermediate_views: Vec<wgpu::TextureView>,
+}
+
+impl RenderGraphExecutor for PbrRenderGraphPassExecutor<'_> {
+    fn execute_pass(
+        &mut self,
+        pass: &CompiledRenderPass,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), RenderGraphError> {
+        let pass_id = pass.id.0.as_str();
+        if pass_id == RenderSystemLabel::PbrForward.as_str() {
+            let output = self
+                .renderer
+                .record_pbr_forward_pass(
+                    self.render_world,
+                    self.asset_cache,
+                    self.camera_params,
+                    self.output_size,
+                    self.background_color,
+                    encoder,
+                )
+                .map_err(|error| RenderGraphError::Execution {
+                    pass: pass.id.0.clone(),
+                    error: error.to_string(),
+                })?;
+            self.output = Some(output);
+            return Ok(());
+        }
+
+        if pass_id == RenderSystemLabel::PostProcess.as_str() {
+            return self.record_post_process(pass, encoder);
+        }
+
+        if pass_id == RenderSystemLabel::ViewportHelpers.as_str() {
+            return self.record_viewport_helpers(pass, encoder);
+        }
+
+        if pass_id == RenderSystemLabel::ColorConvert.as_str() {
+            return self.record_color_convert(pass, encoder);
+        }
+
+        if pass_id == RenderSystemLabel::EncoderCopy.as_str() {
+            return self.record_texture_copy(pass, encoder);
+        }
+
+        Err(RenderGraphError::Execution {
+            pass: pass.id.0.clone(),
+            error: "no executor registered for render pass".to_string(),
+        })
+    }
+}
+
+impl PbrRenderGraphPassExecutor<'_> {
+    fn record_viewport_helpers(
+        &mut self,
+        pass: &CompiledRenderPass,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), RenderGraphError> {
+        let current = self.take_output(pass)?;
+        let helper_texture =
+            self.create_graph_color_texture(&pass.id.0, &current, current.color_texture.format());
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &current.color_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &helper_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: current.width,
+                height: current.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        let helper_view = helper_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.intermediate_textures.push(current.color_texture);
+        self.intermediate_views.push(current.color_view);
+        self.output = Some(SceneRenderOutput {
+            color_texture: helper_texture,
+            color_view: helper_view,
+            depth_texture: current.depth_texture,
+            width: current.width,
+            height: current.height,
+            graph_execution: empty_graph_execution(),
+        });
+        Ok(())
+    }
+
+    fn record_post_process(
+        &mut self,
+        pass: &CompiledRenderPass,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), RenderGraphError> {
+        let current = self.take_output(pass)?;
+        let processed_texture = self.create_graph_color_texture(
+            "pbr_post_process_target",
+            &current,
+            wgpu::TextureFormat::Rgba16Float,
+        );
+        let processed_view = processed_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.renderer.post_process_chain.record_process(
+            &current.color_view,
+            &processed_view,
+            current.width,
+            current.height,
+            &self.post_process_settings,
+            encoder,
+        );
+
+        self.intermediate_textures.push(current.color_texture);
+        self.intermediate_views.push(current.color_view);
+        self.output = Some(SceneRenderOutput {
+            color_texture: processed_texture,
+            color_view: processed_view,
+            depth_texture: current.depth_texture,
+            width: current.width,
+            height: current.height,
+            graph_execution: empty_graph_execution(),
+        });
+        Ok(())
+    }
+
+    fn record_color_convert(
+        &mut self,
+        pass: &CompiledRenderPass,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), RenderGraphError> {
+        let current = self.take_output(pass)?;
+        let converted_texture = self.create_graph_color_texture(
+            "pbr_color_convert_rgba8_target",
+            &current,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        let converted_view = converted_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self
+            .renderer
+            .ctx
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("scene_color_convert_bg"),
+                layout: &self.renderer.color_convert_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current.color_view),
+                }],
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("scene_color_convert_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &converted_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            render_pass.set_pipeline(&self.renderer.color_convert_pipeline);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+
+        self.intermediate_textures.push(current.color_texture);
+        self.intermediate_views.push(current.color_view);
+        self.output = Some(SceneRenderOutput {
+            color_texture: converted_texture,
+            color_view: converted_view,
+            depth_texture: current.depth_texture,
+            width: current.width,
+            height: current.height,
+            graph_execution: empty_graph_execution(),
+        });
+        Ok(())
+    }
+
+    fn record_texture_copy(
+        &mut self,
+        pass: &CompiledRenderPass,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), RenderGraphError> {
+        let current = self.take_output(pass)?;
+        let copied_texture =
+            self.create_graph_color_texture(&pass.id.0, &current, current.color_texture.format());
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &current.color_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &copied_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: current.width,
+                height: current.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        let copied_view = copied_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.intermediate_textures.push(current.color_texture);
+        self.intermediate_views.push(current.color_view);
+        self.output = Some(SceneRenderOutput {
+            color_texture: copied_texture,
+            color_view: copied_view,
+            depth_texture: current.depth_texture,
+            width: current.width,
+            height: current.height,
+            graph_execution: empty_graph_execution(),
+        });
+        Ok(())
+    }
+
+    fn take_output(
+        &mut self,
+        pass: &CompiledRenderPass,
+    ) -> Result<SceneRenderOutput, RenderGraphError> {
+        self.output
+            .take()
+            .ok_or_else(|| RenderGraphError::Execution {
+                pass: pass.id.0.clone(),
+                error: "pass requires PBR color output".to_string(),
+            })
+    }
+
+    fn create_graph_color_texture(
+        &self,
+        label: &str,
+        current: &SceneRenderOutput,
+        format: wgpu::TextureFormat,
+    ) -> wgpu::Texture {
+        self.renderer
+            .ctx
+            .device()
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: current.width,
+                    height: current.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            })
+    }
+}
+
+fn default_pbr_viewport_descriptor() -> ViewportDescriptor {
+    ViewportDescriptor {
+        viewport_id: "main".to_string(),
+        scene_id: "default".to_string(),
+        render_mode: ViewportRenderMode::Pbr,
+        debug_view: None,
+        fps: 60,
+        tone_mapping: SceneToneMapping::Aces,
+        post_process: ViewportPostProcess::default(),
+        layer_mask: None,
+        work_mode: ViewportWorkMode::EditParametric,
+        helper_passes: true,
+    }
+}
+
+fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> PostProcessSettings {
+    PostProcessSettings {
+        tone_mapping: match descriptor.tone_mapping {
+            SceneToneMapping::Aces => ToneMapping::AcesFilmic,
+            SceneToneMapping::Reinhard => ToneMapping::Reinhard,
+            SceneToneMapping::None => ToneMapping::None,
+        },
+        bloom_intensity: if descriptor.post_process.bloom {
+            0.35
+        } else {
+            0.0
+        },
+        ..PostProcessSettings::default()
+    }
+}
+
+fn empty_graph_execution() -> SceneRenderGraphExecution {
+    SceneRenderGraphExecution {
+        variant: ViewportRenderGraphVariant::StandardPbr,
+        pass_ids: Vec::new(),
+        helper_passes: false,
+        post_process: false,
+        color_convert: false,
+        encoder_copy: false,
+    }
+}
+
 /// Pre-collected draw call data (owns model buffers, borrows mesh/material from cache)
 struct DrawCall<'a> {
     #[allow(dead_code)]
@@ -783,6 +1296,8 @@ struct DrawCall<'a> {
 pub enum PbrRenderError {
     #[error("No camera found in scene")]
     NoCamera,
+    #[error("RenderGraph failed: {0}")]
+    RenderGraph(#[from] RenderGraphError),
     #[error("Render failed: {0}")]
     RenderFailed(String),
 }

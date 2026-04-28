@@ -12,6 +12,7 @@
  * PTS and duration are in microseconds.
  */
 
+import type { AudioStreamDescriptor } from '@neko/shared';
 import { getLogger } from './utils/logger';
 
 const logger = getLogger('Audio');
@@ -55,6 +56,8 @@ function parsePcmPacket(data: ArrayBuffer): {
 export interface AudioStreamClientConfig {
   /** WebSocket URL for audio stream */
   websocketUrl: string;
+  /** Engine audio stream descriptor. */
+  descriptor?: AudioStreamDescriptor;
   /** Initial volume (0.0 - 1.0) */
   volume?: number;
   /** Fade-in duration in seconds (0 to disable) */
@@ -78,12 +81,21 @@ export interface AudioStreamStats {
   driftMs: number;
 }
 
+type NormalizedAudioStreamClientConfig = AudioStreamClientConfig & {
+  volume: number;
+  fadeInDuration: number;
+  fadeOutDuration: number;
+  onConnectionChange: (connected: boolean) => void;
+  onError: (error: Error) => void;
+  onStreamEnd: () => void;
+};
+
 // =============================================================================
 // AudioStreamClient
 // =============================================================================
 
 export class AudioStreamClient {
-  private config: Required<AudioStreamClientConfig>;
+  private config: NormalizedAudioStreamClientConfig;
   private ws: WebSocket | null = null;
   private audioCtx: AudioContext | null = null;
   private gainNode: GainNode | null = null;
@@ -141,8 +153,13 @@ export class AudioStreamClient {
   private static readonly DEFAULT_FADE_OUT = 0.15;
 
   constructor(config: AudioStreamClientConfig) {
+    if (config.descriptor) {
+      AudioStreamClient.validateDescriptor(config.descriptor);
+    }
+
     this.config = {
       websocketUrl: config.websocketUrl,
+      descriptor: config.descriptor,
       volume: config.volume ?? 1.0,
       fadeInDuration: config.fadeInDuration ?? AudioStreamClient.DEFAULT_FADE_IN,
       fadeOutDuration: config.fadeOutDuration ?? AudioStreamClient.DEFAULT_FADE_OUT,
@@ -150,6 +167,18 @@ export class AudioStreamClient {
       onError: config.onError ?? (() => {}),
       onStreamEnd: config.onStreamEnd ?? (() => {}),
     };
+  }
+
+  static validateDescriptor(descriptor: AudioStreamDescriptor): void {
+    if (descriptor.codec !== 'pcm-f32le') {
+      throw new Error(`Unsupported audio stream codec: ${String(descriptor.codec)}`);
+    }
+    if (descriptor.frameHeader !== 'neko-pcm-v1') {
+      throw new Error(`Unsupported audio frame header: ${String(descriptor.frameHeader)}`);
+    }
+    if (descriptor.sampleRate <= 0 || descriptor.channels <= 0) {
+      throw new Error('Invalid audio stream sample rate or channel count');
+    }
   }
 
   // =========================================================================
@@ -169,7 +198,9 @@ export class AudioStreamClient {
     if (existingAudioCtx) {
       this.audioCtx = existingAudioCtx;
     } else {
-      this.audioCtx = new AudioContext({ sampleRate: 48000 });
+      this.audioCtx = new AudioContext({
+        sampleRate: this.config.descriptor?.sampleRate ?? 48000,
+      });
     }
 
     this.gainNode = this.audioCtx.createGain();

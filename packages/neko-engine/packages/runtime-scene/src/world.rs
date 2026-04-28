@@ -3,12 +3,19 @@
 //! Isolates bevy_ecs API details behind a stable interface.
 
 use crate::animation_blend::{
-    SceneAnimationBlendState, SceneBlendLayer, SceneBlendLayerInfo, SceneCrossfadeRequest,
+    SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneBlendLayerInfo,
+    SceneCrossfadeRequest,
 };
 use crate::components::*;
 use crate::hierarchy;
 use crate::ik::{self, IkChain, IkChainInfo, IkSolverType};
 use crate::loader::{self, LoadError, LoadResult};
+use crate::modeling_session::{ModelingSessionStateDelta, TopologyChangeEvent};
+use crate::scene_control::{
+    advance_scene_revision, ensure_scene_control_resources, extract_scene_delta,
+    mark_morph_weights_dirty, mark_node_removed, mark_transform_dirty, mark_visibility_dirty,
+    rebuild_node_index,
+};
 use crate::systems;
 use bevy_ecs::prelude::*;
 use glam::Vec3;
@@ -51,8 +58,19 @@ pub struct AnimationClipInfo {
 /// Delta change from a scene tick
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneDelta {
+    pub revision: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied_seq: Option<u64>,
     pub updated_transforms: Vec<TransformUpdate>,
     pub updated_morph_weights: Vec<MorphWeightsUpdate>,
+    pub updated_visibility: Vec<VisibilityUpdate>,
+    pub removed_nodes: Vec<String>,
+    pub updated_character_morph_weights: Vec<CharacterMorphWeightsUpdate>,
+    pub updated_character_materials: Vec<CharacterMaterialUpdate>,
+    pub updated_skeleton_pose: Vec<CharacterSkeletonPoseUpdate>,
+    pub character_overrides: Vec<CharacterOverrideUpdate>,
+    pub modeling_sessions: Vec<ModelingSessionStateDelta>,
+    pub topology_changes: Vec<TopologyChangeEvent>,
 }
 
 /// A single transform update
@@ -69,6 +87,42 @@ pub struct TransformUpdate {
 pub struct MorphWeightsUpdate {
     pub node_id: String,
     pub weights: Vec<f32>,
+}
+
+/// Visibility update for a single scene node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VisibilityUpdate {
+    pub node_id: String,
+    pub visible: bool,
+}
+
+/// Morph weight update for one editable character.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterMorphWeightsUpdate {
+    pub character_id: String,
+    pub weights: Vec<CharacterMorphWeight>,
+    pub topology_version: u64,
+}
+
+/// Material layer update for one editable character.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterMaterialUpdate {
+    pub character_id: String,
+    pub layers: Vec<CharacterMaterialLayer>,
+}
+
+/// Skeleton pose update for one editable character.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterSkeletonPoseUpdate {
+    pub character_id: String,
+    pub bones: Vec<CharacterBonePose>,
+}
+
+/// Override update for one editable character.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterOverrideUpdate {
+    pub character_id: String,
+    pub overrides: Vec<CharacterOverrideState>,
 }
 
 /// Abstraction for scene management operations
@@ -180,14 +234,66 @@ pub struct BevySceneWorld {
 
 impl BevySceneWorld {
     pub fn new() -> Self {
-        Self {
-            world: World::new(),
-        }
+        let mut world = World::new();
+        ensure_scene_control_resources(&mut world);
+        Self { world }
     }
 
     /// Access the inner ECS World (for GPU rendering queries)
     pub fn ecs_world_mut(&mut self) -> &mut World {
         &mut self.world
+    }
+
+    fn write_playback_state(
+        &mut self,
+        clip_name: &str,
+        time_cursor: f32,
+        playing: bool,
+        looping: bool,
+    ) {
+        let Some(entity) = self.playback_state_entity() else {
+            return;
+        };
+        let duration = self.clip_duration(clip_name).unwrap_or(0.0);
+        let evaluated_time = if duration > 0.0 {
+            time_cursor % duration
+        } else {
+            0.0
+        };
+
+        self.world
+            .entity_mut(entity)
+            .insert(SceneAnimationPlaybackState {
+                clip_name: Some(clip_name.to_string()),
+                time_cursor,
+                evaluated_time,
+                playing,
+                looping,
+            });
+    }
+
+    fn playback_state_entity(&mut self) -> Option<Entity> {
+        let root = {
+            let mut query = self.world.query_filtered::<Entity, With<SceneRoot>>();
+            query.iter(&self.world).next()
+        };
+        if root.is_some() {
+            return root;
+        }
+
+        let mut query = self.world.query_filtered::<Entity, With<AnimationTarget>>();
+        query.iter(&self.world).next()
+    }
+
+    fn clip_duration(&mut self, clip_name: &str) -> Option<f32> {
+        let mut query = self.world.query::<&AnimationTarget>();
+        query.iter(&self.world).find_map(|target| {
+            target
+                .clips
+                .iter()
+                .find(|clip| clip.name == clip_name)
+                .map(|clip| clip.duration)
+        })
     }
 
     /// Find the entity + clip by clip name within AnimationTarget components
@@ -222,7 +328,10 @@ impl Default for BevySceneWorld {
 
 impl SceneWorld for BevySceneWorld {
     fn load_model(&mut self, path: &Path) -> Result<LoadResult, LoadError> {
-        loader::load_gltf(&mut self.world, path)
+        let result = loader::load_gltf(&mut self.world, path)?;
+        rebuild_node_index(&mut self.world);
+        advance_scene_revision(&mut self.world);
+        Ok(result)
     }
 
     fn get_snapshot(&mut self) -> SceneSnapshot {
@@ -295,6 +404,8 @@ impl SceneWorld for BevySceneWorld {
 
         // Re-propagate transforms
         systems::transform_propagation(&mut self.world);
+        mark_transform_dirty(&mut self.world, node_id);
+        advance_scene_revision(&mut self.world);
 
         Ok(())
     }
@@ -302,6 +413,7 @@ impl SceneWorld for BevySceneWorld {
     fn tick(&mut self, clip_name: &str, time: f32) -> SceneDelta {
         // Advance animation
         systems::animation_tick(&mut self.world, clip_name, time);
+        self.write_playback_state(clip_name, time, true, true);
 
         // Propagate transforms
         systems::transform_propagation(&mut self.world);
@@ -328,10 +440,17 @@ impl SceneWorld for BevySceneWorld {
             });
         }
 
-        SceneDelta {
-            updated_transforms,
-            updated_morph_weights,
+        for update in &updated_transforms {
+            mark_transform_dirty(&mut self.world, &update.node_id);
         }
+        for update in &updated_morph_weights {
+            mark_morph_weights_dirty(&mut self.world, &update.node_id);
+        }
+        if !updated_transforms.is_empty() || !updated_morph_weights.is_empty() {
+            advance_scene_revision(&mut self.world);
+        }
+
+        extract_scene_delta(&mut self.world, None)
     }
 
     fn get_animation_clips(&mut self) -> Vec<AnimationClipInfo> {
@@ -390,6 +509,8 @@ impl SceneWorld for BevySceneWorld {
 
         // Propagate transforms
         systems::transform_propagation(&mut self.world);
+        rebuild_node_index(&mut self.world);
+        advance_scene_revision(&mut self.world);
     }
 
     fn get_keyframe_tracks(
@@ -557,6 +678,8 @@ impl SceneWorld for BevySceneWorld {
             fade_elapsed: 0.0,
             loop_anim,
         });
+
+        self.write_playback_state(clip_name, 0.0, true, loop_anim);
 
         Ok(())
     }
@@ -749,6 +872,8 @@ impl SceneWorld for BevySceneWorld {
         } else {
             self.world.entity_mut(entity).insert(Visible(visible));
         }
+        mark_visibility_dirty(&mut self.world, node_id);
+        advance_scene_revision(&mut self.world);
         Ok(())
     }
 
@@ -795,9 +920,22 @@ impl SceneWorld for BevySceneWorld {
         }
 
         // Despawn all collected entities (children first to avoid dangling refs)
+        let removed_node_ids: Vec<String> = to_despawn
+            .iter()
+            .filter_map(|entity| {
+                self.world
+                    .get::<SceneNodeId>(*entity)
+                    .map(|id| id.0.clone())
+            })
+            .collect();
         for e in to_despawn.into_iter().rev() {
             self.world.despawn(e);
         }
+        for node_id in removed_node_ids {
+            mark_node_removed(&mut self.world, &node_id);
+        }
+        rebuild_node_index(&mut self.world);
+        advance_scene_revision(&mut self.world);
 
         Ok(())
     }
@@ -891,5 +1029,49 @@ mod tests {
         let mut world = BevySceneWorld::default();
         let snapshot = world.get_snapshot();
         assert!(snapshot.nodes.is_empty());
+    }
+
+    #[test]
+    fn tick_writes_engine_playback_state_and_evaluated_pose() {
+        let mut scene = BevySceneWorld::new();
+        let (root, target) = {
+            let ecs = scene.ecs_world_mut();
+            let target = ecs
+                .spawn((
+                    SceneNodeId("node_0".to_string()),
+                    NodeName("Target".to_string()),
+                    Transform::default(),
+                    GlobalTransform::identity(),
+                ))
+                .id();
+            let clip = AnimationClipData {
+                name: "Move".to_string(),
+                duration: 1.0,
+                channels: vec![AnimationChannel::from_flat(
+                    "node_0".to_string(),
+                    AnimationProperty::Translation,
+                    &[0.0, 1.0],
+                    &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                )],
+            };
+            let root = ecs
+                .spawn((SceneRoot, AnimationTarget { clips: vec![clip] }))
+                .id();
+            (root, target)
+        };
+
+        scene.tick("Move", 1.25);
+
+        let ecs = scene.ecs_world_mut();
+        let state = ecs
+            .get::<SceneAnimationPlaybackState>(root)
+            .expect("playback state is stored in ECS");
+        assert_eq!(state.clip_name.as_deref(), Some("Move"));
+        assert!((state.time_cursor - 1.25).abs() < f32::EPSILON);
+        assert!((state.evaluated_time - 0.25).abs() < f32::EPSILON);
+        assert!(state.playing);
+
+        let transform = ecs.get::<Transform>(target).unwrap();
+        assert!((transform.position.x - 0.25).abs() < f32::EPSILON);
     }
 }
