@@ -15,6 +15,9 @@ import {
   TEMPERATURE_FRAG,
   GLOW_FRAG,
   FILM_GRAIN_FRAG,
+  HALFTONE_FRAG,
+  GRADIENT_MAP_FRAG,
+  SSAO_FRAG,
 } from './filter-shaders';
 
 const BUILTIN_FILTERS: readonly FilterDef[] = [
@@ -191,6 +194,35 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
     fragmentShader: TEMPERATURE_FRAG,
   },
   {
+    id: 'gradient-map',
+    name: 'sketch.filter.gradientMap',
+    category: 'color',
+    params: [
+      {
+        name: 'u_shadowColor',
+        label: 'sketch.filter.param.shadowColor',
+        type: 'color',
+        default: [0.07, 0.07, 0.09, 1],
+      },
+      {
+        name: 'u_highlightColor',
+        label: 'sketch.filter.param.highlightColor',
+        type: 'color',
+        default: [1, 0.85, 0.45, 1],
+      },
+      {
+        name: 'u_amount',
+        label: 'sketch.filter.param.amount',
+        type: 'float',
+        default: 1,
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+    ],
+    fragmentShader: GRADIENT_MAP_FRAG,
+  },
+  {
     id: 'glow',
     name: 'sketch.filter.glow',
     category: 'stylize',
@@ -232,6 +264,76 @@ const BUILTIN_FILTERS: readonly FilterDef[] = [
       },
     ],
     fragmentShader: FILM_GRAIN_FRAG,
+  },
+  {
+    id: 'halftone',
+    name: 'sketch.filter.halftone',
+    category: 'stylize',
+    params: [
+      {
+        name: 'u_cellSize',
+        label: 'sketch.filter.param.cellSize',
+        type: 'float',
+        default: 8,
+        min: 2,
+        max: 64,
+        step: 1,
+      },
+      {
+        name: 'u_angle',
+        label: 'sketch.filter.param.angle',
+        type: 'float',
+        default: 0,
+        min: -3.14,
+        max: 3.14,
+        step: 0.01,
+      },
+      {
+        name: 'u_amount',
+        label: 'sketch.filter.param.amount',
+        type: 'float',
+        default: 1,
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+    ],
+    fragmentShader: HALFTONE_FRAG,
+  },
+  {
+    id: 'ssao',
+    name: 'sketch.filter.ssao',
+    category: 'stylize',
+    params: [
+      {
+        name: 'u_radius',
+        label: 'sketch.filter.param.radius',
+        type: 'float',
+        default: 8,
+        min: 1,
+        max: 48,
+        step: 1,
+      },
+      {
+        name: 'u_intensity',
+        label: 'sketch.filter.param.intensity',
+        type: 'float',
+        default: 0.8,
+        min: 0,
+        max: 2,
+        step: 0.05,
+      },
+      {
+        name: 'u_bias',
+        label: 'sketch.filter.param.bias',
+        type: 'float',
+        default: 0.04,
+        min: 0,
+        max: 0.25,
+        step: 0.005,
+      },
+    ],
+    fragmentShader: SSAO_FRAG,
   },
 ];
 

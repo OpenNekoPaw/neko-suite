@@ -5,7 +5,11 @@
  * new raster layers with the image dimensions.
  */
 import type { LayerData } from '../types';
-import { generateLayerId } from '../layer';
+import {
+  createRasterLayerFromBase64,
+  createRasterLayerFromBlob,
+  isImageMimeType,
+} from './raster-source';
 
 /**
  * Create a LayerData from a base64-encoded image.
@@ -16,15 +20,8 @@ export async function importImageAsLayer(
   base64Data: string,
   mimeType?: string,
 ): Promise<{ layer: LayerData; bitmap: ImageBitmap }> {
-  const mime = mimeType ?? guessMimeType(name);
-  const binary = atob(base64Data);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  const blob = new Blob([bytes], { type: mime });
-  return importImageFromBlob(blob, name);
+  const { layer } = await createRasterLayerFromBase64(name, base64Data, mimeType);
+  return { layer, bitmap: await pendingLayerToBitmap(layer) };
 }
 
 /**
@@ -35,69 +32,22 @@ export async function importImageFromBlob(
   blob: Blob,
   name: string,
 ): Promise<{ layer: LayerData; bitmap: ImageBitmap }> {
-  const bitmap = await createImageBitmap(blob);
-
-  const layer: LayerData = buildLayerData(
-    blob instanceof File ? stripExtension(blob.name) : stripExtension(name),
-    bitmap.width,
-    bitmap.height,
-  );
-
-  return { layer, bitmap };
+  const { layer } = await createRasterLayerFromBlob(blob, {
+    name: blob instanceof File ? blob.name : name,
+  });
+  return { layer, bitmap: await pendingLayerToBitmap(layer) };
 }
 
-/** Supported image MIME types for import validation */
-const IMAGE_MIME_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'image/bmp',
-  'image/svg+xml',
-]);
+export { isImageMimeType };
 
-/** Check if a MIME type represents an importable image */
-export function isImageMimeType(mimeType: string): boolean {
-  return IMAGE_MIME_TYPES.has(mimeType);
-}
-
-/** Build a raster LayerData with common defaults */
-function buildLayerData(name: string, width: number, height: number): LayerData {
-  return {
-    id: generateLayerId(),
-    name,
-    type: 'raster',
-    visible: true,
-    locked: false,
-    opacity: 1.0,
-    blendMode: 'normal',
-    width,
-    height,
-    offsetX: 0,
-    offsetY: 0,
-    clippingMask: false,
-    maskLayerId: null,
-    children: [],
-    texture: null, // Will be uploaded by renderer
-    alphaLock: false,
-  };
-}
-
-function guessMimeType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  const map: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    bmp: 'image/bmp',
-    svg: 'image/svg+xml',
-  };
-  return map[ext] ?? 'image/png';
-}
-
-function stripExtension(name: string): string {
-  const dot = name.lastIndexOf('.');
-  return dot > 0 ? name.substring(0, dot) : name;
+async function pendingLayerToBitmap(layer: LayerData): Promise<ImageBitmap> {
+  if (!layer.pendingData) {
+    throw new Error('Imported raster layer has no pending pixel data');
+  }
+  const binary = atob(layer.pendingData);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return createImageBitmap(new Blob([bytes], { type: 'image/png' }));
 }

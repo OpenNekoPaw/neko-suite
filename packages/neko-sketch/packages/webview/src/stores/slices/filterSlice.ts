@@ -4,7 +4,7 @@
  * Manages applied filters per layer: add, remove, reorder, toggle, update params.
  */
 import type { StateCreator } from 'zustand';
-import type { AppliedFilter } from '../../types/filter';
+import type { AppliedFilter, FilterParamValue } from '../../types/filter';
 
 let filterCounter = 0;
 
@@ -13,16 +13,9 @@ export interface FilterSlice {
   filters: AppliedFilter[];
 
   // ── Actions ──
-  addFilter: (
-    filterId: string,
-    params?: Record<string, number | boolean | [number, number] | [number, number, number, number]>,
-  ) => void;
+  addFilter: (filterId: string, params?: Record<string, FilterParamValue>) => void;
   removeFilter: (id: string) => void;
-  updateFilterParam: (
-    id: string,
-    paramName: string,
-    value: number | boolean | [number, number] | [number, number, number, number],
-  ) => void;
+  updateFilterParam: (id: string, paramName: string, value: FilterParamValue) => void;
   reorderFilter: (fromIndex: number, toIndex: number) => void;
   toggleFilter: (id: string) => void;
   clearFilters: () => void;

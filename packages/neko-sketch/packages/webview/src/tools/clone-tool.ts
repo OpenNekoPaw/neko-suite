@@ -36,6 +36,21 @@ export function cloneStamp(
   radius: number,
   hardness: number,
 ): void {
+  cloneStampFromSource(imageData, imageData, w, h, dstX, dstY, offsetX, offsetY, radius, hardness);
+}
+
+export function cloneStampFromSource(
+  targetData: Uint8ClampedArray,
+  sourceData: Uint8ClampedArray,
+  w: number,
+  h: number,
+  dstX: number,
+  dstY: number,
+  offsetX: number,
+  offsetY: number,
+  radius: number,
+  hardness: number,
+): void {
   const srcCX = Math.round(dstX + offsetX);
   const srcCY = Math.round(dstY + offsetY);
   const r = Math.ceil(radius);
@@ -64,9 +79,9 @@ export function cloneStamp(
 
       // Blend source over destination with brush alpha
       for (let c = 0; c < 4; c++) {
-        const src = imageData[si + c]!;
-        const dst = imageData[di + c]!;
-        imageData[di + c] = Math.round(dst + (src - dst) * alpha);
+        const src = sourceData[si + c]!;
+        const dst = targetData[di + c]!;
+        targetData[di + c] = Math.round(dst + (src - dst) * alpha);
       }
     }
   }

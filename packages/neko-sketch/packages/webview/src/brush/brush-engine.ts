@@ -10,6 +10,7 @@ import type { IRenderPipeline } from '../engine/types';
 import { interpolateStroke } from './stroke-interpolator';
 import { pressureToSize, pressureToOpacity } from './pressure-mapper';
 import { BRUSH_PROFILES } from './brush-profiles';
+import { getTextureStampPatternIndex } from './texture-stamp';
 
 export interface IBrushEngine {
   beginStroke(
@@ -20,6 +21,7 @@ export interface IBrushEngine {
     height: number,
     alphaLock?: boolean,
     symmetry?: SymmetryConfig | null,
+    stampTexture?: WebGLTexture | null,
   ): void;
   addPoint(point: StrokePoint): void;
   endStroke(): StrokeResult | null;
@@ -36,6 +38,7 @@ export class BrushEngine implements IBrushEngine {
   private active = false;
   private alphaLock = false;
   private symmetry: SymmetryConfig | null = null;
+  private stampTexture: WebGLTexture | null = null;
   private bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
   constructor(pipeline: IRenderPipeline) {
@@ -50,11 +53,13 @@ export class BrushEngine implements IBrushEngine {
     height: number,
     alphaLock = false,
     symmetry?: SymmetryConfig | null,
+    stampTexture: WebGLTexture | null = null,
   ): void {
     this.points = [point];
     this.settings = settings;
     this.alphaLock = alphaLock;
     this.symmetry = symmetry && symmetry.mode !== 'none' ? symmetry : null;
+    this.stampTexture = stampTexture;
     this.layerFBO = layerFBO;
     this.fboWidth = width;
     this.fboHeight = height;
@@ -114,6 +119,8 @@ export class BrushEngine implements IBrushEngine {
 
     const profile = BRUSH_PROFILES[this.settings.type];
     const color = hexToRGBA(this.settings.color, this.settings.opacity);
+    const stampPattern =
+      this.settings.type === 'stamp' ? getTextureStampPatternIndex(this.settings.stampPattern) : 0;
 
     // Convert to Float32Array (x, y, pressure, tiltX, tiltY) per point
     const data = new Float32Array(points.length * 5);
@@ -150,6 +157,8 @@ export class BrushEngine implements IBrushEngine {
       this.fboHeight,
       this.settings.hardness,
       this.alphaLock,
+      stampPattern,
+      this.stampTexture,
     );
   }
 
@@ -168,6 +177,7 @@ export class BrushEngine implements IBrushEngine {
     this.fboWidth = 0;
     this.fboHeight = 0;
     this.active = false;
+    this.stampTexture = null;
     this.bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
 }

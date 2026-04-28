@@ -7,12 +7,17 @@
 // ─── Filter Parameter Types ───
 
 export type FilterParamType = 'float' | 'int' | 'bool' | 'vec2' | 'color';
+export type FilterParamValue =
+  | number
+  | boolean
+  | [number, number]
+  | [number, number, number, number];
 
 export interface FilterParam {
   readonly name: string;
   readonly label: string;
   readonly type: FilterParamType;
-  readonly default: number | boolean | [number, number] | [number, number, number, number];
+  readonly default: FilterParamValue;
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
@@ -35,9 +40,6 @@ export interface FilterDef {
 export interface AppliedFilter {
   readonly id: string;
   readonly filterId: string;
-  readonly params: Record<
-    string,
-    number | boolean | [number, number] | [number, number, number, number]
-  >;
+  readonly params: Record<string, FilterParamValue>;
   readonly enabled: boolean;
 }

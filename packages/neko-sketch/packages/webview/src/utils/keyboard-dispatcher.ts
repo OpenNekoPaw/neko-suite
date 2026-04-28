@@ -5,6 +5,9 @@
  * to Zustand store operations.
  */
 import type { SketchStore } from '../stores/sketch-store';
+import type { HistoryStateSnapshot, LayerData } from '../types';
+import { deleteVectorSelection } from '../tools/vector-editing';
+import { extractRegionSnapshot, findChangedPixelBounds } from './region-snapshot';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -28,11 +31,11 @@ export function dispatchKeyboardAction(
 
   switch (action) {
     case 'undo':
-      store.undo();
+      notifyHistoryReplay(store.undo(), 'undo', vscode);
       break;
 
     case 'redo':
-      store.redo();
+      notifyHistoryReplay(store.redo(), 'redo', vscode);
       break;
 
     case 'selectAll':
@@ -40,7 +43,13 @@ export function dispatchKeyboardAction(
       break;
 
     case 'deleteSelected':
-      deleteSelectedRegion(store);
+      if (deleteSelectedVectorGeometry(store)) {
+        notifyVectorEdit(vscode, 'Delete vector selection');
+        break;
+      }
+      if (deleteSelectedRegion(store)) {
+        notifyPixelEdit(vscode, 'Delete selection');
+      }
       break;
 
     case 'escape':
@@ -94,6 +103,18 @@ export function dispatchKeyboardAction(
       store.resetViewport();
       break;
 
+    case 'rotateViewLeft':
+      store.rotateViewportBy(-Math.PI / 12);
+      break;
+
+    case 'rotateViewRight':
+      store.rotateViewportBy(Math.PI / 12);
+      break;
+
+    case 'resetRotation':
+      store.resetViewportRotation();
+      break;
+
     case 'import':
       vscode.postMessage({ type: 'file:import' });
       break;
@@ -116,30 +137,128 @@ export function dispatchKeyboardAction(
   }
 }
 
+function deleteSelectedVectorGeometry(store: SketchStore): boolean {
+  if (store.activeTool !== 'vector' || !store.activeLayerId) {
+    return false;
+  }
+
+  const layer = findLayerById(store.layers, store.activeLayerId);
+  if (!layer || layer.type !== 'vector' || layer.locked || !layer.vectorData) {
+    return false;
+  }
+
+  const result = deleteVectorSelection(layer.vectorData);
+  if (!result.deleted) {
+    return false;
+  }
+
+  const before = captureLayerStateSnapshot(store.layers, store.activeLayerId);
+  const nextLayers = updateLayerById(store.layers, layer.id, (item) => ({
+    ...item,
+    vectorData: result.layerData,
+  }));
+  const after = captureLayerStateSnapshot(nextLayers, store.activeLayerId);
+  store.setLayers(nextLayers);
+  store.pushHistory({
+    type: 'clear',
+    label: 'Delete vector selection',
+    snapshot: null,
+    stateSnapshot: { before, after },
+  });
+  store.markDirty();
+  return true;
+}
+
+function captureLayerStateSnapshot(
+  layers: readonly LayerData[],
+  activeLayerId: string | null,
+): HistoryStateSnapshot {
+  return {
+    layers: layers.map(cloneLayerForHistory),
+    activeLayerId,
+  };
+}
+
+function cloneLayerForHistory(layer: LayerData): LayerData {
+  return {
+    ...layer,
+    children: layer.children.map(cloneLayerForHistory),
+  };
+}
+
+function findLayerById(layers: readonly LayerData[], layerId: string): LayerData | null {
+  for (const layer of layers) {
+    if (layer.id === layerId) {
+      return layer;
+    }
+    const child = findLayerById(layer.children, layerId);
+    if (child) {
+      return child;
+    }
+  }
+  return null;
+}
+
+function updateLayerById(
+  layers: readonly LayerData[],
+  layerId: string,
+  update: (layer: LayerData) => LayerData,
+): LayerData[] {
+  return layers.map((layer) => {
+    if (layer.id === layerId) {
+      return update(layer);
+    }
+    return { ...layer, children: updateLayerById(layer.children, layerId, update) };
+  });
+}
+
+function notifyHistoryReplay(
+  entry: ReturnType<SketchStore['undo']>,
+  direction: 'undo' | 'redo',
+  vscode: VsCodeApi,
+): void {
+  if (!entry || (!entry.stateSnapshot && !entry.snapshot)) {
+    return;
+  }
+  vscode.postMessage({
+    type: 'operationApplied',
+    operation: {
+      type: `sketch.history.${direction}`,
+      meta: {
+        id: `sketch-history-${direction}-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'user',
+        description: `${direction}: ${entry.label}`,
+      },
+      payload: { historyEntryId: entry.id, actionType: entry.type },
+    },
+  });
+}
+
 /**
  * Clear pixels in the selected region on the active layer.
  * Writes transparent pixels to the WebGL texture via the canvas 2D fallback.
  */
-function deleteSelectedRegion(store: SketchStore): void {
+function deleteSelectedRegion(store: SketchStore): boolean {
   const { selection, activeLayerId, layers } = store;
-  if (!selection || !activeLayerId) return;
+  if (!selection || !activeLayerId) return false;
 
   const layer = layers.find((l) => l.id === activeLayerId);
-  if (!layer || layer.locked || !layer.texture) return;
+  if (!layer || layer.locked || !layer.texture) return false;
 
   // Get the WebGL canvas to access the GL context
   const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
-  if (!canvas) return;
+  if (!canvas) return false;
 
   const gl = canvas.getContext('webgl2');
-  if (!gl) return;
+  if (!gl) return false;
 
   // Build a transparent pixel buffer for the full layer, zeroing selected pixels
   const { width, height, data } = selection;
 
   // Create a temporary FBO to read/write the layer texture
   const fbo = gl.createFramebuffer();
-  if (!fbo) return;
+  if (!fbo) return false;
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.texture, 0);
@@ -147,6 +266,7 @@ function deleteSelectedRegion(store: SketchStore): void {
   // Read existing pixels
   const existing = new Uint8Array(width * height * 4);
   gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, existing);
+  const beforePixels = new Uint8Array(existing);
 
   // Zero out selected pixels
   for (let i = 0; i < data.length; i++) {
@@ -160,6 +280,23 @@ function deleteSelectedRegion(store: SketchStore): void {
   }
 
   // Write back
+  const changedBounds = findChangedPixelBounds(beforePixels, existing, width, height);
+  if (!changedBounds) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    return false;
+  }
+
+  const before = extractRegionSnapshot(activeLayerId, beforePixels, width, height, changedBounds);
+  const after = extractRegionSnapshot(activeLayerId, existing, width, height, changedBounds);
+  if (before && after) {
+    store.pushHistory({
+      type: 'clear',
+      label: 'Delete selection',
+      snapshot: { before, after },
+    });
+  }
+
   gl.bindTexture(gl.TEXTURE_2D, layer.texture);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, existing);
   gl.bindTexture(gl.TEXTURE_2D, null);
@@ -168,6 +305,39 @@ function deleteSelectedRegion(store: SketchStore): void {
   gl.deleteFramebuffer(fbo);
 
   store.markDirty();
+  return true;
+}
+
+function notifyPixelEdit(vscode: VsCodeApi, description: string): void {
+  vscode.postMessage({
+    type: 'operationApplied',
+    operation: {
+      type: 'sketch.pixel.edit',
+      meta: {
+        id: `sketch-pixel-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'user',
+        description,
+      },
+      payload: {},
+    },
+  });
+}
+
+function notifyVectorEdit(vscode: VsCodeApi, description: string): void {
+  vscode.postMessage({
+    type: 'operationApplied',
+    operation: {
+      type: 'sketch.vector.edit',
+      meta: {
+        id: `sketch-vector-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'user',
+        description,
+      },
+      payload: {},
+    },
+  });
 }
 
 function cycleBrushSize(store: SketchStore): void {

@@ -20,6 +20,10 @@ function toStrokePoint(e: PointerEvent, canvas: HTMLCanvasElement): StrokePoint 
     tiltX: e.tiltX,
     tiltY: e.tiltY,
     timestamp: e.timeStamp,
+    shiftKey: e.shiftKey,
+    ctrlKey: e.ctrlKey,
+    metaKey: e.metaKey,
+    altKey: e.altKey,
   };
 }
 

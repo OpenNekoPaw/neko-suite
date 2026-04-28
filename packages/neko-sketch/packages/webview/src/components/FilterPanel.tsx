@@ -7,7 +7,7 @@ import { useCallback } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { FilterRegistry } from '../engine/filter-registry';
-import type { FilterCategory, FilterDef } from '../types/filter';
+import type { FilterCategory, FilterDef, FilterParamValue } from '../types/filter';
 import { BUILTIN_PRESETS } from '../types/filter-preset';
 
 const registry = new FilterRegistry();
@@ -18,6 +18,43 @@ const CATEGORY_KEYS: Record<FilterCategory, string> = {
   distort: 'sketch.filter.category.distort',
   stylize: 'sketch.filter.category.stylize',
 };
+
+function isRgbaTuple(
+  value: FilterParamValue | undefined,
+): value is [number, number, number, number] {
+  return (
+    Array.isArray(value) && value.length === 4 && value.every((item) => typeof item === 'number')
+  );
+}
+
+function resolveRgbaValue(
+  value: FilterParamValue | undefined,
+  fallback: FilterParamValue,
+): [number, number, number, number] {
+  if (isRgbaTuple(value)) return value;
+  if (isRgbaTuple(fallback)) return fallback;
+  return [0, 0, 0, 1];
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function rgbaToHex(color: [number, number, number, number]): string {
+  const toHex = (component: number) =>
+    Math.round(clamp01(component) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toHex(color[0])}${toHex(color[1])}${toHex(color[2])}`;
+}
+
+function hexToRgba(hex: string, alpha: number): [number, number, number, number] {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return [0, 0, 0, alpha];
+  const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
+  const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
+  const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b, clamp01(alpha)];
+}
 
 export function FilterPanel() {
   const { t } = useTranslation();
@@ -33,10 +70,7 @@ export function FilterPanel() {
       if (!filterId) return;
       const def = registry.get(filterId);
       if (!def) return;
-      const defaults: Record<
-        string,
-        number | boolean | [number, number] | [number, number, number, number]
-      > = {};
+      const defaults: Record<string, FilterParamValue> = {};
       for (const p of def.params) {
         defaults[p.name] = p.default;
       }
@@ -123,15 +157,11 @@ export function FilterPanel() {
 interface FilterItemProps {
   id: string;
   def: FilterDef;
-  params: Record<string, number | boolean | [number, number] | [number, number, number, number]>;
+  params: Record<string, FilterParamValue>;
   enabled: boolean;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
-  onUpdateParam: (
-    id: string,
-    name: string,
-    value: number | boolean | [number, number] | [number, number, number, number],
-  ) => void;
+  onUpdateParam: (id: string, name: string, value: FilterParamValue) => void;
 }
 
 function FilterItem({
@@ -169,6 +199,8 @@ function FilterItem({
         def.params.map((p) => {
           const val = params[p.name] ?? p.default;
           if (p.type === 'float' || p.type === 'int') {
+            const numericValue =
+              typeof val === 'number' ? val : typeof p.default === 'number' ? p.default : 0;
             return (
               <div key={p.name} className="flex items-center gap-1 text-[10px]">
                 <span className="w-16 opacity-60 truncate">{t(p.label)}</span>
@@ -177,7 +209,7 @@ function FilterItem({
                   min={p.min ?? 0}
                   max={p.max ?? 1}
                   step={p.step ?? 0.01}
-                  value={val as number}
+                  value={numericValue}
                   onChange={(e) =>
                     onUpdateParam(
                       id,
@@ -188,7 +220,26 @@ function FilterItem({
                   className="flex-1 h-3"
                   aria-label={t(p.label)}
                 />
-                <span className="w-8 text-right tabular-nums">{(val as number).toFixed(2)}</span>
+                <span className="w-8 text-right tabular-nums">{numericValue.toFixed(2)}</span>
+              </div>
+            );
+          }
+          if (p.type === 'color') {
+            const color = resolveRgbaValue(val, p.default);
+            const hex = rgbaToHex(color);
+            return (
+              <div key={p.name} className="flex items-center gap-1 text-[10px]">
+                <span className="w-16 opacity-60 truncate">{t(p.label)}</span>
+                <input
+                  type="color"
+                  value={hex}
+                  onChange={(e) => onUpdateParam(id, p.name, hexToRgba(e.target.value, color[3]))}
+                  className="w-8 h-5 p-0 border border-[var(--vscode-input-border)] bg-transparent"
+                  aria-label={t(p.label)}
+                />
+                <span className="flex-1 text-right tabular-nums opacity-70">
+                  {hex.toUpperCase()}
+                </span>
               </div>
             );
           }

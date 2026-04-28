@@ -4,7 +4,7 @@
  * Default settings and dab generation for each brush type.
  * Each brush produces a circular dab with type-specific characteristics.
  */
-import type { BrushType, BrushSettings } from '../types';
+import type { BrushType, BrushSettings, TextureStampPattern } from '../types';
 import type { PressureCurveType } from './pressure-mapper';
 
 /** Brush-specific configuration */
@@ -19,6 +19,7 @@ export interface BrushProfile {
   readonly minSizeFraction: number;
   readonly minOpacityFraction: number;
   readonly accumulative: boolean; // true = opacity builds up per dab
+  readonly defaultStampPattern?: TextureStampPattern;
 }
 
 export const BRUSH_PROFILES: Record<BrushType, BrushProfile> = {
@@ -106,6 +107,19 @@ export const BRUSH_PROFILES: Record<BrushType, BrushProfile> = {
     minOpacityFraction: 1.0,
     accumulative: false,
   },
+  stamp: {
+    type: 'stamp',
+    label: 'Texture Stamp',
+    defaultSize: 48,
+    defaultOpacity: 0.85,
+    defaultHardness: 0.55,
+    defaultSpacing: 0.65,
+    pressureCurve: 'firm',
+    minSizeFraction: 0.45,
+    minOpacityFraction: 0.2,
+    accumulative: false,
+    defaultStampPattern: 'grain',
+  },
 };
 
 /** Get default BrushSettings for a brush type */
@@ -120,5 +134,7 @@ export function getDefaultBrushSettings(type: BrushType, color = '#000000'): Bru
     color,
     pressureSizeEnabled: true,
     pressureOpacityEnabled: type !== 'pixel',
+    stampPattern: profile.defaultStampPattern ?? 'grain',
+    stampAssetId: null,
   };
 }

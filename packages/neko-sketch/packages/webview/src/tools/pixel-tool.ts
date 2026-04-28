@@ -133,3 +133,106 @@ export function floodFill(
     if (cy < height - 1) stack.push([cx, cy + 1]);
   }
 }
+
+export type PatternFillType = 'checker' | 'dots' | 'diagonal';
+
+export function patternFill(
+  imageData: ImageData,
+  startX: number,
+  startY: number,
+  fillColor: readonly [number, number, number, number],
+  pattern: PatternFillType,
+  patternSize: number,
+  tolerance: number = 0,
+): void {
+  const { width, height, data } = imageData;
+  const x = Math.floor(startX);
+  const y = Math.floor(startY);
+  if (x < 0 || x >= width || y < 0 || y >= height) return;
+
+  const startIdx = (y * width + x) * 4;
+  const sr = data[startIdx]!;
+  const sg = data[startIdx + 1]!;
+  const sb = data[startIdx + 2]!;
+  const sa = data[startIdx + 3]!;
+
+  const base = rgbaToBytes(fillColor);
+  const accent = makePatternAccent(base);
+  const visited = new Uint8Array(width * height);
+  const stack: [number, number][] = [[x, y]];
+  const cellSize = Math.max(2, Math.round(patternSize));
+
+  while (stack.length > 0) {
+    const [cx, cy] = stack.pop()!;
+    const vi = cy * width + cx;
+    if (visited[vi]) continue;
+    visited[vi] = 1;
+
+    const idx = vi * 4;
+    const dr = Math.abs(data[idx]! - sr);
+    const dg = Math.abs(data[idx + 1]! - sg);
+    const db = Math.abs(data[idx + 2]! - sb);
+    const da = Math.abs(data[idx + 3]! - sa);
+
+    if (dr + dg + db + da > tolerance * 4) continue;
+
+    const color = patternColorAt(cx, cy, pattern, cellSize, base, accent);
+    data[idx] = color[0];
+    data[idx + 1] = color[1];
+    data[idx + 2] = color[2];
+    data[idx + 3] = color[3];
+
+    if (cx > 0) stack.push([cx - 1, cy]);
+    if (cx < width - 1) stack.push([cx + 1, cy]);
+    if (cy > 0) stack.push([cx, cy - 1]);
+    if (cy < height - 1) stack.push([cx, cy + 1]);
+  }
+}
+
+function rgbaToBytes(
+  color: readonly [number, number, number, number],
+): [number, number, number, number] {
+  return [
+    Math.round(color[0] * 255),
+    Math.round(color[1] * 255),
+    Math.round(color[2] * 255),
+    Math.round(color[3] * 255),
+  ];
+}
+
+function makePatternAccent(
+  color: readonly [number, number, number, number],
+): [number, number, number, number] {
+  return [
+    Math.round(color[0] * 0.62),
+    Math.round(color[1] * 0.62),
+    Math.round(color[2] * 0.62),
+    color[3],
+  ];
+}
+
+function patternColorAt(
+  x: number,
+  y: number,
+  pattern: PatternFillType,
+  patternSize: number,
+  base: readonly [number, number, number, number],
+  accent: readonly [number, number, number, number],
+): readonly [number, number, number, number] {
+  switch (pattern) {
+    case 'checker': {
+      const cell = Math.floor(x / patternSize) + Math.floor(y / patternSize);
+      return cell % 2 === 0 ? base : accent;
+    }
+    case 'dots': {
+      const cx = (x % patternSize) - patternSize / 2;
+      const cy = (y % patternSize) - patternSize / 2;
+      const radius = Math.max(1, patternSize * 0.22);
+      return cx * cx + cy * cy <= radius * radius ? accent : base;
+    }
+    case 'diagonal': {
+      const band = (x + y) % patternSize;
+      return band < Math.max(1, patternSize * 0.28) ? accent : base;
+    }
+  }
+}

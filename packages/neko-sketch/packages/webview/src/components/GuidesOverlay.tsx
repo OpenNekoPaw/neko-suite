@@ -7,6 +7,7 @@
  */
 import { useCallback } from 'react';
 import type { ViewportState } from '../types';
+import { documentToScreenPoint, screenToDocumentPoint } from '../utils/viewport-transform';
 
 export interface Guide {
   readonly id: string;
@@ -38,6 +39,7 @@ export function GuidesOverlay({
   onRemoveGuide,
 }: GuidesOverlayProps) {
   const { zoom, panX, panY } = viewport;
+  const viewportSize = { width: canvasWidth, height: canvasHeight };
 
   // Convert document coord to screen
   const toScreenX = (docX: number) => docX * zoom + panX;
@@ -54,8 +56,14 @@ export function GuidesOverlay({
     (id: string, axis: 'horizontal' | 'vertical', e: React.PointerEvent) => {
       e.preventDefault();
       (e.target as SVGElement).setPointerCapture(e.pointerId);
+      const rect = getSvgRect(e.currentTarget);
       const onMove = (me: PointerEvent) => {
-        const pos = axis === 'horizontal' ? (me.clientY - panY) / zoom : (me.clientX - panX) / zoom;
+        const doc = screenToDocumentPoint(
+          { x: me.clientX - rect.left, y: me.clientY - rect.top },
+          viewport,
+          viewportSize,
+        );
+        const pos = axis === 'horizontal' ? doc.y : doc.x;
         onMoveGuide(id, Math.round(pos));
       };
       const onUp = () => {
@@ -65,7 +73,7 @@ export function GuidesOverlay({
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
     },
-    [zoom, panX, panY, onMoveGuide],
+    [viewport, viewportSize, onMoveGuide],
   );
 
   return (
@@ -85,7 +93,12 @@ export function GuidesOverlay({
         style={{ pointerEvents: 'auto', cursor: 'ns-resize' }}
         onPointerDown={(e) => {
           e.preventDefault();
-          const pos = (e.clientY - panY) / zoom;
+          const rect = getSvgRect(e.currentTarget);
+          const pos = screenToDocumentPoint(
+            { x: e.clientX - rect.left, y: e.clientY - rect.top },
+            viewport,
+            viewportSize,
+          ).y;
           onAddGuide('horizontal', Math.round(pos));
         }}
       />
@@ -100,7 +113,12 @@ export function GuidesOverlay({
         style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
         onPointerDown={(e) => {
           e.preventDefault();
-          const pos = (e.clientX - panX) / zoom;
+          const rect = getSvgRect(e.currentTarget);
+          const pos = screenToDocumentPoint(
+            { x: e.clientX - rect.left, y: e.clientY - rect.top },
+            viewport,
+            viewportSize,
+          ).x;
           onAddGuide('vertical', Math.round(pos));
         }}
       />
@@ -148,14 +166,19 @@ export function GuidesOverlay({
       {/* Guide lines */}
       {guides.map((g) => {
         if (g.axis === 'horizontal') {
-          const sy = toScreenY(g.position);
+          const start = documentToScreenPoint({ x: 0, y: g.position }, viewport, viewportSize);
+          const end = documentToScreenPoint(
+            { x: canvasWidth, y: g.position },
+            viewport,
+            viewportSize,
+          );
           return (
             <line
               key={g.id}
-              x1={0}
-              y1={sy}
-              x2="100%"
-              y2={sy}
+              x1={start.x}
+              y1={start.y}
+              x2={end.x}
+              y2={end.y}
               stroke="rgba(0,200,255,0.5)"
               strokeWidth={1}
               strokeDasharray="6 3"
@@ -165,14 +188,19 @@ export function GuidesOverlay({
             />
           );
         }
-        const sx = toScreenX(g.position);
+        const start = documentToScreenPoint({ x: g.position, y: 0 }, viewport, viewportSize);
+        const end = documentToScreenPoint(
+          { x: g.position, y: canvasHeight },
+          viewport,
+          viewportSize,
+        );
         return (
           <line
             key={g.id}
-            x1={sx}
-            y1={0}
-            x2={sx}
-            y2="100%"
+            x1={start.x}
+            y1={start.y}
+            x2={end.x}
+            y2={end.y}
             stroke="rgba(0,200,255,0.5)"
             strokeWidth={1}
             strokeDasharray="6 3"
@@ -184,4 +212,11 @@ export function GuidesOverlay({
       })}
     </svg>
   );
+}
+
+function getSvgRect(target: EventTarget & Element): DOMRect {
+  if (target instanceof SVGElement) {
+    return (target.ownerSVGElement ?? target).getBoundingClientRect();
+  }
+  return target.getBoundingClientRect();
 }

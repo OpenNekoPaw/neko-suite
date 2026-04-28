@@ -264,3 +264,110 @@ void main() {
   fragColor   = vec4(rgb, color.a);
 }
 `;
+
+/** Halftone — screen-space dot pattern driven by source luminance. */
+export const HALFTONE_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec2 u_resolution;
+uniform float u_cellSize; // pixels per dot cell
+uniform float u_angle;    // radians
+uniform float u_amount;   // 0.0 .. 1.0
+
+mat2 rotate2d(float angle) {
+  float s = sin(angle);
+  float c = cos(angle);
+  return mat2(c, -s, s, c);
+}
+
+void main() {
+  vec4 color = texture(u_texture, v_texCoord);
+  float cellSize = max(2.0, u_cellSize);
+
+  vec2 center = u_resolution * 0.5;
+  vec2 pixel = v_texCoord * u_resolution;
+  mat2 rot = rotate2d(u_angle);
+  vec2 rotated = rot * (pixel - center);
+  vec2 cell = floor(rotated / cellSize);
+  vec2 cellCenter = (cell + 0.5) * cellSize;
+  vec2 samplePixel = transpose(rot) * cellCenter + center;
+  vec2 sampleUv = clamp(samplePixel / u_resolution, vec2(0.0), vec2(1.0));
+  vec4 sampleColor = texture(u_texture, sampleUv);
+
+  float luminance = dot(sampleColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+  float radius = sqrt(1.0 - luminance) * cellSize * 0.5;
+  float dist = length(rotated - cellCenter);
+  float edge = max(1.0, fwidth(dist));
+  float dotMask = 1.0 - smoothstep(radius - edge, radius + edge, dist);
+
+  vec3 paper = vec3(1.0);
+  vec3 dotted = mix(paper, sampleColor.rgb, dotMask);
+  vec3 rgb = mix(color.rgb, dotted, clamp(u_amount, 0.0, 1.0));
+  fragColor = vec4(rgb, color.a);
+}
+`;
+
+/** Gradient Map — remap luminance between two user-selected colors. */
+export const GRADIENT_MAP_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec4 u_shadowColor;
+uniform vec4 u_highlightColor;
+uniform float u_amount; // 0.0 .. 1.0
+
+void main() {
+  vec4 color = texture(u_texture, v_texCoord);
+  float luminance = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+  vec4 mapped = mix(u_shadowColor, u_highlightColor, luminance);
+  vec3 rgb = mix(color.rgb, mapped.rgb, clamp(u_amount, 0.0, 1.0));
+  fragColor = vec4(rgb, color.a);
+}
+`;
+
+/** SSAO — 2D screen-space ambient occlusion using alpha/luminance as depth hints. */
+export const SSAO_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec2 u_resolution;
+uniform float u_radius;    // sample radius in pixels
+uniform float u_intensity; // 0.0 .. 2.0
+uniform float u_bias;      // depth-hint threshold
+
+const float PI = 3.14159265359;
+
+float depthHint(vec4 color) {
+  float luminance = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+  return color.a * (1.0 - luminance * 0.35);
+}
+
+float sampleOcclusion(vec2 direction, float centerDepth, float radiusPixels) {
+  vec2 uv = clamp(v_texCoord + direction * radiusPixels / u_resolution, vec2(0.0), vec2(1.0));
+  vec4 sampleColor = texture(u_texture, uv);
+  float sampleDepth = depthHint(sampleColor);
+  return max(0.0, sampleDepth - centerDepth - u_bias) * sampleColor.a;
+}
+
+void main() {
+  vec4 color = texture(u_texture, v_texCoord);
+  float radiusPixels = max(1.0, u_radius);
+  float centerDepth = depthHint(color);
+
+  float occlusion = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float angle = (float(i) / 8.0) * PI * 2.0;
+    vec2 direction = vec2(cos(angle), sin(angle));
+    occlusion += sampleOcclusion(direction, centerDepth, radiusPixels);
+    occlusion += sampleOcclusion(direction, centerDepth, radiusPixels * 0.5) * 0.5;
+  }
+
+  occlusion = clamp(occlusion / 12.0, 0.0, 1.0);
+  float shade = 1.0 - occlusion * clamp(u_intensity, 0.0, 2.0) * color.a;
+  fragColor = vec4(color.rgb * shade, color.a);
+}
+`;

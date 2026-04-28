@@ -154,6 +154,41 @@ in vec2 v_tilt;
 out vec4 fragColor;
 uniform vec4 u_color;
 uniform float u_hardness;
+uniform int u_stampPattern;
+uniform bool u_hasStampTexture;
+uniform sampler2D u_stampTexture;
+
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float stampPatternMask(vec2 uv) {
+  if (u_hasStampTexture) {
+    vec4 texel = texture(u_stampTexture, uv);
+    return texel.a;
+  }
+  if (u_stampPattern == 1) {
+    vec2 cell = floor(uv * 18.0);
+    float grain = hash12(cell) * 0.7 + hash12(cell + vec2(7.1, 3.7)) * 0.3;
+    return mix(0.35, 1.0, smoothstep(0.15, 0.95, grain));
+  }
+  if (u_stampPattern == 2) {
+    float forward = abs(fract((uv.x + uv.y) * 8.0) - 0.5);
+    float backward = abs(fract((uv.x - uv.y) * 8.0) - 0.5);
+    float line = 1.0 - smoothstep(0.04, 0.11, min(forward, backward));
+    return mix(0.18, 1.0, line);
+  }
+  if (u_stampPattern == 3) {
+    float wave = sin(uv.x * 80.0 + sin(uv.y * 26.0) * 2.5);
+    float streak = smoothstep(-0.2, 0.85, wave);
+    float grain = hash12(floor(uv * vec2(24.0, 10.0)));
+    return clamp(0.25 + streak * 0.55 + grain * 0.2, 0.0, 1.0);
+  }
+  return 1.0;
+}
+
 void main() {
   vec2 center = gl_PointCoord - vec2(0.5);
 
@@ -171,6 +206,7 @@ void main() {
   float edge = 1.0 - u_hardness;
   float alpha = 1.0 - smoothstep(u_hardness, u_hardness + edge, dist);
   alpha *= v_pressure;
+  alpha *= stampPatternMask(gl_PointCoord);
   fragColor = vec4(u_color.rgb, u_color.a * alpha);
 }
 `;

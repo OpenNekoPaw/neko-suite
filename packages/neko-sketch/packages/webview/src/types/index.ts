@@ -2,7 +2,18 @@
  * Core types for neko-sketch webview
  */
 
-import type { SketchBlendMode } from '@neko/shared';
+import type {
+  PsdImportPayloadWire,
+  SketchAICancelMessage,
+  SketchAIErrorMessage,
+  SketchFeatureFlagsMessage,
+  SketchAIOpenAgentMessage,
+  SketchAIProgressMessage,
+  SketchAIResultAppliedMessage,
+  SketchAIResultApplyMessage,
+  SketchBlendMode,
+} from '@neko/shared';
+import type { VectorLayerData } from './vector';
 export type { SketchBlendMode };
 
 // ─── Brush Types ───
@@ -14,7 +25,20 @@ export type BrushType =
   | 'airbrush'
   | 'eraser'
   | 'marker'
-  | 'pixel';
+  | 'pixel'
+  | 'stamp';
+
+export type TextureStampPattern = 'grain' | 'crosshatch' | 'bristle';
+
+export interface TextureStampAsset {
+  readonly id: string;
+  readonly name: string;
+  readonly dataUrl: string;
+  readonly mimeType: string;
+  readonly width: number;
+  readonly height: number;
+  readonly createdAt: number;
+}
 
 export interface StrokePoint {
   readonly x: number;
@@ -23,6 +47,10 @@ export interface StrokePoint {
   readonly tiltX: number; // -90~90
   readonly tiltY: number; // -90~90
   readonly timestamp: number;
+  readonly shiftKey?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly altKey?: boolean;
 }
 
 export interface BrushSettings {
@@ -34,6 +62,15 @@ export interface BrushSettings {
   readonly color: string; // hex
   readonly pressureSizeEnabled: boolean;
   readonly pressureOpacityEnabled: boolean;
+  readonly stampPattern?: TextureStampPattern;
+  readonly stampAssetId?: string | null;
+}
+
+export type FillPatternType = 'solid' | 'checker' | 'dots' | 'diagonal';
+
+export interface FillSettings {
+  readonly pattern: FillPatternType;
+  readonly patternSize: number;
 }
 
 export interface StrokeResult {
@@ -91,6 +128,8 @@ export interface LayerData {
   readonly adjustmentFilter?: string;
   /** Adjustment layer: filter parameter overrides */
   readonly adjustmentParams?: Record<string, number>;
+  /** Vector layer payload: editable source paths for shape/path editing */
+  readonly vectorData?: VectorLayerData;
 }
 
 // ─── Tool Types ───
@@ -132,6 +171,25 @@ export interface ViewportState {
   readonly rotation: number;
 }
 
+// ─── Perspective Grid Types ───
+
+export type PerspectiveGridMode = 'one-point' | 'two-point' | 'three-point';
+export type PerspectiveVanishingPointKey = 'center' | 'left' | 'right' | 'vertical';
+
+export interface DocumentPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface PerspectiveGridState {
+  readonly enabled: boolean;
+  readonly snapEnabled: boolean;
+  readonly mode: PerspectiveGridMode;
+  readonly divisions: number;
+  readonly opacity: number;
+  readonly vanishingPoints: Readonly<Record<PerspectiveVanishingPointKey, DocumentPoint>>;
+}
+
 // ─── Document Types ───
 
 export interface CanvasConfig {
@@ -160,7 +218,8 @@ export interface HistoryEntry {
   readonly type: HistoryActionType;
   readonly label: string;
   readonly timestamp: number;
-  readonly snapshot: RegionSnapshot | null;
+  readonly snapshot: RegionSnapshotPair | null;
+  readonly stateSnapshot?: HistoryStateSnapshotPair;
 }
 
 export interface RegionSnapshot {
@@ -170,6 +229,22 @@ export interface RegionSnapshot {
   readonly width: number;
   readonly height: number;
   readonly data: Uint8Array;
+}
+
+export interface RegionSnapshotPair {
+  readonly before: RegionSnapshot;
+  readonly after: RegionSnapshot;
+}
+
+export interface HistoryStateSnapshot {
+  readonly layers?: readonly LayerData[];
+  readonly activeLayerId?: string | null;
+  readonly selection?: SelectionMask | null;
+}
+
+export interface HistoryStateSnapshotPair {
+  readonly before: HistoryStateSnapshot;
+  readonly after: HistoryStateSnapshot;
 }
 
 // ─── Message Protocol (Extension ↔ Webview) ───
@@ -187,13 +262,33 @@ export interface SketchSelectionResponse {
   layerImageData: string;
 }
 
+export type FileImportFailureCode =
+  | 'kill-switch-disabled'
+  | 'import-failed'
+  | 'parser-unavailable'
+  | 'parse-failed';
+
 export type ExtensionToWebviewMessage =
   | { type: 'document:load'; data: unknown }
   | { type: 'document:revert' }
   | { type: 'document:save' }
   | { type: 'document:saveAs'; path: string }
   | { type: 'file:imported'; name: string; data: string; path: string }
+  | { type: 'file:importedPsdTree'; payload: PsdImportPayloadWire }
+  | { type: 'stamp:imported'; name: string; data: string; mimeType: string }
+  | {
+      type: 'file:importResult';
+      success: boolean;
+      code?: FileImportFailureCode;
+      error?: string;
+      name?: string;
+    }
   | { type: 'file:exportResult'; success: boolean; path?: string; error?: string }
+  | SketchFeatureFlagsMessage
+  | SketchAIProgressMessage
+  | SketchAIResultApplyMessage
+  | SketchAIErrorMessage
+  | SketchAICancelMessage
   | { type: 'keyboardAction'; action: string }
   | { type: 'setLocale'; locale: string }
   // Phase 2: export request from extension
@@ -207,8 +302,13 @@ export type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'document:save'; data: unknown }
   | { type: 'file:import' }
+  | { type: 'stamp:import' }
   | { type: 'file:export'; data: { format: string; data: string } }
   | { type: 'file:dropRequest'; uris: string }
+  | { type: 'operationApplied'; operation: unknown }
+  | SketchAIOpenAgentMessage
+  | SketchAIResultAppliedMessage
+  | SketchAICancelMessage
   | { type: 'status:update'; data: unknown }
   | { type: 'layer:outline'; data: unknown }
   // Phase 2: export response

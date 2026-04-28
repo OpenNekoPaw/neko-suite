@@ -10,7 +10,15 @@ import type { ITextureManager } from './types';
 import type { LightSceneObject } from '../types/scene';
 import type { AmbientLightConfig } from '../types/light';
 import { QUAD_VERT } from './shaders';
-import { LIGHT_POINT_FRAG, LIGHT_NORMAL_FRAG, LIGHT_AMBIENT_FRAG } from './light-shaders';
+import {
+  LIGHT_POINT_FRAG,
+  LIGHT_NORMAL_FRAG,
+  LIGHT_DIRECTIONAL_FRAG,
+  LIGHT_DIRECTIONAL_NORMAL_FRAG,
+  LIGHT_SPOT_FRAG,
+  LIGHT_SPOT_NORMAL_FRAG,
+  LIGHT_AMBIENT_FRAG,
+} from './light-shaders';
 
 /** Fullscreen quad: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -35,6 +43,10 @@ export class LightPass {
   // Shader programs (lazy-compiled)
   private pointProgram: WebGLProgram | null = null;
   private normalProgram: WebGLProgram | null = null;
+  private directionalProgram: WebGLProgram | null = null;
+  private directionalNormalProgram: WebGLProgram | null = null;
+  private spotProgram: WebGLProgram | null = null;
+  private spotNormalProgram: WebGLProgram | null = null;
   private ambientProgram: WebGLProgram | null = null;
 
   constructor(gl: WebGL2RenderingContext, textures: ITextureManager) {
@@ -88,6 +100,34 @@ export class LightPass {
     return this.normalProgram;
   }
 
+  private getDirectionalProgram(): WebGLProgram {
+    if (!this.directionalProgram) {
+      this.directionalProgram = this.compileProgram(QUAD_VERT, LIGHT_DIRECTIONAL_FRAG);
+    }
+    return this.directionalProgram;
+  }
+
+  private getDirectionalNormalProgram(): WebGLProgram {
+    if (!this.directionalNormalProgram) {
+      this.directionalNormalProgram = this.compileProgram(QUAD_VERT, LIGHT_DIRECTIONAL_NORMAL_FRAG);
+    }
+    return this.directionalNormalProgram;
+  }
+
+  private getSpotProgram(): WebGLProgram {
+    if (!this.spotProgram) {
+      this.spotProgram = this.compileProgram(QUAD_VERT, LIGHT_SPOT_FRAG);
+    }
+    return this.spotProgram;
+  }
+
+  private getSpotNormalProgram(): WebGLProgram {
+    if (!this.spotNormalProgram) {
+      this.spotNormalProgram = this.compileProgram(QUAD_VERT, LIGHT_SPOT_NORMAL_FRAG);
+    }
+    return this.spotNormalProgram;
+  }
+
   private getAmbientProgram(): WebGLProgram {
     if (!this.ambientProgram) {
       this.ambientProgram = this.compileProgram(QUAD_VERT, LIGHT_AMBIENT_FRAG);
@@ -125,12 +165,11 @@ export class LightPass {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
 
-    // Accumulate point lights — use normal-mapped shader when normal map is available
+    // Accumulate lights — use normal-mapped shaders when a normal map is available
     const useNormals = !!normalMapTex;
-    const lightProg = useNormals ? this.getNormalProgram() : this.getPointProgram();
 
     for (const light of lights) {
-      if (light.properties.lightType !== 'point') continue;
+      const lightProg = this.getProgramForLight(light, useNormals);
 
       gl.useProgram(lightProg);
 
@@ -163,6 +202,12 @@ export class LightPass {
       );
       gl.uniform1f(gl.getUniformLocation(lightProg, 'u_intensity'), light.properties.intensity);
       gl.uniform1f(gl.getUniformLocation(lightProg, 'u_radius'), light.properties.radius);
+      gl.uniform1f(gl.getUniformLocation(lightProg, 'u_direction'), light.properties.direction);
+      gl.uniform1f(gl.getUniformLocation(lightProg, 'u_coneAngle'), light.properties.coneAngle);
+      gl.uniform1f(
+        gl.getUniformLocation(lightProg, 'u_coneSoftness'),
+        light.properties.coneSoftness,
+      );
 
       this.drawQuad();
     }
@@ -191,6 +236,17 @@ export class LightPass {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     return this.litTex!;
+  }
+
+  private getProgramForLight(light: LightSceneObject, useNormals: boolean): WebGLProgram {
+    switch (light.properties.lightType) {
+      case 'directional':
+        return useNormals ? this.getDirectionalNormalProgram() : this.getDirectionalProgram();
+      case 'spot':
+        return useNormals ? this.getSpotNormalProgram() : this.getSpotProgram();
+      case 'point':
+        return useNormals ? this.getNormalProgram() : this.getPointProgram();
+    }
   }
 
   private drawQuad(): void {
@@ -242,6 +298,10 @@ export class LightPass {
     if (this.litTex) this.textures.deleteTexture(this.litTex);
     if (this.pointProgram) gl.deleteProgram(this.pointProgram);
     if (this.normalProgram) gl.deleteProgram(this.normalProgram);
+    if (this.directionalProgram) gl.deleteProgram(this.directionalProgram);
+    if (this.directionalNormalProgram) gl.deleteProgram(this.directionalNormalProgram);
+    if (this.spotProgram) gl.deleteProgram(this.spotProgram);
+    if (this.spotNormalProgram) gl.deleteProgram(this.spotNormalProgram);
     if (this.ambientProgram) gl.deleteProgram(this.ambientProgram);
     if (this.quadVAO) gl.deleteVertexArray(this.quadVAO);
     if (this.quadVBO) gl.deleteBuffer(this.quadVBO);

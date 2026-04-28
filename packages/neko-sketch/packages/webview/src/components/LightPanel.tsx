@@ -1,11 +1,11 @@
 /**
  * LightPanel - property inspector for a selected light scene object
  *
- * Controls light color, intensity, radius, and height.
+ * Controls light type, color, intensity, radius, direction, cone, and height.
  * Dispatches updates via updateSceneObject.
  */
 import type { LightSceneObject, SceneObject } from '../types/scene';
-import type { LightProperties } from '../types/light';
+import type { LightProperties, LightType } from '../types/light';
 
 interface LightPanelProps {
   sceneId: string;
@@ -32,29 +32,51 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
     updateSceneObject(sceneId, layerId, light.id, { [axis]: value });
   };
 
+  const showPosition = props.lightType !== 'directional';
+  const showRadius = props.lightType !== 'directional';
+  const showDirection = props.lightType === 'directional' || props.lightType === 'spot';
+  const showCone = props.lightType === 'spot';
+
   return (
     <div className="mt-1 pt-1 text-[10px]" style={{ borderTop: '1px solid var(--sketch-divider)' }}>
-      <p className="opacity-60 mb-0.5">Point Light</p>
+      <p className="opacity-60 mb-0.5">{lightTypeLabel(props.lightType)} Light</p>
+
+      {/* Type */}
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="w-14 opacity-60">Type</span>
+        <select
+          value={props.lightType}
+          onChange={(e) => updateProp({ lightType: parseLightType(e.target.value) })}
+          className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0"
+          aria-label="Light type"
+        >
+          <option value="point">Point</option>
+          <option value="directional">Directional</option>
+          <option value="spot">Spot</option>
+        </select>
+      </div>
 
       {/* Position */}
-      <div className="flex items-center gap-1 mb-0.5">
-        <span className="w-14 opacity-60">X</span>
-        <input
-          type="number"
-          value={Math.round(light.x)}
-          onChange={(e) => updatePosition('x', parseFloat(e.target.value) || 0)}
-          className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
-          aria-label="Light X position"
-        />
-        <span className="w-4 opacity-60">Y</span>
-        <input
-          type="number"
-          value={Math.round(light.y)}
-          onChange={(e) => updatePosition('y', parseFloat(e.target.value) || 0)}
-          className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
-          aria-label="Light Y position"
-        />
-      </div>
+      {showPosition && (
+        <div className="flex items-center gap-1 mb-0.5">
+          <span className="w-14 opacity-60">X</span>
+          <input
+            type="number"
+            value={Math.round(light.x)}
+            onChange={(e) => updatePosition('x', parseFloat(e.target.value) || 0)}
+            className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
+            aria-label="Light X position"
+          />
+          <span className="w-4 opacity-60">Y</span>
+          <input
+            type="number"
+            value={Math.round(light.y)}
+            onChange={(e) => updatePosition('y', parseFloat(e.target.value) || 0)}
+            className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
+            aria-label="Light Y position"
+          />
+        </div>
+      )}
 
       {/* Color */}
       <div className="flex items-center gap-1 mb-0.5">
@@ -85,20 +107,82 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
       </div>
 
       {/* Radius */}
-      <div className="flex items-center gap-1 mb-0.5">
-        <span className="w-14 opacity-60">Radius</span>
-        <input
-          type="range"
-          min={10}
-          max={2000}
-          step={10}
-          value={props.radius}
-          onChange={(e) => updateProp({ radius: parseFloat(e.target.value) })}
-          className="sketch-slider flex-1"
-          aria-label="Light radius"
-        />
-        <span className="w-8 text-right tabular-nums">{props.radius}px</span>
-      </div>
+      {showRadius && (
+        <div className="flex items-center gap-1 mb-0.5">
+          <span className="w-14 opacity-60">Radius</span>
+          <input
+            type="range"
+            min={10}
+            max={2000}
+            step={10}
+            value={props.radius}
+            onChange={(e) => updateProp({ radius: parseFloat(e.target.value) })}
+            className="sketch-slider flex-1"
+            aria-label="Light radius"
+          />
+          <span className="w-8 text-right tabular-nums">{props.radius}px</span>
+        </div>
+      )}
+
+      {/* Direction */}
+      {showDirection && (
+        <div className="flex items-center gap-1 mb-0.5">
+          <span className="w-14 opacity-60">Direction</span>
+          <input
+            type="range"
+            min={-180}
+            max={180}
+            step={1}
+            value={radiansToDegrees(props.direction)}
+            onChange={(e) =>
+              updateProp({ direction: degreesToRadians(parseFloat(e.target.value)) })
+            }
+            className="sketch-slider flex-1"
+            aria-label="Light direction"
+          />
+          <span className="w-8 text-right tabular-nums">
+            {Math.round(radiansToDegrees(props.direction))}°
+          </span>
+        </div>
+      )}
+
+      {/* Spotlight cone */}
+      {showCone && (
+        <>
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="w-14 opacity-60">Cone</span>
+            <input
+              type="range"
+              min={5}
+              max={180}
+              step={1}
+              value={radiansToDegrees(props.coneAngle)}
+              onChange={(e) =>
+                updateProp({ coneAngle: degreesToRadians(parseFloat(e.target.value)) })
+              }
+              className="sketch-slider flex-1"
+              aria-label="Spotlight cone angle"
+            />
+            <span className="w-8 text-right tabular-nums">
+              {Math.round(radiansToDegrees(props.coneAngle))}°
+            </span>
+          </div>
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="w-14 opacity-60">Softness</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={props.coneSoftness}
+              onChange={(e) => updateProp({ coneSoftness: parseFloat(e.target.value) })}
+              className="sketch-slider flex-1"
+              aria-label="Spotlight cone softness"
+            />
+            <span className="w-8 text-right tabular-nums">{props.coneSoftness.toFixed(2)}</span>
+          </div>
+        </>
+      )}
 
       {/* Height (Z-axis simulation) */}
       <div className="flex items-center gap-1">
@@ -139,4 +223,28 @@ function hexToRgb(hex: string): readonly [number, number, number] {
   const g = parseInt(hex.slice(3, 5), 16) / 255;
   const b = parseInt(hex.slice(5, 7), 16) / 255;
   return [r, g, b] as const;
+}
+
+function lightTypeLabel(type: LightType): string {
+  switch (type) {
+    case 'directional':
+      return 'Directional';
+    case 'spot':
+      return 'Spot';
+    case 'point':
+      return 'Point';
+  }
+}
+
+function parseLightType(value: string): LightType {
+  if (value === 'directional' || value === 'spot') return value;
+  return 'point';
+}
+
+function radiansToDegrees(value: number): number {
+  return (value * 180) / Math.PI;
+}
+
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180;
 }

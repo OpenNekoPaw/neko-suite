@@ -13,7 +13,7 @@ import type {
   SceneObject,
 } from '../types/scene';
 import { isLightObject } from '../types/scene';
-import type { AmbientLightConfig } from '../types/light';
+import type { AmbientLightConfig, LightType } from '../types/light';
 import { DEFAULT_LIGHT_PROPERTIES } from '../types/light';
 import { SCENE_TEMPLATES } from '../data/scene-templates';
 import type { LayerData } from '../types';
@@ -308,38 +308,41 @@ function LightingSection(props: LightingSectionProps) {
     }
   }
 
-  const handleAddLight = useCallback(() => {
-    // Ensure at least one scene layer exists for lights
-    let targetLayerId: string | undefined;
-    if (sceneLayers.length === 0) {
-      addSceneLayer(sceneId, {
-        name: 'Lights',
-        type: 'effect' as import('../types/scene').SceneLayerType,
-        zIndex: 0,
-        parallaxFactor: [1, 1],
-        objects: [],
-        visible: true,
-        canvasLayerId: null,
-      });
-      // Get the newly created layer
-      const state = useSketchStore.getState();
-      const sc = state.scenes.find((s) => s.id === sceneId);
-      targetLayerId = sc?.layers[sc.layers.length - 1]?.id;
-    } else {
-      targetLayerId = sceneLayers[0]?.id;
-    }
-    if (!targetLayerId) return;
+  const handleAddLight = useCallback(
+    (lightType: LightType) => {
+      // Ensure at least one scene layer exists for lights
+      let targetLayerId: string | undefined;
+      if (sceneLayers.length === 0) {
+        addSceneLayer(sceneId, {
+          name: 'Lights',
+          type: 'effect' as import('../types/scene').SceneLayerType,
+          zIndex: 0,
+          parallaxFactor: [1, 1],
+          objects: [],
+          visible: true,
+          canvasLayerId: null,
+        });
+        // Get the newly created layer
+        const state = useSketchStore.getState();
+        const sc = state.scenes.find((s) => s.id === sceneId);
+        targetLayerId = sc?.layers[sc.layers.length - 1]?.id;
+      } else {
+        targetLayerId = sceneLayers[0]?.id;
+      }
+      if (!targetLayerId) return;
 
-    addSceneObject(sceneId, targetLayerId, {
-      type: 'light',
-      x: 400,
-      y: 300,
-      width: 0,
-      height: 0,
-      rotation: 0,
-      properties: { ...DEFAULT_LIGHT_PROPERTIES },
-    });
-  }, [sceneId, sceneLayers, addSceneLayer, addSceneObject]);
+      addSceneObject(sceneId, targetLayerId, {
+        type: 'light',
+        x: 400,
+        y: 300,
+        width: 0,
+        height: 0,
+        rotation: 0,
+        properties: { ...DEFAULT_LIGHT_PROPERTIES, lightType },
+      });
+    },
+    [sceneId, sceneLayers, addSceneLayer, addSceneObject],
+  );
 
   const selectedEntry = lightEntries.find((e) => e.light.id === selectedLightId);
 
@@ -392,10 +395,24 @@ function LightingSection(props: LightingSectionProps) {
             <span className="text-xs opacity-60 flex-1">Lights</span>
             <button
               className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
-              onClick={handleAddLight}
+              onClick={() => handleAddLight('point')}
               aria-label="Add point light"
             >
-              +
+              P
+            </button>
+            <button
+              className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
+              onClick={() => handleAddLight('directional')}
+              aria-label="Add directional light"
+            >
+              D
+            </button>
+            <button
+              className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
+              onClick={() => handleAddLight('spot')}
+              aria-label="Add spot light"
+            >
+              S
             </button>
           </div>
 

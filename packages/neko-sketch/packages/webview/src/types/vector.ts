@@ -35,3 +35,31 @@ export interface VectorPath {
   readonly fill: FillStyle | null;
   readonly stroke: StrokeStyle | null;
 }
+
+export type VectorNodeRole = 'anchor' | 'control-in' | 'control-out' | 'control';
+export type VectorHandleMode = 'corner' | 'smooth' | 'mirrored';
+
+export interface VectorNodeRef {
+  readonly pathId: string;
+  readonly segmentIndex: number;
+  readonly pointIndex: number;
+  readonly role: VectorNodeRole;
+}
+
+export interface VectorHandleModeAssignment {
+  readonly anchor: VectorNodeRef;
+  readonly mode: VectorHandleMode;
+}
+
+export interface VectorNode {
+  readonly ref: VectorNodeRef;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface VectorLayerData {
+  readonly paths: readonly VectorPath[];
+  readonly selectedPathId?: string | null;
+  readonly selectedNodeRefs?: readonly VectorNodeRef[];
+  readonly handleModes?: readonly VectorHandleModeAssignment[];
+}

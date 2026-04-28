@@ -16,13 +16,22 @@ import {
 } from '../../layer';
 import { useSketchOperationStore } from '../sketchOperationStore';
 
+export interface LayerMergeDownRequest {
+  readonly id: number;
+  readonly layerId: string;
+}
+
+let nextLayerMergeDownRequestId = 1;
+
 export interface LayerSlice {
   // State
   layers: LayerData[];
   activeLayerId: string | null;
+  pendingLayerMergeDownRequest: LayerMergeDownRequest | null;
 
   // Actions
   addNewLayer: (name?: string) => void;
+  addVectorLayer: (name?: string) => void;
   removeLayerById: (id: string) => void;
   setActiveLayer: (id: string) => void;
   moveLayerTo: (id: string, index: number) => void;
@@ -42,17 +51,21 @@ export interface LayerSlice {
         | 'alphaLock'
         | 'adjustmentFilter'
         | 'adjustmentParams'
+        | 'vectorData'
       >
     >,
   ) => void;
   addAdjustmentLayer: (filterId: string, defaultParams: Record<string, number>) => void;
   groupSelectedLayers: (ids: string[]) => void;
   setLayers: (layers: LayerData[]) => void;
+  requestMergeLayerDown: (layerId: string) => void;
+  clearLayerMergeDownRequest: (requestId: number) => void;
 }
 
 export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
   layers: [],
   activeLayerId: null,
+  pendingLayerMergeDownRequest: null,
 
   addNewLayer: (name) => {
     const state = get();
@@ -61,6 +74,22 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
       name ?? t('sketch.layer.defaultName', { index: String(state.layers.length + 1) }),
       canvas?.width ?? 1920,
       canvas?.height ?? 1080,
+    );
+    set({
+      layers: addLayer(state.layers, newLayer),
+      activeLayerId: newLayer.id,
+    });
+    useSketchOperationStore.getState().recordLayerAdd(newLayer as any);
+  },
+
+  addVectorLayer: (name) => {
+    const state = get();
+    const canvas = (state as unknown as { canvas: { width: number; height: number } }).canvas;
+    const newLayer = createLayer(
+      name ?? t('sketch.layer.vectorDefaultName', { index: String(state.layers.length + 1) }),
+      canvas?.width ?? 1920,
+      canvas?.height ?? 1080,
+      'vector',
     );
     set({
       layers: addLayer(state.layers, newLayer),
@@ -137,4 +166,19 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
     })),
 
   setLayers: (layers) => set({ layers }),
+
+  requestMergeLayerDown: (layerId) =>
+    set({
+      pendingLayerMergeDownRequest: {
+        id: nextLayerMergeDownRequestId++,
+        layerId,
+      },
+    }),
+
+  clearLayerMergeDownRequest: (requestId) =>
+    set((state) =>
+      state.pendingLayerMergeDownRequest?.id === requestId
+        ? { pendingLayerMergeDownRequest: null }
+        : {},
+    ),
 });

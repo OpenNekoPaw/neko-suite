@@ -17,6 +17,11 @@ import { createFrameSlice, type FrameSlice } from './slices/frameSlice';
 import { createFilterSlice, type FilterSlice } from './slices/filterSlice';
 import { createParticleSlice, type ParticleSlice } from './slices/particleSlice';
 import { createSceneSlice, type SceneSlice } from './slices/sceneSlice';
+import {
+  createPerspectiveGridSlice,
+  type PerspectiveGridSlice,
+} from './slices/perspectiveGridSlice';
+import { createFillSlice, type FillSlice } from './slices/fillSlice';
 
 export type SketchStore = DocumentSlice &
   LayerSlice &
@@ -29,7 +34,9 @@ export type SketchStore = DocumentSlice &
   FrameSlice &
   FilterSlice &
   ParticleSlice &
-  SceneSlice;
+  SceneSlice &
+  PerspectiveGridSlice &
+  FillSlice;
 
 export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createDocumentSlice(...a),
@@ -44,4 +51,6 @@ export const useSketchStore = create<SketchStore>()((...a) => ({
   ...createFilterSlice(...a),
   ...createParticleSlice(...a),
   ...createSceneSlice(...a),
+  ...createPerspectiveGridSlice(...a),
+  ...createFillSlice(...a),
 }));

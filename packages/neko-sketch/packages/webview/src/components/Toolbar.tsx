@@ -22,6 +22,7 @@ const TOOLS: { type: ToolType; icon: React.ReactNode; key: string }[] = [
   { type: 'select-wand', icon: <WandIcon />, key: 'sketch.toolbar.wand' },
   { type: 'move', icon: <MoveIcon />, key: 'sketch.toolbar.move' },
   { type: 'shape', icon: <ShapeIcon />, key: 'sketch.toolbar.shape' },
+  { type: 'vector', icon: <VectorNodeIcon />, key: 'sketch.toolbar.vector' },
   { type: 'transform', icon: <TransformIcon />, key: 'sketch.toolbar.transform' },
   { type: 'eyedropper', icon: <EyedropperIcon />, key: 'sketch.toolbar.eyedropper' },
   { type: 'fill', icon: <FillIcon />, key: 'sketch.toolbar.fill' },
@@ -153,6 +154,27 @@ function ShapeIcon() {
       strokeLinejoin="round"
     >
       <rect x="3" y="3" width="10" height="10" rx="2" />
+    </svg>
+  );
+}
+
+function VectorNodeIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 11C5 3 11 3 13 8" />
+      <circle cx="3" cy="11" r="1.4" />
+      <circle cx="8" cy="4" r="1.4" />
+      <circle cx="13" cy="8" r="1.4" />
+      <path d="M4.4 10.4L6.8 5.1M9.4 4.4l2.4 2.6" opacity="0.55" />
     </svg>
   );
 }

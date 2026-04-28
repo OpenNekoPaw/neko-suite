@@ -1,20 +1,27 @@
 /**
  * PalettePanel - color palette management for pixel art
  *
- * Built-in palettes (PICO-8, DB32, Endesga 64) with color selection.
+ * Built-in and custom palettes with color selection.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
-
-interface PaletteDef {
-  readonly name: string;
-  readonly colors: readonly string[];
-}
+import { encodeAsePalette, normalizeHexColor, parsePaletteFile } from '../utils/palette-file';
+import {
+  CUSTOM_PALETTES_CHANGED_EVENT,
+  createCustomPaletteId,
+  dedupeColors,
+  loadCustomPalettes,
+  makeUniquePaletteName,
+  saveCustomPalettes,
+  type PaletteDef,
+} from '../utils/custom-palettes';
 
 const BUILTIN_PALETTES: readonly PaletteDef[] = [
   {
+    id: 'pico-8',
     name: 'PICO-8',
+    builtin: true,
     colors: [
       '#000000',
       '#1D2B53',
@@ -35,7 +42,9 @@ const BUILTIN_PALETTES: readonly PaletteDef[] = [
     ],
   },
   {
+    id: 'db32',
     name: 'DB32',
+    builtin: true,
     colors: [
       '#000000',
       '#222034',
@@ -72,7 +81,9 @@ const BUILTIN_PALETTES: readonly PaletteDef[] = [
     ],
   },
   {
+    id: 'endesga-32',
     name: 'Endesga 32',
+    builtin: true,
     colors: [
       '#BE4A2F',
       '#D77643',
@@ -112,10 +123,27 @@ const BUILTIN_PALETTES: readonly PaletteDef[] = [
 
 export function PalettePanel() {
   const { t } = useTranslation();
-  const [selectedPalette, setSelectedPalette] = useState(0);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [customPalettes, setCustomPalettes] = useState<readonly PaletteDef[]>(loadCustomPalettes);
+  const [selectedPaletteId, setSelectedPaletteId] = useState(BUILTIN_PALETTES[0]?.id ?? '');
+  const [importError, setImportError] = useState<string | null>(null);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
+  const brushColor = useSketchStore((s) => s.brushSettings.color);
 
-  const palette = BUILTIN_PALETTES[selectedPalette];
+  const palettes = useMemo(() => [...BUILTIN_PALETTES, ...customPalettes], [customPalettes]);
+  const palette = palettes.find((item) => item.id === selectedPaletteId) ?? BUILTIN_PALETTES[0];
+
+  useEffect(() => {
+    const handleCustomPalettesChanged = () => setCustomPalettes(loadCustomPalettes());
+    window.addEventListener(CUSTOM_PALETTES_CHANGED_EVENT, handleCustomPalettesChanged);
+    return () =>
+      window.removeEventListener(CUSTOM_PALETTES_CHANGED_EVENT, handleCustomPalettesChanged);
+  }, []);
+
+  const persistCustomPalettes = useCallback((next: readonly PaletteDef[]) => {
+    setCustomPalettes(next);
+    saveCustomPalettes(next);
+  }, []);
 
   const handleColorClick = useCallback(
     (color: string) => {
@@ -124,23 +152,131 @@ export function PalettePanel() {
     [setBrushColor],
   );
 
+  const handleNewPalette = useCallback(() => {
+    const color = normalizeHexColor(brushColor) ?? '#000000';
+    const paletteName = makeUniquePaletteName(customPalettes, t('sketch.palette.customName'));
+    const nextPalette: PaletteDef = {
+      id: createCustomPaletteId(),
+      name: paletteName,
+      colors: [color],
+    };
+    persistCustomPalettes([...customPalettes, nextPalette]);
+    setSelectedPaletteId(nextPalette.id);
+  }, [brushColor, customPalettes, persistCustomPalettes, t]);
+
+  const handleAddBrushColor = useCallback(() => {
+    const color = normalizeHexColor(brushColor);
+    if (!color || !palette) return;
+
+    if (palette.builtin) {
+      const nextPalette: PaletteDef = {
+        id: createCustomPaletteId(),
+        name: makeUniquePaletteName(customPalettes, `${palette.name} Custom`),
+        colors: dedupeColors([...palette.colors, color]),
+      };
+      persistCustomPalettes([...customPalettes, nextPalette]);
+      setSelectedPaletteId(nextPalette.id);
+      return;
+    }
+
+    const next = customPalettes.map((item) =>
+      item.id === palette.id ? { ...item, colors: dedupeColors([...item.colors, color]) } : item,
+    );
+    persistCustomPalettes(next);
+  }, [brushColor, customPalettes, palette, persistCustomPalettes]);
+
+  const handleImportPalette = useCallback(
+    async (file: File) => {
+      setImportError(null);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const parsed = parsePaletteFile(file.name, bytes);
+      if (!parsed) {
+        setImportError(t('sketch.palette.importFailed'));
+        return;
+      }
+
+      const nextPalette: PaletteDef = {
+        id: createCustomPaletteId(),
+        name: makeUniquePaletteName(customPalettes, parsed.name),
+        colors: parsed.colors,
+      };
+      persistCustomPalettes([...customPalettes, nextPalette]);
+      setSelectedPaletteId(nextPalette.id);
+    },
+    [customPalettes, persistCustomPalettes, t],
+  );
+
+  const handleExportPalette = useCallback(() => {
+    if (!palette) return;
+    const bytes = encodeAsePalette(palette);
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${sanitizeFileName(palette.name)}.ase`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [palette]);
+
   return (
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.palette')}>
       <div className="flex items-center gap-1 mb-1">
         <h3 className="sketch-panel-title m-0 flex-1">{t('sketch.panel.palette')}</h3>
         <select
           className="text-xs bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0.5"
-          value={selectedPalette}
-          onChange={(e) => setSelectedPalette(parseInt(e.target.value, 10))}
+          value={palette?.id ?? ''}
+          onChange={(e) => setSelectedPaletteId(e.target.value)}
           aria-label={t('sketch.palette.select')}
         >
-          {BUILTIN_PALETTES.map((p, i) => (
-            <option key={p.name} value={i}>
+          {palettes.map((p) => (
+            <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
         </select>
       </div>
+
+      <div className="flex flex-wrap gap-1 mb-1">
+        <button
+          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
+          onClick={handleNewPalette}
+        >
+          {t('sketch.palette.new')}
+        </button>
+        <button
+          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
+          onClick={handleAddBrushColor}
+        >
+          {t('sketch.palette.addColor')}
+        </button>
+        <button
+          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
+          onClick={() => importInputRef.current?.click()}
+        >
+          {t('sketch.palette.import')}
+        </button>
+        <button
+          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
+          onClick={handleExportPalette}
+        >
+          {t('sketch.palette.export')}
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".ase,.aco,.json,.txt"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void handleImportPalette(file);
+          }}
+        />
+      </div>
+
+      {importError && <p className="text-[10px] text-red-400 m-0 mb-1">{importError}</p>}
 
       {palette && (
         <div className="grid grid-cols-8 gap-0.5" role="listbox" aria-label={palette.name}>
@@ -159,5 +295,14 @@ export function PalettePanel() {
         </div>
       )}
     </div>
+  );
+}
+
+function sanitizeFileName(name: string): string {
+  return (
+    name
+      .trim()
+      .replace(/[^a-z0-9-_]+/gi, '-')
+      .replace(/^-+|-+$/g, '') || 'palette'
   );
 }

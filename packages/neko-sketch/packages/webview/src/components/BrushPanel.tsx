@@ -10,7 +10,12 @@
  */
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
-import type { BrushType, SymmetryMode } from '../types';
+import { TEXTURE_STAMP_PATTERNS, getTextureStampPatternLabelKey } from '../brush/texture-stamp';
+import type { BrushType, SymmetryMode, TextureStampPattern } from '../types';
+
+interface VsCodeBridge {
+  postMessage(message: unknown): void;
+}
 
 const SYMMETRY_MODES: { mode: SymmetryMode; label: string }[] = [
   { mode: 'none', label: 'Off' },
@@ -28,6 +33,7 @@ const BRUSH_TYPES: { type: BrushType; key: string }[] = [
   { type: 'airbrush', key: 'sketch.brush.airbrush' },
   { type: 'marker', key: 'sketch.brush.marker' },
   { type: 'pixel', key: 'sketch.brush.pixel' },
+  { type: 'stamp', key: 'sketch.brush.stamp' },
 ];
 
 export function BrushPanel() {
@@ -39,6 +45,8 @@ export function BrushPanel() {
   const setBrushOpacity = useSketchStore((s) => s.setBrushOpacity);
   const setBrushColor = useSketchStore((s) => s.setBrushColor);
   const setBrushSettings = useSketchStore((s) => s.setBrushSettings);
+  const textureStampAssets = useSketchStore((s) => s.textureStampAssets);
+  const removeTextureStampAsset = useSketchStore((s) => s.removeTextureStampAsset);
   const symmetry = useSketchStore((s) => s.symmetry);
   const setSymmetry = useSketchStore((s) => s.setSymmetry);
   const show = useSketchStore((s) => s.showBrushPanel);
@@ -46,6 +54,12 @@ export function BrushPanel() {
   if (!show) return null;
 
   const isEraser = activeTool === 'eraser';
+  const isStamp = brushSettings.type === 'stamp';
+  const showStampControls = !isEraser && isStamp;
+  const spacingPercent = Math.round((brushSettings.spacing ?? 0.65) * 100);
+  const stampTextureValue = brushSettings.stampAssetId
+    ? `asset:${brushSettings.stampAssetId}`
+    : `builtin:${brushSettings.stampPattern ?? 'grain'}`;
 
   return (
     <div
@@ -112,7 +126,7 @@ export function BrushPanel() {
       {!isEraser && (
         <div className="sketch-panel-row">
           <label htmlFor="brush-hardness">
-            Hardness {Math.round(brushSettings.hardness * 100)}%
+            {t('sketch.brush.hardness', { hardness: Math.round(brushSettings.hardness * 100) })}
           </label>
           <input
             id="brush-hardness"
@@ -125,6 +139,89 @@ export function BrushPanel() {
             onChange={(e) => setBrushSettings({ hardness: Number(e.target.value) / 100 })}
           />
         </div>
+      )}
+
+      {showStampControls && (
+        <>
+          <div className="sketch-panel-row">
+            <label htmlFor="brush-stamp-pattern">{t('sketch.brush.stampPattern')}</label>
+            <select
+              id="brush-stamp-pattern"
+              className="sketch-select"
+              value={stampTextureValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.startsWith('asset:')) {
+                  setBrushSettings({ stampAssetId: value.slice('asset:'.length) });
+                  return;
+                }
+                setBrushSettings({
+                  stampAssetId: null,
+                  stampPattern: value.slice('builtin:'.length) as TextureStampPattern,
+                });
+              }}
+            >
+              <optgroup label={t('sketch.brush.stampPattern.builtIn')}>
+                {TEXTURE_STAMP_PATTERNS.map((pattern) => (
+                  <option key={pattern} value={`builtin:${pattern}`}>
+                    {t(getTextureStampPatternLabelKey(pattern))}
+                  </option>
+                ))}
+              </optgroup>
+              {textureStampAssets.length > 0 && (
+                <optgroup label={t('sketch.brush.stampPattern.assets')}>
+                  {textureStampAssets.map((asset) => (
+                    <option key={asset.id} value={`asset:${asset.id}`}>
+                      {asset.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          <div className="sketch-panel-row">
+            <span>{t('sketch.brush.stampAssets')}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="sketch-button"
+                onClick={() => requestTextureStampImport()}
+              >
+                {t('sketch.brush.stampAsset.import')}
+              </button>
+              {brushSettings.stampAssetId && (
+                <button
+                  type="button"
+                  className="sketch-danger-button"
+                  onClick={() => {
+                    if (brushSettings.stampAssetId) {
+                      removeTextureStampAsset(brushSettings.stampAssetId);
+                    }
+                  }}
+                >
+                  {t('sketch.brush.stampAsset.remove')}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="sketch-panel-row">
+            <label htmlFor="brush-spacing">
+              {t('sketch.brush.spacing', { spacing: spacingPercent })}
+            </label>
+            <input
+              id="brush-spacing"
+              type="range"
+              className="sketch-slider"
+              min={10}
+              max={200}
+              step={5}
+              value={spacingPercent}
+              onChange={(e) => setBrushSettings({ spacing: Number(e.target.value) / 100 })}
+            />
+          </div>
+        </>
       )}
 
       {/* Symmetry mode — hidden in eraser mode */}
@@ -167,4 +264,9 @@ export function BrushPanel() {
       )}
     </div>
   );
+}
+
+function requestTextureStampImport(): void {
+  const vscode = (window as unknown as { __vscode_api__?: VsCodeBridge }).__vscode_api__;
+  vscode?.postMessage({ type: 'stamp:import' });
 }

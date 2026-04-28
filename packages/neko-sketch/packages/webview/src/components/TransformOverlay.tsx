@@ -7,10 +7,13 @@
 import type { TransformState, HandleType } from '../tools/transform-tool';
 import { getHandlePositions } from '../tools/transform-tool';
 import type { ViewportState } from '../types';
+import { documentToScreenPoint } from '../utils/viewport-transform';
 
 interface TransformOverlayProps {
   transform: TransformState;
   viewport: ViewportState;
+  canvasWidth: number;
+  canvasHeight: number;
 }
 
 const HANDLE_SIZE = 6;
@@ -27,16 +30,19 @@ const HANDLE_CURSORS: Record<HandleType, string> = {
   rotate: 'grab',
 };
 
-export function TransformOverlay({ transform, viewport }: TransformOverlayProps) {
+export function TransformOverlay({
+  transform,
+  viewport,
+  canvasWidth,
+  canvasHeight,
+}: TransformOverlayProps) {
   const { bounds, matrix } = transform;
   const handles = getHandlePositions(bounds, matrix);
-  const { zoom, panX, panY } = viewport;
+  const viewportSize = { width: canvasWidth, height: canvasHeight };
 
   // Convert document coords to screen coords
-  const toScreen = (dx: number, dy: number) => ({
-    x: dx * zoom + panX,
-    y: dy * zoom + panY,
-  });
+  const toScreen = (dx: number, dy: number) =>
+    documentToScreenPoint({ x: dx, y: dy }, viewport, viewportSize);
 
   const corners = {
     tl: toScreen(handles.tl.x, handles.tl.y),

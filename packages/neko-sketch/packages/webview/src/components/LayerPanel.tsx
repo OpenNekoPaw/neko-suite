@@ -10,6 +10,7 @@ import { useTranslation } from '../i18n/I18nContext';
 import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
 import type { LayerData } from '../types';
+import { canMergeLayerPixels } from '../tools/layer-merge-tool';
 
 /** Adjustment layer types that map to FilterRegistry IDs */
 const ADJUSTMENT_TYPES = [
@@ -25,11 +26,13 @@ export function LayerPanel() {
   const activeLayerId = useSketchStore((s) => s.activeLayerId);
   const setActiveLayer = useSketchStore((s) => s.setActiveLayer);
   const addNewLayer = useSketchStore((s) => s.addNewLayer);
+  const addVectorLayer = useSketchStore((s) => s.addVectorLayer);
   const removeLayerById = useSketchStore((s) => s.removeLayerById);
   const updateLayerProps = useSketchStore((s) => s.updateLayerProps);
   const duplicateLayerById = useSketchStore((s) => s.duplicateLayerById);
   const moveLayerTo = useSketchStore((s) => s.moveLayerTo);
   const addAdjustmentLayer = useSketchStore((s) => s.addAdjustmentLayer);
+  const requestMergeLayerDown = useSketchStore((s) => s.requestMergeLayerDown);
   const show = useSketchStore((s) => s.showLayerPanel);
 
   const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
@@ -42,6 +45,7 @@ export function LayerPanel() {
       e.preventDefault();
       e.stopPropagation();
       const arrayIndex = layers.findIndex((l) => l.id === layer.id);
+      const belowLayer = arrayIndex > 0 ? layers[arrayIndex - 1] : undefined;
       const items: MenuItem[] = [
         {
           label: t('sketch.layer.duplicate'),
@@ -61,11 +65,8 @@ export function LayerPanel() {
         { separator: true },
         {
           label: t('sketch.layer.mergeDown'),
-          disabled: arrayIndex <= 0,
-          // TODO(P1): implement pixel-level merge via SketchCanvas renderer callback
-          onClick: () => {
-            /* requires renderer access — not yet available in LayerPanel */
-          },
+          disabled: !canMergeLayerPixels(layer, belowLayer),
+          onClick: () => requestMergeLayerDown(layer.id),
         },
         { separator: true },
         {
@@ -85,7 +86,15 @@ export function LayerPanel() {
       ];
       setLayerMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [layers, t, duplicateLayerById, moveLayerTo, removeLayerById],
+    [
+      layers,
+      t,
+      duplicateLayerById,
+      moveLayerTo,
+      removeLayerById,
+      requestMergeLayerDown,
+      updateLayerProps,
+    ],
   );
 
   if (!show) return null;
@@ -103,6 +112,14 @@ export function LayerPanel() {
             title={t('sketch.layer.add')}
           >
             <PlusIcon />
+          </button>
+          <button
+            aria-label={t('sketch.layer.addVector')}
+            className="sketch-icon-button"
+            onClick={() => addVectorLayer()}
+            title={t('sketch.layer.addVector')}
+          >
+            <VectorLayerIcon />
           </button>
           <button
             aria-label="Add adjustment layer"
@@ -271,6 +288,26 @@ function PlusIcon() {
       strokeLinecap="round"
     >
       <path d="M6 2v8M2 6h8" />
+    </svg>
+  );
+}
+
+function VectorLayerIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 9c2-6 6-6 8-3" />
+      <circle cx="2" cy="9" r="1" />
+      <circle cx="6" cy="4" r="1" />
+      <circle cx="10" cy="6" r="1" />
     </svg>
   );
 }

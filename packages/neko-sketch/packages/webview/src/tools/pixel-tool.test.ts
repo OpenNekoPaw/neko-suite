@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawPixel, drawLine, floodFill } from './pixel-tool';
+import { drawPixel, drawLine, floodFill, patternFill } from './pixel-tool';
 
 const WHITE: readonly [number, number, number, number] = [1, 1, 1, 1];
 const RED: readonly [number, number, number, number] = [1, 0, 0, 1];
@@ -79,5 +79,30 @@ describe('floodFill', () => {
     expect(px(img, 0, 0)).toEqual([255, 0, 0, 255]);
     expect(px(img, 1, 0)).toEqual([255, 0, 0, 255]); // within tolerance
     expect(px(img, 2, 0)).toEqual([200, 200, 200, 255]); // outside tolerance
+  });
+});
+
+describe('patternFill', () => {
+  it('fills a matching region with a checker pattern', () => {
+    const img = makeImageData(4, 4);
+    patternFill(img, 0, 0, RED, 'checker', 2);
+
+    expect(px(img, 0, 0)).toEqual([255, 0, 0, 255]);
+    expect(px(img, 2, 0)).toEqual([158, 0, 0, 255]);
+    expect(px(img, 0, 2)).toEqual([158, 0, 0, 255]);
+    expect(px(img, 2, 2)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('keeps non-matching pixels outside the filled region', () => {
+    const img = makeImageData(3, 1);
+    img.data.set([10, 10, 10, 255], 0);
+    img.data.set([10, 10, 10, 255], 4);
+    img.data.set([200, 200, 200, 255], 8);
+
+    patternFill(img, 0, 0, RED, 'diagonal', 3);
+
+    expect(px(img, 0, 0)[3]).toBe(255);
+    expect(px(img, 1, 0)[3]).toBe(255);
+    expect(px(img, 2, 0)).toEqual([200, 200, 200, 255]);
   });
 });

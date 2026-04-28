@@ -6,6 +6,7 @@
  */
 import type { LayerData, LayerType } from '../types';
 import { t } from '../i18n';
+import { createVectorLayerData } from '../tools/vector-editing';
 
 let nextId = 1;
 
@@ -38,6 +39,7 @@ export function createLayer(
     children: [],
     texture: null,
     alphaLock: false,
+    vectorData: type === 'vector' ? createVectorLayerData() : undefined,
   };
 }
 

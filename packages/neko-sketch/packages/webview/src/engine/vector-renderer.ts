@@ -9,7 +9,7 @@ import type { VectorPath, PathSegment } from '../types/vector';
  * Render a vector path to a 2D canvas context.
  */
 function renderPath(ctx: CanvasRenderingContext2D, path: VectorPath): void {
-  const path2d = buildPath2D(path.segments);
+  const path2d = buildPath2D(path.segments, path.closed);
 
   if (path.fill) {
     ctx.fillStyle = rgba(path.fill.color);
@@ -36,7 +36,7 @@ export function renderPaths(ctx: CanvasRenderingContext2D, paths: readonly Vecto
 
 // ─── Helpers ───
 
-function buildPath2D(segments: readonly PathSegment[]): Path2D {
+function buildPath2D(segments: readonly PathSegment[], closed: boolean): Path2D {
   const p = new Path2D();
   for (const seg of segments) {
     switch (seg.type) {
@@ -61,6 +61,9 @@ function buildPath2D(segments: readonly PathSegment[]): Path2D {
         break;
       }
     }
+  }
+  if (closed) {
+    p.closePath();
   }
   return p;
 }

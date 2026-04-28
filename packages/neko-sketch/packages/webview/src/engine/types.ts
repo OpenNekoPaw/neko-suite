@@ -64,6 +64,8 @@ export interface IRenderPipeline {
     targetHeight: number,
     hardness?: number,
     alphaLock?: boolean,
+    stampPattern?: number,
+    stampTexture?: WebGLTexture | null,
   ): void;
   clear(fbo: WebGLFramebuffer): void;
   dispose(): void;

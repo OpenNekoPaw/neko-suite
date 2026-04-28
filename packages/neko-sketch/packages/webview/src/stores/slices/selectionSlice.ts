@@ -23,6 +23,7 @@ export interface SelectionSlice {
     tolerance: number,
     contiguous: boolean,
   ) => void;
+  setSelectionMask: (mask: SelectionMask | null) => void;
   clearSelection: () => void;
   invertSelection: () => void;
 }
@@ -60,6 +61,11 @@ export const createSelectionSlice: StateCreator<SelectionSlice> = (set, get) => 
       contiguous,
     );
     set({ selection: selectionManager.getSelection() });
+  },
+
+  setSelectionMask: (mask) => {
+    selectionManager.setSelection(mask);
+    set({ selection: mask });
   },
 
   clearSelection: () => {

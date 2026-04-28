@@ -15,27 +15,77 @@ import {
   FrameTimeline,
   FrameControls,
   FilterPanel,
+  FillPanel,
   ParticlePanel,
   ScenePanel,
   PalettePanel,
+  AIPanel,
   SpriteSheetPlayer,
   VectorToolbar,
+  PerspectiveGridPanel,
   CollapsiblePanel,
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
 import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
+import { createTextureStampAssetFromBase64 } from './brush';
+import { exportLayerImageDataBase64 } from './utils/layer-export';
+import { mapPsdDocumentTree } from './utils/psd-layer-mapper';
+import { applySketchAIResult } from './ai/ai-result-applier';
+import { applySketchAIResultWithSession, type SketchAIApplySnapshot } from './ai/ai-apply-flow';
+import { SketchAISessionStore } from './ai/ai-session-store';
+import type {
+  SketchAIOperationParams,
+  SketchAIOperationType,
+  SketchAIResult,
+  SketchAIRun,
+} from './ai/ai-progress-types';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider } from './i18n/I18nContext';
-import type { SupportedLocale } from '@neko/shared';
+import type { SketchRuntimeFeatureFlags, SupportedLocale } from '@neko/shared';
+import type { CanvasConfig, LayerData } from './types';
 
-// Acquire VSCode API once
-const vscode = (window as unknown as { acquireVsCodeApi: () => VsCodeApi }).acquireVsCodeApi();
+interface AppSketchAIApplySnapshot extends SketchAIApplySnapshot {
+  readonly wasDirty: boolean;
+}
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
   getState(): unknown;
   setState(state: unknown): void;
+}
+
+interface SketchWebviewWindow {
+  acquireVsCodeApi(): VsCodeApi;
+  __vscode_api__?: VsCodeApi;
+}
+
+// Acquire VSCode API once and expose it to operation sync helpers.
+const webviewWindow = window as unknown as SketchWebviewWindow;
+const vscode = webviewWindow.acquireVsCodeApi();
+webviewWindow.__vscode_api__ = vscode;
+const aiSessionStore = new SketchAISessionStore();
+const DEFAULT_FEATURE_FLAGS: SketchRuntimeFeatureFlags = {
+  psdImportEnabled: false,
+  aiOps: {
+    enabled: false,
+    operations: {},
+  },
+};
+
+function isSketchAIOperationEnabled(
+  flags: SketchRuntimeFeatureFlags,
+  operation: SketchAIOperationType,
+): boolean {
+  return flags.aiOps.enabled && flags.aiOps.operations[operation] !== false;
+}
+
+function hasAvailableSketchAIOperations(flags: SketchRuntimeFeatureFlags): boolean {
+  if (!flags.aiOps.enabled) {
+    return false;
+  }
+  const operationFlags = Object.values(flags.aiOps.operations);
+  return operationFlags.length === 0 || operationFlags.some((enabled) => enabled);
 }
 
 export function App() {
@@ -54,6 +104,9 @@ export function App() {
   const brushSize = store((s) => s.brushSettings).size;
   const sidebarWidth = store((s) => s.sidebarWidth);
   const setSidebarWidth = store((s) => s.setSidebarWidth);
+  const [aiRuns, setAIRuns] = useState<readonly SketchAIRun[]>(() => aiSessionStore.list());
+  const [featureFlags, setFeatureFlags] =
+    useState<SketchRuntimeFeatureFlags>(DEFAULT_FEATURE_FLAGS);
 
   // Drag-over visual state
   const [isDragOver, setIsDragOver] = useState(false);
@@ -88,18 +141,62 @@ export function App() {
       type: 'status:update',
       data: {
         zoom: viewport.zoom,
+        rotation: viewport.rotation,
         canvasSize: `${canvasState.width} x ${canvasState.height}`,
         activeTool,
         layerCount,
         brushSize,
       },
     });
-  }, [viewport.zoom, canvasState.width, canvasState.height, activeTool, layerCount, brushSize]);
+  }, [
+    viewport.zoom,
+    viewport.rotation,
+    canvasState.width,
+    canvasState.height,
+    activeTool,
+    layerCount,
+    brushSize,
+  ]);
 
   // Notify extension that webview is ready
   useEffect(() => {
     vscode.postMessage({ type: 'ready' });
   }, []);
+
+  useEffect(() => aiSessionStore.subscribe(setAIRuns), []);
+
+  const handleCancelAIRun = useCallback((runId: string) => {
+    aiSessionStore.cancel(runId, 'Cancelling');
+    vscode.postMessage({ type: 'ai:cancel', runId });
+  }, []);
+
+  const handleDismissAIRun = useCallback((runId: string) => {
+    aiSessionStore.delete(runId);
+  }, []);
+
+  const handleApplyAIResult = useCallback((runId: string) => {
+    const pending = aiSessionStore.getPendingResult(runId);
+    if (!pending) {
+      return;
+    }
+    void handleAIResultApply(pending.runId, pending.operation, pending.result);
+  }, []);
+
+  const handleDiscardAIResult = useCallback((runId: string) => {
+    aiSessionStore.clearPendingResult(runId);
+    aiSessionStore.delete(runId);
+    notifyAIResultApplied(runId, false, 'discarded');
+  }, []);
+
+  const handleOpenAgentForAI = useCallback(
+    (operation: SketchAIOperationType, prompt: string, params: SketchAIOperationParams) => {
+      if (!isSketchAIOperationEnabled(featureFlags, operation)) {
+        return;
+      }
+      vscode.postMessage({ type: 'ai:openAgent', operation, prompt, params });
+    },
+    [featureFlags],
+  );
 
   // Handle messages from extension
   const handleMessage = useCallback(
@@ -172,6 +269,47 @@ export function App() {
           break;
         }
 
+        case 'file:importedPsdTree': {
+          handlePsdTreeImport(msg.payload);
+          break;
+        }
+
+        case 'stamp:imported': {
+          void handleTextureStampImport(msg.name, msg.data, msg.mimeType);
+          break;
+        }
+
+        case 'file:importResult': {
+          // Extension already owns user-visible import errors; this message keeps
+          // the protocol explicit for kill switch and failure telemetry.
+          break;
+        }
+
+        case 'featureFlags:update': {
+          setFeatureFlags(msg.flags);
+          break;
+        }
+
+        case 'ai:progress': {
+          aiSessionStore.recordProgress(msg.runId, msg.operation, msg.percent, msg.stage);
+          break;
+        }
+
+        case 'ai:resultApply': {
+          aiSessionStore.stageResult(msg.runId, msg.operation, msg.result);
+          break;
+        }
+
+        case 'ai:error': {
+          aiSessionStore.fail(msg.runId, msg.message);
+          break;
+        }
+
+        case 'ai:cancel': {
+          aiSessionStore.cancel(msg.runId);
+          break;
+        }
+
         case 'setLocale': {
           setLocale(msg.locale as SupportedLocale);
           break;
@@ -200,17 +338,14 @@ export function App() {
         }
 
         case 'request:layerImageData': {
-          // Currently returns the full composite canvas.
-          // Individual layer extraction requires renderer changes (future work).
           const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
-          let data: string | null = null;
-          if (canvas) {
-            try {
-              data = canvas.toDataURL('image/png').split(',')[1] ?? null;
-            } catch {
-              /* ignore */
-            }
-          }
+          const state = store.getState();
+          const data = exportLayerImageDataBase64({
+            layers: state.layers,
+            activeLayerId: state.activeLayerId,
+            layerId: msg.layerId,
+            gl: canvas?.getContext('webgl2') ?? null,
+          });
           vscode.postMessage({ type: 'response:layerImageData', requestId: msg.requestId, data });
           break;
         }
@@ -414,6 +549,14 @@ export function App() {
             </div>
           </div>
         )}
+        <AIRunMonitor
+          runs={aiRuns}
+          getPendingResult={(runId) => aiSessionStore.getPendingResult(runId)?.result ?? null}
+          onApply={handleApplyAIResult}
+          onCancel={handleCancelAIRun}
+          onDiscard={handleDiscardAIResult}
+          onDismiss={handleDismissAIRun}
+        />
         <div ref={rootRef} className="flex flex-1 overflow-hidden">
           <Toolbar />
           <div className="sketch-canvas-container">
@@ -446,9 +589,25 @@ export function App() {
                       <VectorToolbar />
                     </CollapsiblePanel>
                   )}
+                  {activeTool === 'fill' && (
+                    <CollapsiblePanel titleKey="sketch.panel.fill">
+                      <FillPanel />
+                    </CollapsiblePanel>
+                  )}
                   <CollapsiblePanel titleKey="sketch.panel.palette">
                     <PalettePanel />
                   </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
+                    <PerspectiveGridPanel />
+                  </CollapsiblePanel>
+                  {hasAvailableSketchAIOperations(featureFlags) && (
+                    <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
+                      <AIPanel
+                        operationAvailability={featureFlags.aiOps.operations}
+                        onOpenAgent={handleOpenAgentForAI}
+                      />
+                    </CollapsiblePanel>
+                  )}
                   <CollapsiblePanel titleKey="sketch.panel.layers">
                     <LayerPanel />
                   </CollapsiblePanel>
@@ -478,14 +637,158 @@ export function App() {
   );
 }
 
+function AIRunMonitor({
+  runs,
+  getPendingResult,
+  onApply,
+  onCancel,
+  onDiscard,
+  onDismiss,
+}: {
+  readonly runs: readonly SketchAIRun[];
+  readonly getPendingResult: (runId: string) => SketchAIResult | null;
+  readonly onApply: (runId: string) => void;
+  readonly onCancel: (runId: string) => void;
+  readonly onDiscard: (runId: string) => void;
+  readonly onDismiss: (runId: string) => void;
+}): JSX.Element | null {
+  const visibleRuns = runs.filter((run) => run.state !== 'completed' && run.state !== 'idle');
+  if (visibleRuns.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="absolute right-3 bottom-10 z-40 flex w-[min(360px,calc(100vw-1.5rem))] flex-col gap-2 pointer-events-none">
+      {visibleRuns.slice(-3).map((run) => {
+        const canCancel = run.state === 'preparing' || run.state === 'running';
+        const pendingResult = getPendingResult(run.runId);
+        const preview = pendingResult ? getAIResultPreview(pendingResult) : null;
+        return (
+          <div
+            key={run.runId}
+            className="pointer-events-auto border border-[var(--neko-border)] bg-[var(--neko-surface)] shadow-lg"
+            style={{ borderRadius: 6 }}
+          >
+            <div className="flex items-start gap-2 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-xs font-medium text-[var(--vscode-foreground)]">
+                    {formatAIOperation(run.operation)}
+                  </span>
+                  <span className="shrink-0 text-[10px] uppercase text-[var(--vscode-descriptionForeground)]">
+                    {run.state}
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden bg-[var(--vscode-progressBar-background,#0e70c0)]/20">
+                  <div
+                    className="h-full bg-[var(--vscode-progressBar-background,#0e70c0)] transition-[width]"
+                    style={{ width: `${Math.round(run.progress * 100)}%` }}
+                  />
+                </div>
+                {run.stage && (
+                  <div className="mt-1 truncate text-[11px] text-[var(--vscode-descriptionForeground)]">
+                    {run.stage}
+                  </div>
+                )}
+                {preview && (
+                  <div className="mt-2 overflow-hidden border border-[var(--neko-border)] bg-[var(--vscode-editor-background)]">
+                    <img
+                      src={preview.src}
+                      alt={preview.alt}
+                      className="h-28 w-full object-contain"
+                      draggable={false}
+                    />
+                  </div>
+                )}
+                {typeof run.metadata.error === 'string' && (
+                  <div className="mt-1 line-clamp-2 text-[11px] text-[var(--vscode-errorForeground,#f85149)]">
+                    {run.metadata.error}
+                  </div>
+                )}
+              </div>
+              {run.state === 'previewing' && pendingResult ? (
+                <div className="flex shrink-0 flex-col gap-1">
+                  <button
+                    type="button"
+                    className="border border-[var(--vscode-button-border)] bg-[var(--vscode-button-background)] px-2 py-0.5 text-xs text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]"
+                    style={{ borderRadius: 4 }}
+                    onClick={() => onApply(run.runId)}
+                    aria-label={`Apply ${formatAIOperation(run.operation)}`}
+                    title="Apply"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="border border-[var(--vscode-button-border)] px-2 py-0.5 text-xs hover:bg-[var(--vscode-button-hoverBackground)]"
+                    style={{ borderRadius: 4 }}
+                    onClick={() => onDiscard(run.runId)}
+                    aria-label={`Discard ${formatAIOperation(run.operation)}`}
+                    title="Discard"
+                  >
+                    Discard
+                  </button>
+                </div>
+              ) : canCancel ? (
+                <button
+                  type="button"
+                  className="shrink-0 border border-[var(--vscode-button-border)] px-2 py-0.5 text-xs hover:bg-[var(--vscode-button-hoverBackground)]"
+                  style={{ borderRadius: 4 }}
+                  onClick={() => onCancel(run.runId)}
+                  aria-label={`Cancel ${formatAIOperation(run.operation)}`}
+                  title="Cancel"
+                >
+                  Cancel
+                </button>
+              ) : run.state === 'failed' || run.state === 'cancelled' ? (
+                <button
+                  type="button"
+                  className="shrink-0 border border-[var(--vscode-button-border)] px-2 py-0.5 text-xs hover:bg-[var(--vscode-button-hoverBackground)]"
+                  style={{ borderRadius: 4 }}
+                  onClick={() => onDismiss(run.runId)}
+                  aria-label={`Dismiss ${formatAIOperation(run.operation)}`}
+                  title="Dismiss"
+                >
+                  Dismiss
+                </button>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function getAIResultPreview(
+  result: SketchAIResult,
+): { readonly src: string; readonly alt: string } | null {
+  switch (result.kind) {
+    case 'layer':
+    case 'selection':
+      return result.data.kind === 'webviewUri'
+        ? { src: result.data.ref, alt: `${result.kind} preview` }
+        : null;
+    case 'palette':
+    case 'brushPreset':
+      return null;
+    default:
+      return null;
+  }
+}
+
+function formatAIOperation(operation: SketchAIRun['operation']): string {
+  return operation
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 /** Import an image file as a new layer */
 async function handleFileImport(name: string, base64Data: string): Promise<void> {
   try {
     const { layer } = await importImageAsLayer(name, base64Data);
-    const state = useSketchStore.getState();
-    state.setLayers([...state.layers, layer]);
-    state.setActiveLayer(layer.id);
-    state.markDirty();
+    applyImportedLayers({ layers: [layer], sourceName: name, sourceKind: 'image' });
   } catch {
     // Silently fail — extension already logged the error
   }
@@ -495,11 +798,204 @@ async function handleFileImport(name: string, base64Data: string): Promise<void>
 async function handleBlobImport(blob: Blob, name: string): Promise<void> {
   try {
     const { layer } = await importImageFromBlob(blob, name);
-    const state = useSketchStore.getState();
-    state.setLayers([...state.layers, layer]);
-    state.setActiveLayer(layer.id);
-    state.markDirty();
+    applyImportedLayers({ layers: [layer], sourceName: name, sourceKind: 'image' });
   } catch {
     // Silently fail — bitmap decode may fail for unsupported formats
   }
+}
+
+async function handleTextureStampImport(
+  name: string,
+  base64Data: string,
+  mimeType: string,
+): Promise<void> {
+  try {
+    const asset = await createTextureStampAssetFromBase64(name, base64Data, mimeType);
+    useSketchStore.getState().addTextureStampAsset(asset);
+  } catch {
+    // Extension owns file-level errors; decode failures keep the current brush unchanged.
+  }
+}
+
+function handlePsdTreeImport(payload: import('@neko/shared').PsdImportPayloadWire): void {
+  const result = mapPsdDocumentTree(payload.tree, payload.issues);
+  applyImportedLayers({
+    layers: result.layers,
+    canvas: result.canvas,
+    sourceName: payload.name,
+    sourceKind: 'PSD',
+  });
+}
+
+async function handleAIResultApply(
+  runId: string,
+  operation: import('./ai/ai-progress-types').SketchAIOperationType,
+  result: import('./ai/ai-progress-types').SketchAIResult,
+): Promise<void> {
+  await applySketchAIResultWithSession(runId, operation, result, {
+    sessionStore: aiSessionStore,
+    applyResult: (aiResult) =>
+      applySketchAIResult(aiResult, {
+        getLayers: () => useSketchStore.getState().layers,
+        setLayers: (layers) => useSketchStore.getState().setLayers(layers),
+        setActiveLayer: (id) => useSketchStore.getState().setActiveLayer(id),
+        setSelectionMask: (mask) => useSketchStore.getState().setSelectionMask(mask),
+        setBrushSettings: (updates) => useSketchStore.getState().setBrushSettings(updates),
+        markDirty: () => useSketchStore.getState().markDirty(),
+      }),
+    captureSnapshot: captureAIApplySnapshot,
+    rollbackSnapshot: rollbackAIApplySnapshot,
+    pushHistorySnapshot,
+    notifyDocumentEdited,
+    notifyResultApplied: notifyAIResultApplied,
+  });
+}
+
+function applyImportedLayers(params: {
+  readonly layers: readonly LayerData[];
+  readonly canvas?: CanvasConfig;
+  readonly sourceName: string;
+  readonly sourceKind: 'image' | 'PSD';
+}): void {
+  const state = useSketchStore.getState();
+  const before = captureLayerHistorySnapshot();
+  const shouldAdoptCanvas = params.canvas !== undefined && state.layers.length === 0;
+  if (!shouldAdoptCanvas && params.layers.length === 0) {
+    return;
+  }
+
+  if (shouldAdoptCanvas && params.canvas) {
+    state.setCanvas(params.canvas);
+  }
+  if (params.layers.length > 0) {
+    state.setLayers([...state.layers, ...params.layers]);
+  }
+  const activeLayer = findLastRasterLayer(params.layers) ?? params.layers[params.layers.length - 1];
+  if (activeLayer) {
+    state.setActiveLayer(activeLayer.id);
+  }
+  state.markDirty();
+  pushHistorySnapshot({
+    type: 'layer-add',
+    label: `Import ${params.sourceKind}: ${params.sourceName}`,
+    before,
+    after: captureLayerHistorySnapshot(),
+  });
+  notifyDocumentEdited(`Import ${params.sourceKind}: ${params.sourceName}`);
+}
+
+function captureHistorySnapshotForAIResult(
+  result: SketchAIResult,
+): import('./types').HistoryStateSnapshot {
+  if (result.kind === 'selection') {
+    return captureSelectionHistorySnapshot();
+  }
+  return captureLayerHistorySnapshot();
+}
+
+function captureAIApplySnapshot(result: SketchAIResult): AppSketchAIApplySnapshot {
+  return {
+    state: captureHistorySnapshotForAIResult(result),
+    wasDirty: useSketchStore.getState().isDirty,
+  };
+}
+
+function rollbackAIApplySnapshot(snapshot: AppSketchAIApplySnapshot): void {
+  const state = useSketchStore.getState();
+  if (snapshot.state.layers !== undefined) {
+    state.setLayers([...snapshot.state.layers]);
+  }
+  if (snapshot.state.activeLayerId !== undefined) {
+    useSketchStore.setState({ activeLayerId: snapshot.state.activeLayerId });
+  }
+  if (snapshot.state.selection !== undefined) {
+    state.setSelectionMask(
+      snapshot.state.selection
+        ? {
+            width: snapshot.state.selection.width,
+            height: snapshot.state.selection.height,
+            data: new Uint8Array(snapshot.state.selection.data),
+          }
+        : null,
+    );
+  }
+  if (snapshot.wasDirty) {
+    state.markDirty();
+  } else {
+    state.markClean();
+  }
+}
+
+function captureLayerHistorySnapshot(): import('./types').HistoryStateSnapshot {
+  const state = useSketchStore.getState();
+  return {
+    layers: [...state.layers],
+    activeLayerId: state.activeLayerId,
+  };
+}
+
+function captureSelectionHistorySnapshot(): import('./types').HistoryStateSnapshot {
+  const selection = useSketchStore.getState().selection;
+  return {
+    selection: selection
+      ? {
+          width: selection.width,
+          height: selection.height,
+          data: new Uint8Array(selection.data),
+        }
+      : null,
+  };
+}
+
+function pushHistorySnapshot(params: {
+  readonly type: import('./types').HistoryActionType;
+  readonly label: string;
+  readonly before: import('./types').HistoryStateSnapshot;
+  readonly after: import('./types').HistoryStateSnapshot;
+}): void {
+  useSketchStore.getState().pushHistory({
+    type: params.type,
+    label: params.label,
+    snapshot: null,
+    stateSnapshot: {
+      before: params.before,
+      after: params.after,
+    },
+  });
+}
+
+function findLastRasterLayer(layers: readonly LayerData[]): LayerData | undefined {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    if (!layer) continue;
+    const child = findLastRasterLayer(layer.children);
+    if (child) return child;
+    if (layer.type === 'raster') return layer;
+  }
+  return undefined;
+}
+
+function notifyDocumentEdited(description: string): void {
+  vscode.postMessage({
+    type: 'operationApplied',
+    operation: {
+      type: 'sketch.import',
+      meta: {
+        id: `sketch-import-${Date.now()}`,
+        timestamp: Date.now(),
+        source: 'user',
+        description,
+      },
+      payload: {},
+    },
+  });
+}
+
+function notifyAIResultApplied(runId: string, success: boolean, reason?: string): void {
+  vscode.postMessage({
+    type: 'ai:resultApplied',
+    runId,
+    success,
+    reason,
+  });
 }

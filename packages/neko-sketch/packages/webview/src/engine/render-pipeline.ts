@@ -8,6 +8,7 @@ import type { IRenderPipeline, IShaderManager, ITextureManager } from './types';
 import type { LayerData, ViewportState } from '../types';
 import { BLEND_MODE_INDEX, QUAD_VERT } from './shaders';
 import { CLIPPING_MASK_FRAG, LAYER_MASK_FRAG } from './mask-shaders';
+import { buildViewportTransformMatrix } from '../utils/viewport-transform';
 
 /** Fullscreen quad geometry: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -263,6 +264,8 @@ export class RenderPipeline implements IRenderPipeline {
     targetHeight: number,
     hardness = 0.7,
     alphaLock = false,
+    stampPattern = 0,
+    stampTexture: WebGLTexture | null = null,
   ): void {
     const gl = this.gl;
     const pointCount = points.length / 5; // x, y, pressure, tiltX, tiltY per point
@@ -277,11 +280,26 @@ export class RenderPipeline implements IRenderPipeline {
     const colorLoc = gl.getUniformLocation(program, 'u_color');
     const sizeLoc = gl.getUniformLocation(program, 'u_size');
     const hardnessLoc = gl.getUniformLocation(program, 'u_hardness');
+    const stampPatternLoc = gl.getUniformLocation(program, 'u_stampPattern');
+    const hasStampTextureLoc = gl.getUniformLocation(program, 'u_hasStampTexture');
+    const stampTextureLoc = gl.getUniformLocation(program, 'u_stampTexture');
     const transformLoc = gl.getUniformLocation(program, 'u_transform');
 
     gl.uniform4fv(colorLoc, color);
     gl.uniform1f(sizeLoc, size);
     gl.uniform1f(hardnessLoc, hardness);
+    if (stampPatternLoc !== null) {
+      gl.uniform1i(stampPatternLoc, stampPattern);
+    }
+    if (hasStampTextureLoc !== null) {
+      gl.uniform1i(hasStampTextureLoc, stampTexture ? 1 : 0);
+    }
+    if (stampTexture && stampTextureLoc !== null) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, stampTexture);
+      gl.uniform1i(stampTextureLoc, 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     // Orthographic projection: map document pixel coords → clip space
     gl.uniformMatrix3fv(transformLoc, false, ortho3(targetWidth, targetHeight));
 
@@ -303,6 +321,11 @@ export class RenderPipeline implements IRenderPipeline {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     gl.bindVertexArray(null);
+    if (stampTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
@@ -340,24 +363,13 @@ export class RenderPipeline implements IRenderPipeline {
     _canvasW: number,
     _canvasH: number,
   ): Float32Array {
-    const { panX, panY, zoom } = viewport;
     // panX/panY are in CSS pixels (from pointer events / zoom handler).
     // gl.canvas.width is in device pixels (CSS * DPR). We must use CSS pixel
     // dimensions for the pan-to-NDC conversion to avoid DPR-dependent offset.
     const el = this.gl.canvas as HTMLCanvasElement;
     const cssW = el.clientWidth || _canvasW;
     const cssH = el.clientHeight || _canvasH;
-
-    // Forward transform matching screenToCanvas() inverse:
-    //   docX = (screenX - panX) / zoom  →  screenX = zoom * docX + panX
-    // Composite texture u = docX/docW, ndcX = 2u - 1.
-    // Since init sets style.width = docW, cssW ≈ docW → sx = zoom.
-    const sx = zoom;
-    const sy = zoom;
-    const tx = zoom - 1 + (panX / cssW) * 2;
-    const ty = 1 - zoom - (panY / cssH) * 2;
-
-    return new Float32Array([sx, 0, 0, 0, sy, 0, tx, ty, 1]);
+    return buildViewportTransformMatrix(viewport, _canvasW, _canvasH, cssW, cssH);
   }
 
   private drawQuad(): void {

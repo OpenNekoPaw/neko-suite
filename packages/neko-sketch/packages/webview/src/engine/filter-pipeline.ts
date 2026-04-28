@@ -4,10 +4,22 @@
  * Applies a chain of image filters using ping-pong FBO rendering.
  * Each filter reads from one texture and writes to another.
  */
-import type { AppliedFilter } from '../types/filter';
+import type { AppliedFilter, FilterParam, FilterParamValue } from '../types/filter';
 import type { FilterRegistry } from './filter-registry';
 import type { ITextureManager } from './types';
 import { FILTER_VERT } from './filter-shaders';
+
+function isVec2Value(value: FilterParamValue): value is [number, number] {
+  return (
+    Array.isArray(value) && value.length === 2 && value.every((item) => typeof item === 'number')
+  );
+}
+
+function isVec4Value(value: FilterParamValue): value is [number, number, number, number] {
+  return (
+    Array.isArray(value) && value.length === 4 && value.every((item) => typeof item === 'number')
+  );
+}
 
 export class FilterPipeline {
   private readonly gl: WebGL2RenderingContext;
@@ -163,11 +175,7 @@ export class FilterPipeline {
         const loc = gl.getUniformLocation(program, param.name);
         if (!loc) continue;
         const val = applied.params[param.name] ?? param.default;
-        if (typeof val === 'number') {
-          gl.uniform1f(loc, val);
-        } else if (typeof val === 'boolean') {
-          gl.uniform1i(loc, val ? 1 : 0);
-        }
+        this.setParamUniform(loc, param, val);
       }
 
       gl.disable(gl.BLEND);
@@ -176,6 +184,31 @@ export class FilterPipeline {
     }
 
     return texs[current]!;
+  }
+
+  private setParamUniform(
+    loc: WebGLUniformLocation,
+    param: FilterParam,
+    value: FilterParamValue,
+  ): void {
+    const gl = this.gl;
+    switch (param.type) {
+      case 'float':
+        if (typeof value === 'number') gl.uniform1f(loc, value);
+        return;
+      case 'int':
+        if (typeof value === 'number') gl.uniform1i(loc, Math.round(value));
+        return;
+      case 'bool':
+        if (typeof value === 'boolean') gl.uniform1i(loc, value ? 1 : 0);
+        return;
+      case 'vec2':
+        if (isVec2Value(value)) gl.uniform2f(loc, value[0], value[1]);
+        return;
+      case 'color':
+        if (isVec4Value(value)) gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
+        return;
+    }
   }
 
   private applyGaussianBlur(
@@ -188,7 +221,8 @@ export class FilterPipeline {
     texs: WebGLTexture[],
   ): void {
     const gl = this.gl;
-    const radius = (applied.params['u_radius'] as number | undefined) ?? 5;
+    const radiusValue = applied.params['u_radius'];
+    const radius = typeof radiusValue === 'number' ? radiusValue : 5;
 
     // Horizontal pass
     const hTarget = fbos[1 - startIdx]!;

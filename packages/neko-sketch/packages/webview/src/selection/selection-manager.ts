@@ -11,6 +11,7 @@ import type { Point2D } from '../utils/scanline-fill';
 export interface ISelectionManager {
   hasSelection(): boolean;
   getSelection(): SelectionMask | null;
+  setSelection(mask: SelectionMask | null): void;
   selectRect(
     x: number,
     y: number,
@@ -43,6 +44,10 @@ export class SelectionManager implements ISelectionManager {
 
   getSelection(): SelectionMask | null {
     return this.mask;
+  }
+
+  setSelection(mask: SelectionMask | null): void {
+    this.mask = mask;
   }
 
   selectRect(
