@@ -9,18 +9,83 @@ import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type { LayerOutlineProvider } from '../views/layerOutlineProvider';
 import type { SketchStatusBar } from '../views/sketchStatusBar';
 import type { NksDocument, LayerOutlineData, SketchStatusInfo } from '../types';
-import type { SketchImportContext, SketchSelectionData } from '@neko/shared';
+import type {
+  PsdImportIssue,
+  PsdImportPayloadWire,
+  PsdLayerNodeWire,
+  PsdImportIssueCode,
+  SketchImportContext,
+  SketchSelectionData,
+  SketchAIAssetRef,
+  SketchAIContextSnapshot,
+  SketchAIContextSnapshotRequest,
+  SketchAICancelMessage,
+  SketchAIErrorMessage,
+  SketchAIImageResultRequest,
+  SketchAIOperationType,
+  SketchAIOperationParams,
+  SketchAIProgressMessage,
+  SketchAIResult,
+  SketchAIResultApplyMessage,
+  SketchRuntimeFeatureFlags,
+} from '@neko/shared';
 import { getLogger } from '../utils/logger';
+import { parsePsdToWire, PsdImportError } from '../psd/psd-ag-adapter';
 
 const logger = getLogger('SketchEditorProvider');
 
 /** Image file extensions supported for import */
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+const PSD_EXTENSIONS = new Set(['psd']);
+const PSD_IMPORT_OUTPUT_CHANNEL = 'Neko Sketch PSD Import';
+const FILE_IMPORT_RESULT_TYPE = 'file:importResult';
+const AI_RESULT_CACHE_DIR = 'sketch-ai';
+type ImportFailureCode =
+  | 'kill-switch-disabled'
+  | 'import-failed'
+  | Extract<PsdImportIssueCode, 'parser-unavailable' | 'parse-failed'>;
 
 /** Check if a URI points to an importable image file */
 function isImageUri(uri: vscode.Uri): boolean {
   const ext = uri.path.split('.').pop()?.toLowerCase() ?? '';
   return IMAGE_EXTENSIONS.has(ext);
+}
+
+function isPsdUri(uri: vscode.Uri): boolean {
+  const ext = uri.path.split('.').pop()?.toLowerCase() ?? '';
+  return PSD_EXTENSIONS.has(ext);
+}
+
+function isPsdImportEnabled(): boolean {
+  return vscode.workspace.getConfiguration('neko.sketch').get('psdImport.enabled', false);
+}
+
+const AI_OPERATION_CONFIG_KEYS: Readonly<Partial<Record<SketchAIOperationType, string>>> = {
+  generate: 'generate',
+  'smart-selection': 'smartSelection',
+  inpaint: 'inpaint',
+  'style-transfer': 'styleTransfer',
+  upscale: 'upscale',
+  'auto-layer': 'autoLayer',
+  'lineart-colorize': 'lineartColorize',
+};
+
+function getSketchRuntimeFeatureFlags(): SketchRuntimeFeatureFlags {
+  const config = vscode.workspace.getConfiguration('neko.sketch');
+  const operations: Partial<Record<SketchAIOperationType, boolean>> = {};
+  for (const [operation, key] of Object.entries(AI_OPERATION_CONFIG_KEYS) as Array<
+    [SketchAIOperationType, string]
+  >) {
+    operations[operation] = config.get(`aiOps.${key}.enabled`, true);
+  }
+
+  return {
+    psdImportEnabled: config.get('psdImport.enabled', false),
+    aiOps: {
+      enabled: config.get('aiOps.enabled', false),
+      operations,
+    },
+  };
 }
 
 /** Pending promise entry for Extension → Webview request/response round-trips */
@@ -52,8 +117,24 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Phase 2/3: pending Extension → Webview request/response round-trips
   // Key: requestId, Value: pending promise
   private readonly pendingRequests = new Map<string, PendingRequest<unknown>>();
+  private readonly pendingAIResultRuns = new Set<string>();
+  private readonly cancellableAIRuns = new Map<string, () => Promise<void>>();
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private readonly psdImportOutput = vscode.window.createOutputChannel(PSD_IMPORT_OUTPUT_CHANNEL);
+
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.context.subscriptions.push(this.psdImportOutput);
+    this.context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration('neko.sketch.aiOps') ||
+          event.affectsConfiguration('neko.sketch.psdImport.enabled')
+        ) {
+          void this.postFeatureFlags();
+        }
+      }),
+    );
+  }
 
   /** Wire up external providers after construction */
   setProviders(opts: { outline?: LayerOutlineProvider; statusBar?: SketchStatusBar }): void {
@@ -79,7 +160,10 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
 
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
+        this.getAIResultCacheRoot(),
+      ],
     };
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
@@ -102,6 +186,13 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
           clearTimeout(pending.timer);
           pending.reject(new Error('Sketch editor closed'));
           this.pendingRequests.delete(id);
+        }
+        for (const runId of this.pendingAIResultRuns) {
+          void this.cleanupAIArtifacts(runId);
+        }
+        this.pendingAIResultRuns.clear();
+        for (const runId of Array.from(this.cancellableAIRuns.keys())) {
+          void this.cancelAIRun(runId);
         }
       }
     });
@@ -161,6 +252,109 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       data: base64,
       path: '',
     });
+  }
+
+  private async postFeatureFlags(webviewPanel = this.activeWebviewPanel): Promise<void> {
+    await webviewPanel?.webview.postMessage({
+      type: 'featureFlags:update',
+      flags: getSketchRuntimeFeatureFlags(),
+    });
+  }
+
+  async applyAIImageResult(request: SketchAIImageResultRequest): Promise<boolean> {
+    const webviewPanel = this.activeWebviewPanel;
+    if (!webviewPanel) {
+      return false;
+    }
+
+    const runId = request.runId ?? createAIResultRunId(request.operation);
+    try {
+      await this.postAIProgress(webviewPanel, runId, request.operation, 5, 'Downloading AI result');
+      const asset = await this.downloadAIResultAsset(request, runId, webviewPanel.webview);
+      await this.postAIProgress(webviewPanel, runId, request.operation, 90, 'Applying AI result');
+      const result = createSketchAIImageResult(request, asset);
+      const message: SketchAIResultApplyMessage = {
+        type: 'ai:resultApply',
+        runId,
+        operation: request.operation,
+        result,
+      };
+      const posted = await webviewPanel.webview.postMessage(message);
+      if (posted) {
+        this.pendingAIResultRuns.add(runId);
+      } else {
+        await this.cleanupAIArtifacts(runId);
+      }
+      return posted;
+    } catch (error) {
+      await this.cleanupAIArtifacts(runId);
+      const message: SketchAIErrorMessage = {
+        type: 'ai:error',
+        runId,
+        message: error instanceof Error ? error.message : String(error),
+      };
+      await webviewPanel.webview.postMessage(message);
+      return false;
+    }
+  }
+
+  async cleanupAIArtifacts(runId: string): Promise<void> {
+    const safeRunId = sanitizePathSegment(runId);
+    if (!safeRunId) {
+      return;
+    }
+
+    const runDir = vscode.Uri.joinPath(this.getAIResultCacheRoot(), safeRunId);
+    try {
+      await vscode.workspace.fs.delete(runDir, { recursive: true, useTrash: false });
+    } catch {
+      // Missing cache directories are expected on repeated cleanup paths.
+    } finally {
+      this.pendingAIResultRuns.delete(runId);
+    }
+  }
+
+  async reportAIProgress(message: Omit<SketchAIProgressMessage, 'type'>): Promise<boolean> {
+    const webviewPanel = this.activeWebviewPanel;
+    if (!webviewPanel) {
+      return false;
+    }
+    await this.postAIProgress(
+      webviewPanel,
+      message.runId,
+      message.operation,
+      message.percent,
+      message.stage,
+    );
+    return true;
+  }
+
+  registerAIRun(runId: string, cancel: () => Promise<void>): void {
+    if (!runId) {
+      return;
+    }
+    this.cancellableAIRuns.set(runId, cancel);
+  }
+
+  unregisterAIRun(runId: string): void {
+    this.cancellableAIRuns.delete(runId);
+  }
+
+  async cancelAIRun(runId: string): Promise<boolean> {
+    const cancel = this.cancellableAIRuns.get(runId);
+    if (!cancel) {
+      return false;
+    }
+
+    try {
+      await cancel();
+      this.cancellableAIRuns.delete(runId);
+      await this.cleanupAIArtifacts(runId);
+      return true;
+    } catch (error) {
+      logger.error(`Failed to cancel AI run ${runId}: ${error}`);
+      return false;
+    }
   }
 
   // ===========================================================================
@@ -254,6 +448,55 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
+  async createAIContextSnapshot(
+    request: SketchAIContextSnapshotRequest,
+    timeoutMs = 10_000,
+  ): Promise<SketchAIContextSnapshot | null> {
+    if (!this.activeWebviewPanel) return null;
+
+    const scope = request.scope ?? 'canvas';
+    const runId = request.runId ?? createAIResultRunId(request.operation ?? 'context');
+    const imageData =
+      scope === 'layer'
+        ? await this.getLayerImageData(request.layerId, timeoutMs)
+        : await this.getCanvasImageData(timeoutMs);
+
+    if (!imageData) {
+      return null;
+    }
+
+    const primaryAsset = await this.cacheAIContextBase64Asset({
+      runId,
+      name: scope === 'layer' ? 'layer.png' : 'composite.png',
+      base64Data: imageData,
+    });
+
+    const selection = request.includeSelection ? await this.getSelectionMask(timeoutMs) : null;
+    const maskImage = selection
+      ? await this.cacheAIContextBase64Asset({
+          runId,
+          name: 'selection-mask.png',
+          base64Data: selection.mask,
+        })
+      : undefined;
+
+    return {
+      runId,
+      operation: request.operation,
+      scope,
+      [scope === 'layer' ? 'layerImage' : 'compositeImage']: primaryAsset,
+      maskImage,
+      selectionBounds: selection
+        ? {
+            x: selection.x,
+            y: selection.y,
+            width: selection.width,
+            height: selection.height,
+          }
+        : undefined,
+    };
+  }
+
   // ===========================================================================
   // Private helpers
   // ===========================================================================
@@ -306,7 +549,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src ${webview.cspSource}; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource};">
   <title>Sketch Editor</title>
   <link rel="stylesheet" href="${webviewUri}/assets/index.css">
 </head>
@@ -329,6 +572,71 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     return text;
   }
 
+  private getAIResultCacheRoot(): vscode.Uri {
+    return vscode.Uri.joinPath(this.context.globalStorageUri, AI_RESULT_CACHE_DIR);
+  }
+
+  private async postAIProgress(
+    webviewPanel: vscode.WebviewPanel,
+    runId: string,
+    operation: SketchAIProgressMessage['operation'],
+    percent: number,
+    stage?: string,
+  ): Promise<void> {
+    const message: SketchAIProgressMessage = {
+      type: 'ai:progress',
+      runId,
+      operation,
+      percent,
+      stage,
+    };
+    await webviewPanel.webview.postMessage(message);
+  }
+
+  private async downloadAIResultAsset(
+    request: SketchAIImageResultRequest,
+    runId: string,
+    webview: vscode.Webview,
+  ): Promise<SketchAIAssetRef> {
+    const source = await readAIResultSource(request);
+    const runDir = vscode.Uri.joinPath(this.getAIResultCacheRoot(), sanitizePathSegment(runId));
+    await vscode.workspace.fs.createDirectory(runDir);
+
+    const fileName = createAIResultFileName(request.name ?? request.operation, source.mimeType);
+    const fileUri = vscode.Uri.joinPath(runDir, fileName);
+    await vscode.workspace.fs.writeFile(fileUri, source.bytes);
+
+    return {
+      kind: 'webviewUri',
+      ref: webview.asWebviewUri(fileUri).toString(),
+      mimeType: source.mimeType,
+    };
+  }
+
+  private async cacheAIContextBase64Asset(params: {
+    readonly runId: string;
+    readonly name: string;
+    readonly base64Data: string;
+    readonly mimeType?: string;
+  }): Promise<SketchAIAssetRef> {
+    const mimeType = params.mimeType ?? 'image/png';
+    const runDir = vscode.Uri.joinPath(
+      this.getAIResultCacheRoot(),
+      sanitizePathSegment(params.runId),
+      'context',
+    );
+    await vscode.workspace.fs.createDirectory(runDir);
+
+    const fileUri = vscode.Uri.joinPath(runDir, createAIResultFileName(params.name, mimeType));
+    await vscode.workspace.fs.writeFile(fileUri, Buffer.from(params.base64Data, 'base64'));
+
+    return {
+      kind: 'fileUri',
+      ref: fileUri.toString(),
+      mimeType,
+    };
+  }
+
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
@@ -336,6 +644,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     switch (message.type) {
       case 'ready': {
+        await this.postFeatureFlags(webviewPanel);
         try {
           const fileData = await vscode.workspace.fs.readFile(document.uri);
           const content = Buffer.from(fileData).toString('utf-8');
@@ -392,11 +701,74 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         });
         break;
       }
+      case 'ai:resultApplied': {
+        const runId = typeof message.runId === 'string' ? message.runId : '';
+        if (runId) {
+          await this.cleanupAIArtifacts(runId);
+        }
+        break;
+      }
+      case 'ai:cancel': {
+        const runId = typeof message.runId === 'string' ? message.runId : '';
+        if (!runId) {
+          break;
+        }
+
+        const cancelled = await this.cancelAIRun(runId);
+        if (cancelled) {
+          const cancelMessage: SketchAICancelMessage = { type: 'ai:cancel', runId };
+          await webviewPanel.webview.postMessage(cancelMessage);
+        } else {
+          const errorMessage: SketchAIErrorMessage = {
+            type: 'ai:error',
+            runId,
+            message: `No cancellable AI run is registered for ${runId}.`,
+          };
+          await webviewPanel.webview.postMessage(errorMessage);
+        }
+        break;
+      }
+      case 'ai:openAgent': {
+        await this.openAgentForSketch(message, document);
+        break;
+      }
+      case 'stamp:import': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'],
+          },
+        });
+        const uri = uris?.[0];
+        if (!uri) {
+          break;
+        }
+
+        try {
+          const fileData = await vscode.workspace.fs.readFile(uri);
+          const name = uri.path.split('/').pop() || 'stamp';
+          await webviewPanel.webview.postMessage({
+            type: 'stamp:imported',
+            name,
+            data: Buffer.from(fileData).toString('base64'),
+            mimeType: mimeTypeFromFileName(uri.path) ?? 'image/png',
+          });
+        } catch (error) {
+          logger.error(`Failed to import stamp asset: ${error}`);
+          void vscode.window.showErrorMessage(
+            error instanceof Error ? error.message : vscode.l10n.t('neko.sketch.import.failed'),
+          );
+        }
+        break;
+      }
       case 'file:import': {
         const filters: Record<string, string[]> = {
-          Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'psd'],
+          Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
           'All Files': ['*'],
         };
+        if (isPsdImportEnabled()) {
+          filters['Photoshop Documents'] = ['psd'];
+        }
         const uris = await vscode.window.showOpenDialog({
           canSelectMany: false,
           filters,
@@ -404,19 +776,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (uris && uris.length > 0) {
           const uri = uris[0];
           if (uri) {
-            try {
-              const fileData = await vscode.workspace.fs.readFile(uri);
-              const base64 = Buffer.from(fileData).toString('base64');
-              const name = uri.path.split('/').pop() || 'imported';
-              webviewPanel.webview.postMessage({
-                type: 'file:imported',
-                name,
-                data: base64,
-                path: uri.fsPath,
-              });
-            } catch (error) {
-              logger.error(`Failed to import file: ${error}`);
-            }
+            await this.importFileUri(uri, webviewPanel);
           }
         }
         break;
@@ -426,20 +786,8 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         const uriStrings = rawUris.split('\n').filter(Boolean);
         for (const uriStr of uriStrings) {
           const uri = vscode.Uri.parse(uriStr.trim());
-          if (isImageUri(uri)) {
-            try {
-              const fileData = await vscode.workspace.fs.readFile(uri);
-              const base64 = Buffer.from(fileData).toString('base64');
-              const name = uri.path.split('/').pop() || 'dropped';
-              webviewPanel.webview.postMessage({
-                type: 'file:imported',
-                name,
-                data: base64,
-                path: uri.fsPath,
-              });
-            } catch (error) {
-              logger.error(`Failed to import dropped file: ${error}`);
-            }
+          if (isImageUri(uri) || isPsdUri(uri)) {
+            await this.importFileUri(uri, webviewPanel);
             return; // Import the first valid image only
           }
         }
@@ -511,4 +859,470 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       layers: mapLayers(layers),
     });
   }
+
+  private async importFileUri(uri: vscode.Uri, webviewPanel: vscode.WebviewPanel): Promise<void> {
+    try {
+      if (isPsdUri(uri)) {
+        if (!isPsdImportEnabled()) {
+          const message = vscode.l10n.t('neko.sketch.psdImport.disabled');
+          void vscode.window.showWarningMessage(message);
+          await this.postImportFailure(webviewPanel, 'kill-switch-disabled', message, uri);
+          return;
+        }
+
+        const fileData = await vscode.workspace.fs.readFile(uri);
+        const name = uri.path.split('/').pop() || 'imported.psd';
+        const payload = await parsePsdToWire(name, fileData);
+        const shouldImport = await this.confirmPsdImportIfNeeded(payload);
+        if (!shouldImport) {
+          return;
+        }
+
+        await webviewPanel.webview.postMessage({
+          type: 'file:importedPsdTree',
+          payload,
+        });
+        await this.showPsdImportIssues(payload);
+        return;
+      }
+
+      const fileData = await vscode.workspace.fs.readFile(uri);
+      const base64 = Buffer.from(fileData).toString('base64');
+      const name = uri.path.split('/').pop() || 'imported';
+      await webviewPanel.webview.postMessage({
+        type: 'file:imported',
+        name,
+        data: base64,
+        path: uri.fsPath,
+      });
+    } catch (error) {
+      logger.error(`Failed to import file: ${error}`);
+      const message =
+        error instanceof Error ? error.message : vscode.l10n.t('neko.sketch.import.failed');
+      void vscode.window.showErrorMessage(message);
+      await this.postImportFailure(webviewPanel, getImportFailureCode(error), message, uri);
+    }
+  }
+
+  private async postImportFailure(
+    webviewPanel: vscode.WebviewPanel,
+    code: ImportFailureCode,
+    error: string,
+    uri: vscode.Uri,
+  ): Promise<void> {
+    await webviewPanel.webview.postMessage({
+      type: FILE_IMPORT_RESULT_TYPE,
+      success: false,
+      code,
+      error,
+      name: uri.path.split('/').pop() ?? uri.path,
+    });
+  }
+
+  private async confirmPsdImportIfNeeded(payload: PsdImportPayloadWire): Promise<boolean> {
+    const layerCountIssue = payload.issues.find((issue) => issue.code === 'layer-count-exceeded');
+    if (!layerCountIssue) {
+      return true;
+    }
+
+    this.writePsdImportReport(payload);
+    const importAnywayAction = vscode.l10n.t('neko.sketch.psdImport.importAnyway');
+    const showDetailsAction = vscode.l10n.t('neko.sketch.psdImport.showDetails');
+    const message = vscode.l10n.t('neko.sketch.psdImport.layerCountConfirm', {
+      message: layerCountIssue.message,
+    });
+    const choice = await vscode.window.showWarningMessage(
+      message,
+      { modal: true },
+      importAnywayAction,
+      showDetailsAction,
+    );
+    if (choice === showDetailsAction) {
+      this.psdImportOutput.show(true);
+      const retry = await vscode.window.showWarningMessage(
+        message,
+        { modal: true },
+        importAnywayAction,
+      );
+      return retry === importAnywayAction;
+    }
+    return choice === importAnywayAction;
+  }
+
+  private async showPsdImportIssues(payload: PsdImportPayloadWire): Promise<void> {
+    if (payload.issues.length === 0) {
+      return;
+    }
+
+    this.writePsdImportReport(payload);
+    const showDetailsAction = vscode.l10n.t('neko.sketch.psdImport.showDetails');
+    const choice = await vscode.window.showWarningMessage(
+      vscode.l10n.t('neko.sketch.psdImport.warningSummary', {
+        count: payload.issues.length,
+      }),
+      showDetailsAction,
+    );
+    if (choice === showDetailsAction) {
+      this.psdImportOutput.show(true);
+    }
+  }
+
+  private writePsdImportReport(payload: PsdImportPayloadWire): void {
+    this.psdImportOutput.clear();
+    this.psdImportOutput.appendLine(
+      vscode.l10n.t('neko.sketch.psdImport.reportTitle', { name: payload.name }),
+    );
+    this.psdImportOutput.appendLine(
+      vscode.l10n.t('neko.sketch.psdImport.reportCanvas', {
+        width: payload.tree.canvas.width,
+        height: payload.tree.canvas.height,
+        layers: this.countPsdLayers(payload.tree.layers),
+      }),
+    );
+    this.psdImportOutput.appendLine(
+      vscode.l10n.t('neko.sketch.psdImport.reportIssues', { count: payload.issues.length }),
+    );
+    this.psdImportOutput.appendLine(formatPsdImportIssueSummary(payload.issues));
+    this.psdImportOutput.appendLine('');
+    for (const [index, issue] of payload.issues.entries()) {
+      this.psdImportOutput.appendLine(formatPsdImportIssue(issue, index + 1));
+    }
+  }
+
+  private countPsdLayers(layers: readonly PsdLayerNodeWire[]): number {
+    return layers.reduce((sum, layer) => sum + 1 + this.countPsdLayers(layer.children ?? []), 0);
+  }
+
+  private async openAgentForSketch(
+    message: { type: string; [key: string]: unknown },
+    document: vscode.CustomDocument,
+  ): Promise<void> {
+    const operation = typeof message.operation === 'string' ? message.operation : 'generate';
+    const prompt = typeof message.prompt === 'string' ? message.prompt.trim() : '';
+    const params = normalizeSketchAIOperationParams(message.params);
+    const label = document.uri.path.split('/').pop() || 'Neko Sketch';
+    try {
+      await vscode.commands.executeCommand('neko.agent.sendContext', {
+        type: 'sketch-layer',
+        id: document.uri.toString(),
+        label,
+        summary: createSketchAgentSummary(label, operation, params),
+        data: {
+          documentUri: document.uri.toString(),
+          operation,
+          params,
+        },
+        intent: createSketchAgentIntent(operation, prompt, params),
+      });
+    } catch (error) {
+      logger.warn(`Failed to open Neko Agent for sketch AI: ${error}`);
+      void vscode.window.showWarningMessage(vscode.l10n.t('neko.sketch.ai.openAgent.failed'));
+    }
+  }
+}
+
+function getImportFailureCode(error: unknown): ImportFailureCode {
+  return error instanceof PsdImportError ? error.code : 'import-failed';
+}
+
+function createSketchAIImageResult(
+  request: SketchAIImageResultRequest,
+  asset: SketchAIAssetRef,
+): SketchAIResult {
+  if (request.target === 'selection') {
+    return {
+      kind: 'selection',
+      data: asset,
+      metadata: request.metadata,
+    };
+  }
+
+  return {
+    kind: 'layer',
+    data: asset,
+    name: request.name,
+    width: request.width,
+    height: request.height,
+    offsetX: request.offsetX,
+    offsetY: request.offsetY,
+    opacity: request.opacity,
+    blendMode: request.blendMode,
+    metadata: request.metadata,
+  };
+}
+
+function createAIResultRunId(operation: string): string {
+  return `${sanitizePathSegment(operation)}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createAIResultFileName(name: string, mimeType: string): string {
+  const ext = extensionForMimeType(mimeType);
+  const base = sanitizePathSegment(stripKnownImageExtension(name)) || 'ai-result';
+  return `${base}.${ext}`;
+}
+
+async function readAIResultSource(request: SketchAIImageResultRequest): Promise<{
+  readonly bytes: Uint8Array;
+  readonly mimeType: string;
+}> {
+  const localUri = parseLocalSourceUri(request.sourceUrl);
+  if (localUri) {
+    return {
+      bytes: await vscode.workspace.fs.readFile(localUri),
+      mimeType: request.mimeType ?? mimeTypeFromFileName(localUri.path) ?? 'image/png',
+    };
+  }
+
+  const response = await fetch(request.sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download AI result: HTTP ${response.status}`);
+  }
+
+  return {
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    mimeType:
+      request.mimeType ??
+      normalizeMimeType(response.headers.get('content-type')) ??
+      mimeTypeFromFileName(request.sourceUrl) ??
+      'image/png',
+  };
+}
+
+function parseLocalSourceUri(sourceUrl: string): vscode.Uri | null {
+  if (sourceUrl.startsWith('file:')) {
+    return vscode.Uri.parse(sourceUrl);
+  }
+  if (sourceUrl.startsWith('/')) {
+    return vscode.Uri.file(sourceUrl);
+  }
+  return null;
+}
+
+function stripKnownImageExtension(name: string): string {
+  return name.replace(/\.(png|jpe?g|webp|gif|bmp)$/i, '');
+}
+
+function normalizeMimeType(value: string | null): string | undefined {
+  const mimeType = value?.split(';')[0]?.trim().toLowerCase();
+  return mimeType || undefined;
+}
+
+function extensionForMimeType(mimeType: string): string {
+  switch (mimeType) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    case 'image/bmp':
+      return 'bmp';
+    case 'image/svg+xml':
+      return 'svg';
+    case 'image/png':
+    default:
+      return 'png';
+  }
+}
+
+function mimeTypeFromFileName(path: string): string | undefined {
+  const ext = path.split(/[?#]/)[0]?.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'bmp':
+      return 'image/bmp';
+    case 'svg':
+      return 'image/svg+xml';
+    case 'png':
+      return 'image/png';
+    default:
+      return undefined;
+  }
+}
+
+function sanitizePathSegment(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function normalizeSketchAIOperationParams(value: unknown): SketchAIOperationParams {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const params: Record<string, unknown> = {};
+
+  if (source.scope === 'canvas' || source.scope === 'layer') {
+    params.scope = source.scope;
+  }
+  if (typeof source.negativePrompt === 'string' && source.negativePrompt.trim()) {
+    params.negativePrompt = source.negativePrompt.trim();
+  }
+  if (typeof source.strength === 'number' && Number.isFinite(source.strength)) {
+    params.strength = Math.max(0, Math.min(1, source.strength));
+  }
+  if (source.scale === 2 || source.scale === 4) {
+    params.scale = source.scale;
+  }
+  if (typeof source.style === 'string' && source.style.trim()) {
+    params.style = source.style.trim();
+  }
+  if (typeof source.layerName === 'string' && source.layerName.trim()) {
+    params.layerName = source.layerName.trim();
+  }
+  if (Array.isArray(source.palette)) {
+    const palette = source.palette.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    if (palette.length > 0) {
+      params.palette = palette.map((item) => item.trim());
+    }
+  }
+  if (Array.isArray(source.autoLayerTargets)) {
+    const targets = source.autoLayerTargets.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    if (targets.length > 0) {
+      params.autoLayerTargets = targets.map((item) => item.trim());
+    }
+  }
+
+  return params as SketchAIOperationParams;
+}
+
+function createSketchAgentSummary(
+  label: string,
+  operation: string,
+  params: SketchAIOperationParams,
+): string {
+  const suffix = formatSketchAIParams(params);
+  return suffix
+    ? `Neko Sketch document: ${label}. Requested AI operation: ${operation}. Parameters: ${suffix}.`
+    : `Neko Sketch document: ${label}. Requested AI operation: ${operation}.`;
+}
+
+function createSketchAgentIntent(
+  operation: string,
+  prompt: string,
+  params: SketchAIOperationParams = {},
+): string {
+  const operationText = operation.replace(/-/g, ' ');
+  const parts = [`Use Neko Sketch ${operationText} on the active sketch.`];
+  if (prompt) {
+    parts.push(`Prompt: ${prompt}`);
+  }
+  const formattedParams = formatSketchAIParams(params);
+  if (formattedParams) {
+    parts.push(`Parameters: ${formattedParams}`);
+  }
+  return parts.join(' ');
+}
+
+function formatSketchAIParams(params: SketchAIOperationParams): string {
+  const items: string[] = [];
+  if (params.scope) items.push(`scope=${params.scope}`);
+  if (params.negativePrompt) items.push(`negativePrompt=${params.negativePrompt}`);
+  if (params.strength !== undefined) items.push(`strength=${params.strength}`);
+  if (params.scale !== undefined) items.push(`scale=${params.scale}x`);
+  if (params.style) items.push(`style=${params.style}`);
+  if (params.layerName) items.push(`layerName=${params.layerName}`);
+  if (params.palette?.length) items.push(`palette=${params.palette.join(', ')}`);
+  if (params.autoLayerTargets?.length) {
+    items.push(`autoLayerTargets=${params.autoLayerTargets.join(', ')}`);
+  }
+  return items.join('; ');
+}
+
+export interface PsdImportIssueSummaryEntry {
+  readonly code: PsdImportIssue['code'];
+  readonly severity: PsdImportIssue['severity'];
+  readonly count: number;
+  readonly sampleLayerPaths: readonly string[];
+}
+
+export function summarizePsdImportIssues(
+  issues: readonly PsdImportIssue[],
+): readonly PsdImportIssueSummaryEntry[] {
+  const entries = new Map<PsdImportIssue['code'], PsdImportIssueSummaryEntry>();
+  for (const issue of issues) {
+    const existing = entries.get(issue.code);
+    const layerPath = formatPsdIssueLayerPath(issue);
+    if (!existing) {
+      entries.set(issue.code, {
+        code: issue.code,
+        severity: issue.severity,
+        count: 1,
+        sampleLayerPaths: [layerPath],
+      });
+      continue;
+    }
+
+    entries.set(issue.code, {
+      ...existing,
+      severity: mergeIssueSeverity(existing.severity, issue.severity),
+      count: existing.count + 1,
+      sampleLayerPaths: appendIssueSample(existing.sampleLayerPaths, layerPath),
+    });
+  }
+  return [...entries.values()];
+}
+
+export function formatPsdImportIssueSummary(issues: readonly PsdImportIssue[]): string {
+  const summary = summarizePsdImportIssues(issues);
+  if (summary.length === 0) {
+    return 'Summary by issue type: none';
+  }
+
+  return [
+    'Summary by issue type:',
+    ...summary.map((entry) => {
+      const samples = entry.sampleLayerPaths.length
+        ? ` (examples: ${entry.sampleLayerPaths.join('; ')})`
+        : '';
+      return `- [${entry.severity}] ${entry.code}: ${entry.count}${samples}`;
+    }),
+  ].join('\n');
+}
+
+export function formatPsdImportIssue(issue: PsdImportIssue, index: number): string {
+  const layerPath = formatPsdIssueLayerPath(issue);
+  return [
+    `${index}. [${issue.severity}] ${issue.code}`,
+    `   Layer: ${layerPath}`,
+    `   ${issue.message}`,
+    '',
+  ].join('\n');
+}
+
+function formatPsdIssueLayerPath(issue: PsdImportIssue): string {
+  const layerPath = issue.layerPath?.length ? issue.layerPath.join(' > ') : '(document)';
+  return layerPath;
+}
+
+function mergeIssueSeverity(
+  left: PsdImportIssue['severity'],
+  right: PsdImportIssue['severity'],
+): PsdImportIssue['severity'] {
+  return left === 'error' || right === 'error' ? 'error' : 'warning';
+}
+
+function appendIssueSample(samples: readonly string[], layerPath: string): readonly string[] {
+  if (samples.includes(layerPath)) {
+    return samples;
+  }
+  if (samples.length >= 3) {
+    return samples;
+  }
+  return [...samples, layerPath];
 }

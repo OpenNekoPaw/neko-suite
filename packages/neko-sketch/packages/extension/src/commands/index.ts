@@ -53,7 +53,7 @@ function getSketchTemplate(name: string, width = 1920, height = 1080): string {
     ],
     brushPresets: [],
     palette: ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff'],
-    viewport: { panX: 0, panY: 0, zoom: 1 },
+    viewport: { panX: 0, panY: 0, zoom: 1, rotation: 0 },
   };
   return JSON.stringify(data, null, 2);
 }
@@ -110,6 +110,9 @@ export function registerCommands(
     'neko.sketch.selectTransform',
     'neko.sketch.adjustSize',
     'neko.sketch.pickColor',
+    'neko.sketch.rotateViewLeft',
+    'neko.sketch.rotateViewRight',
+    'neko.sketch.resetRotation',
   ];
   for (const commandId of keyboardActions) {
     const action = commandId.replace('neko.sketch.', '');

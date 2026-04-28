@@ -60,7 +60,8 @@ export class SketchStatusBar implements vscode.Disposable {
   }
 
   update(info: SketchStatusInfo): void {
-    this.group.update(ID.zoom, `$(zoom-in) ${Math.round(info.zoom * 100)}%`);
+    const rotation = info.rotation ? ` · ${Math.round((info.rotation * 180) / Math.PI)}°` : '';
+    this.group.update(ID.zoom, `$(zoom-in) ${Math.round(info.zoom * 100)}%${rotation}`);
     this.group.update(ID.size, `$(screen-full) ${info.canvasSize}`);
     this.group.update(ID.tool, `$(paintcan) ${info.activeTool}`);
     this.group.update(ID.layer, `$(layers) ${info.layerCount} layers`);

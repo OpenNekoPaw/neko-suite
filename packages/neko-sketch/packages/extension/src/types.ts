@@ -29,12 +29,13 @@ export interface SketchStatusInfo {
   readonly layerCount: number;
   readonly canvasSize: string;
   readonly zoom: number;
+  readonly rotation?: number;
   readonly activeTool: string;
   readonly brushSize: number;
 }
 
 /** Export format options */
-export type ExportFormat = 'png' | 'jpeg' | 'webp' | 'svg' | 'psd';
+export type ExportFormat = 'png' | 'jpeg' | 'webp' | 'svg';
 
 export interface ExportOptions {
   readonly format: ExportFormat;

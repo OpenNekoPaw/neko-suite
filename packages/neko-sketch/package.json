@@ -120,6 +120,21 @@
         "category": "NekoSketch"
       },
       {
+        "command": "neko.sketch.rotateViewLeft",
+        "title": "%neko.sketch.rotateViewLeft.title%",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.rotateViewRight",
+        "title": "%neko.sketch.rotateViewRight.title%",
+        "category": "NekoSketch"
+      },
+      {
+        "command": "neko.sketch.resetRotation",
+        "title": "%neko.sketch.resetRotation.title%",
+        "category": "NekoSketch"
+      },
+      {
         "command": "neko.sketch.sendToTimeline",
         "title": "%neko.sketch.sendToTimeline.title%",
         "category": "NekoSketch"
@@ -266,6 +281,51 @@
           "type": "boolean",
           "default": true,
           "description": "%neko.sketch.config.pressureSensitivity%"
+        },
+        "neko.sketch.psdImport.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "%neko.sketch.config.psdImportEnabled%"
+        },
+        "neko.sketch.aiOps.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "%neko.sketch.config.aiOpsEnabled%"
+        },
+        "neko.sketch.aiOps.generate.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsGenerateEnabled%"
+        },
+        "neko.sketch.aiOps.inpaint.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsInpaintEnabled%"
+        },
+        "neko.sketch.aiOps.styleTransfer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsStyleTransferEnabled%"
+        },
+        "neko.sketch.aiOps.upscale.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsUpscaleEnabled%"
+        },
+        "neko.sketch.aiOps.autoLayer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsAutoLayerEnabled%"
+        },
+        "neko.sketch.aiOps.lineartColorize.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsLineartColorizeEnabled%"
+        },
+        "neko.sketch.aiOps.smartSelection.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%neko.sketch.config.aiOpsSmartSelectionEnabled%"
         },
         "neko.sketch.defaultBrush": {
           "type": "string",

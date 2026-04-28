@@ -83,6 +83,27 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
     importImageData(base64: string, name: string): void {
       sketchEditorProvider.postImageData(base64, name);
     },
+    async applyAIImageResult(request) {
+      return sketchEditorProvider.applyAIImageResult(request);
+    },
+    async createAIContextSnapshot(request) {
+      return sketchEditorProvider.createAIContextSnapshot(request);
+    },
+    async cleanupAIArtifacts(runId) {
+      return sketchEditorProvider.cleanupAIArtifacts(runId);
+    },
+    async reportAIProgress(message) {
+      return sketchEditorProvider.reportAIProgress(message);
+    },
+    registerAIRun(runId, cancel) {
+      sketchEditorProvider.registerAIRun(runId, cancel);
+    },
+    unregisterAIRun(runId) {
+      sketchEditorProvider.unregisterAIRun(runId);
+    },
+    async cancelAIRun(runId) {
+      return sketchEditorProvider.cancelAIRun(runId);
+    },
     importImageWithContext(base64: string, name: string, context: SketchImportContext) {
       sketchEditorProvider.importImageWithContext(base64, name, context);
     },

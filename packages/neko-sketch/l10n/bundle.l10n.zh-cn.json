@@ -4,5 +4,19 @@
   "neko.sketch.new.title": "新建素描",
   "neko.sketch.new.noFolder": "未打开工作区文件夹",
   "neko.sketch.template.layer.background": "背景",
-  "neko.sketch.template.layer.default": "图层 1"
+  "neko.sketch.template.layer.default": "图层 1",
+  "neko.sketch.import.failed": "导入文件失败",
+  "neko.sketch.psdImport.disabled": "PSD 导入已被 neko.sketch.psdImport.enabled 禁用。",
+  "neko.sketch.psdImport.importAnyway": "仍然导入",
+  "neko.sketch.psdImport.showDetails": "查看详情",
+  "neko.sketch.psdImport.layerCountConfirm": "{message} 是否仍然导入？",
+  "neko.sketch.psdImport.warningSummary": "PSD 已导入，包含 {count} 个兼容性警告。",
+  "neko.sketch.psdImport.reportTitle": "PSD 导入报告：{name}",
+  "neko.sketch.psdImport.reportCanvas": "画布：{width} x {height}，图层：{layers}",
+  "neko.sketch.psdImport.reportIssues": "问题：{count}",
+  "neko.sketch.ai.openAgent.failed": "Neko Agent 不可用。",
+  "neko.sketch.editImage.noWorkspace": "未打开工作区文件夹",
+  "neko.sketch.sendToTimeline.noCanvas": "没有可发送到时间线的画布图像",
+  "neko.sketch.sendToCanvas.noContext": "没有可用的源画布上下文",
+  "neko.sketch.sendToCanvas.noCanvas": "没有可送回画布的图像"
 }

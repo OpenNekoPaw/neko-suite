@@ -4,5 +4,19 @@
   "neko.sketch.new.title": "New Sketch",
   "neko.sketch.new.noFolder": "No workspace folder open",
   "neko.sketch.template.layer.background": "Background",
-  "neko.sketch.template.layer.default": "Layer 1"
+  "neko.sketch.template.layer.default": "Layer 1",
+  "neko.sketch.import.failed": "Failed to import file",
+  "neko.sketch.psdImport.disabled": "PSD import is disabled by neko.sketch.psdImport.enabled.",
+  "neko.sketch.psdImport.importAnyway": "Import Anyway",
+  "neko.sketch.psdImport.showDetails": "Show Details",
+  "neko.sketch.psdImport.layerCountConfirm": "{message} Import anyway?",
+  "neko.sketch.psdImport.warningSummary": "PSD imported with {count} compatibility warning(s).",
+  "neko.sketch.psdImport.reportTitle": "PSD Import Report: {name}",
+  "neko.sketch.psdImport.reportCanvas": "Canvas: {width} x {height}, layers: {layers}",
+  "neko.sketch.psdImport.reportIssues": "Issues: {count}",
+  "neko.sketch.ai.openAgent.failed": "Neko Agent is not available.",
+  "neko.sketch.editImage.noWorkspace": "No workspace folder open",
+  "neko.sketch.sendToTimeline.noCanvas": "No canvas image is available to send to timeline",
+  "neko.sketch.sendToCanvas.noContext": "No source canvas context is available",
+  "neko.sketch.sendToCanvas.noCanvas": "No canvas image is available to send back"
 }
