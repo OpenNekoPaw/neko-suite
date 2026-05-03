@@ -241,9 +241,7 @@ impl Controller for AudioController {
 
                 let start = opts.start.unwrap_or(0.0);
                 let duration = opts.duration.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "duration required for audios:segment".to_string(),
-                    )
+                    ApiError::InvalidRequest("duration required for audios:segment".to_string())
                 })?;
                 if !start.is_finite() || start < 0.0 || !duration.is_finite() || duration <= 0.0 {
                     return Err(ApiError::InvalidRequest(
@@ -270,9 +268,8 @@ impl Controller for AudioController {
                     AudioOutputFormat::Flac => "flac",
                     AudioOutputFormat::Pcm => "wav",
                 };
-                let temp_dir = tempfile::tempdir().map_err(|e| {
-                    ApiError::Internal(format!("failed to create temp dir: {}", e))
-                })?;
+                let temp_dir = tempfile::tempdir()
+                    .map_err(|e| ApiError::Internal(format!("failed to create temp dir: {}", e)))?;
                 let output_path = temp_dir.path().join(format!("segment.{}", extension));
 
                 let transcode_opts = AudioTranscodeOptions {
@@ -619,7 +616,6 @@ mod tests {
         // Should fail because output path is missing
         assert!(result.is_err());
     }
-
 
     #[tokio::test]
     async fn test_audio_controller_segment_missing_duration() {

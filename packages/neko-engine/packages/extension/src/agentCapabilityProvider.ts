@@ -25,7 +25,7 @@ let cachedClient: EngineClient | null = null;
 
 /**
  * Obtain a ready EngineClient, starting the frame server if necessary.
- * Uses the same pattern as neko-agent's extensionTools.getEngineClient().
+ * Uses the neko-engine VSCode command bridge to start the frame server lazily.
  */
 async function getEngineClient(): Promise<EngineClient> {
   if (cachedClient) {

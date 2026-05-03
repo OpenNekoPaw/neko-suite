@@ -17,6 +17,7 @@
     "./nka": "./src/nka/index.ts",
     "./nkplan": "./src/nkplan/index.ts",
     "./nkproj": "./src/nkproj/index.ts",
+    "./config/config-reader": "./src/config/config-reader.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
     "./*": "./src/*"
   },

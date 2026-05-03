@@ -16,12 +16,14 @@ import {
   LicenseManager,
   InstalledRegistry,
   InstallTargetRegistry,
+  SkillInstallTarget,
 } from '@neko/market-core';
 import type {
   MarketSearchQuery,
   MarketSearchResult,
   MarketPackage,
   InstallResult,
+  InstallProgressCallback,
   InstallProgress,
   InstalledPackage,
   UpdateInfo,
@@ -31,7 +33,6 @@ import type { IAuthSession, ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 
 import type { MarketAssetEvent } from './market-api';
-import { SkillInstallTarget } from './SkillInstallTarget';
 import { ShaderInstallTarget } from './ShaderInstallTarget';
 import { ModelInstallTarget } from './ModelInstallTarget';
 import { PresetInstallTarget } from './PresetInstallTarget';
@@ -179,11 +180,16 @@ export class MarketplaceService implements vscode.Disposable {
   // Install / Uninstall
   // ===========================================================================
 
-  async install(packageId: string, version: string): Promise<InstallResult> {
+  async install(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult> {
     this._logger.info(`Installing ${packageId}@${version}`);
-    const result = await this._installManager.install(packageId, version, (progress) =>
-      this._onInstallProgress.fire(progress),
-    );
+    const result = await this._installManager.install(packageId, version, (progress) => {
+      this._onInstallProgress.fire(progress);
+      onProgress?.(progress);
+    });
 
     if (result.success && result.manifest && result.installedPath) {
       this._logger.info(`Installed ${packageId} → ${result.installedPath}`);

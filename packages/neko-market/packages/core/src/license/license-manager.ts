@@ -5,8 +5,7 @@
  * Phase 6.5.4: Full JWT + online verification.
  */
 
-import type { AssetManifest } from '@neko/shared/types/asset/manifest';
-import type { ILicenseManager } from '@neko/shared/types/asset/market';
+import type { AssetManifest, ILicenseManager } from '@neko/shared';
 
 // =============================================================================
 // Implementation (Phase 1 — stub)

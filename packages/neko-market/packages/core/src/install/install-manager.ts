@@ -15,8 +15,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-import type { AssetManifest } from '@neko/shared/types/asset/manifest';
 import type {
+  AssetManifest,
   IInstallManager,
   IMarketClient,
   ICacheManager,
@@ -26,7 +26,7 @@ import type {
   InstallProgressCallback,
   InstalledPackage,
   UpdateInfo,
-} from '@neko/shared/types/asset/market';
+} from '@neko/shared';
 
 import { verifyIntegrity } from './integrity-checker';
 import { downloadFile } from './download-service';

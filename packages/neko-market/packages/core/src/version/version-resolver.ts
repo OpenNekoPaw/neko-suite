@@ -5,7 +5,7 @@
  * Supports basic semver ranges: exact, caret, tilde, comparison, wildcard.
  */
 
-import type { AssetCompatibility, IVersionResolver } from '@neko/shared/types/asset/market';
+import type { AssetCompatibility, IVersionResolver } from '@neko/shared';
 
 // =============================================================================
 // Parsed Version

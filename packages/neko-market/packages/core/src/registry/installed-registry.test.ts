@@ -3,7 +3,7 @@ import { rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { InstalledRegistry } from './installed-registry';
-import type { InstalledPackage, AssetManifest } from '@neko/shared/types/asset';
+import type { AssetManifest, InstalledPackage } from '@neko/shared';
 
 const testDir = join(tmpdir(), 'neko-market-registry-test');
 const registryFile = join(testDir, 'market-installed.json');

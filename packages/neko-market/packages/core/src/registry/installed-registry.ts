@@ -7,7 +7,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { InstalledPackage, InstalledRegistryData } from '@neko/shared/types/asset/market';
+import type { InstalledPackage, InstalledRegistryData } from '@neko/shared';
 
 // =============================================================================
 // Constants

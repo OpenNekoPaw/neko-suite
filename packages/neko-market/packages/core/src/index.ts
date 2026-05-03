@@ -19,6 +19,11 @@ export type { MarketClientConfig } from './client/market-client';
 export { InstallManager } from './install/install-manager';
 export type { InstallManagerConfig } from './install/install-manager';
 export { InstallTargetRegistry } from './install/install-target';
+export { SkillInstallTarget, injectMarketFrontmatter } from './install/skill-install-target';
+export type {
+  SkillInstallTargetLogger,
+  SkillInstallTargetOptions,
+} from './install/skill-install-target';
 export { downloadFile } from './install/download-service';
 export type { DownloadOptions } from './install/download-service';
 export { computeHash, verifyIntegrity } from './install/integrity-checker';

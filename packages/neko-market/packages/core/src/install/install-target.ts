@@ -5,8 +5,7 @@
  * packages are installed and provides lifecycle hooks.
  */
 
-import type { AssetType } from '@neko/shared/types/asset/manifest';
-import type { IInstallTarget } from '@neko/shared/types/asset/market';
+import type { AssetType, IInstallTarget } from '@neko/shared';
 
 // =============================================================================
 // Registry

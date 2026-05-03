@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LicenseManager } from './license-manager';
-import type { AssetManifest } from '@neko/shared/types/asset';
+import type { AssetManifest } from '@neko/shared';
 
 function makeManifest(visibility?: string): AssetManifest {
   return {

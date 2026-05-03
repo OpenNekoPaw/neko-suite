@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { InstallTargetRegistry } from './install-target';
-import type { IInstallTarget } from '@neko/shared/types/asset/market';
-import type { AssetManifest } from '@neko/shared/types/asset/manifest';
+import type { AssetManifest, IInstallTarget } from '@neko/shared';
 
 const mockTarget: IInstallTarget<'skill'> = {
   type: 'skill',

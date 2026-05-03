@@ -5,14 +5,14 @@
  * Zero vscode dependency (Layer 0).
  */
 
-import type { AssetType } from '@neko/shared/types/asset/manifest';
 import type {
+  AssetType,
   IMarketClient,
   MarketSearchQuery,
   MarketSearchResult,
   MarketPackage,
   MarketPackageVersion,
-} from '@neko/shared/types/asset/market';
+} from '@neko/shared';
 
 // =============================================================================
 // Configuration

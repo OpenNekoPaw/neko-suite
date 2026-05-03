@@ -7,7 +7,7 @@
 
 import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ICacheManager } from '@neko/shared/types/asset/market';
+import type { ICacheManager } from '@neko/shared';
 
 // =============================================================================
 // Implementation

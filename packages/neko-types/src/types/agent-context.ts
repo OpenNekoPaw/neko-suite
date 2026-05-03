@@ -12,6 +12,8 @@ export type AgentContextType =
   | 'canvas-node'
   | 'cut-clip'
   | 'story-selection'
+  | 'character'
+  | 'scene'
   | 'sketch-layer'
   | 'model-scene'
   | 'audio-clip'

@@ -7,7 +7,7 @@
 
 import { createWriteStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import type { InstallProgressCallback } from '@neko/shared/types/asset/market';
+import type { InstallProgressCallback } from '@neko/shared';
 
 // =============================================================================
 // Types

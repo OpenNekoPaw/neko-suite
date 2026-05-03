@@ -9,7 +9,14 @@
 
 import * as vscode from 'vscode';
 import type { AssetManifest, AssetType } from '@neko/shared/types/asset/manifest';
-import type { InstalledPackage } from '@neko/shared/types/asset/market';
+import type {
+  InstallProgressCallback,
+  InstallResult,
+  InstalledPackage,
+  MarketSearchQuery,
+  MarketSearchResult,
+  UpdateInfo,
+} from '@neko/shared/types/asset/market';
 import type { MarketplaceService } from './MarketplaceService';
 
 // =============================================================================
@@ -49,6 +56,20 @@ export interface NekoMarketAPI {
   onDidDisable: vscode.Event<MarketAssetEvent>;
   /** Get installed packages with optional filtering */
   getInstalled(options?: GetInstalledOptions): Promise<InstalledPackage[]>;
+  /** Search marketplace packages */
+  search(query: MarketSearchQuery): Promise<MarketSearchResult>;
+  /** Get featured marketplace packages */
+  getFeatured(type?: AssetType): Promise<MarketSearchResult>;
+  /** Install a marketplace package */
+  install(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult>;
+  /** Uninstall a marketplace package */
+  uninstall(packageId: string): Promise<void>;
+  /** Check available marketplace package updates */
+  checkUpdates(): Promise<UpdateInfo[]>;
   /** Check if a specific package is installed (regardless of enabled state) */
   isInstalled(packageId: string): boolean;
 }
@@ -85,6 +106,31 @@ export class NekoMarketAPIImpl implements NekoMarketAPI, vscode.Disposable {
     }
 
     return packages;
+  }
+
+  search(query: MarketSearchQuery): Promise<MarketSearchResult> {
+    return this.service.search(query);
+  }
+
+  async getFeatured(type?: AssetType): Promise<MarketSearchResult> {
+    const items = await this.service.getFeatured(type);
+    return { items, total: items.length, hasMore: false };
+  }
+
+  install(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult> {
+    return this.service.install(packageId, version, onProgress);
+  }
+
+  uninstall(packageId: string): Promise<void> {
+    return this.service.uninstall(packageId);
+  }
+
+  checkUpdates(): Promise<UpdateInfo[]> {
+    return this.service.checkUpdates();
   }
 
   isInstalled(packageId: string): boolean {
