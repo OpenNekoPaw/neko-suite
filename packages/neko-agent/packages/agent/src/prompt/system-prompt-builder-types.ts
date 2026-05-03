@@ -127,6 +127,12 @@ export interface ISystemPromptBuilder {
   build(): string;
 
   /**
+   * Build the final system prompt for a specific mode without mutating the
+   * builder's current mode. Useful for per-conversation mode projection.
+   */
+  buildForMode(mode: PromptMode): string;
+
+  /**
    * Build prompt with skill injection
    * @param skillPrompt Skill prompt to append
    */

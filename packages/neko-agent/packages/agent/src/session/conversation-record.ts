@@ -2,9 +2,7 @@
  * Conversation Record - Shared resume layer format
  *
  * Both Extension (Webview) and TUI/CLI can surface this format.
- * Legacy records may still exist in ~/.neko/conversations/<workDir-hash>.json
- * as migration input, but Journal + conversations-index.json is the
- * source of truth.
+ * Journal + conversations-index.json is the source of truth.
  */
 
 import type { ChatMessage } from '@neko/shared';
@@ -39,14 +37,6 @@ export interface ConversationRecord {
 }
 
 /**
- * Legacy on-disk JSON structure for a single workDir's conversation file.
- * This remains migration input only.
- */
-export interface ConversationIndex {
-  records: ConversationRecord[];
-}
-
-/**
  * Meta record stored in ~/.neko/conversations-index.json.
  * Contains routing and list metadata only; message history stays in Journal.
  */
@@ -70,5 +60,4 @@ export interface ConversationsIndexFile {
   version: 1;
   workspaces: Record<string, string[]>;
   conversations: Record<string, ConversationIndexMeta>;
-  aliases?: Record<string, string>;
 }

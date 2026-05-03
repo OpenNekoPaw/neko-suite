@@ -39,6 +39,7 @@ export interface ActDeps {
   toolRegistry: IToolRegistry;
   hooks: ExecutorHooks[];
   abortController: AbortController | null;
+  metadata?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -234,6 +235,10 @@ async function executeToolCall(
   const execute = () =>
     deps.toolRegistry.execute(info.name, info.arguments, {
       onProgress,
+      metadata:
+        deps.metadata && Object.keys(deps.metadata).length > 0
+          ? { ...deps.metadata, parentToolCallId: info.id }
+          : { parentToolCallId: info.id },
     });
 
   // Check if any hook wants to handle the tool call

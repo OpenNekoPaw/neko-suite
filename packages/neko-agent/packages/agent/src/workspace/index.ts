@@ -21,6 +21,20 @@ export {
 } from './neko-paths';
 
 export {
+  NEKO_AGENTS_FILE_NAME,
+  NEKO_CONTENT_DIR,
+  NEKO_CONTENT_SUBDIRS,
+  resolveAgentsFile,
+  resolveNekoContentDir,
+  resolvePersonalAgentsFile,
+  resolvePersonalNekoContentDir,
+  resolveProjectAgentsFile,
+  resolveProjectNekoContentDir,
+  type NekoContentSource,
+  type NekoContentSubdir,
+} from './neko-content-layout';
+
+export {
   createArtifactIndexStore,
   type ArtifactIndexEntry,
   type ArtifactIndexSnapshot,

@@ -41,7 +41,6 @@ export interface FeedbackCoordinatorConfig {
   readonly stageTracker?: StageTracker | null;
   readonly projectMemoryManager?: IProjectMemoryManager;
   readonly autoMemoryExtraction?: boolean;
-  readonly journalAsSSOT?: boolean;
   readonly evaluators?: readonly IFeedbackEvaluator[];
   readonly arbiter?: IFeedbackArbiter;
   readonly controlPolicy?: FeedbackControlPolicy;
@@ -417,11 +416,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
         })
       : null;
 
-    if (
-      config.projectMemoryManager &&
-      config.autoMemoryExtraction !== false &&
-      config.journalAsSSOT !== false
-    ) {
+    if (config.projectMemoryManager && config.autoMemoryExtraction !== false) {
       this._keyFactExtractor = new KeyFactExtractor();
       this._projectMemoryRouter = new ProjectMemoryRouter(config.projectMemoryManager);
       return;

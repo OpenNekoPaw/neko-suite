@@ -41,6 +41,7 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
       outputFormat: 'text',
       verbose: false,
       mcpServers: [],
+      executionMode: 'auto',
     },
     skillService: {
       skillCount: 5,
@@ -66,6 +67,7 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
     conversations: {
       getActiveId: vi.fn().mockReturnValue('conv-123'),
       list: vi.fn().mockReturnValue([{ id: 'conv-123' }, { id: 'conv-456' }]),
+      getActiveMessageCount: vi.fn().mockReturnValue(3),
       create: vi.fn(),
       clearCurrent: vi.fn(),
     },
@@ -211,7 +213,9 @@ describe('generateExtensionStatusData', () => {
     expect(data.model).toBe('claude-sonnet-4-6');
     expect(data.conversationCount).toBe(2);
     expect(data.activeConversationId).toBe('conv-123');
+    expect(data.messageCount).toBe(3);
     expect(data.tokenCount).toBe(1500);
+    expect(data.executionMode).toBe('auto');
   });
 
   it('should include plan mode status', () => {

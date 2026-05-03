@@ -11,6 +11,7 @@ import type {
   Tool,
   ToolResult,
   ToolCategory,
+  ToolParameters,
   IToolCategoryRegistry,
   IToolGroupRegistry,
   IToolInjectionManager,
@@ -27,14 +28,20 @@ import { BuiltinTool } from '@neko/shared';
  */
 export interface ISkillProvider {
   /** List all registered skills (name + description) */
-  listSkills(): Array<{ name: string; description: string }>;
+  listSkills(): SkillProviderMaybePromise<Array<{ name: string; description: string }>>;
   /** Get active skill info */
-  getActiveSkill(): { name: string; description: string } | null;
+  getActiveSkill(): SkillProviderMaybePromise<{ name: string; description: string } | null>;
   /** Activate a skill by name. Returns injection result or error. */
-  activateSkill(name: string): { success: boolean; message: string; allowedTools?: string[] };
+  activateSkill(
+    name: string,
+  ): SkillProviderMaybePromise<{ success: boolean; message: string; allowedTools?: string[] }>;
   /** Deactivate the current active skill */
-  deactivateSkill(): { success: boolean; message: string };
+  deactivateSkill(): SkillProviderMaybePromise<{ success: boolean; message: string }>;
 }
+
+export type SkillProviderFactory = (conversationId: string) => ISkillProvider;
+
+export type SkillProviderMaybePromise<T> = T | Promise<T>;
 
 // =============================================================================
 // GetContext Tool
@@ -47,7 +54,7 @@ export class GetContextTool extends BuiltinTool {
   readonly name = 'GetContext';
   readonly description =
     'Get current context: active skill, registered skills, and available tool categories.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       includeTools: {
@@ -81,8 +88,8 @@ export class GetContextTool extends BuiltinTool {
 
     // Active skill
     if (this._skillProvider) {
-      result.activeSkill = this._skillProvider.getActiveSkill();
-      result.registeredSkills = this._skillProvider.listSkills();
+      result.activeSkill = await this._skillProvider.getActiveSkill();
+      result.registeredSkills = await this._skillProvider.listSkills();
     }
 
     // Tool categories (semantic groupings)
@@ -120,7 +127,7 @@ export class ActivateSkillTool extends BuiltinTool {
   readonly name = 'ActivateSkill';
   readonly description =
     'Activate a skill to receive specialized domain instructions. Use GetContext to see available skills. Only one skill can be active at a time.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       skillName: {
@@ -149,7 +156,7 @@ export class ActivateSkillTool extends BuiltinTool {
     }
 
     const skillName = args.skillName as string;
-    const result = this._skillProvider.activateSkill(skillName);
+    const result = await this._skillProvider.activateSkill(skillName);
 
     if (!result.success) {
       return this.error(result.message);
@@ -175,7 +182,7 @@ export class DeactivateSkillTool extends BuiltinTool {
   readonly name = 'DeactivateSkill';
   readonly description =
     'Deactivate the currently active skill, removing its specialized instructions.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {},
   };
@@ -192,7 +199,7 @@ export class DeactivateSkillTool extends BuiltinTool {
       return this.error('Skill system not initialized');
     }
 
-    const result = this._skillProvider.deactivateSkill();
+    const result = await this._skillProvider.deactivateSkill();
 
     if (!result.success) {
       return this.error(result.message);

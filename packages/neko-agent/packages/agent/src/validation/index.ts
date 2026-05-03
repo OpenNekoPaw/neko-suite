@@ -113,9 +113,37 @@ export type { IRemediationPlanner } from './remediation-planner';
 // Consistency Evaluator
 export { ConsistencyEvaluator, createConsistencyEvaluator } from './consistency-evaluator';
 export type {
+  ConsistencyFrameExtractor,
   IClipScorer,
   ConsistencyInput,
   CharacterRef,
   ConsistencyContext,
   ConsistencyEvaluatorDeps,
+  ConsistencyLLMService,
 } from './consistency-evaluator';
+
+// Media Quality Runtime
+export {
+  MediaQualityRuntime,
+  coerceQualityScore,
+  createMediaQualityRuntime,
+  detectQualityMediaType,
+  extractTextFromContent,
+} from './media-quality-runtime';
+export type {
+  IAudioAnalyzer,
+  IFrameExtractor,
+  MediaGenerateOptions,
+  MediaQualityCheckInput,
+  MediaQualityCheckResult,
+  MediaQualityEvalOptions,
+  MediaQualityGenerator,
+  MediaQualityLLMService,
+  MediaQualityLogger,
+  MediaQualityRuntimeDeps,
+  MediaQualitySceneInput,
+} from './media-quality-runtime';
+
+// Quality / consistency tool factories
+export { createConsistencyCheckTools, createQualityCheckTools } from './quality-check-tools';
+export type { ConsistencyCheckToolsDeps, QualityCheckToolsDeps } from './quality-check-tools';

@@ -71,7 +71,8 @@ export class JournalReader {
         entries.push({
           ...parsed,
           eventId:
-            parsed.eventId ?? createLegacyJournalEntryId(parsed.seq, parsed.ts, trimmed, lineIndex),
+            parsed.eventId ??
+            createFallbackJournalEntryId(parsed.seq, parsed.ts, trimmed, lineIndex),
         });
       } catch {
         // Skip corrupted lines — JSONL fault tolerance
@@ -124,6 +125,7 @@ export class JournalReader {
           case 'compaction':
           case 'compaction_failed':
           case 'memory_extraction':
+          case 'feedback.stage_transition_requested':
           case 'text':
           case 'thinking_content':
           case 'tool_call':
@@ -148,7 +150,7 @@ export class JournalReader {
   }
 }
 
-function createLegacyJournalEntryId(
+function createFallbackJournalEntryId(
   seq: number,
   ts: number,
   rawLine: string,
@@ -156,5 +158,5 @@ function createLegacyJournalEntryId(
 ): string {
   const crypto = require('node:crypto') as typeof import('node:crypto');
   const digest = crypto.createHash('sha1').update(rawLine).digest('hex').slice(0, 12);
-  return `legacy-${seq}-${ts}-${lineIndex.toString(36)}-${digest}`;
+  return `fallback-${seq}-${ts}-${lineIndex.toString(36)}-${digest}`;
 }

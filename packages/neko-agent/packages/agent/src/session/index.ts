@@ -5,8 +5,6 @@
 export * from './types';
 export * from './agent-session';
 export { createSkillRunKind, encodeRunKindSegment } from './idc-run-kind';
-/** @deprecated Use `createSkillRunKind` / `encodeRunKindSegment` instead. */
-export { createSkillWorkflowId, encodeWorkflowIdSegment } from './idc-workflow-id';
 export {
   createPlanModeIdcMetadata,
   createSkillExecutionIdcMetadata,
@@ -21,7 +19,6 @@ export {
 } from './agent-session-initializer';
 export type {
   ConversationRecord,
-  ConversationIndex,
   ConversationIndexMeta,
   ConversationsIndexFile,
   ConversationSource,
@@ -29,10 +26,8 @@ export type {
 } from './conversation-record';
 export {
   createConversationId,
-  createLegacyConversationMigrationId,
   getConversationWorkDirHash,
   isCanonicalConversationId,
-  isLegacyConversationId,
   parseConversationId,
 } from './conversation-id';
 export type { ConversationIdOptions, ParsedConversationId } from './conversation-id';
@@ -43,18 +38,63 @@ export {
   type ConversationIndexStoreOptions,
 } from './conversation-index-store';
 export {
-  discoverLegacyConversationWorkDirs,
-  migrateLegacyConversationIndex,
-  type ConversationIndexMigrationFsOps,
-  type ConversationIndexMigrationOptions,
-  type ConversationIndexMigrationResult,
-} from './conversation-index-migration';
-export {
   FileConversationStorage,
   createFileConversationStorage,
-  type LegacyConversationSupportMode,
-  type CreateFileConversationStorageOptions,
+  type FileConversationStorageOptions,
 } from './file-conversation-storage';
+export {
+  ConversationManager,
+  type AgentHistoryEntry,
+  type CleanupPolicy,
+  type Conversation,
+  type ConversationManagerOptions,
+  type ConversationStorage,
+} from './conversation-manager';
+export {
+  buildConversationHistoryClearedMessage,
+  runCancelMessageRuntime,
+  runClearAllConversationsRuntime,
+  runClearHistoryRuntime,
+  runConfirmToolRuntime,
+  runDeleteConversationRuntime,
+  runNewConversationRuntime,
+  runStopAgentRuntime,
+  runSwitchConversationRuntime,
+  type ConfirmToolRuntimeInput,
+  type ConversationControlAction,
+  type ConversationControlConversationInput,
+  type ConversationControlDisposable,
+  type ConversationControlRuntimeEffects,
+  type ConversationControlRuntimeMessage,
+  type ConversationControlRuntimeResult,
+  type ConversationControlRuntimeWarning,
+  type ConversationControlRuntimeWarningCode,
+} from './conversation-control-runtime';
+export {
+  formatToolResultContext,
+  hydrateAgentHistoryWithToolResults,
+  type AgentHistoryToolCallContext,
+  type AgentHistoryToolResultContext,
+  type AgentHistoryWithToolContextMessage,
+} from './history-hydration';
+export {
+  buildConversationRecordSavePlan,
+  projectConversationMessagesToAgentHistory,
+  type AgentHistoryEntry as ProjectedAgentHistoryEntry,
+  type ConversationRecordProjectionConversation,
+  type ConversationRecordSavePlan,
+  type ConversationRecordSavePlanInput,
+} from './conversation-record-projector';
+export {
+  ConversationPersistenceRuntime,
+  createConversationPersistenceRuntime,
+  createFileConversationPersistenceRuntime,
+  type ConversationPersistenceRuntimeOptions,
+  type ConversationPersistenceRuntimeQueueResult,
+  type ConversationPersistenceRuntimeResult,
+  type ConversationPersistenceRuntimeStorage,
+  type ConversationPersistenceRuntimeWarning,
+} from './conversation-persistence-runtime';
 
 // Journal (JSONL session persistence)
 export { JournalWriter } from './journal-writer';

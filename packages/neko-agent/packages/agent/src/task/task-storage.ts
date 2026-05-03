@@ -4,6 +4,7 @@
 
 import type { ITaskStorage, SerializableTask } from '@neko/shared';
 import { getLogger } from '../utils/logger';
+import { buildTaskStorageCleanupPlan, filterRecoverableTasks } from './task-storage-policy';
 
 const logger = getLogger('TaskStorage');
 
@@ -24,9 +25,7 @@ export class MemoryTaskStorage implements ITaskStorage {
   }
 
   async loadPending(): Promise<SerializableTask[]> {
-    return Array.from(this.tasks.values())
-      .filter((t) => t.status === 'pending' || t.status === 'running')
-      .map((t) => ({ ...t }));
+    return filterRecoverableTasks(Array.from(this.tasks.values()));
   }
 
   async loadAll(): Promise<SerializableTask[]> {
@@ -38,22 +37,82 @@ export class MemoryTaskStorage implements ITaskStorage {
   }
 
   async cleanup(olderThanMs: number): Promise<number> {
-    const cutoff = Date.now() - olderThanMs;
-    let cleaned = 0;
+    const plan = buildTaskStorageCleanupPlan({
+      tasks: Array.from(this.tasks.values()),
+      olderThanMs,
+    });
 
-    for (const [id, task] of this.tasks.entries()) {
-      // Only cleanup completed, failed, or cancelled tasks
-      if (
-        (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') &&
-        task.updatedAt < cutoff
-      ) {
-        this.tasks.delete(id);
-        cleaned++;
-      }
+    for (const task of plan.removed) {
+      this.tasks.delete(task.id);
     }
 
-    return cleaned;
+    return plan.removed.length;
   }
+}
+
+export interface StateTaskStorageAdapter {
+  load(key: string): readonly SerializableTask[] | PromiseLike<readonly SerializableTask[]>;
+  save(key: string, tasks: readonly SerializableTask[]): void | PromiseLike<void>;
+}
+
+export interface StateTaskStorageOptions {
+  storageKey: string;
+  adapter: StateTaskStorageAdapter;
+}
+
+export class StateTaskStorage implements ITaskStorage {
+  constructor(private readonly options: StateTaskStorageOptions) {}
+
+  async save(task: SerializableTask): Promise<void> {
+    const tasks = await this.loadAll();
+    const index = tasks.findIndex((item) => item.id === task.id);
+    if (index >= 0) {
+      tasks[index] = { ...task };
+    } else {
+      tasks.push({ ...task });
+    }
+    await this.writeAll(tasks);
+  }
+
+  async load(id: string): Promise<SerializableTask | undefined> {
+    const tasks = await this.loadAll();
+    const task = tasks.find((item) => item.id === id);
+    return task ? { ...task } : undefined;
+  }
+
+  async loadPending(): Promise<SerializableTask[]> {
+    return filterRecoverableTasks(await this.loadAll());
+  }
+
+  async loadAll(): Promise<SerializableTask[]> {
+    const tasks = await this.options.adapter.load(this.options.storageKey);
+    return tasks.map((task) => ({ ...task }));
+  }
+
+  async delete(id: string): Promise<void> {
+    const tasks = await this.loadAll();
+    await this.writeAll(tasks.filter((task) => task.id !== id));
+  }
+
+  async cleanup(olderThanMs: number): Promise<number> {
+    const plan = buildTaskStorageCleanupPlan({
+      tasks: await this.loadAll(),
+      olderThanMs,
+    });
+    await this.writeAll(plan.retained);
+    return plan.removed.length;
+  }
+
+  private async writeAll(tasks: readonly SerializableTask[]): Promise<void> {
+    await this.options.adapter.save(
+      this.options.storageKey,
+      tasks.map((task) => ({ ...task })),
+    );
+  }
+}
+
+export function createStateTaskStorage(options: StateTaskStorageOptions): StateTaskStorage {
+  return new StateTaskStorage(options);
 }
 
 /**
@@ -99,9 +158,7 @@ export class FileTaskStorage implements ITaskStorage {
 
   async loadPending(): Promise<SerializableTask[]> {
     await this.ensureInitialized();
-    return Array.from(this.cache.values())
-      .filter((t) => t.status === 'pending' || t.status === 'running')
-      .map((t) => ({ ...t }));
+    return filterRecoverableTasks(Array.from(this.cache.values()));
   }
 
   async loadAll(): Promise<SerializableTask[]> {
@@ -117,23 +174,19 @@ export class FileTaskStorage implements ITaskStorage {
 
   async cleanup(olderThanMs: number): Promise<number> {
     await this.ensureInitialized();
-    const cutoff = Date.now() - olderThanMs;
-    let cleaned = 0;
-
-    this.cache.forEach((task, id) => {
-      if (
-        (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') &&
-        task.updatedAt < cutoff
-      ) {
-        this.cache.delete(id);
-        cleaned++;
-      }
+    const plan = buildTaskStorageCleanupPlan({
+      tasks: Array.from(this.cache.values()),
+      olderThanMs,
     });
 
-    if (cleaned > 0) {
+    for (const task of plan.removed) {
+      this.cache.delete(task.id);
+    }
+
+    if (plan.removed.length > 0) {
       this.scheduleSave();
     }
-    return cleaned;
+    return plan.removed.length;
   }
 
   /** Force save to disk immediately */

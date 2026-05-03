@@ -6,7 +6,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
 const DEFAULT_TIMEOUT = 120_000;
@@ -21,7 +21,7 @@ export class BashTool extends BuiltinTool {
   readonly name = 'Bash';
   readonly description =
     'Execute a bash command and return its output. Use for system operations, running tests, builds, etc.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       command: {

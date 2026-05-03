@@ -23,6 +23,7 @@ import type {
   SpecializedAgentPreset,
   ModelTier,
   SubAgentExecutor,
+  SubAgentModelTierResolverContext,
 } from './types';
 import { CREATIVE_PRESETS } from './creative-presets';
 
@@ -177,6 +178,7 @@ export class SubAgentManager implements ISubAgentManager {
       subAgentId: config.id,
       parentAgentId: parentId,
       conversationId,
+      data: this.toEventData(config, 'pending'),
       timestamp: Date.now(),
     });
 
@@ -358,7 +360,7 @@ export class SubAgentManager implements ISubAgentManager {
       subAgentId: config.id,
       parentAgentId: parentId,
       conversationId,
-      data: { status: 'running' },
+      data: this.toEventData(config, 'running'),
       timestamp: Date.now(),
     });
 
@@ -390,18 +392,37 @@ export class SubAgentManager implements ISubAgentManager {
       const baseSystemPrompt = config.systemPrompt || this.buildSystemPrompt(config, preset);
       const systemPrompt = this.injectSkillsToPrompt(baseSystemPrompt, config);
 
+      const modelTier = config.modelTier || preset.defaultModelTier;
+      const primaryModel =
+        config.modelId ||
+        this.resolveModelId(modelTier, {
+          parentId,
+          conversationId,
+          subAgentId: config.id,
+          subAgentConfig: config,
+        });
+      if (!primaryModel) {
+        throw new Error(
+          `SubAgent model tier "${modelTier}" could not be resolved; configure modelTierResolver or pass modelId.`,
+        );
+      }
+
       // Create agent config
       const agentConfig: AgentConfig = {
         name: `subagent-${config.type}-${config.id}`,
         systemPrompt,
         tools: filteredTools,
         maxIterations: config.maxIterations || preset.defaultMaxIterations,
-        primaryModel:
-          config.modelId || this.resolveModelId(config.modelTier || preset.defaultModelTier),
+        primaryModel,
       };
 
       // Create executor
-      const executor = this.deps.createAgent(agentConfig);
+      const executor = this.deps.createAgent(agentConfig, undefined, {
+        parentId,
+        conversationId,
+        subAgentId: config.id,
+        subAgentConfig: config,
+      });
       instance.executor = executor;
 
       // Build input prompt
@@ -416,8 +437,21 @@ export class SubAgentManager implements ISubAgentManager {
         abortController?.abort();
       }, timeout);
 
+      const emitProgress = (progress: string): void => {
+        this.emit({
+          type: 'progress',
+          subAgentId: config.id,
+          parentAgentId: parentId,
+          conversationId,
+          data: { ...this.toEventData(config, 'running'), progress },
+          timestamp: Date.now(),
+        });
+      };
+
+      emitProgress('10% Preparing SubAgent execution');
+
       // Execute
-      const result = await executor.execute(inputPrompt);
+      const result = await executor.execute(inputPrompt, { onProgress: emitProgress });
 
       clearTimeout(timeoutId);
 
@@ -436,7 +470,7 @@ export class SubAgentManager implements ISubAgentManager {
         subAgentId: config.id,
         parentAgentId: parentId,
         conversationId,
-        data: { status: 'completed', result: instance.result },
+        data: { ...this.toEventData(config, 'completed'), result: instance.result },
         timestamp: Date.now(),
       });
 
@@ -459,7 +493,7 @@ export class SubAgentManager implements ISubAgentManager {
         subAgentId: config.id,
         parentAgentId: parentId,
         conversationId,
-        data: { status: instance.status, error: errorMessage },
+        data: { ...this.toEventData(config, instance.status), error: errorMessage },
         timestamp: Date.now(),
       });
 
@@ -483,20 +517,11 @@ Focus on completing this specific task efficiently and report your findings clea
   /**
    * Resolve model tier to actual model ID
    */
-  private resolveModelId(tier: ModelTier): string | undefined {
-    // Try custom resolver first (e.g., from Platform ConfigManager)
-    if (this.deps.modelTierResolver) {
-      const resolved = this.deps.modelTierResolver(tier);
-      if (resolved) return resolved;
-    }
-
-    // Fallback to hardcoded defaults
-    const modelMap: Record<ModelTier, string> = {
-      fast: 'claude-3-haiku-20240307',
-      balanced: 'claude-sonnet-4-20250514',
-      powerful: 'claude-opus-4-20250514',
-    };
-    return modelMap[tier];
+  private resolveModelId(
+    tier: ModelTier,
+    context: SubAgentModelTierResolverContext,
+  ): string | undefined {
+    return this.deps.modelTierResolver?.(tier, context);
   }
 
   /**
@@ -585,6 +610,21 @@ ${skillContents.join('\n\n')}`;
     return `## Skill: ${name}
 
 ${content}`;
+  }
+
+  private toEventData(
+    config: SubAgentConfig,
+    status: SubAgentStatus,
+  ): NonNullable<SubAgentEvent['data']> {
+    return {
+      status,
+      description: config.description,
+      subagentType: config.type,
+      runMode: config.runMode,
+      modelTier: config.modelTier,
+      parentMessageId: config.parentMessageId,
+      parentToolCallId: config.parentToolCallId,
+    };
   }
 
   /**

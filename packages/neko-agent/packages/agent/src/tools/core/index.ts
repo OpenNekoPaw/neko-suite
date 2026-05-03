@@ -16,7 +16,17 @@ export {
   GetContextTool,
   createCoreMetaTools,
   type ISkillProvider,
+  type SkillProviderFactory,
+  type SkillProviderMaybePromise,
 } from './meta-tools';
+export {
+  DEFAULT_PLUGIN_SKILL_PROVIDER_EXTENSION_IDS,
+  createPluginSkillDiscoveryTools,
+  type PluginSkillCatalogue,
+  type PluginSkillCatalogueEntry,
+  type PluginSkillCatalogueSource,
+  type PluginSkillDiscoveryLogger,
+} from './plugin-skill-discovery-tool';
 
 // Core file/system tools
 export { ReadTool } from './read-tool';

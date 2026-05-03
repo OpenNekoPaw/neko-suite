@@ -150,18 +150,11 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
   // ---------------------------------------------------------------------------
 
   build(): string {
-    // 1. Plan mode - use plan prompt
-    if (this._mode === 'plan') {
-      return this._getPlanPrompt();
-    }
+    return this._buildForMode(this._mode);
+  }
 
-    // 2. AGENTS.md content (completely replaces default)
-    if (this._agentsContent) {
-      return this._agentsContent;
-    }
-
-    // 3. Built-in default prompt
-    return this._getDefaultPrompt();
+  buildForMode(mode: PromptMode): string {
+    return this._buildForMode(mode);
   }
 
   buildWithSkill(skillPrompt: string): string {
@@ -227,6 +220,18 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
     }
     const key = `plan-${this._locale}` as const;
     return BUILTIN_PROMPTS[key];
+  }
+
+  private _buildForMode(mode: PromptMode): string {
+    if (mode === 'plan') {
+      return this._getPlanPrompt();
+    }
+
+    if (this._agentsContent) {
+      return this._agentsContent;
+    }
+
+    return this._getDefaultPrompt();
   }
 
   private async _tryLoadFile(

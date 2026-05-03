@@ -1,0 +1,541 @@
+import type {
+  AgentCapabilityContext,
+  AgentCapabilityHostRequirement,
+  AgentCapabilityLifecycleHook,
+  AgentCapabilityManifest,
+  AgentCapabilityProtocolVersion,
+  AgentCapabilityProvider,
+  AgentCapabilityTrustLevel,
+  IProviderCardRegistry,
+  ISkillRegistry,
+  IToolCategoryRegistry,
+  IToolRegistry,
+  PromptFragment,
+  ProviderCard,
+  Skill,
+  Tool,
+  ToolGroup,
+} from '@neko/shared';
+
+export interface CapabilityProtocolInfo {
+  readonly providerId: string;
+  readonly protocolVersion: AgentCapabilityProtocolVersion;
+  readonly trustLevel: AgentCapabilityTrustLevel;
+  readonly hostRequirements: readonly AgentCapabilityHostRequirement[];
+  readonly lifecycleHooks: readonly AgentCapabilityLifecycleHook[];
+  readonly source: 'provider' | 'manifest';
+}
+
+interface ProviderCardTarget {
+  readonly providerId: string;
+  readonly modelId?: string;
+}
+
+interface RegisteredProvider {
+  provider: AgentCapabilityProvider;
+  protocol: CapabilityProtocolInfo;
+  registeredTools: string[];
+  registeredSkills: string[];
+  registeredToolGroups: string[];
+  registeredProviderCards: ProviderCardTarget[];
+}
+
+export interface CapabilityRegistryRuntimeDeps {
+  toolRegistry: IToolRegistry;
+  skillRegistry?: ISkillRegistry;
+  toolGroupRegistry?: {
+    register(group: ToolGroup): void;
+    unregister(name: string): void;
+    listEnabled?(): ToolGroup[];
+  };
+  toolCategoryRegistry?: Pick<IToolCategoryRegistry, 'categorizeTool'> & {
+    clearTools?(): void;
+  };
+  providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
+}
+
+export type CapabilityDiscoveryDeps = CapabilityRegistryRuntimeDeps;
+
+export interface CapabilityRegistryRuntimeLogger {
+  info(message: string, context?: unknown): void;
+  warn(message: string, context?: unknown): void;
+  debug(message: string, context?: unknown): void;
+}
+
+const noopLogger: CapabilityRegistryRuntimeLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  debug: () => undefined,
+};
+
+type CapabilityDiagnosticLevel = 'debug' | 'info' | 'warn';
+
+interface CapabilityRuntimeDiagnostic {
+  readonly code: string;
+  readonly message: string;
+  readonly reason?: string;
+  readonly context?: Record<string, unknown>;
+  readonly error?: unknown;
+}
+
+function emitCapabilityDiagnostic(
+  logger: CapabilityRegistryRuntimeLogger,
+  level: CapabilityDiagnosticLevel,
+  diagnostic: CapabilityRuntimeDiagnostic,
+): void {
+  const payload: Record<string, unknown> = {
+    code: diagnostic.code,
+  };
+
+  if (diagnostic.reason) {
+    payload['reason'] = diagnostic.reason;
+  }
+  if (diagnostic.context && Object.keys(diagnostic.context).length > 0) {
+    payload['context'] = diagnostic.context;
+  }
+  if (diagnostic.error !== undefined) {
+    payload['error'] = toCapabilityDiagnosticError(diagnostic.error);
+  }
+
+  logger[level](diagnostic.message, payload);
+}
+
+function toCapabilityDiagnosticError(error: unknown): unknown {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return error;
+}
+
+export class CapabilityRegistryRuntime {
+  private readonly providers = new Map<string, RegisteredProvider>();
+  private readonly manifests = new Map<string, AgentCapabilityManifest>();
+  private readonly toolOwners = new Map<string, string>();
+  private readonly skillOwners = new Map<string, string>();
+  private readonly toolGroupOwners = new Map<string, string>();
+  private readonly providerCardOwners = new Map<string, string>();
+  private readonly logger: CapabilityRegistryRuntimeLogger;
+  private capabilityContext: AgentCapabilityContext | null = null;
+  private warnedMissingCapabilityContextForFragments = false;
+
+  constructor(
+    private readonly deps: CapabilityRegistryRuntimeDeps,
+    options: { readonly logger?: CapabilityRegistryRuntimeLogger } = {},
+  ) {
+    this.logger = options.logger ?? noopLogger;
+  }
+
+  setCapabilityContext(context: AgentCapabilityContext): void {
+    this.capabilityContext = context;
+    this.warnedMissingCapabilityContextForFragments = false;
+  }
+
+  replaceManifests(manifests: readonly AgentCapabilityManifest[]): void {
+    this.manifests.clear();
+    for (const manifest of manifests) {
+      this.upsertManifest(manifest);
+    }
+    this.logger.debug(`Discovered ${this.manifests.size} capability manifest(s)`);
+  }
+
+  upsertManifest(manifest: AgentCapabilityManifest): boolean {
+    const protocol = resolveCapabilityProtocolInfo(manifest.id, manifest, 'manifest');
+    if (!isSupportedCapabilityProtocol(protocol.protocolVersion)) {
+      emitCapabilityDiagnostic(this.logger, 'warn', {
+        code: 'extension.capability.protocol.unsupported',
+        reason: 'unsupported-protocol-version',
+        message: 'Skipping unsupported capability manifest protocol version.',
+        context: {
+          providerId: manifest.id,
+          protocolVersion: protocol.protocolVersion,
+        },
+      });
+      return false;
+    }
+    this.manifests.set(manifest.id, manifest);
+    return true;
+  }
+
+  cleanupProvidersWithoutManifests(): string[] {
+    const removed: string[] = [];
+    for (const id of this.getRegisteredProviderIds()) {
+      if (!this.manifests.has(id) && this.unregisterProvider(id)) {
+        removed.push(id);
+      }
+    }
+    return removed;
+  }
+
+  registerProvider(provider: AgentCapabilityProvider, context: AgentCapabilityContext): void {
+    const { id } = provider;
+    this.setCapabilityContext(context);
+
+    if (this.providers.has(id)) {
+      this.logger.info(`Re-registering provider: ${id}`);
+      this.unregisterProvider(id);
+    }
+
+    const registeredTools: string[] = [];
+    const registeredSkills: string[] = [];
+    const registeredToolGroups: string[] = [];
+    const registeredProviderCards: ProviderCardTarget[] = [];
+
+    try {
+      const tools: Tool[] = provider.getTools(context);
+      for (const tool of tools) {
+        this.recordCapabilityNameCollision({
+          kind: 'tool',
+          name: tool.name,
+          providerId: id,
+          existingOwner: this.toolOwners.get(tool.name),
+          existsInRuntime: this.deps.toolRegistry.get(tool.name) !== undefined,
+        });
+        this.deps.toolRegistry.register(tool);
+        this.toolOwners.set(tool.name, id);
+        registeredTools.push(tool.name);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to get tools from provider "${id}"`, { error: err });
+    }
+
+    if (provider.getSkills && this.deps.skillRegistry) {
+      try {
+        const skills: Skill[] = provider.getSkills();
+        for (const skill of skills) {
+          this.recordCapabilityNameCollision({
+            kind: 'skill',
+            name: skill.name,
+            providerId: id,
+            existingOwner: this.skillOwners.get(skill.name),
+            existsInRuntime: this.deps.skillRegistry.getSkill(skill.name) !== undefined,
+          });
+          this.deps.skillRegistry.registerSkill(skill);
+          this.skillOwners.set(skill.name, id);
+          registeredSkills.push(skill.name);
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get skills from provider "${id}"`, { error: err });
+      }
+    }
+
+    if (provider.getToolGroups && this.deps.toolGroupRegistry) {
+      try {
+        const groups: ToolGroup[] = provider.getToolGroups();
+        for (const group of groups) {
+          this.recordCapabilityNameCollision({
+            kind: 'tool-group',
+            name: group.name,
+            providerId: id,
+            existingOwner: this.toolGroupOwners.get(group.name),
+            existsInRuntime: false,
+          });
+          this.deps.toolGroupRegistry.register(group);
+          this.toolGroupOwners.set(group.name, id);
+          registeredToolGroups.push(group.name);
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get tool groups from provider "${id}"`, { error: err });
+      }
+    }
+
+    if (provider.getProviderCards && this.deps.providerCardRegistry) {
+      try {
+        const cards: ProviderCard[] = provider.getProviderCards(context);
+        for (const card of cards) {
+          this.recordCapabilityNameCollision({
+            kind: 'provider-card',
+            name: formatProviderCardTarget(card),
+            providerId: id,
+            existingOwner: this.providerCardOwners.get(toProviderCardOwnerKey(card)),
+            existsInRuntime: false,
+          });
+          this.deps.providerCardRegistry.register(card);
+          this.providerCardOwners.set(toProviderCardOwnerKey(card), id);
+          registeredProviderCards.push(toProviderCardTarget(card));
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get provider cards from provider "${id}"`, { error: err });
+      }
+    }
+
+    this.providers.set(id, {
+      provider,
+      protocol: resolveCapabilityProtocolInfo(id, provider, 'provider'),
+      registeredTools,
+      registeredSkills,
+      registeredToolGroups,
+      registeredProviderCards,
+    });
+
+    this.logger.info(
+      `Provider "${id}" v${provider.version} registered: ` +
+        `${registeredTools.length} tools, ${registeredSkills.length} skills, ` +
+        `${registeredToolGroups.length} tool groups, ${registeredProviderCards.length} provider cards`,
+    );
+
+    this.syncToolCategories();
+  }
+
+  unregisterProvider(id: string): boolean {
+    const entry = this.providers.get(id);
+    if (!entry) return false;
+
+    for (const toolName of entry.registeredTools) {
+      this.deps.toolRegistry.unregister(toolName);
+      if (this.toolOwners.get(toolName) === id) {
+        this.toolOwners.delete(toolName);
+      }
+    }
+
+    if (this.deps.skillRegistry) {
+      for (const skillName of entry.registeredSkills) {
+        this.deps.skillRegistry.unregisterSkill(skillName);
+        if (this.skillOwners.get(skillName) === id) {
+          this.skillOwners.delete(skillName);
+        }
+      }
+    }
+
+    if (this.deps.toolGroupRegistry) {
+      for (const groupName of entry.registeredToolGroups) {
+        this.deps.toolGroupRegistry.unregister(groupName);
+        if (this.toolGroupOwners.get(groupName) === id) {
+          this.toolGroupOwners.delete(groupName);
+        }
+      }
+    }
+
+    if (this.deps.providerCardRegistry) {
+      for (const target of entry.registeredProviderCards) {
+        this.deps.providerCardRegistry.unregister(target.providerId, undefined, target.modelId);
+        const key = toProviderCardOwnerKey(target);
+        if (this.providerCardOwners.get(key) === id) {
+          this.providerCardOwners.delete(key);
+        }
+      }
+    }
+
+    entry.provider.dispose?.();
+    this.providers.delete(id);
+
+    this.syncToolCategories();
+    this.logger.info(`Provider "${id}" unregistered`);
+    return true;
+  }
+
+  dispose(): void {
+    for (const id of this.getRegisteredProviderIds()) {
+      this.unregisterProvider(id);
+    }
+  }
+
+  syncToolCategories(
+    targetRegistry: CapabilityRegistryRuntimeDeps['toolCategoryRegistry'] = this.deps
+      .toolCategoryRegistry,
+  ): void {
+    if (!targetRegistry) {
+      return;
+    }
+
+    targetRegistry.clearTools?.();
+
+    const layersByTool = this.resolveToolLayers();
+    for (const tool of this.deps.toolRegistry.list()) {
+      targetRegistry.categorizeTool(tool.name, tool.category, layersByTool.get(tool.name));
+    }
+  }
+
+  getAllProviders(): AgentCapabilityProvider[] {
+    return Array.from(this.providers.values()).map((entry) => entry.provider);
+  }
+
+  getAllPromptFragments(): PromptFragment[] {
+    if (!this.capabilityContext) {
+      if (!this.warnedMissingCapabilityContextForFragments) {
+        emitCapabilityDiagnostic(this.logger, 'warn', {
+          code: 'extension.capability.prompt-fragments-skipped',
+          reason: 'missing-capability-context',
+          message:
+            'Skipping capability prompt fragment aggregation because capability context is not initialized.',
+          context: {
+            providerCount: this.providers.size,
+          },
+        });
+        this.warnedMissingCapabilityContextForFragments = true;
+      }
+      return [];
+    }
+
+    const aggregated: PromptFragment[] = [];
+    for (const { provider } of this.providers.values()) {
+      if (!provider.getPromptFragments) continue;
+      try {
+        const fragments = provider.getPromptFragments(this.capabilityContext);
+        if (fragments && fragments.length > 0) aggregated.push(...fragments);
+      } catch (err) {
+        this.logger.warn(`Provider "${provider.id}" getPromptFragments threw; skipping`, err);
+      }
+    }
+    return aggregated;
+  }
+
+  getAllManifests(): AgentCapabilityManifest[] {
+    return Array.from(this.manifests.values());
+  }
+
+  getCapabilityProtocolInfo(id: string): CapabilityProtocolInfo | null {
+    const registered = this.providers.get(id);
+    if (registered) {
+      return registered.protocol;
+    }
+    const manifest = this.manifests.get(id);
+    return manifest ? resolveCapabilityProtocolInfo(id, manifest, 'manifest') : null;
+  }
+
+  hasProvider(id: string): boolean {
+    return this.providers.has(id);
+  }
+
+  get providerCount(): number {
+    return this.providers.size;
+  }
+
+  getRegisteredProviderIds(): string[] {
+    return Array.from(this.providers.keys());
+  }
+
+  getSubpackage(id: string): { id: string; version: string; enabled: boolean } | null {
+    const registered = this.providers.get(id);
+    if (registered) {
+      return {
+        id,
+        version: registered.provider.version,
+        enabled: true,
+      };
+    }
+    const manifest = this.manifests.get(id);
+    if (manifest) {
+      return {
+        id,
+        version: manifest.version,
+        enabled: false,
+      };
+    }
+    return null;
+  }
+
+  private resolveToolLayers(): Map<string, 'always' | 'dynamic'> {
+    const layersByTool = new Map<string, 'always' | 'dynamic'>();
+    const groups = this.deps.toolGroupRegistry?.listEnabled?.() ?? [];
+
+    for (const group of groups) {
+      const layer = resolveGroupLayer(group);
+      for (const toolName of group.tools) {
+        const existing = layersByTool.get(toolName);
+        if (existing === 'always') {
+          continue;
+        }
+        layersByTool.set(toolName, layer);
+      }
+    }
+
+    return layersByTool;
+  }
+
+  private recordCapabilityNameCollision(input: {
+    kind: 'tool' | 'skill' | 'tool-group' | 'provider-card';
+    name: string;
+    providerId: string;
+    existingOwner?: string;
+    existsInRuntime: boolean;
+  }): void {
+    let reason:
+      | 'duplicate-name-in-provider'
+      | 'provider-name-collision'
+      | 'preexisting-name-collision'
+      | null = null;
+
+    if (input.existingOwner === input.providerId) {
+      reason = 'duplicate-name-in-provider';
+    } else if (input.existingOwner) {
+      reason = 'provider-name-collision';
+    } else if (input.existsInRuntime) {
+      reason = 'preexisting-name-collision';
+    }
+
+    if (!reason) {
+      return;
+    }
+
+    emitCapabilityDiagnostic(this.logger, 'warn', {
+      code: `extension.capability.${input.kind}.name-collision`,
+      reason,
+      message: 'Capability registration is overwriting a shared runtime name.',
+      context: {
+        capabilityKind: input.kind,
+        name: input.name,
+        providerId: input.providerId,
+        existingOwner: input.existingOwner ?? null,
+      },
+    });
+  }
+}
+
+function toProviderCardTarget(card: ProviderCard): ProviderCardTarget {
+  return {
+    providerId: card.providerId,
+    ...(card.modelId ? { modelId: card.modelId } : {}),
+  };
+}
+
+function toProviderCardOwnerKey(target: ProviderCardTarget): string {
+  return target.modelId ? `${target.providerId}\u0000${target.modelId}` : target.providerId;
+}
+
+function formatProviderCardTarget(target: ProviderCardTarget): string {
+  return target.modelId ? `${target.providerId}/${target.modelId}` : target.providerId;
+}
+
+function resolveCapabilityProtocolInfo(
+  providerId: string,
+  metadata: {
+    readonly protocolVersion?: AgentCapabilityProtocolVersion;
+    readonly trustLevel?: AgentCapabilityTrustLevel;
+    readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+    readonly lifecycleHooks?: readonly AgentCapabilityLifecycleHook[];
+  },
+  source: 'provider' | 'manifest',
+): CapabilityProtocolInfo {
+  return {
+    providerId,
+    protocolVersion: metadata.protocolVersion ?? '1.0',
+    trustLevel: metadata.trustLevel ?? 'core',
+    hostRequirements:
+      metadata.hostRequirements && metadata.hostRequirements.length > 0
+        ? metadata.hostRequirements
+        : [{ host: 'vscode' }],
+    lifecycleHooks: metadata.lifecycleHooks ?? [],
+    source,
+  };
+}
+
+function isSupportedCapabilityProtocol(version: AgentCapabilityProtocolVersion): boolean {
+  return version === '1.0';
+}
+
+function resolveGroupLayer(group: ToolGroup): 'always' | 'dynamic' {
+  if (group.loadingTier === 'resident') {
+    return 'always';
+  }
+  if (group.loadingTier === 'eager' || group.loadingTier === 'lazy') {
+    return 'dynamic';
+  }
+  if (!group.alwaysActive) {
+    return 'dynamic';
+  }
+  return group.priority !== undefined && group.priority >= 100 ? 'always' : 'dynamic';
+}

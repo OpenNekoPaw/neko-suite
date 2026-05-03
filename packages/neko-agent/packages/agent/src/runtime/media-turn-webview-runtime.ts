@@ -1,0 +1,176 @@
+import {
+  buildErrorMessage,
+  buildMediaTaskCreatedMessage,
+  buildMediaTaskProgressMessage,
+  type AgentMediaTaskView,
+  type ErrorMessage,
+  type MediaModelCategory,
+  type MediaTaskCreatedMessage,
+  type MediaTaskProgressMessage,
+  type ModelRef,
+} from '@neko-agent/types';
+import { projectMediaTaskToWorkItem } from './work-item-projector';
+
+export type AgentMediaTurnRuntimeMessage =
+  | ErrorMessage
+  | MediaTaskCreatedMessage
+  | MediaTaskProgressMessage;
+
+export interface AgentMediaTurnTaskEvent<
+  TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
+  TSourceTask = unknown,
+> {
+  readonly conversationId: string;
+  readonly task: TTaskView;
+  readonly sourceTask: TSourceTask;
+}
+
+export interface AgentMediaTurnIgnoredTaskEvent<TSourceTask = unknown> {
+  readonly taskId: string;
+  readonly conversationId: string;
+  readonly sourceTask: TSourceTask;
+}
+
+export interface AgentMediaTurnProgressErrorEvent<
+  TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
+  TSourceTask = unknown,
+> {
+  readonly taskId: string;
+  readonly conversationId: string;
+  readonly sourceTask: TSourceTask;
+  readonly error: unknown;
+  readonly fallbackTask?: TTaskView;
+}
+
+export interface AgentMediaTurnExecutionInput<
+  TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
+  TSourceTask = unknown,
+> {
+  readonly prompt: string;
+  readonly mediaModel: ModelRef<MediaModelCategory>;
+  readonly conversationId: string;
+  readonly onTaskCreated: (
+    event: AgentMediaTurnTaskEvent<TTaskView, TSourceTask>,
+  ) => void | Promise<void>;
+  readonly onTaskProgress: (
+    event: AgentMediaTurnTaskEvent<TTaskView, TSourceTask>,
+  ) => void | Promise<void>;
+  readonly onIgnoredConversationTask?: (event: AgentMediaTurnIgnoredTaskEvent<TSourceTask>) => void;
+  readonly onAlreadyTerminalTask?: (event: AgentMediaTurnIgnoredTaskEvent<TSourceTask>) => void;
+  readonly onProgressDeliveryError?: (
+    event: AgentMediaTurnProgressErrorEvent<TTaskView, TSourceTask>,
+  ) => void;
+}
+
+export interface RunAgentMediaTurnForWebviewInput<
+  TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
+  TSourceTask = unknown,
+> {
+  readonly conversationId: string;
+  readonly prompt: string;
+  readonly mediaModel: ModelRef<MediaModelCategory>;
+  readonly executeMediaTurn?: (
+    input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
+  ) => Promise<unknown>;
+  readonly postMessage: (message: AgentMediaTurnRuntimeMessage) => void;
+  readonly unavailableMessage?: string;
+  readonly failureMessage?: string;
+  readonly onExecutionError?: (error: unknown) => void;
+  readonly onIgnoredConversationTask?: (event: AgentMediaTurnIgnoredTaskEvent<TSourceTask>) => void;
+  readonly onAlreadyTerminalTask?: (event: AgentMediaTurnIgnoredTaskEvent<TSourceTask>) => void;
+  readonly onProgressDeliveryError?: (
+    event: AgentMediaTurnProgressErrorEvent<TTaskView, TSourceTask>,
+  ) => void;
+}
+
+export type RunAgentMediaTurnForWebviewResult =
+  | { readonly status: 'submitted' }
+  | { readonly status: 'unavailable' }
+  | { readonly status: 'failed'; readonly error: unknown };
+
+export async function runAgentMediaTurnForWebview<
+  TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
+  TSourceTask = unknown,
+>(
+  input: RunAgentMediaTurnForWebviewInput<TTaskView, TSourceTask>,
+): Promise<RunAgentMediaTurnForWebviewResult> {
+  const executeMediaTurn = input.executeMediaTurn;
+  if (!executeMediaTurn) {
+    input.postMessage(
+      buildErrorMessage({
+        conversationId: input.conversationId,
+        message: input.unavailableMessage ?? 'Media generation is unavailable',
+      }),
+    );
+    return { status: 'unavailable' };
+  }
+
+  try {
+    await executeMediaTurn({
+      prompt: input.prompt,
+      mediaModel: input.mediaModel,
+      conversationId: input.conversationId,
+      onTaskCreated: (event) => {
+        if (!isMediaTurnEventForConversation(event, input.conversationId)) {
+          input.onIgnoredConversationTask?.({
+            taskId: event.task.id,
+            conversationId: input.conversationId,
+            sourceTask: event.sourceTask,
+          });
+          return;
+        }
+        input.postMessage(
+          buildMediaTaskCreatedMessage({
+            conversationId: input.conversationId,
+            workItem: projectMediaTaskToWorkItem({
+              conversationId: input.conversationId,
+              task: event.task,
+            }),
+          }),
+        );
+      },
+      onTaskProgress: (event) => {
+        if (!isMediaTurnEventForConversation(event, input.conversationId)) {
+          input.onIgnoredConversationTask?.({
+            taskId: event.task.id,
+            conversationId: input.conversationId,
+            sourceTask: event.sourceTask,
+          });
+          return;
+        }
+        input.postMessage(
+          buildMediaTaskProgressMessage({
+            conversationId: input.conversationId,
+            workItem: projectMediaTaskToWorkItem({
+              conversationId: input.conversationId,
+              task: event.task,
+            }),
+          }),
+        );
+      },
+      onIgnoredConversationTask: input.onIgnoredConversationTask,
+      onAlreadyTerminalTask: input.onAlreadyTerminalTask,
+      onProgressDeliveryError: input.onProgressDeliveryError,
+    });
+    return { status: 'submitted' };
+  } catch (error) {
+    input.onExecutionError?.(error);
+    input.postMessage(
+      buildErrorMessage({
+        conversationId: input.conversationId,
+        message:
+          error instanceof Error
+            ? error.message
+            : (input.failureMessage ?? 'Media generation failed'),
+      }),
+    );
+    return { status: 'failed', error };
+  }
+}
+
+function isMediaTurnEventForConversation(
+  event: AgentMediaTurnTaskEvent<AgentMediaTaskView, unknown>,
+  conversationId: string,
+): boolean {
+  return event.conversationId === conversationId;
+}

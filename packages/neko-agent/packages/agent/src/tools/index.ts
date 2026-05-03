@@ -31,6 +31,14 @@ export {
   GetContextTool,
   createCoreMetaTools,
   type ISkillProvider,
+  type SkillProviderFactory,
+  type SkillProviderMaybePromise,
+  DEFAULT_PLUGIN_SKILL_PROVIDER_EXTENSION_IDS,
+  createPluginSkillDiscoveryTools,
+  type PluginSkillCatalogue,
+  type PluginSkillCatalogueEntry,
+  type PluginSkillCatalogueSource,
+  type PluginSkillDiscoveryLogger,
   // Core file/system tools
   ReadTool,
   WriteTool,
@@ -51,16 +59,20 @@ export {
   PERCEPTION_IMAGE_SIMILARITY_METADATA,
   PERCEPTION_IMAGE_CLASSIFY_METADATA,
   PERCEPTION_DESCRIBE_INPUT_METADATA,
+  PERCEPTION_VIDEO_DETECT_SHOTS_METADATA,
   PerceptionAudioTranscribeTool,
   PerceptionImageSimilarityTool,
   PerceptionImageClassifyTool,
   PerceptionDescribeInputTool,
+  PerceptionVideoDetectShotsTool,
   createPerceptionTools,
   perceptionToolGroup,
   type PerceptionAudioTranscribeToolConfig,
+  type PerceptionVideoDetectShotsToolConfig,
   type PerceptionImageSimilarityToolConfig,
   type PerceptionImageClassifyToolConfig,
   type PerceptionClassifyClient,
+  type PerceptionDetectShotsClient,
   type PerceptionSimilarityClient,
   type PerceptionTranscribeClient,
 } from './perception';
@@ -99,6 +111,50 @@ export {
 
 // Tier resolver (tiered lazy loading)
 export { resolveToolGroupTier, resolveSkillTier } from './tier-resolver';
+
+// Creative tool runtimes
+export {
+  createPuppetFaceTools,
+  type PuppetFaceToolsDeps,
+  type PuppetFaceToolsLogger,
+} from './puppet-face-tools';
+export {
+  PuppetFaceRuntime,
+  buildPuppetFaceParameterSchemaPrompt,
+  createPuppetFaceRuntime,
+  detectPuppetFaceImageMimeType,
+  diffPuppetFaceParams,
+  parsePuppetFaceJsonResponse,
+  validateAndClampPuppetFaceParams,
+  type PuppetFaceAdjustInput,
+  type PuppetFaceAdjustResult,
+  type PuppetFaceAdjustSuccess,
+  type PuppetFaceErrorResult,
+  type PuppetFaceGenerateInput,
+  type PuppetFaceGenerateResult,
+  type PuppetFaceGenerateSuccess,
+  type PuppetFaceImageInput,
+  type PuppetFaceImageResult,
+  type PuppetFaceImageSuccess,
+  type PuppetFaceParamChanges,
+  type PuppetFaceParams,
+  type PuppetFaceRuntimeDeps,
+} from './puppet-face-runtime';
+export {
+  ScriptEmbeddingIndex,
+  buildScriptSceneTextInputs,
+  keywordSearchScriptScenes,
+  normalizeScriptSceneTopK,
+  searchScriptScenes,
+  tokenizeScriptSceneQuery,
+  type EmbedFn,
+  type SceneEmbedding,
+  type SceneTextInput,
+  type ScriptSceneSearchInput,
+  type ScriptSceneSearchResult,
+  type ScriptSceneSpan,
+  type SearchResult,
+} from './script-scene-search-runtime';
 
 // Re-export injection constants
 export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';

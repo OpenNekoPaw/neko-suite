@@ -17,8 +17,7 @@ import type {
   StageActivationDecision,
   Task,
 } from '@neko-agent/types';
-import { roundSummaryFromDecision } from '@neko-agent/types';
-import { createIdcRunStore } from '../idc-run-store';
+import { createIdcRunStore, roundSummaryFromDecision } from '../idc-run-store';
 
 function decision(overrides: Partial<StageActivationDecision> = {}): StageActivationDecision {
   return {
@@ -61,27 +60,15 @@ describe('IdcRunStore', () => {
     expect(run).not.toBeNull();
     expect(run!.id).toBe(id);
     expect(run!.runKind).toBe('flow-c');
-    expect(run!.workflowId).toBe('flow-c');
     expect(run!.status).toBe('running');
     expect(run!.createdAt).toBe(1000);
     expect(run!.startedAt).toBe(1000);
     expect(run!.rounds).toEqual([]);
   });
 
-  it('still accepts legacy workflowId input during migration', () => {
-    const store = createIdcRunStore();
-    store.startRun({ workflowId: 'legacy-flow' });
-    expect(store.getActive()).toEqual(
-      expect.objectContaining({
-        runKind: 'legacy-flow',
-        workflowId: 'legacy-flow',
-      }),
-    );
-  });
-
   it('uses a user-supplied runId when given', () => {
     const store = createIdcRunStore();
-    expect(store.startRun({ workflowId: 'f', runId: 'custom-run' })).toBe('custom-run');
+    expect(store.startRun({ runKind: 'f', runId: 'custom-run' })).toBe('custom-run');
   });
 
   it('generates distinct default runIds across store instances', () => {
@@ -89,8 +76,8 @@ describe('IdcRunStore', () => {
     const first = createIdcRunStore({ now });
     const second = createIdcRunStore({ now });
 
-    const firstId = first.startRun({ workflowId: 'flow-a' });
-    const secondId = second.startRun({ workflowId: 'flow-b' });
+    const firstId = first.startRun({ runKind: 'flow-a' });
+    const secondId = second.startRun({ runKind: 'flow-b' });
 
     expect(firstId).not.toBe(secondId);
     expect(firstId).toMatch(/^run-1234-[a-z0-9]+$/);
@@ -99,7 +86,7 @@ describe('IdcRunStore', () => {
 
   it('recordRound appends round summaries in order', () => {
     const store = createIdcRunStore();
-    store.startRun({ workflowId: 'f' });
+    store.startRun({ runKind: 'f' });
     store.recordRound(decision({ round: 0 }));
     store.recordRound(decision({ round: 1, activated: ['apply'] }), 'retry');
     const rounds = store.getActive()!.rounds;
@@ -120,7 +107,7 @@ describe('IdcRunStore', () => {
     let t = 0;
     const store = createIdcRunStore({ now: () => t });
     t = 1;
-    store.startRun({ workflowId: 'f' });
+    store.startRun({ runKind: 'f' });
     t = 50;
     store.endRun('completed');
     expect(store.getActive()).toBeNull();
@@ -132,7 +119,7 @@ describe('IdcRunStore', () => {
 
   it('endRun carries error payload when failed', () => {
     const store = createIdcRunStore();
-    store.startRun({ workflowId: 'f' });
+    store.startRun({ runKind: 'f' });
     store.endRun('failed', { code: 'oops', message: 'tool failed' });
     const done = store.listCompleted()[0];
     expect(done.status).toBe('failed');
@@ -141,8 +128,8 @@ describe('IdcRunStore', () => {
 
   it('startRun while active auto-aborts the previous run', () => {
     const store = createIdcRunStore();
-    const first = store.startRun({ workflowId: 'a' });
-    store.startRun({ workflowId: 'b' });
+    const first = store.startRun({ runKind: 'a' });
+    store.startRun({ runKind: 'b' });
     const completed = store.listCompleted();
     expect(completed.map((r) => r.id)).toContain(first);
     expect(completed.find((r) => r.id === first)!.status).toBe('aborted');
@@ -150,7 +137,7 @@ describe('IdcRunStore', () => {
 
   it('setTask attaches the task checklist to the active run', () => {
     const store = createIdcRunStore();
-    store.startRun({ workflowId: 'f' });
+    store.startRun({ runKind: 'f' });
     const task: Task = { id: 'l1', items: [], createdAt: 0, updatedAt: 0 };
     store.setTask(task);
 
@@ -160,7 +147,7 @@ describe('IdcRunStore', () => {
 
   it('tracks draft / plan / task bindings on the active run', () => {
     const store = createIdcRunStore();
-    store.startRun({ workflowId: 'f', runId: 'run-1' });
+    store.startRun({ runKind: 'f', runId: 'run-1' });
     const task: Task = { id: 'task-1', items: [], createdAt: 5, updatedAt: 6 };
 
     store.setDraft(draft, {
@@ -216,7 +203,6 @@ describe('IdcRunStore', () => {
     const active: IdcRun = {
       id: 'run-active',
       runKind: 'wf-active',
-      workflowId: 'wf-active',
       status: 'running',
       createdAt: 1,
       startedAt: 2,
@@ -233,7 +219,6 @@ describe('IdcRunStore', () => {
     const completed: IdcRun = {
       id: 'run-completed',
       runKind: 'wf-completed',
-      workflowId: 'wf-completed',
       status: 'completed',
       createdAt: 4,
       startedAt: 5,

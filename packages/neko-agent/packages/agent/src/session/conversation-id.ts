@@ -44,32 +44,8 @@ export function getConversationWorkDirHash(workDir: string): string {
   return (value % WORK_DIR_HASH_SPACE).toString(36).padStart(WORK_DIR_HASH_WIDTH, '0');
 }
 
-export function createLegacyConversationMigrationId(
-  workDir: string,
-  legacyConversationId: string,
-  createdAt: number,
-): string {
-  const digest = createHash('sha256')
-    .update(workDir)
-    .update('\0')
-    .update(legacyConversationId)
-    .update('\0')
-    .update(String(createdAt))
-    .digest()
-    .subarray(0, ULID_RANDOM_BYTES);
-
-  return createConversationId(workDir, {
-    now: normalizeTimestamp(createdAt),
-    random: digest,
-  });
-}
-
 export function isCanonicalConversationId(conversationId: string): boolean {
   return parseConversationId(conversationId) !== null;
-}
-
-export function isLegacyConversationId(conversationId: string): boolean {
-  return !isCanonicalConversationId(conversationId);
 }
 
 export function parseConversationId(conversationId: string): ParsedConversationId | null {

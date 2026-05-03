@@ -116,6 +116,7 @@ import {
   createQualityReviewEvidence,
   type IFeedbackCoordinator,
 } from '../feedback';
+import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
 import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
 import { getLogger } from '../utils/logger';
 import { toSerializableErrorCause } from '../utils/serializable-error';
@@ -208,7 +209,7 @@ export class AgentSession implements IAgentSession {
 
   // IDC stage tracking: StageTracker emits stage.entered events;
   // StagePersonaBinding subscribes and swaps the persona Skill when a new
-  // stage is reached. Replaces the legacy FlowSwitcher/FlowBinding pair.
+  // stage is reached.
   private _stageTracker: StageTracker | null = null;
   private _stagePersonaBinding: IStagePersonaBinding | null = null;
   /** Non-blocking inspector that rides alongside the tracker (ADR §6.5). */
@@ -357,7 +358,7 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
-    this._controlPlane = config.controlPlane ?? null;
+    this._controlPlane = config.controlPlane ?? createDefaultControlPlane();
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
     this._artifactService = resolveArtifactService(config);
@@ -423,7 +424,7 @@ export class AgentSession implements IAgentSession {
       // ArtifactWatcher (Phase B) — fire-and-forget start. Prefer the
       // runtime artifact-plane factory when one is supplied so host
       // bootstraps control how Draft/Plan/Task watch/validate is wired.
-      // Fallback keeps the legacy workspace-backed watcher alive.
+      // Fallback keeps the workspace-backed watcher alive.
       this._artifactWatcher = this._createConfiguredArtifactWatcher();
       void this._artifactWatcher?.start();
 
@@ -774,7 +775,7 @@ export class AgentSession implements IAgentSession {
       await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
     }
 
-    this._captureFeedbackCycle();
+    await this._captureFeedbackCycle();
   }
 
   writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
@@ -893,7 +894,7 @@ export class AgentSession implements IAgentSession {
       }
 
       feedbackGuidanceAdjustedThisTurn =
-        this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
+        (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
       await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
@@ -938,7 +939,7 @@ export class AgentSession implements IAgentSession {
 
           this._observeToolFeedback(step);
           feedbackGuidanceAdjustedThisTurn =
-            this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
+            (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
         }
 
         const yieldedEvents = Array.from(
@@ -1009,7 +1010,7 @@ export class AgentSession implements IAgentSession {
 
       await this._extractProjectMemory(turnPersistedEvents);
       feedbackGuidanceAdjustedThisTurn =
-        this._captureFeedbackCycle() || feedbackGuidanceAdjustedThisTurn;
+        (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
 
       // Emit done event with real accumulated usage
       const doneEvent = {
@@ -1186,15 +1187,6 @@ export class AgentSession implements IAgentSession {
     this._hydrateRunArtifacts(nextRunId);
     this._persistIdcRuntimeState();
     return nextRunId;
-  }
-
-  /**
-   * Legacy compatibility wrapper for the old workflowId terminology.
-   * New code should call startIdcRun().
-   * @deprecated Use `startIdcRun(runKind, runId)` instead.
-   */
-  startWorkflowRun(workflowId: string, runId?: string): string | null {
-    return this.startIdcRun(workflowId, runId);
   }
 
   /**
@@ -1981,7 +1973,6 @@ export class AgentSession implements IAgentSession {
         stageTracker: this._stageTracker,
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
-        journalAsSSOT: this._config.journalAsSSOT,
         ...(this._config.feedbackControlPolicy
           ? { controlPolicy: this._config.feedbackControlPolicy }
           : {}),
@@ -2125,12 +2116,15 @@ export class AgentSession implements IAgentSession {
         toolCallId,
         toolName,
         observedAt: step.timestamp,
-        attachEvidence: !this._ablationMarker?.disableAgentFirstQualityReviewEvidence,
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (qualityCheckSignal) {
         this._feedbackCoordinator.observe(qualityCheckSignal);
-        if (qualityCheckSignal.evidence && !this._ablationMarker?.disableAgentFirstToolEvidence) {
+        if (
+          'evidence' in qualityCheckSignal &&
+          qualityCheckSignal.evidence &&
+          !this._ablationMarker?.disableAgentFirstToolEvidence
+        ) {
           void this._recordAgentEvidence(qualityCheckSignal.evidence);
         }
       }
@@ -2185,7 +2179,7 @@ export class AgentSession implements IAgentSession {
     return typeof id === 'string' ? id : undefined;
   }
 
-  private _captureFeedbackCycle(): boolean {
+  private async _captureFeedbackCycle(): Promise<boolean> {
     if (!this._feedbackCoordinator) {
       return false;
     }
@@ -2202,21 +2196,60 @@ export class AgentSession implements IAgentSession {
     if (this._feedbackCycles.length > MAX_FEEDBACK_CYCLES) {
       this._feedbackCycles.splice(0, this._feedbackCycles.length - MAX_FEEDBACK_CYCLES);
     }
-    this._adviseControlPlane(cycle);
-    this._applyFeedbackFlowActions(cycle.actions);
-    return cycle.actions.length > 0;
+    const stageGuidance = await this._adviseControlPlane(cycle);
+    this._applyFeedbackFlowActions(cycle.actions, stageGuidance);
+    return cycle.actions.length > 0 || stageGuidance.length > 0;
   }
 
-  private _adviseControlPlane(cycle: import('../feedback').FeedbackCycle): void {
+  private async _adviseControlPlane(
+    cycle: import('../feedback').FeedbackCycle,
+  ): Promise<readonly StageTransitionGuidance[]> {
     if (!this._controlPlane) {
-      return;
+      return [];
     }
 
+    const guidance: StageTransitionGuidance[] = [];
     for (const decision of cycle.decisions) {
-      this._controlPlane.advise({
+      const controlDecision = this._controlPlane.advise({
         ...(cycle.currentStage ? { currentStageId: cycle.currentStage } : {}),
         decision,
       });
+      if (controlDecision.guidance) {
+        guidance.push(controlDecision.guidance);
+        await this._recordFeedbackStageTransition({
+          cycle,
+          decision,
+          guidance: controlDecision.guidance,
+          timestamp: controlDecision.createdAt,
+        });
+      }
+    }
+    return guidance;
+  }
+
+  private async _recordFeedbackStageTransition(input: {
+    readonly cycle: import('../feedback').FeedbackCycle;
+    readonly decision: import('../feedback').FeedbackDecision;
+    readonly guidance: StageTransitionGuidance;
+    readonly timestamp: number;
+  }): Promise<void> {
+    if (!this._journalWriter) {
+      return;
+    }
+
+    try {
+      await this._journalWriter.appendEvent(++this._journalSeq, {
+        type: 'feedback.stage_transition_requested',
+        feedbackStageTransition: {
+          timestamp: input.timestamp,
+          ...(input.cycle.activeRunId ? { activeRunId: input.cycle.activeRunId } : {}),
+          ...(input.cycle.currentStage ? { currentStageId: input.cycle.currentStage } : {}),
+          decision: input.decision,
+          guidance: input.guidance,
+        },
+      });
+    } catch (error) {
+      logger.warn('Failed to record ControlPlane feedback transition', { error });
     }
   }
 
@@ -2271,14 +2304,18 @@ export class AgentSession implements IAgentSession {
 
   private _applyFeedbackFlowActions(
     actions: readonly import('../feedback').FeedbackFlowAction[],
+    stageGuidance: readonly StageTransitionGuidance[] = [],
   ): void {
-    if (actions.length === 0) {
+    if (actions.length === 0 && stageGuidance.length === 0) {
       return;
     }
 
     const activeRun = this._runStore?.getActive() ?? null;
     const guidanceBlocks: string[] = [];
     let requestedClear = false;
+    for (const guidance of stageGuidance) {
+      guidanceBlocks.push(formatStageTransitionGuidance(guidance));
+    }
     for (const action of actions) {
       if (action.kind === 'set-guidance') {
         guidanceBlocks.push(action.guidance);
@@ -2479,7 +2516,7 @@ export class AgentSession implements IAgentSession {
   }
 
   private _shouldLogCompaction(): boolean {
-    return this._config.journalAsSSOT !== false && this._config.compactLogging !== false;
+    return this._config.compactLogging !== false;
   }
 }
 
@@ -2609,7 +2646,6 @@ function snapshotIdcRun(run: IdcRun): import('../workspace').PersistedIdcRunSnap
   return {
     id: run.id,
     runKind: run.runKind,
-    workflowId: run.workflowId,
     status: run.status,
     createdAt: run.createdAt,
     ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
@@ -2678,6 +2714,23 @@ function stripRestoredPendingApprovalDetails(
   return next;
 }
 
+function formatStageTransitionGuidance(guidance: StageTransitionGuidance): string {
+  const fromStage = guidance.fromStageId ?? 'current stage';
+  const transition = formatStageTransitionAction(guidance, fromStage);
+  const approval = guidance.requiresUserApproval ? ' User approval is required.' : '';
+  return `- ControlPlane: ${transition}. ${guidance.reason}${approval}`;
+}
+
+function formatStageTransitionAction(guidance: StageTransitionGuidance, fromStage: string): string {
+  if (guidance.transitionAction === 'restart-run') {
+    return `restart the IDC run from ${fromStage}`;
+  }
+  if (guidance.transitionAction === 'regress-to') {
+    return `regress from ${fromStage} to ${guidance.toStageId ?? 'an earlier stage'}`;
+  }
+  return `retry ${guidance.toStageId ?? fromStage}`;
+}
+
 function shouldRestorePersistedFeedbackGuidance(
   guidance: PersistedFeedbackGuidanceSnapshot | null,
   activeRun: Pick<IdcRun, 'id' | 'startedAt'> | null,
@@ -2708,7 +2761,7 @@ function restoreIdcRunFromSnapshot(
   if (!snapshot) {
     return null;
   }
-  const runKind = snapshot.runKind ?? snapshot.workflowId;
+  const runKind = snapshot.runKind;
   if (!runKind) {
     return null;
   }
@@ -2721,7 +2774,6 @@ function restoreIdcRunFromSnapshot(
   return {
     id: snapshot.id,
     runKind,
-    workflowId: snapshot.workflowId ?? runKind,
     status: snapshot.status,
     createdAt: snapshot.createdAt,
     ...(snapshot.startedAt !== undefined ? { startedAt: snapshot.startedAt } : {}),
@@ -2916,7 +2968,6 @@ function toQualityCheckFeedbackSignal(input: {
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
-  readonly attachEvidence?: boolean;
 }): import('../feedback').FeedbackSignal | null {
   if (input.toolName !== 'QualityCheck' || !isQualityCheckFeedbackPayload(input.result.data)) {
     return null;
@@ -2941,7 +2992,7 @@ function toQualityCheckFeedbackSignal(input: {
     failingSceneIndexes: qualityReview.summary.failingSceneIndexes,
     remediationCount: qualityReview.summary.remediationCount,
     ...(input.runId ? { runId: input.runId } : {}),
-    ...(input.attachEvidence === false ? {} : { evidence: qualityReview.evidence }),
+    evidence: qualityReview.evidence,
   };
 }
 

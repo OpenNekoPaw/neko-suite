@@ -1,6 +1,8 @@
 import type { FeedbackDecision } from '../feedback';
+import type { IdcStage } from '@neko-agent/types';
 
 export type StageRiskLevel = 'low' | 'medium' | 'high' | 'unknown';
+export type StageTransitionAction = 'retry-stage' | 'regress-to' | 'restart-run';
 
 export interface StageDescriptor {
   readonly id: string;
@@ -15,6 +17,7 @@ export interface StageDescriptor {
 }
 
 export interface StageTransitionGuidance {
+  readonly transitionAction: StageTransitionAction;
   readonly decisionAction: FeedbackDecision['action'];
   readonly fromStageId?: string;
   readonly toStageId?: string;
@@ -26,6 +29,7 @@ export interface StageControllerContext {
   readonly currentStageId?: string;
   readonly decision: FeedbackDecision;
   readonly history?: readonly StageTransitionGuidance[];
+  readonly stageRegistry?: IReadonlyStageRegistry;
 }
 
 export interface IStageController {
@@ -76,4 +80,35 @@ export function createStageRegistry(descriptors: readonly StageDescriptor[] = []
     registry.register(descriptor);
   }
   return registry;
+}
+
+export function createDefaultStageRegistry(): IStageRegistry {
+  return createStageRegistry([
+    {
+      id: 'draft' satisfies IdcStage,
+      label: 'Draft',
+      description: 'Clarify intent and produce the user-facing draft artifact.',
+      outputArtifactKinds: ['draft'],
+      riskLevel: 'low',
+      enabled: true,
+    },
+    {
+      id: 'plan' satisfies IdcStage,
+      label: 'Plan',
+      description: 'Compile an execution plan and task projection from the draft.',
+      inputArtifactKinds: ['draft'],
+      outputArtifactKinds: ['plan'],
+      riskLevel: 'medium',
+      enabled: true,
+    },
+    {
+      id: 'apply' satisfies IdcStage,
+      label: 'Apply',
+      description: 'Execute approved work and observe task artifacts.',
+      inputArtifactKinds: ['plan'],
+      outputArtifactKinds: ['task'],
+      riskLevel: 'high',
+      enabled: true,
+    },
+  ]);
 }

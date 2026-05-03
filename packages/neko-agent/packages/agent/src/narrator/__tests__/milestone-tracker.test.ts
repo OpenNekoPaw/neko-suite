@@ -40,7 +40,6 @@ function runStarted(at = 1): DualFlowEvent {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId: 'r1',
     runKind: 'flow-a',
-    workflowId: 'flow-a',
     at,
   };
 }

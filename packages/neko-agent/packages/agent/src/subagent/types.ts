@@ -10,7 +10,7 @@ import type {
   ExecutorHooks,
   IService,
   IToolRegistry,
-  ISkillService,
+  ISkillRegistry,
   IToolGroupRegistry,
 } from '@neko/shared';
 
@@ -59,10 +59,19 @@ export type ModelTier = 'fast' | 'balanced' | 'powerful';
 
 /**
  * Resolves a ModelTier to a concrete model ID.
- * Allows external configuration (e.g., from Platform ConfigManager)
- * to override hardcoded defaults.
+ * Runtime/platform configuration owns the concrete mapping.
  */
-export type ModelTierResolver = (tier: ModelTier) => string | undefined;
+export interface SubAgentModelTierResolverContext {
+  readonly parentId: string;
+  readonly conversationId: string;
+  readonly subAgentId: string;
+  readonly subAgentConfig: SubAgentConfig;
+}
+
+export type ModelTierResolver = (
+  tier: ModelTier,
+  context?: SubAgentModelTierResolverContext,
+) => string | undefined;
 
 // =============================================================================
 // Configuration
@@ -98,6 +107,10 @@ export interface SubAgentConfig {
   inheritContext?: boolean;
   /** Parent context summary */
   contextSummary?: string;
+  /** Parent message ID in the host UI, when available */
+  parentMessageId?: string;
+  /** Parent tool call ID that spawned this SubAgent, when available */
+  parentToolCallId?: string;
 
   // ==========================================================================
   // Skill & ToolSkill Injection (New)
@@ -216,6 +229,12 @@ export interface SubAgentEvent {
     progress?: string;
     result?: SubAgentResult;
     error?: string;
+    description?: string;
+    subagentType?: string;
+    runMode?: 'foreground' | 'background';
+    modelTier?: ModelTier;
+    parentMessageId?: string;
+    parentToolCallId?: string;
   };
   /** Event timestamp */
   timestamp: number;
@@ -234,8 +253,22 @@ export type SubAgentEventListener = (event: SubAgentEvent) => void;
  * Agent executor type for SubAgent
  */
 export interface SubAgentExecutor {
-  execute(prompt: string): Promise<{ success: boolean; response: string; iterations: number }>;
+  execute(
+    prompt: string,
+    options?: { onProgress?: (progress: string) => void },
+  ): Promise<{ success: boolean; response: string; iterations: number }>;
   abort(): void;
+}
+
+export interface SubAgentCreateAgentContext {
+  parentId: string;
+  conversationId: string;
+  subAgentId: string;
+  subAgentConfig: SubAgentConfig;
+}
+
+export interface SubAgentSkillContentProvider {
+  readonly registry: Pick<ISkillRegistry, 'getSkill'>;
 }
 
 /**
@@ -245,14 +278,18 @@ export interface SubAgentManagerDeps {
   /** Create AI service instance */
   createService: () => IService;
   /** Create agent executor */
-  createAgent: (config: AgentConfig, hooks?: ExecutorHooks[]) => SubAgentExecutor;
+  createAgent: (
+    config: AgentConfig,
+    hooks?: ExecutorHooks[],
+    context?: SubAgentCreateAgentContext,
+  ) => SubAgentExecutor;
   /** Tool registry */
   toolRegistry: IToolRegistry;
   /** Skill service (optional - for skill injection) */
-  skillService?: ISkillService;
+  skillService?: SubAgentSkillContentProvider;
   /** ToolSkill registry (optional - for toolskill injection) */
   toolSkillRegistry?: IToolGroupRegistry;
-  /** Custom model tier resolver (overrides hardcoded defaults) */
+  /** Custom model tier resolver supplied by runtime/platform configuration. */
   modelTierResolver?: ModelTierResolver;
 }
 

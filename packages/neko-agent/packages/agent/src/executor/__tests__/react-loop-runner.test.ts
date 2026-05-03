@@ -203,7 +203,6 @@ describe('ReActLoopRunner hooks', () => {
           channel: CREATION_CHANNELS.RUN_STARTED,
           runId: store.getActive()!.id,
           runKind: 'test',
-          workflowId: 'test',
           at: 555,
         }),
       );

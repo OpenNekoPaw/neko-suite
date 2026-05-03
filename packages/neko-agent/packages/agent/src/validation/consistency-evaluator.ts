@@ -20,8 +20,8 @@ export interface IClipScorer {
   score(imagePath: string, text: string): Promise<number>;
 }
 
-/** LLM service for multimodal chat (same shape as qualityCheckTools) */
-interface ILLMService {
+/** LLM service for multimodal chat. */
+export interface ConsistencyLLMService {
   chat(
     messages: unknown[],
     options?: { maxTokens?: number },
@@ -29,17 +29,17 @@ interface ILLMService {
 }
 
 /** Frame extractor for video scenes */
-interface IFrameExtractor {
+export interface ConsistencyFrameExtractor {
   extractFrame(source: string, time: number): Promise<string | null>;
   probe(source: string): Promise<{ duration: number; fps: number; width: number; height: number }>;
 }
 
 export interface ConsistencyEvaluatorDeps {
-  createService: () => ILLMService;
+  createService: () => ConsistencyLLMService;
   /** Optional CLIP scorer — when absent, all pairs go to LLM layer 2 */
   clipScorer?: IClipScorer;
   /** Optional frame extractor — when absent, video scenes are skipped */
-  frameExtractor?: IFrameExtractor;
+  frameExtractor?: ConsistencyFrameExtractor;
 }
 
 export interface ConsistencyInput {

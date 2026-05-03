@@ -27,6 +27,7 @@ import {
   toSerializableIdcProjectedTask,
   type IdcProjectedTaskUpsertInput,
 } from './idc-projected-task';
+import { isTaskCleanupCandidate } from './task-storage-policy';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskManager');
@@ -187,12 +188,7 @@ export class TaskManager implements IRuntimeTaskManager {
     if (cleaned > 0) {
       const cutoff = Date.now() - this.retentionPeriodMs;
       for (const [id, task] of this.tasks.entries()) {
-        if (
-          (task.status === 'completed' ||
-            task.status === 'failed' ||
-            task.status === 'cancelled') &&
-          task.updatedAt < cutoff
-        ) {
+        if (isTaskCleanupCandidate(task, cutoff)) {
           this.tasks.delete(id);
         }
       }

@@ -11,6 +11,7 @@ export {
   PerceptionVideoDetectShotsTool,
   createPerceptionTools,
   type PerceptionAudioTranscribeToolConfig,
+  type PerceptionVideoDetectShotsToolConfig,
   type PerceptionImageSimilarityToolConfig,
   type PerceptionImageClassifyToolConfig,
   type PerceptionClassifyClient,

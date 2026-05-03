@@ -80,12 +80,6 @@ export const NO_PROJECT_MEMORY: ExperimentVariant = {
   toggles: { projectMemory: false },
 };
 
-export const NO_JOURNAL_AS_SSOT: ExperimentVariant = {
-  name: 'no-journal-as-ssot',
-  description: 'Journal-backed projection disabled; runtime falls back to legacy record-first mode',
-  toggles: { journalAsSSOT: false },
-};
-
 export const NO_COMPACT_LOGGING: ExperimentVariant = {
   name: 'no-compact-logging',
   description: 'Compaction keeps working in memory but skips journal compaction events',
@@ -168,7 +162,6 @@ export const NO_ALL_EXTERNAL: ExperimentVariant = {
   toggles: {
     settingsHooks: false,
     projectMemory: false,
-    journalAsSSOT: false,
     compactLogging: false,
     autoMemoryExtraction: false,
     memoryRecall: false,
@@ -189,7 +182,6 @@ export const MINIMAL: ExperimentVariant = {
     retry: false,
     settingsHooks: false,
     projectMemory: false,
-    journalAsSSOT: false,
     compactLogging: false,
     autoMemoryExtraction: false,
     memoryRecall: false,
@@ -204,7 +196,7 @@ export const MINIMAL: ExperimentVariant = {
 
 /**
  * Standard ablation suite: baseline + one feature off per variant.
- * 16 variants total (baseline + 15 single-feature).
+ * 15 variants total (baseline + 14 single-feature).
  */
 export function createStandardAblationSuite(): ExperimentVariant[] {
   return [
@@ -218,7 +210,6 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
     NO_RETRY,
     NO_SETTINGS_HOOKS,
     NO_PROJECT_MEMORY,
-    NO_JOURNAL_AS_SSOT,
     NO_COMPACT_LOGGING,
     NO_AUTO_MEMORY_EXTRACTION,
     NO_MEMORY_RECALL,

@@ -1,8 +1,8 @@
 /**
  * JournalProjection — build resume-oriented views from journal JSONL files.
  *
- * Recovery reads are projection-backed; legacy conversation JSON migration is
- * handled separately and is not part of the steady-state runtime path.
+ * Recovery reads are projection-backed; old per-workDir conversation JSON is
+ * intentionally ignored by the steady-state runtime.
  */
 
 import * as path from 'node:path';

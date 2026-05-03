@@ -1,0 +1,210 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  AgentSessionRunner,
+  DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
+  createAgentSessionRunner,
+} from '../agent-session-runner';
+import type { AgentEvent, IAgentSession } from '../../session/types';
+
+function createSession(events: AgentEvent[] = [{ type: 'text', content: 'response' }]) {
+  const history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+  return {
+    configure: vi.fn(),
+    getExecutionMode: vi.fn(),
+    setExecutionMode: vi.fn(),
+    setSkillProvider: vi.fn(),
+    setPromptFragments: vi.fn(),
+    getArtifactsForRun: vi.fn(() => []),
+    listArtifactRunIds: vi.fn(() => []),
+    getIdcRun: vi.fn(() => null),
+    listIdcRuns: vi.fn(() => []),
+    getFeedbackCycles: vi.fn(() => []),
+    getOperationToolAdapterRegistry: vi.fn(() => null),
+    writeDraftArtifact: vi.fn(),
+    writePlanArtifact: vi.fn(),
+    writeTaskArtifact: vi.fn(),
+    execute: vi.fn().mockImplementation(async function* (_input, context) {
+      yield* events;
+      if (context?.metadata?.echo) {
+        yield { type: 'text', content: String(context.metadata.echo) };
+      }
+    }),
+    cancel: vi.fn(),
+    isRunning: vi.fn(() => false),
+    confirmTool: vi.fn(),
+    getPendingConfirmations: vi.fn(() => []),
+    getHistory: vi.fn(() => [...history]),
+    addMessage: vi.fn((message) => history.push(message)),
+    applySkillInjection: vi.fn(),
+    removeSkillInjection: vi.fn(),
+    getActiveSkill: vi.fn(),
+    clearActiveSkill: vi.fn(),
+    isToolAllowed: vi.fn(() => true),
+    clearHistory: vi.fn(() => {
+      history.length = 0;
+    }),
+    loadHistory: vi.fn(),
+    getTokenCount: vi.fn(() => 123),
+    compressContext: vi.fn(async () => ({
+      originalTokens: 123,
+      compressedTokens: 45,
+      ratio: 45 / 123,
+    })),
+    dispose: vi.fn(),
+  } as unknown as IAgentSession;
+}
+
+async function collect(iterable: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for await (const event of iterable) {
+    events.push(event);
+  }
+  return events;
+}
+
+function iterator(iterable: AsyncIterable<AgentEvent>) {
+  return iterable[Symbol.asyncIterator]();
+}
+
+describe('AgentSessionRunner', () => {
+  it('returns an error event when no session is configured', async () => {
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+
+    await expect(collect(runner.execute('hello', {}))).resolves.toEqual([
+      expect.objectContaining({ type: 'error' }),
+    ]);
+  });
+
+  it('executes session events with host-built execution context', async () => {
+    const onDidStart = vi.fn();
+    const onDidStop = vi.fn();
+    const session = createSession();
+    const runner = new AgentSessionRunner<{ traceId: string }>({
+      buildExecutionContext: (context) => ({ metadata: { echo: context.traceId } }),
+      onDidStart,
+      onDidStop,
+    });
+    runner.setSession(session);
+
+    const events = await collect(runner.execute('hello', { traceId: 'trace-1' }));
+
+    expect(events).toEqual([
+      { type: 'text', content: 'response' },
+      { type: 'text', content: 'trace-1' },
+      expect.objectContaining({ type: 'done' }),
+    ]);
+    expect(onDidStart).toHaveBeenCalledTimes(1);
+    expect(onDidStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues a second input while execution is running', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+
+    const queued = await collect(runner.execute('second', {}));
+
+    expect(queued).toEqual([
+      expect.objectContaining({
+        type: 'messageQueued',
+        content: expect.stringContaining('1 pending'),
+      }),
+    ]);
+    expect(runner.getPendingMessagesCount()).toBe(1);
+
+    await collect(first);
+  });
+
+  it('resolves a pending tool confirmation when the host confirms it', async () => {
+    const onDidRequestConfirmation = vi.fn();
+    const timer = { set: vi.fn(() => 'timer-1'), clear: vi.fn() };
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+      onDidRequestConfirmation,
+      confirmationTimeoutMs: 1000,
+      timer,
+    });
+
+    const approval = runner.handleToolConfirmation({
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      action: 'write',
+      description: 'Write file',
+      details: { path: 'README.md' },
+      confirmationToken: 'token-1',
+    });
+    runner.confirmTool('call-1', true);
+
+    await expect(approval).resolves.toBe(true);
+    expect(onDidRequestConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: 'call-1', toolName: 'write_file' }),
+    );
+    expect(timer.clear).toHaveBeenCalledWith('timer-1');
+  });
+
+  it('auto-rejects a pending tool confirmation on timeout', async () => {
+    let timeout: (() => void) | undefined;
+    const onConfirmationTimeout = vi.fn();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+      onConfirmationTimeout,
+      confirmationTimeoutMs: 1000,
+      timer: {
+        set: vi.fn((callback) => {
+          timeout = callback;
+          return 'timer-1';
+        }),
+        clear: vi.fn(),
+      },
+    });
+
+    const approval = runner.handleToolConfirmation({
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      action: 'write',
+      description: 'Write file',
+      details: {},
+      confirmationToken: 'token-1',
+    });
+    timeout?.();
+
+    await expect(approval).resolves.toBe(false);
+    expect(onConfirmationTimeout).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: 'call-1' }),
+    );
+  });
+
+  it('applies the runtime default confirmation timeout through the factory', async () => {
+    let timeout: (() => void) | undefined;
+    const timer = {
+      set: vi.fn((callback) => {
+        timeout = callback;
+        return 'timer-1';
+      }),
+      clear: vi.fn(),
+    };
+    const runner = createAgentSessionRunner({
+      buildExecutionContext: () => ({}),
+      timer,
+    });
+
+    const approval = runner.handleToolConfirmation({
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      action: 'write',
+      description: 'Write file',
+      details: {},
+    });
+    timeout?.();
+
+    await expect(approval).resolves.toBe(false);
+    expect(timer.set).toHaveBeenCalledWith(
+      expect.any(Function),
+      DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
+    );
+  });
+});

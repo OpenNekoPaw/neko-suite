@@ -81,7 +81,7 @@ export interface SessionComponents {
   feedbackGuidanceModule: FeedbackGuidanceModule;
   promptModuleOrchestrator: ModuleOrchestrator;
   // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
-  // through the module (byte-identical to the legacy setSection path).
+  // through the module.
   skillInjectionModule: SkillInjectionModule;
 
   // PR3b: AGENTS.md overlay projected into the environment layer instead

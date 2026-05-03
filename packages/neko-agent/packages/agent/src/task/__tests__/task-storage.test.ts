@@ -3,22 +3,22 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MemoryTaskStorage } from '../task-storage';
+import { MemoryTaskStorage, StateTaskStorage } from '../task-storage';
 import type { SerializableTask } from '@neko/shared';
+
+const createTask = (overrides: Partial<SerializableTask> = {}): SerializableTask => ({
+  id: `task_${Date.now()}_1`,
+  type: 'custom',
+  status: 'pending',
+  input: { type: 'custom', payload: {} },
+  progress: 0,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  ...overrides,
+});
 
 describe('MemoryTaskStorage', () => {
   let storage: MemoryTaskStorage;
-
-  const createTask = (overrides: Partial<SerializableTask> = {}): SerializableTask => ({
-    id: `task_${Date.now()}_1`,
-    type: 'custom',
-    status: 'pending',
-    input: { type: 'custom', payload: {} },
-    progress: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...overrides,
-  });
 
   beforeEach(() => {
     storage = new MemoryTaskStorage();
@@ -192,5 +192,73 @@ describe('MemoryTaskStorage', () => {
       const cleaned = await storage.cleanup(7 * 24 * 60 * 60 * 1000);
       expect(cleaned).toBe(0);
     });
+  });
+});
+
+describe('StateTaskStorage', () => {
+  it('persists task storage rules through an injected key-value adapter', async () => {
+    const persisted = new Map<string, SerializableTask[]>();
+    const storage = new StateTaskStorage({
+      storageKey: 'tasks',
+      adapter: {
+        load: (key) => persisted.get(key) ?? [],
+        save: (key, tasks) => {
+          persisted.set(
+            key,
+            tasks.map((task) => ({ ...task })),
+          );
+        },
+      },
+    });
+
+    await storage.save(createTask({ id: 'pending', status: 'pending' }));
+    await storage.save(createTask({ id: 'running', status: 'running' }));
+    await storage.save(createTask({ id: 'completed', status: 'completed' }));
+    await storage.save(createTask({ id: 'pending', status: 'completed', progress: 100 }));
+
+    expect((await storage.load('pending'))?.progress).toBe(100);
+    expect((await storage.loadPending()).map((task) => task.id)).toEqual(['running']);
+
+    await storage.delete('running');
+    expect((await storage.loadAll()).map((task) => task.id).sort()).toEqual([
+      'completed',
+      'pending',
+    ]);
+  });
+
+  it('uses agent cleanup policy while keeping the host storage as an adapter', async () => {
+    const now = Date.now();
+    const persisted = new Map<string, SerializableTask[]>([
+      [
+        'tasks',
+        [
+          createTask({
+            id: 'old-completed',
+            status: 'completed',
+            updatedAt: now - 10 * 24 * 60 * 60 * 1000,
+          }),
+          createTask({
+            id: 'running',
+            status: 'running',
+            updatedAt: now - 10 * 24 * 60 * 60 * 1000,
+          }),
+        ],
+      ],
+    ]);
+    const storage = new StateTaskStorage({
+      storageKey: 'tasks',
+      adapter: {
+        load: (key) => persisted.get(key) ?? [],
+        save: (key, tasks) => {
+          persisted.set(
+            key,
+            tasks.map((task) => ({ ...task })),
+          );
+        },
+      },
+    });
+
+    await expect(storage.cleanup(7 * 24 * 60 * 60 * 1000)).resolves.toBe(1);
+    expect((await storage.loadAll()).map((task) => task.id)).toEqual(['running']);
   });
 });

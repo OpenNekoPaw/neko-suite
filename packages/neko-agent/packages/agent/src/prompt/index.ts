@@ -16,6 +16,27 @@ export {
   hasAgentsFile,
 } from './system-prompt-builder';
 
+export {
+  buildConversationPromptModeChangedMessage,
+  createConversationPromptModeRuntime,
+  runSendConversationPromptModeRuntime,
+  runSetConversationPromptModeRuntime,
+  runToggleConversationPromptModeRuntime,
+} from './conversation-prompt-mode-runtime';
+export { runSystemPromptAgentsFileLoadRuntime } from './system-prompt-agents-file-runtime';
+
+export type {
+  ConversationPromptModeRuntime,
+  ConversationPromptModeRuntimeOptions,
+  ConversationPromptModeSnapshot,
+  ConversationPromptModeMessageRuntimeEffects,
+  ConversationPromptModeMessageRuntimeResult,
+} from './conversation-prompt-mode-runtime';
+export type {
+  SystemPromptAgentsFileRuntimeDeps,
+  SystemPromptAgentsFileRuntimeInput,
+} from './system-prompt-agents-file-runtime';
+
 export type {
   ISystemPromptBuilder,
   SystemPromptBuilderConfig,
@@ -87,6 +108,44 @@ export { ArtifactSchemaModule } from './modules/schema/artifact-schema-module';
 
 // Sub-package prompt fragments module (PR3e)
 export { SubpackageFragmentsModule } from './modules/environment/subpackage-fragments-module';
+
+// Prompt file host-neutral projection
+export {
+  DEFAULT_AGENTS_FILE_CONTENT,
+  DEFAULT_NEW_PROMPT_NAME,
+  PROMPT_FILE_EXTENSION,
+  buildAgentsFileLoadPlan,
+  buildAgentsFilePlan,
+  buildPromptConfigFilePlan,
+  buildPromptFileContent,
+  ensurePromptFileExtension,
+  extractPromptNameFromContent,
+  generatePromptFileId,
+  generatePromptFileName,
+  projectPromptFileInfo,
+  promptFileInfoToConfig,
+  shouldScanPromptFile,
+  syncPromptFilesWithConfig,
+  type AgentsFileLoadCandidate,
+  type PromptFileInfo,
+  type PromptFileScanResult,
+  type AgentsFileFailurePlan,
+  type AgentsFilePlan,
+  type PromptConfigFilePlan,
+} from './prompt-file-projector';
+
+export {
+  createPromptFileRuntime,
+  type LoadedAgentsFile,
+  type PromptFileRuntime,
+  type PromptFileRuntimeFs,
+  type PromptFileRuntimeLogger,
+  type PromptFileRuntimeOptions,
+  type PromptFileRuntimePath,
+  type PromptFileRuntimeStatLike,
+  type PromptFileSaveResult,
+  type SavePromptFileInput,
+} from './prompt-file-runtime';
 
 // Re-export types from @neko/shared for convenience
 export type {

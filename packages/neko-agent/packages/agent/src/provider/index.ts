@@ -13,6 +13,13 @@ export {
 } from './provider-card-loader';
 
 export {
+  registerRuntimeProviderCardDirectories,
+  type ProviderCardRuntimeLogger,
+  type RegisterRuntimeProviderCardDirectoriesOptions,
+  type RuntimeProviderCardDirectoryRegistrationResult,
+} from './provider-card-runtime';
+
+export {
   createProviderExpressionPromptFragments,
   type ProviderExpressionContextOptions,
 } from './provider-expression-context';

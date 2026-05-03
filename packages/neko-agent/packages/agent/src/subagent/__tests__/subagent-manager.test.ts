@@ -69,6 +69,7 @@ function createMockDeps(): SubAgentManagerDeps {
     createService: vi.fn().mockReturnValue(mockService),
     createAgent: vi.fn().mockReturnValue(mockExecutor),
     toolRegistry: mockToolRegistry,
+    modelTierResolver: vi.fn((tier) => `test-${tier}-model`),
   };
 }
 
@@ -148,6 +149,41 @@ describe('SubAgentManager', () => {
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(agentConfig.name).toContain('code-search');
       expect(agentConfig.systemPrompt).toContain(SPECIALIZED_PRESETS['code-search'].systemPrompt);
+    });
+
+    it('should resolve primary model through injected model tier resolver', async () => {
+      const config = createTestConfig({
+        id: 'model-resolver-agent',
+        modelTier: 'powerful',
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('model-resolver-agent', 5000);
+
+      const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(agentConfig.primaryModel).toBe('test-powerful-model');
+      expect(deps.modelTierResolver).toHaveBeenCalledWith(
+        'powerful',
+        expect.objectContaining({
+          parentId: 'parent-1',
+          conversationId: 'conv-1',
+          subAgentId: 'model-resolver-agent',
+        }),
+      );
+    });
+
+    it('should fail clearly when neither modelId nor model tier resolver is configured', async () => {
+      const depsWithoutResolver = createMockDeps();
+      delete depsWithoutResolver.modelTierResolver;
+      const managerWithoutResolver = new SubAgentManager(depsWithoutResolver);
+      const config = createTestConfig({ id: 'missing-model-agent' });
+
+      await managerWithoutResolver.spawn('parent-1', 'conv-1', config);
+      const result = await managerWithoutResolver.getResult('missing-model-agent', 5000);
+
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('SubAgent model tier "balanced" could not be resolved');
+      expect(depsWithoutResolver.createAgent).not.toHaveBeenCalled();
     });
   });
 
@@ -381,13 +417,6 @@ describe('SubAgentManager - Skill Injection', () => {
     // Add mock skill service with registry
     deps.skillService = {
       registry: mockRegistry,
-      skillCount: 0,
-      commandCount: 0,
-      match: vi.fn().mockReturnValue([]),
-      apply: vi.fn(),
-      applyCommand: vi.fn(),
-      getActiveSkill: vi.fn(),
-      clearActiveSkill: vi.fn(),
     };
 
     manager = new SubAgentManager(deps);

@@ -118,6 +118,12 @@ export {
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';
 
+export {
+  projectRuntimeToolGroup,
+  projectRuntimeToolGroups,
+  type RuntimeToolGroupRegistryView,
+} from './tool-group-projector';
+
 // Skill Injection Coordinator
 export {
   SkillInjectionCoordinator,
@@ -130,6 +136,132 @@ export { SkillConflictResolver, createSkillConflictResolver } from './skill-conf
 
 // Path Matcher (for Skill paths trigger)
 export { matchSkillPaths, globMatch, type SkillPathInfo } from './path-matcher';
+
+// Skill file host-neutral projection
+export {
+  appendSkillFileScanLoadResult,
+  buildSkillDirectoryLoadFailureResult,
+  buildCommandFileCreationPlan,
+  buildCommandFileDeletionPlan,
+  buildCommandFileOpenPlan,
+  buildSkillFileScanPlan,
+  buildSkillFileContent,
+  buildSkillFileCreationPlan,
+  buildSkillDirectoryDeletionPlan,
+  buildSkillDirectoryDuplicationPlan,
+  createEmptySkillFileScanResult,
+  buildSkillSupportFileOpenPlan,
+  normalizeSkillFrontmatter,
+  normalizeDuplicatedSkillContent,
+  buildCommandFileContent,
+  shouldCopySkillDirectoryEntry,
+  toConfiguredSkillFileCatalog,
+  resolveSkillPathTriggers,
+  type SkillFileScanGroup,
+  type SkillFileScanResult,
+  type SkillFileScanGroupOf,
+  type SkillFileScanResultOf,
+  type LazySkillFileScanResult,
+  type ConfiguredSkillFileCatalog,
+  type BuildSkillFileContentOptions,
+  type CommandFileCreationPlan,
+  type CommandFileDeletionPlan,
+  type CommandFileOpenPlan,
+  type ResolveSkillPathTriggersOptions,
+  type SkillFileLoadResultOf,
+  type SkillFileScanError,
+  type SkillFileScanKind,
+  type SkillFileScanPlan,
+  type SkillFileScanPlanEntry,
+  type SkillFileSource,
+  type SkillDirectoryDeletionPlan,
+  type SkillDirectoryDuplicationPlan,
+  type SkillFileCreationPlan,
+  type SkillFileOperationFailurePlan,
+  type SkillPathTriggerMatch,
+  type SkillSupportFileOpenPlan,
+  type SkillSupportFileOpenType,
+} from './skill-file-projector';
+
+export {
+  SKILL_FILE_WATCH_DEBOUNCE_MS,
+  SKILL_PATH_TRIGGER_DEBOUNCE_MS,
+  createSkillFileRuntime,
+  type CreateCommandFileInput,
+  type CreateSkillFileInput,
+  type DeleteCommandFileInput,
+  type DeleteSkillDirectoryInput,
+  type DuplicateSkillDirectoryInput,
+  type SkillFileRuntime,
+  type SkillFileRuntimeDirentLike,
+  type SkillFileRuntimeFs,
+  type SkillFileRuntimeLoader,
+  type SkillFileRuntimeLogger,
+  type SkillFileRuntimeOptions,
+  type SkillFileRuntimePath,
+} from './skill-file-runtime';
+
+// Webview-facing skill projection
+export {
+  buildSkillInjectionMessage,
+  buildSkillsListMessage,
+  type SkillInjectionMessage,
+  type SkillsListMessage,
+} from './skill-webview-presenter';
+
+export {
+  buildSkillAwareSystemPrompt,
+  getEnabledSkillPromptEntries,
+  toSkillPromptEntries,
+  type BuildSkillAwareSystemPromptInput,
+  type SkillPromptEntry,
+} from './skill-system-prompt';
+
+export {
+  SkillRegistryPopulator,
+  type LazySkillRegistryPopulateInput,
+  type LazySkillRegistryScanGroup,
+  type LazySkillRegistryScanResult,
+  type SkillRegistryPopulateInput,
+  type SkillRegistryPopulationSummary,
+  type SkillRegistryScanGroup,
+  type SkillRegistryScanResult,
+} from './skill-registry-populator';
+
+export {
+  buildRuntimeSkillAwareSystemPrompt,
+  createRuntimeSkillLazySync,
+  createRuntimeSkillBootstrap,
+  populateLazyRuntimeSkillRegistry,
+  type BuildRuntimeSkillAwareSystemPromptInput,
+  type PopulateLazyRuntimeSkillRegistryInput,
+  type RuntimeSkillLazySync,
+  type RuntimeSkillLazySyncLogger,
+  type RuntimeSkillLazySyncOptions,
+  type RuntimeSkillBootstrap,
+  type RuntimeSkillBootstrapLogger,
+  type RuntimeSkillBootstrapOptions,
+  type RuntimeSkillAwareSystemPromptResult,
+  type RuntimeSkillProviderState,
+} from './skill-runtime-bootstrap';
+
+// Conversation-scoped skill activation runtime
+export {
+  ConversationSkillRuntime,
+  type ActiveSkillState,
+  type ApplySlashSkillCommandInput,
+  type ConversationSkillAgentBridge,
+  type ConversationSkillRuntimeDeps,
+  type ConversationSkillRuntimeLogger,
+  type ExecuteSkillInput,
+} from './conversation-skill-runtime';
+
+// Meta-tool skill provider
+export {
+  createConversationSkillProvider,
+  type ConversationSkillProviderEffects,
+  type ConversationSkillProviderOptions,
+} from './skill-meta-provider';
 
 // Markdown parser
 export {

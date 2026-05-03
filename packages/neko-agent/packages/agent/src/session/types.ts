@@ -166,15 +166,6 @@ export interface AgentSessionConfig {
   projectMemoryManager?: import('@neko/shared').IProjectMemoryManager;
 
   /**
-   * Whether Journal-backed projection remains the primary persistence path.
-   * `false` keeps journaling enabled but allows callers to rebuild adjacent
-   * resume/storage layers in legacy Record-first mode as a rollback hatch.
-   *
-   * Default: true
-   */
-  journalAsSSOT?: boolean;
-
-  /**
    * Whether working-memory compaction should emit compaction events into the
    * Journal. `false` preserves in-memory compression but skips Journal
    * provenance/logging for the compaction step.
@@ -310,8 +301,8 @@ export interface AgentSessionConfig {
    * applies the matching persona Skill (`creation-persona` for draft/plan,
    * `execution-persona` for apply) on each stage transition.
    *
-   * Omitted = IDC runtime stays dormant, preserving legacy behaviour for
-   * callers that want a plain ReAct session.
+   * Omitted = IDC runtime stays dormant for callers that want a plain ReAct
+   * session.
    */
   stageTracking?: {
     /**
@@ -385,6 +376,7 @@ export type AgentEventType =
   | 'compaction' // Working-memory compaction summary written to journal
   | 'compaction_failed' // Compaction attempt failed and tripped/advanced circuit state
   | 'memory_extraction' // Semantic memory extraction/write pipeline event
+  | 'feedback.stage_transition_requested' // ControlPlane requested retry/regress/restart flow guidance
   | 'agent.observation.created' // Agent-first multimodal observation recorded
   | 'agent.evidence.attached' // Optional evidence attached to an observation/rationale
   | 'agent.rationale.created' // Agent decision rationale recorded
@@ -481,6 +473,15 @@ export interface AgentEvent {
       destination: 'project';
     }>;
     writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
+  };
+
+  /** ControlPlane feedback transition request event */
+  feedbackStageTransition?: {
+    timestamp: number;
+    activeRunId?: string;
+    currentStageId?: string;
+    decision: import('../feedback').FeedbackDecision;
+    guidance: import('../control-plane').StageTransitionGuidance;
   };
 
   /** Agent-first multimodal observation event */

@@ -23,7 +23,6 @@ function creationStarted(runId = 'r1', at = 1): DualFlowEvent {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId,
     runKind: 'wf',
-    workflowId: 'wf',
     at,
   };
 }
@@ -62,7 +61,6 @@ describe('EventBus', () => {
     const bus = createEventBus();
     bus.on(CREATION_CHANNELS.RUN_STARTED, (event) => {
       expect(event.runKind).toBe('wf');
-      expect(event.workflowId).toBe('wf');
     });
     bus.emit(creationStarted());
   });

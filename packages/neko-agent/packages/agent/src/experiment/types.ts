@@ -18,8 +18,6 @@ export interface AgentFirstAblationToggles {
   readonly observation?: false;
   /** Tool evidence wrapping / feedback policy. false = guidance avoids tool-evidence requirements. */
   readonly toolEvidence?: false;
-  /** QualityReview evidence wrapper. false = keep legacy quality-check feedback shape only. */
-  readonly qualityReviewEvidence?: false;
   /** Skill prompt-chain recovery guidance. false = do not inject recovery-specific prompt guidance. */
   readonly recoveryGuidance?: false;
   /** Confidence policy override for low-confidence evidence guidance. */
@@ -83,9 +81,6 @@ export interface AblationToggles {
   /** Project memory injection into system prompt.
    *  false = disable */
   projectMemory?: false;
-  /** Journal-backed persistence remains the primary runtime source of truth.
-   *  false = rollback to Record-first/runtime-fallback mode */
-  journalAsSSOT?: false;
   /** Persist compaction provenance/events into the Journal.
    *  false = keep in-memory compression but skip compaction event logging */
   compactLogging?: false;

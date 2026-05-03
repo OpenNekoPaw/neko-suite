@@ -1,33 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FileConversationStorage } from '../file-conversation-storage';
 import type { ConversationRecord } from '../conversation-record';
-import { createLegacyConversationMigrationId } from '../conversation-id';
 
 describe('FileConversationStorage', () => {
-  it('prefers journal projection when available', async () => {
+  it('projects records from journal metadata when indexed', async () => {
     const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
     const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-1',
-      version: 1,
-      title: 'Legacy title',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'tui',
-    };
-
     const { files, readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
+      [indexPath]: JSON.stringify({
+        version: 1,
+        workspaces: { [workDir]: ['conv-1'] },
+        conversations: {
+          'conv-1': {
+            conversationId: 'conv-1',
+            title: 'Indexed title',
+            workDir,
+            createdAt: 1000,
+            updatedAt: 1500,
+            messageCount: 1,
+            source: 'tui',
+          },
+        },
+      }),
     });
 
     const storage = new FileConversationStorage({
       workDir,
-      filePath: legacyPath,
       indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
       readFile,
       writeFile,
       exists,
@@ -51,6 +50,8 @@ describe('FileConversationStorage', () => {
           messageCount: 2,
           source: 'journal-projection',
         }),
+        projectAgentFirstGraph: vi.fn().mockResolvedValue(emptyAgentFirstGraph('conv-1')),
+        scanAgentFirstIntegrity: vi.fn().mockResolvedValue(emptyIntegrityScan('conv-1')),
         filterEvents: vi.fn(),
       },
     });
@@ -61,7 +62,7 @@ describe('FileConversationStorage', () => {
     expect(loaded).toEqual({
       id: 'conv-1',
       version: 2,
-      title: 'Legacy title',
+      title: 'Indexed title',
       workDir,
       messages: [
         { role: 'user', content: 'journal history' },
@@ -82,154 +83,21 @@ describe('FileConversationStorage', () => {
     });
   });
 
-  it('falls back to the legacy file cache when projection has no summary', async () => {
+  it('initializes an empty index when no index metadata exists', async () => {
     const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
     const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-2',
-      version: 1,
-      title: 'Legacy only',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'extension',
-    };
 
-    const { readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
-    });
+    const { files, readFile, writeFile, exists } = createMemoryFs();
 
     const storage = new FileConversationStorage({
       workDir,
-      filePath: legacyPath,
-      indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
-      readFile,
-      writeFile,
-      exists,
-      journalProjection: {
-        projectToHistory: vi.fn().mockResolvedValue([]),
-        projectToHistoryWithEventIds: vi.fn().mockResolvedValue({
-          messages: [],
-          messageEventIds: [],
-        }),
-        projectToSummary: vi.fn().mockResolvedValue(null),
-        filterEvents: vi.fn(),
-      },
-    });
-
-    const loaded = await storage.load('conv-2');
-    await storage.flush();
-
-    expect(loaded).toEqual(legacyRecord);
-  });
-
-  it('can disable journal projection and prefer the legacy record path', async () => {
-    const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
-    const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-legacy-first',
-      version: 1,
-      title: 'Legacy preferred',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'extension',
-    };
-
-    const { readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
-      [indexPath]: JSON.stringify({
-        version: 1,
-        workspaces: { [workDir]: ['conv-legacy-first'] },
-        conversations: {
-          'conv-legacy-first': {
-            conversationId: 'conv-legacy-first',
-            title: 'Indexed title',
-            workDir,
-            createdAt: 1000,
-            updatedAt: 2000,
-            messageCount: 2,
-            source: 'journal-projection',
-          },
-        },
-      }),
-    });
-
-    const journalProjection = {
-      projectToHistory: vi.fn().mockResolvedValue([
-        { role: 'user', content: 'journal history' },
-        { role: 'assistant', content: 'journal answer' },
-      ]),
-      projectToHistoryWithEventIds: vi.fn().mockResolvedValue({
-        messages: [
-          { role: 'user', content: 'journal history' },
-          { role: 'assistant', content: 'journal answer' },
-        ],
-        messageEventIds: [['evt-1'], ['evt-2']],
-      }),
-      projectToSummary: vi.fn().mockResolvedValue({
-        conversationId: 'conv-legacy-first',
-        title: 'Journal title',
-        createdAt: 900,
-        updatedAt: 2000,
-        messageCount: 2,
-        source: 'journal-projection',
-      }),
-      filterEvents: vi.fn(),
-    };
-
-    const storage = new FileConversationStorage({
-      workDir,
-      filePath: legacyPath,
-      indexFilePath: indexPath,
-      journalAsSSOT: false,
-      readFile,
-      writeFile,
-      exists,
-      journalProjection,
-    });
-
-    const loaded = await storage.load('conv-legacy-first');
-    await storage.flush();
-
-    expect(loaded).toEqual(legacyRecord);
-    expect(journalProjection.projectToSummary).not.toHaveBeenCalled();
-  });
-
-  it('ignores legacy JSON by default when no index or journal metadata exists', async () => {
-    const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
-    const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-legacy-default-disabled',
-      version: 1,
-      title: 'Legacy ignored',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'extension',
-    };
-
-    const { files, readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
-    });
-
-    const storage = new FileConversationStorage({
-      workDir,
-      filePath: legacyPath,
       indexFilePath: indexPath,
       readFile,
       writeFile,
       exists,
     });
 
-    const loaded = await storage.load(legacyRecord.id);
+    const loaded = await storage.load('conv-old-json');
     await storage.flush();
 
     expect(loaded).toBeUndefined();
@@ -242,9 +110,8 @@ describe('FileConversationStorage', () => {
     expect(indexData.conversations ?? {}).toEqual({});
   });
 
-  it('save updates conversations index without rewriting the legacy cache file', async () => {
+  it('save updates conversations index without writing the old record file', async () => {
     const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
     const indexPath = '/tmp/conversations-index.json';
     const record: ConversationRecord = {
       id: 'conv-3',
@@ -265,9 +132,7 @@ describe('FileConversationStorage', () => {
 
     const storage = new FileConversationStorage({
       workDir,
-      filePath: legacyPath,
       indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
       readFile,
       writeFile,
       exists,
@@ -275,8 +140,6 @@ describe('FileConversationStorage', () => {
 
     await storage.save(record);
     await storage.flush();
-
-    expect(files.has(legacyPath)).toBe(false);
 
     const indexData = JSON.parse(files.get(indexPath) ?? '{}') as {
       workspaces?: Record<string, string[]>;
@@ -289,16 +152,15 @@ describe('FileConversationStorage', () => {
     });
   });
 
-  it('save also rewrites the legacy cache file when journalAsSSOT is disabled', async () => {
+  it('falls back to cached records when journal projection is unavailable', async () => {
     const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
     const indexPath = '/tmp/conversations-index.json';
     const record: ConversationRecord = {
-      id: 'conv-legacy-write',
+      id: 'conv-memory-first',
       version: 1,
-      title: 'Legacy cache write',
+      title: 'Memory first',
       workDir,
-      messages: [{ role: 'user', content: 'hello legacy' }],
+      messages: [{ role: 'user', content: 'hello' }],
       createdAt: 3000,
       updatedAt: 3500,
       source: 'tui',
@@ -308,31 +170,25 @@ describe('FileConversationStorage', () => {
 
     const storage = new FileConversationStorage({
       workDir,
-      filePath: legacyPath,
       indexFilePath: indexPath,
-      journalAsSSOT: false,
       readFile,
       writeFile,
       exists,
     });
 
     await storage.save(record);
-    await storage.flush();
 
-    expect(files.get(legacyPath)).toContain('conv-legacy-write');
-    expect(files.get(legacyPath)).toContain('hello legacy');
+    expect(await storage.load(record.id)).toEqual(record);
+    await storage.flush();
   });
 
-  it('lists conversations from the index and journal instead of the legacy cache only', async () => {
+  it('lists conversations from the index and journal projection', async () => {
     const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
     const indexPath = '/tmp/conversations-index.json';
     const { readFile, writeFile, exists } = createMemoryFs({
       [indexPath]: JSON.stringify({
         version: 1,
-        workspaces: {
-          [workDir]: ['conv-10'],
-        },
+        workspaces: { [workDir]: ['conv-10'] },
         conversations: {
           'conv-10': {
             conversationId: 'conv-10',
@@ -349,9 +205,7 @@ describe('FileConversationStorage', () => {
 
     const storage = new FileConversationStorage({
       workDir,
-      filePath: legacyPath,
       indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
       readFile,
       writeFile,
       exists,
@@ -375,6 +229,8 @@ describe('FileConversationStorage', () => {
           messageCount: 2,
           source: 'journal-projection',
         }),
+        projectAgentFirstGraph: vi.fn().mockResolvedValue(emptyAgentFirstGraph('conv-10')),
+        scanAgentFirstIntegrity: vi.fn().mockResolvedValue(emptyIntegrityScan('conv-10')),
         filterEvents: vi.fn(),
       },
     });
@@ -399,143 +255,6 @@ describe('FileConversationStorage', () => {
       },
     ]);
   });
-
-  it('migrates legacy record IDs without journals to canonical IDs and keeps alias lookup', async () => {
-    const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
-    const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-legacy-id',
-      version: 1,
-      title: 'Legacy only',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'extension',
-    };
-    const migratedId = createLegacyConversationMigrationId(
-      workDir,
-      legacyRecord.id,
-      legacyRecord.createdAt,
-    );
-    const { files, readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
-    });
-
-    const storage = new FileConversationStorage({
-      workDir,
-      filePath: legacyPath,
-      indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
-      readFile,
-      writeFile,
-      exists,
-      hasJournal: vi.fn().mockResolvedValue(false),
-      journalProjection: {
-        projectToHistory: vi.fn().mockResolvedValue([]),
-        projectToHistoryWithEventIds: vi.fn().mockResolvedValue({
-          messages: [],
-          messageEventIds: [],
-        }),
-        projectToSummary: vi.fn().mockResolvedValue(null),
-        filterEvents: vi.fn(),
-      },
-    });
-
-    const loadedFromLegacyId = await storage.load('conv-legacy-id');
-    const listed = await storage.list();
-    await storage.flush();
-
-    expect(loadedFromLegacyId).toEqual({
-      ...legacyRecord,
-      id: migratedId,
-    });
-    expect(listed).toEqual([
-      {
-        ...legacyRecord,
-        id: migratedId,
-      },
-    ]);
-
-    const indexData = JSON.parse(files.get(indexPath) ?? '{}') as {
-      workspaces?: Record<string, string[]>;
-      conversations?: Record<string, { title: string }>;
-      aliases?: Record<string, string>;
-    };
-    expect(indexData.workspaces?.[workDir]).toEqual([migratedId]);
-    expect(indexData.conversations?.[migratedId]).toMatchObject({
-      title: 'Legacy only',
-    });
-    expect(indexData.aliases).toEqual({
-      'conv-legacy-id': migratedId,
-    });
-  });
-
-  it('keeps legacy IDs when a matching legacy journal already exists', async () => {
-    const workDir = '/workspace/demo';
-    const legacyPath = '/tmp/conversations/demo.json';
-    const indexPath = '/tmp/conversations-index.json';
-    const legacyRecord: ConversationRecord = {
-      id: 'conv-with-journal',
-      version: 1,
-      title: 'Legacy journal',
-      workDir,
-      messages: [{ role: 'user', content: 'legacy history' }],
-      createdAt: 1000,
-      updatedAt: 1500,
-      source: 'tui',
-    };
-
-    const { files, readFile, writeFile, exists } = createMemoryFs({
-      [legacyPath]: JSON.stringify({ records: [legacyRecord] }),
-    });
-
-    const storage = new FileConversationStorage({
-      workDir,
-      filePath: legacyPath,
-      indexFilePath: indexPath,
-      legacySupportMode: 'runtime-fallback',
-      readFile,
-      writeFile,
-      exists,
-      hasJournal: vi.fn().mockImplementation(async (conversationId: string) => {
-        return conversationId === 'conv-with-journal';
-      }),
-      journalProjection: {
-        projectToHistory: vi.fn().mockResolvedValue([
-          { role: 'user', content: 'journal history' },
-          { role: 'assistant', content: 'journal answer' },
-        ]),
-        projectToHistoryWithEventIds: vi.fn().mockResolvedValue({
-          messages: [
-            { role: 'user', content: 'journal history' },
-            { role: 'assistant', content: 'journal answer' },
-          ],
-          messageEventIds: [['evt-20'], ['evt-21']],
-        }),
-        projectToSummary: vi.fn().mockResolvedValue({
-          conversationId: 'conv-with-journal',
-          title: 'Legacy journal',
-          createdAt: 1000,
-          updatedAt: 2000,
-          messageCount: 2,
-          source: 'journal-projection',
-        }),
-        filterEvents: vi.fn(),
-      },
-    });
-
-    const loaded = await storage.load('conv-with-journal');
-    await storage.flush();
-
-    expect(loaded?.id).toBe('conv-with-journal');
-
-    const indexData = JSON.parse(files.get(indexPath) ?? '{}') as {
-      aliases?: Record<string, string>;
-    };
-    expect(indexData.aliases).toBeUndefined();
-  });
 });
 
 function createMemoryFs(initialFiles?: Record<string, string>): {
@@ -559,5 +278,21 @@ function createMemoryFs(initialFiles?: Record<string, string>): {
       files.set(path, content);
     }),
     exists: vi.fn(async (path: string) => files.has(path)),
+  };
+}
+
+function emptyAgentFirstGraph(conversationId: string) {
+  return {
+    conversationId,
+    observations: [],
+    evidence: [],
+    rationales: [],
+  };
+}
+
+function emptyIntegrityScan(conversationId: string) {
+  return {
+    conversationId,
+    issues: [],
   };
 }

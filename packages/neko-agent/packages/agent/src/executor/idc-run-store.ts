@@ -24,7 +24,6 @@ import type {
   IdcRunRoundSummary,
   IdcRunStatus,
 } from '@neko-agent/types';
-import { roundSummaryFromDecision } from '@neko-agent/types';
 
 // =============================================================================
 // Types
@@ -32,7 +31,7 @@ import { roundSummaryFromDecision } from '@neko-agent/types';
 
 export interface IIdcRunStore {
   /** Start a fresh run, aborting any in-flight run. Returns the new run id. */
-  startRun(input: { runKind?: string; workflowId?: string; runId?: string }): string;
+  startRun(input: { runKind: string; runId?: string }): string;
   /** Replace in-memory state from a persisted runtime snapshot. */
   restore(input: { active?: IdcRun | null; completed?: readonly IdcRun[] }): void;
   /** Append a round summary derived from the planner decision. */
@@ -60,6 +59,19 @@ export interface IdcRunStoreConfig {
   nextId?: () => string;
 }
 
+export function roundSummaryFromDecision(
+  decision: StageActivationDecision,
+  lastObserveHint?: string,
+): IdcRunRoundSummary {
+  return {
+    round: decision.round,
+    activatedStages: decision.activated,
+    skippedStages: decision.skipped,
+    decidedAt: decision.decidedAt,
+    lastObserveHint,
+  };
+}
+
 let globalRunCounter = 0;
 
 // =============================================================================
@@ -77,16 +89,16 @@ class IdcRunStore implements IIdcRunStore {
     this._nextId = config.nextId ?? (() => defaultRunId(this._now));
   }
 
-  startRun(input: { runKind?: string; workflowId?: string; runId?: string }): string {
+  startRun(input: { runKind: string; runId?: string }): string {
     // If a run is still active, close it as aborted. This is defensive —
     // callers should endRun() explicitly; reaching here means a bug.
     if (this._active && this._active.status === 'running') {
       this._closeActive('aborted');
     }
 
-    const runKind = input.runKind ?? input.workflowId;
+    const runKind = input.runKind;
     if (!runKind || runKind.trim().length === 0) {
-      throw new Error('IdcRunStore.startRun: runKind or workflowId is required');
+      throw new Error('IdcRunStore.startRun: runKind is required');
     }
 
     const now = this._now();
@@ -94,7 +106,6 @@ class IdcRunStore implements IIdcRunStore {
     this._active = {
       id,
       runKind,
-      workflowId: runKind,
       status: 'running',
       createdAt: now,
       startedAt: now,

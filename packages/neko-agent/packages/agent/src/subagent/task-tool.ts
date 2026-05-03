@@ -6,7 +6,7 @@
  * - task_output: Get results from background SubAgents
  */
 
-import type { Tool, ToolResult, ToolCategory } from '@neko/shared';
+import type { Tool, ToolResult, ToolCategory, ToolExecuteOptions } from '@neko/shared';
 import type {
   ISubAgentManager,
   SubAgentConfig,
@@ -27,6 +27,21 @@ function generateSubAgentId(): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).slice(2, 7);
   return `subagent-${timestamp}-${random}`;
+}
+
+function buildSubAgentToolResultMetadata(
+  parentAgentId: string,
+  config: SubAgentConfig,
+): Record<string, unknown> {
+  return {
+    parentAgentId,
+    description: config.description,
+    subagentType: config.type,
+    runMode: config.runMode,
+    modelTier: config.modelTier,
+    ...(config.parentMessageId ? { parentMessageId: config.parentMessageId } : {}),
+    ...(config.parentToolCallId ? { parentToolCallId: config.parentToolCallId } : {}),
+  };
 }
 
 // =============================================================================
@@ -113,7 +128,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
           type: 'string',
           enum: ['fast', 'balanced', 'powerful'],
           description:
-            'Model tier: fast (haiku), balanced (sonnet), powerful (opus). Default: balanced',
+            'Model tier resolved by runtime/platform config: fast, balanced, or powerful. Default: balanced',
         },
         resume: {
           type: 'string',
@@ -145,7 +160,10 @@ Launch multiple SubAgents in a single turn for independent tasks:
     category: 'system' as ToolCategory,
     requiresConfirmation: false,
 
-    async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    async execute(
+      args: Record<string, unknown>,
+      options?: ToolExecuteOptions,
+    ): Promise<ToolResult> {
       const typedArgs = args as unknown as TaskToolArgs;
       const {
         description,
@@ -205,10 +223,25 @@ Launch multiple SubAgents in a single turn for independent tasks:
         };
       }
 
-      // Extract metadata from args (injected by executor)
-      const metadata = (args._metadata as Record<string, unknown>) || {};
-      const parentId = (metadata.parentAgentId as string) || 'unknown';
-      const conversationId = (metadata.conversationId as string) || 'unknown';
+      const metadata = options?.metadata ?? {};
+      const conversationId =
+        typeof metadata.conversationId === 'string' && metadata.conversationId.length > 0
+          ? metadata.conversationId
+          : undefined;
+      if (!conversationId) {
+        return {
+          success: false,
+          error: 'Missing conversationId for SubAgent task',
+        };
+      }
+      const parentId =
+        typeof metadata.parentAgentId === 'string' && metadata.parentAgentId.length > 0
+          ? metadata.parentAgentId
+          : `agent-${conversationId}`;
+      const parentMessageId =
+        typeof metadata.parentMessageId === 'string' ? metadata.parentMessageId : undefined;
+      const parentToolCallId =
+        typeof metadata.parentToolCallId === 'string' ? metadata.parentToolCallId : undefined;
 
       // Create SubAgent config
       const config: SubAgentConfig = {
@@ -219,6 +252,8 @@ Launch multiple SubAgents in a single turn for independent tasks:
         runMode: run_in_background ? 'background' : 'foreground',
         modelTier: model as ModelTier,
         timeout: 5 * 60 * 1000, // 5 minutes
+        parentMessageId,
+        parentToolCallId,
         // Skill & ToolSkill injection
         skills,
         inheritParentSkills: inherit_parent_skills,
@@ -230,12 +265,14 @@ Launch multiple SubAgents in a single turn for independent tasks:
 
       try {
         const subAgentId = await subAgentManager.spawn(parentId, conversationId, config);
+        const resultMetadata = buildSubAgentToolResultMetadata(parentId, config);
 
         if (run_in_background) {
           return {
             success: true,
             data: {
               subAgentId,
+              ...resultMetadata,
               status: 'running',
               message: 'SubAgent started in background. Use task_output to get results.',
             },
@@ -246,7 +283,11 @@ Launch multiple SubAgents in a single turn for independent tasks:
         const result = await subAgentManager.getResult(subAgentId);
         return {
           success: result.status === 'completed',
-          data: result,
+          data: {
+            ...resultMetadata,
+            ...result,
+            subAgentId,
+          },
           error: result.error,
         };
       } catch (error) {
@@ -323,6 +364,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           data: {
             status: 'running',
             taskId: task_id,
+            subAgentId: task_id,
             message: 'Task is still running',
           },
         };
@@ -333,7 +375,10 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         const result = await subAgentManager.getResult(task_id, timeout);
         return {
           success: result.status === 'completed',
-          data: result,
+          data: {
+            ...result,
+            subAgentId: task_id,
+          },
           error: result.error,
         };
       } catch (error) {

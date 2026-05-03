@@ -50,6 +50,14 @@ function createMockManager(): ISubAgentManager {
   };
 }
 
+function executeWithRuntimeMetadata(
+  tool: ReturnType<typeof createTaskTool>,
+  args: Record<string, unknown>,
+  metadata: Record<string, unknown> = { parentAgentId: 'parent-1', conversationId: 'conv-1' },
+) {
+  return tool.execute(args, { metadata });
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -73,7 +81,7 @@ describe('createTaskTool', () => {
 
     it('should have correct parameter schema', () => {
       const tool = createTaskTool(manager);
-      const params = tool.parameters as Record<string, unknown>;
+      const params = tool.parameters as unknown as Record<string, unknown>;
 
       expect(params.required).toContain('description');
       expect(params.required).toContain('prompt');
@@ -84,10 +92,9 @@ describe('createTaskTool', () => {
     it('should spawn a SubAgent and return result in foreground mode', async () => {
       const tool = createTaskTool(manager);
 
-      const result = await tool.execute({
+      const result = await executeWithRuntimeMetadata(tool, {
         description: 'Test task',
         prompt: 'Do something',
-        _metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' },
       });
 
       expect(result.success).toBe(true);
@@ -98,11 +105,10 @@ describe('createTaskTool', () => {
     it('should return immediately in background mode', async () => {
       const tool = createTaskTool(manager);
 
-      const result = await tool.execute({
+      const result = await executeWithRuntimeMetadata(tool, {
         description: 'Test task',
         prompt: 'Do something',
         run_in_background: true,
-        _metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' },
       });
 
       expect(result.success).toBe(true);
@@ -110,15 +116,91 @@ describe('createTaskTool', () => {
       expect((result.data as Record<string, unknown>).message).toContain('background');
     });
 
+    it('should include rehydrate metadata in background results', async () => {
+      const tool = createTaskTool(manager);
+
+      const result = await tool.execute(
+        {
+          description: 'Test task',
+          prompt: 'Do something',
+          run_in_background: true,
+          model: 'fast',
+          subagent_type: 'code-search',
+        },
+        {
+          metadata: {
+            parentAgentId: 'parent-1',
+            conversationId: 'conv-1',
+            parentMessageId: 'msg-1',
+            parentToolCallId: 'tool-1',
+          },
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({
+        parentAgentId: 'parent-1',
+        description: 'Test task',
+        subagentType: 'code-search',
+        runMode: 'background',
+        modelTier: 'fast',
+        parentMessageId: 'msg-1',
+        parentToolCallId: 'tool-1',
+      });
+    });
+
+    it('should fail closed when conversationId metadata is missing', async () => {
+      const tool = createTaskTool(manager);
+
+      const result = await tool.execute(
+        {
+          description: 'Test task',
+          prompt: 'Do something',
+        },
+        {
+          metadata: { parentAgentId: 'parent-1' },
+        },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Missing conversationId');
+      expect(manager.spawn).not.toHaveBeenCalled();
+    });
+
+    it('should pass conversation and parent lineage into spawn config', async () => {
+      const tool = createTaskTool(manager);
+
+      await executeWithRuntimeMetadata(
+        tool,
+        {
+          description: 'Test task',
+          prompt: 'Do something',
+          run_in_background: true,
+        },
+        {
+          parentAgentId: 'parent-1',
+          conversationId: 'conv-1',
+          parentToolCallId: 'tool-1',
+        },
+      );
+
+      expect(manager.spawn).toHaveBeenCalledWith(
+        'parent-1',
+        'conv-1',
+        expect.objectContaining({
+          parentToolCallId: 'tool-1',
+        }),
+      );
+    });
+
     it('should handle resume for running SubAgent', async () => {
       const tool = createTaskTool(manager);
 
       // First, spawn a SubAgent
-      await tool.execute({
+      await executeWithRuntimeMetadata(tool, {
         description: 'Test task',
         prompt: 'Do something',
         run_in_background: true,
-        _metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' },
       });
 
       // Get the spawned ID
@@ -150,11 +232,10 @@ describe('createTaskTool', () => {
     it('should use specialized agent type', async () => {
       const tool = createTaskTool(manager);
 
-      await tool.execute({
+      await executeWithRuntimeMetadata(tool, {
         description: 'Search code',
         prompt: 'Find API endpoints',
         subagent_type: 'code-search',
-        _metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' },
       });
 
       expect(manager.spawn).toHaveBeenCalled();
@@ -165,11 +246,10 @@ describe('createTaskTool', () => {
     it('should use model tier', async () => {
       const tool = createTaskTool(manager);
 
-      await tool.execute({
+      await executeWithRuntimeMetadata(tool, {
         description: 'Complex task',
         prompt: 'Do something complex',
         model: 'powerful',
-        _metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' },
       });
 
       const config = (manager.spawn as ReturnType<typeof vi.fn>).mock.calls[0]![2];

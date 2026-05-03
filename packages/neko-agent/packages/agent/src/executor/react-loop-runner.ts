@@ -28,13 +28,13 @@
 
 import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
 import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
-import { EXECUTION_CHANNELS, roundSummaryFromDecision, CREATION_CHANNELS } from '@neko-agent/types';
+import { CREATION_CHANNELS, EXECUTION_CHANNELS } from '@neko-agent/types';
 
 import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
-import type { IIdcRunStore } from './idc-run-store';
+import { roundSummaryFromDecision, type IIdcRunStore } from './idc-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
@@ -173,7 +173,6 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
             channel: CREATION_CHANNELS.RUN_STARTED,
             runId: activeRun.id,
             runKind: activeRun.runKind,
-            workflowId: activeRun.workflowId,
             at: clock(),
           });
         }

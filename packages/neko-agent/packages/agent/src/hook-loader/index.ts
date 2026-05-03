@@ -50,6 +50,35 @@ export type {
   HookModuleExports,
 } from './types';
 
+export type {
+  HookCompilerOptions,
+  HookRequireFn,
+  HookSandboxModuleExecutorOptions,
+  HookTransform,
+  HookTransformOptions,
+  HookTransformResult,
+} from './hook-runtime';
+
+export type {
+  HookRuntimeDisposable,
+  HookRuntimeLoader,
+  HookRuntimeLogger,
+  HookRuntimeManagerOptions,
+  HookRuntimeReloadEvent,
+  HookRuntimeReloadListener,
+  ProjectHookRuntimeManagerOptions,
+} from './hook-runtime-manager';
+
+export type {
+  HookFileRuntime,
+  HookFileRuntimeDirentLike,
+  HookFileRuntimeFs,
+  HookFileRuntimeLogger,
+  HookFileRuntimeOptions,
+  HookFileRuntimePath,
+  HookFileWatchEntry,
+} from './hook-file-runtime';
+
 // Types - Settings-based
 export type {
   SettingsHookLoaderOptions,
@@ -63,6 +92,34 @@ export type {
 // Constants
 export { HOOK_DIRECTORIES, DEFAULT_HOOK_METADATA } from './types';
 
+// Markdown hook file projection
+export {
+  HOOK_MARKDOWN_FILE_EXTENSION,
+  buildHookDirectoryScanError,
+  buildHookFileReadError,
+  parseHookMarkdownFile,
+  parseSimpleHookYaml,
+  shouldScanHookFile,
+  toConfiguredHookCatalog,
+  type HookFileParseResult,
+  type HookFileScanResult,
+} from './hook-file-projector';
+export { HOOK_FILE_WATCH_DEBOUNCE_MS, createHookFileRuntime } from './hook-file-runtime';
+
 // Main classes
 export { HookLoader, createHookLoader } from './hook-loader';
+export {
+  HookRuntimeManager,
+  createHookRuntimeManager,
+  createProjectHookRuntimeManager,
+} from './hook-runtime-manager';
 export { SettingsHookLoader, createSettingsHookLoader } from './settings-hook-loader';
+export {
+  DEFAULT_HOOK_ALLOWED_BUILTINS,
+  DEFAULT_HOOK_PACKAGE_STUBS,
+  DEFAULT_HOOK_SANDBOX_TIMEOUT_MS,
+  buildHookTransformOptions,
+  createHookCompiler,
+  createHookSandboxModuleExecutor,
+  createSafeHookRequire,
+} from './hook-runtime';

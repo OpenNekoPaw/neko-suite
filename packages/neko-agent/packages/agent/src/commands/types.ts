@@ -93,11 +93,13 @@ export interface CommandContext {
     outputFormat?: string;
     verbose?: boolean;
     mcpServers?: unknown[];
+    executionMode?: string;
   };
   /** Conversation management (extension only) */
   conversations?: {
     list(): Array<{ id: string; title: string }>;
     getActiveId(): string | null;
+    getActiveMessageCount?(): number;
     create(): string;
     clearCurrent(): void;
   };

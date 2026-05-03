@@ -72,8 +72,8 @@ CORRUPTED LINE
       expect(result).toHaveLength(2);
       expect(result[0]!.seq).toBe(1);
       expect(result[1]!.seq).toBe(2);
-      expect(result[0]!.eventId).toMatch(/^legacy-1-1000-0-[a-f0-9]{12}$/);
-      expect(result[1]!.eventId).toMatch(/^legacy-2-2000-2-[a-f0-9]{12}$/);
+      expect(result[0]!.eventId).toMatch(/^fallback-1-1000-0-[a-f0-9]{12}$/);
+      expect(result[1]!.eventId).toMatch(/^fallback-2-2000-2-[a-f0-9]{12}$/);
     });
 
     it('should skip empty lines', async () => {

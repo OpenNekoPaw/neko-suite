@@ -8,7 +8,6 @@ export function createPlanModeIdcMetadata(): Record<string, unknown> {
       entrySignal: 'vague-creative',
       taskShape: 'multi-step',
       runKind,
-      workflowId: runKind,
     },
   };
 }
@@ -31,7 +30,6 @@ export function createSkillExecutionIdcMetadata(
       entrySignal: 'prompt-chain-skill',
       taskShape: 'multi-step',
       runKind,
-      workflowId: runKind,
     },
   };
 }

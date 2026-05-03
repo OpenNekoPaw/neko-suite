@@ -79,3 +79,37 @@ export {
   executeSlashCommand,
   getCommandHandler,
 } from './command-executor';
+
+export {
+  buildExtensionCommandConversationSummaries,
+  buildExtensionCommandHostEffectPlan,
+  buildExtensionCommandResultPayload,
+  buildExtensionSkillCommandResultPayload,
+  normalizeSlashCommandName,
+  parseBuiltinCommandArgs,
+  shouldExecutePlanPromptAfterToggle,
+  type BuildExtensionCommandHostEffectPlanInput,
+  type BuildExtensionCommandResultPayloadInput,
+  type BuildExtensionSkillCommandResultPayloadInput,
+  type ExtensionCommandHostEffect,
+  type ExtensionCommandHostEffectPlan,
+  type ExtensionCommandConversationSummary,
+  type ExtensionCommandConversationSummarySource,
+  type ExtensionCommandResultPayload,
+  type ExtensionSkillCommandResultStatus,
+} from './extension-command-presenter';
+
+export {
+  buildExtensionSlashStatusPayload,
+  runExtensionSlashCommandRuntime,
+  type ExtensionSlashCommandContextManager,
+  type ExtensionSlashCommandConversationSource,
+  type ExtensionSlashCommandExecutionDispatch,
+  type ExtensionSlashCommandPlanModeSource,
+  type ExtensionSlashCommandRuntimeDeps,
+  type ExtensionSlashCommandRuntimeEffects,
+  type ExtensionSlashCommandRuntimeInput,
+  type ExtensionSlashCommandRuntimeResult,
+  type ExtensionSlashCommandSettingsSource,
+  type ExtensionSlashCommandSkillSource,
+} from './extension-slash-command-runtime';

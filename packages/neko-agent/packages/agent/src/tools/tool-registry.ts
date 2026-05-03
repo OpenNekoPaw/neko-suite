@@ -195,7 +195,7 @@ export class ToolRegistry implements IToolRegistry {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: tool.parameters,
+        parameters: toProviderToolParameters(tool.parameters),
       },
     }));
   }
@@ -246,4 +246,12 @@ export class ToolRegistry implements IToolRegistry {
  */
 export function createToolRegistry(): ToolRegistry {
   return new ToolRegistry();
+}
+
+function toProviderToolParameters(toolParameters: Tool['parameters']): Record<string, unknown> {
+  return {
+    ...toolParameters,
+    properties: { ...toolParameters.properties },
+    ...(toolParameters.required ? { required: [...toolParameters.required] } : {}),
+  };
 }

@@ -28,9 +28,12 @@ export type {
   SubAgentEventType,
   SubAgentEvent,
   SubAgentEventListener,
+  SubAgentModelTierResolverContext,
   // Manager interface
   SubAgentManagerDeps,
   SubAgentExecutor,
+  SubAgentCreateAgentContext,
+  SubAgentSkillContentProvider,
   ISubAgentManager,
   // Tool types
   TaskToolArgs,
@@ -146,17 +149,13 @@ export interface SubAgentSystem {
  * ```
  */
 export function createSubAgentSystem(options: SubAgentSystemOptions): SubAgentSystem {
-  const { createService, createAgent, toolRegistry, registerTools = true } = options;
+  const { registerTools = true, ...deps } = options;
 
-  const manager = new SubAgentManager({
-    createService,
-    createAgent,
-    toolRegistry,
-  });
+  const manager = new SubAgentManager(deps);
 
   // Register task tools if requested
   if (registerTools) {
-    registerSubAgentTools(toolRegistry, manager);
+    registerSubAgentTools(deps.toolRegistry, manager);
   }
 
   return {

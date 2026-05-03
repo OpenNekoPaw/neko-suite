@@ -120,7 +120,6 @@ export interface ICapabilityRuntime {
  */
 export interface IFeedbackLoop {
   readonly projectMemoryManager?: IProjectMemoryManager;
-  readonly journalAsSSOT?: boolean;
   readonly compactLogging?: boolean;
   readonly autoMemoryExtraction?: boolean;
   readonly memoryRecall?: boolean;

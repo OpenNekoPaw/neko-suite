@@ -100,7 +100,7 @@ export function validateStageDispatch(decision: StageActivationDecision): StageD
  */
 export function assertStageDispatch(decision: StageActivationDecision): void {
   const result = validateStageDispatch(decision);
-  if (!result.ok) {
+  if (result.ok === false) {
     const codes = result.violations.map((v) => v.code).join(', ');
     throw new Error(
       `StageDispatcher: decision failed validation (${codes}): ` +

@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
 const MAX_DEPTH = 3;
@@ -21,7 +21,7 @@ interface DirEntry {
 export class ListDirectoryTool extends BuiltinTool {
   readonly name = 'ListDirectory';
   readonly description = 'List contents of a directory. Returns file names, types, and sizes.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       path: {

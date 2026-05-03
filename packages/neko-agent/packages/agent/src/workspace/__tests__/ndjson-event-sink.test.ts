@@ -58,7 +58,6 @@ describe('NdjsonEventSink', () => {
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'run-1',
       runKind: 'w-1',
-      workflowId: 'w-1',
       at: 0,
     });
     bus.emit({
@@ -144,7 +143,6 @@ describe('NdjsonEventSink', () => {
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
       runKind: 'w',
-      workflowId: 'w',
       at: 0,
     });
     await sink.dispose();
@@ -175,7 +173,6 @@ describe('NdjsonEventSink', () => {
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
       runKind: 'w',
-      workflowId: 'w',
       at: 0,
     });
     // A second event must still land even though the first failed.
@@ -206,7 +203,6 @@ describe('NdjsonEventSink', () => {
       channel: CREATION_CHANNELS.RUN_STARTED,
       runId: 'r',
       runKind: 'w',
-      workflowId: 'w',
       at: 0,
     });
     await sink.flush();

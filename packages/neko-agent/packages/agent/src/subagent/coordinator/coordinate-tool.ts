@@ -5,7 +5,7 @@
  * orchestrate multi-agent workflows through normal tool calling.
  */
 
-import type { Tool, ToolResult, ToolCategory } from '@neko/shared';
+import type { Tool, ToolResult, ToolCategory, ToolExecuteOptions } from '@neko/shared';
 import type { CoordinateToolDeps, CoordinatorEvent, TaskItem } from './types';
 import type { SpecializedAgentType } from '../types';
 import { Coordinator } from './coordinator';
@@ -150,7 +150,10 @@ Dependency results are automatically passed to dependent tasks as context.`,
     isConcurrencySafe: false,
     isReadOnly: false,
 
-    async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    async execute(
+      args: Record<string, unknown>,
+      options?: ToolExecuteOptions,
+    ): Promise<ToolResult> {
       const typedArgs = args as unknown as CoordinateToolArgs;
       const { description, tasks, max_concurrency, require_confirmation, worker_model } = typedArgs;
 
@@ -161,10 +164,21 @@ Dependency results are automatically passed to dependent tasks as context.`,
         };
       }
 
-      // Extract parent metadata
-      const metadata = (args._metadata as Record<string, unknown>) || {};
-      const parentAgentId = (metadata.parentAgentId as string) || 'unknown';
-      const conversationId = (metadata.conversationId as string) || 'unknown';
+      const metadata = options?.metadata ?? {};
+      const conversationId =
+        typeof metadata.conversationId === 'string' && metadata.conversationId.length > 0
+          ? metadata.conversationId
+          : undefined;
+      if (!conversationId) {
+        return {
+          success: false,
+          error: 'Missing conversationId for coordinate tool',
+        };
+      }
+      const parentAgentId =
+        typeof metadata.parentAgentId === 'string' && metadata.parentAgentId.length > 0
+          ? metadata.parentAgentId
+          : `agent-${conversationId}`;
 
       // Convert tool args to TaskItems
       const taskItems: Omit<TaskItem, 'status'>[] = tasks.map((t) => ({

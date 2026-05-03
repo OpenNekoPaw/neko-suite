@@ -3,7 +3,6 @@ import {
   classifyIdcEntrySignal,
   classifyIdcTaskShape,
   resolveIdcRunKind,
-  resolveIdcWorkflowId,
   type IdcTurnPlanningContext,
 } from '../idc-turn-planning';
 
@@ -46,7 +45,6 @@ describe('idc-turn-planning', () => {
     expect(taskShape).toBe('multi-step');
     expect(entrySignal).toBe('prompt-chain-skill');
     expect(resolveIdcRunKind(context)).toBe('skill:launch-workflow');
-    expect(resolveIdcWorkflowId(context)).toBe('skill:launch-workflow');
   });
 
   it('uses explicit skill runKind metadata', () => {
@@ -61,9 +59,6 @@ describe('idc-turn-planning', () => {
     expect(resolveIdcRunKind(context)).toBe(
       'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
     );
-    expect(resolveIdcWorkflowId(context)).toBe(
-      'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
-    );
   });
 
   it('detects referenced artifacts and resumes from the artifact path', () => {
@@ -76,7 +71,6 @@ describe('idc-turn-planning', () => {
 
     expect(entrySignal).toBe('referenced-artifact');
     expect(resolveIdcRunKind(context)).toBe('artifact-resume');
-    expect(resolveIdcWorkflowId(context)).toBe('artifact-resume');
   });
 
   it('treats vague creative asks as draft-first IDC entries', () => {
@@ -99,7 +93,6 @@ describe('idc-turn-planning', () => {
           taskShape: 'plan-only',
           entrySignal: 'prompt-chain-skill',
           runKind: 'custom-run-kind',
-          workflowId: 'custom-workflow',
         },
       },
     });
@@ -110,20 +103,6 @@ describe('idc-turn-planning', () => {
     expect(taskShape).toBe('plan-only');
     expect(entrySignal).toBe('prompt-chain-skill');
     expect(resolveIdcRunKind(context)).toBe('custom-run-kind');
-    expect(resolveIdcWorkflowId(context)).toBe('custom-run-kind');
-  });
-
-  it('falls back to legacy workflowId metadata when runKind is absent', () => {
-    const context = planningContext({
-      metadata: {
-        idc: {
-          workflowId: 'legacy-workflow-only',
-        },
-      },
-    });
-
-    expect(resolveIdcRunKind(context)).toBe('legacy-workflow-only');
-    expect(resolveIdcWorkflowId(context)).toBe('legacy-workflow-only');
   });
 
   it('uses plan-mode run kind when the turn is forced into plan execution mode', () => {
@@ -133,6 +112,5 @@ describe('idc-turn-planning', () => {
     });
 
     expect(resolveIdcRunKind(context)).toBe('plan-mode');
-    expect(resolveIdcWorkflowId(context)).toBe('plan-mode');
   });
 });

@@ -537,7 +537,6 @@ describe('AgentSession', () => {
       expect(getCompletedRuns(session)).toEqual([
         expect.objectContaining({
           runKind: 'plan-mode',
-          workflowId: 'plan-mode',
           status: 'failed',
           error: expect.objectContaining({
             code: 'execute_failed',
@@ -642,6 +641,14 @@ describe('AgentSession', () => {
           list: vi.fn(() => []),
           has: vi.fn(() => false),
         },
+        artifactRegistry: {
+          register: vi.fn(),
+          unregister: vi.fn(),
+          get: vi.fn(),
+          byStage: vi.fn(),
+          list: vi.fn(() => []),
+          has: vi.fn(() => false),
+        },
         advise: vi.fn((input) => ({ input, guidance: null, createdAt: 1 })),
         getDecisionHistory: vi.fn(() => []),
       };
@@ -664,6 +671,84 @@ describe('AgentSession', () => {
           signalKind: 'memory-extraction',
         }),
       });
+    });
+
+    it('injects ControlPlane stage guidance into the next feedback prompt', async () => {
+      const journalWriter = createMockJournalWriter();
+      const controlPlane = {
+        stageRegistry: {
+          register: vi.fn(),
+          unregister: vi.fn(),
+          get: vi.fn(),
+          list: vi.fn(() => []),
+          has: vi.fn(() => false),
+        },
+        artifactRegistry: {
+          register: vi.fn(),
+          unregister: vi.fn(),
+          get: vi.fn(),
+          byStage: vi.fn(),
+          list: vi.fn(() => []),
+          has: vi.fn(() => false),
+        },
+        advise: vi.fn((input) => ({
+          input,
+          guidance: {
+            transitionAction: 'retry-stage' as const,
+            decisionAction: 'repair' as const,
+            toStageId: 'apply',
+            reason: 'Retry the Apply stage with a safer fallback.',
+            requiresUserApproval: false,
+          },
+          createdAt: 1,
+        })),
+        getDecisionHistory: vi.fn(() => []),
+      };
+      const session = new AgentSession(createConfig({ controlPlane, journalWriter }));
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolResults: [
+            {
+              callId: 'call-write',
+              success: false,
+              error: 'permission denied',
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 100,
+        },
+      ]);
+
+      await collectEvents(session.execute('write the draft'));
+
+      const content = (
+        session as unknown as { _feedbackGuidanceModule: { getContent(): string | null } }
+      )._feedbackGuidanceModule.getContent();
+      expect(content).toContain('ControlPlane');
+      expect(content).toContain('Retry the Apply stage with a safer fallback.');
+      expect(content).toContain('permission denied');
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          type: 'feedback.stage_transition_requested',
+          feedbackStageTransition: expect.objectContaining({
+            timestamp: 1,
+            decision: expect.objectContaining({
+              action: 'repair',
+              signalKind: 'tool-failure',
+              toolName: 'Write',
+              error: 'permission denied',
+            }),
+            guidance: expect.objectContaining({
+              transitionAction: 'retry-stage',
+              decisionAction: 'repair',
+              toStageId: 'apply',
+            }),
+          }),
+        }),
+      );
     });
 
     it('does not extract project memory when autoMemoryExtraction is disabled', async () => {
@@ -755,22 +840,6 @@ describe('AgentSession', () => {
       injectMockExecutor(session, steps);
 
       await collectEvents(session.execute('继续'));
-
-      expect(projectMemory.upsertEntry).not.toHaveBeenCalled();
-    });
-
-    it('disables automatic extraction when journalAsSSOT is turned off', async () => {
-      const projectMemory = createMockProjectMemory();
-      const session = new AgentSession(
-        createConfig({
-          projectMemoryManager: projectMemory,
-          journalAsSSOT: false,
-        }),
-      );
-      const steps: AgentStep[] = [{ type: 'think', content: '好的', timestamp: Date.now() }];
-      injectMockExecutor(session, steps);
-
-      await collectEvents(session.execute('我喜欢中文说明'));
 
       expect(projectMemory.upsertEntry).not.toHaveBeenCalled();
     });
@@ -962,7 +1031,7 @@ describe('AgentSession', () => {
       );
       const runStore = getInternalRunStore(session);
 
-      session.startWorkflowRun('wf', 'run-active');
+      session.startIdcRun('wf', 'run-active');
       session.dispose();
 
       expect(runStore?.getActive()).toBeNull();
@@ -970,7 +1039,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-active',
           runKind: 'wf',
-          workflowId: 'wf',
           status: 'aborted',
         }),
       ]);
@@ -1131,13 +1199,12 @@ describe('AgentSession', () => {
       expect(getCompletedRuns(session)).toEqual([
         expect.objectContaining({
           runKind: 'plan-mode',
-          workflowId: 'plan-mode',
           status: 'completed',
         }),
       ]);
     });
 
-    it('startIdcRun writes runKind while keeping the legacy workflowId mirror', () => {
+    it('startIdcRun writes runKind', () => {
       const session = new AgentSession(
         createConfig({
           stageTracking: {},
@@ -1150,7 +1217,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-kind',
           runKind: 'artifact-resume',
-          workflowId: 'artifact-resume',
           status: 'running',
         }),
       );
@@ -1480,43 +1546,6 @@ describe('AgentSession', () => {
             contextPacketId: 'ctx-quality-review',
           }),
         }),
-      );
-    });
-
-    it('respects agentFirst.qualityReviewEvidence: false for legacy quality feedback shape', async () => {
-      const session = new AgentSession(
-        applyAblationToggles(createConfig(), {
-          agentFirst: { qualityReviewEvidence: false },
-        }),
-      );
-      injectMockExecutor(session, [
-        {
-          type: 'act',
-          content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
-          toolResults: [
-            {
-              callId: 'call-qc',
-              success: true,
-              data: {
-                totalScenes: 1,
-                passed: 0,
-                failed: 1,
-                evaluations: [{ index: 1, passed: false, finalScore: 41 }],
-              },
-            } as ToolResultWithMeta,
-          ],
-          timestamp: 200,
-        },
-      ]);
-
-      await collectEvents(session.execute('check scene quality'));
-
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
-        expect.not.objectContaining({ evidence: expect.anything() }),
-      );
-      expect(session.getFeedbackCycles()[0]?.decisions[0]).toEqual(
-        expect.not.objectContaining({ evidenceId: expect.anything() }),
       );
     });
 
@@ -2168,7 +2197,6 @@ describe('AgentSession', () => {
               active: {
                 id: 'run-active',
                 runKind: 'wf-active',
-                workflowId: 'wf-active',
                 status: 'running',
                 createdAt: 1,
                 startedAt: 2,
@@ -2226,7 +2254,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-active',
           runKind: 'wf-active',
-          workflowId: 'wf-active',
           draft: restoredDraft,
           artifactBindings: [
             {
@@ -2382,7 +2409,6 @@ describe('AgentSession', () => {
               active: {
                 id: 'run-active',
                 runKind: 'wf-active',
-                workflowId: 'wf-active',
                 status: 'running',
                 createdAt: 1,
                 startedAt: 2,
@@ -2413,7 +2439,6 @@ describe('AgentSession', () => {
               lastCompleted: {
                 id: 'run-done',
                 runKind: 'wf-done',
-                workflowId: 'wf-done',
                 status: 'completed',
                 createdAt: 4,
                 startedAt: 5,
@@ -2475,14 +2500,12 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-active',
           runKind: 'wf-active',
-          workflowId: 'wf-active',
         }),
       );
       expect(session.getIdcRun('run-done')).toEqual(
         expect.objectContaining({
           id: 'run-done',
           runKind: 'wf-done',
-          workflowId: 'wf-done',
         }),
       );
       expect(session.listIdcRuns()).toEqual([
@@ -2493,7 +2516,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-active',
           runKind: 'wf-active',
-          workflowId: 'wf-active',
           status: 'running',
           draft: restoredDraft,
           task: restoredTask,
@@ -2523,7 +2545,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-done',
           runKind: 'wf-done',
-          workflowId: 'wf-done',
           status: 'completed',
           plan: restoredPlan,
           rounds: [
@@ -2641,7 +2662,6 @@ describe('AgentSession', () => {
               lastCompleted: {
                 id: 'run-done',
                 runKind: 'wf-done',
-                workflowId: 'wf-done',
                 status: 'completed',
                 createdAt: 10,
                 startedAt: 11,
@@ -2703,7 +2723,7 @@ describe('AgentSession', () => {
       session.dispose();
     });
 
-    it('hydrates previously written artifacts when startWorkflowRun reuses the same runId', async () => {
+    it('hydrates previously written artifacts when startIdcRun reuses the same runId', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const fsOps = {
         async mkdir(_path: string): Promise<void> {},
@@ -2734,7 +2754,7 @@ describe('AgentSession', () => {
       };
 
       await session.writeDraftArtifact(draft, { runId: 'run-reuse' });
-      session.startWorkflowRun('wf-reuse', 'run-reuse');
+      session.startIdcRun('wf-reuse', 'run-reuse');
 
       expect(session.getActiveIdcRun()).toEqual(
         expect.objectContaining({
@@ -3287,7 +3307,7 @@ describe('AgentSession', () => {
         };
         run: {
           active?: unknown;
-          lastCompleted?: { id: string; runKind?: string; workflowId: string; status: string };
+          lastCompleted?: { id: string; runKind: string; status: string };
         };
         approval: { pending: unknown[] };
       }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
@@ -3303,7 +3323,6 @@ describe('AgentSession', () => {
         expect.objectContaining({
           id: 'run-1',
           runKind: 'wf-demo',
-          workflowId: 'wf-demo',
           status: 'completed',
         }),
       );

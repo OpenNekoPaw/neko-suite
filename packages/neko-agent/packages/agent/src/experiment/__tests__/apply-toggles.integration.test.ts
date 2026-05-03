@@ -130,11 +130,6 @@ describe('applyAblationToggles → initializer → factory (integration)', () =>
     expect(config.autoMemoryExtraction).toBe(false);
   });
 
-  it('journalAsSSOT: false writes the session config override directly', () => {
-    const config = applyAblationToggles(makeBaseConfig(), { journalAsSSOT: false });
-    expect(config.journalAsSSOT).toBe(false);
-  });
-
   it('compactLogging: false writes the session config override directly', () => {
     const config = applyAblationToggles(makeBaseConfig(), { compactLogging: false });
     expect(config.compactLogging).toBe(false);
@@ -226,7 +221,6 @@ describe('applyAblationToggles — Agent-first marker fields', () => {
     expect(marker.disableAgentFirst).toBe(true);
     expect(marker.disableAgentFirstObservation).toBe(true);
     expect(marker.disableAgentFirstToolEvidence).toBe(true);
-    expect(marker.disableAgentFirstQualityReviewEvidence).toBe(true);
     expect(marker.disableAgentFirstRecoveryGuidance).toBe(true);
     expect(config.feedbackControlPolicy).toEqual({ toolEvidenceMode: 'off' });
   });

@@ -7,6 +7,8 @@
     ".": "./src/index.ts",
     "./validation": "./src/validation/index.ts",
     "./approval": "./src/approval/index.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./tools": "./src/tools/index.ts",
     "./workspace": "./src/workspace/index.ts",
     "./*": "./src/*"
   },
@@ -19,14 +21,6 @@
     "@neko/shared": "workspace:*",
     "ajv": "^8.17.1",
     "mermaid": "^11.12.2"
-  },
-  "peerDependencies": {
-    "@neko/platform": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@neko/platform": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "typescript": "^5.0.0",

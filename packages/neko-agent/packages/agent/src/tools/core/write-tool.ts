@@ -7,7 +7,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
 export interface WriteToolOptions {
@@ -26,7 +26,7 @@ export class WriteTool extends BuiltinTool {
   readonly name = 'Write';
   readonly description =
     'Write content to a file. Creates parent directories if needed. Use append mode to add to existing files.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       file_path: {

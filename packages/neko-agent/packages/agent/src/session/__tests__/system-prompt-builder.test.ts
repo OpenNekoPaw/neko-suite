@@ -162,6 +162,16 @@ describe('SystemPromptBuilder', () => {
 
       expect(prompt).toBe(customPlanPrompt);
     });
+
+    it('should build for a requested mode without mutating current mode', () => {
+      const builder = new SystemPromptBuilder({ mode: 'default' });
+      builder.setAgentsContent('# Project rules', 'project');
+
+      expect(builder.buildForMode('plan')).toBe(BUILTIN_PLAN_PROMPT_EN);
+      expect(builder.getMode()).toBe('default');
+      expect(builder.buildForMode('default')).toBe('# Project rules');
+      expect(builder.getMode()).toBe('default');
+    });
   });
 
   describe('Prompt Building with Suffix', () => {

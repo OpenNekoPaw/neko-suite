@@ -207,7 +207,7 @@ export class AgentExecutor implements IAgentExecutor {
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
           this.setState('act');
-          const actStep = await act(this.actDeps, thinkStep.toolCalls);
+          const actStep = await act(this.getActDeps(agentContext), thinkStep.toolCalls);
           steps.push(actStep);
           yield actStep;
 
@@ -355,12 +355,13 @@ export class AgentExecutor implements IAgentExecutor {
     };
   }
 
-  /** Build ActDeps from current instance state */
-  private get actDeps(): ActDeps {
+  /** Build ActDeps from current instance state and turn metadata */
+  private getActDeps(context: AgentContext): ActDeps {
     return {
       toolRegistry: this.toolRegistry,
       hooks: this.hooks,
       abortController: this.abortController,
+      metadata: context.metadata,
     };
   }
 
@@ -409,7 +410,7 @@ export class AgentExecutor implements IAgentExecutor {
       if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
         // ACT: Execute tools
         this.setState('act');
-        const actStep = await act(this.actDeps, thinkStep.toolCalls);
+        const actStep = await act(this.getActDeps(context), thinkStep.toolCalls);
         steps.push(actStep);
         this.onStep?.(actStep);
 

@@ -34,12 +34,9 @@ export interface AgentErrorInfo extends Omit<BaseErrorInfo, 'category'> {
  * Agent error class
  */
 export class AgentError extends BaseError {
-  override readonly category: AgentErrorCategory;
-
   constructor(info: AgentErrorInfo) {
     super(info as BaseErrorInfo);
     this.name = 'AgentError';
-    this.category = info.category;
   }
 
   /**

@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
 const MAX_RESULTS = 100;
@@ -28,7 +28,7 @@ export class GrepTool extends BuiltinTool {
   readonly name = 'Grep';
   readonly description =
     'Search file contents using regex. Returns matching lines with file paths and line numbers.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       pattern: {

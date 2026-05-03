@@ -193,11 +193,11 @@ export function generateExtensionStatusData(context: CommandContext): Record<str
     model: config?.model,
     conversationCount: conversations?.list().length ?? 0,
     activeConversationId,
-    messageCount: 0, // Would need conversation manager to get this
+    messageCount: conversations?.getActiveMessageCount?.() ?? 0,
     tokenCount,
     activeSkill: skillService?.getActiveSkill()?.name,
     planMode: planMode?.isEnabled() ?? false,
-    executionMode: 'normal', // Would need settings to get this
+    executionMode: config?.executionMode ?? 'normal',
   };
 }
 

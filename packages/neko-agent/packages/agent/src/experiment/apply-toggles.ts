@@ -51,8 +51,6 @@ export interface AblationMarkerHook extends ExecutorHooks {
   disableAgentFirstObservation: boolean;
   /** When true, tool evidence wrappers/policy are disabled. */
   disableAgentFirstToolEvidence: boolean;
-  /** When true, QualityReview evidence wrapper is disabled. */
-  disableAgentFirstQualityReviewEvidence: boolean;
   /** When true, recovery prompt-chain guidance is disabled. */
   disableAgentFirstRecoveryGuidance: boolean;
   /** Agent-first tool-evidence guidance mode override. */
@@ -74,8 +72,6 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
       toggles.agentFirst?.enabled === false || toggles.agentFirst?.observation === false,
     disableAgentFirstToolEvidence:
       toggles.agentFirst?.enabled === false || toggles.agentFirst?.toolEvidence === false,
-    disableAgentFirstQualityReviewEvidence:
-      toggles.agentFirst?.enabled === false || toggles.agentFirst?.qualityReviewEvidence === false,
     disableAgentFirstRecoveryGuidance:
       toggles.agentFirst?.enabled === false || toggles.agentFirst?.recoveryGuidance === false,
     ...(toggles.agentFirst?.toolEvidenceMode !== undefined && {
@@ -111,7 +107,6 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | traitsRegistry: false | traitsRegistry = undefined                         |
  * | settingsHooks: false  | settingsHookLoader = undefined                     |
  * | projectMemory: false  | projectMemoryManager = undefined                   |
- * | journalAsSSOT         | journalAsSSOT = false                              |
  * | compactLogging        | compactLogging = false                             |
  * | autoMemoryExtraction  | autoMemoryExtraction = false                        |
  * | memoryRecall          | memoryRecall = false                               |
@@ -158,10 +153,6 @@ export function applyAblationToggles(
 
   if (toggles.projectMemory === false) {
     config.projectMemoryManager = undefined;
-  }
-
-  if (toggles.journalAsSSOT === false) {
-    config.journalAsSSOT = false;
   }
 
   if (toggles.compactLogging === false) {

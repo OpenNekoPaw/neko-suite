@@ -31,8 +31,6 @@ export interface IConversationIndexStore {
   ensureWorkDir(workDir: string): Promise<void>;
   hasWorkDir(workDir: string): Promise<boolean>;
   upsert(meta: ConversationIndexMeta): Promise<void>;
-  registerAlias(legacyConversationId: string, conversationId: string): Promise<void>;
-  resolveId(conversationId: string): Promise<string | undefined>;
   getMeta(conversationId: string): Promise<ConversationIndexMeta | undefined>;
   listByWorkDir(workDir: string): Promise<ConversationIndexMeta[]>;
   delete(conversationId: string): Promise<void>;
@@ -45,7 +43,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
   private readonly _options: ConversationIndexStoreOptions;
   private readonly _workspaces = new Map<string, string[]>();
   private readonly _conversations = new Map<string, ConversationIndexMeta>();
-  private readonly _aliases = new Map<string, string>();
   private _initialized = false;
   private _dirty = false;
   private _saveTimer?: ReturnType<typeof setTimeout>;
@@ -97,43 +94,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
     }
   }
 
-  async registerAlias(legacyConversationId: string, conversationId: string): Promise<void> {
-    await this._ensureInitialized();
-    if (
-      legacyConversationId.length === 0 ||
-      legacyConversationId === conversationId ||
-      this._aliases.get(legacyConversationId) === conversationId
-    ) {
-      return;
-    }
-
-    this._aliases.set(legacyConversationId, conversationId);
-    this._scheduleSave();
-  }
-
-  async resolveId(conversationId: string): Promise<string | undefined> {
-    await this._ensureInitialized();
-
-    let current = conversationId;
-    const visited = new Set<string>();
-
-    while (!visited.has(current)) {
-      visited.add(current);
-
-      if (this._conversations.has(current)) {
-        return current;
-      }
-
-      const aliasTarget = this._aliases.get(current);
-      if (!aliasTarget) {
-        return current === conversationId ? undefined : current;
-      }
-      current = aliasTarget;
-    }
-
-    return conversationId;
-  }
-
   async getMeta(conversationId: string): Promise<ConversationIndexMeta | undefined> {
     await this._ensureInitialized();
     const meta = this._conversations.get(conversationId);
@@ -161,9 +121,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
       changed = this._removeFromWorkspace(existing.workDir, conversationId) || changed;
     }
 
-    changed = this._removeAlias(conversationId) || changed;
-    changed = this._removeAliasesTargeting(conversationId) || changed;
-
     if (changed) {
       this._scheduleSave();
     }
@@ -190,7 +147,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
     this._workspaces.set(workDir, keptIds);
     for (const conversationId of removedIds) {
       this._conversations.delete(conversationId);
-      this._removeAliasesTargeting(conversationId);
     }
 
     if (removedIds.length > 0) {
@@ -224,9 +180,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
           cloneConversationMeta(meta),
         ]),
       ),
-      ...(this._aliases.size > 0 && {
-        aliases: Object.fromEntries(Array.from(this._aliases.entries())),
-      }),
     };
 
     await this._options.writeFile(this._options.filePath, JSON.stringify(data, null, 2));
@@ -267,19 +220,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
             }
           }
         }
-
-        if (parsed.aliases && typeof parsed.aliases === 'object') {
-          for (const [legacyConversationId, conversationId] of Object.entries(parsed.aliases)) {
-            if (
-              typeof legacyConversationId === 'string' &&
-              legacyConversationId.length > 0 &&
-              typeof conversationId === 'string' &&
-              conversationId.length > 0
-            ) {
-              this._aliases.set(legacyConversationId, conversationId);
-            }
-          }
-        }
       }
     } catch (error) {
       logger.warn('Failed to load conversations index file', { error });
@@ -299,26 +239,6 @@ export class ConversationIndexStore implements IConversationIndexStore {
 
     this._workspaces.set(workDir, nextIds);
     return true;
-  }
-
-  private _removeAlias(legacyConversationId: string): boolean {
-    if (!this._aliases.has(legacyConversationId)) {
-      return false;
-    }
-
-    this._aliases.delete(legacyConversationId);
-    return true;
-  }
-
-  private _removeAliasesTargeting(conversationId: string): boolean {
-    let removed = false;
-    for (const [legacyConversationId, targetId] of this._aliases.entries()) {
-      if (targetId === conversationId) {
-        this._aliases.delete(legacyConversationId);
-        removed = true;
-      }
-    }
-    return removed;
   }
 
   private _scheduleSave(): void {

@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
 const MAX_LINE_LENGTH = 2000;
@@ -16,7 +16,7 @@ export class ReadTool extends BuiltinTool {
   readonly name = 'Read';
   readonly description =
     'Read a file from the filesystem. Returns contents with line numbers. Supports offset/limit for large files.';
-  readonly parameters = {
+  readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       file_path: {
