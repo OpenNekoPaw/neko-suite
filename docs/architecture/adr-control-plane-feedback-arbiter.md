@@ -6,7 +6,7 @@ Partially Adopted / Needs Refresh (2026-04-24，2026-04-26 现状核对；Agent-
 
 > **协议地基对齐（2026-04-25）**：本 ADR 定义的 `StageRegistry` / `ArtifactRegistry` 与 [adr-capability-protocol.md](./adr-capability-protocol.md) 的 `CapabilityRegistry` 共享同一套 **Registry 查询面**（`getByContributor` / `isRegistered` / `onDidChange` 等）。ControlPlane 作为第 7 控制平面不拥有独立的注册/分发基础设施——它复用协议地基的两阶段模型（Registration / Injection），只在其上定义 StageDescriptor / ArtifactDescriptor 两类新的 Registry 条目语义。FeedbackArbiter 的 `beforeToolCall` 钩子挂在协议地基的 Injection 阶段之后。本 ADR 原先独立表述的"ControlPlane 子系统"语义不变，基础设施对齐到协议地基。
 
-> **现状核对（2026-04-26）**：本 ADR 的 Stage / Artifact Registry 与 ControlPlane 仍未落地；`IdcStage` 仍是 `draft | plan | apply` union，`ArtifactKind` 仍是 `draft | plan | task`。但 feedback 方向已经出现轻量实现：`FeedbackCoordinator` 已支持 `IFeedbackArbiter` 注入、信号 history、`evaluatePending()` 与 guidance / escalate-user action。当前代码中的 Arbiter 是**反馈指导层**，尚不是本文目标的**流程仲裁层**；因此本 ADR 的后续重点应从“新建 Arbiter”调整为“收敛并升级现有 FeedbackCoordinator / IFeedbackArbiter 契约”。
+> **现状核对（2026-05-01）**：ControlPlane / StageRegistry / ArtifactRegistry 已有最小落地：`AgentSession` 默认创建 ControlPlane，默认注册 IDC 三阶段，并用 ArtifactRegistry 将 `apply` 语义映射到现有 `task` storage，避免破坏 `.neko/tasks/`。`IdcStage` 与 `ArtifactKind` 的 TypeScript union 仍保留，作为迁移期类型边界。`FeedbackCoordinator` 已支持 `IFeedbackArbiter` 注入、信号 history、`evaluatePending()` 与 guidance / escalate-user action；ControlPlane 返回的 stage guidance 已回注到 `FeedbackGuidanceModule`，参与下一轮 prompt 约束。当前 ControlPlane 已把 repair 类反馈投射为结构化 `retry-stage` / `regress-to` / `restart-run` 请求，但仍采用 Agent-first / prompt-first 执行策略：请求先进入下一轮提示词约束，尚未直接驱动 runner 硬编排跳转。
 
 > **Agent-first 感知边界（2026-04-26）**：ControlPlane / FeedbackArbiter 不替代 Agent 对图片、视频、音频、数据与创作质量的主判断。Agent 形成 `AgentObservation` 与 `DecisionRationale`，工具输出作为可选 evidence；FeedbackArbiter 只管理流程层决策（budget、retry、regress、terminate、escalate）和 Journal 可观察性，不直接判定内容好坏，也不直接调用 Perception tool 或 Subagent。
 
@@ -207,7 +207,7 @@ FeedbackDecision 的五级循环粒度（L0-L4）**首次被形式化**：
 | L3 | restart-run | 整个 IDC run 重启（换 skill / mode） |
 | L4 | escalate-user | 交回用户（approval mode / 仲裁不确定） |
 
-L2 规程事件同步写入 Journal（`feedback.regressed` 事件），可被 Memory 召回与后续分析消费。
+ControlPlane 规程请求同步写入 Journal（`feedback.stage_transition_requested` 事件），其中 `transitionAction: 'regress-to'` 覆盖 L2 回退语义，可被 Memory 召回与后续分析消费。
 
 ### 5. FeedbackPolicy 可插拔，作为消融对象
 

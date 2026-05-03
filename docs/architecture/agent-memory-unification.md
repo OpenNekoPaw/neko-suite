@@ -516,7 +516,6 @@ MessageBus 的消息流走主 Journal 的 `agent_message_*` 事件（§Federatio
 
 ```ts
 interface AblationTogglesPersistence {
-  journalAsSSOT?: false;        // 关闭：退回到旧的 Record+Journal 双写
   compactLogging?: false;        // 关闭：Compact 不写 CompactionEvent（退回旧语义）
   autoMemoryExtraction?: false;  // 已存在：保留
   memoryRecall?: false;          // 关闭 MemoryRecallModule 注入
@@ -525,10 +524,13 @@ interface AblationTogglesPersistence {
 
 **实现补充（2026-04-24）**：
 
-- `journalAsSSOT?: false` 已重新接回 runtime config，并在 `createFileConversationStorage(..., { journalAsSSOT: false })` 侧提供对应回退入口：读取优先走 legacy record path，默认联动 `runtime-fallback`
 - `compactLogging?: false` 控制 compaction provenance 是否落 Journal；关闭时仍允许 in-memory compression
 - `autoMemoryExtraction?: false` 控制 `KeyFactExtractor → ProjectMemoryRouter` 写路径
 - `memoryRecall?: false` 控制 per-turn recall 注入；不影响 `.neko/memory.md` 作为 project memory 状态本身存在
+
+**实现补充（2026-05-01）**：
+
+- `journalAsSSOT?: false` rollback 已移除；Journal projection + `conversations-index.json` 是会话持久化 SSOT，不再通过实验开关退回 Record-first 路径。
 
 ### 10.5 Self-Evaluation（§11.6.9）
 
@@ -565,10 +567,11 @@ Apply 退出 → SelfEvaluationHooks 注入引导 → AI 产生自评结论（�
 
 ### 11.3 回滚策略
 
-所有改动受 `AblationToggles.journalAsSSOT = false` 控制：
+Journal projection 不再支持 rollback 开关；可消融范围仅覆盖 compaction provenance 与 project-memory recall / extraction：
 
-- 关闭时：所有子系统走旧路径
-- 打开时：Journal projection / compaction event / extraction pipeline 全部启用
+- `compactLogging: false`：压缩仍在内存中生效，但不写 CompactionEvent。
+- `autoMemoryExtraction: false`：关闭 KeyFact 写路径。
+- `memoryRecall: false`：关闭 per-turn recall 注入。
 
 Runtime 可切换（重建 AgentSession 生效）。PR-M8 的数据迁移不可回滚，但保留旧文件备份 30 天。
 
@@ -667,6 +670,7 @@ Journal 文件本身会无限增长。是否需要"老事件打包 + 生成 snap
 | 2026-04-24 | PR-M9 public API cleanup：`MemoryRecall` 收敛为 project-only，`@neko/agent` 不再导出 `InMemorySessionMemory` / `CreativeMemoryHooks`，README / ARCHITECTURE 同步更新 | legacy memory 不再暴露给新集成；目标态对外契约与实现保持一致 |
 | 2026-04-24 | PR-M9 internal hard cleanup：删除 `SessionMemory` 共享契约、`InMemorySessionMemory` / `CreativeMemoryHooks` 实现，以及 ablation 中的 legacy `sessionMemory` toggle | legacy session-memory 路径从运行时与实验契约中彻底移除 |
 | 2026-04-24 | PR-M9 persistence rollback 收口：补回 `journalAsSSOT / compactLogging / memoryRecall` toggle，`JournalReader` legacy eventId 改为基于原始行内容的稳定 fallback，`MemoryExtractionEvent` 显式携带 timestamp | ADR §10.4 / §11.3 与实现重新对齐；旧 Journal 回填 ID 的碰撞窗口进一步收窄 |
+| 2026-05-01 | P0 hard cleanup：移除 `journalAsSSOT=false` rollback，Journal projection + `conversations-index.json` 固化为会话持久化 SSOT | 无存量数据约束下删除 legacy Record-first 入口，避免实验开关破坏 runtime 权威来源 |
 
 ---
 

@@ -54,8 +54,8 @@ cli-tui ──→ agent ──→ platform ──→ shared
 │  │  Bootstrap → ChatViewProvider            │           │
 │  │         │         │                      │           │
 │  │  ServiceCollection                       │           │
-│  │    ├─ MessageHandler (消息编排)           │           │
-│  │    ├─ ConversationHandler (会话持久化)    │           │
+│  │    ├─ AgentMessageTurnHandler (消息桥接)  │           │
+│  │    ├─ ConversationBridge (会话桥接/注入)  │           │
 │  │    ├─ SystemPromptManager (代理 Builder)  │           │
 │  │    ├─ AgentRunner (薄包装 AgentSession)   │           │
 │  │    ├─ AgentManager (LRU 多会话池)         │           │

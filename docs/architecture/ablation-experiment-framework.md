@@ -1,6 +1,6 @@
 # 消融实验框架设计方案
 
-> 状态更新（2026-04-24）：代码中的 legacy `sessionMemory` / `disableSessionMemory` toggle 已移除。当前实验实现的 persistence 相关开关已收敛为 `journalAsSSOT`、`compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`；若后文仍出现 `sessionMemory`，应视为早期设计草案而非当前代码。
+> 状态更新（2026-05-01）：代码中的 legacy `sessionMemory` / `disableSessionMemory` / `journalAsSSOT=false` rollback toggle 已移除。Journal projection 是会话持久化 SSOT，不再作为消融变量；当前 persistence / memory 相关开关收敛为 `compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`。
 >
 > **Proposed 扩展（2026-04-24）**：[adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) 拟新增 7 个 FeedbackArbiter 相关 toggle（`feedbackArbiter` / `feedbackPolicy` / `selfEvalSignal` / `memoryConflictSignal` / `regressionEnabled` / `llmConfidenceSignal` / `stageRegistry`）并明确**消融永不作为 stage**的原则。详见文末 "§附录 A：Proposed FeedbackArbiter Toggles"。
 >
@@ -8,10 +8,10 @@
 
 ## 当前实现快照（2026-04-24）
 
-- `AblationToggles` 现为 18 个独立字段，其中 persistence / memory 相关开关已收敛为 `journalAsSSOT`、`compactLogging`、`compression`、`creativeCompression`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`。
+- `AblationToggles` 中 persistence / memory 相关开关已收敛为 `compactLogging`、`compression`、`creativeCompression`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall`；Journal SSOT 不再可关闭。
 - `MemoryHooks` 现在只负责 context compression；project-only memory 的 recall / extraction 由 `AgentSession + MemoryRecall + ProjectMemoryRouter` 驱动。
-- `applyAblationToggles()` 通过 `AblationMarkerHook` 传递 `disableHooks`、`disableCompression`、Skill / ToolInjection 相关标记；`journalAsSSOT`、`compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall` 直接写回 `AgentSessionConfig`。
-- `presets.ts` 已提供 `no-journal-as-ssot` / `no-compact-logging` / `no-project-memory` / `no-auto-memory-extraction` / `no-memory-recall` 变体，不再提供 `no-session-memory`。
+- `applyAblationToggles()` 通过 `AblationMarkerHook` 传递 `disableHooks`、`disableCompression`、Skill / ToolInjection 相关标记；`compactLogging`、`projectMemory`、`autoMemoryExtraction`、`memoryRecall` 直接写回 `AgentSessionConfig`。
+- `presets.ts` 已提供 `no-compact-logging` / `no-project-memory` / `no-auto-memory-extraction` / `no-memory-recall` 变体，不再提供 `no-session-memory` 或 `no-journal-as-ssot`。
 
 ## Context
 
@@ -25,7 +25,7 @@ neko-agent 已具备多层可配置子系统（权限、压缩、Skill、工具�
 
 | 问题 | 初版设计 | 修正后 |
 |------|---------|--------|
-| MemoryHooks 捆绑压缩+会话记忆 | `memory: false` 同时关闭两者 | 现已收敛为 `journalAsSSOT` + `compactLogging` + `compression` + `projectMemory` + `autoMemoryExtraction` + `memoryRecall`；`MemoryHooks` 只负责压缩 |
+| MemoryHooks 捆绑压缩+会话记忆 | `memory: false` 同时关闭两者 | 现已收敛为 `compactLogging` + `compression` + `projectMemory` + `autoMemoryExtraction` + `memoryRecall`；`MemoryHooks` 只负责压缩，Journal SSOT 不再可关闭 |
 | 缺少创意压缩开关 | 未覆盖 `creativeCompression` | 新增独立开关 |
 | Skill 系统 3 个子功能捆绑 | `skillSystem: false` 一刀切 | 拆为 `skillDiscovery` + `skillInjection` + `dynamicToolSets` |
 | 缺少外部集成开关 | 未覆盖 settingsHooks/projectMemory/traitsRegistry | 现已扩展为 `settingsHooks` / `projectMemory` / `autoMemoryExtraction` / `traitsRegistry` 各自独立 |
@@ -111,9 +111,6 @@ export interface AblationToggles {
   /** 项目记忆后端（`.neko/memory.md` 的 recall / injection / 写入目标）
    *  false=禁用 project-only memory 路径 */
   projectMemory?: false;
-  /** Journal projection / provenance 是否仍作为主 persistence 路径
-   *  false=退回 legacy record-first 路径 */
-  journalAsSSOT?: false;
   /** Compaction provenance 是否写回 Journal
    *  false=保留内存压缩，但不写 compaction event */
   compactLogging?: false;
@@ -151,7 +148,6 @@ export interface AblationToggles {
 | `traitsRegistry: false` | Auto 模式 trait-based 决策 | 其他权限逻辑 | ✅ |
 | `settingsHooks: false` | SettingsHookLoader shell 执行 | 内置 hooks | ✅ |
 | `projectMemory: false` | Project memory backend（environment 注入 + recall / extraction 目标） | 压缩、Skill、Permission | ✅ |
-| `journalAsSSOT: false` | Journal projection / legacy record-first fallback / extraction provenance | 普通 journaling、本轮内存态 | ✅ |
 | `compactLogging: false` | `AgentSession._applyCompressionResult()` 的 compaction event 写入 | 压缩本身、Working Memory 替换 | ✅ |
 | `autoMemoryExtraction: false` | `AgentSession._extractProjectMemory()` / `ProjectMemoryRouter.writeFacts()` | project memory recall / injection | ✅ |
 | `memoryRecall: false` | `MemoryRecall.recall()` / `MemoryRecallModule` 注入 | project memory 文件本体、自动抽取 | ✅ |
@@ -324,7 +320,6 @@ export interface ComparisonEntry {
 | **外部集成** | | |
 | `settingsHooks: false` | AgentSessionConfig | 设置 `config.settingsHookLoader = undefined` |
 | `projectMemory: false` | AgentSessionConfig | 设置 `config.projectMemoryManager = undefined`（同时关闭 recall / injection 与写入目标） |
-| `journalAsSSOT: false` | AgentSessionConfig + FileConversationStorage | 设置 `config.journalAsSSOT = false`，并让 storage builder 可切回 legacy record-first 路径 |
 | `compactLogging: false` | AgentSessionConfig | 设置 `config.compactLogging = false`，跳过 compaction event Journal 写入 |
 | `autoMemoryExtraction: false` | AgentSessionConfig | 设置 `config.autoMemoryExtraction = false` |
 | `memoryRecall: false` | AgentSessionConfig | 设置 `config.memoryRecall = false` |
@@ -371,7 +366,7 @@ if (this.compressor && !this.disableCompression) { ... }
 **改动 3**：`experiment/apply-toggles.ts` + session 初始化链路
 
 - `AblationMarkerHook` 负责携带 `disableHooks` / `disableCompression` / `disableSkillDiscovery` / `disableSkillInjection` / `disableDynamicToolSets` / `toolInjectionMode`
-- `journalAsSSOT` / `compactLogging` / `projectMemory` / `autoMemoryExtraction` / `memoryRecall` 直接写回 `AgentSessionConfig`
+- `compactLogging` / `projectMemory` / `autoMemoryExtraction` / `memoryRecall` 直接写回 `AgentSessionConfig`
 - `agent-session-initializer.ts` / `agent-session.ts` 读取这些配置，分别作用到 hook 链、Skill 发现/注入、ToolInjection 以及 project memory / compaction / persistence 路径
 
 **不改动**的文件：session、permission、context、skill、validation、retry 的核心逻辑。
@@ -498,10 +493,6 @@ export const NO_PROJECT_MEMORY: ExperimentVariant = {
   name: 'no-project-memory', description: 'Project memory backend disabled',
   toggles: { projectMemory: false }
 };
-export const NO_JOURNAL_AS_SSOT: ExperimentVariant = {
-  name: 'no-journal-as-ssot', description: 'Journal-backed projection disabled',
-  toggles: { journalAsSSOT: false }
-};
 export const NO_COMPACT_LOGGING: ExperimentVariant = {
   name: 'no-compact-logging', description: 'Compaction event logging disabled',
   toggles: { compactLogging: false }
@@ -542,7 +533,7 @@ export const NO_ALL_SKILLS: ExperimentVariant = {
 export const NO_ALL_EXTERNAL: ExperimentVariant = {
   name: 'no-all-external', description: 'All external integrations disabled',
   toggles: {
-    settingsHooks: false, projectMemory: false, journalAsSSOT: false,
+    settingsHooks: false, projectMemory: false,
     compactLogging: false, autoMemoryExtraction: false, memoryRecall: false,
     traitsRegistry: false
   }
@@ -554,14 +545,14 @@ export const MINIMAL: ExperimentVariant = {
     compression: false, creativeCompression: false,
     skillDiscovery: false, skillInjection: false, dynamicToolSets: false,
     validation: false, retry: false,
-    settingsHooks: false, projectMemory: false, journalAsSSOT: false,
+    settingsHooks: false, projectMemory: false,
     compactLogging: false, autoMemoryExtraction: false, memoryRecall: false,
     traitsRegistry: false,
     thinkingBudget: 0,
   }
 };
 
-/** 标准消融套件：baseline + 15 个单功能关闭变体（合计 16 个变体）
+/** 标准消融套件：baseline + 14 个单功能关闭变体（合计 15 个变体）
  * 说明：toolInjection / permissionMode / maxIterations 属于参数覆盖型 toggle，
  * 默认不进入标准单功能关闭套件，可按实验目标单独添加。 */
 export function createStandardAblationSuite(): ExperimentVariant[]
@@ -718,9 +709,9 @@ session、permission、context、skill、validation、retry 的核心逻辑 — 
 | `packages/neko-agent/packages/cli-tui/src/cli.tsx` | 新增 `nekoagent experiment <prompt>` 命令 |
 | `packages/neko-agent/packages/agent/src/experiment/__tests__/metrics-hooks.test.ts` | 覆盖 token/tool/latency/iteration/reset 指标采集 |
 | `packages/neko-agent/packages/agent/src/experiment/__tests__/experiment-runner.test.ts` | 覆盖 runner 成功、隔离、evaluator、异常、超时与 dispose |
-| `packages/neko-agent/packages/agent/src/session/file-conversation-storage.ts` | `journalAsSSOT` rollback path，支持 legacy record-first 读写回退 |
-| `packages/neko-agent/packages/agent/src/experiment/presets.ts` | 新增 `no-journal-as-ssot` / `no-compact-logging` / `no-auto-memory-extraction` / `no-memory-recall`，移除 legacy `no-session-memory` |
-| `packages/neko-agent/packages/agent/src/experiment/index.ts` | 对外导出新增 persistence rollback presets，避免 public API 与 preset 实现脱节 |
+| `packages/neko-agent/packages/agent/src/session/file-conversation-storage.ts` | Journal projection + conversations-index 作为会话持久化 SSOT，不再提供 legacy record-first fallback |
+| `packages/neko-agent/packages/agent/src/experiment/presets.ts` | 保留 `no-compact-logging` / `no-auto-memory-extraction` / `no-memory-recall`，移除 legacy `no-session-memory` 与 `no-journal-as-ssot` |
+| `packages/neko-agent/packages/agent/src/experiment/index.ts` | 对外导出当前 persistence presets，避免 public API 与 preset 实现脱节 |
 | `packages/neko-agent/packages/agent/src/session/agent-session-initializer.ts` | 读取 ablation marker，接线 Skill discovery / ToolInjection flags |
 | `packages/neko-agent/packages/agent/src/session/agent-session.ts` | project-only memory recall / extraction / compaction logging honor ablation config |
 

@@ -626,7 +626,6 @@ agentFirst: boolean;
 | ---------------------------------- | ----------------------------------------------------------- |
 | `agentFirst.observation`           | 启用 observation/rationale Journal event。                  |
 | `agentFirst.toolEvidence`          | 启用 evidence wrapper 与 tool evidence policy。             |
-| `agentFirst.qualityReviewEvidence` | 启用 QualityReview evidence wrapper。                       |
 | `agentFirst.recoveryGuidance`      | 启用 Skill prompt-chain / feedback recovery guidance 注入；关闭时清空并跳过 pending guidance，不启用 pipeline DSL。 |
 | `agentFirst.confidencePolicy`      | 控制 confidence 下调与 unknown 兼容策略。                   |
 
