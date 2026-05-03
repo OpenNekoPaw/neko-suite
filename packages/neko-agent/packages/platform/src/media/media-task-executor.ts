@@ -21,6 +21,7 @@ import type { MediaTaskManagerDeps } from './types';
 import { getLogger } from '../utils/logger';
 import { resolveProvider } from '@neko/ai-sdk';
 import { generateImage, experimental_generateVideo, experimental_generateSpeech } from 'ai';
+import { materializeImageRequestFileUris } from './media-request-assets';
 
 const logger = getLogger('MediaTaskExecutor');
 
@@ -260,7 +261,7 @@ export class MediaTaskExecutor {
         const imageModel = resolved.image(model.name);
         if (!imageModel) return null;
 
-        const imgReq = request as ImageGenerationRequest;
+        const imgReq = await materializeImageRequestFileUris(request as ImageGenerationRequest);
         const size =
           imgReq.width && imgReq.height ? (`${imgReq.width}x${imgReq.height}` as const) : undefined;
 

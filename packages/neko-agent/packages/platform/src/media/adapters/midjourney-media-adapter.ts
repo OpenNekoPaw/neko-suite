@@ -39,11 +39,11 @@ interface MidjourneyTaskResponse {
 export class MidjourneyMediaAdapter extends BaseMediaAdapter {
   readonly type = 'midjourney';
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'image-to-image'];
   }
 
-  async generateImage(
+  override async generateImage(
     request: ImageGenerationRequest,
     model: Model,
     provider: Provider,
@@ -100,7 +100,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async generateVideo(
+  override async generateVideo(
     _request: VideoGenerationRequest,
     _model: Model,
     _provider: Provider,
@@ -115,7 +115,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async generateAudio(
+  override async generateAudio(
     _request: AudioGenerationRequest,
     _model: Model,
     _provider: Provider,
@@ -130,7 +130,10 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.midjourney-proxy.com';
     const endpoint = `${baseUrl}/mj/task/${externalTaskId}/fetch`;
 
@@ -187,7 +190,7 @@ export class MidjourneyMediaAdapter extends BaseMediaAdapter {
     }
   }
 
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     const baseUrl = provider.apiUrl || 'https://api.midjourney-proxy.com';
     const endpoint = `${baseUrl}/mj/task/${externalTaskId}/cancel`;
 

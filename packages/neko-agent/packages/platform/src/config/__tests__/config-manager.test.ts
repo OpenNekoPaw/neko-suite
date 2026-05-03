@@ -224,6 +224,76 @@ describe('ConfigManager', () => {
       await manager.removeModel('anthropic-claude-sonnet-4');
       expect(manager.getModel('anthropic-claude-sonnet-4')).toBeUndefined();
     });
+
+    it('should import provider credentials from unified config files with later configs winning', async () => {
+      const result = await manager.importProviderCredentialsFromUnifiedConfigs([
+        {
+          providers: [
+            {
+              ...SAMPLE_PROVIDER,
+              apiKey: 'sk-user',
+            },
+            {
+              id: 'openai',
+              name: 'openai',
+              displayName: 'OpenAI',
+              type: 'openai',
+              apiUrl: 'https://api.openai.com/v1',
+              apiKey: 'sk-openai',
+              enabled: true,
+            },
+          ],
+        },
+        {
+          providers: [
+            {
+              ...SAMPLE_PROVIDER,
+              apiKey: 'sk-workspace',
+            },
+          ],
+        },
+      ]);
+
+      expect(manager.getProvider('anthropic')?.apiKey).toBe('sk-workspace');
+      expect(manager.getProvider('openai')?.apiKey).toBe('sk-openai');
+      expect(result.imported.map((item) => item.id)).toEqual(['anthropic', 'openai']);
+      expect(result.failed).toEqual([]);
+    });
+
+    it('should keep importing remaining provider credentials when one provider fails', async () => {
+      const ucm = createMockUserConfigManager({
+        providers: [SAMPLE_PROVIDER],
+      });
+      const updateProviderOverride = ucm.updateProviderOverride;
+      ucm.updateProviderOverride = async (id, override) => {
+        if (id === 'anthropic') {
+          throw new Error('denied');
+        }
+        await updateProviderOverride(id, override);
+      };
+      const failingManager = new ConfigManager({ userConfigManager: ucm });
+
+      const result = await failingManager.importProviderCredentialsFromUnifiedConfigs([
+        {
+          providers: [
+            { ...SAMPLE_PROVIDER, apiKey: 'sk-user' },
+            {
+              id: 'openai',
+              name: 'openai',
+              displayName: 'OpenAI',
+              type: 'openai',
+              apiUrl: 'https://api.openai.com/v1',
+              apiKey: 'sk-openai',
+              enabled: true,
+            },
+          ],
+        },
+      ]);
+
+      expect(result.imported.map((item) => item.id)).toEqual(['openai']);
+      expect(result.failed.map((item) => item.id)).toEqual(['anthropic']);
+      expect(failingManager.getProvider('openai')?.apiKey).toBe('sk-openai');
+    });
   });
 
   describe('helper methods', () => {

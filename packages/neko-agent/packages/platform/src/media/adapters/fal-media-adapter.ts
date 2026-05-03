@@ -85,11 +85,11 @@ export class FalMediaAdapter extends BaseMediaAdapter {
     FAILED: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'image-to-image', 'image-edit'];
   }
 
-  supportsType(type: MediaGenerationType): boolean {
+  override supportsType(type: MediaGenerationType): boolean {
     return this.getSupportedTypes().includes(type);
   }
 
@@ -104,7 +104,7 @@ export class FalMediaAdapter extends BaseMediaAdapter {
   // Image Generation
   // ===========================================================================
 
-  async generateImage(
+  override async generateImage(
     request: ImageGenerationRequest,
     model: Model,
     provider: Provider,
@@ -137,7 +137,10 @@ export class FalMediaAdapter extends BaseMediaAdapter {
   // Task Status
   // ===========================================================================
 
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const [modelId, requestId] = this.parseTaskId(externalTaskId);
 
     // First check status
@@ -196,7 +199,7 @@ export class FalMediaAdapter extends BaseMediaAdapter {
   // Cancel
   // ===========================================================================
 
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     const [modelId, requestId] = this.parseTaskId(externalTaskId);
     // fal.ai uses PUT for cancel (not POST/DELETE)
     await this.request(

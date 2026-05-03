@@ -117,8 +117,12 @@ export interface ImageGenerationRequest extends MediaGenerationRequestBase {
   referenceImageUrl?: string;
   /** Reference image as base64-encoded PNG (alternative to URL, used for inpaint/style-transfer) */
   referenceImageBase64?: string;
+  /** Reference image local URI/path (materialized to base64 before provider execution) */
+  referenceImageUri?: string;
   /** Inpaint mask as base64-encoded grayscale PNG (white = repaint, black = keep) */
   maskBase64?: string;
+  /** Inpaint mask local URI/path (materialized to base64 before provider execution) */
+  maskUri?: string;
   /** Inpaint strength 0.0–1.0 (only meaningful when maskBase64 is set) */
   inpaintStrength?: number;
   /** Image quality setting */
@@ -127,6 +131,8 @@ export interface ImageGenerationRequest extends MediaGenerationRequestBase {
   style?: string;
   /** ControlNet conditioning image as base64-encoded PNG */
   controlImageBase64?: string;
+  /** ControlNet conditioning image local URI/path (materialized to base64 before provider execution) */
+  controlImageUri?: string;
   /** ControlNet mode (canny, depth, pose, etc.) */
   controlMode?: ControlMode;
   /** ControlNet conditioning strength 0.0–1.0 */

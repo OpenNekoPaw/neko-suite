@@ -14,7 +14,7 @@ import {
   writeUserConfig as writeUserConfigFile,
   watchUserConfig as watchUserConfigFile,
   getUserConfigPath,
-} from '@neko/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader';
 import { ensureUserConfig } from './default-config';
 
 /**

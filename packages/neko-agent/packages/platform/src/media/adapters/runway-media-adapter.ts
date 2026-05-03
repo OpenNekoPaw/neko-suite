@@ -48,14 +48,14 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
     FAILED: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video', 'image-to-video'];
   }
 
   /**
    * Build Runway-specific headers
    */
-  protected buildAuthHeader(provider: Provider): Record<string, string> {
+  protected override buildAuthHeader(provider: Provider): Record<string, string> {
     const headers: Record<string, string> = {
       'X-Runway-Version': this.apiVersion,
     };
@@ -68,7 +68,7 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
   /**
    * Generate video using Runway API
    */
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -116,7 +116,10 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/v1/tasks/${externalTaskId}`;
 
     const { data, error } = await this.request<RunwayTaskResponse>(
@@ -158,7 +161,7 @@ export class RunwayMediaAdapter extends BaseMediaAdapter {
   /**
    * Cancel a running task
    */
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     await this.cancelViaEndpoint(`${provider.apiUrl}/v1/tasks/${externalTaskId}/cancel`, provider);
   }
 }

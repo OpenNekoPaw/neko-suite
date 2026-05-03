@@ -189,7 +189,7 @@ export class AnthropicAdapter extends AISdkAdapter {
   /**
    * List available models
    */
-  async listModels(_provider: Provider): Promise<string[]> {
+  override async listModels(_provider: Provider): Promise<string[]> {
     // Anthropic doesn't have a models list API, return known models
     return [
       'claude-opus-4-5-20251101',
@@ -203,7 +203,7 @@ export class AnthropicAdapter extends AISdkAdapter {
   /**
    * List available models with details
    */
-  async listModelsDetailed(_provider: Provider): Promise<ModelInfo[]> {
+  override async listModelsDetailed(_provider: Provider): Promise<ModelInfo[]> {
     const models = await this.listModels(_provider);
     return models.map((id) => this.inferModelCapabilities(id));
   }

@@ -34,10 +34,123 @@ export type {
 
 export { MediaGenerationService } from './media-generation-service';
 export {
+  observeMediaTaskProgress,
+  runMediaTurn,
+  submitMediaTurn,
+  type MediaTurnCategory,
+  type MediaTurnDeliveryEvent,
+  type MediaTurnIgnoredTaskEvent,
+  type MediaTurnModelRef,
+  type MediaTurnProgressErrorEvent,
+  type ObserveMediaTaskProgressInput,
+  type RunMediaTurnInput,
+  type RunMediaTurnResult,
+  type SubmitMediaTurnInput,
+} from './media-turn-dispatcher';
+export {
   downloadMediaOutputs,
   detectMediaExtension,
   type DownloadMediaOptions,
 } from './media-file-downloader';
+export {
+  buildGeneratedMediaAssets,
+  computeAspectRatioLabel,
+  inferGeneratedMediaMimeType,
+  type BuildGeneratedMediaAssetsInput,
+  type GeneratedMediaTaskType,
+} from './media-generated-asset';
+export {
+  createMediaTaskActionCandidate,
+  createMediaTaskView,
+  filterLocalMediaPaths,
+  createMediaTaskProgressView,
+  getMediaTaskConversationId,
+  matchesMediaTaskConversation,
+  toMediaBackgroundTaskStatus,
+  toMediaBackgroundTaskType,
+  type MediaBackgroundTaskStatus,
+  type MediaBackgroundTaskType,
+  type MediaTaskActionCandidate,
+  type MediaTaskOutputView,
+  type MediaTaskProgressView,
+  type MediaTaskProgressViewInput,
+  type MediaTaskResultView,
+  type MediaTaskView,
+  type MediaTaskViewOptions,
+} from './media-task-view';
+export {
+  finalizeCompletedMediaTaskOutputs,
+  getMediaTaskPrimaryOutputUrl,
+  type FinalizeCompletedMediaTaskOutputsInput,
+  type FinalizedMediaTaskOutputs,
+  type GeneratedAssetSink,
+} from './media-task-result';
+export {
+  MEDIA_TASK_SAVE_NOTIFICATION_ACTION,
+  buildMediaTaskProgressDeliveryPlan,
+  isTerminalMediaTaskStatus,
+  type BuildMediaTaskProgressDeliveryPlanInput,
+  type MediaTaskProgressDeliveryPlan,
+  type MediaTaskSaveNotificationPlan,
+} from './media-task-progress-plan';
+export {
+  buildMediaTaskViewDelivery,
+  buildMediaTaskProgressViewDelivery,
+  type BuildMediaTaskProgressViewDeliveryInput,
+  type MediaTaskProgressViewDelivery,
+  type MediaTaskViewDelivery,
+} from './media-task-progress-view';
+export {
+  DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
+  DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
+  MEDIA_TASK_DELIVERY_CONFIG_SECTION,
+  MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
+  MEDIA_TASK_SHOW_SAVE_NOTIFICATION_SETTING_KEY,
+  buildMediaTaskDeliverySettingsPlan,
+  type MediaTaskDeliverySettingsInput,
+  type MediaTaskDeliverySettingsPlan,
+} from './media-task-delivery-settings';
+export {
+  GeneratedAssetIndex,
+  generateAssetId,
+  resolveAssetSubDir,
+  resolveGeneratedDir,
+  type AssetFilter,
+} from './generated-asset-index';
+export {
+  DEFAULT_VISION_PREPROCESS_POLICY,
+  VISION_IMAGE_OUTPUT_MEDIA_TYPE,
+  calculateVisionVideoFrameSize,
+  calculateVisionVideoSampleRange,
+  getDefaultVisionVideoMaxFrames,
+  getVisionMediaKindFromMime,
+  getVisionMediaKindFromPath,
+  isVisionImageMime,
+  isVisionVideoMime,
+  planVisionImagePreprocess,
+  resolveVisionImageAttachmentMediaType,
+  selectVisionVideoSampleTimestamps,
+  uniformVisionVideoSample,
+  type VisionImageMetadata,
+  type VisionImagePreprocessPlan,
+  type VisionMediaKind,
+  type VisionPreprocessPolicy,
+  type VisionVideoFrameSize,
+  type VisionVideoSampleRange,
+  type VisionVideoSegment,
+} from './vision-preprocess-policy';
+export {
+  VisionPreprocessor,
+  type VisionImageMetadataResult,
+  type VisionImageProcessor,
+  type VisionImageTransformInput,
+  type VisionMediaProcessOptions,
+  type VisionProcessedMedia,
+  type VisionPreprocessorDeps,
+  type VisionPreprocessorLogger,
+  type VisionVideoProbeResult,
+  type VisionVideoProcessor,
+} from './vision-preprocessor';
 
 // Factory
 import { ConfigManager } from '../config/config-manager';

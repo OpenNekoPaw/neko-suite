@@ -104,7 +104,7 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
     CANCELED: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return [
       'text-to-image',
       'image-to-image',
@@ -115,7 +115,7 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
     ];
   }
 
-  supportsType(type: MediaGenerationType): boolean {
+  override supportsType(type: MediaGenerationType): boolean {
     return this.getSupportedTypes().includes(type);
   }
 
@@ -123,7 +123,7 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
   // Image Generation (Qwen-Image 2.0)
   // ===========================================================================
 
-  async generateImage(
+  override async generateImage(
     request: ImageGenerationRequest,
     model: Model,
     provider: Provider,
@@ -157,7 +157,7 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
   // Video Generation (Wan 2.7)
   // ===========================================================================
 
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -191,7 +191,10 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
   // Task Status (shared for image and video)
   // ===========================================================================
 
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/tasks/${externalTaskId}`;
 
     const { data, error } = await this.request<DashScopeTaskResponse>(
@@ -256,7 +259,7 @@ export class DashScopeMediaAdapter extends BaseMediaAdapter {
   // Cancel (DashScope does not support cancellation)
   // ===========================================================================
 
-  async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
+  override async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
     // DashScope API does not provide a cancel endpoint
   }
 

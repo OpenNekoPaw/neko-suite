@@ -54,14 +54,14 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
     failed: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video', 'image-to-video'];
   }
 
   /**
    * Generate video using Luma API
    */
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -110,7 +110,10 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`;
 
     const { data, error } = await this.request<LumaGenerationResponse>(
@@ -156,7 +159,7 @@ export class LumaMediaAdapter extends BaseMediaAdapter {
   /**
    * Cancel a running task
    */
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     await this.cancelViaEndpoint(
       `${provider.apiUrl}/dream-machine/v1/generations/${externalTaskId}`,
       provider,

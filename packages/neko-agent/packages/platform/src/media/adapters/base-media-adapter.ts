@@ -140,7 +140,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
       body: options.body ? JSON.parse(options.body as string) : undefined,
     });
 
-    if (result.success) {
+    if (result.success === true) {
       return { data: result.data };
     }
 
@@ -186,7 +186,7 @@ export abstract class BaseMediaAdapter implements MediaAdapter {
     result: HttpResult<T>,
     transform: (data: T) => MediaAdapterResult,
   ): MediaAdapterResult {
-    if (result.success) {
+    if (result.success === true) {
       return transform(result.data);
     }
 

@@ -140,7 +140,11 @@ export class OllamaAdapter extends BaseAdapter {
     }
   }
 
-  async embed(input: string | string[], model: Model, provider: Provider): Promise<number[][]> {
+  override async embed(
+    input: string | string[],
+    model: Model,
+    provider: Provider,
+  ): Promise<number[][]> {
     const apiUrl = this.getApiUrl(provider);
     const inputs = Array.isArray(input) ? input : [input];
     const embeddings: number[][] = [];

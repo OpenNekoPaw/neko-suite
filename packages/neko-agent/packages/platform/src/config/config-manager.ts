@@ -8,8 +8,14 @@
 import type { Provider, Model } from '../types/provider';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset } from '../types/config';
-import type { ChatModelOption, MediaModelType, UnifiedConfig } from '@neko/shared';
+import type {
+  ChatModelOption,
+  GenerationModelConfig,
+  MediaModelType,
+  UnifiedConfig,
+} from '@neko/shared';
 import { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG } from '@neko/shared';
+import { readUserConfig, readWorkspaceConfig } from '@neko/shared/config/config-reader';
 import { type UserConfig, type IUserConfigManager } from './user-config';
 import {
   loadWorkspaceConfig,
@@ -24,6 +30,35 @@ import {
   type ConfigImportResult,
   type CustomProviderConfig,
 } from './config-export-service';
+import {
+  buildAssistantConfiguredProviderViews,
+  buildAssistantConfigState,
+  buildAssistantProviderViews,
+  buildAssistantRuntimeSettingsSnapshot,
+  buildAssistantSettingsResetScalars,
+  buildAssistantSettingsSnapshot,
+  buildDefaultMediaModelOptionIds,
+  mapAssistantSettingsToUnifiedScalars,
+  mapWebviewSettingsToUnifiedScalars,
+  selectAssistantDefaultProvider,
+  selectAssistantProvider,
+  type AssistantConfigState,
+  type AssistantConfiguredProviderView,
+  type AssistantProviderSelection,
+  type AssistantProviderView,
+  type AssistantRuntimeSettingsSnapshot,
+  type AssistantSettingsData,
+  type AssistantSettingsSnapshot,
+} from './assistant-config';
+import {
+  buildAssistantStatusBarPresentation,
+  type AssistantStatusBarPresentation,
+} from './assistant-status-bar';
+import {
+  buildProviderCredentialImports,
+  type ProviderCredentialImportApplyResult,
+  type ProviderCredentialImport,
+} from './config-file-import';
 
 /**
  * Merged configuration
@@ -241,6 +276,79 @@ export class ConfigManager {
     );
   }
 
+  getAssistantStatusBarPresentation(
+    generationConfig?: GenerationModelConfig,
+  ): AssistantStatusBarPresentation {
+    return buildAssistantStatusBarPresentation({
+      enabledModels: this.getEnabledModels(),
+      ...(generationConfig ? { generationConfig } : {}),
+    });
+  }
+
+  getAssistantProviderViews(): AssistantProviderView[] {
+    return buildAssistantProviderViews(this.getConfig());
+  }
+
+  getAssistantConfiguredProviderViews(): AssistantConfiguredProviderView[] {
+    return buildAssistantConfiguredProviderViews(this.getConfig());
+  }
+
+  getAssistantConfigState(): AssistantConfigState {
+    return buildAssistantConfigState(this.getConfig());
+  }
+
+  getAssistantDefaultProvider(): AssistantProviderSelection | undefined {
+    return selectAssistantDefaultProvider(this.getConfig());
+  }
+
+  getAssistantProvider(providerId: string): AssistantProviderSelection | undefined {
+    return selectAssistantProvider(this.getConfig(), providerId);
+  }
+
+  getAssistantSettingsSnapshot(): AssistantSettingsSnapshot {
+    return buildAssistantSettingsSnapshot({
+      defaultProvider: this.getDefaultProviderScalar() ?? null,
+      defaultModel: this.getDefaultModelScalar() ?? null,
+      customSystemPrompt: this.getCustomSystemPrompt(),
+      autoExecuteTools: this.getAutoExecuteTools(),
+      streamResponses: this.getStreamResponses(),
+      showToolCalls: this.getShowToolCalls(),
+      temperature: this.getTemperature(),
+      maxTokens: this.getMaxTokens(),
+      executionMode: this.getExecutionMode(),
+    });
+  }
+
+  getAssistantRuntimeSettingsSnapshot(): AssistantRuntimeSettingsSnapshot {
+    return buildAssistantRuntimeSettingsSnapshot({
+      defaultProvider: this.getDefaultProviderScalar() ?? null,
+      defaultModel: this.getDefaultModelScalar() ?? null,
+      customSystemPrompt: this.getCustomSystemPrompt(),
+      autoExecuteTools: this.getAutoExecuteTools(),
+      streamResponses: this.getStreamResponses(),
+      showToolCalls: this.getShowToolCalls(),
+      temperature: this.getTemperature(),
+      maxTokens: this.getMaxTokens(),
+      executionMode: this.getExecutionMode(),
+      thinkingBudget: this.getThinkingBudget(),
+    });
+  }
+
+  getAssistantSettingsData(): AssistantSettingsData {
+    const config = this.getConfig();
+    const chatModelOptions = this.getChatModelOptions();
+    return {
+      ...this.getAssistantSettingsSnapshot(),
+      ...buildAssistantConfigState(config),
+      chatModelOptions,
+      defaultMediaModels: buildDefaultMediaModelOptionIds({
+        defaultMediaModels: this.getDefaultMediaModels(),
+        chatModelOptions,
+        models: config.models.values(),
+      }),
+    };
+  }
+
   async setModel(model: Model): Promise<void> {
     this.ensureUserConfigManager();
     await this.userConfigManager!.addModel(model);
@@ -381,6 +489,18 @@ export class ConfigManager {
     await this.userConfigManager!.updateScalars(updates);
   }
 
+  async setAssistantSettings(updates: Partial<AssistantSettingsSnapshot>): Promise<void> {
+    await this.setScalars(mapAssistantSettingsToUnifiedScalars(updates));
+  }
+
+  async setAssistantSettingsFromWebview(settings: Record<string, unknown>): Promise<void> {
+    await this.setScalars(mapWebviewSettingsToUnifiedScalars(settings));
+  }
+
+  async resetAssistantSettings(): Promise<void> {
+    await this.setScalars(buildAssistantSettingsResetScalars());
+  }
+
   // ==========================================================================
   // Retry/Timeout Preset Methods
   // ==========================================================================
@@ -403,6 +523,51 @@ export class ConfigManager {
     options: { overwrite?: boolean; includeSecrets?: boolean } = {},
   ): Promise<ConfigImportResult> {
     return this.configExportService.importConfig(data, this, options);
+  }
+
+  async importProviderCredentialsFromUnifiedConfigs(
+    configs: readonly UnifiedConfig[],
+  ): Promise<ProviderCredentialImportApplyResult> {
+    const imports = buildProviderCredentialImports(configs);
+    const imported: ProviderCredentialImport[] = [];
+    const failed: ProviderCredentialImportApplyResult['failed'] = [];
+
+    for (const item of imports) {
+      try {
+        if (this.getProvider(item.id)) {
+          await this.setProviderApiKey(item.id, item.apiKey);
+        } else {
+          await this.setProvider(item.provider);
+        }
+        imported.push(item);
+      } catch (error) {
+        failed.push({ id: item.id, error });
+      }
+    }
+
+    return { imported, failed };
+  }
+
+  async importProviderCredentialsFromConfigFiles(
+    options: {
+      readonly workspacePath?: string;
+    } = {},
+  ): Promise<ProviderCredentialImportApplyResult> {
+    const configs: UnifiedConfig[] = [];
+    const userConfig = readUserConfig();
+    if (userConfig) {
+      configs.push(userConfig);
+    }
+
+    const workspacePath = options.workspacePath ?? this.workspacePath ?? undefined;
+    if (workspacePath) {
+      const workspaceConfig = readWorkspaceConfig(workspacePath);
+      if (workspaceConfig) {
+        configs.push(workspaceConfig);
+      }
+    }
+
+    return this.importProviderCredentialsFromUnifiedConfigs(configs);
   }
 
   async addCustomProvider(config: CustomProviderConfig): Promise<ConfigImportResult> {

@@ -22,6 +22,7 @@ import { downloadMediaOutputs, type DownloadMediaOptions } from './media-file-do
 import { ProviderRegistry } from '../provider/provider-registry';
 import { MediaRoutingManager } from './routing/media-routing-manager';
 import { createMediaTaskInput } from './media-task-executor';
+import { resolveImageGenerationType } from './media-generation-kind';
 
 /**
  * Extended task manager interface with updateOutputData support
@@ -29,8 +30,6 @@ import { createMediaTaskInput } from './media-task-executor';
 export interface IMediaTaskManager extends ITaskManager {
   /** Update task output data (e.g., to store local file paths) */
   updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
-  /** Delete a task */
-  delete?(id: string): Promise<boolean>;
 }
 
 /**
@@ -66,11 +65,7 @@ export class MediaGenerationService {
    * Generate an image
    */
   async generateImage(request: ImageGenerationRequest): Promise<MediaTask> {
-    const generationType: MediaGenerationType = request.referenceImageUrl
-      ? 'image-to-image'
-      : 'text-to-image';
-
-    return this.submitGeneration(generationType, request);
+    return this.submitGeneration(resolveImageGenerationType(request), request);
   }
 
   /**

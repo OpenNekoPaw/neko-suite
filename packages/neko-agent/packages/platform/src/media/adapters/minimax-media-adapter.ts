@@ -70,14 +70,14 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
     Fail: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video'];
   }
 
   /**
    * Generate video using MiniMax API
    */
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -120,7 +120,10 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/v1/query/video_generation?task_id=${externalTaskId}`;
 
     const { data, error } = await this.request<MiniMaxTaskStatusResponse>(
@@ -193,7 +196,7 @@ export class MiniMaxMediaAdapter extends BaseMediaAdapter {
   /**
    * Cancel a running task
    */
-  async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
+  override async cancelTask(_externalTaskId: string, _provider: Provider): Promise<void> {
     // MiniMax does not support task cancellation
   }
 }

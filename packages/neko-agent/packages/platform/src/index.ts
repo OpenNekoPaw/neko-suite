@@ -19,9 +19,11 @@ export * from './types';
 
 export {
   FileUserConfigManager,
+  getUserConfigPath,
   type UserConfig,
   type IUserConfigManager,
 } from './config/user-config';
+export { ensureUserConfig } from './config/default-config';
 
 export { watchWorkspaceConfig, type WorkspaceConfig } from './config/workspace-config';
 
@@ -35,6 +37,95 @@ export {
   type ConfigImportResult,
   type CustomProviderConfig,
 } from './config/config-export-service';
+export {
+  buildAssistantConfigState,
+  buildAssistantConfiguredProviderViews,
+  buildAssistantProviderMutationResultMessage,
+  buildAssistantProviderViews,
+  buildAssistantRuntimeSettingsSnapshot,
+  buildAssistantSettingsDataMessage,
+  buildAssistantSettingsResetScalars,
+  buildAssistantSettingsUpdatedMessage,
+  buildAssistantProviderMutationSettingsUpdate,
+  buildAssistantSettingsSnapshot,
+  buildDefaultMediaModelOptionIds,
+  mapAssistantSettingsToUnifiedScalars,
+  mapWebviewSettingsToUnifiedScalars,
+  selectAssistantDefaultProvider,
+  selectAssistantProvider,
+  type AssistantConfigState,
+  type AssistantConfiguredProviderView,
+  type AssistantExecutionMode,
+  type AssistantProviderModelView,
+  type AssistantProviderMutation,
+  type AssistantProviderMutationResultMessage,
+  type AssistantProviderSelection,
+  type AssistantProviderView,
+  type AssistantRuntimeSettingsSnapshot,
+  type AssistantSettingsData,
+  type AssistantSettingsDataMessage,
+  type AssistantSettingsSnapshot,
+  type AssistantSettingsUpdatedMessage,
+} from './config/assistant-config';
+export {
+  runAssistantProviderConfigMutationRuntime,
+  runAssistantProviderConfigMutationNotificationRuntime,
+  runAssistantProviderMutationRuntime,
+  type AssistantProviderConfigInput,
+  type AssistantProviderConfigMutationNotificationEffects,
+  type AssistantProviderConfigMutationNotificationResult,
+  type AssistantProviderMutationNotificationMessage,
+  type AssistantProviderMutationConfigRuntime,
+  type AssistantProviderMutationOperationResult,
+  type AssistantProviderMutationRuntimeEffects,
+  type AssistantProviderMutationRuntimeRequest,
+  type AssistantProviderMutationRuntimeResult,
+} from './config/assistant-provider-mutation-runtime';
+export {
+  buildAssistantSettingsRuntimeDataMessage,
+  runAssistantSettingsUpdateRuntime,
+  type AssistantSettingsRuntimeEffects,
+} from './config/assistant-settings-runtime';
+export {
+  refreshOllamaModels,
+  type OllamaModelRefreshConfig,
+  type OllamaModelRefreshLogger,
+  type OllamaModelRefreshProviderRegistry,
+  type RefreshOllamaModelsInput,
+  type RefreshOllamaModelsResult,
+} from './config/ollama-model-refresh';
+export {
+  buildAssistantStatusBarPresentation,
+  type AssistantStatusBarPresentation,
+  type BuildAssistantStatusBarPresentationInput,
+} from './config/assistant-status-bar';
+export {
+  buildProviderCredentialImports,
+  runProviderCredentialConfigFileChangeRuntime,
+  runProviderCredentialConfigFileImportRuntime,
+  type ProviderCredentialConfigFileChangeRuntimeEffects,
+  type ProviderCredentialConfigFileChangeRuntimeResult,
+  type ProviderCredentialConfigFileImportLogger,
+  type ProviderCredentialConfigFileImportRuntime,
+  type ProviderCredentialConfigFileImportRuntimeEffects,
+  type ProviderCredentialConfigFileImportRuntimeInput,
+  type ProviderCredentialConfigFileImportRuntimeResult,
+  type ProviderCredentialImportApplyResult,
+  type ProviderCredentialImportFailure,
+  type ProviderCredentialImport,
+} from './config/config-file-import';
+export {
+  MCP_CONFIGURATION_UNAVAILABLE_MESSAGE,
+  buildMCPServerAddedMessage,
+  buildMCPServerAddFailureMessage,
+  buildMCPStdioServerPreset,
+  parseMCPArgsInput,
+  runAddMCPStdioServerRuntime,
+  type AddMCPStdioServerInput,
+  type AddMCPStdioServerResult,
+  type BuildMCPStdioServerPresetInput,
+  type MCPServerConfigWriter,
+} from './config/mcp-server-config';
 
 // =============================================================================
 // Provider Layer
@@ -51,6 +142,56 @@ export { setRootLogger as setPlatformRootLogger } from './utils/logger';
 export { Service, type ServiceConfig } from './service/service';
 export { toSharedService } from './service/shared-service-adapter';
 export { PromptManager } from './service/prompt-manager';
+export {
+  INTERNAL_CHAT_DEFAULT_MAX_TOKENS,
+  runInternalChatRuntime,
+  type InternalChatRuntimeDeps,
+  type InternalChatRuntimeInput,
+  type InternalChatRuntimeLogger,
+  type InternalChatRuntimeService,
+} from './service/internal-chat-runtime';
+
+// =============================================================================
+// Document Layer
+// =============================================================================
+
+export {
+  DocumentReaderRuntime,
+  createDocumentReaderRuntime,
+  estimateSlideCount,
+  isDocumentUrl,
+  isSupportedDocumentPath,
+  stripHtmlToText,
+  type DocumentContent,
+  type DocumentReaderLogger,
+  type DocumentReaderRuntimeDeps,
+  type IDocumentReader,
+} from './document';
+
+// =============================================================================
+// File Operation Layer
+// =============================================================================
+
+export {
+  DEFAULT_NEKO_SETTINGS_TEMPLATE,
+  buildConfigFilePath,
+  buildSettingsFilePlan,
+  buildSvgDownloadPlan,
+  buildSvgDownloadSavedMessage,
+  createOpenFilePlan,
+  detectFileOpenViewer,
+  stripFileProtocol,
+  type EnsureFileOperationPlan,
+  type EnsureFilePlan,
+  type FileOpenViewer,
+  type FileOperationFailurePlan,
+  type FileOperationPlan,
+  type FileOperationSuccessPlan,
+  type NekoSettingsFileSource,
+  type OpenFilePlan,
+  type SaveDialogFilterPlan,
+  type SvgDownloadPlan,
+} from './files';
 
 // =============================================================================
 // Media Layer (service + types only; adapters are internal)
@@ -58,10 +199,81 @@ export { PromptManager } from './service/prompt-manager';
 
 export { MediaGenerationService } from './media/media-generation-service';
 export {
+  observeMediaTaskProgress,
+  runMediaTurn,
+  submitMediaTurn,
+  type MediaTurnCategory,
+  type MediaTurnDeliveryEvent,
+  type MediaTurnIgnoredTaskEvent,
+  type MediaTurnModelRef,
+  type MediaTurnProgressErrorEvent,
+  type ObserveMediaTaskProgressInput,
+  type RunMediaTurnInput,
+  type RunMediaTurnResult,
+  type SubmitMediaTurnInput,
+} from './media/media-turn-dispatcher';
+export {
+  DEFAULT_VISION_PREPROCESS_POLICY,
+  VISION_IMAGE_OUTPUT_MEDIA_TYPE,
+  calculateVisionVideoFrameSize,
+  calculateVisionVideoSampleRange,
+  getDefaultVisionVideoMaxFrames,
+  getVisionMediaKindFromMime,
+  getVisionMediaKindFromPath,
+  isVisionImageMime,
+  isVisionVideoMime,
+  planVisionImagePreprocess,
+  resolveVisionImageAttachmentMediaType,
+  selectVisionVideoSampleTimestamps,
+  uniformVisionVideoSample,
+  type VisionImageMetadata,
+  type VisionImagePreprocessPlan,
+  type VisionMediaKind,
+  type VisionPreprocessPolicy,
+  type VisionVideoFrameSize,
+  type VisionVideoSampleRange,
+  type VisionVideoSegment,
+} from './media/vision-preprocess-policy';
+export {
   downloadMediaOutputs,
   detectMediaExtension,
   type DownloadMediaOptions,
 } from './media/media-file-downloader';
+export {
+  createMediaTaskActionCandidate,
+  createMediaTaskView,
+  getMediaTaskConversationId,
+  matchesMediaTaskConversation,
+  type MediaTaskActionCandidate,
+  type MediaTaskResultView,
+  type MediaTaskView,
+  type MediaTaskViewOptions,
+} from './media/media-task-view';
+export { isTerminalMediaTaskStatus } from './media/media-task-progress-plan';
+export {
+  buildMediaTaskViewDelivery,
+  buildMediaTaskProgressViewDelivery,
+  type BuildMediaTaskProgressViewDeliveryInput,
+  type MediaTaskProgressViewDelivery,
+  type MediaTaskViewDelivery,
+} from './media/media-task-progress-view';
+export {
+  DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
+  DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
+  MEDIA_TASK_DELIVERY_CONFIG_SECTION,
+  MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
+  MEDIA_TASK_SHOW_SAVE_NOTIFICATION_SETTING_KEY,
+  buildMediaTaskDeliverySettingsPlan,
+  type MediaTaskDeliverySettingsInput,
+  type MediaTaskDeliverySettingsPlan,
+} from './media/media-task-delivery-settings';
+export {
+  GeneratedAssetIndex,
+  generateAssetId,
+  resolveAssetSubDir,
+  resolveGeneratedDir,
+  type AssetFilter,
+} from './media/generated-asset-index';
 export type {
   MediaGenerationType,
   MediaTaskStatus,
@@ -81,6 +293,26 @@ export type {
 } from './media/types';
 
 // =============================================================================
+// Marketplace Layer
+// =============================================================================
+
+export {
+  SKILL_MARKET_UNAVAILABLE_ERROR,
+  SkillInstallTarget,
+  SkillMarketService,
+  executeSkillMarketRequest,
+  injectMarketFrontmatter,
+  type ExecuteSkillMarketRequestInput,
+  type SkillInstallTargetOptions,
+  type SkillMarketExecutionEvent,
+  type SkillMarketExecutionLogger,
+  type SkillMarketExecutionRequest,
+  type SkillMarketRuntime,
+  type SkillMarketSearchQuery,
+  type SkillMarketServiceOptions,
+} from './market';
+
+// =============================================================================
 // Factory Functions
 // =============================================================================
 
@@ -95,6 +327,7 @@ import { PromptManager } from './service/prompt-manager';
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
 import { registerMediaAgentTools } from './media/media-agent-tools';
+import { SkillMarketService, type SkillMarketServiceOptions } from './market';
 import { getLogger } from './utils/logger';
 
 const logger = getLogger('Platform');
@@ -114,6 +347,7 @@ export interface PlatformOptions {
    */
   taskManager?: ITaskManager & {
     initialize?(): Promise<void>;
+    resumePendingTasks?(): Promise<string[]>;
     dispose?(): void;
     registerExecutor?(type: string, executor: unknown): void;
     saveRecoveryInfo?(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
@@ -127,6 +361,11 @@ export interface PlatformOptions {
    * Platform no longer creates its own ToolRegistry.
    */
   toolRegistry: IToolRegistry;
+  /**
+   * Optional marketplace support. Extension injects host callbacks such as
+   * skill rescanning; platform owns marketplace business rules.
+   */
+  skillMarket?: SkillMarketServiceOptions;
 }
 
 /**
@@ -143,6 +382,8 @@ export interface Platform {
   prompts: PromptManager;
   /** Media generation service (undefined when taskManager not provided) */
   media: MediaGenerationService | undefined;
+  /** Skill marketplace service (undefined when not configured by host) */
+  skillMarket: SkillMarketService | undefined;
   /** Create a service instance */
   createService: () => Service;
   /** Dispose resources */
@@ -176,13 +417,6 @@ export function createPlatform(options: PlatformOptions): Platform {
   let mediaGenerationService: MediaGenerationService | undefined;
 
   if (mediaTaskManager) {
-    // Initialize task manager to load persisted tasks (fire and forget)
-    if (mediaTaskManager.initialize) {
-      mediaTaskManager.initialize().catch((err) => {
-        logger.error('Failed to initialize task manager', { error: err });
-      });
-    }
-
     // Initialize media platform with all components
     const mediaPlatform = createMediaPlatform({
       configManager,
@@ -194,10 +428,16 @@ export function createPlatform(options: PlatformOptions): Platform {
 
     // Register media generation tools so agents can call GenerateImage, GenerateVideo, etc.
     registerMediaAgentTools(toolRegistry, mediaGenerationService);
+
+    startPlatformTaskManager(mediaTaskManager);
   } else {
     logger.info('taskManager not provided — media generation disabled');
     mediaGenerationService = undefined;
   }
+
+  const skillMarketService = options.skillMarket
+    ? new SkillMarketService(options.skillMarket)
+    : undefined;
 
   // Factory function — model selection is handled inside Service via ModelSelector
   const createService = (): Service => {
@@ -208,9 +448,7 @@ export function createPlatform(options: PlatformOptions): Platform {
   };
 
   const dispose = (): void => {
-    if (mediaTaskManager?.dispose) {
-      mediaTaskManager.dispose();
-    }
+    skillMarketService?.dispose();
     providerRegistry.dispose();
     configManager.dispose();
   };
@@ -221,7 +459,20 @@ export function createPlatform(options: PlatformOptions): Platform {
     tools: toolRegistry,
     prompts: promptManager,
     media: mediaGenerationService,
+    skillMarket: skillMarketService,
     createService,
     dispose,
   };
+}
+
+function startPlatformTaskManager(taskManager: NonNullable<PlatformOptions['taskManager']>): void {
+  void (async () => {
+    await taskManager.initialize?.();
+    const resumed = await taskManager.resumePendingTasks?.();
+    if (resumed && resumed.length > 0) {
+      logger.info(`Resumed ${resumed.length} pending task(s)`);
+    }
+  })().catch((err) => {
+    logger.error('Failed to initialize task manager', { error: err });
+  });
 }

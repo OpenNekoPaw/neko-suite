@@ -58,7 +58,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
     4: 'failed', // failed
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'image-to-image', 'text-to-video', 'image-to-video'];
   }
 
@@ -105,7 +105,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   /**
    * Generate image using LiblibAI API
    */
-  async generateImage(
+  override async generateImage(
     request: ImageGenerationRequest,
     model: Model,
     provider: Provider,
@@ -166,7 +166,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   /**
    * Generate video using LiblibAI API
    */
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -225,7 +225,10 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status
    */
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = `${provider.apiUrl}/api/generate/status?generateUuid=${externalTaskId}`;
 
     const { data, error } = await this.request<LiblibStatusResponse>(
@@ -283,7 +286,7 @@ export class LiblibMediaAdapter extends BaseMediaAdapter {
   /**
    * Cancel a running task
    */
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     const url = `${provider.apiUrl}/api/generate/cancel`;
     await this.request(
       url,

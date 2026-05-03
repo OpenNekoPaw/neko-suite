@@ -5,7 +5,7 @@
  */
 
 import { BaseError, type BaseErrorInfo, calculateBackoff, shouldRetry, sleep } from '@neko/shared';
-import type { PlatformErrorCategory, PlatformErrorInfo } from '../types/error';
+import type { PlatformErrorInfo } from '../types/error';
 
 // Re-export shared utilities for backward compatibility
 export { calculateBackoff, shouldRetry, sleep };
@@ -14,12 +14,9 @@ export { calculateBackoff, shouldRetry, sleep };
  * Platform error with classification
  */
 export class PlatformError extends BaseError {
-  override readonly category: PlatformErrorCategory;
-
   constructor(info: PlatformErrorInfo) {
     super(info as BaseErrorInfo);
     this.name = 'PlatformError';
-    this.category = info.category;
   }
 
   /**

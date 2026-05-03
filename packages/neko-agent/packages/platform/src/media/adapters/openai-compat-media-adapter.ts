@@ -67,7 +67,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
     failed: 0,
   };
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-image', 'text-to-video', 'image-to-video'];
   }
 
@@ -114,7 +114,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   /**
    * Generate image using OpenAI DALL-E compatible API
    */
-  async generateImage(
+  override async generateImage(
     request: ImageGenerationRequest,
     model: Model,
     provider: Provider,
@@ -164,7 +164,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   /**
    * Generate video using Sora-like API
    */
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -233,7 +233,10 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   /**
    * Get task status for async video generation
    */
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const url = this.getMediaEndpoint(provider, 'videoStatus', { taskId: externalTaskId });
 
     const { data, error } = await this.request<OpenAIVideoResponse>(
@@ -281,7 +284,7 @@ export class OpenAICompatMediaAdapter extends BaseMediaAdapter {
   /**
    * Cancel a running task
    */
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     await this.cancelViaEndpoint(
       this.getMediaEndpoint(provider, 'videoCancel', { taskId: externalTaskId }),
       provider,

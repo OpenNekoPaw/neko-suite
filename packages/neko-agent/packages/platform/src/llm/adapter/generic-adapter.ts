@@ -66,6 +66,7 @@ export class GenericAdapter extends BaseAdapter {
     streamFormat: 'sse',
     streamDoneMarker: '[DONE]',
     extraHeaders: {},
+    mediaEndpoints: {},
   };
 
   protected getSupportedCapabilities(): string[] {
@@ -260,9 +261,10 @@ export class GenericAdapter extends BaseAdapter {
       content = message.content.map((part: ContentPart) => {
         if (part.type === 'text') {
           return { type: 'text', text: part.text };
-        } else {
+        } else if (part.type === 'image') {
           return { type: 'image_url', image_url: { url: part.imageUrl } };
         }
+        return { type: 'text', text: part.videoUrl };
       });
     }
 

@@ -204,4 +204,56 @@ describe('registerMediaAgentTools', () => {
       }),
     );
   });
+
+  it('uses runtime media model metadata when GenerateImage omits provider/model args', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateImage',
+      { prompt: 'A mountain village' },
+      {
+        metadata: {
+          mediaModels: {
+            image: { providerId: 'flux-provider', modelId: 'flux-model', category: 'image' },
+          },
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(media.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'flux-provider',
+        modelId: 'flux-model',
+      }),
+    );
+  });
+
+  it('uses runtime audio model metadata for GenerateTTS', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateTTS',
+      { text: 'hello' },
+      {
+        metadata: {
+          mediaModels: {
+            audio: { providerId: 'tts-provider', modelId: 'tts-model', category: 'audio' },
+          },
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(media.generateAudio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'tts-provider',
+        modelId: 'tts-model',
+      }),
+    );
+  });
 });

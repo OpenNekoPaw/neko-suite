@@ -216,12 +216,13 @@ export class AzureAdapter extends BaseAdapter {
       content = message.content.map((part: ContentPart) => {
         if (part.type === 'text') {
           return { type: 'text', text: part.text };
-        } else {
+        } else if (part.type === 'image') {
           return {
             type: 'image_url',
             image_url: { url: part.imageUrl, detail: part.detail },
           };
         }
+        return { type: 'text', text: part.videoUrl };
       });
     }
 

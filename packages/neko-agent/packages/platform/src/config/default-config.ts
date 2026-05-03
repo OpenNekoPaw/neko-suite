@@ -7,7 +7,7 @@
 
 import type { UnifiedConfig } from '@neko/shared';
 import type { ProviderConfig, ModelConfig } from '@neko/shared';
-import { readUserConfig, writeUserConfig } from '@neko/shared/config/config-reader.ts';
+import { readUserConfig, writeUserConfig } from '@neko/shared/config/config-reader';
 
 // =============================================================================
 // Default Providers (4)

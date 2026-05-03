@@ -95,7 +95,11 @@ export class OpenAIAdapter extends AISdkAdapter {
   /**
    * Generate embeddings using AI SDK
    */
-  async embed(input: string | string[], model: Model, provider: Provider): Promise<number[][]> {
+  override async embed(
+    input: string | string[],
+    model: Model,
+    provider: Provider,
+  ): Promise<number[][]> {
     const apiKey = provider.apiKey || process.env[OpenAIAdapter.ENV_KEY_NAME];
     if (!apiKey) {
       throw new Error('OpenAI API key not configured');
@@ -122,7 +126,7 @@ export class OpenAIAdapter extends AISdkAdapter {
   /**
    * Generate image using OpenAI DALL-E
    */
-  async generateImage(
+  override async generateImage(
     prompt: string,
     options: ImageGenerationOptions,
     model: Model,
@@ -134,7 +138,7 @@ export class OpenAIAdapter extends AISdkAdapter {
   /**
    * List available models
    */
-  async listModels(provider: Provider): Promise<string[]> {
+  override async listModels(provider: Provider): Promise<string[]> {
     const models = await this.listModelsDetailed(provider);
     return models.map((m) => m.id);
   }
@@ -142,7 +146,7 @@ export class OpenAIAdapter extends AISdkAdapter {
   /**
    * List available models with details
    */
-  async listModelsDetailed(provider: Provider): Promise<ModelInfo[]> {
+  override async listModelsDetailed(provider: Provider): Promise<ModelInfo[]> {
     return this.httpHelper.listModelsDetailed(provider);
   }
 }

@@ -203,16 +203,18 @@ export abstract class AISdkAdapter implements Adapter {
           // Re-throw so the error propagates to the agent error handler.
           throw part.error;
         } else if (part.type === 'finish') {
+          const usage = part.totalUsage;
           yield {
             id: chunkId,
             model: model.name,
             delta: {},
             finishReason: this.mapFinishReason(part.finishReason),
-            usage: part.usage
+            usage: usage
               ? {
-                  promptTokens: part.usage.promptTokens ?? 0,
-                  completionTokens: part.usage.completionTokens ?? 0,
-                  totalTokens: (part.usage.promptTokens ?? 0) + (part.usage.completionTokens ?? 0),
+                  promptTokens: usage.inputTokens ?? 0,
+                  completionTokens: usage.outputTokens ?? 0,
+                  totalTokens:
+                    usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
                 }
               : undefined,
           };

@@ -15,9 +15,11 @@ import type { ConfigManager } from '../../config/config-manager';
 const GENERATION_TYPE_TO_MEDIA_TYPE: Record<MediaGenerationType, MediaModelType> = {
   'text-to-image': 'image',
   'image-to-image': 'image',
+  'image-edit': 'image',
   'text-to-video': 'video',
   'image-to-video': 'video',
   'video-to-video': 'video',
+  'video-edit': 'video',
   'text-to-audio': 'audio',
   'text-to-music': 'music',
   workflow: 'image', // Default to image for workflow

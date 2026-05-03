@@ -12,6 +12,7 @@ import type {
   IToolRegistry,
   ProviderAdaptationMode,
   ProviderGenerationCapability,
+  ToolExecuteOptions,
 } from '@neko/shared';
 import type { MediaGenerationService } from './media-generation-service';
 
@@ -32,8 +33,9 @@ interface GenerationTargetMetadata {
 async function resolveGenerationPrompt(
   args: Record<string, unknown>,
   capability: ProviderGenerationCapability,
+  defaultProviderId?: string,
 ): Promise<ResolvedGenerationPrompt> {
-  const explicitProviderId = typeof args.providerId === 'string' ? args.providerId : undefined;
+  const explicitProviderId = readOptionalString(args.providerId) ?? defaultProviderId;
   const prompt = typeof args.prompt === 'string' ? args.prompt : '';
   const intent = readMarkdownGenerationIntent(args, capability, prompt);
   const adaptationMode = readProviderAdaptationMode(args);
@@ -182,6 +184,39 @@ function readOptionalString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function resolveToolMediaTarget(
+  args: Record<string, unknown>,
+  options: ToolExecuteOptions | undefined,
+  category: 'image' | 'video' | 'audio' | 'music',
+  fallbackCategory?: 'audio',
+): { providerId?: string; modelId?: string } {
+  const runtimeTarget =
+    readRuntimeMediaModel(options, category) ??
+    (fallbackCategory ? readRuntimeMediaModel(options, fallbackCategory) : undefined);
+
+  return {
+    providerId: readOptionalString(args.providerId) ?? runtimeTarget?.providerId,
+    modelId: readOptionalString(args.modelId) ?? runtimeTarget?.modelId,
+  };
+}
+
+function readRuntimeMediaModel(
+  options: ToolExecuteOptions | undefined,
+  category: 'image' | 'video' | 'audio' | 'music',
+): { providerId: string; modelId: string } | undefined {
+  const mediaModels = options?.metadata?.mediaModels;
+  if (!isRecord(mediaModels)) return undefined;
+
+  const model = mediaModels[category];
+  if (!isRecord(model)) return undefined;
+
+  const providerId = readOptionalString(model.providerId);
+  const modelId = readOptionalString(model.modelId);
+  if (!providerId || !modelId) return undefined;
+
+  return { providerId, modelId };
 }
 
 function readMarkdownGenerationIntent(
@@ -382,18 +417,18 @@ export function registerMediaAgentTools(
         },
         required: [],
       },
-      execute: async (args) => {
+      execute: async (args, options) => {
         const sizeStr = readOptionalString(args.size) ?? '1024x1024';
         const [w, h] = sizeStr.split('x').map(Number);
-        const requestedModelId = readOptionalString(args.modelId);
+        const target = resolveToolMediaTarget(args, options, 'image');
 
         try {
-          const resolved = await resolveGenerationPrompt(args, 'image.generate');
+          const resolved = await resolveGenerationPrompt(args, 'image.generate', target.providerId);
           const task = await media.generateImage({
             prompt: resolved.prompt,
             ...(resolved.negativePrompt ? { negativePrompt: resolved.negativePrompt } : {}),
             ...(resolved.providerId ? { providerId: resolved.providerId } : {}),
-            ...(requestedModelId ? { modelId: requestedModelId } : {}),
+            ...(target.modelId ? { modelId: target.modelId } : {}),
             width: w,
             height: h,
             quality: args.quality as 'standard' | 'hd' | undefined,
@@ -403,7 +438,7 @@ export function registerMediaAgentTools(
               ? {
                   metadata: withGenerationTargetMetadata(resolved.metadata, {
                     ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                    ...(requestedModelId ? { requestedModelId } : {}),
+                    ...(target.modelId ? { requestedModelId: target.modelId } : {}),
                   }),
                 }
               : {}),
@@ -425,7 +460,7 @@ export function registerMediaAgentTools(
                 ? {
                     providerAdaptation: withGenerationTargetMetadata(resolved.metadata, {
                       ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                      ...(requestedModelId ? { requestedModelId } : {}),
+                      ...(target.modelId ? { requestedModelId: target.modelId } : {}),
                       actualProviderId: task.providerId,
                       actualModelId: task.modelId,
                     })?.providerAdaptation,
@@ -506,15 +541,15 @@ export function registerMediaAgentTools(
         },
         required: [],
       },
-      execute: async (args) => {
-        const requestedModelId = readOptionalString(args.modelId);
+      execute: async (args, options) => {
+        const target = resolveToolMediaTarget(args, options, 'video');
 
         try {
-          const resolved = await resolveGenerationPrompt(args, 'video.generate');
+          const resolved = await resolveGenerationPrompt(args, 'video.generate', target.providerId);
           const task = await media.generateVideo({
             prompt: resolved.prompt,
             ...(resolved.providerId ? { providerId: resolved.providerId } : {}),
-            ...(requestedModelId ? { modelId: requestedModelId } : {}),
+            ...(target.modelId ? { modelId: target.modelId } : {}),
             duration: args.duration as number | undefined,
             resolution: args.resolution as string | undefined,
             fps: args.fps as number | undefined,
@@ -522,7 +557,7 @@ export function registerMediaAgentTools(
               ? {
                   metadata: withGenerationTargetMetadata(resolved.metadata, {
                     ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                    ...(requestedModelId ? { requestedModelId } : {}),
+                    ...(target.modelId ? { requestedModelId: target.modelId } : {}),
                   }),
                 }
               : {}),
@@ -544,7 +579,7 @@ export function registerMediaAgentTools(
                 ? {
                     providerAdaptation: withGenerationTargetMetadata(resolved.metadata, {
                       ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                      ...(requestedModelId ? { requestedModelId } : {}),
+                      ...(target.modelId ? { requestedModelId: target.modelId } : {}),
                       actualProviderId: task.providerId,
                       actualModelId: task.modelId,
                     })?.providerAdaptation,
@@ -592,14 +627,17 @@ export function registerMediaAgentTools(
         },
         required: ['prompt'],
       },
-      execute: async (args) => {
+      execute: async (args, options) => {
         const prompt = args.prompt as string;
         const moodStr = args.mood ? ` (mood: ${args.mood})` : '';
         const genreStr = args.genre ? ` (genre: ${args.genre})` : '';
+        const target = resolveToolMediaTarget(args, options, 'music', 'audio');
 
         try {
           const task = await media.generateAudio({
             prompt: `${prompt}${genreStr}${moodStr}`,
+            ...(target.providerId ? { providerId: target.providerId } : {}),
+            ...(target.modelId ? { modelId: target.modelId } : {}),
             duration: args.duration as number | undefined,
             isMusic: true,
             genre: args.genre as string | undefined,
@@ -612,7 +650,7 @@ export function registerMediaAgentTools(
               type: 'audio',
               status: 'queued',
               message: prompt,
-              routedTo: { provider: task.providerId },
+              routedTo: { provider: task.providerId, model: task.modelId },
             },
           };
         } catch (error) {
@@ -655,12 +693,15 @@ export function registerMediaAgentTools(
         },
         required: ['text'],
       },
-      execute: async (args) => {
+      execute: async (args, options) => {
         const text = args.text as string;
+        const target = resolveToolMediaTarget(args, options, 'audio');
 
         try {
           const task = await media.generateAudio({
             prompt: text,
+            ...(target.providerId ? { providerId: target.providerId } : {}),
+            ...(target.modelId ? { modelId: target.modelId } : {}),
             isMusic: false,
             metadata: {
               voice: args.voice,
@@ -676,7 +717,7 @@ export function registerMediaAgentTools(
               type: 'audio',
               status: 'queued',
               message: text,
-              routedTo: { provider: task.providerId },
+              routedTo: { provider: task.providerId, model: task.modelId },
             },
           };
         } catch (error) {

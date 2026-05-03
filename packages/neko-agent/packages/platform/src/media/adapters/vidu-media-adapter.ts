@@ -38,11 +38,11 @@ interface ViduTaskResponse {
 export class ViduMediaAdapter extends BaseMediaAdapter {
   readonly type = 'vidu';
 
-  getSupportedTypes(): MediaGenerationType[] {
+  override getSupportedTypes(): MediaGenerationType[] {
     return ['text-to-video', 'image-to-video'];
   }
 
-  async generateImage(
+  override async generateImage(
     _request: ImageGenerationRequest,
     _model: Model,
     _provider: Provider,
@@ -57,7 +57,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async generateVideo(
+  override async generateVideo(
     request: VideoGenerationRequest,
     model: Model,
     provider: Provider,
@@ -106,7 +106,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async generateAudio(
+  override async generateAudio(
     _request: AudioGenerationRequest,
     _model: Model,
     _provider: Provider,
@@ -121,7 +121,10 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
     };
   }
 
-  async getTaskStatus(externalTaskId: string, provider: Provider): Promise<MediaAdapterResult> {
+  override async getTaskStatus(
+    externalTaskId: string,
+    provider: Provider,
+  ): Promise<MediaAdapterResult> {
     const baseUrl = provider.apiUrl || 'https://api.vidu.com/v1';
     const endpoint = `${baseUrl}/tasks/${externalTaskId}`;
 
@@ -178,7 +181,7 @@ export class ViduMediaAdapter extends BaseMediaAdapter {
     }
   }
 
-  async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
+  override async cancelTask(externalTaskId: string, provider: Provider): Promise<void> {
     const baseUrl = provider.apiUrl || 'https://api.vidu.com/v1';
     const endpoint = `${baseUrl}/tasks/${externalTaskId}/cancel`;
 

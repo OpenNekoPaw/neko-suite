@@ -57,7 +57,7 @@ export class GoogleAdapter extends AISdkAdapter {
   /**
    * List available models
    */
-  async listModels(_provider: Provider): Promise<string[]> {
+  override async listModels(_provider: Provider): Promise<string[]> {
     // Google doesn't have a public models list API, return known models
     return [
       'gemini-2.0-flash-exp',
@@ -71,7 +71,7 @@ export class GoogleAdapter extends AISdkAdapter {
   /**
    * List available models with details
    */
-  async listModelsDetailed(_provider: Provider): Promise<ModelInfo[]> {
+  override async listModelsDetailed(_provider: Provider): Promise<ModelInfo[]> {
     const models = await this.listModels(_provider);
     return models.map((id) => this.inferModelCapabilities(id));
   }

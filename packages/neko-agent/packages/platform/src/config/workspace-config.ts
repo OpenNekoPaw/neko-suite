@@ -16,7 +16,7 @@ import {
   writeWorkspaceConfig as writeWorkspaceConfigFile,
   watchWorkspaceConfig as watchWorkspaceConfigFile,
   getWorkspaceConfigPath,
-} from '@neko/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader';
 
 /**
  * Workspace configuration structure
