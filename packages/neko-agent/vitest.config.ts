@@ -9,6 +9,7 @@ export default defineConfig({
       'packages/extension/src/**/*.test.ts',
       'packages/platform/src/**/*.test.ts',
       'packages/agent/src/**/*.test.ts',
+      'packages/agent-types/src/**/*.test.ts',
       'packages/cli/src/**/*.test.ts',
       'packages/cli-tui/src/**/*.test.ts',
     ],
@@ -44,6 +45,8 @@ export default defineConfig({
       '@neko/shared': path.resolve(__dirname, '../neko-types/src'),
       '@neko/agent': path.resolve(__dirname, 'packages/agent/src'),
       '@neko/platform': path.resolve(__dirname, 'packages/platform/src'),
+      '@neko-agent/types': path.resolve(__dirname, 'packages/agent-types/src'),
+      '@neko/neko-client': path.resolve(__dirname, '../neko-client/src'),
       // Handler tests mock vscode via vi.mock('vscode') — alias ensures resolution
       'vscode': path.resolve(__dirname, 'packages/extension/src/__mocks__/vscode.ts'),
     },

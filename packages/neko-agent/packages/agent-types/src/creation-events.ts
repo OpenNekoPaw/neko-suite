@@ -45,12 +45,6 @@ export interface CreationRunStartedEvent {
   channel: typeof CREATION_CHANNELS.RUN_STARTED;
   runId: string;
   runKind: string;
-  /**
-   * Legacy compatibility mirror of runKind.
-   * @deprecated Prefer `runKind`. This mirror remains only for migration safety.
-   * TODO(P1): delete after workflowId -> runKind migration completes.
-   */
-  workflowId: string;
   at: number;
 }
 

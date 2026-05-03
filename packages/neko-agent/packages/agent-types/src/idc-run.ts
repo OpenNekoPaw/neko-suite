@@ -14,7 +14,7 @@
  *   run-lifecycle record.
  */
 
-import type { IdcStage, StageActivationDecision, StageSkipReason } from './stage';
+import type { IdcStage, StageSkipReason } from './stage';
 import type { Draft } from './draft';
 import type { ExecutionPlan } from './execution-plan';
 import type { Task } from './task';
@@ -75,19 +75,6 @@ export interface IdcRunRoundSummary {
   lastObserveHint?: string;
 }
 
-export function roundSummaryFromDecision(
-  decision: StageActivationDecision,
-  lastObserveHint?: string,
-): IdcRunRoundSummary {
-  return {
-    round: decision.round,
-    activatedStages: decision.activated,
-    skippedStages: decision.skipped,
-    decidedAt: decision.decidedAt,
-    lastObserveHint,
-  };
-}
-
 // =============================================================================
 // Run
 // =============================================================================
@@ -97,12 +84,6 @@ export interface IdcRun {
   id: string;
   /** Run kind / origin label for this Run. */
   runKind: string;
-  /**
-   * Legacy compatibility mirror of runKind.
-   * @deprecated Prefer `runKind`. This mirror remains only for migration safety.
-   * TODO(P1): delete after workflowId -> runKind migration completes.
-   */
-  workflowId: string;
   /** Current status. */
   status: IdcRunStatus;
   /** ms epoch — when the Run was created. */

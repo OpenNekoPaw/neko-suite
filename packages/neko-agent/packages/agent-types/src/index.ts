@@ -6,6 +6,267 @@
 
 // Message protocol
 export type { Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff } from './message';
+export type {
+  CloseCurrentConversationTabInput,
+  CloseCurrentConversationTabProjection,
+  SlashCommandResultEffect,
+  SlashCommandResultProjection,
+  SlashCommandResultProjectionOptions,
+} from './command-result-contract';
+export type {
+  ConnectionServiceType,
+  ConnectionState,
+  ConnectionStateChangeEvent,
+  ConnectionStateListener,
+  ConnectionStatus,
+} from './connection-state';
+export {
+  NEKO_AGENT_LLM_GENERATE_COMMAND,
+  NEKO_AGENT_REGISTER_CAPABILITIES_COMMAND,
+  NEKO_AGENT_REGISTER_SLASH_COMMANDS_COMMAND,
+  NEKO_AI_ASSISTANT_FOCUS_COMMAND,
+  NEKO_MARKET_EXTENSION_ID,
+  NEKO_MARKET_OPEN_SKILLS_COMMAND,
+  NEKO_PUPPET_EXTENSION_ID,
+  buildPluginSlashCommandCommand,
+  type PluginSlashCommandCommandInput,
+} from './extension-command-contract';
+export {
+  NEKO_ENGINE_CLIENT_TIMEOUT_MS,
+  NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND,
+  NEKO_ENGINE_EXTENSION_ID,
+  isNekoEngineFrameServerResult,
+  type NekoEngineFrameServerResult,
+} from './engine-bridge-contract';
+export type { EnabledStateRecord } from './enabled-state';
+export type {
+  PluginSlashCommandDef,
+  PluginSlashCommandInvocation,
+  RegisteredPluginSlashCommand,
+} from './plugin-slash-command';
+export type {
+  MarketplaceProjectionMessage,
+  ChatWorkspaceModelStateInput,
+  ChatWorkspaceModelStateProjection,
+  MessageModelProjection,
+  MessageModelProjectionInput,
+  MarketplaceExecutionEventProjection,
+  MarketplaceRequestProjection,
+  MediaModelDefaults,
+  MediaModelSelectionDefaultsProjection,
+  MediaModelSelectionState,
+  PluginSlashCommandProjection,
+  ProjectFilesProjection,
+  ProjectMentionItem,
+  ProjectMentionItemKind,
+  SessionModeMediaSelectionProjection,
+  SettingsDataProjection,
+  SsoErrorProjection,
+  SsoSessionMessagePayload,
+  SsoSessionProjection,
+} from './config-message-projector';
+export type {
+  AgentStateEntry,
+  AgentStateStoreProjection,
+  ProjectAgentPhaseInput,
+  ProjectAgentStateSnapshotInput,
+  ProjectAgentStoppedInput,
+} from './agent-state-contract';
+export type {
+  ActiveConversationPayload,
+  ActiveConversationProjection,
+  ActiveConversationProjectionInput,
+  ConversationErrorProjectionInput,
+  ConversationMessagesProjection,
+  ConversationStreamingState,
+} from './conversation-ui-contract';
+export type {
+  CompressionErrorProjection,
+  CompressionResultProjection,
+  ContextTokenCountProjection,
+  ProjectCompressionErrorInput,
+  ProjectCompressionResultInput,
+  ProjectContextTokenCountInput,
+} from './context-state-contract';
+export type {
+  AgentBackgroundTask,
+  AgentMediaTaskError,
+  AgentMediaTaskOutput,
+  AgentMediaTaskView,
+  AgentWorkItem,
+  AgentWorkItemBase,
+  AgentWorkItemKind,
+  AgentWorkItemStore,
+  AgentWorkItemTaskStatus,
+  AgentWorkItemTaskStep,
+  AgentWorkItemTaskStepStatus,
+  AgentWorkItemTaskType,
+  SubAgentRuntimeStatus,
+  SubAgentWorkItem,
+  SubAgentWorkItemEvent,
+  SubAgentWorkItemEventType,
+  TaskWorkItem,
+} from './work-item';
+export type {
+  AgentMediaModelCategory,
+  AgentMediaModelSelections,
+  ActiveConversationMessage,
+  AddModelWebviewMessage,
+  AgentStoppedMessage,
+  AgentPhaseMessage,
+  AgentStateSnapshotMessage,
+  AmbientCanvasUpdateMessage,
+  CancelSkillWebviewMessage,
+  CompressionErrorMessage,
+  CompressionResultMessage,
+  ConfigChangedMessage,
+  ConfigStateMessage,
+  ConfigStateWithStatusMessage,
+  ConfirmToolWebviewMessage,
+  ConnectionStateChangedMessage,
+  ConnectionStatesMessage,
+  ContextTokenCountMessage,
+  ConversationListMessage,
+  ConversationOnlyWebviewMessage,
+  DownloadSvgWebviewMessage,
+  DragStartWebviewMessage,
+  EmptyWebviewMessage,
+  ErrorMessage,
+  ExecuteSkillWebviewMessage,
+  ExtensionToWebviewMessage,
+  ExternalMessage,
+  FilePathWebviewMessage,
+  GlobalErrorMessage,
+  GenerationProgressMessage,
+  GenerationProgressPayload,
+  GenerationProgressStatus,
+  HistoryClearedMessage,
+  HooksDataMessage,
+  InjectContextMessage,
+  InvokePluginSlashCommandWebviewMessage,
+  InvokeSlashCommandWebviewMessage,
+  MarketInstallWebviewMessage,
+  MarketErrorMessage,
+  MarketFeaturedMessage,
+  MarketInstalledListMessage,
+  MarketInstallProgressMessage,
+  MarketInstallResultMessage,
+  MarketSearchWebviewMessage,
+  MarketSearchResultMessage,
+  MarketUninstallWebviewMessage,
+  MarketUninstallResultMessage,
+  MarketUpdatesMessage,
+  MediaModelCategory,
+  MediaTaskCreatedMessage,
+  MediaTaskProgressMessage,
+  MermaidErrorWebviewMessage,
+  McpServerTestResultMessage,
+  MessageCancelledMessage,
+  MessageQueuedMessage,
+  MessageOfType,
+  ModelRef,
+  OpenCommandFileWebviewMessage,
+  OpenFileWebviewMessage,
+  OpenPromptConfigWebviewMessage,
+  OpenSettingsFileWebviewMessage,
+  OpenSkillFileWebviewMessage,
+  OpenUrlWebviewMessage,
+  PluginCommandsMessage,
+  PluginsAvailable,
+  PluginsAvailableMessage,
+  PlanActionWebviewMessage,
+  PlanStatusUpdateMessage,
+  PlanStepActionWebviewMessage,
+  PlanStepStatusUpdateMessage,
+  PrefillInputMessage,
+  PromptModeChangedMessage,
+  ProviderMutationResultMessage,
+  ProjectFileMentionInfo,
+  ProjectFilesWebviewMessage,
+  ProjectFilesMessage,
+  ProjectMentionExtra,
+  ProjectMentionExtraType,
+  ProtocolConnectionState,
+  ProtocolConnectionStateMap,
+  ProtocolConnectionStatus,
+  ProtocolModelCategory,
+  RuntimeMediaModelSelections,
+  SearchProjectFilesWebviewMessage,
+  SendMessageWebviewMessage,
+  SendToPluginWebviewMessage,
+  SetPromptModeWebviewMessage,
+  SettingsDataMessage,
+  SettingsUpdatedMessage,
+  SkillConfirmResponseWebviewMessage,
+  SkillInjectionMessage,
+  SkillsDataMessage,
+  SkillsListMessage,
+  SlashCommandResultMessage,
+  SourceFileWebviewMessage,
+  SsoLoginWebviewMessage,
+  SsoErrorMessage,
+  SsoSessionChangedMessage,
+  StreamCompleteMessage,
+  StreamTextMessage,
+  StreamThinkingMessage,
+  SubAgentEventMessage,
+  TabStateMessage,
+  TaskActionWebviewMessage,
+  TaskCreatedMessage,
+  TaskRemovedMessage,
+  TasksUpdatedMessage,
+  TaskUpdatedMessage,
+  ThinkingMessage,
+  TestMcpServerWebviewMessage,
+  ToggleModelWebviewMessage,
+  ToggleProviderWebviewMessage,
+  ToolSkillsChangedMessage,
+  ToolSkillsDataMessage,
+  ToolCallMessage,
+  ToolConfirmationMessage,
+  ToolResultMessage,
+  UpdateSettingsWebviewMessage,
+  UpdateTabStateWebviewMessage,
+  WebviewProviderConfig,
+  WebviewToExtensionMessage,
+} from './webview-protocol';
+export {
+  buildAmbientCanvasUpdateMessage,
+  buildAgentPhaseMessage,
+  buildAgentStateSnapshotMessage,
+  buildConfigChangedMessage,
+  buildAgentStoppedMessage,
+  buildConfigStateMessage,
+  buildConfigStateWithStatusMessage,
+  buildConnectionStateChangedMessage,
+  buildConnectionStatesMessage,
+  buildErrorMessage,
+  buildExternalInputMessage,
+  buildHooksDataMessage,
+  buildGlobalErrorMessage,
+  buildHistoryClearedMessage,
+  buildInjectContextMessage,
+  buildMediaTaskCreatedMessage,
+  buildMediaTaskProgressMessage,
+  buildMessageCancelledMessage,
+  buildPluginCommandsMessage,
+  buildPluginSlashCommandInvocation,
+  buildPluginsAvailableMessage,
+  buildSkillsDataMessage,
+  buildSubAgentEventMessage,
+  buildTabStateMessage,
+  buildTaskCreatedMessage,
+  buildTaskRemovedMessage,
+  buildTaskUpdatedMessage,
+  buildTasksUpdatedMessage,
+  buildThinkingMessage,
+  buildToolConfirmationMessage,
+  buildToolSkillsDataMessage,
+  isSessionMode,
+  parseSendMessageWebviewMessage,
+  parseWebviewToExtensionMessage,
+  projectGenerationProgressMessage,
+} from './webview-protocol';
 
 // Builtin slash command metadata shared across runtime + UI surfaces
 export type {
@@ -22,7 +283,7 @@ export {
 } from './builtin-slash-command';
 
 // Plan (parsed plan-mode markdown — agent / extension / webview share)
-export type { Plan, PlanStep } from './plan';
+export type { Plan, PlanStep, PlanStatus } from './plan';
 
 // Provider
 export type { ConfiguredProvider } from './provider';
@@ -47,7 +308,6 @@ export type {
 
 // Task primitive (Plan-stage user-visible checklist — renamed from TodoList 2026-04-22)
 export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
-export { toTaskStatusCamel, toTaskStatusSnake } from './task';
 
 // IdcRun — run record carrying IDC stage-activation summaries
 export type {
@@ -57,7 +317,6 @@ export type {
   IdcRunArtifactKind,
   IdcRunArtifactBinding,
 } from './idc-run';
-export { roundSummaryFromDecision } from './idc-run';
 
 // Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)
 export type { Draft, DraftStatus } from './draft';
@@ -85,7 +344,6 @@ export type {
   CapabilityKindSkillLike,
   CapabilityKindToolLike,
 } from './capability-kind';
-export { capabilityKindOf, safeCapabilityKindOf } from './capability-kind';
 
 // Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
 export type {
@@ -127,9 +385,26 @@ export { EXECUTION_CHANNELS } from './execution-events';
 export type {
   ConversationSummary,
   OpenTab,
+  TabState,
   TabType,
   PromptMode,
   SessionMode,
   SsoSession,
   SettingsState,
 } from './ui';
+export {
+  EMPTY_TAB_STATE,
+  normalizeTabState,
+  projectTabStateUpdate,
+  resolveActiveTabConversationId,
+  type ProjectTabStateUpdateInput,
+  type ResolveActiveTabConversationIdInput,
+} from './tab-state-projector';
+export {
+  NEKO_PLUGIN_EXTENSION_IDS,
+  type NekoPluginKey,
+  type PluginTransferMediaType,
+  type PluginTransferCommandPlan,
+  type PluginTransferTarget,
+  type ProjectPluginsAvailableInput,
+} from './plugin-transfer-contract';

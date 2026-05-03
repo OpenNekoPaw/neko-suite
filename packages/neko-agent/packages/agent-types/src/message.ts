@@ -84,8 +84,8 @@ export interface Message {
   toolCalls?: ToolCall[];
   isStreaming?: boolean;
   attachments?: MessageAttachment[];
-  /** Associated background task IDs (for inline task cards) */
-  backgroundTaskIds?: string[];
+  /** Associated unified work item IDs (media tasks, tool background tasks, subagents) */
+  workItemIds?: string[];
   /** AI thinking process (legacy, for backward compatibility) */
   thinking?: string;
   isThinkingComplete?: boolean;

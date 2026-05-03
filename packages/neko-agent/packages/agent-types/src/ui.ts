@@ -23,6 +23,11 @@ export interface OpenTab {
   conversationId: string;
 }
 
+export interface TabState {
+  openTabs: OpenTab[];
+  activeTabId: string | null;
+}
+
 export type TabType = 'chat';
 
 // ---------------------------------------------------------------------------

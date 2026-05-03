@@ -34,19 +34,6 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 /** UI-friendly camelCase alias for rendering layers. */
 export type TaskStatusCamel = 'pending' | 'inProgress' | 'completed' | 'failed';
 
-/**
- * Bridge helper — snake → camel. Keep here so both layers import the
- * mapping from the same source.
- */
-export function toTaskStatusCamel(status: TaskStatus): TaskStatusCamel {
-  return status === 'in_progress' ? 'inProgress' : status;
-}
-
-/** Bridge helper — camel → snake. */
-export function toTaskStatusSnake(status: TaskStatusCamel): TaskStatus {
-  return status === 'inProgress' ? 'in_progress' : status;
-}
-
 // =============================================================================
 // Item
 // =============================================================================
