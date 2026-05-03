@@ -39,17 +39,21 @@ function createMockSkillService() {
   };
 }
 
-// Mock toSkillSummary and createToolGuard
-vi.mock('@neko/agent', () => ({
-  toSkillSummary: vi.fn((skill: any) => ({
-    name: skill.name,
-    description: skill.description,
-    slashCommand: skill.slashCommand,
-  })),
-  createToolGuard: vi.fn().mockReturnValue({
-    check: vi.fn().mockReturnValue({ allowed: true }),
-  }),
-}));
+// Mock only the shared utility surface used by the presenter.
+vi.mock('@neko/agent', async () => {
+  const actual = await vi.importActual<typeof import('@neko/agent')>('@neko/agent');
+  return {
+    ...actual,
+    toSkillSummary: vi.fn((skill: any) => ({
+      name: skill.name,
+      description: skill.description,
+      slashCommand: skill.slashCommand,
+    })),
+    createToolGuard: vi.fn().mockReturnValue({
+      check: vi.fn().mockReturnValue({ allowed: true }),
+    }),
+  };
+});
 
 describe('SkillHandler', () => {
   let handler: SkillHandler;
@@ -98,7 +102,7 @@ describe('SkillHandler', () => {
   describe('handleSlashCommand', () => {
     it('should return error when no skillService', async () => {
       handler = new SkillHandler();
-      const result = await handler.handleSlashCommand(webview as any, 'commit');
+      const result = await handler.handleSlashCommand(webview as any, 'commit', 'conv-1');
 
       expect(result).toEqual({ applied: false, error: 'SkillService not initialized' });
     });
@@ -107,7 +111,7 @@ describe('SkillHandler', () => {
       skillService.registry.getSkillByCommand.mockReturnValue(null);
       handler = new SkillHandler({ skillService: skillService as any });
 
-      const result = await handler.handleSlashCommand(webview as any, 'unknown');
+      const result = await handler.handleSlashCommand(webview as any, 'unknown', 'conv-1');
 
       expect(result).toEqual({ applied: false, error: 'Unknown command: /unknown' });
     });
@@ -126,18 +130,62 @@ describe('SkillHandler', () => {
       });
 
       handler = new SkillHandler({ skillService: skillService as any });
-      const result = await handler.handleSlashCommand(webview as any, 'commit', 'fix bug');
+      const result = await handler.handleSlashCommand(
+        webview as any,
+        'commit',
+        'conv-1',
+        'fix bug',
+      );
 
       expect(skillService.apply).toHaveBeenCalledWith(mockSkill, 'fix bug');
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'skillInjection',
+          conversationId: 'conv-1',
           skillName: 'commit',
           systemPrompt: 'You are a commit assistant',
         }),
       );
       expect(result).toEqual(expect.objectContaining({ applied: true, skill: mockSkill }));
-      expect(handler.getActiveSkill()?.skill).toBe(mockSkill);
+      expect(handler.getActiveSkill('conv-1')?.skill).toBe(mockSkill);
+    });
+
+    it('should isolate active slash-command skills by conversation', async () => {
+      const commitSkill = {
+        name: 'commit',
+        description: 'Create a commit',
+        command: 'commit',
+      };
+      const reviewSkill = {
+        name: 'review',
+        description: 'Review code',
+        command: 'review',
+      };
+      skillService.registry.getSkillByCommand.mockImplementation((command: string) =>
+        command === 'commit' ? commitSkill : reviewSkill,
+      );
+      skillService.apply.mockImplementation((skill: { name: string }) => ({
+        name: skill.name,
+        systemPrompt: `Prompt for ${skill.name}`,
+        allowedTools: [],
+      }));
+
+      handler = new SkillHandler({
+        skillService: skillService as any,
+      });
+
+      await handler.handleSlashCommand(webview as any, 'commit', 'conv-1');
+      await handler.handleSlashCommand(webview as any, 'review', 'conv-2');
+
+      expect(handler.getActiveSkill('conv-1')?.skill).toBe(commitSkill);
+      expect(handler.getActiveSkill('conv-2')?.skill).toBe(reviewSkill);
+      expect(webview.postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          type: 'skillInjection',
+          conversationId: 'conv-2',
+          skillName: 'review',
+        }),
+      );
     });
   });
 
@@ -160,9 +208,9 @@ describe('SkillHandler', () => {
   });
 
   describe('isToolAllowed', () => {
-    it('should return true when no conversationId', () => {
+    it('should reject missing conversationId', () => {
       handler = new SkillHandler();
-      expect(handler.isToolAllowed('bash')).toBe(true);
+      expect(handler.isToolAllowed('bash', '')).toBe(false);
     });
 
     it('should delegate to agentManager when conversationId provided', () => {
@@ -182,7 +230,7 @@ describe('SkillHandler', () => {
   describe('handleExecuteSkill', () => {
     it('should return error when no skillService', async () => {
       handler = new SkillHandler();
-      const result = await handler.handleExecuteSkill(webview as any, 'commit', {});
+      const result = await handler.handleExecuteSkill(webview as any, 'commit', 'conv-1');
 
       expect(result).toEqual({ applied: false, error: 'SkillService not initialized' });
     });
@@ -191,7 +239,7 @@ describe('SkillHandler', () => {
       skillService.registry.getSkill.mockReturnValue(null);
       handler = new SkillHandler({ skillService: skillService as any });
 
-      const result = await handler.handleExecuteSkill(webview as any, 'unknown', {});
+      const result = await handler.handleExecuteSkill(webview as any, 'unknown', 'conv-1');
 
       expect(result).toEqual({ applied: false, error: 'Unknown skill: unknown' });
     });
@@ -201,12 +249,37 @@ describe('SkillHandler', () => {
       skillService.registry.getSkill.mockReturnValue(mockSkill);
 
       handler = new SkillHandler({ skillService: skillService as any });
-      const result = await handler.handleExecuteSkill(webview as any, 'review', { pr: '123' });
+      const result = await handler.handleExecuteSkill(webview as any, 'review', 'conv-1', {
+        pr: '123',
+      });
 
       expect(skillService.apply).toHaveBeenCalledWith(mockSkill);
       expect(result).toEqual(expect.objectContaining({ applied: true }));
-      expect(handler.getActiveSkill()).toBeDefined();
-      expect(handler.getActiveSkill()!.skill.name).toBe('review');
+      expect(handler.getActiveSkill('conv-1')).toBeDefined();
+      expect(handler.getActiveSkill('conv-1')!.skill.name).toBe('review');
+    });
+
+    it('should isolate executed skills by active conversation', async () => {
+      const reviewSkill = { name: 'review', description: 'Review code', toolDefinitions: [] };
+      const commitSkill = { name: 'commit', description: 'Create commit', toolDefinitions: [] };
+      skillService.registry.getSkill.mockImplementation((skillId: string) =>
+        skillId === 'review' ? reviewSkill : commitSkill,
+      );
+      skillService.apply.mockImplementation((skill: { name: string }) => ({
+        name: skill.name,
+        systemPrompt: `Prompt for ${skill.name}`,
+        allowedTools: [],
+      }));
+
+      handler = new SkillHandler({
+        skillService: skillService as any,
+      });
+
+      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
+      await handler.handleExecuteSkill(webview as any, 'commit', 'conv-2');
+
+      expect(handler.getActiveSkill('conv-1')?.skill).toBe(reviewSkill);
+      expect(handler.getActiveSkill('conv-2')?.skill).toBe(commitSkill);
     });
   });
 
@@ -215,22 +288,22 @@ describe('SkillHandler', () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       handler = new SkillHandler({ skillService: skillService as any });
-      await handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
 
-      expect(handler.getActiveSkill()).toBeDefined();
+      expect(handler.getActiveSkill('conv-1')).toBeDefined();
 
-      handler.handleCancelSkill('review');
-      expect(handler.getActiveSkill()).toBeUndefined();
+      handler.handleCancelSkill('review', 'conv-1');
+      expect(handler.getActiveSkill('conv-1')).toBeUndefined();
     });
 
     it('should not clear active skill for different name', async () => {
       const mockSkill = { name: 'review', description: 'Review code' };
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       handler = new SkillHandler({ skillService: skillService as any });
-      await handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
 
-      handler.handleCancelSkill('commit');
-      expect(handler.getActiveSkill()).toBeDefined();
+      handler.handleCancelSkill('commit', 'conv-1');
+      expect(handler.getActiveSkill('conv-1')).toBeDefined();
     });
   });
 
@@ -242,13 +315,12 @@ describe('SkillHandler', () => {
       handler = new SkillHandler({
         skillService: skillService as any,
         agentManager: mockAgentManager,
-        getActiveConversationId: () => 'conv-1',
       });
-      await handler.handleExecuteSkill(webview as any, 'review', {});
+      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
 
-      handler.clearActiveSkill();
+      handler.clearActiveSkill('conv-1');
 
-      expect(handler.getActiveSkill()).toBeUndefined();
+      expect(handler.getActiveSkill('conv-1')).toBeUndefined();
       expect(mockAgentManager.clearActiveSkill).toHaveBeenCalledWith('conv-1');
     });
   });

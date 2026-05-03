@@ -7,14 +7,18 @@
  */
 
 import * as vscode from 'vscode';
+import { compressAgentContext, sendAgentContextTokenCount } from '@neko/agent/runtime';
 import type { IAgentManager } from '../../ai/agentManager';
-import type { ConversationHandler } from '../conversationHandler';
+import type { ConversationBridge } from '../conversationBridge';
+import { getLogger } from '../../base';
+
+const logger = getLogger('ContextHandler');
 
 /**
  * Dependencies for ContextHandler
  */
 export interface ContextHandlerDeps {
-  conversations: ConversationHandler;
+  conversations: ConversationBridge;
   agentManager?: IAgentManager;
 }
 
@@ -31,54 +35,36 @@ export class ContextHandler {
   /**
    * Get context token count for a conversation
    */
-  getTokenCount(webview: vscode.Webview, conversationId?: string): void {
-    const activeId = conversationId || this.deps.conversations.getActiveId();
-    if (!activeId || !this.deps.agentManager) {
-      webview.postMessage({
-        type: 'contextTokenCount',
-        conversationId: activeId,
-        tokenCount: 0,
-      });
-      return;
-    }
-
-    const tokenCount = this.deps.agentManager.getContextTokenCount(activeId);
-    webview.postMessage({
-      type: 'contextTokenCount',
-      conversationId: activeId,
-      tokenCount,
+  getTokenCount(webview: vscode.Webview, conversationId: string): void {
+    sendAgentContextTokenCount({
+      conversationId,
+      postMessage: (message) => {
+        void webview.postMessage(message);
+      },
+      ...(this.deps.agentManager
+        ? { getTokenCount: (id: string) => this.deps.agentManager!.getContextTokenCount(id) }
+        : {}),
+      onMissingConversationId: () => {
+        logger.warn('Rejected getTokenCount without conversationId');
+      },
     });
   }
 
   /**
    * Trigger context compression for a conversation
    */
-  async compressContext(webview: vscode.Webview, conversationId?: string): Promise<void> {
-    const activeId = conversationId || this.deps.conversations.getActiveId();
-    if (!activeId || !this.deps.agentManager) {
-      webview.postMessage({
-        type: 'compressionError',
-        conversationId: activeId,
-        error: 'No active conversation or agent manager',
-      });
-      return;
-    }
-
-    try {
-      const result = await this.deps.agentManager.compressContext(activeId);
-      webview.postMessage({
-        type: 'compressionResult',
-        conversationId: activeId,
-        originalTokens: result.originalTokens,
-        compressedTokens: result.compressedTokens,
-        ratio: result.ratio,
-      });
-    } catch (error) {
-      webview.postMessage({
-        type: 'compressionError',
-        conversationId: activeId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+  async compressContext(webview: vscode.Webview, conversationId: string): Promise<void> {
+    await compressAgentContext({
+      conversationId,
+      postMessage: (message) => {
+        void webview.postMessage(message);
+      },
+      ...(this.deps.agentManager
+        ? { compressContext: (id: string) => this.deps.agentManager!.compressContext(id) }
+        : {}),
+      onMissingConversationId: () => {
+        logger.warn('Rejected compressContext without conversationId');
+      },
+    });
   }
 }

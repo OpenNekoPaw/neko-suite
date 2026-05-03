@@ -7,16 +7,17 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
-import type { SettingsManager } from '../settingsManager';
-import type { ProviderManager } from '../providerManager';
+import {
+  buildAssistantSettingsRuntimeDataMessage,
+  runAssistantSettingsUpdateRuntime,
+  type Platform,
+} from '@neko/platform';
+import { buildAssistantSettingsUpdatedMessage } from '@neko/platform/config/assistant-config';
 
 /**
  * Dependencies for SettingsHandler
  */
 export interface SettingsHandlerDeps {
-  settings: SettingsManager;
-  providers?: ProviderManager;
   platform?: Platform;
 }
 
@@ -34,67 +35,38 @@ export class SettingsHandler {
    * Send all settings data to webview
    */
   sendSettings(webview: vscode.Webview): void {
-    if (!this.deps.providers) return;
+    if (!this.deps.platform) return;
 
-    if (!this.deps.settings.selectedProviderId) {
-      const defaultProvider = this.deps.providers.getDefaultProvider();
-      if (defaultProvider) {
-        this.deps.settings.selectedProviderId = defaultProvider.id;
-        this.deps.settings.selectedModelId = defaultProvider.getDefaultModel();
-      }
-    }
-
-    // Get chat model options from Platform ConfigManager
-    const chatModelOptions = this.deps.platform?.config.getChatModelOptions() ?? [];
-
-    // Resolve defaultMediaModels model IDs to ChatModelOption IDs (providerId:modelId format)
-    const rawDefaults = this.deps.platform?.config.getDefaultMediaModels() ?? {};
-    const defaultMediaModels: Partial<Record<string, string>> = {};
-    for (const [category, modelId] of Object.entries(rawDefaults)) {
-      if (!modelId) continue;
-      const option = chatModelOptions.find((o) => o.modelId === modelId);
-      if (option) defaultMediaModels[category] = option.id;
-    }
-
-    webview.postMessage({
-      type: 'settingsData',
-      selectedProviderId: this.deps.settings.selectedProviderId,
-      selectedModelId: this.deps.settings.selectedModelId,
-      systemPrompt: this.deps.settings.customSystemPrompt,
-      autoExecuteTools: this.deps.settings.get('autoExecuteTools'),
-      streamResponses: this.deps.settings.get('streamResponses'),
-      showToolCalls: this.deps.settings.get('showToolCalls'),
-      temperature: this.deps.settings.temperature,
-      maxTokens: this.deps.settings.maxTokens,
-      executionMode: this.deps.settings.executionMode,
-      chatModelOptions,
-      defaultMediaModels,
+    const message = buildAssistantSettingsRuntimeDataMessage({
+      getSettingsData: () => this.deps.platform?.config.getAssistantSettingsData(),
     });
+    if (message) {
+      webview.postMessage(message);
+    }
   }
 
   /**
    * Handle settings update from webview
    */
-  handleUpdateSettings(webview: vscode.Webview, settings: Record<string, unknown>): void {
-    if (settings.providerId !== undefined)
-      this.deps.settings.selectedProviderId = settings.providerId as string;
-    if (settings.modelId !== undefined)
-      this.deps.settings.selectedModelId = settings.modelId as string;
-    if (settings.systemPrompt !== undefined)
-      this.deps.settings.customSystemPrompt = settings.systemPrompt as string;
-    if (settings.autoExecuteTools !== undefined)
-      this.deps.settings.set('autoExecuteTools', settings.autoExecuteTools as boolean);
-    if (settings.streamResponses !== undefined)
-      this.deps.settings.set('streamResponses', settings.streamResponses as boolean);
-    if (settings.showToolCalls !== undefined)
-      this.deps.settings.set('showToolCalls', settings.showToolCalls as boolean);
-    if (settings.temperature !== undefined)
-      this.deps.settings.set('temperature', settings.temperature as number);
-    if (settings.maxTokens !== undefined)
-      this.deps.settings.set('maxTokens', settings.maxTokens as number);
-    if (settings.executionMode !== undefined)
-      this.deps.settings.executionMode = settings.executionMode as 'plan' | 'ask' | 'auto';
+  async handleUpdateSettings(
+    webview: vscode.Webview,
+    settings: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.deps.platform) {
+      webview.postMessage(
+        buildAssistantSettingsUpdatedMessage({
+          success: false,
+          error: 'Platform is not initialized',
+        }),
+      );
+      return;
+    }
 
-    webview.postMessage({ type: 'settingsUpdated', success: true });
+    const platform = this.deps.platform;
+    const message = await runAssistantSettingsUpdateRuntime(settings, {
+      updateSettingsFromWebview: (updates) =>
+        platform.config.setAssistantSettingsFromWebview(updates),
+    });
+    webview.postMessage(message);
   }
 }

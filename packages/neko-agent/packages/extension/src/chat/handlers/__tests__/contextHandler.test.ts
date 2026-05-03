@@ -42,7 +42,7 @@ describe('ContextHandler', () => {
   describe('getTokenCount', () => {
     it('should return 0 when agentManager is unavailable', () => {
       handler = new ContextHandler({ conversations: conversations as any });
-      handler.getTokenCount(webview as any);
+      handler.getTokenCount(webview as any, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'contextTokenCount',
@@ -51,19 +51,16 @@ describe('ContextHandler', () => {
       });
     });
 
-    it('should return 0 when no active conversation', () => {
+    it('should ignore missing conversationId', () => {
       conversations.getActiveId.mockReturnValue(undefined);
       handler = new ContextHandler({
         conversations: conversations as any,
         agentManager: agentManager as any,
       });
-      handler.getTokenCount(webview as any);
+      handler.getTokenCount(webview as any, '');
 
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'contextTokenCount',
-        conversationId: undefined,
-        tokenCount: 0,
-      });
+      expect(agentManager.getContextTokenCount).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalled();
     });
 
     it('should return token count from agentManager', () => {
@@ -71,7 +68,7 @@ describe('ContextHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
       });
-      handler.getTokenCount(webview as any);
+      handler.getTokenCount(webview as any, 'conv-1');
 
       expect(agentManager.getContextTokenCount).toHaveBeenCalledWith('conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith({
@@ -93,16 +90,12 @@ describe('ContextHandler', () => {
   });
 
   describe('compressContext', () => {
-    it('should send error when no active conversation', async () => {
+    it('should ignore compression without conversationId', async () => {
       conversations.getActiveId.mockReturnValue(undefined);
       handler = new ContextHandler({ conversations: conversations as any });
-      await handler.compressContext(webview as any);
+      await handler.compressContext(webview as any, '');
 
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'compressionError',
-        conversationId: undefined,
-        error: 'No active conversation or agent manager',
-      });
+      expect(webview.postMessage).not.toHaveBeenCalled();
     });
 
     it('should send compression result on success', async () => {
@@ -110,7 +103,7 @@ describe('ContextHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
       });
-      await handler.compressContext(webview as any);
+      await handler.compressContext(webview as any, 'conv-1');
 
       expect(agentManager.compressContext).toHaveBeenCalledWith('conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith({
@@ -128,7 +121,7 @@ describe('ContextHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
       });
-      await handler.compressContext(webview as any);
+      await handler.compressContext(webview as any, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'compressionError',

@@ -4,6 +4,7 @@
  */
 
 import type { MultimodalContextPacket } from '@neko/shared';
+import { createAgentTurnContext } from '@neko/agent/runtime';
 import type { IEditorModel } from '../editor/common/editorModel';
 
 // =============================================================================
@@ -110,13 +111,5 @@ export interface IAgentContext {
  * 创建默认 Agent 上下文
  */
 export function createDefaultAgentContext(): IAgentContext {
-  return {
-    activeEditor: undefined,
-    selection: undefined,
-    workspaceRoot: undefined,
-    openFiles: [],
-    projectType: 'unknown',
-    userPreferences: {},
-    custom: {},
-  };
+  return createAgentTurnContext<IEditorModel>();
 }

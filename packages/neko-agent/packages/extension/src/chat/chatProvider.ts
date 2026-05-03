@@ -8,11 +8,10 @@
  */
 
 import * as vscode from 'vscode';
-import { getService, getLogger, handleError } from '../base';
+import { getService, getLogger } from '../base';
 
 const logger = getLogger('ChatProvider');
 import type { Platform } from '@neko/platform';
-import type { ProviderConfig, Skill } from '@neko/shared';
 import type { IAgentManager } from '../ai/agentManager';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import {
@@ -24,10 +23,9 @@ import {
 } from '../bootstrap';
 import { SettingsManager } from './settingsManager';
 import { ProviderManager } from './providerManager';
-import { ConversationHandler } from './conversationHandler';
-import { MessageHandler } from './messageHandler';
+import { ConversationBridge } from './conversationBridge';
+import { AgentMessageTurnHandler } from './agentMessageTurnHandler';
 import { SystemPromptManager } from './systemPromptManager';
-import { WebviewMessage, MessageAttachment, TabState, OpenTab } from './types';
 import { ConfigBridge } from '../services/configBridge';
 import { DragDropBroker } from '../services/DragDropBroker';
 import {
@@ -43,26 +41,47 @@ import {
   ConversationMessageHandler,
 } from './handlers';
 import {
-  createSkillService,
-  builtinSkills,
-  createCommandBackedSkill,
-  createLazyCommandBackedSkill,
+  buildChatAmbientCanvasUpdateMessage,
+  buildChatContextInjectionMessage,
+  buildChatExternalInputMessage,
+  buildChatPluginCommandsMessage,
+  buildChatRestorePlan,
+  buildChatTabStateMessage,
+  buildInvalidWebviewPayloadMessage,
+  createCapabilityRuntimeRefreshRuntime,
+  syncActiveConversationFromTabState,
+  updateTabStateRuntime,
+  type CapabilityRuntimeRefreshRuntime,
+} from '@neko/agent/runtime';
+import {
+  createRuntimeSkillBootstrap,
+  createRuntimeSkillLazySync,
   SkillRegistry,
   type IRuntimeTaskManager,
   type ISubpackageResolver,
 } from '@neko/agent';
-import {
-  getSkillFileService,
-  type SkillScanResult,
-  type LazySkillScanResult,
-} from '../services/SkillFileService';
+import { getSkillFileService } from '../services/SkillFileService';
+import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
+import { postPluginsAvailable } from '../services/pluginTransferBridge';
+import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
   setCapabilityRuntimeSkillService,
 } from '../bootstrap/capabilityBootstrap';
+import {
+  NEKO_AI_ASSISTANT_FOCUS_COMMAND,
+  normalizeTabState,
+  parseWebviewToExtensionMessage,
+  type OpenTab,
+  type TabState,
+} from '@neko-agent/types';
 
-export class ChatViewProvider implements vscode.WebviewViewProvider {
+function getCurrentWorkspaceRoot(): string | undefined {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'neko.aiAssistant';
   private static readonly TAB_STATE_KEY = 'neko.tabState';
 
@@ -71,9 +90,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // Managers
   private readonly _settings: SettingsManager;
   private readonly _systemPrompt: SystemPromptManager;
-  private readonly _conversations: ConversationHandler;
+  private readonly _conversations: ConversationBridge;
   private _providers?: ProviderManager;
-  private _messages?: MessageHandler;
+  private _messages?: AgentMessageTurnHandler;
 
   // Tab state for persistence
   private _tabState: TabState = { openTabs: [], activeTabId: null };
@@ -92,8 +111,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
+  private readonly _webviewDisposables: vscode.Disposable[] = [];
 
-  // Lazy getter for plugin slash commands (set from index.ts after registry is ready)
+  // Lazy getter for plugin slash commands (set by the command host after registry is ready)
   private _pluginCommandsGetter?: () => Array<{
     id: string;
     name: string;
@@ -108,8 +128,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _platform?: Platform;
   private _taskManager?: IRuntimeTaskManager;
   private _configBridge?: ConfigBridge;
-  private readonly _managedDiskSkillNames = new Set<string>();
-  private readonly _managedDiskSkillFallbacks = new Map<string, Skill>();
+  private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   // Note: _routerAskBroker and _workflowPlanHandler were removed alongside
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
@@ -122,7 +141,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // Initialize managers
     this._settings = new SettingsManager();
     this._systemPrompt = new SystemPromptManager();
-    this._conversations = new ConversationHandler(_context);
+    this._conversations = new ConversationBridge(_context, getCurrentWorkspaceRoot());
 
     // Load persisted tab state
     this._loadTabState();
@@ -134,10 +153,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._planModeHandler = new PlanModeHandler({
       systemPrompt: this._systemPrompt,
       conversations: this._conversations,
-      settings: this._settings,
     });
     this._providerHandler = new ProviderHandler({
-      settings: this._settings,
       sendSettings: () => {
         if (this._view?.webview) {
           this._settingsHandler.sendSettings(this._view.webview);
@@ -146,21 +163,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       getWebview: () => this._view?.webview,
     });
     this._integrationHandler = new IntegrationHandler({
-      context: this._context,
       sendSettings: () => {
         if (this._view?.webview) {
           this._settingsHandler.sendSettings(this._view.webview);
         }
       },
     });
-    this._settingsHandler = new SettingsHandler({
-      settings: this._settings,
-    });
+    this._settingsHandler = new SettingsHandler({});
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
     });
     this._conversationMessageHandler = new ConversationMessageHandler({
       conversations: this._conversations,
+      promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
     this._slashCommandHandler = new SlashCommandHandler({
@@ -177,100 +192,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     // Get services - deferred initialization
     this._initializeServices();
-  }
-
-  /**
-   * Build system prompt with available skills summary appended
-   */
-  private _buildSystemPromptWithSkills(
-    skillService: ReturnType<typeof createSkillService>,
-  ): string {
-    const basePrompt = this._systemPrompt.getPrompt();
-    const skills = skillService.registry.listSkills().filter((s) => s.enabled !== false);
-    logger.info(`Building system prompt with ${skills.length} skills`);
-    if (skills.length === 0) return basePrompt;
-
-    const lines = ['\n\n# Available Skills\n'];
-    lines.push(
-      'Skills are specialized instruction sets that get automatically activated when your request matches them. The following skills are registered:\n',
-    );
-    for (const skill of skills) {
-      const desc = skill.description?.split('\n')[0] ?? '';
-      lines.push(`- **${skill.name}**: ${desc}`);
-    }
-    lines.push(
-      "\nUse `ActivateSkill` to activate a skill when the user's request matches a skill domain.",
-      'Use `GetContext` to see all registered skills and current state.',
-    );
-    return basePrompt + lines.join('\n');
-  }
-
-  /**
-   * Populate the skill registry from builtin skills/commands and a disk scan result.
-   * Called once on startup and again whenever the file watcher fires.
-   */
-  private _populateSkillRegistry(
-    skillService: ReturnType<typeof createSkillService>,
-    scanResult: SkillScanResult,
-  ): void {
-    const registry = skillService.registry as SkillRegistry;
-    this._ensureBuiltinSkills(skillService);
-    this._clearManagedDiskSkills(registry);
-    const diskSkills = [
-      ...scanResult.personal.skills,
-      ...scanResult.project.skills,
-      ...scanResult.personal.commands.map((command) => createCommandBackedSkill(command)),
-      ...scanResult.project.commands.map((command) => createCommandBackedSkill(command)),
-    ];
-    for (const skill of diskSkills) {
-      this._rememberManagedSkillFallback(registry, skill.name);
-      registry.registerSkill(skill);
-      this._managedDiskSkillNames.add(skill.name);
-    }
-
-    logger.info(`Skill registry populated: ${skillService.skillCount} skills`, {
-      builtin: builtinSkills.length,
-      personal: scanResult.personal.skills.length,
-      project: scanResult.project.skills.length,
-      personalCommands: scanResult.personal.commands.length,
-      projectCommands: scanResult.project.commands.length,
-    });
-  }
-
-  /**
-   * Populate the skill registry using lazy loading — frontmatter only.
-   * Builtins are still eagerly registered (they are always resident).
-   * Personal/project skills are registered as lazy (content loaded on activation).
-   */
-  private _populateLazySkillRegistry(
-    skillService: ReturnType<typeof createSkillService>,
-    scanResult: LazySkillScanResult,
-  ): void {
-    const registry = skillService.registry as SkillRegistry;
-    this._ensureBuiltinSkills(skillService);
-    this._clearManagedDiskSkills(registry);
-
-    // Personal + project: lazy registration (frontmatter only)
-    // registerLazySkill is on the concrete SkillRegistry, not on ISkillRegistry interface
-    const allLazy = [
-      ...scanResult.personal.skills,
-      ...scanResult.project.skills,
-      ...scanResult.personal.commands.map((command) => createLazyCommandBackedSkill(command)),
-      ...scanResult.project.commands.map((command) => createLazyCommandBackedSkill(command)),
-    ];
-    for (const lazySkill of allLazy) {
-      this._rememberManagedSkillFallback(registry, lazySkill.name);
-      registry.registerLazySkill(lazySkill);
-      this._managedDiskSkillNames.add(lazySkill.name);
-    }
-
-    logger.info(`Skill registry populated (lazy): ${skillService.skillCount} skills`, {
-      builtin: builtinSkills.length,
-      personalLazy: scanResult.personal.skills.length,
-      projectLazy: scanResult.project.skills.length,
-      personalLazyCommands: scanResult.personal.commands.length,
-      projectLazyCommands: scanResult.project.commands.length,
-    });
   }
 
   private _initializeServices(): void {
@@ -302,9 +223,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._context,
         );
 
-        // Initialize ToolSkills in ConfigBridge
-        // Create a temporary AgentRunner to get ToolSkills (they are registered during configure)
-        this._initializeToolSkills();
+        this._capabilityRefreshRuntime = createCapabilityRuntimeRefreshRuntime({
+          getBindings: () => getCapabilityRuntimeBindings(),
+          refreshAgentRuntime: () => this._agentManager?.refreshCapabilityRuntime(),
+          setToolSkills: (toolSkills) => this._configBridge?.setToolSkills(toolSkills),
+          logger,
+        });
+        this._capabilityRefreshRuntime.syncToolSkills();
 
         // Wire up SkillService: create instance, populate from disk, keep in sync.
         // Inject toolRegistry so allowedTools validation warns on unregistered tool references.
@@ -323,58 +248,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           subpackageResolver = undefined;
         }
         const capabilityRuntime = getCapabilityRuntimeBindings();
-        const skillService = createSkillService({
+        const skillRuntimeBootstrap = createRuntimeSkillBootstrap({
           registry: capabilityRuntime.skillRegistry ?? new SkillRegistry(),
           toolRegistry: toolRegistry ?? undefined,
           subpackageResolver,
+          logger,
         });
+        const { skillService } = skillRuntimeBootstrap;
         setCapabilityRuntimeSkillService(skillService);
 
-        this._providers = new ProviderManager(this._context, this._platform);
-        this._messages = new MessageHandler(
+        this._providers = new ProviderManager(this._platform);
+        this._messages = new AgentMessageTurnHandler(
           this._settings,
           this._providers,
           this._conversations,
           this._agentManager,
           this._editorRegistry,
-          () => this._buildSystemPromptWithSkills(skillService),
-          () => this._systemPrompt.isPlanMode(),
+          (conversationId) =>
+            skillRuntimeBootstrap.buildSystemPrompt(this._systemPrompt.getPrompt(conversationId))
+              .prompt,
+          (conversationId) => this._systemPrompt.isPlanMode(conversationId),
           this._platform,
           this._taskManager,
+          (conversationId) => this._skillHandler.getActiveSkill(conversationId),
         );
 
-        // Use lazy scanning: load frontmatter only, content deferred until activation
-        skillFileService
-          .scanSkillsLazy()
-          .then((result) => {
-            this._populateLazySkillRegistry(skillService, result);
-          })
-          .catch((err: unknown) => {
-            logger.warn('Failed to lazy-load initial skills into SkillService:', err);
-          });
-        // On file changes, rescan lazily and repopulate
+        const skillLazySync = createRuntimeSkillLazySync({
+          scanLazy: () => skillFileService.scanSkillsLazy(),
+          populateLazy: (result) => skillRuntimeBootstrap.populateLazy(result),
+          logger,
+        });
+        void skillLazySync.syncInitial();
         this._disposables.push(
           skillFileService.onSkillsChanged(() => {
-            skillFileService
-              .scanSkillsLazy()
-              .then((result) => {
-                this._populateLazySkillRegistry(skillService, result);
-              })
-              .catch((err: unknown) => {
-                logger.warn('Failed to lazy-rescan skills:', err);
-              });
+            void skillLazySync.resync();
           }),
         );
         try {
           const capabilityDiscovery = getCapabilityDiscoveryService();
           this._disposables.push(
             capabilityDiscovery.onDidRegister(() => {
-              this._agentManager?.refreshCapabilityRuntime();
-              void this._initializeToolSkills();
+              this._capabilityRefreshRuntime?.handleCapabilityChanged();
             }),
             capabilityDiscovery.onDidUnregister(() => {
-              this._agentManager?.refreshCapabilityRuntime();
-              void this._initializeToolSkills();
+              this._capabilityRefreshRuntime?.handleCapabilityChanged();
             }),
           );
         } catch {
@@ -383,49 +300,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._skillHandler.setDependencies({
           skillService,
           agentManager: this._agentManager,
-          getActiveConversationId: () => this._conversations.getActiveId(),
         });
 
-        // Bridge skillService to ISkillProvider for meta tools
+        // Bridge host effects into per-conversation skill providers for meta tools.
         if (this._agentManager) {
-          this._agentManager.setSkillProvider({
-            listSkills: () =>
-              skillService.registry
-                .listSkills()
-                .filter((s) => s.enabled !== false)
-                .map((s) => ({ name: s.name, description: s.description || '' })),
-            getActiveSkill: () => {
-              const activeId = this._conversations.getActiveId();
-              if (!activeId) return null;
-              const skill = this._agentManager?.getActiveSkill(activeId);
-              return skill ? { name: skill.name, description: skill.description || '' } : null;
-            },
-            activateSkill: (name: string) => {
-              const activeId = this._conversations.getActiveId();
-              if (!activeId) return { success: false, message: 'No active conversation' };
-
-              // ensureLoaded() handles lazy skills: loads content on first activation
-              void skillService.registry.ensureLoaded(name).then((skill) => {
-                if (!skill) {
-                  logger.warn(`Skill "${name}" not found during activation`);
-                  return;
-                }
-                return skillService.apply(skill).then((injection) => {
-                  this._agentManager?.applySkillInjection(activeId, injection, skill);
-                });
-              });
-              return {
-                success: true,
-                message: `Activated skill "${name}"`,
-              };
-            },
-            deactivateSkill: () => {
-              const activeId = this._conversations.getActiveId();
-              if (!activeId) return { success: false, message: 'No active conversation' };
-              this._agentManager?.clearActiveSkill(activeId);
-              return { success: true, message: 'Skill deactivated' };
-            },
-          });
+          const skillRuntime = this._skillHandler.getRuntime();
+          this._agentManager.setSkillProviderFactory(
+            skillRuntimeBootstrap.createSkillProviderFactory(skillRuntime),
+          );
         }
 
         // Update handler dependencies via type-safe updateDeps()
@@ -435,13 +317,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
         this._fileOperationHandler.updateDeps({ platform: this._platform });
         this._planModeHandler.updateDeps({
-          agentManager: this._agentManager,
-          platform: this._platform,
           messages: this._messages,
         });
-        this._providerHandler.updateDeps({ providers: this._providers });
+        this._providerHandler.updateDeps({ platform: this._platform });
+        this._integrationHandler.updateDeps({ platform: this._platform });
         this._settingsHandler.updateDeps({
-          providers: this._providers,
           platform: this._platform,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
@@ -460,87 +340,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Initialize ToolSkills in ConfigBridge
-   * Prefer the shared capability ToolGroupRegistry so dynamic provider
-   * registrations flow straight into the webview. Falls back to the legacy
-   * temporary AgentRunner path when capability bootstrap is unavailable.
-   */
-  private async _initializeToolSkills(): Promise<void> {
-    if (!this._configBridge) {
-      return;
-    }
-
-    try {
-      const capabilityRuntime = getCapabilityRuntimeBindings();
-      if (capabilityRuntime.toolGroupRegistry) {
-        this._configBridge.setToolSkills(
-          capabilityRuntime.toolGroupRegistry.list().map((toolSkill) => ({ ...toolSkill })),
-        );
-        return;
-      }
-
-      if (!this._agentManager || !this._platform) {
-        return;
-      }
-
-      // Get or create a temporary agent runner
-      const tempRunner = this._agentManager.getOrCreate('__toolskill_init__');
-
-      // Configure it to initialize ToolSkillRegistry
-      await tempRunner.configure({
-        platform: this._platform,
-        systemPrompt: '',
-        maxIterations: 1,
-        autoExecuteTools: false,
-      });
-
-      // Get ToolSkills and pass to ConfigBridge
-      const toolSkills = tempRunner.getToolSkills();
-      this._configBridge.setToolSkills(toolSkills);
-
-      // Clean up the temporary runner
-      this._agentManager.remove('__toolskill_init__');
-    } catch (error) {
-      logger.error('Failed to initialize ToolSkills:', error);
-    }
-  }
-
-  private _ensureBuiltinSkills(skillService: ReturnType<typeof createSkillService>): void {
-    for (const skill of builtinSkills) {
-      if (!skillService.registry.getSkill(skill.name)) {
-        skillService.registry.registerSkill({
-          ...skill,
-          source: 'builtin' as const,
-          enabled: true,
-        });
-      }
-    }
-  }
-
-  private _rememberManagedSkillFallback(registry: SkillRegistry, skillName: string): void {
-    if (this._managedDiskSkillFallbacks.has(skillName)) {
-      return;
-    }
-    const existing = registry.getSkill(skillName);
-    if (existing) {
-      this._managedDiskSkillFallbacks.set(skillName, existing);
-    }
-  }
-
-  private _clearManagedDiskSkills(registry: SkillRegistry): void {
-    for (const skillName of this._managedDiskSkillNames) {
-      const fallback = this._managedDiskSkillFallbacks.get(skillName);
-      if (fallback) {
-        registry.registerSkill(fallback);
-      } else {
-        registry.unregisterSkill(skillName);
-      }
-    }
-    this._managedDiskSkillNames.clear();
-    this._managedDiskSkillFallbacks.clear();
-  }
-
-  /**
    * Resolve the webview view when it becomes visible
    */
   public resolveWebviewView(
@@ -548,6 +347,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ) {
+    this._disposeWebviewBindings();
     this._view = webviewView;
 
     // Include workspace folders in localResourceRoots for accessing generated media files
@@ -561,13 +361,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._setupMessageHandlers(webviewView.webview);
 
     // Notify webview which neko-suite plugins are installed (ADR-5)
-    this._sendPluginsAvailable(webviewView.webview);
+    postPluginsAvailable(webviewView.webview);
 
-    webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible) {
-        this._restoreState();
-      }
-    });
+    this._webviewDisposables.push(
+      webviewView.onDidChangeVisibility(() => {
+        if (webviewView.visible) {
+          this._restoreState();
+        }
+      }),
+    );
   }
 
   /**
@@ -576,9 +378,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    */
   public sendAmbientCanvasContext(
     nodes: import('../services/canvasAmbientContext').SelectedNodeSummary[],
+    conversationId: string | null = this._conversations.getActiveId(),
   ): void {
     if (!this._view?.webview) return;
-    this._view.webview.postMessage({ type: 'ambientCanvasUpdate', nodes });
+    this._view.webview.postMessage(buildChatAmbientCanvasUpdateMessage({ nodes, conversationId }));
   }
 
   /**
@@ -586,7 +389,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    * Used for low-priority notifications (e.g. generation progress) that don't
    * require the panel to be focused.
    */
-  public postMessage(message: Record<string, unknown>): void {
+  public postMessage(message: unknown): void {
     if (!this._view?.webview) return;
     this._view.webview.postMessage(message);
   }
@@ -595,7 +398,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return this._view?.webview;
   }
 
-  /** Expose the DnD broker so index.ts can register query/clear commands. */
+  /** Expose the DnD broker so the command host can register query/clear commands. */
   get dndBroker(): DragDropBroker {
     return this._dndBroker;
   }
@@ -607,12 +410,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   public async sendContextPayload(
     payload: import('@neko/shared').AgentContextPayload,
   ): Promise<void> {
-    await vscode.commands.executeCommand('neko.aiAssistant.focus');
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
     if (!this._view?.webview) {
       logger.warn('AI Assistant webview not available for sendContextPayload');
       return;
     }
-    this._view.webview.postMessage({ type: 'injectContext', payload });
+    this._view.webview.postMessage(
+      buildChatContextInjectionMessage(payload, {
+        conversationId: this._conversations.getActiveId(),
+      }),
+    );
   }
 
   /**
@@ -621,18 +428,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    */
   public async sendMessageToAssistant(message: string, autoSend: boolean = true): Promise<void> {
     // Focus the AI Assistant panel
-    await vscode.commands.executeCommand('neko.aiAssistant.focus');
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
 
     if (!this._view?.webview) {
       logger.warn('AI Assistant webview not available');
       return;
     }
 
-    // Send message to webview to prefill or auto-send
-    this._view.webview.postMessage({
-      type: autoSend ? 'externalMessage' : 'prefillInput',
-      message,
-    });
+    this._view.webview.postMessage(buildChatExternalInputMessage({ message, autoSend }));
   }
 
   /**
@@ -649,7 +452,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }>,
   ): void {
     if (!this._view?.webview) return;
-    this._view.webview.postMessage({ type: 'pluginCommands', commands });
+    this._view.webview.postMessage(buildChatPluginCommandsMessage(commands));
   }
 
   /**
@@ -675,375 +478,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // Register webview for broadcasts (skills, commands, etc.)
     const postMessageFn = (msg: unknown) => webview.postMessage(msg);
     if (this._configBridge) {
-      this._configBridge.registerWebview(postMessageFn);
+      this._webviewDisposables.push(this._configBridge.registerWebview(postMessageFn));
     }
 
-    webview.onDidReceiveMessage(async (message: WebviewMessage) => {
-      // 1. Delegate config messages to ConfigBridge
-      if (this._configBridge) {
-        const handled = await this._configBridge.handleMessage(
-          message as { type: string; [key: string]: unknown },
-          postMessageFn,
-        );
-        if (handled) return;
-      }
-
-      // Note: workflow/plan* / workflow/router* / pipelineGate* webview
-      // messages were removed with the orchestrator layer. Plan handling
-      // is now the Agent's job via IDC artifacts + approvalEngine.
-
-      // 3. Handle chat-specific messages
-      switch (message.type) {
-        // Message handling
-        case 'sendMessage':
-          this._messages?.handleUserMessage(
-            webview,
-            message.message as string,
-            message.providerId as string | undefined,
-            message.modelId as string | undefined,
-            message.attachments as MessageAttachment[] | undefined,
-            message.promptId as string | undefined,
-            message.conversationId as string | undefined,
-            message.sessionMode as string | undefined,
-            message.mediaProviderId as string | undefined,
-            message.mediaModelId as string | undefined,
-            message.agentMediaModels as
-              | {
-                  image?: { providerId?: string; modelId: string };
-                  video?: { providerId?: string; modelId: string };
-                  audio?: { providerId?: string; modelId: string };
-                }
-              | undefined,
-          );
-          break;
-        case 'searchProjectFiles':
-          this._messages?.searchProjectFiles(webview, message.filter as string);
-          break;
-        case 'confirmTool':
-          this._conversationMessageHandler.handleConfirmTool(
-            message.toolCallId as string,
-            message.approved as boolean,
-            message.conversationId as string,
-          );
-          break;
-
-        // Plan mode messages
-        case 'planApprove':
-          this._planModeHandler.handlePlanApprove(
-            webview,
-            message.planId as string,
-            message.conversationId as string,
-            message.filePath as string | undefined,
-          );
-          break;
-        case 'planReject':
-          this._planModeHandler.handlePlanReject(
-            webview,
-            message.planId as string,
-            message.conversationId as string,
-          );
-          break;
-        case 'planStepApprove':
-          this._planModeHandler.handlePlanStepAction(
-            webview,
-            message.planId as string,
-            message.stepId as string,
-            message.conversationId as string,
-            'approve',
-          );
-          break;
-        case 'planStepReject':
-          this._planModeHandler.handlePlanStepAction(
-            webview,
-            message.planId as string,
-            message.stepId as string,
-            message.conversationId as string,
-            'reject',
-          );
-          break;
-        case 'planStepModify':
-          this._planModeHandler.handlePlanStepModify(
-            webview,
-            message.planId as string,
-            message.stepId as string,
-            message.newDescription as string,
-            message.conversationId as string,
-          );
-          break;
-
-        // Cancel / stop agent
-        case 'cancelMessage':
-          this._conversationMessageHandler.handleCancelMessage(
-            webview,
-            message.conversationId as string,
-          );
-          break;
-        case 'stopAgent':
-          this._conversationMessageHandler.handleStopAgent(
-            webview,
-            message.conversationId as string,
-          );
-          break;
-
-        // Conversation management (delegated to ConversationMessageHandler)
-        case 'newConversation':
-          this._conversationMessageHandler.handleNewConversation();
-          break;
-        case 'switchConversation':
-          this._conversationMessageHandler.handleSwitchConversation(
-            message.conversationId as string,
-          );
-          break;
-        case 'deleteConversation':
-          this._conversationMessageHandler.handleDeleteConversation(
-            message.conversationId as string,
-          );
-          break;
-        case 'getConversations':
-          this._conversationMessageHandler.sendConversationList();
-          break;
-        case 'getActiveConversation':
-          this._conversationMessageHandler.sendActiveConversation();
-          break;
-        case 'getAgentStates':
-          this._conversationMessageHandler.sendAgentStateSnapshot(webview);
-          break;
-        case 'clearHistory':
-          this._conversationMessageHandler.handleClearHistory(webview);
-          break;
-        case 'clearAllConversations':
-          this._conversationMessageHandler.handleClearAllConversations(webview);
-          break;
-
-        // Settings handling
-        case 'getSettings':
-          this._settingsHandler.sendSettings(webview);
-          break;
-        case 'updateSettings':
-          this._settingsHandler.handleUpdateSettings(
-            webview,
-            message.settings as Record<string, unknown>,
-          );
-          break;
-
-        // Tab state handling
-        case 'getTabState':
-          this._sendTabState();
-          break;
-        case 'updateTabState':
-          this._updateTabState(message.openTabs as OpenTab[], message.activeTabId as string | null);
-          break;
-
-        // Provider handling
-        case 'addModel':
-          this._providerHandler.handleAddModel(message.model as ProviderConfig);
-          break;
-        case 'removeModel':
-          this._providerHandler.handleRemoveModel(message.modelType as string);
-          break;
-        case 'toggleProvider':
-          this._providerHandler.handleToggleProvider(
-            message.providerType as string,
-            message.enabled as boolean,
-          );
-          break;
-        case 'toggleModel':
-          this._providerHandler.handleToggleModel(
-            message.providerType as string,
-            message.modelId as string,
-            message.enabled as boolean,
-          );
-          break;
-
-        // Integration handling
-        case 'addMCPServer':
-          this._integrationHandler.addMCPServer();
-          break;
-        case 'testMCPServer':
-          this._integrationHandler.handleTestMCPServer(
-            webview,
-            message.server as {
-              id: string;
-              name: string;
-              command: string;
-              args?: string[];
-              env?: Record<string, string>;
-              requestId?: string;
-            },
-          );
-          break;
-
-        // Task handling (delegated to TaskHandler)
-        case 'getTasks':
-          this._taskHandler.sendTasks(webview);
-          break;
-        case 'cancelTask':
-          this._taskHandler.handleCancelTask(webview, message.taskId as string);
-          break;
-        case 'retryTask':
-          this._taskHandler.handleRetryTask(webview, message.taskId as string);
-          break;
-        case 'removeTask':
-          this._taskHandler.handleRemoveTask(webview, message.taskId as string);
-          break;
-        case 'viewTaskResult':
-          this._taskHandler.handleViewTaskResult(message.taskId as string);
-          break;
-        case 'clearCompletedTasks':
-          this._taskHandler.handleClearCompletedTasks(webview);
-          break;
-        case 'openFile':
-          this._fileOperationHandler.handleOpenFile(message.filePath as string);
-          break;
-        case 'revealFile':
-          this._fileOperationHandler.handleRevealFile(message.filePath as string);
-          break;
-        case 'openConfigFile':
-          this._fileOperationHandler.handleOpenConfigFile();
-          break;
-        case 'openPromptConfig':
-          this._fileOperationHandler.handleOpenPromptConfig(
-            message.source as 'personal' | 'project',
-            message.promptId as string | undefined,
-          );
-          break;
-        case 'openAgentsFile':
-          this._fileOperationHandler.handleOpenAgentsFile(message.source as 'personal' | 'project');
-          break;
-        case 'openSettingsFile':
-          this._fileOperationHandler.handleOpenSettingsFile(
-            message.source as 'personal' | 'project' | 'local',
-          );
-          break;
-
-        // Prompt mode handling
-        case 'setPromptMode':
-          this._planModeHandler.handleSetPromptMode(webview, message.mode as 'default' | 'plan');
-          break;
-        case 'togglePlanMode':
-          this._planModeHandler.handleTogglePlanMode(webview);
-          break;
-        case 'getPromptMode':
-          this._planModeHandler.sendPromptMode(webview);
-          break;
-
-        case 'openSkillFile':
-          this._fileOperationHandler.handleOpenSkillFile(
-            message.skillName as string,
-            message.source as 'personal' | 'project',
-            message.fileType as 'skill' | 'reference' | 'script',
-            message.filePath as string | undefined,
-          );
-          break;
-        case 'openCommandFile':
-          this._fileOperationHandler.handleOpenCommandFile(
-            message.commandName as string,
-            message.source as 'personal' | 'project',
-          );
-          break;
-        case 'openUrl':
-          this._fileOperationHandler.handleOpenUrl(message.url as string);
-          break;
-
-        // Cross-plugin "Send to" handler (ADR-5 P0)
-        case 'sendToPlugin': {
-          const target = message.target as string;
-          const assetPath = message.assetPath as string;
-          if (target && assetPath) {
-            void this._handleSendToPlugin(target, assetPath);
-          }
-          break;
+    this._webviewDisposables.push(
+      webview.onDidReceiveMessage(async (raw: unknown) => {
+        const message = parseWebviewToExtensionMessage(raw);
+        if (!message) {
+          logger.warn('Rejected invalid webview message payload');
+          webview.postMessage(buildInvalidWebviewPayloadMessage());
+          return;
         }
 
-        // Cross-plugin drag-and-drop start (ADR-5 P1)
-        case 'dnd:start': {
-          const asset = message.asset as
-            | { path: string; mediaType: 'image' | 'video' | 'audio'; name: string }
-            | undefined;
-          if (asset?.path && asset.mediaType && asset.name) {
-            this._dndBroker.setPayload(asset);
-          }
-          break;
+        // 1. Delegate config messages to ConfigBridge
+        if (this._configBridge) {
+          const handled = await this._configBridge.handleMessage(message, postMessageFn);
+          if (handled) return;
         }
 
-        // Mermaid error feedback - send as new message to ask AI to fix
-        case 'mermaidError':
-          if (message.feedbackMessage) {
-            this._messages?.handleUserMessage(
-              webview,
-              message.feedbackMessage as string,
-              undefined, // providerId
-              undefined, // modelId
-              undefined, // attachments
-              undefined, // promptId
-            );
-          }
-          break;
-
-        // Download SVG file
-        case 'downloadSvg':
-          this._fileOperationHandler.handleDownloadSvg(
-            message.svg as string,
-            message.filename as string,
-          );
-          break;
-
-        // Skill handling (delegated to SkillHandler)
-        case 'getSkills':
-          this._skillHandler.sendSkillsList(webview);
-          break;
-        case 'executeSkill':
-          this._skillHandler.handleExecuteSkill(
-            webview,
-            message.skillId as string,
-            (message.input as Record<string, unknown>) || {},
-          );
-          break;
-        case 'cancelSkill':
-          this._skillHandler.handleCancelSkill(message.skillId as string);
-          break;
-
-        // Slash command invocation
-        case 'invokeSlashCommand':
-          void this._slashCommandHandler.handleCommand(
-            webview,
-            message.command as string,
-            message.args as string | undefined,
-          );
-          break;
-
-        // Plugin slash command invocation — route to the registering extension
-        case 'invokePluginSlashCommand': {
-          const extId = message.extensionId as string;
-          const cmdId = message.commandId as string;
-          const args = message.args as string | undefined;
-          vscode.commands
-            .executeCommand(`${extId}.slashCommand.${cmdId}`, args)
-            .then(undefined, (err) => {
-              logger.warn(`Plugin slash command ${extId}/${cmdId} failed`, { error: err });
-            });
-          break;
-        }
-
-        // Context management
-        case 'getContextTokenCount':
-          this._contextHandler.getTokenCount(webview, message.conversationId as string | undefined);
-          break;
-        case 'compressContext':
-          this._contextHandler.compressContext(
-            webview,
-            message.conversationId as string | undefined,
-          );
-          break;
-
-        // Open full Neko Marketplace panel (neko-market extension)
-        case 'openMarketplace':
-          vscode.commands.executeCommand('neko.market.openSkills').then(undefined, () => {
-            // neko-market extension not installed — silently ignore
-          });
-          break;
-      }
-    });
+        handleChatWebviewMessage(message, {
+          webview,
+          messages: this._messages,
+          taskHandler: this._taskHandler,
+          skillHandler: this._skillHandler,
+          fileOperationHandler: this._fileOperationHandler,
+          planModeHandler: this._planModeHandler,
+          providerHandler: this._providerHandler,
+          integrationHandler: this._integrationHandler,
+          settingsHandler: this._settingsHandler,
+          contextHandler: this._contextHandler,
+          slashCommandHandler: this._slashCommandHandler,
+          conversationMessageHandler: this._conversationMessageHandler,
+          dndBroker: this._dndBroker,
+          sendTabState: () => this._sendTabState(),
+          updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
+          syncCanvasAmbientScopeFromActiveConversation: () =>
+            this._syncCanvasAmbientScopeFromActiveConversation(),
+        });
+      }),
+    );
   }
 
   // ============================================================================
@@ -1051,16 +524,51 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // ============================================================================
 
   private _restoreState(): void {
-    this._syncActiveConversationFromTabState();
-    this._conversationMessageHandler.sendConversationList();
-    this._conversationMessageHandler.sendActiveConversation();
-    if (this._view) {
-      this._settingsHandler.sendSettings(this._view.webview);
-      this._sendTabState();
-      this._taskHandler.sendTasks(this._view.webview);
-      this._conversationMessageHandler.sendAgentStateSnapshot(this._view.webview);
-      if (this._pluginCommandsGetter) {
-        this.sendPluginSlashCommands(this._pluginCommandsGetter());
+    const webview = this._view?.webview;
+    const plan = buildChatRestorePlan({
+      tabState: this._tabState,
+      hasWebview: Boolean(webview),
+      pluginCommands: this._pluginCommandsGetter?.(),
+    });
+
+    for (const action of plan.actions) {
+      switch (action.type) {
+        case 'syncActiveConversation':
+          this._syncActiveConversationFromTabState();
+          break;
+        case 'syncCanvasAmbientScope':
+          this._syncCanvasAmbientScopeFromActiveConversation();
+          break;
+        case 'sendConversationList':
+          this._conversationMessageHandler.sendConversationList();
+          break;
+        case 'sendActiveConversation':
+          this._conversationMessageHandler.sendActiveConversation();
+          break;
+        case 'sendSettings':
+          if (webview) {
+            this._settingsHandler.sendSettings(webview);
+          }
+          break;
+        case 'postTabState':
+          webview?.postMessage(action.message);
+          break;
+        case 'sendActiveConversationTasks':
+          if (webview) {
+            const conversationId = this._conversations.getActiveId();
+            if (conversationId) {
+              this._taskHandler.sendTasks(webview, conversationId);
+            }
+          }
+          break;
+        case 'sendAgentStateSnapshot':
+          if (webview) {
+            this._conversationMessageHandler.sendAgentStateSnapshot(webview);
+          }
+          break;
+        case 'postPluginCommands':
+          webview?.postMessage(action.message);
+          break;
       }
     }
   }
@@ -1070,28 +578,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   // ============================================================================
 
   private _loadTabState(): void {
-    const saved = this._context.workspaceState.get<TabState>(ChatViewProvider.TAB_STATE_KEY);
-    if (saved) {
-      this._tabState = saved;
-    }
-  }
-
-  private _getActiveTabConversationId(): string | null {
-    const activeTab = this._tabState.activeTabId
-      ? this._tabState.openTabs.find((tab) => tab.id === this._tabState.activeTabId)
-      : undefined;
-
-    if (!activeTab) return null;
-    return this._conversations.get(activeTab.conversationId) ? activeTab.conversationId : null;
+    this._tabState = normalizeTabState(
+      this._context.workspaceState.get<unknown>(ChatViewProvider.TAB_STATE_KEY),
+    );
   }
 
   private _syncActiveConversationFromTabState(): void {
     // Defensive sync for panel restore: normal tab switches send switchConversation
     // before updateTabState, but restored tab state can replay without that message.
-    const conversationId = this._getActiveTabConversationId();
-    if (!conversationId || this._conversations.getActiveId() === conversationId) return;
+    syncActiveConversationFromTabState(
+      { tabState: this._tabState },
+      {
+        hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
+        getActiveConversationId: () => this._conversations.getActiveId(),
+        switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+      },
+    );
+  }
 
-    this._conversations.switchTo(conversationId);
+  private _syncCanvasAmbientScopeFromActiveConversation(): void {
+    const conversationId = this._conversations.getActiveId();
+    const nodes = conversationId ? setActiveCanvasAmbientScope(conversationId) : [];
+    if (!conversationId) {
+      setActiveCanvasAmbientScope(null);
+    }
+    this.sendAmbientCanvasContext(nodes, conversationId);
   }
 
   private _saveTabState(): void {
@@ -1100,67 +611,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private _sendTabState(): void {
     if (!this._view) return;
-    this._view.webview.postMessage({
-      type: 'tabState',
-      tabState: this._tabState,
-    });
+    this._view.webview.postMessage(buildChatTabStateMessage(this._tabState));
   }
 
   private _updateTabState(openTabs: OpenTab[], activeTabId: string | null): void {
-    this._tabState = { openTabs, activeTabId };
-    this._syncActiveConversationFromTabState();
-    this._saveTabState();
-  }
-
-  // ============================================================================
-  // Cross-plugin transfer (ADR-5 P0)
-  // ============================================================================
-
-  /**
-   * Dispatch a generated asset to another neko-suite plugin.
-   * Payload is the file path on disk — the target plugin loads it directly.
-   */
-  private async _handleSendToPlugin(target: string, assetPath: string): Promise<void> {
-    try {
-      switch (target) {
-        case 'canvas':
-          await vscode.commands.executeCommand('neko.canvas.importAsset', { path: assetPath });
-          break;
-        case 'cut':
-          await vscode.commands.executeCommand('neko.cut.importGeneratedClip', {
-            assetPath,
-          });
-          break;
-        case 'explorer':
-          await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(assetPath));
-          break;
-        default:
-          logger.warn(`Unknown sendToPlugin target: ${target}`);
-      }
-    } catch (err) {
-      logger.error(`Failed to send to ${target}:`, err);
-      void handleError(
-        err instanceof Error
-          ? err
-          : new Error(`Failed to send to ${target}. Is the extension installed?`),
-        { showToUser: true, severity: 'warning' },
-      );
-    }
-  }
-
-  /**
-   * Detect which neko-suite plugins are installed and notify the webview.
-   * Called when the webview first becomes visible.
-   */
-  private _sendPluginsAvailable(webview: vscode.Webview): void {
-    webview.postMessage({
-      type: 'pluginsAvailable',
-      plugins: {
-        canvas: !!vscode.extensions.getExtension('neko.nekocanvas'),
-        cut: !!vscode.extensions.getExtension('neko.nekocut'),
-        sketch: !!vscode.extensions.getExtension('neko.nekosketch'),
+    const result = updateTabStateRuntime(
+      { openTabs, activeTabId },
+      {
+        hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
+        getActiveConversationId: () => this._conversations.getActiveId(),
+        switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        onConversationSwitched: () => this._syncCanvasAmbientScopeFromActiveConversation(),
       },
-    });
+    );
+    this._tabState = result.tabState;
+    this._saveTabState();
   }
 
   // ============================================================================
@@ -1192,6 +657,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
+  }
+
+  dispose(): void {
+    this._disposeWebviewBindings();
+    this._messages?.dispose();
+    this._conversations.dispose();
+    this._configBridge?.dispose();
+    this._configBridge = undefined;
+
+    for (const disposable of this._disposables.splice(0)) {
+      try {
+        disposable.dispose();
+      } catch (error) {
+        logger.warn('Failed to dispose chat provider resource', error);
+      }
+    }
+  }
+
+  private _disposeWebviewBindings(): void {
+    for (const disposable of this._webviewDisposables.splice(0)) {
+      try {
+        disposable.dispose();
+      } catch (error) {
+        logger.warn('Failed to dispose webview binding', error);
+      }
+    }
   }
 }
 

@@ -27,6 +27,11 @@ export const commands = {
   executeCommand: vi.fn().mockResolvedValue(undefined),
 };
 
+// extensions mock
+export const extensions = {
+  getExtension: vi.fn(),
+};
+
 // env mock
 export const env = {
   openExternal: vi.fn().mockResolvedValue(true),

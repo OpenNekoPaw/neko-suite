@@ -9,49 +9,47 @@ function createMockWebview() {
   return { postMessage: vi.fn().mockResolvedValue(true) };
 }
 
-function createMockSettings() {
-  const store = new Map<string, unknown>();
+function createMockPlatform() {
   return {
-    selectedProviderId: 'anthropic' as string | null,
-    selectedModelId: 'claude-3' as string | null,
-    customSystemPrompt: 'You are a helpful assistant',
-    temperature: 0.7,
-    maxTokens: 4096,
-    executionMode: 'auto' as 'plan' | 'ask' | 'auto',
-    get: vi.fn((key: string) => store.get(key)),
-    set: vi.fn((key: string, value: unknown) => {
-      store.set(key, value);
-    }),
-  };
-}
-
-function createMockProviders() {
-  return {
-    getAllProviders: vi.fn().mockReturnValue([{ id: 'anthropic', name: 'Anthropic' }]),
-    getConfiguredProviders: vi.fn().mockReturnValue([{ id: 'anthropic' }]),
-    getDefaultProvider: vi.fn().mockReturnValue({
-      id: 'anthropic',
-      getDefaultModel: () => 'claude-3',
-    }),
+    config: {
+      getAssistantSettingsData: vi.fn().mockReturnValue({
+        providers: [
+          { id: 'anthropic', name: 'Anthropic', type: 'anthropic', models: [], enabled: true },
+        ],
+        configuredProviders: [
+          { id: 'anthropic', name: 'Anthropic', type: 'anthropic', models: [], enabled: true },
+        ],
+        selectedProviderId: 'anthropic',
+        selectedModelId: 'claude-3',
+        customSystemPrompt: 'You are a helpful assistant',
+        autoExecuteTools: true,
+        streamResponses: true,
+        showToolCalls: true,
+        temperature: 0.7,
+        maxTokens: 4096,
+        executionMode: 'auto',
+        chatModelOptions: [],
+        defaultMediaModels: {},
+      }),
+      setAssistantSettingsFromWebview: vi.fn().mockResolvedValue(undefined),
+    },
   };
 }
 
 describe('SettingsHandler', () => {
   let handler: SettingsHandler;
   let webview: ReturnType<typeof createMockWebview>;
-  let settings: ReturnType<typeof createMockSettings>;
-  let providers: ReturnType<typeof createMockProviders>;
+  let platform: ReturnType<typeof createMockPlatform>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     webview = createMockWebview();
-    settings = createMockSettings();
-    providers = createMockProviders();
+    platform = createMockPlatform();
   });
 
   describe('sendSettings', () => {
-    it('should do nothing when providers is unavailable', () => {
-      handler = new SettingsHandler({ settings: settings as any });
+    it('should do nothing when platform is unavailable', () => {
+      handler = new SettingsHandler({});
       handler.sendSettings(webview as any);
 
       expect(webview.postMessage).not.toHaveBeenCalled();
@@ -59,8 +57,7 @@ describe('SettingsHandler', () => {
 
     it('should send settings data to webview', () => {
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
       handler.sendSettings(webview as any);
 
@@ -77,94 +74,109 @@ describe('SettingsHandler', () => {
       );
     });
 
-    it('should auto-select default provider when none selected', () => {
-      settings.selectedProviderId = null;
-      settings.selectedModelId = null;
-
+    it('should expose platform-projected provider and media data', () => {
+      platform.config.getAssistantSettingsData.mockReturnValue({
+        ...platform.config.getAssistantSettingsData(),
+        defaultMediaModels: { image: 'openai:openai-dall-e-3' },
+      });
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
       handler.sendSettings(webview as any);
 
-      expect(settings.selectedProviderId).toBe('anthropic');
-      expect(settings.selectedModelId).toBe('claude-3');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providers: expect.any(Array),
+          configuredProviders: expect.any(Array),
+          defaultMediaModels: { image: 'openai:openai-dall-e-3' },
+        }),
+      );
     });
   });
 
   describe('handleUpdateSettings', () => {
-    it('should update provider and model', () => {
+    it('should update provider and model', async () => {
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
-      handler.handleUpdateSettings(webview as any, {
+      const update = {
         providerId: 'openai',
         modelId: 'gpt-4',
-      });
+      };
+      await handler.handleUpdateSettings(webview as any, update);
 
-      expect(settings.selectedProviderId).toBe('openai');
-      expect(settings.selectedModelId).toBe('gpt-4');
+      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'settingsUpdated',
         success: true,
       });
     });
 
-    it('should update boolean settings', () => {
+    it('should update boolean settings', async () => {
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
-      handler.handleUpdateSettings(webview as any, {
+      const update = {
         autoExecuteTools: true,
         streamResponses: false,
         showToolCalls: true,
-      });
+      };
+      await handler.handleUpdateSettings(webview as any, update);
 
-      expect(settings.set).toHaveBeenCalledWith('autoExecuteTools', true);
-      expect(settings.set).toHaveBeenCalledWith('streamResponses', false);
-      expect(settings.set).toHaveBeenCalledWith('showToolCalls', true);
+      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
-    it('should update numeric settings', () => {
+    it('should update numeric settings', async () => {
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
-      handler.handleUpdateSettings(webview as any, {
+      const update = {
         temperature: 0.5,
         maxTokens: 8192,
-      });
+      };
+      await handler.handleUpdateSettings(webview as any, update);
 
-      expect(settings.set).toHaveBeenCalledWith('temperature', 0.5);
-      expect(settings.set).toHaveBeenCalledWith('maxTokens', 8192);
+      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
-    it('should update execution mode', () => {
+    it('should update execution mode', async () => {
       handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
+        platform: platform as any,
       });
-      handler.handleUpdateSettings(webview as any, {
-        executionMode: 'plan',
-      });
+      const update = { executionMode: 'plan' };
+      await handler.handleUpdateSettings(webview as any, update);
 
-      expect(settings.executionMode).toBe('plan');
+      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
-    it('should only update provided fields', () => {
-      handler = new SettingsHandler({
-        settings: settings as any,
-        providers: providers as any,
-      });
-      handler.handleUpdateSettings(webview as any, {
+    it('should report failure when platform is unavailable', async () => {
+      handler = new SettingsHandler({});
+      await handler.handleUpdateSettings(webview as any, {
         temperature: 0.3,
       });
 
-      // Should not touch provider/model
-      expect(settings.selectedProviderId).toBe('anthropic');
-      expect(settings.selectedModelId).toBe('claude-3');
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: false,
+        error: 'Platform is not initialized',
+      });
+    });
+
+    it('should report failure when platform rejects settings update', async () => {
+      platform.config.setAssistantSettingsFromWebview.mockRejectedValue(
+        new Error('Config write failed'),
+      );
+      handler = new SettingsHandler({
+        platform: platform as any,
+      });
+
+      await handler.handleUpdateSettings(webview as any, { temperature: 0.3 });
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: false,
+        error: 'Config write failed',
+      });
     });
   });
 });

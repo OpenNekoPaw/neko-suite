@@ -19,7 +19,9 @@ const bootstrapLogger = {
 const activateMock = vi.fn();
 const disposeMock = vi.fn();
 const discoveryDeps: unknown[] = [];
-const registerProviderCardDirectoryMock = vi.fn(() => Promise.resolve([]));
+const registerRuntimeProviderCardDirectoriesMock = vi.fn(() =>
+  Promise.resolve({ market: [], project: [] }),
+);
 
 vi.mock('@neko/agent', () => ({
   ProviderCardRegistry: class ProviderCardRegistry {
@@ -28,7 +30,40 @@ vi.mock('@neko/agent', () => ({
   ToolCategoryRegistry: class ToolCategoryRegistry {
     readonly id = 'default-tool-category-registry';
   },
-  registerProviderCardDirectory: registerProviderCardDirectoryMock,
+  createCapabilityRuntimeBindingStore: (logger: {
+    warn: (message: string, data?: unknown) => void;
+  }) => {
+    let bindings: Record<string, unknown> = {};
+    const update = (next: Record<string, unknown>) => {
+      const merged = { ...bindings };
+      for (const [key, value] of Object.entries(next)) {
+        if (value === undefined) {
+          if (merged[key] !== undefined) {
+            logger.warn(
+              'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
+              {
+                code: 'extension.capability-runtime.binding-update-ignored',
+                reason: 'undefined-value-ignored',
+                message:
+                  'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
+                context: { binding: key },
+              },
+            );
+          }
+          continue;
+        }
+        merged[key] = value;
+      }
+      bindings = merged;
+      return bindings;
+    };
+    return {
+      get: () => bindings,
+      update,
+      setSkillService: (skillService: unknown) => update({ skillService }),
+    };
+  },
+  registerRuntimeProviderCardDirectories: registerRuntimeProviderCardDirectoriesMock,
 }));
 
 vi.mock('../../base', () => ({
@@ -55,7 +90,7 @@ describe('capabilityBootstrap', () => {
     bootstrapLogger.error.mockReset();
     bootstrapLogger.debug.mockReset();
     discoveryDeps.length = 0;
-    registerProviderCardDirectoryMock.mockClear();
+    registerRuntimeProviderCardDirectoriesMock.mockClear();
   });
 
   it('does not clear existing runtime bindings when a later bootstrap omits them', async () => {
@@ -127,7 +162,7 @@ describe('capabilityBootstrap', () => {
     );
   });
 
-  it('loads market and project provider card directories into the shared registry', async () => {
+  it('delegates provider card directory registration to the agent runtime', async () => {
     const module = await import('../capabilityBootstrap');
     const toolRegistry = {
       register: vi.fn(),
@@ -144,17 +179,9 @@ describe('capabilityBootstrap', () => {
       { subscriptions: [] } as never,
     );
 
-    expect(registerProviderCardDirectoryMock).toHaveBeenCalledWith(
+    expect(registerRuntimeProviderCardDirectoriesMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceLayer: 'market',
-        sourceRefPrefix: '${NEKO_HOME}/providers',
-      }),
-    );
-    expect(registerProviderCardDirectoryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        root: '/workspace/project/.neko/providers',
-        sourceLayer: 'project',
-        sourceRefPrefix: '.neko/providers',
+        workspaceRoot: '/workspace/project',
       }),
     );
   });

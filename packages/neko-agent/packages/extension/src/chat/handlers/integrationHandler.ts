@@ -7,14 +7,20 @@
  */
 
 import * as vscode from 'vscode';
-import { getMCPTestService } from '@neko/agent';
+import {
+  getMCPTestService,
+  runMCPServerTestRuntime,
+  type MCPServerTestRuntimeEffects,
+} from '@neko/agent';
+import { runAddMCPStdioServerRuntime, type Platform } from '@neko/platform';
 
 /**
  * Dependencies for IntegrationHandler
  */
 export interface IntegrationHandlerDeps {
-  context: vscode.ExtensionContext;
+  platform?: Platform;
   sendSettings: () => void;
+  mcpServerTester?: MCPServerTestRuntimeEffects['test'];
 }
 
 /**
@@ -22,6 +28,10 @@ export interface IntegrationHandlerDeps {
  */
 export class IntegrationHandler {
   constructor(private deps: IntegrationHandlerDeps) {}
+
+  updateDeps(partial: Partial<IntegrationHandlerDeps>): void {
+    Object.assign(this.deps, partial);
+  }
 
   async handleTestMCPServer(
     webview: vscode.Webview,
@@ -34,33 +44,15 @@ export class IntegrationHandler {
       requestId?: string;
     },
   ): Promise<void> {
-    const requestId = server.requestId || `mcp-test-${Date.now()}`;
-
-    try {
-      const testService = getMCPTestService();
-      const result = await testService.test({
-        id: server.id,
-        name: server.name,
-        command: server.command,
-        args: server.args,
-        env: server.env,
-        timeout: 10000,
-      });
-
-      webview.postMessage({
-        type: 'mcpServerTestResult',
-        requestId,
-        success: result.success,
-        error: result.error,
-      });
-    } catch (error) {
-      webview.postMessage({
-        type: 'mcpServerTestResult',
-        requestId,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+    await runMCPServerTestRuntime(
+      { server },
+      {
+        test: this.deps.mcpServerTester ?? ((config) => getMCPTestService().test(config)),
+        postMessage: async (message) => {
+          await webview.postMessage(message);
+        },
+      },
+    );
   }
 
   async addMCPServer(): Promise<void> {
@@ -83,16 +75,23 @@ export class IntegrationHandler {
       placeHolder: 'e.g., /path/to/allowed/dir',
     });
 
-    const args = argsInput ? argsInput.split(',').map((s) => s.trim()) : [];
-
-    const mcpServers = this.deps.context.globalState.get<Record<string, any>>(
-      'neko.mcpServers',
-      {},
+    const result = await runAddMCPStdioServerRuntime(
+      {
+        serverName,
+        command,
+        ...(argsInput !== undefined ? { argsInput } : {}),
+      },
+      this.deps.platform?.config,
     );
-    mcpServers[serverName] = { command, args };
-    await this.deps.context.globalState.update('neko.mcpServers', mcpServers);
 
-    vscode.window.showInformationMessage(`MCP Server "${serverName}" added successfully.`);
-    this.deps.sendSettings();
+    if (result.status === 'added') {
+      vscode.window.showInformationMessage(result.message);
+      this.deps.sendSettings();
+      return;
+    }
+
+    if (result.status === 'unavailable' || result.status === 'failed') {
+      await vscode.window.showErrorMessage(result.message);
+    }
   }
 }

@@ -9,13 +9,26 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
+import * as fs from 'fs/promises';
+import {
+  runPlanApprovalRuntime,
+  runPlanRejectionRuntime,
+  runSendConversationPromptModeRuntime,
+  runSetConversationPromptModeRuntime,
+  runPlanStepActionRuntime,
+  runPlanStepModificationRuntime,
+  runToggleConversationPromptModeRuntime,
+  type PlanApprovalExecutionDispatch,
+  type PlanReviewConversationStore,
+  type PlanReviewRuntimeEffects,
+  type PlanReviewRuntimeMessage,
+  type PlanStepReviewAction,
+  type ConversationPromptModeRuntime,
+} from '@neko/agent';
 import { getLogger } from '../../base';
 import type { SystemPromptManager } from '../systemPromptManager';
-import type { ConversationHandler } from '../conversationHandler';
-import type { SettingsManager } from '../settingsManager';
-import type { IAgentManager } from '../../ai/agentManager';
-import type { MessageHandler } from '../messageHandler';
+import type { ConversationBridge } from '../conversationBridge';
+import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 
 const logger = getLogger('PlanModeHandler');
 
@@ -23,12 +36,14 @@ const logger = getLogger('PlanModeHandler');
  * Dependencies for PlanModeHandler
  */
 export interface PlanModeHandlerDeps {
-  systemPrompt: SystemPromptManager;
-  conversations: ConversationHandler;
-  agentManager?: IAgentManager;
-  platform?: Platform;
-  settings: SettingsManager;
-  messages?: MessageHandler;
+  systemPrompt: SystemPromptManager | ConversationPromptModeRuntimeProvider;
+  conversations: ConversationBridge;
+  messages?: AgentMessageTurnHandler;
+  readPlanFile?: (filePath: string) => Promise<string>;
+}
+
+export interface ConversationPromptModeRuntimeProvider {
+  getPromptModeRuntime(): ConversationPromptModeRuntime;
 }
 
 /**
@@ -41,22 +56,38 @@ export class PlanModeHandler {
     Object.assign(this.deps, partial);
   }
 
-  handleSetPromptMode(webview: vscode.Webview, mode: 'default' | 'plan'): void {
-    this.deps.systemPrompt.setMode(mode);
-    this.sendPromptMode(webview);
+  handleSetPromptMode(
+    webview: vscode.Webview,
+    conversationId: string,
+    mode: 'default' | 'plan',
+  ): void {
+    void this._runPromptModeRuntime(() =>
+      runSetConversationPromptModeRuntime(
+        { conversationId, mode },
+        this.deps.systemPrompt.getPromptModeRuntime(),
+        this._createPromptModeRuntimeEffects(webview),
+      ),
+    );
   }
 
-  handleTogglePlanMode(webview: vscode.Webview): void {
-    this.deps.systemPrompt.togglePlanMode();
-    this.sendPromptMode(webview);
+  handleTogglePlanMode(webview: vscode.Webview, conversationId: string): void {
+    void this._runPromptModeRuntime(() =>
+      runToggleConversationPromptModeRuntime(
+        { conversationId },
+        this.deps.systemPrompt.getPromptModeRuntime(),
+        this._createPromptModeRuntimeEffects(webview),
+      ),
+    );
   }
 
-  sendPromptMode(webview: vscode.Webview): void {
-    webview.postMessage({
-      type: 'promptModeChanged',
-      mode: this.deps.systemPrompt.getMode(),
-      isPlanMode: this.deps.systemPrompt.isPlanMode(),
-    });
+  sendPromptMode(webview: vscode.Webview, conversationId: string): void {
+    void this._runPromptModeRuntime(() =>
+      runSendConversationPromptModeRuntime(
+        { conversationId },
+        this.deps.systemPrompt.getPromptModeRuntime(),
+        this._createPromptModeRuntimeEffects(webview),
+      ),
+    );
   }
 
   async handlePlanApprove(
@@ -66,250 +97,121 @@ export class PlanModeHandler {
     filePath?: string,
   ): Promise<void> {
     logger.info('Plan approved:', { planId, conversationId, filePath });
-
-    // Persist the plan status change
-    this._updatePlanStatusInConversation(conversationId, planId, 'approved');
-
-    // Update plan status in UI
-    webview.postMessage({
-      type: 'planStatusUpdate',
-      planId,
-      conversationId,
-      status: 'approved',
-    });
-
-    // If we have a plan file, read it and execute with auto mode
-    if (filePath) {
-      try {
-        const fs = await import('fs');
-        const planContent = await fs.promises.readFile(filePath, 'utf-8');
-
-        // Switch agent to auto mode and execute the plan
-        const agentRunner = this.deps.agentManager?.get(conversationId);
-        if (agentRunner && this.deps.platform) {
-          // Temporarily switch to auto mode for plan execution
-          await agentRunner.configure(this._buildAgentConfig());
-
-          // Send message to execute the approved plan
-          const executeMessage = `The plan has been approved. Please execute the following plan:\n\n${planContent}`;
-          this.deps.messages?.handleUserMessage(webview, executeMessage);
-        }
-      } catch (error) {
-        logger.error('Failed to read plan file:', error);
-        webview.postMessage({
-          type: 'error',
-          message: `Failed to read plan file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        });
-      }
-    } else {
-      // No file path - just notify the agent
-      const agentRunner = this.deps.agentManager?.get(conversationId);
-      if (agentRunner && this.deps.platform) {
-        await agentRunner.configure(this._buildAgentConfig());
-
-        this.deps.messages?.handleUserMessage(
-          webview,
-          'The plan has been approved. Please proceed with the implementation.',
-        );
-      }
-    }
+    await this._runPlanReviewRuntime(() =>
+      runPlanApprovalRuntime(
+        { planId, conversationId, filePath },
+        this._createPlanRuntimeStore(),
+        this._createPlanRuntimeEffects(webview),
+      ),
+    );
   }
 
-  handlePlanReject(webview: vscode.Webview, planId: string, conversationId: string): void {
+  async handlePlanReject(
+    webview: vscode.Webview,
+    planId: string,
+    conversationId: string,
+  ): Promise<void> {
     logger.info('Plan rejected:', { planId, conversationId });
-
-    // Persist the plan status change
-    this._updatePlanStatusInConversation(conversationId, planId, 'rejected');
-
-    // Update plan status in UI
-    webview.postMessage({
-      type: 'planStatusUpdate',
-      planId,
-      conversationId,
-      status: 'rejected',
-    });
-
-    // Notify the user
-    webview.postMessage({
-      type: 'streamText',
-      conversationId,
-      content:
-        '\n\n---\n**Plan rejected.** Please provide more details or a different approach if you would like me to create a new plan.',
-    });
+    await this._runPlanReviewRuntime(() =>
+      runPlanRejectionRuntime(
+        { planId, conversationId },
+        this._createPlanRuntimeStore(),
+        this._createPlanRuntimeEffects(webview),
+      ),
+    );
   }
 
-  handlePlanStepAction(
+  async handlePlanStepAction(
     webview: vscode.Webview,
     planId: string,
     stepId: string,
     conversationId: string,
-    action: 'approve' | 'reject',
-  ): void {
+    action: PlanStepReviewAction,
+  ): Promise<void> {
     logger.info('Plan step action:', { planId, stepId, conversationId, action });
-
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
-
-    // Persist the step status change
-    this._updatePlanStepInConversation(conversationId, planId, stepId, { status: newStatus });
-
-    // Update step status in UI
-    webview.postMessage({
-      type: 'planStepStatusUpdate',
-      planId,
-      stepId,
-      conversationId,
-      status: newStatus,
-    });
+    await this._runPlanReviewRuntime(() =>
+      runPlanStepActionRuntime(
+        { planId, stepId, conversationId, action },
+        this._createPlanRuntimeStore(),
+        this._createPlanRuntimeEffects(webview),
+      ),
+    );
   }
 
-  handlePlanStepModify(
+  async handlePlanStepModify(
     webview: vscode.Webview,
     planId: string,
     stepId: string,
     newDescription: string,
     conversationId: string,
-  ): void {
+  ): Promise<void> {
     logger.info('Plan step modified:', { planId, stepId, newDescription, conversationId });
-
-    // Persist the step modification
-    this._updatePlanStepInConversation(conversationId, planId, stepId, {
-      status: 'modified',
-      description: newDescription,
-    });
-
-    // Update step in UI
-    webview.postMessage({
-      type: 'planStepStatusUpdate',
-      planId,
-      stepId,
-      conversationId,
-      status: 'modified',
-      newDescription,
-    });
+    await this._runPlanReviewRuntime(() =>
+      runPlanStepModificationRuntime(
+        { planId, stepId, conversationId, newDescription },
+        this._createPlanRuntimeStore(),
+        this._createPlanRuntimeEffects(webview),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  /** Build the common agent config used for all plan execution branches. */
-  private _buildAgentConfig() {
+  private async _runPlanReviewRuntime(action: () => Promise<unknown>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      logger.error('Plan review bridge failed:', error);
+    }
+  }
+
+  private async _runPromptModeRuntime(action: () => Promise<unknown>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      logger.error('Prompt mode bridge failed:', error);
+    }
+  }
+
+  private _createPromptModeRuntimeEffects(webview: vscode.Webview): {
+    postMessage(message: Parameters<typeof webview.postMessage>[0]): Promise<void>;
+  } {
     return {
-      platform: this.deps.platform!,
-      systemPrompt: this.deps.settings.customSystemPrompt || this.deps.systemPrompt.getPrompt(),
-      maxIterations: 200,
-      autoExecuteTools: true,
-      temperature: this.deps.settings.temperature,
-      maxTokens: this.deps.settings.maxTokens,
-      executionMode: 'auto' as const,
-      thinkingBudget: this.deps.settings.thinkingBudget,
+      postMessage: async (message): Promise<void> => {
+        await webview.postMessage(message);
+      },
     };
   }
 
-  private _updatePlanStepInConversation(
-    conversationId: string,
-    planId: string,
-    stepId: string,
-    update: { status?: string; description?: string },
-  ): void {
-    const conversation = this.deps.conversations.manager.get(conversationId);
-    if (!conversation) {
-      logger.warn('Conversation not found for plan step update:', conversationId);
-      return;
-    }
-
-    let updated = false;
-    const updatedMessages = conversation.messages.map((message) => {
-      if (!message.contentBlocks) return message;
-
-      const updatedBlocks = message.contentBlocks.map((block) => {
-        if (block.type !== 'plan' || !block.plan) return block;
-
-        // Type assertion for plan structure
-        const plan = block.plan as {
-          id: string;
-          steps: Array<{ id: string; status: string; description: string }>;
-        };
-
-        if (plan.id !== planId) return block;
-
-        // Update the step
-        const updatedSteps = plan.steps.map((step) => {
-          if (step.id !== stepId) return step;
-          updated = true;
-          return {
-            ...step,
-            ...(update.status && { status: update.status }),
-            ...(update.description && { description: update.description }),
-          };
-        });
-
-        return {
-          ...block,
-          plan: {
-            ...plan,
-            steps: updatedSteps,
-          },
-        };
-      });
-
-      return {
-        ...message,
-        contentBlocks: updatedBlocks,
-      };
-    });
-
-    if (updated) {
-      this.deps.conversations.manager.updateMessages(conversationId, updatedMessages);
-      logger.info('Persisted plan step update:', { conversationId, planId, stepId, update });
-    }
+  private _createPlanRuntimeStore(): PlanReviewConversationStore {
+    return {
+      getMessages: (conversationId) => this.deps.conversations.get(conversationId)?.messages,
+      updateMessages: (conversationId, messages) =>
+        this.deps.conversations.updateMessagesForConversation(conversationId, messages),
+    };
   }
 
-  private _updatePlanStatusInConversation(
-    conversationId: string,
-    planId: string,
-    status: 'approved' | 'rejected',
-  ): void {
-    const conversation = this.deps.conversations.manager.get(conversationId);
-    if (!conversation) {
-      logger.warn('Conversation not found for plan status update:', conversationId);
-      return;
-    }
-
-    let updated = false;
-    const updatedMessages = conversation.messages.map((message) => {
-      if (!message.contentBlocks) return message;
-
-      const updatedBlocks = message.contentBlocks.map((block) => {
-        if (block.type !== 'plan' || !block.plan) return block;
-
-        // Type assertion for plan structure
-        const plan = block.plan as {
-          id: string;
-          status: string;
-        };
-
-        if (plan.id !== planId) return block;
-
-        updated = true;
-        return {
-          ...block,
-          plan: {
-            ...plan,
-            status,
-          },
-        };
-      });
-
-      return {
-        ...message,
-        contentBlocks: updatedBlocks,
-      };
-    });
-
-    if (updated) {
-      this.deps.conversations.manager.updateMessages(conversationId, updatedMessages);
-      logger.info('Persisted plan status update:', { conversationId, planId, status });
-    }
+  private _createPlanRuntimeEffects(webview: vscode.Webview): PlanReviewRuntimeEffects {
+    return {
+      postMessage: async (message: PlanReviewRuntimeMessage): Promise<void> => {
+        await webview.postMessage(message);
+      },
+      readPlanFile: (filePath: string): Promise<string> =>
+        this.deps.readPlanFile?.(filePath) ?? fs.readFile(filePath, 'utf-8'),
+      executePlanApproval: async (dispatch: PlanApprovalExecutionDispatch): Promise<void> => {
+        await this.deps.messages?.handleUserMessage(webview, dispatch);
+      },
+      onMissingConversation: (input: { conversationId: string; planId: string }): void => {
+        logger.warn('Conversation not found for plan review update:', input);
+      },
+      onPlanMessageNotUpdated: (input: { conversationId: string; planId: string }): void => {
+        logger.warn('Plan message not found for review update:', input);
+      },
+      onError: (error: unknown): void => {
+        logger.error('Plan review runtime failed:', error);
+      },
+    };
   }
 }

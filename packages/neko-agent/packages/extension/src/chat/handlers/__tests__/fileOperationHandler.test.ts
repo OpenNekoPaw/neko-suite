@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import { FileOperationHandler } from '../fileOperationHandler';
+import { handleError } from '../../../base';
 
 // Mock fs.promises
 vi.mock('fs', () => ({
@@ -139,7 +140,7 @@ describe('FileOperationHandler', () => {
 
       await handler.handleOpenPromptConfig('project');
 
-      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('No workspace folder open');
+      expectHandleErrorMessage('No workspace folder open');
     });
 
     it('should create template file if not exists', async () => {
@@ -181,6 +182,29 @@ describe('FileOperationHandler', () => {
     });
   });
 
+  describe('handleOpenAgentsFile', () => {
+    it('should create AGENTS.md with the agent-owned template if it does not exist', async () => {
+      vi.mocked(fs.promises.access).mockRejectedValueOnce(new Error('ENOENT'));
+
+      await handler.handleOpenAgentsFile('personal');
+
+      expect(fs.promises.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('AGENTS.md'),
+        expect.stringContaining('# Global Agent Instructions'),
+        'utf-8',
+      );
+    });
+
+    it('should show error for project AGENTS.md without workspace', async () => {
+      const vscode = await import('vscode');
+      (vscode.workspace as any).workspaceFolders = undefined;
+
+      await handler.handleOpenAgentsFile('project');
+
+      expectHandleErrorMessage('No workspace folder open for project AGENTS.md');
+    });
+  });
+
   describe('handleOpenSkillFile', () => {
     it('should open SKILL.md for skill fileType', async () => {
       const { commands } = await import('vscode');
@@ -193,28 +217,23 @@ describe('FileOperationHandler', () => {
     });
 
     it('should show error when reference filePath missing', async () => {
-      const { window } = await import('vscode');
       await handler.handleOpenSkillFile('my-skill', 'personal', 'reference');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith('No file path provided for reference');
+      expectHandleErrorMessage('No file path provided for reference');
     });
 
     it('should show error when script filePath missing', async () => {
-      const { window } = await import('vscode');
       await handler.handleOpenSkillFile('my-skill', 'personal', 'script');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith('No file path provided for script');
+      expectHandleErrorMessage('No file path provided for script');
     });
 
     it('should show error when file not found', async () => {
       vi.mocked(fs.promises.access).mockRejectedValueOnce(new Error('ENOENT'));
-      const { window } = await import('vscode');
 
       await handler.handleOpenSkillFile('my-skill', 'personal', 'skill');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('File not found'),
-      );
+      expectHandleErrorMessage(/File not found/);
     });
   });
 
@@ -231,13 +250,10 @@ describe('FileOperationHandler', () => {
 
     it('should show error when command file not found', async () => {
       vi.mocked(fs.promises.access).mockRejectedValueOnce(new Error('ENOENT'));
-      const { window } = await import('vscode');
 
       await handler.handleOpenCommandFile('missing', 'personal');
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('File not found'),
-      );
+      expectHandleErrorMessage(/File not found/);
     });
   });
 
@@ -274,3 +290,13 @@ describe('FileOperationHandler', () => {
     });
   });
 });
+
+function expectHandleErrorMessage(expected: string | RegExp): void {
+  const error = vi.mocked(handleError).mock.calls.at(-1)?.[0];
+  expect(error).toBeInstanceOf(Error);
+  if (typeof expected === 'string') {
+    expect((error as Error).message).toBe(expected);
+  } else {
+    expect((error as Error).message).toMatch(expected);
+  }
+}

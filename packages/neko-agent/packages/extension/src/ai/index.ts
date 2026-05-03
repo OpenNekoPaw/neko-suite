@@ -12,7 +12,3 @@ export {
   ExecutionMode,
 } from './agentRunner';
 export { IAgentManager, AgentManager } from './agentManager';
-export { createTimelineElementUpdateAdapter } from './operationAdapters';
-export type { TimelineElementUpdateAdapterOptions } from './operationAdapters';
-export { createDefaultOperationToolAdapterRegistry } from './operationAdapters';
-export type { DefaultOperationToolAdapterRegistryOptions } from './operationAdapters';

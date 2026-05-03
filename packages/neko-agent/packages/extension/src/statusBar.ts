@@ -25,37 +25,17 @@ import {
 export function createStatusBar(platform: Platform): vscode.Disposable {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = 'neko.ai.chat';
-  item.tooltip = 'Neko AI Assistant — click to open chat';
+  item.tooltip = platform.config.getAssistantStatusBarPresentation().tooltip;
 
   function refresh(): void {
-    const models = platform.config
-      .getEnabledModels()
-      .filter((m) => (m.capabilities as string[] | undefined)?.includes('chat'));
-
-    let llmLabel: string;
-    if (models.length === 0) {
-      item.color = new vscode.ThemeColor('statusBarItem.warningForeground');
-      llmLabel = 'Neko AI';
-    } else {
-      item.color = undefined;
-      const name = models[0].name;
-      llmLabel = name.length > 20 ? name.slice(0, 18) + '…' : name;
-    }
-
-    // Append generation model badges when a canvas project is active
-    const genConfig = getActiveGenerationConfig();
-    const badges: string[] = [];
-    if (genConfig?.image) {
-      const imgName = shortModelName(genConfig.image);
-      badges.push(`✨ ${imgName}`);
-    }
-    if (genConfig?.video) {
-      const vidName = shortModelName(genConfig.video);
-      badges.push(`🎬 ${vidName}`);
-    }
-
-    const badgeSuffix = badges.length > 0 ? `  ${badges.join('  ')}` : '';
-    item.text = `$(hubot) ${llmLabel}${badgeSuffix}`;
+    const presentation = platform.config.getAssistantStatusBarPresentation(
+      getActiveGenerationConfig(),
+    );
+    item.color = presentation.warning
+      ? new vscode.ThemeColor('statusBarItem.warningForeground')
+      : undefined;
+    item.tooltip = presentation.tooltip;
+    item.text = presentation.text;
     item.show();
   }
 
@@ -80,13 +60,4 @@ export function createStatusBar(platform: Platform): vscode.Disposable {
       item.dispose();
     },
   };
-}
-
-/** Shorten a model id for display: strip common prefixes and cap at 12 chars. */
-function shortModelName(modelId: string): string {
-  // Strip known provider prefixes for brevity
-  const stripped = modelId
-    .replace(/^(stability-ai\/|fal-ai\/|black-forest-labs\/|wan-|wan\.)/i, '')
-    .replace(/^(flux-)/, 'flux-');
-  return stripped.length > 12 ? stripped.slice(0, 11) + '…' : stripped;
 }

@@ -12,10 +12,10 @@ import * as vscode from 'vscode';
 import { createServiceId, getLogger } from '../base';
 
 const logger = getLogger('AgentManager');
-import type { Platform } from '@neko/platform';
 import type { ChatMessage } from '@neko/shared';
-import type { SkillInjection } from '@neko/agent';
-import { AgentRunner, IAgentRunner, IAgentConfig } from './agentRunner';
+import { createAgentRuntimeManager, type AgentRuntimeManager } from '@neko/agent/runtime';
+import { type AgentHistoryWithToolContextMessage, type SkillInjection } from '@neko/agent';
+import { AgentRunner, IAgentRunner } from './agentRunner';
 
 // =============================================================================
 // Service Identifier
@@ -31,11 +31,6 @@ export const IAgentManager = createServiceId<IAgentManager>('agentManager');
  * Agent Manager 接口
  */
 export interface IAgentManager extends vscode.Disposable {
-  /**
-   * 设置 Platform 实例（共享）
-   */
-  setPlatform(platform: Platform): void;
-
   /**
    * 获取或创建指定会话的 Agent
    */
@@ -100,12 +95,7 @@ export interface IAgentManager extends vscode.Disposable {
    */
   loadHistoryWithContext(
     conversationId: string,
-    messages: Array<{
-      role: 'user' | 'assistant' | 'system';
-      content: string;
-      toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-      toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
-    }>,
+    messages: readonly AgentHistoryWithToolContextMessage[],
   ): void;
 
   /**
@@ -165,10 +155,10 @@ export interface IAgentManager extends vscode.Disposable {
   clearActiveSkill(conversationId: string): void;
 
   /**
-   * Set the skill provider for meta tools (GetContext, ActivateSkill, DeactivateSkill).
+   * Set the per-conversation skill provider factory for meta tools.
    * Applied to all existing and future AgentRunners.
    */
-  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void;
+  setSkillProviderFactory(factory: import('@neko/agent').SkillProviderFactory): void;
 
   /**
    * Re-sync capability-derived runtime overlays into all existing sessions.
@@ -185,35 +175,19 @@ export interface IAgentManager extends vscode.Disposable {
  * Agent Manager 实现
  */
 export class AgentManager implements IAgentManager {
-  /** 会话 ID -> AgentRunner 映射 */
-  private _agents = new Map<string, AgentRunner>();
-
-  /** 最近访问顺序（用于 LRU） */
-  private _accessOrder: string[] = [];
-
-  /** 最大 Agent 实例数量 */
-  private _maxAgents = 10;
-  private readonly _defaultMaxAgents = 10;
-
-  /** Platform 实例（共享） */
-  private _platform?: Platform;
-
-  /** Skill provider for meta tools */
-  private _skillProvider?: import('@neko/agent').ISkillProvider;
-
-  /** 事件订阅 */
-  private _agentDisposables = new Map<string, vscode.Disposable[]>();
-
-  /** 等待队列：当所有 Agent 都在运行时，新请求排队等待 */
-  private _waitingQueue: Array<{
-    conversationId: string;
-    resolve: (agent: IAgentRunner) => void;
-    reject: (error: Error) => void;
-  }> = [];
-
   /** 事件发射器 */
   private readonly _onDidAgentStart = new vscode.EventEmitter<{ conversationId: string }>();
   private readonly _onDidAgentStop = new vscode.EventEmitter<{ conversationId: string }>();
+  private readonly _runtime: AgentRuntimeManager<AgentRunner>;
+
+  constructor() {
+    this._runtime = createAgentRuntimeManager<AgentRunner>({
+      createAgent: ({ subAgentRuntime }) => new AgentRunner({ subAgentRuntime }),
+      onAgentStart: (event) => this._onDidAgentStart.fire(event),
+      onAgentStop: (event) => this._onDidAgentStop.fire(event),
+      logger,
+    });
+  }
 
   // -------------------------------------------------------------------------
   // Events
@@ -228,121 +202,43 @@ export class AgentManager implements IAgentManager {
   }
 
   // -------------------------------------------------------------------------
-  // Platform
-  // -------------------------------------------------------------------------
-
-  setPlatform(platform: Platform): void {
-    this._platform = platform;
-  }
-
-  // -------------------------------------------------------------------------
   // Agent Management
   // -------------------------------------------------------------------------
 
   getOrCreate(conversationId: string): IAgentRunner {
-    // 更新访问顺序
-    this._updateAccessOrder(conversationId);
-
-    let agent = this._agents.get(conversationId);
-    if (!agent) {
-      // 如果超过限制，移除最久未使用的非运行中 Agent
-      this._evictIfNeeded();
-
-      // 创建新 Agent
-      agent = new AgentRunner();
-      if (this._skillProvider) {
-        agent.setSkillProvider(this._skillProvider);
-      }
-      this._agents.set(conversationId, agent);
-
-      // 监听 Agent 事件
-      const disposables: vscode.Disposable[] = [];
-      disposables.push(
-        agent.onDidStart(() => {
-          this._onDidAgentStart.fire({ conversationId });
-        }),
-        agent.onDidStop(() => {
-          this._onDidAgentStop.fire({ conversationId });
-          // 当 Agent 停止时，尝试处理等待队列中的请求
-          this._processWaitingQueue();
-        }),
-      );
-      this._agentDisposables.set(conversationId, disposables);
-    }
-
-    return agent;
+    return this._runtime.getOrCreate(conversationId);
   }
 
   get(conversationId: string): IAgentRunner | undefined {
-    const agent = this._agents.get(conversationId);
-    if (agent) {
-      this._updateAccessOrder(conversationId);
-    }
-    return agent;
+    return this._runtime.get(conversationId);
   }
 
   isRunning(conversationId: string): boolean {
-    const agent = this._agents.get(conversationId);
-    return agent?.isRunning() ?? false;
+    return this._runtime.isRunning(conversationId);
   }
 
   hasRunningAgents(): boolean {
-    for (const agent of this._agents.values()) {
-      if (agent.isRunning()) return true;
-    }
-    return false;
+    return this._runtime.hasRunningAgents();
   }
 
   getRunningConversations(): string[] {
-    const running: string[] = [];
-    for (const [id, agent] of this._agents) {
-      if (agent.isRunning()) {
-        running.push(id);
-      }
-    }
-    return running;
+    return this._runtime.getRunningConversations();
   }
 
   getAllConversations(): string[] {
-    return Array.from(this._agents.keys());
+    return this._runtime.getAllConversations();
   }
 
   remove(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    if (agent) {
-      // 取消执行
-      agent.cancel();
-
-      // 清理事件订阅
-      const disposables = this._agentDisposables.get(conversationId);
-      if (disposables) {
-        for (const d of disposables) {
-          d.dispose();
-        }
-        this._agentDisposables.delete(conversationId);
-      }
-
-      // 释放 Agent
-      agent.dispose();
-      this._agents.delete(conversationId);
-
-      // 从访问顺序中移除
-      const index = this._accessOrder.indexOf(conversationId);
-      if (index !== -1) {
-        this._accessOrder.splice(index, 1);
-      }
-    }
+    this._runtime.remove(conversationId);
   }
 
   cancel(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    agent?.cancel();
+    this._runtime.cancel(conversationId);
   }
 
   cancelAll(): void {
-    for (const agent of this._agents.values()) {
-      agent.cancel();
-    }
+    this._runtime.cancelAll();
   }
 
   // -------------------------------------------------------------------------
@@ -350,8 +246,7 @@ export class AgentManager implements IAgentManager {
   // -------------------------------------------------------------------------
 
   confirmTool(conversationId: string, toolCallId: string, approved: boolean): void {
-    const agent = this._agents.get(conversationId);
-    agent?.confirmTool(toolCallId, approved);
+    this._runtime.confirmTool(conversationId, toolCallId, approved);
   }
 
   // -------------------------------------------------------------------------
@@ -363,59 +258,26 @@ export class AgentManager implements IAgentManager {
     messages: ChatMessage[],
     messageEventIds?: readonly (readonly string[])[],
   ): void {
-    const agent = this.getOrCreate(conversationId);
-    agent.loadHistory(messages, messageEventIds);
+    this._runtime.loadHistory(conversationId, messages, messageEventIds);
   }
 
   loadHistoryWithContext(
     conversationId: string,
-    messages: Array<{
-      role: 'user' | 'assistant' | 'system';
-      content: string;
-      toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-      toolResults?: Array<{ callId: string; success: boolean; data: unknown }>;
-    }>,
+    messages: readonly AgentHistoryWithToolContextMessage[],
   ): void {
-    const agent = this.getOrCreate(conversationId);
-    agent.clearHistory();
-
-    for (const msg of messages) {
-      // Add basic message
-      agent.addMessage({
-        role: msg.role,
-        content: msg.content,
-      });
-
-      // For assistant messages with tool calls, we need to add tool results as separate messages
-      // This ensures the agent has the full context for proper resume
-      if (msg.role === 'assistant' && msg.toolResults && msg.toolResults.length > 0) {
-        for (const result of msg.toolResults) {
-          // Add tool result as a separate message for context
-          // This format is compatible with Claude's tool_result content block
-          agent.addMessage({
-            role: 'user', // Tool results are typically sent as user messages
-            content: `[Tool Result for ${result.callId}]: ${result.success ? 'Success' : 'Failed'}\n${JSON.stringify(result.data, null, 2)}`,
-          });
-        }
-      }
-    }
-
-    logger.info(`Loaded ${messages.length} messages with context for: ${conversationId}`);
+    this._runtime.loadHistoryWithContext(conversationId, messages);
   }
 
   clearHistory(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    agent?.clearHistory();
+    this._runtime.clearHistory(conversationId);
   }
 
   clearPendingMessages(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    agent?.clearPendingMessages();
+    this._runtime.clearPendingMessages(conversationId);
   }
 
   getContextTokenCount(conversationId: string): number {
-    const agent = this._agents.get(conversationId);
-    return agent?.getContextTokenCount() ?? 0;
+    return this._runtime.getContextTokenCount(conversationId);
   }
 
   async compressContext(conversationId: string): Promise<{
@@ -423,11 +285,7 @@ export class AgentManager implements IAgentManager {
     compressedTokens: number;
     ratio: number;
   }> {
-    const agent = this._agents.get(conversationId);
-    if (!agent) {
-      return { originalTokens: 0, compressedTokens: 0, ratio: 1 };
-    }
-    return agent.compressContext();
+    return this._runtime.compressContext(conversationId);
   }
 
   applySkillInjection(
@@ -435,103 +293,23 @@ export class AgentManager implements IAgentManager {
     injection: SkillInjection,
     skill?: import('@neko/shared').Skill,
   ): void {
-    const agent = this._agents.get(conversationId);
-    agent?.applySkillInjection(injection, skill);
+    this._runtime.applySkillInjection(conversationId, injection, skill);
   }
 
   getActiveSkill(conversationId: string): import('@neko/shared').Skill | undefined {
-    const agent = this._agents.get(conversationId);
-    return agent?.getActiveSkill();
+    return this._runtime.getActiveSkill(conversationId);
   }
 
   clearActiveSkill(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    agent?.clearActiveSkill();
+    this._runtime.clearActiveSkill(conversationId);
   }
 
-  setSkillProvider(provider: import('@neko/agent').ISkillProvider): void {
-    this._skillProvider = provider;
-    // Apply to all existing agents
-    for (const agent of this._agents.values()) {
-      agent.setSkillProvider(provider);
-    }
+  setSkillProviderFactory(factory: import('@neko/agent').SkillProviderFactory): void {
+    this._runtime.setSkillProviderFactory(factory);
   }
 
   refreshCapabilityRuntime(): void {
-    for (const agent of this._agents.values()) {
-      agent.refreshCapabilityRuntime();
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // LRU Cache Management
-  // -------------------------------------------------------------------------
-
-  private _updateAccessOrder(conversationId: string): void {
-    const index = this._accessOrder.indexOf(conversationId);
-    if (index !== -1) {
-      this._accessOrder.splice(index, 1);
-    }
-    this._accessOrder.push(conversationId);
-  }
-
-  private _evictIfNeeded(): void {
-    while (this._agents.size >= this._maxAgents) {
-      // 找到最久未使用且未运行的 Agent
-      let evictId: string | null = null;
-      for (const id of this._accessOrder) {
-        const agent = this._agents.get(id);
-        if (agent && !agent.isRunning()) {
-          evictId = id;
-          break;
-        }
-      }
-
-      if (evictId) {
-        logger.info(`Evicting agent (LRU): ${evictId}`);
-        this.remove(evictId);
-      } else {
-        // 所有 Agent 都在运行，无法驱逐
-        // 增加最大 Agent 数量临时容纳新请求，但设置上限防止无限增长
-        const absoluteMax = 20;
-        if (this._maxAgents < absoluteMax) {
-          this._maxAgents++;
-          logger.warn(`All agents running, temporarily increased maxAgents to ${this._maxAgents}`);
-        } else {
-          logger.error(`Cannot evict: reached absolute max (${absoluteMax}) agents, all running`);
-        }
-        break;
-      }
-    }
-  }
-
-  /**
-   * 处理等待队列：当 Agent 停止时尝试处理等待的请求
-   */
-  private _processWaitingQueue(): void {
-    // Shrink _maxAgents back toward default when pressure is relieved
-    if (this._maxAgents > this._defaultMaxAgents && this._agents.size <= this._defaultMaxAgents) {
-      this._maxAgents = this._defaultMaxAgents;
-    }
-
-    if (this._waitingQueue.length === 0) return;
-
-    // 检查是否有可用容量
-    const availableSlots = this._maxAgents - this._agents.size;
-    const nonRunningAgents = Array.from(this._agents.values()).filter((a) => !a.isRunning()).length;
-
-    if (availableSlots > 0 || nonRunningAgents > 0) {
-      const waiting = this._waitingQueue.shift();
-      if (waiting) {
-        try {
-          const agent = this.getOrCreate(waiting.conversationId);
-          waiting.resolve(agent);
-          logger.info(`Processed waiting request for: ${waiting.conversationId}`);
-        } catch (error) {
-          waiting.reject(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-    }
+    this._runtime.refreshCapabilityRuntime();
   }
 
   // -------------------------------------------------------------------------
@@ -539,29 +317,7 @@ export class AgentManager implements IAgentManager {
   // -------------------------------------------------------------------------
 
   dispose(): void {
-    // 取消所有执行
-    this.cancelAll();
-
-    // 拒绝所有等待中的请求
-    for (const waiting of this._waitingQueue) {
-      waiting.reject(new Error('AgentManager disposed'));
-    }
-    this._waitingQueue = [];
-
-    // 清理所有事件订阅
-    for (const disposables of this._agentDisposables.values()) {
-      for (const d of disposables) {
-        d.dispose();
-      }
-    }
-    this._agentDisposables.clear();
-
-    // 释放所有 Agent
-    for (const agent of this._agents.values()) {
-      agent.dispose();
-    }
-    this._agents.clear();
-    this._accessOrder = [];
+    this._runtime.dispose();
 
     // 释放事件发射器
     this._onDidAgentStart.dispose();

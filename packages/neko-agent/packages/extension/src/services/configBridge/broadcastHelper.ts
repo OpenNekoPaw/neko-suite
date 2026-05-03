@@ -12,7 +12,7 @@ const logger = getLogger('WebviewBroadcaster');
  */
 export function broadcastToWebviews(
   webviews: Set<PostMessageFn>,
-  message: Record<string, unknown>,
+  message: Parameters<PostMessageFn>[0],
 ): void {
   for (const postMessage of webviews) {
     try {

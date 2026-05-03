@@ -1,111 +1,54 @@
 /**
  * Attachment Processor
  *
- * Handles processing of message attachments (images, files, media).
- * Automatically resizes images exceeding Claude's optimal vision dimensions.
+ * Extension-host bridge for attachment projection.
  */
 
 import * as fs from 'fs';
 import { getLogger } from '../../base';
-import { getMimeType } from '@neko/shared';
+import {
+  projectAgentMessageAttachments,
+  type AgentBase64ImageAttachment,
+  type AgentProcessedAttachments,
+} from '@neko/agent/runtime';
+import {
+  isVisionImageMime,
+  planVisionImagePreprocess,
+  resolveVisionImageAttachmentMediaType,
+} from '@neko/platform/media/vision-preprocess-policy';
 import type { MessageAttachment } from '../types';
 
 const logger = getLogger('AttachmentProcessor');
 
-/** Claude's optimal long-edge for vision inputs */
-const VISION_MAX_LONG_EDGE = 1568;
-/** Safety margin below the 5MB API limit */
-const VISION_MAX_BYTES = 4 * 1024 * 1024;
-
-const IMAGE_MIMES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/bmp',
-  'image/tiff',
-]);
-
 /**
  * Processed attachment result
  */
-export interface ProcessedAttachments {
-  textContent: string;
-  imageAttachments: Array<{ type: 'base64'; media_type: string; data: string }>;
-}
+export type ProcessedAttachments = AgentProcessedAttachments;
 
 /**
- * Processor for message attachments
+ * Bridge for message attachments.
+ *
+ * Projection rules live in @neko/agent. This class only injects local file IO
+ * and image encoding capabilities from the extension host.
  */
 export class AttachmentProcessor {
   /**
-   * Process attachments - extract text content and image data
+   * Process attachments using agent-owned projection rules.
    */
   async processAttachments(attachments?: MessageAttachment[]): Promise<ProcessedAttachments> {
-    const imageAttachments: ProcessedAttachments['imageAttachments'] = [];
-    let textContent = '';
-
-    if (!attachments || attachments.length === 0) {
-      return { textContent, imageAttachments };
-    }
-
-    for (const attachment of attachments) {
-      switch (attachment.type) {
-        case 'image':
-          // For images, extract base64 data for multimodal AI
-          if (attachment.preview) {
-            // Preview is already base64 data URL
-            const match = attachment.preview.match(/^data:([^;]+);base64,(.+)$/);
-            if (match) {
-              imageAttachments.push({
-                type: 'base64',
-                media_type: match[1],
-                data: match[2],
-              });
-            }
-          } else if (attachment.path) {
-            // Read from file path
-            try {
-              const base64Data = await this.readFileAsBase64(attachment.path);
-              if (base64Data) {
-                imageAttachments.push(base64Data);
-              }
-            } catch (err) {
-              logger.error('Failed to read image attachment:', err);
-            }
-          }
-          break;
-
-        case 'file':
-          // For text files, read content and append to message
-          if (attachment.path) {
-            try {
-              const content = await fs.promises.readFile(attachment.path, 'utf-8');
-              textContent += `\n\n### File: ${attachment.name}\n\`\`\`\n${content}\n\`\`\``;
-            } catch (err) {
-              logger.error('Failed to read file attachment:', err);
-              textContent += `\n\n### File: ${attachment.name}\n(Failed to read file)`;
-            }
-          }
-          break;
-
-        case 'video':
-        case 'audio':
-          // For media files, just note the reference
-          textContent += `\n\n[Attached ${attachment.type}: ${attachment.name}]`;
-          if (attachment.path) {
-            textContent += ` (path: ${attachment.path})`;
-          }
-          break;
-      }
-    }
-
-    return { textContent, imageAttachments };
+    return projectAgentMessageAttachments(attachments, {
+      readTextFile: (path) => fs.promises.readFile(path, 'utf-8'),
+      readImageFileAsBase64: (path) => this.readFileAsBase64(path),
+      onError: ({ operation, error }) => {
+        logger.error(`Failed to ${operation} attachment`, error);
+      },
+    });
   }
 
   /**
    * Read file as base64 for image attachments.
-   * Automatically resizes if the image exceeds vision thresholds.
+   * Image policy is provided by @neko/platform; this method only performs IO
+   * and sharp-based encoding in the extension host.
    */
   async readFileAsBase64(filePath: string): Promise<{
     type: 'base64';
@@ -114,13 +57,12 @@ export class AttachmentProcessor {
   } | null> {
     try {
       const buffer = await fs.promises.readFile(filePath);
-      const mimeFromExt = getMimeType(filePath);
-      const mediaType = mimeFromExt !== 'application/octet-stream' ? mimeFromExt : 'image/png';
+      const mediaType = resolveVisionImageAttachmentMediaType(filePath);
 
-      if (IMAGE_MIMES.has(mediaType)) {
-        const resized = await this.maybeResizeImage(buffer);
-        if (resized) {
-          return { type: 'base64', media_type: 'image/jpeg', data: resized };
+      if (isVisionImageMime(mediaType)) {
+        const encoded = await this.maybeEncodeVisionImage(buffer);
+        if (encoded) {
+          return encoded;
         }
       }
 
@@ -132,32 +74,38 @@ export class AttachmentProcessor {
   }
 
   /**
-   * Resize image if it exceeds vision thresholds (dimension or file size).
-   * Returns base64 JPEG string if resized, null if no resize needed.
+   * Encode image only when the platform policy asks for a transform.
    */
-  private async maybeResizeImage(buffer: Buffer): Promise<string | null> {
+  private async maybeEncodeVisionImage(buffer: Buffer): Promise<AgentBase64ImageAttachment | null> {
     try {
       const sharp = (await import('sharp')).default;
       const meta = await sharp(buffer).metadata();
       const w = meta.width ?? 0;
       const h = meta.height ?? 0;
-      const longEdge = Math.max(w, h);
+      const plan = planVisionImagePreprocess({
+        width: w,
+        height: h,
+        byteLength: buffer.length,
+      });
 
-      const needsResize = longEdge > VISION_MAX_LONG_EDGE || buffer.length > VISION_MAX_BYTES;
-      if (!needsResize) return null;
+      if (!plan.shouldResize) return null;
 
       const resized = await sharp(buffer)
         .resize({
-          width: VISION_MAX_LONG_EDGE,
-          height: VISION_MAX_LONG_EDGE,
+          width: plan.maxWidth,
+          height: plan.maxHeight,
           fit: 'inside',
           withoutEnlargement: true,
         })
-        .jpeg({ quality: 85 })
+        .jpeg({ quality: plan.jpegQuality })
         .toBuffer();
 
-      logger.info(`Resized image: ${w}x${h} (${buffer.length}B) → ${resized.length}B`);
-      return resized.toString('base64');
+      logger.info(`Resized image: ${w}x${h} (${buffer.length}B) -> ${resized.length}B`);
+      return {
+        type: 'base64',
+        media_type: plan.outputMediaType,
+        data: resized.toString('base64'),
+      };
     } catch (err) {
       logger.warn('Image resize failed, using original:', err);
       return null;

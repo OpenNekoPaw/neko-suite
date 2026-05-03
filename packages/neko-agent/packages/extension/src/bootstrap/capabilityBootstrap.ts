@@ -11,17 +11,20 @@
  */
 
 import * as vscode from 'vscode';
-import { emitDiagnostic, resolveGlobalStorageLayout, resolveStorageLayout } from '@neko/shared';
-import { promises as fs } from 'node:fs';
-import * as os from 'node:os';
 import type {
   ICapabilityMediaService,
   ICapabilityConfigManager,
   IProviderCardRegistry,
 } from '@neko/shared';
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import {
+  createCapabilityRuntimeBindingStore,
+  type CapabilityRuntimeBindings,
+} from '@neko/agent/runtime';
 import {
   ProviderCardRegistry,
-  registerProviderCardDirectory,
+  registerRuntimeProviderCardDirectories,
   ToolCategoryRegistry,
   type SkillService,
   type SkillRegistry,
@@ -34,29 +37,8 @@ import {
 import { getLogger } from '../base';
 
 let _instance: CapabilityDiscoveryService | undefined;
-let _runtimeBindings: CapabilityRuntimeBindings = {};
 const logger = getLogger('CapabilityBootstrap');
-
-const CAPABILITY_RUNTIME_BINDING_KEYS = [
-  'skillRegistry',
-  'toolGroupRegistry',
-  'toolCategoryRegistry',
-  'skillService',
-  'providerCardRegistry',
-] as const;
-
-export interface CapabilityRuntimeBindings {
-  /** Shared registry that provider-contributed skills are injected into. */
-  skillRegistry?: SkillRegistry;
-  /** Shared ToolGroup registry used by runtime bootstrap + UI projections. */
-  toolGroupRegistry?: ToolGroupRegistry;
-  /** Shared ToolCategory registry used by tool injection + filtering. */
-  toolCategoryRegistry?: ToolCategoryRegistry;
-  /** Shared SkillService layered on top of the shared SkillRegistry. */
-  skillService?: SkillService;
-  /** Shared ProviderCard registry used by ProviderExpressionContext. */
-  providerCardRegistry?: IProviderCardRegistry;
-}
+const runtimeBindingStore = createCapabilityRuntimeBindingStore(logger);
 
 export interface CapabilityBootstrapOptions extends Omit<
   CapabilityDiscoveryDeps,
@@ -74,58 +56,6 @@ export interface CapabilityBootstrapOptions extends Omit<
   workspaceRoot?: string;
 }
 
-function mergeCapabilityRuntimeBindings(
-  next: Partial<CapabilityRuntimeBindings>,
-): CapabilityRuntimeBindings {
-  const merged: CapabilityRuntimeBindings = { ..._runtimeBindings };
-
-  for (const key of CAPABILITY_RUNTIME_BINDING_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(next, key)) {
-      continue;
-    }
-
-    const value = next[key];
-    const previous = merged[key];
-    if (value === undefined) {
-      if (previous !== undefined) {
-        emitDiagnostic(logger, 'warn', {
-          code: 'extension.capability-runtime.binding-update-ignored',
-          reason: 'undefined-value-ignored',
-          message:
-            'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
-          context: {
-            binding: key,
-          },
-        });
-      }
-      continue;
-    }
-
-    if (previous !== undefined && previous !== value) {
-      emitDiagnostic(logger, 'warn', {
-        code: 'extension.capability-runtime.binding-replaced',
-        reason: 'shared-singleton-replaced',
-        message: 'Replacing a shared capability runtime binding reference.',
-        context: {
-          binding: key,
-        },
-      });
-    }
-
-    assignCapabilityRuntimeBinding(merged, key, value);
-  }
-
-  return merged;
-}
-
-function assignCapabilityRuntimeBinding<K extends keyof CapabilityRuntimeBindings>(
-  bindings: CapabilityRuntimeBindings,
-  key: K,
-  value: NonNullable<CapabilityRuntimeBindings[K]>,
-): void {
-  bindings[key] = value;
-}
-
 /**
  * Initialize and activate the capability discovery system.
  * Returns the service instance for query access.
@@ -134,46 +64,30 @@ export function bootstrapCapabilities(
   options: CapabilityBootstrapOptions,
   context: vscode.ExtensionContext,
 ): CapabilityDiscoveryService {
+  const runtimeBindings = runtimeBindingStore.get();
   const toolCategoryRegistry =
     (options.toolCategoryRegistry as ToolCategoryRegistry | undefined) ??
-    _runtimeBindings.toolCategoryRegistry ??
+    runtimeBindings.toolCategoryRegistry ??
     new ToolCategoryRegistry();
   const providerCardRegistry: IProviderCardRegistry =
     options.providerCardRegistry ??
-    _runtimeBindings.providerCardRegistry ??
+    runtimeBindings.providerCardRegistry ??
     new ProviderCardRegistry();
 
-  _runtimeBindings = {
-    ...mergeCapabilityRuntimeBindings({
-      skillRegistry: options.skillRegistry as SkillRegistry | undefined,
-      toolGroupRegistry: options.toolGroupRegistry as ToolGroupRegistry | undefined,
-      toolCategoryRegistry,
-      providerCardRegistry,
-    }),
-  };
-
-  void registerProviderCardDirectory({
-    registry: providerCardRegistry,
-    root: resolveGlobalStorageLayout(os.homedir()).providerCards,
-    sourceLayer: 'market',
-    fs,
-    recursive: true,
-    sourceRefPrefix: '${NEKO_HOME}/providers',
-    onError: (error) => emitProviderCardLoadWarning(error, 'market'),
+  runtimeBindingStore.update({
+    skillRegistry: options.skillRegistry as SkillRegistry | undefined,
+    toolGroupRegistry: options.toolGroupRegistry as ToolGroupRegistry | undefined,
+    toolCategoryRegistry,
+    providerCardRegistry,
   });
 
-  const workspaceRoot = options.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (workspaceRoot) {
-    void registerProviderCardDirectory({
-      registry: providerCardRegistry,
-      root: resolveStorageLayout(workspaceRoot, os.homedir()).project.providerCards,
-      sourceLayer: 'project',
-      fs,
-      recursive: false,
-      sourceRefPrefix: '.neko/providers',
-      onError: (error) => emitProviderCardLoadWarning(error, 'project'),
-    });
-  }
+  void registerRuntimeProviderCardDirectories({
+    registry: providerCardRegistry,
+    fs,
+    homeDir: os.homedir(),
+    workspaceRoot: options.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    logger,
+  });
 
   _instance = new CapabilityDiscoveryService({
     ...options,
@@ -187,22 +101,6 @@ export function bootstrapCapabilities(
   });
   context.subscriptions.push(_instance);
   return _instance;
-}
-
-function emitProviderCardLoadWarning(
-  error: { readonly path: string; readonly reason: string; readonly cause: unknown },
-  layer: 'market' | 'project',
-): void {
-  emitDiagnostic(logger, 'warn', {
-    code: 'extension.provider-card.load-failed',
-    reason: error.reason,
-    message: 'Failed to load provider expression card.',
-    context: {
-      layer,
-      path: error.path,
-      error: String(error.cause),
-    },
-  });
 }
 
 /**
@@ -224,7 +122,7 @@ export function getCapabilityDiscoveryService(): CapabilityDiscoveryService {
  * partial bootstraps can fall back gracefully.
  */
 export function getCapabilityRuntimeBindings(): Readonly<CapabilityRuntimeBindings> {
-  return _runtimeBindings;
+  return runtimeBindingStore.get();
 }
 
 /**
@@ -236,9 +134,5 @@ export function getCapabilityRuntimeBindings(): Readonly<CapabilityRuntimeBindin
  * previous shared singleton binding instead of silently clearing it.
  */
 export function setCapabilityRuntimeSkillService(skillService: SkillService | undefined): void {
-  _runtimeBindings = {
-    ...mergeCapabilityRuntimeBindings({
-      skillService,
-    }),
-  };
+  runtimeBindingStore.setSkillService(skillService);
 }

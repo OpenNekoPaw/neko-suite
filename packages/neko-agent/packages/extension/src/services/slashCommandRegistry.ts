@@ -14,27 +14,22 @@
  */
 
 import * as vscode from 'vscode';
+import {
+  createRuntimePluginSlashCommandRegistry,
+  type PluginSlashCommandDef,
+  type RegisteredPluginSlashCommand,
+  type RuntimePluginSlashCommandRegistry,
+} from '@neko/agent/runtime';
 
-/** Single plugin slash command definition */
-export interface PluginSlashCommandDef {
-  id: string;
-  name: string;
-  description: string;
-  icon?: string;
-}
-
-/** Entry stored internally */
-interface RegistryEntry {
-  extensionId: string;
-  commands: PluginSlashCommandDef[];
-}
+export type { PluginSlashCommandDef, RegisteredPluginSlashCommand };
 
 /**
  * Registry that aggregates plugin slash commands from all registered extensions.
  * Implements vscode.Disposable for clean teardown.
  */
 export class SlashCommandRegistry implements vscode.Disposable {
-  private readonly _entries = new Map<string, RegistryEntry>();
+  private readonly _runtime: RuntimePluginSlashCommandRegistry =
+    createRuntimePluginSlashCommandRegistry();
   private readonly _onChange = new vscode.EventEmitter<void>();
 
   /** Fired whenever the registered command set changes */
@@ -46,7 +41,7 @@ export class SlashCommandRegistry implements vscode.Disposable {
    * @param commands    - Commands to expose in the chat panel
    */
   register(extensionId: string, commands: PluginSlashCommandDef[]): void {
-    this._entries.set(extensionId, { extensionId, commands });
+    this._runtime.register(extensionId, commands);
     this._onChange.fire();
   }
 
@@ -54,7 +49,7 @@ export class SlashCommandRegistry implements vscode.Disposable {
    * Unregister all commands from a specific extension.
    */
   unregister(extensionId: string): void {
-    if (this._entries.delete(extensionId)) {
+    if (this._runtime.unregister(extensionId)) {
       this._onChange.fire();
     }
   }
@@ -62,15 +57,12 @@ export class SlashCommandRegistry implements vscode.Disposable {
   /**
    * Get all registered plugin commands as a flat list (sorted by extensionId for stability).
    */
-  getAll(): Array<PluginSlashCommandDef & { extensionId: string }> {
-    return [...this._entries.values()]
-      .sort((a, b) => a.extensionId.localeCompare(b.extensionId))
-      .flatMap((entry) =>
-        entry.commands.map((cmd) => ({ ...cmd, extensionId: entry.extensionId })),
-      );
+  getAll(): RegisteredPluginSlashCommand[] {
+    return this._runtime.getAll();
   }
 
   dispose(): void {
+    this._runtime.clear();
     this._onChange.dispose();
   }
 }

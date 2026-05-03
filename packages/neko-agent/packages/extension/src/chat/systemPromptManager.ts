@@ -3,7 +3,7 @@
  *
  * Delegates prompt building to @neko/agent's SystemPromptBuilder.
  * Extension layer only manages:
- * - Mode state (default/plan)
+ * - Per-conversation mode state (default/plan)
  * - AGENTS.md loading trigger
  * - Platform prompt registry bridge
  *
@@ -14,8 +14,11 @@
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
 import {
+  createConversationPromptModeRuntime,
   createSystemPromptBuilder,
-  getDefaultPersonalPath,
+  runSystemPromptAgentsFileLoadRuntime,
+  type ConversationPromptModeRuntime,
+  type ConversationPromptModeSnapshot,
   type SystemPromptBuilder,
   type PromptMode,
 } from '@neko/agent';
@@ -29,10 +32,12 @@ export type { PromptMode };
 export class SystemPromptManager {
   private _platform?: Platform;
   private _builder: SystemPromptBuilder;
+  private readonly _promptModes: ConversationPromptModeRuntime;
 
   constructor(platform?: Platform) {
     this._platform = platform;
     this._builder = createSystemPromptBuilder({ locale: 'en' });
+    this._promptModes = createConversationPromptModeRuntime();
   }
 
   /**
@@ -52,29 +57,50 @@ export class SystemPromptManager {
   /**
    * Get current mode
    */
-  getMode(): PromptMode {
-    return this._builder.getMode();
+  getMode(conversationId: string): PromptMode {
+    return this._promptModes.getMode(conversationId);
   }
 
   /**
    * Set prompt mode (default or plan)
    */
-  setMode(mode: PromptMode): void {
-    this._builder.setMode(mode);
+  setMode(conversationId: string, mode: PromptMode): ConversationPromptModeSnapshot {
+    return this._promptModes.setMode(conversationId, mode);
   }
 
   /**
    * Toggle between default and plan mode
    */
-  togglePlanMode(): PromptMode {
-    return this._builder.togglePlanMode();
+  togglePlanMode(conversationId: string): ConversationPromptModeSnapshot {
+    return this._promptModes.togglePlanMode(conversationId);
   }
 
   /**
    * Check if in plan mode
    */
-  isPlanMode(): boolean {
-    return this._builder.isPlanMode();
+  isPlanMode(conversationId: string): boolean {
+    return this._promptModes.isPlanMode(conversationId);
+  }
+
+  getPromptModeSnapshot(conversationId: string): ConversationPromptModeSnapshot {
+    const mode = this.getMode(conversationId);
+    return {
+      conversationId,
+      mode,
+      isPlanMode: mode === 'plan',
+    };
+  }
+
+  getPromptModeRuntime(): ConversationPromptModeRuntime {
+    return this._promptModes;
+  }
+
+  clearPromptMode(conversationId: string): void {
+    this._promptModes.clear(conversationId);
+  }
+
+  clearAllPromptModes(): void {
+    this._promptModes.clearAll();
   }
 
   /**
@@ -82,7 +108,7 @@ export class SystemPromptManager {
    */
   async loadAgentsFile(): Promise<void> {
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    await this._builder.loadAgentsFile(workspacePath, getDefaultPersonalPath());
+    await runSystemPromptAgentsFileLoadRuntime({ workspacePath }, { builder: this._builder });
   }
 
   /**
@@ -114,8 +140,8 @@ export class SystemPromptManager {
    * 2. AGENTS.md content (project > personal)
    * 3. Built-in default prompt
    */
-  getPrompt(): string {
-    return this._builder.build();
+  getPrompt(conversationId: string): string {
+    return this._builder.buildForMode(this.getMode(conversationId));
   }
 
   /**

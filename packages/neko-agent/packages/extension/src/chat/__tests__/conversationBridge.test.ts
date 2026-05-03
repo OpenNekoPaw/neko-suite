@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ConversationHandler } from '../conversationHandler';
+import { ConversationBridge } from '../conversationBridge';
 
 function createMockContext() {
   const store = new Map<string, unknown>();
@@ -24,14 +24,14 @@ function createMockWebview() {
   };
 }
 
-describe('ConversationHandler', () => {
-  let handler: ConversationHandler;
+describe('ConversationBridge', () => {
+  let handler: ConversationBridge;
   let ctx: ReturnType<typeof createMockContext>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     ctx = createMockContext();
-    handler = new ConversationHandler(ctx as any);
+    handler = new ConversationBridge(ctx as any);
   });
 
   describe('create and ensureActive', () => {
@@ -54,7 +54,7 @@ describe('ConversationHandler', () => {
     });
 
     it('uses canonical conversationId format when workspace root is known', () => {
-      const workspaceHandler = new ConversationHandler(ctx as any, '/workspace/demo');
+      const workspaceHandler = new ConversationBridge(ctx as any, '/workspace/demo');
       const id = workspaceHandler.create();
 
       expect(id).toMatch(/^[0-9a-z]{8}-[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -114,6 +114,19 @@ describe('ConversationHandler', () => {
     });
   });
 
+  describe('updateMessagesForConversation', () => {
+    it('should replace messages for a specific conversation', () => {
+      const id = handler.ensureActive();
+      handler.updateMessagesForConversation(id, [
+        { id: 'm1', role: 'user', content: 'updated', timestamp: Date.now() },
+      ]);
+
+      expect(handler.get(id)?.messages).toEqual([
+        expect.objectContaining({ id: 'm1', content: 'updated' }),
+      ]);
+    });
+  });
+
   describe('sendConversationList', () => {
     it('should post conversationList with mapped summaries', () => {
       const webview = createMockWebview();
@@ -157,7 +170,7 @@ describe('ConversationHandler', () => {
 
   describe('cleanup on init', () => {
     it('should survive construction without stored conversations', () => {
-      expect(() => new ConversationHandler(ctx as any)).not.toThrow();
+      expect(() => new ConversationBridge(ctx as any)).not.toThrow();
     });
   });
 });

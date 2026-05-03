@@ -15,15 +15,12 @@
 
 import * as vscode from 'vscode';
 import type {
-  SkillSummary,
-  Skill,
-  SkillInjection,
+  ActiveSkillState,
   SkillDiscoveryResult,
   SkillApplicationResult,
   SkillService,
 } from '@neko/agent';
-import { toSkillSummary } from '@neko/agent';
-import type { SkillToolDefinition } from '@neko/shared';
+import { ConversationSkillRuntime } from '@neko/agent';
 import { getLogger } from '../../base';
 
 const logger = getLogger('SkillHandler');
@@ -32,41 +29,15 @@ export interface SkillHandlerDeps {
   skillService?: SkillService;
   /** AgentManager for applying skill injection to the active session */
   agentManager?: import('../../ai/agentManager').IAgentManager;
-  /** Returns the currently active conversation ID */
-  getActiveConversationId?: () => string | undefined;
-}
-
-/**
- * Skill application state - Tracks active skill for UI state
- */
-export interface ActiveSkillState {
-  /** Applied skill */
-  skill: Skill;
-  /** Injection result */
-  injection: SkillInjection;
-  /** Timestamp when skill was applied */
-  appliedAt: number;
-}
-
-/**
- * Skill injection message - Sent when skill is applied
- */
-export interface SkillInjectionMessage {
-  type: 'skillInjection';
-  skillName: string;
-  systemPrompt: string;
-  allowedTools?: string[];
-  model?: string;
-  /** Tool definitions from skill's tools.md - to be injected into AI request */
-  toolDefinitions?: SkillToolDefinition[];
 }
 
 export class SkillHandler {
   private _deps: SkillHandlerDeps;
-  private _activeSkill?: ActiveSkillState;
+  private readonly _runtime: ConversationSkillRuntime;
 
   constructor(deps: SkillHandlerDeps = {}) {
     this._deps = deps;
+    this._runtime = new ConversationSkillRuntime(this._createRuntimeDeps(deps));
   }
 
   /**
@@ -74,10 +45,15 @@ export class SkillHandler {
    */
   setDependencies(deps: SkillHandlerDeps): void {
     this._deps = deps;
+    this._runtime.setDependencies(this._createRuntimeDeps(deps));
   }
 
   getSkillService(): SkillService | undefined {
-    return this._deps.skillService;
+    return this._runtime.getSkillService();
+  }
+
+  getRuntime(): ConversationSkillRuntime {
+    return this._runtime;
   }
 
   // ===========================================================================
@@ -89,24 +65,7 @@ export class SkillHandler {
    * Used for slash command autocomplete menu
    */
   sendSkillsList(webview: vscode.Webview): void {
-    const { skillService } = this._deps;
-    if (!skillService) {
-      webview.postMessage({ type: 'skillsList', skills: [] });
-      return;
-    }
-
-    try {
-      // Get all skills from registry via skillService
-      const allSkills = skillService.registry.listSkills();
-
-      // Convert to SkillSummary format for UI
-      const summaries: SkillSummary[] = allSkills.map((skill: Skill) => toSkillSummary(skill));
-
-      webview.postMessage({ type: 'skillsList', skills: summaries });
-    } catch (error) {
-      logger.error('Failed to get skills:', error);
-      webview.postMessage({ type: 'skillsList', skills: [] });
-    }
+    webview.postMessage(this._runtime.buildSkillsListMessage());
   }
 
   // ===========================================================================
@@ -121,43 +80,25 @@ export class SkillHandler {
    *
    * @param webview Webview to send messages to
    * @param command Slash command name (without /)
+   * @param conversationId Conversation that owns the skill state
    * @param args Arguments passed to the command
    */
   async handleSlashCommand(
     webview: vscode.Webview,
     command: string,
+    conversationId: string,
     args?: string,
   ): Promise<SkillApplicationResult | null> {
-    const { skillService } = this._deps;
-    if (!skillService) {
-      return { applied: false, error: 'SkillService not initialized' };
+    const result = await this._runtime.applySlashCommand({
+      command,
+      conversationId,
+      ...(args !== undefined ? { args } : {}),
+    });
+
+    if (result?.applied) {
+      this._sendSkillInjection(webview, result, conversationId);
     }
-
-    // Look up skill by command name
-    const skill = skillService.registry.getSkillByCommand(command);
-    if (!skill) {
-      return { applied: false, error: `Unknown command: /${command}` };
-    }
-
-    // Apply the skill with argument interpolation
-    try {
-      const injection = await skillService.apply(skill, args);
-      this._activeSkill = {
-        skill,
-        injection,
-        appliedAt: Date.now(),
-      };
-
-      // Send injection to webview for conversation context
-      this._sendSkillInjection(webview, injection);
-
-      return { applied: true, injection, skill };
-    } catch (error) {
-      return {
-        applied: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+    return result;
   }
 
   // ===========================================================================
@@ -172,12 +113,7 @@ export class SkillHandler {
    * @returns Discovery result with matched skills
    */
   discoverSkills(userInput: string): SkillDiscoveryResult | null {
-    const { skillService } = this._deps;
-    if (!skillService) {
-      return null;
-    }
-
-    return skillService.discover(userInput);
+    return this._runtime.discoverSkills(userInput);
   }
 
   // ===========================================================================
@@ -188,29 +124,23 @@ export class SkillHandler {
    * Check if a tool call is allowed by the active skill.
    * Delegates to AgentSession via agentManager.
    */
-  isToolAllowed(toolName: string, conversationId?: string): boolean {
-    if (!conversationId) return true;
-    const agent = this._deps.agentManager?.get(conversationId);
-    return agent?.isToolAllowed(toolName) ?? true;
+  isToolAllowed(toolName: string, conversationId: string): boolean {
+    return this._runtime.isToolAllowed(toolName, conversationId);
   }
 
   /**
    * Get the active skill state
    */
-  getActiveSkill(): ActiveSkillState | undefined {
-    return this._activeSkill;
+  getActiveSkill(conversationId: string): ActiveSkillState | undefined {
+    return this._runtime.getActiveSkill(conversationId);
   }
 
   /**
    * Clear the active skill (e.g., when conversation ends).
    * Delegates to AgentManager → AgentSession → SkillInjectionCoordinator.
    */
-  clearActiveSkill(): void {
-    this._activeSkill = undefined;
-    const conversationId = this._deps.getActiveConversationId?.();
-    if (conversationId) {
-      this._deps.agentManager?.clearActiveSkill(conversationId);
-    }
+  clearActiveSkill(conversationId: string): void {
+    this._runtime.clearActiveSkill(conversationId);
   }
 
   // ===========================================================================
@@ -223,45 +153,21 @@ export class SkillHandler {
    *
    * @param webview Webview to send messages to
    * @param skillId Skill ID to execute
+   * @param conversationId Conversation that owns the skill state
    * @param input Input data for the skill
    */
   async handleExecuteSkill(
     webview: vscode.Webview,
     skillId: string,
-    input: Record<string, unknown>,
+    conversationId: string,
+    input: Record<string, unknown> = {},
   ): Promise<SkillApplicationResult | null> {
-    const { skillService } = this._deps;
-    if (!skillService) {
-      return { applied: false, error: 'SkillService not initialized' };
+    void input;
+    const result = await this._runtime.executeSkill({ skillId, conversationId });
+    if (result?.applied) {
+      this._sendSkillInjection(webview, result, conversationId);
     }
-
-    // Look up skill by name
-    const skill = skillService.registry.getSkill(skillId);
-    if (!skill) {
-      return { applied: false, error: `Unknown skill: ${skillId}` };
-    }
-
-    // Apply the skill (async: may execute shell commands)
-    const injection = await skillService.apply(skill);
-
-    // Store active skill state (tool guard is now managed by AgentSession)
-    this._activeSkill = {
-      skill,
-      injection,
-      appliedAt: Date.now(),
-    };
-
-    // Send injection to webview with tool definitions
-    this._sendSkillInjection(webview, injection, skill);
-
-    // Apply injection to the active AgentSession so LLM receives the skill prompt
-    // Pass skill for Coordinator to track active skill state + activate ToolSets
-    const conversationId = this._deps.getActiveConversationId?.();
-    if (conversationId) {
-      this._deps.agentManager?.applySkillInjection(conversationId, injection, skill);
-    }
-
-    return { applied: true, injection, skill };
+    return result;
   }
 
   /**
@@ -269,11 +175,8 @@ export class SkillHandler {
    *
    * @param skillId Skill ID to cancel
    */
-  handleCancelSkill(skillId: string): void {
-    // Clear active skill if it matches the cancelled one
-    if (this._activeSkill?.skill.name === skillId) {
-      this.clearActiveSkill();
-    }
+  handleCancelSkill(skillId: string, conversationId: string): void {
+    this._runtime.cancelSkill(skillId, conversationId);
   }
 
   // ===========================================================================
@@ -285,18 +188,31 @@ export class SkillHandler {
    */
   private _sendSkillInjection(
     webview: vscode.Webview,
-    injection: SkillInjection,
-    skill?: Skill,
+    result: SkillApplicationResult,
+    conversationId: string,
   ): void {
-    const message: SkillInjectionMessage = {
-      type: 'skillInjection',
-      skillName: injection.name,
-      systemPrompt: injection.systemPrompt,
-      allowedTools: injection.allowedTools,
-      model: injection.model,
-      toolDefinitions: skill?.toolDefinitions,
-    };
+    const message = this._runtime.buildSkillInjectionMessage(result, conversationId);
+    if (message) {
+      webview.postMessage(message);
+    }
+  }
 
-    webview.postMessage(message);
+  private _createRuntimeDeps(deps: SkillHandlerDeps) {
+    const agentManager = deps.agentManager;
+    return {
+      skillService: deps.skillService,
+      ...(agentManager
+        ? {
+            agentBridge: {
+              applySkillInjection: (conversationId, injection, skill) =>
+                agentManager.applySkillInjection(conversationId, injection, skill),
+              clearActiveSkill: (conversationId) => agentManager.clearActiveSkill(conversationId),
+              isToolAllowed: (conversationId, toolName) =>
+                agentManager.get(conversationId)?.isToolAllowed(toolName),
+            },
+          }
+        : {}),
+      logger,
+    } satisfies ConstructorParameters<typeof ConversationSkillRuntime>[0];
   }
 }

@@ -11,10 +11,14 @@ import {
   MCPManager,
   TaskManager,
   ToolRegistry,
-  createAllMCPTools,
+  DEFAULT_TASK_CLEANUP_INTERVAL_MS,
+  DEFAULT_TASK_RETENTION_PERIOD_MS,
+  DEFAULT_TASK_STORAGE_KEY,
+  connectMCPServersRuntime,
+  createStateTaskStorage,
   type IRuntimeTaskManager,
 } from '@neko/agent';
-import type { ITaskStorage, SerializableTask } from '@neko/shared';
+import type { SerializableTask } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
 const logger = getLogger('ServiceBootstrap');
@@ -52,61 +56,6 @@ export {
 };
 
 // =============================================================================
-// VSCode Task Storage
-// =============================================================================
-
-class VSCodeTaskStorage implements ITaskStorage {
-  private readonly STORAGE_KEY = 'neko.agent.tasks';
-
-  constructor(private readonly globalState: vscode.Memento) {}
-
-  async save(task: SerializableTask): Promise<void> {
-    const tasks = await this.loadAll();
-    const index = tasks.findIndex((t) => t.id === task.id);
-    if (index >= 0) {
-      tasks[index] = task;
-    } else {
-      tasks.push(task);
-    }
-    await this.globalState.update(this.STORAGE_KEY, tasks);
-  }
-
-  async load(id: string): Promise<SerializableTask | undefined> {
-    const tasks = await this.loadAll();
-    return tasks.find((t) => t.id === id);
-  }
-
-  async loadPending(): Promise<SerializableTask[]> {
-    const tasks = await this.loadAll();
-    return tasks.filter((t) => t.status === 'pending' || t.status === 'running');
-  }
-
-  async loadAll(): Promise<SerializableTask[]> {
-    return this.globalState.get<SerializableTask[]>(this.STORAGE_KEY, []);
-  }
-
-  async delete(id: string): Promise<void> {
-    const tasks = await this.loadAll();
-    const filtered = tasks.filter((t) => t.id !== id);
-    await this.globalState.update(this.STORAGE_KEY, filtered);
-  }
-
-  async cleanup(olderThanMs: number): Promise<number> {
-    const tasks = await this.loadAll();
-    const now = Date.now();
-    const filtered = tasks.filter((t) => {
-      if (t.status === 'completed' || t.status === 'failed') {
-        return now - t.updatedAt < olderThanMs;
-      }
-      return true;
-    });
-    const removed = tasks.length - filtered.length;
-    await this.globalState.update(this.STORAGE_KEY, filtered);
-    return removed;
-  }
-}
-
-// =============================================================================
 // Service Bootstrap Result
 // =============================================================================
 
@@ -134,14 +83,19 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 1. Task Manager with Persistence
   // ==========================================================================
-  const taskStorage = new VSCodeTaskStorage(context.globalState);
+  const taskStorage = createStateTaskStorage({
+    storageKey: DEFAULT_TASK_STORAGE_KEY,
+    adapter: {
+      load: (key) => context.globalState.get<SerializableTask[]>(key, []),
+      save: (key, tasks) => context.globalState.update(key, [...tasks]),
+    },
+  });
   const taskManager = new TaskManager({
     storage: taskStorage,
-    cleanupIntervalMs: 60 * 60 * 1000, // 1 hour
-    retentionPeriodMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    cleanupIntervalMs: DEFAULT_TASK_CLEANUP_INTERVAL_MS,
+    retentionPeriodMs: DEFAULT_TASK_RETENTION_PERIOD_MS,
   });
   services.set(ITaskManager, taskManager);
-  context.subscriptions.push({ dispose: () => taskManager.dispose() });
 
   // ==========================================================================
   // 2. Tool Registry (from @neko/agent)
@@ -168,7 +122,6 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   const connectionStateManager = new ConnectionStateManager();
   services.set(IConnectionStateManager, connectionStateManager);
-  context.subscriptions.push(connectionStateManager);
 
   // ==========================================================================
   // 5. MCP Manager
@@ -182,10 +135,14 @@ export async function bootstrapCoreServices(
   }
 
   services.set(IMCPManager, mcpManager);
-  context.subscriptions.push({ dispose: () => mcpManager.disconnectAll() });
 
   // Connect MCP servers in background
-  connectMCPServers(mcpManager, toolRegistry, connectionStateManager).catch((error) => {
+  connectMCPServersRuntime({
+    mcpManager,
+    toolRegistry,
+    connectionState: connectionStateManager,
+    logger,
+  }).catch((error) => {
     logger.error('Failed to connect MCP servers:', error);
   });
 
@@ -201,18 +158,6 @@ export async function bootstrapCoreServices(
   const editorRegistry = new EditorRegistry();
   services.set(IEditorRegistry, editorRegistry);
 
-  // ==========================================================================
-  // 8. Initialize TaskManager
-  // ==========================================================================
-  taskManager
-    .initialize()
-    .then(() => {
-      return taskManager.resumePendingTasks();
-    })
-    .catch((err) => {
-      logger.error('Failed to initialize TaskManager:', err);
-    });
-
   return {
     platform,
     toolRegistry,
@@ -222,36 +167,6 @@ export async function bootstrapCoreServices(
     connectionStateManager,
     editorRegistry,
   };
-}
-
-// =============================================================================
-// MCP Connection Helper
-// =============================================================================
-
-async function connectMCPServers(
-  mcpManager: MCPManager,
-  toolRegistry: ToolRegistry,
-  connectionStateManager: ConnectionStateManager,
-): Promise<void> {
-  const servers = mcpManager.listServers();
-
-  for (const server of servers) {
-    try {
-      await mcpManager.connect(server.id);
-      connectionStateManager.updateState(server.id, server.name, 'mcp', 'connected');
-      logger.info(`Connected to MCP server: ${server.name}`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      connectionStateManager.updateState(server.id, server.name, 'mcp', 'error', errorMessage);
-      logger.error(`Failed to connect to MCP server ${server.name}:`, error);
-    }
-  }
-
-  // Register all MCP tools once after all servers are connected
-  const tools = await createAllMCPTools(mcpManager);
-  for (const tool of tools) {
-    toolRegistry.register(tool);
-  }
 }
 
 // =============================================================================

@@ -18,6 +18,8 @@ function createMockConversations() {
     ]),
     clearCurrent: vi.fn(),
     create: vi.fn(),
+    getMessageCount: vi.fn().mockReturnValue(1),
+    updateMessagesForConversation: vi.fn(),
     manager: {
       get: vi.fn().mockReturnValue({ messages: [{ role: 'user', content: 'hi' }] }),
       updateMessages: vi.fn(),
@@ -46,6 +48,7 @@ function createMockSkillHandler() {
   return {
     handleSlashCommand: vi.fn().mockResolvedValue(null),
     getActiveSkill: vi.fn().mockReturnValue(undefined),
+    clearActiveSkill: vi.fn(),
     getSkillService: vi.fn().mockReturnValue(undefined),
   };
 }
@@ -62,7 +65,7 @@ function createMockPlanModeHandler() {
   return { handleTogglePlanMode: vi.fn() };
 }
 
-function createMockMessageHandler() {
+function createMockAgentTurnHandler() {
   return { handleUserMessage: vi.fn().mockResolvedValue(undefined) };
 }
 
@@ -76,7 +79,7 @@ describe('SlashCommandHandler', () => {
   let taskHandler: ReturnType<typeof createMockTaskHandler>;
   let contextHandler: ReturnType<typeof createMockContextHandler>;
   let planModeHandler: ReturnType<typeof createMockPlanModeHandler>;
-  let messageHandler: ReturnType<typeof createMockMessageHandler>;
+  let agentTurnHandler: ReturnType<typeof createMockAgentTurnHandler>;
   let sendConversationList: ReturnType<typeof vi.fn>;
   let sendActiveConversation: ReturnType<typeof vi.fn>;
 
@@ -90,7 +93,7 @@ describe('SlashCommandHandler', () => {
     taskHandler = createMockTaskHandler();
     contextHandler = createMockContextHandler();
     planModeHandler = createMockPlanModeHandler();
-    messageHandler = createMockMessageHandler();
+    agentTurnHandler = createMockAgentTurnHandler();
     sendConversationList = vi.fn();
     sendActiveConversation = vi.fn();
 
@@ -98,7 +101,7 @@ describe('SlashCommandHandler', () => {
       conversations: conversations as any,
       settings: settings as any,
       systemPrompt: systemPrompt as any,
-      messages: messageHandler as any,
+      messages: agentTurnHandler as any,
       skillHandler: skillHandler as any,
       taskHandler: taskHandler as any,
       contextHandler: contextHandler as any,
@@ -110,7 +113,7 @@ describe('SlashCommandHandler', () => {
 
   describe('handleCommand - builtin commands', () => {
     it('should strip leading / from command', () => {
-      handler.handleCommand(webview as any, '/help');
+      handler.handleCommand(webview as any, '/help', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'help', success: true, action: 'showHelp' }),
@@ -118,10 +121,15 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /clear command', () => {
-      handler.handleCommand(webview as any, 'clear');
+      handler.handleCommand(webview as any, 'clear', undefined, 'conv-1');
 
-      expect(conversations.clearCurrent).toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith({ type: 'historyCleared' });
+      expect(conversations.clearCurrent).not.toHaveBeenCalled();
+      expect(conversations.updateMessagesForConversation).toHaveBeenCalledWith('conv-1', []);
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'historyCleared',
+        conversationId: 'conv-1',
+      });
+      expect(conversations.getActiveId).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'clear',
@@ -138,7 +146,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -147,12 +155,12 @@ describe('SlashCommandHandler', () => {
         sendActiveConversation,
       });
 
-      handler.handleCommand(webview as any, 'cls');
+      handler.handleCommand(webview as any, 'cls', undefined, 'conv-1');
       expect(agentManager.clearHistory).toHaveBeenCalledWith('conv-1');
     });
 
     it('should handle /exit command', () => {
-      handler.handleCommand(webview as any, 'exit');
+      handler.handleCommand(webview as any, 'exit', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'exit', success: true, action: 'exit' }),
@@ -160,7 +168,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /quit alias', () => {
-      handler.handleCommand(webview as any, 'q');
+      handler.handleCommand(webview as any, 'q', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'q', success: true, action: 'exit' }),
@@ -168,7 +176,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /help command', () => {
-      handler.handleCommand(webview as any, 'help');
+      handler.handleCommand(webview as any, 'help', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'help', action: 'showHelp' }),
@@ -176,7 +184,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /new command', () => {
-      handler.handleCommand(webview as any, 'new');
+      handler.handleCommand(webview as any, 'new', undefined, 'conv-1');
 
       expect(conversations.create).toHaveBeenCalled();
       expect(sendConversationList).toHaveBeenCalled();
@@ -191,7 +199,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /status command', () => {
-      handler.handleCommand(webview as any, 'status');
+      handler.handleCommand(webview as any, 'status', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -202,13 +210,32 @@ describe('SlashCommandHandler', () => {
             provider: 'anthropic',
             model: 'claude-3',
             conversationCount: 2,
+            activeConversationId: 'conv-1',
+          }),
+        }),
+      );
+    });
+
+    it('should use the provided conversationId for /status even if extension active differs', () => {
+      conversations.getActiveId.mockReturnValue('conv-active');
+
+      handler.handleCommand(webview as any, 'status', undefined, 'conv-2');
+
+      expect(conversations.getActiveId).not.toHaveBeenCalled();
+      expect(conversations.getMessageCount).toHaveBeenCalledWith('conv-2');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'status',
+          data: expect.objectContaining({
+            activeConversationId: 'conv-2',
+            messageCount: 1,
           }),
         }),
       );
     });
 
     it('should handle /s alias for status', () => {
-      handler.handleCommand(webview as any, 's');
+      handler.handleCommand(webview as any, 's', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'status', action: 'showStatus' }),
@@ -216,16 +243,17 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /compact command', async () => {
-      await handler.handleCommand(webview as any, 'compact');
+      await handler.handleCommand(webview as any, 'compact', undefined, 'conv-1');
 
       expect(contextHandler.compressContext).toHaveBeenCalledWith(webview, 'conv-1');
+      expect(conversations.getActiveId).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'compact', success: true }),
       );
     });
 
     it('should handle /model command', () => {
-      handler.handleCommand(webview as any, 'model');
+      handler.handleCommand(webview as any, 'model', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showModelSelector' }),
@@ -233,7 +261,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /settings command', () => {
-      handler.handleCommand(webview as any, 'settings');
+      handler.handleCommand(webview as any, 'settings', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showSettings' }),
@@ -242,9 +270,9 @@ describe('SlashCommandHandler', () => {
 
     it('should handle /plan command', () => {
       systemPrompt.isPlanMode.mockReturnValue(true);
-      handler.handleCommand(webview as any, 'plan');
+      handler.handleCommand(webview as any, 'plan', undefined, 'conv-1');
 
-      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview);
+      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'plan',
@@ -257,37 +285,33 @@ describe('SlashCommandHandler', () => {
     it('should enter plan mode and immediately execute slash arguments', () => {
       systemPrompt.isPlanMode.mockReturnValue(true);
 
-      handler.handleCommand(webview as any, 'plan', 'outline the rollout');
+      handler.handleCommand(webview as any, 'plan', 'outline the rollout', 'conv-1');
 
-      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview);
-      expect(messageHandler.handleUserMessage).toHaveBeenCalledWith(
-        webview,
-        'outline the rollout',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'conv-1',
-      );
+      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
+      expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
+        conversationId: 'conv-1',
+        messageText: 'outline the rollout',
+        sessionMode: 'agent',
+      });
     });
 
     it('should handle /tasks command', () => {
-      handler.handleCommand(webview as any, 'tasks');
+      handler.handleCommand(webview as any, 'tasks', undefined, 'conv-1');
 
-      expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview);
+      expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview, 'conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showTasks' }),
       );
     });
 
     it('should handle /todos alias', () => {
-      handler.handleCommand(webview as any, 'todos');
+      handler.handleCommand(webview as any, 'todos', undefined, 'conv-1');
 
-      expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview);
+      expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview, 'conv-1');
     });
 
     it('should handle /mcp command', () => {
-      handler.handleCommand(webview as any, 'mcp');
+      handler.handleCommand(webview as any, 'mcp', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showMCPServers' }),
@@ -295,7 +319,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /permissions command', () => {
-      handler.handleCommand(webview as any, 'permissions');
+      handler.handleCommand(webview as any, 'permissions', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showPermissions' }),
@@ -303,7 +327,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /init command', () => {
-      handler.handleCommand(webview as any, 'init');
+      handler.handleCommand(webview as any, 'init', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'initProject' }),
@@ -311,7 +335,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /resume command with conversation data', () => {
-      handler.handleCommand(webview as any, 'resume');
+      handler.handleCommand(webview as any, 'resume', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -345,7 +369,7 @@ describe('SlashCommandHandler', () => {
         },
       });
 
-      handler.handleCommand(webview as any, 'skills');
+      handler.handleCommand(webview as any, 'skills', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -357,9 +381,14 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should not execute CLI-only builtins in extension mode', async () => {
-      await handler.handleCommand(webview as any, 'config');
+      await handler.handleCommand(webview as any, 'config', undefined, 'conv-1');
 
-      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(webview, 'config', undefined);
+      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(
+        webview,
+        'config',
+        'conv-1',
+        undefined,
+      );
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'config',
@@ -378,7 +407,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -393,40 +422,36 @@ describe('SlashCommandHandler', () => {
         skill,
       });
 
-      await handler.handleCommand(webview as any, 'commit', 'fix bug');
+      await handler.handleCommand(webview as any, 'commit', 'fix bug', 'conv-1');
 
-      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(webview, 'commit', 'fix bug');
-      expect(agentManager.applySkillInjection).toHaveBeenCalledWith(
-        'conv-1',
-        { name: 'commit' },
-        skill,
-      );
-      expect(messageHandler.handleUserMessage).toHaveBeenCalledWith(
+      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(
         webview,
-        'fix bug',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        'commit',
         'conv-1',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
+        'fix bug',
+      );
+      expect(agentManager.applySkillInjection).not.toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
+        conversationId: 'conv-1',
+        messageText: 'fix bug',
+        sessionMode: 'agent',
+        executionOverrides: {
           metadata: {
             idc: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
               runKind: 'skill:commit-workflow',
-              workflowId: 'skill:commit-workflow',
             },
           },
         },
-      );
+      });
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'commit', success: true }),
       );
+      const resultMessage = webview.postMessage.mock.calls.find(
+        ([message]) => message?.type === 'slashCommandResult' && message.command === 'commit',
+      )?.[0];
+      expect(resultMessage).not.toHaveProperty('injection');
     });
 
     it('should only activate the skill when no slash arguments are provided', async () => {
@@ -436,7 +461,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -450,14 +475,10 @@ describe('SlashCommandHandler', () => {
         skill: { name: 'commit' },
       });
 
-      await handler.handleCommand(webview as any, 'commit');
+      await handler.handleCommand(webview as any, 'commit', undefined, 'conv-1');
 
-      expect(agentManager.applySkillInjection).toHaveBeenCalledWith(
-        'conv-1',
-        { name: 'commit' },
-        { name: 'commit' },
-      );
-      expect(messageHandler.handleUserMessage).not.toHaveBeenCalled();
+      expect(agentManager.applySkillInjection).not.toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).not.toHaveBeenCalled();
     });
 
     it('should escape skill names in IDC metadata for slash execution', async () => {
@@ -467,7 +488,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -482,31 +503,22 @@ describe('SlashCommandHandler', () => {
         skill,
       });
 
-      await handler.handleCommand(webview as any, 'edit', 'polish cut');
+      await handler.handleCommand(webview as any, 'edit', 'polish cut', 'conv-1');
 
-      expect(messageHandler.handleUserMessage).toHaveBeenCalledWith(
-        webview,
-        'polish cut',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'conv-1',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
+      expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
+        conversationId: 'conv-1',
+        messageText: 'polish cut',
+        sessionMode: 'agent',
+        executionOverrides: {
           metadata: {
             idc: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
               runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
-              workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
             },
           },
         },
-      );
+      });
     });
 
     it('should attach IDC metadata for explicit skill slash execution', async () => {
@@ -516,7 +528,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -531,31 +543,22 @@ describe('SlashCommandHandler', () => {
         skill,
       });
 
-      await handler.handleCommand(webview as any, 'commit', 'fix bug');
+      await handler.handleCommand(webview as any, 'commit', 'fix bug', 'conv-1');
 
-      expect(messageHandler.handleUserMessage).toHaveBeenCalledWith(
-        webview,
-        'fix bug',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'conv-1',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
+      expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
+        conversationId: 'conv-1',
+        messageText: 'fix bug',
+        sessionMode: 'agent',
+        executionOverrides: {
           metadata: {
             idc: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
               runKind: 'skill:commit',
-              workflowId: 'skill:commit',
             },
           },
         },
-      );
+      });
     });
 
     it('should report error when skill command fails', async () => {
@@ -564,7 +567,7 @@ describe('SlashCommandHandler', () => {
         error: 'Skill not found',
       });
 
-      await handler.handleCommand(webview as any, 'badcmd');
+      await handler.handleCommand(webview as any, 'badcmd', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'badcmd', success: false, error: 'Skill not found' }),
@@ -574,7 +577,7 @@ describe('SlashCommandHandler', () => {
     it('should report unknown command when skill returns null', async () => {
       skillHandler.handleSlashCommand.mockResolvedValue(null);
 
-      await handler.handleCommand(webview as any, 'unknown');
+      await handler.handleCommand(webview as any, 'unknown', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -595,7 +598,7 @@ describe('SlashCommandHandler', () => {
         agentManager: agentManager as any,
         settings: settings as any,
         systemPrompt: systemPrompt as any,
-        messages: messageHandler as any,
+        messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
@@ -604,7 +607,7 @@ describe('SlashCommandHandler', () => {
         sendActiveConversation,
       });
 
-      handler.sendStatusInfo(webview as any);
+      handler.sendStatusInfo(webview as any, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -623,7 +626,7 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should return 0 token count without agentManager', () => {
-      handler.sendStatusInfo(webview as any);
+      handler.sendStatusInfo(webview as any, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({

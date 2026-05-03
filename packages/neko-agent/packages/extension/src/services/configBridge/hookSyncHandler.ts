@@ -4,6 +4,11 @@
 
 import type * as vscode from 'vscode';
 import type { ConfiguredHook } from '@neko/shared';
+import {
+  buildHookConfigDataMessage,
+  createHookConfigSyncRuntime,
+  type HookConfigSyncRuntime,
+} from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import type { HookFileService, HookScanResult } from '../HookFileService';
 import type { PostMessageFn } from './types';
@@ -12,14 +17,19 @@ import { broadcastToWebviews } from './broadcastHelper';
 const logger = getLogger('HookSyncHandler');
 
 export class HookSyncHandler implements vscode.Disposable {
-  private initialized = false;
-  private cachedHooks: ConfiguredHook[] = [];
+  private readonly runtime: HookConfigSyncRuntime<HookScanResult>;
   private disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly hookFileService: HookFileService,
     private readonly activeWebviews: Set<PostMessageFn>,
   ) {
+    this.runtime = createHookConfigSyncRuntime({
+      scanHooks: () => this.hookFileService.scanHooks(),
+      toConfigured: (scanResult) => this.hookFileService.toConfigured(scanResult),
+      logger,
+    });
+
     // Listen for hook changes
     this.disposables.push(
       this.hookFileService.onHooksChanged((result) => {
@@ -29,28 +39,17 @@ export class HookSyncHandler implements vscode.Disposable {
   }
 
   async init(): Promise<void> {
-    if (this.initialized) return;
-    this.initialized = true;
-
-    try {
-      const scanResult = await this.hookFileService.scanHooks();
-      this.cachedHooks = this.hookFileService.toConfigured(scanResult);
-    } catch (error) {
-      logger.error('Failed to initialize hook file sync:', error);
-    }
+    await this.runtime.init();
   }
 
   getHooks(): ConfiguredHook[] {
-    return this.cachedHooks;
+    return this.runtime.getHooks();
   }
 
   private handleChanged(result: HookScanResult): void {
-    this.cachedHooks = this.hookFileService.toConfigured(result);
+    const hooks = this.runtime.handleChanged(result);
 
-    broadcastToWebviews(this.activeWebviews, {
-      type: 'hooksChanged',
-      hooks: this.cachedHooks,
-    });
+    broadcastToWebviews(this.activeWebviews, buildHookConfigDataMessage(hooks));
   }
 
   dispose(): void {

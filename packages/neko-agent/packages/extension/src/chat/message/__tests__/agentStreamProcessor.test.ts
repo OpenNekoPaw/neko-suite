@@ -300,6 +300,213 @@ describe('AgentStreamProcessor', () => {
       // thinking + text + tool_call + text
       expect(result.contentBlocks).toHaveLength(4);
     });
+
+    it('should send full background task views for task progress updates', async () => {
+      let progressCallback: ((task: any) => Promise<void>) | undefined;
+      const unsubscribe = vi.fn();
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
+            progressCallback = callback;
+            return unsubscribe;
+          }),
+          saveOutputs: vi.fn(),
+        },
+      };
+      processor = new AgentStreamProcessor({ platform: platform as any });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId: 'task-media',
+                type: 'video',
+                message: 'Generate a city flythrough',
+                routedTo: { provider: 'runway' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+
+      await progressCallback?.({
+        id: 'task-media',
+        type: 'text-to-video',
+        status: 'processing',
+        progress: 45,
+        providerId: 'runway',
+        modelId: 'gen-3',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
+      });
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'taskUpdated',
+          conversationId: 'conv-1',
+          workItem: expect.objectContaining({
+            id: 'task-media',
+            kind: 'tool-background-task',
+            status: 'processing',
+            progress: 45,
+            task: expect.objectContaining({
+              type: 'video',
+              name: 'Generate a city flythrough',
+              prompt: 'Generate a city flythrough',
+              providerId: 'runway',
+              providerName: 'runway',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should ignore background task progress from another conversation', async () => {
+      let progressCallback: ((task: any) => Promise<void>) | undefined;
+      const unsubscribe = vi.fn();
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
+            progressCallback = callback;
+            return unsubscribe;
+          }),
+          saveOutputs: vi.fn(),
+        },
+      };
+      processor = new AgentStreamProcessor({ platform: platform as any });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId: 'task-media',
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+
+      await progressCallback?.({
+        id: 'task-media',
+        type: 'text-to-image',
+        status: 'processing',
+        progress: 50,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-other' } },
+      });
+
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'taskUpdated' }),
+      );
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should dispose background task progress subscriptions', async () => {
+      const unsubscribe = vi.fn();
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, _callback: (task: any) => Promise<void>) => {
+            return unsubscribe;
+          }),
+          saveOutputs: vi.fn(),
+        },
+      };
+      processor = new AgentStreamProcessor({ platform: platform as any });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId: 'task-media',
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+
+      processor.dispose();
+
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear background task progress subscriptions by conversation', async () => {
+      const unsubscribeA = vi.fn();
+      const unsubscribeB = vi.fn();
+      const platform = {
+        media: {
+          onProgress: vi
+            .fn()
+            .mockImplementationOnce(
+              (_taskId: string, _callback: (task: any) => Promise<void>) => unsubscribeA,
+            )
+            .mockImplementationOnce(
+              (_taskId: string, _callback: (task: any) => Promise<void>) => unsubscribeB,
+            ),
+          saveOutputs: vi.fn(),
+        },
+      };
+      processor = new AgentStreamProcessor({ platform: platform as any });
+
+      const events = (taskId: string) =>
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: `tc-${taskId}`,
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId,
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]);
+
+      await processor.processStream(webview as any, 'conv-a', events('task-a'), callbacks);
+      await processor.processStream(webview as any, 'conv-b', events('task-b'), callbacks);
+
+      processor.clearConversation('conv-a');
+
+      expect(unsubscribeA).toHaveBeenCalledTimes(1);
+      expect(unsubscribeB).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateToolResultWithUrls', () => {
@@ -325,13 +532,13 @@ describe('AgentStreamProcessor', () => {
       ];
       const conversations = {
         get: vi.fn().mockReturnValue({ messages }),
-        manager: { updateMessages: vi.fn() },
+        updateMessagesForConversation: vi.fn(),
       };
 
       processor = new AgentStreamProcessor({ conversations: conversations as any });
       processor.updateToolResultWithUrls('conv-1', 'task-1', ['/output/file.png']);
 
-      expect(conversations.manager.updateMessages).toHaveBeenCalledWith(
+      expect(conversations.updateMessagesForConversation).toHaveBeenCalledWith(
         'conv-1',
         expect.arrayContaining([
           expect.objectContaining({
@@ -372,13 +579,13 @@ describe('AgentStreamProcessor', () => {
       ];
       const conversations = {
         get: vi.fn().mockReturnValue({ messages }),
-        manager: { updateMessages: vi.fn() },
+        updateMessagesForConversation: vi.fn(),
       };
 
       processor = new AgentStreamProcessor({ conversations: conversations as any });
       processor.updateToolResultWithUrls('conv-1', 'task-2', ['/out/video.mp4']);
 
-      expect(conversations.manager.updateMessages).toHaveBeenCalled();
+      expect(conversations.updateMessagesForConversation).toHaveBeenCalled();
     });
 
     it('should not update when taskId does not match', () => {
@@ -397,25 +604,25 @@ describe('AgentStreamProcessor', () => {
       ];
       const conversations = {
         get: vi.fn().mockReturnValue({ messages }),
-        manager: { updateMessages: vi.fn() },
+        updateMessagesForConversation: vi.fn(),
       };
 
       processor = new AgentStreamProcessor({ conversations: conversations as any });
       processor.updateToolResultWithUrls('conv-1', 'task-1', ['/out/file.png']);
 
-      expect(conversations.manager.updateMessages).not.toHaveBeenCalled();
+      expect(conversations.updateMessagesForConversation).not.toHaveBeenCalled();
     });
 
     it('should handle missing conversation gracefully', () => {
       const conversations = {
         get: vi.fn().mockReturnValue(undefined),
-        manager: { updateMessages: vi.fn() },
+        updateMessagesForConversation: vi.fn(),
       };
 
       processor = new AgentStreamProcessor({ conversations: conversations as any });
       // Should not throw
       processor.updateToolResultWithUrls('conv-missing', 'task-1', ['/file.png']);
-      expect(conversations.manager.updateMessages).not.toHaveBeenCalled();
+      expect(conversations.updateMessagesForConversation).not.toHaveBeenCalled();
     });
   });
 });

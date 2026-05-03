@@ -1,0 +1,151 @@
+/**
+ * neko-engine host adapter.
+ *
+ * Extension code owns VSCode activation and command execution. Agent/runtime
+ * code receives a stable capability surface and does not need to know how the
+ * engine extension is discovered.
+ */
+
+import * as vscode from 'vscode';
+import { EngineClient } from '@neko/neko-client/EngineClient';
+import type { AgentRuntimeSessionFactoryConfig } from '@neko/agent/runtime';
+import type {
+  PerceptionClassifyClient,
+  PerceptionDetectShotsClient,
+  PerceptionSimilarityClient,
+  PerceptionTranscribeClient,
+} from '@neko/agent';
+import {
+  NEKO_ENGINE_CLIENT_TIMEOUT_MS,
+  NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND,
+  NEKO_ENGINE_EXTENSION_ID,
+  isNekoEngineFrameServerResult,
+} from '@neko-agent/types';
+import { getLogger } from '../base';
+
+const logger = getLogger('EngineClientProvider');
+
+export type EnginePerceptionClient = PerceptionTranscribeClient &
+  PerceptionSimilarityClient &
+  PerceptionClassifyClient &
+  PerceptionDetectShotsClient;
+
+export interface IEngineClientProvider {
+  getOptionalClient(): Promise<EngineClient | null>;
+  getRequiredClient(): Promise<EngineClient>;
+  transcodeFile(
+    inputPath: string,
+    outputPath: string,
+    mediaType: 'audio' | 'video',
+  ): Promise<boolean>;
+  createPerceptionClient(client?: EngineClient): EnginePerceptionClient;
+  createPerceptionClients(
+    client?: EngineClient,
+  ): AgentRuntimeSessionFactoryConfig['perceptionClients'];
+}
+
+class VSCodeEngineClientProvider implements IEngineClientProvider {
+  private _engineClient?: EngineClient;
+
+  async getOptionalClient(): Promise<EngineClient | null> {
+    try {
+      return await this.getRequiredClient();
+    } catch {
+      return null;
+    }
+  }
+
+  async getRequiredClient(): Promise<EngineClient> {
+    if (this._engineClient) {
+      return this._engineClient;
+    }
+
+    const extension = vscode.extensions.getExtension(NEKO_ENGINE_EXTENSION_ID);
+    if (!extension) {
+      throw new Error(`Extension ${NEKO_ENGINE_EXTENSION_ID} not installed`);
+    }
+
+    if (!extension.isActive) {
+      await extension.activate();
+    }
+
+    const result = await vscode.commands.executeCommand<unknown>(
+      NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND,
+    );
+    if (!isNekoEngineFrameServerResult(result)) {
+      throw new Error('Failed to start neko-engine Frame Server');
+    }
+
+    this._engineClient = new EngineClient(result.port, { timeout: NEKO_ENGINE_CLIENT_TIMEOUT_MS });
+    return this._engineClient;
+  }
+
+  async transcodeFile(
+    inputPath: string,
+    outputPath: string,
+    mediaType: 'audio' | 'video',
+  ): Promise<boolean> {
+    const client = await this.getOptionalClient();
+    if (!client) return false;
+
+    try {
+      const group = mediaType === 'audio' ? 'audios' : 'videos';
+      const codec = mediaType === 'audio' ? 'mp3' : 'h264';
+      const response = await client.dispatch({
+        group,
+        action: 'transcode',
+        options: { source: inputPath, output: outputPath, codec },
+      });
+      return response.status === 'ok';
+    } catch (error) {
+      logger.warn('neko-engine transcode failed:', error);
+      return false;
+    }
+  }
+
+  createPerceptionClient(client?: EngineClient): EnginePerceptionClient {
+    if (client) {
+      return client;
+    }
+
+    return {
+      perception: {
+        transcribe: async (request) => {
+          const engine = await this.getRequiredClient();
+          return engine.perception.transcribe(request);
+        },
+        similarity: async (request) => {
+          const engine = await this.getRequiredClient();
+          return engine.perception.similarity(request);
+        },
+        classify: async (request) => {
+          const engine = await this.getRequiredClient();
+          return engine.perception.classify(request);
+        },
+        detectShots: async (request) => {
+          const engine = await this.getRequiredClient();
+          return engine.perception.detectShots(request);
+        },
+      },
+    };
+  }
+
+  createPerceptionClients(
+    client?: EngineClient,
+  ): AgentRuntimeSessionFactoryConfig['perceptionClients'] {
+    const perceptionClient = this.createPerceptionClient(client);
+    return {
+      transcribe: perceptionClient,
+      similarity: perceptionClient,
+      classify: perceptionClient,
+      detectShots: perceptionClient,
+    };
+  }
+}
+
+let singleton: IEngineClientProvider | undefined;
+
+export function getEngineClientProvider(): IEngineClientProvider {
+  singleton ??= new VSCodeEngineClientProvider();
+  return singleton;
+}

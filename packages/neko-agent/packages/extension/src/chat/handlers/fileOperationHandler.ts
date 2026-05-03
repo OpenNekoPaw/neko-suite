@@ -10,9 +10,25 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import {
+  buildAgentsFilePlan,
+  buildCommandFileOpenPlan,
+  buildPromptConfigFilePlan,
+  buildSkillSupportFileOpenPlan,
+} from '@neko/agent';
 import type { Platform } from '@neko/platform';
+import {
+  buildConfigFilePath,
+  buildSettingsFilePlan,
+  buildSvgDownloadPlan,
+  buildSvgDownloadSavedMessage,
+  createOpenFilePlan,
+  ensureFileOperationPlan,
+  stripFileProtocol,
+  type FileOperationPlan,
+  type SaveDialogFilterPlan,
+} from '@neko/platform/files';
 import { getLogger, handleError } from '../../base';
 
 const logger = getLogger('FileOperationHandler');
@@ -35,36 +51,17 @@ export class FileOperationHandler {
   }
 
   async handleOpenFile(filePath: string): Promise<void> {
-    if (!filePath) return;
+    const plan = createOpenFilePlan(filePath);
+    if (!plan) return;
 
     try {
-      // Handle file:// protocol
-      const cleanPath = filePath.replace(/^file:\/\//, '');
+      const uri = this._uriForOpenFilePath(plan.cleanPath);
 
-      // Check if it's a relative path (resolve against workspace)
-      let uri: vscode.Uri;
-      if (cleanPath.startsWith('/')) {
-        uri = vscode.Uri.file(cleanPath);
-      } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          uri = vscode.Uri.joinPath(workspaceFolders[0].uri, cleanPath);
-        } else {
-          uri = vscode.Uri.file(cleanPath);
-        }
-      }
-
-      // Route media files to neko-preview's customEditor
-      const ext = cleanPath.split('.').pop()?.toLowerCase() ?? '';
-      const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
-      const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
-
-      if (videoExts.includes(ext)) {
+      if (plan.viewer === 'video') {
         await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
-      } else if (audioExts.includes(ext)) {
+      } else if (plan.viewer === 'audio') {
         await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
       } else {
-        // Non-media files: open with default editor
         await vscode.commands.executeCommand('vscode.open', uri);
       }
     } catch (error) {
@@ -86,42 +83,15 @@ export class FileOperationHandler {
 
   async handleOpenPromptConfig(source: 'personal' | 'project', promptId?: string): Promise<void> {
     try {
-      let basePath: string;
+      const plan = buildPromptConfigFilePlan({
+        source,
+        homeDir: this._getHomeDir(),
+        unavailableError: 'No workspace folder open',
+        ...(promptId !== undefined ? { promptId } : {}),
+        ...this._workspaceRootInput(),
+      });
 
-      if (source === 'personal') {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        basePath = path.join(homeDir, '.neko', 'prompts');
-      } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void handleError(new Error('No workspace folder open'), { showToUser: true });
-          return;
-        }
-        basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'prompts');
-      }
-
-      // Create directory if not exists
-      await fs.promises.mkdir(basePath, { recursive: true });
-
-      // Determine file name from prompt ID
-      const promptName: string = promptId || 'New Prompt';
-      const fileName = promptId
-        ? `${promptId.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.md`
-        : 'new-prompt.md';
-
-      const filePath = path.join(basePath, fileName);
-
-      // Create file with template if not exists
-      try {
-        await fs.promises.access(filePath);
-      } catch {
-        const template = `# ${promptName}\n\n<!-- Write your prompt content here -->\n\n`;
-        await fs.promises.writeFile(filePath, template, 'utf-8');
-      }
-
-      // Open the file in VSCode
-      const uri = vscode.Uri.file(filePath);
-      await vscode.commands.executeCommand('vscode.open', uri);
+      await this._ensureFileAndOpen(plan);
     } catch (error) {
       logger.error('Failed to open prompt config:', error);
       handleError(error, { showToUser: true, severity: 'error' });
@@ -130,9 +100,13 @@ export class FileOperationHandler {
 
   async handleOpenAgentsFile(source: 'personal' | 'project'): Promise<void> {
     try {
-      const { getPromptFileService } = await import('../../services/PromptFileService');
-      const promptFileService = getPromptFileService();
-      await promptFileService.openAgentsFile(source);
+      const plan = buildAgentsFilePlan({
+        source,
+        homeDir: this._getHomeDir(),
+        ...this._workspaceRootInput(),
+      });
+
+      await this._ensureFileAndOpen(plan);
     } catch (error) {
       logger.error('Failed to open AGENTS.md:', error);
       handleError(error, { showToUser: true, severity: 'error' });
@@ -141,36 +115,13 @@ export class FileOperationHandler {
 
   async handleOpenSettingsFile(source: 'personal' | 'project' | 'local'): Promise<void> {
     try {
-      let filePath: string;
+      const plan = buildSettingsFilePlan({
+        source,
+        homeDir: this._getHomeDir(),
+        ...this._workspaceRootInput(),
+      });
 
-      if (source === 'personal') {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        filePath = path.join(homeDir, '.neko', 'settings.json');
-      } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void handleError(new Error('No workspace folder open'), { showToUser: true });
-          return;
-        }
-        const fileName = source === 'local' ? 'settings.local.json' : 'settings.json';
-        filePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', fileName);
-      }
-
-      // Create directory if not exists
-      const dirPath = path.dirname(filePath);
-      await fs.promises.mkdir(dirPath, { recursive: true });
-
-      // Create file with default template if not exists
-      try {
-        await fs.promises.access(filePath);
-      } catch {
-        const template = `{\n  "hooks": {\n    "PreToolUse": [],\n    "PostToolUse": []\n  }\n}\n`;
-        await fs.promises.writeFile(filePath, template, 'utf-8');
-      }
-
-      // Open the file in VSCode
-      const uri = vscode.Uri.file(filePath);
-      await vscode.commands.executeCommand('vscode.open', uri);
+      await this._ensureFileAndOpen(plan);
     } catch (error) {
       logger.error('Failed to open settings.json:', error);
       handleError(error, { showToUser: true, severity: 'error' });
@@ -184,59 +135,17 @@ export class FileOperationHandler {
     filePath?: string,
   ): Promise<void> {
     try {
-      let basePath: string;
+      const plan = buildSkillSupportFileOpenPlan({
+        skillName,
+        source,
+        fileType,
+        ...(filePath !== undefined ? { filePath } : {}),
+        homeDir: this._getHomeDir(),
+        ...this._workspaceRootInput(),
+      });
+      if (!this._ensurePlanOk(plan)) return;
 
-      if (source === 'personal') {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        basePath = path.join(homeDir, '.neko', 'skills');
-      } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void handleError(new Error('No workspace folder open'), { showToUser: true });
-          return;
-        }
-        basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'skills');
-      }
-
-      // Build full path based on file type
-      let fullPath: string;
-
-      switch (fileType) {
-        case 'skill':
-          fullPath = path.join(basePath, skillName, 'SKILL.md');
-          break;
-        case 'reference':
-          if (!filePath) {
-            void handleError(new Error('No file path provided for reference'), {
-              showToUser: true,
-            });
-            return;
-          }
-          fullPath = path.join(basePath, skillName, 'references', filePath);
-          break;
-        case 'script':
-          if (!filePath) {
-            void handleError(new Error('No file path provided for script'), { showToUser: true });
-            return;
-          }
-          fullPath = path.join(basePath, skillName, 'scripts', filePath);
-          break;
-        default:
-          void handleError(new Error(`Unknown file type: ${fileType}`), { showToUser: true });
-          return;
-      }
-
-      // Check if file exists
-      try {
-        await fs.promises.access(fullPath);
-      } catch {
-        void handleError(new Error(`File not found: ${fullPath}`), { showToUser: true });
-        return;
-      }
-
-      // Open the file in VSCode
-      const uri = vscode.Uri.file(fullPath);
-      await vscode.commands.executeCommand('vscode.open', uri);
+      await this._openExistingFile(plan.filePath);
     } catch (error) {
       logger.error('Failed to open skill file:', error);
       handleError(error, { showToUser: true, severity: 'error' });
@@ -245,34 +154,15 @@ export class FileOperationHandler {
 
   async handleOpenCommandFile(commandName: string, source: 'personal' | 'project'): Promise<void> {
     try {
-      let basePath: string;
+      const plan = buildCommandFileOpenPlan({
+        commandName,
+        source,
+        homeDir: this._getHomeDir(),
+        ...this._workspaceRootInput(),
+      });
+      if (!this._ensurePlanOk(plan)) return;
 
-      if (source === 'personal') {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        basePath = path.join(homeDir, '.neko', 'commands');
-      } else {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          void handleError(new Error('No workspace folder open'), { showToUser: true });
-          return;
-        }
-        basePath = path.join(workspaceFolders[0].uri.fsPath, '.neko', 'commands');
-      }
-
-      // Command file: <name>.md
-      const fullPath = path.join(basePath, `${commandName}.md`);
-
-      // Check if file exists
-      try {
-        await fs.promises.access(fullPath);
-      } catch {
-        void handleError(new Error(`File not found: ${fullPath}`), { showToUser: true });
-        return;
-      }
-
-      // Open the file in VSCode
-      const uri = vscode.Uri.file(fullPath);
-      await vscode.commands.executeCommand('vscode.open', uri);
+      await this._openExistingFile(plan.filePath);
     } catch (error) {
       logger.error('Failed to open command file:', error);
       handleError(error, { showToUser: true, severity: 'error' });
@@ -281,7 +171,7 @@ export class FileOperationHandler {
 
   async handleOpenConfigFile(): Promise<void> {
     try {
-      const configPath = path.join(os.homedir(), '.neko', 'config.json');
+      const configPath = buildConfigFilePath(os.homedir());
       const uri = vscode.Uri.file(configPath);
       await vscode.commands.executeCommand('vscode.open', uri);
     } catch (error) {
@@ -294,7 +184,7 @@ export class FileOperationHandler {
     if (!filePath) return;
 
     try {
-      const cleanPath = filePath.replace(/^file:\/\//, '');
+      const cleanPath = stripFileProtocol(filePath);
       const uri = vscode.Uri.file(cleanPath);
       await vscode.commands.executeCommand('revealFileInOS', uri);
     } catch (error) {
@@ -304,24 +194,98 @@ export class FileOperationHandler {
   }
 
   async handleDownloadSvg(svg: string, filename: string): Promise<void> {
-    if (!svg) return;
+    const plan = buildSvgDownloadPlan({ svg, filename });
+    if (!plan) return;
 
     try {
       const uri = await vscode.window.showSaveDialog({
-        defaultUri: vscode.Uri.file(filename || 'diagram.svg'),
-        filters: {
-          'SVG Files': ['svg'],
-          'All Files': ['*'],
-        },
+        defaultUri: vscode.Uri.file(plan.defaultFileName),
+        filters: this._toVscodeSaveFilters(plan.filters),
       });
 
       if (uri) {
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(svg, 'utf-8'));
-        vscode.window.showInformationMessage(`SVG saved to ${uri.fsPath}`);
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(plan.content, 'utf-8'));
+        vscode.window.showInformationMessage(buildSvgDownloadSavedMessage(uri.fsPath));
       }
     } catch (error) {
       logger.error('Failed to save SVG:', error);
       handleError(error, { showToUser: true, severity: 'error' });
     }
+  }
+
+  private _uriForOpenFilePath(cleanPath: string): vscode.Uri {
+    if (cleanPath.startsWith('/')) {
+      return vscode.Uri.file(cleanPath);
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      return vscode.Uri.joinPath(workspaceFolders[0].uri, cleanPath);
+    }
+
+    return vscode.Uri.file(cleanPath);
+  }
+
+  private _getHomeDir(): string {
+    return process.env.HOME || process.env.USERPROFILE || os.homedir();
+  }
+
+  private _workspaceRootInput(): { workspaceRoot: string } | Record<string, never> {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    return workspaceRoot ? { workspaceRoot } : {};
+  }
+
+  private _ensurePlanOk<TPlan extends FileOperationPlan>(
+    plan: TPlan,
+  ): plan is Extract<TPlan, { ok: true }> {
+    if (!('error' in plan)) return true;
+
+    void handleError(new Error(plan.error), { showToUser: true });
+    return false;
+  }
+
+  private async _ensureFileAndOpen(
+    plan: Parameters<typeof ensureFileOperationPlan>[0]['plan'],
+  ): Promise<void> {
+    const result = await ensureFileOperationPlan({
+      plan,
+      fs: {
+        mkdir: async (dirPath, options) => {
+          await fs.promises.mkdir(dirPath, options);
+        },
+        access: async (filePath) => {
+          await fs.promises.access(filePath);
+        },
+        writeFile: async (filePath, content, encoding) => {
+          await fs.promises.writeFile(filePath, content, encoding);
+        },
+      },
+    });
+    if ('error' in result) {
+      void handleError(new Error(result.error), { showToUser: true });
+      return;
+    }
+
+    await this._openFilePath(result.filePath);
+  }
+
+  private async _openExistingFile(filePath: string): Promise<void> {
+    try {
+      await fs.promises.access(filePath);
+    } catch {
+      void handleError(new Error(`File not found: ${filePath}`), { showToUser: true });
+      return;
+    }
+
+    await this._openFilePath(filePath);
+  }
+
+  private async _openFilePath(filePath: string): Promise<void> {
+    const uri = vscode.Uri.file(filePath);
+    await vscode.commands.executeCommand('vscode.open', uri);
+  }
+
+  private _toVscodeSaveFilters(filters: readonly SaveDialogFilterPlan[]): Record<string, string[]> {
+    return Object.fromEntries(filters.map((filter) => [filter.name, filter.extensions]));
   }
 }

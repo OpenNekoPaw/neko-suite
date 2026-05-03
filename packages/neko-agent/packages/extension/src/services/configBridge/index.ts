@@ -10,16 +10,32 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
+import {
+  executeSkillMarketRequest,
+  type Platform,
+  type SkillMarketExecutionRequest,
+} from '@neko/platform';
+import {
+  buildConfigBridgeConnectionStateChangedMessage,
+  buildConfigBridgeGlobalErrorMessage,
+  buildConfigBridgeMarketplaceExecutionMessage,
+  buildConfigBridgeSsoSessionChangedMessage,
+  NEKO_AUTH_EXTENSION_ID,
+  projectConfigBridgeMarketplaceRequest,
+  runConfigBridgeQueryRuntime,
+  runConfigBridgeSsoLoginRuntime,
+  runConfigBridgeSsoLogoutRuntime,
+  type ConfigBridgeQueryRequest,
+} from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import type {
-  ConfigState,
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredHook,
   ConfiguredToolGroup,
   IAuthSession,
 } from '@neko/shared';
+import { type WebviewToExtensionMessage } from '@neko-agent/types';
 /** Minimal interface matching neko.neko-auth extension exports (defined locally to avoid cross-extension import). */
 interface NekoAuthAPI {
   getSession(): Promise<IAuthSession | null>;
@@ -31,12 +47,13 @@ import { getSkillFileService } from '../SkillFileService';
 import { getHookFileService } from '../HookFileService';
 import type { ConnectionStateManager, ConnectionStateChangeEvent } from '../connectionStateManager';
 
-import type { PostMessageFn } from './types';
+import type { PostMessageFn, WebviewConfigState } from './types';
 import { broadcastToWebviews } from './broadcastHelper';
 import { SkillSyncHandler } from './skillSyncHandler';
 import { HookSyncHandler } from './hookSyncHandler';
 import { ToolSkillHandler } from './toolSkillHandler';
 import { ConfigFileHandler } from './configFileHandler';
+import { resolveNekoMarketRuntime } from '../marketBridge';
 
 export type { PostMessageFn } from './types';
 export type { ConfigStateWithStatus } from './types';
@@ -48,14 +65,10 @@ const logger = getLogger('ConfigBridge');
 // ---------------------------------------------------------------------------
 
 async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
-  const ext = vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth');
+  const ext = vscode.extensions.getExtension<NekoAuthAPI>(NEKO_AUTH_EXTENSION_ID);
   if (!ext) return undefined;
   await ext.activate();
   return ext.exports;
-}
-
-function toSsoSession(s: IAuthSession): { user: string; plan?: string; usage?: number } {
-  return { user: s.user, plan: s.plan, usage: s.usage };
 }
 
 /**
@@ -101,10 +114,7 @@ export class ConfigBridge implements vscode.Disposable {
     // Broadcast updated configState to webviews whenever ~/.neko/config.json changes
     // (e.g. after neko-market installs an Ollama model and refreshModels writes new entries)
     const unsubscribeConfig = platform.config.onUserConfigChange(() => {
-      broadcastToWebviews(this.activeWebviews, {
-        type: 'configState',
-        config: this.buildConfigState(),
-      });
+      void this.broadcastConfigBridgeQuery({ type: 'getConfig' });
     });
     this.disposables.push({ dispose: unsubscribeConfig });
 
@@ -120,10 +130,7 @@ export class ConfigBridge implements vscode.Disposable {
     const auth = await getNekoAuthAPI();
     if (!auth) return;
     const sub = auth.onDidChangeSession((session) => {
-      broadcastToWebviews(this.activeWebviews, {
-        type: 'ssoSessionChanged',
-        session: session ? toSsoSession(session) : null,
-      });
+      broadcastToWebviews(this.activeWebviews, buildConfigBridgeSsoSessionChangedMessage(session));
     });
     this.disposables.push(sub);
   }
@@ -131,13 +138,8 @@ export class ConfigBridge implements vscode.Disposable {
   registerWebview(postMessage: PostMessageFn): vscode.Disposable {
     this.activeWebviews.add(postMessage);
 
-    // Send current connection states immediately
-    if (this.connectionStateManager) {
-      postMessage({
-        type: 'connectionStates',
-        states: this.connectionStateManager.getStatesMap(),
-      });
-    }
+    // Send current connection states immediately.
+    void this.postConfigBridgeQuery({ type: 'getConnectionStates' }, postMessage);
 
     return {
       dispose: () => {
@@ -151,52 +153,39 @@ export class ConfigBridge implements vscode.Disposable {
    * @returns true if message was handled, false otherwise
    */
   async handleMessage(
-    message: { type: string; [key: string]: unknown },
+    message: WebviewToExtensionMessage,
     postMessage: PostMessageFn,
   ): Promise<boolean> {
     try {
+      const marketRequest = projectConfigBridgeMarketplaceRequest(message);
+      if (marketRequest) {
+        await this.handleSkillMarketRequest(postMessage, marketRequest);
+        return true;
+      }
+
       switch (message.type) {
         case 'getConfig':
-          postMessage({ type: 'configState', config: this.buildConfigState() });
+          await this.postConfigBridgeQuery({ type: 'getConfig' }, postMessage);
           return true;
 
         case 'getConfigWithStatus':
-          postMessage({
-            type: 'configStateWithStatus',
-            config: this.buildConfigStateWithStatus(),
-          });
+          await this.postConfigBridgeQuery({ type: 'getConfigWithStatus' }, postMessage);
           return true;
 
         case 'getSkills':
-          await this.skillSync.waitForInit();
-          postMessage({
-            type: 'skillsData',
-            skills: this.skillSync.getSkills(),
-            commands: this.skillSync.getCommands(),
-          });
+          await this.postConfigBridgeQuery({ type: 'getSkills' }, postMessage);
           return true;
 
         case 'getHooks':
-          postMessage({
-            type: 'hooksData',
-            hooks: this.hookSync.getHooks(),
-          });
+          await this.postConfigBridgeQuery({ type: 'getHooks' }, postMessage);
           return true;
 
         case 'getConnectionStates':
-          if (this.connectionStateManager) {
-            postMessage({
-              type: 'connectionStates',
-              states: this.connectionStateManager.getStatesMap(),
-            });
-          }
+          await this.postConfigBridgeQuery({ type: 'getConnectionStates' }, postMessage);
           return true;
 
         case 'getToolSkills':
-          postMessage({
-            type: 'toolSkillsData',
-            toolSkills: this.toolSkill.getToolSkills(),
-          });
+          await this.postConfigBridgeQuery({ type: 'getToolSkills' }, postMessage);
           return true;
 
         case 'openUserConfigFile':
@@ -204,29 +193,21 @@ export class ConfigBridge implements vscode.Disposable {
           return true;
 
         case 'ssoLogin': {
-          const auth = await getNekoAuthAPI();
-          if (!auth) {
-            postMessage({
-              type: 'ssoError',
-              error: 'neko-auth extension is not installed or active',
-            });
-            return true;
-          }
-          try {
-            const session = await auth.login({ force: message.force as boolean | undefined });
-            postMessage({ type: 'ssoSessionChanged', session: toSsoSession(session) });
-          } catch (err) {
-            postMessage({
-              type: 'ssoError',
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
+          await runConfigBridgeSsoLoginRuntime(
+            { ...(message.force !== undefined ? { force: message.force } : {}) },
+            {
+              getAuth: () => getNekoAuthAPI(),
+              postMessage,
+            },
+          );
           return true;
         }
 
         case 'ssoLogout': {
-          await (await getNekoAuthAPI())?.logout();
-          postMessage({ type: 'ssoSessionChanged', session: null });
+          await runConfigBridgeSsoLogoutRuntime({
+            getAuth: () => getNekoAuthAPI(),
+            postMessage,
+          });
           return true;
         }
 
@@ -235,10 +216,7 @@ export class ConfigBridge implements vscode.Disposable {
       }
     } catch (error) {
       logger.error(`Error handling ${message.type}:`, error);
-      postMessage({
-        type: 'error',
-        message: `Failed to ${message.type}: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      postMessage(buildConfigBridgeGlobalErrorMessage({ action: message.type, error }));
       return true;
     }
   }
@@ -267,28 +245,61 @@ export class ConfigBridge implements vscode.Disposable {
 
   // ---- Private helpers ----
 
-  private buildConfigState(): Pick<ConfigState, 'providers'> {
-    const cm = this.platform.config;
-    return {
-      providers: cm.getProviders(),
-    };
-  }
-
-  private buildConfigStateWithStatus() {
-    return {
-      ...this.buildConfigState(),
-      connectionStates: this.connectionStateManager?.getStatesMap() || {},
-    };
+  private buildConfigState(): WebviewConfigState {
+    return this.platform.config.getAssistantConfigState();
   }
 
   private broadcastConnectionStateChange(event: ConnectionStateChangeEvent): void {
-    broadcastToWebviews(this.activeWebviews, {
-      type: 'connectionStateChanged',
-      id: event.id,
-      serviceType: event.type,
-      status: event.newStatus,
-      error: event.error,
+    broadcastToWebviews(
+      this.activeWebviews,
+      buildConfigBridgeConnectionStateChangedMessage({
+        id: event.id,
+        serviceType: event.type,
+        status: event.newStatus,
+        ...(event.error !== undefined ? { error: event.error } : {}),
+      }),
+    );
+  }
+
+  private async handleSkillMarketRequest(
+    postMessage: PostMessageFn,
+    request: SkillMarketExecutionRequest,
+  ): Promise<void> {
+    const market = (await resolveNekoMarketRuntime()) ?? this.platform.skillMarket;
+    await executeSkillMarketRequest({
+      market,
+      request,
+      onEvent: (event) => {
+        postMessage(buildConfigBridgeMarketplaceExecutionMessage(event));
+      },
+      logger,
     });
+  }
+
+  private async postConfigBridgeQuery(
+    request: ConfigBridgeQueryRequest,
+    postMessage: PostMessageFn,
+  ): Promise<void> {
+    const result = await runConfigBridgeQueryRuntime(request, {
+      getConfigState: () => this.buildConfigState(),
+      getConnectionStates: () => this.connectionStateManager?.getStatesMap() || {},
+      waitForSkillsInit: () => this.skillSync.waitForInit(),
+      getSkills: () => this.skillSync.getSkills(),
+      getCommands: () => this.skillSync.getCommands(),
+      getHooks: () => this.hookSync.getHooks(),
+      getToolSkills: () => this.toolSkill.getToolSkills(),
+    });
+    if (result.message) {
+      postMessage(result.message);
+    }
+  }
+
+  private broadcastConfigBridgeQuery(request: ConfigBridgeQueryRequest): void {
+    for (const postMessage of this.activeWebviews) {
+      void this.postConfigBridgeQuery(request, postMessage).catch((error) => {
+        logger.error(`Failed to broadcast ${request.type}:`, error);
+      });
+    }
   }
 
   dispose(): void {

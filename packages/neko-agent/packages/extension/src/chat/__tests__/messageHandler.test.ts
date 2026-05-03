@@ -48,7 +48,13 @@ vi.mock('vscode', () => {
     },
   };
 });
-import { MessageHandler, buildProviderExpressionTargets } from '../messageHandler';
+import * as vscode from 'vscode';
+import {
+  buildProviderExpressionTargets,
+  type AgentMessageRuntimeRequest,
+} from '@neko/agent/runtime';
+import type { SubAgentEvent } from '@neko/agent';
+import { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 
 // Mock @neko/agent module - createInputProcessor is used inside _getInputProcessor
 vi.mock('@neko/agent', async (importOriginal) => {
@@ -111,6 +117,8 @@ vi.mock('../message/agentStreamProcessor', () => {
         contentBlocks: [],
         hasError: false,
       });
+      clearConversation = vi.fn();
+      dispose = vi.fn();
     },
   };
 });
@@ -121,6 +129,18 @@ vi.mock('../message/agentStreamProcessor', () => {
 
 function createMockWebview() {
   return { postMessage: vi.fn().mockResolvedValue(true) };
+}
+
+function createMessageRequest(
+  messageText = 'hello',
+  overrides: Partial<AgentMessageRuntimeRequest> = {},
+): AgentMessageRuntimeRequest {
+  return {
+    conversationId: 'conv-1',
+    messageText,
+    sessionMode: 'agent',
+    ...overrides,
+  };
 }
 
 /** Minimal SettingsManager-shaped object */
@@ -147,7 +167,7 @@ function createMockProviders(isConfigured = false) {
   };
 }
 
-/** Minimal ConversationHandler-shaped object */
+/** Minimal ConversationBridge-shaped object */
 function createMockConversations() {
   const msgs: unknown[] = [];
   return {
@@ -156,6 +176,7 @@ function createMockConversations() {
     addMessage: vi.fn(),
     getActiveId: vi.fn().mockReturnValue('conv-1'),
     get: vi.fn().mockReturnValue({ id: 'conv-1', messages: msgs }),
+    toAgentHistory: vi.fn().mockReturnValue([]),
     manager: {
       toAgentHistory: vi.fn().mockReturnValue([]),
     },
@@ -164,19 +185,32 @@ function createMockConversations() {
 
 /** Minimal IAgentRunner — returned by agentManager.getOrCreate */
 function createMockAgentRunner() {
+  let subAgentEventListener: ((event: SubAgentEvent) => void) | undefined;
+  const subAgentEventDisposable = {
+    dispose: vi.fn(() => {
+      subAgentEventListener = undefined;
+    }),
+  };
+
   return {
     getHistory: vi.fn().mockReturnValue([]),
     configure: vi.fn().mockResolvedValue(undefined),
     execute: vi.fn().mockReturnValue((async function* () {})()),
     abort: vi.fn(),
     onDidRequestConfirmation: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+    onDidSubAgentEvent: vi.fn().mockImplementation((listener: (event: SubAgentEvent) => void) => {
+      subAgentEventListener = listener;
+      return subAgentEventDisposable;
+    }),
+    emitSubAgentEvent: (event: SubAgentEvent) => subAgentEventListener?.(event),
+    subAgentEventDisposable,
   };
 }
 
 /** Minimal IAgentManager-shaped object */
-function createMockAgentManager() {
+function createMockAgentManager(agentRunner = createMockAgentRunner()) {
   return {
-    getOrCreate: vi.fn().mockReturnValue(createMockAgentRunner()),
+    getOrCreate: vi.fn().mockReturnValue(agentRunner),
     loadHistoryWithContext: vi.fn(),
     dispose: vi.fn(),
   };
@@ -194,7 +228,7 @@ function createMockPlatform() {
 }
 
 /**
- * Build a MessageHandler with sensible defaults, allowing per-test overrides.
+ * Build an AgentMessageTurnHandler with sensible defaults, allowing per-test overrides.
  */
 function buildHandler(
   overrides: {
@@ -214,7 +248,7 @@ function buildHandler(
     overrides.agentManager !== undefined ? overrides.agentManager : createMockAgentManager();
   const platform = overrides.platform !== undefined ? overrides.platform : createMockPlatform();
 
-  return new MessageHandler(
+  return new AgentMessageTurnHandler(
     settings as any,
     providers as any,
     conversations as any,
@@ -230,22 +264,24 @@ function buildHandler(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('MessageHandler', () => {
+describe('AgentMessageTurnHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (vscode.workspace as any).workspaceFolders = undefined;
+    vi.mocked(vscode.workspace.findFiles).mockResolvedValue([]);
+    vi.mocked(vscode.workspace.asRelativePath).mockImplementation(
+      (value: { fsPath?: string } | string) =>
+        typeof value === 'string' ? value : (value.fsPath ?? ''),
+    );
   });
 
   describe('provider expression target mapping', () => {
     it('maps agent media models to capability-specific targets', () => {
       expect(
-        buildProviderExpressionTargets(
-          {
-            image: { providerId: 'flux', modelId: 'flux-pro-1.1' },
-            video: { providerId: 'runway', modelId: 'gen-4' },
-          },
-          undefined,
-          undefined,
-        ),
+        buildProviderExpressionTargets({
+          image: { providerId: 'flux', modelId: 'flux-pro-1.1', category: 'image' },
+          video: { providerId: 'runway', modelId: 'gen-4', category: 'video' },
+        }),
       ).toEqual([
         { capability: 'image.generate', providerId: 'flux', modelId: 'flux-pro-1.1' },
         { capability: 'video.generate', providerId: 'runway', modelId: 'gen-4' },
@@ -253,7 +289,13 @@ describe('MessageHandler', () => {
     });
 
     it('maps a non-agent media model to image, video, and audio targets', () => {
-      expect(buildProviderExpressionTargets(undefined, 'openai', 'gpt-image-1')).toEqual([
+      expect(
+        buildProviderExpressionTargets(undefined, {
+          providerId: 'openai',
+          modelId: 'gpt-image-1',
+          category: 'image',
+        }),
+      ).toEqual([
         { capability: 'image.generate', providerId: 'openai', modelId: 'gpt-image-1' },
         { capability: 'video.generate', providerId: 'openai', modelId: 'gpt-image-1' },
         { capability: 'audio.generate', providerId: 'openai', modelId: 'gpt-image-1' },
@@ -271,7 +313,10 @@ describe('MessageHandler', () => {
         isPlanMode: true,
       });
 
-      await handler.handleUserMessage(createMockWebview() as any, 'outline the rollout');
+      await handler.handleUserMessage(
+        createMockWebview() as any,
+        createMessageRequest('outline the rollout'),
+      );
 
       expect(agentRunner.configure).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -289,7 +334,10 @@ describe('MessageHandler', () => {
         isPlanMode: true,
       });
 
-      await handler.handleUserMessage(createMockWebview() as any, 'outline the rollout');
+      await handler.handleUserMessage(
+        createMockWebview() as any,
+        createMessageRequest('outline the rollout'),
+      );
 
       expect(agentRunner.execute).toHaveBeenCalledWith(
         'outline the rollout',
@@ -299,7 +347,6 @@ describe('MessageHandler', () => {
               entrySignal: 'vague-creative',
               taskShape: 'multi-step',
               runKind: 'plan-mode',
-              workflowId: 'plan-mode',
             },
           },
         }),
@@ -352,7 +399,7 @@ describe('MessageHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler();
 
-      await handler.handleUserMessage(webview as any, 'hello');
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
@@ -365,7 +412,7 @@ describe('MessageHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler();
 
-      await handler.handleUserMessage(webview as any, 'hello');
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
@@ -386,26 +433,27 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        'hi',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'provided-conv-id',
+        createMessageRequest('hi', { conversationId: 'provided-conv-id' }),
       );
 
       // ensureActive should NOT have been called when a conversationId is provided
       expect(conversations.ensureActive).not.toHaveBeenCalled();
     });
 
-    it('calls ensureActive when no conversationId is provided', async () => {
+    it('rejects the message when no conversationId is provided', async () => {
       const webview = createMockWebview();
       const conversations = createMockConversations();
       const handler = buildHandler({ conversations });
 
-      await handler.handleUserMessage(webview as any, 'hi');
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('hi', { conversationId: '' }),
+      );
 
-      expect(conversations.ensureActive).toHaveBeenCalled();
+      expect(conversations.ensureActive).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'globalError' }),
+      );
     });
 
     it('thinking message includes the correct conversationId', async () => {
@@ -414,12 +462,7 @@ describe('MessageHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        'hello',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'my-conv',
+        createMessageRequest('hello', { conversationId: 'my-conv' }),
       );
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
@@ -440,20 +483,24 @@ describe('MessageHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler({ agentManager: undefined });
 
-      await handler.handleUserMessage(webview as any, 'hello');
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
+        conversationId?: string;
       }>;
-      const hasError = calls.some((msg) => msg.type === 'error');
-      expect(hasError).toBe(true);
+      expect(calls).toContainEqual(
+        expect.objectContaining({ type: 'error', conversationId: 'conv-1' }),
+      );
     });
 
     it('does not throw when agentManager is undefined', async () => {
       const webview = createMockWebview();
       const handler = buildHandler({ agentManager: undefined });
 
-      await expect(handler.handleUserMessage(webview as any, 'hello')).resolves.toBeUndefined();
+      await expect(
+        handler.handleUserMessage(webview as any, createMessageRequest('hello')),
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -467,13 +514,15 @@ describe('MessageHandler', () => {
       // providers returns undefined (not configured)
       const handler = buildHandler({ providers: createMockProviders(false) });
 
-      await handler.handleUserMessage(webview as any, 'hello');
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
+        conversationId?: string;
       }>;
-      const hasError = calls.some((msg) => msg.type === 'error');
-      expect(hasError).toBe(true);
+      expect(calls).toContainEqual(
+        expect.objectContaining({ type: 'error', conversationId: 'conv-1' }),
+      );
     });
   });
 
@@ -487,12 +536,155 @@ describe('MessageHandler', () => {
       const conversations = createMockConversations();
       const handler = buildHandler({ conversations });
 
-      await handler.handleUserMessage(webview as any, 'test message');
+      await handler.handleUserMessage(webview as any, createMessageRequest('test message'));
 
       expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ role: 'user', content: 'test message' }),
       );
+    });
+  });
+
+  describe('handleUserMessage() — SubAgent event bridge', () => {
+    it('forwards SubAgent events for the subscribed conversation', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+      );
+
+      agentRunner.emitSubAgentEvent({
+        type: 'progress',
+        subAgentId: 'sub-1',
+        parentAgentId: 'agent-1',
+        conversationId: 'conv-1',
+        data: {
+          status: 'running',
+          progress: 'reading files',
+        },
+        timestamp: 100,
+      });
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'subagentEvent',
+        conversationId: 'conv-1',
+        event: expect.objectContaining({
+          type: 'progress',
+          subAgentId: 'sub-1',
+          conversationId: 'conv-1',
+        }),
+        workItem: expect.objectContaining({
+          id: 'sub-1',
+          conversationId: 'conv-1',
+          kind: 'subagent',
+        }),
+      });
+    });
+
+    it('does not forward SubAgent events from another conversation', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+      );
+
+      agentRunner.emitSubAgentEvent({
+        type: 'started',
+        subAgentId: 'sub-2',
+        parentAgentId: 'agent-2',
+        conversationId: 'conv-2',
+        timestamp: 200,
+      });
+
+      const subAgentMessages = webview.postMessage.mock.calls
+        .map((call: unknown[]) => call[0])
+        .filter((message: unknown): message is { type: string } => {
+          return (
+            typeof message === 'object' &&
+            message !== null &&
+            'type' in message &&
+            (message as { type?: unknown }).type === 'subagentEvent'
+          );
+        });
+      expect(subAgentMessages).toEqual([]);
+    });
+
+    it('disposes the SubAgent event subscription when clearing agent state', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+      );
+      handler.clearAgentState('conv-1');
+
+      expect(agentRunner.subAgentEventDisposable.dispose).toHaveBeenCalledTimes(1);
+
+      agentRunner.emitSubAgentEvent({
+        type: 'completed',
+        subAgentId: 'sub-1',
+        parentAgentId: 'agent-1',
+        conversationId: 'conv-1',
+        timestamp: 300,
+      });
+
+      const subAgentMessages = webview.postMessage.mock.calls
+        .map((call: unknown[]) => call[0])
+        .filter((message: unknown): message is { type: string } => {
+          return (
+            typeof message === 'object' &&
+            message !== null &&
+            'type' in message &&
+            (message as { type?: unknown }).type === 'subagentEvent'
+          );
+        });
+      expect(subAgentMessages).toEqual([]);
+    });
+  });
+
+  describe('searchProjectFiles()', () => {
+    it('uses an agent runtime search/projection plan and preserves conversationId', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+
+      (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
+      vi.mocked(vscode.workspace.findFiles).mockResolvedValue([
+        { fsPath: '/workspace/src/app.ts' },
+      ] as any);
+      vi.mocked(vscode.workspace.asRelativePath).mockImplementation((value: any) =>
+        String(value.fsPath).replace('/workspace/', ''),
+      );
+
+      await handler.searchProjectFiles(webview as any, 'app', 'conv-search');
+
+      expect(vscode.workspace.findFiles).toHaveBeenCalledWith(
+        '**/*app*',
+        '**/node_modules/**,**/.git/**,**/dist/**,**/build/**',
+        30,
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'projectFiles',
+        conversationId: 'conv-search',
+        files: [{ path: 'src/app.ts', name: 'app.ts', type: 'file' }],
+        mentionExtras: [],
+      });
     });
   });
 });

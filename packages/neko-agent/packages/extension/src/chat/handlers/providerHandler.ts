@@ -7,15 +7,21 @@
  */
 
 import * as vscode from 'vscode';
-import type { ProviderManager } from '../providerManager';
-import type { SettingsManager } from '../settingsManager';
+import {
+  runAssistantProviderConfigMutationNotificationRuntime,
+  type AssistantProviderConfigInput,
+  type AssistantProviderMutationRuntimeRequest,
+  type Platform,
+} from '@neko/platform';
+import { getLogger } from '../../base';
+
+const logger = getLogger('ProviderHandler');
 
 /**
  * Dependencies for ProviderHandler
  */
 export interface ProviderHandlerDeps {
-  providers?: ProviderManager;
-  settings: SettingsManager;
+  platform?: Platform;
   sendSettings: () => void;
   getWebview: () => vscode.Webview | undefined;
 }
@@ -30,72 +36,33 @@ export class ProviderHandler {
     Object.assign(this.deps, partial);
   }
 
-  async handleAddModel(model: any): Promise<void> {
-    if (!this.deps.providers) return;
-
-    const result = await this.deps.providers.addProvider(model);
-    this.deps.sendSettings();
-
-    const webview = this.deps.getWebview();
-    if (webview) {
-      webview.postMessage({
-        type: 'modelAdded',
-        success: result.success,
-        modelType: model.type,
-        error: result.error,
-      });
-    }
+  async handleAddModel(model: AssistantProviderConfigInput): Promise<void> {
+    await this.runMutation({ type: 'addModel', model });
   }
 
   async handleRemoveModel(modelType: string): Promise<void> {
-    if (!this.deps.providers) return;
-
-    const result = await this.deps.providers.removeProvider(modelType);
-
-    if (this.deps.settings.selectedProviderId === modelType) {
-      this.deps.settings.selectedProviderId = null;
-      this.deps.settings.selectedModelId = null;
-    }
-
-    this.deps.sendSettings();
-
-    const webview = this.deps.getWebview();
-    if (webview) {
-      webview.postMessage({
-        type: 'modelRemoved',
-        success: result.success,
-        modelType,
-        error: result.error,
-      });
-    }
+    await this.runMutation({ type: 'removeModel', providerId: modelType });
   }
 
   async handleToggleProvider(providerType: string, enabled: boolean): Promise<void> {
-    if (!this.deps.providers) return;
-
-    await this.deps.providers.toggleProvider(providerType, enabled);
-
-    if (!enabled && this.deps.settings.selectedProviderId === providerType) {
-      this.deps.settings.selectedProviderId = null;
-      this.deps.settings.selectedModelId = null;
-    }
-
-    this.deps.sendSettings();
+    await this.runMutation({ type: 'toggleProvider', providerId: providerType, enabled });
   }
 
   async handleToggleModel(providerType: string, modelId: string, enabled: boolean): Promise<void> {
-    if (!this.deps.providers) return;
+    await this.runMutation({ type: 'toggleModel', providerId: providerType, modelId, enabled });
+  }
 
-    await this.deps.providers.toggleModel(providerType, modelId, enabled);
-
-    if (
-      !enabled &&
-      this.deps.settings.selectedProviderId === providerType &&
-      this.deps.settings.selectedModelId === modelId
-    ) {
-      this.deps.settings.selectedModelId = null;
-    }
-
-    this.deps.sendSettings();
+  private async runMutation(request: AssistantProviderMutationRuntimeRequest): Promise<void> {
+    await runAssistantProviderConfigMutationNotificationRuntime(
+      request,
+      this.deps.platform?.config,
+      {
+        sendSettings: this.deps.sendSettings,
+        postMessage: async (message) => {
+          await this.deps.getWebview()?.postMessage(message);
+        },
+        onError: (error) => logger.error('Failed to update provider settings:', error),
+      },
+    );
   }
 }

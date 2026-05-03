@@ -4,41 +4,54 @@
 
 import type * as vscode from 'vscode';
 import type { ConfiguredToolGroup } from '@neko/shared';
+import {
+  TOOL_SKILL_ENABLED_STATE_STORAGE_KEY,
+  buildToolSkillConfigDataMessage,
+  createEnabledStateRuntimeStore,
+  createToolSkillConfigSyncRuntime,
+  type ToolSkillConfigSyncRuntime,
+} from '@neko/agent/runtime';
 import type { PostMessageFn } from './types';
-import { EnabledStateStore } from './enabledStateStore';
+import { createVSCodeEnabledStateStorage } from './enabledStateStore';
 import { broadcastToWebviews } from './broadcastHelper';
+import { getLogger } from '../../base';
 
-const TOOL_SKILL_ENABLED_STATE_KEY = 'toolSkillEnabledState';
+const logger = getLogger('ToolSkillHandler');
 
 export class ToolSkillHandler {
-  private cachedToolSkills: ConfiguredToolGroup[] = [];
-  private readonly enabledState: EnabledStateStore;
+  private readonly runtime: ToolSkillConfigSyncRuntime;
 
   constructor(
     private readonly activeWebviews: Set<PostMessageFn>,
     context?: vscode.ExtensionContext,
   ) {
-    this.enabledState = new EnabledStateStore(TOOL_SKILL_ENABLED_STATE_KEY, context);
+    this.runtime = createToolSkillConfigSyncRuntime({
+      enabledState: createEnabledStateRuntimeStore({
+        storageKey: TOOL_SKILL_ENABLED_STATE_STORAGE_KEY,
+        storage: createVSCodeEnabledStateStorage(context),
+        logger,
+      }),
+    });
   }
 
   /**
    * Set ToolSkills from ToolSkillRegistry (called by AgentRunner after initialization)
    */
   setToolSkills(toolSkills: ConfiguredToolGroup[]): void {
-    this.cachedToolSkills = this.enabledState.applyTo(toolSkills, (ts) => ts.name);
+    this.runtime.setToolSkills(toolSkills);
   }
 
   getToolSkills(): ConfiguredToolGroup[] {
-    return this.cachedToolSkills;
+    return this.runtime.getToolSkills();
   }
 
   /**
    * Broadcast current ToolSkills state to all webviews
    */
   broadcast(): void {
-    broadcastToWebviews(this.activeWebviews, {
-      type: 'toolSkillsChanged',
-      toolSkills: this.cachedToolSkills,
-    });
+    broadcastToWebviews(
+      this.activeWebviews,
+      buildToolSkillConfigDataMessage(this.runtime.getToolSkills()),
+    );
   }
 }

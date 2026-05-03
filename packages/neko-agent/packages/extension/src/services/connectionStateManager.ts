@@ -6,42 +6,26 @@
  */
 
 import * as vscode from 'vscode';
+import {
+  createRuntimeConnectionStateStore,
+  type ConnectionServiceType,
+  type ConnectionState,
+  type ConnectionStateChangeEvent,
+  type ConnectionStateListener,
+  type ConnectionStatus,
+  type RuntimeConnectionStateStore,
+} from '@neko/agent/runtime';
 import { getLogger } from '../base';
 
 const logger = getLogger('ConnectionStateManager');
 
-/**
- * Connection status enum
- */
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-
-/**
- * Connection state for a single service
- */
-export interface ConnectionState {
-  id: string;
-  name: string;
-  type: 'mcp';
-  status: ConnectionStatus;
-  error?: string;
-  lastChecked?: number;
-}
-
-/**
- * Connection state change event
- */
-export interface ConnectionStateChangeEvent {
-  id: string;
-  type: 'mcp';
-  oldStatus: ConnectionStatus;
-  newStatus: ConnectionStatus;
-  error?: string;
-}
-
-/**
- * Connection state listener
- */
-export type ConnectionStateListener = (event: ConnectionStateChangeEvent) => void;
+export type {
+  ConnectionServiceType,
+  ConnectionState,
+  ConnectionStateChangeEvent,
+  ConnectionStateListener,
+  ConnectionStatus,
+};
 
 /**
  * Connection State Manager
@@ -49,8 +33,9 @@ export type ConnectionStateListener = (event: ConnectionStateChangeEvent) => voi
  * Singleton service that manages connection states for MCP services.
  */
 export class ConnectionStateManager implements vscode.Disposable {
-  private states: Map<string, ConnectionState> = new Map();
-  private listeners: Set<ConnectionStateListener> = new Set();
+  private readonly store: RuntimeConnectionStateStore = createRuntimeConnectionStateStore({
+    onListenerError: (error) => logger.error('Listener error:', error),
+  });
 
   /**
    * Update connection state for a service
@@ -58,107 +43,71 @@ export class ConnectionStateManager implements vscode.Disposable {
   updateState(
     id: string,
     name: string,
-    type: 'mcp',
+    type: ConnectionServiceType,
     status: ConnectionStatus,
     error?: string,
   ): void {
-    const key = `${type}:${id}`;
-    const existing = this.states.get(key);
-    const oldStatus = existing?.status || 'disconnected';
-
-    const newState: ConnectionState = {
+    this.store.updateState({
       id,
       name,
       type,
       status,
-      error,
-      lastChecked: Date.now(),
-    };
-
-    this.states.set(key, newState);
-
-    // Notify listeners if status changed
-    if (oldStatus !== status) {
-      this.notifyListeners({
-        id,
-        type,
-        oldStatus,
-        newStatus: status,
-        error,
-      });
-    }
+      ...(error !== undefined ? { error } : {}),
+    });
   }
 
   /**
    * Get connection state for a service
    */
-  getState(id: string, type: 'mcp'): ConnectionState | undefined {
-    return this.states.get(`${type}:${id}`);
+  getState(id: string, type: ConnectionServiceType): ConnectionState | undefined {
+    return this.store.getState(id, type);
   }
 
   /**
    * Get all MCP connection states
    */
   getMCPStates(): ConnectionState[] {
-    return Array.from(this.states.values()).filter((s) => s.type === 'mcp');
+    return this.store.getStatesByType('mcp');
   }
 
   /**
    * Get all connection states
    */
   getAllStates(): ConnectionState[] {
-    return Array.from(this.states.values());
+    return this.store.getAllStates();
   }
 
   /**
    * Get states as a map for UI consumption
    */
   getStatesMap(): Record<string, { status: ConnectionStatus; error?: string }> {
-    const result: Record<string, { status: ConnectionStatus; error?: string }> = {};
-    for (const state of this.states.values()) {
-      result[`${state.type}:${state.id}`] = {
-        status: state.status,
-        error: state.error,
-      };
-    }
-    return result;
+    return this.store.getStatesMap();
   }
 
   /**
    * Add a state change listener
    */
   addListener(listener: ConnectionStateListener): vscode.Disposable {
-    this.listeners.add(listener);
-    return { dispose: () => this.listeners.delete(listener) };
+    const dispose = this.store.addListener(listener);
+    return { dispose };
   }
 
   /**
    * Remove state for a service
    */
-  removeState(id: string, type: 'mcp'): void {
-    this.states.delete(`${type}:${id}`);
+  removeState(id: string, type: ConnectionServiceType): void {
+    this.store.removeState(id, type);
   }
 
   /**
    * Clear all states
    */
   clear(): void {
-    this.states.clear();
-  }
-
-  private notifyListeners(event: ConnectionStateChangeEvent): void {
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        logger.error('Listener error:', error);
-      }
-    }
+    this.store.clear();
   }
 
   dispose(): void {
-    this.states.clear();
-    this.listeners.clear();
+    this.store.dispose();
   }
 }
 

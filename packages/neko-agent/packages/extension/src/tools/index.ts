@@ -1,19 +1,11 @@
 /**
  * Extension Tools Module
  *
- * Provides tools for inter-extension communication with NekoCut and NekoCanvas.
+ * Extension-local tool adapters only. Domain tools are contributed by their
+ * owning extensions through AgentCapabilityProvider.
  */
 
-export {
-  createNekoCutTools,
-  createNekoCanvasTools,
-  createNekoEngineEffectsTools,
-  createTranscribeTools,
-  createNekoStoryTools,
-  createNekoSketchTools,
-  type Tool,
-} from './extensionTools';
-
+export type { Tool } from './types';
 export { createPuppetFaceTools } from './puppetFaceTools';
 
 // pipelineTools / runReportTools were removed with the workflow/ layer.

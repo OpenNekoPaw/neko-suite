@@ -7,9 +7,25 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Platform, Service } from '@neko/platform';
-import { TaskManager, ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
+import type { PromptFragment, ProviderCard } from '@neko/shared';
+import { NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND } from '@neko-agent/types';
+import {
+  buildAgentRuntimeSessionFactoryConfig,
+  createAgentSessionWithRuntime,
+  SubAgentRuntimeCoordinator,
+  type AgentRuntimeSessionAssemblyInput,
+  type AgentRuntimeSessionController,
+  type AgentRuntimeSessionControllerTarget,
+} from '@neko/agent/runtime';
+import {
+  TaskManager,
+  ToolCategoryRegistry,
+  ToolGroupRegistry,
+  ToolRegistry,
+  createProviderExpressionPromptFragments,
+} from '@neko/agent';
 import { AgentRunner, type AgentEvent, type IAgentConfig } from './agentRunner';
-import { EngineClient } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client/EngineClient';
 
 // =============================================================================
 // Module mocks
@@ -95,8 +111,8 @@ vi.mock('../bootstrap/capabilityBootstrap', () => ({
 let latestMockSession: ReturnType<typeof createMockSession>;
 let latestCreateSessionConfig: unknown;
 
-// Mock @neko/agent — createAgentSessionWithRuntime + createSystemPromptBuilder
-vi.mock('@neko/agent', async (importOriginal) => {
+// Mock @neko/agent/runtime — session/runtime assembly helpers.
+vi.mock('@neko/agent/runtime', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -105,10 +121,19 @@ vi.mock('@neko/agent', async (importOriginal) => {
       latestMockSession = createMockSession();
       return latestMockSession;
     }),
+  };
+});
+
+// Mock @neko/agent — prompt builder and other domain helpers.
+vi.mock('@neko/agent', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
     createSystemPromptBuilder: vi.fn(() => ({
       loadAgentsFile: vi.fn().mockResolvedValue(undefined),
       getAgentsContent: vi.fn().mockReturnValue(null),
       build: vi.fn().mockReturnValue('default prompt'),
+      buildForMode: vi.fn().mockReturnValue('default prompt'),
       buildBaseOnly: vi.fn().mockReturnValue('default prompt'),
       buildAgentsOverlay: vi.fn().mockReturnValue(undefined),
     })),
@@ -174,6 +199,195 @@ function createMockPlatform(): Platform {
   } as unknown as Platform;
 }
 
+function createMockRuntimeController(
+  target: AgentRuntimeSessionControllerTarget,
+): AgentRuntimeSessionController {
+  let handle:
+    | {
+        session: ReturnType<typeof createMockSession>;
+        toolGroupRegistry?: ToolGroupRegistry;
+        operationToolAdapterRegistry?: unknown;
+        promptFragments?: PromptFragment[];
+        conversationId?: string;
+        effectiveSystemPrompt: string;
+      }
+    | undefined;
+
+  return {
+    async configure(input: AgentRuntimeSessionAssemblyInput) {
+      const factoryConfig = buildFactoryConfig(input, handle?.operationToolAdapterRegistry);
+      syncToolCategories(factoryConfig);
+      const promptFragments = resolvePromptFragments(factoryConfig);
+      const sessionConfig = buildMockSessionConfig(factoryConfig, promptFragments);
+      const session = createAgentSessionWithRuntime(sessionConfig as never) as ReturnType<
+        typeof createMockSession
+      >;
+      handle = {
+        session,
+        effectiveSystemPrompt: sessionConfig.systemPrompt,
+        ...(factoryConfig.capabilityRuntime?.toolGroupRegistry
+          ? {
+              toolGroupRegistry: factoryConfig.capabilityRuntime
+                .toolGroupRegistry as ToolGroupRegistry,
+            }
+          : {}),
+        ...(factoryConfig.operationToolAdapterRegistry
+          ? { operationToolAdapterRegistry: factoryConfig.operationToolAdapterRegistry }
+          : {}),
+        ...(promptFragments ? { promptFragments } : {}),
+        ...(factoryConfig.conversationId ? { conversationId: factoryConfig.conversationId } : {}),
+      };
+      target.setSession(session);
+      return handle as never;
+    },
+    refresh(input: AgentRuntimeSessionAssemblyInput) {
+      if (!handle || !target.getSession()) return null;
+      const factoryConfig = buildFactoryConfig(input, handle.operationToolAdapterRegistry);
+      syncToolCategories(factoryConfig);
+      const promptFragments = resolvePromptFragments(factoryConfig);
+      target.setPromptFragments(promptFragments);
+      handle.promptFragments = promptFragments;
+      return {
+        sessionConfig: {
+          systemPrompt: factoryConfig.systemPrompt,
+          modelId: factoryConfig.modelId,
+          temperature: factoryConfig.temperature,
+          maxTokens: factoryConfig.maxTokens,
+          thinkingBudget: factoryConfig.thinkingBudget,
+          maxIterations: factoryConfig.maxIterations,
+          executionMode: factoryConfig.executionMode ?? 'auto',
+        },
+        ...(promptFragments ? { promptFragments } : {}),
+      };
+    },
+    getHandle() {
+      return handle as never;
+    },
+    getToolSkills() {
+      return handle?.toolGroupRegistry?.listEnabled() ?? [];
+    },
+    dispose() {
+      handle = undefined;
+    },
+  };
+}
+
+function buildFactoryConfig(
+  input: AgentRuntimeSessionAssemblyInput,
+  previousOperationToolAdapterRegistry?: unknown,
+) {
+  return buildAgentRuntimeSessionFactoryConfig({
+    ...input,
+    ...(previousOperationToolAdapterRegistry
+      ? { previousOperationToolAdapterRegistry: previousOperationToolAdapterRegistry as never }
+      : {}),
+  });
+}
+
+function syncToolCategories(
+  config: ReturnType<typeof buildAgentRuntimeSessionFactoryConfig>,
+): void {
+  const registry = config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
+  if (registry) {
+    config.syncToolCategories?.(registry);
+  }
+}
+
+function buildMockSessionConfig(
+  config: ReturnType<typeof buildAgentRuntimeSessionFactoryConfig>,
+  promptFragments: PromptFragment[] | undefined,
+) {
+  const capabilityRuntime = config.capabilityRuntime;
+  return {
+    service: config.service,
+    toolRegistry: config.toolRegistry,
+    systemPrompt: config.systemPrompt ?? 'default prompt',
+    executionMode: config.executionMode ?? 'auto',
+    maxIterations: config.maxIterations,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    thinkingBudget: config.thinkingBudget,
+    modelId: config.modelId,
+    ...(config.conversationId ? { conversationId: config.conversationId } : {}),
+    ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
+    ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
+    runtime: {
+      workflowRuntime: {
+        ...(capabilityRuntime?.skillRegistry || capabilityRuntime?.skillService
+          ? {
+              stageTracking: {
+                ...(capabilityRuntime.skillRegistry
+                  ? { skillRegistry: capabilityRuntime.skillRegistry }
+                  : {}),
+                ...(capabilityRuntime.skillService
+                  ? { skillService: capabilityRuntime.skillService }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(config.taskManager
+          ? { idcTaskProjection: { syncTask: vi.fn(), clearRun: vi.fn() } }
+          : {}),
+      },
+      capabilityRuntime: {
+        ...(capabilityRuntime?.skillService
+          ? { skillService: capabilityRuntime.skillService }
+          : {}),
+        ...(capabilityRuntime?.skillRegistry
+          ? { skillRegistry: capabilityRuntime.skillRegistry }
+          : {}),
+        ...(capabilityRuntime?.toolGroupRegistry
+          ? { toolGroupRegistry: capabilityRuntime.toolGroupRegistry }
+          : {}),
+        ...(promptFragments ? { promptFragments } : {}),
+        ...((config.toolCategoryRegistry ?? capabilityRuntime?.toolCategoryRegistry)
+          ? {
+              toolCategoryRegistry:
+                config.toolCategoryRegistry ?? capabilityRuntime?.toolCategoryRegistry,
+            }
+          : {}),
+        ...(capabilityRuntime?.providerCardRegistry
+          ? { providerCardRegistry: capabilityRuntime.providerCardRegistry }
+          : {}),
+        ...(config.operationToolAdapterRegistry
+          ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
+          : {}),
+      },
+    },
+  };
+}
+
+function resolvePromptFragments(
+  config: ReturnType<typeof buildAgentRuntimeSessionFactoryConfig>,
+): PromptFragment[] | undefined {
+  const capabilityFragments = [...(config.capabilityPromptFragments ?? [])];
+  const providerCards = listProviderCards(config.capabilityRuntime?.providerCardRegistry);
+  const selectedTargets =
+    config.providerExpressionTargets?.filter((target) => target.providerId || target.modelId) ?? [];
+  const providerFragments =
+    selectedTargets.length === 0
+      ? createProviderExpressionPromptFragments({ cards: providerCards, mode: 'candidates' })
+      : selectedTargets.flatMap((target) =>
+          createProviderExpressionPromptFragments({
+            cards: providerCards,
+            mode: 'selected',
+            capability: target.capability,
+            ...(target.providerId ? { providerId: target.providerId } : {}),
+            ...(target.modelId ? { modelId: target.modelId } : {}),
+            fragmentId: `provider:expression-context:${target.capability}`,
+          }),
+        );
+  const fragments = [...capabilityFragments, ...providerFragments];
+  return fragments.length > 0 ? fragments : undefined;
+}
+
+function listProviderCards(providerCardRegistry: unknown): ProviderCard[] {
+  if (!providerCardRegistry || typeof providerCardRegistry !== 'object') return [];
+  const list = (providerCardRegistry as { list?: unknown }).list;
+  const cards = typeof list === 'function' ? list.call(providerCardRegistry) : [];
+  return Array.isArray(cards) ? (cards as ProviderCard[]) : [];
+}
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -201,7 +415,10 @@ describe('AgentRunner', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    runner = new AgentRunner();
+    runner = new AgentRunner({
+      createRuntimeController: createMockRuntimeController,
+      subAgentRuntime: new SubAgentRuntimeCoordinator(),
+    });
     mockPlatform = createMockPlatform();
     capabilityRuntimeMock.skillRegistry = undefined;
     capabilityRuntimeMock.skillService = undefined;
@@ -383,7 +600,7 @@ describe('AgentRunner', () => {
         durationSecs: 1,
       });
       expect(activateEngineExtensionMock).toHaveBeenCalled();
-      expect(executeCommandMock).toHaveBeenCalledWith('neko.engine.ensureFrameServer');
+      expect(executeCommandMock).toHaveBeenCalledWith(NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND);
 
       const fetchCall = vi.mocked(globalThis.fetch).mock.calls.at(-1);
       expect(fetchCall?.[0]).toBe('http://127.0.0.1:7788/v1/dispatch');
@@ -803,7 +1020,7 @@ describe('AgentRunner', () => {
 
   describe('工具调用', () => {
     it('应该透传 session 的工具调用事件', async () => {
-      const { createAgentSessionWithRuntime } = await import('@neko/agent');
+      const { createAgentSessionWithRuntime } = await import('@neko/agent/runtime');
       vi.mocked(createAgentSessionWithRuntime).mockReturnValueOnce(
         createMockSession({
           events: [
@@ -834,7 +1051,7 @@ describe('AgentRunner', () => {
     });
 
     it('应该透传工具执行失败事件', async () => {
-      const { createAgentSessionWithRuntime } = await import('@neko/agent');
+      const { createAgentSessionWithRuntime } = await import('@neko/agent/runtime');
       vi.mocked(createAgentSessionWithRuntime).mockReturnValueOnce(
         createMockSession({
           events: [

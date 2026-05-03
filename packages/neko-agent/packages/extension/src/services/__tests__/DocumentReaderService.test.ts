@@ -120,8 +120,17 @@ describe('DocumentReaderService', () => {
 
   describe('read', () => {
     it('should throw error for DRM-protected files', async () => {
-      // Mock hasDRM to return true
-      vi.spyOn(service, 'hasDRM').mockResolvedValue(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.spyOn(service as any, 'tryImport').mockImplementation(async (pkg: string) => {
+        if (pkg === 'adm-zip') {
+          return class FakeZip {
+            getEntry(name: string) {
+              return name === 'META-INF/encryption.xml' ? {} : null;
+            }
+          };
+        }
+        return null;
+      });
 
       await expect(service.read('/path/to/protected.epub')).rejects.toThrow(
         'DRM-protected files are not supported',
@@ -151,7 +160,9 @@ describe('DocumentReaderService', () => {
     it('should throw error when required package is missing', async () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
 
-      await expect(service.read('/path/to/file.pdf')).rejects.toThrow('Failed to read PDF');
+      await expect(service.read('/path/to/file.pdf')).rejects.toThrow(
+        'pdf-parse package not installed',
+      );
     });
   });
 
@@ -218,6 +229,28 @@ describe('DocumentReaderService', () => {
 </FinalDraft>`;
       vi.mocked(fs.readFile).mockResolvedValue(mockXml as any);
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.spyOn(service as any, 'tryImport').mockImplementation(async (pkg: string) => {
+        if (pkg === 'fast-xml-parser') {
+          return {
+            XMLParser: class FakeXmlParser {
+              parse() {
+                return {
+                  FinalDraft: {
+                    Content: {
+                      Paragraph: [
+                        { '@_Type': 'Scene Heading', Text: 'INT. OFFICE - DAY' },
+                        { '@_Type': 'Action', Text: 'John enters.' },
+                      ],
+                    },
+                  },
+                };
+              }
+            },
+          };
+        }
+        return null;
+      });
 
       const result = await service.read('/path/to/script.fdx');
 
@@ -261,7 +294,7 @@ describe('DocumentReaderService', () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
 
       await expect(service.read('/path/to/presentation.pptx')).rejects.toThrow(
-        'Failed to read PPTX',
+        'officeparser package not installed',
       );
     });
 

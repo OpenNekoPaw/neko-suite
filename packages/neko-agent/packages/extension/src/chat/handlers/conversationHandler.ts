@@ -8,20 +8,39 @@
  */
 
 import * as vscode from 'vscode';
+import { buildAgentRuntimeStateSnapshotMessage } from '@neko/agent/runtime';
+import {
+  runCancelMessageRuntime,
+  runClearAllConversationsRuntime,
+  runClearHistoryRuntime,
+  runConfirmToolRuntime,
+  runDeleteConversationRuntime,
+  runNewConversationRuntime,
+  runStopAgentRuntime,
+  runSwitchConversationRuntime,
+  type ConversationControlRuntimeEffects,
+  type ConversationControlRuntimeMessage,
+} from '@neko/agent';
 import { getLogger } from '../../base';
-import type { ConversationHandler as ConversationManager } from '../conversationHandler';
-import type { MessageHandler } from '../messageHandler';
+import type { ConversationBridge } from '../conversationBridge';
+import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 import type { IAgentManager } from '../../ai/agentManager';
 
 const logger = getLogger('ConversationMessageHandler');
+
+export interface ConversationPromptModeCleanup {
+  clearPromptMode(conversationId: string): void;
+  clearAllPromptModes?(): void;
+}
 
 /**
  * Dependencies for ConversationMessageHandler
  */
 export interface ConversationMessageHandlerDeps {
-  conversations: ConversationManager;
+  conversations: ConversationBridge;
   agentManager?: IAgentManager;
-  messages?: MessageHandler;
+  messages?: AgentMessageTurnHandler;
+  promptModeCleanup?: ConversationPromptModeCleanup;
   getWebview: () => vscode.Webview | undefined;
 }
 
@@ -37,86 +56,57 @@ export class ConversationMessageHandler {
 
   // ---- Conversation CRUD ----
 
-  handleNewConversation(): void {
-    this.deps.conversations.create();
-    this.sendConversationList();
-    this.sendActiveConversation();
+  handleNewConversation(): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runNewConversationRuntime(this._createConversationRuntimeEffects()),
+    );
   }
 
-  handleSwitchConversation(conversationId: string): void {
-    if (this.deps.conversations.switchTo(conversationId)) {
-      this.sendActiveConversation();
-    }
+  handleSwitchConversation(conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runSwitchConversationRuntime({ conversationId }, this._createConversationRuntimeEffects()),
+    );
   }
 
-  handleDeleteConversation(conversationId: string): void {
-    this.deps.agentManager?.remove(conversationId);
-    this.deps.messages?.clearAgentState(conversationId);
-    this.deps.conversations.delete(conversationId);
-    this.sendConversationList();
-    this.sendActiveConversation();
+  handleDeleteConversation(conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runDeleteConversationRuntime({ conversationId }, this._createConversationRuntimeEffects()),
+    );
   }
 
-  handleClearHistory(webview: vscode.Webview): void {
-    const currentConversationId = this.deps.conversations.getActiveId();
-    if (currentConversationId) {
-      this.deps.agentManager?.clearHistory(currentConversationId);
-    }
-    this.deps.conversations.clearCurrent();
-    webview.postMessage({ type: 'historyCleared' });
+  handleClearHistory(webview: vscode.Webview, conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runClearHistoryRuntime({ conversationId }, this._createConversationRuntimeEffects(webview)),
+    );
   }
 
-  handleClearAllConversations(webview: vscode.Webview): void {
-    for (const conv of this.deps.conversations.list()) {
-      this.deps.agentManager?.remove(conv.id);
-      this.deps.messages?.clearAgentState(conv.id);
-    }
-    this.deps.conversations.manager.clear();
-    this.sendConversationList();
-    webview.postMessage({ type: 'historyCleared' });
+  handleClearAllConversations(webview: vscode.Webview): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runClearAllConversationsRuntime(this._createConversationRuntimeEffects(webview)),
+    );
   }
 
   // ---- Agent Control ----
 
-  handleConfirmTool(toolCallId: string, approved: boolean, conversationId: string): void {
-    if (!conversationId) {
-      logger.warn('No conversationId for confirmTool');
-      return;
-    }
-
-    this.deps.agentManager?.confirmTool(conversationId, toolCallId, approved);
+  handleConfirmTool(toolCallId: string, approved: boolean, conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runConfirmToolRuntime(
+        { conversationId, toolCallId, approved },
+        this._createConversationRuntimeEffects(),
+      ),
+    );
   }
 
-  handleCancelMessage(webview: vscode.Webview, conversationId: string): void {
-    if (conversationId && this.deps.agentManager) {
-      const agent = this.deps.agentManager.get(conversationId);
-      if (agent?.isRunning()) {
-        const disposable = agent.onDidStop(() => {
-          disposable.dispose();
-          webview.postMessage({ type: 'messageCancelled', conversationId });
-        });
-        this.deps.agentManager.cancel(conversationId);
-      } else {
-        this.deps.agentManager.cancel(conversationId);
-        webview.postMessage({ type: 'messageCancelled', conversationId });
-      }
-    } else {
-      logger.warn('No conversationId for cancelMessage');
-    }
+  handleCancelMessage(webview: vscode.Webview, conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runCancelMessageRuntime({ conversationId }, this._createConversationRuntimeEffects(webview)),
+    );
   }
 
-  handleStopAgent(webview: vscode.Webview, conversationId: string): void {
-    if (conversationId && this.deps.agentManager) {
-      this.deps.agentManager.cancel(conversationId);
-      this.deps.messages?.clearAgentState(conversationId);
-      webview.postMessage({ type: 'agentStopped', conversationId });
-      webview.postMessage({
-        type: 'agentPhase',
-        conversationId,
-        phase: 'idle',
-        timestamp: Date.now(),
-      });
-    }
+  handleStopAgent(webview: vscode.Webview, conversationId: string): Promise<void> {
+    return this._runConversationRuntime(() =>
+      runStopAgentRuntime({ conversationId }, this._createConversationRuntimeEffects(webview)),
+    );
   }
 
   // ---- Queries ----
@@ -137,9 +127,61 @@ export class ConversationMessageHandler {
 
   sendAgentStateSnapshot(webview: vscode.Webview): void {
     if (!this.deps.messages) return;
-    webview.postMessage({
-      type: 'agentStateSnapshot',
-      agentStates: this.deps.messages.getAgentStateSnapshot(),
-    });
+    webview.postMessage(
+      buildAgentRuntimeStateSnapshotMessage(this.deps.messages.getAgentStateSnapshot()),
+    );
+  }
+
+  private async _runConversationRuntime(action: () => Promise<unknown>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      logger.error('Conversation runtime bridge failed:', error);
+    }
+  }
+
+  private _createConversationRuntimeEffects(
+    webview?: vscode.Webview,
+  ): ConversationControlRuntimeEffects {
+    const promptModeCleanup = this.deps.promptModeCleanup;
+    const effects: ConversationControlRuntimeEffects = {
+      createConversation: () => this.deps.conversations.create(),
+      switchConversation: (conversationId) => this.deps.conversations.switchTo(conversationId),
+      deleteConversation: (conversationId) => this.deps.conversations.delete(conversationId),
+      listConversationIds: () =>
+        this.deps.conversations.list().map((conversation) => conversation.id),
+      clearConversations: () => this.deps.conversations.clearAll(),
+      refreshConversationList: () => this.sendConversationList(),
+      refreshActiveConversation: () => this.sendActiveConversation(),
+      removeAgent: (conversationId) => this.deps.agentManager?.remove(conversationId),
+      clearAgentState: (conversationId) => this.deps.messages?.clearAgentState(conversationId),
+      clearAgentHistory: (conversationId) => this.deps.agentManager?.clearHistory(conversationId),
+      updateConversationMessages: (conversationId, messages) =>
+        this.deps.conversations.updateMessagesForConversation(conversationId, messages),
+      confirmTool: (conversationId, toolCallId, approved) =>
+        this.deps.agentManager?.confirmTool(conversationId, toolCallId, approved),
+      cancelAgent: this.deps.agentManager
+        ? (conversationId) => this.deps.agentManager?.cancel(conversationId)
+        : undefined,
+      isAgentRunning: (conversationId) =>
+        this.deps.agentManager?.get(conversationId)?.isRunning() ?? false,
+      onAgentStopped: (conversationId, listener) =>
+        this.deps.agentManager?.get(conversationId)?.onDidStop(listener),
+      postMessage: async (message: ConversationControlRuntimeMessage): Promise<void> => {
+        await webview?.postMessage(message);
+      },
+      now: () => Date.now(),
+      onWarning: ({ code, action, conversationId }) => {
+        logger.warn('Conversation control runtime warning:', { code, action, conversationId });
+      },
+    };
+    if (promptModeCleanup) {
+      effects.clearPromptMode = (conversationId) =>
+        promptModeCleanup.clearPromptMode(conversationId);
+      if (promptModeCleanup.clearAllPromptModes) {
+        effects.clearAllPromptModes = () => promptModeCleanup.clearAllPromptModes?.();
+      }
+    }
+    return effects;
   }
 }

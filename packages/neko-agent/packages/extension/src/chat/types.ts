@@ -17,14 +17,6 @@ export { DEFAULT_SETTINGS } from '@neko-agent/types';
 // =============================================================================
 
 /**
- * Message types for communication between extension and webview
- */
-export interface WebviewMessage {
-  type: string;
-  [key: string]: unknown;
-}
-
-/**
  * File reference parsed from @ mentions
  */
 export interface FileReference {
@@ -60,25 +52,4 @@ export interface ProviderConfig {
   apiKey?: string;
   baseUrl?: string;
   models?: Array<{ id: string; enabled: boolean }>;
-}
-
-// =============================================================================
-// Tab State Types (for session persistence)
-// =============================================================================
-
-/**
- * Open tab state for persistence
- */
-export interface OpenTab {
-  id: string;
-  title: string;
-  conversationId: string;
-}
-
-/**
- * Tab state for persistence across panel close/reopen
- */
-export interface TabState {
-  openTabs: OpenTab[];
-  activeTabId: string | null;
 }

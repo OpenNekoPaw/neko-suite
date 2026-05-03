@@ -8,178 +8,51 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import * as vm from 'vm';
 import {
-  HookLoader,
   type IHookFileSystem,
-  type IHookCompiler,
-  type CompileResult,
   type LoadedHook,
   type HookLoadError,
   type ExecutorHooks,
-  HOOK_DIRECTORIES,
+  createHookCompiler,
+  createProjectHookRuntimeManager,
+  type HookRuntimeDisposable,
+  type HookRuntimeManager,
 } from '@neko/agent';
 import { getLogger } from '../base';
 
 const logger = getLogger('HookManager');
 
-// =============================================================================
-// esbuild Compiler Implementation
-// =============================================================================
+function createEsbuildHookCompiler() {
+  let esbuild: typeof import('esbuild') | null = null;
+  let loadError: Error | null = null;
 
-/**
- * esbuild-based TypeScript compiler for hooks
- */
-class EsbuildHookCompiler implements IHookCompiler {
-  private esbuild: typeof import('esbuild') | null = null;
-  private loadError: Error | null = null;
-
-  /**
-   * Lazily load esbuild module
-   */
-  private async loadEsbuild(): Promise<typeof import('esbuild')> {
-    if (this.loadError) {
-      throw this.loadError;
+  const loadEsbuild = async (): Promise<typeof import('esbuild')> => {
+    if (loadError) {
+      throw loadError;
     }
 
-    if (!this.esbuild) {
+    if (!esbuild) {
       try {
-        // Dynamic import esbuild
-        this.esbuild = await import('esbuild');
+        esbuild = await import('esbuild');
       } catch (error) {
-        this.loadError = new Error(
+        loadError = new Error(
           `Failed to load esbuild: ${error instanceof Error ? error.message : String(error)}`,
         );
-        throw this.loadError;
+        throw loadError;
       }
     }
 
-    return this.esbuild;
-  }
+    return esbuild;
+  };
 
-  /**
-   * Compile TypeScript content to JavaScript
-   */
-  async compile(filePath: string, content: string): Promise<CompileResult> {
-    try {
-      const esbuild = await this.loadEsbuild();
-
-      const result = await esbuild.transform(content, {
-        loader: 'ts',
-        format: 'cjs',
-        target: 'node18',
-        sourcemap: false,
-        // Strip type imports since we can't resolve them at runtime
-        tsconfigRaw: {
-          compilerOptions: {
-            importsNotUsedAsValues: 'remove',
-            verbatimModuleSyntax: false,
-          },
-        },
-      });
-
-      return {
-        success: true,
-        code: result.code,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
-
-  /**
-   * Execute compiled JavaScript and return module exports
-   */
-  executeModule(code: string, filename: string): Record<string, unknown> {
-    const exports: Record<string, unknown> = {};
-    const module = { exports };
-
-    // Create a sandbox context for execution
-    const sandbox = {
-      exports,
-      module,
-      require: this.createSafeRequire(filename),
-      console,
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
-      __filename: filename,
-      __dirname: path.dirname(filename),
-      process: {
-        env: process.env,
-        cwd: () => process.cwd(),
-      },
-    };
-
-    try {
-      vm.runInNewContext(code, sandbox, {
-        filename,
-        timeout: 5000, // 5 second timeout for hook initialization
-      });
-    } catch (error) {
-      throw new Error(
-        `Failed to execute hook: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    return module.exports as Record<string, unknown>;
-  }
-
-  /**
-   * Create a safe require function that allows specific modules
-   */
-  private createSafeRequire(filename: string): NodeRequire {
-    const baseRequire = require;
-    const hookDir = path.dirname(filename);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const safeRequire = (id: string): any => {
-      // Allow relative imports within the hook directory
-      if (id.startsWith('./') || id.startsWith('../')) {
-        const resolvedPath = path.resolve(hookDir, id);
-        return baseRequire(resolvedPath);
-      }
-
-      // Allow specific Node.js built-ins
-      const allowedBuiltins = [
-        'path',
-        'util',
-        'events',
-        'stream',
-        'buffer',
-        'url',
-        'querystring',
-        'crypto',
-      ];
-
-      if (allowedBuiltins.includes(id)) {
-        return baseRequire(id);
-      }
-
-      // Allow @neko/platform types (they're stripped at runtime anyway)
-      if (id === '@neko/platform') {
-        // Return empty object - types are compile-time only
-        return {};
-      }
-
-      // Block other requires for security
-      throw new Error(
-        `Module '${id}' is not allowed in hooks. Allowed: ${allowedBuiltins.join(', ')}`,
-      );
-    };
-
-    // Copy require properties
-    safeRequire.resolve = baseRequire.resolve;
-    safeRequire.cache = baseRequire.cache;
-    safeRequire.extensions = baseRequire.extensions;
-    safeRequire.main = baseRequire.main;
-
-    return safeRequire as NodeRequire;
-  }
+  return createHookCompiler({
+    transform: async (content, options) => {
+      const loadedEsbuild = await loadEsbuild();
+      const result = await loadedEsbuild.transform(content, options);
+      return { code: result.code };
+    },
+    requireModule: require,
+  });
 }
 
 // =============================================================================
@@ -257,11 +130,8 @@ function createNodeFileSystem(workspaceRoot: string): IHookFileSystem {
  * ```
  */
 export class HookManager implements vscode.Disposable {
-  private loader: HookLoader;
-  private loadedHooks: LoadedHook[] = [];
-  private loadErrors: HookLoadError[] = [];
-  private workspaceRoot: string;
-  private initialized = false;
+  private readonly runtime: HookRuntimeManager;
+  private readonly runtimeReloadDisposable: HookRuntimeDisposable;
 
   private readonly _onDidReload = new vscode.EventEmitter<{
     hooks: LoadedHook[];
@@ -272,12 +142,18 @@ export class HookManager implements vscode.Disposable {
   readonly onDidReload = this._onDidReload.event;
 
   constructor(workspaceRoot: string) {
-    this.workspaceRoot = workspaceRoot;
-
-    // Create HookLoader with Node.js implementations
-    this.loader = new HookLoader({
+    this.runtime = createProjectHookRuntimeManager({
+      workspaceRoot,
       fs: createNodeFileSystem(workspaceRoot),
-      compiler: new EsbuildHookCompiler(),
+      compiler: createEsbuildHookCompiler(),
+      joinPath: path.join,
+      logger,
+    });
+    this.runtimeReloadDisposable = this.runtime.onDidReload((event) => {
+      this._onDidReload.fire({
+        hooks: [...event.hooks],
+        errors: [...event.errors],
+      });
     });
   }
 
@@ -285,99 +161,50 @@ export class HookManager implements vscode.Disposable {
    * Initialize and load hooks
    */
   async initialize(): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
-
-    const hookDir = path.join(this.workspaceRoot, HOOK_DIRECTORIES.project);
-
-    try {
-      const result = await this.loader.loadFromDirectory(hookDir);
-
-      this.loadedHooks = result.hooks;
-      this.loadErrors = result.errors;
-
-      // Log results
-      if (result.hooks.length > 0) {
-        logger.info(
-          `Loaded ${result.hooks.length} hook(s): ${result.hooks.map((h) => h.metadata.name).join(', ')}`,
-        );
-      }
-
-      // Report errors
-      for (const error of result.errors) {
-        logger.error(`Failed to load ${error.file}: ${error.message}`);
-        if (error.details) {
-          logger.error(`  Details: ${error.details}`);
-        }
-      }
-
-      // Start watching for changes
-      this.loader.watchDirectory(hookDir, (hooks, errors) => {
-        this.loadedHooks = hooks;
-        this.loadErrors = errors;
-
-        logger.info(`Reloaded ${hooks.length} hook(s)`);
-
-        // Fire reload event
-        this._onDidReload.fire({ hooks, errors });
-      });
-
-      this.initialized = true;
-    } catch (error) {
-      logger.error('Failed to initialize:', error);
-      // Don't throw - allow extension to continue without custom hooks
-    }
+    await this.runtime.initialize();
   }
 
   /**
    * Get all loaded ExecutorHooks instances
    */
   getHooks(): ExecutorHooks[] {
-    return this.loadedHooks.map((h) => h.hooks);
+    return this.runtime.getHooks();
   }
 
   /**
    * Get loaded hook metadata
    */
   getLoadedHooks(): LoadedHook[] {
-    return [...this.loadedHooks];
+    return this.runtime.getLoadedHooks();
   }
 
   /**
    * Get load errors
    */
   getErrors(): HookLoadError[] {
-    return [...this.loadErrors];
+    return this.runtime.getErrors();
   }
 
   /**
    * Check if any hooks are loaded
    */
   hasHooks(): boolean {
-    return this.loadedHooks.length > 0;
+    return this.runtime.hasHooks();
   }
 
   /**
    * Manually reload hooks
    */
   async reload(): Promise<void> {
-    const hookDir = path.join(this.workspaceRoot, HOOK_DIRECTORIES.project);
-
-    this.loader.clearCache();
-    const result = await this.loader.loadFromDirectory(hookDir);
-
-    this.loadedHooks = result.hooks;
-    this.loadErrors = result.errors;
-
-    this._onDidReload.fire({ hooks: result.hooks, errors: result.errors });
+    await this.runtime.reload();
   }
 
   /**
    * Dispose resources
    */
   dispose(): void {
-    this.loader.stopWatching();
+    this.runtimeReloadDisposable.dispose();
+    this.runtime.dispose();
     this._onDidReload.dispose();
   }
 }

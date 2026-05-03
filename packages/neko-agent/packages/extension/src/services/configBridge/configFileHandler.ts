@@ -3,16 +3,15 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
-import type { UnifiedConfig } from '@neko/shared';
 import {
-  readUserConfig,
-  readWorkspaceConfig,
-  watchUserConfig,
-  watchWorkspaceConfig,
+  ensureUserConfig,
   getUserConfigPath,
-  writeUserConfig,
-} from '@neko/shared/config/config-reader.ts';
+  runProviderCredentialConfigFileChangeRuntime,
+  runProviderCredentialConfigFileImportRuntime,
+  type Platform,
+} from '@neko/platform';
+import { buildConfigChangedRuntimeMessage } from '@neko/agent/runtime';
+import { watchUserConfig, watchWorkspaceConfig } from '@neko/shared/config/config-reader';
 import { getLogger } from '../../base';
 import type { PostMessageFn } from './types';
 import { broadcastToWebviews } from './broadcastHelper';
@@ -37,27 +36,11 @@ export class ConfigFileHandler implements vscode.Disposable {
 
   /**
    * Open ~/.neko/config.json in the VS Code editor.
-   * Creates the file with a provider template if it doesn't exist.
+   * Platform owns the default config shape; Extension only opens the file.
    */
   async handleOpenUserConfigFile(): Promise<void> {
+    ensureUserConfig();
     const configPath = getUserConfigPath();
-
-    const fsModule = await import('fs');
-    if (!fsModule.existsSync(configPath)) {
-      writeUserConfig({
-        providers: [
-          {
-            id: 'anthropic',
-            name: 'anthropic',
-            displayName: 'Anthropic',
-            type: 'anthropic',
-            apiUrl: 'https://api.anthropic.com',
-            apiKey: 'YOUR_ANTHROPIC_API_KEY',
-            enabled: true,
-          },
-        ],
-      } as Parameters<typeof writeUserConfig>[0]);
-    }
 
     const doc = await vscode.workspace.openTextDocument(configPath);
     await vscode.window.showTextDocument(doc, { preview: false });
@@ -67,74 +50,40 @@ export class ConfigFileHandler implements vscode.Disposable {
    * Import providers from config files into platform
    */
   private async importConfigs(): Promise<void> {
-    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-    const configs: Array<UnifiedConfig> = [];
-    const userConfig = readUserConfig();
-    if (userConfig) configs.push(userConfig);
-
-    if (workspacePath) {
-      const wsConfig = readWorkspaceConfig(workspacePath);
-      if (wsConfig) configs.push(wsConfig);
-    }
-
-    if (configs.length > 0) {
-      await this.importProvidersFromConfigs(configs);
-    }
-  }
-
-  /**
-   * Import providers with API keys from config file data into the platform.
-   * Workspace config overrides user config (last entry wins).
-   */
-  private async importProvidersFromConfigs(configs: Array<UnifiedConfig>): Promise<void> {
-    const cm = this.platform.config;
-
-    const keyMap = new Map<string, { apiKey: string; raw: Record<string, unknown> }>();
-    for (const config of configs) {
-      for (const provider of config.providers ?? []) {
-        if (provider.apiKey) {
-          keyMap.set(provider.id, {
-            apiKey: provider.apiKey,
-            raw: provider as unknown as Record<string, unknown>,
-          });
-        }
-      }
-    }
-
-    for (const [id, { apiKey, raw }] of keyMap) {
-      try {
-        if (cm.getProvider(id)) {
-          await cm.setProviderApiKey(id, apiKey);
-        } else {
-          await cm.setProvider(raw as unknown as Parameters<typeof cm.setProvider>[0]);
-        }
-      } catch (error) {
-        logger.error(`Failed to import provider ${id} from config file:`, error);
-      }
-    }
+    await runProviderCredentialConfigFileImportRuntime(
+      { ...this.workspacePathInput() },
+      { config: this.platform.config, logger },
+    );
   }
 
   /**
    * Watch config files for changes and re-import
    */
   private watchFiles(): void {
-    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-    const handleChange = (_config: UnifiedConfig | null) => {
-      void this.importConfigs().then(() => {
-        broadcastToWebviews(this.activeWebviews, {
-          type: 'configChanged',
-          changeType: 'all',
-        });
-      });
+    const handleChange = () => {
+      void runProviderCredentialConfigFileChangeRuntime(
+        { ...this.workspacePathInput() },
+        {
+          config: this.platform.config,
+          logger,
+          notifyConfigChanged: () => {
+            broadcastToWebviews(this.activeWebviews, buildConfigChangedRuntimeMessage());
+          },
+        },
+      );
     };
 
     this.watcherCleanups.push(watchUserConfig(handleChange));
 
+    const workspacePath = this.workspacePathInput().workspacePath;
     if (workspacePath) {
       this.watcherCleanups.push(watchWorkspaceConfig(workspacePath, handleChange));
     }
+  }
+
+  private workspacePathInput(): { workspacePath?: string } {
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    return workspacePath ? { workspacePath } : {};
   }
 
   dispose(): void {
